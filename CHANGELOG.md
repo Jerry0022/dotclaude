@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-03-20
+
+### Added
+- Interactive question rules (AskUserQuestion preferences) in `CLAUDE.md`
+- Visual diagram rules (Mermaid rendering pipeline) in `CLAUDE.md`
+- Language rules (German conversation / English artifacts) in `CLAUDE.md`
+- `render-diagram.js` — Mermaid-to-HTML rendering script with dark theme and styled template
+- `diagrams/template.html` — diagram HTML template (Patrick Hand font, SVG postprocessing)
+
+### Fixed
+- `check-dotclaude-sync.js` — handle MSYS/Git Bash path mangling and CRLF line ending differences
+
 ## [0.1.0] - 2026-03-20
 
 ### Added

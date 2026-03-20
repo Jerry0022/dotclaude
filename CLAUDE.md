@@ -80,7 +80,7 @@ Render diagrams via the Preview panel pipeline — do **not** use the Mermaid MC
 ## Versioning
 - Every project must use **semantic versioning** (`major.minor.patch`) in `package.json`.
 - The `README.md` must display the current version as `**Version: x.y.z**` near the top.
-- When bumping the version: update `package.json` **and** the README version line in the same commit.
+- When bumping the version: update **all** files referencing the version in a **single commit**: `package.json`, `README.md` version line, `CHANGELOG.md` (new section with date and changes), and any other file containing the old version string. Before committing, grep the repo for the old version to catch every reference.
 - Increment rules: `patch` for bug fixes, `minor` for new features, `major` for breaking changes.
 - Apply retroactively when touching a project that lacks a version badge in the README.
 
