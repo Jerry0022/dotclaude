@@ -1,5 +1,5 @@
 {
-  "name": "dotclaude",
+  "name": "@Jerry0022/dotclaude",
   "version": "0.3.0",
   "description": "Global Claude Code configuration — instructions, hooks, skills, and scripts",
   "author": "Jerry0022",
@@ -8,8 +8,41 @@
     "type": "git",
     "url": "git+https://github.com/Jerry0022/dotclaude.git"
   },
+  "bin": {
+    "dotclaude": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "CLAUDE.md",
+    "commands/",
+    "skills/",
+    "scripts/*.js",
+    "scripts/package.json",
+    "scripts/package-lock.json",
+    "scripts/diagrams/template.html",
+    "plugins/",
+    "templates/"
+  ],
   "scripts": {
-    "setup": "bash setup.sh",
+    "setup": "node bin/cli.js setup",
+    "setup:bash": "bash setup.sh",
     "setup:win": "powershell -ExecutionPolicy Bypass -File setup.ps1"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "pkg": {
+    "assets": [
+      "CLAUDE.md",
+      "commands/**/*",
+      "skills/**/*",
+      "scripts/*.js",
+      "scripts/package.json",
+      "scripts/package-lock.json",
+      "scripts/diagrams/template.html",
+      "plugins/**/*",
+      "templates/**/*"
+    ],
+    "outputPath": "dist"
   }
 }
