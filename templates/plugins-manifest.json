@@ -1,0 +1,68 @@
+{
+  "description": "List of plugins to install via 'claude plugins install'. MCP server permissions with dynamic UUIDs must be added manually after connecting the respective services.",
+  "marketplace": "claude-plugins-official",
+  "plugins": [
+    "frontend-design",
+    "atomic-agents",
+    "claude-code-setup",
+    "playwright",
+    "code-review",
+    "skill-creator",
+    "commit-commands",
+    "github",
+    "claude-md-management",
+    "code-simplifier"
+  ],
+  "mcpServers": {
+    "_comment": "These MCP servers generate unique UUIDs per installation. Add their permission patterns to settings.json after connecting.",
+    "required": [
+      {
+        "name": "Claude Preview",
+        "permission": "mcp__Claude_Preview__*",
+        "note": "Built-in, usually auto-configured"
+      },
+      {
+        "name": "Claude in Chrome",
+        "permission": "mcp__Claude_in_Chrome__*",
+        "note": "Requires Chrome extension"
+      },
+      {
+        "name": "MCP Registry",
+        "permission": "mcp__mcp-registry__*",
+        "note": "Built-in registry search"
+      },
+      {
+        "name": "Scheduled Tasks",
+        "permission": "mcp__scheduled-tasks__*",
+        "note": "Built-in task scheduler"
+      }
+    ],
+    "optional": [
+      {
+        "name": "Google Calendar",
+        "permissionPattern": "mcp__<UUID>__gcal_*",
+        "note": "Connect via MCP, then add permission with generated UUID"
+      },
+      {
+        "name": "Gmail",
+        "permissionPattern": "mcp__<UUID>__gmail_*",
+        "note": "Connect via MCP, then add permission with generated UUID"
+      },
+      {
+        "name": "Google Drive",
+        "permissionPattern": "mcp__<UUID>__google_drive_*",
+        "note": "Connect via MCP, then add permission with generated UUID"
+      },
+      {
+        "name": "Figma",
+        "permissionPattern": "mcp__<UUID>__*",
+        "note": "Connect via MCP, then add permission with generated UUID"
+      },
+      {
+        "name": "Postman",
+        "permissionPattern": "mcp__<UUID>__*",
+        "note": "Connect via MCP, then add permission with generated UUID"
+      }
+    ]
+  }
+}

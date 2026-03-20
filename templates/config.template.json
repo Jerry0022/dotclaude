@@ -1,0 +1,9 @@
+{
+  "estimatedLimitTokens": 1000000,
+  "confirmThresholdPct": 0.02,
+  "tokensPerByte": 0.25,
+  "sessionsToAnalyze": 5,
+  "fiveHourLimitTokens": 200000000,
+  "weeklyLimitTokens": 270000000,
+  "expensiveFiles": []
+}

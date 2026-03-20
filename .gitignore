@@ -1,0 +1,36 @@
+# Dependencies
+scripts/node_modules/
+
+# Runtime data (generated at startup)
+scripts/config.json
+scripts/session-history.json
+scripts/usage-live.json
+scripts/dotclaude-repo-path
+
+# Plugin runtime data
+plugins/cache/
+plugins/data/
+plugins/.install-manifests/
+plugins/marketplaces/
+plugins/installed_plugins.json
+plugins/known_marketplaces.json
+plugins/install-counts-cache.json
+
+# Session state
+projects/
+session-env/
+shell-snapshots/
+plans/
+backups/
+telemetry/
+todos/
+worktrees/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
