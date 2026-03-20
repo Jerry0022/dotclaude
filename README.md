@@ -17,6 +17,7 @@ Portable, version-controlled [Claude Code](https://docs.anthropic.com/en/docs/cl
 - [Overview](#-overview)
 - [Features](#-features)
 - [Quick Start](#-quick-start)
+- [Usage Guide](#-usage-guide)
 - [What's Inside](#-whats-inside)
 - [Sync Workflow](#-sync-workflow)
 - [File Classification](#-file-classification)
@@ -33,7 +34,7 @@ Clone once, run setup, and every Claude Code session starts with the same instru
 ## ✨ Features
 
 - 🧠 **Global instructions** — `CLAUDE.md` with rules for autonomy, git hygiene, sprint workflows, token awareness, versioning, and response style
-- ⚡ **6 custom skills** — commit, debug, deep-research, explain, youtube-transcript, ship-dotclaude
+- ⚡ **7 custom skills** — commit, debug, deep-research, explain, readme, youtube-transcript, ship-dotclaude
 - 📊 **Token management** — SessionStart dashboard with live rate limit tracking, cost guard hooks, and usage scraping
 - 🔄 **Drift detection** — automatically detects when config files change during project sessions and prompts to sync
 - 🖥️ **Cross-platform** — setup scripts for Unix (Bash) and Windows (PowerShell), path-portable hooks
@@ -72,12 +73,80 @@ The setup script:
 2. **Install plugins** if not already present (see `plugins-manifest.json`)
 3. **Start a Claude Code session** — the startup hook shows the usage dashboard automatically
 
+## 📖 Usage Guide
+
+> **New here?** This section explains what you now have after running setup and how to get the most out of it.
+
+### What changed on your machine
+
+Setup deployed a full Claude Code configuration to `~/.claude/`. Every Claude Code session — in any project, in any directory — now automatically loads:
+
+- **Global instructions** (`CLAUDE.md`) that define how Claude behaves: commit style, response language, versioning rules, token budgets, and more
+- **Hooks** that run on every session start: a usage dashboard showing your rate limits and a drift detector that tells you when config is out of sync
+- **Skills** you can invoke via slash commands (see below)
+
+### Available skills
+
+These slash commands work in every Claude Code session:
+
+| Command | What it does |
+|---|---|
+| `/commit` | Create a conventional commit with proper formatting |
+| `/debug` | Diagnose runtime errors and crashes — root-cause analysis first |
+| `/deep-research` | Spawn an isolated research agent for thorough investigation |
+| `/explain` | Explain code, architecture, or concepts with analogies |
+| `/readme` | Generate a polished, modern README with badges, diagrams, and screenshots |
+| `/ship-dotclaude` | Sync your local config changes back to this repo (see [Sync Workflow](#-sync-workflow)) |
+| `/youtube-transcript` | Fetch and summarize a YouTube video transcript |
+| `/refresh-usage` | Scrape live rate limit data from claude.ai |
+
+### Project-specific customization
+
+The global `CLAUDE.md` is your **baseline** — it applies everywhere. When you start working in a specific project, you can create a project-level `CLAUDE.md` that **extends** the global rules without duplicating them.
+
+**How it works:**
+
+1. Create a `.claude/CLAUDE.md` (or `CLAUDE.md` at project root) in your project
+2. Add only project-specific rules — tech stack, architecture, custom commands, module map
+3. Start with this header:
+   ```markdown
+   <!-- Inherits from ~/.claude/CLAUDE.md — do not duplicate global rules here -->
+   ```
+4. To **change** a global rule for this project, use override syntax:
+   ```markdown
+   **Override (global §Commit Style):** Use Angular commit format instead of Conventional Commits.
+   ```
+5. To **add to** a global rule, use extension syntax:
+   ```markdown
+   **Extends (global §Sprint Regression Testing):** Also run `npm run test:e2e` after unit tests.
+   ```
+
+Project-level skills work the same way — they reference the global skill and describe only what's different.
+
+### What you still need to do manually
+
+| Task | Why |
+|---|---|
+| **Add MCP server permissions** | MCP servers have machine-specific UUIDs — add them to `~/.claude/settings.json` after connecting each service (Google Calendar, Gmail, Figma, etc.). See `templates/plugins-manifest.json` for the format. |
+| **Install plugins** | Review `templates/plugins-manifest.json` and install the ones you need via Claude Code's plugin system. |
+| **Connect external services** | MCP connections (Google, Figma, Postman, etc.) must be authorized per machine. |
+| **Customize global rules** | Edit `~/.claude/CLAUDE.md` if you want to change the language, response style, or workflow rules. Changes are detected and can be synced back with `/ship-dotclaude`. |
+
+### Session startup
+
+Every time you start a Claude Code session, two things happen automatically:
+
+1. **Usage Dashboard** — shows your current token consumption (5-hour window + weekly), expensive files to avoid, and recent sessions
+2. **Drift Detection** — compares your live `~/.claude/` files against this repo and alerts you if anything is out of sync
+
+If drift is detected, Claude will suggest running `/ship-dotclaude` to push your changes back to the repo — keeping all your machines in sync.
+
 ## 📦 What's Inside
 
 | Category | Path | Purpose |
 |---|---|---|
 | **Instructions** | `CLAUDE.md` | Global rules: autonomy, git hygiene, sprint workflow, token awareness, versioning, response style, inheritance model |
-| **Skills** | `skills/*/SKILL.md` | commit, debug, deep-research, explain, youtube-transcript, ship-dotclaude |
+| **Skills** | `skills/*/SKILL.md` | commit, debug, deep-research, explain, readme, youtube-transcript, ship-dotclaude |
 | **Commands** | `commands/*.md` | refresh-usage (scrape live rate limits from claude.ai) |
 | **Scripts** | `scripts/*.js` | startup-summary, precheck-cost, check-dotclaude-sync, render-diagram, diagram-server, scrape-usage |
 | **Templates** | `templates/` | settings.template.json, config.template.json, plugins-manifest.json |
