@@ -6,6 +6,7 @@ scripts/config.json
 scripts/session-history.json
 scripts/usage-live.json
 scripts/dotclaude-repo-path
+scripts/dotclaude-plan
 
 # Plugin runtime data
 plugins/cache/

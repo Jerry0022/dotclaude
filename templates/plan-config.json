@@ -1,0 +1,31 @@
+{
+  "plans": {
+    "free": {
+      "claudeMd": "CLAUDE-lite.md",
+      "skills": ["commit", "debug"],
+      "hooks": {
+        "SessionStart": [],
+        "PreToolUse": []
+      },
+      "description": "Token-optimized — no hooks, 2 essential skills, lite instructions"
+    },
+    "pro": {
+      "claudeMd": "CLAUDE.md",
+      "skills": ["commit", "debug", "explain", "readme", "ship-dotclaude"],
+      "hooks": {
+        "SessionStart": ["startup-summary"],
+        "PreToolUse": []
+      },
+      "description": "Balanced — dashboard on startup, 5 skills, full instructions"
+    },
+    "max": {
+      "claudeMd": "CLAUDE.md",
+      "skills": ["commit", "debug", "deep-research", "explain", "readme", "ship-dotclaude", "youtube-transcript"],
+      "hooks": {
+        "SessionStart": ["startup-summary", "check-dotclaude-sync"],
+        "PreToolUse": ["precheck-cost"]
+      },
+      "description": "Full — all hooks, all skills, drift detection, cost guard"
+    }
+  }
+}

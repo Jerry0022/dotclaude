@@ -1,8 +1,8 @@
 # dotclaude
 
-**Version: 0.4.1**
+**Version: 0.5.0**
 
-![Version](https://img.shields.io/badge/version-0.4.1-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.5.0-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -60,12 +60,19 @@ powershell -ExecutionPolicy Bypass -File setup.ps1
 node bin/cli.js setup
 ```
 
-The setup script:
+The setup script asks which **Claude plan** you have and configures accordingly:
 
-1. Copies all tracked files to `~/.claude/`
-2. Deploys `settings.json` from the template (backs up any existing config)
+| Plan | Instructions | Skills | Hooks | Optimized for |
+|---|---|---|---|---|
+| **Free** | CLAUDE-lite.md | 2 (commit, debug) | None | Maximum token budget |
+| **Pro** | CLAUDE.md (full) | 5 | Dashboard | Balanced |
+| **Max** | CLAUDE.md (full) | 7 (all) | All (dashboard, drift, cost guard) | Full power |
+
+Then it:
+1. Copies the plan-appropriate files to `~/.claude/`
+2. Deploys the matching `settings.json` template (backs up existing)
 3. Installs Node dependencies for hook scripts
-4. Stores the repo path for sync-check
+4. Stores the repo path and selected plan for sync-check
 
 ### After setup
 

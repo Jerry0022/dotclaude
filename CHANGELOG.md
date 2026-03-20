@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-03-20
+
+### Added
+- Plan-based setup: Free / Pro / Max tiers with different token footprints
+- `CLAUDE-lite.md` — token-optimized instructions for Free plan (~1,200 tokens vs ~4,300)
+- Plan-specific settings templates: `settings.free.json`, `settings.pro.json`
+- `plan-config.json` — central configuration for skills, hooks, and instructions per plan tier
+- Setup scripts now prompt for plan selection and deploy accordingly
+- `dotclaude-plan` file to persist selected plan
+
+### Changed
+- Setup scripts (setup.sh, setup.ps1) rewritten with plan selection flow
+- Skills are now deployed selectively based on plan tier
+- README updated with plan comparison table
+
 ## [0.4.1] - 2026-03-20
 
 ### Changed
