@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-03-20
+
+### Added
+- Inheritance Model section in `CLAUDE.md` — global rules as baseline, project CLAUDE.md files only extend/override
+- Override and Extends syntax conventions for project-level rule customization
+- New Project Setup guidelines (no duplication, comment header, delta-only approach)
+- Skill & Hook Inheritance rules (project skills reference global versions, describe only deltas)
+- Drift Detection protocol (detect global changes in project sessions, check redundancy/conflicts, ask user)
+- Conflict Resolution Priority (Override > Extends > Global default)
+- Global sync tracking via `<!-- global-sync: YYYY-MM-DD -->` comments in project CLAUDE.md files
+
 ## [0.2.0] - 2026-03-20
 
 ### Added

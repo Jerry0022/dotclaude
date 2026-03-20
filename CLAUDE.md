@@ -2,6 +2,47 @@
 
 These rules apply to ALL projects and sessions.
 
+## Inheritance Model — Global ↔ Project
+
+This global CLAUDE.md is the **baseline** for every project. Project-level CLAUDE.md files extend or override it — they must never duplicate global rules.
+
+### Principles
+- **Global = default**: Every rule here applies automatically in every project session. Project CLAUDE.md files inherit all global rules implicitly.
+- **Project = delta only**: A project CLAUDE.md must contain **only** additions, overrides, or project-specific details. If a rule is identical to the global version, it does not belong in the project file.
+- **Override syntax**: To explicitly override a global rule, use `**Override (global §SectionName):**` followed by the replacement rule. This makes it clear which global rule is being changed and why.
+- **Extension syntax**: To extend a global rule with project-specific details, use `**Extends (global §SectionName):**` followed by the additional details.
+
+### New Project Setup
+When creating a CLAUDE.md for a new project:
+1. Do **not** copy any global rules into the project file.
+2. Start with a project header and only add sections that are project-specific (tech stack, architecture, custom commands, module map, etc.).
+3. Include a comment at the top: `<!-- Inherits from ~/.claude/CLAUDE.md — do not duplicate global rules here -->`
+4. If a global rule needs project-specific parameters (e.g., the test command differs from `npm run test:unit`), use the **Extends** syntax.
+
+### Skill & Hook Inheritance
+- **Global skills** (in `~/.claude/skills/`) are the canonical versions. Project-level skills with the same name **extend** the global skill — they must not redefine the entire flow.
+- A project-level skill must reference the global version and describe **only the delta**: project-specific build steps, different commands, additional checks, etc.
+- Example: A project `/ship` skill should say _"Extends global /ship with: use `npm run build:prod` in step 3, merge strategy is `--merge` not `--squash`"_ — not restate the entire 7-step flow.
+- Same principle applies to hooks: project hooks extend global hooks, not replace them (unless explicitly marked as **Override**).
+
+### Drift Detection — Global Changes in Project Sessions
+At the start of every project session, compare the global CLAUDE.md's last-modified timestamp (or content hash) against the project's last-synced state. If the global has changed since the last project session:
+
+1. **Identify affected sections**: Determine which global sections were added, modified, or removed.
+2. **Check for redundancy**: If the project CLAUDE.md contains rules that are now covered by a new or updated global rule, flag them for removal.
+3. **Check for conflicts**: If a project override or extension conflicts with the updated global rule, **ask the user** (via AskUserQuestion) which path to take:
+   - **Adopt global**: Remove the project override and use the new global rule.
+   - **Keep project override**: Retain the project-specific version and update the Override reference to point to the new global section.
+   - **Merge**: Combine both — take the global update but keep project-specific additions.
+4. **Track sync state**: After resolution, update a `<!-- global-sync: YYYY-MM-DD -->` comment in the project CLAUDE.md so future sessions know when the last sync happened.
+5. **Report changes**: Briefly inform the user what was synced/resolved — do not silently change project behavior.
+
+### Conflict Resolution Priority
+When a rule exists at both levels:
+1. Explicit project **Override** → wins over global.
+2. Project **Extends** → global rule applies, project additions are layered on top.
+3. No annotation → global rule applies (project duplicate is ignored and should be cleaned up).
+
 ## Autonomy
 - Full autonomous access to all local files, commands, programs, and project actions.
 - Never ask for per-action permission. Act, then report.
