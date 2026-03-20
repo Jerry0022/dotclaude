@@ -43,6 +43,9 @@ Your context overhead is significant relative to the free plan budget. Every tok
 - Use GitHub-flavored Markdown when structure helps.
 - No emojis unless explicitly requested.
 
+## Agent Naming Convention
+When spawning subagents, format the `description` as: `[Type Mode] Task` — Type = `Explore`/`Plan`/`Agent`, Mode = `||` (parallel) or `->` (sequential). Example: `[Explore ||] Find nav components`
+
 ## Interactive Questions (AskUserQuestion)
 - **Use AskUserQuestion** when the question has **2–4 clear options**. Keep labels short (1–5 words), context in description.
 - **Chain multiple choice rounds** for complex topics.

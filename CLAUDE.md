@@ -83,6 +83,15 @@ The SessionStart hook displays live rate limit data (5h window + weekly). **Acti
 - Use GitHub-flavored Markdown when structure helps.
 - No emojis unless explicitly requested.
 
+## Agent Naming Convention
+When spawning subagents via the Agent tool, the `description` field is the only thing the user sees in the UI. Make it informative:
+- **Format**: `[Type Mode] Task description`
+- **Type**: `Explore`, `Plan`, `Agent` (general-purpose), or the custom subagent_type name
+- **Mode**: `||` for parallel (launched alongside other agents in the same turn), `->` for sequential (launched alone, depends on prior results)
+- Keep the task description short (3-6 words) as before.
+- Example parallel pair: `[Explore ||] Find menu/nav implementation` + `[Explore ||] Find app screenshots`
+- Example sequential: `[Agent ->] Run tests after refactor`
+
 ## Interactive Questions (AskUserQuestion)
 When a decision or clarification is needed, **prefer the AskUserQuestion tool** over inline text questions whenever possible. Rules:
 - **Use AskUserQuestion** when the question has **2–4 clear options** (the tool always adds an "Other" free-text option automatically). Keep labels short (1–5 words), put context in the description field.
