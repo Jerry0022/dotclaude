@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-03-20
+
+### Added
+- New `readme` skill — generates polished, modern READMEs with badges, emoji sections, Mermaid diagrams, and media handling
+- README rewritten with modern design (shields.io badges, architecture diagram, ToC)
+
+### Changed
+- Simplified permissions: removed explicit `allow` list in favor of pure `bypassPermissions` mode
+- Updated settings template to match new permission model
+
 ## [0.3.0] - 2026-03-20
 
 ### Added
