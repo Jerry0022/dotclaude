@@ -214,8 +214,8 @@ flowchart LR
     Live --> Session
     Startup --> Dashboard
     Startup --> DriftCheck
-    DriftCheck -->|drift detected| ShipSkill[/ship-dotclaude]
-    ShipSkill -->|sync back| Repo
+    DriftCheck -->|"drift detected"| ShipSkill["/ship-dotclaude"]
+    ShipSkill -->|"sync back"| Repo
 ```
 
 ## 🤝 Contributing
