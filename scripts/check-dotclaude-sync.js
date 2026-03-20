@@ -34,7 +34,12 @@ const TRACKED_FILES = [
 
 function getRepoPath() {
   try {
-    return fs.readFileSync(REPO_PATH_FILE, 'utf8').trim();
+    let p = fs.readFileSync(REPO_PATH_FILE, 'utf8').trim();
+    // Convert MSYS/Git Bash paths (/c/Users/...) to Windows paths (C:\Users\...)
+    if (process.platform === 'win32' && /^\/[a-zA-Z]\//.test(p)) {
+      p = p[1].toUpperCase() + ':' + p.slice(2).replace(/\//g, '\\');
+    }
+    return p;
   } catch {
     return null;
   }
@@ -42,7 +47,10 @@ function getRepoPath() {
 
 function filesIdentical(a, b) {
   try {
-    return fs.readFileSync(a, 'utf8') === fs.readFileSync(b, 'utf8');
+    // Normalize line endings to avoid CRLF/LF false positives
+    const contentA = fs.readFileSync(a, 'utf8').replace(/\r\n/g, '\n');
+    const contentB = fs.readFileSync(b, 'utf8').replace(/\r\n/g, '\n');
+    return contentA === contentB;
   } catch {
     return false;
   }
@@ -50,7 +58,7 @@ function filesIdentical(a, b) {
 
 function gitStatus(repoDir) {
   try {
-    const status = execSync('git status --porcelain', { cwd: repoDir, encoding: 'utf8', timeout: 5000 });
+    const status = execSync('git status --porcelain', { cwd: repoDir, encoding: 'utf8', timeout: 5000, shell: true, stdio: ['pipe', 'pipe', 'pipe'] });
     return status.trim();
   } catch {
     return null;
@@ -59,7 +67,7 @@ function gitStatus(repoDir) {
 
 function gitUnpushed(repoDir) {
   try {
-    const result = execSync('git log @{u}..HEAD --oneline 2>/dev/null', { cwd: repoDir, encoding: 'utf8', timeout: 5000 });
+    const result = execSync('git log @{u}..HEAD --oneline', { cwd: repoDir, encoding: 'utf8', timeout: 5000, shell: true, stdio: ['pipe', 'pipe', 'pipe'] });
     return result.trim();
   } catch {
     return '';
@@ -117,7 +125,7 @@ if (unpushed) {
 const cwd = process.cwd();
 if (cwd !== repoPath) {
   try {
-    const projectRoot = execSync('git rev-parse --show-toplevel 2>/dev/null', { cwd, encoding: 'utf8', timeout: 5000 }).trim();
+    const projectRoot = execSync('git rev-parse --show-toplevel', { cwd, encoding: 'utf8', timeout: 5000, shell: true, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
     if (projectRoot) {
       const projStatus = gitStatus(projectRoot);
       const projUnpushed = gitUnpushed(projectRoot);
