@@ -210,4 +210,4 @@ This flow is codified in the `/ship` skill (project-level). If a project lacks `
 
 On every session start, silently run these as a **background agent** (do not block the user or show output unless there's an error):
 
-1. **Refresh live usage data**: If `~/.claude/scripts/usage-live.json` is missing or older than 30 minutes, execute `/refresh-usage` in the background. This scrapes `claude.ai/settings/usage` via the Chrome extension and writes fresh rate limit percentages to `usage-live.json`. If the browser is unavailable or not logged in, silently skip — the startup hook falls back to local estimates.
+1. **Refresh live usage data**: Execute `/refresh-usage` in the background at **session start** if `~/.claude/scripts/usage-live.json` is missing or older than 5 minutes — cached data is fine here since the session just started. Do **not** run refresh at arbitrary points during a session. The `/ship-dotclaude` skill handles its own post-ship refresh (step 14). If the browser is unavailable or not logged in, silently skip — the startup hook falls back to local estimates.

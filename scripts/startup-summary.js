@@ -24,7 +24,7 @@ const LIVE_USAGE_PATH = path.join(os.homedir(), '.claude', 'scripts', 'usage-liv
 const HOUR_MS = 3600000;
 const FIVE_HOURS_MS = 5 * HOUR_MS;
 const WEEK_MS = 7 * 24 * HOUR_MS;
-const LIVE_DATA_MAX_AGE_MS = 60 * 60000; // 60 minutes
+const LIVE_DATA_MAX_AGE_MS = 10 * 60000; // 10 minutes
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

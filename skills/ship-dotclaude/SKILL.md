@@ -49,6 +49,7 @@ The repo path is stored in `~/.claude/scripts/dotclaude-repo-path`.
 11. Push to origin.
 12. Verify push succeeded and remote is up to date.
 13. Pull main locally to confirm.
+14. Run `/refresh-usage` to update the usage dashboard with live data — shipping consumes tokens, so the dashboard should reflect the current state immediately.
 
 ## Rules
 - Never `git add -A` or `git add .` — add specific files only.

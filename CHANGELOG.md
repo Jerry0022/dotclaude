@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1] - 2026-03-20
+
+### Changed
+- Reduced live usage data max-age from 60 to 10 minutes for fresher dashboard data
+- Auto-refresh threshold reduced from 30 to 5 minutes at session start
+- Added forced usage refresh after ship-dotclaude (step 14)
+- Clarified refresh-usage timing: session start (cached OK) and post-ship (forced) only
+
 ## [0.4.0] - 2026-03-20
 
 ### Added
