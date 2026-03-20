@@ -41,6 +41,25 @@ The SessionStart hook displays live rate limit data (5h window + weekly). **Acti
 - Use GitHub-flavored Markdown when structure helps.
 - No emojis unless explicitly requested.
 
+## Interactive Questions (AskUserQuestion)
+When a decision or clarification is needed, **prefer the AskUserQuestion tool** over inline text questions whenever possible. Rules:
+- **Use AskUserQuestion** when the question has **2–4 clear options** (the tool always adds an "Other" free-text option automatically). Keep labels short (1–5 words), put context in the description field.
+- **Chain multiple choice rounds** if the topic is complex: ask the first question, then based on the answer ask a follow-up — rather than dumping all options at once.
+- **Use up to 4 questions per call** when the questions are independent of each other (e.g., "Which framework?" + "Which styling?" in one call).
+- **Use preview fields** when options involve visual or code comparisons (ASCII mockups, config snippets, diagram variants).
+- **Fall back to inline text** only when the topic is too nuanced for bullet-point options — e.g., open-ended architecture discussions with many trade-offs. In that case, present a structured plan with numbered questions in the output text.
+- Never mix both styles for the same question — either AskUserQuestion or inline, not both.
+
+## Visual Diagrams (Mermaid)
+Proactively include **Mermaid diagrams** to make responses clearer. Use the Mermaid rendering tool whenever a visual would add genuine value — do not describe what could be shown.
+- **Architecture & planning**: flowcharts, sequence diagrams, or C4-style component diagrams when discussing system design, module interactions, or sprint plans.
+- **Decision summaries**: flowcharts or decision trees when presenting options, trade-offs, or conditional logic.
+- **Status & progress**: Gantt charts for sprint timelines, state diagrams for workflow states.
+- **Explanations**: sequence diagrams for request flows, class diagrams for data models, ER diagrams for database schemas.
+- Keep diagrams **focused** — one concept per diagram. Split into multiple diagrams rather than cramming everything into one.
+- Always give the diagram a descriptive `title`.
+- Prefer `LR` (left-to-right) direction for flowcharts unless vertical layout is clearly better.
+
 ## Git Hygiene
 - Before every commit: run `git status --short` and ensure zero `??` (untracked) entries.
 - Every new file must be either staged for the commit or added to `.gitignore`/`.npmignore`.
