@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0d1117;
+    color: #e6edf3;
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid #21262d;
+    background: #0d1117;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 2.2rem;
+    font-weight: 400;
+    color: #58a6ff;
+    letter-spacing: 0.01em;
+    padding: 8px 0;
+  }
+  main {
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+  }
+  .mermaid {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 24px;
+    overflow: auto;
+  }
+  .mermaid svg {
+    display: block;
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#161b22',
+      fontFamily: 'Patrick Hand, cursive',
+      fontSize: '56px',
+
+      primaryColor: '#1f6feb',
+      primaryTextColor: '#f0f6fc',
+      primaryBorderColor: '#388bfd',
+
+      secondaryColor: '#8b5cf6',
+      secondaryTextColor: '#f0f6fc',
+      secondaryBorderColor: '#a78bfa',
+
+      tertiaryColor: '#238636',
+      tertiaryTextColor: '#f0f6fc',
+      tertiaryBorderColor: '#3fb950',
+
+      lineColor: '#58a6ff',
+      textColor: '#e6edf3',
+
+      mainBkg: '#1f6feb',
+      nodeBorder: '#388bfd',
+      nodeTextColor: '#f0f6fc',
+
+      clusterBkg: '#0d1117',
+      clusterBorder: '#58a6ff',
+
+      titleColor: '#58a6ff',
+      edgeLabelBackground: '#161b22',
+
+      activeTaskBkgColor: '#8b5cf6',
+      activeTaskBorderColor: '#a78bfa',
+      doneTaskBkgColor: '#238636',
+      doneTaskBorderColor: '#3fb950',
+      taskBkgColor: '#1f6feb',
+      taskBorderColor: '#388bfd',
+      taskTextColor: '#f0f6fc',
+      sectionBkgColor: '#161b22',
+      sectionBkgColor2: '#0d1117',
+      gridColor: '#30363d',
+      todayLineColor: '#f97583',
+
+      labelColor: '#e6edf3',
+      errorBkgColor: '#da3633',
+      errorTextColor: '#f0f6fc'
+    },
+    flowchart: {
+      useMaxWidth: false,
+      htmlLabels: true,
+      curve: 'basis',
+      padding: 40,
+      subGraphTitleMargin: { top: 20, bottom: 20 }
+    },
+    sequence: { useMaxWidth: false },
+    gantt: { useMaxWidth: false }
+  });
+
+  // Render, then fix cluster label overlap via SVG postprocessing
+  document.addEventListener('DOMContentLoaded', async () => {
+    await mermaid.run();
+
+    // Post-process: move cluster labels fully above cluster rects
+    document.querySelectorAll('.cluster').forEach(cluster => {
+      const label = cluster.querySelector('.cluster-label');
+      const rect = cluster.querySelector('rect');
+      if (!label || !rect) return;
+
+      const labelBBox = label.getBBox();
+      const rectBBox = rect.getBBox();
+      const gap = 16; // px between label bottom and rect top
+
+      // Target: label bottom = rect top - gap
+      // Label currently at labelBBox.y, we want it at (rectBBox.y - gap - labelBBox.height)
+      const targetLabelY = rectBBox.y - gap - labelBBox.height;
+      const dy = targetLabelY - labelBBox.y;
+
+      if (dy < 0) {
+        // Move label up
+        label.setAttribute('transform', 'translate(0, ' + dy + ')');
+        // Expand rect upward to cover the label area too (for viewBox)
+        const expansion = Math.abs(dy) + labelBBox.height + gap;
+        rect.setAttribute('y', String(rectBBox.y - expansion));
+        rect.setAttribute('height', String(rectBBox.height + expansion));
+      }
+    });
+
+    // Update viewBox to fit the modified SVG
+    const svg = document.querySelector('.mermaid svg');
+    if (svg) {
+      const bbox = svg.getBBox();
+      svg.setAttribute('viewBox',
+        (bbox.x - 20) + ' ' + (bbox.y - 20) + ' ' +
+        (bbox.width + 40) + ' ' + (bbox.height + 40)
+      );
+      // Remove fixed width/height so it scales to container
+      svg.removeAttribute('width');
+      svg.removeAttribute('height');
+      svg.style.width = '100%';
+      svg.style.height = 'auto';
+    }
+  });
+</script>
+</head>
+<body>
+  <header><h1>{{TITLE}}</h1></header>
+  <main>
+    <div class="mermaid">
+{{DIAGRAM}}
+    </div>
+  </main>
+</body>
+</html>

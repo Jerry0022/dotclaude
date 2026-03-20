@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.1.0**
+**Version: 0.2.0**
 
 Global [Claude Code](https://docs.anthropic.com/en/docs/claude-code) configuration — portable instructions, hooks, skills, and scripts.
 

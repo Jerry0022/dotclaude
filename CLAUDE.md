@@ -12,7 +12,8 @@ These rules apply to ALL projects and sessions.
 - Implementation only begins when the user explicitly says to implement/execute a sprint.
 
 ## Language
-- All documentation, GitHub artifacts (issues, PRs, milestones, project titles/views), commit messages, and code comments must be in **English**.
+- **Conversation language**: Always match the user's language. The user speaks **German** — all chat responses, AskUserQuestion labels/descriptions, inline explanations, and plan text must be in German.
+- **Project artifacts**: All documentation, GitHub artifacts (issues, PRs, milestones, project titles/views), commit messages, code comments, README, and CHANGELOG must be in **English**.
 - Exception: explicit i18n/localization resource files (e.g. `de.json`, `i18n/de/`).
 - Apply this retroactively when editing existing files.
 
@@ -51,7 +52,7 @@ When a decision or clarification is needed, **prefer the AskUserQuestion tool** 
 - Never mix both styles for the same question — either AskUserQuestion or inline, not both.
 
 ## Visual Diagrams (Mermaid)
-Proactively include **Mermaid diagrams** to make responses clearer. Use the Mermaid rendering tool whenever a visual would add genuine value — do not describe what could be shown.
+Proactively include **Mermaid diagrams** to make responses clearer. Do not describe what could be shown — render it.
 - **Architecture & planning**: flowcharts, sequence diagrams, or C4-style component diagrams when discussing system design, module interactions, or sprint plans.
 - **Decision summaries**: flowcharts or decision trees when presenting options, trade-offs, or conditional logic.
 - **Status & progress**: Gantt charts for sprint timelines, state diagrams for workflow states.
@@ -59,6 +60,12 @@ Proactively include **Mermaid diagrams** to make responses clearer. Use the Merm
 - Keep diagrams **focused** — one concept per diagram. Split into multiple diagrams rather than cramming everything into one.
 - Always give the diagram a descriptive `title`.
 - Prefer `LR` (left-to-right) direction for flowcharts unless vertical layout is clearly better.
+
+### Rendering
+Render diagrams via the Preview panel pipeline — do **not** use the Mermaid MCP tool (output too large):
+1. Pipe Mermaid code into `node ~/.claude/scripts/render-diagram.js "Title"` — this writes `~/.claude/scripts/diagrams/index.html` using the styled template.
+2. The diagram server (`launch.json` config `diagrams`, port 9753) serves the HTML. The Preview panel auto-reloads.
+3. Template: `~/.claude/scripts/diagrams/template.html` — dark theme, Patrick Hand font, SVG postprocessing for cluster label positioning.
 
 ## Git Hygiene
 - Before every commit: run `git status --short` and ensure zero `??` (untracked) entries.
