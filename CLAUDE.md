@@ -145,6 +145,65 @@ Render diagrams via the Preview panel pipeline — do **not** use the Mermaid MC
 2. The diagram server (`launch.json` config `diagrams`, port 9753) serves the HTML. The Preview panel auto-reloads.
 3. Template: `~/.claude/scripts/diagrams/template.html` — dark theme, Patrick Hand font, SVG postprocessing for cluster label positioning.
 
+## Branching Strategy
+
+### Branch naming convention
+
+| Branch type | Pattern | Example |
+|-------------|---------|---------|
+| Feature/issue | `feat/<issue>-<short-desc>` | `feat/42-video-filters` |
+| Agent sub-branch | `feat/<issue>/<role>` | `feat/42/core`, `feat/42/frontend` |
+| Bugfix | `fix/<issue>-<short-desc>` | `fix/55-startup-crash` |
+| Chore/refactor | `chore/<issue>-<short-desc>` | `chore/60-cleanup-imports` |
+
+### When to use sub-branches
+
+| Scope | Strategy |
+|-------|----------|
+| Simple change (1–2 roles, <5 files) | Single `feat/<issue>` branch — no sub-branches |
+| Multi-role change (3+ roles) | Integration branch `feat/<issue>` + sub-branches `feat/<issue>/<role>` per agent |
+| Orchestrated agents (`agents:run`) | Each agent gets its own sub-branch and worktree automatically |
+
+### Multi-branch workflow
+
+```
+main
+ └── feat/42-video-filters          ← integration branch
+      ├── feat/42/core               ← agent sub-branch (worktree)
+      ├── feat/42/frontend            ← agent sub-branch (worktree)
+      └── feat/42/windows             ← agent sub-branch (worktree)
+```
+
+1. Create integration branch from `main`: `git checkout -b feat/42-video-filters main`
+2. Each agent branches from the integration branch: `git checkout -b feat/42/core feat/42-video-filters`
+3. Agents work in parallel — each in its own worktree (via `isolation: "worktree"` or manual `git worktree add`)
+4. Merge sub-branches into integration branch in wave order (core → frontend → windows → ai), resolving conflicts at each step
+5. Quality gates run on the integration branch
+6. PR from integration branch → `main` (squash merge)
+7. Cleanup: delete ALL local branches + worktrees (see §Local Cleanup)
+
+### Local cleanup — zero leftover policy
+
+After a successful merge to remote `main`, **nothing must remain locally** except `main` itself:
+
+- **All feature/sub-branches**: deleted with `git branch -D`
+- **All worktrees**: removed with `git worktree remove --force`, then `git worktree prune`
+- **Orphaned worktree directories**: `rm -rf` any leftover dirs in `.claude/worktrees/` (Windows file locking may require user intervention)
+- **Stale remote refs**: `git remote prune origin`
+
+**Traceability lives on GitHub, not locally.** The merged PR preserves the full diff, commit messages, and discussion. Local branches are ephemeral working state — never kept after merge.
+
+### Session-start sweep
+
+At the start of every session, silently check for and clean up leftover branches and worktrees from previous sessions:
+
+1. `git worktree prune` — sync git's internal worktree state
+2. Delete orphaned directories in `.claude/worktrees/` not listed in `git worktree list`
+3. Delete local branches whose upstream is gone: `git branch -vv | grep ': gone]'` → `git branch -D` each
+4. `git remote prune origin` — remove stale remote tracking refs
+
+Run this silently in the background. Only report if something was cleaned up.
+
 ## Git Hygiene
 - Before every commit: run `git status --short` and ensure zero `??` (untracked) entries.
 - Every new file must be either staged for the commit or added to `.gitignore`/`.npmignore`.
@@ -247,4 +306,4 @@ This flow is codified in the `/ship` skill (project-level). If a project lacks `
 
 On every session start, silently run these as a **background agent** (do not block the user or show output unless there's an error):
 
-1. **Refresh live usage data**: Execute `/refresh-usage` in the background at **session start** if `~/.claude/scripts/usage-live.json` is missing or older than 5 minutes — cached data is fine here since the session just started. Do **not** run refresh at arbitrary points during a session. The `/ship-dotclaude` skill handles its own post-ship refresh (step 14). If the browser is unavailable or not logged in, silently skip — the startup hook falls back to local estimates.
+1. **Refresh live usage data**: Execute `/refresh-usage` in the background at **session start** if `~/.claude/scripts/usage-live.json` is missing or older than 5 minutes. The refresh script uses Edge CDP (port 9223). **Critical:** Edge must only be restarted with `--remote-debugging-port` **once per PC session** — the first time CDP is not yet active. After that first activation, Edge keeps CDP enabled and all subsequent refreshes happen invisibly (background tab, no visible window). Never restart Edge if CDP is already responding. Do **not** run refresh at arbitrary points during a session. The `/ship-dotclaude` skill handles its own post-ship refresh (step 14). If the browser is unavailable or not logged in, silently skip — the startup hook falls back to local estimates.
