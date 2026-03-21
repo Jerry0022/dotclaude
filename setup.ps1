@@ -154,7 +154,16 @@ if ($npmPath) {
     Write-Host "  [warn]  npm not found - install Node.js and run 'npm ci' in $ClaudeHome\scripts\"
 }
 
-# 10. Summary
+# 10. Taskbar shortcut (Windows only)
+Write-Host "10. Creating taskbar shortcut..."
+$shortcutScript = "$ScriptDir\scripts\create-taskbar-shortcut.ps1"
+if (Test-Path $shortcutScript) {
+    & $shortcutScript -Force
+} else {
+    Write-Host "  [skip]  create-taskbar-shortcut.ps1 not found"
+}
+
+# 11. Summary
 Write-Host ""
 Write-Host "Setup complete! (plan: $Plan)" -ForegroundColor Green
 Write-Host ""

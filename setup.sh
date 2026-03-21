@@ -155,7 +155,21 @@ else
   echo "  [warn]  npm not found — install Node.js and run 'npm ci' in $CLAUDE_HOME/scripts/"
 fi
 
-# ── 10. Summary ──────────────────────────────────────────────────────────────
+# ── 10. Taskbar shortcut (Windows only) ──────────────────────────────────────
+
+echo "10. Creating taskbar shortcut..."
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+  SHORTCUT_SCRIPT="$SCRIPT_DIR/scripts/create-taskbar-shortcut.ps1"
+  if [ -f "$SHORTCUT_SCRIPT" ]; then
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$SHORTCUT_SCRIPT" -Force
+  else
+    echo "  [skip]  create-taskbar-shortcut.ps1 not found"
+  fi
+else
+  echo "  [skip]  not Windows — taskbar shortcut not applicable"
+fi
+
+# ── 11. Summary ──────────────────────────────────────────────────────────────
 
 echo ""
 echo "Setup complete! (plan: $PLAN)"
