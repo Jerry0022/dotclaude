@@ -182,7 +182,29 @@ main
 6. PR from integration branch → `main` (squash merge)
 7. Cleanup: delete ALL local branches + worktrees (see §Local Cleanup)
 
-### Local cleanup — zero leftover policy
+### Branch lifecycle & intermediate states
+
+Branches go through distinct phases. Cleanup rules depend on the phase:
+
+| Phase | Branch state | Worktree | Cleanup rule |
+|-------|-------------|----------|--------------|
+| **Active work** | Has uncommitted or unpushed changes | Exists | Never touch — active session is using it |
+| **Pushed (WIP)** | All changes committed + pushed to remote | May exist | Worktree may be removed (work is remote-safe). Branch stays until ship. |
+| **Parked** | Committed + pushed, session ended | Should not exist | Branch stays (remote backup). Worktree should be gone. Next session recreates worktree from remote branch if needed. |
+| **Consolidated** | Sub-branch merged into integration branch | Must not exist | Branch + worktree deleted immediately after merge into integration branch |
+| **Shipped** | Integration branch merged to `main` via PR | Must not exist | Everything deleted — zero leftover policy (see below) |
+
+**Key principle:** A branch's work must be **pushed to remote** before its worktree can be removed. The remote branch is the durable backup; worktrees are cheap, disposable working copies.
+
+**Between sessions:**
+- When a session ends mid-work: commit + push current state (even as WIP commit). The worktree will be cleaned up by the next session's sweep, but the branch persists on remote.
+- Next session: if work needs to resume, `git worktree add` from the existing remote branch. No work is lost.
+
+**Agent completion (before all agents are done):**
+- When one agent finishes its sub-branch: commit, push, then delete the agent's worktree. The sub-branch stays until consolidation.
+- Other agents continue working on their own sub-branches independently.
+
+### Local cleanup — zero leftover policy (post-ship)
 
 After a successful merge to remote `main`, **nothing must remain locally** except `main` itself:
 
@@ -193,16 +215,20 @@ After a successful merge to remote `main`, **nothing must remain locally** excep
 
 **Traceability lives on GitHub, not locally.** The merged PR preserves the full diff, commit messages, and discussion. Local branches are ephemeral working state — never kept after merge.
 
-### Session-start sweep
+### Session-start sweep (automated via hook)
 
-At the start of every session, silently check for and clean up leftover branches and worktrees from previous sessions:
+The `sweep-branches.js` hook runs automatically at every session start (`SessionStart` in `settings.json`). It handles all cleanup:
 
-1. `git worktree prune` — sync git's internal worktree state
-2. Delete orphaned directories in `.claude/worktrees/` not listed in `git worktree list`
-3. Delete local branches whose upstream is gone: `git branch -vv | grep ': gone]'` → `git branch -D` each
-4. `git remote prune origin` — remove stale remote tracking refs
+**Safe to delete (garbage):**
+- Worktree directories in `.claude/worktrees/` not listed in `git worktree list`
+- Local branches whose upstream is gone (remote deleted after PR merge)
+- Stale remote tracking refs
 
-Run this silently in the background. Only report if something was cleaned up.
+**Never delete (active work):**
+- Local branches that have a remote counterpart (`origin/<branch>` exists) — parked or in-progress
+- Worktrees listed in `git worktree list` with a valid branch checkout
+
+The hook reports what was cleaned and what was preserved. No manual action needed.
 
 ## Git Hygiene
 - Before every commit: run `git status --short` and ensure zero `??` (untracked) entries.
@@ -275,13 +301,15 @@ After implementing **all issues in a sprint**, run a comprehensive regression te
 
 When a unit of work is complete (feature, bug fix, design asset, refactor — anything with committed changes on a branch), execute the **full shipping pipeline** as a single uninterrupted step. Do not stop at the PR — carry through to merge and verification.
 
-1. **Sync main**: `git fetch origin main && git checkout main && git pull origin main`
-2. **Rebase/merge branch onto main**: resolve any conflicts inline — do not leave them for the user.
-3. **Quality gates**: run the project's lint, contract checks, and tests (see Sprint Regression Testing). If anything fails, fix and re-run.
-4. **Create PR**: `gh pr create` with `Closes #NNN`, summary, and test plan.
-5. **Merge PR**: `gh pr merge --squash --delete-branch` (or `--merge` if the project prefers merge commits). If merge checks fail, diagnose and fix.
-6. **Update local main**: `git checkout main && git pull origin main` — confirm the merge landed.
-7. **Verify changes are live**: start/restart the app or dev server so the user can see and test the changes immediately. Use whatever the project's start command is (`npm run dev-start`, `npm start`, etc.). If the project has a preview tool, use it to confirm rendering.
+1. **Consolidate sub-branches** (if multi-branch workflow): merge each sub-branch into the integration branch in wave order (see §Branching Strategy). Resolve conflicts at each merge — do not defer.
+2. **Sync main**: `git fetch origin main && git checkout main && git pull origin main`
+3. **Rebase integration branch onto main**: resolve any conflicts inline — do not leave them for the user.
+4. **Quality gates**: run the project's lint, contract checks, and tests (see Sprint Regression Testing). If anything fails, fix and re-run.
+5. **Create PR**: `gh pr create` with `Closes #NNN`, summary, and test plan.
+6. **Merge PR**: `gh pr merge --squash --delete-branch`. If merge checks fail, diagnose and fix.
+7. **Update local main**: `git checkout main && git pull origin main` — confirm the merge landed.
+8. **Aggressive local cleanup** (see §Local Cleanup): delete ALL local feature/sub-branches, remove ALL worktrees, prune stale refs. After this step, only `main` exists locally.
+9. **Verify changes are live**: start/restart the app or dev server so the user can see and test the changes immediately.
 
 This flow is codified in the `/ship` skill (project-level). If a project lacks `/ship`, follow these steps manually.
 
@@ -289,6 +317,13 @@ This flow is codified in the `/ship` skill (project-level). If a project lacks `
 - Never leave merged PRs with a stale local `main` — always pull after merge.
 - Never stop at "PR created" — the work is not done until the user can test it locally.
 - If running in a worktree: after merge, ensure the main repo's `main` branch is also updated.
+- After ship: zero local branches besides `main`, zero worktrees. Traceability lives in the GitHub PR.
+
+**Session ending before ship (work in progress):**
+- Commit + push all current changes before the session ends — even as a WIP commit.
+- Worktrees may be cleaned up between sessions (work is safe on remote).
+- Next session resumes by checking out the remote branch (or `git worktree add` if needed).
+- The session-start sweep will NOT delete branches that still have a remote counterpart.
 
 ## Skill Creation & Refinement
 - When creating ANY new skill (global or project-level), always use the Anthropic `skill-creator` skill to refine it.
@@ -307,3 +342,5 @@ This flow is codified in the `/ship` skill (project-level). If a project lacks `
 On every session start, silently run these as a **background agent** (do not block the user or show output unless there's an error):
 
 1. **Refresh live usage data**: Execute `/refresh-usage` in the background at **session start** if `~/.claude/scripts/usage-live.json` is missing or older than 5 minutes. The refresh script uses Edge CDP (port 9223). **Critical:** Edge must only be restarted with `--remote-debugging-port` **once per PC session** — the first time CDP is not yet active. After that first activation, Edge keeps CDP enabled and all subsequent refreshes happen invisibly (background tab, no visible window). Never restart Edge if CDP is already responding. Do **not** run refresh at arbitrary points during a session. The `/ship-dotclaude` skill handles its own post-ship refresh (step 14). If the browser is unavailable or not logged in, silently skip — the startup hook falls back to local estimates.
+
+2. **Branch & worktree sweep**: Handled automatically by the `sweep-branches.js` SessionStart hook — no manual action needed. The hook cleans up garbage (orphaned worktrees, gone branches, stale refs) while preserving branches with remote counterparts. See §Session-start sweep for details.

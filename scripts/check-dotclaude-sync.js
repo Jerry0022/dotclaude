@@ -29,6 +29,7 @@ const TRACKED_FILES = [
   'scripts/precheck-cost.js',
   'scripts/scrape-usage.js',
   'scripts/check-dotclaude-sync.js',
+  'scripts/sweep-branches.js',
   'plugins/blocklist.json'
 ];
 
