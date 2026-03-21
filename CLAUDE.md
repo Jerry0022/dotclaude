@@ -84,13 +84,41 @@ The SessionStart hook displays live rate limit data (5h window + weekly). **Acti
 - No emojis unless explicitly requested.
 
 ## Agent Naming Convention
-When spawning subagents via the Agent tool, the `description` field is the only thing the user sees in the UI. Make it informative:
-- **Format**: `[Type Mode] Task description`
-- **Type**: `Explore`, `Plan`, `Agent` (general-purpose), or the custom subagent_type name
-- **Mode**: `||` for parallel (launched alongside other agents in the same turn), `->` for sequential (launched alone, depends on prior results)
-- Keep the task description short (3-6 words) as before.
-- Example parallel pair: `[Explore ||] Find menu/nav implementation` + `[Explore ||] Find app screenshots`
-- Example sequential: `[Agent ->] Run tests after refactor`
+When spawning subagents via the Agent tool, the `description` field is the only thing the user sees in the UI. Make it informative — the user must always know **which role** is acting and **what it does**.
+
+### Format
+```
+[role:X · Type] Task description
+```
+
+- **role:X** — the agent team role driving this work (`po`, `gamer`, `frontend`, `core`, `windows`, `ai`, `qa`). If no project role applies (e.g., pure codebase exploration unrelated to a role), use the technical type alone: `[Explore]`, `[Plan]`, `[Agent]`.
+- **Type** — the technical subagent type: `Explore`, `Plan`, `Agent` (general-purpose), or a custom `subagent_type` name.
+- Keep the task description short (3-6 words).
+
+### Parallel vs. sequential indicator
+When multiple agents launch in the same turn, append `||` after the bracket to signal parallel execution. For a single sequential agent, no indicator is needed.
+
+### Examples
+| Scenario | Description |
+|----------|-------------|
+| QA running tests | `[role:qa · Agent] Run test suite` |
+| Gamer checking copy | `[role:gamer · Agent] Lore-check changed strings` |
+| Frontend health check | `[role:frontend · Agent] Angular health check` |
+| Two parallel explores | `[role:frontend · Explore ||] Find nav component` + `[role:core · Explore ||] Find IPC contract` |
+| Non-role exploration | `[Explore] Find config files` |
+| Planning agent | `[role:po · Plan] Review issue scope` |
+
+### Inline role attribution (no subagent)
+When roles execute inline (no subagent spawned — typical for small changes), attribute output with role tags so the user sees which role produced each result:
+
+```
+[core] IPC contract updated — new event: `foo:bar`
+[frontend] Consuming `foo:bar` in FooComponent — /angular-health: clean
+[gamer] Copy review — 2 strings updated, tone approved
+[qa] Tests: 14 passed, 0 failed
+```
+
+This applies to both GitHub issue comments (structured handoff comments) and direct conversation output.
 
 ## Interactive Questions (AskUserQuestion)
 When a decision or clarification is needed, **prefer the AskUserQuestion tool** over inline text questions whenever possible. Rules:
