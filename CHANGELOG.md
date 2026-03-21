@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-03-21
+
+### Added
+- Pre-approved tool permissions in settings template — all standard tools (Read, Write, Edit, Glob, Grep, Bash, WebFetch, WebSearch, NotebookEdit, Agent, TodoWrite, Skill, mcp__*) now bypass permission prompts on startup
+- Global Config Sync rule in CLAUDE.md — changes to `~/.claude/` files must always be shipped to the dotclaude repo via `/ship-dotclaude`
+
 ## [0.5.0] - 2026-03-20
 
 ### Added

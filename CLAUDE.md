@@ -325,6 +325,16 @@ This flow is codified in the `/ship` skill (project-level). If a project lacks `
 - Next session resumes by checking out the remote branch (or `git worktree add` if needed).
 - The session-start sweep will NOT delete branches that still have a remote counterpart.
 
+## Global Config Sync — Dotclaude Repository
+
+Whenever any file under `~/.claude/` is modified during a session (settings.json, CLAUDE.md, skills, scripts, commands, hooks, plugins), **always ship the changes to the dotclaude repo** at the end of the task using `/ship-dotclaude`. This is mandatory — global config changes must never remain unsynced.
+
+**Rules:**
+- Treat global config changes like code changes: they are not "done" until synced and pushed.
+- If a session modifies both project files and global config, ship the project first (via `/ship`), then ship dotclaude.
+- If a session only modifies global config (no project changes), skip `/ship` and go straight to `/ship-dotclaude`.
+- The `/ship-dotclaude` skill handles diffing, copying, version bumping, committing, and pushing automatically.
+
 ## Skill Creation & Refinement
 - When creating ANY new skill (global or project-level), always use the Anthropic `skill-creator` skill to refine it.
 - At minimum: draft the skill, then run the skill-creator's description optimizer to improve triggering accuracy.

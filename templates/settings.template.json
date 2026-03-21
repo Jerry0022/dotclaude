@@ -1,6 +1,20 @@
 {
   "permissions": {
-    "allow": []
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Bash",
+      "WebFetch",
+      "WebSearch",
+      "NotebookEdit",
+      "Agent",
+      "TodoWrite",
+      "Skill",
+      "mcp__*"
+    ]
   },
   "hooks": {
     "SessionStart": [
