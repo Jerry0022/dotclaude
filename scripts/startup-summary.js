@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { execFileSync } = require('child_process');
 
 const CONFIG_PATH = path.join(os.homedir(), '.claude', 'scripts', 'config.json');
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
@@ -60,6 +61,21 @@ function saveHistory(history) {
   try { fs.writeFileSync(HISTORY_PATH, JSON.stringify(history, null, 2)); } catch {}
 }
 
+/** Try headless refresh via CDP connection to Edge */
+function tryHeadlessRefresh() {
+  const REFRESH_SCRIPT = path.join(CLAUDE_DIR, 'scripts', 'refresh-usage-headless.js');
+  if (!fs.existsSync(REFRESH_SCRIPT)) return false;
+  try {
+    execFileSync(process.execPath, [REFRESH_SCRIPT, '--quiet'], {
+      timeout: 40000,
+      stdio: 'ignore'
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Load live usage data scraped from claude.ai (if recent enough) */
 function loadLiveUsage() {
   try {
@@ -71,6 +87,19 @@ function loadLiveUsage() {
       return data;
     }
   } catch {}
+
+  // Data is stale or missing — attempt headless refresh
+  if (tryHeadlessRefresh()) {
+    try {
+      const data = JSON.parse(fs.readFileSync(LIVE_USAGE_PATH, 'utf8'));
+      if (data.session && typeof data.session.pct === 'number') {
+        data._age = 0;
+        data._source = 'live';
+        return data;
+      }
+    } catch {}
+  }
+
   return null;
 }
 
@@ -376,8 +405,8 @@ if (liveData) {
   weeklyResetStr = liveData.weekly.resetDay && liveData.weekly.resetTime
     ? `resets ${liveData.weekly.resetDay} ${liveData.weekly.resetTime}`
     : '';
-  const ageMin = Math.round(liveData._age / 60000);
-  dataSource = `LIVE (${ageMin}m ago)`;
+  const ageMin = Math.max(0, Math.round(liveData._age / 60000));
+  dataSource = ageMin === 0 ? 'LIVE (just now)' : `LIVE (${ageMin}m ago)`;
 } else {
   // Fallback: local estimate from .jsonl files
   const limit5h = cfg.fiveHourLimitTokens;
@@ -498,7 +527,7 @@ if (pct5h >= 80) {
 
 // Stale data warning
 if (!liveData) {
-  console.log(pad('>> Run /refresh-usage to scrape live data from claude.ai'));
+  console.log(pad('>> Auto-refresh failed (Edge CDP). Using local estimate.'));
 }
 
 console.log(`\u255A${sep}\u255D`);
