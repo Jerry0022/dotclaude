@@ -93,7 +93,7 @@ When a task is complete, **always** end with a completion card. This is the only
 
 ## ✨ Aufgabe abgeschlossen — <short summary, max ~10 words>
 
-<status> · `<branch>` · <ship detail>
+<status> auf remote `<branch>` via <ship method>
 
 First change or action
 Second change or action
@@ -105,12 +105,12 @@ file2 — what changed
 ```
 
 **Status line variants:**
-- **Shipped** — work is merged and live. Include branch + PR/push ref.
+- **Shipped** — work is merged and live. Format: `Shipped auf remote <branch> via <method>`.
 - **Nicht shipped** — work is done but not shipped. Append: "Soll ich shippen?" (or ship automatically per §Completion Flow rules).
 - **Ship blockiert** — done but ship failed (tests, merge conflict, etc.). Explain why.
-- **Erledigt** — for tasks without code changes (config, research, explanation). Omit branch/status line.
+- **Erledigt** — for tasks without code changes (config, research, explanation). Omit status line.
 
-**Ship detail examples:** `PR #18` (merged via PR), `direct push` (pushed to main without PR — typical for dotclaude or trivial fixes).
+**Ship methods:** `direct push` (pushed without PR), `Pull-Request-Merge (PR #N)` (merged via PR).
 
 **Rules:**
 - The completion card is **always** the last thing in the response — nothing after it.
