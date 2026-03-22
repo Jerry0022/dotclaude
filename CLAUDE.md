@@ -85,41 +85,33 @@ The SessionStart hook displays live rate limit data (5h window + weekly). **Acti
 
 ### Task Completion Signal
 
-When a task is complete, **always** end with a completion card. This is the only place where emojis are always allowed. The signal must be consistent and recognizable across all sessions.
+When a task is complete, **always** end with a completion card. This is the only place where emojis are always allowed. The signal must be consistent and recognizable across all sessions. Note: `<details>` tags do NOT render in Claude Code — use blockquotes for the details section instead.
 
 **Format:**
 ```markdown
 ---
 
-◈ **Aufgabe abgeschlossen** — <short summary, max ~10 words>
+**Aufgabe abgeschlossen** — <short summary, max ~10 words>
+✨ <status> · `<branch>` · <ship detail>
 
-<icon> <status> · `<branch>` · <ship detail>
-
-<details><summary>Details</summary>
-
-**Was wurde gemacht:**
-- First change or action
-- Second change or action
-
-**Dateien:**
-- `file1` — what changed
-- `file2` — what changed
-
-</details>
+> - First change or action
+> - Second change or action
+> ---
+> `file1` — what changed
+> `file2` — what changed
 ```
 
 **Status line variants:**
-- `✅ Shipped` — work is merged and live. Include branch + PR/push ref.
+- `✨ Shipped` — work is merged and live. Include branch + PR/push ref.
 - `📦 Nicht shipped` — work is done but not shipped. Append: "Soll ich shippen?" (or ship automatically per §Completion Flow rules).
 - `🔴 Ship blockiert` — done but ship failed (tests, merge conflict, etc.). Explain why.
 - `🔧 Erledigt` — for tasks without code changes (config, research, explanation). Omit branch line.
 
 **Rules:**
 - The completion card is **always** the last thing in the response — nothing after it.
-- `<details>` must be **outside** any blockquote (blockquotes break collapsibility in Claude Code).
 - The summary line is in the user's language (German), max ~10 words.
 - Branch info is omitted for branchless tasks.
-- The details block has two sections: "Was wurde gemacht" (bullet list of actions) and "Dateien" (changed files with descriptions). For non-code tasks, omit the Dateien section.
+- The blockquote contains two parts separated by `---`: first a bullet list of what was done, then the changed files. For non-code tasks, omit the files section.
 - Keep it factual — no commentary or praise.
 
 ## Agent Naming Convention
