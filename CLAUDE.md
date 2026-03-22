@@ -83,6 +83,39 @@ The SessionStart hook displays live rate limit data (5h window + weekly). **Acti
 - Use GitHub-flavored Markdown when structure helps.
 - No emojis unless explicitly requested.
 
+### Task Completion Signal
+
+When a task is complete, **always** end with a Status-Card. This is the only place where emojis are always allowed (the status icon). The card must be consistent and recognizable across all sessions.
+
+**Format:**
+```markdown
+---
+| <icon> | **<status>** |
+|---|---|
+| Branch | `<branch>` → `<target>` |
+| Ship | <ship status> |
+
+<details><summary>Änderungen (<N> Dateien)</summary>
+
+- `file1` — what changed
+- `file2` — what changed
+
+</details>
+```
+
+**Status icons and states:**
+- `✅` **Fertig & shipped** — work is merged and live
+- `📦` **Fertig** — work is done but not shipped. Follow with: "Soll ich shippen?" (or ship automatically per §Completion Flow rules)
+- `🔴` **Fertig — Ship blockiert** — done but ship failed (tests, merge conflict, etc.)
+- `🔧` **Erledigt** — for tasks without code changes (config, research, explanation)
+
+**Rules:**
+- The card is **always** the last thing in the response — nothing after it.
+- The `Branch` row is omitted for tasks without branches (e.g., config changes, explanations).
+- The `Ship` row describes what happened: "Shipped (PR #N merged)", "Nicht shipped", "Pushed to `origin/<branch>`", etc.
+- The details block lists changed files with a short description per file. For non-code tasks, list what was done instead.
+- Keep it factual — no commentary or praise in the card.
+
 ## Agent Naming Convention
 When spawning subagents via the Agent tool, the `description` field is the only thing the user sees in the UI. Make it informative — the user must always know **which role** is acting and **what it does**.
 
