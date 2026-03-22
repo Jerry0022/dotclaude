@@ -85,34 +85,41 @@ The SessionStart hook displays live rate limit data (5h window + weekly). **Acti
 
 ### Task Completion Signal
 
-When a task is complete, **always** end with a blockquote status card. This is the only place where emojis are always allowed. The signal must be consistent and recognizable across all sessions. Note: `<details>` tags do NOT render in Claude Code — use code blocks for file lists instead.
+When a task is complete, **always** end with a completion card. This is the only place where emojis are always allowed. The signal must be consistent and recognizable across all sessions.
 
 **Format:**
 ```markdown
 ---
 
-> **━━ Aufgabe abgeschlossen ━━**
-> <short summary of what was done — 1 sentence>
->
-> <icon> <status> · `<branch>` · <ship detail>
->
-> ```
-> file1   What changed
-> file2   What changed
-> ```
+◈ **Aufgabe abgeschlossen** — <short summary, max ~10 words>
+
+<icon> <status> · `<branch>` · <ship detail>
+
+<details><summary>Details</summary>
+
+**Was wurde gemacht:**
+- First change or action
+- Second change or action
+
+**Dateien:**
+- `file1` — what changed
+- `file2` — what changed
+
+</details>
 ```
 
 **Status line variants:**
 - `✅ Shipped` — work is merged and live. Include branch + PR/push ref.
-- `📦 Nicht shipped` — work is done but not shipped. Append: "Soll ich shippen?"  (or ship automatically per §Completion Flow rules).
+- `📦 Nicht shipped` — work is done but not shipped. Append: "Soll ich shippen?" (or ship automatically per §Completion Flow rules).
 - `🔴 Ship blockiert` — done but ship failed (tests, merge conflict, etc.). Explain why.
 - `🔧 Erledigt` — for tasks without code changes (config, research, explanation). Omit branch line.
 
 **Rules:**
-- The blockquote is **always** the last thing in the response — nothing after it.
-- The summary line is in the user's language (German), imperative, max ~10 words.
+- The completion card is **always** the last thing in the response — nothing after it.
+- `<details>` must be **outside** any blockquote (blockquotes break collapsibility in Claude Code).
+- The summary line is in the user's language (German), max ~10 words.
 - Branch info is omitted for branchless tasks.
-- The code block lists changed files aligned with tab-separated descriptions. For non-code tasks, list what was done instead.
+- The details block has two sections: "Was wurde gemacht" (bullet list of actions) and "Dateien" (changed files with descriptions). For non-code tasks, omit the Dateien section.
 - Keep it factual — no commentary or praise.
 
 ## Agent Naming Convention
