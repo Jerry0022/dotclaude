@@ -329,6 +329,21 @@ This flow is codified in the `/ship` skill (project-level). If a project lacks `
 
 ## Global Config Sync — Dotclaude Repository
 
+The dotclaude repo is the **single source of truth** for global Claude config. Sync is **bidirectional**:
+
+### Direction 1: Repo → Local (automatic at session start)
+
+The `check-dotclaude-sync.js` SessionStart hook automatically:
+1. `git fetch origin main` on the dotclaude repo
+2. `git pull --ff-only` if remote is ahead
+3. For each tracked file: if repo version is newer and local was not independently changed → **auto-copy repo → `~/.claude/`**
+4. If both repo and local changed the same file → **conflict warning** — do not overwrite, ask the user to decide
+5. Tracks sync state in `.dotclaude-sync-state.json` (last synced commit hash)
+
+This works whether the repo is cloned locally or needs to be fetched from remote. No user action needed for clean updates.
+
+### Direction 2: Local → Repo (ship via `/ship-dotclaude`)
+
 Whenever any file under `~/.claude/` is modified during a session (settings.json, CLAUDE.md, skills, scripts, commands, hooks, plugins), **always ship the changes to the dotclaude repo** at the end of the task using `/ship-dotclaude`. This is mandatory — global config changes must never remain unsynced.
 
 **Rules:**
