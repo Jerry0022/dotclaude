@@ -85,35 +85,34 @@ The SessionStart hook displays live rate limit data (5h window + weekly). **Acti
 
 ### Task Completion Signal
 
-When a task is complete, **always** end with a compact status line. This is the only place where emojis are always allowed (the status icon). The signal must be consistent and recognizable across all sessions.
+When a task is complete, **always** end with a blockquote status card. This is the only place where emojis are always allowed. The signal must be consistent and recognizable across all sessions. Note: `<details>` tags do NOT render in Claude Code — use code blocks for file lists instead.
 
 **Format:**
 ```markdown
 ---
 
-<icon> **<status>** · `<branch>` → `<target>` · <ship detail>
-
-<details><summary>Änderungen</summary>
-
-| Datei | Was |
-|-------|-----|
-| `file1` | What changed |
-| `file2` | What changed |
-
-</details>
+> **━━ Aufgabe abgeschlossen ━━**
+> <short summary of what was done — 1 sentence>
+>
+> <icon> <status> · `<branch>` · <ship detail>
+>
+> ```
+> file1   What changed
+> file2   What changed
+> ```
 ```
 
-**Status icons and states:**
-- `✅` **Shipped** — work is merged and live. Include branch + PR ref.
-- `📦` **Done** — work is done but not shipped. Follow with: "Soll ich shippen?" (or ship automatically per §Completion Flow rules).
-- `🔴` **Blockiert** — done but ship failed (tests, merge conflict, etc.).
-- `🔧` **Erledigt** — for tasks without code changes (config, research, explanation). Omit branch info.
+**Status line variants:**
+- `✅ Shipped` — work is merged and live. Include branch + PR/push ref.
+- `📦 Nicht shipped` — work is done but not shipped. Append: "Soll ich shippen?"  (or ship automatically per §Completion Flow rules).
+- `🔴 Ship blockiert` — done but ship failed (tests, merge conflict, etc.). Explain why.
+- `🔧 Erledigt` — for tasks without code changes (config, research, explanation). Omit branch line.
 
 **Rules:**
-- The status line is **always** the last thing in the response — nothing after it.
-- Branch info is omitted for branchless tasks (config tweaks, explanations, research).
-- Ship detail examples: `PR #18`, `pushed to origin/feat/42`, `direct push`.
-- The details table lists changed files with a short description per file. For non-code tasks, list what was done instead.
+- The blockquote is **always** the last thing in the response — nothing after it.
+- The summary line is in the user's language (German), imperative, max ~10 words.
+- Branch info is omitted for branchless tasks.
+- The code block lists changed files aligned with tab-separated descriptions. For non-code tasks, list what was done instead.
 - Keep it factual — no commentary or praise.
 
 ## Agent Naming Convention
