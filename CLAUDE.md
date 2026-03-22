@@ -91,9 +91,9 @@ When a task is complete, **always** end with a completion card. This is the only
 ```markdown
 ---
 
-## Aufgabe abgeschlossen — <short summary, max ~10 words>
+## ✨ Aufgabe abgeschlossen — <short summary, max ~10 words>
 
-✨ <status> · `<branch>` · <ship detail>
+<status> · `<branch>` · <ship detail>
 
 - First change or action
 - Second change or action
@@ -105,10 +105,10 @@ When a task is complete, **always** end with a completion card. This is the only
 ```
 
 **Status line variants:**
-- `✨ Shipped` — work is merged and live. Include branch + PR/push ref.
-- `📦 Nicht shipped` — work is done but not shipped. Append: "Soll ich shippen?" (or ship automatically per §Completion Flow rules).
-- `🔴 Ship blockiert` — done but ship failed (tests, merge conflict, etc.). Explain why.
-- `🔧 Erledigt` — for tasks without code changes (config, research, explanation). Omit branch/status line.
+- **Shipped** — work is merged and live. Include branch + PR/push ref.
+- **Nicht shipped** — work is done but not shipped. Append: "Soll ich shippen?" (or ship automatically per §Completion Flow rules).
+- **Ship blockiert** — done but ship failed (tests, merge conflict, etc.). Explain why.
+- **Erledigt** — for tasks without code changes (config, research, explanation). Omit branch/status line.
 
 **Ship detail examples:** `PR #18` (merged via PR), `direct push` (pushed to main without PR — typical for dotclaude or trivial fixes).
 
