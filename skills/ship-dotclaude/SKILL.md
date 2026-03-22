@@ -47,10 +47,9 @@ The repo path is stored in `~/.claude/scripts/dotclaude-repo-path`.
     Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
     ```
 11. Push to origin.
-12. Create a git tag (`v<version>`) on the commit and push it: `git tag v<version> && git push origin v<version>`.
-13. Create a GitHub Release from the tag: `gh release create v<version> --title "dotclaude v<version>" --notes "<CHANGELOG section for this version>"`.
-14. Verify push and release succeeded — `gh release view v<version>`.
-15. Pull main locally to confirm.
+12. Create a git tag (`v<version>`) on the commit and push it: `git tag v<version> && git push origin v<version>`. This triggers the `release.yml` GitHub Actions workflow which builds the `.exe`, creates the GitHub Release with the `.exe` asset, and publishes the npm package to GitHub Packages.
+13. Wait for the pipeline to complete: `gh run list --workflow=release.yml --limit 1` then `gh run watch <run-id>` or poll with `gh run view <run-id>`. Verify all 3 jobs succeeded (build-exe, release, publish-npm).
+14. Pull main locally to confirm.
 16. Run `/refresh-usage` to update the usage dashboard with live data — shipping consumes tokens, so the dashboard should reflect the current state immediately.
 
 ## Rules
@@ -59,4 +58,4 @@ The repo path is stored in `~/.claude/scripts/dotclaude-repo-path`.
 - If `$ARGUMENTS` is provided, use it as the commit message subject.
 - If settings.json has new MCP permissions with UUIDs, warn the user but do NOT copy those to the template.
 - Always bump the version in package.json, README.md (text + badge), and CHANGELOG.md.
-- Always create a git tag and GitHub Release after pushing.
+- Always create a git tag and push it — the GitHub Actions pipeline handles Release creation, .exe build, and npm publish. Never create releases manually via `gh release create`.

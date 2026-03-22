@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2026-03-22
+
+### Added
+- Task Completion Signal — consistent status card at end of every task (sparkles icon, plain-text details, backslash-break spacing)
+- Ship behavior rules — auto-ship for project repos, prompt-only for dotclaude
+- Release pipeline integration in `/ship-dotclaude` skill (CHANGELOG, git tag, GitHub Release)
+
+### Fixed
+- `/ship-dotclaude` was missing CHANGELOG update, git tag creation, and GitHub Release steps
+- GitHub Release aligned from v0.3.0 to match code version
+- README version badge synced with package.json
+
 ## [0.9.0] - 2026-03-22
 
 ### Added
