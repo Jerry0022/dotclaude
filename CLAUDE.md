@@ -287,11 +287,11 @@ The hook reports what was cleaned and what was preserved. No manual action neede
 - Increment rules: `patch` for bug fixes, `minor` for new features, `major` for breaking changes.
 - Apply retroactively when touching a project that lacks a version badge in the README.
 
-## Release Flow (major/minor versions)
-Before committing a new **major or minor** version tag (`vX.Y.0` with Y or X incremented):
+## Release Flow
+Before committing a new version tag (`vX.Y.Z`):
 1. Run the project's release pipeline — use GitHub Actions where possible; fall back to a Windows self-hosted runner for anything requiring native Windows (installers, platform-specific tooling).
 2. Update `CHANGELOG.md` (or equivalent) before tagging. See per-project memory for tone/format requirements.
-- Patch versions do **not** trigger this full flow.
+- This applies to **all** version bumps — major, minor, and patch alike.
 - Specific pipeline details (scripts, artifact names, runner requirements) are stored in per-project memory.
 
 ## GitHub Issues

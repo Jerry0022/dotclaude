@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.1] - 2026-03-22
+
+### Changed
+- Release Flow now applies to all version bumps (major, minor, and patch) — no more patch exception
+
 ## [0.11.0] - 2026-03-22
 
 ### Added
