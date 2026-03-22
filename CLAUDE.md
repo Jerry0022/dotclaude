@@ -220,13 +220,15 @@ After a successful merge to remote `main`, **nothing must remain locally** excep
 The `sweep-branches.js` hook runs automatically at every session start (`SessionStart` in `settings.json`). It handles all cleanup:
 
 **Safe to delete (garbage):**
-- Worktree directories in `.claude/worktrees/` not listed in `git worktree list`
-- Local branches whose upstream is gone (remote deleted after PR merge)
+- Worktree directories in `.claude/worktrees/` not listed in `git worktree list` **AND** containing no uncommitted changes
+- Local branches whose upstream is gone (remote deleted after PR merge) **AND** not the current session's branch
 - Stale remote tracking refs
 
-**Never delete (active work):**
+**Never delete (protected):**
+- **The current session's worktree and branch** — always preserved, even if the branch has no remote counterpart or was never pushed. The sweep detects the active session via `git rev-parse --show-toplevel` and `--abbrev-ref HEAD`.
 - Local branches that have a remote counterpart (`origin/<branch>` exists) — parked or in-progress
 - Worktrees listed in `git worktree list` with a valid branch checkout
+- Orphaned worktree directories that contain uncommitted or untracked files (may be work-in-progress from a crashed session)
 
 The hook reports what was cleaned and what was preserved. No manual action needed.
 
@@ -334,6 +336,17 @@ Whenever any file under `~/.claude/` is modified during a session (settings.json
 - If a session modifies both project files and global config, ship the project first (via `/ship`), then ship dotclaude.
 - If a session only modifies global config (no project changes), skip `/ship` and go straight to `/ship-dotclaude`.
 - The `/ship-dotclaude` skill handles diffing, copying, version bumping, committing, and pushing automatically.
+
+### Proactive Sync Prompt (Jerry0022 only)
+
+When **any** global Claude config file (`~/.claude/` — CLAUDE.md, settings.json, skills, scripts, hooks, commands) is modified during a session, **proactively ask** (via AskUserQuestion) whether the user wants to sync and ship **all** global config changes to the dotclaude repo — not just the files changed in this session.
+
+This ensures the dotclaude repo stays fully up to date, even if previous sessions forgot to sync. The prompt should offer:
+1. **Full sync** (recommended) — diff all `~/.claude/` files against the dotclaude repo and ship everything that differs
+2. **Session changes only** — only ship files modified in this session
+3. **Skip** — do not sync now
+
+This rule applies **only** to the user `Jerry0022` (the dotclaude repo owner). For other users or contexts, follow the standard rule above (ship session changes at end of task).
 
 ## Skill Creation & Refinement
 - When creating ANY new skill (global or project-level), always use the Anthropic `skill-creator` skill to refine it.

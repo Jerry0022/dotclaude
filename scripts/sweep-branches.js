@@ -34,6 +34,10 @@ if (isGit !== 'true') process.exit(0);
 
 const mainRepo = run('git rev-parse --path-format=absolute --git-common-dir').replace(/[\\/].git$/, '');
 
+// Detect the current session's worktree (if any) so we never touch it
+const currentWorktree = path.resolve(run('git rev-parse --show-toplevel'));
+const currentBranch = run('git rev-parse --abbrev-ref HEAD');
+
 // 1. git worktree prune
 run(`git -C "${mainRepo}" worktree prune`);
 
@@ -52,7 +56,21 @@ if (fs.existsSync(worktreesDir)) {
     for (const entry of fs.readdirSync(worktreesDir)) {
       const fullPath = path.resolve(path.join(worktreesDir, entry));
       if (!fs.statSync(fullPath).isDirectory()) continue;
+
+      // NEVER delete the worktree the current session is running in
+      if (fullPath === currentWorktree) {
+        preserved.push(`${entry} (current session worktree)`);
+        continue;
+      }
+
+      // Only delete unregistered dirs that have NO local changes
       if (!registeredPaths.has(fullPath)) {
+        // Check if the directory contains uncommitted work (untracked/modified files)
+        const dirStatus = run(`git -C "${fullPath}" status --short 2>/dev/null`);
+        if (dirStatus) {
+          preserved.push(`${entry} (orphaned but has uncommitted changes)`);
+          continue;
+        }
         try {
           fs.rmSync(fullPath, { recursive: true, force: true });
           cleaned.push(`worktree dir: ${entry}`);
@@ -70,14 +88,25 @@ const goneLines = branchVV.split('\n').filter(l => l.includes(': gone]'));
 for (const line of goneLines) {
   const branch = line.trim().replace(/^\*\s*/, '').split(/\s+/)[0];
   if (branch && branch !== 'main' && branch !== 'master') {
-    // Check if branch has a worktree - remove it first
+    // NEVER delete the branch the current session is on
+    if (branch === currentBranch) {
+      preserved.push(`${branch} (current session branch, upstream gone)`);
+      continue;
+    }
+
+    // Check if branch has a worktree - remove it first (but not the current session's)
     const wtList = run(`git -C "${mainRepo}" worktree list --porcelain`);
     const blocks = wtList.split(/\n\n/).filter(Boolean);
     const branchWt = blocks.find(block => block.includes(`branch refs/heads/${branch}`));
     if (branchWt) {
       const wtLine = branchWt.split('\n').find(l => l.startsWith('worktree '));
       if (wtLine) {
-        const p = wtLine.replace('worktree ', '');
+        const p = path.resolve(wtLine.replace('worktree ', ''));
+        // Protect current session's worktree
+        if (p === currentWorktree) {
+          preserved.push(`${branch} (worktree is current session)`);
+          continue;
+        }
         run(`git -C "${mainRepo}" worktree remove "${p}" --force`);
         cleaned.push(`worktree: ${path.basename(p)} (gone branch)`);
       }
