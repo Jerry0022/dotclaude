@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.2] - 2026-03-22
+
+### Added
+- New CLAUDE.md rule: "Tool Selection — Minimize Terminal Windows (Windows)" — prefer dedicated tools over Bash to reduce disruptive CMD window popups
+
 ## [0.11.1] - 2026-03-22
 
 ### Changed

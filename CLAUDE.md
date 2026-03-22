@@ -421,6 +421,13 @@ This rule applies **only** to the user `Jerry0022` (the dotclaude repo owner). F
 - Minimal changes — do not refactor or add features beyond what was asked.
 - No fallbacks by default — propose as option, implement only with explicit approval.
 
+## Tool Selection — Minimize Terminal Windows (Windows)
+On Windows, each Bash tool call can open a visible CMD window that steals focus and clutters the taskbar. Minimize this:
+- **Always prefer dedicated tools** (Read, Write, Edit, Glob, Grep, WebFetch, WebSearch) over Bash equivalents — these don't spawn terminal processes.
+- **Never use Bash** for file reading (`cat`, `head`, `tail`), file searching (`find`, `grep`, `rg`), or file editing (`sed`, `awk`) — dedicated tools exist for all of these.
+- **Batch Bash calls**: when Bash is unavoidable (git, npm, node), combine related commands into a single call using `&&` instead of multiple separate calls.
+- **Exception**: when the user explicitly needs to see terminal output (interactive programs, dev servers, debugging), a visible terminal is expected and fine.
+
 ## Session Startup — Automatic Background Tasks
 
 On every session start, silently run these as a **background agent** (do not block the user or show output unless there's an error):
