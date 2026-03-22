@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] - 2026-03-22
+
+### Added
+- New `/project-setup` skill — audit or initialize repo hygiene (.gitignore, LICENSE, .gitattributes, .editorconfig, AI tooling config tracking)
+
 ## [0.10.0] - 2026-03-22
 
 ### Added
