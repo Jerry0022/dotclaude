@@ -315,6 +315,12 @@ When a unit of work is complete (feature, bug fix, design asset, refactor — an
 
 This flow is codified in the `/ship` skill (project-level). If a project lacks `/ship`, follow these steps manually.
 
+**When to ship (project repos — NOT dotclaude):**
+- **Ship automatically** (no user prompt) when a clear unit of work is complete: an issue is fully implemented, a whole topic is wrapped up, or the user explicitly says something is done.
+- **Offer to ship** (AskUserQuestion) when uncertain — e.g., multiple small changes that might or might not be done, or when the user's intent is ambiguous.
+- **Do NOT offer/ship** for minor intermediate states — small tweaks, WIP changes, or when the user is clearly still iterating. Avoid pestering the user after every request.
+- Rule of thumb: ship should feel natural, not annoying. When in doubt, lean toward just doing it silently for complete work, and skipping it for incomplete work.
+
 **Key rules:**
 - Never leave merged PRs with a stale local `main` — always pull after merge.
 - Never stop at "PR created" — the work is not done until the user can test it locally.
@@ -352,7 +358,9 @@ Whenever any file under `~/.claude/` is modified during a session (settings.json
 - If a session only modifies global config (no project changes), skip `/ship` and go straight to `/ship-dotclaude`.
 - The `/ship-dotclaude` skill handles diffing, copying, version bumping, committing, and pushing automatically.
 
-### Proactive Sync Prompt (Jerry0022 only)
+### Proactive Sync Prompt (Jerry0022 only — dotclaude repo ONLY)
+
+**Important:** Unlike project repos (where ship can happen automatically), dotclaude sync **always requires user confirmation** via AskUserQuestion. Never push global config changes silently.
 
 When **any** global Claude config file (`~/.claude/` — CLAUDE.md, settings.json, skills, scripts, hooks, commands) is modified during a session, **proactively ask** (via AskUserQuestion) whether the user wants to sync and ship **all** global config changes to the dotclaude repo — not just the files changed in this session.
 
