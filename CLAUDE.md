@@ -91,27 +91,33 @@ When a task is complete, **always** end with a completion card. This is the only
 ```markdown
 ---
 
-**Aufgabe abgeschlossen** — <short summary, max ~10 words>
+## Aufgabe abgeschlossen — <short summary, max ~10 words>
+
 ✨ <status> · `<branch>` · <ship detail>
 
-> - First change or action
-> - Second change or action
-> ---
-> `file1` — what changed
-> `file2` — what changed
+- First change or action
+- Second change or action
+
+---
+
+`file1` — what changed
+`file2` — what changed
 ```
 
 **Status line variants:**
 - `✨ Shipped` — work is merged and live. Include branch + PR/push ref.
 - `📦 Nicht shipped` — work is done but not shipped. Append: "Soll ich shippen?" (or ship automatically per §Completion Flow rules).
 - `🔴 Ship blockiert` — done but ship failed (tests, merge conflict, etc.). Explain why.
-- `🔧 Erledigt` — for tasks without code changes (config, research, explanation). Omit branch line.
+- `🔧 Erledigt` — for tasks without code changes (config, research, explanation). Omit branch/status line.
+
+**Ship detail examples:** `PR #18` (merged via PR), `direct push` (pushed to main without PR — typical for dotclaude or trivial fixes).
 
 **Rules:**
 - The completion card is **always** the last thing in the response — nothing after it.
-- The summary line is in the user's language (German), max ~10 words.
+- Use `##` heading for the title line — gives it visual weight and spacing.
+- The summary is in the user's language (German), max ~10 words.
 - Branch info is omitted for branchless tasks.
-- The blockquote contains two parts separated by `---`: first a bullet list of what was done, then the changed files. For non-code tasks, omit the files section.
+- Bullet list of actions first, then `---` separator with whitespace above and below, then changed files as inline code + description. For non-code tasks, omit the files section.
 - Keep it factual — no commentary or praise.
 
 ## Agent Naming Convention
