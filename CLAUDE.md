@@ -98,10 +98,10 @@ When a task is complete, **always** end with a completion card. This is the only
 First change or action
 Second change or action
 
----
-
 file1 — what changed
 file2 — what changed
+
+---
 ```
 
 **Status line variants:**
@@ -117,7 +117,7 @@ file2 — what changed
 - Use `##` heading for the title line — gives it visual weight and spacing.
 - The summary is in the user's language (German), max ~10 words.
 - Branch info is omitted for branchless tasks.
-- Plain text (no bold, no inline code, no bullet markers) for actions and files — this renders in the terminal's default gray, visually subdued compared to the bold title and status line. Separate actions from files with a `---` line with blank lines above and below. For non-code tasks, omit the files section.
+- Plain text (no bold, no inline code, no bullet markers) for actions and files — this renders in the terminal's default gray, visually subdued compared to the bold title and status line. Actions first, then files below (separated by a blank line). End the entire card with a `---` line at the very bottom. For non-code tasks, omit the files section.
 - Keep it factual — no commentary or praise.
 
 ## Agent Naming Convention
