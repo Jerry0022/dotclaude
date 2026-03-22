@@ -94,7 +94,7 @@ When a task is complete, **always** end with a completion card. This is the only
 ## ✨ Aufgabe abgeschlossen — <short summary, max ~10 words>
 
 <status> auf remote `<branch>` via <ship method>
-
+\
 First change or action
 Second change or action
 
@@ -115,7 +115,7 @@ file2 — what changed
 **Rules:**
 - The completion card is **always** the last thing in the response — nothing after it.
 - Use `##` heading for the title line — gives it visual weight and spacing.
-- Always insert a blank line after the status line (before the plain-text details).
+- Use a backslash `\` on its own line after the status line to force a visual break before the plain-text details (blank lines alone get swallowed by the renderer).
 - The summary is in the user's language (German), max ~10 words.
 - Branch info is omitted for branchless tasks.
 - Plain text (no bold, no inline code, no bullet markers) for actions and files — this renders in the terminal's default gray, visually subdued compared to the bold title and status line. Actions first, then files below (separated by a blank line). End the entire card with a `---` line at the very bottom. For non-code tasks, omit the files section.
