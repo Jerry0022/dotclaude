@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-03-22
+
+### Added
+- Bidirectional dotclaude sync — `check-dotclaude-sync.js` now auto-updates local `~/.claude/` from repo when remote is ahead
+- Session-start branch & worktree sweep hook (`sweep-branches.js`) — automatic cleanup of orphaned worktrees and gone branches
+- Branching strategy documentation in CLAUDE.md (branch lifecycle, sub-branches, zero-leftover policy)
+- Proactive sync prompt for dotclaude repo owner (full sync vs session-only vs skip)
+- Taskbar shortcut with `--dangerously-skip-permissions` in setup scripts
+
+### Fixed
+- Sweep hook now protects active session worktrees from cleanup
+
 ## [0.8.0] - 2026-03-21
 
 ### Added

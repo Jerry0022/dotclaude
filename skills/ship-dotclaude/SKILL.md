@@ -39,7 +39,7 @@ The repo path is stored in `~/.claude/scripts/dotclaude-repo-path`.
 6. Run `git status` in the repo to confirm staged changes.
 7. If there are new files, `git add` them specifically (never `git add -A`).
 8. Determine if changes are a patch (bug fix, tweak) or minor (new skill, new rule) version bump.
-9. Update `package.json` version and `README.md` version badge.
+9. Update `package.json` version, `README.md` version badge (both the text line and the shields.io badge URL), and add a new section to `CHANGELOG.md` with the new version, today's date, and a summary of what changed.
 10. Commit with conventional commit format:
     ```
     chore(config): <describe what changed>
@@ -47,13 +47,16 @@ The repo path is stored in `~/.claude/scripts/dotclaude-repo-path`.
     Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
     ```
 11. Push to origin.
-12. Verify push succeeded and remote is up to date.
-13. Pull main locally to confirm.
-14. Run `/refresh-usage` to update the usage dashboard with live data — shipping consumes tokens, so the dashboard should reflect the current state immediately.
+12. Create a git tag (`v<version>`) on the commit and push it: `git tag v<version> && git push origin v<version>`.
+13. Create a GitHub Release from the tag: `gh release create v<version> --title "dotclaude v<version>" --notes "<CHANGELOG section for this version>"`.
+14. Verify push and release succeeded — `gh release view v<version>`.
+15. Pull main locally to confirm.
+16. Run `/refresh-usage` to update the usage dashboard with live data — shipping consumes tokens, so the dashboard should reflect the current state immediately.
 
 ## Rules
 - Never `git add -A` or `git add .` — add specific files only.
 - Never commit MCP server UUIDs or machine-specific paths.
 - If `$ARGUMENTS` is provided, use it as the commit message subject.
 - If settings.json has new MCP permissions with UUIDs, warn the user but do NOT copy those to the template.
-- Always bump the version in package.json and README.md.
+- Always bump the version in package.json, README.md (text + badge), and CHANGELOG.md.
+- Always create a git tag and GitHub Release after pushing.

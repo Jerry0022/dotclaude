@@ -2,7 +2,7 @@
 
 **Version: 0.9.0**
 
-![Version](https://img.shields.io/badge/version-0.8.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.9.0-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white)
