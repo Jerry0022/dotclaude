@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.1] - 2026-03-23
+
+### Changed
+- CLAUDE.md §Tool Selection: added "Priority: functionality > aesthetics" rule — Bash is always preferred over broken workflows, console windows should only be avoided when genuinely unnecessary
+
 ## [0.14.0] - 2026-03-23
 
 ### Added

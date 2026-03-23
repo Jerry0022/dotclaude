@@ -433,6 +433,7 @@ On Windows, each Bash tool call can open a visible CMD window that steals focus 
 - **Always prefer dedicated tools** (Read, Write, Edit, Glob, Grep, WebFetch, WebSearch) over Bash equivalents — these don't spawn terminal processes.
 - **Never use Bash** for file reading (`cat`, `head`, `tail`), file searching (`find`, `grep`, `rg`), or file editing (`sed`, `awk`) — dedicated tools exist for all of these.
 - **Batch Bash calls**: when Bash is unavoidable (git, npm, node), combine related commands into a single call using `&&` instead of multiple separate calls.
+- **Priority: functionality > aesthetics**: If Bash is the only way to accomplish a task (starting apps, running servers, executing builds), use it — a console window is always better than a broken workflow. The goal is to avoid *unnecessary* terminal windows (e.g., using `cat` instead of Read), not to avoid terminals at all costs.
 - **Exception**: when the user explicitly needs to see terminal output (interactive programs, dev servers, debugging), a visible terminal is expected and fine.
 
 ## Session Startup — Automatic Background Tasks
