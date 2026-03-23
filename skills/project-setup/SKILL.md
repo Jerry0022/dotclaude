@@ -11,10 +11,10 @@ description: >-
   about any repo-structure file (.gitignore, .gitattributes, LICENSE, .editorconfig)
   — even a single-line change like "add node_modules to gitignore". Trigger phrases
   include: "set up this project", "init repo", "audit gitignore", "add license",
-  "what should be tracked", "fix gitignore", "repo hygiene", "project scaffolding".
-  Do NOT trigger for README generation (/readme handles that), CLAUDE.md edits
-  (/claude-md-improver handles that), or source code changes unrelated to repo
-  structure.
+  "what should be tracked", "fix gitignore", "repo hygiene", "project scaffolding",
+  "Projekt einrichten", "Repo aufsetzen". Do NOT trigger for README generation
+  (/readme handles that), CLAUDE.md edits (/claude-md-improver handles that),
+  or source code changes unrelated to repo structure.
 argument-hint: "[--audit | --init] [--fix]"
 allowed-tools: Read, Grep, Glob, Bash, AskUserQuestion, Write, Edit
 ---
@@ -42,13 +42,14 @@ Gather context:
 5. Existing `README.md`
 6. `.claude/` directory — check what AI config exists
 7. `.github/` directory — check for workflows, templates
-8. Directory structure via `ls` / `Glob` — identify build output dirs, dependency dirs
+8. Directory structure via `Glob` — identify build output dirs, dependency dirs
 
 Determine:
 - **Language/stack**: Node.js, Python, Rust, Go, C#, Java, multi-language, etc.
 - **Package manager**: npm, yarn, pnpm, pip, cargo, etc.
 - **Build output dirs**: dist, build, out, target, bin, etc.
 - **AI tooling present**: Claude, Cursor, Copilot, etc.
+- **Monorepo detection**: Does `packages/`, `apps/`, `libs/`, or `workspaces` in package.json exist?
 
 ## Step 2 — .gitignore audit & generation
 
@@ -168,6 +169,21 @@ obj/
 packages/
 ```
 
+### 2.1b — Monorepo additions
+
+If a monorepo structure is detected:
+
+```gitignore
+# Monorepo — per-package build artifacts
+packages/*/dist/
+packages/*/build/
+packages/*/node_modules/
+apps/*/dist/
+apps/*/.next/
+```
+
+Also check if individual packages have their own .gitignore files — flag if they contain rules that should be at root level.
+
 ### 2.2 — AI tooling ignores (CRITICAL)
 
 This section is mandatory for ALL projects, regardless of stack.
@@ -235,14 +251,21 @@ The .gitignore must follow this section order:
 
 Each section gets a comment header (`# Section name`). Blank line between sections.
 
-### 2.5 — Audit rules
+### 2.5 — Audit rules with severity levels
 
-When auditing an existing .gitignore:
-- **Missing rules**: Report which mandatory rules are absent
-- **Redundant rules**: Flag rules that duplicate each other
-- **Wrong section**: Flag rules in the wrong section
-- **Dangerous gaps**: Highlight if .env, credentials, or AI session state would be tracked
-- **Over-ignoring**: Flag if shared AI config (CLAUDE.md, .claude/skills/, etc.) is being ignored when it shouldn't be
+When auditing an existing .gitignore, classify each finding:
+
+| Severity | Meaning | Action with `--fix` |
+|----------|---------|---------------------|
+| **CRITICAL** | Secrets or credentials could be committed | Auto-fix immediately |
+| **CRITICAL** | Shared AI config (.claude/skills/) is being ignored | Auto-fix immediately |
+| **WARNING** | Required ignore rule is missing (e.g., node_modules/) | Auto-fix |
+| **WARNING** | .env variants not ignored | Auto-fix |
+| **INFO** | Redundant rules, wrong section order | Report only (suggest fix) |
+| **INFO** | Missing optional files (.editorconfig, .gitattributes) | Report only |
+
+With `--fix`: auto-fix CRITICAL and WARNING. Report INFO for manual review.
+Without `--fix`: report all findings.
 
 ## Step 3 — LICENSE
 
@@ -287,6 +310,13 @@ Check for and report on:
 
 Do NOT auto-create these — only report their status and recommend.
 
+## Step 5b — CI awareness
+
+If `.github/workflows/` exists:
+- Check if build artifacts produced by CI are correctly ignored (e.g., coverage reports, build outputs)
+- Check if CI-specific cache directories are ignored
+- Flag if CI generates files that might accidentally get committed
+
 ## Step 6 — Output
 
 ### Audit mode (default)
@@ -296,10 +326,11 @@ Present a structured report:
 ## Repo Hygiene Report
 
 ### .gitignore
+- [CRITICAL] .env.local not ignored — secrets at risk
+- [CRITICAL] .claude/skills/ is ignored but should be tracked
+- [WARNING] AI session state not ignored (.claude/worktrees/)
 - [OK] Dependencies ignored
-- [MISSING] AI session state not ignored (.claude/worktrees/)
-- [WARNING] .env.local not ignored
-- [OVER-IGNORED] .claude/skills/ is ignored but should be tracked
+- [INFO] Rules in wrong section order
 
 ### LICENSE
 - [OK] MIT license present, matches package.json
@@ -309,16 +340,20 @@ Present a structured report:
 - Suggestion: Run /readme to regenerate
 
 ### Additional files
-- [MISSING] .editorconfig — recommended
-- [MISSING] .gitattributes — recommended
+- [INFO] .editorconfig — recommended
+- [INFO] .gitattributes — recommended
 - [OK] CHANGELOG.md present
+
+### CI Integration
+- [OK] Coverage output ignored
+- [WARNING] Build artifacts not in .gitignore
 ```
 
-If `--fix` is passed: auto-fix all issues marked as MISSING or WARNING in the .gitignore and .gitattributes. Ask before creating new files (LICENSE, .editorconfig).
+If `--fix` is passed: auto-fix all CRITICAL and WARNING issues. Ask before creating new files (LICENSE, .editorconfig).
 
 ### Init mode
 Create all files sequentially:
-1. `.gitignore` (full, stack-appropriate)
+1. `.gitignore` (full, stack-appropriate, including monorepo rules if applicable)
 2. `.gitattributes` (`* text=auto` + language-specific rules)
 3. `LICENSE` (after user selects type)
 4. Inform user to run `/readme` for README generation

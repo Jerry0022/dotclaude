@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0] - 2026-03-23
+
+### Added
+- All 8 custom skills upgraded with improved trigger descriptions, decision logic, and new features
+- `/commit`: dynamic co-author detection (Opus/Sonnet/Haiku), smart staging dialog for >5 files, amend flow, German triggers
+- `/deep-research`: budget awareness (checks 5h window), depth check to skip unnecessary agent spawns, adaptive output formats (report/comparison/state-of-art)
+- `/ship-dotclaude`: `--dry-run` parameter, conflict resolution flow, automatic MCP UUID filtering, fixed step numbering
+- `/debug`: automatic log discovery via Glob, decision tree (trivial→auto-fix, unclear→propose), git-recent-changes as first check, triage step with AskUserQuestion
+- `/explain`: adaptive depth (inline for single lines, full template for modules, +Mermaid for architecture), user memory integration
+- `/youtube-transcript`: `--at MM:SS` timestamp support, robust 4-step fallback chain, interactive follow-up, language-adaptive output
+- `/readme`: `--update` mode for incremental edits, auto-preview for large projects, "What's New" section from CHANGELOG
+- `/project-setup`: monorepo detection with per-package ignores, severity levels (CRITICAL/WARNING/INFO), CI awareness check
+
 ## [0.11.3] - 2026-03-23
 
 ### Fixed

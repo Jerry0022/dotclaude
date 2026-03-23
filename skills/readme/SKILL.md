@@ -5,9 +5,10 @@ description: >-
   the user explicitly calls /readme, AND also whenever Claude is about to create,
   rewrite, or substantially update a README.md file as part of any other task.
   Triggers include: "create a readme", "update the readme", "improve the readme",
-  "write documentation", or any workflow that produces a new or rewritten README.md.
-  Do NOT trigger for minor one-line edits like bumping a version number.
-argument-hint: [--preview]
+  "write documentation", "README erstellen", "README aktualisieren", or any
+  workflow that produces a new or rewritten README.md. Do NOT trigger for minor
+  one-line edits like bumping a version number.
+argument-hint: "[--preview] [--update]"
 allowed-tools: Read, Grep, Glob, Bash, AskUserQuestion, Write, Edit, mcp__972a13cb-e2c8-4660-871b-0630efb3cad3__validate_and_render_mermaid_diagram
 ---
 
@@ -18,18 +19,30 @@ Generate a visually appealing, modern, and informative README.md for the current
 ## Arguments
 
 - `--preview`: Show planned structure (sections, badges, media) and ask for confirmation before generating. Without this flag, generate directly.
+- `--update`: Incremental update mode — instead of full rewrite, analyze what changed since the last README update and apply targeted updates. Preserves user-written sections while updating version, features, and structure.
+
+## Step 0 — Mode detection
+
+Determine the right mode automatically if no flag is given:
+
+| Situation | Mode |
+|-----------|------|
+| No README.md exists | Full generation (same as no flag) |
+| README.md exists + small project (<10 source files) | Full generation |
+| README.md exists + large project (>20 source files) | Auto-enable `--preview` |
+| User says "update" or "aktualisieren" | `--update` mode |
 
 ## Step 1 — Analyze the project
 
 Read and analyze these sources to understand the project:
 
 1. `package.json` (or equivalent manifest: `Cargo.toml`, `pyproject.toml`, `go.mod`, etc.)
-2. Existing `README.md` (extract any useful content, but the output will be a full rewrite)
+2. Existing `README.md` (extract any useful content)
 3. Source file structure via `Glob` (identify main tech stack, entry points, folder layout)
 4. `LICENSE` or license field in manifest
 5. `.github/workflows/` for CI/CD presence
 6. `/docs`, `/assets`, `/screenshots`, `/images` for existing media files
-7. `CHANGELOG.md` if present
+7. `CHANGELOG.md` if present — extract the latest 3 entries for a "What's New" section
 8. `CLAUDE.md` for project-specific context and conventions
 
 From this analysis, determine:
@@ -41,6 +54,16 @@ From this analysis, determine:
 - **Available media** (screenshots, GIFs, diagrams in the repo)
 - **Package registry** (npm, PyPI, crates.io, etc. — if published)
 - **CI status** (GitHub Actions, etc.)
+
+## Step 1b — Update mode analysis (only for `--update`)
+
+If in update mode:
+1. Read the existing README.md carefully.
+2. Identify sections that are outdated (wrong version, missing new features, stale badges).
+3. Identify sections that look user-written and should be preserved.
+4. Show a diff preview: "Diese Sections würde ich aktualisieren: ... Diese bleibe unverändert: ..."
+5. Ask for confirmation via `AskUserQuestion` before applying changes.
+6. Apply changes with `Edit` tool (targeted edits, not full rewrite).
 
 ## Step 2 — Select template
 
@@ -54,12 +77,13 @@ Sections in order:
 2. **Table of Contents** (only if 5+ sections)
 3. **Overview / Motivation** — Why does this exist? What problem does it solve? (2-4 sentences)
 4. **Features** — Bullet list with emoji prefixes, highlight what makes it stand out
-5. **Installation** — Package manager commands, prerequisites
-6. **Quick Start** — Minimal working example (code block)
-7. **Usage / API** — Key API surface, configuration options, common patterns
-8. **Architecture** — Mermaid diagram if the project has 3+ modules/services (optional)
-9. **Contributing** — How to contribute, link to CONTRIBUTING.md if it exists
-10. **License** — Type + link
+5. **What's New** — Latest 2-3 CHANGELOG entries (if CHANGELOG.md exists)
+6. **Installation** — Package manager commands, prerequisites
+7. **Quick Start** — Minimal working example (code block)
+8. **Usage / API** — Key API surface, configuration options, common patterns
+9. **Architecture** — Mermaid diagram if the project has 3+ modules/services (optional)
+10. **Contributing** — How to contribute, link to CONTRIBUTING.md if it exists
+11. **License** — Type + link
 
 ### User-facing template
 
@@ -70,12 +94,13 @@ Sections in order:
 3. **What is this?** — Elevator pitch for end users (2-3 sentences, no jargon)
 4. **Screenshots / Demo** — Key screenshots or GIF showing the app in action
 5. **Features** — User-oriented feature list with emoji prefixes
-6. **Getting Started** — Download/install instructions per platform
-7. **Tutorial / How to Use** — Step-by-step guide with screenshots where helpful
-8. **FAQ** — Common questions (only if there's enough content)
-9. **Architecture** — Mermaid diagram for complex multi-process apps (optional)
-10. **Contributing** — How to contribute
-11. **License** — Type + link
+6. **What's New** — Latest 2-3 CHANGELOG entries (if CHANGELOG.md exists)
+7. **Getting Started** — Download/install instructions per platform
+8. **Tutorial / How to Use** — Step-by-step guide with screenshots where helpful
+9. **FAQ** — Common questions (only if there's enough content)
+10. **Architecture** — Mermaid diagram for complex multi-process apps (optional)
+11. **Contributing** — How to contribute
+12. **License** — Type + link
 
 Omit any section that has no meaningful content for the specific project. Do not generate filler.
 
@@ -96,14 +121,6 @@ Generate a badge row using `shields.io` format. Include contextually relevant ba
 
 Badge style: `flat-square` for consistency. Use branded colors where possible (e.g., npm red, TypeScript blue).
 
-Example badge row:
-```markdown
-![Version](https://img.shields.io/badge/version-1.2.3-blue?style=flat-square)
-![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![Build](https://img.shields.io/github/actions/workflow/status/owner/repo/ci.yml?style=flat-square)
-![npm](https://img.shields.io/npm/dm/package-name?style=flat-square)
-```
-
 ## Step 4 — Media handling
 
 Search for existing media files in the repository:
@@ -113,7 +130,6 @@ Search for existing media files in the repository:
 For each media candidate found:
 - Use `AskUserQuestion` to ask the user which images to include and where
 - Only include media the user explicitly approves
-- Place screenshots/GIFs in the most relevant section (hero, features, tutorial)
 
 If no media exists but would significantly improve the README (e.g., a desktop app with no screenshots), add a TODO comment:
 ```markdown
@@ -128,9 +144,9 @@ If the project is complex enough (3+ modules, multi-service architecture, or com
 - Use `LR` direction for flowcharts
 - Include it in the Architecture section
 
-## Step 6 — Preview mode (if `--preview` flag)
+## Step 6 — Preview mode (if `--preview` flag or auto-detected)
 
-If `--preview` is passed, do NOT generate the README yet. Instead:
+If in preview mode, do NOT generate the README yet. Instead:
 
 1. Present the analysis results (category, stack, version, badges planned)
 2. Show the section outline with brief descriptions of planned content
@@ -140,7 +156,7 @@ If `--preview` is passed, do NOT generate the README yet. Instead:
 
 ## Step 7 — Generate
 
-Write the final `README.md` using the `Write` tool.
+Write the final `README.md` using the `Write` tool (full generation) or `Edit` tool (update mode).
 
 ## Style rules
 
