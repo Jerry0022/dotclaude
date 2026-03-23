@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.3] - 2026-03-23
+
+### Fixed
+- Sweep hook now cleans up stale `claude/*` branches whose worktree was archived and have no commits ahead of main
+
 ## [0.11.2] - 2026-03-22
 
 ### Added

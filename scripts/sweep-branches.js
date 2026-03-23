@@ -116,7 +116,47 @@ for (const line of goneLines) {
   }
 }
 
-// 4. Prune stale remote tracking refs
+// 4. Delete claude/* branches whose worktree was removed and have no commits ahead of main
+const allBranches = run(`git -C "${mainRepo}" branch`)
+  .split('\n')
+  .map(l => l.trim().replace(/^\*\s*/, ''))
+  .filter(Boolean);
+
+const wtListForClaude = run(`git -C "${mainRepo}" worktree list --porcelain`);
+const wtBlocksForClaude = wtListForClaude.split(/\n\n/).filter(Boolean);
+const branchesWithWorktree = new Set(
+  wtBlocksForClaude
+    .map(block => {
+      const branchLine = block.split('\n').find(l => l.startsWith('branch refs/heads/'));
+      return branchLine ? branchLine.replace('branch refs/heads/', '') : null;
+    })
+    .filter(Boolean)
+);
+
+for (const branch of allBranches) {
+  if (!branch.startsWith('claude/')) continue;
+
+  // NEVER delete the current session's branch
+  if (branch === currentBranch) {
+    // already reported in step 5
+    continue;
+  }
+
+  // Only delete if the worktree has been removed (archived)
+  if (branchesWithWorktree.has(branch)) continue;
+
+  // Only delete if no commits ahead of main
+  const commitsAhead = run(`git -C "${mainRepo}" rev-list --count main..${branch}`);
+  if (commitsAhead && parseInt(commitsAhead, 10) > 0) {
+    preserved.push(`${branch} (no worktree, ${commitsAhead} commits ahead — keeping)`);
+    continue;
+  }
+
+  run(`git -C "${mainRepo}" branch -D "${branch}"`);
+  cleaned.push(`branch: ${branch} (claude worktree archived, no changes)`);
+}
+
+// 5. Prune stale remote tracking refs
 const pruneOutput = run(`git -C "${mainRepo}" remote prune origin --dry-run`);
 if (pruneOutput) {
   run(`git -C "${mainRepo}" remote prune origin`);
@@ -124,7 +164,7 @@ if (pruneOutput) {
   if (pruned > 0) cleaned.push(`${pruned} stale remote ref(s)`);
 }
 
-// 5. Report surviving non-main branches (informational)
+// 6. Report surviving non-main branches (informational)
 const survivingBranches = run(`git -C "${mainRepo}" branch`)
   .split('\n')
   .map(l => l.trim().replace(/^\*\s*/, ''))
