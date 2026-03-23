@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0] - 2026-03-23
+
+### Added
+- Automatic version bump decision as explicit step 5 in Completion Flow (§Ship & Verify)
+- Version bump decision table in §Versioning: patch (user-visible bugs), minor (UI features), major (redesigns, requires confirmation), none (internal-only)
+- "Multiple changes in one ship" rule: highest applicable bump wins
+
+### Changed
+- Completion Flow steps renumbered (5→Version bump, 6→PR, 7→Merge, 8→Pull, 9→Cleanup, 10→Verify)
+- Replaced one-line "Increment rules" with structured decision table and automation rules
+
 ## [0.12.0] - 2026-03-23
 
 ### Added

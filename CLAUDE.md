@@ -284,8 +284,22 @@ The hook reports what was cleaned and what was preserved. No manual action neede
 - Every project must use **semantic versioning** (`major.minor.patch`) in `package.json`.
 - The `README.md` must display the current version as `**Version: x.y.z**` near the top.
 - When bumping the version: update **all** files referencing the version in a **single commit**: `package.json`, `README.md` version line, `CHANGELOG.md` (new section with date and changes), and any other file containing the old version string. Before committing, grep the repo for the old version to catch every reference.
-- Increment rules: `patch` for bug fixes, `minor` for new features, `major` for breaking changes.
 - Apply retroactively when touching a project that lacks a version badge in the README.
+
+### When to bump (automatic — part of the ship flow)
+
+Every ship must include a version bump decision. This is **not optional** — it is step 4.5 in the Completion Flow (between quality gates and PR creation). Evaluate the changes being shipped and apply the correct bump:
+
+| Change type | Bump | Decision | Examples |
+|-------------|------|----------|----------|
+| Bug fix that a user could notice | **patch** | Automatic — no confirmation needed | UI glitch fixed, broken toggle repaired, crash on startup resolved |
+| Internal-only fix (refactor, code cleanup, test fix) | **none** | No bump needed | Renamed internal variable, fixed flaky test, updated dev dependency |
+| New UI feature or visible functionality | **minor** | Automatic — no confirmation needed | New settings panel, added filter option, new overlay widget |
+| Complete redesign of a feature set, new major feature area | **major** | **Always ask the user** (AskUserQuestion): "Major version bump (→ X.0.0) or minor (→ 0.X.0)?" | Full settings redesign, new module added, breaking UX overhaul |
+
+**Decision rule of thumb:** If a user would notice the change (positive or negative), bump the version. If only a developer would notice, skip.
+
+**Multiple changes in one ship:** Use the highest applicable bump. If shipping a sprint with 3 bugfixes and 1 new feature → minor (not patch).
 
 ## Release Flow
 Before committing a new version tag (`vX.Y.Z`):
@@ -345,11 +359,12 @@ When a unit of work is complete (feature, bug fix, design asset, refactor — an
 2. **Sync main**: `git fetch origin main && git checkout main && git pull origin main`
 3. **Rebase integration branch onto main**: resolve any conflicts inline — do not leave them for the user.
 4. **Quality gates**: run the project's lint, contract checks, and tests (see Sprint Regression Testing). If anything fails, fix and re-run.
-5. **Create PR**: `gh pr create` with `Closes #NNN`, summary, and test plan.
-6. **Merge PR**: `gh pr merge --squash --delete-branch`. If merge checks fail, diagnose and fix.
-7. **Update local main**: `git checkout main && git pull origin main` — confirm the merge landed.
-8. **Aggressive local cleanup** (see §Local Cleanup): delete ALL local feature/sub-branches, remove ALL worktrees, prune stale refs. After this step, only `main` exists locally.
-9. **Verify changes are live**: start/restart the app or dev server so the user can see and test the changes immediately.
+5. **Version bump** (see §Versioning → When to bump): evaluate all changes in this ship, determine the correct semver bump (patch/minor/major/none), update all version references in a single commit on the integration branch. For major bumps, ask the user first.
+6. **Create PR**: `gh pr create` with `Closes #NNN`, summary, and test plan.
+7. **Merge PR**: `gh pr merge --squash --delete-branch`. If merge checks fail, diagnose and fix.
+8. **Update local main**: `git checkout main && git pull origin main` — confirm the merge landed.
+9. **Aggressive local cleanup** (see §Local Cleanup): delete ALL local feature/sub-branches, remove ALL worktrees, prune stale refs. After this step, only `main` exists locally.
+10. **Verify changes are live**: start/restart the app or dev server so the user can see and test the changes immediately.
 
 This flow is codified in the `/ship` skill (project-level). If a project lacks `/ship`, follow these steps manually.
 
