@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.0] - 2026-03-23
+
+### Added
+- New global `/ship` skill — canonical implementation of the Completion Flow shipping pipeline (consolidate, rebase, quality gates, version bump, PR, merge, cleanup, verify)
+
+### Changed
+- CLAUDE.md §Completion Flow: replaced inline 10-step list with reference to `/ship` skill + compact summary line
+- Project-level `/ship` skills now extend the global skill instead of duplicating the full flow
+
 ## [0.13.0] - 2026-03-23
 
 ### Added

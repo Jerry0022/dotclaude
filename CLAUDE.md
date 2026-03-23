@@ -355,18 +355,10 @@ After implementing **all issues in a sprint**, run a comprehensive regression te
 
 When a unit of work is complete (feature, bug fix, design asset, refactor — anything with committed changes on a branch), execute the **full shipping pipeline** as a single uninterrupted step. Do not stop at the PR — carry through to merge and verification.
 
-1. **Consolidate sub-branches** (if multi-branch workflow): merge each sub-branch into the integration branch in wave order (see §Branching Strategy). Resolve conflicts at each merge — do not defer.
-2. **Sync main**: `git fetch origin main && git checkout main && git pull origin main`
-3. **Rebase integration branch onto main**: resolve any conflicts inline — do not leave them for the user.
-4. **Quality gates**: run the project's lint, contract checks, and tests (see Sprint Regression Testing). If anything fails, fix and re-run.
-5. **Version bump** (see §Versioning → When to bump): evaluate all changes in this ship, determine the correct semver bump (patch/minor/major/none), update all version references in a single commit on the integration branch. For major bumps, ask the user first.
-6. **Create PR**: `gh pr create` with `Closes #NNN`, summary, and test plan.
-7. **Merge PR**: `gh pr merge --squash --delete-branch`. If merge checks fail, diagnose and fix.
-8. **Update local main**: `git checkout main && git pull origin main` — confirm the merge landed.
-9. **Aggressive local cleanup** (see §Local Cleanup): delete ALL local feature/sub-branches, remove ALL worktrees, prune stale refs. After this step, only `main` exists locally.
-10. **Verify changes are live**: start/restart the app or dev server so the user can see and test the changes immediately.
+**The step-by-step flow is defined in the global `/ship` skill** (`~/.claude/skills/ship/SKILL.md`). The skill is the canonical implementation — always invoke it rather than running steps manually. Project-level `/ship` skills extend the global skill with project-specific details (commands, extra steps, etc.).
 
-This flow is codified in the `/ship` skill (project-level). If a project lacks `/ship`, follow these steps manually.
+**Summary of steps** (see `/ship` skill for full details):
+1. Consolidate sub-branches → 2. Sync main → 3. Rebase → 4. Quality gates → 5. **Version bump** (§Versioning) → 6. Commit & push → 7. Create PR → 8. Merge PR → 9. Update local main → 10. Cleanup → 11. Verify live
 
 **When to ship (project repos — NOT dotclaude):**
 - **Ship automatically** (no user prompt) when a clear unit of work is complete: an issue is fully implemented, a whole topic is wrapped up, or the user explicitly says something is done.
