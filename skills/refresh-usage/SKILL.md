@@ -19,8 +19,8 @@ Scrapes live token usage from claude.ai via Edge CDP (Chrome DevTools Protocol).
 2. Run `node ~/.claude/scripts/refresh-usage-headless.js --quiet --check-only` to test if CDP is available.
 
 3. **CDP available** (exit code 0):
-   Run `node ~/.claude/scripts/refresh-usage-headless.js --quiet` to scrape in the background.
-   - Exit code 0: success, done.
+   Run `node ~/.claude/scripts/refresh-usage-headless.js --quiet --summary` to scrape in the background.
+   - Exit code 0: success — the script prints a formatted usage box to stdout. Display it directly to the user as-is (do NOT read usage-live.json separately or reformat).
    - Exit code 2: not logged in — inform user: "Bitte bei claude.ai einloggen, dann /refresh-usage erneut."
    - Exit code 3/4: scrape failed — silently skip, will retry next session.
 
@@ -37,5 +37,5 @@ Scrapes live token usage from claude.ai via Edge CDP (Chrome DevTools Protocol).
 
 - Never restart Edge without explicit user consent (AskUserQuestion).
 - This skill runs as a **background agent** at session start — do not block the main conversation.
-- The startup-summary.js hook reads the cached data — it never triggers a refresh itself.
+- Usage display is handled by Claude directly (reads usage-live.json, outputs as chat text) — not by a hook.
 - Edge only needs to be restarted once per PC session. After that, CDP stays active.

@@ -583,10 +583,30 @@ On Windows, each Bash tool call can open a visible CMD window that steals focus 
 - **Priority: functionality > aesthetics**: If Bash is the only way to accomplish a task (starting apps, running servers, executing builds), use it — a console window is always better than a broken workflow. The goal is to avoid *unnecessary* terminal windows (e.g., using `cat` instead of Read), not to avoid terminals at all costs.
 - **Exception**: when the user explicitly needs to see terminal output (interactive programs, dev servers, debugging), a visible terminal is expected and fine.
 
-## Session Startup — Automatic Background Tasks
+## Session Startup — Automatic Tasks
 
-On every session start, silently run these as a **background agent** (do not block the user or show output unless there's an error):
+### 1. Usage display (visible — Claude's first output)
 
-1. **Refresh live usage data**: Execute `/refresh-usage` as a background agent at **session start** if `~/.claude/scripts/usage-live.json` is missing or older than 10 minutes. The skill checks Edge CDP (port 9223) — if CDP is available, it scrapes invisibly. If CDP is not available, it asks the user (AskUserQuestion) before restarting Edge. Edge only needs one visible restart per PC session; after that, CDP stays active and all refreshes are invisible. The `startup-summary.js` SessionStart hook only **reads** the cached data — it never triggers a refresh itself.
+At the very start of every session, **before responding to the user's first message**, read `~/.claude/scripts/usage-live.json` and output the usage summary as a **fenced code block** directly in chat. This makes it always visible — not hidden inside collapsed hook output.
 
-2. **Branch & worktree sweep**: Handled automatically by the `sweep-branches.js` SessionStart hook — no manual action needed. The hook cleans up garbage (orphaned worktrees, gone branches, stale refs) while preserving branches with remote counterparts. See §Session-start sweep for details.
+**Format:**
+```
+────────────────────────────────────────
+📊 USAGE [LIVE <age>]
+5h: <pct>% — resets in <duration>
+Weekly: <pct>% | Sonnet: <pct>% — resets <day> <time>
+Status: <status>
+────────────────────────────────────────
+```
+
+- `<age>`: if timestamp is <1 min old → `just now`, otherwise `Xm ago`
+- `<status>`: `Budget healthy` / `CONSERVE — weekly >70%` / `SLOW DOWN — 5h limit near` (≥80%)
+- If the file is missing or unreadable: output `📊 USAGE [no data] — Run /refresh-usage`
+
+### 2. Refresh live usage data (background)
+
+Execute `/refresh-usage` as a **background agent** at session start if `~/.claude/scripts/usage-live.json` is missing or older than 10 minutes. The skill checks Edge CDP (port 9223) — if CDP is available, it scrapes invisibly (background tab, no focus steal). If CDP is not available, it asks the user (AskUserQuestion) before restarting Edge. Edge only needs one visible restart per PC session; after that, CDP stays active.
+
+### 3. Branch & worktree sweep (hook)
+
+Handled automatically by the `sweep-branches.js` SessionStart hook — no manual action needed. The hook cleans up garbage (orphaned worktrees, gone branches, stale refs) while preserving branches with remote counterparts. See §Session-start sweep for details.

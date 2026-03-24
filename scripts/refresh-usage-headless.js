@@ -4,7 +4,7 @@
  *
  * Connects to the user's running Edge browser via Chrome DevTools Protocol (CDP).
  * Opens a background tab, scrapes usage data, closes the tab — invisible to the user.
- * Reuses the existing Edge session (no auth needed, no Cloudflare block).
+ * Uses raw WebSocket CDP protocol (no Playwright for scraping) to avoid Edge focus stealing.
  *
  * Exit codes:
  *   0 = success
@@ -16,12 +16,12 @@
  *   6 = Edge restart requested but failed
  *
  * Flags:
- *   --quiet           suppress output
+ *   --quiet           suppress output (debug logs only; --summary still prints)
+ *   --summary         after successful scrape, print formatted usage box to stdout
  *   --activate-cdp    restart Edge with CDP flag (visible, one-time)
  *   --check-only      only check if CDP is available, exit 0 or 5
  */
 
-const { chromium } = require('playwright');
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -35,6 +35,7 @@ const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
 const EDGE_EXE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 
 const isQuiet = process.argv.includes('--quiet');
+const printSummary = process.argv.includes('--summary');
 const activateCDP = process.argv.includes('--activate-cdp');
 const checkOnly = process.argv.includes('--check-only');
 
@@ -104,45 +105,173 @@ async function restartEdgeWithCDP() {
   return false;
 }
 
+/**
+ * Raw CDP WebSocket helper.
+ * Sends commands to the browser or a specific target session — fully invisible.
+ */
+function createCDPConnection(wsUrl) {
+  // Use Node 22+ built-in WebSocket, or fallback to ws package
+  const WS = globalThis.WebSocket || require('ws');
+  const ws = new WS(wsUrl);
+  let msgId = 1;
+  const pending = new Map();
+
+  ws.addEventListener('message', (event) => {
+    const data = JSON.parse(typeof event.data === 'string' ? event.data : event.data.toString());
+    if (data.id && pending.has(data.id)) {
+      const { resolve, reject } = pending.get(data.id);
+      pending.delete(data.id);
+      if (data.error) reject(new Error(data.error.message));
+      else resolve(data.result);
+    }
+  });
+
+  const ready = new Promise((resolve, reject) => {
+    ws.addEventListener('open', resolve);
+    ws.addEventListener('error', reject);
+  });
+
+  function send(method, params = {}, sessionId) {
+    const id = msgId++;
+    const msg = { id, method, params };
+    if (sessionId) msg.sessionId = sessionId;
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`CDP timeout: ${method}`));
+      }, 15000);
+      pending.set(id, {
+        resolve: (r) => { clearTimeout(timeout); resolve(r); },
+        reject: (e) => { clearTimeout(timeout); reject(e); }
+      });
+      ws.send(JSON.stringify(msg));
+    });
+  }
+
+  function close() {
+    ws.close();
+  }
+
+  return { ready, send, close };
+}
+
 async function scrapeViaCDP() {
-  let page;
+  let cdp;
+  let targetId;
   try {
-    const browser = await chromium.connectOverCDP(CDP_URL, { timeout: 5000 });
-    log('Connected to Edge via CDP');
+    // Get browser WebSocket endpoint
+    const versionRes = await fetch(CDP_URL + '/json/version');
+    const { webSocketDebuggerUrl } = await versionRes.json();
+    log('Connecting to', webSocketDebuggerUrl);
 
-    const context = browser.contexts()[0];
-    if (!context) { log('No browser context found'); return 1; }
+    cdp = createCDPConnection(webSocketDebuggerUrl);
+    await cdp.ready;
+    log('Connected to Edge via raw CDP WebSocket');
 
-    page = await context.newPage();
-    await page.goto(USAGE_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await page.waitForTimeout(3000);
+    // Create background target — this is the key: background:true prevents focus steal
+    const { targetId: tid } = await cdp.send('Target.createTarget', {
+      url: USAGE_URL,
+      background: true
+    });
+    targetId = tid;
+    log('Background target created:', targetId);
 
-    const url = page.url();
-    if (url.includes('/login') || url.includes('/logout')) {
+    // Attach to the target to get a session for sending commands
+    const { sessionId } = await cdp.send('Target.attachToTarget', {
+      targetId,
+      flatten: true
+    });
+    log('Attached to target, sessionId:', sessionId);
+
+    // Wait for page to load
+    await new Promise(r => setTimeout(r, 5000));
+
+    // Evaluate JS in the target session to extract usage data
+    const evalResult = await cdp.send('Runtime.evaluate', {
+      expression: `(() => {
+        const url = window.location.href;
+        if (url.includes('/login') || url.includes('/logout')) return JSON.stringify({ notLoggedIn: true });
+        const main = document.querySelector('main');
+        if (!main) return JSON.stringify({ noMain: true });
+        return JSON.stringify({ text: main.innerText });
+      })()`,
+      returnByValue: true
+    }, sessionId);
+
+    // Close the background target
+    await cdp.send('Target.closeTarget', { targetId }).catch(() => {});
+    targetId = null;
+    cdp.close();
+
+    const evalData = JSON.parse(evalResult.result?.value || '{}');
+
+    if (evalData.notLoggedIn) {
       log('Not logged in to claude.ai');
-      await page.close();
       return 2;
     }
 
-    const text = await page.innerText('main', { timeout: 5000 });
-    const result = parseUsageText(text);
-
-    if (!result) {
-      log('Could not parse usage data from page.');
-      await page.close();
+    if (evalData.noMain || !evalData.text) {
+      log('Could not find main element on page');
       return 3;
     }
 
-    fs.writeFileSync(USAGE_LIVE_PATH, JSON.stringify(result, null, 2));
-    log('Usage data refreshed:', JSON.stringify(result));
+    const parsed = parseUsageText(evalData.text);
+    if (!parsed) {
+      log('Could not parse usage data from page.');
+      return 3;
+    }
 
-    await page.close();
+    fs.writeFileSync(USAGE_LIVE_PATH, JSON.stringify(parsed, null, 2));
+    log('Usage data refreshed:', JSON.stringify(parsed));
+
     return 0;
   } catch (err) {
     log('CDP scrape failed:', err.message);
-    if (page) await page.close().catch(() => {});
+    if (targetId && cdp) {
+      await cdp.send('Target.closeTarget', { targetId }).catch(() => {});
+    }
+    if (cdp) cdp.close();
     return 4;
   }
+}
+
+function formatDuration(ms) {
+  const totalMin = Math.round(ms / 60000);
+  if (totalMin < 60) return `${totalMin}m`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function printUsageSummary() {
+  let data;
+  try { data = JSON.parse(fs.readFileSync(USAGE_LIVE_PATH, 'utf8')); }
+  catch { return; }
+
+  const pct5h = data.session?.pct || 0;
+  const pctWeekly = data.weekly?.pct || 0;
+  const pctSonnet = data.weeklySonnet?.pct ?? null;
+
+  const reset5hStr = data.session?.resetInMinutes
+    ? `resets in ${formatDuration(data.session.resetInMinutes * 60000)}`
+    : 'unknown';
+  const weeklyResetStr = data.weekly?.resetDay && data.weekly?.resetTime
+    ? ` \u2014 resets ${data.weekly.resetDay} ${data.weekly.resetTime}`
+    : '';
+  const sonnetPart = pctSonnet !== null ? ` | Sonnet: ${Math.round(pctSonnet)}%` : '';
+
+  let status;
+  if (pct5h >= 80) status = 'SLOW DOWN \u2014 5h limit near';
+  else if (pctWeekly >= 70) status = 'CONSERVE \u2014 weekly >70%';
+  else status = 'Budget healthy';
+
+  const line = '\u2500'.repeat(40);
+  console.log(line);
+  console.log(`\uD83D\uDCCA USAGE [LIVE just now]`);
+  console.log(`5h: ${Math.round(pct5h)}% \u2014 ${reset5hStr}`);
+  console.log(`Weekly: ${Math.round(pctWeekly)}%${sonnetPart}${weeklyResetStr}`);
+  console.log(`Status: ${status}`);
+  console.log(line);
 }
 
 (async () => {
@@ -162,5 +291,6 @@ async function scrapeViaCDP() {
   }
 
   const code = await scrapeViaCDP();
+  if (code === 0 && printSummary) printUsageSummary();
   process.exit(code);
 })();

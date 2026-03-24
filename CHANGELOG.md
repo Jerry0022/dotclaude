@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.0] - 2026-03-24
+
+### Changed
+- Usage scraper uses raw WebSocket CDP with `Target.createTarget({ background: true })` — Edge no longer steals focus
+- Removed Playwright dependency from scraping (kept only for `--activate-cdp`)
+- Usage display moved from collapsed SessionStart hook output to visible Claude chat output
+- startup-summary.js reduced to expensive-files scanner only (no more usage display)
+- Added `--summary` flag to refresh-usage-headless.js for formatted usage box output
+
+### Fixed
+- Edge browser window no longer comes to foreground during background usage scraping
+
 ## [0.17.1] - 2026-03-24
 
 ### Changed
