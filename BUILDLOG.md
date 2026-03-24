@@ -1,5 +1,12 @@
 # Build Log
 
+## c7f052d — 2026-03-25
+Version: 0.21.0
+Branch: main
+Commit: 904d15a
+Changes:
+- Add /test skill for visual verification (screenshots, simulated CLI output, formatted examples)
+
 ## fb0061d — 2026-03-25
 Version: 0.20.0
 Branch: main
