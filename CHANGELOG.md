@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.17.0] - 2026-03-24
+
+### Added
+- New `/refresh-usage` skill — manages Edge CDP lifecycle with user consent for browser restart
+- `--check-only` and `--activate-cdp` flags for refresh-usage-headless.js
+
+### Changed
+- Simplified startup-summary.js from 535 to 120 lines — compact 4-line usage dashboard, no ASCII box
+- Removed local .jsonl fallback, session history tracking, expensive prompts display, and pace calculation from startup summary
+- startup-summary.js now only reads cached usage data — never triggers a refresh or blocks session start
+- refresh-usage-headless.js no longer auto-kills Edge — requires explicit user consent via AskUserQuestion
+- Updated §Session Startup in CLAUDE.md to reflect new 10-minute cache and consent-based CDP activation
+
 ## [0.16.2] - 2026-03-24
 
 ### Changed

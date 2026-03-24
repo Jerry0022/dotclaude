@@ -3,14 +3,22 @@
  * Headless Usage Scraper for claude.ai
  *
  * Connects to the user's running Edge browser via Chrome DevTools Protocol (CDP).
- * If Edge isn't running with CDP enabled, restarts it with --remote-debugging-port=9223.
- *
  * Opens a background tab, scrapes usage data, closes the tab — invisible to the user.
  * Reuses the existing Edge session (no auth needed, no Cloudflare block).
  *
- * Usage:
- *   node refresh-usage-headless.js          # scrape via CDP
- *   node refresh-usage-headless.js --quiet  # suppress output
+ * Exit codes:
+ *   0 = success
+ *   1 = no browser context
+ *   2 = not logged in
+ *   3 = parse error
+ *   4 = scrape failed
+ *   5 = CDP not available (Edge not running with --remote-debugging-port)
+ *   6 = Edge restart requested but failed
+ *
+ * Flags:
+ *   --quiet           suppress output
+ *   --activate-cdp    restart Edge with CDP flag (visible, one-time)
+ *   --check-only      only check if CDP is available, exit 0 or 5
  */
 
 const { chromium } = require('playwright');
@@ -27,6 +35,8 @@ const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
 const EDGE_EXE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 
 const isQuiet = process.argv.includes('--quiet');
+const activateCDP = process.argv.includes('--activate-cdp');
+const checkOnly = process.argv.includes('--check-only');
 
 function log(...args) {
   if (!isQuiet) console.log(...args);
@@ -62,41 +72,26 @@ function parseUsageText(text) {
   };
 }
 
-/** Check if CDP port is responding */
 async function isCDPAvailable() {
   try {
     const res = await fetch(CDP_URL + '/json/version', { signal: AbortSignal.timeout(2000) });
     return res.ok;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
-/** Ensure Edge is running with CDP enabled. Restarts if needed. */
-async function ensureEdgeCDP() {
-  if (await isCDPAvailable()) {
-    log('CDP already available on port', CDP_PORT);
-    return true;
-  }
+/** Restart Edge with CDP flag. Visible to user — use only with explicit consent. */
+async function restartEdgeWithCDP() {
+  log('Restarting Edge with CDP on port', CDP_PORT, '...');
 
-  log('CDP not available — restarting Edge with debug port...');
-
-  // Kill existing Edge (it will restore tabs on restart)
-  try {
-    execSync('taskkill /F /IM msedge.exe', { stdio: 'ignore' });
-  } catch {}
-
-  // Wait for processes to fully exit
+  try { execSync('taskkill /F /IM msedge.exe', { stdio: 'ignore' }); } catch {}
   await new Promise(r => setTimeout(r, 3000));
 
-  // Start Edge with CDP flag (detached so it outlives this script)
   const child = spawn(EDGE_EXE, [
     `--remote-debugging-port=${CDP_PORT}`,
     '--restore-last-session'
   ], { detached: true, stdio: 'ignore' });
   child.unref();
 
-  // Wait for Edge to fully start and CDP to become available
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 1000));
     if (await isCDPAvailable()) {
@@ -116,11 +111,7 @@ async function scrapeViaCDP() {
     log('Connected to Edge via CDP');
 
     const context = browser.contexts()[0];
-    if (!context) {
-      log('No browser context found');
-      process.exitCode = 1;
-      return false;
-    }
+    if (!context) { log('No browser context found'); return 1; }
 
     page = await context.newPage();
     await page.goto(USAGE_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
@@ -130,8 +121,7 @@ async function scrapeViaCDP() {
     if (url.includes('/login') || url.includes('/logout')) {
       log('Not logged in to claude.ai');
       await page.close();
-      process.exitCode = 2;
-      return false;
+      return 2;
     }
 
     const text = await page.innerText('main', { timeout: 5000 });
@@ -140,27 +130,37 @@ async function scrapeViaCDP() {
     if (!result) {
       log('Could not parse usage data from page.');
       await page.close();
-      process.exitCode = 3;
-      return false;
+      return 3;
     }
 
     fs.writeFileSync(USAGE_LIVE_PATH, JSON.stringify(result, null, 2));
     log('Usage data refreshed:', JSON.stringify(result));
 
     await page.close();
-    return true;
+    return 0;
   } catch (err) {
     log('CDP scrape failed:', err.message);
     if (page) await page.close().catch(() => {});
-    process.exitCode = 4;
-    return false;
+    return 4;
   }
 }
 
 (async () => {
-  if (!(await ensureEdgeCDP())) {
-    process.exit(process.exitCode || 5);
+  const cdpReady = await isCDPAvailable();
+
+  if (checkOnly) {
+    process.exit(cdpReady ? 0 : 5);
   }
-  await scrapeViaCDP();
-  process.exit(process.exitCode || 0);
+
+  if (!cdpReady) {
+    if (activateCDP) {
+      if (!(await restartEdgeWithCDP())) process.exit(6);
+    } else {
+      log('CDP not available on port', CDP_PORT);
+      process.exit(5);
+    }
+  }
+
+  const code = await scrapeViaCDP();
+  process.exit(code);
 })();
