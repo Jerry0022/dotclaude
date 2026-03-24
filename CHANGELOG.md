@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.21.0] - 2026-03-25
+
+### Added
+- New `/test` skill — visual verification after code changes: preview screenshots for UI, simulated CLI output for terminal formatting, rendered examples for markdown/structured text
+
 ## [0.20.0] - 2026-03-25
 
 ### Changed
