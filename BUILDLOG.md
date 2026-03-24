@@ -1,5 +1,13 @@
 # Build Log
 
+## 99368d1 — 2026-03-25
+Version: 0.18.1
+Branch: main
+Commit: 53ccbd4
+Changes:
+- Completion card title shows build ID instead of "Aufgabe abgeschlossen"
+- Fallback "Erledigt" for tasks without build ID
+
 ## 18c9d22 — 2026-03-24
 Version: 0.18.0
 Branch: main
