@@ -5,7 +5,12 @@
  * If estimated token cost >= 2% of the estimated 5-hour session window limit,
  * blocks the operation and asks for confirmation.
  *
- * First call  → creates flag file, exits 2 (blocked with warning)
+ * IMPORTANT: This hook only guards against Claude TOKEN processing costs.
+ * Commands that Claude merely executes without processing large output
+ * (git push, git fetch, gh pr create, rm, mkdir, etc.) are always allowed
+ * because they don't consume tokens for Claude to analyze.
+ *
+ * First call  → creates flag file, exits 2 (blocked with warning + file list)
  * Second call → flag exists → deletes flag, exits 0 (allowed through)
  */
 
@@ -74,20 +79,31 @@ process.stdin.on('end', () => {
 
   else if (toolName === 'Bash') {
     const cmd = toolInput.command || '';
+    // Commands that don't produce output Claude needs to process — no token cost.
+    // These are "fire and forget" executions where Claude just checks the exit code.
+    // Pattern for commands that don't produce output Claude needs to process.
+    const noTokenCostPattern = /^\s*(git\s+(push|fetch|remote|prune|worktree\s+(add|remove|prune)|branch\s+-[dD]|checkout|switch|pull|merge|rebase|tag|stash|rm|add|commit)|gh\s+(pr\s+(create|merge|close)|issue\s+(create|close)|project\s+item-add|api\s+graphql)|npm\s+publish|rm\s|mkdir\s|cp\s|mv\s)/;
+    // Check each segment in a &&/; chain — if ALL segments are no-cost, allow.
+    const segments = cmd.split(/\s*(?:&&|;)\s*/);
+    const allNoTokenCost = segments.every(seg => noTokenCostPattern.test(seg));
+    if (allNoTokenCost) {
+      process.exit(0); // no Claude processing needed → allow
+    }
+
     // Check if command references a known expensive file
     const expensiveFiles = cfg.expensiveFiles || [];
-    let maxKnownCost = 0;
-    let matchedFile = '';
+    const matchedFiles = [];
     for (const ef of expensiveFiles) {
-      if (cmd.includes(ef.path || ef) && (ef.estimatedTokens || 20000) > maxKnownCost) {
-        maxKnownCost = ef.estimatedTokens || 20000;
-        matchedFile = ef.path || ef;
+      const fp = ef.path || ef;
+      if (cmd.includes(fp)) {
+        matchedFiles.push({ path: fp, tokens: ef.estimatedTokens || 20000 });
       }
     }
-    // Also flag broad npm install / ci (moderate cost from node exec)
-    if (maxKnownCost > 0) {
-      estimatedTokens = maxKnownCost;
-      description = `Bash referencing large file: ${matchedFile}`;
+    if (matchedFiles.length > 0) {
+      estimatedTokens = matchedFiles.reduce((sum, f) => sum + f.tokens, 0);
+      description = `Bash referencing large file(s)`;
+      // Store matched files for the warning output
+      toolInput._matchedFiles = matchedFiles;
     } else {
       process.exit(0); // can't estimate arbitrary bash → allow
     }
@@ -146,6 +162,24 @@ process.stdin.on('end', () => {
   console.error(`Operation:  ${description}`);
   console.error(`Est. cost:  ~${estimatedTokens.toLocaleString()} tokens  (${pct}% of ${(LIMIT/1000).toFixed(0)}K session window)`);
   console.error(`Threshold:  ${THRESHOLD.toLocaleString()} tokens (${(cfg.confirmThresholdPct * 100).toFixed(0)}% of session limit)`);
+
+  // List the large files that triggered this warning
+  if (toolName === 'Read') {
+    const fp = toolInput.file_path || '';
+    const absP = path.isAbsolute(fp) ? fp : path.join(process.cwd(), fp);
+    try {
+      const bytes = fs.statSync(absP).size;
+      const kb = (bytes / 1024).toFixed(1);
+      console.error(`\nLarge file:`);
+      console.error(`  ${path.relative(process.cwd(), absP).replace(/\\/g, '/')}  (${kb} KB → ~${estimatedTokens.toLocaleString()} tokens)`);
+    } catch {}
+  } else if (toolName === 'Bash' && toolInput._matchedFiles) {
+    console.error(`\nLarge files referenced:`);
+    for (const f of toolInput._matchedFiles) {
+      console.error(`  ${f.path}  (~${f.tokens.toLocaleString()} tokens)`);
+    }
+  }
+
   console.error(line);
   console.error(`To proceed, reply: "yes, proceed"`);
   console.error(`I will retry the operation once you confirm.`);

@@ -100,9 +100,11 @@ Milestones do **not** use `sprint:N` labels. Issue-to-milestone assignment is ha
 - Avoid reading files listed as expensive (>20,000 tokens) unless absolutely necessary.
 - Use targeted skills (`/ipc-validate`, `/angular-health`, `/rsi-style`) instead of reading raw large files.
 - Confirm with the user before any operation estimated to cost ≥2% of the session limit (~20,000 tokens).
+- **Token cost = Claude processing cost only.** The cost hook guards against operations where Claude must *read and analyze* large output. Commands that Claude merely *executes* without processing content (git push, git fetch, git add, git commit, gh pr create, rm, mkdir, cp, mv, etc.) have zero token cost and must never be blocked — even if they reference large files by name. The hook's `noTokenCostPattern` allowlist handles this automatically.
+- When the cost hook blocks an operation, it lists the specific large files and their sizes/token estimates so you can report them to the user.
 
 ### Strategic budget awareness
-The SessionStart hook displays live rate limit data (5h window + weekly). **Actively use this data** when planning work:
+The completion card displays live rate limit data (5h window + weekly) after every task. **Actively use this data** when planning work:
 
 - Before any action likely to consume **>2% of the weekly limit** (broad codebase exploration, large Explore agents, full-repo grep, multi-file rewrites), pause and evaluate:
   1. **Prompt justifies it** (complex implementation, broad concept, large milestone) → proceed, this is what tokens are for.
@@ -137,6 +139,8 @@ Second change or action
 file1 — what changed
 file2 — what changed
 
+📊 5h: <pct>% (+<delta>%) | Weekly: <pct>% (+<delta>%) | Sonnet: <pct>% (+<delta>%)
+
 ---
 ```
 
@@ -152,13 +156,21 @@ file2 — what changed
 
 **Ship methods:** `direct push` (pushed without PR), `Pull-Request-Merge (PR #N)` (merged via PR).
 
+**Usage line (always last line before closing `---`):**
+- **Always** run `/refresh-usage` (no caching — always scrape live data) right before rendering the completion card.
+- Read `usage-live.json` **before** the refresh to capture the previous state. After the refresh, read the new state. Compute the delta (`new_pct - old_pct`) for each metric.
+- Format: `📊 5h: <pct>% (+<delta>%) | Weekly: <pct>% (+<delta>%) | Sonnet: <pct>% (+<delta>%)`
+- If the delta is 0, show `(+0%)`. If the previous file was missing (first refresh of the session), show `(—)` instead of a delta.
+- If the refresh fails, show `📊 [no data]` — do not block the completion card.
+- This is the **only** place where usage is displayed — no session start display, no background refresh.
+
 **Rules:**
 - The completion card is **always** the last thing in the response — nothing after it.
 - Use `##` heading for the title line — gives it visual weight and spacing.
 - Use a backslash `\` on its own line after the status line to force a visual break before the plain-text details (blank lines alone get swallowed by the renderer).
 - The summary is in the user's language (German), max ~10 words.
 - Branch info is omitted for branchless tasks.
-- Plain text (no bold, no inline code, no bullet markers) for actions and files — this renders in the terminal's default gray, visually subdued compared to the bold title and status line. Actions first, then files below (separated by a blank line). End the entire card with a `---` line at the very bottom. For non-code tasks, omit the files section.
+- Plain text (no bold, no inline code, no bullet markers) for actions and files — this renders in the terminal's default gray, visually subdued compared to the bold title and status line. Actions first, then files below (separated by a blank line). The usage line comes after files (or after actions if no files). End the entire card with a `---` line at the very bottom. For non-code tasks, omit the files section but still show the usage line.
 - Keep it factual — no commentary or praise.
 
 ## Agent Naming Convention
@@ -614,28 +626,6 @@ On Windows, each Bash tool call can open a visible CMD window that steals focus 
 
 ## Session Startup — Automatic Tasks
 
-### 1. Usage display (visible — Claude's first output)
-
-At the very start of every session, **before responding to the user's first message**, read `~/.claude/scripts/usage-live.json` and output the usage summary as a **fenced code block** directly in chat. This makes it always visible — not hidden inside collapsed hook output.
-
-**Format:**
-```
-────────────────────────────────────────
-📊 USAGE [LIVE <age>]
-5h: <pct>% — resets in <duration>
-Weekly: <pct>% | Sonnet: <pct>% — resets <day> <time>
-Status: <status>
-────────────────────────────────────────
-```
-
-- `<age>`: if timestamp is <1 min old → `just now`, otherwise `Xm ago`
-- `<status>`: `Budget healthy` / `CONSERVE — weekly >70%` / `SLOW DOWN — 5h limit near` (≥80%)
-- If the file is missing or unreadable: output `📊 USAGE [no data] — Run /refresh-usage`
-
-### 2. Refresh live usage data (background)
-
-Execute `/refresh-usage` as a **background agent** at session start if `~/.claude/scripts/usage-live.json` is missing or older than 10 minutes. The skill checks Edge CDP (port 9223) — if CDP is available, it scrapes invisibly (background tab, no focus steal). If CDP is not available, it asks the user (AskUserQuestion) before restarting Edge. Edge only needs one visible restart per PC session; after that, CDP stays active.
-
-### 3. Branch & worktree sweep (hook)
+### 1. Branch & worktree sweep (hook)
 
 Handled automatically by the `sweep-branches.js` SessionStart hook — no manual action needed. The hook cleans up garbage (orphaned worktrees, gone branches, stale refs) while preserving branches with remote counterparts. See §Session-start sweep for details.
