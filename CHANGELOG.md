@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.17.1] - 2026-03-24
+
+### Changed
+- Ship quality gates now skip tests when the same code state was already tested in the session (tree hash deduplication)
+- Added "Test deduplication at ship time" section to CLAUDE.md test execution strategy
+
 ## [0.17.0] - 2026-03-24
 
 ### Added

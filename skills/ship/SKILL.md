@@ -70,9 +70,11 @@ Resolve any conflicts inline. Do not leave them for the user.
 
 Run the project's lint, contract checks, and tests. If anything fails, fix and re-run.
 
+**Test deduplication:** If tests were already run on the **same code state** earlier in this session (same `git write-tree` hash — no code changes since the last successful test run), skip the test commands and log: `Tests skipped — already passed on tree <hash>`. This avoids redundant runs when shipping immediately after a test pass. The rebase in Step 3 changes the tree hash only if main had new commits that alter the merge result — in that case, tests must re-run.
+
 **Default commands** (override in project-level skill if different):
 - `npm run lint` (or project-specific lint commands)
-- `npm run test:unit`
+- `npm run test:unit` (skip if deduplicated — see above)
 - `git status` — ensure no untracked files in ambiguous state
 
 ---
