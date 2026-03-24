@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.0] - 2026-03-25
+
+### Added
+- Issue status tracking on project board — auto-detect matching issues at session start and topic switches, set In Progress/Done via GraphQL
+
 ## [0.18.2] - 2026-03-25
 
 ### Added
