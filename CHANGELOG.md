@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.16.1] - 2026-03-24
+
+### Changed
+- Remove priority:* labels from GitHub Issues required parameters (4 → 3)
+- priority:* label family deprecated — milestones handle prioritization implicitly
+
 ## [0.16.0] - 2026-03-24
 
 ### Changed
