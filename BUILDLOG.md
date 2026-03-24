@@ -1,5 +1,13 @@
 # Build Log
 
+## a91f638 — 2026-03-25
+Version: 0.18.2
+Branch: main
+Commit: 987ca87
+Changes:
+- Added dotclaude repo exception to §Inheritance Model (avoids ~11k token duplication)
+- Deduplicated cleanup and WIP rules in §Completion Flow (references instead of copies)
+
 ## 99368d1 — 2026-03-25
 Version: 0.18.1
 Branch: main
