@@ -1,5 +1,16 @@
 # Build Log
 
+## a6145c7 — 2026-03-24
+Version: 0.17.0
+Branch: main
+PR: #4
+Commit: dca6d34
+Changes:
+- Simplify startup-summary.js from 535 to 120 lines — compact 4-line usage dashboard
+- Remove local .jsonl fallback, session history, expensive prompts, pace calculation
+- Add /refresh-usage skill with Edge CDP consent flow
+- Update CLAUDE.md §Session Startup for new architecture
+
 ## fd14fa8 — 2026-03-24
 Version: 0.16.2
 Branch: main
