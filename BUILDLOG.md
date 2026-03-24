@@ -1,5 +1,15 @@
 # Build Log
 
+## db4eb74 — 2026-03-25
+Version: 0.19.0
+Branch: chore/cost-hook-improvements
+PR: #5
+Commit: c0e0208
+Changes:
+- Fix cost hook blocking git push/fetch/add/commit and similar non-token-consuming commands
+- Add file size and token estimate details to block warning output
+- Sync pending global config changes (CLAUDE.md, blocklist, refresh-usage skill)
+
 ## d93241e — 2026-03-25
 Version: 0.19.0
 Branch: main
