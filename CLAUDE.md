@@ -37,6 +37,13 @@ At the start of every project session, compare the global CLAUDE.md's last-modif
 4. **Track sync state**: After resolution, update a `<!-- global-sync: YYYY-MM-DD -->` comment in the project CLAUDE.md so future sessions know when the last sync happened.
 5. **Report changes**: Briefly inform the user what was synced/resolved — do not silently change project behavior.
 
+### Exception: The dotclaude Repository
+The `dotclaude` repo (`Jerry0022/dotclaude`) **is** the source-of-truth for this global CLAUDE.md. Its project CLAUDE.md is intentionally a full copy of the global file — this is the one repo where that duplication is correct by design.
+
+**Token-saving rule:** When working inside the dotclaude repo, Claude Code loads both the global and project CLAUDE.md (identical content). To avoid processing ~11k tokens twice, **use only the global CLAUDE.md** (which reflects the latest state after any edits in the current session) and ignore the project copy. Edits flow: global file → committed to the dotclaude repo via `/ship-dotclaude`. The project copy is updated by that sync, not edited directly.
+
+This exception applies **only** to the dotclaude repo. All other projects follow the delta-only rule below.
+
 ### Conflict Resolution Priority
 When a rule exists at both levels:
 1. Explicit project **Override** → wins over global.
@@ -120,7 +127,7 @@ When a task is complete, **always** end with a completion card. This is the only
 ```markdown
 ---
 
-## ✨ Aufgabe abgeschlossen — <short summary, max ~10 words>
+## ✨ <build-id> · <short summary, max ~10 words>
 
 <status> auf remote `<branch>` via <ship method>
 \
@@ -132,6 +139,10 @@ file2 — what changed
 
 ---
 ```
+
+**Title line logic:**
+- **With build ID** (code changes that produced a testable state): `## ✨ a3f9b21 · Filter UI implementiert`
+- **Without build ID** (no testable state — docs, config, research): `## ✨ Erledigt · CLAUDE.md aktualisiert`
 
 **Status line variants:**
 - **Shipped** — work is merged and live. Format: `Shipped auf remote <branch> via <method>`.

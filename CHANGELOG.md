@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.1] - 2026-03-25
+
+### Changed
+- Completion card title now shows build ID instead of "Aufgabe abgeschlossen" — format: `✨ <build-id> · <summary>`
+- Tasks without a build ID use `✨ Erledigt · <summary>` as fallback
+
 ## [0.18.0] - 2026-03-24
 
 ### Changed
