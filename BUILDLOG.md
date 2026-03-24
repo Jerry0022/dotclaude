@@ -1,5 +1,13 @@
 # Build Log
 
+## 7e1bb41 — 2026-03-24
+Version: 0.17.1
+Branch: main
+Commit: 73f5289
+Changes:
+- Add test deduplication to ship quality gates (skip tests if same tree hash already passed)
+- Add "Test deduplication at ship time" section to CLAUDE.md
+
 ## a6145c7 — 2026-03-24
 Version: 0.17.0
 Branch: main
