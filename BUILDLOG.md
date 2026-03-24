@@ -1,5 +1,14 @@
 # Build Log
 
+## fb0061d — 2026-03-25
+Version: 0.20.0
+Branch: main
+Commit: 2cef6dc
+Changes:
+- Move usage display from session start to completion card with live refresh and delta tracking
+- Remove 10-minute caching from refresh-usage skill
+- Version bump to 0.20.0
+
 ## db4eb74 — 2026-03-25
 Version: 0.19.0
 Branch: chore/cost-hook-improvements
