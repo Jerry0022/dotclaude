@@ -1,5 +1,13 @@
 # Build Log
 
+## fd14fa8 — 2026-03-24
+Version: 0.16.2
+Branch: main
+Commit: 57bed17
+Changes:
+- Restructure test execution strategy: task-specific inline, full regression at ship time
+- Reduces token consumption in iterative development sessions
+
 ## 913b3e3 — 2026-03-24
 Version: 0.16.1
 Branch: main
