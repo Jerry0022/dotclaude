@@ -1,5 +1,12 @@
 # Build Log
 
+## f1808b6 — 2026-03-25
+Version: 0.21.1
+Branch: main
+Commit: 651abe8
+Changes:
+- Show (+0%) instead of (—) for missing usage delta in completion card
+
 ## c7f052d — 2026-03-25
 Version: 0.21.0
 Branch: main
