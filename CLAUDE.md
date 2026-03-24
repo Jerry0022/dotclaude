@@ -160,7 +160,7 @@ file2 — what changed
 - **Always** run `/refresh-usage` (no caching — always scrape live data) right before rendering the completion card.
 - Read `usage-live.json` **before** the refresh to capture the previous state. After the refresh, read the new state. Compute the delta (`new_pct - old_pct`) for each metric.
 - Format: `📊 5h: <pct>% (+<delta>%) | Weekly: <pct>% (+<delta>%) | Sonnet: <pct>% (+<delta>%)`
-- If the delta is 0, show `(+0%)`. If the previous file was missing (first refresh of the session), show `(—)` instead of a delta.
+- If the delta is 0, show `(+0%)`. If the previous file was missing (first refresh of the session), show `(+0%)` as well — never use `(—)` which looks like an error.
 - If the refresh fails, show `📊 [no data]` — do not block the completion card.
 - This is the **only** place where usage is displayed — no session start display, no background refresh.
 

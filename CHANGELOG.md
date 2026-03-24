@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.21.1] - 2026-03-25
+
+### Changed
+- Usage delta display: show `(+0%)` instead of `(—)` when previous data is missing — avoids looking like an error
+
 ## [0.21.0] - 2026-03-25
 
 ### Added
