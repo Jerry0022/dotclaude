@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.16.0] - 2026-03-24
+
+### Changed
+- Replace sprint concept with milestone system — thematic, level-based milestones ([New], [Evolve], [Overhaul], [Fix]) with auto-assignment logic
+- §Milestone naming convention added with format rules, level prefix table, and living title re-evaluation
+- sprint:N labels deprecated in favor of GitHub milestone field
+- §GitHub Issues required parameters reduced from 5 to 4 (sprint label removed)
+- All sprint references updated to milestone terminology across CLAUDE.md
+
 ## [0.15.0] - 2026-03-24
 
 ### Added

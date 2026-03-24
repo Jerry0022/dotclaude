@@ -48,9 +48,38 @@ When a rule exists at both levels:
 - Never ask for per-action permission. Act, then report.
 - Only confirm before: force-push to `main`/`master`, sending external communications, purchases.
 
-## Sprint Planning vs. Sprint Execution
-- "Plan a sprint" / "sprint planen" = **planning mode only**: create GitHub issues, ask clarifying questions, set milestones/labels. No code, no commits.
-- Implementation only begins when the user explicitly says to implement/execute a sprint.
+## Milestone Planning vs. Execution
+- "Plan a milestone" / "milestone planen" = **planning mode only**: create GitHub milestone + issues, ask clarifying questions, set labels. No code, no commits.
+- Implementation only begins when the user explicitly says to implement/execute a milestone or specific issues.
+- Milestones are **not time-boxed** — they are done when all issues are closed. No due dates unless explicitly requested.
+
+### Milestone naming convention
+
+**Format:** `[Level] Short Title — descriptive half-sentence or list`
+
+- **Title**: max 3 words, no `&` symbol. A mini-summary of what is being built.
+- **Description**: after the dash, one half-sentence or comma-separated list. Never more than one sentence.
+
+**Level prefix — auto-assigned based on issue composition:**
+
+| Level | Rule | Example |
+|-------|------|---------|
+| `[New]` | Creates something that does not exist yet (new module, new feature area) | `[New] Profile Sync — Google Drive settings backup and restore` |
+| `[Evolve]` | Improves or extends existing functionality | `[Evolve] UI Polish — internationalization, layout fixes, host shell cleanup` |
+| `[Overhaul]` | Fundamentally redesigns or restructures existing code | `[Overhaul] Agent Architecture — crawler module redesign to read+execute agents` |
+| `[Fix]` | **Only** when 100% of issues are `type:bug` | `[Fix] Startup Stability — settings freeze, tray daemon crash, overlay init` |
+
+**Auto-assignment logic (evaluated when milestone is created or issues change):**
+1. All issues `type:bug` → `[Fix]`
+2. At least one issue creates a completely new feature area or module → `[New]`
+3. Issues fundamentally restructure or redesign existing code → `[Overhaul]`
+4. Otherwise (extend, polish, add minor features to existing) → `[Evolve]`
+
+**Living title:** When issues are added or removed, re-evaluate the level and update the milestone title if the level no longer fits. The `/milestone` skill (project-specific) handles creation; the `/new-issue` skill handles re-evaluation when assigning issues.
+
+### Milestone labels
+
+Milestones do **not** use `sprint:N` labels. Issue-to-milestone assignment is handled via the GitHub milestone field directly. The `sprint:*` label family is deprecated and should not be created for new projects.
 
 ## Language
 - **Conversation language**: Always match the user's language. The user speaks **German** — all chat responses, AskUserQuestion labels/descriptions, inline explanations, and plan text must be in German.
@@ -69,7 +98,7 @@ When a rule exists at both levels:
 The SessionStart hook displays live rate limit data (5h window + weekly). **Actively use this data** when planning work:
 
 - Before any action likely to consume **>2% of the weekly limit** (broad codebase exploration, large Explore agents, full-repo grep, multi-file rewrites), pause and evaluate:
-  1. **Prompt justifies it** (complex implementation, broad concept, large sprint) → proceed, this is what tokens are for.
+  1. **Prompt justifies it** (complex implementation, broad concept, large milestone) → proceed, this is what tokens are for.
   2. **Uncertain** whether the cost is proportionate → ask the user: "This will be token-intensive (~X%). Proceed?"
   3. **Clearly disproportionate** (simple question or small fix triggering massive exploration) → choose a cheaper approach first (targeted grep, read specific files, use cached knowledge).
 - When the **5h window is >70%**, prefer targeted over broad operations. Ask before launching Explore agents or reading >5 files.
@@ -170,9 +199,9 @@ When a decision or clarification is needed, **prefer the AskUserQuestion tool** 
 
 ## Visual Diagrams (Mermaid)
 Proactively include **Mermaid diagrams** to make responses clearer. Do not describe what could be shown — render it.
-- **Architecture & planning**: flowcharts, sequence diagrams, or C4-style component diagrams when discussing system design, module interactions, or sprint plans.
+- **Architecture & planning**: flowcharts, sequence diagrams, or C4-style component diagrams when discussing system design, module interactions, or milestone plans.
 - **Decision summaries**: flowcharts or decision trees when presenting options, trade-offs, or conditional logic.
-- **Status & progress**: Gantt charts for sprint timelines, state diagrams for workflow states.
+- **Status & progress**: Gantt charts for milestone timelines, state diagrams for workflow states.
 - **Explanations**: sequence diagrams for request flows, class diagrams for data models, ER diagrams for database schemas.
 - Keep diagrams **focused** — one concept per diagram. Split into multiple diagrams rather than cramming everything into one.
 - Always give the diagram a descriptive `title`.
@@ -407,7 +436,7 @@ Every ship must include a version bump decision. This is **not optional** — it
 
 **Decision rule of thumb:** If a user would notice the change (positive or negative), bump the version. If only a developer would notice, skip.
 
-**Multiple changes in one ship:** Use the highest applicable bump. If shipping a sprint with 3 bugfixes and 1 new feature → minor (not patch).
+**Multiple changes in one ship:** Use the highest applicable bump. If shipping a milestone with 3 bugfixes and 1 new feature → minor (not patch).
 
 ## Release Flow
 Before committing a new version tag (`vX.Y.Z`):
@@ -432,14 +461,13 @@ Before committing a new version tag (`vX.Y.Z`):
 - Description: imperative mood, sentence case, no trailing period (e.g. `[BUG] Settings UI freezes on startup`)
 - Never use `[FIX]` — bugs are always `[BUG]`
 
-**Required parameters — every issue must have all five:**
-1. **Labels:** at least one each of `type:*`, `role:*`, `priority:*`, `module:*`, and the active `sprint:N`
-2. **Milestone:** set to the current sprint milestone (query open milestones if unsure)
-3. **Assignees:** omit (Claude is not a GitHub user); roles are captured in labels
-4. **Project board:** immediately after creation run `gh project item-add 2 --owner Jerry0022 --url <issue-url>`
-5. **Agent Role field:** after adding to the project board, set the "Agent Role" text field on the board item to match the `role:*` labels (comma-separated agent codes, e.g., `frontend, qa`). Use the GraphQL API via `gh api graphql`. Project-specific field IDs are stored in the project's `/new-issue` and `/sprint` skills — use those IDs directly instead of querying them each time.
+**Required parameters — every issue must have all four:**
+1. **Labels:** at least one each of `type:*`, `role:*`, `priority:*`, `module:*`
+2. **Milestone:** assign to the appropriate milestone (query open milestones if unsure)
+3. **Project board:** immediately after creation run `gh project item-add 2 --owner Jerry0022 --url <issue-url>`
+4. **Agent Role field:** after adding to the project board, set the "Agent Role" text field on the board item to match the `role:*` labels (comma-separated agent codes, e.g., `frontend, qa`). Use the GraphQL API via `gh api graphql`. Project-specific field IDs are stored in the project's `/new-issue` and `/milestone` skills — use those IDs directly instead of querying them each time.
 
-Missing any of these five is a hard error — do not consider the issue created until all are set.
+Missing any of these four is a hard error — do not consider the issue created until all are set.
 
 **Linked pull requests:** Always link PRs to their issues. In the PR body include `Closes #NNN` (or `Fixes #NNN`) for every issue the PR resolves — GitHub will then populate the "Linked pull requests" column automatically.
 
@@ -449,15 +477,15 @@ When auditing or writing ignore files for any project:
 - **Ignore** (must be excluded): `.claude/worktrees/`, `.claude/todos/`, token caches, local model files, personal session state
 - Section heading to use in `.gitignore`: `# AI tooling — shared config tracked, session state excluded`
 
-## Sprint Regression Testing
-After implementing **all issues in a sprint**, run a comprehensive regression test before closing issues or raising a PR:
+## Milestone Regression Testing
+After implementing **all issues in a milestone**, run a comprehensive regression test before closing issues or raising a PR:
 1. Run the full unit test suite: `npm run test:unit`
 2. Run the syntax and contract lints: `npm run precommit`
 3. Verify all modules start without errors (check logs, no uncaught exceptions)
 4. Confirm all UI content loads (Angular components render, no blank screens)
 5. Confirm all UI interactive elements work (toggles, buttons, navigation)
 6. If any failures are found: fix them, re-run from step 1, repeat until clean
-7. Only after a clean pass: close sprint GitHub issues and open the sprint PR
+7. Only after a clean pass: close milestone GitHub issues and open the milestone PR
 
 ## Completion Flow — Ship & Verify
 
