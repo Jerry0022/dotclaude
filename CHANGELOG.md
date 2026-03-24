@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.20.0] - 2026-03-25
+
+### Changed
+- Usage display moved from session start to completion card — live refresh with delta tracking
+- Removed session-start usage display and background refresh
+- refresh-usage skill: removed 10-minute caching, always scrapes fresh data
+
 ## [0.19.0] - 2026-03-25
 
 ### Added
