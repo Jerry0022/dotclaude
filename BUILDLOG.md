@@ -1,5 +1,13 @@
 # Build Log
 
+## 913b3e3 — 2026-03-24
+Version: 0.16.1
+Branch: main
+Commit: 02da5dd
+Changes:
+- Remove priority:* labels from issue required parameters (4 → 3)
+- Deprecate priority:* label family
+
 ## c54c27b — 2026-03-24
 Version: 0.16.0
 Branch: main
