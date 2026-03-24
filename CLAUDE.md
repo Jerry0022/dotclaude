@@ -528,13 +528,7 @@ When a unit of work is complete (feature, bug fix, design asset, refactor — an
 - Never leave merged PRs with a stale local `main` — always pull after merge.
 - Never stop at "PR created" — the work is not done until the user can test it locally.
 - If running in a worktree: after merge, ensure the main repo's `main` branch is also updated.
-- After ship: zero local branches besides `main`, zero worktrees. Traceability lives in the GitHub PR.
-
-**Session ending before ship (work in progress):**
-- Commit + push all current changes before the session ends — even as a WIP commit.
-- Worktrees may be cleaned up between sessions (work is safe on remote).
-- Next session resumes by checking out the remote branch (or `git worktree add` if needed).
-- The session-start sweep will NOT delete branches that still have a remote counterpart.
+- Post-ship cleanup: see §Local Cleanup. Session-ending WIP behavior: see §Branch Lifecycle.
 
 ## Global Config Sync — Dotclaude Repository
 

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.2] - 2026-03-25
+
+### Added
+- Dotclaude repo exception in §Inheritance Model — project CLAUDE.md is intentionally a full copy, Claude uses only the global version to avoid ~11k token duplication per request
+
+### Changed
+- §Completion Flow: replaced duplicated cleanup and WIP rules with references to §Local Cleanup and §Branch Lifecycle
+
 ## [0.18.1] - 2026-03-25
 
 ### Changed
