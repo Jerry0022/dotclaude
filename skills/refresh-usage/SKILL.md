@@ -8,34 +8,31 @@ Scrapes live token usage from claude.ai via Edge CDP (Chrome DevTools Protocol).
 
 ## When to run
 
-- **Automatically** at session start as a background agent, if `~/.claude/scripts/usage-live.json` is missing or older than 10 minutes.
+- **Automatically** before every completion card (Task Completion Signal) — always, no caching.
 - **Manually** when the user asks for fresh usage data.
 
 ## Steps
 
-1. Check if `~/.claude/scripts/usage-live.json` exists and is less than 10 minutes old.
-   - If fresh: skip, no refresh needed. Exit silently.
+1. Run `node ~/.claude/scripts/refresh-usage-headless.js --quiet --check-only` to test if CDP is available.
 
-2. Run `node ~/.claude/scripts/refresh-usage-headless.js --quiet --check-only` to test if CDP is available.
-
-3. **CDP available** (exit code 0):
-   Run `node ~/.claude/scripts/refresh-usage-headless.js --quiet --summary` to scrape in the background.
-   - Exit code 0: success — the script prints a formatted usage box to stdout. Display it directly to the user as-is (do NOT read usage-live.json separately or reformat).
+2. **CDP available** (exit code 0):
+   Run `node ~/.claude/scripts/refresh-usage-headless.js --quiet --summary` to scrape.
+   - Exit code 0: success — the script updates `usage-live.json`. Read the file for the new values.
    - Exit code 2: not logged in — inform user: "Bitte bei claude.ai einloggen, dann /refresh-usage erneut."
-   - Exit code 3/4: scrape failed — silently skip, will retry next session.
+   - Exit code 3/4: scrape failed — show `📊 [no data]` in the completion card.
 
-4. **CDP not available** (exit code 5):
+3. **CDP not available** (exit code 5):
    Ask the user via AskUserQuestion:
    - Label: "Edge CDP aktivieren"
    - Description: "Edge wird einmal sichtbar neu gestartet mit CDP-Port 9223. Danach läuft alles unsichtbar im Background."
    - Options: "Ja, Edge neu starten" / "Nein, überspringen"
 
    If approved: run `node ~/.claude/scripts/refresh-usage-headless.js --quiet --activate-cdp`
-   If declined: skip silently.
+   If declined: show `📊 [no data]` in the completion card.
 
 ## Important
 
 - Never restart Edge without explicit user consent (AskUserQuestion).
-- This skill runs as a **background agent** at session start — do not block the main conversation.
-- Usage display is handled by Claude directly (reads usage-live.json, outputs as chat text) — not by a hook.
+- **No caching** — always scrape fresh data, regardless of file age.
 - Edge only needs to be restarted once per PC session. After that, CDP stays active.
+- Usage display is handled exclusively by the completion card (§Task Completion Signal) — not at session start.
