@@ -1,5 +1,12 @@
 # Build Log
 
+## d93241e — 2026-03-25
+Version: 0.19.0
+Branch: main
+Commit: 2e412b3
+Changes:
+- Added issue status tracking on project board (In Progress on session start, Done on ship)
+
 ## a91f638 — 2026-03-25
 Version: 0.18.2
 Branch: main
