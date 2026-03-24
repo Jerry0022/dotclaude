@@ -66,10 +66,11 @@ The repo path is stored in `~/.claude/scripts/dotclaude-repo-path`.
     Co-Authored-By: <dynamic model name from system prompt> <noreply@anthropic.com>
     ```
 12. Push to origin.
-13. Create a git tag (`v<version>`) on the commit and push it: `git tag v<version> && git push origin v<version>`. This triggers the `release.yml` GitHub Actions workflow which builds the `.exe`, creates the GitHub Release with the `.exe` asset, and publishes the npm package to GitHub Packages.
-14. Wait for the pipeline to complete: `gh run list --workflow=release.yml --limit 1` then `gh run watch <run-id>` or poll with `gh run view <run-id>`. Verify all 3 jobs succeeded (build-exe, release, publish-npm).
-15. Pull main locally to confirm.
-16. Run `/refresh-usage` to update the usage dashboard with live data — shipping consumes tokens, so the dashboard should reflect the current state immediately.
+13. Write a new entry to `BUILDLOG.md` (see `~/.claude/CLAUDE.md §Build Log`). Generate the build hash via `git write-tree | cut -c1-7`. Commit: `chore: update build log`.
+14. Create a git tag (`v<version>`) on the commit and push it: `git tag v<version> && git push origin v<version>`. This triggers the `release.yml` GitHub Actions workflow which builds the `.exe`, creates the GitHub Release with the `.exe` asset, and publishes the npm package to GitHub Packages.
+15. Wait for the pipeline to complete: `gh run list --workflow=release.yml --limit 1` then `gh run watch <run-id>` or poll with `gh run view <run-id>`. Verify all 3 jobs succeeded (build-exe, release, publish-npm).
+16. Pull main locally to confirm.
+17. Run `/refresh-usage` to update the usage dashboard with live data — shipping consumes tokens, so the dashboard should reflect the current state immediately.
 
 ## Conflict resolution
 

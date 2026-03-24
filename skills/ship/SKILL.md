@@ -17,13 +17,28 @@ allowed-tools: Bash(git *), Bash(gh *), Bash(npm run *), Bash(node *), Bash(grep
 
 # Ship — Global Completion Flow
 
-This skill implements the 10-step Completion Flow defined in `~/.claude/CLAUDE.md §Completion Flow — Ship & Verify`. It is the **canonical implementation** — project-level `/ship` skills extend this with project-specific details.
+**Extends `/ship-dotclaude`** — this skill inherits the base shipping logic (version bump, changelog, commit, push, build log, verify) from `/ship-dotclaude` and adds PR-based workflow, branch consolidation, quality gates, and aggressive cleanup for project repositories.
 
 **Goal:** After shipping, only two artifacts remain: (1) the merged PR on GitHub (traceability), and (2) local `main` branch up to date. Everything else is deleted.
 
 ---
 
-## Step 1: Consolidate Sub-Branches (if multi-branch workflow)
+## Differences from `/ship-dotclaude`
+
+| Aspect | `/ship-dotclaude` (base) | This skill (project override) |
+|--------|--------------------------|-------------------------------|
+| **Branching** | Direct push on main | Sub-branch consolidation → PR → squash merge |
+| **File sync** | Diff `~/.claude/` → repo | Not needed — changes are already in the repo |
+| **Quality gates** | None (config repo) | Run project lint + tests before shipping |
+| **PR workflow** | No PR — direct push + tag | Always create PR, merge via `gh pr merge --squash` |
+| **Git tags / Release** | Tag + push triggers release pipeline | No tags — project-specific skills add this if needed |
+| **Cleanup** | Minimal (single branch) | Aggressive — delete all feature branches, worktrees, prune refs |
+
+---
+
+## Additional steps before base flow
+
+### Step 1: Consolidate Sub-Branches (if multi-branch workflow)
 
 Check for sub-branches of the current integration branch. If they exist, merge each into the integration branch in wave order (per the project's agent team definition). Resolve conflicts at each merge — do not defer.
 
@@ -32,11 +47,9 @@ After merging each sub-branch:
 - Delete the remote sub-branch: `git push origin --delete <sub-branch>`
 - Remove any associated worktree: `git worktree remove <path> --force`
 
-Skip this step if no sub-branches exist (single-branch workflow).
+Skip if no sub-branches exist (single-branch workflow).
 
----
-
-## Step 2: Sync Main
+### Step 2: Sync Main
 
 ```bash
 git fetch origin main
@@ -45,9 +58,7 @@ git pull origin main
 git checkout <integration-branch>
 ```
 
----
-
-## Step 3: Rebase Integration Branch onto Main
+### Step 3: Rebase Integration Branch onto Main
 
 ```bash
 git rebase main
@@ -55,9 +66,7 @@ git rebase main
 
 Resolve any conflicts inline. Do not leave them for the user.
 
----
-
-## Step 4: Quality Gates
+### Step 4: Quality Gates
 
 Run the project's lint, contract checks, and tests. If anything fails, fix and re-run.
 
@@ -68,53 +77,26 @@ Run the project's lint, contract checks, and tests. If anything fails, fix and r
 
 ---
 
-## Step 5: Version Bump
+## Base flow steps (inherited from `/ship-dotclaude`)
 
-**This step is mandatory for every ship.** It implements `~/.claude/CLAUDE.md §Versioning → When to bump`.
+### Step 5: Version Bump
 
-### 5a. Evaluate changes
+Same as `/ship-dotclaude` steps 9–10. Evaluate changes, determine bump type (patch/minor/major/none), update `package.json`, `README.md`, `CHANGELOG.md`, and any other files referencing the old version.
 
-Review all changes being shipped (diff from main). Classify using the global bump table:
+### Step 6: Commit & Push
 
-| Change type | Bump | Confirmation? |
-|-------------|------|---------------|
-| Bug fix visible to users | **patch** | No |
-| Internal-only fix (refactor, tests, dev deps) | **none** | No — skip to Step 6 |
-| New UI feature or visible functionality | **minor** | No |
-| Complete redesign, new major feature area | **major** | **Always ask** (AskUserQuestion) |
-
-Multiple changes in one ship → use the highest applicable bump.
-
-### 5b. Update version references
-
-If a bump is needed:
-1. Read current version from `package.json`
-2. Calculate new version
-3. **Grep the entire repo** for the old version string to find all files that reference it
-4. Update all references in a **single commit**:
-   - `package.json` — version field
-   - `README.md` — version badge/line (if present)
-   - `CHANGELOG.md` — new section with date and changes (if the project maintains one)
-   - Any other files found by the grep
-5. Commit: `chore: bump version to X.Y.Z`
-
-If no bump is needed (internal-only changes), skip this step entirely.
+Same as `/ship-dotclaude` steps 8–12, except push to the **feature branch** (not main):
+```bash
+git push -u origin <branch>
+```
 
 ---
 
-## Step 6: Commit & Push
+## Overridden steps (replace base flow)
 
-If there are uncommitted changes (beyond the version bump commit):
-1. Stage relevant files (`git add <specific files>` — never `git add -A`)
-2. Write conventional commit message with `Co-Authored-By` footer
-3. Commit
-4. Push with `-u`: `git push -u origin <branch>`
+### Step 7: Create PR
 
-If all changes are already committed (e.g., only the version bump commit was added), just push.
-
----
-
-## Step 7: Create PR
+**Replaces** `/ship-dotclaude` direct push — projects always go through PRs.
 
 ```bash
 gh pr create --title "<title>" --body "$(cat <<'EOF'
@@ -133,9 +115,9 @@ EOF
 - Body MUST start with `Closes #NNN` / `Fixes #NNN` for every resolved issue
 - Base branch: `main`
 
----
+### Step 8: Merge PR
 
-## Step 8: Merge PR
+**Replaces** `/ship-dotclaude` tag + release pipeline.
 
 ```bash
 gh pr merge --squash --delete-branch
@@ -143,27 +125,26 @@ gh pr merge --squash --delete-branch
 
 - `--delete-branch` deletes the remote integration branch after merge
 - If merge checks fail, diagnose and fix before retrying
-- Verify remote branch is gone: `git ls-remote --heads origin <branch>` — delete explicitly if still present
+- Verify remote branch is gone: `git ls-remote --heads origin <branch>`
 
----
-
-## Step 9: Update Local Main
+### Step 9: Update Local Main
 
 ```bash
 git checkout main
 git pull origin main
 ```
 
-Confirm the merge landed. If running in a worktree, also update the main repo's main branch.
+If running in a worktree, also update the main repo's main branch.
 
----
+### Step 10: Build Log Entry
 
-## Step 10: Aggressive Local Cleanup
+Write a new entry to `BUILDLOG.md` (see `~/.claude/CLAUDE.md §Build Log`). Generate the build hash via `git write-tree | cut -c1-7`.
+
+### Step 11: Aggressive Local Cleanup
 
 Delete ALL local branches related to the shipped feature:
 ```bash
 git branch -D <shipped-branch>
-# Delete any remaining sub-branches
 git branch --list "<prefix>/*" | xargs -r git branch -D
 ```
 
@@ -177,17 +158,15 @@ Full sweep (always):
 - `git worktree prune`
 - `git remote prune origin`
 - Delete gone branches: `git branch -vv | grep ': gone]' | awk '{print $1}' | xargs -r git branch -D`
-- Report any surviving non-main branches (other in-progress work)
 
----
-
-## Step 11: Verify Changes Are Live
+### Step 12: Verify Changes Are Live
 
 Start/restart the app or dev server so the user can see and test the changes immediately.
 
 Report checklist:
 - [ ] PR merged (link)
 - [ ] Version bumped (old → new, or: no bump — reason)
+- [ ] Build log entry written
 - [ ] Remote branches deleted
 - [ ] Local branches deleted
 - [ ] Worktrees removed

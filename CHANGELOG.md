@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.0] - 2026-03-24
+
+### Added
+- BUILDLOG.md — retroactive build log with 10 historical entries (v0.10.0–v0.14.1)
+- Build log step (step 13) in /ship-dotclaude skill
+
+### Changed
+- /ship skill refactored to extend /ship-dotclaude as base — contains only delta (PR workflow, branch consolidation, quality gates, aggressive cleanup)
+- /ship-dotclaude steps renumbered (13→14 tag, 14→15 pipeline wait, 15→16 pull, 16→17 refresh)
+
 ## [0.14.1] - 2026-03-23
 
 ### Changed
