@@ -1,5 +1,15 @@
 # Build Log
 
+## c54c27b — 2026-03-24
+Version: 0.16.0
+Branch: main
+Commit: 82d2061
+Changes:
+- Replace sprint concept with milestone system ([New], [Evolve], [Overhaul], [Fix])
+- Add milestone naming convention with auto-assignment logic
+- Deprecate sprint:N labels in favor of GitHub milestone field
+- Reduce issue required parameters from 5 to 4
+
 ## cf06ae0 — 2026-03-24
 Version: 0.14.1
 Branch: main
