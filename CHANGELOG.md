@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.16.2] - 2026-03-24
+
+### Changed
+- Restructured "Milestone Regression Testing" into "Test Execution Strategy" with three tiers: task-specific tests (run inline), full regression suite (deferred to ship time), milestone regression (before closing milestones)
+- Reduces token consumption by avoiding full test suite output in conversation context during iterative development
+
 ## [0.16.1] - 2026-03-24
 
 ### Changed

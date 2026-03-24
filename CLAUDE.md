@@ -477,7 +477,15 @@ When auditing or writing ignore files for any project:
 - **Ignore** (must be excluded): `.claude/worktrees/`, `.claude/todos/`, token caches, local model files, personal session state
 - Section heading to use in `.gitignore`: `# AI tooling — shared config tracked, session state excluded`
 
-## Milestone Regression Testing
+## Test Execution Strategy
+
+### Task-specific tests (run immediately)
+After every code change, run only the tests directly related to the current task — e.g., the specific test file for the changed module, or a targeted `npm run test:unit -- --grep "pattern"`. This verifies the change works without the cost of a full regression suite.
+
+### Full regression suite (run only at ship time)
+The full test suite (`npm run test:unit` + `npm run precommit`) runs as part of the `/ship` quality gates (Step 4). Do **not** run the full suite after every implementation pass — this burns tokens on context (test output) and terminal windows without proportional value. The ship flow catches regressions before they reach `main`.
+
+### Milestone regression (run before closing a milestone)
 After implementing **all issues in a milestone**, run a comprehensive regression test before closing issues or raising a PR:
 1. Run the full unit test suite: `npm run test:unit`
 2. Run the syntax and contract lints: `npm run precommit`
