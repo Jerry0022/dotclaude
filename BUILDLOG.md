@@ -1,5 +1,15 @@
 # Build Log
 
+## 18c9d22 — 2026-03-24
+Version: 0.18.0
+Branch: main
+Commit: 7ca3ddb
+Changes:
+- Usage scraper uses raw WebSocket CDP with background:true — no Edge focus steal
+- Usage display moved from collapsed hook output to visible Claude chat output
+- startup-summary.js reduced to expensive-files scanner only
+- Added --summary flag for formatted usage box output
+
 ## 7e1bb41 — 2026-03-24
 Version: 0.17.1
 Branch: main
