@@ -164,6 +164,7 @@ When a decision or clarification is needed, **prefer the AskUserQuestion tool** 
 - **Chain multiple choice rounds** if the topic is complex: ask the first question, then based on the answer ask a follow-up — rather than dumping all options at once.
 - **Use up to 4 questions per call** when the questions are independent of each other (e.g., "Which framework?" + "Which styling?" in one call).
 - **Use preview fields** when options involve visual or code comparisons (ASCII mockups, config snippets, diagram variants).
+- **"Erst reviewen" Option**: Wenn vor der AskUserQuestion-Frage viel Text ausgegeben wurde (Erklärungen, Pläne, Diffs, etc.), füge als **erste Option** immer eine "Erst reviewen" Variante hinzu — z.B. Label: `Erst lesen`, Description: `Ich pausiere — lies den Text oben in Ruhe, dann antworte.` Das gibt dem Nutzer die Möglichkeit, den Kontext hinter dem Dialogfenster erst vollständig zu lesen, bevor er sich entscheidet. Bei kurzen/einfachen Fragen ohne vorherigen Textblock ist diese Option nicht nötig.
 - **Fall back to inline text** only when the topic is too nuanced for bullet-point options — e.g., open-ended architecture discussions with many trade-offs. In that case, present a structured plan with numbered questions in the output text.
 - Never mix both styles for the same question — either AskUserQuestion or inline, not both.
 
