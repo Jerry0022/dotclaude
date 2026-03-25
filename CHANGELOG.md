@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.26.0] - 2026-03-25
+
+### Changed
+- Ship skill rebuilt with agent-delegated execution — entire ship flow runs in a subagent to avoid main-context token consumption and mid-flow context compression
+- CLAUDE.md §Completion Flow updated to document agent delegation architecture
+
 ## [0.25.0] - 2026-03-25
 
 ### Added

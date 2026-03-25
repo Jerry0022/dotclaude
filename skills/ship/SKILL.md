@@ -12,31 +12,68 @@ description: >-
   it. Do NOT trigger when: user is still coding/debugging, mid-sprint with
   unfinished issues, user asks for PR-only without merge, or just committing
   without shipping.
-allowed-tools: Bash(git *), Bash(gh *), Bash(npm run *), Bash(node *), Bash(grep *), Read, Glob, Grep, AskUserQuestion
+allowed-tools: Bash(git *), Bash(gh *), Bash(npm run *), Bash(node *), Bash(grep *), Read, Glob, Grep, Agent, AskUserQuestion
 ---
 
-# Ship — Global Completion Flow
+# Ship — Global Completion Flow (Agent-Delegated)
 
-**Extends `/ship-dotclaude`** — this skill inherits the base shipping logic (version bump, changelog, commit, push, build log, verify) from `/ship-dotclaude` and adds PR-based workflow, branch consolidation, quality gates, and aggressive cleanup for project repositories.
+**Architecture:** This skill delegates the entire ship flow to a **subagent** to avoid consuming main-context tokens. The main context only collects metadata and spawns the agent — the agent executes all 12 steps independently.
+
+**Why:** The ship flow runs at the end of a task when the context window is fullest. Running it inline risks mid-flow context compression (which triggers SessionStart hooks and can confuse the user). Delegating to an agent isolates the ship flow in its own context.
 
 **Goal:** After shipping, only two artifacts remain: (1) the merged PR on GitHub (traceability), and (2) local `main` branch up to date. Everything else is deleted.
 
 ---
 
-## Differences from `/ship-dotclaude`
+## Orchestration (runs in main context)
 
-| Aspect | `/ship-dotclaude` (base) | This skill (project override) |
-|--------|--------------------------|-------------------------------|
-| **Branching** | Direct push on main | Sub-branch consolidation → PR → squash merge |
-| **File sync** | Diff `~/.claude/` → repo | Not needed — changes are already in the repo |
-| **Quality gates** | None (config repo) | Run project lint + tests before shipping |
-| **PR workflow** | No PR — direct push + tag | Always create PR, merge via `gh pr merge --squash` |
-| **Git tags / Release** | Tag + push triggers release pipeline | Tag `vX.Y.Z` on squash-merge commit → triggers release pipeline (Step 8.5) |
-| **Cleanup** | Minimal (single branch) | Aggressive — delete all feature branches, worktrees, prune refs |
+### Phase 1: Collect metadata
+
+Before spawning the agent, gather:
+
+1. **Current branch**: `git branch --show-current`
+2. **Changed files summary**: `git diff main --stat` (just the stat, not full diff)
+3. **Issue numbers**: Extract from branch name (e.g., `feat/42-*` → `#42`) or from recent commits
+4. **Sub-branches**: `git branch --list "<current-branch>/*"` — check if multi-branch workflow
+5. **Working directory**: `pwd` (the agent needs the exact path)
+6. **Is worktree?**: Check if running in a worktree (`git rev-parse --show-toplevel`)
+7. **Project-level ship overrides**: Check if a project-level `/ship` skill exists with custom commands
+
+### Phase 2: Version bump decision (if major)
+
+If the changes clearly warrant a **major** version bump (new feature area, breaking changes), ask the user via `AskUserQuestion` **before** spawning the agent. Pass the decision to the agent. For patch/minor bumps, the agent decides autonomously.
+
+### Phase 3: Spawn ship agent
+
+Launch a **single Agent** with `subagent_type: "general-purpose"`. Pass ALL collected metadata and the full step-by-step instructions in the prompt. The agent must return a structured result.
+
+**Agent description format:** `[Agent] Ship flow — <branch>`
+
+**Agent prompt must include:**
+- The working directory path
+- The branch name and issue numbers
+- Whether it's a worktree session
+- Sub-branch list (if any)
+- Version bump decision (if pre-decided)
+- The complete 12-step flow (see below)
+- Instructions to return a structured result
+
+### Phase 4: Process agent result
+
+The agent returns a structured result. Extract and display:
+- PR link
+- Version (old → new)
+- Build hash
+- Cleanup status
+- Any errors or warnings
+
+Then render the **completion card** (per §Task Completion Signal in CLAUDE.md) using the agent's output.
 
 ---
 
-## Additional steps before base flow
+## Ship Flow Steps (executed by the agent)
+
+The agent executes these steps sequentially. All steps run in the working directory passed via the prompt.
 
 ### Step 1: Consolidate Sub-Branches (if multi-branch workflow)
 
@@ -70,35 +107,27 @@ Resolve any conflicts inline. Do not leave them for the user.
 
 Run the project's lint, contract checks, and tests. If anything fails, fix and re-run.
 
-**Test deduplication:** If tests were already run on the **same code state** earlier in this session (same `git write-tree` hash — no code changes since the last successful test run), skip the test commands and log: `Tests skipped — already passed on tree <hash>`. This avoids redundant runs when shipping immediately after a test pass. The rebase in Step 3 changes the tree hash only if main had new commits that alter the merge result — in that case, tests must re-run.
+**Test deduplication:** If the prompt includes a tree hash from a previous successful test run, compare with `git write-tree`. If identical, skip tests and log: `Tests skipped — already passed on tree <hash>`.
 
 **Default commands** (override in project-level skill if different):
 - `npm run lint` (or project-specific lint commands)
 - `npm run test:unit` (skip if deduplicated — see above)
 - `git status` — ensure no untracked files in ambiguous state
 
----
-
-## Base flow steps (inherited from `/ship-dotclaude`)
-
 ### Step 5: Version Bump
 
-Same as `/ship-dotclaude` steps 9–10. Evaluate changes, determine bump type (patch/minor/major/none), update `package.json`, `README.md`, `CHANGELOG.md`, and any other files referencing the old version.
+Evaluate changes, determine bump type (patch/minor/major/none), update `package.json`, `README.md`, `CHANGELOG.md`, and any other files referencing the old version. If the main context pre-decided a major bump, use that decision.
 
 ### Step 6: Commit & Push
 
-Same as `/ship-dotclaude` steps 8–12, except push to the **feature branch** (not main):
+Stage version-bumped files and any remaining changes. Commit with conventional commit format. Push to the feature branch:
 ```bash
 git push -u origin <branch>
 ```
 
----
-
-## Overridden steps (replace base flow)
+Commit style: `type(scope): subject` with `Co-Authored-By:` trailer.
 
 ### Step 7: Create PR
-
-**Replaces** `/ship-dotclaude` direct push — projects always go through PRs.
 
 ```bash
 gh pr create --title "<title>" --body "$(cat <<'EOF'
@@ -119,8 +148,6 @@ EOF
 
 ### Step 8: Merge PR
 
-**Replaces** `/ship-dotclaude` tag + release pipeline.
-
 ```bash
 gh pr merge --squash --delete-branch
 ```
@@ -131,7 +158,7 @@ gh pr merge --squash --delete-branch
 
 ### Step 8.5: Git Tag & Release Pipeline
 
-After the PR is merged, create a version tag on `main` and push it. This triggers the GitHub Actions release pipeline (per global §Release Flow).
+After the PR is merged, create a version tag on `main` and push it. This triggers the GitHub Actions release pipeline.
 
 ```bash
 git checkout main
@@ -144,7 +171,7 @@ git push origin v<X.Y.Z>
 - Tag format: `vX.Y.Z` (matches the version bumped in Step 5).
 - If the version bump in Step 5 was "none" (internal-only change), **skip this step** — no tag, no release.
 - After pushing the tag, verify the GitHub Actions release workflow was triggered: `gh run list --workflow=release --limit 1`.
-- Do NOT wait for the workflow to complete — it runs asynchronously. Proceed to Step 9.
+- Do NOT wait for the workflow to complete — it runs asynchronously.
 
 ### Step 9: Update Local Main
 
@@ -153,11 +180,15 @@ git checkout main
 git pull origin main
 ```
 
-If running in a worktree, also update the main repo's main branch.
+If running in a worktree, also update the main repo's main branch:
+```bash
+git -C <main-repo-path> checkout main
+git -C <main-repo-path> pull origin main
+```
 
 ### Step 10: Build Log Entry
 
-Write a new entry to `BUILDLOG.md` (see `~/.claude/CLAUDE.md §Build Log`). Generate the build hash via `git write-tree | cut -c1-7`.
+Write a new entry to `BUILDLOG.md`. Generate the build hash via `git write-tree | cut -c1-7`. Format per §Build Log in CLAUDE.md.
 
 ### Step 11: Aggressive Local Cleanup
 
@@ -178,19 +209,27 @@ Full sweep (always):
 - `git remote prune origin`
 - Delete gone branches: `git branch -vv | grep ': gone]' | awk '{print $1}' | xargs -r git branch -D`
 
-### Step 12: Verify Changes Are Live
+### Step 12: Return Structured Result
 
-Start/restart the app or dev server so the user can see and test the changes immediately.
+Do NOT render a completion card. Instead, return a structured text block:
 
-Report checklist:
-- [ ] PR merged (link)
-- [ ] Version bumped (old → new, or: no bump — reason)
-- [ ] Build log entry written
-- [ ] Remote branches deleted
-- [ ] Local branches deleted
-- [ ] Worktrees removed
-- [ ] Local main up to date (commit SHA)
-- [ ] App running
+```
+SHIP_RESULT:
+  status: success|failed
+  pr_url: <url>
+  pr_number: <number>
+  version_old: <x.y.z>
+  version_new: <x.y.z>
+  version_bump: patch|minor|major|none
+  build_hash: <7-char hash>
+  tag: v<x.y.z> | none
+  main_sha: <short sha>
+  branch_deleted: <branch-name>
+  worktree_removed: true|false
+  issues_closed: #N, #M
+  errors: <any errors or "none">
+  warnings: <any warnings or "none">
+```
 
 ---
 

@@ -36,3 +36,5 @@ Scrapes live token usage from claude.ai via Edge CDP (Chrome DevTools Protocol).
 - **No caching** — always scrape fresh data, regardless of file age.
 - Edge only needs to be restarted once per PC session. After that, CDP stays active.
 - Usage display is handled exclusively by the completion card (§Task Completion Signal) — not at session start.
+- **Never use Claude in Chrome MCP tools** (navigate, read_page, computer, etc.) as a fallback for scraping usage data. The headless CDP script is the **only** allowed scraping method. If CDP is unavailable and the user declines Edge restart, show `📊 [no data]` — do not attempt browser automation.
+- **Silent execution**: This skill must produce zero visible browser activity. If a visible browser window opens during execution, the implementation is wrong — stop and report the issue instead of continuing.

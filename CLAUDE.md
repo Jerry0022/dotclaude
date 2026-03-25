@@ -602,6 +602,8 @@ When a unit of work is complete (feature, bug fix, design asset, refactor — an
 
 **The step-by-step flow is defined in the global `/ship` skill** (`~/.claude/skills/ship/SKILL.md`). The skill is the canonical implementation — always invoke it rather than running steps manually. Project-level `/ship` skills extend the global skill with project-specific details (commands, extra steps, etc.).
 
+**Agent-delegated execution:** The ship flow runs inside a **subagent** to avoid consuming main-context tokens. The main context collects metadata (branch, issues, version bump decision) and spawns an Agent that executes all steps independently. This prevents mid-flow context compression (which would re-trigger SessionStart hooks). The agent returns a structured result; the main context renders the completion card.
+
 **Summary of steps** (see `/ship` skill for full details):
 1. Consolidate sub-branches → 2. Sync main → 3. Rebase → 4. Quality gates → 5. **Version bump** (§Versioning) → 6. Commit & push → 7. Create PR → 8. Merge PR → 9. Update local main → 10. Cleanup → 11. Verify live
 
