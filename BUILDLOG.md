@@ -1,5 +1,14 @@
 # Build Log
 
+## e8bb1b8 — 2026-03-25
+Version: 0.32.0
+Branch: main
+Commit: a41207e
+Changes:
+- Test prompt card: formatted block for every app start (test-prompt-card.md)
+- CLAUDE.md §Test Execution: test prompt card reference added
+- .gitignore: channels/ directory added
+
 ## 876049e — 2026-03-25
 Version: 0.31.0
 Branch: main
