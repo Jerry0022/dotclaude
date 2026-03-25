@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.29.1] - 2026-03-25
+
+### Fixed
+- Remove dead `check-dotclaude-sync.js` reference from settings template and plan config (caused MODULE_NOT_FOUND on fresh setups)
+
 ## [0.29.0] - 2026-03-25
 
 ### Added

@@ -27,11 +27,6 @@
           },
           {
             "type": "command",
-            "command": "node \"$HOME/.claude/scripts/check-dotclaude-sync.js\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "node \"$HOME/.claude/scripts/sweep-branches.js\"",
             "timeout": 15
           }

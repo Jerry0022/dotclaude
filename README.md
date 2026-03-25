@@ -1,8 +1,8 @@
 # dotclaude
 
-**Version: 0.29.0**
+**Version: 0.29.1**
 
-![Version](https://img.shields.io/badge/version-0.29.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.29.1-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -158,7 +158,7 @@ If drift is detected, Claude will suggest running `/ship-dotclaude` to push your
 | **Instructions** | `CLAUDE.md` | Global rules: autonomy, git hygiene, sprint workflow, token awareness, versioning, response style, inheritance model |
 | **Skills** | `skills/*/SKILL.md` | ship, ship-dotclaude, commit, debug, deep-research, explain, readme, test, refresh-usage, project-setup, youtube-transcript, readme-workspace |
 | **Commands** | `commands/*.md` | refresh-usage (scrape live rate limits from claude.ai) |
-| **Scripts** | `scripts/*.js` | startup-summary, precheck-cost, check-dotclaude-sync, render-diagram, diagram-server, scrape-usage |
+| **Scripts** | `scripts/*.js` | startup-summary, precheck-cost, render-diagram, diagram-server, scrape-usage |
 | **Templates** | `templates/` | settings.template.json, config.template.json, plugins-manifest.json |
 | **Plugins** | `plugins/blocklist.json` | Blocked plugin list |
 | **CLI** | `bin/cli.js` | Setup automation entry point |

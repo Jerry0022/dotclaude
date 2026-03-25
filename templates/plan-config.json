@@ -22,7 +22,7 @@
       "claudeMd": "CLAUDE.md",
       "skills": ["commit", "debug", "deep-research", "explain", "readme", "ship-dotclaude", "youtube-transcript"],
       "hooks": {
-        "SessionStart": ["startup-summary", "check-dotclaude-sync"],
+        "SessionStart": ["startup-summary"],
         "PreToolUse": ["precheck-cost"]
       },
       "description": "Full — all hooks, all skills, drift detection, cost guard"
