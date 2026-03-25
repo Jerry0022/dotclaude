@@ -10,6 +10,9 @@ scripts/dotclaude-repo-path
 scripts/dotclaude-plan
 scripts/diagrams/index.html
 
+# Channel credentials and state
+channels/
+
 # Plugin runtime data
 plugins/cache/
 plugins/data/

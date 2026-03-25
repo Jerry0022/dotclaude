@@ -110,6 +110,7 @@ Details in `/test` skill deep-knowledge (`test-strategy.md`). Key rules:
 - Task-specific tests immediately after changes. Full suite only at ship time.
 - Skip preview for non-runtime changes (config, docs, build assets).
 - Always include user-facing test plan for visible changes.
+- **Test prompt card**: Every app start ends with the test prompt card (with test steps after changes, without for standalone starts). Format in `/test` skill deep-knowledge (`test-prompt-card.md`).
 
 ## AI Configuration Files in .gitignore
 Details in `/project-setup` skill. Key rule: track shared config (CLAUDE.md, skills, hooks), ignore session state (worktrees, todos, caches).

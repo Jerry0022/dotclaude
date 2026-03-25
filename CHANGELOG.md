@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.32.0] - 2026-03-25
+
+### Added
+- Test prompt card: formatted block shown on every app start (with/without test steps)
+- `/test` deep-knowledge: test-prompt-card.md — template, variants, and trigger rules
+
+### Changed
+- CLAUDE.md §Test Execution: added test prompt card reference
+- .gitignore: added channels/ directory
+
 ## [0.31.0] - 2026-03-25
 
 ### Added
