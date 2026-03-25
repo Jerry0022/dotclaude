@@ -28,6 +28,7 @@ These rules apply to ALL projects and sessions. Context-specific rules live in s
 - GitHub-flavored Markdown when structure helps. No emojis unless requested.
 - **Completion card mandatory** after every completed task — format in `/ship` deep-knowledge (`completion-card.md`).
 - **Test prompt card mandatory** after every app start — format in `/start` deep-knowledge (`test-prompt-card.md`).
+- **Auto-start + test plan** after code changes — see §Completion Flow.
 - These cards are **non-negotiable output contracts** — skipping them is a rule violation, not a style choice. Load the skill deep-knowledge to get the exact format before rendering.
 
 ## Agent Naming
@@ -43,6 +44,24 @@ Details (inline attribution, collaboration protocol): agent-conventions deep-kno
 ## Visual Diagrams (Mermaid)
 Proactively include Mermaid diagrams for architecture, decisions, status, explanations. One concept per diagram, `LR` direction preferred, always give descriptive `title`.
 Render: `node ~/.claude/scripts/render-diagram.js "Title"` → port 9753 via Preview panel.
+
+## Completion Flow
+After completing code changes for a task, follow this sequence:
+
+1. **Auto-start dev server** — if the project has a dev server (project-level `/dev-start` or `.claude/launch.json`), start it automatically after implementation completes. Do not ask first.
+2. **Show test plan** — format in `/test` deep-knowledge (`test-strategy.md`, §User-facing test plan).
+3. **Show completion card** — format in `/ship` deep-knowledge (`completion-card.md`).
+
+**When to auto-start:**
+- Implementation complete, test plan needed → start, then show test plan + completion card.
+- Ship flow quality gates → start if not already running, run tests against live app.
+
+**When NOT to auto-start:**
+- Pure documentation, config, or non-code changes (nothing to test visually).
+- User immediately brings up a new topic (no pause for testing).
+- Dev server is already running from this session.
+
+Projects extend this with project-specific launch methods, cache cleanup paths, and pre-conditions via `/dev-start` skill extensions.
 
 ## Code Defaults
 - UTF-8. English identifiers/comments/strings (except localization).
