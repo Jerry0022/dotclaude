@@ -1,5 +1,12 @@
 # Build Log
 
+## cec73b0 — 2026-03-25
+Version: 0.23.2
+Branch: main
+Commit: ffd1e7b
+Changes:
+- Deduplicate sync-dotclaude SessionStart hook via process.ppid lock file
+
 ## 7b1efd4 — 2026-03-25
 Version: 0.23.1
 Branch: main
