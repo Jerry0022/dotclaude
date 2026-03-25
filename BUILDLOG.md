@@ -1,5 +1,13 @@
 # Build Log
 
+## e8d120b — 2026-03-25
+Version: 0.26.0
+Branch: main
+Commit: 50d3e70
+Changes:
+- Ship skill rebuilt with agent-delegated execution for context isolation
+- CLAUDE.md §Completion Flow documents agent delegation architecture
+
 ## 975537d — 2026-03-25
 Version: 0.25.0
 Branch: main
