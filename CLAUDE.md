@@ -556,8 +556,13 @@ When auditing or writing ignore files for any project:
 
 ## Test Execution Strategy
 
-### Config-only changes — skip preview
-When the **only** changed files are config, docs, or scripts (CLAUDE.md, shell scripts, `package.json`, `settings.json`, skill files, hook scripts) — **skip the `/test` preview skill entirely**. There is no UI, no dev server, and nothing to preview or screenshot. Verification for these changes = CI pipeline green, not the preview panel.
+### Non-runtime changes — skip preview
+Skip the `/test` preview skill entirely when changes are **not visible in the running dev server**. There is nothing to preview or screenshot — verification = CI pipeline or a rebuild/reinstall, not the preview panel.
+
+**Categories that skip preview:**
+- **Config/docs/scripts**: CLAUDE.md, shell scripts, `package.json`, `settings.json`, skill files, hook scripts
+- **Build/installer assets**: icon files (`.ico`, `.png`), installer code (e.g., `InstallerBridge.cs`, shortcut creation), static design-system assets — these take effect only after a fresh build (`dotnet publish`, `rcedit`, installer run), not in the dev server
+- **CI/CD**: workflow files, release scripts, Dockerfile changes
 
 ### Task-specific tests (run immediately)
 After every code change, run only the tests directly related to the current task — e.g., the specific test file for the changed module, or a targeted `npm run test:unit -- --grep "pattern"`. This verifies the change works without the cost of a full regression suite.

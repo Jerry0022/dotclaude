@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.28.1] - 2026-03-25
+
+### Changed
+- CLAUDE.md: expanded preview skip rule to cover build/installer assets (ICO, PNG, C# installer code) and CI/CD files — not just config
+
 ## [0.28.0] - 2026-03-25
 
 ### Added
