@@ -97,7 +97,7 @@ Core rules live in `/ship` skill deep-knowledge — loaded when shipping. Key su
 - **Versioning**: Semantic versioning in `package.json` + README badge. Build ID via `git write-tree | cut -c1-7`. Bump decision at ship time. Details in `versioning.md`.
 - **Release**: Tag `vX.Y.Z` after merge, trigger GitHub Actions. Details in `release-flow.md`.
 - **When to ship**: Auto-ship complete work, offer for uncertain, skip intermediate. Details in `when-to-ship.md`.
-- **Build-ID bei App-Start**: Always show `✨ Build <hash> gestartet` when starting an app.
+- **Build-ID bei App-Start**: After every app start, show the **test prompt card** via the `/dev-start` skill (format in its deep-knowledge `test-prompt-card.md`). Minimal version for standalone starts, with test steps after code changes.
 
 ## GitHub Issues & Milestones
 Managed via `/new-issue` skill. Key rules:
@@ -110,7 +110,7 @@ Details in `/test` skill deep-knowledge (`test-strategy.md`). Key rules:
 - Task-specific tests immediately after changes. Full suite only at ship time.
 - Skip preview for non-runtime changes (config, docs, build assets).
 - Always include user-facing test plan for visible changes.
-- **Test prompt card**: Every app start ends with the test prompt card (with test steps after changes, without for standalone starts). Format in `/test` skill deep-knowledge (`test-prompt-card.md`).
+- **Test prompt card**: Every app start ends with the test prompt card. Owned by `/dev-start` skill (see its deep-knowledge `test-prompt-card.md`).
 
 ## AI Configuration Files in .gitignore
 Details in `/project-setup` skill. Key rule: track shared config (CLAUDE.md, skills, hooks), ignore session state (worktrees, todos, caches).
