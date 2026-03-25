@@ -1,5 +1,14 @@
 # Build Log
 
+## 1e0acb2 — 2026-03-25
+Version: 0.27.0
+Branch: main
+Commit: 44b293b
+Changes:
+- CLAUDE.md: raw refresh-usage output must never leak into visible responses
+- Project-setup skill: .claude/ directory structure convention with canonical layout
+- precheck-cost.js: add cd to noTokenCostPattern allowlist (bug fix)
+
 ## e8d120b — 2026-03-25
 Version: 0.26.0
 Branch: main
