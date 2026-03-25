@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.30.0] - 2026-03-25
+
+### Added
+- Completion card: reset timer for 5h and weekly windows inline per metric
+- Usage scraper: compute `weekly.resetInMinutes` from reset day + time
+- New `formatWeeklyDuration()` for days+hours display
+
+### Changed
+- Completion card icon: `📊` → `🔋` (battery — intuitive capacity indicator)
+- Completion card format: Variante C — reset times inline after each metric
+
 ## [0.29.3] - 2026-03-25
 
 ### Added

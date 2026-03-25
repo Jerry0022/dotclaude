@@ -144,7 +144,7 @@ Second change or action
 file1 — what changed
 file2 — what changed
 
-📊 5h: <pct>% (+<delta>%) | Weekly: <pct>% (+<delta>%) | Sonnet: <pct>% (+<delta>%)
+🔋 5h: <pct>% (+<delta>%) · Reset <Xh Ym> | Weekly: <pct>% (+<delta>%) · Reset <Xd Yh> | Sonnet: <pct>% (+<delta>%)
 
 ---
 ```
@@ -164,12 +164,13 @@ file2 — what changed
 **Usage line (always last line before closing `---`):**
 - **Always** run `/refresh-usage` (no caching — always scrape live data) right before rendering the completion card.
 - Read `usage-live.json` **before** the refresh to capture the previous state. After the refresh, read the new state. Compute the delta (`new_pct - old_pct`) for each metric.
-- Format: `📊 5h: <pct>% (+<delta>%) | Weekly: <pct>% (+<delta>%) | Sonnet: <pct>% (+<delta>%)`
+- Format: `🔋 5h: <pct>% (+<delta>%) · Reset <Xh Ym> | Weekly: <pct>% (+<delta>%) · Reset <Xd Yh> | Sonnet: <pct>% (+<delta>%)`
+- **Reset times**: Read `session.resetInMinutes` and `weekly.resetInMinutes` from `usage-live.json`. Format: `<24h` → `Xh Ym`, `>=24h` → `Xd Yh`. If a reset value is missing, omit the `· Reset ...` part for that metric.
 - If the delta is 0, show `(+0%)`. If the previous file was missing (first refresh of the session), show `(+0%)` as well — never use `(—)` which looks like an error.
-- If the refresh fails, show `📊 [no data]` — do not block the completion card.
+- If the refresh fails, show `🔋 [no data]` — do not block the completion card.
 - This is the **only** place where usage is displayed — no session start display, no background refresh.
-- **Raw data is internal only.** The before/after values from `/refresh-usage` (e.g., "Previous: 5h 11%... New: 5h 13%...") must never appear in the visible response. Consume them silently to compute the delta — only the formatted `📊` line is user-facing.
-- **Never estimate or recall usage numbers.** Every value in the `📊` line must come directly from the script's output — never from memory, interpolation, or earlier conversation context. If the script cannot run and no cached data exists, show `📊 [no data]`.
+- **Raw data is internal only.** The before/after values from `/refresh-usage` (e.g., "Previous: 5h 11%... New: 5h 13%...") must never appear in the visible response. Consume them silently to compute the delta — only the formatted `🔋` line is user-facing.
+- **Never estimate or recall usage numbers.** Every value in the `🔋` line must come directly from the script's output — never from memory, interpolation, or earlier conversation context. If the script cannot run and no cached data exists, show `🔋 [no data]`.
 
 **Rules:**
 - The completion card is **always** the last thing in the response — nothing after it. If additional context arises after composing the card (hook output, afterthoughts, caveats), place it **before** the card block, never after. The `---` closing line is the absolute end of the response.
@@ -450,6 +451,16 @@ Ship → squash to main               —                → x5v3n88 (carried ov
 ```
 
 3 commits, 4 builds — independent counts. Builds track testable states; commits track logical code units.
+
+### Build-ID bei App-Start anzeigen
+
+When the user asks to start/run an app, generate the current build hash (`git write-tree | cut -c1-7`) and display it inline immediately after the start command:
+
+```
+✨ Build a3f9b21 gestartet
+```
+
+This lets the user match the running app window to the exact code state. Independent of the completion card — this is a quick visual anchor at launch time.
 
 ### Build Log (`BUILDLOG.md`)
 

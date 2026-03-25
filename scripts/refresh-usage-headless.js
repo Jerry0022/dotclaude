@@ -62,13 +62,35 @@ function parseUsageText(text) {
 
   if (pcts.length < 2) return null;
 
+  // Compute weekly reset in minutes from resetDay + resetTime
+  let weeklyResetMinutes = null;
+  if (weeklyMatch) {
+    const dayAbbrev = (weeklyMatch[1] || '').replace(/\.$/, '').toLowerCase();
+    const dayMap = { so: 0, su: 0, mo: 1, di: 2, tu: 2, mi: 3, we: 3, do: 4, th: 4, fr: 5, sa: 6 };
+    const targetDow = dayMap[dayAbbrev];
+    if (targetDow != null && weeklyMatch[2]) {
+      const [hh, mm] = weeklyMatch[2].split(':').map(Number);
+      const now = new Date();
+      const nowDow = now.getDay();
+      let daysUntil = (targetDow - nowDow + 7) % 7;
+      if (daysUntil === 0) {
+        // Same day — check if reset time is still ahead
+        const resetTodayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm).getTime();
+        if (now.getTime() >= resetTodayMs) daysUntil = 7; // already passed today → next week
+      }
+      const resetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntil, hh, mm);
+      weeklyResetMinutes = Math.round((resetDate.getTime() - now.getTime()) / 60000);
+    }
+  }
+
   return {
     timestamp: new Date().toISOString(),
     session: { pct: pcts[0], resetInMinutes: resetMinutes },
     weekly: {
       pct: pcts[1],
       resetDay: weeklyMatch ? weeklyMatch[1] + '.' : null,
-      resetTime: weeklyMatch ? weeklyMatch[2] : null
+      resetTime: weeklyMatch ? weeklyMatch[2] : null,
+      resetInMinutes: weeklyResetMinutes
     },
     weeklySonnet: pcts[2] != null ? { pct: pcts[2] } : undefined,
     plan: 'Max Plan'
@@ -287,6 +309,18 @@ function formatDuration(ms) {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
+function formatWeeklyDuration(totalMinutes) {
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) {
+    const m = totalMinutes % 60;
+    return m > 0 ? `${totalHours}h ${m}m` : `${totalHours}h`;
+  }
+  const d = Math.floor(totalHours / 24);
+  const h = totalHours % 24;
+  return h > 0 ? `${d}d ${h}h` : `${d}d`;
+}
+
 function printUsageSummary() {
   let data;
   try { data = JSON.parse(fs.readFileSync(USAGE_LIVE_PATH, 'utf8')); }
@@ -299,9 +333,11 @@ function printUsageSummary() {
   const reset5hStr = data.session?.resetInMinutes
     ? `resets in ${formatDuration(data.session.resetInMinutes * 60000)}`
     : 'unknown';
-  const weeklyResetStr = data.weekly?.resetDay && data.weekly?.resetTime
-    ? ` \u2014 resets ${data.weekly.resetDay} ${data.weekly.resetTime}`
-    : '';
+  const weeklyResetStr = data.weekly?.resetInMinutes
+    ? ` \u2014 resets in ${formatWeeklyDuration(data.weekly.resetInMinutes)}`
+    : data.weekly?.resetDay && data.weekly?.resetTime
+      ? ` \u2014 resets ${data.weekly.resetDay} ${data.weekly.resetTime}`
+      : '';
   const sonnetPart = pctSonnet !== null ? ` | Sonnet: ${Math.round(pctSonnet)}%` : '';
 
   let status;
