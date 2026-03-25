@@ -1,5 +1,13 @@
 # Build Log
 
+## d6d5c5a — 2026-03-25
+Version: 0.24.0
+Branch: main
+Commit: 57d6308
+Changes:
+- Add ship prompt timing rule — prompt exactly once after verification, never mid-task
+- Add Step 8.5 to /ship skill — git tag + release pipeline after PR merge
+
 ## cec73b0 — 2026-03-25
 Version: 0.23.2
 Branch: main
