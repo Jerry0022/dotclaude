@@ -1,5 +1,15 @@
 # Build Log
 
+## d22c577 — 2026-03-25
+Version: 0.29.0
+Branch: main
+Commit: ef1f047
+Changes:
+- Usage scraper: auto-start Edge with CDP when not running (non-destructive)
+- Usage scraper: cache fallback when live scraping fails
+- Usage scraper: smart polling replaces fixed 5s page-load wait
+- Refresh-usage skill: 3-tier flow (CDP → auto-start → user-prompted restart)
+
 ## e2c8bfa — 2026-03-25
 Version: 0.28.1
 Branch: main
