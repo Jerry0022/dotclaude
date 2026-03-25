@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.35.0] - 2026-03-25
+
+### Changed
+- **Completion card redesigned** — 8 variant system with structured sections (Changes/Tests/Cleanup)
+- Status line promoted to `##` heading with icons: 🚀 Shipped, 📦 Nicht shipped, ⛔ Ship blockiert
+- Mandatory status line on every card (shipped, not shipped, or blocked)
+- Removed Quality/Build metadata from status line — cleaner layout
+- Added variants overview table for quick reference
+- Test Prompt Card variants (auto-start + user-triggered) documented alongside completion card
+
 ## [0.34.0] - 2026-03-25
 
 ### Added
