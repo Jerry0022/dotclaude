@@ -1,5 +1,17 @@
 # Build Log
 
+## 876049e — 2026-03-25
+Version: 0.31.0
+Branch: main
+Commit: f0d2761
+Changes:
+- CLAUDE.md reduced from 690 to 132 lines (81% reduction)
+- Deep-knowledge architecture: context-specific rules loaded on-demand via skill directories
+- /ship deep-knowledge: branching, versioning, completion-card, release-flow, when-to-ship
+- /new-issue skill + deep-knowledge: issue-rules, milestone-rules, issue-status
+- /commit deep-knowledge: commit-granularity
+- /test deep-knowledge: test-strategy
+
 ## 803a914 — 2026-03-25
 Version: 0.30.0
 Branch: main
