@@ -1,5 +1,14 @@
 # Build Log
 
+## 5b17ab6 — 2026-03-25
+Version: 0.23.0
+Branch: main
+Commit: 9a142c7
+Changes:
+- Add project-level .claude/settings.json with sync-dotclaude hook for cloned repos
+- Track .claude/settings.json in git while keeping other .claude/ contents ignored
+- Scope root settings.json ignore patterns with / prefix
+
 ## 1b81fa3 — 2026-03-25
 Version: 0.22.0
 Branch: main
