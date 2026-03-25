@@ -9,8 +9,17 @@
  */
 
 const { execSync } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 const os = require('os');
+
+// Deduplicate: skip if already ran in this session (hook may fire from both
+// global and project-level settings.json when working inside ~/.claude/).
+const LOCK = path.join(os.tmpdir(), `sync-dotclaude-${process.ppid}`);
+if (fs.existsSync(LOCK)) {
+  process.exit(0);
+}
+fs.writeFileSync(LOCK, Date.now().toString());
 
 const DOTCLAUDE = path.join(os.homedir(), '.claude');
 

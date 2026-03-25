@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.23.2] - 2026-03-25
+
+### Fixed
+- sync-dotclaude.js no longer runs twice per session when working inside ~/.claude/ (lock-file deduplication via process.ppid)
+
 ## [0.23.1] - 2026-03-25
 
 ### Improved
