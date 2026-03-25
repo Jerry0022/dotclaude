@@ -1,5 +1,12 @@
 # Build Log
 
+## 7b1efd4 — 2026-03-25
+Version: 0.23.1
+Branch: main
+Commit: 6a0f432
+Changes:
+- Improve sync-dotclaude.js hook to report status in all cases (up-to-date, pulled, diverged)
+
 ## 5b17ab6 — 2026-03-25
 Version: 0.23.0
 Branch: main
