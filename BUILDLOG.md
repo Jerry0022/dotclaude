@@ -1,5 +1,10 @@
 # Build Log
 
+## ef1f15e — 2026-03-25
+Version: 0.36.0
+Branch: main
+Ship safety: pre-flight gate (Step 0) blocks shipping with dirty state, Step 11 cleanup guarded behind confirmed merge
+
 ## 50022f0 — 2026-03-25
 Version: 0.35.0
 Branch: main
