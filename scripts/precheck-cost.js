@@ -82,7 +82,7 @@ process.stdin.on('end', () => {
     // Commands that don't produce output Claude needs to process — no token cost.
     // These are "fire and forget" executions where Claude just checks the exit code.
     // Pattern for commands that don't produce output Claude needs to process.
-    const noTokenCostPattern = /^\s*(git\s+(push|fetch|remote|prune|worktree\s+(add|remove|prune)|branch\s+-[dD]|checkout|switch|pull|merge|rebase|tag|stash|rm|add|commit)|gh\s+(pr\s+(create|merge|close)|issue\s+(create|close)|project\s+item-add|api\s+graphql)|npm\s+publish|rm\s|mkdir\s|cp\s|mv\s)/;
+    const noTokenCostPattern = /^\s*(cd\s|git\s+(push|fetch|remote|prune|worktree\s+(add|remove|prune)|branch\s+-[dD]|checkout|switch|pull|merge|rebase|tag|stash|rm|add|commit)|gh\s+(pr\s+(create|merge|close)|issue\s+(create|close)|project\s+item-add|api\s+graphql)|npm\s+publish|rm\s|mkdir\s|cp\s|mv\s)/;
     // Check each segment in a &&/; chain — if ALL segments are no-cost, allow.
     const segments = cmd.split(/\s*(?:&&|;)\s*/);
     const allNoTokenCost = segments.every(seg => noTokenCostPattern.test(seg));

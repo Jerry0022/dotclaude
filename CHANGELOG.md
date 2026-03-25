@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.27.0] - 2026-03-25
+
+### Added
+- CLAUDE.md: raw refresh-usage output must never leak into visible responses — only formatted 📊 line is user-facing
+- Project-setup skill: `.claude/` directory structure convention with canonical layout and root-level placement rules
+
 ## [0.26.0] - 2026-03-25
 
 ### Changed
