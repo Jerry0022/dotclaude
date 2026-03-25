@@ -1,5 +1,10 @@
 # Build Log
 
+## 6c0aee0 — 2026-03-25
+Version: 0.33.1
+Branch: main
+Enforce completion card rendering after ship agent return
+
 ## e8bb1b8 — 2026-03-25
 Version: 0.32.0
 Branch: main
