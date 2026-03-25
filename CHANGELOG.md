@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.29.2] - 2026-03-25
+
+### Changed
+- WARTE option rule: trigger based on whether relevant context is scrolled out of view, not text length
+
 ## [0.29.1] - 2026-03-25
 
 ### Fixed
