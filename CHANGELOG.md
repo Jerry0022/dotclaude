@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.31.0] - 2026-03-25
+
+### Added
+- Deep-knowledge architecture: context-specific rules loaded on-demand via skill deep-knowledge directories
+- `/ship` deep-knowledge: branching.md, versioning.md, completion-card.md, release-flow.md, when-to-ship.md
+- `/new-issue` skill: GitHub issue creation with enforced format, labels, milestone, board integration
+- `/new-issue` deep-knowledge: issue-rules.md, milestone-rules.md, issue-status.md
+- `/commit` deep-knowledge: commit-granularity.md
+- `/test` deep-knowledge: test-strategy.md
+
+### Changed
+- CLAUDE.md reduced from 690 to 132 lines (81% reduction) — top-level rules prominent, details cascaded into skills
+- No rules lost — all context-specific rules moved to skill deep-knowledge, loaded when skill triggers
+
 ## [0.30.0] - 2026-03-25
 
 ### Added
