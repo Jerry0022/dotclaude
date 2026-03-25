@@ -1,5 +1,10 @@
 # Build Log
 
+## 4802700 — 2026-03-25
+Version: 0.34.0
+Branch: main
+Slim CLAUDE.md (133→54 lines), restructure config for team sharing, add auto-sync hook
+
 ## 6c0aee0 — 2026-03-25
 Version: 0.33.1
 Branch: main
