@@ -88,5 +88,15 @@ Projects extend this with project-specific launch methods, cache cleanup paths, 
 - Always prefer dedicated tools (Read, Write, Edit, Glob, Grep) over Bash equivalents.
 - Batch Bash calls with `&&`. Priority: functionality > aesthetics.
 
+## Ship Safety — Zero-Loss Guarantee
+
+These rules override any cleanup or convenience logic in the ship flow:
+
+1. **No cleanup before confirmed merge.** Step 11 (branch/worktree deletion) MUST NOT execute unless the PR merge (Step 8) succeeded and the merge commit is visible on `main`. If any step fails, all branches and worktrees are preserved.
+2. **No ship with dirty state.** Step 0 (Pre-Flight Gate) blocks shipping when untracked or uncommitted files exist. Every file must be either committed or explicitly gitignored before `/ship` proceeds.
+3. **Warn about orphaned worktrees.** Before cleanup, check all worktrees for uncommitted changes and warn the user about any that would be lost.
+4. **Never delete what isn't merged.** A branch may only be deleted (local or remote) after its commits are reachable from `main`. Verify with `git merge-base --is-ancestor <branch> main`.
+5. **Session-end obligation.** When a session ends mid-work (without `/ship`), commit and push all current state — even WIP. Never leave uncommitted changes in a worktree that could be cleaned up by the next session.
+
 ## Skill References
 Commit, Ship, Test, Issues, Project-Setup, Agent-Conventions, Skill-Creation: detail rules in respective skill deep-knowledge files.

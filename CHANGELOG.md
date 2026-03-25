@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.36.0] - 2026-03-25
+
+### Added
+- **Ship Safety — Zero-Loss Guarantee** in global CLAUDE.md — 5 rules preventing data loss during shipping
+- **Step 0: Pre-Flight Safety Gate** in `/ship` skill — mandatory checks before any ship flow proceeds
+  - Blocks shipping with uncommitted/untracked files
+  - Warns about orphaned worktrees with uncommitted changes
+  - Verifies commits exist ahead of main
+  - Verifies all commits are pushed to remote
+  - Checks .gitignore covers build artifacts
+- **Step 11 merge guard** — cleanup only runs after confirmed PR merge on main
+
+### Changed
+- Step 11 renamed to "Aggressive Local Cleanup (ONLY after successful merge)" with explicit guard condition
+
 ## [0.35.0] - 2026-03-25
 
 ### Changed

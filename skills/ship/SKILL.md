@@ -74,6 +74,42 @@ The agent returns a `SHIP_RESULT:` block. This is NOT the final output — it is
 
 The agent executes these steps sequentially. All steps run in the working directory passed via the prompt.
 
+### Step 0: Pre-Flight Safety Gate (MANDATORY — never skip)
+
+Before ANY other step, run these checks. If any check fails, **STOP and report** — do not proceed to Step 1.
+
+```bash
+# 0a. Untracked files — nothing may be left uncommitted
+git status --porcelain
+```
+If output is non-empty: **ABORT.** List the untracked/modified files and ask the user whether to stage+commit them or discard. Never proceed with uncommitted work.
+
+```bash
+# 0b. Stale worktree branches — check for OTHER worktrees with uncommitted changes
+git worktree list --porcelain
+```
+For each worktree (other than the current one), run `git -C <path> status --porcelain`. If any has uncommitted changes, **WARN** the user: "Worktree `<name>` has uncommitted changes that will NOT be included in this ship."
+
+```bash
+# 0c. Verify current branch has commits ahead of main
+git rev-list --count main..HEAD
+```
+If count is 0: **ABORT.** Nothing to ship.
+
+```bash
+# 0d. Verify all commits are pushed to remote
+git rev-list --count @{upstream}..HEAD 2>/dev/null
+```
+If count > 0: commits exist locally that aren't pushed. Push them before proceeding.
+
+```bash
+# 0e. Verify .gitignore covers build artifacts
+git ls-files --others --exclude-standard --directory | grep -E '(dist/|\.angular/|\.scc-build-hash|\.tmp/)' | head -5
+```
+If any build artifacts are untracked and not gitignored, fix `.gitignore` first.
+
+**Rule:** Step 11 (cleanup) MUST NOT execute unless Step 8 (PR merge) completed successfully. If the ship flow fails at any step, no cleanup occurs — branches, worktrees, and local state are preserved intact.
+
 ### Step 1: Consolidate Sub-Branches (if multi-branch workflow)
 
 Check for sub-branches of the current integration branch. If they exist, merge each into the integration branch in wave order (per the project's agent team definition). Resolve conflicts at each merge — do not defer.
@@ -189,7 +225,9 @@ git -C <main-repo-path> pull origin main
 
 Write a new entry to `BUILDLOG.md`. Generate the build hash via `git write-tree | cut -c1-7`. Format per §Build Log in CLAUDE.md.
 
-### Step 11: Aggressive Local Cleanup
+### Step 11: Aggressive Local Cleanup (ONLY after successful merge)
+
+**Guard:** This step MUST NOT run unless Step 8 (PR merge) returned success AND `git log main --oneline -1` shows the squash-merge commit. If any prior step failed, SKIP this entire step and preserve all branches/worktrees.
 
 Delete ALL local branches related to the shipped feature:
 ```bash
