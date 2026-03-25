@@ -55,7 +55,7 @@ At session start, compare global CLAUDE.md against the project's `<!-- global-sy
 - Be concise. Lead with the action or answer — no preamble.
 - No trailing summaries restating what was just done.
 - GitHub-flavored Markdown when structure helps. No emojis unless requested.
-- **Completion card**: Always end completed tasks with a completion card. Format details in `/ship` skill deep-knowledge (`completion-card.md`).
+- **Completion card**: Every completed task MUST end with a completion card — no exceptions, no abbreviated summaries. This is the **single most important output rule**. After a `/ship` agent returns its `SHIP_RESULT:` block, the main context MUST load `/ship` deep-knowledge `completion-card.md`, run `/refresh-usage`, and render the full completion card. Never substitute an ad-hoc summary. Format spec: `/ship` skill deep-knowledge (`completion-card.md`).
 
 ## Agent Naming Convention
 

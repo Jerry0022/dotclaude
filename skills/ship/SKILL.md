@@ -58,16 +58,15 @@ Launch a **single Agent** with `subagent_type: "general-purpose"`. Pass ALL coll
 - The complete 12-step flow (see below)
 - Instructions to return a structured result
 
-### Phase 4: Process agent result
+### Phase 4: Process agent result (MANDATORY — never skip)
 
-The agent returns a structured result. Extract and display:
-- PR link
-- Version (old → new)
-- Build hash
-- Cleanup status
-- Any errors or warnings
+The agent returns a `SHIP_RESULT:` block. This is NOT the final output — it is raw data. You MUST now:
 
-Then render the **completion card** (per §Task Completion Signal in CLAUDE.md) using the agent's output.
+1. Run `/refresh-usage` to get live usage data
+2. Map the `SHIP_RESULT:` fields to the completion card format from deep-knowledge `completion-card.md`
+3. Render the **full completion card** as the last thing in the response
+
+**Never** substitute an ad-hoc summary, table, or bullet list for the completion card. The completion card is the only acceptable final output after a ship.
 
 ---
 

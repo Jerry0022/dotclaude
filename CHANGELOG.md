@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.33.1] - 2026-03-25
+
+### Changed
+- CLAUDE.md §Response Style: strengthen completion card rule — MUST render after ship agent returns, never substitute ad-hoc summary
+- `/ship` SKILL.md Phase 4: rewritten as MANDATORY with explicit 3-step sequence (refresh-usage → map fields → render card)
+
 ## [0.33.0] - 2026-03-25
 
 ### Added
