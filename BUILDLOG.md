@@ -1,5 +1,12 @@
 # Build Log
 
+## d907d06 — 2026-03-25
+Version: 0.29.1
+Branch: main
+Commit: a991f36
+Changes:
+- Remove dead check-dotclaude-sync.js references from templates and docs
+
 ## d22c577 — 2026-03-25
 Version: 0.29.0
 Branch: main
