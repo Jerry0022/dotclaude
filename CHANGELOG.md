@@ -4,11 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [0.33.0] - 2026-03-25
 
+### Added
+- New global `/start` skill: user-triggered app launch with test prompt card
+- `/start` deep-knowledge: test-prompt-card.md — format, variants, build-ID logic
+
 ### Changed
-- Test prompt card ownership transferred from `/test` to `/dev-start` skill (project-level)
-- CLAUDE.md §Build-ID: references `/dev-start` skill instead of inline `✨` format
-- CLAUDE.md §Test Execution: test prompt card now owned by `/dev-start`
-- `/test` deep-knowledge test-prompt-card.md: replaced with redirect to `/dev-start`
+- CLAUDE.md §Build-ID: references `/start` skill instead of inline `✨` format
+- CLAUDE.md §Test Execution: test prompt card now owned by `/start`
+- `/test` deep-knowledge test-prompt-card.md: replaced with redirect to `/start`
 
 ## [0.32.0] - 2026-03-25
 
