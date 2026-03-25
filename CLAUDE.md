@@ -169,6 +169,7 @@ file2 — what changed
 - If the refresh fails, show `📊 [no data]` — do not block the completion card.
 - This is the **only** place where usage is displayed — no session start display, no background refresh.
 - **Raw data is internal only.** The before/after values from `/refresh-usage` (e.g., "Previous: 5h 11%... New: 5h 13%...") must never appear in the visible response. Consume them silently to compute the delta — only the formatted `📊` line is user-facing.
+- **Never estimate or recall usage numbers.** Every value in the `📊` line must come directly from the script's output — never from memory, interpolation, or earlier conversation context. If the script cannot run and no cached data exists, show `📊 [no data]`.
 
 **Rules:**
 - The completion card is **always** the last thing in the response — nothing after it. If additional context arises after composing the card (hook output, afterthoughts, caveats), place it **before** the card block, never after. The `---` closing line is the absolute end of the response.

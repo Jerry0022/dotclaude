@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.29.3] - 2026-03-25
+
+### Added
+- CLAUDE.md: usage numbers must always come from live script output — never estimated, recalled, or interpolated
+
 ## [0.29.2] - 2026-03-25
 
 ### Changed
