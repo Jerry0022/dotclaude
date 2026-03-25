@@ -215,6 +215,29 @@ When roles execute inline (no subagent spawned — typical for small changes), a
 
 This applies to both GitHub issue comments (structured handoff comments) and direct conversation output.
 
+### Agent collaboration protocol
+
+When multiple roles work on a shared task, they collaborate via structured handoffs. A finding by one role becomes a task for another — this is the **finding-to-task principle**.
+
+**Finding → task examples:**
+- `frontend` finds a broken contract → hands off to `core` to fix it first
+- `gamer` finds an untranslated string → hands off to `frontend` to fix the template
+- `qa` finds a failing test → hands off to the owning role to fix it
+- `core` renames an event → triggers all consuming roles to update before proceeding
+
+**When working on a GitHub issue — post a structured comment for every handoff:**
+- Starting: `[role:X] Starting — scope: <summary>`
+- Handoff: `[role:X] Done — <what changed>. Passing to role:Y for <reason>`
+- Review clean: `[role:X] Review pass clean. Ready for role:Y`
+- Review findings: `[role:X] Review pass — <N findings>, fixing now`
+- Blocker: `[role:X] Blocked — <reason>. Needs: <decision>`
+
+**When no GitHub issue exists** (direct code change, prompt-driven) — exchange results inline using the role attribution format above.
+
+**Rules:**
+- Never skip a role's review because "it probably won't find anything." Run it and let the output decide.
+- If a role's finding requires changes outside its own module, it explicitly names the responsible role before proceeding.
+
 ## Interactive Questions (AskUserQuestion)
 When a decision or clarification is needed, **prefer the AskUserQuestion tool** over inline text questions whenever possible. Rules:
 - **Use AskUserQuestion** when the question has **2–4 clear options** (the tool always adds an "Other" free-text option automatically). Keep labels short (1–5 words), put context in the description field.
@@ -549,6 +572,28 @@ After implementing **all issues in a milestone**, run a comprehensive regression
 5. Confirm all UI interactive elements work (toggles, buttons, navigation)
 6. If any failures are found: fix them, re-run from step 1, repeat until clean
 7. Only after a clean pass: close milestone GitHub issues and open the milestone PR
+
+### User-facing test plan (after implementation)
+
+After completing a unit of work that has user-visible effects, **always include a test plan** — a numbered checklist of concrete steps the user can follow to verify the change. Do not just say "it works" — prove it with actionable steps.
+
+**Format:**
+```
+## Test Plan
+
+> [Pre-conditions: app started, specific state needed, etc.]
+
+1. [Concise test step — what to do and what to verify]
+2. ...
+```
+
+**Rules:**
+- Steps must be concrete and executable (click X, observe Y, enter Z).
+- Cover the happy path first, then the most likely failure modes.
+- Scale the number of steps to the scope: 1–2 for a trivial patch, up to 10 for a large feature.
+- If hot-reload (HMR) is sufficient, note that a full restart is not required.
+- Keep each step to one sentence.
+- Skip the test plan for non-visible changes (pure refactors, internal config, documentation).
 
 ## Completion Flow — Ship & Verify
 

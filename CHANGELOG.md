@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.25.0] - 2026-03-25
+
+### Added
+- Global §Agent collaboration protocol — finding-to-task principle, structured GitHub issue handoff comments, review enforcement
+- Global §User-facing test plan — format template, scaling rules, concrete-step requirements after implementation
+
 ## [0.24.0] - 2026-03-25
 
 ### Added
