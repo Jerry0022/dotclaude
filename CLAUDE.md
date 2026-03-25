@@ -170,7 +170,7 @@ file2 — what changed
 - This is the **only** place where usage is displayed — no session start display, no background refresh.
 
 **Rules:**
-- The completion card is **always** the last thing in the response — nothing after it.
+- The completion card is **always** the last thing in the response — nothing after it. If additional context arises after composing the card (hook output, afterthoughts, caveats), place it **before** the card block, never after. The `---` closing line is the absolute end of the response.
 - Use `##` heading for the title line — gives it visual weight and spacing.
 - Use a backslash `\` on its own line after the status line to force a visual break before the plain-text details (blank lines alone get swallowed by the renderer).
 - The summary is in the user's language (German), max ~10 words.
