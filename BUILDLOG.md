@@ -1,5 +1,12 @@
 # Build Log
 
+## 6bbc943 — 2026-03-25
+Version: 0.29.3
+Branch: main
+Commit: 3171899
+Changes:
+- CLAUDE.md: usage numbers must always come from live script output
+
 ## 59a9600 — 2026-03-25
 Version: 0.29.2
 Branch: main
