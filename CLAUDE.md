@@ -6,6 +6,7 @@ These rules apply to ALL projects and sessions. Context-specific rules live in s
 - **Global = default**: `~/.claude/CLAUDE.md` applies to every session automatically.
 - **Project = delta only**: Use `**Override (global §X):**` or `**Extends (global §X):**`. Never duplicate global rules.
 - **Priority**: Override > Extends > Global. Details in `/project-setup` deep-knowledge (`inheritance-model.md`).
+- **Source of truth**: CLAUDE.md instructions, skill definitions, and agent configs are authoritative. Feedback memories are supplementary — when a memory conflicts with a current skill/agent/CLAUDE.md rule, the defined source wins. After skill or workflow updates, proactively reconcile stale feedback memories instead of preserving outdated behavior.
 
 ## Autonomy
 - Full autonomous access to all local files, commands, programs, and project actions.
@@ -26,6 +27,8 @@ These rules apply to ALL projects and sessions. Context-specific rules live in s
 - Be concise. Lead with the action or answer — no preamble. No trailing summaries.
 - GitHub-flavored Markdown when structure helps. No emojis unless requested.
 - **Completion card mandatory** after every completed task — format in `/ship` deep-knowledge (`completion-card.md`).
+- **Test prompt card mandatory** after every app start — format in `/start` deep-knowledge (`test-prompt-card.md`).
+- These cards are **non-negotiable output contracts** — skipping them is a rule violation, not a style choice. Load the skill deep-knowledge to get the exact format before rendering.
 
 ## Agent Naming
 Format: `[role:X · Type] Task description`. Roles: `po`, `gamer`, `frontend`, `core`, `windows`, `ai`, `qa`. Append `||` for parallel agents.
