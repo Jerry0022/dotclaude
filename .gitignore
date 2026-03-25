@@ -7,6 +7,7 @@ scripts/session-history.json
 scripts/usage-live.json
 scripts/dotclaude-repo-path
 scripts/dotclaude-plan
+scripts/diagrams/index.html
 
 # Plugin runtime data
 plugins/cache/
@@ -27,6 +28,17 @@ telemetry/
 todos/
 worktrees/
 
+# Claude Code project-level config (nested .claude/ within the repo)
+.claude/
+
+# Settings (may contain local paths or sensitive data)
+settings.json
+settings.json.backup
+settings.local.json
+
+# Sync state (no longer needed — repo IS the global config)
+.dotclaude-sync-state.json
+
 # OS / editor
 .DS_Store
 Thumbs.db
@@ -35,3 +47,4 @@ Thumbs.db
 *~
 .idea/
 .vscode/
+skills/readme-workspace/

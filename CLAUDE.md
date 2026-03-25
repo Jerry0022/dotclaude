@@ -37,12 +37,17 @@ At the start of every project session, compare the global CLAUDE.md's last-modif
 4. **Track sync state**: After resolution, update a `<!-- global-sync: YYYY-MM-DD -->` comment in the project CLAUDE.md so future sessions know when the last sync happened.
 5. **Report changes**: Briefly inform the user what was synced/resolved — do not silently change project behavior.
 
-### Exception: The dotclaude Repository
-The `dotclaude` repo (`Jerry0022/dotclaude`) **is** the source-of-truth for this global CLAUDE.md. Its project CLAUDE.md is intentionally a full copy of the global file — this is the one repo where that duplication is correct by design.
+### The dotclaude Repository
+The `~/.claude/` directory **is** the dotclaude git repo (`Jerry0022/dotclaude`). There is no separate project folder — the global config directory is the repo itself.
 
-**Token-saving rule:** When working inside the dotclaude repo, Claude Code loads both the global and project CLAUDE.md (identical content). To avoid processing ~11k tokens twice, **use only the global CLAUDE.md** (which reflects the latest state after any edits in the current session) and ignore the project copy. Edits flow: global file → committed to the dotclaude repo via `/ship-dotclaude`. The project copy is updated by that sync, not edited directly.
+**Implications:**
+- No sync needed — changes to global config are made directly in the repo.
+- `/ship-dotclaude` commits and pushes from `~/.claude/` directly.
+- `settings.json` is in `.gitignore` (contains MCP UUIDs and local paths).
+- Session state (worktrees, todos, session-env, etc.) is in `.gitignore`.
+- The `.claude/` subdirectory within `~/.claude/` holds project-level Claude settings for the dotclaude repo itself (also gitignored).
 
-This exception applies **only** to the dotclaude repo. All other projects follow the delta-only rule below.
+**Token note:** Since `~/.claude/` is both the global config dir and the project root, Claude Code loads `CLAUDE.md` as both global and project instructions. The content is identical — ignore the project copy to avoid processing it twice.
 
 ### Conflict Resolution Priority
 When a rule exists at both levels:
@@ -566,43 +571,26 @@ When a unit of work is complete (feature, bug fix, design asset, refactor — an
 - If running in a worktree: after merge, ensure the main repo's `main` branch is also updated.
 - Post-ship cleanup: see §Local Cleanup. Session-ending WIP behavior: see §Branch Lifecycle.
 
-## Global Config Sync — Dotclaude Repository
+## Global Config — Dotclaude Repository
 
-The dotclaude repo is the **single source of truth** for global Claude config. Sync is **bidirectional**:
+The `~/.claude/` directory is the dotclaude git repo. No separate project folder, no sync scripts. Changes are committed and pushed directly.
 
-### Direction 1: Repo → Local (automatic at session start)
+### Shipping global config changes
 
-The `check-dotclaude-sync.js` SessionStart hook automatically:
-1. `git fetch origin main` on the dotclaude repo
-2. `git pull --ff-only` if remote is ahead
-3. For each tracked file: if repo version is newer and local was not independently changed → **auto-copy repo → `~/.claude/`**
-4. If both repo and local changed the same file → **conflict warning** — do not overwrite, ask the user to decide
-5. Tracks sync state in `.dotclaude-sync-state.json` (last synced commit hash)
-
-This works whether the repo is cloned locally or needs to be fetched from remote. No user action needed for clean updates.
-
-### Direction 2: Local → Repo (ship via `/ship-dotclaude`)
-
-Whenever any file under `~/.claude/` is modified during a session (settings.json, CLAUDE.md, skills, scripts, commands, hooks, plugins), **always ship the changes to the dotclaude repo** at the end of the task using `/ship-dotclaude`. This is mandatory — global config changes must never remain unsynced.
+Use `/ship-dotclaude` to commit and push changes from `~/.claude/`. This works from any project session — the skill runs git commands against `~/.claude/` regardless of the current working directory.
 
 **Rules:**
-- Treat global config changes like code changes: they are not "done" until synced and pushed.
-- If a session modifies both project files and global config, ship the project first (via `/ship`), then ship dotclaude.
-- If a session only modifies global config (no project changes), skip `/ship` and go straight to `/ship-dotclaude`.
-- The `/ship-dotclaude` skill handles diffing, copying, version bumping, committing, and pushing automatically.
+- Treat global config changes like code changes: they are not "done" until committed and pushed.
+- If a session modifies both project files and global config, ship the project first (via `/ship`), then run `/ship-dotclaude`.
+- If a session only modifies global config (no project changes), go straight to `/ship-dotclaude`.
 
-### Proactive Sync Prompt (Jerry0022 only — dotclaude repo ONLY)
+### Proactive ship prompt (Jerry0022 only)
 
-**Important:** Unlike project repos (where ship can happen automatically), dotclaude sync **always requires user confirmation** via AskUserQuestion. Never push global config changes silently.
+**Important:** Dotclaude config pushes **always require user confirmation** via AskUserQuestion. Never push global config changes silently.
 
-When **any** global Claude config file (`~/.claude/` — CLAUDE.md, settings.json, skills, scripts, hooks, commands) is modified during a session, **proactively ask** (via AskUserQuestion) whether the user wants to sync and ship **all** global config changes to the dotclaude repo — not just the files changed in this session.
-
-This ensures the dotclaude repo stays fully up to date, even if previous sessions forgot to sync. The prompt should offer:
-1. **Full sync** (recommended) — diff all `~/.claude/` files against the dotclaude repo and ship everything that differs
-2. **Session changes only** — only ship files modified in this session
-3. **Skip** — do not sync now
-
-This rule applies **only** to the user `Jerry0022` (the dotclaude repo owner). For other users or contexts, follow the standard rule above (ship session changes at end of task).
+When **any** global config file (`~/.claude/` — CLAUDE.md, skills, scripts, commands) is modified during a session, **proactively ask** whether to ship via `/ship-dotclaude`. Options:
+1. **Ship** (recommended) — commit and push all uncommitted changes in `~/.claude/`
+2. **Skip** — do not ship now
 
 ## Skill Creation & Refinement
 - When creating ANY new skill (global or project-level), always use the Anthropic `skill-creator` skill to refine it.
