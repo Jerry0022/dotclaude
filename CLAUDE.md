@@ -556,6 +556,9 @@ When auditing or writing ignore files for any project:
 
 ## Test Execution Strategy
 
+### Config-only changes — skip preview
+When the **only** changed files are config, docs, or scripts (CLAUDE.md, shell scripts, `package.json`, `settings.json`, skill files, hook scripts) — **skip the `/test` preview skill entirely**. There is no UI, no dev server, and nothing to preview or screenshot. Verification for these changes = CI pipeline green, not the preview panel.
+
 ### Task-specific tests (run immediately)
 After every code change, run only the tests directly related to the current task — e.g., the specific test file for the changed module, or a targeted `npm run test:unit -- --grep "pattern"`. This verifies the change works without the cost of a full regression suite.
 

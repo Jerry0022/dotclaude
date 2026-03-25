@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.28.0] - 2026-03-25
+
+### Added
+- CLAUDE.md: config-only changes skip `/test` preview — no UI to verify for pure config/docs/scripts
+- README.md: skill table and architecture section updated with all current skills and diagrams
+
 ## [0.27.0] - 2026-03-25
 
 ### Added
