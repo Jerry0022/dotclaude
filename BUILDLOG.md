@@ -1,5 +1,13 @@
 # Build Log
 
+## d662f47 — 2026-03-25
+Version: 0.28.0
+Branch: main
+Commit: faa3db9
+Changes:
+- CLAUDE.md: config-only changes skip /test preview — no UI to verify for pure config/docs/scripts
+- README.md: skill table and architecture section updated with all current skills and diagrams
+
 ## 1e0acb2 — 2026-03-25
 Version: 0.27.0
 Branch: main
