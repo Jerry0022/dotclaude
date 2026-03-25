@@ -1,5 +1,12 @@
 # Build Log
 
+## 59a9600 — 2026-03-25
+Version: 0.29.2
+Branch: main
+Commit: f68d12f
+Changes:
+- WARTE option rule: trigger based on visibility of relevant context, not text length
+
 ## d907d06 — 2026-03-25
 Version: 0.29.1
 Branch: main
