@@ -184,9 +184,39 @@ apps/*/.next/
 
 Also check if individual packages have their own .gitignore files — flag if they contain rules that should be at root level.
 
-### 2.2 — AI tooling ignores (CRITICAL)
+### 2.2 — AI tooling ignores & directory structure (CRITICAL)
 
 This section is mandatory for ALL projects, regardless of stack.
+
+#### Claude directory structure convention
+
+All Claude Code configuration belongs inside `.claude/`. Nothing Claude-specific should live at root level (except `CLAUDE.md` and `.claudeignore` — Claude Code requires these at root).
+
+**Canonical `.claude/` layout:**
+```
+.claude/
+├── commands/          # Slash commands (tracked)
+├── skills/            # Project skills (tracked)
+├── hooks/             # Hook scripts (tracked)
+├── scripts/           # Claude-specific scripts — diagram rendering, helpers (tracked)
+├── agents/            # Agent definitions (tracked)
+├── agents.json        # Orchestrator config (tracked)
+├── settings.json      # Project-level settings (tracked)
+├── settings.local.json # Local overrides (ignored)
+├── launch.json        # Dev server configs (tracked)
+├── worktrees/         # Session worktrees (ignored)
+├── todos/             # Session todos (ignored)
+├── plans/             # Session plans (ignored)
+└── ...session state   # All other session artifacts (ignored)
+```
+
+**Root-level rules:**
+- `CLAUDE.md` → root (required by Claude Code)
+- `.claudeignore` → root (required by Claude Code)
+- `skills/` at root → **WRONG** — must be `.claude/skills/`
+- Agent/team documentation (e.g. `AGENTS.md`) → `docs/`, not root
+- Claude-specific scripts → `.claude/scripts/`, not root `scripts/`
+- Project scripts (build, dev, CI) → root `scripts/` (these are NOT Claude-specific)
 
 **MUST be tracked (never ignore):**
 ```
@@ -259,6 +289,7 @@ When auditing an existing .gitignore, classify each finding:
 |----------|---------|---------------------|
 | **CRITICAL** | Secrets or credentials could be committed | Auto-fix immediately |
 | **CRITICAL** | Shared AI config (.claude/skills/) is being ignored | Auto-fix immediately |
+| **CRITICAL** | Claude files at root level instead of `.claude/` (e.g., root `skills/`) | Move to `.claude/` and update refs |
 | **WARNING** | Required ignore rule is missing (e.g., node_modules/) | Auto-fix |
 | **WARNING** | .env variants not ignored | Auto-fix |
 | **INFO** | Redundant rules, wrong section order | Report only (suggest fix) |
@@ -328,6 +359,7 @@ Present a structured report:
 ### .gitignore
 - [CRITICAL] .env.local not ignored — secrets at risk
 - [CRITICAL] .claude/skills/ is ignored but should be tracked
+- [CRITICAL] skills/ at root level — must be .claude/skills/
 - [WARNING] AI session state not ignored (.claude/worktrees/)
 - [OK] Dependencies ignored
 - [INFO] Rules in wrong section order
