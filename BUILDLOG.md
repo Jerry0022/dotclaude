@@ -1,5 +1,12 @@
 # Build Log
 
+## e2c8bfa — 2026-03-25
+Version: 0.28.1
+Branch: main
+Commit: 4a4b454
+Changes:
+- Expanded preview skip rule to cover build/installer assets (ICO, PNG, C# installer code) and CI/CD files
+
 ## d662f47 — 2026-03-25
 Version: 0.28.0
 Branch: main
