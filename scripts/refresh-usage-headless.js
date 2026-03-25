@@ -19,6 +19,7 @@
  *   --quiet           suppress output (debug logs only; --summary still prints)
  *   --summary         after successful scrape, print formatted usage box to stdout
  *   --activate-cdp    restart Edge with CDP flag (visible, one-time)
+ *   --auto-start      start Edge with CDP only if no Edge process is running (non-destructive)
  *   --check-only      only check if CDP is available, exit 0 or 5
  */
 
@@ -37,6 +38,7 @@ const EDGE_EXE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.
 const isQuiet = process.argv.includes('--quiet');
 const printSummary = process.argv.includes('--summary');
 const activateCDP = process.argv.includes('--activate-cdp');
+const autoStart = process.argv.includes('--auto-start');
 const checkOnly = process.argv.includes('--check-only');
 
 function log(...args) {
@@ -78,6 +80,41 @@ async function isCDPAvailable() {
     const res = await fetch(CDP_URL + '/json/version', { signal: AbortSignal.timeout(2000) });
     return res.ok;
   } catch { return false; }
+}
+
+/** Check if any Edge process is currently running. */
+function isEdgeRunning() {
+  try {
+    const out = execSync('tasklist /FI "IMAGENAME eq msedge.exe" /NH', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+    return out.includes('msedge.exe');
+  } catch { return false; }
+}
+
+/** Start Edge with CDP — only when no Edge process is running. Non-destructive. */
+async function autoStartEdgeWithCDP() {
+  if (isEdgeRunning()) {
+    log('Edge is running without CDP — auto-start skipped (would need restart)');
+    return false;
+  }
+
+  log('Edge not running — starting with CDP on port', CDP_PORT, '...');
+  const child = spawn(EDGE_EXE, [
+    `--remote-debugging-port=${CDP_PORT}`,
+    '--no-first-run',
+    '--no-default-browser-check'
+  ], { detached: true, stdio: 'ignore' });
+  child.unref();
+
+  for (let i = 0; i < 15; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    if (await isCDPAvailable()) {
+      log('Edge auto-started with CDP on port', CDP_PORT);
+      return true;
+    }
+  }
+
+  log('Edge auto-start failed within 15 seconds');
+  return false;
 }
 
 /** Restart Edge with CDP flag. Visible to user — use only with explicit consent. */
@@ -183,27 +220,34 @@ async function scrapeViaCDP() {
     });
     log('Attached to target, sessionId:', sessionId);
 
-    // Wait for page to load
-    await new Promise(r => setTimeout(r, 5000));
-
-    // Evaluate JS in the target session to extract usage data
-    const evalResult = await cdp.send('Runtime.evaluate', {
-      expression: `(() => {
-        const url = window.location.href;
-        if (url.includes('/login') || url.includes('/logout')) return JSON.stringify({ notLoggedIn: true });
-        const main = document.querySelector('main');
-        if (!main) return JSON.stringify({ noMain: true });
-        return JSON.stringify({ text: main.innerText });
-      })()`,
-      returnByValue: true
-    }, sessionId);
+    // Wait for page to load — poll until content appears or timeout
+    let evalData = null;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const evalResult = await cdp.send('Runtime.evaluate', {
+        expression: `(() => {
+          const url = window.location.href;
+          if (url.includes('/login') || url.includes('/logout')) return JSON.stringify({ notLoggedIn: true });
+          const main = document.querySelector('main');
+          if (!main) return JSON.stringify({ noMain: true });
+          const text = main.innerText;
+          // Check if usage data has actually loaded (contains percentage text)
+          if (!/\\d+\\s*%\\s*(?:verwendet|used)/i.test(text)) return JSON.stringify({ notReady: true });
+          return JSON.stringify({ text });
+        })()`,
+        returnByValue: true
+      }, sessionId);
+      evalData = JSON.parse(evalResult.result?.value || '{}');
+      if (evalData.notLoggedIn || evalData.text) break;
+      log(`Page not ready yet (attempt ${attempt + 1}/12)...`);
+    }
 
     // Close the background target
     await cdp.send('Target.closeTarget', { targetId }).catch(() => {});
     targetId = null;
     cdp.close();
 
-    const evalData = JSON.parse(evalResult.result?.value || '{}');
+    if (!evalData) evalData = {};
 
     if (evalData.notLoggedIn) {
       log('Not logged in to claude.ai');
@@ -265,24 +309,62 @@ function printUsageSummary() {
   else if (pctWeekly >= 70) status = 'CONSERVE \u2014 weekly >70%';
   else status = 'Budget healthy';
 
+  const isCached = data._cached === true;
+  const cacheLabel = isCached ? `CACHED ${data._ageMinutes}m ago` : 'LIVE just now';
+
   const line = '\u2500'.repeat(40);
   console.log(line);
-  console.log(`\uD83D\uDCCA USAGE [LIVE just now]`);
+  console.log(`\uD83D\uDCCA USAGE [${cacheLabel}]`);
   console.log(`5h: ${Math.round(pct5h)}% \u2014 ${reset5hStr}`);
   console.log(`Weekly: ${Math.round(pctWeekly)}%${sonnetPart}${weeklyResetStr}`);
   console.log(`Status: ${status}`);
   console.log(line);
 }
 
+/** Check if cached usage-live.json exists and has data. Returns age in minutes or -1. */
+function getCacheAge() {
+  try {
+    const data = JSON.parse(fs.readFileSync(USAGE_LIVE_PATH, 'utf8'));
+    if (!data.timestamp) return -1;
+    return Math.round((Date.now() - new Date(data.timestamp).getTime()) / 60000);
+  } catch { return -1; }
+}
+
+/** Mark cached data with age info so the caller knows it's stale. */
+function markCached(ageMin) {
+  try {
+    const data = JSON.parse(fs.readFileSync(USAGE_LIVE_PATH, 'utf8'));
+    data._cached = true;
+    data._ageMinutes = ageMin;
+    fs.writeFileSync(USAGE_LIVE_PATH, JSON.stringify(data, null, 2));
+  } catch {}
+}
+
 (async () => {
   const cdpReady = await isCDPAvailable();
 
   if (checkOnly) {
-    process.exit(cdpReady ? 0 : 5);
+    // Extended check: also report whether Edge is running (exit 7 = not running at all)
+    if (cdpReady) process.exit(0);
+    process.exit(isEdgeRunning() ? 5 : 7);
   }
 
   if (!cdpReady) {
-    if (activateCDP) {
+    if (autoStart) {
+      // Non-destructive: only start Edge if it's not running at all
+      if (!(await autoStartEdgeWithCDP())) {
+        // Auto-start failed or Edge is running without CDP — fall back to cache
+        const cacheAge = getCacheAge();
+        if (cacheAge >= 0) {
+          log(`Using cached data (${cacheAge}m old) — Edge auto-start not possible`);
+          markCached(cacheAge);
+          if (printSummary) printUsageSummary();
+          process.exit(0);
+        }
+        process.exit(5);
+      }
+    } else if (activateCDP) {
+      // Destructive: restart Edge (requires user consent)
       if (!(await restartEdgeWithCDP())) process.exit(6);
     } else {
       log('CDP not available on port', CDP_PORT);
@@ -291,6 +373,18 @@ function printUsageSummary() {
   }
 
   const code = await scrapeViaCDP();
-  if (code === 0 && printSummary) printUsageSummary();
+  if (code === 0) {
+    if (printSummary) printUsageSummary();
+    process.exit(0);
+  }
+
+  // Scrape failed — try cache as last resort
+  const cacheAge = getCacheAge();
+  if (cacheAge >= 0) {
+    log(`Scrape failed (code ${code}), using cached data (${cacheAge}m old)`);
+    markCached(cacheAge);
+    if (printSummary) printUsageSummary();
+    process.exit(0);
+  }
   process.exit(code);
 })();

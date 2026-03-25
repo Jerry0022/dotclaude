@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.29.0] - 2026-03-25
+
+### Added
+- Usage scraper: auto-start Edge with CDP when no Edge process is running (non-destructive, no user consent needed)
+- Usage scraper: cache fallback — uses last known data when live scraping fails
+- Usage scraper: smart page-load polling replaces fixed 5s wait, improving reliability on slow loads
+
+### Changed
+- Refresh-usage skill: 3-tier flow (CDP ready → auto-start → user-prompted restart)
+- New exit code 7 distinguishes "Edge not running" from "Edge running without CDP"
+
 ## [0.28.1] - 2026-03-25
 
 ### Changed

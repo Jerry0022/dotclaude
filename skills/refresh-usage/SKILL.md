@@ -13,15 +13,20 @@ Scrapes live token usage from claude.ai via Edge CDP (Chrome DevTools Protocol).
 
 ## Steps
 
-1. Run `node ~/.claude/scripts/refresh-usage-headless.js --quiet --check-only` to test if CDP is available.
+1. Run `node ~/.claude/scripts/refresh-usage-headless.js --quiet --check-only` to test CDP availability.
 
-2. **CDP available** (exit code 0):
+2. **Exit code 0** — CDP available:
    Run `node ~/.claude/scripts/refresh-usage-headless.js --quiet --summary` to scrape.
-   - Exit code 0: success — the script updates `usage-live.json`. Read the file for the new values.
+   - Exit code 0: success — read `usage-live.json` for the new values. Check `_cached` field: if true, data is stale (age in `_ageMinutes`).
    - Exit code 2: not logged in — inform user: "Bitte bei claude.ai einloggen, dann /refresh-usage erneut."
-   - Exit code 3/4: scrape failed — show `📊 [no data]` in the completion card.
+   - Exit code 3/4: scrape failed — the script auto-falls back to cached data if available.
 
-3. **CDP not available** (exit code 5):
+3. **Exit code 7** — Edge not running at all:
+   Run `node ~/.claude/scripts/refresh-usage-headless.js --quiet --summary --auto-start` to start Edge with CDP non-destructively (no kill, no user consent needed).
+   - Exit code 0: success — Edge was started and data scraped (or cached fallback used).
+   - Other: show `📊 [no data]` in the completion card.
+
+4. **Exit code 5** — Edge running without CDP:
    Ask the user via AskUserQuestion:
    - Label: "Edge CDP aktivieren"
    - Description: "Edge wird einmal sichtbar neu gestartet mit CDP-Port 9223. Danach läuft alles unsichtbar im Background."
@@ -32,9 +37,10 @@ Scrapes live token usage from claude.ai via Edge CDP (Chrome DevTools Protocol).
 
 ## Important
 
-- Never restart Edge without explicit user consent (AskUserQuestion).
-- **No caching** — always scrape fresh data, regardless of file age.
-- Edge only needs to be restarted once per PC session. After that, CDP stays active.
+- **Auto-start (step 3) needs no user consent** — it only starts Edge when no Edge process exists. Nothing is killed or disrupted.
+- **Restart (step 4) always needs user consent** — it kills running Edge to add the CDP flag.
+- **No caching by intent** — always attempt a fresh scrape first. Cached data is only used as automatic fallback when scraping fails.
+- Edge only needs CDP activation once per PC session. After that, CDP stays active.
 - Usage display is handled exclusively by the completion card (§Task Completion Signal) — not at session start.
-- **Never use Claude in Chrome MCP tools** (navigate, read_page, computer, etc.) as a fallback for scraping usage data. The headless CDP script is the **only** allowed scraping method. If CDP is unavailable and the user declines Edge restart, show `📊 [no data]` — do not attempt browser automation.
-- **Silent execution**: This skill must produce zero visible browser activity. If a visible browser window opens during execution, the implementation is wrong — stop and report the issue instead of continuing.
+- **Never use Claude in Chrome MCP tools** (navigate, read_page, computer, etc.) as a fallback for scraping usage data. The headless CDP script is the **only** allowed scraping method.
+- **Silent execution**: This skill must produce zero visible browser activity (except the one-time --activate-cdp restart). If a visible browser window opens during auto-start, that's expected — Edge needs a window to function. But it should not steal focus from the user's current work.
