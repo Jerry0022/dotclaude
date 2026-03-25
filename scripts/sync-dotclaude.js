@@ -5,7 +5,7 @@
  * Checks if ~/.claude/ (the dotclaude git repo) is behind origin/main.
  * If so, pulls latest changes so every session uses the current global config.
  *
- * Runs silently on success. Reports only when updates were pulled or errors occurred.
+ * Reports sync status: confirms when up-to-date, announces when new instructions were pulled.
  */
 
 const { execSync } = require('child_process');
@@ -44,7 +44,7 @@ try {
   const localHead = git('rev-parse HEAD');
 
   if (localHead === remoteBranch) {
-    // Already up to date — silent exit
+    process.stderr.write('[dotclaude-sync] Global instructions are up to date.\n');
     process.exit(0);
   }
 
@@ -55,10 +55,10 @@ try {
   if (parseInt(behind) > 0 && parseInt(ahead) === 0) {
     // Clean fast-forward pull
     git(`pull --ff-only origin ${branch} --quiet`);
-    console.log(`[dotclaude-sync] Updated ~/.claude/ — pulled ${behind} commit(s) from origin/${branch}`);
+    process.stderr.write(`[dotclaude-sync] New global instructions pulled — changes apply to this session.\n`);
   } else if (parseInt(behind) > 0 && parseInt(ahead) > 0) {
     // Diverged — don't auto-merge, just warn
-    console.log(`[dotclaude-sync] WARNING: ~/.claude/ has diverged from origin/${branch} (${ahead} ahead, ${behind} behind). Manual merge needed.`);
+    process.stderr.write(`[dotclaude-sync] WARNING: ~/.claude/ has diverged from origin/${branch} (${ahead} ahead, ${behind} behind). Manual merge needed.\n`);
   }
   // If only ahead (local has unpushed commits) — nothing to do, silent exit
 } catch (err) {

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.23.1] - 2026-03-25
+
+### Improved
+- sync-dotclaude.js SessionStart hook now reports status in all cases: confirms when up-to-date, announces when new instructions were pulled
+
 ## [0.23.0] - 2026-03-25
 
 ### Added
