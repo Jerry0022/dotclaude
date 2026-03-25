@@ -1,5 +1,10 @@
 # Build Log
 
+## 50022f0 — 2026-03-25
+Version: 0.35.0
+Branch: main
+Completion card redesigned: 8 variants, structured sections, mandatory status heading with icons
+
 ## 4802700 — 2026-03-25
 Version: 0.34.0
 Branch: main
