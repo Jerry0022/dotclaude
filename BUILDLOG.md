@@ -1,5 +1,14 @@
 # Build Log
 
+## 803a914 — 2026-03-25
+Version: 0.30.0
+Branch: main
+Commit: 8c7753c
+Changes:
+- Completion card: reset timer inline per metric (5h + weekly)
+- Icon switch: 📊 → 🔋
+- Usage scraper: weekly.resetInMinutes + formatWeeklyDuration()
+
 ## 6bbc943 — 2026-03-25
 Version: 0.29.3
 Branch: main

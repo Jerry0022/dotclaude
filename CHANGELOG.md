@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Completion card icon: `📊` → `🔋` (battery — intuitive capacity indicator)
 - Completion card format: Variante C — reset times inline after each metric
+- refresh-usage skill: CDP activation (exit code 5) now fully automatic — no user confirmation needed
 
 ## [0.29.3] - 2026-03-25
 
