@@ -562,7 +562,8 @@ When a unit of work is complete (feature, bug fix, design asset, refactor — an
 **When to ship (project repos — NOT dotclaude):**
 - **Ship automatically** (no user prompt) when a clear unit of work is complete: an issue is fully implemented, a whole topic is wrapped up, or the user explicitly says something is done.
 - **Offer to ship** (AskUserQuestion) when uncertain — e.g., multiple small changes that might or might not be done, or when the user's intent is ambiguous.
-- **Do NOT offer/ship** for minor intermediate states — small tweaks, WIP changes, or when the user is clearly still iterating. Avoid pestering the user after every request.
+- **Do NOT offer/ship** for intermediate states — this includes: small tweaks, WIP changes, code that hasn't been verified/tested yet, or when the user is clearly still iterating. A code edit without verification is not a complete unit of work. Avoid pestering the user after every request.
+- **Ship prompt timing**: The ship prompt (automatic or AskUserQuestion) must come exactly **once**, at the very end — after all implementation, verification, and follow-up fixes are done. Never ask mid-task, then ask again after testing. If you plan to verify/test after editing, the ship prompt belongs after the test, not before it.
 - Rule of thumb: ship should feel natural, not annoying. When in doubt, lean toward just doing it silently for complete work, and skipping it for incomplete work.
 
 **Key rules:**

@@ -31,7 +31,7 @@ allowed-tools: Bash(git *), Bash(gh *), Bash(npm run *), Bash(node *), Bash(grep
 | **File sync** | Diff `~/.claude/` → repo | Not needed — changes are already in the repo |
 | **Quality gates** | None (config repo) | Run project lint + tests before shipping |
 | **PR workflow** | No PR — direct push + tag | Always create PR, merge via `gh pr merge --squash` |
-| **Git tags / Release** | Tag + push triggers release pipeline | No tags — project-specific skills add this if needed |
+| **Git tags / Release** | Tag + push triggers release pipeline | Tag `vX.Y.Z` on squash-merge commit → triggers release pipeline (Step 8.5) |
 | **Cleanup** | Minimal (single branch) | Aggressive — delete all feature branches, worktrees, prune refs |
 
 ---
@@ -128,6 +128,23 @@ gh pr merge --squash --delete-branch
 - `--delete-branch` deletes the remote integration branch after merge
 - If merge checks fail, diagnose and fix before retrying
 - Verify remote branch is gone: `git ls-remote --heads origin <branch>`
+
+### Step 8.5: Git Tag & Release Pipeline
+
+After the PR is merged, create a version tag on `main` and push it. This triggers the GitHub Actions release pipeline (per global §Release Flow).
+
+```bash
+git checkout main
+git pull origin main
+git tag v<X.Y.Z>
+git push origin v<X.Y.Z>
+```
+
+- The tag is created on the **squash-merge commit on main** — not on the feature branch.
+- Tag format: `vX.Y.Z` (matches the version bumped in Step 5).
+- If the version bump in Step 5 was "none" (internal-only change), **skip this step** — no tag, no release.
+- After pushing the tag, verify the GitHub Actions release workflow was triggered: `gh run list --workflow=release --limit 1`.
+- Do NOT wait for the workflow to complete — it runs asynchronously. Proceed to Step 9.
 
 ### Step 9: Update Local Main
 

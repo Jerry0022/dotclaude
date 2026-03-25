@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.24.0] - 2026-03-25
+
+### Added
+- Ship prompt timing rule in §Completion Flow — prompt must come exactly once, after all verification is done
+- Step 8.5 in /ship skill — git tag + release pipeline trigger after PR merge
+
 ## [0.23.2] - 2026-03-25
 
 ### Fixed
