@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.0] - 2026-03-25
+
+### Added
+- SessionStart hook `sync-dotclaude.js` — auto-pulls latest global config from GitHub at session start in any project
+- Ensures every session uses current CLAUDE.md, skills, and scripts without manual sync
+
+### Changed
+- Removed `scripts/package-lock.json` from tracking (added to .gitignore)
+
 ## [0.21.1] - 2026-03-25
 
 ### Changed

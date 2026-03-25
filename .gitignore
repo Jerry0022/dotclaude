@@ -1,5 +1,6 @@
 # Dependencies
 scripts/node_modules/
+scripts/package-lock.json
 
 # Runtime data (generated at startup)
 scripts/config.json
