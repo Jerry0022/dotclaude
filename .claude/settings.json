@@ -7,6 +7,59 @@
             "type": "command",
             "command": "node \"$HOME/.claude/scripts/sync-dotclaude.js\"",
             "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/scripts/startup-summary.js\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/scripts/sweep-branches.js\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/scripts/precheck-cost.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/scripts/auto-sync-dotclaude.js\"",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/scripts/precheck-cost.js\""
+          }
+        ]
+      },
+      {
+        "matcher": "Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/scripts/precheck-cost.js\""
+          }
+        ]
+      },
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/scripts/precheck-cost.js\""
           }
         ]
       }

@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.34.0] - 2026-03-25
+
+### Added
+- New `agent-conventions` skill with deep-knowledge for naming rules and collaboration protocol
+- New deep-knowledge files: `inheritance-model.md`, `token-awareness.md`, `git-hygiene.md`, `skill-creation.md`
+- `auto-sync-dotclaude.js` PreToolUse hook — periodic 30-min throttled sync for live config updates
+- `templates/project-claude-md.md` — project CLAUDE.md template with Extends/Override syntax
+
+### Changed
+- **CLAUDE.md slimmed from 133 to 54 lines** — rules moved to skill deep-knowledge, zero content lost
+- Hooks migrated from root `settings.json` (gitignored) to `.claude/settings.json` (tracked, shared via Git)
+- Root `settings.json` now contains only permissions, plugins, and marketplaces (machine-specific)
+- `.gitignore` updated: added `.credentials.json` and `cache/`
+
+### Architecture
+- Two-level config sharing: global config via dotclaude repo, project config as delta-only CLAUDE.md
+- Auto-sync enables live config updates between team members without session restart
+
 ## [0.33.1] - 2026-03-25
 
 ### Changed

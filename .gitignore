@@ -10,6 +10,12 @@ scripts/dotclaude-repo-path
 scripts/dotclaude-plan
 scripts/diagrams/index.html
 
+# Credentials
+.credentials.json
+
+# Cache
+cache/
+
 # Channel credentials and state
 channels/
 
