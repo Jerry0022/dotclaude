@@ -1,5 +1,13 @@
 # Build Log
 
+## 975537d — 2026-03-25
+Version: 0.25.0
+Branch: main
+Commit: 47097dd
+Changes:
+- Extract agent collaboration protocol to global (finding-to-task, structured issue comments, review enforcement)
+- Extract user-facing test plan template to global (format, scaling, concrete steps)
+
 ## d6d5c5a — 2026-03-25
 Version: 0.24.0
 Branch: main
