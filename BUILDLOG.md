@@ -1,5 +1,13 @@
 # Build Log
 
+## 1b81fa3 — 2026-03-25
+Version: 0.22.0
+Branch: main
+Commit: 689740a
+Changes:
+- Add sync-dotclaude.js SessionStart hook for auto-pulling latest global config
+- Remove package-lock.json from tracking
+
 ## f1808b6 — 2026-03-25
 Version: 0.21.1
 Branch: main
