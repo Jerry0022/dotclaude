@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/scripts/sync-dotclaude.js\"",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

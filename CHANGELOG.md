@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.23.0] - 2026-03-25
+
+### Added
+- Project-level  with sync-dotclaude SessionStart hook — cloned repos auto-pull updates without manual settings.json setup
+
+### Changed
+- : Track  (shared project settings) while keeping other  contents ignored
+- Root-level settings patterns scoped with  prefix to avoid matching nested settings files
+
 ## [0.22.0] - 2026-03-25
 
 ### Added

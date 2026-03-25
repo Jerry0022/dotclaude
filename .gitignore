@@ -30,12 +30,14 @@ todos/
 worktrees/
 
 # Claude Code project-level config (nested .claude/ within the repo)
-.claude/
+# Ignore everything in .claude/ except shared settings
+.claude/*
+!.claude/settings.json
 
 # Settings (may contain local paths or sensitive data)
-settings.json
-settings.json.backup
-settings.local.json
+/settings.json
+/settings.json.backup
+/settings.local.json
 
 # Sync state (no longer needed — repo IS the global config)
 .dotclaude-sync-state.json
