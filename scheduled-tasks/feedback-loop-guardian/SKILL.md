@@ -1,13 +1,13 @@
 ---
 name: feedback-loop-guardian
-description: Daily 8am check: ensure feedback memory self-audit loop is running, start it if not
+description: Daily 8am check: kill old feedback loop and spawn a fresh one every time
 ---
 
-Prüfe ob die Feedback-Loop (CronJob, alle 30 Minuten) in dieser Session aktiv ist. Nutze CronList um alle aktiven Jobs zu sehen.
+Nutze CronList um alle aktiven Jobs zu sehen.
 
-Falls ein Job mit "Feedback-Loop" im Prompt existiert → alles OK, nichts tun.
+Falls ein Job mit "Feedback-Loop" im Prompt existiert → lösche ihn mit CronDelete (Job-ID aus CronList).
 
-Falls KEIN solcher Job existiert → erstelle ihn mit CronCreate:
+Danach erstelle einen neuen Job mit CronCreate (egal ob ein alter existierte oder nicht):
 - Cron: */30 * * * *
 - Recurring: true
 - Prompt: (die vollständige Feedback-Loop v2.4 Anweisung):

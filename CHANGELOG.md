@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.36.2] - 2026-03-26
+
+### Changed
+- **feedback-loop-guardian** scheduled task now always kills old loop and spawns fresh one (previously skipped if already running)
+
 ## [0.36.1] - 2026-03-26
 
 ### Changed
