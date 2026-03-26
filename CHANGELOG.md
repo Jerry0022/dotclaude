@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.37.1] - 2026-03-26
+
+### Changed
+- **plugins/blocklist.json** refresh — updated `fetchedAt` timestamp
+
 ## [0.37.0] - 2026-03-26
 
 ### Added
