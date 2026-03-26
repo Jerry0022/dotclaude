@@ -105,12 +105,13 @@ A persistent scheduled task (`~/.claude/scheduled-tasks/feedback-loop-guardian/`
 1. **Self-Audit** — read all `feedback_*.md` memories, check session behavior against each rule
 2. **Lernen** — detect new feedback patterns from the session, save as memories immediately
 3. **Proaktiv** — pre-check upcoming actions against feedback rules, prepare if needed
-4. **Skill-Internalisierung** — read global CLAUDE.md, then rotate through 25% of all `~/.claude/skills/**/deep-knowledge/*.md` files per cycle (dynamic discovery, batch size = ceil(total * 0.25))
+4. **Skill-Internalisierung** — read global CLAUDE.md, discover all `~/.claude/skills/**/deep-knowledge/*.md` via Glob, sort alphabetically, read 25% per cycle (batch = ceil(total * 0.25)) with deterministic index rotation and wrap-around
 5. **Baseline-Review** — if steps 1-3 had no findings, re-read global + project CLAUDE.md for calibration
 
 **Rules:**
 - All paths use `~` or relative references — never hardcoded absolute paths.
 - Deep-knowledge files are discovered dynamically via Glob, not enumerated statically.
+- Rotation uses explicit index math: startIndex = (cycleCounter * batchSize) % total. No ambiguity.
 - The guardian schedule is global (lives in `~/.claude/scheduled-tasks/`), not project-specific.
 - The loop prompt itself is fully self-contained in the scheduled task SKILL.md.
 
