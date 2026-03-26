@@ -1,6 +1,13 @@
 # Build Log
 
 ## 7f6ed7d — 2026-03-26
+Version: 0.37.1
+Branch: main
+Commit: 7e958b6
+Changes:
+- Plugin blocklist fetchedAt timestamp refresh (no source delta)
+
+## 7f6ed7d — 2026-03-26
 Version: 0.37.0
 Branch: main
 Commit: c1026b1
