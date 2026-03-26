@@ -13,7 +13,7 @@ Start the development app immediately when the user requests it. No confirmation
 
 2. **Start the app** — the launch method is project-specific (defined in `/dev-start` extension or `.claude/launch.json`). If no project extension exists, use `preview_start` with the first available launch config.
 
-3. **Get the build ID**: `git write-tree | cut -c1-7`
+3. **Get the build ID**: `node ~/.claude/scripts/build-id.js` (hashes only source code + assets, ignores config/docs/build artifacts)
 
 4. **Show the test prompt card** as the last thing in the response (format in deep-knowledge `test-prompt-card.md`).
 

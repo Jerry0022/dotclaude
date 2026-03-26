@@ -54,7 +54,7 @@ Everything not in `.gitignore` — key files include:
    Co-Authored-By: <dynamic model name from system prompt> <noreply@anthropic.com>
    ```
 8. Push to origin.
-9. Write a new entry to `BUILDLOG.md` (see `~/.claude/CLAUDE.md §Build Log`). Generate build hash via `git write-tree | cut -c1-7`. Commit: `chore: update build log`.
+9. Write a new entry to `BUILDLOG.md` (see `~/.claude/CLAUDE.md §Build Log`). Generate build hash via `node ~/.claude/scripts/build-id.js`. Commit: `chore: update build log`.
 10. Create a git tag (`v<version>`) and push it: `git tag v<version> && git push origin v<version>`. This triggers the release pipeline.
 11. Wait for the pipeline to complete: `gh run list --workflow=release.yml --limit 1` then poll with `gh run view <run-id>`. Verify all jobs succeeded.
 12. Pull main locally to confirm.

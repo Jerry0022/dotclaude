@@ -32,7 +32,7 @@ Bitte testen:
 
 ## Build ID
 
-Always computed via `git write-tree | cut -c1-7`.
+Always computed via `node ~/.claude/scripts/build-id.js` (source code + assets only).
 
 ## Title line
 

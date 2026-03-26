@@ -46,7 +46,7 @@ When a task is complete, **always** end with a completion card. This is the only
 
 - **With build ID** (code changes that produced a testable state): `## ✅ a3f9b21 · Bank-Setup ins Dashboard verlagert`
 - **Without build ID** (no testable state — docs, config, research): `## ✅ Erledigt · CLAUDE.md aktualisiert`
-- Build ID via `git write-tree | cut -c1-7`.
+- Build ID via `node ~/.claude/scripts/build-id.js`.
 
 ## Status line (mandatory)
 

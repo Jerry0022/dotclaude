@@ -1,8 +1,8 @@
 # dotclaude
 
-**Version: 0.36.2**
+**Version: 0.37.0**
 
-![Version](https://img.shields.io/badge/version-0.36.2-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.37.0-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white)
@@ -322,7 +322,7 @@ src/filter.component.ts — new component
 ---
 ```
 
-The build ID (`a3f9b21`) is a content hash of the working tree (`git write-tree | cut -c1-7`) — deterministic, independent of commits, and identifies exactly which code state is running.
+The build ID (`a3f9b21`) is a content hash of source code + assets (`node ~/.claude/scripts/build-id.js`) — deterministic, independent of commits, and identifies exactly which code state is running. Config, docs, and build artifacts are excluded so the ID only changes when actual source code changes.
 
 ### Token management
 

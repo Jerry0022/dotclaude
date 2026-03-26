@@ -142,7 +142,7 @@ Resolve any conflicts inline. Do not leave them for the user.
 
 Run the project's lint, contract checks, and tests. If anything fails, fix and re-run.
 
-**Test deduplication:** If the prompt includes a tree hash from a previous successful test run, compare with `git write-tree`. If identical, skip tests and log: `Tests skipped — already passed on tree <hash>`.
+**Test deduplication:** If the prompt includes a build ID from a previous successful test run, compare with `node ~/.claude/scripts/build-id.js`. If identical, skip tests and log: `Tests skipped — already passed on build <hash>`.
 
 **Default commands** (override in project-level skill if different):
 - `npm run lint` (or project-specific lint commands)
@@ -223,7 +223,7 @@ git -C <main-repo-path> pull origin main
 
 ### Step 10: Build Log Entry
 
-Write a new entry to `BUILDLOG.md`. Generate the build hash via `git write-tree | cut -c1-7`. Format per §Build Log in CLAUDE.md.
+Write a new entry to `BUILDLOG.md`. Generate the build hash via `node ~/.claude/scripts/build-id.js`. Format per §Build Log in CLAUDE.md.
 
 ### Step 11: Aggressive Local Cleanup (ONLY after successful merge)
 

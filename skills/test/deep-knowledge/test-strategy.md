@@ -15,7 +15,7 @@ After every code change, run only the tests directly related to the current task
 The full test suite (`npm run test:unit` + `npm run precommit`) runs as part of the `/ship` quality gates (Step 4). Do **not** run the full suite after every implementation pass — this burns tokens on context (test output) and terminal windows without proportional value. The ship flow catches regressions before they reach `main`.
 
 ## Test deduplication at ship time
-If the full test suite already passed on the **same code state** (same `git write-tree` hash) earlier in the session — e.g., task-specific tests covered the full suite, or the user explicitly ran all tests — the `/ship` quality gates skip redundant test execution. This saves tokens and avoids unnecessary terminal windows. Tests always re-run if the tree hash changed (e.g., due to rebase picking up new commits from main).
+If the full test suite already passed on the **same code state** (same `build-id.js` hash) earlier in the session — e.g., task-specific tests covered the full suite, or the user explicitly ran all tests — the `/ship` quality gates skip redundant test execution. This saves tokens and avoids unnecessary terminal windows. Tests always re-run if the build ID changed (e.g., due to source code changes from rebase).
 
 ## Milestone regression (run before closing a milestone)
 After implementing **all issues in a milestone**, run a comprehensive regression test before closing issues or raising a PR:

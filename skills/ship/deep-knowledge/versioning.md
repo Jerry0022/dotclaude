@@ -10,7 +10,7 @@
 
 The build number is a **content hash** of the working tree state, generated at every testable state — independent of commits. It identifies exactly which code state is running, even between commits.
 
-**Generation:** `git write-tree | cut -c1-7` (hashes the full working tree including staged changes). Same code state = same hash (deterministic and reproducible).
+**Generation:** `node ~/.claude/scripts/build-id.js` (hashes only source code + assets — excludes config, docs, lock files, build artifacts). Same source code = same hash (deterministic and reproducible).
 
 **Where the build number lives:**
 
@@ -69,7 +69,7 @@ Ship → squash to main               —                → x5v3n88 (carried ov
 
 ## Build-ID bei App-Start anzeigen
 
-When the user asks to start/run an app, generate the current build hash (`git write-tree | cut -c1-7`) and display it inline immediately after the start command:
+When the user asks to start/run an app, generate the current build hash (`node ~/.claude/scripts/build-id.js`) and display it inline immediately after the start command:
 
 ```
 ✨ Build a3f9b21 gestartet

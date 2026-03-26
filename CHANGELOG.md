@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.37.0] - 2026-03-26
+
+### Added
+- **build-id.js** script — computes build ID from source code + assets only (excludes config, docs, lock files, build artifacts)
+
+### Changed
+- All build ID references migrated from `git write-tree` to `node ~/.claude/scripts/build-id.js` — same source code now always produces the same build ID regardless of config/doc changes
+- Updated skills: `/start`, `/ship`, `/ship-dotclaude`, `/test`, completion card, versioning, test-prompt-card
+
 ## [0.36.2] - 2026-03-26
 
 ### Changed
