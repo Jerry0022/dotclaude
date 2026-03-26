@@ -98,5 +98,21 @@ These rules override any cleanup or convenience logic in the ship flow:
 4. **Never delete what isn't merged.** A branch may only be deleted (local or remote) after its commits are reachable from `main`. Verify with `git merge-base --is-ancestor <branch> main`.
 5. **Session-end obligation.** When a session ends mid-work (without `/ship`), commit and push all current state — even WIP. Never leave uncommitted changes in a worktree that could be cleaned up by the next session.
 
+## Feedback Loop (Scheduled Task: `feedback-loop-guardian`)
+
+A persistent scheduled task (`~/.claude/scheduled-tasks/feedback-loop-guardian/`) runs daily at ~8am and ensures a recurring self-audit loop is active in every session. The loop fires every 30 minutes and performs 5 steps:
+
+1. **Self-Audit** — read all `feedback_*.md` memories, check session behavior against each rule
+2. **Lernen** — detect new feedback patterns from the session, save as memories immediately
+3. **Proaktiv** — pre-check upcoming actions against feedback rules, prepare if needed
+4. **Skill-Internalisierung** — read global CLAUDE.md, then rotate through one `~/.claude/skills/**/deep-knowledge/*.md` file per cycle (dynamic discovery, not a static list)
+5. **Baseline-Review** — if steps 1-3 had no findings, re-read global + project CLAUDE.md for calibration
+
+**Rules:**
+- All paths use `~` or relative references — never hardcoded absolute paths.
+- Deep-knowledge files are discovered dynamically via Glob, not enumerated statically.
+- The guardian schedule is global (lives in `~/.claude/scheduled-tasks/`), not project-specific.
+- The loop prompt itself is fully self-contained in the scheduled task SKILL.md.
+
 ## Skill References
 Commit, Ship, Test, Issues, Project-Setup, Agent-Conventions, Skill-Creation: detail rules in respective skill deep-knowledge files.
