@@ -17,6 +17,7 @@
     "refresh-usage"
   ],
   "hooks": [
+    "ss.plugin.update",
     "ss.git.sync",
     "ss.tokens.scan",
     "pre.tokens.guard",

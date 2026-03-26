@@ -39,23 +39,24 @@ claude --plugin-dir /path/to/dotclaude-dev-ops
 
 ## Updates
 
-**Auto-update** is disabled by default for third-party plugins. To update manually:
+### Claude Code CLI
 
 ```bash
 /plugin marketplace update
 ```
 
-To enable auto-updates, set the environment variable:
+Or enable auto-updates: `export FORCE_AUTOUPDATE_PLUGINS=true`
 
-```bash
-export FORCE_AUTOUPDATE_PLUGINS=true
-```
+### Claude Desktop (auto-update via hook)
 
-Or update once explicitly:
+The `ss.plugin.update` hook runs at every session start:
 
-```bash
-/plugin update dotclaude-dev-ops
-```
+1. Checks GitHub for the latest release (~200ms, one API call)
+2. If a newer version exists, downloads and installs automatically
+3. Reports: `Plugin v0.1.0 → v0.2.0 aktualisiert`
+4. If GitHub is unreachable, continues silently with the current version
+
+**Requirement:** `gh` CLI must be authenticated (`gh auth login`).
 
 The plugin uses semantic versioning. Breaking changes only in major versions.
 

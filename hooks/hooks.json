@@ -2,6 +2,11 @@
   "hooks": {
     "SessionStart": [
       {
+        "name": "ss.plugin.update",
+        "description": "Check GitHub for newer plugin version, auto-update if available",
+        "command": "node hooks/session-start/ss.plugin.update.js"
+      },
+      {
         "name": "ss.git.sync",
         "description": "Pull main and merge into current branch/worktree",
         "command": "node hooks/session-start/ss.git.sync.js"
