@@ -28,6 +28,10 @@ plugins/installed_plugins.json
 plugins/known_marketplaces.json
 plugins/install-counts-cache.json
 
+# Scheduled tasks (ignore all, then allowlist specific ones)
+scheduled-tasks/*
+!scheduled-tasks/feedback-loop-guardian/
+
 # Session state
 projects/
 session-env/
