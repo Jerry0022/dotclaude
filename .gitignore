@@ -1,0 +1,33 @@
+# Runtime & cache
+node_modules/
+.claude/cache/
+.claude/sessions/
+.claude/telemetry/
+.claude/shell-snapshots/
+.claude/plans/
+.claude/backups/
+.claude/session-env/
+.claude/worktrees/
+
+# Secrets
+.credentials.json
+*.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Memory (user-specific, not distributable)
+projects/
+memory/
+
+# Package locks (scripts use minimal deps)
+package-lock.json

@@ -1,0 +1,39 @@
+{
+  "name": "dotclaude-dev-ops",
+  "version": "0.1.0",
+  "description": "Complete DevOps automation for Claude Code: hooks, skills, templates, and git hygiene. Ship faster, safer, smarter.",
+  "author": "Jerry0022",
+  "homepage": "https://github.com/Jerry0022/dotclaude-dev-ops",
+  "license": "MIT",
+  "skills": [
+    "ship",
+    "commit",
+    "debug",
+    "deep-research",
+    "explain",
+    "new-issue",
+    "project-setup",
+    "readme",
+    "refresh-usage"
+  ],
+  "hooks": [
+    "ss.git.sync",
+    "ss.tokens.scan",
+    "pre.tokens.guard",
+    "pre.ship.guard",
+    "post.flow.completion",
+    "post.debug.trigger",
+    "prompt.issue.detect",
+    "stop.ship.guard"
+  ],
+  "tags": [
+    "devops",
+    "git",
+    "automation",
+    "hooks",
+    "shipping",
+    "testing",
+    "code-quality",
+    "token-management"
+  ]
+}
