@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.36.1] - 2026-03-26
+
+### Changed
+- **daily-stale-changes-check** scheduled task now also scans all git repos under `~/` (max depth 3) for uncommitted changes, unpushed commits, and stash entries
+
 ## [0.36.0] - 2026-03-25
 
 ### Added

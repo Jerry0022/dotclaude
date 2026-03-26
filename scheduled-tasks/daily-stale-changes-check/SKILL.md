@@ -1,36 +1,33 @@
 ---
 name: daily-stale-changes-check
-description: Check all ~/.claude worktrees and branches for uncommitted or unpushed changes from archived sessions.
+description: Check ~/.claude worktrees AND all git repos under ~/projects for uncommitted or unpushed changes.
 ---
 
-Check for uncommitted or unpushed changes in the ~/.claude dotclaude repository that may have been left behind by archived Claude Code sessions.
+Check for uncommitted or unpushed changes across two scopes:
 
-## Steps
+**Scope 1 — ~/.claude dotclaude repo:**
+1. List all worktrees: `git -C ~/.claude worktree list`
+2. Check each worktree for dirty state: `git -C <path> status --porcelain`
+3. Check for unpushed branches: `git -C ~/.claude branch -vv` — find branches ahead of remote or without tracking.
+4. Check for orphaned worktree directories in `~/.claude/.claude/worktrees/`.
 
-1. **List all worktrees:** Run `git -C ~/.claude worktree list` to find all active worktrees (main repo + any under `~/.claude/.claude/worktrees/`).
+**Scope 2 — User project repos:**
+1. Find all git repositories under `C:\Users\Jerem` (max depth 3) by searching for `.git` directories. Exclude `node_modules`, `.claude/worktrees`, `AppData`, and hidden folders.
+   Use: `find /c/Users/Jerem -maxdepth 3 -name .git -type d 2>/dev/null | grep -v node_modules | grep -v '.claude/.claude/worktrees' | grep -v AppData`
+2. For each found repo, run `git -C <repo-path> status --porcelain` to check for uncommitted changes.
+3. For each found repo, run `git -C <repo-path> log --branches --not --remotes --oneline` to find unpushed commits.
+4. For each found repo, check for stash entries: `git -C <repo-path> stash list`.
 
-2. **Check each worktree for dirty state:**
-   - For each worktree path, run `git -C <path> status --porcelain`.
-   - If output is non-empty, record the worktree name and a summary of changed files.
+**Report (German):**
+- If everything is clean: "Alles sauber — keine offenen Änderungen gefunden."
+- If issues found, structured list grouped by repo:
+  - Uncommitted changes (file count + repo name)
+  - Unpushed commits (branch + count ahead)
+  - Stash entries
+  - (For ~/.claude scope) Orphaned worktree directories
+- End each finding with a suggested action.
 
-3. **Check for unpushed branches:**
-   - Run `git -C ~/.claude branch -vv` to see all local branches and their tracking status.
-   - Identify branches that are ahead of their remote (contain `[origin/...: ahead N]`) or have no remote tracking branch at all (excluding `main`).
-   - For branches without a remote, check if they have commits not on main: `git -C ~/.claude log main..<branch> --oneline`.
-
-4. **Check for orphaned worktree directories:**
-   - List directories in `~/.claude/.claude/worktrees/` and compare against `git worktree list` output.
-   - Flag any directories that exist on disk but aren't registered as worktrees.
-
-5. **Report findings:**
-   - If everything is clean: Reply with a short "Alles sauber — keine offenen Änderungen gefunden."
-   - If issues found: Reply in German with a structured list:
-     - Worktrees with uncommitted changes (file count + worktree name)
-     - Unpushed branches (branch name + how many commits ahead)
-     - Orphaned worktree directories
-   - End with a suggested action for each finding (e.g., "commit & push", "branch löschen", "worktree aufräumen").
-
-## Constraints
+**Constraints:**
 - All output in German.
-- Do not make any changes — this is a read-only audit.
-- Use dedicated tools (Bash for git commands, Glob for directory listing) rather than guessing.
+- Read-only audit — do not make any changes.
+- Use Bash for git commands, Glob for directory listing.
