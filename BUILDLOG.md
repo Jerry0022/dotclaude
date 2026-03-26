@@ -1,5 +1,10 @@
 # Build Log
 
+## 62d7c83 — 2026-03-26
+Version: 0.36.1
+Branch: main
+Scheduled task daily-stale-changes-check extended to scan user project repos for uncommitted/unpushed changes
+
 ## ef1f15e — 2026-03-25
 Version: 0.36.0
 Branch: main
