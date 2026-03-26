@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.37.2] - 2026-03-26
+
+### Fixed
+- **ship/SKILL.md Step 5** — Replaced vague one-liner with explicit version-file checklist (package.json, README, CHANGELOG, project-specific files) and mandatory verification grep to catch stale version references before commit
+- **ship/versioning.md** — Reinforced grep verification rule with concrete command example
+
 ## [0.37.1] - 2026-03-26
 
 ### Changed

@@ -151,7 +151,23 @@ Run the project's lint, contract checks, and tests. If anything fails, fix and r
 
 ### Step 5: Version Bump
 
-Evaluate changes, determine bump type (patch/minor/major/none), update `package.json`, `README.md`, `CHANGELOG.md`, and any other files referencing the old version. If the main context pre-decided a major bump, use that decision.
+**5a. Determine bump type** (patch/minor/major/none). If the main context pre-decided a major bump, use that decision.
+
+**5b. Read the OLD version** from `package.json` before changing anything — you need it for the verification grep.
+
+**5c. Update ALL version files — mandatory checklist** (do NOT skip any):
+- `package.json` → `"version": "X.Y.Z"`
+- `README.md` → `**Version: X.Y.Z**` (near the top of the file)
+- `CHANGELOG.md` → new `## [X.Y.Z] — YYYY-MM-DD` section at top with player-friendly change descriptions
+- Project-specific files: read the project's `CLAUDE.md` for any additional version files (e.g., `version.ts`, config files). These are **equally mandatory**.
+
+If bump type is "none", skip all of 5c.
+
+**5d. Verification grep (MANDATORY — never skip):**
+```bash
+grep -rn "<OLD_VERSION>" --include="*.json" --include="*.md" --include="*.ts" --include="*.js" . | grep -v node_modules | grep -v BUILDLOG | grep -v CHANGELOG
+```
+If any hits remain that should have been updated → fix them before proceeding to Step 6. False positives (e.g., old CHANGELOG entries, unrelated version strings) can be ignored.
 
 ### Step 6: Commit & Push
 
