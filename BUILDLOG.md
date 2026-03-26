@@ -1,6 +1,15 @@
 # Build Log
 
 ## 024f9ca — 2026-03-26
+Version: 0.37.2
+Branch: main
+Commit: 8645a81
+Changes:
+- Ship SKILL.md Step 5: explicit version-file checklist (package.json, README, CHANGELOG, project-specific files)
+- Ship SKILL.md Step 5d: mandatory verification grep to catch stale version references
+- versioning.md: reinforced grep rule with concrete command example
+
+## 024f9ca — 2026-03-26
 Version: 0.37.1
 Branch: main
 Commit: 8457a3b
