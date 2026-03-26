@@ -1,5 +1,13 @@
 # Build Log
 
+## 7f6ed7d — 2026-03-26
+Version: 0.37.0
+Branch: main
+Commit: c1026b1
+Changes:
+- New build-id.js script — hashes only source code + assets for deterministic build IDs
+- Migrated all 8 skill references from git write-tree to build-id.js
+
 ## 7694f7e — 2026-03-26
 Version: 0.36.2
 Branch: main
