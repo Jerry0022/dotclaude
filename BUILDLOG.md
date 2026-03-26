@@ -1,5 +1,14 @@
 # Build Log
 
+## 024f9ca — 2026-03-26
+Version: 0.37.1
+Branch: main
+Commit: 8457a3b
+Changes:
+- Add global SessionStart hook: auto-pull main + merge into worktree branch
+- Hook script at ~/.claude/hooks/session-pull-merge.sh
+- settings.json updated with SessionStart hook config (local, not tracked)
+
 ## 7f6ed7d — 2026-03-26
 Version: 0.37.1
 Branch: main
