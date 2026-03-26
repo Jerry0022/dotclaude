@@ -17,19 +17,66 @@ Multiple changes in one ship → use highest applicable bump.
 
 ## Version files (mandatory checklist)
 
-Update ALL of these in a single commit:
-- `package.json` → `"version": "X.Y.Z"`
-- `README.md` → `**Version: X.Y.Z**` near top
-- `CHANGELOG.md` → new `## [X.Y.Z] — YYYY-MM-DD` section at top
-- Project-specific files from extension (e.g., `version.ts`, config files)
+Update ALL of these in a **single commit**. Missing any is a ship-blocking error.
 
-## Verification grep (mandatory)
+| File | What to update | Required |
+|---|---|---|
+| `package.json` | `"version": "X.Y.Z"` | Always |
+| `README.md` | `**Version: X.Y.Z**` near top | Always |
+| `CHANGELOG.md` | New `## [X.Y.Z] — YYYY-MM-DD` section at top | Always |
+| `.claude-plugin/plugin.json` | `"version": "X.Y.Z"` (if plugin project) | If exists |
+| `.claude-plugin/marketplace.json` | `"metadata.version": "X.Y.Z"` (if marketplace) | If exists |
+| Project-specific files | From extension `reference.md` | If defined |
+
+## Verification grep (BLOCKING — never skip)
+
+After updating version files, run:
 
 ```bash
 grep -rn "<OLD_VERSION>" --include="*.json" --include="*.md" --include="*.ts" --include="*.js" . | grep -v node_modules | grep -v BUILDLOG | grep -v CHANGELOG
 ```
 
-If hits remain that should have been updated → fix before proceeding.
+**If hits remain → DO NOT proceed to commit.** Fix every stale reference first.
+
+This grep is the single most important check in the version bump step.
+It catches: forgotten README badges, stale plugin.json, hardcoded version
+strings in source code, marketplace.json mismatches.
+
+## Post-commit version verification
+
+After the version bump commit, verify once more:
+
+```bash
+# Verify package.json
+node -p "require('./package.json').version"
+
+# Verify README badge
+grep "Version:" README.md
+
+# Verify CHANGELOG entry
+head -5 CHANGELOG.md
+```
+
+All three must show the new version. If not → amend the commit.
+
+## Git tag (MANDATORY for all version bumps)
+
+After PR merge to main:
+
+```bash
+git tag v<X.Y.Z>
+git push origin v<X.Y.Z>
+```
+
+**Verify tag exists on remote:**
+```bash
+git ls-remote --tags origin | grep "v<X.Y.Z>"
+```
+
+If tag is missing → create it. This is the most commonly forgotten step.
+The `pre-flight.md` Post-Ship Verification catches this automatically.
+
+Skip tag only if bump type is "none" (internal-only change).
 
 ## Build-ID
 

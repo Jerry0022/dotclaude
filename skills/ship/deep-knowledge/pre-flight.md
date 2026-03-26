@@ -28,7 +28,70 @@ git ls-files --others --exclude-standard --directory | grep -E '(dist/|\.angular
 ```
 If hits → fix `.gitignore` first.
 
+## Version Consistency Check (MANDATORY)
+
+Before proceeding to build/version-bump, verify that existing version
+references are consistent. This catches cases where a prior ship forgot
+to update a file.
+
+```bash
+# 5. Extract current version from package.json (or manifest)
+VERSION=$(node -p "require('./package.json').version" 2>/dev/null)
+```
+
+If VERSION is available, check:
+
+```bash
+# 5a. README version badge matches
+grep -q "Version: $VERSION" README.md
+```
+If no match → WARN: "README version badge is stale. Will update in Step 3."
+
+```bash
+# 5b. CHANGELOG has an entry for this version
+grep -q "\[$VERSION\]" CHANGELOG.md
+```
+If no match → WARN: "CHANGELOG missing entry for $VERSION. Will add in Step 3."
+
+```bash
+# 5c. plugin.json version matches (if exists)
+node -p "require('./.claude-plugin/plugin.json').version" 2>/dev/null
+```
+If exists and doesn't match → WARN: "plugin.json version is stale."
+
+```bash
+# 5d. Check for project-specific version files from extension
+# Read extension reference.md for additional version file paths
+```
+
+These warnings don't block the ship — they ensure Step 3 (Version Bump)
+knows what needs updating. But they MUST be reported before proceeding.
+
+## Post-Ship Verification (MANDATORY)
+
+After Step 4 (Commit/Push/PR/Merge), before Step 5 (Cleanup), verify:
+
+```bash
+# 6a. Git tag exists on remote
+git ls-remote --tags origin | grep "v$NEW_VERSION"
+```
+If no tag → CREATE it now. This is the most commonly missed step.
+
+```bash
+# 6b. GitHub release exists (if CI creates one)
+gh release view v$NEW_VERSION 2>/dev/null
+```
+If no release but tag exists → OK (CI may create it async).
+If no release and no tag → ABORT cleanup, tag first.
+
+```bash
+# 6c. Merged commit on main has correct version
+git show main:package.json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version"
+```
+If version on main doesn't match new version → something went wrong.
+
 ## Guard rule
 
 Step 5 (Cleanup) MUST NOT execute unless Step 4 (PR merge) completed
-successfully. If any step fails → no cleanup, preserve all branches/worktrees.
+successfully AND Post-Ship Verification passed. If any step fails →
+no cleanup, preserve all branches/worktrees.
