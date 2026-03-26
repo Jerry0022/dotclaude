@@ -1,5 +1,10 @@
 # Build Log
 
+## 7694f7e — 2026-03-26
+Version: 0.36.2
+Branch: main
+feedback-loop-guardian always kills old loop and spawns fresh one instead of skipping when already running
+
 ## 62d7c83 — 2026-03-26
 Version: 0.36.1
 Branch: main
