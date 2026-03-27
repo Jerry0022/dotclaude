@@ -8,14 +8,15 @@ This file is a machine-readable installation procedure. When a user asks Claude 
 
 ## Step 1: Ask the user
 
-Ask the user ONE question with these options:
+Use the `AskUserQuestion` tool — do NOT write question text inline before calling it.
 
-| Option | Description |
-|---|---|
-| **Global** (recommended) | Install for all projects. Writes to `~/.claude/settings.json`. Best for solo devs. |
-| **Project: {cwd}** | Install for this project only. Writes to `{cwd}/.claude/settings.json`. Best for team baselines. |
+Question: `"Wo soll das Plugin installiert werden?"`
 
-Use the project's actual working directory path in the option label.
+Options:
+- `"Global (~/.claude/settings.json)"` — für alle Projekte (empfohlen für Solo-Devs)
+- `"Projekt: {cwd}/.claude/settings.json"` — nur für dieses Projekt
+
+Use the project's actual working directory path in the project option label.
 
 ## Step 2: Determine the settings file path
 
@@ -263,15 +264,13 @@ If any check fails, report the specific issue and offer to fix it.
 
 **Skip this step if the user chose global installation.**
 
-When installed for a specific project, ask the user:
+When installed for a specific project, use the `AskUserQuestion` tool — do NOT write question text inline before calling it.
 
-> "Soll ich die bestehende `.claude/`-Konfiguration des Projekts prüfen und passende Extensions für das Plugin einrichten?"
+Question: `"Soll ich die bestehende .claude/-Konfiguration prüfen und passende Extensions einrichten?"`
 
 Options:
-| Option | Description |
-|---|---|
-| **Ja, scannen und einrichten** | Scan the project's `.claude/` directory and create extension files |
-| **Nein, später** | Skip — the user can run `/project-setup --init` at any time |
+- `"Ja, scannen und einrichten"` — Scan `.claude/` and create extension files
+- `"Nein, später"` — Skip; user can run `/project-setup --init` any time
 
 ### If the user says yes:
 

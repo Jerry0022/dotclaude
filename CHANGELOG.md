@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.2] — 2026-03-27
+
+### Fixed
+- `INSTALL.md`: install flow now uses `AskUserQuestion` tool instead of inline markdown options — eliminates question text duplication and shows native UI buttons
+
 ## [0.3.1] — 2026-03-27
 
 ### Fixed
