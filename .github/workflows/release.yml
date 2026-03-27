@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s" | head -20)
+          else
+            COMMITS=$(git log --pretty=format:"- %s" -20)
+          fi
+
+          # Extract CHANGELOG entry for this version
+          VERSION="${{ steps.version.outputs.version }}"
+          CHANGELOG_ENTRY=$(awk "/^## \[${VERSION}\]/{found=1; next} /^## \[/{if(found) exit} found{print}" CHANGELOG.md 2>/dev/null || echo "")
+
+          # Build release body
+          {
+            echo "body<<RELEASE_EOF"
+            if [ -n "$CHANGELOG_ENTRY" ]; then
+              echo "$CHANGELOG_ENTRY"
+            else
+              echo "## Changes"
+              echo ""
+              echo "$COMMITS"
+            fi
+            echo ""
+            echo "---"
+            echo "Install: \`/plugin marketplace add Jerry0022/dotclaude-dev-ops\`"
+            echo "RELEASE_EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: ${{ steps.notes.outputs.body }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          generate_release_notes: false
