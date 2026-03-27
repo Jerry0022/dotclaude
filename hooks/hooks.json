@@ -47,6 +47,11 @@
     ],
     "UserPromptSubmit": [
       {
+        "name": "prompt.git.sync",
+        "description": "Periodic git pull/merge main into current branch (throttled, every 10 min)",
+        "command": "node hooks/user-prompt-submit/prompt.git.sync.js"
+      },
+      {
         "name": "prompt.issue.detect",
         "description": "Detect issue references in user message, set to In Progress or ask user",
         "command": "node hooks/user-prompt-submit/prompt.issue.detect.js"

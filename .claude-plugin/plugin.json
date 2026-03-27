@@ -24,6 +24,7 @@
     "pre.ship.guard",
     "post.flow.completion",
     "post.debug.trigger",
+    "prompt.git.sync",
     "prompt.issue.detect",
     "stop.ship.guard"
   ],

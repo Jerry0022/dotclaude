@@ -36,7 +36,7 @@ gh pr merge --squash --delete-branch
 - `--delete-branch` removes remote feature branch after merge
 - Verify remote branch is gone: `git ls-remote --heads origin <branch>`
 
-## Tag + Release
+## Tag
 
 After merge, create version tag on main:
 
@@ -50,8 +50,45 @@ git push origin v<X.Y.Z>
 - Tag on the **squash-merge commit on main** — not on the feature branch
 - Format: `vX.Y.Z`
 - Skip if version bump was "none"
-- Verify CI release workflow triggered: `gh run list --workflow=release --limit 1`
-- Do NOT wait for CI completion — it runs asynchronously
+- Verify tag exists: `git ls-remote --tags origin | grep "v<X.Y.Z>"`
+
+## GitHub Release (MANDATORY for every tag)
+
+After tag push, create a GitHub Release. Format per `templates/github-release.md`.
+
+```bash
+# Generate commit list since last tag for release notes
+PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+if [ -n "$PREV_TAG" ]; then
+  COMMITS=$(git log ${PREV_TAG}..HEAD --oneline)
+else
+  COMMITS=$(git log --oneline -20)
+fi
+```
+
+```bash
+gh release create v<X.Y.Z> --title "v<X.Y.Z>" --notes "$(cat <<'EOF'
+## What's New
+
+### Added
+- <from CHANGELOG Added section> (#PR)
+
+### Fixed
+- <from CHANGELOG Fixed section> (#PR)
+
+## Contributors
+- @Jerry0022
+- Co-Authored-By: Claude Opus 4.6
+EOF
+)"
+```
+
+- **Scope**: Only changes since previous release tag — not cumulative
+- **Content**: Mirror CHANGELOG entry for this version (same sections/bullets)
+- **Assets**: Attach build artifacts if CI produces them
+- **Pre-release**: Use `--prerelease` for `0.x` versions
+- **Verification**: `gh release view v<X.Y.Z>` — must show correct version + notes
+- If CI auto-creates releases from tag push → verify with `gh release view` instead
 
 ## CI tag filter
 

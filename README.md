@@ -72,6 +72,7 @@ The plugin uses semantic versioning. Breaking changes only in major versions.
 | PreToolUse | `pre.ship.guard` | Block git push with uncommitted files |
 | PostToolUse | `post.flow.completion` | Verify changes + recommend ship |
 | PostToolUse | `post.debug.trigger` | Recommend debug after repeated failures |
+| UserPromptSubmit | `prompt.git.sync` | Periodic pull/merge main (every 10 min) |
 | UserPromptSubmit | `prompt.issue.detect` | Track GitHub issues automatically |
 | Stop | `stop.ship.guard` | Warn about uncommitted changes |
 
@@ -124,6 +125,8 @@ your-project/.claude/skills/ship/
 The plugin reads your extensions before executing and merges them. Your rules win on conflict.
 
 Run `/project-setup --init` to scaffold extension templates automatically.
+
+For the full extension guide with examples per skill, see `deep-knowledge/skill-extension-guide.md`.
 
 ## Project Structure
 
