@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.2] — 2026-03-27
+
+### Fixed
+- `refresh-usage`: autonomous CDP activation on exit 5 — Edge restart happens automatically instead of silent [no data] fallback; clear German instruction shown if restart fails
+
 ## [0.2.1] — 2026-03-27
 
 ### Fixed

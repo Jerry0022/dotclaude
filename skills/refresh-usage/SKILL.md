@@ -34,13 +34,23 @@ If running in the Claude Code CLI (terminal/REPL):
 If `/usage` is not available (e.g., Claude Desktop, MCP):
 - Run `node scripts/refresh-usage-headless.js --quiet --check-only`
 - Exit 0 → CDP available → scrape via `--quiet --summary`
-- Exit 7 → Edge not running → `--auto-start` (no user consent needed)
-- Exit 5 → Edge without CDP → `--activate-cdp` (one-time restart)
+- Exit 7 → Edge not running → run `--auto-start` automatically (no user consent needed)
+- Exit 5 → Edge running without CDP → run `--activate-cdp` automatically to restart Edge with CDP
+
+**Exit 5 handling (autonomous):**
+1. Run `node scripts/refresh-usage-headless.js --activate-cdp --quiet`
+2. If it succeeds (exit 0) → proceed to scrape
+3. If it fails → output this message to the user (in German):
+   > Edge laeuft ohne CDP-Support. Einmalig Edge neu starten mit:
+   > `node scripts/refresh-usage-headless.js --activate-cdp`
+   > Danach funktioniert der Usage-Check automatisch.
+4. Then fall through to 1c with `[no data]`
 
 ### 1c. No data available
 
 If neither CLI nor CDP works:
-- Return `🔋 [no data]` for the completion card
+- Return `[no data]` for the completion card battery line
+- Always output the reason (CDP not available, Edge not running, parse error, etc.)
 - Non-blocking — never prevent completion card from rendering
 
 ## Step 2 — Parse and store

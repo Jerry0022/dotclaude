@@ -12,7 +12,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { sessionFile } = require('../lib/session-id');
+const { sessionFile, readSessionFile } = require('../lib/session-id');
 
 const cwd = process.cwd();
 
@@ -173,13 +173,15 @@ process.stdin.on('end', () => {
 
   if (prCreatePattern.test(cmdStripped) || prMergePattern.test(cmdStripped)) {
     // Check for ship-flow flag (set by prompt.ship.detect when user triggered /ship)
-    const flagFile = sessionFile('dotclaude-devops-ship-flow', hook.session_id);
+    // Uses readSessionFile with glob fallback to handle session_id mismatches
+    // between UserPromptSubmit and PreToolUse hooks (issue #10).
+    const result = readSessionFile('dotclaude-devops-ship-flow', hook.session_id);
     let inShipFlow = false;
-    try {
-      const ts = parseInt(fs.readFileSync(flagFile, 'utf8'), 10);
+    if (result) {
+      const ts = parseInt(result.content, 10);
       // Flag valid for 30 minutes
-      inShipFlow = (Date.now() - ts) < 30 * 60 * 1000;
-    } catch {}
+      inShipFlow = !isNaN(ts) && (Date.now() - ts) < 30 * 60 * 1000;
+    }
 
     if (!inShipFlow) {
       const action = prCreatePattern.test(cmdStripped) ? 'PR create' : 'PR merge';
@@ -195,8 +197,8 @@ process.stdin.on('end', () => {
       process.exit(2);
     }
     // In ship flow — allow PR commands, but clear flag after merge
-    if (prMergePattern.test(cmdStripped)) {
-      try { fs.unlinkSync(flagFile); } catch {}
+    if (prMergePattern.test(cmdStripped) && result) {
+      try { fs.unlinkSync(result.filePath); } catch {}
     }
   }
 
