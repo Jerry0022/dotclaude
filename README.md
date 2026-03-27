@@ -16,26 +16,89 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 
 ## Installation
 
-### Option 1: Marketplace (recommended)
+### Global vs. Project — which one?
 
-Add the marketplace, then install:
+| | Global | Project |
+|---|---|---|
+| **Scope** | All your projects | This repo only |
+| **Stored in** | `~/.claude/settings.json` | `{project}/.claude/settings.json` |
+| **Shared with team** | No (personal) | Yes (committed to git) |
+| **Best for** | Solo devs, personal workflow | Teams sharing the same setup |
+
+> **Recommendation:** Install **globally** if you want the plugin in every project. Install **per-project** if your team should all get the same setup when they clone the repo.
+
+---
+
+### Claude Code CLI
+
+#### Marketplace (recommended)
 
 ```bash
+# Global (available in all projects)
 /plugin marketplace add Jerry0022/dotclaude-dev-ops
 /plugin install dotclaude-dev-ops
+
+# Per-project (shared via git)
+/plugin marketplace add Jerry0022/dotclaude-dev-ops
+/plugin install dotclaude-dev-ops --scope project
 ```
 
-### Option 2: Direct install
+#### Direct install
 
 ```bash
+# Global
 /plugin install dotclaude-dev-ops@Jerry0022
+
+# Per-project
+/plugin install dotclaude-dev-ops@Jerry0022 --scope project
 ```
 
-### Option 3: Local development
+#### Local development
 
 ```bash
 claude --plugin-dir /path/to/dotclaude-dev-ops
 ```
+
+---
+
+### Claude Desktop
+
+Claude Desktop uses the same plugin system as the CLI. You have two options:
+
+#### Option A: Use the `/plugin` command in chat
+
+Open a project in Claude Desktop and type in chat:
+
+```
+/plugin marketplace add Jerry0022/dotclaude-dev-ops
+/plugin install dotclaude-dev-ops
+```
+
+This works exactly like the CLI commands above. Add `--scope project` for project-level installation.
+
+#### Option B: Ask Claude to install it
+
+Tell Claude in chat:
+
+> "Install the dotclaude-dev-ops plugin from Jerry0022 globally."
+
+or for a specific project:
+
+> "Install the dotclaude-dev-ops plugin from Jerry0022 for this project."
+
+Claude will run the appropriate `/plugin` commands for you.
+
+---
+
+### Verify installation
+
+After installing, check that the plugin is active:
+
+```bash
+/plugin list
+```
+
+You should see `dotclaude-dev-ops` with its hooks, skills, and agents listed.
 
 ## Updates
 
