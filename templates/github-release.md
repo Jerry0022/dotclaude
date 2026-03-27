@@ -1,21 +1,22 @@
 ---
 name: github-release
-description: Template for GitHub Release notes created with gh release create.
-version: 0.1.0
+description: Template for GitHub Release notes created via the GitHub API.
+version: 0.2.0
 ---
 
 # GitHub Release Template
 
 Created automatically after git tag push in the ship flow.
 
-## Command
+## How to create
 
-```bash
-gh release create v<X.Y.Z> --title "v<X.Y.Z>" --notes "$(cat <<'EOF'
-<release notes content>
-EOF
-)"
-```
+Create a GitHub Release via the API for the tag `v<X.Y.Z>` with:
+
+- **Title**: `v<X.Y.Z>`
+- **Tag**: the tag that was just pushed
+- **Body**: release notes content (see format below)
+- **Pre-release**: mark as pre-release for `0.x` or `-beta`/`-rc` versions
+- **Draft**: use draft mode if the release needs review before publishing
 
 ## Content scope
 
@@ -66,10 +67,10 @@ git log $(git describe --tags --abbrev=0 HEAD~1)..HEAD --oneline
 - **Tone**: Same as CHANGELOG (user-facing, no jargon)
 - **PRs**: Link every change to its PR number
 - **Assets**: Attach build artifacts if CI produces them (installers, binaries)
-- **Draft**: Use `--draft` if the release needs review before publishing
-- **Pre-release**: Use `--prerelease` for `0.x` or `-beta`/`-rc` versions
+- **Draft**: Use draft mode if the release needs review before publishing
+- **Pre-release**: Mark as pre-release for `0.x` or `-beta`/`-rc` versions
 - Release is created **after** tag push, **before** cleanup
-- If CI auto-creates releases from tags, skip `gh release create` — verify with `gh release view`
+- If CI auto-creates releases from tags, verify the release exists via the API instead of creating one
 
 ## When to create
 
@@ -81,10 +82,4 @@ git log $(git describe --tags --abbrev=0 HEAD~1)..HEAD --oneline
 
 ## Verification
 
-After creating the release:
-
-```bash
-gh release view v<X.Y.Z>
-```
-
-Must show: correct version, notes present, tag linked.
+After creating the release, verify via the GitHub API that it exists with the correct version and notes.

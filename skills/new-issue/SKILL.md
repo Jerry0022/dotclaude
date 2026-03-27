@@ -51,9 +51,7 @@ Add optional flags based on project extension:
 
 Only if the project extension provides owner + project ID:
 
-```bash
-gh project item-add <PROJECT_ID> --owner <OWNER> --url <issue-url>
-```
+Add the issue to the project board via the GitHub API.
 
 Set custom fields (e.g., "Agent Role") via GraphQL if field IDs are provided in project extension.
 

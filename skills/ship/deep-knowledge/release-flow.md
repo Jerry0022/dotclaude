@@ -10,30 +10,19 @@ git push -u origin <branch>
 
 ## Create PR
 
-```bash
-gh pr create --title "<type>(scope): subject" --body "$(cat <<'EOF'
-Closes #NNN
+Create a pull request via the GitHub API:
 
-## Summary
-- ...
-
-## Test plan
-- [ ] ...
-EOF
-)"
-```
-
-- Title: under 70 chars
+- Title: `<type>(scope): subject` — under 70 chars
 - Body MUST start with `Closes #NNN` / `Fixes #NNN` for every resolved issue
 - Base branch: `main`
+- Include a `## Summary` and `## Test plan` section in the body
 
 ## Merge PR
 
-```bash
-gh pr merge --squash --delete-branch
-```
+Merge the PR via the GitHub API:
 
-- `--delete-branch` removes remote feature branch after merge
+- Strategy: squash merge
+- Delete the remote feature branch after merge
 - Verify remote branch is gone: `git ls-remote --heads origin <branch>`
 
 ## Tag
@@ -66,29 +55,17 @@ else
 fi
 ```
 
-```bash
-gh release create v<X.Y.Z> --title "v<X.Y.Z>" --notes "$(cat <<'EOF'
-## What's New
+Create a GitHub Release via the API with the following content:
 
-### Added
-- <from CHANGELOG Added section> (#PR)
-
-### Fixed
-- <from CHANGELOG Fixed section> (#PR)
-
-## Contributors
-- @Jerry0022
-- Co-Authored-By: Claude Opus 4.6
-EOF
-)"
-```
-
+- **Title**: `v<X.Y.Z>`
+- **Tag**: `v<X.Y.Z>` (must already exist)
+- **Body**: Mirror the CHANGELOG entry for this version (What's New sections: Added/Changed/Fixed + Contributors)
 - **Scope**: Only changes since previous release tag — not cumulative
 - **Content**: Mirror CHANGELOG entry for this version (same sections/bullets)
 - **Assets**: Attach build artifacts if CI produces them
-- **Pre-release**: Use `--prerelease` for `0.x` versions
-- **Verification**: `gh release view v<X.Y.Z>` — must show correct version + notes
-- If CI auto-creates releases from tag push → verify with `gh release view` instead
+- **Pre-release**: Mark as pre-release for `0.x` versions
+- **Verification**: Confirm release exists via GitHub API — must show correct version + notes
+- If CI auto-creates releases from tag push, verify the release exists instead of creating one
 
 ## CI tag filter
 

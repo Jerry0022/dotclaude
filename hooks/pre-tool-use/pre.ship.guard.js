@@ -4,8 +4,8 @@
  * @version 0.3.0
  * @event PreToolUse
  * @plugin dotclaude-dev-ops
- * @description Block manual PR commands (gh pr create/merge) and redirect to
- *   /ship skill. Also block git push when uncommitted files exist or version
+ * @description Block manual PR commands and redirect to /ship skill.
+ *   Also block git push when uncommitted files exist or version
  *   references are inconsistent.
  */
 
@@ -182,7 +182,7 @@ process.stdin.on('end', () => {
     } catch {}
 
     if (!inShipFlow) {
-      const action = prCreatePattern.test(cmdStripped) ? 'gh pr create' : 'gh pr merge';
+      const action = prCreatePattern.test(cmdStripped) ? 'PR create' : 'PR merge';
       console.error(`\n\u26d4 BLOCKED \u2014 manual ${action} is not allowed`);
       console.error('\u2500'.repeat(50));
       console.error('');

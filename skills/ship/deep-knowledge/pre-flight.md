@@ -77,9 +77,9 @@ git ls-remote --tags origin | grep "v$NEW_VERSION"
 ```
 If no tag → CREATE it now. This is the most commonly missed step.
 
-```bash
+```
 # 6b. GitHub release exists (if CI creates one)
-gh release view v$NEW_VERSION 2>/dev/null
+Check via GitHub API whether a release for v$NEW_VERSION exists.
 ```
 If no release but tag exists → OK (CI may create it async).
 If no release and no tag → ABORT cleanup, tag first.

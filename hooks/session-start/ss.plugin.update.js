@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.1.0
+ * @version 0.2.0
  * @event SessionStart
  * @plugin dotclaude-dev-ops
- * @description Self-update mechanism for Claude Desktop (no /plugin CLI).
- *   Checks the GitHub repo for a newer release on every session start.
+ * @description Self-update mechanism — no external CLI dependencies.
+ *   Checks the GitHub repo for a newer release on every session start
+ *   using the GitHub REST API (Node.js built-in https).
  *   If a new version exists, downloads and overwrites the local installation
  *   in ~/.claude/. Quick version check (~200ms), download only when needed.
  */
@@ -14,11 +15,18 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const https = require('https');
 
 const PLUGIN_REPO = 'Jerry0022/dotclaude-dev-ops';
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const VERSION_FILE = path.join(CLAUDE_DIR, '.plugin-version');
 const TEMP_DIR = path.join(os.tmpdir(), 'dotclaude-dev-ops-update');
+
+const GITHUB_API_BASE = `https://api.github.com/repos/${PLUGIN_REPO}`;
+const REQUEST_HEADERS = {
+  'User-Agent': 'dotclaude-dev-ops-updater',
+  Accept: 'application/vnd.github+json',
+};
 
 // Directories to sync from plugin repo into ~/.claude/
 const SYNC_DIRS = [
@@ -39,20 +47,69 @@ function getLocalVersion() {
   }
 }
 
-function getRemoteVersion() {
-  try {
-    const result = execSync(
-      `gh api repos/${PLUGIN_REPO}/releases/latest --jq ".tag_name"`,
-      { encoding: 'utf8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
-    ).trim();
-    // Strip 'v' prefix: v0.1.0 → 0.1.0
-    return result.replace(/^v/, '');
-  } catch {
-    return null; // API not available or no releases
-  }
+/**
+ * Fetch JSON from a URL via HTTPS GET.
+ * Returns a Promise that resolves to the parsed JSON or null on error.
+ */
+function fetchJson(url) {
+  return new Promise((resolve) => {
+    const req = https.get(url, { headers: REQUEST_HEADERS, timeout: 10000 }, (res) => {
+      // Follow redirects (GitHub API sometimes 301/302)
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchJson(res.headers.location).then(resolve);
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return resolve(null);
+      }
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); } catch { resolve(null); }
+      });
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+  });
 }
 
-function downloadAndInstall(version) {
+/**
+ * Download a file from URL to a local path.
+ * Follows redirects (GitHub serves tarballs via CDN redirect).
+ */
+function downloadFile(url, destPath) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(destPath);
+    const request = (downloadUrl) => {
+      https.get(downloadUrl, { headers: REQUEST_HEADERS, timeout: 30000 }, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          return request(res.headers.location);
+        }
+        if (res.statusCode !== 200) {
+          file.close();
+          fs.unlinkSync(destPath);
+          return reject(new Error(`HTTP ${res.statusCode}`));
+        }
+        res.pipe(file);
+        file.on('finish', () => { file.close(); resolve(); });
+      }).on('error', (err) => {
+        file.close();
+        try { fs.unlinkSync(destPath); } catch {}
+        reject(err);
+      });
+    };
+    request(url);
+  });
+}
+
+async function getRemoteVersion() {
+  const release = await fetchJson(`${GITHUB_API_BASE}/releases/latest`);
+  if (!release || !release.tag_name) return null;
+  // Strip 'v' prefix: v0.1.0 → 0.1.0
+  return release.tag_name.replace(/^v/, '');
+}
+
+async function downloadAndInstall(version) {
   // Clean temp dir
   if (fs.existsSync(TEMP_DIR)) {
     fs.rmSync(TEMP_DIR, { recursive: true, force: true });
@@ -60,22 +117,16 @@ function downloadAndInstall(version) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 
   try {
-    // Download release tarball
-    execSync(
-      `gh release download v${version} --repo ${PLUGIN_REPO} --archive tar.gz --dir "${TEMP_DIR}"`,
-      { timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }
-    );
-
-    // Find the downloaded archive
-    const archives = fs.readdirSync(TEMP_DIR).filter(f => f.endsWith('.tar.gz'));
-    if (archives.length === 0) throw new Error('No archive downloaded');
-
-    const archivePath = path.join(TEMP_DIR, archives[0]);
+    // Download release tarball via GitHub API
+    const tarballUrl = `${GITHUB_API_BASE}/tarball/v${version}`;
+    const archivePath = path.join(TEMP_DIR, `dotclaude-dev-ops-${version}.tar.gz`);
+    await downloadFile(tarballUrl, archivePath);
 
     // Extract
     const extractDir = path.join(TEMP_DIR, 'extracted');
     fs.mkdirSync(extractDir, { recursive: true });
-    execSync(`tar -xzf "${archivePath}" -C "${extractDir}"`, {
+    // --force-local prevents tar from interpreting C: as a remote host on Windows
+    execSync(`tar --force-local -xzf "${archivePath}" -C "${extractDir}"`, {
       timeout: 15000,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -135,40 +186,41 @@ function copyDirRecursive(src, dest) {
   }
 }
 
-// Main
-const localVersion = getLocalVersion();
-const remoteVersion = getRemoteVersion();
+// Main (async IIFE)
+(async () => {
+  const localVersion = getLocalVersion();
+  const remoteVersion = await getRemoteVersion();
 
-if (!remoteVersion) {
-  // Can't reach GitHub — skip silently
-  process.exit(0);
-}
+  if (!remoteVersion) {
+    process.exit(0); // Can't reach GitHub — skip silently
+  }
 
-if (localVersion === remoteVersion) {
-  process.exit(0); // Up to date
-}
+  if (localVersion === remoteVersion) {
+    process.exit(0); // Up to date
+  }
 
-// Version comparison (simple semver)
-const local = localVersion.split('.').map(Number);
-const remote = remoteVersion.split('.').map(Number);
-const isNewer = remote[0] > local[0] ||
-  (remote[0] === local[0] && remote[1] > local[1]) ||
-  (remote[0] === local[0] && remote[1] === local[1] && remote[2] > local[2]);
+  // Version comparison (simple semver)
+  const local = localVersion.split('.').map(Number);
+  const remote = remoteVersion.split('.').map(Number);
+  const isNewer = remote[0] > local[0] ||
+    (remote[0] === local[0] && remote[1] > local[1]) ||
+    (remote[0] === local[0] && remote[1] === local[1] && remote[2] > local[2]);
 
-if (!isNewer) {
-  process.exit(0); // Local is same or newer
-}
+  if (!isNewer) {
+    process.exit(0); // Local is same or newer
+  }
 
-process.stderr.write(
-  `[ss.plugin.update] New version available: v${localVersion} → v${remoteVersion}. Updating...\n`
-);
-
-if (downloadAndInstall(remoteVersion)) {
   process.stderr.write(
-    `[ss.plugin.update] Plugin updated to v${remoteVersion}. Changes apply to this session.\n`
+    `[ss.plugin.update] New version available: v${localVersion} → v${remoteVersion}. Updating...\n`
   );
-} else {
-  process.stderr.write(
-    `[ss.plugin.update] Update failed — continuing with v${localVersion}.\n`
-  );
-}
+
+  if (await downloadAndInstall(remoteVersion)) {
+    process.stderr.write(
+      `[ss.plugin.update] Plugin updated to v${remoteVersion}. Changes apply to this session.\n`
+    );
+  } else {
+    process.stderr.write(
+      `[ss.plugin.update] Update failed — continuing with v${localVersion}.\n`
+    );
+  }
+})();

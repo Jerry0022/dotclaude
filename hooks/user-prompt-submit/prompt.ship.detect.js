@@ -93,7 +93,7 @@ process.stdin.on('end', () => {
     `[prompt.ship.detect] ${reason}`,
     '',
     'MANDATORY: Use Skill("ship") to execute the full shipping pipeline.',
-    'Do NOT manually run git commit, git push, gh pr create, or gh pr merge.',
+    'Do NOT manually run git commit, git push, or create/merge PRs outside the skill.',
     'The /ship skill handles: pre-flight checks, build, version bump, commit,',
     'push, PR, merge, sync, cleanup, and the completion card.',
     '',
