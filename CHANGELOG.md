@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2] — 2026-03-27
+
+### Fixed
+- PostToolUse and Stop hooks now share state correctly via Claude Code's `session_id`
+- `stop.flow.completion` now reads stdin (was missing, breaking session_id access)
+- Added `stop.flow.completion` to hooks registry in `plugin.json` and `hooks.json`
+
 ## [0.1.1] — 2026-03-27
 
 ### Fixed
