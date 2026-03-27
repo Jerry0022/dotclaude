@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.4] — 2026-03-27
+
+### Added
+- Branch Inheritance Protocol: isolated agents now rebase onto the caller's branch instead of main
+- All isolated agent definitions (feature, core, frontend, ai, windows) include mandatory Branch Setup as first step
+- Feature agent enforces `Parent branch:` in every sub-agent delegation prompt
+- Agent collaboration docs updated with full protocol, branch naming, and merge order
+
 ## [0.3.3] — 2026-03-27
 
 ### Fixed

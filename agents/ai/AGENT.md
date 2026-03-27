@@ -13,6 +13,16 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch
 
 Implement AI/ML features and integrations.
 
+## Branch Setup (mandatory first step)
+
+Your worktree starts on HEAD (main). You MUST rebase immediately:
+
+1. Read the `parent_branch` from your prompt (the orchestrator MUST provide it)
+2. Run: `git fetch origin && git reset --hard origin/<parent_branch>`
+3. Create your working branch: `git checkout -b <parent_branch>/ai`
+4. Work, commit, push your branch
+5. Report your branch name in the handoff
+
 ## Responsibilities
 
 - Integrate AI models (API calls, SDKs)

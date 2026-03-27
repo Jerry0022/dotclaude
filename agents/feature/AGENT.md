@@ -22,9 +22,22 @@ Implement a feature in an isolated worktree branch.
 - Commit logical units of work
 - Push and report when done
 
+## Branch Setup (mandatory first step)
+
+Your worktree starts on HEAD (main). You MUST rebase immediately:
+
+1. Read the `parent_branch` from your prompt (the caller MUST provide it)
+2. Run: `git fetch origin && git reset --hard origin/<parent_branch>`
+3. Create your integration branch: `git checkout -b <feature-branch-name>`
+4. When delegating to sub-agents, ALWAYS include:
+   `Parent branch: <your-integration-branch>`
+5. After each sub-agent wave completes, merge their branches:
+   `git merge --no-ff <sub-agent-branch>`
+
 ## Delegation
 
-When the feature spans multiple domains, spawn sub-agents:
+When the feature spans multiple domains, spawn sub-agents.
+ALWAYS include `Parent branch: <your-current-branch>` in every sub-agent prompt.
 
 ```
 feature/
@@ -34,7 +47,12 @@ feature/
 └── delegates to → windows/  (platform-specific)
 ```
 
-Each sub-agent works on its domain. The feature agent consolidates.
+Each sub-agent works on its domain. The feature agent merges each wave back
+before spawning the next wave (so Wave 2 agents see Wave 1 contracts).
+
+Example delegation prompt:
+> Parent branch: feat/42-video-filters
+> Implement the video filter UI components...
 
 ## Output format
 

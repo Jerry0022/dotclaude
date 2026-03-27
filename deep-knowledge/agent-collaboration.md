@@ -100,6 +100,43 @@ feat/42-video-filters          ← Feature agent (integration branch)
 
 Merge order follows wave order: Core → Frontend/Windows/AI → integration branch.
 
+## Branch Inheritance Protocol
+
+Claude Code's `isolation: worktree` always creates worktrees from the repo's HEAD (main).
+To ensure agents work on the correct branch, every isolated agent MUST follow this protocol:
+
+### For the Orchestrator (Feature Agent or direct caller)
+
+1. Before spawning any sub-agent, capture the current branch:
+   `PARENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)`
+2. Include in EVERY agent prompt:
+   `Parent branch: <branch-name>`
+3. After each sub-agent completes, merge their branch back:
+   `git merge --no-ff <sub-agent-branch>`
+
+### For every isolated Sub-Agent (first action after spawn)
+
+1. Fetch and reset to parent branch:
+   ```bash
+   git fetch origin
+   git reset --hard origin/<parent-branch>  # or local ref if not pushed
+   ```
+2. Create your working branch from there:
+   ```bash
+   git checkout -b <sub-branch-name>
+   ```
+3. Work, commit, push
+4. Report branch name in handoff
+
+### Branch naming
+
+Sub-branches follow: `<parent-branch>/<role>`
+Example: If parent is `feat/42-video-filters`, core agent works on `feat/42-video-filters/core`
+
+### Merge order
+
+Same as wave order. Feature agent merges each wave's branches before spawning the next wave.
+
 ## Rules
 
 - **Never skip a wave.** Core must commit contracts before Frontend starts.
