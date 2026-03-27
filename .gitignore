@@ -1,5 +1,7 @@
 # Runtime & cache
 node_modules/
+.claude/settings.json
+.claude/settings.local.json
 .claude/cache/
 .claude/sessions/
 .claude/telemetry/
