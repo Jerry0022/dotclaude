@@ -29,31 +29,33 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 
 ---
 
-### Claude Code CLI
+### settings.json (recommended)
 
-#### Marketplace (recommended)
+Add these keys to your target `settings.json` (global or project-level, see table above):
 
-```bash
-# Global (available in all projects)
-/plugin marketplace add Jerry0022/dotclaude-dev-ops
-/plugin install dotclaude-dev-ops
-
-# Per-project (shared via git)
-/plugin marketplace add Jerry0022/dotclaude-dev-ops
-/plugin install dotclaude-dev-ops --scope project
+```jsonc
+{
+  // Step 1: Register the marketplace source
+  "extraKnownMarketplaces": {
+    "Jerry0022": {
+      "source": {
+        "source": "github",
+        "repo": "Jerry0022/dotclaude-dev-ops"
+      }
+    }
+  },
+  // Step 2: Enable the plugin
+  "enabledPlugins": {
+    "dotclaude-dev-ops@Jerry0022": true
+  }
+}
 ```
 
-#### Direct install
+Merge these keys into your existing `settings.json` — do not overwrite the entire file.
 
-```bash
-# Global
-/plugin install dotclaude-dev-ops@Jerry0022
+After saving, restart Claude Code or start a new session. The plugin's hooks, skills, and agents become available immediately.
 
-# Per-project
-/plugin install dotclaude-dev-ops@Jerry0022 --scope project
-```
-
-#### Local development
+### Local development
 
 ```bash
 claude --plugin-dir /path/to/dotclaude-dev-ops
@@ -61,22 +63,7 @@ claude --plugin-dir /path/to/dotclaude-dev-ops
 
 ---
 
-### Claude Desktop
-
-Claude Desktop uses the same plugin system as the CLI. You have two options:
-
-#### Option A: Use the `/plugin` command in chat
-
-Open a project in Claude Desktop and type in chat:
-
-```
-/plugin marketplace add Jerry0022/dotclaude-dev-ops
-/plugin install dotclaude-dev-ops
-```
-
-This works exactly like the CLI commands above. Add `--scope project` for project-level installation.
-
-#### Option B: Ask Claude to install it
+### Ask Claude to install it
 
 Tell Claude in chat:
 
@@ -86,31 +73,19 @@ or for a specific project:
 
 > "Install the dotclaude-dev-ops plugin from Jerry0022 for this project."
 
-Claude will run the appropriate `/plugin` commands for you.
+Claude will edit the appropriate `settings.json` for you.
 
 ---
 
-### Verify installation
+### Verifying installation
 
-After installing, check that the plugin is active:
-
-```bash
-/plugin list
-```
-
-You should see `dotclaude-dev-ops` with its hooks, skills, and agents listed.
+After installation, you should see:
+- Skills: `/ship`, `/commit`, `/debug`, `/deep-research`, `/explain`, `/new-issue`, `/project-setup`, `/readme`, `/refresh-usage`
+- Hooks running automatically (e.g., token scan at session start)
 
 ## Updates
 
-### Claude Code CLI
-
-```bash
-/plugin marketplace update
-```
-
-Or enable auto-updates: `export FORCE_AUTOUPDATE_PLUGINS=true`
-
-### Claude Desktop (auto-update via hook)
+### Auto-update via hook
 
 The `ss.plugin.update` hook runs at every session start:
 
@@ -120,6 +95,10 @@ The `ss.plugin.update` hook runs at every session start:
 4. If GitHub is unreachable, continues silently with the current version
 
 **Requirement:** `gh` CLI must be authenticated (`gh auth login`).
+
+### Manual update
+
+Update `settings.json` with the new version reference, or remove and re-add the plugin.
 
 The plugin uses semantic versioning. Breaking changes only in major versions.
 
