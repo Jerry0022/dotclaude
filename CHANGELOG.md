@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0] — 2026-03-27
+
+### Added
+- `prompt.ship.detect` hook: detect ship intent in user prompts, enforce Skill("ship")
+- `prompt.start.detect` hook: detect app start intent, enforce completion card
+- Ship enforcement via three layers: prompt detection, PR command blocking, completion flow
+
+### Changed
+- `pre.ship.guard` v0.3.0: now blocks `gh pr create` and `gh pr merge`, redirects to /ship
+- `stop.flow.completion` v0.4.0: injects full completion template with all 7 variants
+- README updated: 13 hooks, features section reflects ship enforcement and completion flow
+
 ## [0.1.3] — 2026-03-27
 
 ### Added

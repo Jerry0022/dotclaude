@@ -26,7 +26,7 @@
       },
       {
         "name": "pre.ship.guard",
-        "description": "Block git push when uncommitted or untracked files exist",
+        "description": "Block manual PR commands (redirect to /ship) and git push with dirty state",
         "command": "node hooks/pre-tool-use/pre.ship.guard.js",
         "matcher": "Bash"
       }
@@ -55,6 +55,16 @@
         "name": "prompt.issue.detect",
         "description": "Detect issue references in user message, set to In Progress or ask user",
         "command": "node hooks/user-prompt-submit/prompt.issue.detect.js"
+      },
+      {
+        "name": "prompt.ship.detect",
+        "description": "Detect ship intent in user prompt, enforce Skill('ship') over manual commands",
+        "command": "node hooks/user-prompt-submit/prompt.ship.detect.js"
+      },
+      {
+        "name": "prompt.start.detect",
+        "description": "Detect app start intent, enforce completion card after starting",
+        "command": "node hooks/user-prompt-submit/prompt.start.detect.js"
       }
     ],
     "Stop": [
@@ -65,7 +75,7 @@
       },
       {
         "name": "stop.flow.completion",
-        "description": "Remind to render completion card, recommend /ship after 5+ code edits",
+        "description": "Enforce full completion flow: visual verification, issue update, ship recommendation, mandatory completion card",
         "command": "node hooks/stop/stop.flow.completion.js"
       }
     ]

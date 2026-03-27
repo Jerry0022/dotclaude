@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.1.3**
+**Version: 0.2.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -8,10 +8,11 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 
 ## Features
 
-- **8 Hooks** — automated guards and triggers across the full session lifecycle
+- **13 Hooks** — automated guards and triggers across the full session lifecycle
 - **9 Skills** — ship, commit, debug, research, explain, issues, project setup, readme, usage tracking
 - **9 Agents** — QA, Feature Worker, Research, PO, Frontend, Core, Windows, AI, Gamer
-- **Completion Card** — standardized task completion signal with burn-rate analysis
+- **Completion Flow** — mandatory card after every task (7 variants), visual verification, ship recommendation
+- **Ship Enforcement** — intent detection, PR command blocking, automatic /ship skill routing
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
 
 ## Installation
@@ -55,15 +56,19 @@ The plugin uses semantic versioning. Breaking changes only in major versions.
 
 | Event | Hook | What it does |
 |---|---|---|
+| SessionStart | `ss.plugin.update` | Check GitHub for newer plugin version, auto-update |
 | SessionStart | `ss.tokens.scan` | Scan project for expensive files |
 | SessionStart | `ss.tasks.register` | Auto-register scheduled tasks |
 | PreToolUse | `pre.tokens.guard` | Block operations exceeding token budget |
-| PreToolUse | `pre.ship.guard` | Block git push with uncommitted files |
-| PostToolUse | `post.flow.completion` | Verify changes + recommend ship |
+| PreToolUse | `pre.ship.guard` | Block manual PR commands + git push with dirty state |
+| PostToolUse | `post.flow.completion` | Track code edits for completion flow |
 | PostToolUse | `post.debug.trigger` | Recommend debug after repeated failures |
-| UserPromptSubmit | `prompt.git.sync` | Periodic pull/merge main (every 10 min) |
+| UserPromptSubmit | `prompt.git.sync` | Periodic pull/merge main (every 15 min) |
 | UserPromptSubmit | `prompt.issue.detect` | Track GitHub issues automatically |
+| UserPromptSubmit | `prompt.ship.detect` | Detect ship intent, enforce /ship skill |
+| UserPromptSubmit | `prompt.start.detect` | Detect app start intent, enforce completion card |
 | Stop | `stop.ship.guard` | Warn about uncommitted changes |
+| Stop | `stop.flow.completion` | Enforce full completion flow with mandatory card |
 
 ### Skills (invoked explicitly or by hooks)
 
@@ -123,7 +128,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 dotclaude-dev-ops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← 8 hook scripts (JS)
+├── hooks/                         ← 13 hook scripts (JS)
 ├── skills/                        ← 9 skill definitions (SKILL.md)
 ├── agents/                        ← 9 agent templates (AGENT.md)
 ├── deep-knowledge/                ← Cross-cutting reference docs

@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /**
  * @hook pre.ship.guard
- * @version 0.2.0
+ * @version 0.3.0
  * @event PreToolUse
  * @plugin dotclaude-dev-ops
- * @description Block git push when uncommitted files exist or version references
- *   are inconsistent. Checks plugin.json, marketplace.json, README.md, and
- *   CHANGELOG.md for matching versions before allowing a push.
+ * @description Block manual PR commands (gh pr create/merge) and redirect to
+ *   /ship skill. Also block git push when uncommitted files exist or version
+ *   references are inconsistent.
  */
 
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { sessionFile } = require('../lib/session-id');
 
 const cwd = process.cwd();
 
@@ -161,10 +162,45 @@ process.stdin.on('end', () => {
 
   const cmd = (hook.tool_input && hook.tool_input.command) || '';
 
-  // Only guard git push commands — strip heredoc/quoted content first
-  // to avoid false positives from commit messages containing "git push"
+  // Strip heredoc/quoted content to avoid false positives from commit messages
   const cmdBeforeHeredoc = cmd.split(/<<['"]?\w*['"]?$/m)[0] || cmd;
   const cmdStripped = cmdBeforeHeredoc.replace(/"[^"]*"/g, '').replace(/'[^']*'/g, '');
+
+  // --- Check 0: Block manual PR commands — redirect to /ship ---
+  // Allow if the ship flow is active (flag set by prompt.ship.detect)
+  const prCreatePattern = /\bgh\s+pr\s+create\b/;
+  const prMergePattern = /\bgh\s+pr\s+merge\b/;
+
+  if (prCreatePattern.test(cmdStripped) || prMergePattern.test(cmdStripped)) {
+    // Check for ship-flow flag (set by prompt.ship.detect when user triggered /ship)
+    const flagFile = sessionFile('dotclaude-devops-ship-flow', hook.session_id);
+    let inShipFlow = false;
+    try {
+      const ts = parseInt(fs.readFileSync(flagFile, 'utf8'), 10);
+      // Flag valid for 30 minutes
+      inShipFlow = (Date.now() - ts) < 30 * 60 * 1000;
+    } catch {}
+
+    if (!inShipFlow) {
+      const action = prCreatePattern.test(cmdStripped) ? 'gh pr create' : 'gh pr merge';
+      console.error(`\n\u26d4 BLOCKED \u2014 manual ${action} is not allowed`);
+      console.error('\u2500'.repeat(50));
+      console.error('');
+      console.error('Use Skill("ship") instead. The /ship skill handles the full pipeline:');
+      console.error('  pre-flight checks \u2192 build \u2192 version bump \u2192 commit \u2192 push \u2192 PR \u2192 merge \u2192 cleanup');
+      console.error('');
+      console.error('Manual PR commands bypass quality gates and version bumping.');
+      console.error('\u2500'.repeat(50));
+      console.error('');
+      process.exit(2);
+    }
+    // In ship flow — allow PR commands, but clear flag after merge
+    if (prMergePattern.test(cmdStripped)) {
+      try { fs.unlinkSync(flagFile); } catch {}
+    }
+  }
+
+  // Only guard git push commands for remaining checks
   if (!/\bgit\s+push\b/.test(cmdStripped)) {
     process.exit(0);
   }
