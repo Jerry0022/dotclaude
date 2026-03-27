@@ -7,11 +7,6 @@
         "command": "node hooks/session-start/ss.plugin.update.js"
       },
       {
-        "name": "ss.git.sync",
-        "description": "Pull main and merge into current branch/worktree",
-        "command": "node hooks/session-start/ss.git.sync.js"
-      },
-      {
         "name": "ss.tokens.scan",
         "description": "Scan project for expensive files, update config for token guard",
         "command": "node hooks/session-start/ss.tokens.scan.js"

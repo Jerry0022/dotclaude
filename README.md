@@ -66,7 +66,6 @@ The plugin uses semantic versioning. Breaking changes only in major versions.
 
 | Event | Hook | What it does |
 |---|---|---|
-| SessionStart | `ss.git.sync` | Pull main and merge into current branch |
 | SessionStart | `ss.tokens.scan` | Scan project for expensive files |
 | PreToolUse | `pre.tokens.guard` | Block operations exceeding token budget |
 | PreToolUse | `pre.ship.guard` | Block git push with uncommitted files |
