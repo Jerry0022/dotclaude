@@ -11,6 +11,7 @@ node_modules/
 .claude/session-env/
 .claude/worktrees/
 .claude/token-config.json
+.claude/scheduled_tasks.lock
 
 # Secrets
 .credentials.json
