@@ -13,6 +13,15 @@ node_modules/
 .claude/token-config.json
 .claude/scheduled_tasks.lock
 .claude/usage-live.json
+# Plugin-managed runtime dirs (synced by ss.plugin.update on session start)
+.claude/.plugin-version
+.claude/hooks/
+.claude/skills/
+.claude/agents/
+.claude/deep-knowledge/
+.claude/templates/
+.claude/scripts/
+.claude/scheduled-tasks/
 
 # Secrets
 .credentials.json

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0] — 2026-03-27
+
+### Changed
+- `ss.plugin.update`: detect install type (project vs global) automatically; sync to `{cwd}/.claude/` for project installs, `~/.claude/` for global
+- `ss.plugin.update`: `healHookPaths` now converts paths in both directions based on install type
+- `ss.plugin.update`: updates `installed_plugins.json` metadata after each successful update
+- `INSTALL.md`: documents both global and project-level hook path variants; bootstrap step uses dynamic sync target
+- `.gitignore`: plugin-managed runtime dirs (`.claude/hooks/`, `.claude/skills/`, etc.) excluded from version control
+
 ## [0.2.5] — 2026-03-27
 
 ### Changed
