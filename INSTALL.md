@@ -107,7 +107,8 @@ Claude Code does NOT auto-register hooks from plugin manifests. Without this blo
         "hooks": [
           { "type": "command", "command": "node \"$HOME/.claude/hooks/user-prompt-submit/prompt.git.sync.js\"" },
           { "type": "command", "command": "node \"$HOME/.claude/hooks/user-prompt-submit/prompt.issue.detect.js\"" },
-          { "type": "command", "command": "node \"$HOME/.claude/hooks/user-prompt-submit/prompt.ship.detect.js\"" }
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/user-prompt-submit/prompt.ship.detect.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/user-prompt-submit/prompt.start.detect.js\"" }
         ]
       }
     ],
@@ -164,7 +165,7 @@ Run these checks and report results:
 
 1. **Settings file exists** — confirm the file was written successfully
 2. **All three blocks present** — `extraKnownMarketplaces`, `enabledPlugins`, `hooks`
-3. **Hook count** — count registered hooks across all lifecycle events (expected: 12 hook commands)
+3. **Hook count** — count registered hooks across all lifecycle events (expected: 13 hook commands)
 4. **Parse check** — confirm the JSON is valid (no syntax errors)
 5. **Bootstrap check** — confirm `~/.claude/hooks/session-start/ss.plugin.update.js` exists (from Step 4)
 
@@ -177,7 +178,7 @@ Plugin installiert:
   Ziel:    {global | project path}
   Marketplace: Jerry0022 registriert
   Plugin:  dotclaude-dev-ops@Jerry0022 aktiviert
-  Hooks:   {n}/12 registriert
+  Hooks:   {n}/13 registriert
   Status:  OK
 
 Starte eine neue Session, damit die Hooks aktiv werden.
