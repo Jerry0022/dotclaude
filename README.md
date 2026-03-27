@@ -22,10 +22,10 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 |---|---|---|
 | **Scope** | All your projects | This repo only |
 | **Stored in** | `~/.claude/settings.json` | `{project}/.claude/settings.json` |
-| **Shared with team** | No (personal) | Yes (committed to git) |
-| **Best for** | Solo devs, personal workflow | Teams sharing the same setup |
+| **Shared with team** | No (personal) | No — gitignore recommended |
+| **Best for** | Solo devs, personal workflow | Teams that want a shared baseline |
 
-> **Recommendation:** Install **globally** if you want the plugin in every project. Install **per-project** if your team should all get the same setup when they clone the repo.
+> **Recommendation:** Install **globally** for personal use. For teams, add the snippet below to each dev's `settings.json` and document the setup in your project's `CLAUDE.md` or contributing guide — do **not** commit `.claude/settings.json` to git, as it may contain personal preferences.
 
 ---
 
