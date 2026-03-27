@@ -2,7 +2,12 @@
 
 ## Semantic Versioning
 
-Every project uses `major.minor.patch` in `package.json` (or equivalent manifest).
+Every project uses `major.minor.patch`. The source of truth depends on the project type:
+
+- **Plugin projects**: `.claude-plugin/plugin.json` → `"version"`
+- **npm projects**: `package.json` → `"version"`
+
+If both exist, `.claude-plugin/plugin.json` takes precedence for plugin projects.
 
 ## When to bump
 
@@ -21,12 +26,15 @@ Update ALL of these in a **single commit**. Missing any is a ship-blocking error
 
 | File | What to update | Required |
 |---|---|---|
-| `package.json` | `"version": "X.Y.Z"` | Always |
+| `.claude-plugin/plugin.json` | `"version": "X.Y.Z"` (source of truth for plugins) | If exists |
+| `.claude-plugin/marketplace.json` | `"metadata.version": "X.Y.Z"` | If exists |
+| `package.json` | `"version": "X.Y.Z"` (source of truth for npm) | If exists |
 | `README.md` | `**Version: X.Y.Z**` near top | Always |
 | `CHANGELOG.md` | New `## [X.Y.Z] — YYYY-MM-DD` section at top | Always |
-| `.claude-plugin/plugin.json` | `"version": "X.Y.Z"` (if plugin project) | If exists |
-| `.claude-plugin/marketplace.json` | `"metadata.version": "X.Y.Z"` (if marketplace) | If exists |
 | Project-specific files | From extension `reference.md` | If defined |
+
+The `pre.ship.guard` hook enforces consistency across all existing version files
+before allowing `git push`. Any mismatch blocks the push.
 
 ## Verification grep (BLOCKING — never skip)
 
@@ -47,7 +55,8 @@ strings in source code, marketplace.json mismatches.
 After the version bump commit, verify once more:
 
 ```bash
-# Verify package.json
+# Verify manifest (plugin.json or package.json)
+node -p "require('./.claude-plugin/plugin.json').version" 2>/dev/null || \
 node -p "require('./package.json').version"
 
 # Verify README badge
@@ -57,7 +66,7 @@ grep "Version:" README.md
 head -5 CHANGELOG.md
 ```
 
-All three must show the new version. If not → amend the commit.
+All must show the new version. If not → amend the commit.
 
 ## Git tag (MANDATORY for all version bumps)
 

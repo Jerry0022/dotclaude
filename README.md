@@ -168,7 +168,7 @@ The `ss.plugin.update` hook runs at every session start:
 
 1. Checks GitHub for the latest release (~200ms, one API call)
 2. If a newer version exists, downloads and installs automatically
-3. Reports: `Plugin v0.1.0 → v0.2.0 aktualisiert`
+3. Reports: `Plugin vX.Y.Z → vA.B.C aktualisiert`
 4. If GitHub is unreachable, continues silently with the current version
 
 **Requirement:** `gh` CLI must be authenticated (`gh auth login`).
