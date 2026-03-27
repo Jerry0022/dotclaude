@@ -19,6 +19,7 @@
   "hooks": [
     "ss.plugin.update",
     "ss.tokens.scan",
+    "ss.tasks.register",
     "pre.tokens.guard",
     "pre.ship.guard",
     "post.flow.completion",
