@@ -23,14 +23,6 @@ Tell Claude:
 
 Claude reads [`INSTALL.md`](INSTALL.md) from this repo and handles everything — asks global vs. project, merges settings, registers hooks, verifies the result.
 
-**Prerequisite:** `gh` CLI authenticated (`gh auth login`).
-
-### Local development
-
-```bash
-claude --plugin-dir /path/to/dotclaude-dev-ops
-```
-
 ## Updates
 
 ### Auto-update via hook
@@ -42,7 +34,7 @@ The `ss.plugin.update` hook runs at every session start:
 3. Reports: `Plugin vX.Y.Z → vA.B.C aktualisiert`
 4. If GitHub is unreachable, continues silently with the current version
 
-**Requirement:** `gh` CLI must be authenticated (`gh auth login`).
+No external CLI dependencies required — the hook uses the GitHub REST API directly.
 
 ### Manual update
 

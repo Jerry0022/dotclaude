@@ -8,7 +8,7 @@
 - Ship enforcement via three layers: prompt detection, PR command blocking, completion flow
 
 ### Changed
-- `pre.ship.guard` v0.3.0: now blocks `gh pr create` and `gh pr merge`, redirects to /ship
+- `pre.ship.guard` v0.3.0: now blocks manual PR commands, redirects to /ship
 - `stop.flow.completion` v0.4.0: injects full completion template with all 7 variants
 - README updated: 13 hooks, features section reflects ship enforcement and completion flow
 

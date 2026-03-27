@@ -60,8 +60,8 @@ Execute the release pipeline. See `deep-knowledge/release-flow.md`.
 
 1. Commit version-bumped files (conventional commit format, per /commit rules)
 2. Push to feature branch: `git push -u origin <branch>`
-3. Create PR: `gh pr create` (title <70 chars, body starts with `Closes #N`)
-4. Merge PR: `gh pr merge --squash --delete-branch`
+3. Create PR via GitHub API (title <70 chars, body starts with `Closes #N`)
+4. Merge PR via GitHub API (squash, delete branch)
 5. Tag on main: `git tag v<X.Y.Z>` + push tag (skip if bump = none)
 
 ## Step 5 — Sync + Cleanup

@@ -5,7 +5,6 @@ This file is a machine-readable installation procedure. When a user asks Claude 
 ## Prerequisites
 
 - Claude Code installed and running
-- `gh` CLI authenticated (`gh auth login`) — required for auto-updates
 
 ## Step 1: Ask the user
 

@@ -85,7 +85,7 @@ process.stdin.on('end', () => {
     process.stdout.write(
       `User explicitly referenced issue ${issueList}. ` +
       `Set ${issueList} to "In Progress" on the GitHub project board ` +
-      `(use gh api graphql). Track this issue for the session — ` +
+      `(use the GitHub API). Track this issue for the session — ` +
       `when work is complete, update status to "Done" in the completion flow.\n`
     );
   } else {
