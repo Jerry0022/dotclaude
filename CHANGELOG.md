@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.3] — 2026-03-27
+
+### Fixed
+- `post.flow.completion` v0.5.0: moved completion enforcement from Stop to PostToolUse hook — counts edits and emits card reminder at the right time
+- Removed `stop.flow.completion.js` (redundant, fired too late)
+- Cleaned up `hooks.json` and `.claude/settings.json`
+- Version files now consistent (README, CHANGELOG, .plugin-version were out of sync)
+
+### Improved
+- Ship skill: added mandatory version verification gate — hard stop if any version file is out of sync after bump
+
 ## [0.3.2] — 2026-03-27
 
 ### Fixed

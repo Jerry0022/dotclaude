@@ -52,7 +52,25 @@ Determine bump type and update all version files. See `deep-knowledge/versioning
 - **major**: always ask user via AskUserQuestion
 - **none**: internal-only changes (no user-visible impact)
 
-Mandatory verification grep after bumping.
+### Mandatory Version Verification Gate
+
+After bumping, grep ALL version files and verify they match the new version.
+This is a **hard gate** — if ANY file is out of sync, STOP and fix before continuing.
+
+```
+Files to verify (all must show the new version):
+- .claude-plugin/plugin.json         → "version": "X.Y.Z"
+- .claude-plugin/marketplace.json    → "version": "X.Y.Z"
+- README.md                          → **Version: X.Y.Z**
+- CHANGELOG.md                       → ## [X.Y.Z] — <date> (must exist as newest entry)
+- .claude/.plugin-version            → X.Y.Z (plain text, single line)
+```
+
+Run: `grep -rn "X.Y.Z" README.md CHANGELOG.md .claude-plugin/plugin.json .claude-plugin/marketplace.json .claude/.plugin-version`
+
+Expected: **5 matches minimum** (one per file). If fewer → a file was missed. Fix it before proceeding.
+
+If bump type is "none", skip this gate entirely.
 
 ## Step 4 — Commit, Push, PR, Merge
 
