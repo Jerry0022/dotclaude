@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.3] — 2026-03-27
+
+### Added
+- `pre.ship.guard` now blocks push when hooks in `hooks.json` are missing from `plugin.json`
+
 ## [0.1.2] — 2026-03-27
 
 ### Fixed
