@@ -28,6 +28,7 @@ const SYNC_DIRS = [
   'deep-knowledge',
   'templates',
   'scripts',
+  'scheduled-tasks',
 ];
 
 function getLocalVersion() {

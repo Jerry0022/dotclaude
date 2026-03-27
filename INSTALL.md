@@ -60,15 +60,17 @@ Merge the following three blocks into the existing settings JSON. Do NOT overwri
 
 Claude Code does NOT auto-register hooks from plugin manifests. Without this block, skills and agents work but hooks won't fire.
 
+**Important:** Hook commands must use absolute paths via `$HOME/.claude/hooks/` because the working directory at runtime is the consumer project, not the plugin directory. The plugin's auto-updater (`ss.plugin.update`) syncs all hooks into `~/.claude/hooks/`.
+
 ```json
 {
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "node hooks/session-start/ss.plugin.update.js" },
-          { "type": "command", "command": "node hooks/session-start/ss.tokens.scan.js" },
-          { "type": "command", "command": "node hooks/session-start/ss.tasks.register.js" }
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/session-start/ss.plugin.update.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/session-start/ss.tokens.scan.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/session-start/ss.tasks.register.js\"" }
         ]
       }
     ],
@@ -76,13 +78,13 @@ Claude Code does NOT auto-register hooks from plugin manifests. Without this blo
       {
         "matcher": "Read|Bash|Glob|Grep",
         "hooks": [
-          { "type": "command", "command": "node hooks/pre-tool-use/pre.tokens.guard.js" }
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/pre-tool-use/pre.tokens.guard.js\"" }
         ]
       },
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "node hooks/pre-tool-use/pre.ship.guard.js" }
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/pre-tool-use/pre.ship.guard.js\"" }
         ]
       }
     ],
@@ -90,29 +92,30 @@ Claude Code does NOT auto-register hooks from plugin manifests. Without this blo
       {
         "matcher": "Edit|Write",
         "hooks": [
-          { "type": "command", "command": "node hooks/post-tool-use/post.flow.completion.js" }
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/post-tool-use/post.flow.completion.js\"" }
         ]
       },
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "node hooks/post-tool-use/post.debug.trigger.js" }
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/post-tool-use/post.debug.trigger.js\"" }
         ]
       }
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "node hooks/user-prompt-submit/prompt.git.sync.js" },
-          { "type": "command", "command": "node hooks/user-prompt-submit/prompt.issue.detect.js" }
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/user-prompt-submit/prompt.git.sync.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/user-prompt-submit/prompt.issue.detect.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/user-prompt-submit/prompt.ship.detect.js\"" }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "node hooks/stop/stop.ship.guard.js" },
-          { "type": "command", "command": "node hooks/stop/stop.flow.completion.js" }
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/stop/stop.ship.guard.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/stop/stop.flow.completion.js\"" }
         ]
       }
     ]
@@ -133,14 +136,37 @@ When the target `settings.json` already has content:
 
 Write the merged result back to the settings file.
 
-## Step 4: Verify installation
+## Step 4: Bootstrap — initial hook sync
+
+The SessionStart hooks reference `~/.claude/hooks/` but on first install those files don't exist yet (the auto-updater `ss.plugin.update` is itself one of the hooks that need to be synced first). Perform the initial sync now:
+
+1. Download the latest release from the plugin repo:
+   ```bash
+   gh release download --repo Jerry0022/dotclaude-dev-ops --archive tar.gz --dir "$TMPDIR/dotclaude-bootstrap"
+   ```
+
+2. Extract and sync directories into `~/.claude/`:
+   ```bash
+   tar -xzf "$TMPDIR/dotclaude-bootstrap"/*.tar.gz -C "$TMPDIR/dotclaude-bootstrap/extracted"
+   ```
+
+3. Copy each plugin directory (`hooks`, `skills`, `agents`, `deep-knowledge`, `templates`, `scripts`, `scheduled-tasks`) from the extracted archive into `~/.claude/`. Overwrite existing files.
+
+4. Write the current version to `~/.claude/.plugin-version` (extract from the release tag).
+
+5. Clean up the temp directory.
+
+After this step, all hooks exist at `~/.claude/hooks/` and the SessionStart hooks will work on the next session restart. Subsequent updates are handled automatically by `ss.plugin.update`.
+
+## Step 5: Verify installation
 
 Run these checks and report results:
 
 1. **Settings file exists** — confirm the file was written successfully
 2. **All three blocks present** — `extraKnownMarketplaces`, `enabledPlugins`, `hooks`
-3. **Hook count** — count registered hooks across all lifecycle events (expected: 11 hook commands)
+3. **Hook count** — count registered hooks across all lifecycle events (expected: 12 hook commands)
 4. **Parse check** — confirm the JSON is valid (no syntax errors)
+5. **Bootstrap check** — confirm `~/.claude/hooks/session-start/ss.plugin.update.js` exists (from Step 4)
 
 ### Expected output
 
@@ -151,7 +177,7 @@ Plugin installiert:
   Ziel:    {global | project path}
   Marketplace: Jerry0022 registriert
   Plugin:  dotclaude-dev-ops@Jerry0022 aktiviert
-  Hooks:   {n}/11 registriert
+  Hooks:   {n}/12 registriert
   Status:  OK
 
 Starte eine neue Session, damit die Hooks aktiv werden.
@@ -159,7 +185,7 @@ Starte eine neue Session, damit die Hooks aktiv werden.
 
 If any check fails, report the specific issue and offer to fix it.
 
-## Step 5: Project configuration scan (project-level install only)
+## Step 6: Project configuration scan (project-level install only)
 
 **Skip this step if the user chose global installation.**
 
@@ -199,7 +225,7 @@ Options:
 
 4. **Explain** that these extensions are automatically picked up by the plugin's skills (Layer 3 of the 3-layer extension model) and can be edited at any time.
 
-## Step 6: Post-install notes
+## Step 7: Post-install notes
 
 Tell the user:
 - Restart Claude Code or start a new session for hooks to take effect
