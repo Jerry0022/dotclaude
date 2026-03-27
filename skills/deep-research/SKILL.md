@@ -115,4 +115,7 @@ Match output depth to question complexity:
 - Note the date/recency of each source — flag anything older than 12 months.
 - Do not fabricate sources or URLs.
 - If no reliable sources exist, say so explicitly.
+- **Fact verification mandatory** — double-check every claim and statistic.
+  If 3+ fact references in the output, include a verification table
+  (see `deep-knowledge/fact-verification.md` for format).
 - End with: "Soll ich auf einen bestimmten Aspekt tiefer eingehen?"

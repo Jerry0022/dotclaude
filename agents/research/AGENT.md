@@ -29,3 +29,5 @@ See /deep-research skill for full format specification.
 - Note recency of each source
 - Never fabricate sources
 - Flag information older than 12 months
+- **Fact verification mandatory** — see `deep-knowledge/fact-verification.md`.
+  Double-check every claim. Include verification table if 3+ facts.
