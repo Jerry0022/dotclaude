@@ -15,6 +15,11 @@ the plugin's rules. Runs every 30 minutes during active sessions.
 Find all `feedback_*.md` files in the current project's memory directory.
 Read each file. Check session behavior against each rule.
 
+When auditing completion-flow rules, check whether the **full completion flow**
+was executed (verify → issue status → completion card → ship recommendation),
+not just whether a card was output. Directly rendering a card without going
+through the flow bypasses verify and issue-update steps — that is also a violation.
+
 If a violation is found → correct immediately and briefly report.
 
 ## Step 2 — Learn

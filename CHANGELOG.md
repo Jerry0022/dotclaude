@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.4] — 2026-03-27
+
+### Fixed
+- `self-calibration`: audit now checks full completion flow execution (verify → issue status → card → ship recommendation), not just whether a card was directly rendered
+
 ## [0.2.3] — 2026-03-27
 
 ### Changed
