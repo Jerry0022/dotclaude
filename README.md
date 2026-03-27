@@ -142,7 +142,23 @@ After installation, you should see:
 - **Skills** available: `/ship`, `/commit`, `/debug`, `/deep-research`, `/explain`, `/new-issue`, `/project-setup`, `/readme`, `/refresh-usage`
 - **Hooks firing automatically** — e.g., `pre.tokens.guard` blocking expensive operations, `ss.tokens.scan` running at session start
 
+If skills work but hooks don't fire, check that the `hooks` block is present in the correct `settings.json`:
+
+```bash
+# Should output the path that Claude Code is actually using
+cat {project}/.claude/settings.json | grep -c '"hooks"'  # must be > 0
+```
+
 If skills work but hooks don't fire, the `hooks` block is missing from your `settings.json`. See Step 3 above.
+
+### Working in a git worktree
+
+`.claude/settings.json` is local to each checkout. If you install the plugin or add hooks while inside a worktree, the changes only affect that worktree — **not** the main project directory.
+
+How to propagate the changes depends on whether the file is tracked by git:
+
+- **Tracked** — commit the changes in the worktree branch and merge it into main as usual.
+- **Gitignored** (the default, see recommendation above) — the file is never committed. Open `{main-project}/.claude/settings.json` directly and merge Step 3 from above into it manually. Then start a new session from the main project directory.
 
 ## Updates
 
