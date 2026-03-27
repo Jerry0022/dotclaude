@@ -32,8 +32,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-// Store usage data in the project's .claude dir (portable, not hardcoded to ~/.claude)
-const SCRIPTS_DIR = path.join(process.cwd(), '.claude');
+// Store usage data in ~/.claude — same location regardless of CWD or worktree
+const SCRIPTS_DIR = path.join(os.homedir(), '.claude');
 const USAGE_LIVE_PATH = path.join(SCRIPTS_DIR, 'usage-live.json');
 const USAGE_URL = 'https://claude.ai/settings/usage';
 const CDP_PORT = 9223;

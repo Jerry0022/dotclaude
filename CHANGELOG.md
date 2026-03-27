@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.1] — 2026-03-27
+
+### Fixed
+- `refresh-usage`: `usage-live.json` was written to `{cwd}/.claude/` — broken in worktrees where that path doesn't exist. Now always writes to `~/.claude/` (account-scoped data, not project-specific)
+
 ## [0.3.0] — 2026-03-27
 
 ### Changed
