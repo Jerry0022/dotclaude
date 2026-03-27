@@ -12,8 +12,13 @@
         "command": "node hooks/session-start/ss.tokens.scan.js"
       },
       {
+        "name": "ss.branches.check",
+        "description": "Check for uncommitted/unpushed changes at session start, warn if dirty",
+        "command": "node hooks/session-start/ss.branches.check.js"
+      },
+      {
         "name": "ss.tasks.register",
-        "description": "Register plugin scheduled tasks (stale-check, self-calibration) via CronCreate",
+        "description": "Register plugin scheduled tasks (self-calibration) via CronCreate",
         "command": "node hooks/session-start/ss.tasks.register.js"
       }
     ],

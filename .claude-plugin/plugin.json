@@ -1,6 +1,6 @@
 {
   "name": "dotclaude-dev-ops",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Complete DevOps automation for Claude Code: hooks, skills, templates, and git hygiene. Ship faster, safer, smarter.",
   "author": "Jerry0022",
   "homepage": "https://github.com/Jerry0022/dotclaude-dev-ops",
@@ -19,6 +19,7 @@
   "hooks": [
     "ss.plugin.update",
     "ss.tokens.scan",
+    "ss.branches.check",
     "ss.tasks.register",
     "pre.tokens.guard",
     "pre.ship.guard",

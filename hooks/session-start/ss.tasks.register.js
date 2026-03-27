@@ -19,12 +19,6 @@ const TASKS_DIR = path.join(PLUGIN_DIR, 'scheduled-tasks');
 
 const TASK_DEFINITIONS = [
   {
-    id: 'stale-changes-check',
-    cron: '17 9 * * *',  // Daily ~9am (offset from :00 to spread load)
-    recurring: true,
-    description: 'Daily audit for uncommitted/unpushed changes',
-  },
-  {
     id: 'self-calibration',
     cron: '*/30 * * * *',
     recurring: true,

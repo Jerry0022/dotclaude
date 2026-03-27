@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.3] — 2026-03-27
+
+### Changed
+- `stale-changes-check`: converted from daily cron to `SessionStart` hook (`ss.branches.check.js`) — runs at every session start, silent when clean, brief inline warning only when issues are found
+
 ## [0.2.2] — 2026-03-27
 
 ### Fixed
