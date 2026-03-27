@@ -47,11 +47,70 @@ Add these keys to your target `settings.json` (global or project-level, see tabl
   // Step 2: Enable the plugin
   "enabledPlugins": {
     "dotclaude-dev-ops@Jerry0022": true
+  },
+  // Step 3: Register the hooks
+  // Claude Code does NOT auto-register hooks from plugin manifests.
+  // Without this section, skills and agents work but hooks won't fire.
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node hooks/session-start/ss.plugin.update.js" },
+          { "type": "command", "command": "node hooks/session-start/ss.tokens.scan.js" },
+          { "type": "command", "command": "node hooks/session-start/ss.tasks.register.js" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Bash|Glob|Grep",
+        "hooks": [
+          { "type": "command", "command": "node hooks/pre-tool-use/pre.tokens.guard.js" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node hooks/pre-tool-use/pre.ship.guard.js" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "node hooks/post-tool-use/post.flow.completion.js" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node hooks/post-tool-use/post.debug.trigger.js" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node hooks/user-prompt-submit/prompt.git.sync.js" },
+          { "type": "command", "command": "node hooks/user-prompt-submit/prompt.issue.detect.js" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node hooks/stop/stop.ship.guard.js" }
+        ]
+      }
+    ]
   }
 }
 ```
 
 Merge these keys into your existing `settings.json` — do not overwrite the entire file.
+
+> **Important:** Step 3 (hooks) is required. Claude Code's plugin system loads skills and agents automatically, but hooks must be explicitly registered in `settings.json`. Without the `hooks` block, the plugin's automated guards (token limits, push safety, git sync) will not fire.
 
 After saving, restart Claude Code or start a new session. The plugin's hooks, skills, and agents become available immediately.
 
@@ -67,21 +126,23 @@ claude --plugin-dir /path/to/dotclaude-dev-ops
 
 Tell Claude in chat:
 
-> "Install the dotclaude-dev-ops plugin from Jerry0022 globally."
+> "Install the dotclaude-dev-ops plugin from Jerry0022 globally, including hooks."
 
 or for a specific project:
 
-> "Install the dotclaude-dev-ops plugin from Jerry0022 for this project."
+> "Install the dotclaude-dev-ops plugin from Jerry0022 for this project, including hooks."
 
-Claude will edit the appropriate `settings.json` for you.
+Claude will edit the appropriate `settings.json` for you. Make sure to mention **"including hooks"** — otherwise Claude may only add the marketplace and plugin keys without registering the hooks.
 
 ---
 
 ### Verifying installation
 
 After installation, you should see:
-- Skills: `/ship`, `/commit`, `/debug`, `/deep-research`, `/explain`, `/new-issue`, `/project-setup`, `/readme`, `/refresh-usage`
-- Hooks running automatically (e.g., token scan at session start)
+- **Skills** available: `/ship`, `/commit`, `/debug`, `/deep-research`, `/explain`, `/new-issue`, `/project-setup`, `/readme`, `/refresh-usage`
+- **Hooks firing automatically** — e.g., `pre.tokens.guard` blocking expensive operations, `ss.tokens.scan` running at session start
+
+If skills work but hooks don't fire, the `hooks` block is missing from your `settings.json`. See Step 3 above.
 
 ## Updates
 
