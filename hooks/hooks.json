@@ -77,11 +77,6 @@
         "name": "stop.ship.guard",
         "description": "Warn about uncommitted changes, suggest WIP commit before session ends",
         "command": "node hooks/stop/stop.ship.guard.js"
-      },
-      {
-        "name": "stop.flow.completion",
-        "description": "Enforce full completion flow: visual verification, issue update, ship recommendation, mandatory completion card",
-        "command": "node hooks/stop/stop.flow.completion.js"
       }
     ]
   }
