@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.edit-counter
- * @version 0.2.0
+ * @version 0.3.0
  * @event PostToolUse
  * @plugin dotclaude-dev-ops
  * @description After code edits (Edit/Write): increment the session-scoped
@@ -14,9 +14,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
-
-const SESSION_FILE = path.join(os.tmpdir(), `dotclaude-devops-edits-${process.ppid}`);
+const { sessionFile } = require('../lib/session-id');
 
 // Read hook input from stdin
 let inputData = '';
@@ -44,11 +42,12 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
-  // Increment edit counter
+  // Increment edit counter (keyed on session_id from Claude Code)
+  const counterFile = sessionFile('dotclaude-devops-edits', hook.session_id);
   let editCount = 0;
   try {
-    editCount = parseInt(fs.readFileSync(SESSION_FILE, 'utf8'), 10) || 0;
+    editCount = parseInt(fs.readFileSync(counterFile, 'utf8'), 10) || 0;
   } catch {}
   editCount++;
-  try { fs.writeFileSync(SESSION_FILE, editCount.toString()); } catch {}
+  try { fs.writeFileSync(counterFile, editCount.toString()); } catch {}
 });
