@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.1] — 2026-03-27
+
+### Fixed
+- Self-heal relative hook paths on session start — prevents MODULE_NOT_FOUND errors in consumer projects with old installations
+
 ## [0.2.0] — 2026-03-27
 
 ### Added

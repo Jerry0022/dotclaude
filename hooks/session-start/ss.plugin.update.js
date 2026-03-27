@@ -186,8 +186,66 @@ function copyDirRecursive(src, dest) {
   }
 }
 
+/**
+ * Self-healing: fix relative hook paths in settings.json files.
+ * Scans project-level and global settings for hook commands like
+ * `node hooks/...` and rewrites them to `node "$HOME/.claude/hooks/..."`.
+ */
+function healHookPaths() {
+  const RELATIVE_HOOK_RE = /^node\s+(?:"|')?hooks\//;
+  const settingsFiles = [
+    path.join(process.cwd(), '.claude', 'settings.json'),
+    path.join(CLAUDE_DIR, 'settings.json'),
+  ];
+
+  for (const settingsPath of settingsFiles) {
+    try {
+      if (!fs.existsSync(settingsPath)) continue;
+      const raw = fs.readFileSync(settingsPath, 'utf8');
+      const settings = JSON.parse(raw);
+      if (!settings.hooks || typeof settings.hooks !== 'object') continue;
+
+      let changed = false;
+
+      for (const event of Object.values(settings.hooks)) {
+        if (!Array.isArray(event)) continue;
+        for (const group of event) {
+          const hooks = group.hooks;
+          if (!Array.isArray(hooks)) continue;
+          for (const hook of hooks) {
+            if (hook.command && RELATIVE_HOOK_RE.test(hook.command)) {
+              // node hooks/session-start/foo.js → node "$HOME/.claude/hooks/session-start/foo.js"
+              hook.command = hook.command.replace(
+                /^node\s+(?:"|')?hooks\//,
+                'node "$HOME/.claude/hooks/'
+              );
+              // Ensure closing quote
+              if (!hook.command.endsWith('"')) {
+                hook.command = hook.command.replace(/\.js(?:"|')?$/, '.js"');
+              }
+              changed = true;
+            }
+          }
+        }
+      }
+
+      if (changed) {
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        process.stderr.write(
+          `[ss.plugin.update] Healed relative hook paths in ${settingsPath}\n`
+        );
+      }
+    } catch {
+      // Non-fatal — skip silently
+    }
+  }
+}
+
 // Main (async IIFE)
 (async () => {
+  // Always heal hook paths, even if no update is needed
+  healHookPaths();
+
   const localVersion = getLocalVersion();
   const remoteVersion = await getRemoteVersion();
 
