@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 /**
- * @hook post.flow.completion
- * @version 0.1.0
+ * @hook post.flow.edit-counter
+ * @version 0.2.0
  * @event PostToolUse
  * @plugin dotclaude-dev-ops
- * @description After code edits (Edit/Write): detect that changes were made,
- *   recommend visual verification per deep-knowledge/visual-verification.md
- *   and test-strategy.md, update issue status if tracked, and recommend
- *   /ship when the flow appears complete.
+ * @description After code edits (Edit/Write): increment the session-scoped
+ *   edit counter. The completion card reminder has moved to the Stop hook
+ *   (stop.flow.completion.js) so it fires on every completed response.
  *
- *   Uses a session-scoped counter file to track edit count.
- *   Outputs instructions to Claude via stdout.
+ *   This hook only maintains the counter used by the Stop hook to decide
+ *   whether to recommend /ship.
  */
 
 const fs = require('fs');
@@ -41,7 +40,9 @@ process.stdin.on('end', () => {
 
   // Skip non-code files (docs, config, gitignore)
   const skipExtensions = new Set(['.md', '.txt', '.json', '.yml', '.yaml', '.toml', '.gitignore', '.env']);
-  const isCodeChange = !skipExtensions.has(ext);
+  if (skipExtensions.has(ext)) {
+    process.exit(0);
+  }
 
   // Increment edit counter
   let editCount = 0;
@@ -50,31 +51,4 @@ process.stdin.on('end', () => {
   } catch {}
   editCount++;
   try { fs.writeFileSync(SESSION_FILE, editCount.toString()); } catch {}
-
-  // Only output guidance after meaningful code changes
-  if (!isCodeChange) {
-    process.exit(0);
-  }
-
-  // Output instructions to Claude via stdout (injected into context)
-  const instructions = [];
-
-  // Visual verification reminder (every code edit)
-  instructions.push(
-    'Code was modified. After completing the current task:',
-    '1. Verify changes visually per deep-knowledge/visual-verification.md',
-    '2. If a tracked issue exists, prepare to update its status',
-    '3. Render completion card per templates/completion-card.md',
-  );
-
-  // Ship recommendation after substantial work (5+ code edits)
-  if (editCount >= 5) {
-    instructions.push(
-      '',
-      `Session has ${editCount} code edits. When the current task is complete,`,
-      'recommend shipping via /ship unless the user is clearly still iterating.',
-    );
-  }
-
-  process.stdout.write(instructions.join('\n') + '\n');
 });
