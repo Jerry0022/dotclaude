@@ -16,149 +16,19 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 
 ## Installation
 
-### Global vs. Project — which one?
+Tell Claude:
 
-| | Global | Project |
-|---|---|---|
-| **Scope** | All your projects | This repo only |
-| **Stored in** | `~/.claude/settings.json` | `{project}/.claude/settings.json` |
-| **Shared with team** | No (personal) | No — gitignore recommended |
-| **Best for** | Solo devs, personal workflow | Teams that want a shared baseline |
+> "Install the dotclaude-dev-ops plugin from `Jerry0022/dotclaude-dev-ops`."
 
-> **Recommendation:** Install **globally** for personal use. For teams, add the snippet below to each dev's `settings.json` and document the setup in your project's `CLAUDE.md` or contributing guide — do **not** commit `.claude/settings.json` to git, as it may contain personal preferences.
+Claude reads [`INSTALL.md`](INSTALL.md) from this repo and handles everything — asks global vs. project, merges settings, registers hooks, verifies the result.
 
----
-
-### settings.json (recommended)
-
-Add these keys to your target `settings.json` (global or project-level, see table above):
-
-```jsonc
-{
-  // Step 1: Register the marketplace source
-  "extraKnownMarketplaces": {
-    "Jerry0022": {
-      "source": {
-        "source": "github",
-        "repo": "Jerry0022/dotclaude-dev-ops"
-      }
-    }
-  },
-  // Step 2: Enable the plugin
-  "enabledPlugins": {
-    "dotclaude-dev-ops@Jerry0022": true
-  },
-  // Step 3: Register the hooks
-  // Claude Code does NOT auto-register hooks from plugin manifests.
-  // Without this section, skills and agents work but hooks won't fire.
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          { "type": "command", "command": "node hooks/session-start/ss.plugin.update.js" },
-          { "type": "command", "command": "node hooks/session-start/ss.tokens.scan.js" },
-          { "type": "command", "command": "node hooks/session-start/ss.tasks.register.js" }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Read|Bash|Glob|Grep",
-        "hooks": [
-          { "type": "command", "command": "node hooks/pre-tool-use/pre.tokens.guard.js" }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          { "type": "command", "command": "node hooks/pre-tool-use/pre.ship.guard.js" }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          { "type": "command", "command": "node hooks/post-tool-use/post.flow.completion.js" }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          { "type": "command", "command": "node hooks/post-tool-use/post.debug.trigger.js" }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          { "type": "command", "command": "node hooks/user-prompt-submit/prompt.git.sync.js" },
-          { "type": "command", "command": "node hooks/user-prompt-submit/prompt.issue.detect.js" }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          { "type": "command", "command": "node hooks/stop/stop.ship.guard.js" }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Merge these keys into your existing `settings.json` — do not overwrite the entire file.
-
-> **Important:** Step 3 (hooks) is required. Claude Code's plugin system loads skills and agents automatically, but hooks must be explicitly registered in `settings.json`. Without the `hooks` block, the plugin's automated guards (token limits, push safety, git sync) will not fire.
-
-After saving, restart Claude Code or start a new session. The plugin's hooks, skills, and agents become available immediately.
+**Prerequisite:** `gh` CLI authenticated (`gh auth login`).
 
 ### Local development
 
 ```bash
 claude --plugin-dir /path/to/dotclaude-dev-ops
 ```
-
----
-
-### Ask Claude to install it
-
-Tell Claude in chat:
-
-> "Install the dotclaude-dev-ops plugin from Jerry0022 globally, including hooks."
-
-or for a specific project:
-
-> "Install the dotclaude-dev-ops plugin from Jerry0022 for this project, including hooks."
-
-Claude will edit the appropriate `settings.json` for you. Make sure to mention **"including hooks"** — otherwise Claude may only add the marketplace and plugin keys without registering the hooks.
-
----
-
-### Verifying installation
-
-After installation, you should see:
-- **Skills** available: `/ship`, `/commit`, `/debug`, `/deep-research`, `/explain`, `/new-issue`, `/project-setup`, `/readme`, `/refresh-usage`
-- **Hooks firing automatically** — e.g., `pre.tokens.guard` blocking expensive operations, `ss.tokens.scan` running at session start
-
-If skills work but hooks don't fire, check that the `hooks` block is present in the correct `settings.json`:
-
-```bash
-# Should output the path that Claude Code is actually using
-cat {project}/.claude/settings.json | grep -c '"hooks"'  # must be > 0
-```
-
-If skills work but hooks don't fire, the `hooks` block is missing from your `settings.json`. See Step 3 above.
-
-### Working in a git worktree
-
-`.claude/settings.json` is local to each checkout. If you install the plugin or add hooks while inside a worktree, the changes only affect that worktree — **not** the main project directory.
-
-How to propagate the changes depends on whether the file is tracked by git:
-
-- **Tracked** — commit the changes in the worktree branch and merge it into main as usual.
-- **Gitignored** (the default, see recommendation above) — the file is never committed. Open `{main-project}/.claude/settings.json` directly and merge Step 3 from above into it manually. Then start a new session from the main project directory.
 
 ## Updates
 
