@@ -6,7 +6,7 @@
  * @plugin dotclaude-dev-ops
  * @description Periodic git pull/merge on user prompt — keeps the branch
  *   up-to-date with main during long sessions. Throttled to run at most
- *   every 10 minutes to avoid slowing down every prompt.
+ *   every 15 minutes to avoid slowing down every prompt.
  *   Uses the same logic as ss.git.sync (SessionStart), but non-blocking.
  */
 
@@ -16,7 +16,7 @@ const path = require('path');
 const os = require('os');
 
 const THROTTLE_FILE = path.join(os.tmpdir(), `dotclaude-devops-git-sync-${process.ppid}`);
-const THROTTLE_MS = 10 * 60 * 1000; // 10 minutes
+const THROTTLE_MS = 15 * 60 * 1000; // 15 minutes
 
 // Throttle — skip if last sync was recent
 try {

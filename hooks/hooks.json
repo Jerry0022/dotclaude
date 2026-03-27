@@ -48,7 +48,7 @@
     "UserPromptSubmit": [
       {
         "name": "prompt.git.sync",
-        "description": "Periodic git pull/merge main into current branch (throttled, every 10 min)",
+        "description": "Periodic git pull/merge main into current branch (throttled, every 15 min)",
         "command": "node hooks/user-prompt-submit/prompt.git.sync.js"
       },
       {
