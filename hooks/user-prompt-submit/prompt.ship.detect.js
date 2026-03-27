@@ -14,7 +14,7 @@
  */
 
 const fs = require('fs');
-const { sessionFile } = require('../lib/session-id');
+const { sessionFile, readSessionFile } = require('../lib/session-id');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -67,13 +67,14 @@ process.stdin.on('end', () => {
   let isAffirmationAfterCompletion = false;
   if (affirmations.some(re => re.test(userMessage))) {
     // Check if there were code edits in this session (completion card was likely shown)
-    const counterFile = sessionFile('dotclaude-devops-edits', hook.session_id);
-    try {
-      const editCount = parseInt(fs.readFileSync(counterFile, 'utf8'), 10) || 0;
+    // Uses readSessionFile with glob fallback for session_id mismatches (issue #10)
+    const counterResult = readSessionFile('dotclaude-devops-edits', hook.session_id);
+    if (counterResult) {
+      const editCount = parseInt(counterResult.content, 10) || 0;
       if (editCount >= 1) {
         isAffirmationAfterCompletion = true;
       }
-    } catch {}
+    }
   }
 
   if (!isDirectShipIntent && !isAffirmationAfterCompletion) {

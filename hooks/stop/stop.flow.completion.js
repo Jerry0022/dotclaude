@@ -17,7 +17,7 @@
  */
 
 const fs = require('fs');
-const { sessionFile } = require('../lib/session-id');
+const { readSessionFile } = require('../lib/session-id');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -27,12 +27,12 @@ process.stdin.on('end', () => {
   try { hook = JSON.parse(inputData); }
   catch { hook = {}; }
 
-  const counterFile = sessionFile('dotclaude-devops-edits', hook.session_id);
-
+  // Uses readSessionFile with glob fallback for session_id mismatches (issue #10)
   let editCount = 0;
-  try {
-    editCount = parseInt(fs.readFileSync(counterFile, 'utf8'), 10) || 0;
-  } catch {}
+  const counterResult = readSessionFile('dotclaude-devops-edits', hook.session_id);
+  if (counterResult) {
+    editCount = parseInt(counterResult.content, 10) || 0;
+  }
 
   const lines = [];
 
