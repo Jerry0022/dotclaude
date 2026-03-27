@@ -10,6 +10,7 @@ node_modules/
 .claude/backups/
 .claude/session-env/
 .claude/worktrees/
+.claude/token-config.json
 
 # Secrets
 .credentials.json
