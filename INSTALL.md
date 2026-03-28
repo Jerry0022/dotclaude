@@ -89,13 +89,6 @@ The path prefix `$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops` points to
           { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.flow.appstart.js\"" }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/stop/stop.ship.guard.js\"" }
-        ]
-      }
     ]
   }
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.11.1] — 2026-03-28
+
+### Removed
+- **Stop hook**: Removed `stop.ship.guard` — redundant with Ship Pre-Flight (Step 1) and caused noisy warnings after every Claude response
+
 ## [0.11.0] — 2026-03-28
 
 ### Added

@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.11.0**
+**Version: 0.11.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -8,7 +8,7 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 
 ## Features
 
-- **13 Hooks** — automated guards and triggers across the full session lifecycle
+- **11 Hooks** — automated guards and triggers across the full session lifecycle
 - **9 Skills** — ship, commit, debug, research, explain, issues, project setup, readme, usage tracking
 - **9 Agents** — QA, Feature Worker, Research, PO, Frontend, Core, Windows, AI, Gamer
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
@@ -69,10 +69,6 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 - `prompt.ship.detect` — Detect ship intent, enforce /ship skill
 - `prompt.flow.appstart` — Detect app start intent, enforce completion card
 
-#### Stop — runs when the agent finishes
-
-- `stop.ship.guard` — Warn about uncommitted changes
-
 </details>
 
 <details>
@@ -92,7 +88,6 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 
 - `pre.ship.guard` — Block manual PR commands + git push with dirty state *(PreToolUse)*
 - `prompt.ship.detect` — Detect ship intent, enforce /ship skill *(UserPromptSubmit)*
-- `stop.ship.guard` — Warn about uncommitted changes *(Stop)*
 
 #### flow — track progress toward completion
 
@@ -180,7 +175,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 dotclaude-dev-ops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← 13 hook scripts (JS)
+├── hooks/                         ← 11 hook scripts (JS)
 ├── skills/                        ← 10 skill definitions (SKILL.md)
 ├── agents/                        ← 9 agent templates (AGENT.md)
 ├── deep-knowledge/                ← Cross-cutting reference docs
