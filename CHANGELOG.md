@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0] — 2026-03-28
+
+### Changed
+- **Plugin format**: migrated to official plugin-dev format (auto-discovery for skills, agents, hooks)
+- **plugin.json**: removed explicit `skills[]`, `hooks[]`, `tags[]` arrays; `author` as object; `keywords` replaces `tags`
+- **marketplace.json**: simplified to minimal format (name, owner, plugins)
+- **Agents**: moved from subdirectories (`agents/<name>/AGENT.md`) to flat files (`agents/<name>.md`)
+- **Agent frontmatter**: added `model`, `color`, `tools` (array), `<example>` tags; removed `subagent_type`, `version`
+
+### Fixed
+- **plugin-guard**: supports both old (`@Jerry0022`) and new (`@dotclaude-dev-ops`) plugin keys
+- **refresh-usage**: aggressive 6-step fallback chain — CDP → auto-start Edge → activate CDP → Playwright → cache → [no data]
+- **Star-Citizen-Companion**: removed stale hook registrations from `settings.json` and `settings.local.json`
+
 ## [0.5.0] — 2026-03-28
 
 ### Changed
