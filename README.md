@@ -188,6 +188,51 @@ dotclaude-dev-ops/
 └── scripts/                       ← Utility scripts (build-id, usage)
 ```
 
+## Token Overhead
+
+This plugin runs hooks, injects guard prompts, and periodically self-calibrates. That costs tokens. Here's what you're signing up for — and what you get back.
+
+### Weekly plugin overhead (estimated)
+
+| Source | Tokens/week | Notes |
+|---|---|---|
+| Startup hooks (3x per session) | ~8K | Git check, token scan, task registration |
+| Prompt guards (per message) | ~150K–250K | Ship detection, issue tracking, git sync — most exit silently |
+| Tool guards (per tool call) | ~100K–200K | Token budget + ship enforcement — early-exit when clean |
+| Self-calibration (every 30 min) | ~200K–400K | Deep-knowledge rotation, skill internalization |
+| Skill invocations (~15–25/week) | ~15K–30K | Only when you call /ship, /commit, etc. |
+| **Total** | **~500K–900K** | **~0.7M tokens/week on average** |
+
+### What percentage of your plan is that?
+
+Based on ~0.7M tokens/week plugin overhead:
+
+| Plan | Model | Weekly budget (approx.) | Plugin overhead |
+|---|---|---|---|
+| Pro ($20) | Sonnet | ~10M | **~7%** |
+| Pro ($20) | Opus | ~3M | **~23%** |
+| Max 5x ($100) | Sonnet | ~55M | **~1.3%** |
+| Max 5x ($100) | Opus | ~18M | **~3.9%** |
+| Max 20x ($200) | Sonnet | ~225M | **~0.3%** |
+| Max 20x ($200) | Opus | ~75M | **~0.9%** |
+
+*Budgets are rough estimates and vary by usage pattern. Anthropic adjusts limits dynamically.*
+
+### What you get back
+
+| Without plugin | With plugin |
+|---|---|
+| "Wait, did I push that?" | Git state checked on every session start |
+| `git push --force` to main at 2 AM | Blocked before it happens |
+| Forgetting to bump the version | /ship handles version, PR, merge, cleanup |
+| "Why is my context window gone?" | Token guard kills expensive reads before they land |
+| Debugging the same error 4 times | /flow kicks in after the second failure |
+| Writing commit messages by hand | Conventional commits, auto-staged, one command |
+
+**Net calculation:** ~0.7M tokens/week buys you roughly 2–4 hours of not fighting git, not forgetting steps, and not explaining to your future self why the build broke. Per hour saved, that's about 200K tokens — or roughly the cost of Claude reading this README seventeen times.
+
+Your mileage may vary. Your sanity will not.
+
 ## License
 
 MIT
