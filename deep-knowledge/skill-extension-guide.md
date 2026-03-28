@@ -130,9 +130,9 @@ Override responsibilities, tools, or collaboration rules per project.
 
 ## Scaffolding
 
-Run `/project-setup --init` to auto-generate extension templates for
-your project. It creates a `/ship` extension scaffold and explains
-the pattern for other skills.
+Run `/extend-skill` to interactively scaffold an extension for any plugin skill.
+It lists all available skills, checks whether an extension already exists in your
+project, and either scaffolds new files or opens the existing ones for editing.
 
 ## Rules
 

@@ -119,57 +119,17 @@ Do NOT generate — inform user to run `/readme` if missing.
 Check and report on: `.editorconfig`, `.gitattributes`, `CHANGELOG.md`.
 Do NOT auto-create — only report status and recommend.
 
-## Step 6 — Scaffold plugin skill extensions
+## Step 6 — Inform about skill extensions
 
-**This is the key onboarding step.** Create an exemplary extension for the
-`/ship` skill to show users how plugin customization works:
+Check if `.claude/skills/` exists in the project. If any extensions are already
+present, list them in the report.
 
-```
-{project}/.claude/skills/ship/
-├── SKILL.md        ← Project-specific ship overrides
-└── reference.md    ← Project-specific context
-```
+Point the user to `/extend-skill` for interactively scaffolding or adapting
+extensions for any plugin skill:
 
-**SKILL.md content (scaffold):**
-```markdown
----
-name: ship
-description: Project-specific ship extensions for {project-name}
----
-
-# Ship Extensions
-
-## Additional quality gates
-<!-- Add project-specific build/test commands here -->
-<!-- Example: npm run lint && npm run test:unit -->
-
-## Deploy target
-<!-- Define where this project deploys -->
-<!-- Example: SSH to 192.168.178.32, GitHub Pages, Vercel -->
-
-## Version files
-<!-- List additional files that contain the version string -->
-<!-- Example: src/version.ts, config/app.json -->
-```
-
-**reference.md content (scaffold):**
-```markdown
-# Ship Reference — {project-name}
-
-## Project context
-<!-- Describe project-specific shipping requirements -->
-
-## CI/CD
-<!-- Link to GitHub Actions workflows, describe release process -->
-```
-
-After scaffolding, explain to the user:
-> "Ich habe eine exemplarische Ship-Extension erstellt unter `.claude/skills/ship/`.
-> Dort kannst du projekt-spezifische Build-Befehle, Deploy-Targets und Version-Dateien
-> definieren. Das Plugin liest diese Dateien automatisch vor jedem Ship.
-> Das gleiche Pattern gilt für **alle** Plugin-Skills — erstelle einfach
-> `.claude/skills/{skill-name}/SKILL.md` oder `reference.md` in deinem Projekt.
-> Mehr dazu: siehe Plugin README."
+> "Du kannst jedes Plugin-Skill für dieses Projekt anpassen.
+> Nutze `/extend-skill`, um interaktiv eine Extension anzulegen oder
+> eine bestehende zu bearbeiten. Mehr dazu: siehe Plugin README."
 
 ## Step 7 — Output report
 
@@ -189,5 +149,5 @@ After scaffolding, explain to the user:
 - [INFO] ...
 
 ### Plugin Extensions
-- [OK] Ship extension scaffolded at .claude/skills/ship/
+- [INFO] Run /extend-skill to scaffold extensions for plugin skills
 ```

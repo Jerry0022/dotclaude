@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.0] — 2026-03-28
+
+### Added
+- **extend-skill** skill: interactive scaffolding for project-level skill extensions — lists available skills, detects existing extensions, creates or adapts SKILL.md + reference.md
+
+### Changed
+- **README** customization section: generic extension pattern with `/ship` as example instead of ship-only documentation
+- **project-setup** Step 6: delegates to `/extend-skill` instead of hardcoded ship scaffold
+- **skill-extension-guide**: scaffolding section references `/extend-skill`
+
 ## [0.7.0] — 2026-03-28
 
 ### Added

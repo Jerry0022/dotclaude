@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.7.0**
+**Version: 0.8.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -146,6 +146,7 @@ The plugin uses semantic versioning. Breaking changes only in major versions.
 | `/project-setup` | Repo hygiene audit and initialization |
 | `/readme` | Modern README generation |
 | `/refresh-usage` | Token usage tracking (CLI + CDP) |
+| `/extend-skill` | Scaffold or adapt project-level skill extensions |
 
 ### Agents (spawned for parallel work)
 
@@ -171,17 +172,28 @@ Layer 2: User global (~/.claude/)     ← your personal overrides
 Layer 3: Project ({project}/.claude/) ← project-specific rules
 ```
 
-To extend a skill for your project, create:
+To extend any plugin skill for your project, create a directory matching the
+skill's name under `.claude/skills/` in your project:
 
 ```
-your-project/.claude/skills/ship/
+your-project/.claude/skills/{skill-name}/
 ├── SKILL.md        ← override or add steps
 └── reference.md    ← project-specific context
 ```
 
 The plugin reads your extensions before executing and merges them. Your rules win on conflict.
+Both files are optional — create only what you need.
 
-Run `/project-setup --init` to scaffold extension templates automatically.
+**Example** — extending `/ship` with project-specific quality gates and deploy targets:
+
+```
+your-project/.claude/skills/ship/
+├── SKILL.md        ← "Before PR: run ng build --prod"
+└── reference.md    ← "Deploy via SSH to 192.168.178.32"
+```
+
+Run `/extend-skill` to interactively scaffold an extension for any plugin skill.
+It detects existing extensions and lets you adapt them.
 
 For the full extension guide with examples per skill, see `deep-knowledge/skill-extension-guide.md`.
 
@@ -192,7 +204,7 @@ dotclaude-dev-ops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
 ├── hooks/                         ← 13 hook scripts (JS)
-├── skills/                        ← 9 skill definitions (SKILL.md)
+├── skills/                        ← 10 skill definitions (SKILL.md)
 ├── agents/                        ← 9 agent templates (AGENT.md)
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
