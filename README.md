@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.6.1**
+**Version: 0.6.2**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -40,7 +40,7 @@ The plugin uses semantic versioning. Breaking changes only in major versions.
 | Event | Hook | What it does |
 |---|---|---|
 | SessionStart | `ss.tokens.scan` | Scan project for expensive files |
-| SessionStart | `ss.branches.check` | Check for uncommitted/unpushed changes |
+| SessionStart | `ss.git.check` | Check for uncommitted/unpushed changes |
 | SessionStart | `ss.tasks.register` | Auto-register scheduled tasks |
 | PreToolUse | `pre.tokens.guard` | Block operations exceeding token budget |
 | PreToolUse | `pre.ship.guard` | Block manual PR commands + git push with dirty state |

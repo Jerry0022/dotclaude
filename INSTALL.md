@@ -47,7 +47,7 @@ The path prefix `$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops` points to
       {
         "hooks": [
           { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.tokens.scan.js\"" },
-          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.branches.check.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.git.check.js\"" },
           { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.tasks.register.js\"" }
         ]
       }

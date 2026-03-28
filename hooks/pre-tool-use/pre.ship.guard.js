@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 /**
  * @hook pre.ship.guard
- * @version 0.3.0
+ * @version 0.4.0
  * @event PreToolUse
  * @plugin dotclaude-dev-ops
- * @description Block manual PR commands and redirect to /ship skill.
- *   Also block git push when uncommitted files exist or version
- *   references are inconsistent.
+ * @description Guard git push: block on dirty tree, version mismatch,
+ *   or hook registry inconsistency.
  */
 
 require('../lib/plugin-guard');
@@ -14,7 +13,6 @@ require('../lib/plugin-guard');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { sessionFile, readSessionFile } = require('../lib/session-id');
 
 const cwd = process.cwd();
 
@@ -168,43 +166,7 @@ process.stdin.on('end', () => {
   const cmdBeforeHeredoc = cmd.split(/<<['"]?\w*['"]?$/m)[0] || cmd;
   const cmdStripped = cmdBeforeHeredoc.replace(/"[^"]*"/g, '').replace(/'[^']*'/g, '');
 
-  // --- Check 0: Block manual PR commands — redirect to /ship ---
-  // Allow if the ship flow is active (flag set by prompt.ship.detect)
-  const prCreatePattern = /\bgh\s+pr\s+create\b/;
-  const prMergePattern = /\bgh\s+pr\s+merge\b/;
-
-  if (prCreatePattern.test(cmdStripped) || prMergePattern.test(cmdStripped)) {
-    // Check for ship-flow flag (set by prompt.ship.detect when user triggered /ship)
-    // Uses readSessionFile with glob fallback to handle session_id mismatches
-    // between UserPromptSubmit and PreToolUse hooks (issue #10).
-    const result = readSessionFile('dotclaude-devops-ship-flow', hook.session_id);
-    let inShipFlow = false;
-    if (result) {
-      const ts = parseInt(result.content, 10);
-      // Flag valid for 30 minutes
-      inShipFlow = !isNaN(ts) && (Date.now() - ts) < 30 * 60 * 1000;
-    }
-
-    if (!inShipFlow) {
-      const action = prCreatePattern.test(cmdStripped) ? 'PR create' : 'PR merge';
-      console.error(`\n\u26d4 BLOCKED \u2014 manual ${action} is not allowed`);
-      console.error('\u2500'.repeat(50));
-      console.error('');
-      console.error('Use Skill("ship") instead. The /ship skill handles the full pipeline:');
-      console.error('  pre-flight checks \u2192 build \u2192 version bump \u2192 commit \u2192 push \u2192 PR \u2192 merge \u2192 cleanup');
-      console.error('');
-      console.error('Manual PR commands bypass quality gates and version bumping.');
-      console.error('\u2500'.repeat(50));
-      console.error('');
-      process.exit(2);
-    }
-    // In ship flow — allow PR commands, but clear flag after merge
-    if (prMergePattern.test(cmdStripped) && result) {
-      try { fs.unlinkSync(result.filePath); } catch {}
-    }
-  }
-
-  // Only guard git push commands for remaining checks
+  // Only guard git push commands
   if (!/\bgit\s+push\b/.test(cmdStripped)) {
     process.exit(0);
   }

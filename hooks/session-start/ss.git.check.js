@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * @hook ss.branches.check
+ * @hook ss.git.check
  * @version 0.2.0
  * @event SessionStart
  * @plugin dotclaude-dev-ops

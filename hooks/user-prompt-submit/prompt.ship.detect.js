@@ -1,22 +1,18 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.1.0
+ * @version 0.2.0
  * @event UserPromptSubmit
  * @plugin dotclaude-dev-ops
- * @description Detect ship intent in user prompts and enforce Skill('ship').
+ * @description Detect ship intent in user prompts and inject Skill('ship') instruction.
  *   Triggers on keywords like "ship", "shippen", "ab damit", "mach nen PR",
  *   "merge it", "das kann rein", "fertig", and affirmations after a completion
  *   card ("ja", "yes", "mach", "go", "do it").
- *
- *   When detected, injects a mandatory instruction to use Skill('ship')
- *   instead of manual git/gh commands.
  */
 
 require('../lib/plugin-guard');
 
-const fs = require('fs');
-const { sessionFile, readSessionFile } = require('../lib/session-id');
+const { readSessionFile } = require('../lib/session-id');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -48,9 +44,6 @@ process.stdin.on('end', () => {
   const isDirectShipIntent = shipKeywords.some(re => re.test(userMessage));
 
   // --- Affirmation after completion card (short messages) ---
-  // When user says "ja", "yes", "mach", "go" etc. after a completion card was shown,
-  // they almost certainly mean "ship it". We detect this via the edit counter
-  // (completion card is shown after edits) + short affirmation.
   const affirmations = [
     /^ja[.,!]?$/,
     /^yes[.,!]?$/,
@@ -68,8 +61,6 @@ process.stdin.on('end', () => {
 
   let isAffirmationAfterCompletion = false;
   if (affirmations.some(re => re.test(userMessage))) {
-    // Check if there were code edits in this session (completion card was likely shown)
-    // Uses readSessionFile with glob fallback for session_id mismatches (issue #10)
     const counterResult = readSessionFile('dotclaude-devops-edits', hook.session_id);
     if (counterResult) {
       const editCount = parseInt(counterResult.content, 10) || 0;
@@ -83,11 +74,7 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
-  // --- Set session-scoped ship-flow flag (used by pre.ship.guard to allow PR commands) ---
-  const flagFile = sessionFile('dotclaude-devops-ship-flow', hook.session_id);
-  try { fs.writeFileSync(flagFile, Date.now().toString()); } catch {}
-
-  // --- Inject mandatory ship instruction ---
+  // --- Inject ship instruction (soft guidance, no flag files) ---
   const reason = isDirectShipIntent
     ? `Ship intent detected: "${userMessage}"`
     : `Affirmation after code changes: "${userMessage}"`;

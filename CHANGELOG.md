@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.2] — 2026-03-28
+
+### Changed
+- **ss.branches.check** renamed to **ss.git.check** — consistent naming (`ss.<domain>.<action>`)
+- **pre.ship.guard**: removed manual PR blocking and ship-flow flag mechanism (simplified to push guard only)
+- **prompt.ship.detect**: removed flag file writes, soft guidance only
+
+### Fixed
+- Hook references updated across hooks.json, README.md, INSTALL.md
+
 ## [0.6.1] — 2026-03-28
 
 ### Removed
