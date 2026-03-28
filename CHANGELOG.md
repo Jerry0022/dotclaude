@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.9.0] — 2026-03-28
+
+### Added
+- **Ship skill**: Session Activity Guard (Pre-Step) — checks for running background agents, bash commands, and incomplete tasks before shipping; offers wait/proceed/cancel options
+
 ## [0.8.2] — 2026-03-28
 
 ### Changed

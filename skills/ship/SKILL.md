@@ -15,6 +15,26 @@ allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, G
 
 Ship completed work to main via PR.
 
+## Pre-Step — Session Activity Guard
+
+Before anything else, check whether this session still has work in progress.
+
+1. Check for **background agents** still running (Agent tool results pending)
+2. Check for **background Bash commands** still executing
+3. Check for **TodoWrite tasks** that are not yet marked `completed` or `cancelled`
+
+If ANY of the above are active:
+
+> **STOP. Do not proceed with shipping.**
+>
+> Inform the user which activities are still in progress (agent names, task descriptions, or command summaries).
+> Ask via AskUserQuestion:
+> - "Warten bis alles fertig ist" — pause and resume /ship automatically when all activity completes
+> - "Trotzdem shippen" — user accepts the risk, continue with Step 0
+> - "Abbrechen" — cancel /ship entirely
+
+This guard only applies to the **current chat session**, not external CI or other terminals.
+
 ## Step 0 — Load Extensions
 
 Silently check for optional overrides (do not surface "not found" in output):
