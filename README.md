@@ -37,99 +37,79 @@ The plugin uses semantic versioning. Breaking changes only in major versions.
 
 ### Hooks (automatic, no user action needed)
 
+13 hooks fire automatically across the session lifecycle — no user action needed.
+
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
 
-> **SessionStart** `-->` **PreToolUse** `-->` **PostToolUse** `-->` **UserPromptSubmit** `-->` **Stop**
+```
+SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubmit  ──>  Stop
+```
 
-**SessionStart** — runs once when a session begins
+#### SessionStart — runs once when a session begins
 
-| Category | Action | Description | Hook |
-|---|---|---|---|
-| tokens | scan | Scan project for expensive files | `ss.tokens.scan` |
-| git | check | Check for uncommitted/unpushed changes | `ss.git.check` |
-| tasks | register | Auto-register scheduled tasks | `ss.tasks.register` |
+- `ss.tokens.scan` — Scan project for expensive files
+- `ss.git.check` — Check for uncommitted/unpushed changes
+- `ss.tasks.register` — Auto-register scheduled tasks
 
-**PreToolUse** — runs before each tool call
+#### PreToolUse — runs before each tool call
 
-| Category | Action | Description | Hook |
-|---|---|---|---|
-| tokens | guard | Block operations exceeding token budget | `pre.tokens.guard` |
-| ship | guard | Block manual PR commands + git push with dirty state | `pre.ship.guard` |
+- `pre.tokens.guard` — Block operations exceeding token budget
+- `pre.ship.guard` — Block manual PR commands + git push with dirty state
 
-**PostToolUse** — runs after each tool call
+#### PostToolUse — runs after each tool call
 
-| Category | Action | Description | Hook |
-|---|---|---|---|
-| flow | track | Track code edits for completion flow | `post.flow.completion` |
-| debug | trigger | Recommend debug after repeated failures | `post.debug.trigger` |
+- `post.flow.completion` — Track code edits for completion flow
+- `post.debug.trigger` — Recommend debug after repeated failures
 
-**UserPromptSubmit** — runs when the user sends a message
+#### UserPromptSubmit — runs when the user sends a message
 
-| Category | Action | Description | Hook |
-|---|---|---|---|
-| git | sync | Periodic pull/merge main (every 15 min) | `prompt.git.sync` |
-| issues | detect | Track GitHub issues automatically | `prompt.issue.detect` |
-| ship | detect | Detect ship intent, enforce /ship skill | `prompt.ship.detect` |
-| flow | detect | Detect app start intent, enforce completion card | `prompt.start.detect` |
+- `prompt.git.sync` — Periodic pull/merge main (every 15 min)
+- `prompt.issue.detect` — Track GitHub issues automatically
+- `prompt.ship.detect` — Detect ship intent, enforce /ship skill
+- `prompt.start.detect` — Detect app start intent, enforce completion card
 
-**Stop** — runs when the agent finishes
+#### Stop — runs when the agent finishes
 
-| Category | Action | Description | Hook |
-|---|---|---|---|
-| ship | guard | Warn about uncommitted changes | `stop.ship.guard` |
+- `stop.ship.guard` — Warn about uncommitted changes
 
 </details>
 
 <details>
 <summary><strong>By category</strong> — what does it guard?</summary>
 
-#### :shield: tokens — prevent context window waste
+#### tokens — prevent context window waste
 
-| Action | Trigger | Description | Hook |
-|---|---|---|---|
-| scan | SessionStart | Scan project for expensive files | `ss.tokens.scan` |
-| guard | PreToolUse | Block operations exceeding token budget | `pre.tokens.guard` |
+- `ss.tokens.scan` — Scan project for expensive files *(SessionStart)*
+- `pre.tokens.guard` — Block operations exceeding token budget *(PreToolUse)*
 
-#### :anchor: git — keep the working tree in sync
+#### git — keep the working tree in sync
 
-| Action | Trigger | Description | Hook |
-|---|---|---|---|
-| check | SessionStart | Check for uncommitted/unpushed changes | `ss.git.check` |
-| sync | UserPromptSubmit | Periodic pull/merge main (every 15 min) | `prompt.git.sync` |
+- `ss.git.check` — Check for uncommitted/unpushed changes *(SessionStart)*
+- `prompt.git.sync` — Periodic pull/merge main, every 15 min *(UserPromptSubmit)*
 
-#### :ship: ship — enforce the shipping pipeline
+#### ship — enforce the shipping pipeline
 
-| Action | Trigger | Description | Hook |
-|---|---|---|---|
-| guard | PreToolUse | Block manual PR commands + git push with dirty state | `pre.ship.guard` |
-| detect | UserPromptSubmit | Detect ship intent, enforce /ship skill | `prompt.ship.detect` |
-| guard | Stop | Warn about uncommitted changes | `stop.ship.guard` |
+- `pre.ship.guard` — Block manual PR commands + git push with dirty state *(PreToolUse)*
+- `prompt.ship.detect` — Detect ship intent, enforce /ship skill *(UserPromptSubmit)*
+- `stop.ship.guard` — Warn about uncommitted changes *(Stop)*
 
-#### :arrows_counterclockwise: flow — track progress toward completion
+#### flow — track progress toward completion
 
-| Action | Trigger | Description | Hook |
-|---|---|---|---|
-| track | PostToolUse | Track code edits for completion flow | `post.flow.completion` |
-| detect | UserPromptSubmit | Detect app start intent, enforce completion card | `prompt.start.detect` |
+- `post.flow.completion` — Track code edits for completion flow *(PostToolUse)*
+- `prompt.start.detect` — Detect app start intent, enforce completion card *(UserPromptSubmit)*
 
-#### :beetle: debug — surface failures early
+#### debug — surface failures early
 
-| Action | Trigger | Description | Hook |
-|---|---|---|---|
-| trigger | PostToolUse | Recommend debug after repeated failures | `post.debug.trigger` |
+- `post.debug.trigger` — Recommend debug after repeated failures *(PostToolUse)*
 
-#### :clipboard: tasks — manage scheduled automation
+#### tasks — manage scheduled automation
 
-| Action | Trigger | Description | Hook |
-|---|---|---|---|
-| register | SessionStart | Auto-register scheduled tasks | `ss.tasks.register` |
+- `ss.tasks.register` — Auto-register scheduled tasks *(SessionStart)*
 
-#### :mag: issues — automatic issue tracking
+#### issues — automatic issue tracking
 
-| Action | Trigger | Description | Hook |
-|---|---|---|---|
-| detect | UserPromptSubmit | Track GitHub issues automatically | `prompt.issue.detect` |
+- `prompt.issue.detect` — Track GitHub issues automatically *(UserPromptSubmit)*
 
 </details>
 
