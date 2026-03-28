@@ -4,13 +4,13 @@ This file is a machine-readable installation procedure. When a user asks Claude 
 
 ## Prerequisites
 
-- Claude Code installed and running
+- Claude Code installed and running (Desktop or CLI)
 
 ## Installation Model
 
 This plugin is installed **globally** — it runs in all projects. No per-project configuration is needed.
 
-## Step 1: Register the marketplace
+## Step 1: Register marketplace and enable plugin
 
 Read `~/.claude/settings.json` (create with `{}` if it doesn't exist).
 
@@ -25,39 +25,97 @@ Merge the following into the existing JSON. Do NOT overwrite existing keys — m
         "repo": "Jerry0022/dotclaude-dev-ops"
       }
     }
-  }
-}
-```
-
-## Step 2: Enable the plugin
-
-Merge into the same `~/.claude/settings.json`:
-
-```json
-{
+  },
   "enabledPlugins": {
     "dotclaude-dev-ops@Jerry0022": true
   }
 }
 ```
 
+## Step 2: Register hooks
+
+Claude Code Desktop does **not** auto-load hooks from plugin `hooks.json` files. Hooks must be registered explicitly in the `hooks` field of `~/.claude/settings.json`.
+
+Merge the following `hooks` block into `~/.claude/settings.json`. If a `hooks` field already exists, merge each event array (do not overwrite existing hooks from other sources).
+
+The path prefix `$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops` points to the marketplace cache directory. Claude Code resolves `$HOME` automatically.
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.plugin.update.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.tokens.scan.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.branches.check.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.tasks.register.js\"" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Bash|Glob|Grep",
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/pre-tool-use/pre.tokens.guard.js\"" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/pre-tool-use/pre.ship.guard.js\"" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/post-tool-use/post.flow.completion.js\"" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/post-tool-use/post.debug.trigger.js\"" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.git.sync.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.issue.detect.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.ship.detect.js\"" },
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.start.detect.js\"" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/stop/stop.ship.guard.js\"" }
+        ]
+      }
+    ]
+  }
+}
+```
+
 ### Merge rules
 
-- **`extraKnownMarketplaces`**: Add the `Jerry0022` key. Keep existing marketplace entries.
-- **`enabledPlugins`**: Add the `dotclaude-dev-ops@Jerry0022` key. Keep existing plugin entries.
-
-Write the merged result back to the file.
-
-**No hook registration needed.** Hooks are auto-loaded from the plugin's `hooks/hooks.json` by the Claude Code plugin system.
+- **`extraKnownMarketplaces`**: Add the `Jerry0022` key. Keep existing entries.
+- **`enabledPlugins`**: Add the `dotclaude-dev-ops@Jerry0022` key. Keep existing entries.
+- **`hooks`**: For each event type (`SessionStart`, `PreToolUse`, etc.), append the hook entries to the existing array. Keep existing hooks from other sources.
 
 ## Step 3: Verify installation
 
 Run these checks and report results:
 
-1. **Settings file written** — confirm `~/.claude/settings.json` contains both blocks
+1. **Settings file written** — confirm `~/.claude/settings.json` contains all three blocks
 2. **Parse check** — confirm the JSON is valid
 3. **Marketplace cloned** — confirm `~/.claude/plugins/marketplaces/dotclaude-dev-ops/` exists (Claude Code clones it automatically on next session start)
-4. **Hooks present** — confirm `hooks/hooks.json` exists in the marketplace directory
+4. **Hook scripts exist** — confirm `hooks/session-start/ss.plugin.update.js` exists in the marketplace directory
 
 ### Expected output
 
@@ -66,7 +124,7 @@ Plugin installiert:
   Scope:       global (~/.claude/settings.json)
   Marketplace: Jerry0022 registriert
   Plugin:      dotclaude-dev-ops@Jerry0022 aktiviert
-  Hooks:       13 hooks via hooks.json (marketplace-direct)
+  Hooks:       13 hooks in settings.json (absolute paths to marketplace cache)
   Auto-Update: ss.plugin.update (every session start)
   Status:      OK
 
@@ -106,5 +164,6 @@ To remove the plugin:
 
 1. Remove `"Jerry0022"` from `extraKnownMarketplaces` in `~/.claude/settings.json`
 2. Remove `"dotclaude-dev-ops@Jerry0022"` from `enabledPlugins` in `~/.claude/settings.json`
-3. Delete `~/.claude/plugins/marketplaces/dotclaude-dev-ops/`
-4. Remove entry from `~/.claude/plugins/known_marketplaces.json` if present
+3. Remove all hook entries containing `dotclaude-dev-ops` from `hooks` in `~/.claude/settings.json`
+4. Delete `~/.claude/plugins/marketplaces/dotclaude-dev-ops/`
+5. Remove entry from `~/.claude/plugins/known_marketplaces.json` if present
