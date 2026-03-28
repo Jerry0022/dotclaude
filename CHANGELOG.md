@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.12.2] — 2026-03-28
+
+### Changed
+- **post.flow.completion** v0.10.0: hook instruction compressed from 36 to 20 lines — variant rules preserved, JSON schema and steps condensed
+
 ## [0.12.1] — 2026-03-28
 
 ### Fixed

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.9.0
+ * @version 0.10.0
  * @event PostToolUse
  * @plugin dotclaude-dev-ops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -53,12 +53,9 @@ process.stdin.on('end', () => {
 
   lines.push(
     '',
-    'When you have finished ALL work for this task, render the completion card by piping JSON to the render script.',
-    'Do NOT render the card yourself — the script produces it deterministically.',
-    '',
-    'STEP 1: Run /refresh-usage to get fresh battery data.',
-    '',
-    'STEP 2: Choose variant:',
+    'COMPLETION CARD — when ALL work is done:',
+    '1. /refresh-usage',
+    '2. Variant:',
     '  if   ship succeeded                 → "shipped"',
     '  elif build/gate/merge failed        → "blocked"',
     '  elif task aborted or not feasible   → "aborted"',
@@ -67,29 +64,14 @@ process.stdin.on('end', () => {
     '  elif code/doc changes, no app       → "ready"',
     '  elif research/review/explanation    → "research"',
     '  else                                → "fallback"',
-    '',
-    'STEP 3: Run via Bash tool:',
-    `  echo '<JSON>' | node ${scriptPath}`,
-    '',
-    'JSON schema:',
-    '  {',
-    '    "variant": "ready|shipped|blocked|test|minimal-start|research|aborted|fallback",',
-    '    "summary": "max ~10 words, user language",',
-    '    "lang": "de",',
-    '    "changes": [{"area":"x","description":"y"}],     // max 3, omit if none',
-    '    "tests": [{"method":"x","result":"y"}],           // max 3, omit if none',
-    '    "state": {                                         // omit for minimal-start',
-    '      "branch": "feat/xyz", "worktree": false,',
-    '      "commit": "abc1234", "pushed": true,',
-    '      "pr": {"number":42,"title":"Title"}, "merged": "remote/main",',
-    '      "appStatus": "running|not-started|null"',
-    '    },',
-    '    "cta": {"info":"PR #42 ready","reason":"lint fails","vOld":"1.2.0","vNew":"1.3.0","bump":"minor","version":"1.3.0","description":"Website opens"},',
-    '    "userTest": ["Step 1","Step 2"]                   // only for test variant',
-    '  }',
-    '',
-    'STEP 4: Output the script result VERBATIM. Nothing before, nothing after.',
-    'The card is always the LAST thing in your response. No text after closing ---.',
+    `3. Bash: echo '<JSON>' | node ${scriptPath}`,
+    '   {"variant":"...","summary":"~10 words","lang":"de",',
+    '    "changes":[{"area":"x","description":"y"}],',
+    '    "tests":[{"method":"x","result":"y"}],',
+    '    "state":{"branch":"...","worktree":false,"commit":"...","pushed":true,"pr":{"number":1,"title":"..."},"merged":"remote/main","appStatus":null},',
+    '    "cta":{"info":"...","reason":"...","vOld":"...","vNew":"...","bump":"...","version":"...","description":"..."},',
+    '    "userTest":["step 1"]}',
+    '4. Output VERBATIM — card LAST, nothing after closing ---.',
   );
 
   if (editCount >= 5) {
