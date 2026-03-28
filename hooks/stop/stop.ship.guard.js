@@ -8,6 +8,8 @@
  *   Suggests WIP commit if dirty state is detected. Non-blocking (exit 0).
  */
 
+require('../lib/plugin-guard');
+
 const { execSync } = require('child_process');
 
 const cwd = process.cwd();

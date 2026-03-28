@@ -13,6 +13,8 @@
  *   instead of manual git/gh commands.
  */
 
+require('../lib/plugin-guard');
+
 const fs = require('fs');
 const { sessionFile, readSessionFile } = require('../lib/session-id');
 

@@ -10,6 +10,8 @@
  *   Tasks are session-scoped — re-registered each session start.
  */
 
+require('../lib/plugin-guard');
+
 const fs = require('fs');
 const path = require('path');
 

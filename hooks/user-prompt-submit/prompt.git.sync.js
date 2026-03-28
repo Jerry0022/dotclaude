@@ -10,6 +10,8 @@
  *   Uses the same logic as ss.git.sync (SessionStart), but non-blocking.
  */
 
+require('../lib/plugin-guard');
+
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');

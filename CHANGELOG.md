@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0] — 2026-03-28
+
+### Changed
+- **Hook architecture**: hooks.json now uses absolute paths to marketplace plugin directory — eliminates bootstrap/sync step entirely
+- **Project isolation**: new `plugin-guard.js` module ensures hooks only fire for projects where `enabledPlugins` is set
+- **ss.plugin.update**: simplified to target marketplace directory directly, removed `getInstallTarget()` and `healHookPaths()` functions
+- **INSTALL.md**: removed Step 3c (hook registration in settings.json) and Step 4 (bootstrap sync) — installation now only requires marketplace + enabledPlugins
+
+### Fixed
+- `stop.flow.completion` removed from plugin.json hook list (script was deleted in v0.3.3 but reference remained)
+- `ss.branches.check` added to README hook table (was missing since v0.3.4)
+
 ## [0.3.4] — 2026-03-27
 
 ### Added

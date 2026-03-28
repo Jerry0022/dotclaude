@@ -9,6 +9,8 @@
  *   first call blocks with warning, second call (same operation) allows through.
  */
 
+require('../lib/plugin-guard');
+
 const fs = require('fs');
 const path = require('path');
 const os = require('os');

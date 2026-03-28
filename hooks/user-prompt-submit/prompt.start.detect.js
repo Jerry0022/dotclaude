@@ -11,6 +11,8 @@
  *   Also injects a reminder that the completion card is mandatory after starting.
  */
 
+require('../lib/plugin-guard');
+
 const fs = require('fs');
 const { sessionFile } = require('../lib/session-id');
 

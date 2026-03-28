@@ -9,6 +9,8 @@
  *   (branch name pattern like feat/42-*), ask the user for confirmation first.
  */
 
+require('../lib/plugin-guard');
+
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');

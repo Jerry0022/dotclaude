@@ -11,6 +11,8 @@
  *   (which fires too late to influence the current response).
  */
 
+require('../lib/plugin-guard');
+
 const fs = require('fs');
 const path = require('path');
 const { sessionFile } = require('../lib/session-id');

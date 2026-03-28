@@ -8,6 +8,8 @@
  *   Silent when clean. Outputs a Claude prompt only when issues are found.
  */
 
+require('../lib/plugin-guard');
+
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');

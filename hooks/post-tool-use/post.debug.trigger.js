@@ -8,6 +8,8 @@
  *   Tracks consecutive failures via a temp file. Resets on success.
  */
 
+require('../lib/plugin-guard');
+
 const fs = require('fs');
 const { sessionFile } = require('../lib/session-id');
 

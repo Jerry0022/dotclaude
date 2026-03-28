@@ -9,6 +9,8 @@
  *   references are inconsistent.
  */
 
+require('../lib/plugin-guard');
+
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');

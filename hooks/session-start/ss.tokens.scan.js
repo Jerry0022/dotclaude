@@ -8,6 +8,8 @@
  *   pre.tokens.guard hook. Identifies the top 20 largest source files.
  */
 
+require('../lib/plugin-guard');
+
 const fs = require('fs');
 const path = require('path');
 

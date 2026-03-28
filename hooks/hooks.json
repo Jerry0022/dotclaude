@@ -4,35 +4,35 @@
       {
         "name": "ss.plugin.update",
         "description": "Check GitHub for newer plugin version, auto-update if available",
-        "command": "node hooks/session-start/ss.plugin.update.js"
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/session-start/ss.plugin.update.js\""
       },
       {
         "name": "ss.tokens.scan",
         "description": "Scan project for expensive files, update config for token guard",
-        "command": "node hooks/session-start/ss.tokens.scan.js"
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/session-start/ss.tokens.scan.js\""
       },
       {
         "name": "ss.branches.check",
         "description": "Check for uncommitted/unpushed changes at session start, warn if dirty",
-        "command": "node hooks/session-start/ss.branches.check.js"
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/session-start/ss.branches.check.js\""
       },
       {
         "name": "ss.tasks.register",
         "description": "Register plugin scheduled tasks (self-calibration) via CronCreate",
-        "command": "node hooks/session-start/ss.tasks.register.js"
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/session-start/ss.tasks.register.js\""
       }
     ],
     "PreToolUse": [
       {
         "name": "pre.tokens.guard",
         "description": "Block operations exceeding 2% of session token limit",
-        "command": "node hooks/pre-tool-use/pre.tokens.guard.js",
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/pre-tool-use/pre.tokens.guard.js\"",
         "matcher": "Read|Bash|Glob|Grep"
       },
       {
         "name": "pre.ship.guard",
         "description": "Block manual PR commands (redirect to /ship) and git push with dirty state",
-        "command": "node hooks/pre-tool-use/pre.ship.guard.js",
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/pre-tool-use/pre.ship.guard.js\"",
         "matcher": "Bash"
       }
     ],
@@ -40,13 +40,13 @@
       {
         "name": "post.flow.completion",
         "description": "After code edits: verify changes, update issue status if tracked, recommend /ship when flow appears complete",
-        "command": "node hooks/post-tool-use/post.flow.completion.js",
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/post-tool-use/post.flow.completion.js\"",
         "matcher": "Edit|Write"
       },
       {
         "name": "post.debug.trigger",
         "description": "After 2+ consecutive Bash failures: recommend debug flow",
-        "command": "node hooks/post-tool-use/post.debug.trigger.js",
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/post-tool-use/post.debug.trigger.js\"",
         "matcher": "Bash"
       }
     ],
@@ -54,29 +54,29 @@
       {
         "name": "prompt.git.sync",
         "description": "Periodic git pull/merge main into current branch (throttled, every 15 min)",
-        "command": "node hooks/user-prompt-submit/prompt.git.sync.js"
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/user-prompt-submit/prompt.git.sync.js\""
       },
       {
         "name": "prompt.issue.detect",
         "description": "Detect issue references in user message, set to In Progress or ask user",
-        "command": "node hooks/user-prompt-submit/prompt.issue.detect.js"
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/user-prompt-submit/prompt.issue.detect.js\""
       },
       {
         "name": "prompt.ship.detect",
         "description": "Detect ship intent in user prompt, enforce Skill('ship') over manual commands",
-        "command": "node hooks/user-prompt-submit/prompt.ship.detect.js"
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/user-prompt-submit/prompt.ship.detect.js\""
       },
       {
         "name": "prompt.start.detect",
         "description": "Detect app start intent, enforce completion card after starting",
-        "command": "node hooks/user-prompt-submit/prompt.start.detect.js"
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/user-prompt-submit/prompt.start.detect.js\""
       }
     ],
     "Stop": [
       {
         "name": "stop.ship.guard",
         "description": "Warn about uncommitted changes, suggest WIP commit before session ends",
-        "command": "node hooks/stop/stop.ship.guard.js"
+        "command": "node \"$HOME/.claude/plugins/marketplaces/jerry0022-dotclaude-dev-ops/hooks/stop/stop.ship.guard.js\""
       }
     ]
   }

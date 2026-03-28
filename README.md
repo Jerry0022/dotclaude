@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.3.4**
+**Version: 0.4.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -21,7 +21,7 @@ Tell Claude:
 
 > "Install the dotclaude-dev-ops plugin from `Jerry0022/dotclaude-dev-ops`."
 
-Claude reads [`INSTALL.md`](INSTALL.md) from this repo and handles everything — asks global vs. project, merges settings, registers hooks, verifies the result.
+Claude reads [`INSTALL.md`](INSTALL.md) from this repo and handles everything — asks global vs. project, merges settings, verifies the result.
 
 ## Updates
 
@@ -50,6 +50,7 @@ The plugin uses semantic versioning. Breaking changes only in major versions.
 |---|---|---|
 | SessionStart | `ss.plugin.update` | Check GitHub for newer plugin version, auto-update |
 | SessionStart | `ss.tokens.scan` | Scan project for expensive files |
+| SessionStart | `ss.branches.check` | Check for uncommitted/unpushed changes |
 | SessionStart | `ss.tasks.register` | Auto-register scheduled tasks |
 | PreToolUse | `pre.tokens.guard` | Block operations exceeding token budget |
 | PreToolUse | `pre.ship.guard` | Block manual PR commands + git push with dirty state |
@@ -60,7 +61,6 @@ The plugin uses semantic versioning. Breaking changes only in major versions.
 | UserPromptSubmit | `prompt.ship.detect` | Detect ship intent, enforce /ship skill |
 | UserPromptSubmit | `prompt.start.detect` | Detect app start intent, enforce completion card |
 | Stop | `stop.ship.guard` | Warn about uncommitted changes |
-| Stop | `stop.flow.completion` | Enforce full completion flow with mandatory card |
 
 ### Skills (invoked explicitly or by hooks)
 

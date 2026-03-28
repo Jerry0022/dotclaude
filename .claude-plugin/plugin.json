@@ -1,6 +1,6 @@
 {
   "name": "dotclaude-dev-ops",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "description": "Complete DevOps automation for Claude Code: hooks, skills, templates, and git hygiene. Ship faster, safer, smarter.",
   "author": "Jerry0022",
   "homepage": "https://github.com/Jerry0022/dotclaude-dev-ops",
@@ -29,8 +29,7 @@
     "prompt.issue.detect",
     "prompt.ship.detect",
     "prompt.start.detect",
-    "stop.ship.guard",
-    "stop.flow.completion"
+    "stop.ship.guard"
   ],
   "tags": [
     "devops",
