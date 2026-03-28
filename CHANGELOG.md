@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0] — 2026-03-28
+
+### Changed
+- **Hook rename**: `prompt.start.detect` → `prompt.flow.appstart` — consistent `flow` domain naming
+- **Hook recategorize**: `post.flow.debug` moved from "debug" to "flow" category in README (was already in `flow` domain)
+- Updated all references in hooks.json, INSTALL.md, README.md, CHANGELOG.md
+
 ## [0.9.0] — 2026-03-28
 
 ### Added
@@ -164,7 +171,7 @@ Project-specific skill extensions (`.claude/skills/{name}/reference.md`) remain 
 
 ### Added
 - `prompt.ship.detect` hook: detect ship intent in user prompts, enforce Skill("ship")
-- `prompt.start.detect` hook: detect app start intent, enforce completion card
+- `prompt.flow.appstart` hook: detect app start intent, enforce completion card
 - Ship enforcement via three layers: prompt detection, PR command blocking, completion flow
 
 ### Changed

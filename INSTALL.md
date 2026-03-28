@@ -86,7 +86,7 @@ The path prefix `$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops` points to
           { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.git.sync.js\"" },
           { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.issue.detect.js\"" },
           { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.ship.detect.js\"" },
-          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.start.detect.js\"" }
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.flow.appstart.js\"" }
         ]
       }
     ],

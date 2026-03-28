@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.9.0**
+**Version: 0.10.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -67,7 +67,7 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 - `prompt.git.sync` — Periodic pull/merge main (every 15 min)
 - `prompt.issue.detect` — Track GitHub issues automatically
 - `prompt.ship.detect` — Detect ship intent, enforce /ship skill
-- `prompt.start.detect` — Detect app start intent, enforce completion card
+- `prompt.flow.appstart` — Detect app start intent, enforce completion card
 
 #### Stop — runs when the agent finishes
 
@@ -97,11 +97,8 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 #### flow — track progress toward completion
 
 - `post.flow.completion` — Track code edits for completion flow *(PostToolUse)*
-- `prompt.start.detect` — Detect app start intent, enforce completion card *(UserPromptSubmit)*
-
-#### debug — surface failures early
-
 - `post.flow.debug` — Recommend /flow after repeated failures *(PostToolUse)*
+- `prompt.flow.appstart` — Detect app start intent, enforce completion card *(UserPromptSubmit)*
 
 #### tasks — manage scheduled automation
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * @hook prompt.start.detect
+ * @hook prompt.flow.appstart
  * @version 0.1.0
  * @event UserPromptSubmit
  * @plugin dotclaude-dev-ops
@@ -48,7 +48,7 @@ process.stdin.on('end', () => {
   try { fs.writeFileSync(flagFile, Date.now().toString()); } catch {}
 
   const instruction = [
-    '[prompt.start.detect] App start intent detected.',
+    '[prompt.flow.appstart] App start intent detected.',
     '',
     'After starting the app, you MUST render a completion card.',
     'Use the correct variant:',
