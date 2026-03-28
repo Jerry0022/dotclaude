@@ -18,40 +18,59 @@ Fetch live token usage for the completion card's battery line.
 2. Read `{project}/.claude/skills/refresh-usage/SKILL.md` + `reference.md` if exists → project overrides
 3. Merge: project > global > plugin defaults
 
-## Step 1 — Detect backend
+## Step 1 — Fetch data (aggressive fallback chain)
 
-Choose the data source based on the execution environment:
+**NEVER show `[no data]` without exhausting ALL fallbacks first.**
+Run this chain top-to-bottom. Stop at first success.
 
-### 1a. Claude Code CLI
+The script path is `${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js` (use the plugin root, NOT a relative path).
 
-If running in the Claude Code CLI (terminal/REPL):
-- Use the built-in `/usage` command output
-- Parse session usage, weekly usage, and model-specific data
-- This is the preferred method — no external tools needed
+### 1a. Try Edge CDP directly
 
-### 1b. Edge CDP (fallback for non-CLI environments)
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --check-only
+```
+- Exit 0 → CDP ready → scrape:
+  ```bash
+  node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
+  ```
+  → Done. Read `~/.claude/usage-live.json`.
 
-If `/usage` is not available (e.g., Claude Desktop, MCP):
-- Run `node scripts/refresh-usage-headless.js --quiet --check-only`
-- Exit 0 → CDP available → scrape via `--quiet --summary`
-- Exit 7 → Edge not running → run `--auto-start` automatically (no user consent needed)
-- Exit 5 → Edge running without CDP → run `--activate-cdp` automatically to restart Edge with CDP
+### 1b. Edge not running (exit 7) → auto-start
 
-**Exit 5 handling (autonomous):**
-1. Run `node scripts/refresh-usage-headless.js --activate-cdp --quiet`
-2. If it succeeds (exit 0) → proceed to scrape
-3. If it fails → output this message to the user (in German):
-   > Edge laeuft ohne CDP-Support. Einmalig Edge neu starten mit:
-   > `node scripts/refresh-usage-headless.js --activate-cdp`
-   > Danach funktioniert der Usage-Check automatisch.
-4. Then fall through to 1c with `[no data]`
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --auto-start --quiet --summary
+```
+- Starts Edge with CDP in background, scrapes, done.
+- No user interaction needed.
 
-### 1c. No data available
+### 1c. Edge running without CDP (exit 5) → activate CDP
 
-If neither CLI nor CDP works:
-- Return `[no data]` for the completion card battery line
-- Always output the reason (CDP not available, Edge not running, parse error, etc.)
-- Non-blocking — never prevent completion card from rendering
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --activate-cdp --quiet
+```
+- Restarts Edge with CDP flag (restores tabs via `--restore-last-session`).
+- Then scrape:
+  ```bash
+  node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
+  ```
+- This is autonomous — do NOT ask the user for permission. Edge restart is fast and restores all tabs.
+
+### 1d. CDP still failed → open browser tab as fallback
+
+If all CDP attempts fail, use the Playwright browser tools:
+```
+browser_navigate → https://claude.ai/settings/usage
+```
+Wait for page load, read the usage text from the page, parse it manually using the same percentage/reset patterns from Step 2.
+
+### 1e. Last resort — cached data
+
+Read `~/.claude/usage-live.json`. If it exists and is less than 30 minutes old, use it with `[cached Xm ago]` label.
+
+### 1f. No data
+
+Only after ALL of 1a–1e fail: show `[no data]` with the specific reason (e.g., "Edge not installed", "not logged in to claude.ai").
 
 ## Step 2 — Parse and store
 
@@ -83,7 +102,9 @@ ratio > 1.3  → 🪫 + "Hoher Verbrauch — neue Session oder Haiku empfohlen"
 
 ## Rules
 
-- **Always attempt fresh data** — no caching by default. Cached data only as automatic fallback.
-- **Silent execution** — no visible browser activity except one-time CDP activation.
-- **Never use Claude in Chrome MCP tools** as a scraping fallback.
+- **NEVER give up early** — exhaust the full fallback chain (1a→1b→1c→1d→1e) before showing `[no data]`.
+- **Always attempt fresh data** — cached data only as automatic fallback after all live methods fail.
+- **Silent execution** — CDP operations are invisible. Edge restart is autonomous (restores tabs).
+- **Playwright fallback is acceptable** — if CDP fails, opening a browser tab to scrape is fine.
 - **Delta computation**: Read `usage-live.json` before and after refresh. Delta = new_pct - old_pct.
+- **Script path**: Always use `${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js`, never a relative path.
