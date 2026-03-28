@@ -1,11 +1,13 @@
 ---
 name: qa
-version: 0.1.0
 description: >-
   Quality assurance agent — runs tests, verifies builds, takes screenshots,
   and validates changes in parallel while other work continues.
-subagent_type: general-purpose
-allowed-tools: Bash, Read, Glob, Grep, preview_screenshot, preview_snapshot, preview_console_logs
+  <example>Run the tests and check for console errors</example>
+  <example>Build the project and verify everything compiles</example>
+model: sonnet
+color: green
+tools: ["Bash", "Read", "Glob", "Grep", "preview_screenshot", "preview_snapshot", "preview_console_logs"]
 ---
 
 # QA Agent

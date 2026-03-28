@@ -1,12 +1,13 @@
 ---
 name: core
-version: 0.1.0
 description: >-
   Core/Backend agent — implements business logic, services, data models,
   APIs, and system infrastructure. The backbone that other agents build on.
-subagent_type: general-purpose
-isolation: worktree
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep
+  <example>Create the user service with CRUD operations</example>
+  <example>Add a database migration for the new schema</example>
+model: sonnet
+color: yellow
+tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
 ---
 
 # Core Agent

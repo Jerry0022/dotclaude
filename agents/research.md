@@ -1,11 +1,13 @@
 ---
 name: research
-version: 0.1.0
 description: >-
   Research agent — investigates topics, compares technologies, finds best
   practices. Runs in isolated context to keep main conversation clean.
-subagent_type: Explore
-allowed-tools: WebSearch, WebFetch, Read, Grep, Glob
+  <example>Compare React vs Vue for our use case</example>
+  <example>Research current best practices for API rate limiting</example>
+model: sonnet
+color: cyan
+tools: ["WebSearch", "WebFetch", "Read", "Grep", "Glob"]
 ---
 
 # Research Agent

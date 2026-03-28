@@ -1,12 +1,13 @@
 ---
 name: ai
-version: 0.1.0
 description: >-
   AI/ML integration agent — handles AI model integration, prompt engineering,
   embeddings, vector stores, and AI-powered features.
-subagent_type: general-purpose
-isolation: worktree
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch
+  <example>Integrate the OpenAI API for text classification</example>
+  <example>Set up a vector store for semantic search</example>
+model: sonnet
+color: magenta
+tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"]
 ---
 
 # AI Agent

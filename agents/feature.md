@@ -1,13 +1,14 @@
 ---
 name: feature
-version: 0.1.0
 description: >-
   Feature worker agent — implements features in an isolated worktree.
   Can delegate to other role agents (frontend, core, ai, etc.) when
   the feature spans multiple domains.
-subagent_type: general-purpose
-isolation: worktree
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, AskUserQuestion
+  <example>Implement the video filter feature end-to-end</example>
+  <example>Build the user settings page with backend and frontend</example>
+model: inherit
+color: cyan
+tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Agent", "AskUserQuestion"]
 ---
 
 # Feature Worker Agent

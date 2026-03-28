@@ -1,12 +1,13 @@
 ---
 name: windows
-version: 0.1.0
 description: >-
   Windows platform agent — handles Windows-specific features: system tray,
   native APIs, installers, registry, file associations, and platform integration.
-subagent_type: general-purpose
-isolation: worktree
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep
+  <example>Add system tray support with notifications</example>
+  <example>Create the Windows installer with auto-update</example>
+model: sonnet
+color: red
+tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
 ---
 
 # Windows Agent

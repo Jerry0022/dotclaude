@@ -1,12 +1,13 @@
 ---
 name: frontend
-version: 0.1.0
 description: >-
   Frontend agent — implements UI components, templates, styling, and
   user-facing interactions. Framework-agnostic (Angular, React, Vue, etc.).
-subagent_type: general-purpose
-isolation: worktree
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, preview_screenshot, preview_snapshot
+  <example>Build the settings page with dark mode toggle</example>
+  <example>Fix the responsive layout on mobile viewports</example>
+model: sonnet
+color: blue
+tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "preview_screenshot", "preview_snapshot"]
 ---
 
 # Frontend Agent
