@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0] — 2026-03-28
+
+### Changed
+- **Installation model**: global-only — plugin installs to `~/.claude/settings.json`, no per-project registration needed
+- **INSTALL.md**: rewritten for global-only installation, removed project-scope option
+- **hooks.json**: fixed marketplace directory name (`jerry0022-dotclaude-dev-ops` → `dotclaude-dev-ops`)
+
+### Removed
+- Project-level `.claude/hooks/` directory (hooks now run exclusively from marketplace cache)
+- Project-level `settings.json` hook overrides (hooks come from plugin's `hooks.json`)
+- Per-project `extraKnownMarketplaces` and `enabledPlugins` entries
+
+### Note
+Project-specific skill extensions (`.claude/skills/{name}/reference.md`) remain fully supported.
+
 ## [0.4.0] — 2026-03-28
 
 ### Changed
