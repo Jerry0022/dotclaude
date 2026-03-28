@@ -15,7 +15,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const PLUGIN_KEY = 'dotclaude-dev-ops@Jerry0022';
+const PLUGIN_KEY_LEGACY = 'dotclaude-dev-ops@Jerry0022';
+const PLUGIN_KEY = 'dotclaude-dev-ops@dotclaude-dev-ops';
 
 function isEnabledIn(settingsPath) {
   try {
@@ -29,6 +30,16 @@ function isEnabledIn(settingsPath) {
 const projectSettings = path.join(process.cwd(), '.claude', 'settings.json');
 const globalSettings = path.join(os.homedir(), '.claude', 'settings.json');
 
-if (!isEnabledIn(projectSettings) && !isEnabledIn(globalSettings)) {
+function isEnabledInAny(settingsPath) {
+  try {
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    if (!settings.enabledPlugins) return false;
+    return !!(settings.enabledPlugins[PLUGIN_KEY] || settings.enabledPlugins[PLUGIN_KEY_LEGACY]);
+  } catch {
+    return false;
+  }
+}
+
+if (!isEnabledInAny(projectSettings) && !isEnabledInAny(globalSettings)) {
   process.exit(0);
 }
