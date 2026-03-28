@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.12.7] — 2026-03-28
+
+### Fixed
+- **plugin.json**: Explicit `"hooks": "../hooks/hooks.json"` reference — Claude Code does not reliably auto-discover non-SessionStart hooks from plugin `hooks/hooks.json`; explicit reference ensures PostToolUse, PreToolUse, and UserPromptSubmit hooks are registered
+
 ## [0.12.6] — 2026-03-28
 
 ### Changed
