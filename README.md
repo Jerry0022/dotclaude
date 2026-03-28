@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.11.1**
+**Version: 0.11.2**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -9,7 +9,7 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 ## Features
 
 - **11 Hooks** — automated guards and triggers across the full session lifecycle
-- **9 Skills** — ship, commit, debug, research, explain, issues, project setup, readme, usage tracking
+- **10 Skills** — ship, commit, flow, research, explain, issues, project setup, readme, usage tracking, extend-skill
 - **9 Agents** — QA, Feature Worker, Research, PO, Frontend, Core, Windows, AI, Gamer
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /ship skill routing
@@ -37,7 +37,7 @@ The plugin uses semantic versioning. Breaking changes only in major versions.
 
 ### Hooks (automatic, no user action needed)
 
-13 hooks fire automatically across the session lifecycle — no user action needed.
+11 hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -177,7 +177,7 @@ dotclaude-dev-ops/
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
 ├── hooks/                         ← 11 hook scripts (JS)
 ├── skills/                        ← 10 skill definitions (SKILL.md)
-├── agents/                        ← 9 agent templates (AGENT.md)
+├── agents/                        ← 9 agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
 └── scripts/                       ← Utility scripts (build-id, usage)

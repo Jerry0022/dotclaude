@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2] — 2026-03-28
+
+### Fixed
+- **README**: Hook count corrected (13 → 11), skill count and list updated (9 → 10, debug → flow, added extend-skill), agent template label corrected
+- **INSTALL.md**: Removed stale `Edit|Write` matcher from PostToolUse completion hook (now fires on all tools), hook count corrected (12 → 11)
+- **CONVENTIONS.md**: Removed deleted `stop/stop.ship.guard.js` from directory structure, updated template file listing to match actual files
+
 ## [0.11.1] — 2026-03-28
 
 ### Removed

@@ -70,10 +70,8 @@ hooks/
 ├── pre-tool-use/
 │   ├── pre.tokens.guard.js
 │   └── pre.ship.guard.js
-├── post-tool-use/
-│   └── post.flow.completion.js
-└── stop/
-    └── stop.ship.guard.js
+└── post-tool-use/
+    └── post.flow.completion.js
 ```
 
 ### Exit Codes
@@ -212,9 +210,10 @@ Templates use descriptive names with file-type suffix:
 
 ```
 templates/
-├── config.template.json
-├── settings.template.json
-└── project-claude-md.md
+├── buildlog-entry.md
+├── changelog-entry.md
+├── completion-card.md
+└── github-release.md
 ```
 
 ## General Rules

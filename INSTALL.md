@@ -68,7 +68,6 @@ The path prefix `$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops` points to
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write",
         "hooks": [
           { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/post-tool-use/post.flow.completion.js\"" }
         ]
@@ -116,7 +115,7 @@ Plugin installiert:
   Scope:       global (~/.claude/settings.json)
   Marketplace: Jerry0022 registriert
   Plugin:      dotclaude-dev-ops@Jerry0022 aktiviert
-  Hooks:       12 hooks in settings.json (absolute paths to marketplace cache)
+  Hooks:       11 hooks in settings.json (absolute paths to marketplace cache)
   Auto-Update: managed by Claude Code marketplace (enable via /plugin)
   Status:      OK
 
