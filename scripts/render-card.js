@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script render-card
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin dotclaude-dev-ops
  * @description Deterministic completion card renderer.
  *   Accepts structured JSON on stdin, outputs final markdown card on stdout.
@@ -338,4 +338,11 @@ process.stdin.on('end', () => {
   }
 
   process.stdout.write(renderCard(input));
+
+  // Write card-rendered flag for stop.flow.guard
+  try {
+    const key = input.session_id || 'latest';
+    const flagPath = path.join(os.tmpdir(), 'dotclaude-devops-card-rendered-' + key);
+    fs.writeFileSync(flagPath, new Date().toISOString());
+  } catch {}
 });

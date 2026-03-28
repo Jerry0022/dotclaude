@@ -1,6 +1,6 @@
 {
   "name": "dotclaude-dev-ops",
-  "version": "0.12.8",
+  "version": "0.13.0",
   "description": "Complete DevOps automation for Claude Code: hooks, skills, templates, and git hygiene.",
   "hooks": "./hooks/hooks.json",
   "author": {

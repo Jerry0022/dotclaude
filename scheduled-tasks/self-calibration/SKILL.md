@@ -1,7 +1,7 @@
 ---
 name: self-calibration
 description: Periodic self-audit and learning loop — review feedback, internalize skills, calibrate behavior.
-version: 0.1.0
+version: 0.2.0
 schedule: "*/30 * * * *"
 ---
 
@@ -15,10 +15,29 @@ the plugin's rules. Runs every 30 minutes during active sessions.
 Find all `feedback_*.md` files in the current project's memory directory.
 Read each file. Check session behavior against each rule.
 
-When auditing completion-flow rules, check whether the **full completion flow**
-was executed (verify → issue status → completion card → ship recommendation),
-not just whether a card was output. Directly rendering a card without going
-through the flow bypasses verify and issue-update steps — that is also a violation.
+### Completion Flow Rules
+
+The completion flow is a **generic response-complete pattern**. It fires whenever
+a task is fully completed and Claude is about to wait for the next user input.
+
+**No exceptions based on:**
+- Tool used (Edit, Write, Bash, Read, Grep, research tools, browser tools, etc.)
+- File location (inside repo, outside repo, config files like `~/.claude/`, system files)
+- Type of work (code change, config change, research, explanation, app start, analysis)
+
+**"Discretionary skip" is always a violation.** Examples of invalid skips:
+- "This was just a config file outside the repo" → invalid
+- "This was only research, no code changed" → invalid
+- "The edit was too small to warrant a card" → invalid
+
+**Only valid reason to skip:** the turn was clearly mid-task (Claude is still gathering
+context or executing a multi-step plan mid-flight). Once the task is done and Claude
+is waiting for the next user prompt → completion card is mandatory.
+
+**Full flow check:** verify that the complete flow ran:
+verify → issue status → completion card → ship recommendation (if 5+ edits).
+Directly rendering a card without going through the flow bypasses verify and
+issue-update steps — that is also a violation.
 
 If a violation is found → correct immediately and briefly report.
 

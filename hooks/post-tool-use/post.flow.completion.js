@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.11.0
+ * @version 0.12.0
  * @event PostToolUse
  * @plugin dotclaude-dev-ops
  * @description After EVERY tool call: inject the completion-card reminder so
  *   Claude always has the instruction in context when it finishes — regardless
  *   of whether the last tool was Edit, Read, Bash, Grep, or anything else.
  *   Edit/Write calls additionally increment the session edit counter.
+ *   Writes a per-turn "work-happened" flag consumed by stop.flow.guard.
  */
 
 require('../lib/plugin-guard');
@@ -39,6 +40,12 @@ process.stdin.on('end', () => {
     try { fs.writeFileSync(counterFile, editCount.toString()); } catch {}
   }
 
+  // --- 1b. Write per-turn work-happened flag (consumed by stop.flow.guard) ---
+  try {
+    const workFile = sessionFile('dotclaude-devops-work-happened', hook.session_id);
+    fs.writeFileSync(workFile, toolName);
+  } catch {}
+
   // --- 2. Emit completion-card instruction (deterministic script) ---
   const pluginRoot = path.resolve(__dirname, '..');
   const scriptPath = path.join(pluginRoot, 'scripts', 'render-card.js').replace(/\\/g, '/');
@@ -65,7 +72,8 @@ process.stdin.on('end', () => {
     '  elif research/review/explanation    → "research"',
     '  else                                → "fallback"',
     `3. Bash: echo '<JSON>' | node ${scriptPath}`,
-    '   {"variant":"shipped|ready|blocked|test|minimal-start|research|aborted|fallback",',
+    `   {"variant":"shipped|ready|blocked|test|minimal-start|research|aborted|fallback",`,
+    `    "session_id":"${hook.session_id || ''}",`,
     '    "summary":"max ~10 words, user language","lang":"de",',
     '    "changes":[{"area":"x","description":"y"}],          // max 3, omit if none',
     '    "tests":[{"method":"x","result":"y"}],               // max 3, omit if none',

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.13.0] — 2026-03-28
+
+### Added
+- **stop.flow.guard** v0.1.0 — new Stop hook; per-turn completion card enforcement; writes carry-over reminder to next turn if work happened but no card was rendered; resets per-turn flags (work-happened, card-rendered) at each turn boundary
+- **ss.flow.selfcalibration**: first-install onboarding detection via persistent `~/.claude/dotclaude-devops-onboarded` flag; triggers immediate self-calibration on first session after install instead of waiting 30 minutes
+
+### Changed
+- **Completion flow** is now a generic response-complete pattern — fires for any completed task regardless of tool used, file location, or type of work (code, config, research, app start); no "discretionary skip" valid
+- **post.flow.completion** v0.12.0 — writes per-turn `work-happened` flag; injects `session_id` into render-card Bash instruction
+- **render-card.js** v0.2.0 — writes `card-rendered` session flag after successful render for Stop hook detection
+- **self-calibration/SKILL.md** v0.2.0 — Step 1 rewritten with explicit completion flow rules; discretionary skip documented as violation
+- **plugin-behavior.md** — Completion Flow section updated to reflect generic pattern and hook architecture
+
 ## [0.12.8] — 2026-03-28
 
 ### Fixed

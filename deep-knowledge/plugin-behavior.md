@@ -5,8 +5,15 @@ These are loaded automatically — users don't need to copy them into CLAUDE.md.
 
 ## Completion Flow
 
-After completing code changes, the `post.flow.completion` hook triggers
-automatically. The flow is:
+The completion flow is a **generic response-complete pattern** — not a code-only concept.
+It fires whenever a task is fully completed and Claude is waiting for the next user input.
+
+**Triggers regardless of:**
+- Tool used (Edit, Write, Bash, Read, research, browser, etc.)
+- File location (repo, outside repo, config files like `~/.claude/`)
+- Type of work (code, config, research, explanation, app start, analysis)
+
+**Flow steps:**
 
 1. **Verify** — visual verification per `deep-knowledge/visual-verification.md`
    and `deep-knowledge/test-strategy.md`
@@ -15,8 +22,19 @@ automatically. The flow is:
 3. **Completion Card** — render per `templates/completion-card.md`
 4. **Ship recommendation** — after 5+ code edits, recommend `/ship`
 
-This replaces the old manual `/start` → `/test` → completion card sequence.
-Hooks handle the orchestration automatically.
+**Hook architecture:**
+
+- `post.flow.completion` (PostToolUse) — fires after every tool call; injects card
+  reminder into context; tracks edit count; writes per-turn `work-happened` flag.
+- `stop.flow.guard` (Stop) — fires at turn end; if `work-happened` flag exists but
+  `card-rendered` flag is absent → injects carry-over reminder into next turn.
+  Resets both flags so each turn is evaluated independently.
+- `render-card.js` — writes `card-rendered` flag after successful render so
+  `stop.flow.guard` knows the card was produced.
+
+**No "discretionary skip":** any completed task warrants a card. No edit is
+"too small", no file is "outside scope". Only valid skip: clearly mid-task turns
+where Claude is still executing a multi-step plan.
 
 ## Token Awareness
 
