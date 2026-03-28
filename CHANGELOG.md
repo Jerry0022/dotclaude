@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1] — 2026-03-28
+
+### Fixed
+- **ss.branches.check**: filter active worktree branches from unpushed-commits check (eliminates false positives)
+
+### Changed
+- **ss.branches.check**: structured output with specific call-to-action per issue type (`/ship` for uncommitted/unpushed, `git stash` commands for stashes)
+
 ## [0.6.0] — 2026-03-28
 
 ### Changed
