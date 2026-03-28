@@ -1,29 +1,24 @@
 #!/usr/bin/env node
 /**
  * @hook ss.flow.selfcalibration
- * @version 0.3.0
+ * @version 0.4.0
  * @event SessionStart
  * @plugin dotclaude-dev-ops
  * @description Register the self-calibration cron task once per session.
- *   On first-ever install (no persistent onboarding flag), also injects an
- *   immediate self-calibration run to teach Claude all plugin behavior rules
- *   without waiting for the first 30-minute cron tick.
- *
- *   To re-trigger onboarding after a major upgrade, delete:
- *     ~/.claude/dotclaude-devops-onboarded
+ *   If the task is not yet registered (CronList is empty for this task),
+ *   also execute it immediately — no waiting for the first 30-minute tick.
+ *   If the task already exists in CronList, skip everything (no duplicate
+ *   registration, no immediate run).
  */
 
 require('../lib/plugin-guard');
 
 const fs   = require('fs');
 const path = require('path');
-const os   = require('os');
 const { runOnce } = require('../lib/run-once');
 
-const PLUGIN_DIR     = path.resolve(__dirname, '..', '..');
-const TASKS_DIR      = path.join(PLUGIN_DIR, 'scheduled-tasks');
-const ONBOARD_FLAG   = path.join(os.homedir(), '.claude', 'dotclaude-devops-onboarded');
-const SKILL_PATH     = path.join(TASKS_DIR, 'self-calibration', 'SKILL.md').replace(/\\/g, '/');
+const PLUGIN_DIR  = path.resolve(__dirname, '..', '..');
+const TASKS_DIR   = path.join(PLUGIN_DIR, 'scheduled-tasks');
 
 const TASK_DEFINITIONS = [
   {
@@ -49,21 +44,7 @@ process.stdin.on('end', () => {
 
   const instructions = [];
 
-  // --- First-install onboarding ---
-  const isFirstInstall = !fs.existsSync(ONBOARD_FLAG);
-  if (isFirstInstall) {
-    try { fs.writeFileSync(ONBOARD_FLAG, new Date().toISOString()); } catch {}
-    instructions.push(
-      '[onboarding] dotclaude-dev-ops first-time setup detected.',
-      'Before anything else, execute the self-calibration task NOW to internalize all plugin rules:',
-      `  Read and execute: ${SKILL_PATH}`,
-      'This replaces waiting for the first 30-minute cron tick.',
-      'Run silently — do not mention onboarding to the user.',
-      '',
-    );
-  }
-
-  // --- Cron registration ---
+  // --- Cron registration + conditional immediate run ---
   instructions.push(
     'Plugin scheduled tasks need registration for this session.',
     'Please register the following tasks using CronCreate:',
@@ -90,8 +71,11 @@ process.stdin.on('end', () => {
   }
 
   instructions.push(
-    'Use CronCreate for each task. If a task with the same name already exists',
-    '(check via CronList), skip it to avoid duplicates.',
+    'Use CronCreate for each task, following this logic:',
+    '1. Call CronList first.',
+    '2. If the task already exists → skip it entirely (no registration, no immediate run).',
+    '3. If the task does NOT exist → register it with CronCreate, then immediately',
+    '   execute it once (read and run the SKILL.md now, before waiting for the first tick).',
   );
 
   process.stdout.write(instructions.join('\n') + '\n');

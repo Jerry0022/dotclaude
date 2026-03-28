@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.13.1] — 2026-03-28
+
+### Changed
+- **ss.flow.selfcalibration** v0.4.0 — replaced file-based `ONBOARD_FLAG` with CronList-based logic: task not in CronList → register + execute immediately; task already in CronList → skip entirely (no duplicate registration, no extra run)
+
 ## [0.13.0] — 2026-03-28
 
 ### Added
