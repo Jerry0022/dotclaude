@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.12.3] — 2026-03-28
+
+### Fixed
+- **post.flow.completion** v0.11.0: restore all JSON schema details in hook instruction — max-3, omit-if-none, omit-for-minimal-start, only-for-test comments were lost in v0.12.2
+
 ## [0.12.2] — 2026-03-28
 
 ### Changed

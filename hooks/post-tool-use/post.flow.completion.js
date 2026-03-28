@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.10.0
+ * @version 0.11.0
  * @event PostToolUse
  * @plugin dotclaude-dev-ops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -65,12 +65,13 @@ process.stdin.on('end', () => {
     '  elif research/review/explanation    → "research"',
     '  else                                → "fallback"',
     `3. Bash: echo '<JSON>' | node ${scriptPath}`,
-    '   {"variant":"...","summary":"~10 words","lang":"de",',
-    '    "changes":[{"area":"x","description":"y"}],',
-    '    "tests":[{"method":"x","result":"y"}],',
-    '    "state":{"branch":"...","worktree":false,"commit":"...","pushed":true,"pr":{"number":1,"title":"..."},"merged":"remote/main","appStatus":null},',
+    '   {"variant":"shipped|ready|blocked|test|minimal-start|research|aborted|fallback",',
+    '    "summary":"max ~10 words, user language","lang":"de",',
+    '    "changes":[{"area":"x","description":"y"}],          // max 3, omit if none',
+    '    "tests":[{"method":"x","result":"y"}],               // max 3, omit if none',
+    '    "state":{"branch":"...","worktree":false,"commit":"...","pushed":true,"pr":{"number":1,"title":"..."},"merged":"remote/main","appStatus":"running|not-started|null"}, // omit for minimal-start',
     '    "cta":{"info":"...","reason":"...","vOld":"...","vNew":"...","bump":"...","version":"...","description":"..."},',
-    '    "userTest":["step 1"]}',
+    '    "userTest":["step 1"]}                               // only for test variant',
     '4. Output VERBATIM — card LAST, nothing after closing ---.',
   );
 
