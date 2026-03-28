@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.12.8] — 2026-03-28
+
+### Fixed
+- **plugin.json**: Hooks path corrected from `../hooks/hooks.json` to `./hooks/hooks.json` — paths must be relative to plugin root per spec, not relative to `.claude-plugin/`; wrong path broke Marketplace hook display and caused commit-hash cache keys instead of version-based ones
+
 ## [0.12.7] — 2026-03-28
 
 ### Fixed
