@@ -17,21 +17,23 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 
 ## Installation
 
-Tell Claude:
+Add the plugin via Claude Code (Desktop or CLI):
 
-> "Install the dotclaude-dev-ops plugin from `Jerry0022/dotclaude-dev-ops`."
+```bash
+claude plugin add dotclaude-dev-ops@Jerry0022
+```
 
-Claude reads [`INSTALL.md`](INSTALL.md) from this repo and handles everything — registers the marketplace globally, enables the plugin, verifies the result.
+Or use **Settings** → **Plugins** → **Marketplaces** → add `Jerry0022/dotclaude-dev-ops`.
+
+Start a new session for hooks to take effect. See [`INSTALL.md`](INSTALL.md) for details, extensions, and uninstall.
 
 ## Updates
-
-Plugin updates are managed by the Claude Code marketplace. Enable auto-update via `/plugin` → Marketplaces, or update manually:
 
 ```bash
 claude plugin update dotclaude-dev-ops@Jerry0022
 ```
 
-The plugin uses semantic versioning. Breaking changes only in major versions.
+Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**. Semantic versioning — breaking changes only in major versions.
 
 ## What it does
 
