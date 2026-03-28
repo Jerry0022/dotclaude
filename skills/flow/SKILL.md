@@ -1,5 +1,5 @@
 ---
-name: debug
+name: flow
 version: 0.1.0
 description: >-
   Read session logs, runtime errors, and crash output to diagnose and fix the
@@ -7,14 +7,14 @@ description: >-
   behaving unexpectedly. Triggers on: "debug", "this is broken", "doesn't work",
   "error", "crash", "blank screen", "warum geht das nicht", "funktioniert nicht",
   "something's off", "it just hangs", "unexpected behavior". Also triggers when
-  the user pastes an error message or stack trace, or when post.debug.trigger
+  the user pastes an error message or stack trace, or when post.flow.debug
   hook detects repeated Bash failures. Do NOT trigger for general code questions
   (use /explain).
 argument-hint: "[optional: describe the symptom or paste error]"
 allowed-tools: Read, Grep, Glob, Bash(git log *), Bash(git diff *), Bash(git bisect *), Bash(npm *), Bash(node *), AskUserQuestion
 ---
 
-# Debug
+# Flow
 
 Diagnose and fix the issue: `$ARGUMENTS`
 
@@ -22,8 +22,8 @@ Diagnose and fix the issue: `$ARGUMENTS`
 
 Silently check for optional overrides (do not surface "not found" in output):
 
-1. Global skill extension: `~/.claude/skills/debug/SKILL.md` + `reference.md`
-2. Project skill extension: `{project}/.claude/skills/debug/SKILL.md` + `reference.md`
+1. Global skill extension: `~/.claude/skills/flow/SKILL.md` + `reference.md`
+2. Project skill extension: `{project}/.claude/skills/flow/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 Project extensions define framework-specific log paths (e.g., Electron logs in

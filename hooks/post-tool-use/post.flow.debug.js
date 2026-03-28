@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * @hook post.debug.trigger
- * @version 0.2.0
+ * @hook post.flow.debug
+ * @version 0.3.0
  * @event PostToolUse
  * @plugin dotclaude-dev-ops
- * @description After 2+ consecutive Bash failures: recommend the debug flow.
+ * @description After 2+ consecutive Bash failures: recommend the flow skill.
  *   Tracks consecutive failures via a temp file. Resets on success.
  */
 
@@ -50,9 +50,9 @@ process.stdin.on('end', () => {
   if (failures >= 2) {
     process.stdout.write(
       `Repeated Bash failure detected (${failures} consecutive). ` +
-      'Consider running the debug flow: check recent git changes, ' +
+      'Consider running /flow: check recent git changes, ' +
       'read error logs, and perform root-cause analysis per ' +
-      'skills/debug/SKILL.md before retrying.\n'
+      'skills/flow/SKILL.md before retrying.\n'
     );
     try { fs.unlinkSync(counterFile); } catch {}
   }

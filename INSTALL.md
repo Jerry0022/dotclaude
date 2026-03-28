@@ -76,7 +76,7 @@ The path prefix `$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops` points to
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/post-tool-use/post.debug.trigger.js\"" }
+          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/post-tool-use/post.flow.debug.js\"" }
         ]
       }
     ],

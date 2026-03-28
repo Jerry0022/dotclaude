@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.8.1**
+**Version: 0.8.2**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -60,7 +60,7 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 #### PostToolUse — runs after each tool call
 
 - `post.flow.completion` — Track code edits for completion flow
-- `post.debug.trigger` — Recommend debug after repeated failures
+- `post.flow.debug` — Recommend /flow after repeated failures
 
 #### UserPromptSubmit — runs when the user sends a message
 
@@ -101,7 +101,7 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 
 #### debug — surface failures early
 
-- `post.debug.trigger` — Recommend debug after repeated failures *(PostToolUse)*
+- `post.flow.debug` — Recommend /flow after repeated failures *(PostToolUse)*
 
 #### tasks — manage scheduled automation
 

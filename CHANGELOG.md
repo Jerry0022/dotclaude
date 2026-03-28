@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2] — 2026-03-28
+
+### Changed
+- **Skill rename**: `debug` → `flow` — clearer intent as a diagnostic flow skill
+- **Hook rename**: `post.debug.trigger` → `post.flow.debug` — aligns with flow skill naming convention
+- Updated all references in hooks.json, INSTALL.md, README.md, token-config.json
+
 ## [0.8.1] — 2026-03-28
 
 ### Changed
