@@ -2,11 +2,15 @@
 
 ## [0.6.1] — 2026-03-28
 
+### Removed
+- **ss.plugin.update**: removed custom self-update hook — plugin updates are now handled natively by the Claude Code marketplace
+
 ### Fixed
 - **ss.branches.check**: filter active worktree branches from unpushed-commits check (eliminates false positives)
 
 ### Changed
 - **ss.branches.check**: structured output with specific call-to-action per issue type (`/ship` for uncommitted/unpushed, `git stash` commands for stashes)
+- **INSTALL.md / README.md**: updated documentation to reference marketplace-based updates instead of custom hook
 
 ## [0.6.0] — 2026-03-28
 

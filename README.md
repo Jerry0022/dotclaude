@@ -25,20 +25,11 @@ Claude reads [`INSTALL.md`](INSTALL.md) from this repo and handles everything �
 
 ## Updates
 
-### Auto-update via hook
+Plugin updates are managed by the Claude Code marketplace. Enable auto-update via `/plugin` → Marketplaces, or update manually:
 
-The `ss.plugin.update` hook runs at every session start:
-
-1. Checks GitHub for the latest release (~200ms, one API call)
-2. If a newer version exists, downloads and installs automatically
-3. Reports: `Plugin vX.Y.Z → vA.B.C aktualisiert`
-4. If GitHub is unreachable, continues silently with the current version
-
-No external CLI dependencies required — the hook uses the GitHub REST API directly.
-
-### Manual update
-
-Update `settings.json` with the new version reference, or remove and re-add the plugin.
+```bash
+claude plugin update dotclaude-dev-ops@Jerry0022
+```
 
 The plugin uses semantic versioning. Breaking changes only in major versions.
 
@@ -48,7 +39,6 @@ The plugin uses semantic versioning. Breaking changes only in major versions.
 
 | Event | Hook | What it does |
 |---|---|---|
-| SessionStart | `ss.plugin.update` | Check GitHub for newer plugin version, auto-update |
 | SessionStart | `ss.tokens.scan` | Scan project for expensive files |
 | SessionStart | `ss.branches.check` | Check for uncommitted/unpushed changes |
 | SessionStart | `ss.tasks.register` | Auto-register scheduled tasks |

@@ -46,7 +46,6 @@ The path prefix `$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops` points to
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.plugin.update.js\"" },
           { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.tokens.scan.js\"" },
           { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.branches.check.js\"" },
           { "type": "command", "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.tasks.register.js\"" }
@@ -115,7 +114,7 @@ Run these checks and report results:
 1. **Settings file written** — confirm `~/.claude/settings.json` contains all three blocks
 2. **Parse check** — confirm the JSON is valid
 3. **Marketplace cloned** — confirm `~/.claude/plugins/marketplaces/dotclaude-dev-ops/` exists (Claude Code clones it automatically on next session start)
-4. **Hook scripts exist** — confirm `hooks/session-start/ss.plugin.update.js` exists in the marketplace directory
+4. **Hook scripts exist** — confirm `hooks/session-start/ss.tokens.scan.js` exists in the marketplace directory
 
 ### Expected output
 
@@ -124,8 +123,8 @@ Plugin installiert:
   Scope:       global (~/.claude/settings.json)
   Marketplace: Jerry0022 registriert
   Plugin:      dotclaude-dev-ops@Jerry0022 aktiviert
-  Hooks:       13 hooks in settings.json (absolute paths to marketplace cache)
-  Auto-Update: ss.plugin.update (every session start)
+  Hooks:       12 hooks in settings.json (absolute paths to marketplace cache)
+  Auto-Update: managed by Claude Code marketplace (enable via /plugin)
   Status:      OK
 
 Starte eine neue Session, damit die Hooks aktiv werden.
@@ -155,7 +154,7 @@ Use `/project-setup` in any project to auto-scaffold extension files based on th
 Tell the user:
 - Start a new Claude Code session for hooks to take effect
 - Skills (`/ship`, `/commit`, `/debug`, etc.) are available immediately
-- The plugin auto-updates at each session start via `ss.plugin.update`
+- Plugin updates are handled by the Claude Code marketplace. Enable auto-update via `/plugin` → Marketplaces, or run `claude plugin update dotclaude-dev-ops@Jerry0022` manually
 - Run `/project-setup` in any project to scaffold skill extensions
 
 ## Uninstall

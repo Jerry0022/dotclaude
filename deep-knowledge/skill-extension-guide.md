@@ -140,4 +140,4 @@ the pattern for other skills.
 - Extensions are additive by default — they add to the plugin behavior
 - To override a specific step, redefine it in your SKILL.md
 - To add context, use reference.md (no step redefinition needed)
-- Plugin updates (via `ss.plugin.update` hook) never overwrite your extensions
+- Plugin updates (via Claude Code marketplace) never overwrite your extensions
