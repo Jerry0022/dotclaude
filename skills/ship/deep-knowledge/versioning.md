@@ -20,15 +20,37 @@ If both exist, `.claude-plugin/plugin.json` takes precedence for plugin projects
 
 Multiple changes in one ship → use highest applicable bump.
 
+## Project type detection
+
+Detect project type first — determines which files are version sources of truth:
+
+```bash
+# Plugin project
+[ -f ".claude-plugin/plugin.json" ] && echo "plugin"
+# npm project (no plugin.json)
+[ -f "package.json" ] && ! [ -f ".claude-plugin/plugin.json" ] && echo "npm"
+```
+
 ## Version files (mandatory checklist)
 
-Update ALL of these in a **single commit**. Missing any is a ship-blocking error.
+Update ALL applicable files in a **single commit**. Missing any is a ship-blocking error.
+
+**Plugin project** (`.claude-plugin/plugin.json` exists):
 
 | File | What to update | Required |
 |---|---|---|
-| `.claude-plugin/plugin.json` | `"version": "X.Y.Z"` (source of truth for plugins) | If exists |
-| `.claude-plugin/marketplace.json` | `"metadata.version": "X.Y.Z"` | If exists |
-| `package.json` | `"version": "X.Y.Z"` (source of truth for npm) | If exists |
+| `.claude-plugin/plugin.json` | `"version": "X.Y.Z"` | Source of truth |
+| `README.md` | `**Version: X.Y.Z**` near top | Always |
+| `CHANGELOG.md` | New `## [X.Y.Z] — YYYY-MM-DD` section at top | Always |
+| Project-specific files | From extension `reference.md` | If defined |
+
+Note: `marketplace.json` has no version field — do not update it.
+
+**npm project** (`package.json` exists, no `plugin.json`):
+
+| File | What to update | Required |
+|---|---|---|
+| `package.json` | `"version": "X.Y.Z"` | Source of truth |
 | `README.md` | `**Version: X.Y.Z**` near top | Always |
 | `CHANGELOG.md` | New `## [X.Y.Z] — YYYY-MM-DD` section at top | Always |
 | Project-specific files | From extension `reference.md` | If defined |
@@ -47,17 +69,18 @@ grep -rn "<OLD_VERSION>" --include="*.json" --include="*.md" --include="*.ts" --
 **If hits remain → DO NOT proceed to commit.** Fix every stale reference first.
 
 This grep is the single most important check in the version bump step.
-It catches: forgotten README badges, stale plugin.json, hardcoded version
-strings in source code, marketplace.json mismatches.
+It catches: forgotten README badges, stale plugin.json or package.json,
+hardcoded version strings in source code.
 
 ## Post-commit version verification
 
 After the version bump commit, verify once more:
 
 ```bash
-# Verify manifest (plugin.json or package.json)
-node -p "require('./.claude-plugin/plugin.json').version" 2>/dev/null || \
-node -p "require('./package.json').version"
+# Plugin project: verify plugin.json
+node -p "require('./.claude-plugin/plugin.json').version" 2>/dev/null
+# npm project: verify package.json
+node -p "require('./package.json').version" 2>/dev/null
 
 # Verify README badge
 grep "Version:" README.md

@@ -34,9 +34,21 @@ Before proceeding to build/version-bump, verify that existing version
 references are consistent. This catches cases where a prior ship forgot
 to update a file.
 
+Detect project type first:
+
 ```bash
-# 5. Extract current version from package.json (or manifest)
-VERSION=$(node -p "require('./package.json').version" 2>/dev/null)
+# Plugin project?
+[ -f ".claude-plugin/plugin.json" ] && IS_PLUGIN=true
+# npm project?
+[ -f "package.json" ] && IS_NPM=true
+```
+
+```bash
+# 5. Extract current version from source of truth
+# Plugin project:
+VERSION=$(node -p "require('./.claude-plugin/plugin.json').version" 2>/dev/null)
+# npm project (fallback):
+VERSION=${VERSION:-$(node -p "require('./package.json').version" 2>/dev/null)}
 ```
 
 If VERSION is available, check:
@@ -54,13 +66,7 @@ grep -q "\[$VERSION\]" CHANGELOG.md
 If no match → WARN: "CHANGELOG missing entry for $VERSION. Will add in Step 3."
 
 ```bash
-# 5c. plugin.json version matches (if exists)
-node -p "require('./.claude-plugin/plugin.json').version" 2>/dev/null
-```
-If exists and doesn't match → WARN: "plugin.json version is stale."
-
-```bash
-# 5d. Check for project-specific version files from extension
+# 5c. Check for project-specific version files from extension
 # Read extension reference.md for additional version file paths
 ```
 
@@ -86,7 +92,10 @@ If no release and no tag → ABORT cleanup, tag first.
 
 ```bash
 # 6c. Merged commit on main has correct version
-git show main:package.json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version"
+# Plugin project:
+git show main:.claude-plugin/plugin.json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version" 2>/dev/null
+# npm project:
+git show main:package.json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version" 2>/dev/null
 ```
 If version on main doesn't match new version → something went wrong.
 

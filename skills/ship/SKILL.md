@@ -64,7 +64,7 @@ Build the project and run quality checks. See `deep-knowledge/quality-gates.md`.
 3. Tests: run task-specific tests (full suite only if not deduplicated by build-ID)
 4. Generate build-ID: `node scripts/build-id.js`
 
-If build fails → Completion Card Variant 4 (Blocked). Do not continue.
+If build fails → render completion card with variant `blocked`. Do not continue.
 
 ## Step 3 — Version Bump
 
@@ -79,19 +79,25 @@ Determine bump type and update all version files. See `deep-knowledge/versioning
 After bumping, grep ALL version files and verify they match the new version.
 This is a **hard gate** — if ANY file is out of sync, STOP and fix before continuing.
 
+**Plugin project** (`.claude-plugin/plugin.json` exists):
 ```
-Files to verify (all must show the new version):
-- .claude-plugin/plugin.json         → "version": "X.Y.Z"
-- .claude-plugin/marketplace.json    → "version": "X.Y.Z"
-- README.md                          → **Version: X.Y.Z**
-- CHANGELOG.md                       → ## [X.Y.Z] — <date> (must exist as newest entry)
-- .claude/.plugin-version            → X.Y.Z (plain text, single line)
+- .claude-plugin/plugin.json  → "version": "X.Y.Z"
+- README.md                   → **Version: X.Y.Z**
+- CHANGELOG.md                → ## [X.Y.Z] — <date> (must exist as newest entry)
 ```
+Run: `grep -rn "X.Y.Z" .claude-plugin/plugin.json README.md CHANGELOG.md`
+Expected: **3 matches minimum**.
 
-Run: `grep -rn "X.Y.Z" README.md CHANGELOG.md .claude-plugin/plugin.json .claude-plugin/marketplace.json .claude/.plugin-version`
+**npm project** (`package.json` exists, no `plugin.json`):
+```
+- package.json  → "version": "X.Y.Z"
+- README.md     → **Version: X.Y.Z**
+- CHANGELOG.md  → ## [X.Y.Z] — <date> (must exist as newest entry)
+```
+Run: `grep -rn "X.Y.Z" package.json README.md CHANGELOG.md`
+Expected: **3 matches minimum**.
 
-Expected: **5 matches minimum** (one per file). If fewer → a file was missed. Fix it before proceeding.
-
+If fewer → a file was missed. Fix it before proceeding.
 If bump type is "none", skip this gate entirely.
 
 ## Step 4 — Commit, Push, PR, Merge

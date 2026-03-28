@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.4] — 2026-03-28
+
+### Fixed
+- **ship SKILL.md**: Step 2 blocked variant reference updated; Step 3 version gate split into plugin vs npm with correct 3-match minimum
+- **versioning.md**: Plugin vs npm project type detection added; `marketplace.json` and `.plugin-version` removed from mandatory checklist (marketplace.json has no version field)
+- **pre-flight.md**: Version consistency check now reads from `plugin.json` for plugin projects; post-ship 6c check uses correct source of truth per project type
+
 ## [0.12.3] — 2026-03-28
 
 ### Fixed
