@@ -1,7 +1,13 @@
 ---
 name: frontend
-description: Frontend agent — implements UI components, templates, styling, and user-facing interactions. Framework-agnostic (Angular, React, Vue, etc.).
+description: >-
+  Frontend agent — implements UI components, templates, styling, and
+  user-facing interactions. Framework-agnostic (Angular, React, Vue, etc.).
+  <example>Build the settings page with dark mode toggle</example>
+  <example>Fix the responsive layout on mobile viewports</example>
 model: sonnet
+color: blue
+tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "preview_screenshot", "preview_snapshot"]
 ---
 
 # Frontend Agent

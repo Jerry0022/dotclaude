@@ -1,7 +1,14 @@
 ---
 name: feature
-description: Feature worker agent — implements features in an isolated worktree. Can delegate to other role agents (frontend, core, ai, etc.) when the feature spans multiple domains.
-model: sonnet
+description: >-
+  Feature worker agent — implements features in an isolated worktree.
+  Can delegate to other role agents (frontend, core, ai, etc.) when
+  the feature spans multiple domains.
+  <example>Implement the video filter feature end-to-end</example>
+  <example>Build the user settings page with backend and frontend</example>
+model: inherit
+color: cyan
+tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Agent", "AskUserQuestion"]
 ---
 
 # Feature Worker Agent
