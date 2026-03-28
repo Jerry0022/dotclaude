@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.6] — 2026-03-28
+
+### Changed
+- **ss.tasks.register** renamed to **ss.flow.selfcalibration** — once-per-session guard via new `run-once` lib; no redundant CronCreate output on repeated SessionStart triggers
+- **ss.tokens.scan**: 10-minute cooldown guard — skips file-system scan if `token-config.json` was updated less than 10 min ago
+
+### Added
+- **hooks/lib/run-once.js** v0.1.0 — shared session-scoped execution guard with optional cooldown for SessionStart hooks
+
 ## [0.12.5] — 2026-03-28
 
 ### Changed

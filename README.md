@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.12.5**
+**Version: 0.12.6**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -52,7 +52,7 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 
 - `ss.tokens.scan` — Scan project for expensive files
 - `ss.git.check` — Check for uncommitted/unpushed changes
-- `ss.tasks.register` — Auto-register scheduled tasks
+- `ss.flow.selfcalibration` — Register self-calibration cron (once per session)
 
 #### PreToolUse — runs before each tool call
 
@@ -97,9 +97,9 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 - `post.flow.debug` — Recommend /flow after repeated failures *(PostToolUse)*
 - `prompt.flow.appstart` — Detect app start intent, enforce completion card *(UserPromptSubmit)*
 
-#### tasks — manage scheduled automation
+#### flow — self-calibration
 
-- `ss.tasks.register` — Auto-register scheduled tasks *(SessionStart)*
+- `ss.flow.selfcalibration` — Register self-calibration cron, once per session *(SessionStart)*
 
 #### issues — automatic issue tracking
 

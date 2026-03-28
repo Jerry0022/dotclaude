@@ -73,6 +73,13 @@ function scanFiles(dir, results = []) {
   return results;
 }
 
+// Cooldown: skip if token-config.json was updated < 10 min ago
+const COOLDOWN_MS = 10 * 60 * 1000;
+try {
+  const stat = fs.statSync(CONFIG_PATH);
+  if (Date.now() - stat.mtimeMs < COOLDOWN_MS) process.exit(0);
+} catch {}
+
 // Main
 const cfg = loadConfig();
 const allFiles = scanFiles(cwd);
