@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.8.0
+ * @version 0.9.0
  * @event PostToolUse
  * @plugin dotclaude-dev-ops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -56,7 +56,9 @@ process.stdin.on('end', () => {
     'When you have finished ALL work for this task, render the completion card by piping JSON to the render script.',
     'Do NOT render the card yourself — the script produces it deterministically.',
     '',
-    'STEP 1: Choose variant:',
+    'STEP 1: Run /refresh-usage to get fresh battery data.',
+    '',
+    'STEP 2: Choose variant:',
     '  if   ship succeeded                 → "shipped"',
     '  elif build/gate/merge failed        → "blocked"',
     '  elif task aborted or not feasible   → "aborted"',
@@ -66,7 +68,7 @@ process.stdin.on('end', () => {
     '  elif research/review/explanation    → "research"',
     '  else                                → "fallback"',
     '',
-    'STEP 2: Run via Bash tool:',
+    'STEP 3: Run via Bash tool:',
     `  echo '<JSON>' | node ${scriptPath}`,
     '',
     'JSON schema:',
@@ -86,7 +88,7 @@ process.stdin.on('end', () => {
     '    "userTest": ["Step 1","Step 2"]                   // only for test variant',
     '  }',
     '',
-    'STEP 3: Output the script result VERBATIM. Nothing before, nothing after.',
+    'STEP 4: Output the script result VERBATIM. Nothing before, nothing after.',
     'The card is always the LAST thing in your response. No text after closing ---.',
   );
 

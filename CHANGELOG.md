@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.1] — 2026-03-28
+
+### Fixed
+- **post.flow.completion** v0.9.0: `/refresh-usage` now mandatory Step 1 in completion flow — battery data was potentially stale without it
+- **ship skill Step 6**: removed redundant manual instructions — completion flow is fully handled by the hook
+
 ## [0.12.0] — 2026-03-28
 
 ### Added

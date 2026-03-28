@@ -119,9 +119,6 @@ Update local state and clean up. See `deep-knowledge/cleanup.md`.
 
 ## Step 6 — Completion Card
 
-Render completion card per `templates/completion-card.md`:
-1. Run `/refresh-usage` for live battery data
-2. Select Variant 1 (Shipped via PR) or 2 (Direct Push)
-3. Include: Changes, Tests, Branch cleanup, Usage with burn-rate
-
-The completion card is always the **last thing** in the response.
+Handled automatically by the `post.flow.completion` hook.
+The hook instructs Claude to run `/refresh-usage`, select the correct variant, and pipe JSON to `scripts/render-card.js`.
+No manual steps needed here — the card renders itself.
