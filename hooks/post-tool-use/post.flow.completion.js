@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.7.0
+ * @version 0.8.0
  * @event PostToolUse
  * @plugin dotclaude-dev-ops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -39,15 +39,9 @@ process.stdin.on('end', () => {
     try { fs.writeFileSync(counterFile, editCount.toString()); } catch {}
   }
 
-  // --- 2. Emit completion-card reminder (read from template) ---
+  // --- 2. Emit completion-card instruction (deterministic script) ---
   const pluginRoot = path.resolve(__dirname, '..');
-  const templatePath = path.join(pluginRoot, 'templates', 'completion-card.md');
-  let templateContent = '';
-  try {
-    templateContent = fs.readFileSync(templatePath, 'utf8');
-  } catch {
-    templateContent = 'COMPLETION CARD: Render the completion card after your last tool call. Template missing — use standard format.';
-  }
+  const scriptPath = path.join(pluginRoot, 'scripts', 'render-card.js').replace(/\\/g, '/');
 
   const lines = [];
 
@@ -58,10 +52,42 @@ process.stdin.on('end', () => {
   }
 
   lines.push(
-    'When you have finished ALL work for this task, end your response with the completion card.',
-    'Select the correct variant based on what happened (shipped, ready, blocked, test, research, aborted, or fallback).',
     '',
-    templateContent,
+    'When you have finished ALL work for this task, render the completion card by piping JSON to the render script.',
+    'Do NOT render the card yourself — the script produces it deterministically.',
+    '',
+    'STEP 1: Choose variant:',
+    '  if   ship succeeded                 → "shipped"',
+    '  elif build/gate/merge failed        → "blocked"',
+    '  elif task aborted or not feasible   → "aborted"',
+    '  elif code edits + app relevant      → "test"',
+    '  elif app started, no code edits     → "minimal-start"',
+    '  elif code/doc changes, no app       → "ready"',
+    '  elif research/review/explanation    → "research"',
+    '  else                                → "fallback"',
+    '',
+    'STEP 2: Run via Bash tool:',
+    `  echo '<JSON>' | node ${scriptPath}`,
+    '',
+    'JSON schema:',
+    '  {',
+    '    "variant": "ready|shipped|blocked|test|minimal-start|research|aborted|fallback",',
+    '    "summary": "max ~10 words, user language",',
+    '    "lang": "de",',
+    '    "changes": [{"area":"x","description":"y"}],     // max 3, omit if none',
+    '    "tests": [{"method":"x","result":"y"}],           // max 3, omit if none',
+    '    "state": {                                         // omit for minimal-start',
+    '      "branch": "feat/xyz", "worktree": false,',
+    '      "commit": "abc1234", "pushed": true,',
+    '      "pr": {"number":42,"title":"Title"}, "merged": "remote/main",',
+    '      "appStatus": "running|not-started|null"',
+    '    },',
+    '    "cta": {"info":"PR #42 ready","reason":"lint fails","vOld":"1.2.0","vNew":"1.3.0","bump":"minor","version":"1.3.0","description":"Website opens"},',
+    '    "userTest": ["Step 1","Step 2"]                   // only for test variant',
+    '  }',
+    '',
+    'STEP 3: Output the script result VERBATIM. Nothing before, nothing after.',
+    'The card is always the LAST thing in your response. No text after closing ---.',
   );
 
   if (editCount >= 5) {

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.12.0] — 2026-03-28
+
+### Added
+- **render-card.js**: Deterministic completion card renderer — Node script replaces LLM-based card rendering, eliminates template drift
+- All 8 variants (shipped, ready, blocked, test, minimal-start, research, aborted, fallback) rendered by script with exact column alignment
+
+### Changed
+- **post.flow.completion** v0.8.0: Hook no longer injects 190-line template — instead instructs Claude to pipe JSON to `render-card.js` and output result verbatim
+- Template `completion-card.md` remains as documentation/source of truth but is no longer injected into context at runtime
+
 ## [0.11.2] — 2026-03-28
 
 ### Fixed
