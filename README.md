@@ -21,7 +21,7 @@ Tell Claude:
 
 > "Install the dotclaude-dev-ops plugin from `Jerry0022/dotclaude-dev-ops`."
 
-Claude reads [`INSTALL.md`](INSTALL.md) from this repo and handles everything — asks global vs. project, merges settings, verifies the result.
+Claude reads [`INSTALL.md`](INSTALL.md) from this repo and handles everything — registers the marketplace globally, enables the plugin, verifies the result.
 
 ## Updates
 
