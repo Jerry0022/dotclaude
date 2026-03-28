@@ -19,7 +19,7 @@ const https = require('https');
 
 const PLUGIN_REPO = 'Jerry0022/dotclaude-dev-ops';
 const MARKETPLACE_DIR = path.join(
-  os.homedir(), '.claude', 'plugins', 'marketplaces', 'jerry0022-dotclaude-dev-ops'
+  os.homedir(), '.claude', 'plugins', 'marketplaces', 'dotclaude-dev-ops'
 );
 const TEMP_DIR = path.join(os.tmpdir(), 'dotclaude-dev-ops-update');
 
@@ -132,14 +132,14 @@ function updateInstalledPluginsJson(version, commitSha) {
   try {
     if (!fs.existsSync(installedPluginsPath)) return;
     const data = JSON.parse(fs.readFileSync(installedPluginsPath, 'utf8'));
-    const key = 'dotclaude-dev-ops@jerry0022-dotclaude-dev-ops';
+    const key = 'dotclaude-dev-ops@dotclaude-dev-ops';
     if (!data.plugins || !data.plugins[key]) return;
     const shortSha = commitSha.slice(0, 12);
     const entry = data.plugins[key][0];
     entry.version = shortSha;
     entry.installPath = path.join(
       globalDir, 'plugins', 'cache',
-      'jerry0022-dotclaude-dev-ops', 'dotclaude-dev-ops', shortSha
+      'dotclaude-dev-ops', 'dotclaude-dev-ops', shortSha
     );
     entry.gitCommitSha = commitSha;
     entry.lastUpdated = new Date().toISOString();
