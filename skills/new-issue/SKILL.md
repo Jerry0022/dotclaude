@@ -18,8 +18,10 @@ Create issues and milestones with enforced formatting and optional board integra
 
 ## Step 0 — Load Extensions
 
-1. Read `~/.claude/skills/new-issue/SKILL.md` + `reference.md` if exists → global overrides
-2. Read `{project}/.claude/skills/new-issue/SKILL.md` + `reference.md` if exists → project overrides
+Silently check for optional overrides (do not surface "not found" in output):
+
+1. Global skill extension: `~/.claude/skills/new-issue/SKILL.md` + `reference.md`
+2. Project skill extension: `{project}/.claude/skills/new-issue/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 **Project extensions define:**

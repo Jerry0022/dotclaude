@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.1] — 2026-03-28
+
+### Changed
+- **All skills**: Step 0 extension loading now uses "Silently check" wording to prevent Claude from surfacing "not found" tool calls in output
+- **CONVENTIONS.md**: Updated Step 0 template so new skills inherit the silent-check pattern
+
 ## [0.8.0] — 2026-03-28
 
 ### Added

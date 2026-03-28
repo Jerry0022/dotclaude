@@ -19,8 +19,10 @@ Explain `$ARGUMENTS` clearly, tailored to the user's expertise level.
 
 ## Step 0 — Load Extensions
 
-1. Read `~/.claude/skills/explain/SKILL.md` + `reference.md` if exists → global overrides
-2. Read `{project}/.claude/skills/explain/SKILL.md` + `reference.md` if exists → project overrides
+Silently check for optional overrides (do not surface "not found" in output):
+
+1. Global skill extension: `~/.claude/skills/explain/SKILL.md` + `reference.md`
+2. Project skill extension: `{project}/.claude/skills/explain/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Scope assessment

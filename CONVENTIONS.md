@@ -159,14 +159,13 @@ Layer 3: Project extensions           ← {project}/.claude/skills/{name}/SKILL.
 **Load sequence in every skill (Step 0):**
 
 ```markdown
-## Step 0: Load User Extensions
+## Step 0 — Load Extensions
 
-1. Read `~/.claude/skills/{skill-name}/SKILL.md` if exists → global user overrides
-2. Read `~/.claude/skills/{skill-name}/reference.md` if exists → global user context
-3. Read `{project}/.claude/skills/{skill-name}/SKILL.md` if exists → project overrides
-4. Read `{project}/.claude/skills/{skill-name}/reference.md` if exists → project context
-5. Merge all layers: project rules > global rules > plugin defaults
-6. Proceed with merged ruleset
+Silently check for optional overrides (do not surface "not found" in output):
+
+1. Global skill extension: `~/.claude/skills/{skill-name}/SKILL.md` + `reference.md`
+2. Project skill extension: `{project}/.claude/skills/{skill-name}/SKILL.md` + `reference.md`
+3. Merge: project > global > plugin defaults
 ```
 
 **This pattern is mandatory for every new skill.** When creating skills
