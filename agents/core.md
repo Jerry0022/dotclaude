@@ -1,13 +1,7 @@
 ---
 name: core
-description: >-
-  Core/Backend agent — implements business logic, services, data models,
-  APIs, and system infrastructure. The backbone that other agents build on.
-  <example>Create the user service with CRUD operations</example>
-  <example>Add a database migration for the new schema</example>
+description: Core/Backend agent — implements business logic, services, data models, APIs, and system infrastructure. The backbone that other agents build on.
 model: sonnet
-color: yellow
-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
 ---
 
 # Core Agent

@@ -1,13 +1,7 @@
 ---
 name: windows
-description: >-
-  Windows platform agent — handles Windows-specific features: system tray,
-  native APIs, installers, registry, file associations, and platform integration.
-  <example>Add system tray support with notifications</example>
-  <example>Create the Windows installer with auto-update</example>
+description: Windows platform agent — handles Windows-specific features, system tray, native APIs, installers, registry, file associations, and platform integration.
 model: sonnet
-color: red
-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
 ---
 
 # Windows Agent

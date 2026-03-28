@@ -1,13 +1,7 @@
 ---
 name: research
-description: >-
-  Research agent — investigates topics, compares technologies, finds best
-  practices. Runs in isolated context to keep main conversation clean.
-  <example>Compare React vs Vue for our use case</example>
-  <example>Research current best practices for API rate limiting</example>
+description: Research agent — investigates topics, compares technologies, finds best practices. Runs in isolated context to keep main conversation clean.
 model: sonnet
-color: cyan
-tools: ["WebSearch", "WebFetch", "Read", "Grep", "Glob"]
 ---
 
 # Research Agent
