@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.5] — 2026-03-28
+
+### Changed
+- **render-card.js**: Opening `---` separator moved from above usage meter to below it — usage code block is visually self-contained; `---` now separates usage from title
+- **completion-card.md**: Template updated to reflect new separator position
+
 ## [0.12.4] — 2026-03-28
 
 ### Fixed

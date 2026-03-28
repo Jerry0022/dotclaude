@@ -260,15 +260,15 @@ function renderCard(input) {
 
   const parts = [];
 
-  // Opening fence
-  parts.push('---');
-  parts.push('');
-
   // Block A — What was done
   if (config.usage) {
     parts.push(renderUsageMeter(usageData, input.delta5h, input.deltaWk));
     parts.push('');
+    parts.push('---');
+  } else {
+    parts.push('---');
   }
+  parts.push('');
 
   parts.push(renderTitle(input.summary || 'Task completed', buildId));
   parts.push('');
