@@ -1,82 +1,59 @@
 {
+  "description": "dotclaude-dev-ops lifecycle hooks — guards, triggers, and automation across the full session lifecycle",
   "hooks": {
     "SessionStart": [
       {
-        "name": "ss.plugin.update",
-        "description": "Check GitHub for newer plugin version, auto-update if available",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.plugin.update.js\""
-      },
-      {
-        "name": "ss.tokens.scan",
-        "description": "Scan project for expensive files, update config for token guard",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.tokens.scan.js\""
-      },
-      {
-        "name": "ss.branches.check",
-        "description": "Check for uncommitted/unpushed changes at session start, warn if dirty",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.branches.check.js\""
-      },
-      {
-        "name": "ss.tasks.register",
-        "description": "Register plugin scheduled tasks (self-calibration) via CronCreate",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/session-start/ss.tasks.register.js\""
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.tokens.scan.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.branches.check.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.tasks.register.js" }
+        ]
       }
     ],
     "PreToolUse": [
       {
-        "name": "pre.tokens.guard",
-        "description": "Block operations exceeding 2% of session token limit",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/pre-tool-use/pre.tokens.guard.js\"",
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.tokens.guard.js" }
+        ],
         "matcher": "Read|Bash|Glob|Grep"
       },
       {
-        "name": "pre.ship.guard",
-        "description": "Block manual PR commands (redirect to /ship) and git push with dirty state",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/pre-tool-use/pre.ship.guard.js\"",
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.ship.guard.js" }
+        ],
         "matcher": "Bash"
       }
     ],
     "PostToolUse": [
       {
-        "name": "post.flow.completion",
-        "description": "After code edits: verify changes, update issue status if tracked, recommend /ship when flow appears complete",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/post-tool-use/post.flow.completion.js\"",
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.completion.js" }
+        ],
         "matcher": "Edit|Write"
       },
       {
-        "name": "post.debug.trigger",
-        "description": "After 2+ consecutive Bash failures: recommend debug flow",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/post-tool-use/post.debug.trigger.js\"",
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.debug.trigger.js" }
+        ],
         "matcher": "Bash"
       }
     ],
     "UserPromptSubmit": [
       {
-        "name": "prompt.git.sync",
-        "description": "Periodic git pull/merge main into current branch (throttled, every 15 min)",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.git.sync.js\""
-      },
-      {
-        "name": "prompt.issue.detect",
-        "description": "Detect issue references in user message, set to In Progress or ask user",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.issue.detect.js\""
-      },
-      {
-        "name": "prompt.ship.detect",
-        "description": "Detect ship intent in user prompt, enforce Skill('ship') over manual commands",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.ship.detect.js\""
-      },
-      {
-        "name": "prompt.start.detect",
-        "description": "Detect app start intent, enforce completion card after starting",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/user-prompt-submit/prompt.start.detect.js\""
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.git.sync.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.issue.detect.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.ship.detect.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.start.detect.js" }
+        ]
       }
     ],
     "Stop": [
       {
-        "name": "stop.ship.guard",
-        "description": "Warn about uncommitted changes, suggest WIP commit before session ends",
-        "command": "node \"$HOME/.claude/plugins/marketplaces/dotclaude-dev-ops/hooks/stop/stop.ship.guard.js\""
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.ship.guard.js" }
+        ]
       }
     ]
   }
