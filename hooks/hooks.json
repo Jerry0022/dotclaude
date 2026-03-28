@@ -28,8 +28,7 @@
       {
         "hooks": [
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.completion.js" }
-        ],
-        "matcher": "Edit|Write"
+        ]
       },
       {
         "hooks": [

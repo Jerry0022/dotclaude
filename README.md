@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.10.0**
+**Version: 0.11.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -11,7 +11,7 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 - **13 Hooks** — automated guards and triggers across the full session lifecycle
 - **9 Skills** — ship, commit, debug, research, explain, issues, project setup, readme, usage tracking
 - **9 Agents** — QA, Feature Worker, Research, PO, Frontend, Core, Windows, AI, Gamer
-- **Completion Flow** — mandatory card after every task (7 variants), visual verification, ship recommendation
+- **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /ship skill routing
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
 
@@ -234,6 +234,281 @@ Based on ~0.7M tokens/week plugin overhead:
 **Token guard payoff:** The token guard blocks any single operation above 2% of your session window (~20K tokens). In a typical session, Claude attempts 5–15 broad searches or large-file reads that would each burn 20–80K tokens — that's 100–400K tokens/session evaporating into context you never asked for. Across ~10 sessions/week, the guard saves roughly **1–4M tokens/week** in prevented waste. The plugin's own overhead (~0.7M tokens/week for hooks, startup checks, and skill prompts) pays for itself 1.5–6x over just by keeping Claude from reading files it doesn't need.
 
 Your mileage may vary. Your sanity will not.
+
+## Completion Cards
+
+Every task ends with a completion card — a structured signal showing what happened, the repo state, and what comes next. The card is always the last thing in the response.
+
+**Shipped example** — after a successful PR merge:
+
+```
+---
+
+5h  ▓▓▓▓░░░░░░░░   33% (+2% ! )  · Reset 3h 12m
+        ↑
+
+Wk  ▓▓░░░░░░░░░░   18% (+2% ! )  · Reset 5d 3h
+             ↑
+
+## ✨✨✨ Filter dialog moved to settings · a3f9b21 ✨✨✨
+
+**Changes**
+* Settings → Filter tab as new section with drag & drop
+* Dialog → FilterDialog removed, route redirected to Settings
+* Tests → 3 unit tests added for new settings section
+
+**Tests**
+* Build: npm run build successful
+* Unit: 47/47 passed, 3 new tests
+* Preview: Filter tab rendered correctly, drag & drop functional
+
+✅ feat/filter-settings · a3f9b21 · pushed · PR #42 "Filter dialog to settings" · merged → remote/main
+
+## 🚀 SHIPPED. v0.8.2 → v0.8.3 (patch) — RELAX, all done
+
+---
+```
+
+**Test example** — app running, user must verify:
+
+```
+---
+
+5h  ▓▓▓▓▓▓░░░░░░   50% (+3% ! )  · Reset 2h 30m
+         ↑
+
+Wk  ▓▓▓░░░░░░░░░   27% (+3% ! )  · Reset 4d 16h
+              ↑
+
+## ✨✨✨ Live search in contact book · e82a0f7 ✨✨✨
+
+**Changes**
+* ContactBook → Debounced live search with 300ms delay
+* API → New /contacts/search endpoint with fuzzy match
+* UI → Search field with clear button and loading spinner
+
+**Tests**
+* Build: successful
+* Unit: 38/38 passed
+
+🟢 feat/contact-search · e82a0f7 · not pushed · no PR · not merged · app running
+
+**Please test**
+1. Open contact book, type "Mue" in search field
+2. Verify: results filter after ~300ms, spinner visible
+3. Click clear button, verify list resets
+
+## 🧪 DONE. Live search ready — SHIP after your TEST?
+
+---
+```
+
+<details>
+<summary><strong>All 8 variants</strong></summary>
+
+### shipped (direct push, no version bump)
+
+```
+---
+
+5h  ▓▓░░░░░░░░░░   12% (+1%   )  · Reset 4h 31m
+  ↑
+
+Wk  ▓▓░░░░░░░░░░   15% (+1%   )  · Reset 4d 22h
+          ↑
+
+## ✨✨✨ Typo in error handler fixed · b7e2c44 ✨✨✨
+
+**Changes**
+* ErrorHandler → "Unerwareter" corrected to "Unerwarteter"
+
+✅ main · b7e2c44 · pushed · no PR · remote/main
+
+## 🚀 SHIPPED. v0.8.3 — RELAX, all done
+
+---
+```
+
+### ready
+
+```
+---
+
+5h  ▓▓▓▓▓▓▓░░░░░   58% (+4% ! )  · Reset 2h 5m
+          ↑
+
+Wk  ▓▓▓░░░░░░░░░   22% (+4% ! )  · Reset 5d 1h
+             ↑
+
+## ✨✨✨ Dark mode for dashboard implemented · c91d3e8 ✨✨✨
+
+**Changes**
+* Theme → Dark mode palette as CSS custom properties
+* Dashboard → All panels switched to theme variables
+* Settings → Dark mode toggle with localStorage persistence
+
+**Tests**
+* Build: successful
+* Unit: 52/52 passed
+
+🔀 feat/dark-mode · c91d3e8 · not pushed · no PR · not merged
+
+## 📦 READY. Code complete — SHIP or CHANGE?
+
+---
+```
+
+### blocked
+
+```
+---
+
+5h  ▓▓▓▓▓░░░░░░░   42% (+3% ! )  · Reset 2h 48m
+        ↑
+
+Wk  ▓▓▓░░░░░░░░░   24% (+3% ! )  · Reset 4d 19h
+            ↑
+
+## ✨✨✨ API rate limiting added · d44f1a2 ✨✨✨
+
+**Changes**
+* Middleware → RateLimiter with token bucket algorithm
+* Config → Rate limits configurable per endpoint
+* Tests → Integration tests for throttling behavior
+
+**Tests**
+* Build: successful
+* Unit: 3/5 FAILED — testBurstLimit and testConcurrentRequests timeout
+
+🔀 feat/rate-limiting · d44f1a2 · not pushed · no PR · not merged
+
+## ⛔ BLOCKED. 2 tests failed — FIX or SKIP?
+
+---
+```
+
+### test (app needs start)
+
+```
+---
+
+5h  ▓▓▓▓▓▓▓▓░░░░   67% (+5% ! )  · Reset 1h 40m
+       ↑
+
+Wk  ▓▓▓▓░░░░░░░░   30% (+5% ! )  · Reset 4d 9h
+             ↑
+
+## ✨✨✨ Push notifications for mobile · f1b3d99 ✨✨✨
+
+**Changes**
+* Mobile → Firebase Cloud Messaging integration
+* Backend → Notification service with device token management
+* Settings → Push notification opt-in/opt-out toggle
+
+**Tests**
+* Build: successful
+* Unit: 29/29 passed
+
+🟡 feat/push-notifications · f1b3d99 · not pushed · no PR · not merged · app not started
+
+**Please test**
+1. Start app on phone, grant push permission
+2. Send a test message from another device
+3. Verify: push appears, tap opens correct view
+
+## 🧪 DONE. Push notifications ready — SHIP after your TEST?
+
+---
+```
+
+### minimal-start
+
+```
+---
+
+## ✨✨✨ Dev server started · a3f9b21 ✨✨✨
+
+## 🧪 STARTED. Website opens in Edge — HAVE FUN
+
+---
+```
+
+### research
+
+```
+---
+
+5h  ▓▓▓░░░░░░░░░   25% (+2% ! )  · Reset 3h 45m
+       ↑
+
+Wk  ▓▓░░░░░░░░░░   19% (+2% ! )  · Reset 5d 6h
+              ↑
+
+## ✨✨✨ Hook lifecycle analyzed · a3f9b21 ✨✨✨
+
+**Changes**
+* Analysis → PostToolUse hooks fire only on Edit/Write, not Read
+* Analysis → Session state shared via temp files, not env vars
+* Analysis → prompt.ship.detect recognizes "ja"/"go" as ship intent
+
+➖ No changes to repo
+
+## 📋 DONE. Hook lifecycle documented — READ through
+
+---
+```
+
+### aborted
+
+```
+---
+
+5h  ▓▓▓▓▓▓▓▓▓░░░   75% (+6% !!)  · Reset 1h 15m
+      ↑
+
+Wk  ▓▓▓▓░░░░░░░░   35% (+6% !!)  · Reset 4d 2h  ⚠ Sonnet or new session
+            ↑
+
+## ✨✨✨ WebSocket migration aborted · a3f9b21 ✨✨✨
+
+**Changes**
+* Analysis → existing REST polling architecture incompatible with WS
+* Spike → prototype shows migration requires new session management
+
+🔀 spike/websocket · abc1234 · not pushed · no PR · not merged
+
+## 🚫 ABORTED. Architecture incompatibility — What should I TRY?
+
+---
+```
+
+### fallback
+
+```
+---
+
+5h  ▓▓░░░░░░░░░░   15% (+1%   )  · Reset 4h 10m
+    ↑
+
+Wk  ▓▓░░░░░░░░░░   16% (+1%   )  · Reset 5d 0h
+           ↑
+
+## ✨✨✨ Configuration verified · a3f9b21 ✨✨✨
+
+**Changes**
+* .editorconfig → settings match team standard
+* .gitattributes → LF normalization correctly configured
+
+➖ No changes to repo
+
+## 📋 DONE — Anything ELSE?
+
+---
+```
+
+</details>
+
+8 variants total. The card always fires — see [completion-card.md](templates/completion-card.md) for the full template spec.
 
 ## License
 

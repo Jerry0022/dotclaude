@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.11.0] — 2026-03-28
+
+### Added
+- **Completion card v0.7.0**: Complete redesign — 8 variants (was 7) with fallback, 3-block layout (What/State/CTA)
+- **Title**: Sparkle emoji framing (`✨✨✨`), summary-first, build-ID always included
+- **Usage meter**: ASCII bars with elapsed-time arrow (`↑`), pace comparison vs. elapsed time, delta markers (`!`/`!!`)
+- **State one-liner**: All git fields always present (branch, commit, push, PR, merge, remote/main)
+- **CTAs**: 8 variants with emoji + UPPERCASE status + info + action verb, EN master with on-the-fly translation
+- **New variants**: `research` (no repo changes) and `fallback` (catch-all)
+- **README**: Shipped + test examples prominent, all 8 variants in collapsible details
+
+### Fixed
+- **Hook coverage**: PostToolUse completion hook now fires on ALL tools, not just Edit/Write — fixes 5 coverage gaps (research, docs/config, bash-only, Read-only, template missing)
+- **Extension filter removed**: `.md`/`.json`/`.yml` edits now trigger completion flow
+
+### Changed
+- **Variants consolidated**: shipped-pr + shipped-direct → `shipped`, test-running + test-manual → `test` (difference shown in state line)
+- **Block order**: Usage meter moved directly under title for immediate visibility
+
 ## [0.10.0] — 2026-03-28
 
 ### Changed
