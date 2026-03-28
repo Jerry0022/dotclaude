@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.5.0
+ * @version 0.6.0
  * @event PostToolUse
  * @plugin dotclaude-dev-ops
  * @description After code edits (Edit/Write): increment the session edit
@@ -15,7 +15,7 @@ require('../lib/plugin-guard');
 
 const fs = require('fs');
 const path = require('path');
-const { sessionFile } = require('../lib/session-id');
+const { sessionFile, readSessionFile } = require('../lib/session-id');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -71,6 +71,33 @@ process.stdin.on('end', () => {
     lines.push(
       '',
       `SHIP: ${editCount} code edits this session. Recommend /ship when task is done.`,
+    );
+  }
+
+  // --- 3. Issue status check — inject instructions if issues are tracked ---
+  let trackedIssues = [];
+  try {
+    const result = readSessionFile('dotclaude-devops-tracked-issues', hook.session_id);
+    if (result) {
+      trackedIssues = JSON.parse(result.content);
+    }
+  } catch {}
+
+  if (trackedIssues.length > 0) {
+    const issueList = trackedIssues.map(n => `#${n}`).join(', ');
+    lines.push(
+      '',
+      `[issue-status] Tracked issues this session: ${issueList}`,
+      'BEFORE rendering the completion card, evaluate each tracked issue:',
+      '1. Read the issue body and acceptance criteria from GitHub (gh issue view N)',
+      '2. Compare against the changes made in this session',
+      '3. For each issue:',
+      '   - If ALL acceptance criteria are met → set status to "Done" on the GitHub project board',
+      '   - If NOT fully done → set status to "Todo" on the GitHub project board',
+      '     AND post a comment on the issue summarizing:',
+      '     • What was completed in this session',
+      '     • What remains open',
+      'Do this silently — no extra output to the user, just the API calls.',
     );
   }
 

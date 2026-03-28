@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.issue.detect
- * @version 0.1.0
+ * @version 0.2.0
  * @event UserPromptSubmit
  * @plugin dotclaude-dev-ops
  * @description Detect issue references in user messages. If explicit (#N or
@@ -13,10 +13,7 @@ require('../lib/plugin-guard');
 
 const { execSync } = require('child_process');
 const fs = require('fs');
-const path = require('path');
-const os = require('os');
-
-const TRACKED_FILE = path.join(os.tmpdir(), `dotclaude-devops-tracked-issues-${process.ppid}`);
+const { sessionFile } = require('../lib/session-id');
 
 // Read hook input from stdin (contains user's message)
 let inputData = '';
@@ -68,9 +65,10 @@ process.stdin.on('end', () => {
   }
 
   // Load already tracked issues (avoid duplicate prompts)
+  const trackedFile = sessionFile('dotclaude-devops-tracked-issues', hook.session_id);
   let tracked = [];
   try {
-    tracked = JSON.parse(fs.readFileSync(TRACKED_FILE, 'utf8'));
+    tracked = JSON.parse(fs.readFileSync(trackedFile, 'utf8'));
   } catch { tracked = []; }
 
   const newIssues = issueNumbers.filter(n => !tracked.includes(n));
@@ -102,5 +100,5 @@ process.stdin.on('end', () => {
 
   // Save tracked issues
   tracked.push(...newIssues);
-  try { fs.writeFileSync(TRACKED_FILE, JSON.stringify(tracked)); } catch {}
+  try { fs.writeFileSync(trackedFile, JSON.stringify(tracked)); } catch {}
 });

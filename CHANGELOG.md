@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.0] — 2026-03-28
+
+### Added
+- **post.flow.completion** v0.6.0: issue status check in completion flow — reads tracked issues, evaluates acceptance criteria, sets "Done" or resets to "Todo" with status comment
+- **prompt.issue.detect** v0.2.0: migrated from `process.ppid` to `sessionFile()` for cross-hook session state sharing
+
 ## [0.6.2] — 2026-03-28
 
 ### Changed
