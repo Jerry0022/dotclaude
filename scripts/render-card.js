@@ -91,7 +91,9 @@ function renderBar(pct) {
 }
 
 function formatDelta(delta) {
-  if (delta == null || isNaN(delta)) delta = 0;
+  // null/undefined = no previous data or stale (>8h) → omit parenthetical, pad for alignment
+  if (delta == null) return ' '.repeat(8);
+  if (isNaN(delta)) delta = 0;
   const sign = '+' + delta;
   let marker;
   if (delta >= 6)      marker = '!!';
@@ -125,7 +127,7 @@ function renderUsageMeter(usageData, delta5h, deltaWk) {
   // --- 5h window ---
   const bar5h = renderBar(s.pct);
   const pct5h = String(s.pct).padStart(3, ' ') + '%';
-  const delta5hStr = formatDelta(delta5h || 0);
+  const delta5hStr = formatDelta(delta5h);
   const reset5h = formatResetShort(s.resetInMinutes);
   const elapsed5hPct = ((300 - s.resetInMinutes) / 300) * 100;
   const arrowPos5h = Math.round(Math.max(0, Math.min(100, elapsed5hPct)) / 100 * 12);
@@ -140,7 +142,7 @@ function renderUsageMeter(usageData, delta5h, deltaWk) {
   if (w) {
     const barWk = renderBar(w.pct);
     const pctWk = String(w.pct).padStart(3, ' ') + '%';
-    const deltaWkStr = formatDelta(deltaWk || 0);
+    const deltaWkStr = formatDelta(deltaWk);
     const resetWk = formatResetShort(w.resetInMinutes);
     const elapsedWkPct = ((10080 - w.resetInMinutes) / 10080) * 100;
     const arrowPosWk = Math.round(Math.max(0, Math.min(100, elapsedWkPct)) / 100 * 12);

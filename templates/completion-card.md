@@ -142,7 +142,11 @@ arrow_line = " " × (4 + arrow_pos) + "↑"
 - `4` = offset for label + gap ("5h  ").
 - Arrow line directly below bar line. Blank line only after the arrow, before next window.
 
-**Delta color coding (marker suffix in code block):**
+**Delta display rules:**
+
+Only show the delta parenthetical when a previous `usage-live.json` snapshot exists **and** is less than 8 hours old. If no previous snapshot exists or it is stale (>8h), omit the parenthetical entirely — pad with 8 spaces to preserve column alignment.
+
+When shown, delta uses color coding (marker suffix in code block):
 
 | Delta | Marker | Example |
 |-------|--------|---------|
@@ -151,6 +155,9 @@ arrow_line = " " × (4 + arrow_pos) + "↑"
 | +6%+ | `!!` suffix | `(+8% !!)` |
 
 Delta field is always 8 characters wide: `(+N% XX)`, right-padded with spaces inside.
+When omitted, 8 spaces are used instead to keep `· Reset` aligned.
+
+**Implementation:** Pass `delta5h: null` / `deltaWk: null` in the render-card input JSON when no valid previous snapshot is available. The renderer will omit the parenthetical and pad for alignment.
 
 **Pace comparison (usage vs. elapsed time):**
 

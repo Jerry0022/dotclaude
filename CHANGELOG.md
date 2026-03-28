@@ -13,6 +13,9 @@
 - **self-calibration/SKILL.md** v0.2.0 — Step 1 rewritten with explicit completion flow rules; discretionary skip documented as violation
 - **plugin-behavior.md** — Completion Flow section updated to reflect generic pattern and hook architecture
 
+### Fixed
+- **render-card**: Omit usage delta parenthetical `(+N%)` when no previous usage snapshot exists or it is older than 8 hours — prevents misleading `(+0%)` display on first run
+
 ## [0.12.8] — 2026-03-28
 
 ### Fixed
