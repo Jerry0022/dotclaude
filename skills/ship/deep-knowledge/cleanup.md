@@ -39,15 +39,30 @@ git pull origin main
 If a worktree was active, the main repo may already be on the correct branch
 after ExitWorktree — verify with `git branch --show-current` before checkout.
 
-### 3. Delete shipped branch (local only)
+### 3. Verify remote branch is gone
+
+The merge step uses `--delete-branch`, and the repo has `deleteBranchOnMerge` enabled,
+but neither is guaranteed (API hiccups, setting changes, manual merges). Always verify:
+
+```bash
+git ls-remote --heads origin <shipped-branch>
+```
+
+If the branch still exists on the remote, delete it explicitly:
+
+```bash
+git push origin --delete <shipped-branch>
+```
+
+Re-verify after deletion — an empty result confirms success.
+
+### 4. Delete shipped branch (local)
 
 ```bash
 git branch -D <shipped-branch>
 ```
 
-Remote branch was already deleted by `--delete-branch` in the merge step.
-
-### 4. Prune
+### 5. Prune
 
 ```bash
 git worktree prune

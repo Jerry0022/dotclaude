@@ -22,8 +22,9 @@ Create a pull request via the GitHub API:
 Merge the PR via the GitHub API:
 
 - Strategy: squash merge
-- Delete the remote feature branch after merge
+- Pass `--delete-branch` to request remote branch deletion
 - Verify remote branch is gone: `git ls-remote --heads origin <branch>`
+- If branch persists (API hiccup), cleanup step 3 handles it as a fallback
 
 ## Tag
 

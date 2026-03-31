@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.17.2] — 2026-04-01
+
+### Fixed
+- **ship/cleanup** — added explicit remote branch verification + fallback deletion; prevents stale branches when `--delete-branch` silently fails
+- **ship/release-flow** — clarified `--delete-branch` is a request, not a guarantee; cleanup step 3 is the safety net
+- **repo setting** — enabled `deleteBranchOnMerge` as additional safety net for all future merges
+- **housekeeping** — deleted 3 stale remote branches from prior squash-merged PRs (#58, #59, #60)
+
 ## [0.17.1] — 2026-04-01
 
 ### Added
