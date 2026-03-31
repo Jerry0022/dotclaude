@@ -523,7 +523,9 @@ server.registerTool(
       const key = params.session_id || 'latest';
       const flagPath = join(tmpdir(), 'dotclaude-devops-card-rendered-' + key);
       writeFileSync(flagPath, new Date().toISOString());
-    } catch {}
+    } catch (e) {
+      console.error('[dotclaude-completion-mcp] Failed to write card flag:', e.message);
+    }
 
     return {
       content: [{

@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { git, gitStrict, currentBranch, headShort } from "../lib/git.js";
 import { createPR, mergePR, createRelease } from "../lib/github.js";
 
@@ -28,7 +28,7 @@ export async function handler(params) {
     // Optional: commit version-bumped files
     if (commitMessage) {
       gitStrict("add -A");
-      execSync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, {
+      execFileSync("git", ["commit", "-m", commitMessage], {
         cwd,
         encoding: "utf8",
         timeout: 15_000,

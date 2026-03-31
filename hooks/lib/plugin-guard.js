@@ -18,15 +18,6 @@ const os = require('os');
 const PLUGIN_KEY_LEGACY = 'dotclaude-dev-ops@Jerry0022';
 const PLUGIN_KEY = 'dotclaude-dev-ops@dotclaude-dev-ops';
 
-function isEnabledIn(settingsPath) {
-  try {
-    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-    return !!(settings.enabledPlugins && settings.enabledPlugins[PLUGIN_KEY]);
-  } catch {
-    return false;
-  }
-}
-
 const projectSettings = path.join(process.cwd(), '.claude', 'settings.json');
 const globalSettings = path.join(os.homedir(), '.claude', 'settings.json');
 

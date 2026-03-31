@@ -3,7 +3,20 @@
 ## [0.18.1] — 2026-04-01
 
 ### Fixed
+- **ship/lib/github.js** — `mergePR()` now verifies PR state is MERGED before proceeding; fetches origin/main for accurate merge commit sha
+- **ship/tools/release.js** — replaced shell-interpolated `execSync` with `execFileSync` for commit messages, preventing shell injection
+- **ship/SKILL.md** — added `success: false` error check for version bump step; added cleanup error handling guidance
+- **render-card.js** + **mcp-server/index.js** — flag write failures now logged to stderr instead of silent catch
+- **deep-research/SKILL.md** — removed invalid `agent: Explore` reference (no such agent exists)
 - **INSTALL.md** — corrected Codex plugin installation steps to match actual Claude Code Desktop UI (Customize → + → Browse Plugins)
+
+### Removed
+- **pre.ship.guard.js** — orphaned hook file deleted (was already removed from hooks.json in v0.18.0 but file remained on disk)
+- **plugin-guard.js** — removed unused `isEnabledIn()` function (dead code since `isEnabledInAny()` replaced it)
+- **github.js** — removed unused `repoName()` export
+
+### Changed
+- **README.md** — corrected agent count to 10 (added Designer), corrected hook count to 10 (removed pre.ship.guard references), alphabetized agent table
 
 ## [0.18.0] — 2026-04-01
 

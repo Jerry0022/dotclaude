@@ -95,7 +95,9 @@ Then call `ship_version_bump` MCP tool:
 ship_version_bump({ bump: "minor" })
 ```
 
-Returns: `{ vOld, vNew, filesUpdated, verified, mismatches }`.
+Returns: `{ success, vOld, vNew, filesUpdated, verified, mismatches }`.
+
+If `success: false` → no version file found. Report error and render completion card with variant `blocked`. Do not continue.
 If `verified: false` → fix mismatches manually, then retry.
 
 ## Step 4 — Release
@@ -131,6 +133,8 @@ The tool will refuse to run if still inside a worktree — it returns an error r
 
 **Only own branch/worktree.** Never clean up other branches or worktrees.
 **Only after confirmed merge.** If Step 4 failed, preserve everything.
+
+If `success: false` → log warning but continue to Step 6. Cleanup failures are non-fatal — the merge already landed.
 
 ## Step 6 — Completion Card
 

@@ -8,9 +8,9 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 
 ## Features
 
-- **11 Hooks** — automated guards and triggers across the full session lifecycle
+- **10 Hooks** — automated guards and triggers across the full session lifecycle
 - **10 Skills** — ship, commit, flow, research, explain, issues, project setup, readme, usage tracking, extend-skill
-- **9 Agents** — QA, Feature Worker, Research, PO, Frontend, Core, Windows, AI, Gamer
+- **10 Agents** — AI, Core, Designer, Feature Worker, Frontend, Gamer, PO, QA, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /ship skill routing
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
@@ -39,7 +39,7 @@ Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**. Sem
 
 ### Hooks (automatic, no user action needed)
 
-11 hooks fire automatically across the session lifecycle — no user action needed.
+10 hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -57,7 +57,6 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 #### PreToolUse — runs before each tool call
 
 - `pre.tokens.guard` — Block operations exceeding token budget
-- `pre.ship.guard` — Block manual PR commands + git push with dirty state
 
 #### PostToolUse — runs after each tool call
 
@@ -88,7 +87,6 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 
 #### ship — enforce the shipping pipeline
 
-- `pre.ship.guard` — Block manual PR commands + git push with dirty state *(PreToolUse)*
 - `prompt.ship.detect` — Detect ship intent, enforce /ship skill *(UserPromptSubmit)*
 
 #### flow — track progress toward completion
@@ -126,15 +124,16 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 
 | Agent | Role |
 |---|---|
-| **qa** | Test, verify, screenshot |
-| **feature** | Orchestrate feature implementation |
-| **research** | Deep-dive investigations |
-| **po** | Requirements and validation |
-| **frontend** | UI components and styling |
-| **core** | Business logic and APIs |
-| **windows** | Platform-specific features |
 | **ai** | AI/ML integration |
+| **core** | Business logic and APIs |
+| **designer** | UX/UI design, tokens, and specs |
+| **feature** | Orchestrate feature implementation |
+| **frontend** | UI components and styling |
 | **gamer** | Player perspective and UX |
+| **po** | Requirements and validation |
+| **qa** | Test, verify, screenshot |
+| **research** | Deep-dive investigations |
+| **windows** | Platform-specific features |
 
 ## Customization
 
@@ -190,9 +189,9 @@ See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
 dotclaude-dev-ops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← 11 hook scripts (JS)
+├── hooks/                         ← 10 hook scripts (JS)
 ├── skills/                        ← 10 skill definitions (SKILL.md)
-├── agents/                        ← 9 agent definitions
+├── agents/                        ← 10 agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
 └── scripts/                       ← Utility scripts (build-id, usage)

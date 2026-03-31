@@ -259,5 +259,7 @@ process.stdin.on('end', () => {
     const key = input.session_id || 'latest';
     const flagPath = path.join(os.tmpdir(), 'dotclaude-devops-card-rendered-' + key);
     fs.writeFileSync(flagPath, new Date().toISOString());
-  } catch {}
+  } catch (e) {
+    process.stderr.write('render-card: failed to write flag file: ' + e.message + '\n');
+  }
 });

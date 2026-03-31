@@ -11,7 +11,6 @@ description: >-
   questions that can be answered with a single WebSearch.
 argument-hint: "[topic or question]"
 context: fork
-agent: Explore
 allowed-tools: WebSearch, WebFetch, Read, Grep, Glob
 ---
 
