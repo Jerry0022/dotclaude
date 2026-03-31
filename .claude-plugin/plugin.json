@@ -1,6 +1,6 @@
 {
   "name": "dotclaude-dev-ops",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "description": "Complete DevOps automation for Claude Code: hooks, skills, templates, and git hygiene.",
   "hooks": "./hooks/hooks.json",
   "mcpServers": {
@@ -15,5 +15,14 @@
   },
   "homepage": "https://github.com/Jerry0022/dotclaude-dev-ops",
   "license": "MIT",
-  "keywords": ["devops", "git", "automation", "shipping", "testing", "code-quality"]
+  "keywords": ["devops", "git", "automation", "shipping", "testing", "code-quality"],
+  "optionalPlugins": [
+    {
+      "name": "codex-plugin-cc",
+      "source": "openai/codex-plugin-cc",
+      "description": "Code review and task delegation via OpenAI Codex",
+      "skills": ["codex:review", "codex:adversarial-review", "codex:rescue", "codex:status", "codex:result", "codex:cancel"],
+      "docs": "https://github.com/openai/codex-plugin-cc"
+    }
+  ]
 }

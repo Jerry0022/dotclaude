@@ -1,6 +1,17 @@
 # Changelog
 
-## [0.17.0] — 2026-04-01
+## [0.17.1] — 2026-04-01
+
+### Added
+- **plugin.json** — `optionalPlugins` metadata field referencing `codex-plugin-cc` for AI-powered code review and task delegation via OpenAI Codex (informational, not enforced by Claude Code)
+- **deep-knowledge/codex-integration.md** — cross-cutting reference for all Codex integration points (detection, token costs, troubleshooting)
+- **INSTALL.md** — "Optional: Codex Integration" section with Desktop-first setup guide, skill reference table, combined workflow examples, and troubleshooting
+- **README.md** — "Integrations" section linking to Codex setup
+- **ship/SKILL.md** — optional Codex review gate after build+tests (Step 2): `/codex:review` for patch/minor, `/codex:adversarial-review` for major bumps
+- **flow/SKILL.md** — `/codex:rescue` as option when root cause is unclear (Step 6 decision matrix)
+- **post.flow.debug** v0.4.0 — mentions `/codex:rescue` as alternative to `/flow` after repeated failures
+- **agents/qa** — suggests `/codex:adversarial-review` for complex changes; `codex_review` field in QA_RESULT
+- **agents/research** — delegates sub-questions to `/codex:rescue` for parallel investigation
 
 ### Changed
 - **MCP server** renamed `dotclaude-usage` → `dotclaude-completion` v0.3.0; now exposes two tools

@@ -66,6 +66,19 @@ Build the project and run quality checks. See `deep-knowledge/quality-gates.md`.
 
 If build fails → render completion card with variant `blocked`. Do not continue.
 
+### Codex Review (optional, if codex-plugin-cc installed)
+
+After build + tests pass, run a Codex code review for a second opinion.
+See `deep-knowledge/codex-integration.md` for details.
+
+1. **patch/minor changes** → `/codex:review` (read-only diff review)
+2. **major bump** → `/codex:adversarial-review` (challenges design trade-offs)
+3. Present findings to user before proceeding
+4. User decides: address findings, ignore and continue, or abort ship
+
+If codex-plugin-cc is not installed → skip silently.
+This step is non-blocking — Codex findings are advisory, not a hard gate.
+
 ## Step 3 — Version Bump
 
 Determine bump type and update all version files. See `deep-knowledge/versioning.md`.

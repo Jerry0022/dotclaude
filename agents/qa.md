@@ -21,6 +21,7 @@ Verify that changes work correctly. Run in parallel with implementation.
 - Take screenshots of UI changes
 - Check console logs for errors
 - Generate build-ID after successful build
+- Suggest `/codex:adversarial-review` for complex or high-risk changes (if codex-plugin-cc installed)
 - Report findings in structured format
 
 ## Output format
@@ -33,6 +34,7 @@ QA_RESULT:
   console_errors: [list or "none"]
   build_id: <hash> | "not generated"
   findings: [list of issues or "clean"]
+  codex_review: "not requested" | "advised" | "findings: [...]"
 ```
 
 ## Rules

@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.17.0**
+**Version: 0.17.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -170,6 +170,19 @@ Run `/extend-skill` to interactively scaffold an extension for any plugin skill.
 It detects existing extensions and lets you adapt them.
 
 For the full extension guide with examples per skill, see `deep-knowledge/skill-extension-guide.md`.
+
+## Integrations
+
+### Codex (optional)
+
+Install [codex-plugin-cc](https://github.com/openai/codex-plugin-cc) alongside
+this plugin for AI-powered code review and task delegation via OpenAI Codex.
+Both plugins coexist as independent skill providers — no configuration needed.
+
+Combined workflows: `/codex:review` before `/ship`, `/codex:rescue` as
+alternative to `/deep-research`, `/codex:adversarial-review` alongside QA.
+
+See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
 
 ## Project Structure
 

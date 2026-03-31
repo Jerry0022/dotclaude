@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.debug
- * @version 0.3.0
+ * @version 0.4.0
  * @event PostToolUse
  * @plugin dotclaude-dev-ops
  * @description After 2+ consecutive Bash failures: recommend the flow skill.
@@ -52,7 +52,9 @@ process.stdin.on('end', () => {
       `Repeated Bash failure detected (${failures} consecutive). ` +
       'Consider running /flow: check recent git changes, ' +
       'read error logs, and perform root-cause analysis per ' +
-      'skills/flow/SKILL.md before retrying.\n'
+      'skills/flow/SKILL.md before retrying. ' +
+      'Alternative: /codex:rescue to delegate investigation to Codex ' +
+      '(requires codex-plugin-cc).\n'
     );
     try { fs.unlinkSync(counterFile); } catch {}
   }
