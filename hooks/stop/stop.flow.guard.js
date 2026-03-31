@@ -41,9 +41,9 @@ process.stdin.on('end', () => {
   // --- Inject carry-over reminder only when card was missed ---
   if (workHappened && !cardRendered) {
     process.stdout.write([
-      '[stop.flow.guard] CARRY-OVER: Im letzten Turn wurde Arbeit erledigt, aber keine Completion Card gerendert.',
-      'Render die Completion Card JETZT als ERSTES in deiner naechsten Antwort — vor jeder anderen Ausgabe.',
-      'Kein "discretionary skip": jede erledigte Aufgabe bekommt eine Card, unabhaengig von Tool, Dateipfad oder Aufgabentyp.',
+      '[stop.flow.guard] CARRY-OVER: Work completed but no completion card rendered.',
+      'Call `render_completion_card` MCP tool NOW as the FIRST thing — before any other output.',
+      'Every completed task gets a card, regardless of tool, file, or task type.',
     ].join('\n') + '\n');
   }
   // else: silent — no stdout

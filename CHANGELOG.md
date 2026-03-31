@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.0] — 2026-04-01
+
+### Changed
+- **MCP server** renamed `dotclaude-usage` → `dotclaude-completion` v0.3.0; now exposes two tools
+- **New tool** `render_completion_card` — single MCP call replaces the previous 4-step flow (get_usage → variant → JSON → Bash pipe); internally fetches usage, computes build-ID, renders card, writes flag
+- **post.flow.completion** v0.13.0 — hook output reduced from ~25 lines to ~10 lines; instructs Claude to call `render_completion_card` instead of multi-step Bash pipe
+- **stop.flow.guard** — carry-over message updated to reference `render_completion_card`
+- **plugin.json** — MCP server key renamed to `dotclaude-completion`; bumped to v0.17.0
+
+### Why
+Completion cards were frequently ignored because the hook injected ~70 lines of text instructions requiring 4-5 manual steps. A native MCP tool call is Claude's natural interface — one structured call instead of parsing text and piping JSON through Bash.
+
 ## [0.16.0] — 2026-04-01
 
 ### Added

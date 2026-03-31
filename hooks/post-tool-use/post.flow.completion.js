@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.12.0
+ * @version 0.13.0
  * @event PostToolUse
  * @plugin dotclaude-dev-ops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -46,9 +46,7 @@ process.stdin.on('end', () => {
     fs.writeFileSync(workFile, toolName);
   } catch {}
 
-  // --- 2. Emit completion-card instruction (deterministic script) ---
-  const pluginRoot = path.resolve(__dirname, '..');
-  const scriptPath = path.join(pluginRoot, 'scripts', 'render-card.js').replace(/\\/g, '/');
+  // --- 2. Emit completion-card instruction (MCP tool call) ---
 
   const lines = [];
 
@@ -61,28 +59,13 @@ process.stdin.on('end', () => {
   lines.push(
     '',
     'COMPLETION CARD — when ALL work is done:',
-    '1. Call the `get_usage` MCP tool (dotclaude-usage server) to fetch live usage data.',
-    '   Use the renderedMeter from the tool result as the usage block in the card.',
-    '   Pass delta5h/deltaWk from the tool result into the render-card JSON.',
-    '2. Variant:',
-    '  if   ship succeeded                 → "shipped"',
-    '  elif build/gate/merge failed        → "blocked"',
-    '  elif task aborted or not feasible   → "aborted"',
-    '  elif code edits + app relevant      → "test"',
-    '  elif app started, no code edits     → "minimal-start"',
-    '  elif code/doc changes, no app       → "ready"',
-    '  elif research/review/explanation    → "research"',
-    '  else                                → "fallback"',
-    `3. Bash: echo '<JSON>' | node ${scriptPath}`,
-    `   {"variant":"shipped|ready|blocked|test|minimal-start|research|aborted|fallback",`,
-    `    "session_id":"${hook.session_id || ''}",`,
-    '    "summary":"max ~10 words, user language","lang":"de",',
-    '    "changes":[{"area":"x","description":"y"}],          // max 3, omit if none',
-    '    "tests":[{"method":"x","result":"y"}],               // max 3, omit if none',
-    '    "state":{"branch":"...","worktree":false,"commit":"...","pushed":true,"pr":{"number":1,"title":"..."},"merged":"remote/main","appStatus":"running|not-started|null"}, // omit for minimal-start',
-    '    "cta":{"info":"...","reason":"...","vOld":"...","vNew":"...","bump":"...","version":"...","description":"..."},',
-    '    "userTest":["step 1"]}                               // only for test variant',
-    '4. Output VERBATIM — card LAST, nothing after closing ---.',
+    'Call `render_completion_card` MCP tool (dotclaude-completion server).',
+    `Pass: variant, summary (max ~10 words, user language), lang:"de", session_id:"${hook.session_id || ''}",`,
+    '  plus changes, tests, state, cta, userTest as applicable.',
+    'Variant: shipped=ship succeeded, blocked=build/gate/merge failed,',
+    '  aborted=task aborted, test=code edits+app, minimal-start=app started no edits,',
+    '  ready=code/doc changes no app, research=review/explanation, fallback=other.',
+    'Output returned markdown VERBATIM — card LAST, nothing after closing ---.',
   );
 
   if (editCount >= 5) {
