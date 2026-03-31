@@ -19,7 +19,7 @@ Implement a feature in an isolated worktree branch.
 
 - Create a feature branch and worktree
 - Implement the requested feature
-- Delegate to domain-specific agents (frontend, core, ai, windows) when needed
+- Delegate to domain-specific agents (designer, frontend, core, ai, windows) when needed
 - Commit logical units of work
 - Push and report when done
 
@@ -42,18 +42,44 @@ ALWAYS include `Parent branch: <your-current-branch>` in every sub-agent prompt.
 
 ```
 feature/
-├── delegates to → frontend/ (UI components)
-├── delegates to → core/     (business logic, services)
-├── delegates to → ai/       (AI/ML integration)
-└── delegates to → windows/  (platform-specific)
+├── Wave 0: po/       (requirements analysis, acceptance criteria, scope)
+│            gamer/   (UX expectations, player perspective, parallel)
+├── Wave 1: core/     (contracts, data models — guided by PO requirements)
+│            research/ (if needed, parallel with core)
+├── Wave 2: designer/ (UX/UI design, tokens, specs — informed by PO + Gamer input)
+├── Wave 3: frontend/ (implementation — consumes design specs)
+│            ai/      (AI features, parallel with frontend)
+│            windows/ (platform-specific, parallel with frontend)
+├── Wave 4: qa/       (tests, build, screenshots)
+└── Wave 5: po/       (implementation review vs. acceptance criteria)
+             gamer/   (end-user validation of the built result, parallel)
 ```
 
-Each sub-agent works on its domain. The feature agent merges each wave back
-before spawning the next wave (so Wave 2 agents see Wave 1 contracts).
+**Wave 0 (Analysis)** runs PO and Gamer BEFORE any implementation starts.
+PO defines what to build (requirements, acceptance criteria, scope boundaries).
+Gamer defines how it should feel (UX expectations, player pain points, comparisons).
+Their output is passed to all subsequent waves as context.
 
-Example delegation prompt:
+**Wave 5 (Review)** runs the same agents again to validate the result:
+PO checks implementation against the acceptance criteria from Wave 0.
+Gamer evaluates the built result from a player perspective.
+
+The feature agent merges each wave back before spawning the next wave
+(so each wave sees the artifacts from all previous waves).
+
+Example delegation prompts:
+
+Wave 0 (PO):
 > Parent branch: feat/42-video-filters
-> Implement the video filter UI components...
+> Analyze requirements for video filters: write acceptance criteria, define scope...
+
+Wave 0 (Gamer):
+> Parent branch: feat/42-video-filters
+> What UX expectations should video filters meet from a player perspective?
+
+Wave 2 (Designer):
+> Parent branch: feat/42-video-filters
+> Design the video filter UI. PO requirements: [summary]. Gamer expectations: [summary]...
 
 ## Output format
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.16.0] — 2026-04-01
+
+### Added
+- **agents/designer** — full-stack UX/UI designer agent: Figma + Code bridge, design tokens, component specs, wireframes-to-pixel-perfect pipeline
+- **Wave 0 (Analysis)** — PO + Gamer agents now run before implementation to set requirements and UX expectations
+- **Wave 5 (Review)** — PO + Gamer agents validate the built result against Wave 0 expectations
+
+### Changed
+- **agents/po** — rewritten from requirements engineer to product CEO: holistic ownership (business, user, tech, operations), critical challenge duty, strategic analysis, accountability review
+- **agents/gamer** — dual role with structured output for expectations (Wave 0) and validation (Wave 5)
+- **agents/feature** — 6-wave orchestration (Wave 0–5) with explicit parallelism and dependency documentation
+- **agents/frontend** — collaboration updated to receive from designer agent
+
 ## [0.15.1] — 2026-03-31
 
 ### Fixed
