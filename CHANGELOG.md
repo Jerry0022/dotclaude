@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.14.1] — 2026-03-31
+
+### Fixed
+- **ship/cleanup** — call `ExitWorktree` before git worktree removal to release Windows CWD lock; prevents `git worktree remove` failure when session is still inside the worktree
+- **ship/SKILL.md** — added `ExitWorktree` to `allowed-tools`; rewrote Step 5 to exit worktree first
+
 ## [0.14.0] — 2026-03-31
 
 ### Added

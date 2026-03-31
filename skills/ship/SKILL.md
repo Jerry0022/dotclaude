@@ -8,7 +8,7 @@ description: >-
   "merge it", "ab damit", "mach nen PR", "push and merge", "das kann rein".
   Do NOT trigger when: user is still coding/debugging, mid-sprint, or just
   committing without shipping.
-allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, Grep, AskUserQuestion
+allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, Grep, AskUserQuestion, ExitWorktree
 ---
 
 # Ship
@@ -114,11 +114,10 @@ Execute the release pipeline. See `deep-knowledge/release-flow.md`.
 
 Update local state and clean up. See `deep-knowledge/cleanup.md`.
 
-1. Checkout main + pull
-2. If worktree: also update main repo's main branch
+1. **Exit worktree first** (if session is inside one): call `ExitWorktree(action: "remove")` to release the CWD lock and return to the main repo. This MUST happen before any git worktree cleanup — on Windows, the CWD lock prevents removal otherwise.
+2. Checkout main + pull
 3. Delete shipped feature branch (local)
-4. Remove worktree if applicable
-5. Prune: `git worktree prune`, `git remote prune origin`
+4. Prune: `git worktree prune`, `git remote prune origin`
 
 **Only own branch/worktree.** Never clean up other branches or worktrees.
 **Only after confirmed merge.** If Step 4 failed, preserve everything.

@@ -14,38 +14,38 @@ The squash-merge commit must be visible. If not → preserve everything.
 
 ## Steps
 
-### 1. Sync local main
+### 1. Exit worktree (if session is inside one)
+
+**MUST happen before any git cleanup.** On Windows, the session holds a CWD lock
+on the worktree directory — `git worktree remove` will fail if the CWD is still inside it.
+
+Call `ExitWorktree` with `action: "remove"` to:
+- Release the CWD lock
+- Return the session to the main repo directory
+- Clean up the worktree directory and branch
+
+If `ExitWorktree` reports uncommitted changes and refuses to remove, use
+`discard_changes: true` — the work is already merged at this point.
+
+If `ExitWorktree` is not applicable (no worktree session active), skip to step 2.
+
+### 2. Sync local main
 
 ```bash
 git checkout main
 git pull origin main
 ```
 
-If in a worktree, also update the main repo:
-```bash
-git -C <main-repo-path> checkout main
-git -C <main-repo-path> pull origin main
-```
+If a worktree was active, the main repo may already be on the correct branch
+after ExitWorktree — verify with `git branch --show-current` before checkout.
 
-### 2. Delete shipped branch (local only)
+### 3. Delete shipped branch (local only)
 
 ```bash
 git branch -D <shipped-branch>
 ```
 
 Remote branch was already deleted by `--delete-branch` in the merge step.
-
-### 3. Remove worktree (if applicable)
-
-```bash
-git checkout --detach
-git worktree remove <path> --force
-```
-
-Fallback if file-locked:
-```bash
-git worktree prune && rm -rf <path>
-```
 
 ### 4. Prune
 
