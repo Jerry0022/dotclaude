@@ -123,33 +123,6 @@ function checkVersionConsistency() {
   return mismatches;
 }
 
-// --- Hook registry consistency check ---
-
-function checkHookRegistry() {
-  const missing = [];
-
-  const plugin = readJson('.claude-plugin/plugin.json');
-  const hooksJson = readJson('hooks/hooks.json');
-  if (!plugin || !hooksJson) return missing;
-
-  const registered = new Set(Array.isArray(plugin.hooks) ? plugin.hooks : []);
-
-  // Collect all hook names from hooks.json
-  const defined = [];
-  for (const hooks of Object.values(hooksJson.hooks || {})) {
-    for (const h of hooks) {
-      if (h.name) defined.push(h.name);
-    }
-  }
-
-  for (const name of defined) {
-    if (!registered.has(name)) {
-      missing.push(name);
-    }
-  }
-
-  return missing;
-}
 
 // Read hook input from stdin
 let inputData = '';
@@ -216,19 +189,6 @@ process.stdin.on('end', () => {
     console.error('\n' + '─'.repeat(50));
     console.error('Update all version files before pushing.');
     console.error('See: skills/ship/deep-knowledge/versioning.md');
-    console.error('');
-    process.exit(2);
-  }
-
-  // --- Check 3: Hook registry consistency ---
-  const missingHooks = checkHookRegistry();
-  if (missingHooks.length > 0) {
-    console.error(`\n⛔ PUSH BLOCKED — hook registry mismatch`);
-    console.error('─'.repeat(50));
-    console.error('\nHooks defined in hooks/hooks.json but missing from .claude-plugin/plugin.json:');
-    missingHooks.forEach(name => console.error(`  - ${name}`));
-    console.error('\n' + '─'.repeat(50));
-    console.error('Add missing hooks to .claude-plugin/plugin.json "hooks" array.');
     console.error('');
     process.exit(2);
   }

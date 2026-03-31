@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.15.0**
+**Version: 0.15.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -113,7 +113,7 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 |---|---|
 | `/ship` | Full shipping pipeline: build, version, PR, merge, cleanup |
 | `/commit` | Conventional commits with smart staging |
-| `/debug` | Root-cause analysis with decision tree |
+| `/flow` (alias: `/debug`) | Root-cause analysis, diagnostics, and fix cycle |
 | `/deep-research` | Multi-angle research with structured output |
 | `/explain` | Code explanation with diagrams |
 | `/new-issue` | GitHub issue creation with labels and milestones |

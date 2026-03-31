@@ -158,7 +158,7 @@ process.stdin.on('end', () => {
   }
 
   console.error(line);
-  console.error('To proceed, reply: "yes, proceed"');
+  console.error('To proceed, retry the same operation.');
   console.error('');
   process.exit(2);
 });

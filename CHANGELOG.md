@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.1] — 2026-03-31
+
+### Fixed
+- **pre.ship.guard** — remove dead `checkHookRegistry()` code that never matched (plugin.json#hooks is a path string, not an array; hooks.json entries have no `name` fields)
+- **pre.tokens.guard** — fix UX message: "retry the same operation" instead of misleading "reply: yes, proceed"
+- **refresh-usage-headless** — add platform guard: exit early with code 5 on non-Windows systems instead of crashing on missing Edge/tasklist
+- **README** — correct `/debug` skill entry to `/flow (alias: /debug)` matching the actual skill name
+
 ## [0.15.0] — 2026-03-31
 
 ### Changed

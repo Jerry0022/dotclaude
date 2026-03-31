@@ -40,6 +40,14 @@ const CDP_PORT = 9223;
 const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
 const EDGE_EXE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 
+// Platform guard — Edge CDP scraper is Windows-only
+if (process.platform !== 'win32') {
+  if (!process.argv.includes('--quiet')) {
+    console.log('refresh-usage-headless: Edge CDP scraper is Windows-only. Skipping.');
+  }
+  process.exit(5);
+}
+
 const isQuiet = process.argv.includes('--quiet');
 const printSummary = process.argv.includes('--summary');
 const activateCDP = process.argv.includes('--activate-cdp');
