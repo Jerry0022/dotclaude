@@ -1,11 +1,11 @@
 ---
 name: ship
-version: 0.1.0
+version: 0.2.0
 description: >-
-  Full end-to-end shipping pipeline: build, quality gates, version bump, commit,
-  push, create PR, merge, tag, sync main, cleanup, and completion card. Use when
-  work is complete and ready to land on main. Triggers on: "ship it", "fertig",
-  "merge it", "ab damit", "mach nen PR", "push and merge", "das kann rein".
+  Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
+  ship_version_bump, ship_release, ship_cleanup, then render_completion_card.
+  Use when work is complete and ready to land on main. Triggers on: "ship it",
+  "fertig", "merge it", "ab damit", "mach nen PR", "push and merge", "das kann rein".
   Do NOT trigger when: user is still coding/debugging, mid-sprint, or just
   committing without shipping.
 allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, Grep, AskUserQuestion, ExitWorktree
@@ -13,7 +13,7 @@ allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, G
 
 # Ship
 
-Ship completed work to main via PR.
+Ship completed work to main via PR using the `dotclaude-ship` MCP server tools.
 
 ## Pre-Step — Session Activity Guard
 
@@ -47,24 +47,25 @@ Project extensions define: quality gate commands, deploy targets, version files,
 
 ## Step 1 — Pre-Flight Safety Gate
 
-Run all checks. If any fails → **STOP and report**. Do not proceed.
+Call `ship_preflight` MCP tool (dotclaude-ship server):
+```
+ship_preflight({ base: "main" })
+```
 
-See `deep-knowledge/pre-flight.md` for the full checklist:
-- No uncommitted/untracked files
-- Commits ahead of main (something to ship)
-- All commits pushed to remote
-- Build artifacts gitignored
+If `ready: false` → report errors and **STOP**. Do not proceed.
+
+The tool checks: clean tree, commits ahead, all pushed, version consistency, worktree detection.
 
 ## Step 2 — Build + Quality Gates
 
-Build the project and run quality checks. See `deep-knowledge/quality-gates.md`.
+Call `ship_build` MCP tool:
+```
+ship_build({ buildCmd: "npm run build", lintCmd: "npm run lint" })
+```
 
-1. Build: `npm run build` (or project-specific command from extension)
-2. Lint: `npm run lint` (if available)
-3. Tests: run task-specific tests (full suite only if not deduplicated by build-ID)
-4. Generate build-ID: `node scripts/build-id.js`
+Pass project-specific commands from extensions if available.
 
-If build fails → render completion card with variant `blocked`. Do not continue.
+If `success: false` → call `render_completion_card` with variant `blocked`. Do not continue.
 
 ### Codex Review (optional, if codex-plugin-cc installed)
 
@@ -81,62 +82,101 @@ This step is non-blocking — Codex findings are advisory, not a hard gate.
 
 ## Step 3 — Version Bump
 
-Determine bump type and update all version files. See `deep-knowledge/versioning.md`.
-
-- **patch/minor**: decide autonomously based on changes
+Determine bump type based on changes:
+- **patch/minor**: decide autonomously
 - **major**: always ask user via AskUserQuestion
 - **none**: internal-only changes (no user-visible impact)
 
-### Mandatory Version Verification Gate
+**Before calling ship_version_bump**, update CHANGELOG.md with the new version entry.
+The MCP tool updates JSON files and README — CHANGELOG is editorial and must be done by Claude.
 
-After bumping, grep ALL version files and verify they match the new version.
-This is a **hard gate** — if ANY file is out of sync, STOP and fix before continuing.
-
-**Plugin project** (`.claude-plugin/plugin.json` exists):
+Then call `ship_version_bump` MCP tool:
 ```
-- .claude-plugin/plugin.json  → "version": "X.Y.Z"
-- README.md                   → **Version: X.Y.Z**
-- CHANGELOG.md                → ## [X.Y.Z] — <date> (must exist as newest entry)
+ship_version_bump({ bump: "minor" })
 ```
-Run: `grep -rn "X.Y.Z" .claude-plugin/plugin.json README.md CHANGELOG.md`
-Expected: **3 matches minimum**.
 
-**npm project** (`package.json` exists, no `plugin.json`):
+Returns: `{ vOld, vNew, filesUpdated, verified, mismatches }`.
+If `verified: false` → fix mismatches manually, then retry.
+
+## Step 4 — Release
+
+Call `ship_release` MCP tool:
 ```
-- package.json  → "version": "X.Y.Z"
-- README.md     → **Version: X.Y.Z**
-- CHANGELOG.md  → ## [X.Y.Z] — <date> (must exist as newest entry)
+ship_release({
+  base: "main",
+  title: "feat(ship): add MCP server for ship pipeline",
+  body: "## Summary\n...\n\nCloses #N",
+  commitMessage: "chore(release): v0.18.0",
+  tag: "v0.18.0",
+  releaseNotes: "...",
+  prerelease: false
+})
 ```
-Run: `grep -rn "X.Y.Z" package.json README.md CHANGELOG.md`
-Expected: **3 matches minimum**.
 
-If fewer → a file was missed. Fix it before proceeding.
-If bump type is "none", skip this gate entirely.
+The tool handles: commit, push, PR create, squash-merge, tag, GitHub release — all deterministically.
 
-## Step 4 — Commit, Push, PR, Merge
+Returns: `{ branch, commit, pushed, pr: {number, url}, merged, tag, tagVerified, release }`.
 
-Execute the release pipeline. See `deep-knowledge/release-flow.md`.
+If `success: false` → do NOT proceed to cleanup. Report error and render completion card with variant `blocked`.
 
-1. Commit version-bumped files (conventional commit format, per /commit rules)
-2. Push to feature branch: `git push -u origin <branch>`
-3. Create PR via GitHub API (title <70 chars, body starts with `Closes #N`)
-4. Merge PR via GitHub API (squash, delete branch)
-5. Tag on main: `git tag v<X.Y.Z>` + push tag (skip if bump = none)
+## Step 5 — Cleanup
 
-## Step 5 — Sync + Cleanup
+**If in a worktree**: call `ExitWorktree(action: "remove")` FIRST to release the CWD lock.
+Then call `ship_cleanup` MCP tool:
+```
+ship_cleanup({ branch: "claude/feature-branch", base: "main" })
+```
 
-Update local state and clean up. See `deep-knowledge/cleanup.md`.
-
-1. **Exit worktree first** (if session is inside one): call `ExitWorktree(action: "remove")` to release the CWD lock and return to the main repo. This MUST happen before any git worktree cleanup — on Windows, the CWD lock prevents removal otherwise.
-2. Checkout main + pull
-3. Delete shipped feature branch (local)
-4. Prune: `git worktree prune`, `git remote prune origin`
+The tool will refuse to run if still inside a worktree — it returns an error reminding you to call ExitWorktree first.
 
 **Only own branch/worktree.** Never clean up other branches or worktrees.
 **Only after confirmed merge.** If Step 4 failed, preserve everything.
 
 ## Step 6 — Completion Card
 
-Handled automatically by the `post.flow.completion` hook.
-The hook instructs Claude to run `/refresh-usage`, select the correct variant, and pipe JSON to `scripts/render-card.js`.
-No manual steps needed here — the card renders itself.
+Call `render_completion_card` MCP tool (dotclaude-completion server) with data from previous steps:
+
+```
+render_completion_card({
+  variant: "shipped",
+  summary: "<~10 words, user's language>",
+  lang: "de",
+  changes: [<from ship_build/ship_version_bump results>],
+  tests: [<from ship_build results>],
+  state: {
+    branch: "main",
+    commit: <from ship_release.commit>,
+    pushed: true,
+    pr: { number: <from ship_release.pr.number>, title: <PR title> },
+    merged: "main"
+  },
+  cta: {
+    vOld: <from ship_version_bump.vOld>,
+    vNew: <from ship_version_bump.vNew>,
+    bump: <bump type>
+  }
+})
+```
+
+Output the card markdown VERBATIM — card LAST, nothing after closing `---`.
+
+## Data Flow Summary
+
+```
+ship_preflight → { ready, branch, ahead, inWorktree }
+      ↓
+ship_build → { success, buildId, steps }
+      ↓
+ship_version_bump → { vOld, vNew, filesUpdated, verified }
+      ↓
+ship_release → { commit, pushed, pr, merged, tag }
+      ↓
+[ExitWorktree if needed]
+      ↓
+ship_cleanup → { cleaned }
+      ↓
+render_completion_card → card markdown (VERBATIM)
+```
+
+Each tool produces structured JSON that feeds directly into the next step or the completion card.
+No Bash parsing, no regex extraction — deterministic data flow.

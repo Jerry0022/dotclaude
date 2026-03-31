@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.18.0] — 2026-04-01
+
+### Added
+- **MCP server** `dotclaude-ship` v0.1.0 — new MCP server with 5 granular ship pipeline tools: `ship_preflight`, `ship_build`, `ship_version_bump`, `ship_release`, `ship_cleanup`
+- **ship/lib/git.js** — shared git CLI wrappers (dirtyState, commitsAhead, unpushedCommits, isWorktree, etc.)
+- **ship/lib/github.js** — shared gh CLI wrappers (createPR, mergePR, createRelease)
+- **ship/lib/version.js** — version file detection, bumping, updating, and verification across plugin/npm project types
+
+### Changed
+- **ship/SKILL.md** v0.2.0 — rewritten to orchestrate MCP tools instead of raw Bash commands; deterministic structured JSON data flow between steps
+- **plugin.json** — registered `dotclaude-ship` MCP server alongside existing `dotclaude-completion`
+
+### Removed
+- **pre.ship.guard** hook — dirty-tree and version-consistency checks now handled by `ship_preflight` MCP tool; hook entry removed from hooks.json
+
 ## [0.17.2] — 2026-04-01
 
 ### Fixed
