@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.14.1**
+**Version: 0.15.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 

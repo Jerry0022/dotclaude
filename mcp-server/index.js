@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-usage-mcp
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin dotclaude-dev-ops
  * @description MCP server exposing a single `get_usage` tool.
- *   Scrapes live usage data from claude.ai via CDP, reads cached data,
- *   and returns structured JSON + pre-rendered ASCII usage meter.
+ *   Scrapes live usage data from claude.ai via CDP, computes deltas
+ *   against the previous scrape, and returns structured JSON +
+ *   pre-rendered ASCII usage meter.
+ *
+ *   No caching — every call triggers a fresh scrape.
+ *   usage-live.json is global (cross-session) so deltas work
+ *   regardless of which session last scraped.
  *
  *   Registered in plugin.json → started automatically by Claude Code.
  *   Stdout is the JSON-RPC wire — all logging goes to stderr.
@@ -111,46 +116,29 @@ function readUsageJson() {
   }
 }
 
-function getCacheAgeMinutes(data) {
-  if (!data?.timestamp) return Infinity;
-  return Math.round((Date.now() - new Date(data.timestamp).getTime()) / 60000);
-}
-
 /**
- * Run the CDP scrape with the full fallback chain.
- * Returns { success, data, source } where source is 'live' | 'cached' | 'none'.
+ * Always scrape fresh data. Compute delta against previous usage-live.json.
+ * Returns { success, data, delta5h, deltaWk }.
  */
-function refreshUsage(forceRefresh) {
-  const existing = readUsageJson();
-  const cacheAge = getCacheAgeMinutes(existing);
-
-  // If cache is fresh (<5min) and not forcing, skip scrape
-  if (!forceRefresh && existing && cacheAge < 5) {
-    return { success: true, data: existing, source: 'cached', cacheAgeMinutes: cacheAge };
-  }
-
-  // Save pre-scrape data for delta computation
-  const preScrape = existing;
+function refreshUsage() {
+  // Read previous data for delta computation (written by any session)
+  const previous = readUsageJson();
 
   // Try CDP scrape with auto-start fallback
   try {
-    // 1a. Check if CDP is available
     try {
       execSync(`node "${SCRAPER_SCRIPT}" --check-only`, {
         timeout: 5000,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
-      // exit 0 = CDP ready, proceed to scrape
     } catch (checkErr) {
       const exitCode = checkErr.status;
       if (exitCode === 7) {
-        // No Edge running → auto-start
         execSync(`node "${SCRAPER_SCRIPT}" --auto-start --quiet`, {
           timeout: 30000,
           stdio: ['pipe', 'pipe', 'pipe'],
         });
       } else if (exitCode === 5) {
-        // Edge running without CDP → activate
         execSync(`node "${SCRAPER_SCRIPT}" --activate-cdp --quiet`, {
           timeout: 30000,
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -158,7 +146,6 @@ function refreshUsage(forceRefresh) {
       }
     }
 
-    // Now scrape
     execSync(`node "${SCRAPER_SCRIPT}" --quiet`, {
       timeout: 30000,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -166,28 +153,20 @@ function refreshUsage(forceRefresh) {
 
     const freshData = readUsageJson();
     if (freshData) {
-      // Compute deltas
+      // Delta: only if previous data exists
       let delta5h = null;
       let deltaWk = null;
-      if (preScrape?.timestamp) {
-        const preAge = getCacheAgeMinutes(preScrape);
-        if (preAge < 480) { // <8h
-          delta5h = (freshData.session?.pct || 0) - (preScrape.session?.pct || 0);
-          deltaWk = (freshData.weekly?.pct || 0) - (preScrape.weekly?.pct || 0);
-        }
+      if (previous?.session) {
+        delta5h = (freshData.session?.pct || 0) - (previous.session?.pct || 0);
+        deltaWk = (freshData.weekly?.pct || 0) - (previous.weekly?.pct || 0);
       }
-      return { success: true, data: freshData, source: 'live', delta5h, deltaWk };
+      return { success: true, data: freshData, delta5h, deltaWk };
     }
   } catch (err) {
     console.error('[dotclaude-usage-mcp] Scrape failed:', err.message);
   }
 
-  // Fallback to cached data
-  if (existing) {
-    return { success: true, data: existing, source: 'cached', cacheAgeMinutes: cacheAge };
-  }
-
-  return { success: false, data: null, source: 'none' };
+  return { success: false, data: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +175,7 @@ function refreshUsage(forceRefresh) {
 
 const server = new McpServer({
   name: "dotclaude-usage",
-  version: "0.1.0",
+  version: "0.2.0",
 });
 
 server.registerTool(
@@ -204,16 +183,14 @@ server.registerTool(
   {
     title: "Get Usage",
     description:
-      "Fetch live token usage data from claude.ai. Returns structured usage percentages, " +
-      "reset times, and a pre-rendered ASCII usage meter for the completion card. " +
-      "Automatically handles CDP scraping with fallback chain (auto-start Edge, activate CDP, cache).",
-    inputSchema: z.object({
-      forceRefresh: z.boolean().default(false)
-        .describe("Force a fresh CDP scrape even if cached data is less than 5 minutes old."),
-    }),
+      "Fetch live token usage data from claude.ai. Always scrapes fresh data. " +
+      "Returns structured usage percentages, reset times, deltas against " +
+      "the previous scrape, and a pre-rendered ASCII usage meter. " +
+      "Handles CDP fallback chain (auto-start Edge, activate CDP).",
+    inputSchema: z.object({}),
   },
-  async ({ forceRefresh }) => {
-    const result = refreshUsage(forceRefresh);
+  async () => {
+    const result = refreshUsage();
 
     if (!result.success) {
       return {
@@ -221,7 +198,7 @@ server.registerTool(
           type: "text",
           text: JSON.stringify({
             error: true,
-            message: "Usage data unavailable after exhausting all fallbacks.",
+            message: "Usage data unavailable — scrape failed.",
             renderedMeter: "\u26a0 Usage data unavailable \u2014 monitoring issue",
           }),
         }],
@@ -239,8 +216,6 @@ server.registerTool(
           weeklySonnet: result.data.weeklySonnet,
           plan: result.data.plan,
           timestamp: result.data.timestamp,
-          source: result.source,
-          cacheAgeMinutes: result.cacheAgeMinutes || 0,
           delta5h: result.delta5h ?? null,
           deltaWk: result.deltaWk ?? null,
           renderedMeter: meter,

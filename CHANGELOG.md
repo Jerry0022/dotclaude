@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0] — 2026-03-31
+
+### Changed
+- **mcp-server** — remove cache layer: every `get_usage` call now triggers a fresh CDP scrape (no 5-min cache skip)
+- **mcp-server** — remove `forceRefresh` parameter, `source`, and `cacheAgeMinutes` from response
+- **mcp-server** — delta computed against previous `usage-live.json` (cross-session); `null` when no previous data exists
+
 ## [0.14.1] — 2026-03-31
 
 ### Fixed
