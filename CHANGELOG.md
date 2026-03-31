@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.18.1] — 2026-04-01
+
+### Fixed
+- **INSTALL.md** — corrected Codex plugin installation steps to match actual Claude Code Desktop UI (Customize → + → Browse Plugins)
+
 ## [0.18.0] — 2026-04-01
 
 ### Added

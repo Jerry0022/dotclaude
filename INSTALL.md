@@ -59,9 +59,9 @@ npm install -g @openai/codex
 
 In Claude Code Desktop:
 
-1. Open **Settings** → **Plugins** → **Marketplaces**
-2. Add marketplace: `openai/codex-plugin-cc`
-3. Enable the plugin `codex-plugin-cc`
+1. Click **Customize** (sidebar) → **+** next to *Personal Plugins*
+2. Select **Browse Plugins**
+3. Search for `codex` and install **codex-plugin-cc**
 
 Then start a new session and run `/codex:setup` to configure authentication.
 
