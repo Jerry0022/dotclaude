@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.14.0] — 2026-03-31
+
+### Added
+- **MCP server** `dotclaude-usage` v0.1.0 — first MCP server in the plugin; exposes `get_usage` tool via stdio transport; CDP scrape with full fallback chain (auto-start, activate-cdp, cache); returns structured usage data + pre-rendered ASCII meter as a first-class tool result
+- **scripts/lib/usage-meter.js** v0.1.0 — shared module for usage meter rendering (renderUsageMeter, readUsageData, renderBar, formatDelta, formatResetShort)
+
+### Changed
+- **render-card.js** — refactored to use shared `scripts/lib/usage-meter.js` instead of inline functions (-89 lines)
+- **post.flow.completion** — completion flow now instructs Claude to call `get_usage` MCP tool instead of `/refresh-usage` skill; tool result is a first-class context entry that Claude cannot skip
+- **plugin.json** — added `mcpServers.dotclaude-usage` registration; bumped to v0.14.0
+
 ## [0.13.1] — 2026-03-28
 
 ### Changed

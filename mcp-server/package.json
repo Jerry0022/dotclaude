@@ -1,0 +1,11 @@
+{
+  "name": "dotclaude-usage-mcp",
+  "version": "0.1.0",
+  "description": "MCP server providing live usage data for dotclaude-dev-ops completion cards.",
+  "type": "module",
+  "main": "index.js",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.0"
+  }
+}

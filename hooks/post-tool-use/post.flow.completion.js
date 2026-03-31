@@ -61,7 +61,9 @@ process.stdin.on('end', () => {
   lines.push(
     '',
     'COMPLETION CARD — when ALL work is done:',
-    '1. /refresh-usage',
+    '1. Call the `get_usage` MCP tool (dotclaude-usage server) to fetch live usage data.',
+    '   Use the renderedMeter from the tool result as the usage block in the card.',
+    '   Pass delta5h/deltaWk from the tool result into the render-card JSON.',
     '2. Variant:',
     '  if   ship succeeded                 → "shipped"',
     '  elif build/gate/merge failed        → "blocked"',

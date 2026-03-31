@@ -1,8 +1,14 @@
 {
   "name": "dotclaude-dev-ops",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "description": "Complete DevOps automation for Claude Code: hooks, skills, templates, and git hygiene.",
   "hooks": "./hooks/hooks.json",
+  "mcpServers": {
+    "dotclaude-usage": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/index.js"]
+    }
+  },
   "author": {
     "name": "Jerry0022",
     "url": "https://github.com/Jerry0022"
