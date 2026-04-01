@@ -1,9 +1,9 @@
 {
-  "name": "dotclaude-completion-mcp",
+  "name": "dotclaude-mcp-deps",
   "version": "0.1.0",
-  "description": "MCP server providing completion card rendering and live usage data for dotclaude-dev-ops.",
+  "private": true,
   "type": "module",
-  "main": "index.js",
+  "description": "Shared dependencies for all dotclaude-dev-ops MCP servers. Installed into CLAUDE_PLUGIN_DATA by SessionStart hook.",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.25.0"

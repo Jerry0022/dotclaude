@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.1] — 2026-04-01
+
+### Fixed
+- **mcp-server** — MCP dependencies now auto-installed via SessionStart hook into `CLAUDE_PLUGIN_DATA` (fixes servers failing in plugin cache where `node_modules` are absent)
+- **mcp-server** — ESM-compatible symlink strategy replaces non-functional `NODE_PATH` approach for package resolution
+- **mcp-server** — consolidated shared `package.json` for all MCP server dependencies; ship server references parent deps
+- **hooks** — added `ss.mcp.deps.js` as first SessionStart hook (runs before all others to ensure MCP servers can start)
+
 ## [0.19.0] — 2026-04-01
 
 ### Added

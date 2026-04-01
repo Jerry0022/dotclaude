@@ -1,11 +1,7 @@
 {
   "name": "dotclaude-ship-mcp",
   "version": "0.1.0",
-  "description": "MCP server providing ship pipeline tools (preflight, build, version-bump, release, cleanup) for dotclaude-dev-ops.",
+  "description": "MCP server providing ship pipeline tools for dotclaude-dev-ops. Dependencies managed by parent mcp-server/package.json.",
   "type": "module",
-  "main": "index.js",
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^3.25.0"
-  }
+  "main": "index.js"
 }
