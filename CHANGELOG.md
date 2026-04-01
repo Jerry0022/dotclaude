@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.19.4] — 2026-04-02
+
+### Fixed
+- **usage-meter** — elapsed marker no longer replaces filled bar segments; uses `╇` (heavy+marker) when inside filled area, `╏` (light+marker) when in free area
+
 ## [0.19.3] — 2026-04-01
 
 ### Fixed

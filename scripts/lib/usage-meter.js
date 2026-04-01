@@ -31,7 +31,7 @@ function renderBar(pct, elapsedPct) {
   let bar = '';
   for (let i = 0; i < total; i++) {
     if (i === elapsedPos) {
-      bar += '\u254f'; // ╏ thin vertical — elapsed marker
+      bar += i < filled ? '\u2547' : '\u254f'; // ╇ heavy+marker / ╏ light+marker
     } else if (i < filled) {
       bar += '\u2501'; // ━ heavy horizontal — used
     } else {

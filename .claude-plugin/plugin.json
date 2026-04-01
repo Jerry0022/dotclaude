@@ -1,20 +1,26 @@
 {
   "name": "dotclaude-dev-ops",
-  "version": "0.19.3",
+  "version": "0.19.4",
   "description": "Complete DevOps automation for Claude Code: hooks, skills, templates, and git hygiene.",
   "hooks": "./hooks/hooks.json",
   "mcpServers": {
     "dotclaude-completion": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/index.js"]
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp-server/index.js"
+      ]
     },
     "dotclaude-ship": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/ship/index.js"]
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp-server/ship/index.js"
+      ]
     },
     "dotclaude-issues": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/issues/index.js"]
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp-server/issues/index.js"
+      ]
     }
   },
   "author": {
@@ -23,13 +29,27 @@
   },
   "homepage": "https://github.com/Jerry0022/dotclaude-dev-ops",
   "license": "MIT",
-  "keywords": ["devops", "git", "automation", "shipping", "testing", "code-quality"],
+  "keywords": [
+    "devops",
+    "git",
+    "automation",
+    "shipping",
+    "testing",
+    "code-quality"
+  ],
   "optionalPlugins": [
     {
       "name": "codex-plugin-cc",
       "source": "openai/codex-plugin-cc",
       "description": "Code review and task delegation via OpenAI Codex",
-      "skills": ["codex:review", "codex:adversarial-review", "codex:rescue", "codex:status", "codex:result", "codex:cancel"],
+      "skills": [
+        "codex:review",
+        "codex:adversarial-review",
+        "codex:rescue",
+        "codex:status",
+        "codex:result",
+        "codex:cancel"
+      ],
       "docs": "https://github.com/openai/codex-plugin-cc"
     }
   ]
