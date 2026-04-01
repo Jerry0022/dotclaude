@@ -11,7 +11,7 @@ description: >-
   hook detects repeated Bash failures. Do NOT trigger for general code questions
   (use /explain).
 argument-hint: "[optional: describe the symptom or paste error]"
-allowed-tools: Read, Grep, Glob, Bash(git log *), Bash(git diff *), Bash(git bisect *), Bash(npm *), Bash(node *), AskUserQuestion
+allowed-tools: Read, Grep, Glob, Bash(git log *), Bash(git diff *), Bash(git bisect *), Bash(npm *), Bash(node *), AskUserQuestion, mcp__plugin_dotclaude-dev-ops_dotclaude-issues__*
 ---
 
 # Flow

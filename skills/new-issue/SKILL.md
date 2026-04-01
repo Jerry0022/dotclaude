@@ -9,7 +9,7 @@ description: >-
   "mach ein Issue", "new issue", "milestone planen", "plan a milestone".
   Do NOT trigger for: PR creation (use /ship), commit operations (use /commit),
   or code implementation.
-allowed-tools: Bash(gh *), AskUserQuestion, Read, Grep
+allowed-tools: Bash(gh *), AskUserQuestion, Read, Grep, mcp__plugin_dotclaude-dev-ops_dotclaude-issues__*
 ---
 
 # New Issue — GitHub Issue & Milestone Management

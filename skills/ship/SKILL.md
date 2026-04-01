@@ -8,7 +8,7 @@ description: >-
   "fertig", "merge it", "ab damit", "mach nen PR", "push and merge", "das kann rein".
   Do NOT trigger when: user is still coding/debugging, mid-sprint, or just
   committing without shipping.
-allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, Grep, AskUserQuestion, ExitWorktree
+allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, mcp__plugin_dotclaude-dev-ops_dotclaude-ship__*, mcp__plugin_dotclaude-dev-ops_dotclaude-completion__*, mcp__plugin_dotclaude-dev-ops_dotclaude-issues__*
 ---
 
 # Ship

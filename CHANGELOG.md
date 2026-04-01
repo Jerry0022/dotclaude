@@ -13,6 +13,7 @@
 - **hooks** — migrate all `fs.writeFileSync` calls to `writeSessionFile` across 4 hooks
 - **skills** — add missing `allowed-tools` to `refresh-usage` skill
 - **skills** — document `disable-model-invocation` behavior in `commit` skill
+- **skills** — added MCP tool patterns (`ship__*`, `completion__*`, `issues__*`) to `allowed-tools` in ship, flow, and new-issue skills to prevent unnecessary manual approval prompts
 - **usage-meter** — elapsed marker no longer replaces filled bar segments; uses `╇` (heavy+marker) when inside filled area, `╏` (light+marker) when in free area
 
 ## [0.19.3] — 2026-04-01
