@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.19.0] — 2026-04-01
+
+### Added
+- **mcp-server/issues** — new MCP server (`dotclaude-issues`) that caches open GitHub issues in background (60s refresh) and exposes a `match_issues` tool for fuzzy matching user prompts against issue titles and labels
+- **issue detection hook** — v0.3.0: on the first prompt of a session with no explicit issue number, instructs Claude to call `match_issues` for heuristic issue matching; subsequent prompts skip the heuristic (token-efficient ~200 tokens/session)
+
 ## [0.18.3] — 2026-04-01
 
 ### Fixed

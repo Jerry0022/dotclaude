@@ -1,6 +1,6 @@
 {
   "name": "dotclaude-dev-ops",
-  "version": "0.18.3",
+  "version": "0.19.0",
   "description": "Complete DevOps automation for Claude Code: hooks, skills, templates, and git hygiene.",
   "hooks": "./hooks/hooks.json",
   "mcpServers": {
@@ -11,6 +11,10 @@
     "dotclaude-ship": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/ship/index.js"]
+    },
+    "dotclaude-issues": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/issues/index.js"]
     }
   },
   "author": {

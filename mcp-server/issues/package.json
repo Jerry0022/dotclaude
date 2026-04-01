@@ -1,0 +1,11 @@
+{
+  "name": "dotclaude-issues-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for heuristic issue matching against open GitHub issues.",
+  "type": "module",
+  "main": "index.js",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.0"
+  }
+}

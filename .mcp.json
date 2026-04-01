@@ -9,6 +9,11 @@
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/ship/index.js"],
       "cwd": "${CLAUDE_PLUGIN_ROOT}"
+    },
+    "dotclaude-issues": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/issues/index.js"],
+      "cwd": "${CLAUDE_PLUGIN_ROOT}"
     }
   }
 }

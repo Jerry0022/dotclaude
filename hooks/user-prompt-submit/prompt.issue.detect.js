@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.issue.detect
- * @version 0.2.0
+ * @version 0.3.0
  * @event UserPromptSubmit
  * @plugin dotclaude-dev-ops
  * @description Detect issue references in user messages. If explicit (#N or
  *   "Issue N"), instruct Claude to set it to In Progress on GitHub. If implicit
  *   (branch name pattern like feat/42-*), ask the user for confirmation first.
+ *   On the first prompt of a session with no explicit/implicit match, instruct
+ *   Claude to call the match_issues MCP tool for heuristic matching.
  */
 
 require('../lib/plugin-guard');
@@ -60,7 +62,29 @@ process.stdin.on('end', () => {
     } catch {}
   }
 
+  // No explicit or implicit issue number found — try heuristic matching
+  // on the FIRST prompt of this session only.
   if (issueNumbers.length === 0) {
+    const heuristicFile = sessionFile('dotclaude-devops-heuristic-done', hook.session_id);
+    let heuristicDone = false;
+    try { heuristicDone = fs.existsSync(heuristicFile); } catch {}
+
+    if (!heuristicDone) {
+      // Mark heuristic as done for this session
+      try { fs.writeFileSync(heuristicFile, '1'); } catch {}
+
+      // Instruct Claude to call the match_issues MCP tool
+      process.stdout.write(
+        `No explicit issue reference found in user message. ` +
+        `This is the first prompt of this session — call the match_issues ` +
+        `MCP tool with the user's message as query to find potentially ` +
+        `related open issues. If a match with high confidence is found, ` +
+        `ask the user: "Arbeitest du an Issue #N (Title)?" ` +
+        `If confirmed, set to "In Progress" on the project board. ` +
+        `If no match or low confidence, proceed without issue context.\n`
+      );
+    }
+
     process.exit(0);
   }
 
