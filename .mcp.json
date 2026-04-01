@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "dotclaude-completion": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/index.js"],
+      "cwd": "${CLAUDE_PLUGIN_ROOT}"
+    },
+    "dotclaude-ship": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/ship/index.js"],
+      "cwd": "${CLAUDE_PLUGIN_ROOT}"
+    }
+  }
+}

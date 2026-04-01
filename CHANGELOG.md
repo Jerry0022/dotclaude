@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.3] — 2026-04-01
+
+### Fixed
+- **mcp-server** — added `.mcp.json` for reliable MCP server registration (workaround for inline `mcpServers` bug in `plugin.json`, see claude-code#16143)
+- **mcp-server** — installed missing npm dependencies for both `dotclaude-completion` and `dotclaude-ship` servers
+- **global CLAUDE.md** — removed plugin-specific `render-card.js` reference that broke other projects
+
 ## [0.18.2] — 2026-04-01
 
 ### Fixed
