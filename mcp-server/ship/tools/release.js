@@ -49,7 +49,7 @@ export async function handler(params) {
 
     // Merge PR (squash + delete branch)
     gitStrict(`fetch origin ${base}`);
-    const mergeSha = mergePR(pr.number);
+    const mergeSha = mergePR(pr.number, base);
     result.merged = base;
     result.mergeSha = mergeSha;
 

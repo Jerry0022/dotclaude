@@ -23,6 +23,11 @@ Silently check for optional overrides (do not surface "not found" in output):
 2. Project skill extension: `{project}/.claude/skills/commit/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
+**Note on `disable-model-invocation: true`:** This skill is only triggered by
+explicit user commands (`/commit`), never by model initiative. Extensions are
+still loaded and merged normally — `disable-model-invocation` only controls
+trigger behavior, not extension resolution.
+
 ## Step 1 — Detect intent
 
 - **Amend**: user says "amend", "update last commit", "fix last commit" → amend flow in Step 8

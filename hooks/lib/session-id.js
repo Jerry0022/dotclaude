@@ -31,6 +31,16 @@ function sessionFile(prefix, sessionId) {
 }
 
 /**
+ * Atomic write: write to .tmp file then rename to prevent
+ * partial reads from parallel sessions.
+ */
+function writeSessionFile(filePath, content) {
+  const tmp = filePath + '.tmp';
+  fs.writeFileSync(tmp, content, 'utf8');
+  fs.renameSync(tmp, filePath);
+}
+
+/**
  * Read a session file with glob fallback for session_id mismatches.
  * Tries exact match first, then searches for any file matching the prefix.
  * Returns { content, filePath } or null if not found.
@@ -41,7 +51,11 @@ function readSessionFile(prefix, sessionId) {
   try {
     const content = fs.readFileSync(exact, 'utf8');
     return { content, filePath: exact };
-  } catch {}
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.error(`[session-id] Failed to read ${exact}: ${err.message}`);
+    }
+  }
 
   // 2. Glob fallback — find any file matching the prefix
   try {
@@ -59,9 +73,11 @@ function readSessionFile(prefix, sessionId) {
       const content = fs.readFileSync(files[0].full, 'utf8');
       return { content, filePath: files[0].full };
     }
-  } catch {}
+  } catch (err) {
+    console.error(`[session-id] Glob fallback failed for prefix '${prefix}': ${err.message}`);
+  }
 
   return null;
 }
 
-module.exports = { sessionFile, readSessionFile };
+module.exports = { sessionFile, readSessionFile, writeSessionFile };

@@ -11,7 +11,7 @@
 require('../lib/plugin-guard');
 
 const fs = require('fs');
-const { sessionFile } = require('../lib/session-id');
+const { sessionFile, writeSessionFile } = require('../lib/session-id');
 
 // Read hook input from stdin
 let inputData = '';
@@ -45,7 +45,7 @@ process.stdin.on('end', () => {
     failures = parseInt(fs.readFileSync(counterFile, 'utf8'), 10) || 0;
   } catch {}
   failures++;
-  try { fs.writeFileSync(counterFile, failures.toString()); } catch {}
+  try { writeSessionFile(counterFile, failures.toString()); } catch {}
 
   if (failures >= 2) {
     process.stdout.write(

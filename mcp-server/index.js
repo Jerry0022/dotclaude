@@ -172,8 +172,9 @@ function getBuildId() {
       '"' + process.execPath + '" "' + join(PLUGIN_ROOT, 'scripts', 'build-id.js') + '"',
       { encoding: 'utf8', timeout: 10000 }
     ).trim();
-  } catch {
-    return '0000000';
+  } catch (err) {
+    console.error('[dotclaude-completion-mcp] build-id computation failed:', err.message);
+    return 'no-build-id';
   }
 }
 
@@ -315,6 +316,15 @@ function renderCard(input, meterText, buildId) {
 // ---------------------------------------------------------------------------
 // CDP scrape orchestration (calls existing refresh-usage-headless.js)
 // ---------------------------------------------------------------------------
+
+// Track whether we auto-started Edge so we can document cleanup.
+// NOTE: Edge started via --auto-start persists beyond this process.
+// The scraper script manages Edge lifecycle — if Edge was already running,
+// --auto-start is a no-op. If it was started fresh, it remains running
+// for future scrapes. This is intentional: killing Edge on MCP exit would
+// disrupt the user's browser. The user can close Edge manually or it will
+// be reused by subsequent sessions.
+// See: scripts/refresh-usage-headless.js --auto-start for details.
 
 function readUsageJson() {
   try {

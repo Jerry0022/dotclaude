@@ -70,8 +70,14 @@ export function commitsAhead(base = "main", opts) {
 
 /**
  * Count commits not yet pushed to upstream.
+ * Returns null if no upstream is configured (instead of letting git fail).
  */
 export function unpushedCommits(opts) {
+  // Guard: check if upstream is set before using @{upstream}
+  const upstream = git("rev-parse --abbrev-ref @{upstream}", opts);
+  if (upstream === null) {
+    return null; // no upstream configured
+  }
   const count = git("rev-list --count @{upstream}..HEAD", opts);
   return count !== null ? parseInt(count, 10) : null;
 }

@@ -14,7 +14,7 @@
 require('../lib/plugin-guard');
 
 const fs = require('fs');
-const { sessionFile } = require('../lib/session-id');
+const { sessionFile, writeSessionFile } = require('../lib/session-id');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -45,7 +45,7 @@ process.stdin.on('end', () => {
 
   // Set a session flag so the Stop hook knows this was a start-intent response
   const flagFile = sessionFile('dotclaude-devops-start-intent', hook.session_id);
-  try { fs.writeFileSync(flagFile, Date.now().toString()); } catch {}
+  try { writeSessionFile(flagFile, Date.now().toString()); } catch {}
 
   const instruction = [
     '[prompt.flow.appstart] App start intent detected.',

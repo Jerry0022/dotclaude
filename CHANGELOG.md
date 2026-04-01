@@ -3,6 +3,16 @@
 ## [0.19.4] — 2026-04-02
 
 ### Fixed
+- **ship/github** — replace shell string interpolation with `execFileSync` + stdin for `gh` CLI calls (`createPR`, `mergePR`, `createRelease`) to prevent shell escaping bugs with special characters
+- **ship/github** — `mergePR` now uses `base` parameter instead of hardcoded `main`
+- **ship/git** — add upstream guard to `unpushedCommits()` for detached/no-upstream branches
+- **ship/build** — `getBuildId` fallback changed from silent `"0000000"` to `"no-build-id"` with `console.error` logging
+- **mcp-server** — same `getBuildId` fallback fix in `index.js` (duplicated CJS module)
+- **mcp-server** — document intentional Edge process lifecycle in `index.js`
+- **hooks** — introduce atomic `writeSessionFile()` (write `.tmp` + rename) in `session-id.js`
+- **hooks** — migrate all `fs.writeFileSync` calls to `writeSessionFile` across 4 hooks
+- **skills** — add missing `allowed-tools` to `refresh-usage` skill
+- **skills** — document `disable-model-invocation` behavior in `commit` skill
 - **usage-meter** — elapsed marker no longer replaces filled bar segments; uses `╇` (heavy+marker) when inside filled area, `╏` (light+marker) when in free area
 
 ## [0.19.3] — 2026-04-01

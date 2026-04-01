@@ -15,7 +15,7 @@ require('../lib/plugin-guard');
 
 const fs = require('fs');
 const path = require('path');
-const { sessionFile, readSessionFile } = require('../lib/session-id');
+const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -37,13 +37,13 @@ process.stdin.on('end', () => {
 
   if (isCodeEdit) {
     editCount++;
-    try { fs.writeFileSync(counterFile, editCount.toString()); } catch {}
+    try { writeSessionFile(counterFile, editCount.toString()); } catch {}
   }
 
   // --- 1b. Write per-turn work-happened flag (consumed by stop.flow.guard) ---
   try {
     const workFile = sessionFile('dotclaude-devops-work-happened', hook.session_id);
-    fs.writeFileSync(workFile, toolName);
+    writeSessionFile(workFile, toolName);
   } catch {}
 
   // --- 2. Emit completion-card instruction (MCP tool call) ---

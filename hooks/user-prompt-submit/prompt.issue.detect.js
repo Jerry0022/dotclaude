@@ -15,7 +15,7 @@ require('../lib/plugin-guard');
 
 const { execSync } = require('child_process');
 const fs = require('fs');
-const { sessionFile } = require('../lib/session-id');
+const { sessionFile, writeSessionFile } = require('../lib/session-id');
 
 // Read hook input from stdin (contains user's message)
 let inputData = '';
@@ -71,7 +71,7 @@ process.stdin.on('end', () => {
 
     if (!heuristicDone) {
       // Mark heuristic as done for this session
-      try { fs.writeFileSync(heuristicFile, '1'); } catch {}
+      try { writeSessionFile(heuristicFile, '1'); } catch {}
 
       // Instruct Claude to call the match_issues MCP tool
       process.stdout.write(
@@ -124,5 +124,5 @@ process.stdin.on('end', () => {
 
   // Save tracked issues
   tracked.push(...newIssues);
-  try { fs.writeFileSync(trackedFile, JSON.stringify(tracked)); } catch {}
+  try { writeSessionFile(trackedFile, JSON.stringify(tracked)); } catch {}
 });

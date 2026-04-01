@@ -39,8 +39,9 @@ function getBuildId(cwd) {
       `"${process.execPath}" "${BUILD_ID_SCRIPT}"`,
       { cwd, encoding: "utf8", timeout: 10_000 }
     ).trim();
-  } catch {
-    return "0000000";
+  } catch (err) {
+    console.error(`[ship_build] build-id computation failed: ${err.message}`);
+    return "no-build-id";
   }
 }
 

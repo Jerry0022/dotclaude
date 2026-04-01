@@ -6,6 +6,7 @@ description: >-
   multiple backends: CLI-native (/usage), Edge CDP scraping, or graceful fallback.
   Run silently before every completion card. Also manually: "refresh usage",
   "wie viel hab ich verbraucht", "token budget".
+allowed-tools: Bash(node *), Read
 ---
 
 # Refresh Usage Data
