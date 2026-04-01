@@ -23,22 +23,31 @@ function readUsageData() {
   return null;
 }
 
-function renderBar(pct) {
-  const filled = Math.round((pct / 100) * 12);
-  const empty = 12 - filled;
-  return '\u2593'.repeat(filled) + '\u2591'.repeat(empty);
+function renderBar(pct, elapsedPct) {
+  const total = 14;
+  const filled = Math.round((pct / 100) * total);
+  const elapsedPos = Math.round(Math.max(0, Math.min(100, elapsedPct || 0)) / 100 * total);
+
+  let bar = '';
+  for (let i = 0; i < total; i++) {
+    if (i === elapsedPos) {
+      bar += '\u254f'; // ╏ thin vertical — elapsed marker
+    } else if (i < filled) {
+      bar += '\u2501'; // ━ heavy horizontal — used
+    } else {
+      bar += '\u2500'; // ─ light horizontal — free
+    }
+  }
+  return bar;
 }
 
 function formatDelta(delta) {
-  if (delta == null) return ' '.repeat(8);
+  if (delta == null) return '';
   if (isNaN(delta)) delta = 0;
-  const sign = '+' + delta;
-  let marker;
+  let marker = '';
   if (delta >= 6)      marker = '!!';
-  else if (delta >= 2) marker = '! ';
-  else                 marker = '  ';
-  const inner = (sign + '% ' + marker).padEnd(6, ' ');
-  return '(' + inner + ')';
+  else if (delta >= 2) marker = '!';
+  return '+' + delta + '%' + (marker ? ' ' + marker : '');
 }
 
 function formatResetShort(minutes) {
@@ -52,6 +61,17 @@ function formatResetShort(minutes) {
   return h + 'h ' + m + 'm';
 }
 
+function renderUsageLine(label, pct, elapsedPct, delta, resetMinutes) {
+  const bar = renderBar(pct, elapsedPct);
+  const pctStr = String(pct).padStart(3, ' ') + '%';
+  const deltaStr = formatDelta(delta);
+  const resetStr = formatResetShort(resetMinutes);
+  const pace = pct - elapsedPct;
+  const warn = pace > 10 ? '  \u26a0 Pace!' : '';
+  const deltaPart = deltaStr ? '  ' + deltaStr : '';
+  return label + '  ' + bar + '  ' + pctStr + deltaPart + '  \u00b7 ' + resetStr + ' left' + warn;
+}
+
 function renderUsageMeter(usageData, delta5h, deltaWk) {
   if (!usageData || !usageData.session) {
     return '```\n\u26a0 Usage data unavailable \u2014 monitoring issue\n```';
@@ -59,39 +79,17 @@ function renderUsageMeter(usageData, delta5h, deltaWk) {
 
   const s = usageData.session;
   const w = usageData.weekly;
-
   const lines = [];
 
-  // --- 5h window ---
-  const bar5h = renderBar(s.pct);
-  const pct5h = String(s.pct).padStart(3, ' ') + '%';
-  const delta5hStr = formatDelta(delta5h);
-  const reset5h = formatResetShort(s.resetInMinutes);
   const elapsed5hPct = ((300 - s.resetInMinutes) / 300) * 100;
-  const arrowPos5h = Math.round(Math.max(0, Math.min(100, elapsed5hPct)) / 100 * 12);
-  const pace5h = s.pct - elapsed5hPct;
-  const warn5h = pace5h > 10 ? '  \u26a0 Sonnet or new session' : '';
+  lines.push(renderUsageLine('5h', s.pct, elapsed5hPct, delta5h, s.resetInMinutes));
 
-  lines.push('5h  ' + bar5h + '   ' + pct5h + ' ' + delta5hStr + '  \u00b7 Reset ' + reset5h + warn5h);
-  lines.push(' '.repeat(4 + arrowPos5h) + '\u2191');
-  lines.push('');
-
-  // --- Wk window ---
   if (w) {
-    const barWk = renderBar(w.pct);
-    const pctWk = String(w.pct).padStart(3, ' ') + '%';
-    const deltaWkStr = formatDelta(deltaWk);
-    const resetWk = formatResetShort(w.resetInMinutes);
     const elapsedWkPct = ((10080 - w.resetInMinutes) / 10080) * 100;
-    const arrowPosWk = Math.round(Math.max(0, Math.min(100, elapsedWkPct)) / 100 * 12);
-    const paceWk = w.pct - elapsedWkPct;
-    const warnWk = paceWk > 10 ? '  \u26a0 Sonnet or new session' : '';
-
-    lines.push('Wk  ' + barWk + '   ' + pctWk + ' ' + deltaWkStr + '  \u00b7 Reset ' + resetWk + warnWk);
-    lines.push(' '.repeat(4 + arrowPosWk) + '\u2191');
+    lines.push(renderUsageLine('Wk', w.pct, elapsedWkPct, deltaWk, w.resetInMinutes));
   }
 
   return '```\n' + lines.join('\n') + '\n```';
 }
 
-module.exports = { readUsageData, renderBar, formatDelta, formatResetShort, renderUsageMeter };
+module.exports = { readUsageData, renderBar, formatDelta, formatResetShort, renderUsageLine, renderUsageMeter };

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.2] — 2026-04-01
+
+### Fixed
+- **usage-meter** — redesigned usage display: `━─╏` line-style bar with inline elapsed marker replaces broken arrow alignment
+- **usage-meter** — delta now displays correctly (was missing in both `get_usage` and `render_completion_card`)
+- **usage-meter** — compact 2-line layout (was 4-5 lines with separate arrow rows)
+- **mcp-server** — `get_usage` now passes deltas to `renderUsageMeter`; `renderUsageMeterForCard` uses shared `renderUsageLine`
+
 ## [0.19.1] — 2026-04-01
 
 ### Fixed
