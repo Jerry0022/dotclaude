@@ -75,12 +75,18 @@ const CTA = {
 // ---------------------------------------------------------------------------
 function getBuildId() {
   try {
+    const toplevel = execSync('git rev-parse --show-toplevel', {
+      encoding: 'utf8',
+      timeout: 5000,
+    }).trim();
     return execSync('"' + process.execPath + '" "' + path.join(__dirname, 'build-id.js') + '"', {
       encoding: 'utf8',
       timeout: 10000,
+      cwd: toplevel,
     }).trim();
-  } catch {
-    return '0000000';
+  } catch (err) {
+    console.error('[render-card] build-id computation failed:', err.message);
+    return 'no-build-id';
   }
 }
 
@@ -121,7 +127,7 @@ function renderState(state, variant) {
   // Fields
   const branch = state.branch || 'main';
   const branchStr = branch + (state.worktree ? ' (worktree)' : '');
-  const commitStr = state.commit || 'uncommitted';
+  const commitStr = state.commit ? 'git ' + state.commit : 'uncommitted';
   const pushStr = state.pushed ? 'pushed' : 'not pushed';
 
   let prStr = 'no PR';

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.19.5] — 2026-04-02
+
+### Fixed
+- **completion-card** — commit hash now prefixed with `git` (e.g. `main · git 861b9d2`) for clarity
+- **completion-card** — build-ID `0000000` fixed by resolving git toplevel as cwd for `build-id.js`
+
 ## [0.19.4] — 2026-04-02
 
 ### Fixed

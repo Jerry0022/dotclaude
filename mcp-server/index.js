@@ -168,9 +168,15 @@ const CTA = {
 
 function getBuildId() {
   try {
+    // Resolve the git toplevel so build-id.js runs in the correct repo,
+    // regardless of where the MCP server process was spawned.
+    const toplevel = execSync('git rev-parse --show-toplevel', {
+      encoding: 'utf8',
+      timeout: 5000,
+    }).trim();
     return execSync(
       '"' + process.execPath + '" "' + join(PLUGIN_ROOT, 'scripts', 'build-id.js') + '"',
-      { encoding: 'utf8', timeout: 10000 }
+      { encoding: 'utf8', timeout: 10000, cwd: toplevel }
     ).trim();
   } catch (err) {
     console.error('[dotclaude-completion-mcp] build-id computation failed:', err.message);
@@ -210,7 +216,7 @@ function renderState(state, variant) {
 
   const branch = state.branch || 'main';
   const branchStr = branch + (state.worktree ? ' (worktree)' : '');
-  const commitStr = state.commit || 'uncommitted';
+  const commitStr = state.commit ? 'git ' + state.commit : 'uncommitted';
   const pushStr = state.pushed ? 'pushed' : 'not pushed';
 
   let prStr = 'no PR';
