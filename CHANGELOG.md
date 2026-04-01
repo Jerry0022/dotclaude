@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.19.3] — 2026-04-01
+
+### Fixed
+- **docs** — hook count 10→12 in README and project structure comment
+- **docs** — added missing `ss.mcp.deps` and `stop.flow.guard` hooks to README lifecycle/category sections
+- **docs** — added Stop lifecycle stage to README hook documentation
+- **docs** — replaced stale `pre.ship.guard.js` with complete 12-hook directory structure in CONVENTIONS.md
+- **docs** — replaced removed `pre.ship.guard` hook reference with `ship_preflight` MCP tool in versioning.md
+- **docs** — fixed "Feature Worker" → "Feature" agent name inconsistency in README
+
 ## [0.19.2] — 2026-04-01
 
 ### Fixed

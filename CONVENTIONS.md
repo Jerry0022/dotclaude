@@ -65,13 +65,22 @@ A hook version bumps when:
 hooks/
 ├── hooks.json                  ← Registry (declares all hooks + matchers)
 ├── session-start/
-│   ├── ss.git.sync.js
-│   └── ss.tokens.scan.js
+│   ├── ss.git.check.js
+│   ├── ss.mcp.deps.js
+│   ├── ss.tokens.scan.js
+│   └── ss.flow.selfcalibration.js
 ├── pre-tool-use/
-│   ├── pre.tokens.guard.js
-│   └── pre.ship.guard.js
-└── post-tool-use/
-    └── post.flow.completion.js
+│   └── pre.tokens.guard.js
+├── post-tool-use/
+│   ├── post.flow.completion.js
+│   └── post.flow.debug.js
+├── user-prompt-submit/
+│   ├── prompt.git.sync.js
+│   ├── prompt.issue.detect.js
+│   ├── prompt.ship.detect.js
+│   └── prompt.flow.appstart.js
+└── stop/
+    └── stop.flow.guard.js
 ```
 
 ### Exit Codes

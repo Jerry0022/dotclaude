@@ -55,7 +55,7 @@ Note: `marketplace.json` has no version field — do not update it.
 | `CHANGELOG.md` | New `## [X.Y.Z] — YYYY-MM-DD` section at top | Always |
 | Project-specific files | From extension `reference.md` | If defined |
 
-The `pre.ship.guard` hook enforces consistency across all existing version files
+The `ship_preflight` MCP tool enforces consistency across all existing version files
 before allowing `git push`. Any mismatch blocks the push.
 
 ## Verification grep (BLOCKING — never skip)

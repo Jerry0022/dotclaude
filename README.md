@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.19.2**
+**Version: 0.19.3**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -8,9 +8,9 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 
 ## Features
 
-- **10 Hooks** — automated guards and triggers across the full session lifecycle
+- **12 Hooks** — automated guards and triggers across the full session lifecycle
 - **10 Skills** — ship, commit, flow, research, explain, issues, project setup, readme, usage tracking, extend-skill
-- **10 Agents** — AI, Core, Designer, Feature Worker, Frontend, Gamer, PO, QA, Research, Windows
+- **10 Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /ship skill routing
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
@@ -39,7 +39,7 @@ Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**. Sem
 
 ### Hooks (automatic, no user action needed)
 
-10 hooks fire automatically across the session lifecycle — no user action needed.
+12 hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -52,6 +52,7 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 
 - `ss.tokens.scan` — Scan project for expensive files
 - `ss.git.check` — Check for uncommitted/unpushed changes
+- `ss.mcp.deps` — Auto-install MCP server dependencies
 - `ss.flow.selfcalibration` — Register self-calibration cron (once per session)
 
 #### PreToolUse — runs before each tool call
@@ -69,6 +70,10 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 - `prompt.issue.detect` — Track GitHub issues automatically
 - `prompt.ship.detect` — Detect ship intent, enforce /ship skill
 - `prompt.flow.appstart` — Detect app start intent, enforce completion card
+
+#### Stop — runs when Claude finishes responding
+
+- `stop.flow.guard` — Enforce completion flow before response ends
 
 </details>
 
@@ -98,6 +103,11 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 #### flow — self-calibration
 
 - `ss.flow.selfcalibration` — Register self-calibration cron, once per session *(SessionStart)*
+- `stop.flow.guard` — Enforce completion flow before response ends *(Stop)*
+
+#### mcp — dependency management
+
+- `ss.mcp.deps` — Auto-install MCP server dependencies *(SessionStart)*
 
 #### issues — automatic issue tracking
 
@@ -189,7 +199,7 @@ See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
 dotclaude-dev-ops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← 10 hook scripts (JS)
+├── hooks/                         ← 12 hook scripts (JS)
 ├── skills/                        ← 10 skill definitions (SKILL.md)
 ├── agents/                        ← 10 agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
@@ -518,6 +528,26 @@ Wk  ▓▓░░░░░░░░░░   16% (+1%   )  · Reset 5d 0h
 </details>
 
 8 variants total. The card always fires — see [completion-card.md](templates/completion-card.md) for the full template spec.
+
+## Troubleshooting
+
+### Plugin update not showing
+
+Claude Code caches plugin marketplace data globally. If `claude plugin update` reports no update available despite a new version being published, clear the global marketplace cache:
+
+```bash
+# Windows (Git Bash / WSL)
+rm -rf ~/.claude/plugins/cache/dotclaude-dev-ops
+rm -rf ~/.claude/plugins/marketplaces/dotclaude-dev-ops
+rm -f ~/.claude/plugins/install-counts-cache.json
+
+# macOS / Linux
+rm -rf ~/.claude/plugins/cache/dotclaude-dev-ops
+rm -rf ~/.claude/plugins/marketplaces/dotclaude-dev-ops
+rm -f ~/.claude/plugins/install-counts-cache.json
+```
+
+Then run `claude plugin update dotclaude-dev-ops@Jerry0022` again. Start a new session for changes to take effect.
 
 ## License
 
