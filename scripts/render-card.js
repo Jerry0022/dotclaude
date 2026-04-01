@@ -11,7 +11,7 @@
  *   echo '{"variant":"ready","summary":"Filter refactored",...}' | node scripts/render-card.js
  *
  * Input JSON schema:
- *   variant:   "shipped"|"ready"|"blocked"|"test"|"minimal-start"|"research"|"aborted"|"fallback"
+ *   variant:   "shipped"|"ready"|"blocked"|"test"|"minimal-start"|"analysis"|"aborted"|"fallback"  (legacy: "research")
  *   summary:   string (max ~10 words, user's language)
  *   lang:      "en"|"de" (default "de")
  *   changes:   [{ area, description }]  (max 3)
@@ -36,7 +36,8 @@ const VARIANTS = {
   blocked:         { usage: true,  changes: true,  tests: true,  state: true,  userTest: false },
   test:            { usage: true,  changes: true,  tests: true,  state: true,  userTest: true  },
   'minimal-start': { usage: false, changes: false, tests: false, state: false, userTest: false },
-  research:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
+  analysis:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
+  research:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false }, // legacy alias → analysis
   aborted:         { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
   fallback:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
 };
@@ -52,7 +53,7 @@ const CTA = {
     blocked:         '## ⛔ BLOCKED. {reason} — FIX or SKIP?',
     test:            '## 🧪 DONE. {info} — SHIP after your TEST?',
     'minimal-start': '## 🧪 STARTED. {description} — HAVE FUN',
-    research:        '## 📋 DONE. {info} — READ through',
+    analysis:        '## 📋 DONE. {info} — READ through',
     aborted:         '## 🚫 ABORTED. {reason} — What should I TRY?',
     fallback:        '## 📋 DONE — Anything ELSE?',
   },
@@ -63,7 +64,7 @@ const CTA = {
     blocked:         '## ⛔ BLOCKED. {reason} — FIX oder SKIP?',
     test:            '## 🧪 DONE. {info} — SHIP nach deinem TEST?',
     'minimal-start': '## 🧪 STARTED. {description} — VIEL SPASS',
-    research:        '## 📋 DONE. {info} — LIES dir durch',
+    analysis:        '## 📋 DONE. {info} — LIES dir durch',
     aborted:         '## 🚫 ABORTED. {reason} — Was soll ich VERSUCHEN?',
     fallback:        '## 📋 DONE — Noch was ANDERES?',
   },
@@ -104,7 +105,7 @@ function renderTests(tests) {
 
 function renderState(state, variant) {
   if (!state) {
-    if (variant === 'research') return '\u2796 No changes to repo';
+    if (variant === 'analysis' || variant === 'research') return '\u2796 No changes to repo';
     return '';
   }
 
@@ -150,6 +151,8 @@ function renderCTA(variant, cta, lang) {
   let key;
   if (variant === 'shipped') {
     key = (cta.vOld && cta.vNew) ? 'shipped-bump' : 'shipped-plain';
+  } else if (variant === 'research') {
+    key = 'analysis'; // legacy alias
   } else {
     key = variant;
   }

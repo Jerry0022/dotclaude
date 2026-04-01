@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.2] — 2026-04-01
+
+### Fixed
+- **completion-card** — renamed `research` variant to `analysis` (covers audit/plan/review/explain); `research` kept as legacy alias for backward compat
+- **render-card.js** — updated VARIANTS + CTA tables; `renderState` + `renderCTA` handle legacy `research` alias
+- **completion-card.md** — Variant Selection Rules extended: `plan`, `audit`, `analysis` explicitly route to `analysis (6)`; added Key Rule clarifying `ready` vs `analysis` based on whether files were changed
+
 ## [0.18.1] — 2026-04-01
 
 ### Fixed

@@ -1,8 +1,8 @@
 ---
 name: completion-card
 description: Master template for task completion cards — all variants derive from this single source.
-version: 0.7.0
-used-by: ship, test, start, commit, review, research, and any skill/agent that completes work
+version: 0.8.0
+used-by: ship, test, start, commit, review, analysis, and any skill/agent that completes work
 ---
 
 # Completion Card — Master Template
@@ -200,7 +200,7 @@ Warn          var.    "  ⚠ Sonnet or new session" or empty
 
 | Variants | Behavior |
 |----------|----------|
-| shipped, ready, test, blocked, research, aborted, fallback | **Show** |
+| shipped, ready, test, blocked, analysis, aborted, fallback | **Show** |
 | minimal-start | **Omit** |
 
 ### Changes
@@ -211,7 +211,7 @@ Bullet list (`*`), each bullet: `area → what happened`.
 | Variants | Behavior |
 |----------|----------|
 | shipped, ready, test, blocked | **Required** |
-| research, fallback | **Required** — describes what was investigated/answered |
+| analysis, fallback | **Required** — describes what was investigated/planned/answered |
 | minimal-start | **Omit** |
 | aborted | **Optional** — only if work happened before abort |
 
@@ -223,7 +223,7 @@ Bullet list: what was tested, method and result.
 | Variants | Behavior |
 |----------|----------|
 | shipped, ready, test | **If tests/builds ran** — otherwise omit |
-| research, minimal-start, aborted, fallback | **Omit** |
+| analysis, minimal-start, aborted, fallback | **Omit** |
 
 ---
 
@@ -281,7 +281,7 @@ Fields that don't apply are shown with explicit negative values.
 | Variants | Behavior |
 |----------|----------|
 | shipped, ready, test, blocked | **Required** |
-| research | Shows `➖ No changes to repo` |
+| analysis | Shows `➖ No changes to repo` |
 | minimal-start | **Omit** |
 | aborted, fallback | **Dependent** — show what exists |
 
@@ -318,7 +318,7 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 | 3 | blocked | `## ⛔ BLOCKED. {{reason}} — FIX or SKIP?` |
 | 4 | test | `## 🧪 DONE. {{info}} — SHIP after your TEST?` |
 | 5 | minimal-start | `## 🧪 STARTED. {{user-facing-description}} — HAVE FUN` |
-| 6 | research | `## 📋 DONE. {{info}} — READ through` |
+| 6 | analysis | `## 📋 DONE. {{info}} — READ through` |
 | 7 | aborted | `## 🚫 ABORTED. {{reason}} — What should I TRY?` |
 | 8 | fallback | `## 📋 DONE — Anything ELSE?` |
 
@@ -332,7 +332,7 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 | 3 | blocked | `## ⛔ BLOCKED. {{reason}} — FIX oder SKIP?` |
 | 4 | test | `## 🧪 DONE. {{info}} — SHIP nach deinem TEST?` |
 | 5 | minimal-start | `## 🧪 STARTED. {{user-facing-description}} — VIEL SPASS` |
-| 6 | research | `## 📋 DONE. {{info}} — LIES dir durch` |
+| 6 | analysis | `## 📋 DONE. {{info}} — LIES dir durch` |
 | 7 | aborted | `## 🚫 ABORTED. {{reason}} — Was soll ich VERSUCHEN?` |
 | 8 | fallback | `## 📋 DONE — Noch was ANDERES?` |
 
@@ -347,12 +347,13 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 | 3 | blocked | ⛔ | yes | if ran | — | branch | yes |
 | 4 | test | 🧪 | yes | if ran | yes | app-status | yes |
 | 5 | minimal-start | 🧪 | — | — | — | — | — |
-| 6 | research | 📋 | yes | — | — | none | yes |
+| 6 | analysis | 📋 | yes | — | — | none | yes |
 | 7 | aborted | 🚫 | opt. | — | — | dep. | yes |
 | 8 | **fallback** | 📋 | yes | — | — | dep. | yes |
 
 - **shipped (1)**: PR vs. direct push → state line shows the difference.
 - **test (4)**: App running vs. needs start → state line shows the difference.
+- **analysis (6)**: No file changes — covers research, audit, plan, review, explanation. `research` is a legacy alias.
 
 ### CTA Icons
 
@@ -363,20 +364,25 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 | 🧪 | Test — user must verify | test, minimal-start |
 | ⛔ | Blocked — needs fix | blocked |
 | 🚫 | Aborted — not feasible | aborted |
-| 📋 | Info — purely informational | research, fallback |
+| 📋 | Info — purely informational | analysis, fallback |
 
 ### Variant Selection Rules
 
 ```
-if   ship succeeded                 → shipped (1)
-elif build/gate/merge failed        → blocked (3)
-elif task aborted or not feasible   → aborted (7)
-elif code edits + app relevant      → test (4)
-elif app started, no code edits     → minimal-start (5)
-elif code/doc changes, no app       → ready (2)
-elif research/review/explanation    → research (6)
-else                                → fallback (8)
+if   ship succeeded                               → shipped (1)
+elif build/gate/merge failed                      → blocked (3)
+elif task aborted or not feasible                 → aborted (7)
+elif code edits + app relevant                    → test (4)
+elif app started, no code edits                   → minimal-start (5)
+elif code/doc changes, no app                     → ready (2)
+elif NO code changes (research/review/audit/plan/explanation) → analysis (6)
+else                                              → fallback (8)
 ```
+
+**Key rule — `ready` vs `analysis`:**
+- `ready`: at least one file was modified/created/deleted → user can ship
+- `analysis`: zero files changed → read-only outcome (research, audit, plan, review, explain)
+- When in doubt: if `git status` would be clean → `analysis`, not `ready`
 
 ---
 
