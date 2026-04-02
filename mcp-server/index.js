@@ -15,7 +15,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -341,7 +341,18 @@ function readUsageJson() {
 }
 
 function refreshUsage() {
-  const previous = readUsageJson();
+  let previous = readUsageJson();
+
+  // Discard stale data that's outside the current 5h reset window.
+  // Delta is only meaningful when both scrapes fall in the same window.
+  if (previous?.timestamp && previous?.session) {
+    const ageMs = Date.now() - new Date(previous.timestamp).getTime();
+    const windowMs = (previous.session.resetInMinutes ?? 300) * 60_000;
+    if (ageMs > windowMs) {
+      try { unlinkSync(USAGE_JSON_PATH); } catch {}
+      previous = null;
+    }
+  }
 
   try {
     try {

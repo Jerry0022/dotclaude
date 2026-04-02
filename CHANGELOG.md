@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.19.6] — 2026-04-02
+
+### Fixed
+- **mcp-server** — stale usage data from previous 5h windows no longer produces meaningless deltas; data outside the current reset window is discarded before scraping
+
 ## [0.19.5] — 2026-04-02
 
 ### Fixed
