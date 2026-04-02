@@ -1,6 +1,6 @@
 {
   "name": "dotclaude-dev-ops",
-  "version": "0.19.7",
+  "version": "0.19.8",
   "description": "Complete DevOps automation for Claude Code: hooks, skills, templates, and git hygiene.",
   "hooks": "./hooks/hooks.json",
   "mcpServers": {
@@ -21,6 +21,12 @@
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/mcp-server/issues/index.js"
       ]
+    }
+  },
+  "userConfig": {
+    "claude_plan": {
+      "description": "Your Claude plan tier (pro, max_5, max_20). Affects usage meter display. Default: max_20",
+      "sensitive": false
     }
   },
   "author": {

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.19.8] — 2026-04-03
+
+### Added
+- **plugin** — `userConfig` with `claude_plan` field enables "Verwalten" (manage) button in Desktop app marketplace UI
+
 ## [0.19.7] — 2026-04-03
 
 ### Fixed
