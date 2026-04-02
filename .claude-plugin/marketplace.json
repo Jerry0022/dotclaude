@@ -1,13 +1,22 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "dotclaude-dev-ops",
+  "description": "Complete DevOps automation for Claude Code: hooks, skills, templates, and git hygiene.",
   "owner": {
-    "name": "Jerry0022"
+    "name": "Jerry0022",
+    "url": "https://github.com/Jerry0022"
   },
   "plugins": [
     {
       "name": "dotclaude-dev-ops",
+      "description": "Complete DevOps automation for Claude Code: hooks, skills, agents, and templates.",
+      "author": {
+        "name": "Jerry0022"
+      },
       "source": "./",
-      "description": "Complete DevOps automation for Claude Code: hooks, skills, agents, and templates."
+      "category": "development",
+      "homepage": "https://github.com/Jerry0022/dotclaude-dev-ops",
+      "tags": ["devops", "git", "automation", "shipping", "code-quality"]
     }
   ]
 }

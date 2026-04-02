@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.19.7] — 2026-04-03
+
+### Fixed
+- **marketplace** — added `$schema`, `description`, `category`, `homepage`, `author`, and `tags` to marketplace.json to align with official Anthropic plugin format (fixes missing metadata in plugin directory UI)
+
 ## [0.19.6] — 2026-04-02
 
 ### Fixed
