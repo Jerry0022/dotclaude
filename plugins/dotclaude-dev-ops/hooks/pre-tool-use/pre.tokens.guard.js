@@ -114,7 +114,7 @@ process.stdin.on('end', () => {
         suggestion: 'npm ls --depth=0',
       },
       {
-        test: /\bfind\s+[.\/]/,
+        test: /\bfind\s+[./]/,
         guard: /-maxdepth\s+\d+|head\b|-name\b.*-quit/,
         suggestion: 'find . -maxdepth 3 -name "pattern"',
       },

@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import { execSync, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { git, gitStrict, currentBranch, headShort, dirtyState } from "../lib/git.js";
 import { createPR, mergePR, createRelease, findExistingPR } from "../lib/github.js";
 

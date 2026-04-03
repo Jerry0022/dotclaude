@@ -6,7 +6,8 @@
 import { execSync } from "node:child_process";
 
 const DEFAULT_TIMEOUT = 15_000;
-const PUSH_TIMEOUT = 60_000; // Push/fetch may take longer on large repos or slow networks
+// eslint-disable-next-line no-unused-vars -- reserved for push/fetch operations
+const PUSH_TIMEOUT = 60_000;
 
 /**
  * Run a git command and return trimmed stdout, or null on failure.

@@ -13,7 +13,6 @@
 
 require('../lib/plugin-guard');
 
-const fs = require('fs');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
 
 let inputData = '';

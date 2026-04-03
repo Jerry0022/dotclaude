@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.23.0] — 2026-04-03
+
+### Added
+- **quality** — Vitest test suite with 56 unit tests covering version bumping, git operations, fuzzy issue matching, session file I/O, and execution guards
+- **quality** — ESLint flat config with CJS/ESM-aware linting for hooks and MCP servers
+- **quality** — extracted `matching.js` from issues MCP server for testability
+
+### Fixed
+- **lint** — removed unused imports/requires across 4 hooks and 2 MCP server tools
+- **lint** — fixed unnecessary regex escapes in token guard and matching module
+
 ## [0.22.2] — 2026-04-03
 
 ### Fixed

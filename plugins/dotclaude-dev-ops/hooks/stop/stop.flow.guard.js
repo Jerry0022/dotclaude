@@ -15,7 +15,7 @@
 require('../lib/plugin-guard');
 
 const fs = require('fs');
-const { readSessionFile, sessionFile } = require('../lib/session-id');
+const { readSessionFile } = require('../lib/session-id');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');

@@ -88,7 +88,7 @@ export async function handler(params) {
   checks.push({ name: "all-pushed", value: unpushed, ok: unpushed === 0 || unpushed === null });
 
   // 8. Base branch ahead check (merge-conflict risk)
-  const behind = commitsAhead("HEAD", { base: originBase });
+  const _behind = commitsAhead("HEAD", { base: originBase });
   const baseBehindCount = (() => {
     const count = git(`rev-list --count HEAD..${originBase}`);
     return count ? parseInt(count, 10) : 0;

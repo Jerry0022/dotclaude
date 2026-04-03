@@ -15,6 +15,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { execSync } from "node:child_process";
+import { tokenize, scoreIssue } from "./matching.js";
 
 // ---------------------------------------------------------------------------
 // Issue cache
@@ -48,46 +49,6 @@ function ensureCache() {
   if (Date.now() - lastRefresh > REFRESH_INTERVAL_MS) {
     fetchIssues();
   }
-}
-
-// ---------------------------------------------------------------------------
-// Fuzzy matching
-// ---------------------------------------------------------------------------
-
-/**
- * Tokenize text into lowercase words, strip common noise.
- */
-function tokenize(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9äöüß\-]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length > 2);
-}
-
-/**
- * Score an issue against query tokens.
- * Returns 0-1 confidence based on token overlap with title + labels.
- */
-function scoreIssue(issue, queryTokens) {
-  const issueText = [issue.title, ...issue.labels].join(' ');
-  const issueTokens = new Set(tokenize(issueText));
-
-  if (issueTokens.size === 0 || queryTokens.length === 0) return 0;
-
-  let hits = 0;
-  for (const qt of queryTokens) {
-    for (const it of issueTokens) {
-      // Exact match or substring containment (both directions)
-      if (it === qt || it.includes(qt) || qt.includes(it)) {
-        hits++;
-        break;
-      }
-    }
-  }
-
-  // Normalize: fraction of query tokens that matched
-  return hits / queryTokens.length;
 }
 
 /**
