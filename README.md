@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.24.0**
+**Version: 0.24.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -17,13 +17,13 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 
 ## Installation
 
-Add the plugin via Claude Code (Desktop or CLI):
+Add the plugin via CLI (recommended):
 
 ```bash
 claude plugin add dotclaude-dev-ops@Jerry0022
 ```
 
-Or use **Settings** → **Plugins** → **Marketplaces** → add `Jerry0022/dotclaude-dev-ops`.
+> **Desktop App:** The marketplace UI shows the marketplace tab but may not list plugins for installation. Use the CLI command above, or see [`INSTALL.md`](INSTALL.md) for manual registration steps.
 
 Start a new session for hooks to take effect. See [`INSTALL.md`](INSTALL.md) for details, extensions, and uninstall.
 

@@ -2,17 +2,19 @@
 
 ## Add the plugin
 
-In Claude Code (Desktop or CLI), add the marketplace and enable the plugin:
+**CLI (recommended):**
+
+```bash
+claude plugin add dotclaude-dev-ops@Jerry0022
+```
+
+**Desktop App UI:**
 
 1. Open **Settings** → **Plugins** → **Marketplaces**
 2. Add marketplace: `Jerry0022/dotclaude-dev-ops`
 3. Enable the plugin `dotclaude-dev-ops`
 
-Or via CLI:
-
-```bash
-claude plugin add dotclaude-dev-ops@Jerry0022
-```
+> **Note:** The Desktop App marketplace UI may not list third-party plugins for installation. If the plugin tab appears empty, use the CLI command above or see [Troubleshooting](#troubleshooting) below.
 
 Start a new session for hooks to take effect. Skills (`/ship`, `/commit`, `/flow`, etc.) are available immediately.
 
@@ -94,6 +96,58 @@ Typical combined workflows:
 | `/codex:setup` not found | Plugin not installed — check **Settings** → **Plugins** |
 | Authentication fails | Run `codex auth` in terminal to re-authenticate |
 | Codex binary not found | `npm install -g @openai/codex` and restart session |
+
+## Troubleshooting
+
+### Desktop App: plugin not visible in marketplace
+
+The Desktop App marketplace UI recognizes third-party marketplace tabs but may not list their plugins for one-click installation. The marketplace tab appears empty with "No plugins found".
+
+**Fix — use CLI:**
+
+```bash
+claude plugin add dotclaude-dev-ops@Jerry0022
+```
+
+**Alternative — manual registration:**
+
+If the CLI command is not available, register the plugin manually:
+
+1. Add the marketplace (Settings → Plugins → Marketplaces → `Jerry0022/dotclaude-dev-ops`)
+2. Copy the plugin files into the cache:
+   ```bash
+   mkdir -p ~/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.24.0
+   cp -r ~/.claude/plugins/marketplaces/dotclaude-dev-ops/plugins/dotclaude-dev-ops/* \
+         ~/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.24.0/
+   cp -r ~/.claude/plugins/marketplaces/dotclaude-dev-ops/plugins/dotclaude-dev-ops/.claude-plugin \
+         ~/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.24.0/
+   cp    ~/.claude/plugins/marketplaces/dotclaude-dev-ops/plugins/dotclaude-dev-ops/.mcp.json \
+         ~/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.24.0/
+   ```
+3. Add to `~/.claude/plugins/installed_plugins.json` → `plugins` object:
+   ```json
+   "dotclaude-dev-ops@dotclaude-dev-ops": [{
+     "scope": "user",
+     "installPath": "<home>/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.24.0",
+     "version": "0.24.0",
+     "installedAt": "<now ISO>",
+     "lastUpdated": "<now ISO>",
+     "gitCommitSha": "<git rev-parse HEAD from marketplace clone>"
+   }]
+   ```
+4. Add to `~/.claude/settings.json` → `enabledPlugins`:
+   ```json
+   "dotclaude-dev-ops@dotclaude-dev-ops": true
+   ```
+5. Restart the Desktop App.
+
+### Hooks not running
+
+Start a new session. Hooks only activate on session start, not mid-session.
+
+### Skills not found
+
+Verify the plugin is enabled: check `enabledPlugins` in `~/.claude/settings.json`.
 
 ## Uninstall
 

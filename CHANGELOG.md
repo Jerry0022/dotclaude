@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.24.1] — 2026-04-03
+
+### Fixed
+- **docs** — Desktop App marketplace UI doesn't list third-party plugins; CLI now recommended as primary install method
+- **docs** — added troubleshooting section to INSTALL.md with manual registration steps for Desktop App users
+
 ## [0.24.0] — 2026-04-03
 
 ### Added
