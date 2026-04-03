@@ -5,12 +5,15 @@
 
 import { z } from "zod";
 import { execSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, "..", "..", "..");
 const BUILD_ID_SCRIPT = join(PLUGIN_ROOT, "scripts", "build-id.js");
+const DK_INDEX_SCRIPT = join(PLUGIN_ROOT, "scripts", "gen-dk-index.js");
+const PROJECT_MAP_SCRIPT = join(PLUGIN_ROOT, "scripts", "gen-project-map.js");
 
 export const schema = z.object({
   buildCmd: z.string().default("npm run build").describe("Build command to run"),
@@ -54,6 +57,17 @@ export async function handler(params) {
   }
 
   const steps = [];
+
+  // Regenerate deep-knowledge INDEX.md (idempotent, skips if unchanged)
+  // 1. Plugin's own deep-knowledge
+  run(`"${process.execPath}" "${DK_INDEX_SCRIPT}"`, cwd);
+  // 2. Project's deep-knowledge (if it exists)
+  const projectDk = join(cwd, "deep-knowledge");
+  if (existsSync(projectDk)) {
+    run(`"${process.execPath}" "${DK_INDEX_SCRIPT}" "${projectDk}"`, cwd);
+  }
+  // 3. Project map (full codebase index)
+  run(`"${process.execPath}" "${PROJECT_MAP_SCRIPT}" "${cwd}"`, cwd);
 
   // Build
   const buildResult = run(buildCmd, cwd);

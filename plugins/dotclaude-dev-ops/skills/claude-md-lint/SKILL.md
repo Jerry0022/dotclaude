@@ -87,6 +87,7 @@ If a CLAUDE.md does **not** exist:
 - {1-2 key rules}
 
 ## References
+- Project map: see `.claude/project-map.md`
 - Architecture: see `deep-knowledge/architecture.md`
 ```
 
@@ -102,7 +103,10 @@ If `--fix` is passed and file is over budget:
 3. Create the target files with the extracted content
 4. Replace the original section in CLAUDE.md with a one-line pointer:
    `- {Topic}: see deep-knowledge/{topic}.md`
-5. Verify final CLAUDE.md is ≤25 lines
+5. Regenerate `deep-knowledge/INDEX.md` by running the plugin's index generator:
+   `node {plugin-root}/scripts/gen-dk-index.js {project-root}/deep-knowledge`
+   This ensures the index stays current after every extraction.
+6. Verify final CLAUDE.md is ≤25 lines
 
 Do NOT auto-fix without `--fix` — only report.
 

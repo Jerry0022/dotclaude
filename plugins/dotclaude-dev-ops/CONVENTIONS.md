@@ -101,11 +101,15 @@ Some knowledge applies across multiple skills and hooks — not owned by any sin
 These live at the plugin root level:
 
 ```
-deep-knowledge/                        ← Plugin-global reference docs
+deep-knowledge/
+├── INDEX.md                           ← Auto-generated topic map (read this FIRST)
 ├── test-strategy.md                   ← When/how to test (used by completion flow)
 ├── visual-verification.md             ← Preview methods: screenshot, simulated, etc.
 └── {topic}.md                         ← Any cross-cutting concern
 ```
+
+**Lookup rule:** Before reading individual deep-knowledge files, read `deep-knowledge/INDEX.md`
+to find the right file. This avoids unnecessary reads and saves context tokens.
 
 **vs. skill-level deep-knowledge:**
 - `skills/ship/deep-knowledge/versioning.md` → only used by `/ship`

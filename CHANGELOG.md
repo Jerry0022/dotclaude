@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.24.0] — 2026-04-03
+
+### Added
+- **indexing** — `gen-dk-index.js` auto-generates `deep-knowledge/INDEX.md` topic map from all `.md` files (plugin + project)
+- **indexing** — `gen-project-map.js` auto-generates `.claude/project-map.md` with full codebase structure via `git ls-files`
+- **ship** — `ship_build` regenerates both indexes (deep-knowledge + project map) before every build
+- **skills** — `project-setup --init` generates project map; `claude-md-lint --fix` regenerates deep-knowledge index after extraction
+
+### Changed
+- **conventions** — deep-knowledge lookup rule: read INDEX.md first before individual files
+
 ## [0.23.0] — 2026-04-03
 
 ### Added
