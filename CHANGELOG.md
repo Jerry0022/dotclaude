@@ -1,41 +1,24 @@
 # Changelog
 
-## [0.19.8] — 2026-04-03
+## [0.20.0] — 2026-04-03
+
+### Changed
+- **marketplace** — restructured repository to official plugin subdirectory pattern (`plugins/dotclaude-dev-ops/`)
+- **marketplace** — `marketplace.json` source changed from `"./"` to `"./plugins/dotclaude-dev-ops"` for proper cache isolation
+- **marketplace** — split `.claude-plugin/`: marketplace.json stays at root, plugin.json moves into plugin subdirectory
+- Matches pattern used by `claude-plugins-official` and `openai-codex` — enables Manage button in Desktop App
 
 ### Added
-- **plugin** — `userConfig` with `claude_plan` field enables "Verwalten" (manage) button in Desktop app marketplace UI
+- **plugin** — `userConfig` with `claude_plan` field for Desktop app plugin configuration
 
-## [0.19.7] — 2026-04-03
-
-### Fixed
-- **marketplace** — added `$schema`, `description`, `category`, `homepage`, `author`, and `tags` to marketplace.json to align with official Anthropic plugin format (fixes missing metadata in plugin directory UI)
-
-## [0.19.6] — 2026-04-02
-
-### Fixed
-- **mcp-server** — stale usage data from previous 5h windows no longer produces meaningless deltas; data outside the current reset window is discarded before scraping
-
-## [0.19.5] — 2026-04-02
-
-### Fixed
-- **completion-card** — commit hash now prefixed with `git` (e.g. `main · git 861b9d2`) for clarity
-- **completion-card** — build-ID `0000000` fixed by resolving git toplevel as cwd for `build-id.js`
-
-## [0.19.4] — 2026-04-02
-
-### Fixed
-- **ship/github** — replace shell string interpolation with `execFileSync` + stdin for `gh` CLI calls (`createPR`, `mergePR`, `createRelease`) to prevent shell escaping bugs with special characters
-- **ship/github** — `mergePR` now uses `base` parameter instead of hardcoded `main`
-- **ship/git** — add upstream guard to `unpushedCommits()` for detached/no-upstream branches
-- **ship/build** — `getBuildId` fallback changed from silent `"0000000"` to `"no-build-id"` with `console.error` logging
-- **mcp-server** — same `getBuildId` fallback fix in `index.js` (duplicated CJS module)
-- **mcp-server** — document intentional Edge process lifecycle in `index.js`
-- **hooks** — introduce atomic `writeSessionFile()` (write `.tmp` + rename) in `session-id.js`
-- **hooks** — migrate all `fs.writeFileSync` calls to `writeSessionFile` across 4 hooks
-- **skills** — add missing `allowed-tools` to `refresh-usage` skill
-- **skills** — document `disable-model-invocation` behavior in `commit` skill
-- **skills** — added MCP tool patterns (`ship__*`, `completion__*`, `issues__*`) to `allowed-tools` in ship, flow, and new-issue skills to prevent unnecessary manual approval prompts
-- **usage-meter** — elapsed marker no longer replaces filled bar segments; uses `╇` (heavy+marker) when inside filled area, `╏` (light+marker) when in free area
+### Includes all changes from v0.19.4–v0.19.8
+- **marketplace** — aligned manifest with official Anthropic format
+- **mcp-server** — stale usage data outside 5h reset window discarded
+- **completion-card** — git hash prefix and build-ID cwd fixes
+- **ship/github** — execFileSync + stdin for shell safety
+- **hooks** — atomic writeSessionFile across all hooks
+- **skills** — MCP tool patterns in allowed-tools
+- **usage-meter** — elapsed marker fix
 
 ## [0.19.3] — 2026-04-01
 

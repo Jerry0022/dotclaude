@@ -13,7 +13,7 @@
       "author": {
         "name": "Jerry0022"
       },
-      "source": "./",
+      "source": "./plugins/dotclaude-dev-ops",
       "category": "development",
       "homepage": "https://github.com/Jerry0022/dotclaude-dev-ops",
       "tags": ["devops", "git", "automation", "shipping", "code-quality"]
