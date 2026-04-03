@@ -19,14 +19,7 @@ const cwd = process.cwd();
 const CONFIG_DIR = path.join(cwd, '.claude');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'token-config.json');
 
-// Context window is ~200K for all Claude models (plan-independent).
-// Threshold percentage scales with plan: higher plans = more budget = more
-// generous per-operation allowance.
-const PLAN_DEFAULTS = {
-  pro:    { estimatedLimitTokens: 200000, confirmThresholdPct: 0.05 },  // 10K
-  max_5:  { estimatedLimitTokens: 200000, confirmThresholdPct: 0.08 },  // 16K
-  max_20: { estimatedLimitTokens: 200000, confirmThresholdPct: 0.10 },  // 20K
-};
+const PLAN_DEFAULTS = require('../lib/plan-defaults');
 
 const SKIP_DIRS = new Set([
   'node_modules', 'dist', '.angular', '.git', '.claude', 'out-tsc',

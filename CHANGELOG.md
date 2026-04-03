@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.24.2] — 2026-04-03
+
+### Fixed
+- **usage-meter** — `renderBar` elapsed marker now correctly distinguishes heavy/light region (was always thin `╏`, now `╇`/`╏` conditional)
+- **mcp-server** — removed stale "canonical source" comments referencing deleted files (`scripts/render-card.js`, `scripts/lib/usage-meter.js`)
+- **hooks** — extracted duplicated `PLAN_DEFAULTS` to shared `hooks/lib/plan-defaults.js` (was identical in `ss.tokens.scan` + `pre.tokens.guard`)
+- **hooks** — aligned `CONFIG_PATH` pattern in `pre.tokens.guard` with `ss.tokens.scan` (consistent `cwd`/`CONFIG_DIR` usage)
+
+### Removed
+- **scripts** — deleted `scripts/lib/usage-meter.js` (MCP server `index.js` is now the single source of truth)
+
 ## [0.24.1] — 2026-04-03
 
 ### Fixed

@@ -26,8 +26,7 @@ const SCRAPER_SCRIPT = join(PLUGIN_ROOT, 'scripts', 'refresh-usage-headless.js')
 const USAGE_JSON_PATH = join(homedir(), '.claude', 'usage-live.json');
 
 // ---------------------------------------------------------------------------
-// Inline shared usage-meter renderer (CJS module — duplicated to avoid interop)
-// Canonical source: scripts/lib/usage-meter.js
+// Usage-meter renderer (canonical source — authoritative implementation)
 // ---------------------------------------------------------------------------
 
 function renderBar(pct, elapsedPct) {
@@ -38,7 +37,7 @@ function renderBar(pct, elapsedPct) {
   let bar = '';
   for (let i = 0; i < total; i++) {
     if (i === elapsedPos) {
-      bar += '\u254f'; // ╏ thin vertical — elapsed marker
+      bar += i < filled ? '\u2547' : '\u254f'; // ╇ heavy+marker / ╏ light+marker
     } else if (i < filled) {
       bar += '\u2501'; // ━ heavy horizontal — used
     } else {
@@ -100,8 +99,7 @@ function renderUsageMeter(usageData, delta5h, deltaWk) {
 }
 
 // ---------------------------------------------------------------------------
-// Inline usage-meter for completion card (with deltas + code fences)
-// Canonical source: scripts/lib/usage-meter.js renderUsageMeter()
+// Usage-meter variant for completion card (with deltas + code fences)
 // ---------------------------------------------------------------------------
 
 function renderUsageMeterForCard(usageData, delta5h, deltaWk) {
@@ -126,8 +124,7 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk) {
 }
 
 // ---------------------------------------------------------------------------
-// Inline completion card renderer (CJS module — duplicated to avoid interop)
-// Canonical source: scripts/render-card.js
+// Completion card renderer
 // ---------------------------------------------------------------------------
 
 const VARIANTS = {

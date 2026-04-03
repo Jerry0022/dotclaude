@@ -17,16 +17,11 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
-const CONFIG_PATH = path.join(process.cwd(), '.claude', 'token-config.json');
+const cwd = process.cwd();
+const CONFIG_DIR = path.join(cwd, '.claude');
+const CONFIG_PATH = path.join(CONFIG_DIR, 'token-config.json');
 
-// Context window is ~200K for all Claude models (plan-independent).
-// The threshold percentage scales with the plan: higher plans can afford
-// more context per single operation because their overall budget is larger.
-const PLAN_DEFAULTS = {
-  pro:    { estimatedLimitTokens: 200000, confirmThresholdPct: 0.05 },  // 10K
-  max_5:  { estimatedLimitTokens: 200000, confirmThresholdPct: 0.08 },  // 16K
-  max_20: { estimatedLimitTokens: 200000, confirmThresholdPct: 0.10 },  // 20K
-};
+const PLAN_DEFAULTS = require('../lib/plan-defaults');
 
 function loadConfig() {
   try {
