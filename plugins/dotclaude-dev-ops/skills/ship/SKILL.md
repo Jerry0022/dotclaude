@@ -1,10 +1,12 @@
 ---
 name: ship
-version: 0.2.0
+version: 0.4.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
-  ship_version_bump, ship_release, ship_cleanup, then render_completion_card.
-  Use when work is complete and ready to land on main. Triggers on: "ship it",
+  ship_version_bump, ship_release, ship_cleanup, render_completion_card,
+  then silent memory dream (consolidation).
+  Supports hierarchical merges: sub-branch → feature branch → main.
+  Use when work is complete and ready to land. Triggers on: "ship it",
   "fertig", "merge it", "ab damit", "mach nen PR", "push and merge", "das kann rein".
   Do NOT trigger when: user is still coding/debugging, mid-sprint, or just
   committing without shipping.
@@ -13,7 +15,8 @@ allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, G
 
 # Ship
 
-Ship completed work to main via PR using the `dotclaude-ship` MCP server tools.
+Ship completed work via PR using the `dotclaude-ship` MCP server tools.
+Supports two modes: **direct** (branch → main) and **intermediate** (sub-branch → feature branch).
 
 ## Pre-Step — Session Activity Guard
 
@@ -52,9 +55,17 @@ Call `ship_preflight` MCP tool (dotclaude-ship server):
 ship_preflight({ base: "main" })
 ```
 
-If `ready: false` → report errors and **STOP**. Do not proceed.
+The tool **auto-detects** the correct base branch:
+- If on a sub-branch like `feat/42-video-filters/core`, it detects `feat/42-video-filters` as the parent and uses it as base.
+- If no parent branch is found, it ships to `main` (default).
+- You can override by passing an explicit base: `ship_preflight({ base: "feat/42" })`.
 
-The tool checks: clean tree, commits ahead, all pushed, version consistency, worktree detection.
+Check the result:
+- `autoDetectedBase` — non-null if a parent branch was detected (confirms intermediate merge).
+- `intermediate` — `true` if merging into a feature branch instead of main.
+- `ready: false` → report errors and **STOP**. Do not proceed.
+
+The tool checks: clean tree, commits ahead, all pushed, version consistency (skipped for intermediate), worktree detection.
 
 ## Step 2 — Build + Quality Gates
 
@@ -82,6 +93,10 @@ This step is non-blocking — Codex findings are advisory, not a hard gate.
 
 ## Step 3 — Version Bump
 
+**If `intermediate: true` (from Step 1)**: skip this step entirely. Version bumps only happen on final ship to main.
+
+**If shipping to main:**
+
 Determine bump type based on changes:
 - **patch/minor**: decide autonomously
 - **major**: always ask user via AskUserQuestion
@@ -102,7 +117,9 @@ If `verified: false` → fix mismatches manually, then retry.
 
 ## Step 4 — Release
 
-Call `ship_release` MCP tool:
+Call `ship_release` MCP tool. Use the `base` from Step 1 (auto-detected or explicit).
+
+**Final ship to main:**
 ```
 ship_release({
   base: "main",
@@ -115,19 +132,40 @@ ship_release({
 })
 ```
 
-The tool handles: commit, push, PR create, squash-merge, tag, GitHub release — all deterministically.
+**Intermediate ship (sub-branch → feature branch):**
+```
+ship_release({
+  base: "feat/42-video-filters",
+  title: "feat(core): add video filter data models",
+  body: "## Summary\n...",
+  commitMessage: null,
+  tag: null,
+  releaseNotes: null
+})
+```
 
-Returns: `{ branch, commit, pushed, pr: {number, url}, merged, tag, tagVerified, release }`.
+For intermediate merges: no tag, no release notes, no version commit. The tool automatically skips tag/release creation when `base` is not `main`.
+
+The tool handles: commit (optional), push, PR create, squash-merge, tag (main only), GitHub release (main only).
+
+Returns: `{ branch, commit, pushed, pr: {number, url}, merged, intermediate, tag, tagVerified, release }`.
 
 If `success: false` → do NOT proceed to cleanup. Report error and render completion card with variant `blocked`.
 
 ## Step 5 — Cleanup
 
 **If in a worktree**: call `ExitWorktree(action: "remove")` FIRST to release the CWD lock.
-Then call `ship_cleanup` MCP tool:
+Then call `ship_cleanup` MCP tool with the `base` from Step 1:
 ```
 ship_cleanup({ branch: "claude/feature-branch", base: "main" })
 ```
+
+For intermediate merges:
+```
+ship_cleanup({ branch: "feat/42-video-filters/core", base: "feat/42-video-filters" })
+```
+
+The tool deletes the sub-branch but **preserves the feature branch** for further sub-branch merges or final ship to main.
 
 The tool will refuse to run if still inside a worktree — it returns an error reminding you to call ExitWorktree first.
 
@@ -162,12 +200,37 @@ render_completion_card({
 })
 ```
 
-Output the card markdown VERBATIM — card LAST, nothing after closing `---`.
+Output the card markdown VERBATIM — card is the last **visible** output, nothing after closing `---`.
+
+## Step 7 — Memory Dream
+
+Silent memory consolidation after shipping. Runs **after** the completion card so it never delays user-facing output.
+
+**Skip condition:** If no memory files were written or updated during this session → skip silently.
+
+**If memories were touched this session**, run a lightweight dream pass:
+
+1. **Orient** — Read `MEMORY.md` index and list all `memory/*.md` files
+2. **Consolidate**:
+   - Merge overlapping entries (same topic, different sessions)
+   - Convert any relative dates to absolute (`"gestern"` → actual date)
+   - Remove entries contradicted by current code/repo state
+   - Remove implementation details derivable from code (file paths, line numbers, script commands)
+3. **Prune** — Delete memory files that are fully stale (topic resolved, info now in code/docs)
+4. **Update Index** — Rewrite `MEMORY.md` to match surviving files. Keep under 200 lines.
+
+**Rules:**
+- No user-visible output. This step is silent.
+- Max budget: ~5K tokens (reads + minimal writes)
+- Never touch `CLAUDE.md` — only `memory/` files
+- If consolidation finds nothing to change → done, no writes needed
 
 ## Data Flow Summary
 
+### Direct ship (branch → main)
+
 ```
-ship_preflight → { ready, branch, ahead, inWorktree }
+ship_preflight → { ready, branch, base: "main", intermediate: false }
       ↓
 ship_build → { success, buildId, steps }
       ↓
@@ -180,7 +243,53 @@ ship_release → { commit, pushed, pr, merged, tag }
 ship_cleanup → { cleaned }
       ↓
 render_completion_card → card markdown (VERBATIM)
+      ↓
+[memory dream — silent, only if memories touched]
+```
+
+### Intermediate ship (sub-branch → feature branch)
+
+```
+ship_preflight → { ready, branch, base: "feat/42", intermediate: true, autoDetectedBase: "feat/42" }
+      ↓
+ship_build → { success, buildId, steps }
+      ↓
+[SKIP version bump]
+      ↓
+ship_release → { commit, pushed, pr, merged: "feat/42", tag: null }
+      ↓
+[ExitWorktree if needed]
+      ↓
+ship_cleanup → { cleaned, intermediate: true }  ← feature branch preserved
+      ↓
+render_completion_card → card markdown (VERBATIM)
+      ↓
+[memory dream — silent, only if memories touched]
 ```
 
 Each tool produces structured JSON that feeds directly into the next step or the completion card.
 No Bash parsing, no regex extraction — deterministic data flow.
+
+## Hierarchical Merge Workflow
+
+When multiple agents work on sub-branches of a feature branch:
+
+```
+feat/42-video-filters              ← feature branch (integration)
+├── feat/42-video-filters/core     ← sub-branch (Core agent)
+├── feat/42-video-filters/frontend ← sub-branch (Frontend agent)
+└── feat/42-video-filters/ai       ← sub-branch (AI agent)
+```
+
+Each sub-agent ships independently via `/ship`. The pipeline auto-detects the parent:
+
+1. **Core finishes** → `/ship` on `feat/42-video-filters/core`
+   - Preflight detects base: `feat/42-video-filters`
+   - Squash-merges into feature branch, no tag/version
+2. **Frontend finishes** → `/ship` on `feat/42-video-filters/frontend`
+   - Same: intermediate merge into feature branch
+3. **All sub-branches merged** → `/ship` on `feat/42-video-filters`
+   - No parent detected → ships to `main`
+   - Full release: version bump, tag, GitHub release
+
+This requires no manual `base` parameter — detection is automatic based on branch naming convention (`<parent>/<role>`).
