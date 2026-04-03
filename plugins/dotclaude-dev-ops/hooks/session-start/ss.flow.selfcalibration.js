@@ -76,6 +76,8 @@ process.stdin.on('end', () => {
     '2. If the task already exists → skip it entirely (no registration, no immediate run).',
     '3. If the task does NOT exist → register it with CronCreate, then immediately',
     '   execute it once (read and run the SKILL.md now, before waiting for the first tick).',
+    '   CRITICAL: The immediate run internalizes the completion flow (Step 0 in SKILL.md).',
+    '   This ensures the completion card rules are active BEFORE the user\'s first task.',
   );
 
   process.stdout.write(instructions.join('\n') + '\n');

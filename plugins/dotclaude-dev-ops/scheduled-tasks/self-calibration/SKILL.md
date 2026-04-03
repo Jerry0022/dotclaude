@@ -10,12 +10,18 @@ schedule: "*/30 * * * *"
 Periodic self-audit to keep Claude aligned with the user's preferences and
 the plugin's rules. Runs every 30 minutes during active sessions.
 
-## Step 1 — Self-Audit
+## Step 0 — Completion Flow Internalization (MANDATORY)
 
-Find all `feedback_*.md` files in the current project's memory directory.
-Read each file. Check session behavior against each rule.
+**This step runs FIRST, every cycle, without exception.**
 
-### Completion Flow Rules
+The completion flow is the single most critical behavioral rule in this plugin.
+It is **not a recommendation — it is a MUST**. Every self-calibration cycle
+begins by re-reading and internalizing these rules before anything else.
+
+Read and internalize `deep-knowledge/plugin-behavior.md` § Completion Flow.
+Then verify the following rules are active in your behavioral model:
+
+### Rules (non-negotiable)
 
 The completion flow is a **generic response-complete pattern**. It fires whenever
 a task is fully completed and Claude is about to wait for the next user input.
@@ -38,6 +44,21 @@ is waiting for the next user prompt → completion card is mandatory.
 verify → issue status → completion card → ship recommendation (if 5+ edits).
 Directly rendering a card without going through the flow bypasses verify and
 issue-update steps — that is also a violation.
+
+If a violation is found → correct immediately and briefly report.
+
+### Why this is Step 0
+
+When the self-calibration task is first registered at session start, it runs
+immediately. This means the completion flow is internalized **before any user
+task begins** — ensuring zero missed cards from the very first interaction.
+Every 30-minute re-run reinforces this. Skipping or deprioritizing this step
+is itself a violation.
+
+## Step 1 — Self-Audit
+
+Find all `feedback_*.md` files in the current project's memory directory.
+Read each file. Check session behavior against each rule.
 
 If a violation is found → correct immediately and briefly report.
 

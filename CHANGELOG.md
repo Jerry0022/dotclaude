@@ -3,6 +3,8 @@
 ## [0.20.1] — 2026-04-03
 
 ### Fixed
+- **self-calibration** — completion flow elevated to mandatory Step 0 (runs first every cycle, not a subsection)
+- **session-start hook** — CRITICAL hint added so immediate first run internalizes completion flow before any user task
 - **issue-detection** — implicit (branch-name) issues no longer persisted before user confirmation; uses separate "asked" marker to prevent re-prompting
 - **session-id** — glob fallback now filters files older than 2h, preventing cross-session state bleeding in concurrent sessions
 - **completion-card** — removed duplicate standalone `render-card.js`; MCP server is now the single canonical renderer
