@@ -30,10 +30,14 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 1. Read the `parent_branch` from your prompt (the caller MUST provide it)
 2. Run: `git fetch origin && git reset --hard origin/<parent_branch>`
 3. Create your integration branch: `git checkout -b <feature-branch-name>`
-4. When delegating to sub-agents, ALWAYS include:
+4. **Push the integration branch to origin immediately:**
+   `git push -u origin <feature-branch-name>`
+   This is mandatory — sub-agents need it on origin for `/ship` auto-detection.
+5. When delegating to sub-agents, ALWAYS include:
    `Parent branch: <your-integration-branch>`
-5. After each sub-agent wave completes, merge their branches:
-   `git merge --no-ff <sub-agent-branch>`
+6. After each sub-agent wave completes, ship their branches **sequentially** (one at a time):
+   Call `/ship` for each sub-branch, wait for completion before the next.
+   Do NOT ship multiple sub-branches in parallel to avoid merge conflicts.
 
 ## Delegation
 

@@ -49,10 +49,23 @@ export function mergePR(prNumber, base = "main", opts) {
     ["pr", "merge", String(prNumber), "--squash", "--delete-branch", "--admin"],
     opts,
   );
-  // Verify the PR is actually in MERGED state
-  const state = gh(["pr", "view", String(prNumber), "--json", "state", "-q", ".state"], opts);
+  // Verify the PR is actually in MERGED state (retry up to 3 times with 2s backoff
+  // to handle transient network errors or GitHub eventual consistency)
+  let state = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      state = gh(["pr", "view", String(prNumber), "--json", "state", "-q", ".state"], opts);
+      if (state === "MERGED") break;
+    } catch {
+      // Network error on state check — retry
+    }
+    if (attempt < 3) {
+      // Synchronous sleep for retry backoff
+      execSync(`node -e "setTimeout(()=>{},${attempt * 2000})"`, { timeout: 10_000 });
+    }
+  }
   if (state !== "MERGED") {
-    throw new Error(`PR #${prNumber} merge failed — state is "${state}", expected "MERGED"`);
+    throw new Error(`PR #${prNumber} merge verification failed after 3 attempts — state is "${state || "unknown"}", expected "MERGED"`);
   }
   // Fetch updated base branch and get the merge commit
   execSync(`git fetch origin ${base}`, {
@@ -67,6 +80,23 @@ export function mergePR(prNumber, base = "main", opts) {
     timeout: DEFAULT_TIMEOUT,
   }).trim();
   return sha;
+}
+
+/**
+ * Check if an open PR already exists for head → base.
+ * Returns { number, url } if found, null otherwise.
+ */
+export function findExistingPR({ base, head }, opts) {
+  try {
+    const raw = gh(
+      ["pr", "list", "--head", head, "--base", base, "--state", "open", "--json", "number,url", "--limit", "1"],
+      opts,
+    );
+    const list = JSON.parse(raw);
+    return list.length > 0 ? list[0] : null;
+  } catch {
+    return null; // Network error or no PR — safe to proceed
+  }
 }
 
 /**

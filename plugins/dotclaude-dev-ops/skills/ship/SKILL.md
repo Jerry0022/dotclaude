@@ -78,18 +78,18 @@ Pass project-specific commands from extensions if available.
 
 If `success: false` → call `render_completion_card` with variant `blocked`. Do not continue.
 
-### Codex Review (optional, if codex-plugin-cc installed)
+### Codex Review (automatic, if codex-plugin-cc installed)
 
-After build + tests pass, run a Codex code review for a second opinion.
+After build + tests pass, **automatically run** a Codex code review — do not ask the user first.
 See `deep-knowledge/codex-integration.md` for details.
 
-1. **patch/minor changes** → `/codex:review` (read-only diff review)
-2. **major bump** → `/codex:adversarial-review` (challenges design trade-offs)
-3. Present findings to user before proceeding
+1. **patch/minor changes** → automatically run `/codex:review` (read-only diff review)
+2. **major bump** → automatically run `/codex:adversarial-review` (challenges design trade-offs)
+3. Present Codex findings to user before proceeding
 4. User decides: address findings, ignore and continue, or abort ship
 
 If codex-plugin-cc is not installed → skip silently.
-This step is non-blocking — Codex findings are advisory, not a hard gate.
+Codex findings are advisory, not a hard gate — they never block shipping on their own.
 
 ## Step 3 — Version Bump
 
@@ -146,15 +146,35 @@ ship_release({
 
 For intermediate merges: no tag, no release notes, no version commit. The tool automatically skips tag/release creation when `base` is not `main`.
 
-The tool handles: commit (optional), push, PR create, squash-merge, tag (main only), GitHub release (main only).
+The tool handles: commit (optional), push, PR create (or reuse existing), squash-merge, tag (main only), GitHub release (main only).
 
 Returns: `{ branch, commit, pushed, pr: {number, url}, merged, intermediate, tag, tagVerified, release }`.
 
 If `success: false` → do NOT proceed to cleanup. Report error and render completion card with variant `blocked`.
 
+### Squash-Merge Traceability Convention
+
+When shipping a **feature branch → main** that was built from intermediate sub-branch merges, the PR body **MUST** include references to all intermediate PRs:
+
+```markdown
+## Summary
+Feature: Video filters (end-to-end)
+
+## Intermediate PRs
+- #47 — feat(core): video filter data models
+- #48 — feat(frontend): video filter UI
+- #49 — feat(ai): video filter ML pipeline
+```
+
+This preserves the audit trail through squash-merges. Without these references, `git log` on main only shows one commit with no link back to the sub-branch work.
+
 ## Step 5 — Cleanup
 
 **If in a worktree**: call `ExitWorktree(action: "remove")` FIRST to release the CWD lock.
+
+If `ExitWorktree` **fails** (e.g. directory locked by another process): **STOP**. Do not proceed to cleanup.
+Report the error to the user. The merge already landed on GitHub — cleanup can be retried later.
+
 Then call `ship_cleanup` MCP tool with the `base` from Step 1:
 ```
 ship_cleanup({ branch: "claude/feature-branch", base: "main" })

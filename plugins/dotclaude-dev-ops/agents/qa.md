@@ -21,7 +21,7 @@ Verify that changes work correctly. Run in parallel with implementation.
 - Take screenshots of UI changes
 - Check console logs for errors
 - Generate build-ID after successful build
-- Suggest `/codex:adversarial-review` for complex or high-risk changes (if codex-plugin-cc installed)
+- **Automatically run** `/codex:adversarial-review` for complex or high-risk changes (multi-file, architectural, security-sensitive). Skip for trivial single-file fixes. If codex-plugin-cc is not installed → skip silently.
 - Report findings in structured format
 
 ## Output format

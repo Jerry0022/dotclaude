@@ -72,7 +72,7 @@ Find the actual broken invariant — not just the symptom. Ask:
 | **Trivial fix** (typo, missing import, off-by-one) | Fix immediately, report what was wrong |
 | **Clear root cause, low risk** (single file) | Fix immediately, explain root cause |
 | **Clear root cause, medium risk** (multiple files) | Propose fix via `AskUserQuestion` |
-| **Unclear root cause** | Present findings, propose 2-3 hypotheses, ask user. Offer `/codex:rescue` for independent investigation (if codex-plugin-cc installed) |
+| **Unclear root cause** | Present findings, propose 2-3 hypotheses, ask user. **Automatically invoke** `/codex:rescue` for parallel independent investigation (if codex-plugin-cc installed — skip silently if not) |
 | **Architectural issue** | Report root cause, do NOT fix — recommend planned approach |
 
 ## Step 7 — Implement fix (if appropriate)

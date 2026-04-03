@@ -19,7 +19,7 @@ Deep-dive into a topic and return structured findings.
 - Break topic into 3-5 research angles
 - Search web and local codebase
 - Cross-reference sources
-- Delegate independent sub-questions to `/codex:rescue` for parallel investigation (if codex-plugin-cc installed)
+- **Automatically delegate** 1-2 independent sub-questions to `/codex:rescue` for parallel investigation when the topic breaks into 3+ angles. If codex-plugin-cc is not installed → skip silently.
 - Return structured report (clearly attribute Codex-sourced findings)
 
 ## Output format

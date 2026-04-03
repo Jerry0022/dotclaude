@@ -10,15 +10,19 @@ import { git, gitStrict, isWorktree } from "../lib/git.js";
 export const schema = z.object({
   branch: z.string().describe("Feature branch to delete"),
   base: z.string().default("main").describe("Base branch (should already be checked out)"),
+  cwd: z.string().nullable().default(null).describe("Working directory override (agent cwd) for worktree detection"),
 });
 
 export async function handler(params) {
-  const { branch, base } = params;
+  const { branch, base, cwd: agentCwd } = params;
+  const intermediate = base !== "main";
   const cleaned = [];
   const warnings = [];
 
   // Guard: refuse to run inside a worktree
-  if (isWorktree()) {
+  // Check both the MCP server cwd and the agent-provided cwd
+  const opts = agentCwd ? { cwd: agentCwd } : {};
+  if (isWorktree() || isWorktree(opts)) {
     return {
       success: false,
       error: "Still inside a worktree. Call ExitWorktree(action: 'remove') first, then retry ship_cleanup.",
@@ -27,8 +31,11 @@ export async function handler(params) {
     };
   }
 
+  // Record the branch we're on before any checkout, so we can restore it
+  const branchBeforeCleanup = git("rev-parse --abbrev-ref HEAD");
+
   // Guard: verify we're on base branch
-  const current = git("rev-parse --abbrev-ref HEAD");
+  const current = branchBeforeCleanup;
   if (current !== base) {
     try {
       gitStrict(`checkout ${base}`);
@@ -70,8 +77,26 @@ export async function handler(params) {
   git("remote prune origin");
   cleaned.push("remote-prune");
 
+  // For intermediate merges: note that the base (feature branch) stays alive
+  if (intermediate) {
+    warnings.push(`Intermediate merge: base branch '${base}' preserved for further sub-branch merges or final ship to main`);
+  }
+
+  // Restore the original branch if we switched away from a non-base branch
+  // (avoids disrupting other work in the main working tree)
+  if (branchBeforeCleanup && branchBeforeCleanup !== base && branchBeforeCleanup !== branch) {
+    try {
+      gitStrict(`checkout ${branchBeforeCleanup}`);
+      cleaned.push(`restored:${branchBeforeCleanup}`);
+    } catch {
+      warnings.push(`Could not restore original branch '${branchBeforeCleanup}' — staying on '${base}'`);
+    }
+  }
+
   return {
     success: true,
+    intermediate,
+    branchBeforeCleanup,
     cleaned,
     warnings,
   };

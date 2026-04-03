@@ -100,6 +100,8 @@ feat/42-video-filters          ← Feature agent (integration branch)
 
 Merge order follows wave order: Core → Frontend/Windows/AI → integration branch.
 
+Each sub-agent ships via `/ship` — the pipeline auto-detects the parent branch from naming convention. See `skills/ship/SKILL.md` → "Hierarchical Merge Workflow".
+
 ## Branch Inheritance Protocol
 
 Claude Code's `isolation: worktree` always creates worktrees from the repo's HEAD (main).
@@ -107,11 +109,14 @@ To ensure agents work on the correct branch, every isolated agent MUST follow th
 
 ### For the Orchestrator (Feature Agent or direct caller)
 
-1. Before spawning any sub-agent, capture the current branch:
+1. **Push the integration branch to origin before spawning any sub-agent:**
+   `git push -u origin <integration-branch>`
+   This is mandatory — sub-agents need the branch on origin to auto-detect it as their parent.
+2. Before spawning any sub-agent, capture the current branch:
    `PARENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)`
-2. Include in EVERY agent prompt:
+3. Include in EVERY agent prompt:
    `Parent branch: <branch-name>`
-3. After each sub-agent completes, merge their branch back:
+4. After each sub-agent completes, merge their branch back:
    `git merge --no-ff <sub-agent-branch>`
 
 ### For every isolated Sub-Agent (first action after spawn)
@@ -137,6 +142,26 @@ Example: If parent is `feat/42-video-filters`, core agent works on `feat/42-vide
 
 Same as wave order. Feature agent merges each wave's branches before spawning the next wave.
 
+### Shipping sub-branches
+
+Sub-agents call `/ship` from their branch. The ship pipeline auto-detects the parent:
+- `feat/42-video-filters/core` → detects base `feat/42-video-filters` → intermediate merge
+- `feat/42-video-filters` → no parent detected → ships to `main` with full release
+
+Intermediate merges skip version bump, tag, and GitHub release. These only happen on the final ship to main.
+
+### Shipping order within a wave
+
+**Sub-agents within the same wave must ship sequentially, not in parallel.**
+The Feature agent orchestrates shipping one sub-branch at a time:
+
+1. Sub-agent A completes → Feature agent calls `/ship` for A's branch → waits for merge
+2. Sub-agent B completes → Feature agent calls `/ship` for B's branch → waits for merge
+3. Continue until all sub-branches in the wave are merged
+
+This prevents merge conflicts from concurrent PRs targeting the same feature branch.
+Parallel **work** within a wave is fine — only the **shipping** must be sequential.
+
 ## Rules
 
 - **Never skip a wave.** Core must commit contracts before Frontend starts.
@@ -144,6 +169,8 @@ Same as wave order. Feature agent merges each wave's branches before spawning th
 - **Handoff data is mandatory.** No agent starts without knowing what came before.
 - **Conflicts resolve at integration.** The Feature agent handles merge conflicts.
 - **Parallel agents don't cross-depend.** Frontend and Windows never import from each other.
+- **Push integration branch before spawning sub-agents.** Sub-agents rely on the branch existing on origin for auto-detection.
+- **Ship sub-branches sequentially.** Parallel work is fine, but shipping must be one at a time to avoid merge conflicts.
 
 ## Extension
 

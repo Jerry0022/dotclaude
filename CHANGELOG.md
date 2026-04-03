@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.22.0] — 2026-04-03
+
+### Added
+- **ship** — hierarchical merge: sub-branch → feature branch → main with auto-detection via `detectParentBranch()`
+- **ship** — base branch existence check in preflight (hard gate)
+- **ship** — merge-conflict pre-check: blocks ship when base is ahead of HEAD
+- **ship** — duplicate PR detection: reuses existing open PR instead of failing
+- **ship** — merge verification retry (3 attempts, 2s backoff) for transient network errors
+- **ship** — squash-merge traceability convention: final PR body must list intermediate PR numbers
+- **skill** — new `/repo-health` skill: branch hygiene audit, stale branch detection, PR cross-reference
+
+### Fixed
+- **ship** — unpushed commits now hard-block preflight (was advisory-only)
+- **ship** — `commitMessage=null` with staged changes now aborts instead of silently losing them
+- **ship** — `git add -A` replaced with targeted staging (only tracked modified + CHANGELOG) to prevent accidental sensitive file commits
+- **ship** — tag failure no longer blocks cleanup (merge already landed)
+- **ship** — `commitsAhead()` now uses `origin/` ref after fetch (was stale local ref)
+- **ship** — `readVersion()` triple-call eliminated (cached result)
+- **ship** — cleanup restores original branch after checkout (avoids disrupting parallel work)
+- **ship** — cleanup accepts `cwd` parameter for accurate worktree detection
+- **ship** — push timeout increased from 15s to 60s for large repos
+- **ship** — error truncation increased from 500 to 1000 chars
+- **ship** — ExitWorktree failure now stops pipeline (was undocumented)
+
+### Changed
+- **agents** — feature agent must push integration branch before spawning sub-agents
+- **agents** — sub-branch shipping must be sequential within a wave (prevents merge conflicts)
+
 ## [0.21.1] — 2026-04-03
 
 ### Changed
