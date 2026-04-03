@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.22.1] — 2026-04-03
+
+### Changed
+- **codex-integration** — Codex steps now run automatically when plugin is installed (previously only offered/suggested); silently skipped when not installed
+
 ## [0.22.0] — 2026-04-03
 
 ### Added
