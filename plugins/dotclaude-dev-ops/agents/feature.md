@@ -93,6 +93,25 @@ FEATURE_RESULT:
   blockers: [list or "none"]
 ```
 
+## Model Selection (when delegating)
+
+Choose the model for each sub-agent based on task complexity:
+
+| Complexity | Model | When to use |
+|------------|-------|-------------|
+| **Low** | `model: haiku` | Simple file search, keyword lookup, data gathering, formatting |
+| **Medium** | `model: sonnet` | Code writing, test creation, design specs, UX evaluation, analysis |
+| **High** | `model: opus` | Deep architectural decisions, complex multi-file refactors |
+
+**Default:** `sonnet` (if unsure, use sonnet — it covers most tasks well).
+**Use haiku** when the sub-agent only reads, searches, or summarizes — no code output.
+**Use opus** only when sonnet's output quality is insufficient for the specific task.
+
+Example: spawning a research agent for a simple lookup:
+```
+Agent({ subagent_type: "research", model: "haiku", prompt: "..." })
+```
+
 ## Rules
 
 - Always work in a worktree (isolation: worktree)

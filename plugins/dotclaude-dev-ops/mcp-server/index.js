@@ -15,7 +15,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -261,16 +261,47 @@ function renderCTA(variant, cta, lang) {
   return tpl;
 }
 
+function readToolCallCount(sessionId) {
+  const key = sessionId || 'unknown';
+  const filePath = join(tmpdir(), `dotclaude-devops-toolcalls-${key}`);
+  try {
+    return parseInt(readFileSync(filePath, 'utf8'), 10) || 0;
+  } catch {
+    // Glob fallback for session_id mismatches (same pattern as session-id.js)
+    try {
+      const prefix = 'dotclaude-devops-toolcalls-';
+      const tmp = tmpdir();
+      const files = readdirSync(tmp)
+        .filter(f => f.startsWith(prefix))
+        .map(f => ({ full: join(tmp, f), mtime: statSync(join(tmp, f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime);
+      if (files.length > 0) return parseInt(readFileSync(files[0].full, 'utf8'), 10) || 0;
+    } catch {}
+    return 0;
+  }
+}
+
+function renderContextHealth(toolCallCount) {
+  if (toolCallCount <= 40) return '';
+  if (toolCallCount <= 80) return '\u26a1 ' + toolCallCount + ' tool calls \u2014 consider `/compact`';
+  return '\u26a0 ' + toolCallCount + ' tool calls \u2014 consider `/clear` + session summary';
+}
+
 function renderCard(input, meterText, buildId) {
   const variant = input.variant || 'fallback';
   const config = VARIANTS[variant] || VARIANTS.fallback;
   const lang = input.lang || 'de';
+
+  // Read tool-call counter for context health advisory
+  const toolCallCount = readToolCallCount(input.session_id);
+  const healthLine = config.usage ? renderContextHealth(toolCallCount) : '';
 
   const parts = [];
 
   // Block A — What was done
   if (config.usage && meterText) {
     parts.push(meterText);
+    if (healthLine) parts.push(healthLine);
     parts.push('');
     parts.push('---');
   } else {

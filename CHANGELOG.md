@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.21.0] — 2026-04-03
+
+### Added
+- **completion-card** — context health advisory line: shows tool-call count and recommends `/compact` (>40) or `/clear` (>80)
+- **skill** — new `/claude-md-lint` skill: audits CLAUDE.md files for size (max 25 lines), structure, and token efficiency; suggests creation if missing
+- **hooks** — cache-timeout detection in `prompt.ship.detect`: warns when >5 min pause expires prompt cache
+- **hooks** — verbose command guard in `pre.tokens.guard`: blocks unbounded `git log`, `npm ls`, `find`, `docker logs` and suggests limited alternatives
+- **hooks** — tool-call counter + last-activity timestamp in `post.flow.completion` for session health tracking
+- **hooks** — stale temp file cleanup (>24h) in `ss.git.check` SessionStart hook
+- **agents** — model selection guidance in feature agent: haiku for search/summarize, sonnet for code, opus for architecture
+
+### Changed
+- **skill** — `/project-setup` now calls `/claude-md-lint` as sub-step
+
 ## [0.20.1] — 2026-04-03
 
 ### Fixed

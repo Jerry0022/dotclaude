@@ -107,6 +107,11 @@ service-account*.json
 | **WARNING** | Required ignore rule missing | Auto-fix |
 | **INFO** | Redundant rules, wrong order | Report only |
 
+## Step 2b — CLAUDE.md audit
+
+Run `/claude-md-lint` to check CLAUDE.md size and structure.
+Report the result in the final output under a `### CLAUDE.md` section.
+
 ## Step 3 — LICENSE
 
 If missing: ask user via AskUserQuestion (MIT, Apache 2.0, GPL 3.0, ISC, Proprietary).

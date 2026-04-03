@@ -93,6 +93,27 @@ function checkRepo(dir) {
   return issues;
 }
 
+// ---------------------------------------------------------------------------
+// Cleanup stale session temp files (older than 24h)
+// ---------------------------------------------------------------------------
+const os = require('os');
+try {
+  const tmpDir = os.tmpdir();
+  const PREFIX = 'dotclaude-devops-';
+  const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+  const now = Date.now();
+  const entries = fs.readdirSync(tmpDir).filter(f => f.startsWith(PREFIX));
+  for (const entry of entries) {
+    try {
+      const full = path.join(tmpDir, entry);
+      const stat = fs.statSync(full);
+      if (now - stat.mtimeMs > MAX_AGE_MS) {
+        fs.unlinkSync(full);
+      }
+    } catch {}
+  }
+} catch {}
+
 // Determine repos to check
 const cwd = process.cwd();
 const repos = [{ label: 'current repo', dir: cwd }];

@@ -75,20 +75,62 @@ process.stdin.on('end', () => {
     if (segments.every(seg => noTokenCostPattern.test(seg))) {
       process.exit(0);
     }
-    // Check if command references known expensive files
-    const expensiveFiles = cfg.expensiveFiles || [];
-    const matchedFiles = [];
-    for (const ef of expensiveFiles) {
-      if (cmd.includes(ef.path)) {
-        matchedFiles.push({ path: ef.path, tokens: ef.estimatedTokens || 20000 });
+
+    // --- Verbose command detection (output bloat guard) ---
+    // Detect commands that produce unbounded output and suggest limited alternatives.
+    const verbosePatterns = [
+      {
+        test: /\bgit\s+log\b/,
+        guard: /--oneline|-n\s*\d+|--max-count[= ]\d+|-\d+|--format|--pretty=oneline|head\b/,
+        suggestion: 'git log --oneline -20',
+      },
+      {
+        test: /\bnpm\s+ls\b/,
+        guard: /--depth[= ]\d+/,
+        suggestion: 'npm ls --depth=0',
+      },
+      {
+        test: /\bfind\s+[.\/]/,
+        guard: /-maxdepth\s+\d+|head\b|-name\b.*-quit/,
+        suggestion: 'find . -maxdepth 3 -name "pattern"',
+      },
+      {
+        test: /\bdocker\s+logs\b/,
+        guard: /--tail[= ]\d+|-n\s*\d+|head\b/,
+        suggestion: 'docker logs --tail 50 <container>',
+      },
+    ];
+
+    let verboseMatch = null;
+    for (const vp of verbosePatterns) {
+      if (vp.test.test(cmd) && !vp.guard.test(cmd)) {
+        verboseMatch = vp;
+        break;
       }
     }
-    if (matchedFiles.length > 0) {
-      estimatedTokens = matchedFiles.reduce((sum, f) => sum + f.tokens, 0);
-      description = 'Bash referencing large file(s)';
-      toolInput._matchedFiles = matchedFiles;
-    } else {
-      process.exit(0);
+
+    if (verboseMatch) {
+      estimatedTokens = THRESHOLD;
+      description = 'Bash: unbounded output — may flood context';
+      toolInput._verboseSuggestion = verboseMatch.suggestion;
+    }
+
+    // Check if command references known expensive files
+    if (!verboseMatch) {
+      const expensiveFiles = cfg.expensiveFiles || [];
+      const matchedFiles = [];
+      for (const ef of expensiveFiles) {
+        if (cmd.includes(ef.path)) {
+          matchedFiles.push({ path: ef.path, tokens: ef.estimatedTokens || 20000 });
+        }
+      }
+      if (matchedFiles.length > 0) {
+        estimatedTokens = matchedFiles.reduce((sum, f) => sum + f.tokens, 0);
+        description = 'Bash referencing large file(s)';
+        toolInput._matchedFiles = matchedFiles;
+      } else {
+        process.exit(0);
+      }
     }
   }
 
@@ -150,6 +192,9 @@ process.stdin.on('end', () => {
       console.error(`\nLarge file:`);
       console.error(`  ${path.relative(process.cwd(), absP).replace(/\\/g, '/')}  (${kb} KB → ~${estimatedTokens.toLocaleString()} tokens)`);
     } catch {}
+  } else if (toolInput._verboseSuggestion) {
+    console.error(`\nUnbounded output — command has no limit flag.`);
+    console.error(`Try instead:  ${toolInput._verboseSuggestion}`);
   } else if (toolInput._matchedFiles) {
     console.error(`\nLarge files referenced:`);
     for (const f of toolInput._matchedFiles) {
