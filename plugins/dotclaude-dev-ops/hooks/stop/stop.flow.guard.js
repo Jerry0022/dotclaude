@@ -42,8 +42,9 @@ process.stdin.on('end', () => {
   if (workHappened && !cardRendered) {
     process.stdout.write([
       '[stop.flow.guard] CARRY-OVER: Work completed but no completion card rendered.',
-      'Call `render_completion_card` MCP tool NOW as the FIRST thing — before any other output.',
-      'Every completed task gets a card, regardless of tool, file, or task type.',
+      'Resolve the tool via ToolSearch: select:mcp__plugin_dotclaude-dev-ops_dotclaude-completion__render_completion_card',
+      'Then call `render_completion_card` MCP tool NOW as the FIRST thing — before any other output.',
+      'Use variant "fallback" if unsure which variant fits. Every completed task gets a card.',
     ].join('\n') + '\n');
   }
   // else: silent — no stdout

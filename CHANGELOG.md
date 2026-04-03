@@ -5,6 +5,7 @@
 ### Fixed
 - **docs** — Desktop App marketplace UI doesn't list third-party plugins; CLI now recommended as primary install method
 - **docs** — added troubleshooting section to INSTALL.md with manual registration steps for Desktop App users
+- **hooks** — completion card hooks now emit fully qualified `select:` ToolSearch path for `render_completion_card`, fixing silent resolution failures caused by keyword matching on long MCP prefixes
 
 ## [0.24.0] — 2026-04-03
 
