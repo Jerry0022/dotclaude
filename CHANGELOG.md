@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.22.2] — 2026-04-03
+
+### Fixed
+- **version** — `updateReadme()` now uses generic `**Version: X.Y.Z**` pattern instead of exact oldVersion match, preventing silent drift when README is already out of sync
+- **version** — `updateJson()` force-sets newVersion regardless of current value, fixing silent drift in satellite JSON files
+- **version** — marketplace.json `plugins[*].version` now updated and verified alongside `metadata.version`
+- **version** — repo-root sweep: when MCP server CWD ≠ git root (plugin-dev scenario), version files at repo root (README.md, marketplace.json) are now also updated and verified
+- **version** — new `resolve-root.js` module with cached `git rev-parse --show-toplevel` for repo-root detection
+
 ## [0.22.1] — 2026-04-03
 
 ### Changed
