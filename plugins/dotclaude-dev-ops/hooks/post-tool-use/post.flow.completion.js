@@ -60,7 +60,7 @@ process.stdin.on('end', () => {
     '',
     'COMPLETION CARD — when ALL work is done:',
     'Call `render_completion_card` MCP tool (dotclaude-completion server).',
-    `Pass: variant, summary (max ~10 words, user language), lang:"de", session_id:"${hook.session_id || ''}",`,
+    `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
     '  plus changes, tests, state, cta, userTest as applicable.',
     'Variant: shipped=ship succeeded, blocked=build/gate/merge failed,',
     '  aborted=task aborted, test=code edits+app, minimal-start=app started no edits,',

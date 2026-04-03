@@ -136,7 +136,8 @@ const VARIANTS = {
   blocked:         { usage: true,  changes: true,  tests: true,  state: true,  userTest: false },
   test:            { usage: true,  changes: true,  tests: true,  state: true,  userTest: true  },
   'minimal-start': { usage: false, changes: false, tests: false, state: false, userTest: false },
-  research:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
+  analysis:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
+  research:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false }, // legacy alias → analysis
   aborted:         { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
   fallback:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
 };
@@ -149,6 +150,7 @@ const CTA = {
     blocked:         '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
     test:            '## \ud83e\uddea DONE. {info} \u2014 SHIP after your TEST?',
     'minimal-start': '## \ud83e\uddea STARTED. {description} \u2014 HAVE FUN',
+    analysis:        '## \ud83d\udccb DONE. {info} \u2014 READ through',
     research:        '## \ud83d\udccb DONE. {info} \u2014 READ through',
     aborted:         '## \ud83d\udeab ABORTED. {reason} \u2014 What should I TRY?',
     fallback:        '## \ud83d\udccb DONE \u2014 Anything ELSE?',
@@ -160,6 +162,7 @@ const CTA = {
     blocked:         '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
     test:            '## \ud83e\uddea DONE. {info} \u2014 SHIP nach deinem TEST?',
     'minimal-start': '## \ud83e\uddea STARTED. {description} \u2014 VIEL SPASS',
+    analysis:        '## \ud83d\udccb DONE. {info} \u2014 LIES dir durch',
     research:        '## \ud83d\udccb DONE. {info} \u2014 LIES dir durch',
     aborted:         '## \ud83d\udeab ABORTED. {reason} \u2014 Was soll ich VERSUCHEN?',
     fallback:        '## \ud83d\udccb DONE \u2014 Noch was ANDERES?',
@@ -202,7 +205,7 @@ function renderTests(tests) {
 
 function renderState(state, variant) {
   if (!state) {
-    if (variant === 'research') return '\u2796 No changes to repo';
+    if (variant === 'analysis' || variant === 'research') return '\u2796 No changes to repo';
     return '';
   }
 
@@ -246,6 +249,8 @@ function renderCTA(variant, cta, lang) {
   let key;
   if (variant === 'shipped') {
     key = (cta.vOld && cta.vNew) ? 'shipped-bump' : 'shipped-plain';
+  } else if (variant === 'research') {
+    key = 'analysis'; // legacy alias
   } else {
     key = variant;
   }
@@ -469,7 +474,7 @@ server.registerTool(
     inputSchema: z.object({
       variant: z.enum([
         "shipped", "ready", "blocked", "test",
-        "minimal-start", "research", "aborted", "fallback",
+        "minimal-start", "analysis", "research", "aborted", "fallback",
       ]).describe("Card variant based on task outcome"),
       summary: z.string().max(80).describe("Max ~10 words, user's language"),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.20.1] — 2026-04-03
+
+### Fixed
+- **issue-detection** — implicit (branch-name) issues no longer persisted before user confirmation; uses separate "asked" marker to prevent re-prompting
+- **session-id** — glob fallback now filters files older than 2h, preventing cross-session state bleeding in concurrent sessions
+- **completion-card** — removed duplicate standalone `render-card.js`; MCP server is now the single canonical renderer
+- **completion-card** — added `analysis` variant to MCP server (was only in removed standalone script); `research` remains as legacy alias
+- **completion-hook** — language for completion card now dynamic based on user language instead of hardcoded German
+- **usage-scraper** — Edge executable path now detected dynamically via common install paths + registry fallback instead of hardcoded path
+- **ship/github** — `gh()` helper converted from `execSync` string interpolation to `execFileSync` with argument array, eliminating shell injection risk
+
 ## [0.20.0] — 2026-04-03
 
 ### Changed
