@@ -1,21 +1,32 @@
 #!/usr/bin/env node
 /**
  * @hook ss.tokens.scan
- * @version 0.1.0
+ * @version 0.2.0
  * @event SessionStart
  * @plugin dotclaude-dev-ops
  * @description Scan project for expensive files and update config for the
- *   pre.tokens.guard hook. Identifies the top 20 largest source files.
+ *   pre.tokens.guard hook. Detects the user's Claude plan and writes
+ *   plan-specific thresholds. Identifies the top 20 largest source files.
  */
 
 require('../lib/plugin-guard');
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const cwd = process.cwd();
 const CONFIG_DIR = path.join(cwd, '.claude');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'token-config.json');
+
+// Context window is ~200K for all Claude models (plan-independent).
+// Threshold percentage scales with plan: higher plans = more budget = more
+// generous per-operation allowance.
+const PLAN_DEFAULTS = {
+  pro:    { estimatedLimitTokens: 200000, confirmThresholdPct: 0.05 },  // 10K
+  max_5:  { estimatedLimitTokens: 200000, confirmThresholdPct: 0.08 },  // 16K
+  max_20: { estimatedLimitTokens: 200000, confirmThresholdPct: 0.10 },  // 20K
+};
 
 const SKIP_DIRS = new Set([
   'node_modules', 'dist', '.angular', '.git', '.claude', 'out-tsc',
@@ -33,13 +44,39 @@ function loadConfig() {
   try {
     return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
   } catch {
-    return {
-      estimatedLimitTokens: 1000000,
-      confirmThresholdPct: 0.02,
-      tokensPerByte: 0.25,
-      expensiveFiles: [],
-    };
+    return { tokensPerByte: 0.25, expensiveFiles: [] };
   }
+}
+
+/**
+ * Detect the Claude plan from available sources.
+ *   1. CLAUDE_PLUGIN_CONFIG_claude_plan env var (set by Claude Code plugin system)
+ *   2. Existing plan field in token-config.json (persisted from previous session)
+ *   3. Plugin settings in global or project settings.json
+ *   4. Default: max_20 (matches plugin.json default)
+ */
+function detectPlan(existingCfg) {
+  const envPlan = process.env.CLAUDE_PLUGIN_CONFIG_claude_plan;
+  if (envPlan && PLAN_DEFAULTS[envPlan]) return envPlan;
+
+  if (existingCfg.plan && PLAN_DEFAULTS[existingCfg.plan]) return existingCfg.plan;
+
+  // Check plugin config in settings.json
+  const settingsPaths = [
+    path.join(cwd, '.claude', 'settings.json'),
+    path.join(os.homedir(), '.claude', 'settings.json'),
+  ];
+  for (const sp of settingsPaths) {
+    try {
+      const settings = JSON.parse(fs.readFileSync(sp, 'utf8'));
+      const pluginCfg = settings.enabledPlugins?.['dotclaude-dev-ops@dotclaude-dev-ops'];
+      if (pluginCfg?.config?.claude_plan && PLAN_DEFAULTS[pluginCfg.config.claude_plan]) {
+        return pluginCfg.config.claude_plan;
+      }
+    } catch {}
+  }
+
+  return 'max_20';
 }
 
 function saveConfig(cfg) {
@@ -82,9 +119,16 @@ try {
 
 // Main
 const cfg = loadConfig();
+const plan = detectPlan(cfg);
+const planDefaults = PLAN_DEFAULTS[plan] || PLAN_DEFAULTS.max_20;
+
 const allFiles = scanFiles(cwd);
 allFiles.sort((a, b) => b.estimatedTokens - a.estimatedTokens);
 
+cfg.plan = plan;
+cfg.estimatedLimitTokens = planDefaults.estimatedLimitTokens;
+cfg.confirmThresholdPct = planDefaults.confirmThresholdPct;
+cfg.tokensPerByte = 0.25;
 cfg.expensiveFiles = allFiles.slice(0, 20).map(f => ({
   path: f.path,
   estimatedTokens: f.estimatedTokens,
@@ -92,10 +136,13 @@ cfg.expensiveFiles = allFiles.slice(0, 20).map(f => ({
 
 saveConfig(cfg);
 
+const threshold = Math.round(planDefaults.estimatedLimitTokens * planDefaults.confirmThresholdPct);
 const topFile = cfg.expensiveFiles[0];
 if (topFile) {
   process.stderr.write(
-    `[ss.tokens.scan] Scanned ${allFiles.length} files. ` +
+    `[ss.tokens.scan] plan=${plan} threshold=${threshold.toLocaleString()} tokens ` +
+    `(${(planDefaults.confirmThresholdPct * 100).toFixed(0)}% of 200K). ` +
+    `Scanned ${allFiles.length} files. ` +
     `Largest: ${topFile.path} (~${topFile.estimatedTokens.toLocaleString()} tokens)\n`
   );
 }
