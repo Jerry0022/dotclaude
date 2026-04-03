@@ -38,7 +38,33 @@ const USAGE_LIVE_PATH = path.join(SCRIPTS_DIR, 'usage-live.json');
 const USAGE_URL = 'https://claude.ai/settings/usage';
 const CDP_PORT = 9223;
 const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
-const EDGE_EXE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const EDGE_EXE = findEdgeExecutable();
+
+/** Locate Edge executable across common install paths and registry. */
+function findEdgeExecutable() {
+  const candidates = [
+    path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'Microsoft\\Edge\\Application\\msedge.exe'),
+    path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Microsoft\\Edge\\Application\\msedge.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Microsoft\\Edge\\Application\\msedge.exe'),
+  ];
+  for (const p of candidates) {
+    try { if (fs.statSync(p).isFile()) return p; } catch {}
+  }
+  // Registry fallback
+  try {
+    const reg = execSync(
+      'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\msedge.exe" /ve',
+      { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }
+    );
+    const match = reg.match(/REG_SZ\s+(.+)/);
+    if (match) {
+      const regPath = match[1].trim();
+      try { if (fs.statSync(regPath).isFile()) return regPath; } catch {}
+    }
+  } catch {}
+  // Last resort — hope it's on PATH
+  return 'msedge.exe';
+}
 
 // Platform guard — Edge CDP scraper is Windows-only
 if (process.platform !== 'win32') {

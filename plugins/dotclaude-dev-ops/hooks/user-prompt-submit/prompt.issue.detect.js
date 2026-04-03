@@ -105,7 +105,10 @@ process.stdin.on('end', () => {
   const issueList = newIssues.map(n => `#${n}`).join(', ');
 
   if (isExplicit) {
-    // Explicit mention — instruct Claude to set In Progress immediately
+    // Explicit mention — persist immediately and instruct Claude
+    tracked.push(...newIssues);
+    try { writeSessionFile(trackedFile, JSON.stringify(tracked)); } catch {}
+
     process.stdout.write(
       `User explicitly referenced issue ${issueList}. ` +
       `Set ${issueList} to "In Progress" on the GitHub project board ` +
@@ -113,16 +116,24 @@ process.stdin.on('end', () => {
       `when work is complete, update status to "Done" in the completion flow.\n`
     );
   } else {
-    // Implicit (branch name) — ask user for confirmation
+    // Implicit (branch name) — ask user first, do NOT persist yet.
+    // Use a separate "asked" marker to prevent re-prompting.
+    const askedFile = sessionFile('dotclaude-devops-asked-issues', hook.session_id);
+    let asked = [];
+    try { asked = JSON.parse(fs.readFileSync(askedFile, 'utf8')); } catch { asked = []; }
+    const unasked = newIssues.filter(n => !asked.includes(n));
+    if (unasked.length === 0) process.exit(0);
+
+    asked.push(...unasked);
+    try { writeSessionFile(askedFile, JSON.stringify(asked)); } catch {}
+
+    const unaskedList = unasked.map(n => `#${n}`).join(', ');
     process.stdout.write(
-      `Current branch references issue ${issueList}. ` +
-      `Ask the user: "Arbeitest du an Issue ${issueList}?" ` +
-      `If confirmed, set to "In Progress" on the project board. ` +
-      `If declined, do not track.\n`
+      `Current branch references issue ${unaskedList}. ` +
+      `Ask the user: "Arbeitest du an Issue ${unaskedList}?" ` +
+      `If confirmed, set to "In Progress" on the project board ` +
+      `and add to tracked issues for this session. ` +
+      `If declined, do not track and do not ask again.\n`
     );
   }
-
-  // Save tracked issues
-  tracked.push(...newIssues);
-  try { writeSessionFile(trackedFile, JSON.stringify(tracked)); } catch {}
 });

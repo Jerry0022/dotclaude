@@ -15,7 +15,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -136,7 +136,8 @@ const VARIANTS = {
   blocked:         { usage: true,  changes: true,  tests: true,  state: true,  userTest: false },
   test:            { usage: true,  changes: true,  tests: true,  state: true,  userTest: true  },
   'minimal-start': { usage: false, changes: false, tests: false, state: false, userTest: false },
-  research:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
+  analysis:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
+  research:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false }, // legacy alias → analysis
   aborted:         { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
   fallback:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
 };
@@ -149,6 +150,7 @@ const CTA = {
     blocked:         '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
     test:            '## \ud83e\uddea DONE. {info} \u2014 SHIP after your TEST?',
     'minimal-start': '## \ud83e\uddea STARTED. {description} \u2014 HAVE FUN',
+    analysis:        '## \ud83d\udccb DONE. {info} \u2014 READ through',
     research:        '## \ud83d\udccb DONE. {info} \u2014 READ through',
     aborted:         '## \ud83d\udeab ABORTED. {reason} \u2014 What should I TRY?',
     fallback:        '## \ud83d\udccb DONE \u2014 Anything ELSE?',
@@ -160,6 +162,7 @@ const CTA = {
     blocked:         '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
     test:            '## \ud83e\uddea DONE. {info} \u2014 SHIP nach deinem TEST?',
     'minimal-start': '## \ud83e\uddea STARTED. {description} \u2014 VIEL SPASS',
+    analysis:        '## \ud83d\udccb DONE. {info} \u2014 LIES dir durch',
     research:        '## \ud83d\udccb DONE. {info} \u2014 LIES dir durch',
     aborted:         '## \ud83d\udeab ABORTED. {reason} \u2014 Was soll ich VERSUCHEN?',
     fallback:        '## \ud83d\udccb DONE \u2014 Noch was ANDERES?',
@@ -202,7 +205,7 @@ function renderTests(tests) {
 
 function renderState(state, variant) {
   if (!state) {
-    if (variant === 'research') return '\u2796 No changes to repo';
+    if (variant === 'analysis' || variant === 'research') return '\u2796 No changes to repo';
     return '';
   }
 
@@ -246,6 +249,8 @@ function renderCTA(variant, cta, lang) {
   let key;
   if (variant === 'shipped') {
     key = (cta.vOld && cta.vNew) ? 'shipped-bump' : 'shipped-plain';
+  } else if (variant === 'research') {
+    key = 'analysis'; // legacy alias
   } else {
     key = variant;
   }
@@ -256,16 +261,47 @@ function renderCTA(variant, cta, lang) {
   return tpl;
 }
 
+function readToolCallCount(sessionId) {
+  const key = sessionId || 'unknown';
+  const filePath = join(tmpdir(), `dotclaude-devops-toolcalls-${key}`);
+  try {
+    return parseInt(readFileSync(filePath, 'utf8'), 10) || 0;
+  } catch {
+    // Glob fallback for session_id mismatches (same pattern as session-id.js)
+    try {
+      const prefix = 'dotclaude-devops-toolcalls-';
+      const tmp = tmpdir();
+      const files = readdirSync(tmp)
+        .filter(f => f.startsWith(prefix))
+        .map(f => ({ full: join(tmp, f), mtime: statSync(join(tmp, f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime);
+      if (files.length > 0) return parseInt(readFileSync(files[0].full, 'utf8'), 10) || 0;
+    } catch {}
+    return 0;
+  }
+}
+
+function renderContextHealth(toolCallCount) {
+  if (toolCallCount <= 40) return '';
+  if (toolCallCount <= 80) return '\u26a1 ' + toolCallCount + ' tool calls \u2014 consider `/compact`';
+  return '\u26a0 ' + toolCallCount + ' tool calls \u2014 consider `/clear` + session summary';
+}
+
 function renderCard(input, meterText, buildId) {
   const variant = input.variant || 'fallback';
   const config = VARIANTS[variant] || VARIANTS.fallback;
   const lang = input.lang || 'de';
+
+  // Read tool-call counter for context health advisory
+  const toolCallCount = readToolCallCount(input.session_id);
+  const healthLine = config.usage ? renderContextHealth(toolCallCount) : '';
 
   const parts = [];
 
   // Block A — What was done
   if (config.usage && meterText) {
     parts.push(meterText);
+    if (healthLine) parts.push(healthLine);
     parts.push('');
     parts.push('---');
   } else {
@@ -469,7 +505,7 @@ server.registerTool(
     inputSchema: z.object({
       variant: z.enum([
         "shipped", "ready", "blocked", "test",
-        "minimal-start", "research", "aborted", "fallback",
+        "minimal-start", "analysis", "research", "aborted", "fallback",
       ]).describe("Card variant based on task outcome"),
       summary: z.string().max(80).describe("Max ~10 words, user's language"),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),

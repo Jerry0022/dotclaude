@@ -57,9 +57,13 @@ function readSessionFile(prefix, sessionId) {
     }
   }
 
-  // 2. Glob fallback — find any file matching the prefix
+  // 2. Glob fallback — find any file matching the prefix.
+  //    Only consider files modified in the last 2 hours to prevent
+  //    cross-session state bleeding in concurrent sessions.
   try {
     const tmpdir = os.tmpdir();
+    const maxAgeMs = 2 * 60 * 60 * 1000; // 2 hours
+    const now = Date.now();
     const files = fs.readdirSync(tmpdir)
       .filter(f => f.startsWith(prefix + '-'))
       .map(f => ({
@@ -67,6 +71,7 @@ function readSessionFile(prefix, sessionId) {
         full: path.join(tmpdir, f),
         mtime: fs.statSync(path.join(tmpdir, f)).mtimeMs,
       }))
+      .filter(f => (now - f.mtime) < maxAgeMs)
       .sort((a, b) => b.mtime - a.mtime); // newest first
 
     if (files.length > 0) {

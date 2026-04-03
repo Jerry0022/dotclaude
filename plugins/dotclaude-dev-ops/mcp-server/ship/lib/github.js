@@ -7,9 +7,9 @@ import { execSync, execFileSync } from "node:child_process";
 
 const DEFAULT_TIMEOUT = 30_000;
 
-function gh(cmd, opts = {}) {
+function gh(args, opts = {}) {
   const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts;
-  return execSync(`gh ${cmd}`, {
+  return execFileSync("gh", args, {
     cwd,
     encoding: "utf8",
     timeout,
@@ -46,11 +46,11 @@ export function createPR({ title, body, base = "main", head }, opts) {
  */
 export function mergePR(prNumber, base = "main", opts) {
   gh(
-    `pr merge ${prNumber} --squash --delete-branch --admin`,
+    ["pr", "merge", String(prNumber), "--squash", "--delete-branch", "--admin"],
     opts,
   );
   // Verify the PR is actually in MERGED state
-  const state = gh(`pr view ${prNumber} --json state -q .state`, opts);
+  const state = gh(["pr", "view", String(prNumber), "--json", "state", "-q", ".state"], opts);
   if (state !== "MERGED") {
     throw new Error(`PR #${prNumber} merge failed — state is "${state}", expected "MERGED"`);
   }

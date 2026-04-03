@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.21.0] — 2026-04-03
+
+### Added
+- **completion-card** — context health advisory line: shows tool-call count and recommends `/compact` (>40) or `/clear` (>80)
+- **skill** — new `/claude-md-lint` skill: audits CLAUDE.md files for size (max 25 lines), structure, and token efficiency; suggests creation if missing
+- **hooks** — cache-timeout detection in `prompt.ship.detect`: warns when >5 min pause expires prompt cache
+- **hooks** — verbose command guard in `pre.tokens.guard`: blocks unbounded `git log`, `npm ls`, `find`, `docker logs` and suggests limited alternatives
+- **hooks** — tool-call counter + last-activity timestamp in `post.flow.completion` for session health tracking
+- **hooks** — stale temp file cleanup (>24h) in `ss.git.check` SessionStart hook
+- **agents** — model selection guidance in feature agent: haiku for search/summarize, sonnet for code, opus for architecture
+
+### Changed
+- **skill** — `/project-setup` now calls `/claude-md-lint` as sub-step
+
+## [0.20.1] — 2026-04-03
+
+### Fixed
+- **self-calibration** — completion flow elevated to mandatory Step 0 (runs first every cycle, not a subsection)
+- **session-start hook** — CRITICAL hint added so immediate first run internalizes completion flow before any user task
+- **issue-detection** — implicit (branch-name) issues no longer persisted before user confirmation; uses separate "asked" marker to prevent re-prompting
+- **session-id** — glob fallback now filters files older than 2h, preventing cross-session state bleeding in concurrent sessions
+- **completion-card** — removed duplicate standalone `render-card.js`; MCP server is now the single canonical renderer
+- **completion-card** — added `analysis` variant to MCP server (was only in removed standalone script); `research` remains as legacy alias
+- **completion-hook** — language for completion card now dynamic based on user language instead of hardcoded German
+- **usage-scraper** — Edge executable path now detected dynamically via common install paths + registry fallback instead of hardcoded path
+- **ship/github** — `gh()` helper converted from `execSync` string interpolation to `execFileSync` with argument array, eliminating shell injection risk
+
 ## [0.20.0] — 2026-04-03
 
 ### Changed

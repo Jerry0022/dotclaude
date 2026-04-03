@@ -40,10 +40,25 @@ process.stdin.on('end', () => {
     try { writeSessionFile(counterFile, editCount.toString()); } catch {}
   }
 
-  // --- 1b. Write per-turn work-happened flag (consumed by stop.flow.guard) ---
+  // --- 1b. Increment tool-call counter (all tool calls) ---
+  const toolCallFile = sessionFile('dotclaude-devops-toolcalls', hook.session_id);
+  let toolCallCount = 0;
+  try {
+    toolCallCount = parseInt(fs.readFileSync(toolCallFile, 'utf8'), 10) || 0;
+  } catch {}
+  toolCallCount++;
+  try { writeSessionFile(toolCallFile, toolCallCount.toString()); } catch {}
+
+  // --- 1c. Write per-turn work-happened flag (consumed by stop.flow.guard) ---
   try {
     const workFile = sessionFile('dotclaude-devops-work-happened', hook.session_id);
     writeSessionFile(workFile, toolName);
+  } catch {}
+
+  // --- 1d. Write last-activity timestamp (consumed by cache-timeout check) ---
+  try {
+    const activityFile = sessionFile('dotclaude-devops-last-activity', hook.session_id);
+    writeSessionFile(activityFile, Date.now().toString());
   } catch {}
 
   // --- 2. Emit completion-card instruction (MCP tool call) ---
@@ -60,7 +75,7 @@ process.stdin.on('end', () => {
     '',
     'COMPLETION CARD — when ALL work is done:',
     'Call `render_completion_card` MCP tool (dotclaude-completion server).',
-    `Pass: variant, summary (max ~10 words, user language), lang:"de", session_id:"${hook.session_id || ''}",`,
+    `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
     '  plus changes, tests, state, cta, userTest as applicable.',
     'Variant: shipped=ship succeeded, blocked=build/gate/merge failed,',
     '  aborted=task aborted, test=code edits+app, minimal-start=app started no edits,',

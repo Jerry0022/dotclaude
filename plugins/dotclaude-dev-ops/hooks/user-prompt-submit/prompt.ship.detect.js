@@ -25,6 +25,21 @@ process.stdin.on('end', () => {
   const userMessage = (hook.user_message || hook.message || '').toLowerCase().trim();
   if (!userMessage) process.exit(0);
 
+  // --- Cache-timeout detection (5-minute prompt cache TTL) ---
+  let cacheWarning = '';
+  try {
+    const activityResult = readSessionFile('dotclaude-devops-last-activity', hook.session_id);
+    if (activityResult) {
+      const lastActivity = parseInt(activityResult.content, 10);
+      const gapSeconds = (Date.now() - lastActivity) / 1000;
+      if (gapSeconds > 300) {
+        const gapMin = Math.round(gapSeconds / 60);
+        cacheWarning = `[cache-timeout] ${gapMin} Min. Pause — Prompt-Cache abgelaufen. Erw\u00e4ge /compact vor dem Weiterarbeiten.`;
+      }
+    }
+    // No activityResult = first message in session → no warning
+  } catch {}
+
   // --- Direct ship intent keywords ---
   const shipKeywords = [
     /\bship\b/,
@@ -71,6 +86,10 @@ process.stdin.on('end', () => {
   }
 
   if (!isDirectShipIntent && !isAffirmationAfterCompletion) {
+    // No ship intent — but still emit cache-timeout warning if applicable
+    if (cacheWarning) {
+      process.stdout.write(cacheWarning + '\n');
+    }
     process.exit(0);
   }
 
@@ -80,6 +99,7 @@ process.stdin.on('end', () => {
     : `Affirmation after code changes: "${userMessage}"`;
 
   const instruction = [
+    ...(cacheWarning ? [cacheWarning, ''] : []),
     `[prompt.ship.detect] ${reason}`,
     '',
     'MANDATORY: Use Skill("ship") to execute the full shipping pipeline.',
