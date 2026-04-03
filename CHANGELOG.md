@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.21.1] — 2026-04-03
+
+### Changed
+- **guard** — token threshold now based on real 200K context window instead of fictional 1M session limit
+- **guard** — threshold scales by Claude plan: pro 10K (5%), max_5 16K (8%), max_20 20K (10%)
+- **guard** — auto-migrates old v0.1 configs (1M/2%) to plan-aware values at runtime
+
+### Added
+- **scanner** — detects Claude plan from env var, token-config, or settings.json
+- **scanner** — writes plan-specific `estimatedLimitTokens` and `confirmThresholdPct` to config
+
 ## [0.21.0] — 2026-04-03
 
 ### Added

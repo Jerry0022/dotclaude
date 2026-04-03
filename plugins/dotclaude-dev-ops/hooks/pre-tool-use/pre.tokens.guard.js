@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.1.0
+ * @version 0.2.0
  * @event PreToolUse
  * @plugin dotclaude-dev-ops
- * @description Block Read/Bash/Glob/Grep operations that would consume >= 2%
- *   of the estimated session token limit. Uses a flag-file mechanism:
- *   first call blocks with warning, second call (same operation) allows through.
+ * @description Block Read/Bash/Glob/Grep operations that would consume a
+ *   significant percentage of the ~200K context window. Threshold scales
+ *   with the user's Claude plan (pro/max_5/max_20). Uses a flag-file
+ *   mechanism: first call blocks with warning, retry allows through.
  */
 
 require('../lib/plugin-guard');
@@ -18,9 +19,32 @@ const crypto = require('crypto');
 
 const CONFIG_PATH = path.join(process.cwd(), '.claude', 'token-config.json');
 
+// Context window is ~200K for all Claude models (plan-independent).
+// The threshold percentage scales with the plan: higher plans can afford
+// more context per single operation because their overall budget is larger.
+const PLAN_DEFAULTS = {
+  pro:    { estimatedLimitTokens: 200000, confirmThresholdPct: 0.05 },  // 10K
+  max_5:  { estimatedLimitTokens: 200000, confirmThresholdPct: 0.08 },  // 16K
+  max_20: { estimatedLimitTokens: 200000, confirmThresholdPct: 0.10 },  // 20K
+};
+
 function loadConfig() {
-  try { return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); }
-  catch { return { estimatedLimitTokens: 1000000, confirmThresholdPct: 0.02, tokensPerByte: 0.25, expensiveFiles: [] }; }
+  try {
+    const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    // Ensure plan-specific limits are applied even if config was written
+    // before plan-awareness existed (migration from v0.1 configs)
+    if (cfg.estimatedLimitTokens === 1000000) {
+      const plan = cfg.plan || 'max_20';
+      const defaults = PLAN_DEFAULTS[plan] || PLAN_DEFAULTS.max_20;
+      cfg.estimatedLimitTokens = defaults.estimatedLimitTokens;
+      cfg.confirmThresholdPct = defaults.confirmThresholdPct;
+    }
+    return cfg;
+  } catch {
+    // No config yet — use most conservative defaults (pro)
+    const defaults = PLAN_DEFAULTS.pro;
+    return { ...defaults, tokensPerByte: 0.25, expensiveFiles: [] };
+  }
 }
 
 function flagPath(key) {
@@ -181,8 +205,9 @@ process.stdin.on('end', () => {
   console.error(line);
   console.error(`Tool:       ${toolName}`);
   console.error(`Operation:  ${description}`);
-  console.error(`Est. cost:  ~${estimatedTokens.toLocaleString()} tokens  (${pct}% of ${(LIMIT / 1000).toFixed(0)}K session window)`);
-  console.error(`Threshold:  ${THRESHOLD.toLocaleString()} tokens (${(cfg.confirmThresholdPct * 100).toFixed(0)}% of session limit)`);
+  const planLabel = cfg.plan || 'unknown';
+  console.error(`Est. cost:  ~${estimatedTokens.toLocaleString()} tokens  (${pct}% of ${(LIMIT / 1000).toFixed(0)}K context window)`);
+  console.error(`Threshold:  ${THRESHOLD.toLocaleString()} tokens (${(cfg.confirmThresholdPct * 100).toFixed(0)}% of context · ${planLabel})`);
 
   if (toolName === 'Read') {
     const fp = toolInput.file_path || '';
