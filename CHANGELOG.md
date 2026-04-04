@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.25.0] — 2026-04-05
+
+### Added
+- **deep-knowledge** — `agent-proactivity.md` behavioral rule for proactive agent orchestration without explicit user request; triggers on multi-domain tasks, repeated bug fixes (2+ passes), and polishing iterations
+
+### Changed
+- **self-calibration** — interval reduced from 30 minutes to 10 minutes for tighter feedback loops (SKILL.md + hook)
+
 ## [0.24.4] — 2026-04-05
 
 ### Fixed

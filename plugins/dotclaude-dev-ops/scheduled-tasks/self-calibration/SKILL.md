@@ -2,13 +2,13 @@
 name: self-calibration
 description: Periodic self-audit and learning loop — review feedback, internalize skills, calibrate behavior.
 version: 0.2.0
-schedule: "*/30 * * * *"
+schedule: "*/10 * * * *"
 ---
 
 # Self-Calibration Loop
 
 Periodic self-audit to keep Claude aligned with the user's preferences and
-the plugin's rules. Runs every 30 minutes during active sessions.
+the plugin's rules. Runs every 10 minutes during active sessions.
 
 ## Step 0 — Completion Flow Internalization (MANDATORY)
 
@@ -52,7 +52,7 @@ If a violation is found → correct immediately and briefly report.
 When the self-calibration task is first registered at session start, it runs
 immediately. This means the completion flow is internalized **before any user
 task begins** — ensuring zero missed cards from the very first interaction.
-Every 30-minute re-run reinforces this. Skipping or deprioritizing this step
+Every 10-minute re-run reinforces this. Skipping or deprioritizing this step
 is itself a violation.
 
 ## Step 1 — Self-Audit

@@ -6,6 +6,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | File | Topic | Summary |
 |------|-------|---------|
 | [agent-collaboration.md](agent-collaboration.md) | Agent Collaboration Protocol | How agents work together on multi-role tasks. |
+| [agent-proactivity.md](agent-proactivity.md) | Proactive Agent Orchestration | When to involve specialized agents without explicit user request. |
 | [agent-conventions.md](agent-conventions.md) | Agent Naming & Collaboration Conventions | [role:X · Type] Task description |
 | [claude-directory-structure.md](claude-directory-structure.md) | Claude Directory Structure Convention | All Claude Code configuration belongs inside `.claude/`. Nothing Claude-specific |
 | [code-defaults.md](code-defaults.md) | Code Defaults | Standard coding conventions enforced across all projects using the dotclaude-... |

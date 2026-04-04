@@ -28,7 +28,7 @@ const TASKS_DIR   = path.join(PLUGIN_DIR, 'scheduled-tasks');
 const TASK_DEFINITIONS = [
   {
     id: 'self-calibration',
-    cron: '*/30 * * * *',
+    cron: '*/10 * * * *',
     recurring: true,
     description: 'Periodic self-audit and skill internalization',
   },
