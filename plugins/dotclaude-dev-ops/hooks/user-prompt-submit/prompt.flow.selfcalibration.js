@@ -64,6 +64,7 @@ process.stdin.on('end', () => {
       instructions.push(`WARNING: Could not read ${skillPath} — skipping ${task.id}`);
       continue;
     }
+    const pluginRoot = PLUGIN_DIR.replace(/\\/g, '/');
     instructions.push(
       `Task: ${task.id}`,
       `Cron: ${task.cron}`,
@@ -71,6 +72,7 @@ process.stdin.on('end', () => {
       `Description: ${task.description}`,
       `Prompt: Execute the ${task.id} scheduled task as defined in the plugin.`,
       `  Read the full task definition from: ${skillPath.replace(/\\/g, '/')}`,
+      `  Plugin root (use for resolving relative paths like deep-knowledge/): ${pluginRoot}`,
       '',
     );
   }

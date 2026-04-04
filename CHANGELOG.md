@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.25.1] — 2026-04-05
+
+### Fixed
+- **hooks** — selfcalibration hooks now emit explicit `Plugin root` path so SKILL.md resolves `deep-knowledge/` against the correct cache version (was guessing wrong version number)
+- **scheduled-tasks** — SKILL.md deep-knowledge paths use `{PLUGIN_ROOT}` placeholder anchored to hook-provided root
+
 ## [0.25.0] — 2026-04-05
 
 ### Added

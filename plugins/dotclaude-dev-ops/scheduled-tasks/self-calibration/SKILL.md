@@ -18,7 +18,8 @@ The completion flow is the single most critical behavioral rule in this plugin.
 It is **not a recommendation — it is a MUST**. Every self-calibration cycle
 begins by re-reading and internalizing these rules before anything else.
 
-Read and internalize `deep-knowledge/plugin-behavior.md` § Completion Flow.
+Read and internalize `{PLUGIN_ROOT}/deep-knowledge/plugin-behavior.md` § Completion Flow.
+(Where `{PLUGIN_ROOT}` is the plugin root path provided by the hook at registration time.)
 Then verify the following rules are active in your behavioral model:
 
 ### Rules (non-negotiable)
@@ -91,9 +92,9 @@ If found → take preparatory action.
 Silently read and internalize plugin knowledge:
 
 1. Read the project's CLAUDE.md (if exists)
-2. Discover all deep-knowledge files in the plugin:
-   - `deep-knowledge/*.md` (plugin-level)
-   - `skills/*/deep-knowledge/*.md` (skill-level)
+2. Discover all deep-knowledge files in the plugin (use `{PLUGIN_ROOT}` from hook):
+   - `{PLUGIN_ROOT}/deep-knowledge/*.md` (plugin-level)
+   - `{PLUGIN_ROOT}/skills/*/deep-knowledge/*.md` (skill-level)
 3. Sort alphabetically by path
 4. Calculate batch: `ceil(total * 0.25)`
 5. Read the current batch (rotate index each cycle, wrap around)
