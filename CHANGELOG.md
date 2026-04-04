@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.3] — 2026-04-04
+
+### Fixed
+- **hooks** — self-calibration moved from SessionStart to UserPromptSubmit for higher priority execution at session start
+- **hooks** — completion card instructions now explicitly tell Claude to output card markdown as direct text (MCP tool results are hidden in Desktop App collapsed UI)
+- **docs** — `plugin-behavior.md` updated with new hook architecture and Desktop App visibility rule
+
 ## [0.24.2] — 2026-04-03
 
 ### Fixed

@@ -44,6 +44,8 @@ process.stdin.on('end', () => {
       '[stop.flow.guard] CARRY-OVER: Work completed but no completion card rendered.',
       'Resolve the tool via ToolSearch: select:mcp__plugin_dotclaude-dev-ops_dotclaude-completion__render_completion_card',
       'Then call `render_completion_card` MCP tool NOW as the FIRST thing — before any other output.',
+      'IMPORTANT: The tool result is hidden in a collapsed UI element. You MUST copy the',
+      'returned markdown and output it VERBATIM as your own text — the user cannot see tool results.',
       'Use variant "fallback" if unsure which variant fits. Every completed task gets a card.',
     ].join('\n') + '\n');
   }

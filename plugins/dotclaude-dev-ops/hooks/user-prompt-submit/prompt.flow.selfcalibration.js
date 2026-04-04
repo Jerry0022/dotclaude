@@ -1,13 +1,19 @@
 #!/usr/bin/env node
 /**
- * @hook ss.flow.selfcalibration
+ * @hook prompt.flow.selfcalibration
  * @version 0.5.0
- * @event SessionStart
+ * @event UserPromptSubmit
  * @plugin dotclaude-dev-ops
- * @deprecated Moved to UserPromptSubmit (prompt.flow.selfcalibration.js).
- *   Kept as fallback for older runtimes that don't support UserPromptSubmit.
- *   The UserPromptSubmit variant fires right before Claude processes the first
- *   user message, giving the instructions higher priority.
+ * @description Register the self-calibration cron task once per session.
+ *   Moved from SessionStart to UserPromptSubmit so the instruction is injected
+ *   directly before Claude processes the first user message — giving it higher
+ *   priority than SessionStart system-reminders, which Claude may deprioritize
+ *   in favor of the user's task.
+ *
+ *   If the task is not yet registered (CronList is empty for this task),
+ *   also execute it immediately — no waiting for the first 30-minute tick.
+ *   If the task already exists in CronList, skip everything (no duplicate
+ *   registration, no immediate run).
  */
 
 require('../lib/plugin-guard');
@@ -38,8 +44,8 @@ process.stdin.on('end', () => {
     sessionId = input.session_id;
   } catch {}
 
-  // Once-per-session guard
-  if (!runOnce('ss-flow-selfcalibration', sessionId)) process.exit(0);
+  // Once-per-session guard — only inject on the very first user prompt
+  if (!runOnce('prompt-flow-selfcalibration', sessionId)) process.exit(0);
 
   const instructions = [];
 

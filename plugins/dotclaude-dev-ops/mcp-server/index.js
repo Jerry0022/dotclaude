@@ -497,8 +497,10 @@ server.registerTool(
     description:
       "Render a completion card for the current turn. " +
       "Internally fetches live usage data, computes build-ID, and renders " +
-      "the full markdown card. Returns the card text to output VERBATIM. " +
-      "Card must be the LAST output — nothing after the closing ---.",
+      "the full markdown card. IMPORTANT: The tool result is hidden inside " +
+      "a collapsed UI element in the Desktop App — you MUST copy the returned " +
+      "markdown and output it VERBATIM as your own text response so the user " +
+      "can see it. Card must be the LAST output — nothing after the closing ---.",
     inputSchema: z.object({
       variant: z.enum([
         "shipped", "ready", "blocked", "test",

@@ -80,7 +80,10 @@ process.stdin.on('end', () => {
     'Variant: shipped=ship succeeded, blocked=build/gate/merge failed,',
     '  aborted=task aborted, test=code edits+app, minimal-start=app started no edits,',
     '  ready=code/doc changes no app, research=review/explanation, fallback=other.',
-    'Output returned markdown VERBATIM — card LAST, nothing after closing ---.',
+    'IMPORTANT: The render_completion_card tool result is hidden inside a collapsed',
+    'tool call in the Desktop App UI. You MUST copy the returned markdown and output',
+    'it VERBATIM as your own text response — do NOT rely on the tool result being',
+    'visible to the user. Card LAST, nothing after the closing ---.',
   );
 
   if (editCount >= 5) {

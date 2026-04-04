@@ -24,13 +24,20 @@ It fires whenever a task is fully completed and Claude is waiting for the next u
 
 **Hook architecture:**
 
+- `prompt.flow.selfcalibration` (UserPromptSubmit) — fires on first user prompt;
+  registers the self-calibration cron task and runs it immediately so the
+  completion flow is internalized before the first task begins.
 - `post.flow.completion` (PostToolUse) — fires after every tool call; injects card
   reminder into context; tracks edit count; writes per-turn `work-happened` flag.
 - `stop.flow.guard` (Stop) — fires at turn end; if `work-happened` flag exists but
   `card-rendered` flag is absent → injects carry-over reminder into next turn.
   Resets both flags so each turn is evaluated independently.
-- `render-card.js` — writes `card-rendered` flag after successful render so
-  `stop.flow.guard` knows the card was produced.
+- `render_completion_card` (MCP tool) — writes `card-rendered` flag after successful
+  render so `stop.flow.guard` knows the card was produced.
+
+**Desktop App visibility:** The `render_completion_card` MCP tool result is hidden
+inside a collapsed "Hat ein Tool verwendet" element. All hooks instruct Claude to
+copy the returned markdown and output it VERBATIM as direct text response.
 
 **No "discretionary skip":** any completed task warrants a card. No edit is
 "too small", no file is "outside scope". Only valid skip: clearly mid-task turns
