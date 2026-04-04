@@ -72,9 +72,9 @@ const EXCLUDE = [
 const pathspecs = EXCLUDE.map(p => `:(exclude)${p}`);
 
 try {
-  // List tracked source files, excluding non-source patterns
+  // List source files (tracked + untracked, excluding gitignored)
   const filesRaw = execSync(
-    `git ls-files -- . ${pathspecs.map(p => `"${p}"`).join(' ')}`,
+    `git ls-files --cached --others --exclude-standard -- . ${pathspecs.map(p => `"${p}"`).join(' ')}`,
     { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 }
   ).trim();
 

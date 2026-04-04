@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.25.4] — 2026-04-05
+
+### Fixed
+- **build-id** — include untracked files (`--cached --others --exclude-standard`) in hash computation; previously new code/assets without `git add` were invisible to the build-ID
+
 ## [0.25.3] — 2026-04-05
 
 ### Changed
