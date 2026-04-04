@@ -70,7 +70,7 @@ process.stdin.on('end', () => {
       `Recurring: ${task.recurring}`,
       `Description: ${task.description}`,
       `Prompt: Execute the ${task.id} scheduled task as defined in the plugin.`,
-      `  Read the full task definition from: scheduled-tasks/${task.id}/SKILL.md`,
+      `  Read the full task definition from: ${skillPath.replace(/\\/g, '/')}`,
       '',
     );
   }

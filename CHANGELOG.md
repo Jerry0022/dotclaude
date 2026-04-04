@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.24.4] — 2026-04-05
+
+### Fixed
+- **hooks** — self-calibration task instruction now emits absolute `skillPath` instead of bare relative path, fixing SKILL.md not-found on session start
+
 ## [0.24.3] — 2026-04-04
 
 ### Fixed
