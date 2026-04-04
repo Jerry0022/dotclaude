@@ -11,6 +11,25 @@
 
 const { execSync } = require('child_process');
 
+// If running inside a git worktree, prefer the worktree name as build-ID.
+// Falls back to content hash when not in a worktree.
+function getWorktreeName() {
+  try {
+    const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf8' }).trim();
+    // In a worktree: .git/worktrees/<name> or /absolute/.git/worktrees/<name>
+    const match = gitDir.match(/[/\\]worktrees[/\\]([^/\\]+)$/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+const worktreeName = getWorktreeName();
+if (worktreeName) {
+  process.stdout.write(worktreeName + '\n');
+  process.exit(0);
+}
+
 // Patterns excluded from the build hash — only source code and assets matter.
 const EXCLUDE = [
   // Documentation

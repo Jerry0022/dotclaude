@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.25.3] — 2026-04-05
+
+### Changed
+- **build-id** — prefer worktree name (e.g. `magical-napier`) over content hash when running inside a git worktree; falls back to 7-char hash outside worktrees
+
 ## [0.25.2] — 2026-04-05
 
 ### Fixed
