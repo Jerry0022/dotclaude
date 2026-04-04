@@ -20,6 +20,7 @@ export const schema = z.object({
   lintCmd: z.string().nullable().default("npm run lint").describe("Lint command (null to skip)"),
   testCmd: z.string().nullable().default(null).describe("Test command (null to skip)"),
   buildIdOnly: z.boolean().default(false).describe("Skip build, only compute build-ID"),
+  cwd: z.string().optional().describe("Working directory override (e.g. worktree path). Falls back to process.cwd()."),
 });
 
 function run(cmd, cwd) {
@@ -49,7 +50,7 @@ function getBuildId(cwd) {
 }
 
 export async function handler(params) {
-  const cwd = process.cwd();
+  const cwd = params.cwd || process.cwd();
   const { buildCmd, lintCmd, testCmd, buildIdOnly } = params;
 
   if (buildIdOnly) {

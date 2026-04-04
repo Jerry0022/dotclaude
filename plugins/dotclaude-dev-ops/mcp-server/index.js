@@ -166,17 +166,17 @@ const CTA = {
   },
 };
 
-function getBuildId() {
+function getBuildId(overrideCwd) {
   try {
-    // Resolve the git toplevel so build-id.js runs in the correct repo,
-    // regardless of where the MCP server process was spawned.
-    const toplevel = execSync('git rev-parse --show-toplevel', {
+    // Use overrideCwd when provided (e.g. worktree path from caller),
+    // otherwise resolve git toplevel from the MCP server's own cwd.
+    const cwd = overrideCwd || execSync('git rev-parse --show-toplevel', {
       encoding: 'utf8',
       timeout: 5000,
     }).trim();
     return execSync(
       '"' + process.execPath + '" "' + join(PLUGIN_ROOT, 'scripts', 'build-id.js') + '"',
-      { encoding: 'utf8', timeout: 10000, cwd: toplevel }
+      { encoding: 'utf8', timeout: 10000, cwd }
     ).trim();
   } catch (err) {
     console.error('[dotclaude-completion-mcp] build-id computation failed:', err.message);
@@ -508,6 +508,7 @@ server.registerTool(
       ]).describe("Card variant based on task outcome"),
       summary: z.string().max(80).describe("Max ~10 words, user's language"),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
+      cwd: z.string().optional().describe("Working directory for build-ID computation (e.g. worktree path). Falls back to git toplevel if omitted."),
       session_id: z.string().optional().describe("Session ID for flag writing"),
       changes: z.array(z.object({
         area: z.string(),
@@ -551,8 +552,8 @@ server.registerTool(
     // 2. Render usage meter for card (with deltas + code fences)
     const meterText = renderUsageMeterForCard(usageData, delta5h, deltaWk);
 
-    // 3. Compute build-ID
-    const buildId = getBuildId();
+    // 3. Compute build-ID (use caller-supplied cwd for worktree support)
+    const buildId = getBuildId(params.cwd);
 
     // 4. Render the full card
     const cardMarkdown = renderCard(params, meterText, buildId);

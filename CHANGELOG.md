@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.25.2] — 2026-04-05
+
+### Fixed
+- **build-id** — `render_completion_card` and `ship_build` now accept optional `cwd` parameter for worktree-aware build-ID computation; previously both resolved against the MCP server's process.cwd(), causing identical build IDs across different worktrees
+
 ## [0.25.1] — 2026-04-05
 
 ### Fixed
