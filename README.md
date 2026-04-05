@@ -8,8 +8,8 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 
 ## Features
 
-- **12 Hooks** — automated guards and triggers across the full session lifecycle
-- **10 Skills** — ship, commit, flow, research, explain, issues, project setup, readme, usage tracking, extend-skill
+- **13 Hooks** — automated guards and triggers across the full session lifecycle
+- **13 Skills** — ship, commit, flow, research, explain, issues, project setup, readme, usage tracking, extend-skill, repo health, CLAUDE.md lint, livebrief
 - **10 Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /ship skill routing
@@ -39,7 +39,7 @@ Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**. Sem
 
 ### Hooks (automatic, no user action needed)
 
-12 hooks fire automatically across the session lifecycle — no user action needed.
+13 hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -50,10 +50,10 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 
 #### SessionStart — runs once when a session begins
 
+- `ss.plugin.update` — Check for plugin updates
+- `ss.mcp.deps` — Auto-install MCP server dependencies
 - `ss.tokens.scan` — Scan project for expensive files
 - `ss.git.check` — Check for uncommitted/unpushed changes
-- `ss.mcp.deps` — Auto-install MCP server dependencies
-- `ss.flow.selfcalibration` — Register self-calibration cron (once per session)
 
 #### PreToolUse — runs before each tool call
 
@@ -69,6 +69,7 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 - `prompt.git.sync` — Periodic pull/merge main (every 15 min)
 - `prompt.issue.detect` — Track GitHub issues automatically
 - `prompt.ship.detect` — Detect ship intent, enforce /ship skill
+- `prompt.flow.selfcalibration` — Register self-calibration cron (once per session)
 - `prompt.flow.appstart` — Detect app start intent, enforce completion card
 
 #### Stop — runs when Claude finishes responding
@@ -102,11 +103,12 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 
 #### flow — self-calibration
 
-- `ss.flow.selfcalibration` — Register self-calibration cron, once per session *(SessionStart)*
+- `prompt.flow.selfcalibration` — Register self-calibration cron, once per session *(UserPromptSubmit)*
 - `stop.flow.guard` — Enforce completion flow before response ends *(Stop)*
 
-#### mcp — dependency management
+#### plugin — updates and dependencies
 
+- `ss.plugin.update` — Check for plugin updates *(SessionStart)*
 - `ss.mcp.deps` — Auto-install MCP server dependencies *(SessionStart)*
 
 #### issues — automatic issue tracking
@@ -129,6 +131,9 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 | `/readme` | Explicit | Modern README generation |
 | `/refresh-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
 | `/extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
+| `/repo-health` | Explicit | Repository branch hygiene analysis and cleanup |
+| `/claude-md-lint` | Explicit | Audit CLAUDE.md files for size, structure, and token efficiency |
+| `/livebrief` | Explicit | Interactive HTML page for analysis, plans, and prototypes |
 
 ### Agents (spawned for parallel work)
 
@@ -199,8 +204,8 @@ See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
 dotclaude-dev-ops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← 12 hook scripts (JS)
-├── skills/                        ← 10 skill definitions (SKILL.md)
+├── hooks/                         ← 13 hook scripts (JS)
+├── skills/                        ← 13 skill definitions (SKILL.md)
 ├── agents/                        ← 10 agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
@@ -215,10 +220,10 @@ This plugin runs hooks, injects guard prompts, and periodically self-calibrates.
 
 | Source | Tokens/week | Notes |
 |---|---|---|
-| Startup hooks (3x per session) | ~8K | Git check, token scan, task registration |
+| Startup hooks (4x per session) | ~8K | Update check, git check, token scan, MCP deps |
 | Prompt guards (per message) | ~150K–250K | Ship detection, issue tracking, git sync — most exit silently |
 | Tool guards (per tool call) | ~100K–200K | Token budget + ship enforcement — early-exit when clean |
-| Self-calibration (every 30 min) | ~200K–400K | Deep-knowledge rotation, skill internalization |
+| Self-calibration (every 10 min) | ~200K–400K | Deep-knowledge rotation, skill internalization |
 | Skill invocations (~15–25/week) | ~15K–30K | Only when you call /ship, /commit, etc. |
 | **Total** | **~500K–900K** | **~0.7M tokens/week on average** |
 
