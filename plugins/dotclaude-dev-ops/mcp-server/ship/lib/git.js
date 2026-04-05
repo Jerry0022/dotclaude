@@ -102,6 +102,23 @@ export function isWorktree(opts) {
 }
 
 /**
+ * Get all branches currently attached to active worktrees.
+ * Returns a Set of branch names (e.g. "claude/priceless-goldwasser").
+ * Includes the main working tree's branch as well.
+ */
+export function getWorktreeBranches(opts) {
+  const output = git("worktree list --porcelain", opts);
+  if (!output) return new Set();
+  const branches = new Set();
+  for (const line of output.split("\n")) {
+    if (line.startsWith("branch refs/heads/")) {
+      branches.add(line.slice("branch refs/heads/".length));
+    }
+  }
+  return branches;
+}
+
+/**
  * Check if a branch exists locally or on origin.
  */
 export function branchExists(name, opts) {

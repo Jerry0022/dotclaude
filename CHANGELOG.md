@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.1] — 2026-04-05
+
+### Fixed
+- **safety** — `ship_cleanup` now detects branches attached to active worktrees and refuses to delete them; previously a cleanup could break a parallel worktree session by deleting its branch
+- **safety** — `repo-health` skill hardened with explicit worktree branch protection: hard rule against deleting, recommending, or touching worktree-attached branches — even on user request
+- **git lib** — new `getWorktreeBranches()` helper parses `git worktree list --porcelain` to build a protected branch set
+
 ## [0.26.0] — 2026-04-05
 
 ### Added

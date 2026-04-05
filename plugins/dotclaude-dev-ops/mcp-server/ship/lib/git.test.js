@@ -14,6 +14,7 @@ import {
   unpushedCommits,
   headShort,
   isWorktree,
+  getWorktreeBranches,
   branchExists,
 } from "./git.js";
 
@@ -171,6 +172,53 @@ describe("isWorktree", () => {
       .mockReturnValueOnce(".git\n")
       .mockReturnValueOnce(".git\n");
     expect(isWorktree()).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getWorktreeBranches
+// ---------------------------------------------------------------------------
+
+describe("getWorktreeBranches", () => {
+  test("parses porcelain output with multiple worktrees", () => {
+    execSync.mockReturnValue(
+      [
+        "worktree /repo",
+        "HEAD abc1234",
+        "branch refs/heads/main",
+        "",
+        "worktree /repo/.claude/worktrees/priceless-goldwasser",
+        "HEAD def5678",
+        "branch refs/heads/claude/priceless-goldwasser",
+        "",
+      ].join("\n"),
+    );
+    const branches = getWorktreeBranches();
+    expect(branches).toEqual(new Set(["main", "claude/priceless-goldwasser"]));
+  });
+
+  test("returns empty set on git failure", () => {
+    execSync.mockImplementation(() => {
+      throw new Error("fatal");
+    });
+    expect(getWorktreeBranches()).toEqual(new Set());
+  });
+
+  test("handles detached HEAD worktree (no branch line)", () => {
+    execSync.mockReturnValue(
+      [
+        "worktree /repo",
+        "HEAD abc1234",
+        "branch refs/heads/main",
+        "",
+        "worktree /repo/.claude/worktrees/detached",
+        "HEAD def5678",
+        "detached",
+        "",
+      ].join("\n"),
+    );
+    const branches = getWorktreeBranches();
+    expect(branches).toEqual(new Set(["main"]));
   });
 });
 

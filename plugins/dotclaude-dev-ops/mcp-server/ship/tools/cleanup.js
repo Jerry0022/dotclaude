@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import { git, gitStrict, isWorktree } from "../lib/git.js";
+import { git, gitStrict, isWorktree, getWorktreeBranches } from "../lib/git.js";
 
 export const schema = z.object({
   branch: z.string().describe("Feature branch to delete"),
@@ -26,6 +26,17 @@ export async function handler(params) {
     return {
       success: false,
       error: "Still inside a worktree. Call ExitWorktree(action: 'remove') first, then retry ship_cleanup.",
+      cleaned: [],
+      warnings: [],
+    };
+  }
+
+  // Guard: refuse to delete a branch attached to an active worktree
+  const worktreeBranches = getWorktreeBranches(opts);
+  if (worktreeBranches.has(branch)) {
+    return {
+      success: false,
+      error: `Branch '${branch}' is attached to an active worktree. Cannot delete — worktree session would break. Remove the worktree first (ExitWorktree action:'remove'), then retry.`,
       cleaned: [],
       warnings: [],
     };
