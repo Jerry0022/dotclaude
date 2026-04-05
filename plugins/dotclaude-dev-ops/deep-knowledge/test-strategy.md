@@ -28,6 +28,16 @@ If the full suite already passed on the **same build-ID** earlier in the
 session → ship quality gates skip redundant execution. Tests re-run if
 build-ID changed (source code changed since last run).
 
+## Automated Desktop Testing (Computer Use)
+
+For larger changes (5+ code edits) to UI/web applications, Claude can
+optionally take over the desktop to run visual tests automatically.
+This requires explicit user consent via `AskUserQuestion` with a warning
+about desktop interruption.
+
+See `deep-knowledge/desktop-testing.md` for full rules, user consent flow,
+warning requirements, and safety constraints.
+
 ## User-facing test plan
 
 After completing user-visible work, include a test plan:

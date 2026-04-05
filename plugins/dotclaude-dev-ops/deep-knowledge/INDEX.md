@@ -6,12 +6,13 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | File | Topic | Summary |
 |------|-------|---------|
 | [agent-collaboration.md](agent-collaboration.md) | Agent Collaboration Protocol | How agents work together on multi-role tasks. |
-| [agent-proactivity.md](agent-proactivity.md) | Proactive Agent Orchestration | When to involve specialized agents without explicit user request. |
 | [agent-conventions.md](agent-conventions.md) | Agent Naming & Collaboration Conventions | [role:X · Type] Task description |
+| [agent-proactivity.md](agent-proactivity.md) | Proactive Agent Orchestration | Cross-cutting rule for when to involve specialized agents without explicit us... |
 | [claude-directory-structure.md](claude-directory-structure.md) | Claude Directory Structure Convention | All Claude Code configuration belongs inside `.claude/`. Nothing Claude-specific |
 | [code-defaults.md](code-defaults.md) | Code Defaults | Standard coding conventions enforced across all projects using the dotclaude-... |
 | [codex-integration.md](codex-integration.md) | Codex Integration | Cross-cutting reference for all points where `codex-plugin-cc` skills are |
 | [decision-format.md](decision-format.md) | Decision Format | When presenting multiple options (via AskUserQuestion or inline), use this |
+| [desktop-testing.md](desktop-testing.md) | Automated Desktop Testing (Computer Use) | Rules for when and how Claude takes over the desktop to run visual UI tests |
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |
 | [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/commit`, `/ship`, and hooks. |
 | [plugin-behavior.md](plugin-behavior.md) | Plugin Behavior Rules | Core behavioral rules enforced by the dotclaude-dev-ops plugin. |

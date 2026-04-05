@@ -16,7 +16,8 @@ It fires whenever a task is fully completed and Claude is waiting for the next u
 **Flow steps:**
 
 1. **Verify** — visual verification per `deep-knowledge/visual-verification.md`
-   and `deep-knowledge/test-strategy.md`
+   and `deep-knowledge/test-strategy.md`. For larger changes (5+ edits) to
+   UI projects, offer automated desktop testing per `deep-knowledge/desktop-testing.md`
 2. **Issue status** — if an issue is tracked (via `prompt.issue.detect` hook),
    update its status
 3. **Completion Card** — render per `templates/completion-card.md`

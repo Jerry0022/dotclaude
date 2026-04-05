@@ -384,6 +384,12 @@ else                                              → fallback (8)
 - `analysis`: zero files changed → read-only outcome (research, audit, plan, review, explain)
 - When in doubt: if `git status` would be clean → `analysis`, not `ready`
 
+**Key rule — `test` variant + Desktop Testing:**
+- If `test` variant AND 5+ code edits AND UI project detected → offer
+  automated desktop testing via Computer Use before rendering the card.
+- See `deep-knowledge/desktop-testing.md` for consent flow and warning rules.
+- Desktop testing is optional — user can always decline and test manually.
+
 ---
 
 ## Rules

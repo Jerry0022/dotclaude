@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0] — 2026-04-05
+
+### Added
+- **testing** — automated desktop testing via Computer Use: at 5+ code edits on UI/web projects, Claude asks the user for desktop takeover consent before running visual tests automatically; includes mandatory warning about desktop interruption
+- **hooks** — `post.flow.completion` now injects desktop-testing prompt at 5+ edits, ensuring the consent question is in context when Claude builds the completion card
+- **deep-knowledge** — `desktop-testing.md` with full rules: trigger conditions, user consent flow, Computer Use test steps, safety constraints (2-min timeout, no sensitive data, user abort)
+
 ## [0.25.5] — 2026-04-05
 
 ### Fixed

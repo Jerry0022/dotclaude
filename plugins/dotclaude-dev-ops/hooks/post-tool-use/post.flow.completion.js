@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.13.0
+ * @version 0.14.0
  * @event PostToolUse
  * @plugin dotclaude-dev-ops
  * @description After EVERY tool call: inject the completion-card reminder so
  *   Claude always has the instruction in context when it finishes — regardless
  *   of whether the last tool was Edit, Read, Bash, Grep, or anything else.
  *   Edit/Write calls additionally increment the session edit counter.
+ *   At 5+ edits, injects desktop-testing prompt for UI projects.
  *   Writes a per-turn "work-happened" flag consumed by stop.flow.guard.
  */
 
@@ -93,6 +94,27 @@ process.stdin.on('end', () => {
     lines.push(
       '',
       `SHIP: ${editCount} code edits this session. Recommend /ship when task is done.`,
+    );
+
+    // --- 2b. Desktop testing prompt for UI projects (5+ edits) ---
+    lines.push(
+      '',
+      '[desktop-testing] 5+ code edits reached.',
+      'BEFORE rendering the completion card with variant "test", check:',
+      '  1. Is this a UI/web project? (preview server running, or package.json has',
+      '     UI deps: react, vue, angular, next, vite, svelte, electron, tauri, etc.)',
+      '  2. Is the variant "test" (code edits + app relevant)?',
+      'If BOTH true → ask the user via AskUserQuestion:',
+      '  Header: "Desktop-Test"',
+      '  Question: "Soll ich den Desktop uebernehmen, um die Aenderungen automatisch visuell zu testen?"',
+      '  Warning in question: "WARNUNG: Waehrend der automatischen Tests wird der Desktop',
+      '    periodisch gesteuert — Maus und Tastatur werden automatisch bewegt. Du kannst',
+      '    weiterarbeiten, aber deine Arbeit wird dabei kurzzeitig unterbrochen.',
+      '    Spiele, Videocalls oder zeitkritische Aufgaben sollten in diesem Zeitraum NICHT laufen."',
+      '  Options: "Ja, Desktop uebernehmen" / "Nein, manuell testen"',
+      '  If yes → run Computer Use visual tests (see deep-knowledge/desktop-testing.md)',
+      '  If no → use manual userTest steps in the completion card as usual.',
+      'If NOT a UI project → skip silently, use normal test flow.',
     );
   }
 
