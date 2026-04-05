@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.25.5**
+**Version: 0.26.2**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -117,18 +117,18 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 
 ### Skills (invoked explicitly or by hooks)
 
-| Skill | Purpose |
-|---|---|
-| `/ship` | Full shipping pipeline: build, version, PR, merge, cleanup |
-| `/commit` | Conventional commits with smart staging |
-| `/flow` (alias: `/debug`) | Root-cause analysis, diagnostics, and fix cycle |
-| `/deep-research` | Multi-angle research with structured output |
-| `/explain` | Code explanation with diagrams |
-| `/new-issue` | GitHub issue creation with labels and milestones |
-| `/project-setup` | Repo hygiene audit and initialization |
-| `/readme` | Modern README generation |
-| `/refresh-usage` | Token usage tracking (CLI + CDP) |
-| `/extend-skill` | Scaffold or adapt project-level skill extensions |
+| Skill | Invocation | Purpose |
+|---|---|---|
+| `/ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
+| `/commit` | Explicit | Conventional commits with smart staging |
+| `/flow` (alias: `/debug`) | Explicit + Hook | Root-cause analysis, diagnostics, and fix cycle |
+| `/deep-research` | Explicit | Multi-angle research with structured output |
+| `/explain` | Explicit | Code explanation with diagrams |
+| `/new-issue` | Explicit | GitHub issue creation with labels and milestones |
+| `/project-setup` | Explicit | Repo hygiene audit and initialization |
+| `/readme` | Explicit | Modern README generation |
+| `/refresh-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
+| `/extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
 
 ### Agents (spawned for parallel work)
 
