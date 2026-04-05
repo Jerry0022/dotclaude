@@ -97,11 +97,18 @@ Silently read and internalize plugin knowledge:
    - `{PLUGIN_ROOT}/skills/*/deep-knowledge/*.md` (skill-level)
 3. Sort alphabetically by path
 4. Calculate batch: `ceil(total * 0.25)`
-5. Read the current batch (rotate index each cycle, wrap around)
-6. Silent self-calibration — no output needed
+5. **Load cycle index** from `$TMPDIR/dotclaude-devops-calibration-cycle.json`
+   - If file exists: read `{ cycle: N }` and use N as current cycle
+   - If file missing or corrupt: start at cycle 0
+6. Compute: `startIndex = (cycle * batchSize) % total`
+7. Read the current batch (wrap around at end of list)
+8. **Persist cycle index**: write `{ cycle: N + 1 }` back to the same file
+9. Silent self-calibration — no output needed
 
 This ensures Claude stays familiar with all plugin rules, even those
-not directly triggered in the current session.
+not directly triggered in the current session. Persisting the cycle index
+across sessions guarantees even coverage — without it, every new session
+starts at batch 0 and later files are systematically underread.
 
 ## Step 5 — Baseline Review
 
@@ -126,5 +133,6 @@ Example extensions:
 - All paths use `~` or relative references — never hardcoded
 - Deep-knowledge files are discovered dynamically via Glob
 - Batch rotation uses explicit index math: `startIndex = (cycle * batchSize) % total`
+- Cycle index persisted to `$TMPDIR/dotclaude-devops-calibration-cycle.json` for cross-session continuity
 - This task is **opt-in** — users enable it via scheduled task configuration
 - Token budget: ~5K-15K per cycle (mostly reads, minimal writes)

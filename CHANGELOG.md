@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.5] — 2026-04-05
+
+### Fixed
+- **completion card** — verbatim relay protection: explicit instructions across all card output paths (MCP tool description, response blocks, hooks, plugin-behavior.md) to prevent system emoji-avoidance from stripping pre-rendered card content
+- **completion card** — separate instruction/content blocks in `render_completion_card` MCP response so the relay reminder is read by Claude but not displayed to the user
+- **self-calibration** — persist cycle index to `$TMPDIR/dotclaude-devops-calibration-cycle.json` for cross-session deep-knowledge batch rotation; previously every session restarted at batch 0
+
 ## [0.25.4] — 2026-04-05
 
 ### Fixed
