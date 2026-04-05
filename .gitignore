@@ -45,3 +45,4 @@ memory/
 
 # Package locks (scripts use minimal deps)
 package-lock.json
+.claude/livebrief/

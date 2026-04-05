@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.27.0] — 2026-04-05
+
+### Added
+- **skills** — new `/livebrief` skill: generates interactive self-contained HTML pages for analysis, plans, concepts, comparisons, prototypes, dashboards, and creative work; opens in Edge as new tab; monitors user decisions (toggles, selections, comments) via browser tools and feeds them back into Claude's workflow
+- **livebrief** — 7 recommended variant templates (analysis, plan, concept, comparison, prototype, dashboard, creative) with design system, decision JSON schema, and submit-button feedback mechanism
+- **livebrief** — browser monitoring spec with 4-level fallback: Claude in Chrome/Edge → Playwright → Preview → manual
+- **livebrief** — extension reference for project-level customization (design overrides, default variant, output location, custom elements, browser preference)
+
 ## [0.26.1] — 2026-04-05
 
 ### Fixed
