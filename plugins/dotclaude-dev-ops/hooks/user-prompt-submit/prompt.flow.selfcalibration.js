@@ -47,45 +47,32 @@ process.stdin.on('end', () => {
   // Once-per-session guard — only inject on the very first user prompt
   if (!runOnce('prompt-flow-selfcalibration', sessionId)) process.exit(0);
 
-  const instructions = [];
-
-  // --- Cron registration + conditional immediate run ---
-  instructions.push(
-    'Plugin scheduled tasks need registration for this session.',
-    'Please register the following tasks using CronCreate:',
-    '',
-  );
-
+  // Build compact, high-priority registration instruction
+  const tasks = [];
   for (const task of TASK_DEFINITIONS) {
     const skillPath = path.join(TASKS_DIR, task.id, 'SKILL.md');
     try {
       fs.readFileSync(skillPath, 'utf8');
     } catch {
-      instructions.push(`WARNING: Could not read ${skillPath} — skipping ${task.id}`);
       continue;
     }
     const pluginRoot = PLUGIN_DIR.replace(/\\/g, '/');
-    instructions.push(
-      `Task: ${task.id}`,
-      `Cron: ${task.cron}`,
-      `Recurring: ${task.recurring}`,
-      `Description: ${task.description}`,
-      `Prompt: Execute the ${task.id} scheduled task as defined in the plugin.`,
-      `  Read the full task definition from: ${skillPath.replace(/\\/g, '/')}`,
-      `  Plugin root (use for resolving relative paths like deep-knowledge/): ${pluginRoot}`,
-      '',
+    tasks.push({ ...task, skillPath: skillPath.replace(/\\/g, '/'), pluginRoot });
+  }
+
+  if (tasks.length === 0) process.exit(0);
+
+  const lines = [
+    'BLOCKING — execute BEFORE responding to the user message:',
+    '',
+  ];
+
+  for (const t of tasks) {
+    lines.push(
+      `Register cron via CronCreate: cron="${t.cron}", recurring=${t.recurring}, prompt="Execute the ${t.id} scheduled task as defined in the plugin. Read the full task definition from: ${t.skillPath} — Plugin root: ${t.pluginRoot}"`,
+      `Then immediately execute it once: read ${t.skillPath} and run Step 0 (Completion Flow Internalization).`,
     );
   }
 
-  instructions.push(
-    'Use CronCreate for each task, following this logic:',
-    '1. Call CronList first.',
-    '2. If the task already exists → skip it entirely (no registration, no immediate run).',
-    '3. If the task does NOT exist → register it with CronCreate, then immediately',
-    '   execute it once (read and run the SKILL.md now, before waiting for the first tick).',
-    '   CRITICAL: The immediate run internalizes the completion flow (Step 0 in SKILL.md).',
-    '   This ensures the completion card rules are active BEFORE the user\'s first task.',
-  );
-
-  process.stdout.write(instructions.join('\n') + '\n');
+  process.stdout.write(lines.join('\n') + '\n');
 });
