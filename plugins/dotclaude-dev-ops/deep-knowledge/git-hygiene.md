@@ -1,6 +1,6 @@
 # Git Hygiene
 
-Cross-cutting git rules referenced by `/commit`, `/ship`, and hooks.
+Cross-cutting git rules referenced by `/devops-commit`, `/devops-ship`, and hooks.
 
 ## Before every commit
 

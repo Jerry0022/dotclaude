@@ -93,7 +93,7 @@ process.stdin.on('end', () => {
   if (editCount >= 5) {
     lines.push(
       '',
-      `SHIP: ${editCount} code edits this session. Recommend /ship when task is done.`,
+      `SHIP: ${editCount} code edits this session. Recommend /devops-ship when task is done.`,
     );
 
     // --- 2b. Desktop testing prompt for UI projects (5+ edits) ---

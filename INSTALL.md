@@ -16,7 +16,7 @@ claude plugin add dotclaude-dev-ops@Jerry0022
 
 > **Note:** The Desktop App marketplace UI may not list third-party plugins for installation. If the plugin tab appears empty, use the CLI command above or see [Troubleshooting](#troubleshooting) below.
 
-Start a new session for hooks to take effect. Skills (`/ship`, `/commit`, `/flow`, etc.) are available immediately.
+Start a new session for hooks to take effect. Skills (`/devops-ship`, `/devops-commit`, `/devops-flow`, etc.) are available immediately.
 
 ## Update
 
@@ -38,7 +38,7 @@ your-project/.claude/skills/{skill-name}/
 └── reference.md    ← project-specific context
 ```
 
-Run `/project-setup` in any project to auto-scaffold extensions based on the project's build system, CI config, and conventions. Run `/extend-skill` to interactively scaffold an extension for a specific skill.
+Run `/devops-project-setup` in any project to auto-scaffold extensions based on the project's build system, CI config, and conventions. Run `/devops-extend-skill` to interactively scaffold an extension for a specific skill.
 
 ## Optional: Codex Integration
 
@@ -85,8 +85,8 @@ No extra configuration needed — install both and all skills are available.
 
 Typical combined workflows:
 
-- **Ship with review:** `/codex:review` → check feedback → `/ship`
-- **Delegate investigation:** `/codex:rescue` as alternative to `/deep-research`
+- **Ship with review:** `/codex:review` → check feedback → `/devops-ship`
+- **Delegate investigation:** `/codex:rescue` as alternative to `/devops-deep-research`
 - **Adversarial QA:** `/codex:adversarial-review` alongside the QA agent
 
 ### Troubleshooting
@@ -116,20 +116,20 @@ If the CLI command is not available, register the plugin manually:
 1. Add the marketplace (Settings → Plugins → Marketplaces → `Jerry0022/dotclaude-dev-ops`)
 2. Copy the plugin files into the cache:
    ```bash
-   mkdir -p ~/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.24.0
+   mkdir -p ~/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.28.0
    cp -r ~/.claude/plugins/marketplaces/dotclaude-dev-ops/plugins/dotclaude-dev-ops/* \
-         ~/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.24.0/
+         ~/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.28.0/
    cp -r ~/.claude/plugins/marketplaces/dotclaude-dev-ops/plugins/dotclaude-dev-ops/.claude-plugin \
-         ~/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.24.0/
+         ~/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.28.0/
    cp    ~/.claude/plugins/marketplaces/dotclaude-dev-ops/plugins/dotclaude-dev-ops/.mcp.json \
-         ~/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.24.0/
+         ~/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.28.0/
    ```
 3. Add to `~/.claude/plugins/installed_plugins.json` → `plugins` object:
    ```json
    "dotclaude-dev-ops@dotclaude-dev-ops": [{
      "scope": "user",
-     "installPath": "<home>/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.24.0",
-     "version": "0.24.0",
+     "installPath": "<home>/.claude/plugins/cache/dotclaude-dev-ops/dotclaude-dev-ops/0.28.0",
+     "version": "0.28.0",
      "installedAt": "<now ISO>",
      "lastUpdated": "<now ISO>",
      "gitCommitSha": "<git rev-parse HEAD from marketplace clone>"

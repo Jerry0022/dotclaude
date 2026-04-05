@@ -21,7 +21,7 @@ It fires whenever a task is fully completed and Claude is waiting for the next u
 2. **Issue status** — if an issue is tracked (via `prompt.issue.detect` hook),
    update its status
 3. **Completion Card** — render per `templates/completion-card.md`
-4. **Ship recommendation** — after 5+ code edits, recommend `/ship`
+4. **Ship recommendation** — after 5+ code edits, recommend `/devops-ship`
 
 **Hook architecture:**
 

@@ -4,7 +4,7 @@
  * @version 0.2.0
  * @event UserPromptSubmit
  * @plugin dotclaude-dev-ops
- * @description Detect ship intent in user prompts and inject Skill('ship') instruction.
+ * @description Detect ship intent in user prompts and inject Skill('devops-ship') instruction.
  *   Triggers on keywords like "ship", "shippen", "ab damit", "mach nen PR",
  *   "merge it", "das kann rein", "fertig", and affirmations after a completion
  *   card ("ja", "yes", "mach", "go", "do it").
@@ -102,12 +102,12 @@ process.stdin.on('end', () => {
     ...(cacheWarning ? [cacheWarning, ''] : []),
     `[prompt.ship.detect] ${reason}`,
     '',
-    'MANDATORY: Use Skill("ship") to execute the full shipping pipeline.',
+    'MANDATORY: Use Skill("devops-ship") to execute the full shipping pipeline.',
     'Do NOT manually run git commit, git push, or create/merge PRs outside the skill.',
-    'The /ship skill handles: pre-flight checks, build, version bump, commit,',
+    'The /devops-ship skill handles: pre-flight checks, build, version bump, commit,',
     'push, PR, merge, sync, cleanup, and the completion card.',
     '',
-    'If the user seems to want only a commit (not shipping), use Skill("commit") instead.',
+    'If the user seems to want only a commit (not shipping), use Skill("devops-commit") instead.',
   ].join('\n');
 
   process.stdout.write(instruction + '\n');

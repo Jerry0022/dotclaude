@@ -100,7 +100,7 @@ feat/42-video-filters          ← Feature agent (integration branch)
 
 Merge order follows wave order: Core → Frontend/Windows/AI → integration branch.
 
-Each sub-agent ships via `/ship` — the pipeline auto-detects the parent branch from naming convention. See `skills/ship/SKILL.md` → "Hierarchical Merge Workflow".
+Each sub-agent ships via `/devops-ship` — the pipeline auto-detects the parent branch from naming convention. See `skills/devops-ship/SKILL.md` → "Hierarchical Merge Workflow".
 
 ## Branch Inheritance Protocol
 
@@ -144,7 +144,7 @@ Same as wave order. Feature agent merges each wave's branches before spawning th
 
 ### Shipping sub-branches
 
-Sub-agents call `/ship` from their branch. The ship pipeline auto-detects the parent:
+Sub-agents call `/devops-ship` from their branch. The ship pipeline auto-detects the parent:
 - `feat/42-video-filters/core` → detects base `feat/42-video-filters` → intermediate merge
 - `feat/42-video-filters` → no parent detected → ships to `main` with full release
 
@@ -155,8 +155,8 @@ Intermediate merges skip version bump, tag, and GitHub release. These only happe
 **Sub-agents within the same wave must ship sequentially, not in parallel.**
 The Feature agent orchestrates shipping one sub-branch at a time:
 
-1. Sub-agent A completes → Feature agent calls `/ship` for A's branch → waits for merge
-2. Sub-agent B completes → Feature agent calls `/ship` for B's branch → waits for merge
+1. Sub-agent A completes → Feature agent calls `/devops-ship` for A's branch → waits for merge
+2. Sub-agent B completes → Feature agent calls `/devops-ship` for B's branch → waits for merge
 3. Continue until all sub-branches in the wave are merged
 
 This prevents merge conflicts from concurrent PRs targeting the same feature branch.

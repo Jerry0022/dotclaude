@@ -32,11 +32,11 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 3. Create your integration branch: `git checkout -b <feature-branch-name>`
 4. **Push the integration branch to origin immediately:**
    `git push -u origin <feature-branch-name>`
-   This is mandatory — sub-agents need it on origin for `/ship` auto-detection.
+   This is mandatory — sub-agents need it on origin for `/devops-ship` auto-detection.
 5. When delegating to sub-agents, ALWAYS include:
    `Parent branch: <your-integration-branch>`
 6. After each sub-agent wave completes, ship their branches **sequentially** (one at a time):
-   Call `/ship` for each sub-branch, wait for completion before the next.
+   Call `/devops-ship` for each sub-branch, wait for completion before the next.
    Do NOT ship multiple sub-branches in parallel to avoid merge conflicts.
 
 ## Delegation
@@ -121,5 +121,5 @@ Agent({ subagent_type: "research", model: "haiku", prompt: "..." })
 - Always work in a worktree (isolation: worktree)
 - Commit logical units, not mega-commits
 - Push before reporting completion
-- Follow commit conventions from /commit skill
+- Follow commit conventions from /devops-commit skill
 - Hand off to QA agent after completion

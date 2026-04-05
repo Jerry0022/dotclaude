@@ -363,7 +363,7 @@ function renderCard(input, meterText, buildId) {
 // for future scrapes. This is intentional: killing Edge on MCP exit would
 // disrupt the user's browser. The user can close Edge manually or it will
 // be reused by subsequent sessions.
-// See: scripts/refresh-usage-headless.js --auto-start for details.
+// See: scripts/devops-refresh-usage-headless.js --auto-start for details.
 
 function readUsageJson() {
   try {

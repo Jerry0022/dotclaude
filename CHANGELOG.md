@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.28.0] — 2026-04-05
+
+### BREAKING
+
+- **skills** — all 13 skills renamed with `devops-` prefix for namespace clarity: `/ship` → `/devops-ship`, `/commit` → `/devops-commit`, `/flow` → `/devops-flow`, `/deep-research` → `/devops-deep-research`, `/explain` → `/devops-explain`, `/new-issue` → `/devops-new-issue`, `/project-setup` → `/devops-project-setup`, `/readme` → `/devops-readme`, `/refresh-usage` → `/devops-refresh-usage`, `/extend-skill` → `/devops-extend-skill`, `/repo-health` → `/devops-repo-health`, `/claude-md-lint` → `/devops-claude-md-lint`, `/livebrief` → `/devops-livebrief`
+- **extensions** — user extension directories must be renamed to match (e.g. `.claude/skills/ship/` → `.claude/skills/devops-ship/`)
+- **hooks** — `prompt.ship.detect` now emits `Skill("devops-ship")` and `Skill("devops-commit")`
+
+### Added
+
+- **skills** — new `/devops-orchestrate` skill: explicitly evaluate which agents are useful for a task and orchestrate their parallel or sequential execution with wave-based planning
+
 ## [0.27.0] — 2026-04-05
 
 ### Added

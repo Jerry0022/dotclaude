@@ -172,7 +172,7 @@ pace_delta = usage_pct - elapsed_pct
 
 - Evaluated per window individually (5h, Wk, or both).
 - Never suggest reducing skills/agents — model switch is the lever (Opus → Sonnet).
-- Data source: `usage-live.json` (via `/refresh-usage` before rendering).
+- Data source: `usage-live.json` (via `/devops-refresh-usage` before rendering).
 
 **Column alignment:**
 

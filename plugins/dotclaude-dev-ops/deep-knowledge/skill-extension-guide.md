@@ -20,7 +20,7 @@ In each layer, you can create two files:
 
 | File | Purpose | Example |
 |---|---|---|
-| `SKILL.md` | Override or add steps to the skill | Add a deploy step to /ship |
+| `SKILL.md` | Override or add steps to the skill | Add a deploy step to /devops-ship |
 | `reference.md` | Add context the skill reads before executing | List version files, deploy targets |
 
 Both are optional. Create only what you need.
@@ -72,7 +72,7 @@ Every plugin skill starts with Step 0:
 
 ## Extension examples by skill
 
-### /ship
+### /devops-ship
 ```markdown
 # reference.md
 ## Quality gates
@@ -87,7 +87,7 @@ Every plugin skill starts with Step 0:
 - electron-builder.json → `"version": "X.Y.Z"`
 ```
 
-### /commit
+### /devops-commit
 ```markdown
 # reference.md
 ## Scope rules
@@ -104,7 +104,7 @@ Every plugin skill starts with Step 0:
 - Angular dev server: terminal output
 ```
 
-### /new-issue
+### /devops-new-issue
 ```markdown
 # reference.md
 ## Project board
@@ -130,7 +130,7 @@ Override responsibilities, tools, or collaboration rules per project.
 
 ## Scaffolding
 
-Run `/extend-skill` to interactively scaffold an extension for any plugin skill.
+Run `/devops-extend-skill` to interactively scaffold an extension for any plugin skill.
 It lists all available skills, checks whether an extension already exists in your
 project, and either scaffolds new files or opens the existing ones for editing.
 

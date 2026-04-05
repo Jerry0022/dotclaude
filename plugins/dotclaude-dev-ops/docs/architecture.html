@@ -127,16 +127,16 @@
 
   <h2>Skills</h2>
   <a href="#skills">Skills Overview (10)</a>
-  <a href="#skill-ship">/ship</a>
-  <a href="#skill-commit">/commit</a>
-  <a href="#skill-flow">/flow</a>
-  <a href="#skill-new-issue">/new-issue</a>
-  <a href="#skill-deep-research">/deep-research</a>
-  <a href="#skill-explain">/explain</a>
-  <a href="#skill-project-setup">/project-setup</a>
-  <a href="#skill-readme">/readme</a>
-  <a href="#skill-refresh-usage">/refresh-usage</a>
-  <a href="#skill-extend-skill">/extend-skill</a>
+  <a href="#skill-ship">/devops-ship</a>
+  <a href="#skill-commit">/devops-commit</a>
+  <a href="#skill-flow">/devops-flow</a>
+  <a href="#skill-new-issue">/devops-new-issue</a>
+  <a href="#skill-deep-research">/devops-deep-research</a>
+  <a href="#skill-explain">/devops-explain</a>
+  <a href="#skill-project-setup">/devops-project-setup</a>
+  <a href="#skill-readme">/devops-readme</a>
+  <a href="#skill-refresh-usage">/devops-refresh-usage</a>
+  <a href="#skill-extend-skill">/devops-extend-skill</a>
 
   <h2>MCP Servers</h2>
   <a href="#mcp">MCP Servers (2)</a>
@@ -262,14 +262,14 @@
 </details>
 
 <details>
-  <summary>Extension Example: /ship for an Angular Project</summary>
+  <summary>Extension Example: /devops-ship for an Angular Project</summary>
   <div class="detail-body">
-<pre><code># {project}/.claude/skills/ship/SKILL.md
+<pre><code># {project}/.claude/skills/devops-ship/SKILL.md
 ## Project-Specific Quality Gates
 - Run `ng build --prod` before PR
 - Run `ng test --watch=false`
 
-# {project}/.claude/skills/ship/reference.md
+# {project}/.claude/skills/devops-ship/reference.md
 ## Version files
 - package.json -> "version" field
 - projects/myapp/package.json -> "version" field
@@ -365,7 +365,7 @@
 <details>
   <summary><span class="badge b-hook">POST</span> post.flow.debug.js &mdash; Failure Detector</summary>
   <div class="detail-body">
-    <p>Detects repeated Bash failures (error patterns). After 2+ consecutive failures, recommends the <code>/flow</code> skill for root-cause analysis.</p>
+    <p>Detects repeated Bash failures (error patterns). After 2+ consecutive failures, recommends the <code>/devops-flow</code> skill for root-cause analysis.</p>
     <table>
       <tr><th>Trigger</th><td>After Bash tool use</td></tr>
       <tr><th>Matcher</th><td><code>Bash</code></td></tr>
@@ -394,7 +394,7 @@
 <details>
   <summary><span class="badge b-hook">PROMPT</span> prompt.ship.detect.js &mdash; Ship Intent Router</summary>
   <div class="detail-body">
-    <p>Detects shipping keywords ("ship", "ab damit", "fertig", "merge it") and affirmations after a completion card ("ja", "yes", "go"). Routes to the <code>/ship</code> skill via stdout instruction. Enforces that shipping always goes through the skill, never manually.</p>
+    <p>Detects shipping keywords ("ship", "ab damit", "fertig", "merge it") and affirmations after a completion card ("ja", "yes", "go"). Routes to the <code>/devops-ship</code> skill via stdout instruction. Enforces that shipping always goes through the skill, never manually.</p>
     <table>
       <tr><th>Direct keywords</th><td>ship, ab damit, fertig, merge it, das kann rein, release</td></tr>
       <tr><th>Affirmations</th><td>ja, yes, mach, go, klar (after completion card)</td></tr>
@@ -449,7 +449,7 @@
   │  ── tool executes ──
   │
   ├─ <span class="ok">POST</span> post.flow.completion.js  Track code edits
-  └─ <span class="ok">POST</span> post.flow.debug.js ───── Detect Bash failures → /flow
+  └─ <span class="ok">POST</span> post.flow.debug.js ───── Detect Bash failures → /devops-flow
          (only Bash)
   │
   ▼
@@ -468,23 +468,23 @@
 
 <table>
   <tr><th>Skill</th><th>Purpose</th><th>Trigger Examples</th><th>Context</th></tr>
-  <tr><td><code>/ship</code></td><td>Full shipping pipeline</td><td>"ship it", "fertig", "ab damit"</td><td>Normal</td></tr>
-  <tr><td><code>/commit</code></td><td>Conventional commits</td><td>"commit", "save changes"</td><td>Normal</td></tr>
-  <tr><td><code>/flow</code></td><td>Root-cause analysis</td><td>"debug", "doesn't work"</td><td>Normal</td></tr>
-  <tr><td><code>/new-issue</code></td><td>GitHub issue creation</td><td>"new issue", "mach ein Issue"</td><td>Normal</td></tr>
-  <tr><td><code>/deep-research</code></td><td>Multi-angle research</td><td>"research X", "compare X vs Y"</td><td><code>fork</code></td></tr>
-  <tr><td><code>/explain</code></td><td>Code explanation</td><td>"explain", "how does X work"</td><td>Normal</td></tr>
-  <tr><td><code>/project-setup</code></td><td>Repo hygiene audit</td><td>"set up project", "audit gitignore"</td><td>Normal</td></tr>
-  <tr><td><code>/readme</code></td><td>README generation</td><td>"create a readme"</td><td>Normal</td></tr>
-  <tr><td><code>/refresh-usage</code></td><td>Token usage scraping</td><td>"refresh usage", silently pre-card</td><td>Normal</td></tr>
-  <tr><td><code>/extend-skill</code></td><td>Skill extension scaffolding</td><td>"extend skill", "customize skill"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-ship</code></td><td>Full shipping pipeline</td><td>"ship it", "fertig", "ab damit"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-commit</code></td><td>Conventional commits</td><td>"commit", "save changes"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-flow</code></td><td>Root-cause analysis</td><td>"debug", "doesn't work"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-new-issue</code></td><td>GitHub issue creation</td><td>"new issue", "mach ein Issue"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-deep-research</code></td><td>Multi-angle research</td><td>"research X", "compare X vs Y"</td><td><code>fork</code></td></tr>
+  <tr><td><code>/devops-explain</code></td><td>Code explanation</td><td>"explain", "how does X work"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-project-setup</code></td><td>Repo hygiene audit</td><td>"set up project", "audit gitignore"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-readme</code></td><td>README generation</td><td>"create a readme"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-refresh-usage</code></td><td>Token usage scraping</td><td>"refresh usage", silently pre-card</td><td>Normal</td></tr>
+  <tr><td><code>/devops-extend-skill</code></td><td>Skill extension scaffolding</td><td>"extend skill", "customize skill"</td><td>Normal</td></tr>
 </table>
 </section>
 
 <!-- Individual skills -->
 
 <section id="skill-ship">
-<h3>/ship &mdash; Full Shipping Pipeline</h3>
+<h3>/devops-ship &mdash; Full Shipping Pipeline</h3>
 <p><span class="badge b-skill">Skill</span> <span class="badge b-mcp">5 MCP Tools</span> <span class="tag">v0.2.0</span></p>
 
 <details>
@@ -534,7 +534,7 @@
 </section>
 
 <section id="skill-commit">
-<h3>/commit &mdash; Conventional Commits</h3>
+<h3>/devops-commit &mdash; Conventional Commits</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">disable-model-invocation</span></p>
 
 <details>
@@ -556,7 +556,7 @@
 </section>
 
 <section id="skill-flow">
-<h3>/flow &mdash; Root-Cause Analysis &amp; Diagnostics</h3>
+<h3>/devops-flow &mdash; Root-Cause Analysis &amp; Diagnostics</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">alias: /debug</span></p>
 
 <details>
@@ -578,7 +578,7 @@
 </section>
 
 <section id="skill-new-issue">
-<h3>/new-issue &mdash; GitHub Issue &amp; Milestone Management</h3>
+<h3>/devops-new-issue &mdash; GitHub Issue &amp; Milestone Management</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span></p>
 <details>
   <summary>4-Step Flow</summary>
@@ -594,7 +594,7 @@
 </section>
 
 <section id="skill-deep-research">
-<h3>/deep-research &mdash; Multi-Angle Research</h3>
+<h3>/devops-deep-research &mdash; Multi-Angle Research</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">context: fork</span></p>
 <details>
   <summary>7-Step Research Flow</summary>
@@ -614,7 +614,7 @@
 </section>
 
 <section id="skill-explain">
-<h3>/explain &mdash; Code &amp; Architecture Explanation</h3>
+<h3>/devops-explain &mdash; Code &amp; Architecture Explanation</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span></p>
 <details>
   <summary>Scope-Adaptive Explanation</summary>
@@ -631,7 +631,7 @@
 </section>
 
 <section id="skill-project-setup">
-<h3>/project-setup &mdash; Repository Hygiene</h3>
+<h3>/devops-project-setup &mdash; Repository Hygiene</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">--audit / --init / --fix</span></p>
 <details>
   <summary>5-Step Audit &amp; Init</summary>
@@ -640,7 +640,7 @@
       <li><strong>Analyze Project</strong> &mdash; Detect tech stack, read .gitignore, check LICENSE/README</li>
       <li><strong>.gitignore</strong> &mdash; Fetch from gitignore.io, merge with Claude tooling rules</li>
       <li><strong>LICENSE</strong> &mdash; Generate if missing (MIT/Apache/GPL/ISC)</li>
-      <li><strong>README</strong> &mdash; Inform user to run <code>/readme</code></li>
+      <li><strong>README</strong> &mdash; Inform user to run <code>/devops-readme</code></li>
       <li><strong>Additional Files</strong> &mdash; .editorconfig, .gitattributes, AI tooling config</li>
     </ol>
     <p><strong>Audit severity:</strong> CRITICAL (secrets) &rarr; auto-fix. WARNING (missing rules) &rarr; auto-fix. INFO (redundancy) &rarr; report only.</p>
@@ -649,7 +649,7 @@
 </section>
 
 <section id="skill-readme">
-<h3>/readme &mdash; README Generation</h3>
+<h3>/devops-readme &mdash; README Generation</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">--preview / --update</span></p>
 <details>
   <summary>Section Selection &amp; Rendering</summary>
@@ -661,7 +661,7 @@
 </section>
 
 <section id="skill-refresh-usage">
-<h3>/refresh-usage &mdash; Token Usage Tracking</h3>
+<h3>/devops-refresh-usage &mdash; Token Usage Tracking</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span></p>
 <details>
   <summary>4-Step Fallback Chain</summary>
@@ -685,7 +685,7 @@
 </section>
 
 <section id="skill-extend-skill">
-<h3>/extend-skill &mdash; Extension Scaffolding</h3>
+<h3>/devops-extend-skill &mdash; Extension Scaffolding</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span></p>
 <details>
   <summary>Interactive Scaffolding Flow</summary>
@@ -727,7 +727,7 @@
 
 <section id="mcp-ship">
 <h3>dotclaude-ship (5 Tools)</h3>
-<p><span class="badge b-mcp">MCP</span> <code>mcp-server/ship/index.js</code></p>
+<p><span class="badge b-mcp">MCP</span> <code>mcp-server/devops-ship/index.js</code></p>
 
 <details>
   <summary>Tool: ship_preflight</summary>
@@ -976,8 +976,8 @@
 <table>
   <tr><th>Template</th><th>Used By</th><th>Purpose</th></tr>
   <tr><td><code>completion-card.md</code></td><td>render-card.js</td><td>Master card template (8 variants, 3-block layout)</td></tr>
-  <tr><td><code>buildlog-entry.md</code></td><td>/ship</td><td>Build log entry format</td></tr>
-  <tr><td><code>changelog-entry.md</code></td><td>/ship (version bump)</td><td>CHANGELOG.md entry format</td></tr>
+  <tr><td><code>buildlog-entry.md</code></td><td>/devops-ship</td><td>Build log entry format</td></tr>
+  <tr><td><code>changelog-entry.md</code></td><td>/devops-ship (version bump)</td><td>CHANGELOG.md entry format</td></tr>
   <tr><td><code>github-release.md</code></td><td>ship_release MCP</td><td>GitHub release notes format</td></tr>
 </table>
 </section>
@@ -993,7 +993,7 @@
 <span class="hl">1. SESSION START</span>
    │
    ├─ <span class="ok">ss.tokens.scan</span> ─── "Project is 2.3 MB, 14 large files"
-   ├─ <span class="ok">ss.git.check</span> ──── "3 unpushed commits → run /ship"
+   ├─ <span class="ok">ss.git.check</span> ──── "3 unpushed commits → run /devops-ship"
    └─ <span class="ok">ss.flow.selfcal</span> ─ Register 30-min cron + immediate self-audit
    │
 <span class="hl">2. USER WORKS (coding, debugging, researching)</span>
@@ -1001,11 +1001,11 @@
    ├─ Every prompt: <span class="wr">prompt.git.sync</span> (rebase), <span class="wr">prompt.issue.detect</span> (#NNN)
    ├─ Every tool:   <span class="wr">pre.tokens.guard</span> (budget check)
    ├─ After tools:  <span class="ok">post.flow.completion</span> (track edits)
-   ├─ Bash fails:   <span class="er">post.flow.debug</span> → suggests /flow after 2+ failures
+   ├─ Bash fails:   <span class="er">post.flow.debug</span> → suggests /devops-flow after 2+ failures
    │
-   ├─ User says "debug this" → <span class="hl">/flow</span> skill (root-cause analysis)
-   ├─ User says "explain X"  → <span class="hl">/explain</span> skill
-   ├─ User says "research Y" → <span class="hl">/deep-research</span> skill (forked context)
+   ├─ User says "debug this" → <span class="hl">/devops-flow</span> skill (root-cause analysis)
+   ├─ User says "explain X"  → <span class="hl">/devops-explain</span> skill
+   ├─ User says "research Y" → <span class="hl">/devops-deep-research</span> skill (forked context)
    │
 <span class="hl">3. TASK COMPLETE — COMPLETION CARD</span>
    │
@@ -1014,7 +1014,7 @@
    │
 <span class="hl">4. USER SAYS "ship" / "ja" / "fertig"</span>
    │
-   ├─ <span class="wr">prompt.ship.detect</span> → routes to <span class="hl">/ship</span> skill
+   ├─ <span class="wr">prompt.ship.detect</span> → routes to <span class="hl">/devops-ship</span> skill
    │
    ├─ <span class="hl">ship_preflight</span> ─── Clean tree? Versions consistent? All pushed?
    ├─ <span class="hl">ship_build</span> ─────── Build + lint + tests + build-ID
@@ -1039,25 +1039,25 @@
 <h3>Hook &rarr; Skill Routing</h3>
 <div class="interaction-matrix">
   <span class="from">prompt.ship.detect</span> <span class="to">&rarr; Skill('ship') &mdash; on "ship", "fertig", "ab damit", or affirmation after card</span>
-  <span class="from">post.flow.debug</span> <span class="to">&rarr; recommends /flow &mdash; after 2+ consecutive Bash failures</span>
+  <span class="from">post.flow.debug</span> <span class="to">&rarr; recommends /devops-flow &mdash; after 2+ consecutive Bash failures</span>
   <span class="from">prompt.flow.appstart</span> <span class="to">&rarr; enforces completion card &mdash; before allowing app start</span>
   <span class="from">stop.flow.guard</span> <span class="to">&rarr; carry-over instruction &mdash; render card as first output next turn</span>
 </div>
 
 <h3>Skill &rarr; MCP Tool Dependencies</h3>
 <div class="interaction-matrix">
-  <span class="from">/ship</span> <span class="to">&rarr; ship_preflight, ship_build, ship_version_bump, ship_release, ship_cleanup</span>
-  <span class="from">/ship</span> <span class="to">&rarr; render_completion_card (variant: shipped)</span>
-  <span class="from">/refresh-usage</span> <span class="to">&rarr; get_usage (CDP scraping)</span>
+  <span class="from">/devops-ship</span> <span class="to">&rarr; ship_preflight, ship_build, ship_version_bump, ship_release, ship_cleanup</span>
+  <span class="from">/devops-ship</span> <span class="to">&rarr; render_completion_card (variant: shipped)</span>
+  <span class="from">/devops-refresh-usage</span> <span class="to">&rarr; get_usage (CDP scraping)</span>
   <span class="from">All skills (post-task)</span> <span class="to">&rarr; render_completion_card (various variants)</span>
 </div>
 
 <h3>Skill &rarr; Skill Transitions</h3>
 <div class="interaction-matrix">
-  <span class="from">/flow</span> <span class="to">&rarr; suggests /ship &mdash; after fix is applied and changes are ready</span>
-  <span class="from">/project-setup</span> <span class="to">&rarr; informs user to run /readme &mdash; for README generation</span>
-  <span class="from">/extend-skill</span> <span class="to">&rarr; reads all skills &mdash; to list available extension targets</span>
-  <span class="from">/ship</span> <span class="to">&rarr; optional /codex:review &mdash; for major version bumps (if codex-plugin-cc installed)</span>
+  <span class="from">/devops-flow</span> <span class="to">&rarr; suggests /devops-ship &mdash; after fix is applied and changes are ready</span>
+  <span class="from">/devops-project-setup</span> <span class="to">&rarr; informs user to run /devops-readme &mdash; for README generation</span>
+  <span class="from">/devops-extend-skill</span> <span class="to">&rarr; reads all skills &mdash; to list available extension targets</span>
+  <span class="from">/devops-ship</span> <span class="to">&rarr; optional /codex:review &mdash; for major version bumps (if codex-plugin-cc installed)</span>
 </div>
 
 <h3>Hook &rarr; Hook Chains</h3>
@@ -1074,16 +1074,16 @@
     <table>
       <tr><th>Document</th><th>Topic</th><th>Used By</th></tr>
       <tr><td><code>agent-collaboration.md</code></td><td>Multi-agent wave orchestration</td><td>All agents, /feature</td></tr>
-      <tr><td><code>skill-extension-guide.md</code></td><td>3-layer extension model</td><td>/extend-skill, all skills</td></tr>
-      <tr><td><code>codex-integration.md</code></td><td>Optional Codex plugin</td><td>/ship</td></tr>
+      <tr><td><code>skill-extension-guide.md</code></td><td>3-layer extension model</td><td>/devops-extend-skill, all skills</td></tr>
+      <tr><td><code>codex-integration.md</code></td><td>Optional Codex plugin</td><td>/devops-ship</td></tr>
       <tr><td><code>agent-conventions.md</code></td><td>Agent naming, branching</td><td>All agents</td></tr>
-      <tr><td><code>claude-directory-structure.md</code></td><td>.claude/ canonical layout</td><td>/project-setup</td></tr>
+      <tr><td><code>claude-directory-structure.md</code></td><td>.claude/ canonical layout</td><td>/devops-project-setup</td></tr>
       <tr><td><code>code-defaults.md</code></td><td>Coding style conventions</td><td>All code-writing skills</td></tr>
       <tr><td><code>decision-format.md</code></td><td>Decision presentation</td><td>All skills with AskUserQuestion</td></tr>
-      <tr><td><code>fact-verification.md</code></td><td>Research integrity</td><td>/deep-research</td></tr>
-      <tr><td><code>git-hygiene.md</code></td><td>Git best practices</td><td>/commit, /ship</td></tr>
+      <tr><td><code>fact-verification.md</code></td><td>Research integrity</td><td>/devops-deep-research</td></tr>
+      <tr><td><code>git-hygiene.md</code></td><td>Git best practices</td><td>/devops-commit, /devops-ship</td></tr>
       <tr><td><code>plugin-behavior.md</code></td><td>Plugin integration</td><td>Self-calibration</td></tr>
-      <tr><td><code>test-strategy.md</code></td><td>When/how to test</td><td>/ship (quality gates)</td></tr>
+      <tr><td><code>test-strategy.md</code></td><td>When/how to test</td><td>/devops-ship (quality gates)</td></tr>
       <tr><td><code>tool-selection.md</code></td><td>Tool choice guidance</td><td>All agents</td></tr>
       <tr><td><code>visual-verification.md</code></td><td>Screenshot/simulation</td><td>QA agent, /frontend</td></tr>
     </table>

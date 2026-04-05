@@ -112,7 +112,7 @@ deep-knowledge/
 to find the right file. This avoids unnecessary reads and saves context tokens.
 
 **vs. skill-level deep-knowledge:**
-- `skills/ship/deep-knowledge/versioning.md` → only used by `/ship`
+- `skills/devops-ship/deep-knowledge/versioning.md` → only used by `/devops-ship`
 - `deep-knowledge/test-strategy.md` → used by hooks AND skills
 
 Hooks reference plugin-level deep-knowledge in their stdout instructions to Claude.
@@ -183,7 +183,7 @@ Silently check for optional overrides (do not surface "not found" in output):
 (via `/skill-creator` or manually), always include the Step 0 extension
 load sequence. Skills that skip this step are non-compliant.
 
-**Example: A user extends `/ship` for their HA-Finance project:**
+**Example: A user extends `/devops-ship` for their HA-Finance project:**
 
 ```
 ha-finance/
@@ -194,11 +194,11 @@ ha-finance/
             └── reference.md    ← "Deploy via SSH to 192.168.178.32"
 ```
 
-The plugin's `/ship` reads these before executing and integrates the rules.
+The plugin's `/devops-ship` reads these before executing and integrates the rules.
 
 **Eat-your-own-dogfood:** This plugin's own repo (`dotclaude-dev-ops/`) uses
-the same mechanism. Project-specific ship rules live in `.claude/skills/ship/`
-within this repo — no separate `/ship-dotclaude` skill needed.
+the same mechanism. Project-specific ship rules live in `.claude/skills/devops-ship/`
+within this repo — no separate `/devops-ship-dotclaude` skill needed.
 
 ## Script Conventions
 

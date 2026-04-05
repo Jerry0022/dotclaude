@@ -1,6 +1,6 @@
 # dotclaude-dev-ops
 
-**Version: 0.27.0**
+**Version: 0.28.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -9,10 +9,10 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 ## Features
 
 - **13 Hooks** — automated guards and triggers across the full session lifecycle
-- **13 Skills** — ship, commit, flow, research, explain, issues, project setup, readme, usage tracking, extend-skill, repo health, CLAUDE.md lint, livebrief
+- **14 Skills** — devops-ship, devops-commit, devops-flow, devops-deep-research, devops-explain, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-livebrief, devops-orchestrate
 - **10 Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
-- **Ship Enforcement** — intent detection, PR command blocking, automatic /ship skill routing
+- **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
 
 ## Installation
@@ -62,13 +62,13 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 #### PostToolUse — runs after each tool call
 
 - `post.flow.completion` — Track code edits for completion flow
-- `post.flow.debug` — Recommend /flow after repeated failures
+- `post.flow.debug` — Recommend /devops-flow after repeated failures
 
 #### UserPromptSubmit — runs when the user sends a message
 
 - `prompt.git.sync` — Periodic pull/merge main (every 15 min)
 - `prompt.issue.detect` — Track GitHub issues automatically
-- `prompt.ship.detect` — Detect ship intent, enforce /ship skill
+- `prompt.ship.detect` — Detect ship intent, enforce /devops-ship skill
 - `prompt.flow.selfcalibration` — Register self-calibration cron (once per session)
 - `prompt.flow.appstart` — Detect app start intent, enforce completion card
 
@@ -93,12 +93,12 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 
 #### ship — enforce the shipping pipeline
 
-- `prompt.ship.detect` — Detect ship intent, enforce /ship skill *(UserPromptSubmit)*
+- `prompt.ship.detect` — Detect ship intent, enforce /devops-ship skill *(UserPromptSubmit)*
 
 #### flow — track progress toward completion
 
 - `post.flow.completion` — Track code edits for completion flow *(PostToolUse)*
-- `post.flow.debug` — Recommend /flow after repeated failures *(PostToolUse)*
+- `post.flow.debug` — Recommend /devops-flow after repeated failures *(PostToolUse)*
 - `prompt.flow.appstart` — Detect app start intent, enforce completion card *(UserPromptSubmit)*
 
 #### flow — self-calibration
@@ -121,19 +121,20 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 
 | Skill | Invocation | Purpose |
 |---|---|---|
-| `/ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
-| `/commit` | Explicit | Conventional commits with smart staging |
-| `/flow` (alias: `/debug`) | Explicit + Hook | Root-cause analysis, diagnostics, and fix cycle |
-| `/deep-research` | Explicit | Multi-angle research with structured output |
-| `/explain` | Explicit | Code explanation with diagrams |
-| `/new-issue` | Explicit | GitHub issue creation with labels and milestones |
-| `/project-setup` | Explicit | Repo hygiene audit and initialization |
-| `/readme` | Explicit | Modern README generation |
-| `/refresh-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
-| `/extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
-| `/repo-health` | Explicit | Repository branch hygiene analysis and cleanup |
-| `/claude-md-lint` | Explicit | Audit CLAUDE.md files for size, structure, and token efficiency |
-| `/livebrief` | Explicit | Interactive HTML page for analysis, plans, and prototypes |
+| `/devops-ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
+| `/devops-commit` | Explicit | Conventional commits with smart staging |
+| `/devops-flow` (alias: `/debug`) | Explicit + Hook | Root-cause analysis, diagnostics, and fix cycle |
+| `/devops-deep-research` | Explicit | Multi-angle research with structured output |
+| `/devops-explain` | Explicit | Code explanation with diagrams |
+| `/devops-new-issue` | Explicit | GitHub issue creation with labels and milestones |
+| `/devops-project-setup` | Explicit | Repo hygiene audit and initialization |
+| `/devops-readme` | Explicit | Modern README generation |
+| `/devops-refresh-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
+| `/devops-extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
+| `/devops-repo-health` | Explicit | Repository branch hygiene analysis and cleanup |
+| `/devops-claude-md-lint` | Explicit | Audit CLAUDE.md files for size, structure, and token efficiency |
+| `/devops-livebrief` | Explicit | Interactive HTML page for analysis, plans, and prototypes |
+| `/devops-orchestrate` | Explicit | Evaluate agents and orchestrate parallel execution |
 
 ### Agents (spawned for parallel work)
 
@@ -172,15 +173,15 @@ your-project/.claude/skills/{skill-name}/
 The plugin reads your extensions before executing and merges them. Your rules win on conflict.
 Both files are optional — create only what you need.
 
-**Example** — extending `/ship` with project-specific quality gates and deploy targets:
+**Example** — extending `/devops-ship` with project-specific quality gates and deploy targets:
 
 ```
-your-project/.claude/skills/ship/
+your-project/.claude/skills/devops-ship/
 ├── SKILL.md        ← "Before PR: run ng build --prod"
 └── reference.md    ← "Deploy via SSH to 192.168.178.32"
 ```
 
-Run `/extend-skill` to interactively scaffold an extension for any plugin skill.
+Run `/devops-extend-skill` to interactively scaffold an extension for any plugin skill.
 It detects existing extensions and lets you adapt them.
 
 For the full extension guide with examples per skill, see `deep-knowledge/skill-extension-guide.md`.
@@ -193,8 +194,8 @@ Install [codex-plugin-cc](https://github.com/openai/codex-plugin-cc) alongside
 this plugin for AI-powered code review and task delegation via OpenAI Codex.
 Both plugins coexist as independent skill providers — no configuration needed.
 
-Combined workflows: `/codex:review` before `/ship`, `/codex:rescue` as
-alternative to `/deep-research`, `/codex:adversarial-review` alongside QA.
+Combined workflows: `/codex:review` before `/devops-ship`, `/codex:rescue` as
+alternative to `/devops-deep-research`, `/codex:adversarial-review` alongside QA.
 
 See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
 
@@ -205,7 +206,7 @@ dotclaude-dev-ops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
 ├── hooks/                         ← 13 hook scripts (JS)
-├── skills/                        ← 13 skill definitions (SKILL.md)
+├── skills/                        ← 14 skill definitions (SKILL.md)
 ├── agents/                        ← 10 agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
@@ -224,7 +225,7 @@ This plugin runs hooks, injects guard prompts, and periodically self-calibrates.
 | Prompt guards (per message) | ~150K–250K | Ship detection, issue tracking, git sync — most exit silently |
 | Tool guards (per tool call) | ~100K–200K | Token budget + ship enforcement — early-exit when clean |
 | Self-calibration (every 10 min) | ~200K–400K | Deep-knowledge rotation, skill internalization |
-| Skill invocations (~15–25/week) | ~15K–30K | Only when you call /ship, /commit, etc. |
+| Skill invocations (~15–25/week) | ~15K–30K | Only when you call /devops-ship, /devops-commit, etc. |
 | **Total** | **~500K–900K** | **~0.7M tokens/week on average** |
 
 ### What percentage of your plan is that?
@@ -248,9 +249,9 @@ Based on ~0.7M tokens/week plugin overhead:
 |---|---|
 | "Wait, did I push that?" | Git state checked on every session start |
 | `git push --force` to main at 2 AM | Blocked before it happens |
-| Forgetting to bump the version | /ship handles version, PR, merge, cleanup |
+| Forgetting to bump the version | /devops-ship handles version, PR, merge, cleanup |
 | "Why is my context window gone?" | Token guard kills expensive reads before they land |
-| Debugging the same error 4 times | /flow kicks in after the second failure |
+| Debugging the same error 4 times | /devops-flow kicks in after the second failure |
 | Writing commit messages by hand | Conventional commits, auto-staged, one command |
 
 **Net calculation:** ~0.7M tokens/week buys you roughly 2–4 hours of not fighting git, not forgetting steps, and not explaining to your future self why the build broke. Per hour saved, that's about 200K tokens — or roughly the cost of Claude reading this README seventeen times.

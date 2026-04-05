@@ -14,7 +14,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [decision-format.md](decision-format.md) | Decision Format | When presenting multiple options (via AskUserQuestion or inline), use this |
 | [desktop-testing.md](desktop-testing.md) | Automated Desktop Testing (Computer Use) | Rules for when and how Claude takes over the desktop to run visual UI tests |
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |
-| [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/commit`, `/ship`, and hooks. |
+| [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/devops-commit`, `/devops-ship`, and hooks. |
 | [plugin-behavior.md](plugin-behavior.md) | Plugin Behavior Rules | Core behavioral rules enforced by the dotclaude-dev-ops plugin. |
 | [skill-extension-guide.md](skill-extension-guide.md) | Skill Extension Guide — For Plugin Integrators | How to customize dotclaude-dev-ops skills and agents for your project. |
 | [test-strategy.md](test-strategy.md) | Test Execution Strategy | Cross-cutting rules for when and how to test. Referenced by the completion flow |

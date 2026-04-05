@@ -159,7 +159,7 @@ for (const r of dirty) {
     switch (issue.type) {
       case 'uncommitted':
       case 'unpushed':
-        out.push(`- ${issue.label} → run \`/ship\` to commit, push & create PR`);
+        out.push(`- ${issue.label} → run \`/devops-ship\` to commit, push & create PR`);
         break;
       case 'stash':
         out.push(`- ${issue.label} → review with \`git stash list\`, then \`git stash pop\` or \`git stash drop\``);

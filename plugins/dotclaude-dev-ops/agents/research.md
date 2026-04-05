@@ -24,7 +24,7 @@ Deep-dive into a topic and return structured findings.
 
 ## Output format
 
-See /deep-research skill for full format specification.
+See /devops-deep-research skill for full format specification.
 
 ## Rules
 
