@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.28.1] — 2026-04-06
+
+### Improved
+- **livebrief** — decision panel is now a fixed 20% sidebar (not overlay), always visible while scrolling
+- **livebrief** — tri-state variant evaluation: Verwerfen / Miteinbeziehen (default) / Exakt diese Variante — with exclusive-select logic
+- **livebrief** — iterative live feedback loop: Claude processes submissions, updates the page in-browser, user can act again (replaces one-shot model)
+- **livebrief** — wider text fields (`width: 100%`, `min-height: 80px`) for better usability
+
 ## [0.28.0] — 2026-04-05
 
 ### BREAKING

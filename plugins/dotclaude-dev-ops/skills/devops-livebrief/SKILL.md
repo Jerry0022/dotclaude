@@ -60,11 +60,36 @@ Build a single self-contained HTML file. Requirements:
 - Professional typography, spacing, and color palette
 - Subtle animations for interactions (toggle, expand, submit)
 
+### Decision Panel Layout
+- The decision panel (submit button + global controls) is a **fixed sidebar**
+  on the right side, taking **~20% of the screen width** — NOT an overlay
+- Content area fills the remaining ~80% on the left
+- On mobile/narrow screens: decision panel collapses to bottom (sticky)
+- The panel is always visible while scrolling (position: fixed or sticky)
+
 ### Interactive Elements (per variant)
 - **Toggles/checkboxes**: For binary decisions (accept/reject, include/exclude)
 - **Selectors/sliders**: For prioritization, weighting, or rating
-- **Comment fields**: Inline text areas for notes on each section
-- **Submit button**: Prominent "Entscheidungen abschicken" button at the bottom
+- **Comment fields**: Inline text areas for notes on each section —
+  use `width: 100%` within their container, `min-height: 80px` for usability
+- **Submit button**: Prominent "Entscheidungen abschicken" button in the
+  decision panel sidebar
+
+### Variant Evaluation (when variants exist)
+When the livebrief presents multiple variants (concept, comparison, or any
+multi-option output), each variant MUST include a **tri-state evaluation**:
+
+| State | Label | Behavior |
+|-------|-------|----------|
+| **Verwerfen** | "Verwerfen" | Variant is completely discarded |
+| **Miteinbeziehen** | "Miteinbeziehen" (default) | Variant is considered in the overall decision |
+| **Nur diese** | "Exakt diese Variante" | Select ONLY this variant, discard all others |
+
+- Default state for all variants: **Miteinbeziehen**
+- "Nur diese" is exclusive — selecting it for one variant auto-sets all others
+  to "Verwerfen" (with visual feedback and undo option)
+- Each variant can ADDITIONALLY have rating, comments, and other controls
+- The overall submit sends the tri-state per variant PLUS any additional ratings
 
 ### Feedback Mechanism
 
@@ -140,25 +165,52 @@ user that you're monitoring and they can continue chatting. If the user
 sends a message while monitoring, pause monitoring and respond normally.
 Resume monitoring after responding.
 
-## Step 5 — Process Decisions
+## Step 5 — Live Feedback Loop
 
-Once decisions are received:
+Feedback is processed **iteratively**, not as a one-shot. The cycle:
 
-1. **Parse** the JSON into structured decisions and comments
-2. **Summarize** what was selected/rejected/commented in a brief overview
-3. **Continue workflow** — apply decisions to the ongoing work:
+```
+User submits → Claude reads → Claude processes → Claude updates page → User can act again
+```
+
+### 5a. Read & Parse
+1. Read the JSON from `#livebrief-decisions`
+2. Parse into structured decisions and comments
+
+### 5b. Process & Act
+1. **Summarize** what was selected/rejected/commented
+2. **Execute** the decisions immediately:
    - For plans: proceed with approved steps, skip rejected ones
    - For analysis: focus on accepted findings, deprioritize rejected ones
    - For concepts: develop chosen variant, archive alternatives
    - For comparisons: proceed with selected winner
-4. **Persist decisions** — write a summary to `{project}/.claude/devops-livebrief/{same-slug}-decisions.json`
-   for reference in the session
+### 5c. Update the Page
+After processing, **update the HTML page in the browser** to reflect results:
+1. Reset `submitted` to `false` in `#livebrief-decisions`
+2. Remove `livebrief-submitted` class from `<body>`
+3. Re-enable the submit button
+4. Update the page content to show processed results, next decisions, or
+   confirmation of completed actions
+5. Add a visual "Verarbeitet" indicator on processed items
+
+This allows the user to **review the updated state and submit again** for
+further refinement or additional decisions.
+
+### 5d. Resume Monitoring
+Return to Step 4 (monitor for next submission). The loop continues until:
+- The user closes the page
+- The user says "fertig" / "done" in chat
+- There are no more decisions to make (all items processed)
+
+### 5e. Persist
+Write a cumulative summary to `{project}/.claude/devops-livebrief/{same-slug}-decisions.json`
+after each iteration (append, don't overwrite previous rounds).
 
 ## Step 6 — Completion
 
-After processing decisions, continue with the normal workflow. If the
-livebrief was the primary task, render a completion card. If it was part
-of a larger task, proceed to the next step.
+The feedback loop ends when the user is satisfied. Then continue with the
+normal workflow. If the livebrief was the primary task, render a completion
+card. If it was part of a larger task, proceed to the next step.
 
 ## Smart Trigger Rules
 

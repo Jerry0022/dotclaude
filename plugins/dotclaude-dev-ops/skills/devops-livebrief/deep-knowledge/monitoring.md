@@ -1,7 +1,7 @@
 # Livebrief Browser Monitoring
 
-How Claude monitors the livebrief page for user decisions and feeds them
-back into the workflow.
+How Claude monitors the livebrief page for user decisions, processes them
+**live**, and updates the page for further interaction.
 
 ## Monitoring Architecture
 
@@ -10,8 +10,15 @@ back into the workflow.
                                                        ↓
 [Claude polls page state] ←←←←←←←←←←←←←←←←← [User clicks Submit]
          ↓
-[Parse decisions JSON] → [Continue workflow with decisions]
+[Parse decisions JSON] → [Process decisions] → [Update page in browser]
+         ↑                                              ↓
+         └←←←←←←←← [User reviews update] ←←←←←←←←←←←←┘
+                     [User can submit again]
 ```
+
+This is an **iterative loop**, not a one-shot. After each submission,
+Claude processes the feedback, updates the page, and monitors again.
+The loop continues until the user is done (closes page or says "fertig").
 
 ## Detection Signal
 
@@ -138,10 +145,12 @@ The JSON from `#livebrief-decisions` follows this schema:
 ```json
 {
   "submitted": true,
+  "round": 1,
   "decisions": [
     {
       "id": "string — element identifier",
       "label": "string — human-readable label",
+      "evaluation": "include | discard | only (for variant-bearing types)",
       "...": "variant-specific fields (accepted, included, selected, rating, etc.)"
     }
   ],
@@ -159,10 +168,11 @@ The JSON from `#livebrief-decisions` follows this schema:
 After parsing, produce a brief summary:
 
 ```markdown
-## Livebrief-Ergebnisse
+## Livebrief-Ergebnisse (Runde 1)
 
 **Akzeptiert:** Finding 1, Finding 3, Finding 5
 **Abgelehnt:** Finding 2, Finding 4
+**Varianten:** Variant A → Miteinbeziehen, Variant B → Verworfen, Variant C → Exakt diese
 **Kommentare:**
 - Finding 1: "Focus on this first, highest business impact"
 - Finding 4: "Not relevant for current sprint"
@@ -172,22 +182,53 @@ After parsing, produce a brief summary:
 
 Map decisions back to the original context:
 
-| Variant | Accept action | Reject action |
-|---------|--------------|---------------|
-| analysis | Prioritize finding, include in next steps | Note as deprioritized, skip |
-| plan | Include step in execution plan | Remove step, note as skipped |
-| concept | Develop chosen variant | Archive alternative |
-| comparison | Proceed with winner | Document why others were rejected |
-| prototype | Approve screen/devops-flow | Flag for redesign |
-| dashboard | Mark action item as confirmed | Remove from action list |
-| creative | Keep idea in working set | Archive idea |
+| Variant | Accept/Include action | Reject/Discard action | "Only" action |
+|---------|----------------------|----------------------|---------------|
+| analysis | Prioritize finding | Deprioritize, skip | N/A |
+| plan | Include step in execution | Remove step | N/A |
+| concept | Consider variant | Archive alternative | Develop ONLY this variant |
+| comparison | Keep in evaluation | Remove from comparison | Proceed with ONLY this option |
+| prototype | Approve screen/flow | Flag for redesign | N/A |
+| dashboard | Confirm action item | Remove from list | N/A |
+| creative | Keep idea in working set | Archive idea | N/A |
+
+### Live Page Update (after each round)
+
+After processing a submission, Claude MUST update the browser page:
+
+1. **Reset submission state:**
+   ```javascript
+   // Via browser tool (javascript_tool / browser_evaluate / preview_eval)
+   document.body.classList.remove('livebrief-submitted');
+   document.getElementById('livebrief-decisions').textContent =
+     JSON.stringify({submitted: false, round: N+1, decisions: [], comments: []});
+   document.getElementById('submit-btn').disabled = false;
+   document.getElementById('submit-btn').textContent = 'Entscheidungen abschicken';
+   ```
+
+2. **Update content to reflect processed state:**
+   - Mark processed items visually (checkmark, "Verarbeitet" badge)
+   - Show results of the processing (e.g., generated code, updated plan)
+   - Add new decision points if the processing revealed further choices
+   - Gray out discarded variants
+
+3. **Resume monitoring** — return to the polling loop for the next round
 
 ### Persistence
 
 Write processed decisions to:
 `{project}/.claude/devops-livebrief/{same-timestamp}-{same-slug}-decisions.json`
 
-This allows the decisions to be referenced later in the session if needed.
+Each round appends to the same file (array of rounds), preserving full history:
+
+```json
+{
+  "rounds": [
+    { "round": 1, "timestamp": "...", "decisions": [...], "comments": [...] },
+    { "round": 2, "timestamp": "...", "decisions": [...], "comments": [...] }
+  ]
+}
+```
 
 ## Error Handling
 

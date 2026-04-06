@@ -16,20 +16,30 @@ starting points and inspiration — deviate freely when the content calls for it
   <style>/* all CSS inline */</style>
 </head>
 <body>
-  <header>
-    <h1>{title}</h1>
-    <p class="subtitle">{context line}</p>
-    <button id="theme-toggle" aria-label="Toggle theme">🌙/☀️</button>
-  </header>
+  <div class="livebrief-layout">
+    <!-- Main content: ~80% width -->
+    <div class="livebrief-content">
+      <header>
+        <h1>{title}</h1>
+        <p class="subtitle">{context line}</p>
+        <button id="theme-toggle" aria-label="Toggle theme">🌙/☀️</button>
+      </header>
 
-  <main>
-    <!-- Variant-specific content -->
-  </main>
+      <main>
+        <!-- Variant-specific content -->
+      </main>
+    </div>
 
-  <footer>
-    <button id="submit-btn" class="primary">Entscheidungen abschicken</button>
-    <p class="hint">Deine Auswahl wird direkt an Claude uebermittelt.</p>
-  </footer>
+    <!-- Decision panel: ~20% width, fixed sidebar, NOT overlay -->
+    <aside class="livebrief-decision-panel">
+      <h3>Entscheidungen</h3>
+      <div id="decision-summary">
+        <!-- Auto-populated summary of current selections -->
+      </div>
+      <button id="submit-btn" class="primary">Entscheidungen abschicken</button>
+      <p class="hint">Deine Auswahl wird direkt an Claude uebermittelt.</p>
+    </aside>
+  </div>
 
   <script type="application/json" id="livebrief-decisions">
     {"submitted": false, "decisions": [], "comments": []}
@@ -37,6 +47,45 @@ starting points and inspiration — deviate freely when the content calls for it
   <script>/* all JS inline */</script>
 </body>
 </html>
+```
+
+### Decision Panel CSS
+
+```css
+.livebrief-layout {
+  display: flex;
+  min-height: 100vh;
+}
+.livebrief-content {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
+.livebrief-decision-panel {
+  width: 20%;
+  min-width: 240px;
+  max-width: 360px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 1.5rem;
+  border-left: 1px solid var(--border-color);
+  background: var(--panel-bg);
+}
+/* Mobile: collapse to sticky bottom */
+@media (max-width: 768px) {
+  .livebrief-layout { flex-direction: column; }
+  .livebrief-decision-panel {
+    width: 100%;
+    max-width: none;
+    height: auto;
+    position: sticky;
+    bottom: 0;
+    border-left: none;
+    border-top: 1px solid var(--border-color);
+  }
+}
 ```
 
 ## Design System
@@ -62,9 +111,12 @@ starting points and inspiration — deviate freely when the content calls for it
 ### Interactive Elements
 - Toggle switches: 44px wide, smooth transition, clear on/off state
 - Checkboxes: custom styled, visible check mark
-- Comment fields: auto-expanding textarea, subtle border, placeholder text
-- Submit button: full-width on mobile, centered on desktop, `min-height: 48px`
-- Sliders: labeled endpoints, current value display
+- Comment fields: `width: 100%` within their container, `min-height: 80px`,
+  auto-expanding textarea, subtle border, placeholder text. Never narrow —
+  users must be able to type comfortably
+- Text inputs: `width: 100%` within container, generous padding (`0.75rem`)
+- Submit button: in decision panel sidebar, full-width within panel
+- Sliders: labeled endpoints, current value display, full container width
 
 ## Variant: analysis
 
@@ -145,24 +197,48 @@ starting points and inspiration — deviate freely when the content calls for it
 [Variant A: Name]
   ├── Description + diagram/illustration
   ├── Pro/Con list
-  ├── [Toggle: Favorit]
+  ├── [Tri-state: Verwerfen / Miteinbeziehen (default) / Nur diese]
   ├── [Rating: 1-5 stars or slider]
-  └── [Comment field]
+  └── [Comment field (wide, min-height: 80px)]
 
 [Variant B: Name]
   └── ...
 
-[Submit button]
+[Decision panel sidebar: summary + submit]
 ```
+
+### Tri-State Variant Evaluation
+
+Every variant MUST include a tri-state selector:
+
+```html
+<div class="variant-evaluation" data-decision="variant-a" data-label="Variant A">
+  <div class="tri-state-group">
+    <label><input type="radio" name="eval-variant-a" value="discard"> Verwerfen</label>
+    <label><input type="radio" name="eval-variant-a" value="include" checked> Miteinbeziehen</label>
+    <label><input type="radio" name="eval-variant-a" value="only"> Exakt diese Variante</label>
+  </div>
+</div>
+```
+
+**Behavior:**
+- Default: "Miteinbeziehen" (all variants considered)
+- "Exakt diese Variante": auto-sets ALL other variants to "Verwerfen",
+  shows visual feedback + undo button per auto-changed variant
+- "Verwerfen": grays out the variant card visually (but keeps it accessible)
 
 **Decision schema:**
 ```json
 {
   "decisions": [
-    { "id": "variant-a", "label": "...", "favorite": true, "rating": 4 }
+    { "id": "variant-a", "label": "...", "evaluation": "include", "rating": 4 },
+    { "id": "variant-b", "label": "...", "evaluation": "discard", "rating": 2 },
+    { "id": "variant-c", "label": "...", "evaluation": "only", "rating": 5 }
   ]
 }
 ```
+
+**evaluation values:** `"discard"` | `"include"` | `"only"`
 
 ## Variant: comparison
 
@@ -181,17 +257,21 @@ starting points and inspiration — deviate freely when the content calls for it
 [Per-option detail cards]
   ├── Strengths
   ├── Weaknesses
-  └── [Comment field]
+  ├── [Tri-state: Verwerfen / Miteinbeziehen (default) / Nur diese]
+  └── [Comment field (wide)]
 
-[Winner selection: radio buttons]
-[Submit button]
+[Decision panel sidebar: summary + submit]
 ```
+
+Each option in the comparison gets the same **tri-state evaluation** as
+concept variants (see above): Verwerfen / Miteinbeziehen / Exakt diese.
 
 **Decision schema:**
 ```json
 {
   "decisions": [
-    { "id": "winner", "selected": "option-b" },
+    { "id": "option-a", "label": "...", "evaluation": "include" },
+    { "id": "option-b", "label": "...", "evaluation": "only" },
     { "id": "weight-performance", "value": 0.8 },
     { "id": "weight-cost", "value": 0.4 }
   ]
