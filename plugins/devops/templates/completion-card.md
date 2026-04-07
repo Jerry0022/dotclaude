@@ -37,6 +37,8 @@ Sections within a block may be omitted per variant rules — but the block order
 All variables in `{{...}}`. Sections wrapped in `{{#if}}` are conditional per variant.
 
 ```markdown
+---
+
 {{#if usage}}
 ```
 5h  {{bar-5h}}  {{pct-5h}} ({{delta-5h}})  · Reset {{reset-5h}}{{pace-warn-5h}}
@@ -45,14 +47,10 @@ All variables in `{{...}}`. Sections wrapped in `{{#if}}` are conditional per va
 Wk  {{bar-wk}}  {{pct-wk}} ({{delta-wk}})  · Reset {{reset-wk}}{{pace-warn-wk}}
     {{elapsed-arrow-wk}}
 ```
-{{else}}
-```
-⚠ Usage data unavailable — monitoring issue
-```
-{{/if}}
 
 ---
 
+{{/if}}
 ## ✨✨✨ {{summary}} · {{build-id}} ✨✨✨
 
 {{#if changes}}

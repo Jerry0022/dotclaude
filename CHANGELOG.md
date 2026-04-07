@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.31.1] — 2026-04-07
+
+### Fixed
+
+- **completion-card** — opening `---` separator now always rendered before the usage meter; previously the card started without a top delimiter when usage data was available, leaving the usage section visually unframed
+
 ## [0.31.0] — 2026-04-07
 
 ### Added

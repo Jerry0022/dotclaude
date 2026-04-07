@@ -296,12 +296,12 @@ function renderCard(input, meterText, buildId) {
   const parts = [];
 
   // Block A — What was done
+  parts.push('---');
   if (config.usage && meterText) {
+    parts.push('');
     parts.push(meterText);
     if (healthLine) parts.push(healthLine);
     parts.push('');
-    parts.push('---');
-  } else {
     parts.push('---');
   }
   parts.push('');
