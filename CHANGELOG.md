@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.31.0] — 2026-04-07
+
+### Added
+
+- **skills** — `devops-self-update`: manual plugin update trigger with changelog and verification report
+- **hooks** — `ss.plugin.update` v0.2.0: unified cache-rebuild + registry update (not just cache invalidation)
+
+### Changed
+
+- **BREAKING** — plugin key renamed from `dotclaude-dev-ops@dotclaude-dev-ops` to `devops@dotclaude`; legacy keys preserved as fallback
+- **plugin** — directory renamed `plugins/dotclaude-dev-ops/` → `plugins/devops/`
+- **marketplace** — marketplace name `dotclaude-dev-ops` → `dotclaude`
+- **hooks** — all MCP tool references updated (`mcp__plugin_devops_*`)
+- **skills** — `devops-self-update` v0.3.0: delegates to hook instead of duplicating logic
+
 ## [0.30.5] — 2026-04-07
 
 ### Added
