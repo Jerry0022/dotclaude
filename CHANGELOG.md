@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.30.5] — 2026-04-07
+
+### Added
+
+- **agents** — "Issue Creation as Team Refinement" pattern added to `agent-collaboration.md`: creating an issue is a structured refinement session across all relevant roles (po → domain roles → UX/user role → qa)
+
 ## [0.30.4] — 2026-04-07
 
 ### Fixed
