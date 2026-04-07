@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.33.0] — 2026-04-08
+
+### Added
+
+- **hooks** — `ss.team.changelog`: session-start hook that shows a summary of changes by other contributors on remote `main` since the user's last commit; auto-detects identity via `git config` and GitHub noreply cross-matching; silent when no foreign commits
+
 ## [0.32.2] — 2026-04-08
 
 ### Changed
