@@ -174,7 +174,7 @@ export function updateVersionFiles(oldVersion, newVersion, cwd = process.cwd()) 
   // (README.md, marketplace.json) are outside CWD scope.
   // This sweep updates them without affecting consumer projects where
   // gitRoot === cwd.
-  const gitRoot = resolveGitRoot();
+  const gitRoot = resolveGitRoot(cwd);
   if (gitRoot && resolve(gitRoot) !== resolve(cwd)) {
     // README.md at repo root
     try {
@@ -256,7 +256,7 @@ export function verifyVersionFiles(expectedVersion, cwd = process.cwd()) {
       }
     } catch {
       // Only report missing if the sweep won't check it at repo root
-      const gitRoot = resolveGitRoot();
+      const gitRoot = resolveGitRoot(cwd);
       if (!gitRoot || resolve(gitRoot) === resolve(cwd)) {
         mismatches.push({ file: "CHANGELOG.md", expected: "file to exist", found: "(missing)" });
       }
@@ -311,7 +311,7 @@ export function verifyVersionFiles(expectedVersion, cwd = process.cwd()) {
   checkChangelog();
 
   // ── Repo-root sweep (plugin-dev scenario) ──────────────────────────
-  const gitRoot = resolveGitRoot();
+  const gitRoot = resolveGitRoot(cwd);
   if (gitRoot && resolve(gitRoot) !== resolve(cwd)) {
     // README.md at repo root
     try {

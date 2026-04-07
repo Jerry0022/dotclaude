@@ -15,14 +15,14 @@ export const schema = z.object({
 
 export async function handler(params) {
   const { branch, base, cwd: agentCwd } = params;
+  const cwd = agentCwd || process.cwd();
+  const opts = { cwd };
   const intermediate = base !== "main";
   const cleaned = [];
   const warnings = [];
 
   // Guard: refuse to run inside a worktree
-  // Check both the MCP server cwd and the agent-provided cwd
-  const opts = agentCwd ? { cwd: agentCwd } : {};
-  if (isWorktree() || isWorktree(opts)) {
+  if (isWorktree(opts)) {
     return {
       success: false,
       error: "Still inside a worktree. Call ExitWorktree(action: 'remove') first, then retry ship_cleanup.",
@@ -43,14 +43,14 @@ export async function handler(params) {
   }
 
   // Record the branch we're on before any checkout, so we can restore it
-  const branchBeforeCleanup = git("rev-parse --abbrev-ref HEAD");
+  const branchBeforeCleanup = git("rev-parse --abbrev-ref HEAD", opts);
 
   // Guard: verify we're on base branch
   const current = branchBeforeCleanup;
   if (current !== base) {
     try {
-      gitStrict(`checkout ${base}`);
-      gitStrict(`pull origin ${base}`);
+      gitStrict(`checkout ${base}`, opts);
+      gitStrict(`pull origin ${base}`, opts);
       cleaned.push(`checkout:${base}`);
     } catch (e) {
       return {
@@ -63,10 +63,10 @@ export async function handler(params) {
   }
 
   // Verify remote branch is gone (merge step should have deleted it)
-  const remoteBranch = git(`ls-remote --heads origin ${branch}`);
+  const remoteBranch = git(`ls-remote --heads origin ${branch}`, opts);
   if (remoteBranch) {
     try {
-      gitStrict(`push origin --delete ${branch}`);
+      gitStrict(`push origin --delete ${branch}`, opts);
       cleaned.push(`remote-branch:${branch}`);
     } catch {
       warnings.push(`Could not delete remote branch ${branch} — may already be deleted`);
@@ -75,17 +75,17 @@ export async function handler(params) {
 
   // Delete local branch
   try {
-    gitStrict(`branch -D ${branch}`);
+    gitStrict(`branch -D ${branch}`, opts);
     cleaned.push(`local-branch:${branch}`);
   } catch {
     warnings.push(`Local branch ${branch} not found or already deleted`);
   }
 
   // Prune
-  git("worktree prune");
+  git("worktree prune", opts);
   cleaned.push("worktree-prune");
 
-  git("remote prune origin");
+  git("remote prune origin", opts);
   cleaned.push("remote-prune");
 
   // For intermediate merges: note that the base (feature branch) stays alive
@@ -94,10 +94,9 @@ export async function handler(params) {
   }
 
   // Restore the original branch if we switched away from a non-base branch
-  // (avoids disrupting other work in the main working tree)
   if (branchBeforeCleanup && branchBeforeCleanup !== base && branchBeforeCleanup !== branch) {
     try {
-      gitStrict(`checkout ${branchBeforeCleanup}`);
+      gitStrict(`checkout ${branchBeforeCleanup}`, opts);
       cleaned.push(`restored:${branchBeforeCleanup}`);
     } catch {
       warnings.push(`Could not restore original branch '${branchBeforeCleanup}' — staying on '${base}'`);

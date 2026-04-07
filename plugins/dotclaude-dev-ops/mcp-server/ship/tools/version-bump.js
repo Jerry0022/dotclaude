@@ -8,11 +8,12 @@ import { readVersion, bumpVersion, updateVersionFiles, verifyVersionFiles } from
 
 export const schema = z.object({
   bump: z.enum(["patch", "minor", "major", "none"]).describe("Semantic version bump type"),
+  cwd: z.string().optional().describe("Working directory override (e.g. worktree path). Falls back to process.cwd()."),
 });
 
 export async function handler(params) {
   const { bump } = params;
-  const cwd = process.cwd();
+  const cwd = params.cwd || process.cwd();
 
   // Read current version
   const { version: vOld, type: projectType, file: sourceFile } = readVersion(cwd);

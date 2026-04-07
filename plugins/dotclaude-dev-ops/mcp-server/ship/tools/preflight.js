@@ -9,15 +9,18 @@ import { readVersion, verifyVersionFiles } from "../lib/version.js";
 
 export const schema = z.object({
   base: z.string().default("main").describe("Base branch to ship into (auto-detected from sub-branch naming if 'main')"),
+  cwd: z.string().optional().describe("Working directory override (e.g. worktree path). Falls back to process.cwd()."),
 });
 
 export async function handler(params) {
   let { base } = params;
+  const cwd = params.cwd || process.cwd();
+  const opts = { cwd };
   const checks = [];
   const errors = [];
 
   // 1. Current branch
-  const branch = currentBranch();
+  const branch = currentBranch(opts);
   if (!branch || branch === "HEAD") {
     errors.push(`Cannot ship from '${branch || "detached HEAD"}' — must be on a feature branch`);
     checks.push({ name: "branch", value: branch, ok: false });
@@ -27,7 +30,7 @@ export async function handler(params) {
   //    Only when base is "main" (default) and current branch has a parent.
   let autoDetectedBase = null;
   if (base === "main" && branch && branch !== "main") {
-    const parent = detectParentBranch(branch);
+    const parent = detectParentBranch(branch, opts);
     if (parent) {
       autoDetectedBase = parent.parent;
       base = parent.parent;
@@ -43,23 +46,20 @@ export async function handler(params) {
   if (autoDetectedBase) {
     checks.push({ name: "auto-detected-base", value: autoDetectedBase, source: "sub-branch naming" });
   } else if (base === "main" && branch && (branch.match(/\//g) || []).length >= 2) {
-    // Branch has 2+ slashes (e.g. feat/42/core) — likely a sub-branch, but no parent was found.
-    // 1-slash branches (feat/x, fix/x) are standard feature branches and should ship to main.
-    // 2+ slashes strongly indicate a sub-branch where the parent wasn't pushed yet.
     checks.push({ name: "sub-branch-warning", value: branch, message: "Branch looks like a sub-branch but no parent branch was found. Push the integration branch first." });
     errors.push(`Branch '${branch}' looks like a sub-branch (2+ path segments) but no parent branch exists. Push the integration branch first, or pass an explicit base.`);
   }
   checks.push({ name: "intermediate", value: intermediate });
 
   // 3. Verify base branch exists (locally or on origin)
-  const baseExists = branchExists(base);
+  const baseExists = branchExists(base, opts);
   if (!baseExists) {
     errors.push(`Base branch '${base}' does not exist locally or on origin`);
   }
   checks.push({ name: "base-exists", ok: !!baseExists, value: baseExists });
 
   // 4. Dirty state
-  const state = dirtyState();
+  const state = dirtyState(opts);
   if (state.dirty) {
     errors.push(
       `Dirty working tree: ${state.modified.length} modified, ${state.untracked.length} untracked`
@@ -68,29 +68,27 @@ export async function handler(params) {
   checks.push({ name: "clean-tree", ok: !state.dirty, modified: state.modified.length, untracked: state.untracked.length });
 
   // 5. Fetch base from origin to ensure accurate commit count
-  git(`fetch origin ${base}`);
+  git(`fetch origin ${base}`, opts);
 
   // 6. Commits ahead (compare against origin/ ref for accuracy)
   const originBase = `origin/${base}`;
-  const ahead = commitsAhead(baseExists === "remote" || baseExists === "local" ? originBase : base);
+  const ahead = commitsAhead(baseExists === "remote" || baseExists === "local" ? originBase : base, opts);
   if (ahead === 0) {
     errors.push(`No commits ahead of ${base} — nothing to ship`);
   }
   checks.push({ name: "commits-ahead", value: ahead, ok: ahead > 0 });
 
   // 7. Unpushed commits (hard gate — must be 0 before shipping)
-  // Note: null means no upstream is configured (new branch, never pushed).
-  // This is OK — ship_release will push with -u to set upstream.
-  const unpushed = unpushedCommits();
+  const unpushed = unpushedCommits(opts);
   if (unpushed !== null && unpushed > 0) {
     errors.push(`${unpushed} unpushed commit(s) — push before shipping`);
   }
   checks.push({ name: "all-pushed", value: unpushed, ok: unpushed === 0 || unpushed === null });
 
   // 8. Base branch ahead check (merge-conflict risk)
-  const _behind = commitsAhead("HEAD", { base: originBase });
+  const _behind = commitsAhead("HEAD", { ...opts, base: originBase });
   const baseBehindCount = (() => {
-    const count = git(`rev-list --count HEAD..${originBase}`);
+    const count = git(`rev-list --count HEAD..${originBase}`, opts);
     return count ? parseInt(count, 10) : 0;
   })();
   if (baseBehindCount > 0) {
@@ -103,11 +101,11 @@ export async function handler(params) {
   // 9. Version consistency (skip for intermediate merges — versions only matter on main)
   let versionInfo = { version: null, type: null };
   if (!intermediate) {
-    versionInfo = readVersion();
+    versionInfo = readVersion(cwd);
     let versionOk = true;
     let versionMismatches = [];
     if (versionInfo.version) {
-      const result = verifyVersionFiles(versionInfo.version);
+      const result = verifyVersionFiles(versionInfo.version, cwd);
       versionOk = result.consistent;
       versionMismatches = result.mismatches;
       if (!versionOk) {
@@ -119,8 +117,8 @@ export async function handler(params) {
     checks.push({ name: "version-consistent", ok: true, skipped: true, reason: "intermediate merge" });
   }
 
-  // 9. Worktree detection
-  const inWorktree = isWorktree();
+  // 10. Worktree detection
+  const inWorktree = isWorktree(opts);
   checks.push({ name: "worktree", value: inWorktree });
 
   const ready = errors.length === 0;

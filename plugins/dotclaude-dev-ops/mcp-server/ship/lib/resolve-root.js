@@ -7,24 +7,25 @@
 import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 
-let _cached = null;
+const _cache = new Map();
 
 /**
  * Returns the absolute path to the git repository root, or null if not in a repo.
- * Result is cached for the lifetime of the MCP server process.
+ * Result is cached per-cwd for the lifetime of the MCP server process.
+ * @param {string} [cwd] - Working directory to resolve from (e.g. worktree path).
  */
-export function resolveGitRoot() {
-  if (_cached !== null) return _cached || null;
+export function resolveGitRoot(cwd) {
+  const key = cwd || "";
+  if (_cache.has(key)) return _cache.get(key) || null;
   try {
-    const raw = execSync("git rev-parse --show-toplevel", {
-      encoding: "utf8",
-      timeout: 5000,
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
-    _cached = resolve(raw);
-    return _cached;
+    const opts = { encoding: "utf8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] };
+    if (cwd) opts.cwd = cwd;
+    const raw = execSync("git rev-parse --show-toplevel", opts).trim();
+    const resolved = resolve(raw);
+    _cache.set(key, resolved);
+    return resolved;
   } catch {
-    _cached = ""; // mark as resolved (no git root)
+    _cache.set(key, ""); // mark as resolved (no git root)
     return null;
   }
 }

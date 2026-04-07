@@ -43,11 +43,22 @@ function getWorktreeBranches(dir) {
   return branches;
 }
 
+/**
+ * Detect whether `dir` is a linked worktree (not the main working tree).
+ */
+function isLinkedWorktree(dir) {
+  const gitDir = run('git rev-parse --git-dir', dir);
+  const commonDir = run('git rev-parse --git-common-dir', dir);
+  if (!gitDir || !commonDir) return false;
+  return path.resolve(dir, gitDir) !== path.resolve(dir, commonDir);
+}
+
 function checkRepo(dir) {
   const issues = [];
+  const inWorktree = isLinkedWorktree(dir);
   const worktreeBranches = getWorktreeBranches(dir);
 
-  // Uncommitted files (only on current branch, not affected by worktrees)
+  // Uncommitted files (scoped to this worktree automatically by git)
   const status = run('git status --porcelain', dir);
   if (status) {
     const lines = status.split('\n').filter(Boolean);
@@ -58,36 +69,52 @@ function checkRepo(dir) {
     });
   }
 
-  // Unpushed commits — exclude active worktree branches
-  const unpushed = run('git log --branches --not --remotes --oneline --decorate', dir);
+  // Unpushed commits
+  // In a linked worktree: only check the current branch (HEAD), not --branches.
+  // --branches is repo-wide and shows all local branches' unpushed commits,
+  // which are irrelevant noise in a worktree context.
+  const logTarget = inWorktree ? 'HEAD' : '--branches';
+  const unpushed = run(`git log ${logTarget} --not --remotes --oneline --decorate`, dir);
   if (unpushed) {
     const lines = unpushed.split('\n').filter(Boolean);
-    const staleLines = lines.filter(line => {
-      // Lines look like: abc1234 (branch-name) message  or  abc1234 message
-      const branchMatch = line.match(/\(([^)]+)\)/);
-      if (!branchMatch) return true; // no decoration — include it
-      const refs = branchMatch[1].split(',').map(r => r.trim().replace(/^HEAD -> /, ''));
-      // Exclude if ALL refs belong to active worktrees
-      return !refs.every(ref => worktreeBranches.has(ref));
-    });
-    if (staleLines.length > 0) {
-      issues.push({
-        type: 'unpushed',
-        count: staleLines.length,
-        label: `${staleLines.length} unpushed commit(s)`,
+    if (inWorktree) {
+      // In a worktree all returned commits belong to the current branch
+      if (lines.length > 0) {
+        issues.push({
+          type: 'unpushed',
+          count: lines.length,
+          label: `${lines.length} unpushed commit(s)`,
+        });
+      }
+    } else {
+      // In main working tree: exclude active worktree branches as before
+      const staleLines = lines.filter(line => {
+        const branchMatch = line.match(/\(([^)]+)\)/);
+        if (!branchMatch) return true;
+        const refs = branchMatch[1].split(',').map(r => r.trim().replace(/^HEAD -> /, ''));
+        return !refs.every(ref => worktreeBranches.has(ref));
       });
+      if (staleLines.length > 0) {
+        issues.push({
+          type: 'unpushed',
+          count: staleLines.length,
+          label: `${staleLines.length} unpushed commit(s)`,
+        });
+      }
     }
   }
 
-  // Stashes
-  const stashes = run('git stash list', dir);
-  if (stashes) {
-    const lines = stashes.split('\n').filter(Boolean);
-    issues.push({
-      type: 'stash',
-      count: lines.length,
-      label: `${lines.length} stash entr${lines.length === 1 ? 'y' : 'ies'}`,
-    });
+  // Stashes — repo-wide, skip in worktree context (not actionable there)
+  if (!inWorktree) {
+    const stashes = run('git stash list', dir);
+    if (stashes) {
+      const lines = stashes.split('\n').filter(Boolean);
+      issues.push({
+        type: 'stash',
+        count: lines.length,
+        label: `${lines.length} stash entr${lines.length === 1 ? 'y' : 'ies'}`,
+      });
+    }
   }
 
   return issues;

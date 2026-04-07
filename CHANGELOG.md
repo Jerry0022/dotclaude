@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.29.2] — 2026-04-07
+
+### Fixed
+
+- **ship** — all MCP ship tools (preflight, release, cleanup, version-bump) now accept `cwd` parameter for correct worktree operation; previously used MCP server's `process.cwd()` which pointed to the main repo, not the active worktree
+- **ship** — `resolve-root.js` uses per-cwd cache instead of global singleton that returned stale paths in worktree context
+- **hooks** — session-start git check (`ss.git.check.js`) now detects linked worktrees: only checks current branch's unpushed commits (not all `--branches`) and skips repo-global stashes
+
 ## [0.29.1] — 2026-04-07
 
 ### Fixed

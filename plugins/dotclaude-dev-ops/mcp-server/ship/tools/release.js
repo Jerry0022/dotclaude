@@ -16,33 +16,31 @@ export const schema = z.object({
   releaseNotes: z.string().nullable().default(null).describe("GitHub release notes (CHANGELOG mirror) — ignored for intermediate merges"),
   prerelease: z.boolean().default(false).describe("Mark as pre-release (for 0.x versions)"),
   commitMessage: z.string().nullable().default(null).describe("If set, stage all and commit with this message before pushing"),
+  cwd: z.string().optional().describe("Working directory override (e.g. worktree path). Falls back to process.cwd()."),
 });
 
 export async function handler(params) {
   const { base, title, body, tag, releaseNotes, prerelease, commitMessage } = params;
-  const cwd = process.cwd();
-  const branch = currentBranch();
+  const cwd = params.cwd || process.cwd();
+  const opts = { cwd };
+  const branch = currentBranch(opts);
   const intermediate = base !== "main";
   const result = { branch, base, intermediate };
 
   try {
     // Optional: commit version-bumped files
     if (commitMessage) {
-      // Stage only tracked modified files (version bump files, CHANGELOG, etc.)
-      // Do NOT use `git add -A` to avoid accidentally staging untracked build output
-      // or sensitive files created between build and release steps.
-      const state = dirtyState();
+      const state = dirtyState(opts);
       if (state.modified.length > 0) {
         for (const file of state.modified) {
-          git(`add -- ${file}`);
+          git(`add -- ${file}`, opts);
         }
       }
       if (state.untracked.length > 0) {
-        // Only stage untracked files that match known version/changelog patterns
         const safePatterns = ["CHANGELOG.md", "changelog.md"];
         for (const file of state.untracked) {
           if (safePatterns.some(p => file.endsWith(p))) {
-            git(`add -- ${file}`);
+            git(`add -- ${file}`, opts);
           }
         }
         const skipped = state.untracked.filter(f => !safePatterns.some(p => f.endsWith(p)));
@@ -56,10 +54,9 @@ export async function handler(params) {
         timeout: 15_000,
         stdio: ["pipe", "pipe", "pipe"],
       });
-      result.commit = headShort();
+      result.commit = headShort(opts);
     } else {
-      // Guard: abort if there are staged or modified files that would be left behind
-      const state = dirtyState();
+      const state = dirtyState(opts);
       if (state.dirty) {
         throw new Error(
           `Uncommitted changes detected but no commitMessage provided. ` +
@@ -67,53 +64,51 @@ export async function handler(params) {
           `Pass commitMessage to include them, or commit/stash before shipping.`
         );
       }
-      result.commit = headShort();
+      result.commit = headShort(opts);
     }
 
     // Push (use longer timeout for large repos / slow networks)
-    gitStrict(`push -u origin ${branch}`, { timeout: 60_000 });
+    gitStrict(`push -u origin ${branch}`, { cwd, timeout: 60_000 });
     result.pushed = true;
 
     // Check for existing open PR before creating a new one
-    const existingPR = findExistingPR({ base, head: branch });
+    const existingPR = findExistingPR({ base, head: branch }, opts);
     let pr;
     if (existingPR) {
       pr = existingPR;
       result.prReused = true;
     } else {
-      pr = createPR({ title, body, base, head: branch });
+      pr = createPR({ title, body, base, head: branch }, opts);
     }
     result.pr = { number: pr.number, url: pr.url, title };
 
     // Merge PR (squash + delete branch)
-    gitStrict(`fetch origin ${base}`);
-    const mergeSha = mergePR(pr.number, base);
+    gitStrict(`fetch origin ${base}`, opts);
+    const mergeSha = mergePR(pr.number, base, opts);
     result.merged = base;
     result.mergeSha = mergeSha;
 
     // Sync local base branch
-    gitStrict(`checkout ${base}`);
-    gitStrict(`pull origin ${base}`);
+    gitStrict(`checkout ${base}`, opts);
+    gitStrict(`pull origin ${base}`, opts);
 
     // Tag + Release (only for final merges to main, skip for intermediate)
-    // Tag/release failures are non-fatal — the merge already landed on GitHub.
     if (!intermediate && tag) {
       try {
-        // Check if tag already exists before creating
-        const localTag = git(`tag -l ${tag}`);
+        const localTag = git(`tag -l ${tag}`, opts);
         if (localTag) {
           result.tagWarning = `Tag ${tag} already exists locally — skipping creation`;
         } else {
-          gitStrict(`tag ${tag}`);
+          gitStrict(`tag ${tag}`, opts);
         }
 
-        const remoteTag = git(`ls-remote --tags origin ${tag}`);
+        const remoteTag = git(`ls-remote --tags origin ${tag}`, opts);
         if (remoteTag && remoteTag.includes(tag)) {
           result.tagWarning = (result.tagWarning || "") + ` Tag ${tag} already exists on remote.`;
           result.tagVerified = true;
         } else {
-          gitStrict(`push origin ${tag}`);
-          const tagCheck = git(`ls-remote --tags origin ${tag}`);
+          gitStrict(`push origin ${tag}`, opts);
+          const tagCheck = git(`ls-remote --tags origin ${tag}`, opts);
           result.tagVerified = tagCheck !== null && tagCheck.includes(tag);
         }
         result.tag = tag;
@@ -121,13 +116,11 @@ export async function handler(params) {
         result.tag = tag;
         result.tagVerified = false;
         result.tagError = e.message?.slice(0, 200);
-        // Non-fatal: merge already landed, tag can be created manually
       }
 
-      // Create GitHub Release
       if (releaseNotes) {
         try {
-          createRelease({ tag, title: tag, notes: releaseNotes, prerelease });
+          createRelease({ tag, title: tag, notes: releaseNotes, prerelease }, opts);
           result.release = true;
         } catch (e) {
           result.release = false;
