@@ -122,6 +122,17 @@ function parseUsageText(text) {
     }
   }
 
+  // Fallback: when weekly reset is < 24h away, claude.ai shows duration format
+  // ("Zurücksetzung in X Std. Y Min.") instead of day+time format
+  if (weeklyResetMinutes == null) {
+    const weeklyDurationMatch = text.match(
+      /(?:Alle Modelle|All Models)[\s\S]*?(?:Zurücksetzung in|Resets? in)\s+(\d+)\s*(?:Std\.|hr)\.?\s*(\d+)?\s*(?:Min\.|min)?/
+    );
+    if (weeklyDurationMatch) {
+      weeklyResetMinutes = (parseInt(weeklyDurationMatch[1]) || 0) * 60 + (parseInt(weeklyDurationMatch[2]) || 0);
+    }
+  }
+
   return {
     timestamp: new Date().toISOString(),
     session: { pct: pcts[0], resetInMinutes: resetMinutes },

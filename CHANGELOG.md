@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.29.1] — 2026-04-07
+
+### Fixed
+
+- **usage** — weekly reset time showed "0h 0m left" when reset was < 24h away (claude.ai switches from day+time to duration format near reset)
+
 ## [0.29.0] — 2026-04-07
 
 ### Added
