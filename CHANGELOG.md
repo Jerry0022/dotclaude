@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.4] — 2026-04-07
+
+### Fixed
+
+- **readme** — skill count corrected from 15 to 16, added missing `/devops-self-update` to skills table and feature list
+- **github** — updated `Jerry0022/dotclaude` repo About description (was still referencing old plugin name)
+
 ## [0.30.3] — 2026-04-07
 
 ### Fixed
