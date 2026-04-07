@@ -23,9 +23,10 @@ function gh(args, opts = {}) {
  */
 export function createPR({ title, body, base = "main", head }, opts) {
   const cwd = opts?.cwd || process.cwd();
-  const raw = execFileSync(
+  // gh pr create does not support --json; parse URL from stdout instead
+  const url = execFileSync(
     "gh",
-    ["pr", "create", "--title", title, "--body-file", "-", "--base", base, "--head", head, "--json", "number,url"],
+    ["pr", "create", "--title", title, "--body-file", "-", "--base", base, "--head", head],
     {
       cwd,
       encoding: "utf8",
@@ -34,7 +35,9 @@ export function createPR({ title, body, base = "main", head }, opts) {
       stdio: ["pipe", "pipe", "pipe"],
     },
   ).trim();
-  return JSON.parse(raw);
+  const match = url.match(/\/pull\/(\d+)/);
+  const number = match ? parseInt(match[1], 10) : null;
+  return { number, url };
 }
 
 /**
