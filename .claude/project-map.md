@@ -10,7 +10,7 @@
 .github/  (1) — GitHub workflows & config
   workflows/  (1)
 plugins/  (109) — Plugins
-  dotclaude-dev-ops/  (109)
+  devops/  (109)
     .claude-plugin/  (1)
     agents/  (10) — Agent definitions
     deep-knowledge/  (16) — Reference docs

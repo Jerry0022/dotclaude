@@ -47,7 +47,7 @@ jobs:
             fi
             echo ""
             echo "---"
-            echo "Install: \`/plugin marketplace add Jerry0022/dotclaude-dev-ops\`"
+            echo "Install: \`/plugin marketplace add Jerry0022/dotclaude\`"
             echo "RELEASE_EOF"
           } >> $GITHUB_OUTPUT
 

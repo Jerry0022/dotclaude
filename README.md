@@ -1,4 +1,4 @@
-# dotclaude-dev-ops
+# dotclaude
 
 **Version: 0.30.3**
 
@@ -20,7 +20,7 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 Add the plugin via CLI (recommended):
 
 ```bash
-claude plugin add dotclaude-dev-ops@Jerry0022
+claude plugin add devops@Jerry0022
 ```
 
 > **Desktop App:** The marketplace UI shows the marketplace tab but may not list plugins for installation. Use the CLI command above, or see [`INSTALL.md`](INSTALL.md) for manual registration steps.
@@ -30,7 +30,7 @@ Start a new session for hooks to take effect. See [`INSTALL.md`](INSTALL.md) for
 ## Updates
 
 ```bash
-claude plugin update dotclaude-dev-ops@Jerry0022
+claude plugin update devops@Jerry0022
 ```
 
 Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**. Semantic versioning — breaking changes only in major versions.
@@ -203,7 +203,7 @@ See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
 ## Project Structure
 
 ```
-dotclaude-dev-ops/
+devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
 ├── hooks/                         ← 13 hook scripts (JS)
@@ -544,17 +544,17 @@ Claude Code caches plugin marketplace data globally. If `claude plugin update` r
 
 ```bash
 # Windows (Git Bash / WSL)
-rm -rf ~/.claude/plugins/cache/dotclaude-dev-ops
-rm -rf ~/.claude/plugins/marketplaces/dotclaude-dev-ops
+rm -rf ~/.claude/plugins/cache/dotclaude
+rm -rf ~/.claude/plugins/marketplaces/dotclaude
 rm -f ~/.claude/plugins/install-counts-cache.json
 
 # macOS / Linux
-rm -rf ~/.claude/plugins/cache/dotclaude-dev-ops
-rm -rf ~/.claude/plugins/marketplaces/dotclaude-dev-ops
+rm -rf ~/.claude/plugins/cache/dotclaude
+rm -rf ~/.claude/plugins/marketplaces/dotclaude
 rm -f ~/.claude/plugins/install-counts-cache.json
 ```
 
-Then run `claude plugin update dotclaude-dev-ops@Jerry0022` again. Start a new session for changes to take effect.
+Then run `claude plugin update devops@Jerry0022` again. Start a new session for changes to take effect.
 
 ## License
 
