@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.32.0] — 2026-04-07
+
+### Added
+
+- **hooks** — `pre.ship.guard`: PreToolUse hook that blocks `gh pr create`, `gh pr merge`, and `gh api .../pulls/.../merge` via Bash, enforcing all shipping through `/devops-ship`
+
 ## [0.31.1] — 2026-04-07
 
 ### Fixed
