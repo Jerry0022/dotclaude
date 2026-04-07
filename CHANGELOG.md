@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.3] — 2026-04-07
+
+### Fixed
+
+- **usage** — weekly reset timer matched wrong section (per-model instead of weekly) when reset was < 24h away; now collects all duration-style resets and takes the last one (weekly section)
+- **usage** — weekly reset < 1h showed stale value because minutes-only format ("2 Min.") was not supported
+
 ## [0.30.2] — 2026-04-07
 
 ### Fixed

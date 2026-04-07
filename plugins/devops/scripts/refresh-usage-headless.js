@@ -123,13 +123,32 @@ function parseUsageText(text) {
   }
 
   // Fallback: when weekly reset is < 24h away, claude.ai shows duration format
-  // ("Zurücksetzung in X Std. Y Min.") instead of day+time format
+  // ("Zurücksetzung in X Std. Y Min." or just "X Min.") instead of day+time.
+  // The weekly section comes LAST after per-model sections, so we collect all
+  // duration-style resets after "Alle Modelle" and take the last one.
   if (weeklyResetMinutes == null) {
-    const weeklyDurationMatch = text.match(
-      /(?:Alle Modelle|All Models)[\s\S]*?(?:Zurücksetzung in|Resets? in)\s+(\d+)\s*(?:Std\.|hr)\.?\s*(\d+)?\s*(?:Min\.|min)?/
-    );
-    if (weeklyDurationMatch) {
-      weeklyResetMinutes = (parseInt(weeklyDurationMatch[1]) || 0) * 60 + (parseInt(weeklyDurationMatch[2]) || 0);
+    const afterAllModels = text.match(/(?:Alle Modelle|All Models)([\s\S]*)/);
+    if (afterAllModels) {
+      const allDurations = [...afterAllModels[1].matchAll(
+        /(?:Zurücksetzung in|Resets? in)\s+(?:(\d+)\s*(?:Std\.|hr)\.?\s*)?(\d+)\s*(?:Min\.|min)/g
+      )];
+      if (allDurations.length > 0) {
+        const last = allDurations[allDurations.length - 1];
+        weeklyResetMinutes = (parseInt(last[1]) || 0) * 60 + (parseInt(last[2]) || 0);
+      }
+    }
+  }
+  // Fallback: hours-only format ("Zurücksetzung in X Std." without minutes)
+  if (weeklyResetMinutes == null) {
+    const afterAllModels = text.match(/(?:Alle Modelle|All Models)([\s\S]*)/);
+    if (afterAllModels) {
+      const allHoursDurations = [...afterAllModels[1].matchAll(
+        /(?:Zurücksetzung in|Resets? in)\s+(\d+)\s*(?:Std\.|hr)/g
+      )];
+      if (allHoursDurations.length > 0) {
+        const last = allHoursDurations[allHoursDurations.length - 1];
+        weeklyResetMinutes = (parseInt(last[1]) || 0) * 60;
+      }
     }
   }
 
