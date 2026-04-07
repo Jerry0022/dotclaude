@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.30.2] — 2026-04-07
+
+### Fixed
+
+- **agents** — designer agent now enforces existing design systems and style guides as binding by default; deviations require explicit user approval
+
 ## [0.30.1] — 2026-04-07
 
 ### Fixed
