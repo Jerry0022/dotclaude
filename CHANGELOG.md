@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.0] — 2026-04-07
+
+### Added
+
+- **hooks** — `prompt.git.sync` now supports full branch hierarchy: for `feat/auth/login`, merges `main` → `feat` → `feat/auth` into the current branch instead of only `main`
+- **hooks** — `prompt.git.sync` auto-resolves merge conflicts with `--ours` (keeps local changes) before aborting — only aborts when resolution fails
+
 ## [0.29.2] — 2026-04-07
 
 ### Fixed
