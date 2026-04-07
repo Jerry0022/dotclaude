@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.32.1**
+**Version: 0.32.2**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -9,7 +9,7 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 ## Features
 
 - **13 Hooks** — automated guards and triggers across the full session lifecycle
-- **16 Skills** — devops-ship, devops-commit, devops-flow, devops-deep-research, devops-explain, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-livebrief, devops-orchestrate, devops-self-update, autonomous-mode
+- **16 Skills** — devops-ship, devops-commit, devops-flow, devops-deep-research, devops-explain, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-livebrief, devops-orchestrate, devops-self-update, devops-autonomous
 - **10 Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
@@ -136,7 +136,7 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 | `/devops-claude-md-lint` | Explicit | Audit CLAUDE.md files for size, structure, and token efficiency |
 | `/devops-livebrief` | Explicit | Interactive HTML page for analysis, plans, and prototypes |
 | `/devops-orchestrate` | Explicit | Evaluate agents and orchestrate parallel execution |
-| `/autonomous-mode` | Explicit | Fully autonomous agent orchestration while user is AFK |
+| `/devops-autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |
 
 ### Agents (spawned for parallel work)
 

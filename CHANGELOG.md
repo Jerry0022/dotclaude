@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.32.2] — 2026-04-08
+
+### Changed
+
+- **skills** — rename `autonomous-mode` → `devops-autonomous` for consistent `devops-` prefix across all skills
+
 ## [0.32.1] — 2026-04-08
 
 ### Fixed
@@ -90,7 +96,7 @@
 
 ### Added
 
-- **skills** — new `/autonomous-mode` skill: fully autonomous agent orchestration while user is AFK — task intake, permission priming, desktop/background test mode, safety guardrails (no push/ship), structured report with completion card, optional PC shutdown
+- **skills** — new `/devops-autonomous` skill: fully autonomous agent orchestration while user is AFK — task intake, permission priming, desktop/background test mode, safety guardrails (no push/ship), structured report with completion card, optional PC shutdown
 
 ## [0.28.1] — 2026-04-06
 
