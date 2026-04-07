@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.2.0
+ * @version 0.3.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -150,24 +150,48 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
     beforeVersions[name] = getVersion(dir);
   }
 
-  // Pull latest
+  // Pull latest — reset dirty state first to prevent pull failures
   const localHead = run('git rev-parse HEAD', mDir);
-  run('git pull --ff-only origin main 2>&1 || git pull --ff-only origin master 2>&1', mDir);
-  const newHead = run('git rev-parse HEAD', mDir);
+  const pullResult = run('git pull --ff-only origin main 2>&1 || git pull --ff-only origin master 2>&1', mDir);
+  let newHead = run('git rev-parse HEAD', mDir);
+
+  // If pull failed (dirty tree), reset and retry
+  if (localHead === newHead && !pullResult) {
+    run('git checkout -- .', mDir);
+    run('git clean -fd', mDir);
+    run('git pull --ff-only origin main 2>&1 || git pull --ff-only origin master 2>&1', mDir);
+    newHead = run('git rev-parse HEAD', mDir);
+  }
+
   const newSha = newHead.substring(0, 7);
+  const headChanged = localHead !== newHead;
 
-  if (localHead === newHead) continue; // no changes
-
-  // Rebuild cache for plugins that changed version
+  // Rebuild cache for plugins that changed version OR have missing cache
   for (const { name, dir } of pluginDirs) {
     const after = getVersion(dir);
-    if (after && after !== beforeVersions[name]) {
+    if (!after) continue;
+
+    const versionChanged = headChanged && after !== beforeVersions[name];
+
+    // Cache-existence guard: rebuild if registry points to a missing path
+    let cacheMissing = false;
+    try {
+      const registry = JSON.parse(fs.readFileSync(registryFile, 'utf8'));
+      const key = `${name}@${marketplace}`;
+      const entry = registry.plugins[key]?.[0];
+      if (entry && !fs.existsSync(entry.installPath)) {
+        cacheMissing = true;
+      }
+    } catch { /* registry unreadable — rebuild to be safe */ cacheMissing = true; }
+
+    if (versionChanged || cacheMissing) {
       const result = rebuildCache(marketplace, name, dir, after, newSha);
       updated.push({
         name,
         from: beforeVersions[name] || '?',
         to: after,
         verified: result.ok,
+        cacheRepair: cacheMissing && !versionChanged,
         error: result.ok ? null : (result.missing || result.mismatch),
       });
     }
@@ -180,7 +204,8 @@ const lines = ['Plugin updates applied (workaround for claude-code#14061):'];
 lines.push('');
 for (const u of updated) {
   const status = u.verified ? '✓ cache rebuilt' : `⚠ ${u.error}`;
-  lines.push(`- **${u.name}**: ${u.from} → ${u.to} (${status})`);
+  const repair = u.cacheRepair ? ' [cache repair]' : '';
+  lines.push(`- **${u.name}**: ${u.from} → ${u.to} (${status}${repair})`);
 }
 lines.push('');
 
