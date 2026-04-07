@@ -9,7 +9,7 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 ## Features
 
 - **13 Hooks** — automated guards and triggers across the full session lifecycle
-- **15 Skills** — devops-ship, devops-commit, devops-flow, devops-deep-research, devops-explain, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-livebrief, devops-orchestrate, autonomous-mode
+- **16 Skills** — devops-ship, devops-commit, devops-flow, devops-deep-research, devops-explain, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-livebrief, devops-orchestrate, devops-self-update, autonomous-mode
 - **10 Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
@@ -132,6 +132,7 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 | `/devops-refresh-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
 | `/devops-extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
 | `/devops-repo-health` | Explicit | Repository branch hygiene analysis and cleanup |
+| `/devops-self-update` | Explicit | Update the plugin to the latest version from GitHub |
 | `/devops-claude-md-lint` | Explicit | Audit CLAUDE.md files for size, structure, and token efficiency |
 | `/devops-livebrief` | Explicit | Interactive HTML page for analysis, plans, and prototypes |
 | `/devops-orchestrate` | Explicit | Evaluate agents and orchestrate parallel execution |
@@ -207,7 +208,7 @@ devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
 ├── hooks/                         ← 13 hook scripts (JS)
-├── skills/                        ← 15 skill definitions (SKILL.md)
+├── skills/                        ← 16 skill definitions (SKILL.md)
 ├── agents/                        ← 10 agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
