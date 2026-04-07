@@ -18,6 +18,12 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.tokens.guard.js" }
         ],
         "matcher": "Read|Bash|Glob|Grep"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.ship.guard.js" }
+        ],
+        "matcher": "Bash"
       }
     ],
     "PostToolUse": [
