@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.1.0
+ * @version 0.2.0
  * @event SessionStart
  * @plugin devops
- * @description Auto-update plugin marketplace clones and invalidate stale cache.
+ * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
  *   Workaround for anthropics/claude-code#14061 — Desktop never runs git pull
- *   on marketplace clones and never invalidates the plugin cache.
+ *   on marketplace clones and never rebuilds the plugin cache.
+ *   Shares the same update logic as /devops-self-update (see SKILL.md).
  */
 
 require('../lib/plugin-guard');
@@ -18,6 +19,7 @@ const path = require('path');
 const home = process.env.HOME || process.env.USERPROFILE || '';
 const marketplacesDir = path.join(home, '.claude', 'plugins', 'marketplaces');
 const cacheDir = path.join(home, '.claude', 'plugins', 'cache');
+const registryFile = path.join(home, '.claude', 'plugins', 'installed_plugins.json');
 
 function run(cmd, cwd) {
   try {
@@ -35,6 +37,88 @@ function getVersion(dir) {
   } catch {
     return null;
   }
+}
+
+function copyDir(src, dst) {
+  // Use cp -a (archive) to get dotfiles + new directories.
+  // Fallback to manual copy on Windows where cp -a may not work.
+  const result = run(`cp -a "${src}/." "${dst}/"`, path.dirname(src));
+  if (!result && result !== '') {
+    // Verify copy worked by checking a known file
+    if (!fs.existsSync(path.join(dst, '.claude-plugin', 'plugin.json'))) {
+      // Fallback: manual copy
+      run(`cp -r "${src}/"* "${dst}/"`, path.dirname(src));
+      run(`cp -r "${src}/.claude-plugin" "${dst}/"`, path.dirname(src));
+      const mcpSrc = path.join(src, '.mcp.json');
+      if (fs.existsSync(mcpSrc)) {
+        fs.copyFileSync(mcpSrc, path.join(dst, '.mcp.json'));
+      }
+    }
+  }
+}
+
+function rebuildCache(marketplace, pluginName, pluginDir, version, sha) {
+  const pluginCache = path.join(cacheDir, marketplace, pluginName);
+
+  // Clean ALL old version dirs
+  if (fs.existsSync(pluginCache)) {
+    fs.rmSync(pluginCache, { recursive: true, force: true });
+  }
+
+  // Create new cache dir
+  const newCache = path.join(pluginCache, version);
+  fs.mkdirSync(newCache, { recursive: true });
+
+  // Copy all files (archive mode for dotfiles)
+  copyDir(pluginDir, newCache);
+
+  // Verify cache completeness
+  const checks = [
+    path.join(newCache, '.claude-plugin', 'plugin.json'),
+    path.join(newCache, 'skills'),
+    path.join(newCache, 'hooks'),
+  ];
+  for (const check of checks) {
+    if (!fs.existsSync(check)) {
+      return { ok: false, missing: check };
+    }
+  }
+
+  // Verify version alignment
+  const cachedVersion = getVersion(newCache);
+  if (cachedVersion !== version) {
+    return { ok: false, mismatch: `marketplace=${version} cache=${cachedVersion}` };
+  }
+
+  // Update registry
+  try {
+    const registry = JSON.parse(fs.readFileSync(registryFile, 'utf8'));
+    const key = `${pluginName}@${marketplace}`;
+
+    if (registry.plugins[key]) {
+      const entry = registry.plugins[key][0];
+      entry.installPath = newCache.replace(/\//g, path.sep);
+      entry.version = version;
+      entry.lastUpdated = new Date().toISOString();
+      entry.gitCommitSha = sha;
+    } else {
+      // New install — create entry
+      registry.plugins[key] = [{
+        scope: 'user',
+        installPath: newCache.replace(/\//g, path.sep),
+        version,
+        installedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+        gitCommitSha: sha,
+      }];
+    }
+
+    fs.writeFileSync(registryFile, JSON.stringify(registry, null, 2) + '\n');
+  } catch {
+    // Registry update failed — non-fatal, plugin still works from marketplace dir
+  }
+
+  return { ok: true };
 }
 
 if (!fs.existsSync(marketplacesDir)) process.exit(0);
@@ -70,19 +154,22 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
   const localHead = run('git rev-parse HEAD', mDir);
   run('git pull --ff-only origin main 2>&1 || git pull --ff-only origin master 2>&1', mDir);
   const newHead = run('git rev-parse HEAD', mDir);
+  const newSha = newHead.substring(0, 7);
 
   if (localHead === newHead) continue; // no changes
 
-  // Check which plugins changed version
+  // Rebuild cache for plugins that changed version
   for (const { name, dir } of pluginDirs) {
     const after = getVersion(dir);
     if (after && after !== beforeVersions[name]) {
-      // Invalidate cache for this plugin
-      const pluginCache = path.join(cacheDir, marketplace, name);
-      if (fs.existsSync(pluginCache)) {
-        fs.rmSync(pluginCache, { recursive: true, force: true });
-      }
-      updated.push({ name, from: beforeVersions[name] || '?', to: after });
+      const result = rebuildCache(marketplace, name, dir, after, newSha);
+      updated.push({
+        name,
+        from: beforeVersions[name] || '?',
+        to: after,
+        verified: result.ok,
+        error: result.ok ? null : (result.missing || result.mismatch),
+      });
     }
   }
 }
@@ -92,7 +179,8 @@ if (updated.length === 0) process.exit(0);
 const lines = ['Plugin updates applied (workaround for claude-code#14061):'];
 lines.push('');
 for (const u of updated) {
-  lines.push(`- **${u.name}**: ${u.from} → ${u.to} (cache invalidated)`);
+  const status = u.verified ? '✓ cache rebuilt' : `⚠ ${u.error}`;
+  lines.push(`- **${u.name}**: ${u.from} → ${u.to} (${status})`);
 }
 lines.push('');
 
