@@ -1,5 +1,5 @@
 ---
-name: autonomous-mode
+name: devops-autonomous
 version: 0.1.0
 description: >-
   Activate fully autonomous agent orchestration for when the user is leaving
@@ -7,11 +7,11 @@ description: >-
   (implementation, computer-use desktop interaction, live browser/app testing).
   Delivers a structured report and completion card when done.
   Optionally shuts down the PC after completion.
-  Triggers on: "autonomous mode", "autonomer modus", "ich geh kurz weg",
-  "mach das alleine", "run this while I'm away", "autonom weiter",
-  "ich bin gleich weg", "afk mode", "unattended mode", "mach weiter ohne mich",
-  "autopilot". Do NOT trigger for normal orchestration where the user stays
-  present — use /devops-orchestrate instead.
+  Triggers on: "devops-autonomous", "autonomous", "autonomer modus",
+  "ich geh kurz weg", "mach das alleine", "run this while I'm away",
+  "autonom weiter", "ich bin gleich weg", "afk mode", "unattended mode",
+  "mach weiter ohne mich", "autopilot". Do NOT trigger for normal orchestration
+  where the user stays present — use /devops-orchestrate instead.
 argument-hint: "[optional: task description]"
 allowed-tools: >-
   Bash(*), Read, Write, Edit, Glob, Grep, Agent,
@@ -25,15 +25,15 @@ allowed-tools: >-
   mcp__plugin_devops_dotclaude-issues__*
 ---
 
-# Autonomous Mode
+# Devops Autonomous
 
 User is leaving the PC. Collect the task, prime permissions, confirm, then work independently.
 
 ## Step 0 — Load Extensions
 
 Silently check (do not surface "not found"):
-1. `~/.claude/skills/autonomous-mode/SKILL.md` + `reference.md`
-2. `{project}/.claude/skills/autonomous-mode/SKILL.md` + `reference.md`
+1. `~/.claude/skills/devops-autonomous/SKILL.md` + `reference.md`
+2. `{project}/.claude/skills/devops-autonomous/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Task Intake
@@ -110,7 +110,7 @@ to open the app, screenshot key flows, verify visually. Track progress via TodoW
 Save `AUTONOMOUS-REPORT.md` to project root:
 
 ```markdown
-# Autonomous Mode Report
+# Autonomous Report
 **Task**: {goal} | **Status**: COMPLETED | PARTIAL | BLOCKED
 **Duration**: {time} | **Branch**: {branch}
 
@@ -135,6 +135,6 @@ Card is the last visible output.
 
 Only if user chose "Ja" AND status is COMPLETED:
 ```bash
-shutdown /s /t 60 /c "Autonomous mode completed. Shutting down in 60s. Run 'shutdown /a' to abort."
+shutdown /s /t 60 /c "Autonomous task completed. Shutting down in 60s. Run 'shutdown /a' to abort."
 ```
 If BLOCKED or PARTIAL: skip shutdown — user must intervene.
