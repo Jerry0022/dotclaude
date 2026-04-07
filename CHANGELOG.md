@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.32.1] — 2026-04-08
+
+### Fixed
+
+- **hooks** — `ss.plugin.update` v0.3.0: recover from dirty marketplace clone (reset + retry pull) and rebuild cache when registry points to missing path (`[cache repair]`)
+
 ## [0.32.0] — 2026-04-07
 
 ### Added
