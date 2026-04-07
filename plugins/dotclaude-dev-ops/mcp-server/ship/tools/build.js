@@ -1,11 +1,14 @@
 /**
  * @tool ship_build
- * @description Build project, run lint/tests, compute build-ID.
+ * @description Build project, run lint/tests, compute build-ID. Auto-detects
+ * available scripts from package.json (build, lint, test) — only runs what
+ * exists. Explicit params override auto-detection. Use buildIdOnly=true to
+ * skip all commands and only hash.
  */
 
 import { z } from "zod";
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,12 +19,32 @@ const DK_INDEX_SCRIPT = join(PLUGIN_ROOT, "scripts", "gen-dk-index.js");
 const PROJECT_MAP_SCRIPT = join(PLUGIN_ROOT, "scripts", "gen-project-map.js");
 
 export const schema = z.object({
-  buildCmd: z.string().default("npm run build").describe("Build command to run"),
-  lintCmd: z.string().nullable().default("npm run lint").describe("Lint command (null to skip)"),
-  testCmd: z.string().nullable().default(null).describe("Test command (null to skip)"),
+  buildCmd: z.string().nullable().default(null).describe("Build command (null = auto-detect from package.json)"),
+  lintCmd: z.string().nullable().default(null).describe("Lint command (null = auto-detect from package.json)"),
+  testCmd: z.string().nullable().default(null).describe("Test command (null = auto-detect from package.json)"),
   buildIdOnly: z.boolean().default(false).describe("Skip build, only compute build-ID"),
   cwd: z.string().optional().describe("Working directory override (e.g. worktree path). Falls back to process.cwd()."),
 });
+
+/**
+ * Read package.json scripts and return commands for available scripts.
+ * Only returns a command if the script actually exists in package.json.
+ */
+function detectScripts(cwd) {
+  const pkgPath = join(cwd, "package.json");
+  if (!existsSync(pkgPath)) return { build: null, lint: null, test: null };
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    const s = pkg.scripts || {};
+    return {
+      build: s.build ? "npm run build" : null,
+      lint: s.lint ? "npm run lint" : null,
+      test: s.test ? "npm run test" : null,
+    };
+  } catch {
+    return { build: null, lint: null, test: null };
+  }
+}
 
 function run(cmd, cwd) {
   try {
@@ -51,11 +74,17 @@ function getBuildId(cwd) {
 
 export async function handler(params) {
   const cwd = params.cwd || process.cwd();
-  const { buildCmd, lintCmd, testCmd, buildIdOnly } = params;
+  const { buildIdOnly } = params;
 
   if (buildIdOnly) {
     return { success: true, buildId: getBuildId(cwd), skipped: true };
   }
+
+  // Auto-detect available scripts, then let explicit params override
+  const detected = detectScripts(cwd);
+  const buildCmd = params.buildCmd ?? detected.build;
+  const lintCmd = params.lintCmd ?? detected.lint;
+  const testCmd = params.testCmd ?? detected.test;
 
   const steps = [];
 
@@ -70,14 +99,16 @@ export async function handler(params) {
   // 3. Project map (full codebase index)
   run(`"${process.execPath}" "${PROJECT_MAP_SCRIPT}" "${cwd}"`, cwd);
 
-  // Build
-  const buildResult = run(buildCmd, cwd);
-  steps.push({ step: "build", cmd: buildCmd, ...buildResult });
-  if (!buildResult.success) {
-    return { success: false, buildId: null, steps, failedAt: "build" };
+  // Build (skip if no build script detected/provided)
+  if (buildCmd) {
+    const buildResult = run(buildCmd, cwd);
+    steps.push({ step: "build", cmd: buildCmd, ...buildResult });
+    if (!buildResult.success) {
+      return { success: false, buildId: null, steps, failedAt: "build" };
+    }
   }
 
-  // Lint (optional)
+  // Lint
   if (lintCmd) {
     const lintResult = run(lintCmd, cwd);
     steps.push({ step: "lint", cmd: lintCmd, ...lintResult });
@@ -86,7 +117,7 @@ export async function handler(params) {
     }
   }
 
-  // Tests (optional)
+  // Tests
   if (testCmd) {
     const testResult = run(testCmd, cwd);
     steps.push({ step: "test", cmd: testCmd, ...testResult });
@@ -98,5 +129,5 @@ export async function handler(params) {
   // Build-ID
   const buildId = getBuildId(cwd);
 
-  return { success: true, buildId, steps };
+  return { success: true, buildId, steps, detected: { build: !!buildCmd, lint: !!lintCmd, test: !!testCmd } };
 }

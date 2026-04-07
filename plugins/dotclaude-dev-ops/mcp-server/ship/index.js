@@ -61,6 +61,7 @@ registerTool(
   "ship_build",
   "Ship Build",
   "Build the project, run lint and tests, compute build-ID. " +
+  "Auto-detects available scripts from package.json — only runs what exists. " +
   "Returns success/failure with step details. Use buildIdOnly=true to skip build and only hash.",
   buildSchema,
   buildHandler,
