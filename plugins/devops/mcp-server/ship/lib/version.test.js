@@ -56,12 +56,29 @@ describe("detectProjectType", () => {
     expect(detectProjectType("/test")).toBe("plugin");
   });
 
-  test("returns 'npm' when only package.json exists", () => {
+  test("returns 'npm' when package.json has version field", () => {
     readFileSync.mockImplementation((p) => {
-      if (String(p).includes("package.json")) return "{}";
+      if (String(p).includes("package.json")) return JSON.stringify({ version: "1.0.0" });
       throw new Error("ENOENT");
     });
     expect(detectProjectType("/test")).toBe("npm");
+  });
+
+  test("falls through to marketplace when package.json has no version", () => {
+    readFileSync.mockImplementation((p) => {
+      if (String(p).includes("package.json")) return JSON.stringify({ name: "foo" });
+      if (String(p).includes("marketplace.json")) return "{}";
+      throw new Error("ENOENT");
+    });
+    expect(detectProjectType("/test")).toBe("marketplace");
+  });
+
+  test("returns null when package.json has no version and no marketplace", () => {
+    readFileSync.mockImplementation((p) => {
+      if (String(p).includes("package.json")) return JSON.stringify({ name: "foo" });
+      throw new Error("ENOENT");
+    });
+    expect(detectProjectType("/test")).toBeNull();
   });
 
   test("returns 'marketplace' when only marketplace.json exists", () => {

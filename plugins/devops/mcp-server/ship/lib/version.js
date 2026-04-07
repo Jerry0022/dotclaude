@@ -18,15 +18,14 @@ export function detectProjectType(cwd = process.cwd()) {
     return "plugin";
   } catch {
     try {
-      readFileSync(join(cwd, "package.json"), "utf8");
-      return "npm";
+      const pkg = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8"));
+      if (pkg.version) return "npm";
+    } catch { /* skip */ }
+    try {
+      readFileSync(join(cwd, ".claude-plugin", "marketplace.json"), "utf8");
+      return "marketplace";
     } catch {
-      try {
-        readFileSync(join(cwd, ".claude-plugin", "marketplace.json"), "utf8");
-        return "marketplace";
-      } catch {
-        return null;
-      }
+      return null;
     }
   }
 }
