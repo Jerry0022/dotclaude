@@ -162,6 +162,17 @@ The Feature agent orchestrates shipping one sub-branch at a time:
 This prevents merge conflicts from concurrent PRs targeting the same feature branch.
 Parallel **work** within a wave is fine — only the **shipping** must be sequential.
 
+## Issue Creation as Team Refinement
+
+Creating an issue is a refinement session, not a solo task. All relevant roles participate:
+
+1. `po` — drafts scope, user story, acceptance criteria
+2. Domain roles — add technical notes, flag assumptions, identify risks
+3. UX/user role (if applicable) — validates user story from the end-user perspective, challenges vague AC
+4. `qa` — defines testability: what does "done" look like?
+
+All happens within the single `/devops-new-issue` execution.
+
 ## Rules
 
 - **Never skip a wave.** Core must commit contracts before Frontend starts.

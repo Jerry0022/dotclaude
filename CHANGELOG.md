@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.30.5] — 2026-04-07
+
+### Added
+
+- **agents** — "Issue Creation as Team Refinement" pattern added to `agent-collaboration.md`: creating an issue is a structured refinement session across all relevant roles (po → domain roles → UX/user role → qa)
+
+## [0.30.4] — 2026-04-07
+
+### Fixed
+
+- **readme** — skill count corrected from 15 to 16, added missing `/devops-self-update` to skills table and feature list
+- **github** — updated `Jerry0022/dotclaude` repo About description (was still referencing old plugin name)
+
+## [0.30.3] — 2026-04-07
+
+### Fixed
+
+- **usage** — weekly reset timer matched wrong section (per-model instead of weekly) when reset was < 24h away; now collects all duration-style resets and takes the last one (weekly section)
+- **usage** — weekly reset < 1h showed stale value because minutes-only format ("2 Min.") was not supported
+
+## [0.30.2] — 2026-04-07
+
+### Fixed
+
+- **agents** — designer agent now enforces existing design systems and style guides as binding by default; deviations require explicit user approval
+
 ## [0.30.1] — 2026-04-07
 
 ### Fixed

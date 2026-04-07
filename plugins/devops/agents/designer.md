@@ -107,6 +107,7 @@ DESIGN_RESULT:
 
 ## Rules
 
+- **Existing design systems and style guides are binding.** If the project has a design system, component library, Figma library, style guide, or established design tokens, they MUST be treated as the authoritative source of truth. All new work MUST conform to them — colors, typography, spacing, components, patterns. Deviate ONLY when the user explicitly approves a departure. At the start of every task, run `search_design_system` and check the project for existing token files, style guides, or component libraries.
 - Always start with user flow before visual design (understand the journey first)
 - Never skip edge cases — empty, error, and loading states are not optional
 - Design tokens go in code, not just Figma — they ARE the source of truth

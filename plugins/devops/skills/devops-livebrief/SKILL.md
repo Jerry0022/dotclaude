@@ -130,14 +130,15 @@ If Edge is not running, launch it with the file.
 
 ```bash
 # Windows — opens as new tab in running Edge, or launches Edge
-start msedge "{filepath}"
+start "" msedge "{filepath}"
 ```
 
 On macOS: `open -a "Microsoft Edge" "{filepath}"`, on Linux: `microsoft-edge "{filepath}"`.
 
 **Important:** Always target Edge specifically — never use the system default
-browser or Chrome. The `start msedge` command reuses the running Edge instance
-and adds a tab (no new window).
+browser or Chrome. The `start "" msedge` command reuses the running Edge instance
+and adds a tab (no new window). The empty `""` is required on Windows — without
+it, `cmd.exe` interprets the first quoted argument as a window title.
 
 After opening, inform the user:
 
