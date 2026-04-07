@@ -513,6 +513,7 @@ server.registerTool(
       summary: z.string().max(80).describe("Max ~10 words, user's language"),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
       cwd: z.string().optional().describe("Working directory for build-ID computation (e.g. worktree path). Falls back to git toplevel if omitted."),
+      buildId: z.string().optional().describe("Pre-computed build-ID (from ship_build). If provided, skips internal computation. Use this when the worktree/branch state may have changed after building (e.g. post-merge)."),
       session_id: z.string().optional().describe("Session ID for flag writing"),
       changes: z.array(z.object({
         area: z.string(),
@@ -556,8 +557,8 @@ server.registerTool(
     // 2. Render usage meter for card (with deltas + code fences)
     const meterText = renderUsageMeterForCard(usageData, delta5h, deltaWk);
 
-    // 3. Compute build-ID (use caller-supplied cwd for worktree support)
-    const buildId = getBuildId(params.cwd);
+    // 3. Use pre-computed build-ID if provided, otherwise compute from cwd
+    const buildId = params.buildId || getBuildId(params.cwd);
 
     // 4. Render the full card
     const cardMarkdown = renderCard(params, meterText, buildId);

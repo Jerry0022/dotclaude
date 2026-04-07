@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.30.1] — 2026-04-07
+
+### Fixed
+
+- **completion** — `render_completion_card` now accepts optional `buildId` parameter, fixing `0000000` fallback when worktree state changes between `ship_build` and card render (post-merge)
+
 ## [0.30.0] — 2026-04-07
 
 ### Added

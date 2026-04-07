@@ -203,6 +203,7 @@ render_completion_card({
   variant: "shipped",
   summary: "<~10 words, user's language>",
   lang: "de",
+  buildId: <from ship_build.buildId>,
   changes: [<from ship_build/devops-ship_version_bump results>],
   tests: [<from ship_build results>],
   state: {
