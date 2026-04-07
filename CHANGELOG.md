@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.33.1] — 2026-04-08
+
+### Fixed
+
+- **ship** — `detectProjectType` now validates `package.json` has a `version` field before claiming npm type; falls through to marketplace.json detection for repos with versionless package.json (fixes `ship_version_bump` returning "No version file found")
+- **ship** — `gh pr create` no longer uses unsupported `--json` flag; parses PR URL from stdout instead (v0.32.1)
+- **hooks** — `ss.plugin.update` v0.3.0: recovers from dirty marketplace clones (reset + retry pull) and rebuilds cache when registry points to missing path (v0.32.1)
+
 ## [0.33.0] — 2026-04-08
 
 ### Added
