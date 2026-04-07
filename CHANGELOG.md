@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.32.2] — 2026-04-08
+
+### Changed
+
+- **skills** — rename `autonomous-mode` → `devops-autonomous` for consistent `devops-` prefix across all skills
+
 ## [0.32.1] — 2026-04-08
 
 ### Fixed
