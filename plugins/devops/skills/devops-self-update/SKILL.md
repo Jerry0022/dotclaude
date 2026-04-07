@@ -1,88 +1,126 @@
 ---
 name: devops-self-update
-version: 0.1.0
+version: 0.3.0
 description: >-
-  Update the devops plugin to the latest version from GitHub.
-  Pulls from origin/main, syncs the cache, and updates installed_plugins.json.
-  Use when the Desktop App update mechanism doesn't work correctly.
+  Manually update the devops plugin to the latest version from GitHub.
+  Delegates to the ss.plugin.update hook for pull + cache rebuild + registry,
+  then adds changelog and verification report on top.
   Triggers on: "update plugin", "plugin updaten", "self update",
   "devops update", "plugin aktualisieren", "neue version installieren".
   Do NOT trigger automatically — only on explicit user request.
-allowed-tools: Bash(git *), Bash(cp *), Bash(mkdir *), Bash(rm *), Bash(node *), Read, Write, Edit, Glob
+allowed-tools: Bash(git *), Bash(node *), Read, Glob
 ---
 
 # Self-Update Plugin
 
-Update devops to the latest version from GitHub.
+Manually trigger a plugin update with user-facing reporting.
+
+## Architecture
+
+The actual update logic lives in `ss.plugin.update.js` (SessionStart hook).
+This skill is a thin wrapper that:
+
+1. Captures the current state (version, SHA)
+2. Runs the hook's JS code (pull + cache rebuild + registry update + verify)
+3. Reports what changed (changelog, verify status)
+
+**No duplicated logic.** The hook is the single source of truth for the
+update mechanism. This skill only adds reporting.
 
 ## Constants
 
 ```
+PLUGIN_ROOT = ${CLAUDE_PLUGIN_ROOT} (from hook environment)
 MARKETPLACE_DIR = ~/.claude/plugins/marketplaces/dotclaude
-PLUGIN_SUBDIR   = plugins/devops
-CACHE_BASE      = ~/.claude/plugins/cache/dotclaude/devops
-REGISTRY_FILE   = ~/.claude/plugins/installed_plugins.json
-PLUGIN_KEY      = devops@dotclaude
+PLUGIN_SUBDIR = plugins/devops
+HOOK_SCRIPT = ${PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js
 ```
 
-## Step 0 — Pre-flight
+## Step 0 — Capture current state
 
-1. Verify `MARKETPLACE_DIR` exists and is a git repo
-2. Read current version from `MARKETPLACE_DIR/PLUGIN_SUBDIR/.claude-plugin/plugin.json`
-3. Read current git SHA: `git -C MARKETPLACE_DIR rev-parse --short HEAD`
-4. Report: `Currently installed: v{version} ({sha})`
+1. Read current version from `MARKETPLACE_DIR/PLUGIN_SUBDIR/.claude-plugin/plugin.json`
+2. Read current git SHA: `git -C MARKETPLACE_DIR rev-parse --short HEAD`
+3. Report: `Currently installed: v{version} ({sha})`
 
-## Step 1 — Pull latest
+## Step 1 — Run update hook
 
-1. Check for local changes in `MARKETPLACE_DIR`:
-   ```bash
-   git -C MARKETPLACE_DIR status --porcelain
-   ```
-2. If dirty: stash changes with `git -C MARKETPLACE_DIR stash push -m "devops-self-update auto-stash"`
-3. Pull latest:
-   ```bash
-   git -C MARKETPLACE_DIR pull --ff-only origin main
-   ```
-4. If pull fails (diverged history): abort, pop stash if needed, report error
-5. Read NEW version from `MARKETPLACE_DIR/PLUGIN_SUBDIR/.claude-plugin/plugin.json`
-6. Read NEW git SHA: `git -C MARKETPLACE_DIR rev-parse --short HEAD`
-7. If version unchanged AND SHA unchanged: report "Already up to date", pop stash, stop
-8. Show changelog: `git -C MARKETPLACE_DIR log --oneline {old_sha}..{new_sha}`
+Execute the hook script directly:
 
-## Step 2 — Sync cache
+```bash
+node HOOK_SCRIPT
+```
 
-1. Create cache directory: `mkdir -p CACHE_BASE/{new_version}`
-2. Remove old cache contents if target dir exists:
-   ```bash
-   rm -rf CACHE_BASE/{new_version}/*
-   ```
-3. Copy plugin files to cache:
-   ```bash
-   cp -r MARKETPLACE_DIR/PLUGIN_SUBDIR/* CACHE_BASE/{new_version}/
-   cp -r MARKETPLACE_DIR/PLUGIN_SUBDIR/.claude-plugin CACHE_BASE/{new_version}/
-   cp    MARKETPLACE_DIR/PLUGIN_SUBDIR/.mcp.json CACHE_BASE/{new_version}/ 2>/dev/null || true
-   ```
+The hook handles:
+- `git pull --ff-only` on all marketplace clones
+- Cache rebuild with `cp -a` (archive mode for dotfiles)
+- `installed_plugins.json` registry update
+- Silent verification (version alignment, cache completeness)
 
-## Step 3 — Update registry
+Capture and display the hook's stdout (update status lines).
 
-1. Read `REGISTRY_FILE`
-2. Update the `PLUGIN_KEY` entry:
-   - `installPath`: `CACHE_BASE/{new_version}` (use OS-native path separators)
-   - `version`: `{new_version}`
-   - `lastUpdated`: current ISO timestamp
-   - `gitCommitSha`: `{new_sha}`
-   - Keep `scope`, `installedAt` unchanged
-3. Write updated JSON back to `REGISTRY_FILE`
+## Step 2 — Changelog
 
-## Step 4 — Cleanup & Report
+Read NEW version and SHA, then show what changed:
 
-1. If stash was applied in Step 1: pop it back with `git -C MARKETPLACE_DIR stash pop`
-2. Report:
-   ```
-   Plugin updated: v{old_version} -> v{new_version}
-   Commits: {count} new commits
-   {changelog}
+```bash
+git -C MARKETPLACE_DIR log --oneline {old_sha}..HEAD
+```
 
-   Restart the session for hooks and MCP tools to take effect.
-   Skills are available immediately.
-   ```
+If no changes: report "Already up to date" and stop.
+
+## Step 3 — Verify & Report
+
+### 3a — Version alignment
+
+Read version from three sources and confirm they match:
+
+| Source | Path |
+|---|---|
+| plugin.json (marketplace) | `MARKETPLACE_DIR/PLUGIN_SUBDIR/.claude-plugin/plugin.json` |
+| plugin.json (cache) | Read `installed_plugins.json` → `installPath` → `.claude-plugin/plugin.json` |
+| installed_plugins.json | `devops@dotclaude` → `version` |
+
+All three must show the same version. If not → report mismatch.
+
+### 3b — Cache completeness
+
+Verify critical paths exist in the cache (path from `installed_plugins.json` → `installPath`):
+
+- `.claude-plugin/plugin.json`
+- `.mcp.json`
+- `skills/` (non-empty)
+- `hooks/` (non-empty)
+
+### 3c — Skill count
+
+Compare skill count between marketplace and cache:
+
+```bash
+ls -d MARKETPLACE_DIR/PLUGIN_SUBDIR/skills/*/ | wc -l
+ls -d CACHE_PATH/skills/*/ | wc -l
+```
+
+### 3d — Report
+
+```
+Plugin updated: v{old_version} → v{new_version}
+Commits: {count} new commits
+{changelog}
+
+Verified: ✓ version aligned, ✓ cache complete, ✓ {skill_count} skills
+Restart the session for hooks and MCP tools to take effect.
+Skills are available immediately.
+```
+
+## Known Issues
+
+- **Desktop App does not auto-rebuild cache** (anthropics/claude-code#14061):
+  The `ss.plugin.update` hook works around this by rebuilding the cache.
+
+- **Cache deleted on restart**: If `installed_plugins.json` points to a
+  non-existent cache directory, the Desktop App may skip the plugin.
+  Step 3 catches this.
+
+- **Plugin key naming**: Marketplace and plugin name must differ
+  (`devops@dotclaude`, not `devops@devops`). Identical names hide the
+  plugin from the Customize UI.
