@@ -15,12 +15,12 @@ export default [
     },
   },
   {
-    files: ["plugins/dotclaude-dev-ops/hooks/**/*.js"],
-    ignores: ["plugins/dotclaude-dev-ops/hooks/session-start/ss.mcp.deps.js"],
+    files: ["plugins/devops/hooks/**/*.js"],
+    ignores: ["plugins/devops/hooks/session-start/ss.mcp.deps.js"],
     languageOptions: { sourceType: "commonjs" },
   },
   {
-    files: ["plugins/dotclaude-dev-ops/mcp-server/**/*.js"],
+    files: ["plugins/devops/mcp-server/**/*.js"],
     languageOptions: { sourceType: "module" },
   },
 ];

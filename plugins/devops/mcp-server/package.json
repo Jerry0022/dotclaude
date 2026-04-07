@@ -1,0 +1,11 @@
+{
+  "name": "dotclaude-mcp-deps",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared dependencies for all devops MCP servers. Installed into CLAUDE_PLUGIN_DATA by SessionStart hook.",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.0"
+  }
+}

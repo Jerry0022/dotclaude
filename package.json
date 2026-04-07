@@ -1,5 +1,5 @@
 {
-  "name": "dotclaude-dev-ops",
+  "name": "dotclaude",
   "private": true,
   "scripts": {
     "test": "vitest run",

@@ -1,0 +1,7 @@
+{
+  "name": "dotclaude-ship-mcp",
+  "version": "0.1.0",
+  "description": "MCP server providing ship pipeline tools for devops. Dependencies managed by parent mcp-server/package.json.",
+  "type": "module",
+  "main": "index.js"
+}
