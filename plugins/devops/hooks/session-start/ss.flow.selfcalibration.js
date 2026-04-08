@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.flow.selfcalibration
- * @version 0.5.0
+ * @version 0.6.0
  * @event SessionStart
  * @plugin devops
  * @deprecated Moved to UserPromptSubmit (prompt.flow.selfcalibration.js).
@@ -18,6 +18,14 @@ const { runOnce } = require('../lib/run-once');
 
 const PLUGIN_DIR  = path.resolve(__dirname, '..', '..');
 const TASKS_DIR   = path.join(PLUGIN_DIR, 'scheduled-tasks');
+
+// Stable base path for glob-based discovery (version-agnostic).
+// The cache may be rebuilt mid-session by ss.plugin.update, which deletes the
+// old versioned dir. Baking __dirname into the cron prompt would point to a
+// deleted path. Instead, we emit a glob pattern so Claude can resolve the
+// latest cache at cron fire time.
+const home = process.env.HOME || process.env.USERPROFILE || '';
+const PLUGIN_GLOB_BASE = path.join(home, '.claude', 'plugins', 'cache').replace(/\\/g, '/');
 
 const TASK_DEFINITIONS = [
   {
@@ -41,7 +49,14 @@ process.stdin.on('end', () => {
   // Once-per-session guard
   if (!runOnce('ss-flow-selfcalibration', sessionId)) process.exit(0);
 
-  // Build compact, high-priority registration instruction
+  // Build compact, high-priority registration instruction.
+  // Paths must survive mid-session cache rebuilds (ss.plugin.update deletes
+  // the old versioned dir). When running from cache, emit a glob with a
+  // wildcard version. When running from repo (dev), use the direct path.
+  const normalizedPluginDir = PLUGIN_DIR.replace(/\\/g, '/');
+  const normalizedCacheBase = PLUGIN_GLOB_BASE;
+  const inCache = normalizedPluginDir.startsWith(normalizedCacheBase + '/');
+
   const tasks = [];
   for (const task of TASK_DEFINITIONS) {
     const skillPath = path.join(TASKS_DIR, task.id, 'SKILL.md');
@@ -50,8 +65,18 @@ process.stdin.on('end', () => {
     } catch {
       continue;
     }
-    const pluginRoot = PLUGIN_DIR.replace(/\\/g, '/');
-    tasks.push({ ...task, skillPath: skillPath.replace(/\\/g, '/'), pluginRoot });
+
+    let skillGlob;
+    if (inCache) {
+      // Cache path: ~/.claude/plugins/cache/{marketplace}/{plugin}/{version}/...
+      const rel = normalizedPluginDir.slice(normalizedCacheBase.length + 1);
+      const parts = rel.split('/'); // ["dotclaude", "devops", "0.35.2"]
+      skillGlob = `${normalizedCacheBase}/${parts[0]}/${parts[1]}/*/scheduled-tasks/${task.id}/SKILL.md`;
+    } else {
+      // Repo / dev path — no cache rebuild risk, use direct path
+      skillGlob = `${normalizedPluginDir}/scheduled-tasks/${task.id}/SKILL.md`;
+    }
+    tasks.push({ ...task, skillGlob });
   }
 
   if (tasks.length === 0) process.exit(0);
@@ -63,8 +88,8 @@ process.stdin.on('end', () => {
 
   for (const t of tasks) {
     lines.push(
-      `Register cron via CronCreate: cron="${t.cron}", recurring=${t.recurring}, prompt="Execute the ${t.id} scheduled task as defined in the plugin. Read the full task definition from: ${t.skillPath} — Plugin root: ${t.pluginRoot}"`,
-      `Then immediately execute it once: read ${t.skillPath} and run Step 0 (Completion Flow Internalization).`,
+      `Register cron via CronCreate: cron="${t.cron}", recurring=${t.recurring}, prompt="Execute the ${t.id} scheduled task as defined in the plugin. Glob for the SKILL.md: ${t.skillGlob} — use the match to derive the plugin root (parent of scheduled-tasks/)."`,
+      `Then immediately execute it once: glob for ${t.skillGlob}, read the result, and run Step 0 (Completion Flow Internalization).`,
     );
   }
 

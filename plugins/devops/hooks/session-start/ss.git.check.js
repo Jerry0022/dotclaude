@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.git.check
- * @version 0.2.0
+ * @version 0.3.0
  * @event SessionStart
  * @plugin devops
  * @description Check for stale uncommitted/unpushed changes at session start.
@@ -57,6 +57,11 @@ function checkRepo(dir) {
   const issues = [];
   const inWorktree = isLinkedWorktree(dir);
   const worktreeBranches = getWorktreeBranches(dir);
+
+  // Fetch remote refs so unpushed detection is accurate.
+  // Without this, commits already merged via GitHub PRs appear "unpushed"
+  // because local refs/remotes/* are stale.
+  run('git fetch --quiet', dir);
 
   // Uncommitted files (scoped to this worktree automatically by git)
   const status = run('git status --porcelain', dir);
