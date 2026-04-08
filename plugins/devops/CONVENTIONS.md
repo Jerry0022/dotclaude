@@ -207,6 +207,10 @@ within this repo — no separate `/devops-ship-dotclaude` skill needed.
 Utility scripts use descriptive kebab-case: `build-id.js`, `render-diagram.js`.
 Scripts are NOT hooks — they are helpers invoked by hooks or skills.
 
+**Path rule**: Scripts live inside the plugin at `{PLUGIN_ROOT}/scripts/`. Reference them
+as `node {PLUGIN_ROOT}/scripts/{name}.js` (or `$CLAUDE_PLUGIN_ROOT` in bash). Never use
+`~/.claude/scripts/` — that path is not managed by the plugin installer and may not exist.
+
 ### Directory Structure
 
 ```

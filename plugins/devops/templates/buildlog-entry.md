@@ -23,7 +23,7 @@ Changes:
 
 ## Rules
 
-- `<build-hash>` = content hash from `scripts/build-id.js` (7 chars)
+- `<build-hash>` = content hash from `{PLUGIN_ROOT}/scripts/build-id.js` (7 chars)
 - `Commit` = the squash-merge commit on main (git-referenceable)
 - `Changes` = same bullets as PR description (keep concise, 1 line each)
 - BUILDLOG.md is NOT user-facing — not linked in README, not in CHANGELOG

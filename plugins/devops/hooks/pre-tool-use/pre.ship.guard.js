@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 /**
  * @hook pre.ship.guard
- * @version 0.1.0
+ * @version 0.2.0
  * @event PreToolUse
  * @plugin devops
  * @description Block manual PR creation/merging via Bash.
  *   These operations MUST go through /devops-ship MCP tools.
  *   Detects: gh pr create, gh pr merge, gh api .../pulls/.../merge
  *   Does NOT block: git push (needed for branch work before shipping).
+ *   Does NOT block: MCP tool calls (tool_name !== "Bash") — the ship pipeline
+ *   itself uses execFileSync which doesn't go through Bash hooks, but Claude
+ *   may retry failed MCP calls via Bash as a fallback. This guard only fires
+ *   on Bash tool invocations.
  */
 
 require('../lib/plugin-guard');
@@ -25,6 +29,10 @@ process.stdin.on('end', () => {
   let hook;
   try { hook = JSON.parse(inputData); }
   catch { process.exit(0); }
+
+  // Only guard Bash tool calls — MCP tools (ship_release etc.) are pipeline-internal
+  const toolName = hook.tool_name || '';
+  if (toolName !== 'Bash') process.exit(0);
 
   const cmd = (hook.tool_input || {}).command || '';
 

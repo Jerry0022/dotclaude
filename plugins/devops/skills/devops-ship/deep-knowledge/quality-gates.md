@@ -38,7 +38,7 @@ session → skip. Log: `Tests skipped — already passed on build <hash>`.
 After a successful build, generate the build-ID:
 
 ```bash
-node scripts/build-id.js
+node {PLUGIN_ROOT}/scripts/build-id.js
 ```
 
 This is a content hash over source files (excludes config, docs, build

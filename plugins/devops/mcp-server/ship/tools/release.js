@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
-import { git, gitStrict, currentBranch, headShort, dirtyState } from "../lib/git.js";
+import { git, gitStrict, currentBranch, headShort, dirtyState, isWorktree } from "../lib/git.js";
 import { createPR, mergePR, createRelease, findExistingPR } from "../lib/github.js";
 
 export const schema = z.object({
@@ -88,25 +88,24 @@ export async function handler(params) {
     result.merged = base;
     result.mergeSha = mergeSha;
 
-    // Sync local base branch
-    gitStrict(`checkout ${base}`, opts);
-    gitStrict(`pull origin ${base}`, opts);
+    // Sync local base branch (worktree-safe: can't checkout base if another worktree owns it)
+    if (isWorktree(opts)) {
+      gitStrict(`fetch origin ${base}`, opts);
+    } else {
+      gitStrict(`checkout ${base}`, opts);
+      gitStrict(`pull origin ${base}`, opts);
+    }
 
     // Tag + Release (only for final merges to main, skip for intermediate)
     if (!intermediate && tag) {
       try {
-        const localTag = git(`tag -l ${tag}`, opts);
-        if (localTag) {
-          result.tagWarning = `Tag ${tag} already exists locally — skipping creation`;
-        } else {
-          gitStrict(`tag ${tag}`, opts);
-        }
-
         const remoteTag = git(`ls-remote --tags origin ${tag}`, opts);
         if (remoteTag && remoteTag.includes(tag)) {
-          result.tagWarning = (result.tagWarning || "") + ` Tag ${tag} already exists on remote.`;
+          result.tagWarning = `Tag ${tag} already exists on remote — skipping creation.`;
           result.tagVerified = true;
         } else {
+          // Create tag on the merge commit (origin/base), not on the current HEAD
+          gitStrict(`tag ${tag} origin/${base}`, opts);
           gitStrict(`push origin ${tag}`, opts);
           const tagCheck = git(`ls-remote --tags origin ${tag}`, opts);
           result.tagVerified = tagCheck !== null && tagCheck.includes(tag);
