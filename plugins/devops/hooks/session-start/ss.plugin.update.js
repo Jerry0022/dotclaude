@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.3.0
+ * @version 0.4.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -40,21 +40,22 @@ function getVersion(dir) {
 }
 
 function copyDir(src, dst) {
-  // Use cp -a (archive) to get dotfiles + new directories.
-  // Fallback to manual copy on Windows where cp -a may not work.
-  const result = run(`cp -a "${src}/." "${dst}/"`, path.dirname(src));
-  if (!result && result !== '') {
-    // Verify copy worked by checking a known file
-    if (!fs.existsSync(path.join(dst, '.claude-plugin', 'plugin.json'))) {
-      // Fallback: manual copy
-      run(`cp -r "${src}/"* "${dst}/"`, path.dirname(src));
-      run(`cp -r "${src}/.claude-plugin" "${dst}/"`, path.dirname(src));
-      const mcpSrc = path.join(src, '.mcp.json');
-      if (fs.existsSync(mcpSrc)) {
-        fs.copyFileSync(mcpSrc, path.join(dst, '.mcp.json'));
-      }
+  // Try cp -a (archive) to get dotfiles + new directories.
+  run(`cp -a "${src}/." "${dst}/"`, path.dirname(src));
+
+  // Verify copy worked by checking a known file — don't trust return value
+  // (cp returns empty string on both success and failure via run()).
+  if (!fs.existsSync(path.join(dst, '.claude-plugin', 'plugin.json'))) {
+    // Fallback: explicit copy for Windows where cp -a may not work
+    run(`cp -r "${src}/"* "${dst}/"`, path.dirname(src));
+    run(`cp -r "${src}/.claude-plugin" "${dst}/"`, path.dirname(src));
+    const mcpSrc = path.join(src, '.mcp.json');
+    if (fs.existsSync(mcpSrc)) {
+      fs.copyFileSync(mcpSrc, path.join(dst, '.mcp.json'));
     }
   }
+
+  return fs.existsSync(path.join(dst, '.claude-plugin', 'plugin.json'));
 }
 
 function rebuildCache(marketplace, pluginName, pluginDir, version, sha) {
@@ -70,11 +71,13 @@ function rebuildCache(marketplace, pluginName, pluginDir, version, sha) {
   fs.mkdirSync(newCache, { recursive: true });
 
   // Copy all files (archive mode for dotfiles)
-  copyDir(pluginDir, newCache);
+  const copyOk = copyDir(pluginDir, newCache);
+  if (!copyOk) {
+    return { ok: false, missing: 'copy failed — .claude-plugin/plugin.json not found after copy' };
+  }
 
   // Verify cache completeness
   const checks = [
-    path.join(newCache, '.claude-plugin', 'plugin.json'),
     path.join(newCache, 'skills'),
     path.join(newCache, 'hooks'),
   ];
@@ -90,7 +93,7 @@ function rebuildCache(marketplace, pluginName, pluginDir, version, sha) {
     return { ok: false, mismatch: `marketplace=${version} cache=${cachedVersion}` };
   }
 
-  // Update registry
+  // Update registry (only after verified copy)
   try {
     const registry = JSON.parse(fs.readFileSync(registryFile, 'utf8'));
     const key = `${pluginName}@${marketplace}`;
@@ -175,23 +178,39 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
 
     // Cache-existence guard: rebuild if registry points to a missing path
     let cacheMissing = false;
+    // Cache-staleness guard: rebuild if cached plugin.json version doesn't match marketplace
+    let cacheStale = false;
     try {
       const registry = JSON.parse(fs.readFileSync(registryFile, 'utf8'));
       const key = `${name}@${marketplace}`;
       const entry = registry.plugins[key]?.[0];
-      if (entry && !fs.existsSync(entry.installPath)) {
-        cacheMissing = true;
+      if (entry) {
+        if (!fs.existsSync(entry.installPath)) {
+          cacheMissing = true;
+        } else {
+          // Verify cached content matches marketplace (catches stale-content-in-correct-dir)
+          const cachedVersion = getVersion(entry.installPath);
+          if (cachedVersion !== after) {
+            cacheStale = true;
+          } else {
+            // SHA mismatch: same version string but different commit (files may have changed)
+            const cachedSha = entry.gitCommitSha || '';
+            if (cachedSha && cachedSha !== newHead && cachedSha !== newSha) {
+              cacheStale = true;
+            }
+          }
+        }
       }
     } catch { /* registry unreadable — rebuild to be safe */ cacheMissing = true; }
 
-    if (versionChanged || cacheMissing) {
+    if (versionChanged || cacheMissing || cacheStale) {
       const result = rebuildCache(marketplace, name, dir, after, newSha);
       updated.push({
         name,
         from: beforeVersions[name] || '?',
         to: after,
         verified: result.ok,
-        cacheRepair: cacheMissing && !versionChanged,
+        cacheRepair: (cacheMissing || cacheStale) && !versionChanged,
         error: result.ok ? null : (result.missing || result.mismatch),
       });
     }
