@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.35.3] — 2026-04-08
+
+### Fixed
+
+- **hooks** — `ss.git.check` v0.3.0: add `git fetch --quiet` before unpushed detection to prevent false positives when commits are already merged via GitHub PRs but local remote-tracking refs are stale
+- **hooks** — `ss.flow.selfcalibration` + `prompt.flow.selfcalibration` v0.6.0: emit version-agnostic glob pattern in cron prompt instead of baking the versioned cache path from `__dirname`; prevents broken SKILL.md paths when `ss.plugin.update` rebuilds the cache mid-session
+- **marketplace** — aligned `marketplace.json` version to v0.35.2 (missed in PR #21)
+
 ## [0.35.2] — 2026-04-08
 
 ### Added
