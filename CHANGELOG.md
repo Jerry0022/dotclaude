@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.35.6] — 2026-04-08
+
+### Changed
+
+- **gitignore** — ignore `.claude/project-map.md` (auto-generated, not distributable)
+
 ## [0.35.5] — 2026-04-08
 
 ### Changed
