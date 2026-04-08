@@ -22,8 +22,8 @@ Diagnose and fix the issue: `$ARGUMENTS`
 
 Silently check for optional overrides (do not surface "not found" in output):
 
-1. Global skill extension: `~/.claude/skills/devops-flow/SKILL.md` + `reference.md`
-2. Project skill extension: `{project}/.claude/skills/devops-flow/SKILL.md` + `reference.md`
+1. Global skill extension: `~/.claude/skills/flow/SKILL.md` + `reference.md`
+2. Project skill extension: `{project}/.claude/skills/flow/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 Project extensions define framework-specific log paths (e.g., Electron logs in

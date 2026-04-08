@@ -32,8 +32,8 @@ User is leaving the PC. Collect the task, prime permissions, confirm, then work 
 ## Step 0 — Load Extensions
 
 Silently check (do not surface "not found"):
-1. `~/.claude/skills/devops-autonomous/SKILL.md` + `reference.md`
-2. `{project}/.claude/skills/devops-autonomous/SKILL.md` + `reference.md`
+1. `~/.claude/skills/autonomous/SKILL.md` + `reference.md`
+2. `{project}/.claude/skills/autonomous/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Task Intake

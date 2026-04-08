@@ -19,8 +19,8 @@ Generate a modern, informative README.md for the current project.
 
 Silently check for optional overrides (do not surface "not found" in output):
 
-1. Global skill extension: `~/.claude/skills/devops-readme/SKILL.md` + `reference.md`
-2. Project skill extension: `{project}/.claude/skills/devops-readme/SKILL.md` + `reference.md`
+1. Global skill extension: `~/.claude/skills/readme/SKILL.md` + `reference.md`
+2. Project skill extension: `{project}/.claude/skills/readme/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Arguments

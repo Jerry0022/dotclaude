@@ -20,8 +20,8 @@ Audit CLAUDE.md files for token efficiency.
 
 Silently check for optional overrides (do not surface "not found" in output):
 
-1. Global skill extension: `~/.claude/skills/devops-claude-md-lint/SKILL.md` + `reference.md`
-2. Project skill extension: `{project}/.claude/skills/devops-claude-md-lint/SKILL.md` + `reference.md`
+1. Global skill extension: `~/.claude/skills/claude-md-lint/SKILL.md` + `reference.md`
+2. Project skill extension: `{project}/.claude/skills/claude-md-lint/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Locate CLAUDE.md files

@@ -4,8 +4,8 @@ What users can override in their global or project-level extensions.
 
 ## Extension Paths
 
-- Global: `~/.claude/skills/devops-livebrief/SKILL.md` + `reference.md`
-- Project: `{project}/.claude/skills/devops-livebrief/SKILL.md` + `reference.md`
+- Global: `~/.claude/skills/livebrief/SKILL.md` + `reference.md`
+- Project: `{project}/.claude/skills/livebrief/SKILL.md` + `reference.md`
 
 ## What to Override
 

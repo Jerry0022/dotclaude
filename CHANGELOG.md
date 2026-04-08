@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.33.2] — 2026-04-08
+
+### Fixed
+
+- **skills** — all 16 SKILL.md Step 0 extension lookup paths used `devops-{name}/` prefix but CONVENTIONS.md and projects use short names (`ship/`, `new-issue/`, etc.); user extensions were silently never loaded
+
 ## [0.33.1] — 2026-04-08
 
 ### Fixed

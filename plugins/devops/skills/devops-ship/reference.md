@@ -5,7 +5,7 @@
 Create project-specific ship rules in your project:
 
 ```
-{project}/.claude/skills/devops-ship/
+{project}/.claude/skills/ship/
 ├── SKILL.md        ← Override or add steps
 └── reference.md    ← Project-specific context
 ```
