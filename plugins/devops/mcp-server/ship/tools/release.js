@@ -82,9 +82,11 @@ export async function handler(params) {
     }
     result.pr = { number: pr.number, url: pr.url, title };
 
-    // Merge PR (squash + delete branch)
+    // Merge PR (squash + delete branch; skip --delete-branch in worktrees
+    // where gh tries to switch to base locally — cleanup handles branch deletion)
     gitStrict(`fetch origin ${base}`, opts);
-    const mergeSha = mergePR(pr.number, base, opts);
+    const worktree = isWorktree(opts);
+    const mergeSha = mergePR(pr.number, base, opts, { skipDeleteBranch: worktree });
     result.merged = base;
     result.mergeSha = mergeSha;
 

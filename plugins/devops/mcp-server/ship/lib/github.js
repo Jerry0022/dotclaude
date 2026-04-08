@@ -46,12 +46,13 @@ export function createPR({ title, body, base = "main", head }, opts) {
  * @param {number} prNumber
  * @param {string} base - Base branch name (e.g. "main", "develop")
  * @param {object} [opts]
+ * @param {object} [flags]
+ * @param {boolean} [flags.skipDeleteBranch=false] - Skip --delete-branch (e.g. in worktrees where local branch switch fails)
  */
-export function mergePR(prNumber, base = "main", opts) {
-  gh(
-    ["pr", "merge", String(prNumber), "--squash", "--delete-branch", "--admin"],
-    opts,
-  );
+export function mergePR(prNumber, base = "main", opts, flags = {}) {
+  const args = ["pr", "merge", String(prNumber), "--squash", "--admin"];
+  if (!flags.skipDeleteBranch) args.push("--delete-branch");
+  gh(args, opts);
   // Verify the PR is actually in MERGED state (retry up to 3 times with 2s backoff
   // to handle transient network errors or GitHub eventual consistency)
   let state = null;
