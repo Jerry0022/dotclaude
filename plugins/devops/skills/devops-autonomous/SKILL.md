@@ -11,7 +11,7 @@ description: >-
   "ich geh kurz weg", "mach das alleine", "run this while I'm away",
   "autonom weiter", "ich bin gleich weg", "afk mode", "unattended mode",
   "mach weiter ohne mich", "autopilot". Do NOT trigger for normal orchestration
-  where the user stays present — use /devops-orchestrate instead.
+  where the user stays present — use /devops-agents instead.
 argument-hint: "[optional: task description]"
 allowed-tools: >-
   Bash(*), Read, Write, Edit, Glob, Grep, Agent,

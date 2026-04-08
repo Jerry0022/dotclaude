@@ -197,7 +197,7 @@
 
 ### Added
 
-- **skills** — new `/devops-orchestrate` skill: explicitly evaluate which agents are useful for a task and orchestrate their parallel or sequential execution with wave-based planning
+- **skills** — new `/devops-agents` skill (formerly `/devops-orchestrate`): explicitly evaluate which agents are useful for a task and orchestrate their parallel or sequential execution with wave-based planning
 
 ## [0.27.0] — 2026-04-05
 

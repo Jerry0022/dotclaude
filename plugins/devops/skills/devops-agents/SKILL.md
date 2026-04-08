@@ -1,11 +1,11 @@
 ---
-name: devops-orchestrate
-version: 0.1.0
+name: devops-agents
+version: 0.2.0
 description: >-
   Evaluate which agents are useful for a task and orchestrate their parallel or
   sequential execution. Use when the user explicitly wants orchestrated agent
   work instead of inline execution, or when a task clearly benefits from
-  multi-agent collaboration. Triggers on: "orchestrate", "orchestriere",
+  multi-agent collaboration. Triggers on: "agents", "orchestrate", "orchestriere",
   "agents einsetzen", "use agents", "parallel agents", "multi-agent",
   "lass agents das machen", "delegate to agents", "agent workflow".
   Do NOT trigger for: simple single-file edits, quick fixes, explanations
@@ -23,8 +23,8 @@ Evaluate which agents add value for `$ARGUMENTS`, then orchestrate their executi
 Check for optional overrides. Use **Glob** to verify each path exists before reading.
 Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global: `~/.claude/skills/orchestrate/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/orchestrate/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/devops-agents/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/devops-agents/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Task Analysis
