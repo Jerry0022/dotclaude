@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.1] — 2026-04-08
+
+### Fixed
+
+- **ship** — `mergePR()` now skips `--delete-branch` flag when running inside a git worktree, preventing `gh` from failing on local branch switch; branch cleanup deferred to `ship_cleanup` as designed
+- **marketplace** — synced `marketplace.json` version to v0.35.0 (was stuck at v0.34.1)
+
 ## [0.35.0] — 2026-04-08
 
 ### Added
