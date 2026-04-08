@@ -25,7 +25,7 @@ const { runOnce } = require('../lib/run-once');
 const PLUGIN_DIR  = path.resolve(__dirname, '..', '..');
 const TASKS_DIR   = path.join(PLUGIN_DIR, 'scheduled-tasks');
 
-// Stable base path for glob-based discovery (version-agnostic).
+// Stable base path for version-agnostic discovery.
 // The cache may be rebuilt mid-session by ss.plugin.update, which deletes the
 // old versioned dir. Baking __dirname into the cron prompt would point to a
 // deleted path. Instead, we emit a glob pattern so Claude can resolve the
@@ -72,17 +72,20 @@ process.stdin.on('end', () => {
       continue;
     }
 
-    let skillGlob;
+    // Resolved path for immediate execution (known to exist right now).
+    const resolvedSkillPath = skillPath.replace(/\\/g, '/');
+
+    // For cron: version may change mid-session, so emit the parent dir
+    // and let Claude list + pick the version (more reliable than glob on Windows).
+    let cronDiscoveryDir;
     if (inCache) {
-      // Cache path: ~/.claude/plugins/cache/{marketplace}/{plugin}/{version}/...
       const rel = normalizedPluginDir.slice(normalizedCacheBase.length + 1);
       const parts = rel.split('/'); // ["dotclaude", "devops", "0.35.2"]
-      skillGlob = `${normalizedCacheBase}/${parts[0]}/${parts[1]}/*/scheduled-tasks/${task.id}/SKILL.md`;
+      cronDiscoveryDir = `${normalizedCacheBase}/${parts[0]}/${parts[1]}`;
     } else {
-      // Repo / dev path — no cache rebuild risk, use direct path
-      skillGlob = `${normalizedPluginDir}/scheduled-tasks/${task.id}/SKILL.md`;
+      cronDiscoveryDir = null; // dev path is stable
     }
-    tasks.push({ ...task, skillGlob });
+    tasks.push({ ...task, resolvedSkillPath, cronDiscoveryDir });
   }
 
   if (tasks.length === 0) process.exit(0);
@@ -93,9 +96,12 @@ process.stdin.on('end', () => {
   ];
 
   for (const t of tasks) {
+    const cronPrompt = t.cronDiscoveryDir
+      ? `Execute the ${t.id} scheduled task as defined in the plugin. List the directory ${t.cronDiscoveryDir} to find the current version, then Read {version}/scheduled-tasks/${t.id}/SKILL.md — use the match to derive the plugin root (parent of scheduled-tasks/).`
+      : `Execute the ${t.id} scheduled task as defined in the plugin. Read ${t.resolvedSkillPath} — use the file's parent of scheduled-tasks/ as the plugin root.`;
     lines.push(
-      `Register cron via CronCreate: cron="${t.cron}", recurring=${t.recurring}, prompt="Execute the ${t.id} scheduled task as defined in the plugin. Glob for the SKILL.md: ${t.skillGlob} — use the match to derive the plugin root (parent of scheduled-tasks/)."`,
-      `Then immediately execute it once: glob for ${t.skillGlob}, read the result, and run Step 0 (Completion Flow Internalization).`,
+      `Register cron via CronCreate: cron="${t.cron}", recurring=${t.recurring}, prompt="${cronPrompt}"`,
+      `Then immediately execute it once: Read ${t.resolvedSkillPath} and run Step 0 (Completion Flow Internalization).`,
     );
   }
 
