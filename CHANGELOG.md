@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.35.2] — 2026-04-08
+
+### Added
+
+- **hooks** — `ss.plugin.update` v0.5.0: desktop notification (tray/toast) when a real plugin version upgrade is detected at session start; cross-platform (Windows BalloonTip, macOS osascript, Linux notify-send); cache-only repairs remain silent
+
+### Fixed
+
+- **marketplace** — aligned `marketplace.json` version to v0.35.1 (was stuck at v0.35.0 from previous release)
+
 ## [0.35.1] — 2026-04-08
 
 ### Fixed

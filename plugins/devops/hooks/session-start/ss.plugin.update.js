@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.4.0
+ * @version 0.5.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -26,6 +26,46 @@ function run(cmd, cwd) {
     return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 15000 }).trim();
   } catch {
     return '';
+  }
+}
+
+/**
+ * Fire an OS-level notification (tray / toast / notification center).
+ * Non-blocking on Windows (spawns detached), sync elsewhere.
+ * Fails silently — never blocks or crashes the hook.
+ */
+function notifyDesktop(title, body) {
+  try {
+    if (process.platform === 'win32') {
+      const { spawn } = require('child_process');
+      const script = [
+        'Add-Type -AssemblyName System.Windows.Forms',
+        '$n = New-Object System.Windows.Forms.NotifyIcon',
+        '$n.Icon = [System.Drawing.SystemIcons]::Information',
+        '$n.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info',
+        `$n.BalloonTipTitle = '${title.replace(/'/g, "''")}'`,
+        `$n.BalloonTipText = '${body.replace(/'/g, "''")}'`,
+        '$n.Visible = $true',
+        '$n.ShowBalloonTip(10000)',
+        'Start-Sleep -Seconds 10',
+        '$n.Dispose()',
+      ].join('; ');
+      const child = spawn('powershell', ['-NoProfile', '-Command', script], {
+        detached: true, stdio: 'ignore', windowsHide: true,
+      });
+      child.unref();
+    } else if (process.platform === 'darwin') {
+      execSync(
+        `osascript -e 'display notification "${body.replace(/"/g, '\\"')}" with title "${title.replace(/"/g, '\\"')}"'`,
+        { timeout: 5000, stdio: 'ignore' },
+      );
+    } else {
+      execSync(`notify-send "${title.replace(/"/g, '\\"')}" "${body.replace(/"/g, '\\"')}"`, {
+        timeout: 5000, stdio: 'ignore',
+      });
+    }
+  } catch {
+    // Notification failed — non-fatal
   }
 }
 
@@ -227,5 +267,15 @@ for (const u of updated) {
   lines.push(`- **${u.name}**: ${u.from} → ${u.to} (${status}${repair})`);
 }
 lines.push('');
+
+// Detect real version upgrades (not just cache repairs)
+const upgrades = updated.filter(u => !u.cacheRepair && u.verified);
+if (upgrades.length > 0) {
+  const names = upgrades.map(u => `${u.name} v${u.to}`).join(', ');
+  lines.push(`⚡ **Plugin updated (${names}) — restart Claude to activate the new version.**`);
+  lines.push('Show the user this restart notice as-is.');
+  lines.push('');
+  notifyDesktop('Claude Plugin Updated', `${names} — restart Claude to activate.`);
+}
 
 process.stdout.write(lines.join('\n'));
