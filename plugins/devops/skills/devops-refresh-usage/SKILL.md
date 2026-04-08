@@ -15,10 +15,11 @@ Fetch live token usage for the completion card's battery line.
 
 ## Step 0 — Load Extensions
 
-Silently check for optional overrides (do not surface "not found" in output):
+Check for optional overrides. Use **Glob** to verify each path exists before reading.
+Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global skill extension: `~/.claude/skills/refresh-usage/SKILL.md` + `reference.md`
-2. Project skill extension: `{project}/.claude/skills/refresh-usage/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/refresh-usage/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/refresh-usage/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Fetch data (aggressive fallback chain)

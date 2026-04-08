@@ -4,7 +4,13 @@
 
 ### Fixed
 
-- **skills** — all 16 SKILL.md Step 0 extension lookup paths used `devops-{name}/` prefix but CONVENTIONS.md and projects use short names (`ship/`, `new-issue/`, etc.); user extensions were silently never loaded
+- **skills** — Step 0 extension loading now uses Glob to check file existence before Read, preventing "File does not exist" errors on machines without global skill extensions (all 13 skills)
+- **skills/docs** — all bare `scripts/build-id.js` references replaced with `{PLUGIN_ROOT}/scripts/build-id.js` across deep-knowledge, templates, and skill docs (6 files); prevents Claude from generating wrong `~/.claude/scripts/` paths in project skills
+- **skills** — `{plugin-root}` placeholder normalized to `{PLUGIN_ROOT}` in project-setup and claude-md-lint skills for consistency with CONVENTIONS.md
+- **ship** — `ship_release` no longer runs `git checkout <base>` after merge; uses `git fetch` instead, fixing `fatal: 'main' is already used by worktree` in worktree setups
+- **ship** — tags now created on `origin/<base>` (the merge commit) instead of local HEAD, which pointed at the deleted feature branch
+- **hooks** — `pre.ship.guard` now only intercepts Bash tool calls; no longer blocks MCP tool fallback retries (e.g. when Claude retries a failed `ship_release` via Bash)
+- **conventions** — added explicit path rule: scripts must be referenced via `{PLUGIN_ROOT}/scripts/`, never `~/.claude/scripts/`
 
 ## [0.33.1] — 2026-04-08
 

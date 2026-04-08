@@ -18,10 +18,11 @@ Audit or initialize a project's repository structure.
 
 ## Step 0 — Load Extensions
 
-Silently check for optional overrides (do not surface "not found" in output):
+Check for optional overrides. Use **Glob** to verify each path exists before reading.
+Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global skill extension: `~/.claude/skills/project-setup/SKILL.md` + `reference.md`
-2. Project skill extension: `{project}/.claude/skills/project-setup/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/project-setup/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/project-setup/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Arguments
@@ -127,7 +128,7 @@ Generate `.claude/project-map.md` — a compact index of the project's file stru
 Run the plugin's generator script:
 
 ```bash
-node {plugin-root}/scripts/gen-project-map.js {project-root}
+node {PLUGIN_ROOT}/scripts/gen-project-map.js {project-root}
 ```
 
 This creates a tree overview with directory descriptions and key file highlights.

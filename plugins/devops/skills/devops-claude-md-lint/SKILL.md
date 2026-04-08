@@ -18,10 +18,11 @@ Audit CLAUDE.md files for token efficiency.
 
 ## Step 0 — Load Extensions
 
-Silently check for optional overrides (do not surface "not found" in output):
+Check for optional overrides. Use **Glob** to verify each path exists before reading.
+Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global skill extension: `~/.claude/skills/claude-md-lint/SKILL.md` + `reference.md`
-2. Project skill extension: `{project}/.claude/skills/claude-md-lint/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/claude-md-lint/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/claude-md-lint/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Locate CLAUDE.md files
@@ -104,7 +105,7 @@ If `--fix` is passed and file is over budget:
 4. Replace the original section in CLAUDE.md with a one-line pointer:
    `- {Topic}: see deep-knowledge/{topic}.md`
 5. Regenerate `deep-knowledge/INDEX.md` by running the plugin's index generator:
-   `node {plugin-root}/scripts/gen-dk-index.js {project-root}/deep-knowledge`
+   `node {PLUGIN_ROOT}/scripts/gen-dk-index.js {project-root}/deep-knowledge`
    This ensures the index stays current after every extraction.
 6. Verify final CLAUDE.md is ≤25 lines
 

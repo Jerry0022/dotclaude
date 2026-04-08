@@ -86,7 +86,7 @@ Wk  {{bar-wk}}  {{pct-wk}} ({{delta-wk}})  · Reset {{reset-wk}}{{pace-warn-wk}}
 - `✨✨✨` before and after — "done, look here".
 - Summary first — the important part. Build-ID after as reference.
 - Summary in user's language, max ~10 words, factual.
-- Build-ID via `node scripts/build-id.js` (7-char hash). **Always include** — even for docs/config.
+- Build-ID via `node {PLUGIN_ROOT}/scripts/build-id.js` (7-char hash). **Always include** — even for docs/config.
 
 | Condition | Example |
 |-----------|---------|

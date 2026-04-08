@@ -19,10 +19,11 @@ Explain `$ARGUMENTS` clearly, tailored to the user's expertise level.
 
 ## Step 0 — Load Extensions
 
-Silently check for optional overrides (do not surface "not found" in output):
+Check for optional overrides. Use **Glob** to verify each path exists before reading.
+Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global skill extension: `~/.claude/skills/explain/SKILL.md` + `reference.md`
-2. Project skill extension: `{project}/.claude/skills/explain/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/explain/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/explain/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Scope assessment
