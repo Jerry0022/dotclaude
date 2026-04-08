@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.4] — 2026-04-08
+
+### Fixed
+
+- **ship** — replace passive Codex review step with enforced review gate: MUST-run when codex-plugin-cc is installed, auto-fixes trivial issues, pauses for user judgment only on design/logic/security concerns
+- **deep-knowledge** — aligned `codex-integration.md` with new review gate behavior
+
 ## [0.35.3] — 2026-04-08
 
 ### Fixed
