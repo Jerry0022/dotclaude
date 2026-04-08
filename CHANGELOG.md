@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.35.7] — 2026-04-08
+
+### Fixed
+
+- **hooks** — replace Glob-based SKILL.md discovery with direct Read path for immediate execution and directory listing for cron; fixes Windows wildcard matching failure in deep cache paths
+
 ## [0.35.6] — 2026-04-08
 
 ### Changed
