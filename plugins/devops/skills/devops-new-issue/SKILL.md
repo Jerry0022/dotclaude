@@ -20,8 +20,8 @@ Create issues and milestones with enforced formatting and optional board integra
 
 Silently check for optional overrides (do not surface "not found" in output):
 
-1. Global skill extension: `~/.claude/skills/devops-new-issue/SKILL.md` + `reference.md`
-2. Project skill extension: `{project}/.claude/skills/devops-new-issue/SKILL.md` + `reference.md`
+1. Global skill extension: `~/.claude/skills/new-issue/SKILL.md` + `reference.md`
+2. Project skill extension: `{project}/.claude/skills/new-issue/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 **Project extensions define:**

@@ -197,7 +197,7 @@ ha-finance/
 The plugin's `/devops-ship` reads these before executing and integrates the rules.
 
 **Eat-your-own-dogfood:** This plugin's own repo (`devops/`) uses
-the same mechanism. Project-specific ship rules live in `.claude/skills/devops-ship/`
+the same mechanism. Project-specific ship rules live in `.claude/skills/ship/`
 within this repo — no separate `/devops-ship-dotclaude` skill needed.
 
 ## Script Conventions

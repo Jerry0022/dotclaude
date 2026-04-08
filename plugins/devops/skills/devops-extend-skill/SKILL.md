@@ -18,8 +18,8 @@ Scaffold or adapt a project-level extension for any devops skill.
 
 Silently check for optional overrides (do not surface "not found" in output):
 
-1. Global skill extension: `~/.claude/skills/devops-extend-skill/SKILL.md` + `reference.md`
-2. Project skill extension: `{project}/.claude/skills/devops-extend-skill/SKILL.md` + `reference.md`
+1. Global skill extension: `~/.claude/skills/extend-skill/SKILL.md` + `reference.md`
+2. Project skill extension: `{project}/.claude/skills/extend-skill/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Detect project root

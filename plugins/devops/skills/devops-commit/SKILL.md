@@ -19,8 +19,8 @@ Create a well-formed conventional commit.
 
 Silently check for optional overrides (do not surface "not found" in output):
 
-1. Global skill extension: `~/.claude/skills/devops-commit/SKILL.md` + `reference.md`
-2. Project skill extension: `{project}/.claude/skills/devops-commit/SKILL.md` + `reference.md`
+1. Global skill extension: `~/.claude/skills/commit/SKILL.md` + `reference.md`
+2. Project skill extension: `{project}/.claude/skills/commit/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 **Note on `disable-model-invocation: true`:** This skill is only triggered by
