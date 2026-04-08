@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.34.1] — 2026-04-08
+
+### Fixed
+
+- **hooks** — `ss.plugin.update` v0.4.0: `copyDir` fallback condition was dead code (`!result && result !== ''` always false); now verifies copy by checking file existence instead of trusting `run()` return value
+- **hooks** — `ss.plugin.update`: `rebuildCache` no longer updates registry when file copy fails; aborts early with error
+- **hooks** — `ss.plugin.update`: new cache-staleness guard detects stale content via version + SHA mismatch, triggering rebuild even when cache directory exists with correct name
+
 ## [0.34.0] — 2026-04-08
 
 ### Changed
