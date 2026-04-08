@@ -32,8 +32,11 @@ a hard gate), so automatic execution carries no risk of blocking workflows.
 **Behavior:**
 - patch/minor bump → **automatically run** `/codex:review` on the diff (read-only)
 - major bump → **automatically run** `/codex:adversarial-review` (challenges design trade-offs)
-- Present Codex findings to user before proceeding to PR
-- Findings are advisory — user decides: address findings, ignore, or abort
+- Evaluate findings:
+  - No findings / clean → continue pipeline
+  - Auto-fixable (typos, missing imports, style) → fix inline, continue
+  - Judgment required (design concerns, logic flaws, security) → AskUserQuestion with options
+- This is a **MUST run** gate, not optional or suggested
 
 **Value:** Only point in the pipeline where a second AI reviews the code
 systematically. Tests verify behavior; Codex reviews design and logic.

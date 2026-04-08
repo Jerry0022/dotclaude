@@ -79,18 +79,17 @@ Pass project-specific commands from extensions if available.
 
 If `success: false` → call `render_completion_card` with variant `blocked`. Do not continue.
 
-### Codex Review (automatic, if codex-plugin-cc installed)
+### Codex Review Gate (after build passes)
 
-After build + tests pass, **automatically run** a Codex code review — do not ask the user first.
-See `deep-knowledge/codex-integration.md` for details.
+**MUST run** if codex-plugin-cc is installed — not optional, not suggested.
 
-1. **patch/minor changes** → automatically run `/codex:review` (read-only diff review)
-2. **major bump** → automatically run `/codex:adversarial-review` (challenges design trade-offs)
-3. Present Codex findings to user before proceeding
-4. User decides: address findings, ignore and continue, or abort ship
-
-If codex-plugin-cc is not installed → skip silently.
-Codex findings are advisory, not a hard gate — they never block shipping on their own.
+1. patch/minor → `/codex:review`; major → `/codex:adversarial-review`
+2. Evaluate findings:
+   - **No findings / clean** → continue to Step 3
+   - **Auto-fixable** (typos, missing imports, style) → fix inline, continue
+   - **Judgment required** (design concerns, logic flaws, security) →
+     AskUserQuestion with findings + options: "Fixen", "Ignorieren", "Abbrechen"
+3. If codex-plugin-cc not installed → skip silently
 
 ## Step 3 — Version Bump
 
