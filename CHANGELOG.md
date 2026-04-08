@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.35.0] — 2026-04-08
+
+### Added
+
+- **skills** — new `devops-burn` skill: explicit-only high-throughput mode that collects tasks from multiple sources (GitHub Issues, TODOs, lint errors, coverage gaps, open PRs), prioritizes them (P0–P5), then launches autonomous mode with aggressive parallelization guidance; includes mandatory confirmation gate and anti-trigger safeguards
+
 ## [0.34.1] — 2026-04-08
 
 ### Fixed
