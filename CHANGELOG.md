@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.35.5] — 2026-04-08
+
+### Changed
+
+- **skills** — renamed `/devops-orchestrate` to `/devops-agents` for clarity; updated all references, triggers, and extension paths
+
 ## [0.35.4] — 2026-04-08
 
 ### Fixed
