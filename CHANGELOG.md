@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.35.5] — 2026-04-08
+
+### Changed
+
+- **skills** — renamed `/devops-orchestrate` to `/devops-agents` for clarity; updated all references, triggers, and extension paths
+
 ## [0.35.4] — 2026-04-08
 
 ### Fixed
@@ -197,7 +203,7 @@
 
 ### Added
 
-- **skills** — new `/devops-orchestrate` skill: explicitly evaluate which agents are useful for a task and orchestrate their parallel or sequential execution with wave-based planning
+- **skills** — new `/devops-agents` skill (formerly `/devops-orchestrate`): explicitly evaluate which agents are useful for a task and orchestrate their parallel or sequential execution with wave-based planning
 
 ## [0.27.0] — 2026-04-05
 
