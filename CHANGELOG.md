@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.34.0] — 2026-04-08
+
+### Changed
+
+- **autonomous** — added execution mode question: "analyze only" vs "analyze, implement & test"; analyze mode is read-only, implement mode always starts with analysis phase
+- **autonomous** — all permission priming (computer-use `request_access`, browser, shell, MCP tools) now completes before final "Ja, los!" confirmation — no more late permission prompts
+- **autonomous** — auto-start fallback reduced from 5 to 3 minutes
+- **autonomous** — added analyze-mode report template (findings, recommendations, visual verification)
+
 ## [0.33.2] — 2026-04-08
 
 ### Fixed
