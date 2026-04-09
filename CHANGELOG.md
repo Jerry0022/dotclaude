@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.35.13] — 2026-04-09
+
+### Fixed
+
+- **usage** — session reset timer showed "0h 0m left" when less than 1 hour remained; regex now handles minutes-only format
+- **usage** — `formatResetShort` null guard returns "—" instead of coercing null to "0h 0m"
+- **usage** — null-safe elapsed percentage calculation for progress bar
+
 ## [0.35.12] — 2026-04-09
 
 ### Fixed
