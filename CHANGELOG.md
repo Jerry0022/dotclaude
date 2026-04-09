@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.11] — 2026-04-09
+
+### Added
+
+- **hooks** — idle guard for self-calibration cron: skip cycle when no user prompt occurred since the last run, preventing token waste in idle sessions (#28)
+- **hooks** — new `prompt.flow.useractivity` hook touches a session-scoped flag on every user prompt for cross-session isolation
+
 ## [0.35.10] — 2026-04-09
 
 ### Fixed
