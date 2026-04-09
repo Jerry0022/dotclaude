@@ -1,11 +1,11 @@
-# Livebrief — Extension Reference
+# Concept — Extension Reference
 
 What users can override in their global or project-level extensions.
 
 ## Extension Paths
 
-- Global: `~/.claude/skills/livebrief/SKILL.md` + `reference.md`
-- Project: `{project}/.claude/skills/livebrief/SKILL.md` + `reference.md`
+- Global: `~/.claude/skills/concept/SKILL.md` + `reference.md`
+- Project: `{project}/.claude/skills/concept/SKILL.md` + `reference.md`
 
 ## What to Override
 
@@ -25,7 +25,7 @@ Override default colors, fonts, or branding in a project extension:
 
 ### Default Variant
 
-Set a project-level default variant when most livebriefs in this project
+Set a project-level default variant when most concepts in this project
 are the same type:
 
 ```markdown
@@ -42,7 +42,7 @@ Override where HTML files are written:
 ```markdown
 ## Output
 
-- Output directory: `docs/devops-livebriefs/` (instead of `.claude/devops-livebrief/`)
+- Output directory: `docs/devops-concepts/` (instead of `.claude/devops-concept/`)
 - Include in git: true (don't add to .gitignore)
 ```
 

@@ -207,16 +207,16 @@
 ## [0.28.1] — 2026-04-06
 
 ### Improved
-- **livebrief** — decision panel is now a fixed 20% sidebar (not overlay), always visible while scrolling
-- **livebrief** — tri-state variant evaluation: Verwerfen / Miteinbeziehen (default) / Exakt diese Variante — with exclusive-select logic
-- **livebrief** — iterative live feedback loop: Claude processes submissions, updates the page in-browser, user can act again (replaces one-shot model)
-- **livebrief** — wider text fields (`width: 100%`, `min-height: 80px`) for better usability
+- **concept** — decision panel is now a fixed 20% sidebar (not overlay), always visible while scrolling
+- **concept** — tri-state variant evaluation: Verwerfen / Miteinbeziehen (default) / Exakt diese Variante — with exclusive-select logic
+- **concept** — iterative live feedback loop: Claude processes submissions, updates the page in-browser, user can act again (replaces one-shot model)
+- **concept** — wider text fields (`width: 100%`, `min-height: 80px`) for better usability
 
 ## [0.28.0] — 2026-04-05
 
 ### BREAKING
 
-- **skills** — all 13 skills renamed with `devops-` prefix for namespace clarity: `/ship` → `/devops-ship`, `/commit` → `/devops-commit`, `/flow` → `/devops-flow`, `/deep-research` → `/devops-deep-research`, `/explain` → `/devops-explain`, `/new-issue` → `/devops-new-issue`, `/project-setup` → `/devops-project-setup`, `/readme` → `/devops-readme`, `/refresh-usage` → `/devops-refresh-usage`, `/extend-skill` → `/devops-extend-skill`, `/repo-health` → `/devops-repo-health`, `/claude-md-lint` → `/devops-claude-md-lint`, `/livebrief` → `/devops-livebrief`
+- **skills** — all 13 skills renamed with `devops-` prefix for namespace clarity: `/ship` → `/devops-ship`, `/commit` → `/devops-commit`, `/flow` → `/devops-flow`, `/deep-research` → `/devops-deep-research`, `/explain` → `/devops-explain`, `/new-issue` → `/devops-new-issue`, `/project-setup` → `/devops-project-setup`, `/readme` → `/devops-readme`, `/refresh-usage` → `/devops-refresh-usage`, `/extend-skill` → `/devops-extend-skill`, `/repo-health` → `/devops-repo-health`, `/claude-md-lint` → `/devops-claude-md-lint`, `/concept` → `/devops-concept`
 - **extensions** — user extension directories must be renamed to match (e.g. `.claude/skills/ship/` → `.claude/skills/devops-ship/`)
 - **hooks** — `prompt.ship.detect` now emits `Skill("devops-ship")` and `Skill("devops-commit")`
 
@@ -227,10 +227,10 @@
 ## [0.27.0] — 2026-04-05
 
 ### Added
-- **skills** — new `/livebrief` skill: generates interactive self-contained HTML pages for analysis, plans, concepts, comparisons, prototypes, dashboards, and creative work; opens in Edge as new tab; monitors user decisions (toggles, selections, comments) via browser tools and feeds them back into Claude's workflow
-- **livebrief** — 7 recommended variant templates (analysis, plan, concept, comparison, prototype, dashboard, creative) with design system, decision JSON schema, and submit-button feedback mechanism
-- **livebrief** — browser monitoring spec with 4-level fallback: Claude in Chrome/Edge → Playwright → Preview → manual
-- **livebrief** — extension reference for project-level customization (design overrides, default variant, output location, custom elements, browser preference)
+- **skills** — new `/concept` skill: generates interactive self-contained HTML pages for analysis, plans, concepts, comparisons, prototypes, dashboards, and creative work; opens in Edge as new tab; monitors user decisions (toggles, selections, comments) via browser tools and feeds them back into Claude's workflow
+- **concept** — 7 recommended variant templates (analysis, plan, concept, comparison, prototype, dashboard, creative) with design system, decision JSON schema, and submit-button feedback mechanism
+- **concept** — browser monitoring spec with 4-level fallback: Claude in Chrome/Edge → Playwright → Preview → manual
+- **concept** — extension reference for project-level customization (design overrides, default variant, output location, custom elements, browser preference)
 
 ## [0.26.1] — 2026-04-05
 
