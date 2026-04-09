@@ -78,6 +78,7 @@ See `deep-knowledge/claude-directory-structure.md` for the canonical `.claude/` 
 .claude/token-cache/
 .claude/.cache/
 .claude/*.log
+.claude/token-config.json
 ```
 
 ### 2.3 — Secrets (mandatory, always included)

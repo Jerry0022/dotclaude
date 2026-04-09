@@ -367,15 +367,21 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 ### Variant Selection Rules
 
 ```
-if   ship succeeded                               → shipped (1)
-elif build/gate/merge failed                      → blocked (3)
-elif task aborted or not feasible                 → aborted (7)
-elif code edits + app relevant                    → test (4)
-elif app started, no code edits                   → minimal-start (5)
-elif code/doc changes, no app                     → ready (2)
+if   ship pipeline ran (ship_release MCP tool called) → shipped (1)
+elif build/gate/merge failed                          → blocked (3)
+elif task aborted or not feasible                     → aborted (7)
+elif code edits + app relevant                        → test (4)
+elif user started app/session, no task completed yet  → minimal-start (5)
+elif code/doc changes, no app                         → ready (2)
 elif NO code changes (research/review/audit/plan/explanation) → analysis (6)
-else                                              → fallback (8)
+else                                                  → fallback (8)
 ```
+
+**STRICT variant rules (never violate):**
+
+- **shipped**: ONLY after `/devops-ship` ran `ship_release` successfully. A commit, push, or PR alone is NEVER "shipped". Use `ready` instead.
+- **minimal-start**: ONLY when the user freshly starts the app/session. Never after a commit, task completion, or any other action. This is a session-start greeting, nothing else.
+- **ready**: Default for completed work (commits, PRs, code changes) that hasn't gone through the ship pipeline.
 
 **Key rule — `ready` vs `analysis`:**
 - `ready`: at least one file was modified/created/deleted → user can ship
