@@ -222,6 +222,14 @@ process.stdin.on('end', () => {
     }
   }
 
+  // Project map hint for broad searches
+  if (toolName === 'Grep' || toolName === 'Glob') {
+    const projectMap = path.join(cwd, '.claude', 'project-map.md');
+    if (fs.existsSync(projectMap)) {
+      console.error(`\nHint: Read .claude/project-map.md to find the right path first.`);
+    }
+  }
+
   console.error(line);
   console.error('To proceed, retry the same operation.');
   console.error('');
