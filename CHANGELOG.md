@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.35.14] — 2026-04-09
+
+### Added
+
+- **autonomous** — allow Claude-in-Chrome (Edge) browser control in background mode; DOM-based tab interaction without desktop takeover
+
+### Fixed
+
+- **marketplace** — aligned `marketplace.json` version to v0.35.13 (missed in prior release)
+
 ## [0.35.13] — 2026-04-09
 
 ### Fixed
