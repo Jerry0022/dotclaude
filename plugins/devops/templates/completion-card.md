@@ -324,9 +324,9 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 
 | # | Variant | CTA |
 |---|---------|-----|
-| 1 | shipped (with bump) | `## 🚀 SHIPPED. {{vOld}} → {{vNew}} ({{bump}}) — LEHN dich zurueck, alles erledigt` |
-| 1 | shipped (no bump) | `## 🚀 SHIPPED. {{version}} — LEHN dich zurueck, alles erledigt` |
-| 2 | ready | `## 📦 READY. {{info}} — SHIP oder AENDERN?` |
+| 1 | shipped (with bump) | `## 🚀 SHIPPED. {{vOld}} → {{vNew}} ({{bump}}) — LEHN dich zurück, alles erledigt` |
+| 1 | shipped (no bump) | `## 🚀 SHIPPED. {{version}} — LEHN dich zurück, alles erledigt` |
+| 2 | ready | `## 📦 READY. {{info}} — SHIP oder ÄNDERN?` |
 | 3 | blocked | `## ⛔ BLOCKED. {{reason}} — FIX oder SKIP?` |
 | 4 | test | `## 🧪 DONE. {{info}} — SHIP nach deinem TEST?` |
 | 5 | minimal-start | `## 🧪 STARTED. {{user-facing-description}} — VIEL SPASS` |

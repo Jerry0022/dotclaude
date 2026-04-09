@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.35.10] — 2026-04-09
+
+### Fixed
+
+- **i18n** — replace ASCII umlaut substitutes in completion card CTAs (`AENDERN` → `ÄNDERN`, `zurueck` → `zurück`)
+
 ## [0.35.9] — 2026-04-09
 
 ### Changed
