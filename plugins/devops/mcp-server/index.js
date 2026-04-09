@@ -395,16 +395,20 @@ function refreshUsage() {
       });
     } catch (checkErr) {
       const exitCode = checkErr.status;
-      if (exitCode === 7) {
-        execSync(`node "${SCRAPER_SCRIPT}" --auto-start --quiet`, {
-          timeout: 30000,
-          stdio: ['pipe', 'pipe', 'pipe'],
-        });
-      } else if (exitCode === 5) {
-        execSync(`node "${SCRAPER_SCRIPT}" --activate-cdp --quiet`, {
-          timeout: 30000,
-          stdio: ['pipe', 'pipe', 'pipe'],
-        });
+      try {
+        if (exitCode === 7) {
+          execSync(`node "${SCRAPER_SCRIPT}" --auto-start --quiet`, {
+            timeout: 30000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+          });
+        } else if (exitCode === 5) {
+          execSync(`node "${SCRAPER_SCRIPT}" --activate-cdp --quiet`, {
+            timeout: 30000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+          });
+        }
+      } catch (escalateErr) {
+        console.error('[dotclaude-completion-mcp] CDP escalation failed:', escalateErr.message);
       }
     }
 
@@ -425,6 +429,16 @@ function refreshUsage() {
     }
   } catch (err) {
     console.error('[dotclaude-completion-mcp] Scrape failed:', err.message);
+  }
+
+  // Fallback: use cached data if still within the current 5h reset window.
+  const cached = readUsageJson();
+  if (cached?.session) {
+    cached._cached = true;
+    cached._ageMinutes = Math.round(
+      (Date.now() - new Date(cached.timestamp).getTime()) / 60_000
+    );
+    return { success: true, data: cached, delta5h: null, deltaWk: null };
   }
 
   return { success: false, data: null };
