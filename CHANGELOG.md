@@ -2,6 +2,11 @@
 
 ## [0.35.8] — 2026-04-09
 
+### Added
+
+- **deep-knowledge** — project-map awareness: teach Claude to consult `.claude/project-map.md` before running full-repo Grep/Glob searches
+- **hooks** — token guard now shows "Hint: Read .claude/project-map.md" when blocking broad Grep/Glob operations
+
 ### Fixed
 
 - **mcp** — add cache fallback for usage fetch: when CDP scrape chain fails, use cached `usage-live.json` data (if within 5h reset window) instead of showing "Usage data unavailable"
