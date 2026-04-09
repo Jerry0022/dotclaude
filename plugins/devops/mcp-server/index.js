@@ -22,6 +22,12 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, '..');
+
+/** Safely parse a JSON string; returns the original value on failure. */
+function tryParse(v) {
+  try { return JSON.parse(v); } catch { return v; }
+}
+
 const SCRAPER_SCRIPT = join(PLUGIN_ROOT, 'scripts', 'refresh-usage-headless.js');
 const USAGE_JSON_PATH = join(homedir(), '.claude', 'usage-live.json');
 
@@ -530,36 +536,51 @@ server.registerTool(
       cwd: z.string().optional().describe("Working directory for build-ID computation (e.g. worktree path). Falls back to git toplevel if omitted."),
       buildId: z.string().optional().describe("Pre-computed build-ID (from ship_build). If provided, skips internal computation. Use this when the worktree/branch state may have changed after building (e.g. post-merge)."),
       session_id: z.string().optional().describe("Session ID for flag writing"),
-      changes: z.array(z.object({
-        area: z.string(),
-        description: z.string(),
-      })).max(3).optional().describe("What changed (max 3)"),
-      tests: z.array(z.object({
-        method: z.string(),
-        result: z.string(),
-      })).max(3).optional().describe("Test results (max 3)"),
-      state: z.object({
-        branch: z.string().optional(),
-        worktree: z.boolean().optional(),
-        commit: z.string().optional(),
-        pushed: z.boolean().optional(),
-        pr: z.object({
-          number: z.number(),
-          title: z.string(),
-        }).nullable().optional(),
-        merged: z.string().nullable().optional(),
-        appStatus: z.enum(["running", "not-started"]).nullable().optional(),
-      }).optional().describe("Repository state"),
-      cta: z.object({
-        vOld: z.string().optional(),
-        vNew: z.string().optional(),
-        bump: z.string().optional(),
-        version: z.string().optional(),
-        info: z.string().optional(),
-        reason: z.string().optional(),
-        description: z.string().optional(),
-      }).optional().describe("CTA template placeholders"),
-      userTest: z.array(z.string()).optional().describe("Manual test steps (test variant only)"),
+      changes: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.array(z.object({
+          area: z.string(),
+          description: z.string(),
+        })).max(3).optional(),
+      ).describe("What changed (max 3)"),
+      tests: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.array(z.object({
+          method: z.string(),
+          result: z.string(),
+        })).max(3).optional(),
+      ).describe("Test results (max 3)"),
+      state: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.object({
+          branch: z.string().optional(),
+          worktree: z.boolean().optional(),
+          commit: z.string().optional(),
+          pushed: z.boolean().optional(),
+          pr: z.object({
+            number: z.number(),
+            title: z.string(),
+          }).nullable().optional(),
+          merged: z.string().nullable().optional(),
+          appStatus: z.enum(["running", "not-started"]).nullable().optional(),
+        }).optional(),
+      ).describe("Repository state"),
+      cta: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.object({
+          vOld: z.string().optional(),
+          vNew: z.string().optional(),
+          bump: z.string().optional(),
+          version: z.string().optional(),
+          info: z.string().optional(),
+          reason: z.string().optional(),
+          description: z.string().optional(),
+        }).optional(),
+      ).describe("CTA template placeholders"),
+      userTest: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.array(z.string()).optional(),
+      ).describe("Manual test steps (test variant only)"),
     }),
   },
   async (params) => {
