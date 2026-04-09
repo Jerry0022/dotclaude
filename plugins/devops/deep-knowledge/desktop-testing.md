@@ -22,22 +22,22 @@ If all three are met → ask the user before proceeding with desktop tests.
 Use `AskUserQuestion` with exactly this structure:
 
 ```
-Question: "Soll ich den Desktop uebernehmen, um die Aenderungen automatisch
+Question: "Soll ich den Desktop übernehmen, um die Änderungen automatisch
            visuell zu testen?"
 
 Header: "Desktop-Test"
 
 Options:
-  1. "Ja, Desktop uebernehmen"
-     Description: "Claude steuert Browser/App automatisch und prueft die
-                   Aenderungen visuell. Dauert ca. 1-2 Minuten."
+  1. "Ja, Desktop übernehmen"
+     Description: "Claude steuert Browser/App automatisch und prüft die
+                   Änderungen visuell. Dauert ca. 1-2 Minuten."
 
   2. "Nein, manuell testen"
      Description: "Testschritte werden wie gewohnt in der Completion Card
                    aufgelistet."
 
 Warning (in question text, MANDATORY):
-  "WARNUNG: Waehrend der automatischen Tests wird der Desktop periodisch
+  "WARNUNG: Während der automatischen Tests wird der Desktop periodisch
    gesteuert — Maus und Tastatur werden automatisch bewegt. Du kannst
    weiterarbeiten, aber deine Arbeit wird dabei kurzzeitig unterbrochen.
    Spiele, Videocalls oder zeitkritische Aufgaben sollten in diesem
@@ -57,7 +57,7 @@ Call `request_access` with the required applications:
 - The browser running the app (typically "Google Chrome" or "Microsoft Edge")
 - Any other application visible in the test (if known)
 
-Reason: "Automatische visuelle Tests der UI-Aenderungen durchfuehren"
+Reason: "Automatische visuelle Tests der UI-Änderungen durchführen"
 
 If the user denies access → fall back to manual test steps. Do not ask again.
 

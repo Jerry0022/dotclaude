@@ -37,7 +37,7 @@ starting points and inspiration — deviate freely when the content calls for it
         <!-- Auto-populated summary of current selections -->
       </div>
       <button id="submit-btn" class="primary">Entscheidungen abschicken</button>
-      <p class="hint">Deine Auswahl wird direkt an Claude uebermittelt.</p>
+      <p class="hint">Deine Auswahl wird direkt an Claude übermittelt.</p>
     </aside>
   </div>
 
@@ -382,7 +382,7 @@ document.getElementById('submit-btn').addEventListener('click', () => {
 
   // Visual confirmation
   const btn = document.getElementById('submit-btn');
-  btn.textContent = 'Entscheidungen uebermittelt ✓';
+  btn.textContent = 'Entscheidungen übermittelt ✓';
   btn.disabled = true;
   btn.classList.add('submitted');
 });

@@ -35,7 +35,7 @@ If a skill name was passed as argument, use it. Otherwise:
 1. List all available plugin skills by scanning the plugin's `skills/` directory
 2. Also check for agent extensions in `agents/`
 3. Present the list via AskUserQuestion:
-   > "Welchen Plugin-Skill moechtest du fuer dieses Projekt erweitern?"
+   > "Welchen Plugin-Skill möchtest du für dieses Projekt erweitern?"
    >
    > Options: ship, commit, debug, explain, new-issue, project-setup, readme, ...
 
@@ -51,12 +51,12 @@ Scan `{project}/.claude/skills/{skill-name}/` for:
 ### If extension exists
 
 Report what was found:
-> "Extension fuer `/{skill-name}` existiert bereits:"
+> "Extension für `/{skill-name}` existiert bereits:"
 > - `SKILL.md` — [exists/missing]
 > - `reference.md` — [exists/missing]
 
 Read and display the existing files. Ask:
-> "Moechtest du die bestehende Extension anpassen oder eine fehlende Datei ergaenzen?"
+> "Möchtest du die bestehende Extension anpassen oder eine fehlende Datei ergänzen?"
 >
 > Options:
 > 1. SKILL.md bearbeiten/erstellen
@@ -117,10 +117,10 @@ If it is, warn the user (do not auto-fix .gitignore).
 
 After scaffolding or editing, confirm:
 
-> "Extension fuer `/{skill-name}` angelegt/aktualisiert unter
+> "Extension für `/{skill-name}` angelegt/aktualisiert unter
 > `.claude/skills/{skill-name}/`."
 >
-> - `SKILL.md` — Schritte ueberschreiben oder ergaenzen
-> - `reference.md` — Kontext hinzufuegen (Build-Befehle, Deploy-Ziele, Pfade)
+> - `SKILL.md` — Schritte überschreiben oder ergänzen
+> - `reference.md` — Kontext hinzufügen (Build-Befehle, Deploy-Ziele, Pfade)
 >
-> Das Plugin liest diese Dateien automatisch vor jeder Ausfuehrung von `/{skill-name}`.
+> Das Plugin liest diese Dateien automatisch vor jeder Ausführung von `/{skill-name}`.
