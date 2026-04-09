@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.9] — 2026-04-09
+
+### Changed
+
+- **skills** — rename `devops-livebrief` to `devops-concept` (directory, SKILL.md, reference, deep-knowledge, README, .gitignore)
+- **chore** — untrack `.claude/project-map.md` (already in .gitignore)
+
 ## [0.35.8] — 2026-04-09
 
 ### Fixed
