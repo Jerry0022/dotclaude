@@ -109,6 +109,23 @@ service-account*.json
 | **WARNING** | Required ignore rule missing | Auto-fix |
 | **INFO** | Redundant rules, wrong order | Report only |
 
+### 2.6 — Build-time injected files
+
+Files containing values injected at build or dev-start time (build hashes, build IDs,
+timestamps) that change on every run SHOULD be gitignored. They cause dirty worktrees
+and noisy diffs with no value.
+
+Common patterns to check for:
+```gitignore
+# Build-time injected (changes every dev-start / build)
+**/build-id.*
+**/build-hash.*
+```
+
+**Audit rule:** If a tracked file's only recent changes are build-hash or build-ID
+updates (check `git log -5 --oneline -- <file>`), flag as **WARNING** and recommend
+splitting the volatile value into a separate gitignored file.
+
 ## Step 2b — CLAUDE.md audit
 
 Run `/devops-claude-md-lint` to check CLAUDE.md size and structure.
