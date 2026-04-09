@@ -15,6 +15,7 @@ require('../lib/plugin-guard');
 const fs   = require('fs');
 const path = require('path');
 const { runOnce } = require('../lib/run-once');
+const { sessionFile } = require('../lib/session-id');
 
 const PLUGIN_DIR  = path.resolve(__dirname, '..', '..');
 const TASKS_DIR   = path.join(PLUGIN_DIR, 'scheduled-tasks');
@@ -26,6 +27,8 @@ const TASKS_DIR   = path.join(PLUGIN_DIR, 'scheduled-tasks');
 // latest cache at cron fire time.
 const home = process.env.HOME || process.env.USERPROFILE || '';
 const PLUGIN_GLOB_BASE = path.join(home, '.claude', 'plugins', 'cache').replace(/\\/g, '/');
+
+const FLAG_PREFIX = 'dotclaude-devops-user-active';
 
 const TASK_DEFINITIONS = [
   {
@@ -84,15 +87,23 @@ process.stdin.on('end', () => {
 
   if (tasks.length === 0) process.exit(0);
 
+  // Set the initial user-active flag so the first immediate execution runs.
+  const flagPath = sessionFile(FLAG_PREFIX, sessionId).replace(/\\/g, '/');
+  try {
+    fs.writeFileSync(sessionFile(FLAG_PREFIX, sessionId), String(Date.now()), 'utf8');
+  } catch {}
+
   const lines = [
     'BLOCKING — execute BEFORE responding to the user message:',
     '',
   ];
 
   for (const t of tasks) {
+    const idleGuard = `IDLE GUARD: First, run Bash to check if the file "${flagPath}" exists (test -f "${flagPath}"). If it does NOT exist, output nothing and stop — do NOT proceed with the task. If it DOES exist, delete it (rm "${flagPath}") and continue.`;
+
     const cronPrompt = t.cronDiscoveryDir
-      ? `Execute the ${t.id} scheduled task as defined in the plugin. List the directory ${t.cronDiscoveryDir} to find the current version, then Read {version}/scheduled-tasks/${t.id}/SKILL.md — use the match to derive the plugin root (parent of scheduled-tasks/).`
-      : `Execute the ${t.id} scheduled task as defined in the plugin. Read ${t.resolvedSkillPath} — use the file's parent of scheduled-tasks/ as the plugin root.`;
+      ? `${idleGuard} Execute the ${t.id} scheduled task as defined in the plugin. List the directory ${t.cronDiscoveryDir} to find the current version, then Read {version}/scheduled-tasks/${t.id}/SKILL.md — use the match to derive the plugin root (parent of scheduled-tasks/).`
+      : `${idleGuard} Execute the ${t.id} scheduled task as defined in the plugin. Read ${t.resolvedSkillPath} — use the file's parent of scheduled-tasks/ as the plugin root.`;
     lines.push(
       `Register cron via CronCreate: cron="${t.cron}", recurring=${t.recurring}, prompt="${cronPrompt}"`,
       `Then immediately execute it once: Read ${t.resolvedSkillPath} and run Step 0 (Completion Flow Internalization).`,
