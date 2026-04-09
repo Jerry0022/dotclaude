@@ -57,6 +57,7 @@ function formatDelta(delta) {
 }
 
 function formatResetShort(minutes) {
+  if (minutes == null || isNaN(minutes)) return '—';
   if (minutes >= 1440) {
     const d = Math.floor(minutes / 1440);
     const h = Math.floor((minutes % 1440) / 60);
@@ -87,7 +88,7 @@ function renderUsageMeter(usageData, delta5h, deltaWk) {
   const w = usageData.weekly;
   const lines = [];
 
-  const elapsed5hPct = ((300 - s.resetInMinutes) / 300) * 100;
+  const elapsed5hPct = s.resetInMinutes != null ? ((300 - s.resetInMinutes) / 300) * 100 : 0;
   lines.push(renderUsageLine('5h', s.pct, elapsed5hPct, delta5h, s.resetInMinutes));
 
   if (w) {
@@ -111,7 +112,7 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk) {
   const w = usageData.weekly;
   const lines = ['```'];
 
-  const elapsed5hPct = ((300 - s.resetInMinutes) / 300) * 100;
+  const elapsed5hPct = s.resetInMinutes != null ? ((300 - s.resetInMinutes) / 300) * 100 : 0;
   lines.push(renderUsageLine('5h', s.pct, elapsed5hPct, delta5h, s.resetInMinutes));
 
   if (w) {
