@@ -18,7 +18,8 @@ allowed-tools: >-
   AskUserQuestion, CronCreate, CronDelete, CronList,
   EnterWorktree, ExitWorktree, TodoWrite,
   WebFetch, WebSearch,
-  mcp__computer-use__*, mcp__Claude_Preview__*,
+  mcp__computer-use__*, mcp__Claude_in_Chrome__*,
+  mcp__Claude_Preview__*,
   mcp__plugin_playwright_playwright__*,
   mcp__plugin_devops_dotclaude-completion__*,
   mcp__plugin_devops_dotclaude-ship__*,
@@ -61,7 +62,14 @@ Save the choice as `$EXEC_MODE` (`analyze` | `implement`). This controls Step 5.
 
 Browser-based testing (Playwright, Preview) runs regardless of this choice — it
 operates in its own window and doesn't occupy the desktop. This question only
-controls whether computer-use (mouse/keyboard takeover) is used for native apps.
+controls whether computer-use (mouse/keyboard takeover) is used for **native apps**.
+
+**Edge/Chrome browser exception:** Even in "Hintergrund" mode, Claude is allowed to
+open, navigate, read, and interact with browser tabs via the **Claude-in-Chrome MCP**
+(`mcp__Claude_in_Chrome__*`). This is DOM-based — no mouse/keyboard takeover, no
+desktop occupation. The user can keep working while Claude autonomously tests, reads,
+and interacts with web pages in a browser tab. Prime these tools in Step 3b.
+
 In `analyze` mode, desktop is only used for visual inspection (screenshots), never for interaction.
 
 **Question 3 — Shutdown:**
@@ -82,8 +90,12 @@ Call `mcp__computer-use__request_access` with the list of applications needed
 Then take a test `mcp__computer-use__screenshot` to confirm access works.
 
 ### 3b — Browser Tools
-If the task involves web UI: trigger a lightweight Playwright or Preview call
-(e.g., `browser_snapshot` or `preview_screenshot`) to prime browser permissions.
+**Claude-in-Chrome** (`mcp__Claude_in_Chrome__*`): Always prime — runs in both
+desktop and background mode. Trigger a lightweight call (e.g., `tabs_context_mcp`)
+to confirm the extension is connected. This is the primary browser interface in
+background mode (DOM-based, no desktop takeover).
+**Playwright / Preview**: If the task involves web UI, additionally trigger a
+lightweight call (e.g., `browser_snapshot` or `preview_screenshot`) to prime.
 
 ### 3c — File & Shell Tools
 Run a harmless `Bash` command (e.g., `echo "permission primed"`), `Read` a file,
