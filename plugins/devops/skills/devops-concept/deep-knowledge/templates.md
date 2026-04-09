@@ -1,4 +1,4 @@
-# Livebrief HTML Templates
+# Concept HTML Templates
 
 **These are recommendations, not mandatory structures.** Claude should adapt
 layout, elements, and design to fit the specific content. Use these as
@@ -12,13 +12,13 @@ starting points and inspiration — deviate freely when the content calls for it
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Livebrief — {title}</title>
+  <title>Concept — {title}</title>
   <style>/* all CSS inline */</style>
 </head>
 <body>
-  <div class="livebrief-layout">
+  <div class="concept-layout">
     <!-- Main content: ~80% width -->
-    <div class="livebrief-content">
+    <div class="concept-content">
       <header>
         <h1>{title}</h1>
         <p class="subtitle">{context line}</p>
@@ -31,7 +31,7 @@ starting points and inspiration — deviate freely when the content calls for it
     </div>
 
     <!-- Decision panel: ~20% width, fixed sidebar, NOT overlay -->
-    <aside class="livebrief-decision-panel">
+    <aside class="concept-decision-panel">
       <h3>Entscheidungen</h3>
       <div id="decision-summary">
         <!-- Auto-populated summary of current selections -->
@@ -41,7 +41,7 @@ starting points and inspiration — deviate freely when the content calls for it
     </aside>
   </div>
 
-  <script type="application/json" id="livebrief-decisions">
+  <script type="application/json" id="concept-decisions">
     {"submitted": false, "decisions": [], "comments": []}
   </script>
   <script>/* all JS inline */</script>
@@ -52,16 +52,16 @@ starting points and inspiration — deviate freely when the content calls for it
 ### Decision Panel CSS
 
 ```css
-.livebrief-layout {
+.concept-layout {
   display: flex;
   min-height: 100vh;
 }
-.livebrief-content {
+.concept-content {
   flex: 1;
   padding: 2rem;
   overflow-y: auto;
 }
-.livebrief-decision-panel {
+.concept-decision-panel {
   width: 20%;
   min-width: 240px;
   max-width: 360px;
@@ -75,8 +75,8 @@ starting points and inspiration — deviate freely when the content calls for it
 }
 /* Mobile: collapse to sticky bottom */
 @media (max-width: 768px) {
-  .livebrief-layout { flex-direction: column; }
-  .livebrief-decision-panel {
+  .concept-layout { flex-direction: column; }
+  .concept-decision-panel {
     width: 100%;
     max-width: none;
     height: auto;
@@ -376,9 +376,9 @@ function collectDecisions() {
 ```javascript
 document.getElementById('submit-btn').addEventListener('click', () => {
   const data = collectDecisions();
-  const container = document.getElementById('livebrief-decisions');
+  const container = document.getElementById('concept-decisions');
   container.textContent = JSON.stringify(data);
-  document.body.classList.add('livebrief-submitted');
+  document.body.classList.add('concept-submitted');
 
   // Visual confirmation
   const btn = document.getElementById('submit-btn');

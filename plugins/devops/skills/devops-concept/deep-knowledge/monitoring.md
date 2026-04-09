@@ -1,6 +1,6 @@
-# Livebrief Browser Monitoring
+# Concept Browser Monitoring
 
-How Claude monitors the livebrief page for user decisions, processes them
+How Claude monitors the concept page for user decisions, processes them
 **live**, and updates the page for further interaction.
 
 ## Monitoring Architecture
@@ -25,13 +25,13 @@ The loop continues until the user is done (closes page or says "fertig").
 The submit action adds a CSS class to `<body>`:
 
 ```javascript
-document.body.classList.contains('livebrief-submitted')  // → true when submitted
+document.body.classList.contains('concept-submitted')  // → true when submitted
 ```
 
 Decision data lives in a hidden JSON block:
 
 ```javascript
-JSON.parse(document.getElementById('livebrief-decisions').textContent)
+JSON.parse(document.getElementById('concept-decisions').textContent)
 ```
 
 ## Tool Priority
@@ -44,12 +44,12 @@ Best option — direct access to page DOM. Works with Edge (Chromium-based).
 
 **Check submission:**
 ```
-javascript_tool: "document.body.classList.contains('livebrief-submitted')"
+javascript_tool: "document.body.classList.contains('concept-submitted')"
 ```
 
 **Read decisions:**
 ```
-javascript_tool: "document.getElementById('livebrief-decisions').textContent"
+javascript_tool: "document.getElementById('concept-decisions').textContent"
 ```
 
 ### 2. Playwright (`mcp__plugin_playwright_playwright__*`)
@@ -63,12 +63,12 @@ browser_navigate: "file:///{filepath}"
 
 **Check submission:**
 ```
-browser_evaluate: "document.body.classList.contains('livebrief-submitted')"
+browser_evaluate: "document.body.classList.contains('concept-submitted')"
 ```
 
 **Read decisions:**
 ```
-browser_evaluate: "document.getElementById('livebrief-decisions').textContent"
+browser_evaluate: "document.getElementById('concept-decisions').textContent"
 ```
 
 ### 3. Claude Preview (`mcp__Claude_Preview__*`)
@@ -77,7 +77,7 @@ Works for preview-based workflows.
 
 **Check submission:**
 ```
-preview_eval: "document.body.classList.contains('livebrief-submitted')"
+preview_eval: "document.body.classList.contains('concept-submitted')"
 ```
 
 ### 4. Manual Fallback
@@ -86,7 +86,7 @@ If no browser tool is available:
 
 ```
 AskUserQuestion:
-  question: "Hast du deine Entscheidungen auf der Livebrief-Seite abgeschickt?"
+  question: "Hast du deine Entscheidungen auf der Concept-Seite abgeschickt?"
   options:
     - "Ja, fertig"
     - "Brauche noch Zeit"
@@ -97,7 +97,7 @@ If user picks "Ja" but no browser tool can read the page, ask the user to
 copy-paste the JSON from the page's developer console:
 
 ```
-console.log(document.getElementById('livebrief-decisions').textContent)
+console.log(document.getElementById('concept-decisions').textContent)
 ```
 
 ## Polling Strategy
@@ -129,7 +129,7 @@ After 5 minutes without submission:
 
 ```
 AskUserQuestion:
-  question: "Die Livebrief-Seite ist seit 5 Minuten offen. Wie soll ich weiter?"
+  question: "Die Concept-Seite ist seit 5 Minuten offen. Wie soll ich weiter?"
   options:
     - "Brauche mehr Zeit" → extend by 5 minutes
     - "Ergebnisse jetzt auslesen" → read current state even if not submitted
@@ -140,7 +140,7 @@ AskUserQuestion:
 
 ### Parsing
 
-The JSON from `#livebrief-decisions` follows this schema:
+The JSON from `#concept-decisions` follows this schema:
 
 ```json
 {
@@ -168,7 +168,7 @@ The JSON from `#livebrief-decisions` follows this schema:
 After parsing, produce a brief summary:
 
 ```markdown
-## Livebrief-Ergebnisse (Runde 1)
+## Concept-Ergebnisse (Runde 1)
 
 **Akzeptiert:** Finding 1, Finding 3, Finding 5
 **Abgelehnt:** Finding 2, Finding 4
@@ -199,8 +199,8 @@ After processing a submission, Claude MUST update the browser page:
 1. **Reset submission state:**
    ```javascript
    // Via browser tool (javascript_tool / browser_evaluate / preview_eval)
-   document.body.classList.remove('livebrief-submitted');
-   document.getElementById('livebrief-decisions').textContent =
+   document.body.classList.remove('concept-submitted');
+   document.getElementById('concept-decisions').textContent =
      JSON.stringify({submitted: false, round: N+1, decisions: [], comments: []});
    document.getElementById('submit-btn').disabled = false;
    document.getElementById('submit-btn').textContent = 'Entscheidungen abschicken';
@@ -217,7 +217,7 @@ After processing a submission, Claude MUST update the browser page:
 ### Persistence
 
 Write processed decisions to:
-`{project}/.claude/devops-livebrief/{same-timestamp}-{same-slug}-decisions.json`
+`{project}/.claude/devops-concept/{same-timestamp}-{same-slug}-decisions.json`
 
 Each round appends to the same file (array of rounds), preserving full history:
 
