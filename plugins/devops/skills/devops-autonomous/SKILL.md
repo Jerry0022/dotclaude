@@ -55,8 +55,8 @@ Ask via `AskUserQuestion` (three sequential questions):
 Save the choice as `$EXEC_MODE` (`analyze` | `implement`). This controls Step 5.
 
 **Question 2 — Desktop:**
-> **Soll ich den Desktop fuer Tests uebernehmen oder im Hintergrund testen?**
-> - "Desktop uebernehmen" — computer-use for full desktop/native app interaction
+> **Soll ich den Desktop für Tests übernehmen oder im Hintergrund testen?**
+> - "Desktop übernehmen" — computer-use for full desktop/native app interaction
 > - "Hintergrund" — no desktop takeover, user can keep using the PC
 
 Browser-based testing (Playwright, Preview) runs regardless of this choice — it

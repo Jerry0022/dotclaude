@@ -78,9 +78,9 @@ Present the orchestration plan to the user:
 | 2 | frontend, windows | <what they build, in parallel> |
 | 3 | qa | <what they verify> |
 
-### Abhaengigkeiten
+### Abhängigkeiten
 - Wave 2 wartet auf Wave 1 (Core-Contracts)
-- Wave 3 prueft alle Aenderungen aus Wave 1+2
+- Wave 3 prüft alle Änderungen aus Wave 1+2
 
 ### Geschaetzte Agents: N
 ```

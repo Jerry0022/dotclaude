@@ -6,7 +6,7 @@ description: >-
   comparisons, or creative work — open it in the browser and monitor user
   decisions (toggles, selections, comments) to feed them back into the workflow.
   Triggers on: "concept", "mach mir eine seite", "zeig mir das interaktiv",
-  "als webseite", "interaktive uebersicht", "concept page", "interactive plan",
+  "als webseite", "interaktive Übersicht", "concept page", "interactive plan",
   "show me this as a page", "visualize this".
   Also auto-suggest when Claude completes analysis, planning, comparison,
   or concept work that would benefit from interactive decision-making.
@@ -112,7 +112,7 @@ signal Claude monitors.
 2. Collect all comment field values → `comments[]`
 3. Set `submitted: true` in the JSON block
 4. Add class `concept-submitted` to `<body>`
-5. Show visual confirmation ("Entscheidungen uebermittelt")
+5. Show visual confirmation ("Entscheidungen übermittelt")
 6. Disable the submit button to prevent double-submit
 
 ### File Location
@@ -143,8 +143,8 @@ it, `cmd.exe` interprets the first quoted argument as a window title.
 
 After opening, inform the user:
 
-> Concept geoeffnet. Triff deine Entscheidungen auf der Seite und klick
-> "Entscheidungen abschicken" wenn du fertig bist — ich uebernehme dann.
+> Concept geöffnet. Triff deine Entscheidungen auf der Seite und klick
+> "Entscheidungen abschicken" wenn du fertig bist — ich übernehme dann.
 
 ## Step 4 — Monitor for Feedback
 

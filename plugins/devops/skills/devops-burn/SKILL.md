@@ -46,7 +46,7 @@ Before doing ANYTHING else, ask via `AskUserQuestion`:
 >
 > Dieser Modus verbraucht aggressiv dein verbleibendes Weekly-Budget
 > durch maximale Parallelisierung. Bei aktivierter Zusatznutzung kann
-> das ueber dein Standardlimit hinausgehen.
+> das über dein Standardlimit hinausgehen.
 >
 > Bist du sicher, dass du den Burn-Modus starten willst?
 
@@ -72,12 +72,12 @@ Present a one-line summary:
 > **Budget: {remaining}% | Reset in {hours}h | Modus: BURN**
 
 If weekly remaining is < 10%, warn:
-> "Nur noch {X}% uebrig — Burn-Modus bringt hier wenig. Trotzdem starten?"
+> "Nur noch {X}% übrig — Burn-Modus bringt hier wenig. Trotzdem starten?"
 
 ## Step 3 — Primary Task Intake
 
 Use `$ARGUMENTS` if provided. If empty, ask:
-> **Was ist der Hauptauftrag fuer den Burn?**
+> **Was ist der Hauptauftrag für den Burn?**
 
 Parse into: **Goal** (one sentence), **Scope** (files/systems), **Priority** (high).
 
@@ -220,28 +220,28 @@ BURN MODE ACTIVE — Maximale Parallelisierung.
 - IMMER die maximale Agent-Anzahl nutzen (full devops roster: core, frontend,
   ai, windows, designer, qa, po, research — je nach Relevanz)
 - Waves wo moeglich zusammenlegen: wenn keine harte Abhaengigkeit besteht,
-  koennen Agents aus verschiedenen Waves parallel starten
-- Fuer unabhaengige Tasks: separate Feature-Branches + separate Agent-Gruppen
+  können Agents aus verschiedenen Waves parallel starten
+- Für unabhängige Tasks: separate Feature-Branches + separate Agent-Gruppen
   die gleichzeitig laufen
-- Research-Agent im Hintergrund fuer alle Tasks die Kontext brauchen
+- Research-Agent im Hintergrund für alle Tasks die Kontext brauchen
 
 ### Durchsatz-Optimierung
-- Keine uebertriebene Planung — direkt starten
+- Keine übertriebene Planung — direkt starten
 - Bei Zweifeln: implementieren statt recherchieren
 - Tests erst am Ende als QA-Wave, nicht nach jedem Einzeltask
-- Lint/Type-Fixes koennen ohne eigenen Agent inline passieren
-- Kleine Tasks (< 5 Minuten geschaetzt) direkt inline, nicht delegieren
+- Lint/Type-Fixes können ohne eigenen Agent inline passieren
+- Kleine Tasks (< 5 Minuten geschätzt) direkt inline, nicht delegieren
 
 ### Task-Reihenfolge
 - P0 und P1 Tasks starten sofort in Wave 1
 - P2+ Tasks starten parallel sobald Agents frei werden
-- Wenn ein Agent frueher fertig wird: naechsten Task aus der Queue ziehen
-- Nie idle sein — immer den naechsten Task starten
+- Wenn ein Agent früher fertig wird: nächsten Task aus der Queue ziehen
+- Nie idle sein — immer den nächsten Task starten
 
 ### Ergebnis-Konsolidierung
-- Alle Aenderungen auf dem gleichen Integration-Branch sammeln
+- Alle Änderungen auf dem gleichen Integration-Branch sammeln
 - Sub-Branches pro Agent, sequentiell mergen
-- Ein finaler QA-Durchlauf ueber alle Aenderungen
+- Ein finaler QA-Durchlauf über alle Änderungen
 - AUTONOMOUS-REPORT.md muss alle Tasks und deren Status enthalten
 ```
 
