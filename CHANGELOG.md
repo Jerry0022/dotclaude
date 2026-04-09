@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.8] — 2026-04-09
+
+### Fixed
+
+- **mcp** — add cache fallback for usage fetch: when CDP scrape chain fails, use cached `usage-live.json` data (if within 5h reset window) instead of showing "Usage data unavailable"
+- **mcp** — catch CDP escalation errors (`--activate-cdp`, `--auto-start`) separately so the final scrape attempt still runs even if escalation fails
+
 ## [0.35.7] — 2026-04-08
 
 ### Fixed
