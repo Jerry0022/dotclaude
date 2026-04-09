@@ -88,12 +88,19 @@ function parseUsageText(text) {
   const pctMatches = [...text.matchAll(/(?:\d{1,2}:\d{2})?(\d{1,3}) % (?:verwendet|used)/g)];
   const pcts = pctMatches.map(m => parseInt(m[1]));
 
+  // Match session reset: "Zurücksetzung in 2 Std. 30 Min." or just "30 Min." (< 1h left)
   const resetMatch = text.match(
-    /(?:Zurücksetzung in|Resets? in)\s+(\d+)\s*(?:Std\.|hr)\.?\s*(\d+)?\s*(?:Min\.|min)?/
+    /(?:Zurücksetzung in|Resets? in)\s+(?:(\d+)\s*(?:Std\.|hr)\.?\s*)?(\d+)\s*(?:Min\.|min)/
+  );
+  // Fallback: hours-only format "Zurücksetzung in 2 Std." (no minutes)
+  const resetMatchHoursOnly = !resetMatch && text.match(
+    /(?:Zurücksetzung in|Resets? in)\s+(\d+)\s*(?:Std\.|hr)/
   );
   const resetMinutes = resetMatch
     ? (parseInt(resetMatch[1]) || 0) * 60 + (parseInt(resetMatch[2]) || 0)
-    : null;
+    : resetMatchHoursOnly
+      ? (parseInt(resetMatchHoursOnly[1]) || 0) * 60
+      : null;
 
   const weeklyMatch = text.match(
     /(?:Alle Modelle|All Models)[\s\S]*?(?:Zurücksetzung|Reset)\s+(\w+)\.?,?\s*(\d{1,2}:\d{2})/
