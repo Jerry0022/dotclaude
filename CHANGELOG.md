@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.35.12] — 2026-04-09
+
+### Fixed
+
+- **i18n** — replace all remaining ASCII umlaut digraphs (ae/oe/ue) with proper German umlauts across skills, deep-knowledge, hooks, templates, and MCP server strings
+
 ## [0.35.11] — 2026-04-09
 
 ### Added
