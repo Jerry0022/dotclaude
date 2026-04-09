@@ -153,9 +153,9 @@ const CTA = {
     fallback:        '## \ud83d\udccb DONE \u2014 Anything ELSE?',
   },
   de: {
-    'shipped-bump':  '## \ud83d\ude80 SHIPPED. {vOld} \u2192 {vNew} ({bump}) \u2014 LEHN dich zurueck, alles erledigt',
-    'shipped-plain': '## \ud83d\ude80 SHIPPED. {version} \u2014 LEHN dich zurueck, alles erledigt',
-    ready:           '## \ud83d\udce6 READY. {info} \u2014 SHIP oder AENDERN?',
+    'shipped-bump':  '## \ud83d\ude80 SHIPPED. {vOld} \u2192 {vNew} ({bump}) \u2014 LEHN dich zurück, alles erledigt',
+    'shipped-plain': '## \ud83d\ude80 SHIPPED. {version} \u2014 LEHN dich zurück, alles erledigt',
+    ready:           '## \ud83d\udce6 READY. {info} \u2014 SHIP oder ÄNDERN?',
     blocked:         '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
     test:            '## \ud83e\uddea DONE. {info} \u2014 SHIP nach deinem TEST?',
     'minimal-start': '## \ud83e\uddea STARTED. {description} \u2014 VIEL SPASS',
