@@ -74,8 +74,8 @@ process.stdin.on('end', () => {
   lines.push(
     '',
     'COMPLETION CARD — when ALL work is done:',
-    'Resolve via ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
-    'Then call `render_completion_card` MCP tool (dotclaude-completion server).',
+    'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly (already loaded MCP tool).',
+    'Only if the direct call fails with "tool not found", fall back to ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
     `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
     '  plus changes, tests, state, cta, userTest as applicable.',
     'Variant: shipped=ship succeeded, blocked=build/gate/merge failed,',
