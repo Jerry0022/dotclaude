@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.36.2] — 2026-04-10
+
+### Added
+
+- **hooks** — worktree branch guard: prevents working on main/master inside linked worktrees; outputs BLOCKING instruction to create a new branch first; silent when not in a worktree
+
 ## [0.36.1] — 2026-04-10
 
 ### Fixed
