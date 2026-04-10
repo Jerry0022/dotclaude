@@ -242,7 +242,7 @@ BURN MODE ACTIVE — Maximale Parallelisierung.
 - Alle Änderungen auf dem gleichen Integration-Branch sammeln
 - Sub-Branches pro Agent, sequentiell mergen
 - Ein finaler QA-Durchlauf über alle Änderungen
-- AUTONOMOUS-REPORT.md muss alle Tasks und deren Status enthalten
+- AUTONOMOUS-REPORT.html muss alle Tasks und deren Status enthalten
 ```
 
 **Important:** Pass this entire prompt as `$ARGUMENTS` to the autonomous skill.

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.36.0] — 2026-04-10
+
+### Changed
+
+- **autonomous** — report is now a self-contained interactive HTML file (dark theme, collapsible sections, embedded completion card data) instead of an unread markdown file; auto-opens in Edge on completion
+
 ## [0.35.15] — 2026-04-10
 
 ### Fixed
