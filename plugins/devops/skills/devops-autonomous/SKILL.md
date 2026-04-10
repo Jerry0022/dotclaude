@@ -46,19 +46,27 @@ If ambiguous, ask ONE clarifying question — time is limited.
 
 ## Step 2 — Mode & Preference Questions
 
-Ask via `AskUserQuestion` (three sequential questions):
+Ask via `AskUserQuestion` — three sequential questions. **Option order is fixed** as
+listed below (option 1 first, option 2 second). Never shuffle. Mark the recommended
+option with "(empfohlen)" in its label.
 
 **Question 1 — Execution Mode:**
-> **Nur analysieren oder auch implementieren & testen?**
-> - "Nur analysieren" — read-only: Code lesen, recherchieren, Architektur-Analyse, Report mit Findings & Empfehlungen. Keine Datei-Änderungen.
-> - "Analysieren, implementieren & testen" — erst analysieren, dann implementieren, testen, builden, live verifizieren. Kein Ship — alles bleibt lokal.
+> header: "Modus"
+> question: "Nur analysieren oder auch implementieren & testen?"
+> multiSelect: false
+> Options (fixed order):
+> 1. label: "Analysieren & implementieren (empfohlen)" — description: "Erst analysieren, dann implementieren, testen, builden, live verifizieren. Kein Ship — alles bleibt lokal."
+> 2. label: "Nur analysieren" — description: "Read-only: Code lesen, recherchieren, Architektur-Analyse, Report mit Findings & Empfehlungen. Keine Datei-Änderungen."
 
-Save the choice as `$EXEC_MODE` (`analyze` | `implement`). This controls Step 5.
+Save the choice as `$EXEC_MODE` (`implement` if option 1, `analyze` if option 2). This controls Step 5.
 
 **Question 2 — Desktop:**
-> **Soll ich den Desktop für Tests übernehmen oder im Hintergrund testen?**
-> - "Desktop übernehmen" — computer-use for full desktop/native app interaction
-> - "Hintergrund" — no desktop takeover, user can keep using the PC
+> header: "Desktop"
+> question: "Soll ich den Desktop für Tests übernehmen oder im Hintergrund testen?"
+> multiSelect: false
+> Options (fixed order):
+> 1. label: "Hintergrund (empfohlen)" — description: "Kein Desktop-Takeover, du kannst den PC weiter nutzen. Browser-Tests (Playwright/Preview) laufen trotzdem."
+> 2. label: "Desktop übernehmen" — description: "Computer-Use für volle Desktop-/Native-App-Interaktion (Maus/Tastatur)."
 
 Browser-based testing (Playwright, Preview) runs regardless of this choice — it
 operates in its own window and doesn't occupy the desktop. This question only
@@ -73,8 +81,12 @@ and interacts with web pages in a browser tab. Prime these tools in Step 3b.
 In `analyze` mode, desktop is only used for visual inspection (screenshots), never for interaction.
 
 **Question 3 — Shutdown:**
-> **Soll der PC nach Abschluss automatisch heruntergefahren werden?**
-> - "Ja, herunterfahren" / "Nein, nur Bericht"
+> header: "Shutdown"
+> question: "Soll der PC nach Abschluss automatisch heruntergefahren werden?"
+> multiSelect: false
+> Options (fixed order):
+> 1. label: "Nein, nur Bericht (empfohlen)" — description: "Ergebnisse als Report, PC bleibt an."
+> 2. label: "Ja, herunterfahren" — description: "PC fährt 60s nach Abschluss automatisch herunter."
 
 ## Step 3 — Permission Priming (ALL permissions BEFORE confirmation)
 
