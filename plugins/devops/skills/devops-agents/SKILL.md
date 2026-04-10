@@ -1,6 +1,6 @@
 ---
 name: devops-agents
-version: 0.2.0
+version: 0.3.0
 description: >-
   Evaluate which agents are useful for a task and orchestrate their parallel or
   sequential execution. Use when the user explicitly wants orchestrated agent
@@ -90,7 +90,23 @@ Wait for user confirmation before proceeding. Accept:
 - Modifications → adjust plan
 - "weniger" / "nur X" → reduce scope
 
-## Step 4 — Execution
+## Step 4 — Execution Mode
+
+After the plan is confirmed, ask the user for the execution mode via `AskUserQuestion`:
+
+```
+question: "Wie sollen die Agents arbeiten?"
+header: "Modus"
+options:
+  - label: "Hintergrund (Recommended)"
+    description: "Agents arbeiten autonom im Hintergrund. Du bekommst am Ende einen Gesamtbericht."
+  - label: "Interaktiv"
+    description: "Agents fragen bei Entscheidungen nach und liefern Zwischenergebnisse inline im Chat."
+```
+
+Store the result as `$EXEC_MODE` (`background` or `interactive`).
+
+## Step 5 — Execution
 
 Follow the collaboration protocol from `deep-knowledge/agent-collaboration.md`:
 
@@ -100,28 +116,51 @@ Follow the collaboration protocol from `deep-knowledge/agent-collaboration.md`:
 2. Push integration branch to origin before spawning sub-agents
 3. Each agent works in an isolated worktree (`isolation: "worktree"`)
 
-### Wave Execution
+### Wave Execution — Background Mode
+
+When `$EXEC_MODE` is `background`:
 
 For each wave:
 
-1. **Spawn agents** — parallel within the same wave, sequential across waves
+1. **Spawn agents** with `run_in_background: true` — parallel within the same wave
 2. **Include in every agent prompt:**
    - Parent branch name
    - Task description specific to their role
    - Context from previous waves (handoff data)
    - Instruction to follow commit conventions from `/devops-commit`
+   - **"Work autonomously. Do NOT use AskUserQuestion. Make reasonable decisions independently. Document all decisions in your commit messages."**
+3. **Continue with other work** or inform the user that agents are working
+4. **Collect results** when notified of completion
+5. **Merge** — ship each sub-branch via `/devops-ship` (sequential within wave)
+6. **Handoff** — pass completed contracts/findings to next wave
+
+### Wave Execution — Interactive Mode
+
+When `$EXEC_MODE` is `interactive`:
+
+For each wave:
+
+1. **Spawn agents** in foreground — parallel within the same wave, sequential across waves
+2. **Include in every agent prompt:**
+   - Parent branch name
+   - Task description specific to their role
+   - Context from previous waves (handoff data)
+   - Instruction to follow commit conventions from `/devops-commit`
+   - **"Work interactively. Use AskUserQuestion with concrete options (2-4 choices) for design decisions, ambiguous requirements, or trade-offs. Provide detailed analysis and reasoning inline in the chat. Never decide silently — always explain your approach."**
 3. **Collect results** — wait for all agents in the wave to complete
-4. **Merge** — ship each sub-branch via `/devops-ship` (sequential within wave)
-5. **Handoff** — pass completed contracts/findings to next wave
+4. **Present interim results** — after each wave, summarize findings and decisions inline with analysis text
+5. **Merge** — ship each sub-branch via `/devops-ship` (sequential within wave)
+6. **Handoff** — pass completed contracts/findings to next wave
 
 ### Single-Agent Shortcut
 
 If only 1 agent was selected (e.g., just research or just qa):
 - Skip branching strategy
 - Launch the agent directly with full context
-- Report results inline
+- In background mode: `run_in_background: true`, autonomous
+- In interactive mode: foreground, with inline questions and analysis
 
-## Step 5 — Synthesis
+## Step 6 — Synthesis
 
 After all waves complete:
 
