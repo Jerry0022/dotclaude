@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.36.4] — 2026-04-10
+
+### Added
+
+- **deep-knowledge** — "Erstmal in Ruhe durchlesen" rule: when AskUserQuestion follows substantial inline results, the first option must offer a read-first escape with subtext clarifying nothing will change until the user continues; re-presents questions without that option after selection
+
 ## [0.36.3] — 2026-04-10
 
 ### Added
