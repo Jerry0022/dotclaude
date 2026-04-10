@@ -101,10 +101,10 @@ If `usage-live.json` is missing: show error message instead of bars.
 **Example rendering:**
 
 ```
-5h  ▓▓▓▓▓▓▓▓░░░░   67% (+1%   )  · Reset 1h 42m
+5h  ▓▓▓▓▓▓▓▓░░░░   67% (+1%)  · Reset 1h 42m
           ↑
 
-Wk  ▓▓▓░░░░░░░░░   25% (+8% !!)  · Reset 4d 11h  ⚠ Sonnet or new session
+Wk  ▓▓▓░░░░░░░░░   25% (+8%)  · Reset 4d 11h  ⚠ Sonnet or new session
         ↑
 ```
 
@@ -144,16 +144,8 @@ arrow_line = " " × (4 + arrow_pos) + "↑"
 
 Only show the delta parenthetical when a previous `usage-live.json` snapshot exists **and** is less than 8 hours old. If no previous snapshot exists or it is stale (>8h), omit the parenthetical entirely — pad with 8 spaces to preserve column alignment.
 
-When shown, delta uses color coding (marker suffix in code block):
-
-| Delta | Marker | Example |
-|-------|--------|---------|
-| +0 – 1% | no marker | `(+1%   )` |
-| +2 – 5% | `!` suffix | `(+4% ! )` |
-| +6%+ | `!!` suffix | `(+8% !!)` |
-
-Delta field is always 8 characters wide: `(+N% XX)`, right-padded with spaces inside.
-When omitted, 8 spaces are used instead to keep `· Reset` aligned.
+Delta field is always 5 characters wide: `(+N%)`, no trailing markers.
+When omitted, 5 spaces are used instead to keep `· Reset` aligned.
 
 **Implementation:** Pass `delta5h: null` / `deltaWk: null` in the render-card input JSON when no valid previous snapshot is available. The renderer will omit the parenthetical and pad for alignment.
 
@@ -186,7 +178,7 @@ Gap           3 chr   "   "
 Pct           3 chr   right-aligned, space-padded
 Pct-suffix    1 chr   "%"
 Space         1 chr   " "
-Delta         8 chr   "(+N% XX)"
+Delta         5 chr   "(+N%)"
 Gap           2 chr   "  "
 Separator     2 chr   "· "
 Reset-label   6 chr   "Reset "
