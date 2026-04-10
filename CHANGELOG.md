@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.35.15] — 2026-04-10
+
+### Fixed
+
+- **autonomous** — stable option order in AskUserQuestion prompts with "(empfohlen)" markers on recommended choices
+
 ## [0.35.14] — 2026-04-09
 
 ### Added
