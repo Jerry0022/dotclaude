@@ -190,53 +190,63 @@ to open the app, screenshot key flows, verify visually. Track progress via TodoW
 
 ## Step 7 — Report & Completion
 
-Save `AUTONOMOUS-REPORT.md` to project root.
+Generate an **interactive HTML report** and open it in Edge. No more markdown files
+that nobody reads.
 
-**`implement` mode template:**
-```markdown
-# Autonomous Report
-**Task**: {goal} | **Mode**: Implement | **Status**: COMPLETED | PARTIAL | BLOCKED
-**Duration**: {time} | **Branch**: {branch}
+### 7a — Gather Completion Data
 
-## Done
-- {actions completed}
+Call `render_completion_card` (variant per status: "shipped" for COMPLETED,
+"blocked" for BLOCKED, "analysis" for analyze-mode COMPLETED; pushed: false, pr: null).
+**Capture the full card output** — it will be embedded in the HTML report.
 
-## Changes
-| File | Action | Summary |
-|------|--------|---------|
+### 7b — Build HTML Report
 
-## Verification
-Build: PASS/FAIL | Tests: X passed, Y failed | Live: {results}
+Save `AUTONOMOUS-REPORT.html` to project root (replaces any previous report).
 
-## Related Fixes / Blocked Actions / Warnings
-- {if any}
+The HTML file must be a **self-contained single file** (inline CSS, no external deps).
+Use a clean, modern dark-theme design. Structure:
+
+**Header section:**
+- Task goal, mode (Implement/Analyze), status badge (green/yellow/red)
+- Duration, branch name (implement mode), timestamp
+
+**Completion Card section:**
+- Embed the full completion card data in a styled card widget
+- Include: summary, changes, test results, build-ID, usage/battery info
+- Present it visually (not raw markdown) — use the card's data fields
+
+**`implement` mode — additional sections:**
+- **Changes** — collapsible table: file, action, summary
+- **Verification** — build status, test results, live test results
+- **Related Fixes / Blocked Actions / Warnings** — if any
+
+**`analyze` mode — additional sections:**
+- **Findings** — key observations as styled cards or list
+- **Architecture / Code Quality** — insights with visual hierarchy
+- **Recommendations** — priority-sorted table: priority, area, recommendation, effort
+- **Visual Verification** — embedded screenshots (base64 data URIs if taken)
+
+**Both modes — footer:**
+- Open questions (if any)
+- Timestamp, branch info, git status summary
+
+**Design guidelines:**
+- Dark background (#1a1a2e or similar), accent colors for status
+- Collapsible sections via `<details>/<summary>`
+- Status badge: COMPLETED = green, PARTIAL = amber, BLOCKED = red
+- Responsive layout, readable on any screen size
+- Monospace font for code/file paths, sans-serif for prose
+
+### 7c — Open in Browser
+
+After writing the HTML file, open it in Edge:
+```bash
+start msedge "file://$(pwd)/AUTONOMOUS-REPORT.html"
 ```
 
-**`analyze` mode template:**
-```markdown
-# Autonomous Analysis Report
-**Task**: {goal} | **Mode**: Analyze | **Status**: COMPLETED | PARTIAL | BLOCKED
-**Duration**: {time}
-
-## Findings
-- {key observations}
-
-## Architecture / Code Quality
-- {insights}
-
-## Recommendations
-| Priority | Area | Recommendation | Effort |
-|----------|------|---------------|--------|
-
-## Visual Verification
-- {screenshots taken, UI observations}
-
-## Open Questions
-- {if any}
-```
-
-Then call `render_completion_card` (variant "shipped", pushed: false, pr: null).
-Card is the last visible output.
+The completion card is still rendered in the CLI as the last visible output
+(VERBATIM relay as always). The HTML report is the **primary deliverable** —
+the CLI card is the quick confirmation.
 
 ## Step 8 — Shutdown
 
