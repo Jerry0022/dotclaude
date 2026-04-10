@@ -584,6 +584,21 @@ server.registerTool(
     }),
   },
   async (params) => {
+    // 0. Variant guard — auto-correct "shipped" when state proves it wasn't
+    //    shipped: ONLY valid after ship_release ran (pushed + merged).
+    //    A commit, push, or PR alone is NEVER "shipped".
+    if (params.variant === 'shipped') {
+      const s = params.state || {};
+      if (!s.pushed || !s.merged) {
+        const corrected = s.pushed ? 'ready' : 'ready';
+        console.error(
+          `[dotclaude-completion-mcp] Variant guard: "shipped" rejected ` +
+          `(pushed=${!!s.pushed}, merged=${!!s.merged}) → corrected to "${corrected}"`
+        );
+        params.variant = corrected;
+      }
+    }
+
     // 1. Fetch fresh usage data
     const usageResult = refreshUsage();
     const usageData = usageResult.success ? usageResult.data : null;
