@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.3] — 2026-04-10
+
+### Fixed
+
+- **hooks** — completion card hooks now call `render_completion_card` MCP tool directly instead of via ToolSearch; ToolSearch only searches deferred tools, causing silent resolution failures when the tool is already loaded
+- **hooks** — aligned `marketplace.json` version (was stuck at 0.36.1 while other files had 0.36.2)
+
 ## [0.36.2] — 2026-04-10
 
 ### Added
