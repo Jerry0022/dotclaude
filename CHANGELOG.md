@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.36.1] — 2026-04-10
+
+### Fixed
+
+- **completion-card** — removed delta marker suffixes (! / !!) from usage meter; delta is now a clean (+N%) without trailing noise
+
 ## [0.36.0] — 2026-04-10
 
 ### Changed
