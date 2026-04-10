@@ -2,6 +2,10 @@
 
 ## [0.36.3] — 2026-04-10
 
+### Added
+
+- **agents** — execution mode selection: users choose between background (autonomous) and interactive (inline Q&A) agent work before orchestration begins
+
 ### Fixed
 
 - **hooks** — completion card hooks now call `render_completion_card` MCP tool directly instead of via ToolSearch; ToolSearch only searches deferred tools, causing silent resolution failures when the tool is already loaded
