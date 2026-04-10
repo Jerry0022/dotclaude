@@ -27,6 +27,15 @@ structured format with risk markers and a clear recommendation.
 - Risk levels are relative to the specific decision context
 - If all options have equal risk, say so explicitly
 - For AskUserQuestion: use the `description` field for risk/strength info
+- For AskUserQuestion after inline results: if the preceding output contains
+  substantial inline content (analysis, report, long text), the **first option
+  of the first question** must always be **"Erstmal in Ruhe durchlesen"** with
+  description: "Es wird nichts implementiert oder weiter geändert, bis du
+  weiter sagst." — the options overlay often covers the results, and the user
+  needs a one-click way to dismiss and read first. When the user selects this
+  option, re-present the same questions **without** the "Erstmal in Ruhe
+  durchlesen" option (they already read). This applies only to the first
+  question; follow-up questions don't need this option.
 
 ## When to use
 
