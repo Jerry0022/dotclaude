@@ -42,8 +42,8 @@ process.stdin.on('end', () => {
   if (workHappened && !cardRendered) {
     process.stdout.write([
       '[stop.flow.guard] CARRY-OVER: Work completed but no completion card rendered.',
-      'Resolve the tool via ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
-      'Then call `render_completion_card` MCP tool NOW as the FIRST thing — before any other output.',
+      'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly (already loaded MCP tool) NOW as the FIRST thing — before any other output.',
+      'Only if the direct call fails with "tool not found", fall back to ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
       'IMPORTANT: The tool result is hidden in a collapsed UI element. You MUST copy the',
       'returned markdown and output it VERBATIM as your own text — the user cannot see tool results.',
       'VERBATIM = character-for-character: preserve every emoji, symbol, formatting character.',
