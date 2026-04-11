@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.38.1] — 2026-04-11
+
+### Fixed
+
+- **merge** — restore devops-explain removal lost during v0.38.0 merge conflict (--ours overwrote PR #55 changes)
+
 ## [0.38.0] — 2026-04-11
 
 ### Changed
