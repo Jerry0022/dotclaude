@@ -175,22 +175,49 @@ The patterns in `deep-knowledge/templates.md` (§ Claude Connection Heartbeat,
 
 ## Step 3 — Open in Browser
 
-Open the generated HTML file as a **new tab in the existing Edge browser**.
-If Edge is not running, launch it with the file.
+Open the generated HTML file **inside the user's existing Edge window** — never
+open a separate browser window.
+
+### Preferred: Serve via localhost + Chrome MCP (monitorable)
+
+The Chrome MCP `navigate` tool **always prepends `https://`** to URLs, which
+breaks `file://` paths. And `start "" msedge` opens tabs **outside the MCP tab
+group**, making them invisible to monitoring. The workaround:
+
+1. Start a local HTTP server in the concept directory:
+   ```bash
+   cd "{concept-dir}" && python -m http.server {random-port} &
+   ```
+   Use a random port (8700-8999) to avoid conflicts.
+
+2. Open via Chrome MCP (stays in the MCP tab group, monitorable):
+   ```
+   tabs_context_mcp(createIfEmpty: true)  → get/create tab group
+   navigate(url: "http://localhost:{port}/{filename}", tabId: $TAB_ID)
+   ```
+
+3. After monitoring ends, kill the HTTP server:
+   ```bash
+   kill %1  # or track the PID
+   ```
+
+### Fallback: Direct Edge launch (not monitorable)
+
+If Chrome MCP is unavailable, fall back to direct launch. This opens in the
+user's existing Edge instance but **cannot be monitored** — use AskUserQuestion
+flow instead.
 
 ```bash
-# Windows — opens as new tab in running Edge, or launches Edge
+# Windows — reuses running Edge, adds tab (not a new window)
 start "" msedge "{filepath}"
 ```
 
 On macOS: `open -a "Microsoft Edge" "{filepath}"`, on Linux: `microsoft-edge "{filepath}"`.
 
-**Important:** Always target Edge specifically — never use the system default
-browser or Chrome. The `start "" msedge` command reuses the running Edge instance
-and adds a tab (no new window). The empty `""` is required on Windows — without
-it, `cmd.exe` interprets the first quoted argument as a window title.
+The empty `""` is required on Windows — without it, `cmd.exe` interprets
+the first quoted argument as a window title.
 
-After opening, inform the user:
+### After opening, inform the user:
 
 > Concept geöffnet. Triff deine Entscheidungen auf der Seite und klick
 > "Entscheidungen abschicken" wenn du fertig bist — ich übernehme dann.

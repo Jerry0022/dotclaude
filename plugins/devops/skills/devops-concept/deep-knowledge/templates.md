@@ -623,8 +623,10 @@ function checkClaudeConnection() {
 
 // Check every 5 seconds
 setInterval(checkClaudeConnection, 5000);
-// Initial check after 2 seconds (give Claude time for first heartbeat)
-setTimeout(checkClaudeConnection, 2000);
+// Initial grace period: 30 seconds — Claude needs time to run the browser
+// tool waterfall, find the tab, and inject the first heartbeat. A 2-second
+// grace period causes the button to be disabled before Claude can even start.
+setTimeout(checkClaudeConnection, 30000);
 ```
 
 **Claude-side heartbeat injection** (executed by Claude via eval on each poll):
