@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.39.1] — 2026-04-11
+
+### Changed
+
+- **completion-card** — visual layout redesign: new block order Title → Content → State → Usage → Footer → CTA
+- **completion-card** — title line no longer contains build ID (moved to new 📌 footer line)
+- **completion-card** — footer line: 📌 with version bump info (if available) + build ID in backticks
+- **completion-card** — CTA: removed version info, shipped shows merge target instead ("merged → main")
+- **completion-card** — usage health line moved inside code block as first line, icon removed
+- **completion-card** — delta markers (! / !!) removed, tighter column padding for alignment
+- **completion-card** — shipped CTA: "Alles ERLEDIGT" (DE) / "All DONE" (EN)
+- **completion-card** — test-minimal: no separator between title and footer (compact)
+
 ## [0.39.0] — 2026-04-11
 
 ### Added
