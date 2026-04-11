@@ -196,8 +196,8 @@ that nobody reads.
 
 ### 7a — Gather Completion Data
 
-Call `render_completion_card` (variant per status: "shipped" for COMPLETED,
-"blocked" for BLOCKED, "analysis" for analyze-mode COMPLETED; pushed: false, pr: null).
+Call `render_completion_card` (variant per status: "ship-successful" for COMPLETED,
+"ship-blocked" for BLOCKED, "analysis" for analyze-mode COMPLETED; pushed: false, pr: null).
 **Capture the full card output** — it will be embedded in the HTML report.
 
 ### 7b — Build HTML Report

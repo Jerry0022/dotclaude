@@ -84,7 +84,7 @@ ship_build({ buildCmd: "npm run build", lintCmd: "npm run lint", cwd: "<cwd>" })
 
 Pass project-specific commands from extensions if available.
 
-If `success: false` → call `render_completion_card` with variant `blocked`. Do not continue.
+If `success: false` → call `render_completion_card` with variant `ship-blocked`. Do not continue.
 
 ### Codex Review Gate (after build passes)
 
@@ -119,7 +119,7 @@ ship_version_bump({ bump: "minor", cwd: "<cwd>" })
 
 Returns: `{ success, vOld, vNew, filesUpdated, verified, mismatches }`.
 
-If `success: false` → no version file found. Report error and render completion card with variant `blocked`. Do not continue.
+If `success: false` → no version file found. Report error and render completion card with variant `ship-blocked`. Do not continue.
 If `verified: false` → fix mismatches manually, then retry.
 
 ## Step 4 — Release
@@ -159,7 +159,7 @@ The tool handles: commit (optional), push, PR create (or reuse existing), squash
 
 Returns: `{ branch, commit, pushed, pr: {number, url}, merged, intermediate, tag, tagVerified, release }`.
 
-If `success: false` → do NOT proceed to cleanup. Report error and render completion card with variant `blocked`.
+If `success: false` → do NOT proceed to cleanup. Report error and render completion card with variant `ship-blocked`.
 
 ### Squash-Merge Traceability Convention
 
@@ -209,7 +209,7 @@ Call `render_completion_card` MCP tool (dotclaude-completion server) with data f
 
 ```
 render_completion_card({
-  variant: "shipped",
+  variant: "ship-successful",
   summary: "<~10 words, user's language>",
   lang: "de",
   buildId: <from ship_build.buildId>,
