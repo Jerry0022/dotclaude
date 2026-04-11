@@ -40,6 +40,17 @@ Follow the **Browser Tool Strategy** (`deep-knowledge/browser-tool-strategy.md`)
 for tool selection. Use the waterfall to set `$BROWSER_TOOL`, then use the tool
 mapping table to pick the correct call for each action.
 
+## Known Limitation: `file://` URLs
+
+Browser tools (Chrome MCP, Playwright) **cannot open or interact with `file://`
+URLs**. Chrome MCP's `navigate` tool always prepends `https://`, and Playwright
+blocks the `file:` protocol entirely. Additionally, tabs opened via `start ""
+msedge` land **outside the MCP tab group** and are invisible to monitoring.
+
+**Required workaround:** Serve concept pages via a local HTTP server (see
+SKILL.md Step 3). This makes the page accessible at `http://localhost:<port>/`
+which all browser tools can handle.
+
 ## Pre-Monitoring Setup
 
 Before starting the monitoring loop, establish and validate the browser connection:
@@ -47,6 +58,9 @@ Before starting the monitoring loop, establish and validate the browser connecti
 1. Run the **Browser Tool Strategy waterfall** (`deep-knowledge/browser-tool-strategy.md`)
    to set `$BROWSER_TOOL`
 2. If `$BROWSER_TOOL` is `chrome-mcp`:
+   - The concept page must already be open via `navigate` in the MCP tab group
+     (opened in Step 3 via localhost HTTP server). Do NOT look for tabs opened
+     via `start "" msedge` — those are outside the MCP group.
    - Call `tabs_context_mcp` to get the current tab group
    - Identify the concept page tab (by URL or title) and store its ID as `$TAB_ID`
    - **Validate the type:** `$TAB_ID` must be a number — if it was captured as a
