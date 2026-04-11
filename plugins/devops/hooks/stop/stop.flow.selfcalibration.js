@@ -32,9 +32,8 @@ function lastRunFile() {
   return path.join(os.tmpdir(), `dotclaude-devops-calibration-wt-${worktreeKey()}`);
 }
 
-let inputData = '';
 process.stdin.setEncoding('utf8');
-process.stdin.on('data', d => { inputData += d; });
+process.stdin.on('data', () => {});
 process.stdin.on('end', () => {
   const file = lastRunFile();
 
