@@ -13,7 +13,7 @@ description: >-
   Do NOT trigger for: simple code explanations, debugging
   (use /devops-flow), or static documentation (use /devops-readme).
 argument-hint: "[topic, analysis result, plan, or concept to visualize]"
-allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__*
+allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__*
 ---
 
 # Concept
@@ -164,7 +164,7 @@ are present. **Grep the generated file** for each required pattern:
 | 3 | `connection-warning` | Disconnection warning element |
 | 4 | `checkClaudeConnection` | Heartbeat checker function |
 | 5 | `HEARTBEAT_STALE_MS` | Heartbeat staleness threshold |
-| 6 | `claudeHeartbeat` | Heartbeat dataset target |
+| 6 | `pollHeartbeat` | HTTP heartbeat polling function |
 | 7 | `panel-ready` | Ready-state panel element |
 | 8 | `panel-submitted` | Submitted-state panel element |
 | 9 | `sessionStorage` | Reload resilience (state persistence) |
@@ -188,28 +188,46 @@ The patterns in `deep-knowledge/templates.md` (§ Claude Connection Heartbeat,
 Open the generated HTML file **inside the user's existing Edge window** — never
 open a separate browser window.
 
-### Preferred: Serve via localhost + Chrome MCP (monitorable)
+### Preferred: Concept Bridge Server (HTTP-based monitoring)
 
-The Chrome MCP `navigate` tool **always prepends `https://`** to URLs, which
-breaks `file://` paths. And `start "" msedge` opens tabs **outside the MCP tab
-group**, making them invisible to monitoring. The workaround:
+The **concept bridge server** (`scripts/concept-server.py`) replaces the plain
+`python -m http.server`. It serves static files AND provides HTTP endpoints for
+heartbeat and decision exchange — no Chrome MCP JS injection needed.
 
-1. Start a local HTTP server in the concept directory:
+1. Find the bridge server script:
    ```bash
-   cd "{concept-dir}" && python -m http.server {random-port} &
+   PLUGIN_ROOT=$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-server.py 2>/dev/null | head -1)
    ```
-   Use a random port (8700-8999) to avoid conflicts.
 
-2. Open via Chrome MCP (stays in the MCP tab group, monitorable):
+2. Start the bridge server in the concept directory:
+   ```bash
+   python "$PLUGIN_ROOT" {random-port} "{concept-dir}" &
+   ```
+   Use a random port (8700-8999) to avoid conflicts. Store the port as `$PORT`.
+
+3. Set up the heartbeat cron (keeps the connection indicator green):
+   ```
+   CronCreate(cron: "* * * * *", prompt: "Run: curl -s -X POST http://localhost:{port}/heartbeat > /dev/null")
+   ```
+   This fires every ~60s. For tighter heartbeat, also send an initial POST
+   immediately and on each monitoring poll via Bash.
+
+4. Send the first heartbeat immediately:
+   ```bash
+   curl -s -X POST http://localhost:{port}/heartbeat
+   ```
+
+5. Open via Chrome MCP (stays in the MCP tab group, visible to the user):
    ```
    tabs_context_mcp(createIfEmpty: true)  → get/create tab group
    navigate(url: "http://localhost:{port}/{filename}", tabId: $TAB_ID)
    ```
 
-3. After monitoring ends, kill the HTTP server:
+6. After monitoring ends, clean up:
    ```bash
    kill %1  # or track the PID
    ```
+   Also delete the heartbeat cron via `CronDelete`.
 
 ### Fallback: Direct Edge launch (not monitorable)
 
@@ -232,37 +250,37 @@ the first quoted argument as a window title.
 > Concept geöffnet. Triff deine Entscheidungen auf der Seite und klick
 > "Entscheidungen abschicken" wenn du fertig bist — ich übernehme dann.
 
-## Step 4 — Establish Monitoring Connection
+## Step 4 — Monitor via HTTP Bridge
 
-After opening the page in Edge, immediately establish the monitoring connection:
+The bridge server handles all communication — no JS eval injection needed.
 
-1. Run the **Browser Tool Strategy waterfall** (`deep-knowledge/browser-tool-strategy.md`)
-   → set `$BROWSER_TOOL`
-2. If `chrome-mcp`: call `tabs_context_mcp`, identify the concept tab, store its ID as
-   `$TAB_ID` — **must be a number** (coerce with `Number()` if captured as string)
-3. If `playwright` or `preview`: tab management is implicit, no explicit `$TAB_ID` needed
-4. If the waterfall fails entirely: skip browser monitoring, fall back to manual
-   `AskUserQuestion` flow (see `deep-knowledge/monitoring.md` § Manual Fallback (no browser tool available))
+**Heartbeat** is handled by the cron job set up in Step 3. Additionally,
+send a heartbeat POST on each manual poll cycle:
 
-See `deep-knowledge/monitoring.md` for the full polling protocol.
+```bash
+curl -s -X POST http://localhost:$PORT/heartbeat
+```
 
-**Polling logic:**
-- Before each poll, validate `$TAB_ID` is still alive (chrome-mcp only) —
-  see `deep-knowledge/monitoring.md` § Per-Poll Validation (chrome-mcp only)
-- **First on each poll**: inject heartbeat via
-  `document.body.dataset.claudeHeartbeat = Date.now()` — this keeps the
-  submit button enabled and the connection warning hidden
-- Then check: `document.body.classList.contains('concept-submitted')` via the
-  eval-based tool for `$BROWSER_TOOL`
-- If true → read decisions from `#concept-decisions` JSON using the same eval tool
-- If false → wait and retry (max 5 minutes, check every 15 seconds)
-- If eval fails but tab alive → page reload detected, wait and retry
-  (see `deep-knowledge/monitoring.md` § Page Reload Detection)
-- If timeout → ask user if they need more time or want to skip
+**Polling for decisions** — check if the user has submitted:
 
-**NEVER use `get_page_text` or equivalent read-page tools to read decisions** —
-always use eval-based tools (`javascript_tool` / `browser_evaluate` / `preview_eval`).
-See `deep-knowledge/monitoring.md` § Tool Selection for the reason.
+```bash
+curl -s http://localhost:$PORT/decisions
+```
+
+Parse the JSON response. If `submitted` is `true` → process decisions (Step 5).
+If `false` → wait and retry.
+
+**Polling schedule:**
+- **Initial wait**: 10 seconds after opening
+- **Poll interval**: 15 seconds (via conversation-driven checks or cron)
+- **Timeout**: 5 minutes → ask user via AskUserQuestion
+- On each poll, also POST `/heartbeat` to keep the connection indicator green
+
+**Browser tool strategy** (optional enhancement, not required):
+- If Chrome MCP or Playwright is available, it can still be used for
+  tab-alive checks and page content updates (Step 5c)
+- But heartbeat and decision reading work entirely via HTTP — no JS eval needed
+- If the browser tool waterfall fails, monitoring still works via HTTP
 
 **Important:** While waiting, do NOT block the conversation. Inform the
 user that you're monitoring and they can continue chatting. If the user
@@ -347,5 +365,6 @@ Append to the response: "Soll ich das als Concept-Seite aufbereiten?"
 - Comment fields are optional — include only where comments add value
 - Design quality matters — this is a deliverable, not a debug dump
 - German UI labels (buttons, headers) unless project language says otherwise
-- The HTML must work offline — no fetch calls, no server dependency
+- The HTML must be self-contained — no CDN or external fetch calls.
+  Bridge server fetch calls (`/heartbeat`, `/decisions`) are the only exception
 - Keep file size reasonable (< 500KB) — inline only what's needed

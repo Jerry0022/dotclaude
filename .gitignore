@@ -47,3 +47,4 @@ memory/
 # Package locks (scripts use minimal deps)
 package-lock.json
 .claude/devops-concept/
+__pycache__/
