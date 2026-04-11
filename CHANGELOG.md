@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.38.4] — 2026-04-11
+
+### Fixed
+
+- **autonomous** — post-confirmation lockout: zero user interaction after Step 4 (no inline questions, no permission prompts while user is AFK)
+- **autonomous** — late permission handling: save progress to `AUTONOMOUS-RESUME.json`, execute shutdown if requested, resume on next boot
+- **autonomous** — resume detection (Step 0.5): detect interrupted session, re-prime permissions, ask report vs shutdown preference
+- **marketplace** — sync marketplace.json version to 0.38.3
+
 ## [0.38.3] — 2026-04-11
 
 ### Improved
