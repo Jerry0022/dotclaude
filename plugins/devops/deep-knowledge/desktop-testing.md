@@ -3,6 +3,10 @@
 Rules for when and how Claude takes over the desktop to run visual UI tests
 automatically using the Computer Use MCP tools.
 
+**Important:** For browser-based UI testing, prefer the Browser Tool Strategy
+(`browser-tool-strategy.md`) over computer-use. Computer-use has read-only tier
+for browsers (no clicks/typing). Only use computer-use for native desktop apps.
+
 ## When to Offer
 
 All three conditions must be true:

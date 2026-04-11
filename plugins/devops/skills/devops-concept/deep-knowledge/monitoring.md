@@ -34,55 +34,29 @@ Decision data lives in a hidden JSON block:
 JSON.parse(document.getElementById('concept-decisions').textContent)
 ```
 
-## Tool Priority
+## Tool Selection
 
-Use the first available tool in this order:
+Follow the **Browser Tool Strategy** (`deep-knowledge/browser-tool-strategy.md`)
+for tool selection. Use the waterfall to set `$BROWSER_TOOL`, then use the tool
+mapping table to pick the correct call for each action.
 
-### 1. Claude in Chrome/Edge (`mcp__Claude_in_Chrome__*`)
+### Concept-Specific Calls
 
-Best option — direct access to page DOM. Works with Edge (Chromium-based).
+Using `$BROWSER_TOOL`, execute:
 
 **Check submission:**
-```
-javascript_tool: "document.body.classList.contains('concept-submitted')"
-```
+- chrome-mcp: `javascript_tool("document.body.classList.contains('concept-submitted')")`
+- playwright: `browser_evaluate("document.body.classList.contains('concept-submitted')")`
+- preview: `preview_eval("document.body.classList.contains('concept-submitted')")`
 
 **Read decisions:**
-```
-javascript_tool: "document.getElementById('concept-decisions').textContent"
-```
+- chrome-mcp: `javascript_tool("document.getElementById('concept-decisions').textContent")`
+- playwright: `browser_evaluate("document.getElementById('concept-decisions').textContent")`
+- preview: `preview_eval("document.getElementById('concept-decisions').textContent")`
 
-### 2. Playwright (`mcp__plugin_playwright_playwright__*`)
+### Manual Fallback (no browser tool available)
 
-Second best — headless or attached browser.
-
-**Navigate to file:**
-```
-browser_navigate: "file:///{filepath}"
-```
-
-**Check submission:**
-```
-browser_evaluate: "document.body.classList.contains('concept-submitted')"
-```
-
-**Read decisions:**
-```
-browser_evaluate: "document.getElementById('concept-decisions').textContent"
-```
-
-### 3. Claude Preview (`mcp__Claude_Preview__*`)
-
-Works for preview-based workflows.
-
-**Check submission:**
-```
-preview_eval: "document.body.classList.contains('concept-submitted')"
-```
-
-### 4. Manual Fallback
-
-If no browser tool is available:
+If the browser tool strategy waterfall fails entirely:
 
 ```
 AskUserQuestion:

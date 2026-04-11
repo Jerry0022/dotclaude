@@ -1,16 +1,18 @@
 # Changelog
 
-## [0.36.4] — 2026-04-10
+## [0.36.4] — 2026-04-11
 
 ### Added
 
+- **deep-knowledge** — centralized browser tool strategy: Edge Claude-in-Chrome extension as primary tool, silent waterfall fallback (Chrome MCP → Playwright → Preview), hard error block with fix instructions when no tool available, computer-use explicitly banned for browser interaction (read-only tier)
 - **deep-knowledge** — "Erstmal in Ruhe durchlesen" rule: when AskUserQuestion follows substantial inline results, the first option must offer a read-first escape with subtext clarifying nothing will change until the user continues; re-presents questions without that option after selection
-
-## [0.36.3] — 2026-04-10
-
-### Added
-
 - **agents** — execution mode selection: users choose between background (autonomous) and interactive (inline Q&A) agent work before orchestration begins
+
+### Changed
+
+- **autonomous** — browser priming (Step 3b) now references central strategy with `$BROWSER_TOOL` variable instead of inline waterfall
+- **concept** — monitoring and polling use central browser tool strategy instead of duplicated priority lists
+- **desktop-testing** — added warning to prefer browser tool strategy over computer-use for web UI
 
 ### Fixed
 
