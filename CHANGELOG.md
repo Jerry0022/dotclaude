@@ -17,6 +17,10 @@
 - **completion-card** — extracted magic numbers (BAR_WIDTH, WINDOW_5H_MIN, etc.) as named constants
 - **completion-card** — ship-blocked added to tests variant table
 
+### Removed
+
+- **explain** — remove unused devops-explain skill; Claude handles code explanations natively without a dedicated skill
+
 ## [0.37.2] — 2026-04-11
 
 ### Changed

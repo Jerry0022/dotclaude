@@ -9,7 +9,7 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 ## Features
 
 - **13 Hooks** — automated guards and triggers across the full session lifecycle
-- **16 Skills** — devops-ship, devops-commit, devops-flow, devops-deep-research, devops-explain, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-self-update, devops-autonomous
+- **15 Skills** — devops-ship, devops-commit, devops-flow, devops-deep-research, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-self-update, devops-autonomous
 - **10 Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
@@ -125,7 +125,6 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 | `/devops-commit` | Explicit | Conventional commits with smart staging |
 | `/devops-flow` (alias: `/debug`) | Explicit + Hook | Root-cause analysis, diagnostics, and fix cycle |
 | `/devops-deep-research` | Explicit | Multi-angle research with structured output |
-| `/devops-explain` | Explicit | Code explanation with diagrams |
 | `/devops-new-issue` | Explicit | GitHub issue creation with labels and milestones |
 | `/devops-project-setup` | Explicit | Repo hygiene audit and initialization |
 | `/devops-readme` | Explicit | Modern README generation |
