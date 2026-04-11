@@ -37,6 +37,37 @@ Silently check (do not surface "not found"):
 2. `{project}/.claude/skills/autonomous/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
+## Step 0.5 — Resume Detection
+
+Before Task Intake, check for `AUTONOMOUS-RESUME.json` in the project root.
+If not found → proceed to Step 1.
+
+If found:
+1. Read the resume file (contains: task, mode, progress, missing permission, shutdown pref, branch)
+2. Show: **"Unterbrochene Session gefunden: {task}. Fehlende Berechtigung: {missingPermission}."**
+3. Ask via `AskUserQuestion`:
+   > header: "Fortsetzen"
+   > question: "Unterbrochene autonome Session gefunden — fortsetzen oder neu starten?"
+   > multiSelect: false
+   > Options (fixed order):
+   > 1. label: "Ja, fortsetzen (empfohlen)" — description: "Fehlende Berechtigungen jetzt erteilen, dann weiter wo es aufgehört hat."
+   > 2. label: "Nein, neu starten" — description: "Alte Session verwerfen, neuen Task starten."
+
+**If resuming:**
+- Re-prime ALL permissions including the previously missing one (run Step 3 again)
+- Ask via `AskUserQuestion`:
+   > header: "Abschluss"
+   > question: "Was soll beim nächsten Abschluss passieren?"
+   > multiSelect: false
+   > Options (fixed order):
+   > 1. label: "Nur Bericht (empfohlen)" — description: "Ergebnisse als Report, PC bleibt an."
+   > 2. label: "Herunterfahren" — description: "PC fährt nach Abschluss automatisch herunter."
+- Delete the resume file
+- Skip Steps 1-4, jump directly to Step 5 with the resumed context
+- On completion, proceed normally through Steps 7-8
+
+**If starting fresh:** delete the resume file and proceed to Step 1.
+
 ## Step 1 — Task Intake
 
 Use `$ARGUMENTS` if provided, otherwise ask: **"Was soll ich autonom erledigen?"**
@@ -136,6 +167,21 @@ Ask: **"Alle Berechtigungen erteilt. Soll ich jetzt autonom starten?"** → "Ja,
 **Auto-start:** If no user response and no new messages for 3 minutes, start
 automatically. Output: "3 Minuten ohne Antwort — starte jetzt autonom."
 
+### Post-Confirmation Lockout
+
+**After the user confirms (or auto-start triggers), ZERO user interaction is allowed.**
+No `AskUserQuestion`, no inline questions, no confirmation prompts, no permission
+requests. The user is AFK — they will not see anything.
+
+If something unexpected happens during autonomous execution:
+- **Missing permission** → trigger Late Permission Protocol (Step 5, "Late Permission Handling")
+- **Ambiguous decision** → choose the safer/simpler option, log the choice in the report
+- **Blocked action** → log it, continue with remaining work
+- **Shutdown was requested** → always execute shutdown, even if work is incomplete (after saving progress)
+
+This lockout is absolute. There is no exception. The only user interaction point
+after confirmation is the next session (via Resume Detection in Step 0.5).
+
 ## Step 5 — Autonomous Execution
 
 ### Execution Mode Gate
@@ -170,6 +216,31 @@ Log as "blocked action" if needed for the task.
 git pull/fetch, file ops within project, browser/desktop automation, builds,
 tests, linters, installing dev deps.
 
+### Late Permission Handling
+
+If during autonomous execution a permission is needed that wasn't primed in Step 3:
+
+1. **Do NOT ask the user.** They are AFK. The Post-Confirmation Lockout is absolute.
+2. Log the missing permission and what it was needed for.
+3. Complete as much remaining work as possible WITHOUT the missing permission.
+4. Commit all progress locally (implement mode) or save analysis state.
+5. Write `AUTONOMOUS-RESUME.json` to project root:
+   ```json
+   {
+     "task": "<original goal>",
+     "mode": "<implement|analyze>",
+     "missingPermission": "<what was needed and why>",
+     "progress": "<summary of what was completed>",
+     "remaining": "<what couldn't be done>",
+     "shutdownRequested": true|false,
+     "branch": "<current-branch-name>",
+     "timestamp": "<ISO-8601>"
+   }
+   ```
+6. Proceed to Step 7 (Report) with status **INTERRUPTED**.
+7. Proceed to Step 8 (Shutdown) — **shutdown IS executed** if the user chose it.
+   The resume file ensures continuity on next boot.
+
 ### Strategy
 
 - **Simple**: work directly, no sub-agents
@@ -184,10 +255,17 @@ to open the app, screenshot key flows, verify visually. For native desktop apps
 
 ## Step 6 — Error Handling
 
-- **Critical** (build unfixable, regression, missing permission, requires forbidden action): stop, write report, skip shutdown
+- **Critical** (build unfixable, regression, requires forbidden action): stop, write report, skip shutdown
+- **Late Permission** (unanticipated permission needed during execution): save progress,
+  write `AUTONOMOUS-RESUME.json`, generate INTERRUPTED report, **execute shutdown if
+  requested**. See "Late Permission Handling" in Step 5.
 - **Minor** (single test fail, linter warning, optional enhancement): log and continue
 - **Related bugs** in same codebase context: fix them, log in report
 - **Truly stuck**: commit work locally, write report with BLOCKED status, never shut down
+
+**Status hierarchy:** COMPLETED > INTERRUPTED > BLOCKED.
+INTERRUPTED means useful work was done but couldn't finish due to missing permission.
+The resume file enables continuation. Shutdown is safe because progress is saved.
 
 ## Step 7 — Report & Completion
 
@@ -197,7 +275,8 @@ that nobody reads.
 ### 7a — Gather Completion Data
 
 Call `render_completion_card` (variant per status: "ship-successful" for COMPLETED,
-"ship-blocked" for BLOCKED, "analysis" for analyze-mode COMPLETED; pushed: false, pr: null).
+"ship-blocked" for BLOCKED, "ready" for INTERRUPTED,
+"analysis" for analyze-mode COMPLETED; pushed: false, pr: null).
 **Capture the full card output** — it will be embedded in the HTML report.
 
 ### 7b — Build HTML Report
@@ -234,7 +313,8 @@ Use a clean, modern dark-theme design. Structure:
 **Design guidelines:**
 - Dark background (#1a1a2e or similar), accent colors for status
 - Collapsible sections via `<details>/<summary>`
-- Status badge: COMPLETED = green, PARTIAL = amber, BLOCKED = red
+- Status badge: COMPLETED = green, INTERRUPTED = amber, PARTIAL = amber, BLOCKED = red
+- INTERRUPTED section: show missing permission, saved progress, resume instructions
 - Responsive layout, readable on any screen size
 - Monospace font for code/file paths, sans-serif for prose
 
@@ -251,8 +331,14 @@ the CLI card is the quick confirmation.
 
 ## Step 8 — Shutdown
 
-Only if user chose "Ja" AND status is COMPLETED:
+Execute if user chose "Ja, herunterfahren" AND status is COMPLETED or INTERRUPTED:
 ```bash
 shutdown /s /t 60 /c "Autonomous task completed. Shutting down in 60s. Run 'shutdown /a' to abort."
 ```
-If BLOCKED or PARTIAL: skip shutdown — user must intervene.
+**INTERRUPTED:** Shutdown is safe because progress is saved in `AUTONOMOUS-RESUME.json`
+and committed locally. The user can resume on next boot via Step 0.5.
+
+**BLOCKED:** Skip shutdown — user must intervene immediately, data integrity may be at risk.
+
+**Never ask about shutdown inline.** The decision was made in Step 2 (or Step 0.5 on
+resume). Just execute it.
