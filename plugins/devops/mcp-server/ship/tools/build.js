@@ -8,15 +8,55 @@
 
 import { z } from "zod";
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PLUGIN_ROOT = resolve(__dirname, "..", "..", "..");
-const BUILD_ID_SCRIPT = join(PLUGIN_ROOT, "scripts", "build-id.js");
-const DK_INDEX_SCRIPT = join(PLUGIN_ROOT, "scripts", "gen-dk-index.js");
-const PROJECT_MAP_SCRIPT = join(PLUGIN_ROOT, "scripts", "gen-project-map.js");
+
+/**
+ * Resolve plugin root at call time — survives cache rebuilds while MCP server is running.
+ *
+ * The problem: __dirname is set at import time and points to the cache version that existed
+ * when the MCP server started. If the plugin updates mid-session, the old cache is deleted
+ * and __dirname points to a non-existent path. process.cwd() has the same issue.
+ *
+ * Solution: walk up from __dirname to the cache parent dir, then find the current version.
+ * Cache layout: .claude/plugins/cache/dotclaude/devops/{version}/
+ */
+function pluginRoot() {
+  // 1. Env var (authoritative if set)
+  if (process.env.CLAUDE_PLUGIN_ROOT && existsSync(process.env.CLAUDE_PLUGIN_ROOT)) {
+    return process.env.CLAUDE_PLUGIN_ROOT;
+  }
+  // 2. Static path still valid (no update happened)
+  const staticRoot = resolve(__dirname, "..", "..", "..");
+  if (existsSync(join(staticRoot, "scripts", "build-id.js"))) {
+    return staticRoot;
+  }
+  // 3. Cache was rebuilt — find current version in parent directory
+  //    staticRoot was e.g. .../cache/dotclaude/devops/0.36.4/
+  //    parent is          .../cache/dotclaude/devops/
+  const cacheParent = dirname(staticRoot);
+  try {
+    const versions = readdirSync(cacheParent).filter(
+      v => existsSync(join(cacheParent, v, "scripts", "build-id.js"))
+    );
+    if (versions.length > 0) {
+      // Pick the latest version (lexicographic sort works for semver with same digit count)
+      versions.sort();
+      return join(cacheParent, versions[versions.length - 1]);
+    }
+  } catch { /* cacheParent doesn't exist or isn't readable */ }
+  // 4. Give up — return stale path, caller will get existsSync guard
+  return staticRoot;
+}
+function scriptPath(name) { return join(pluginRoot(), "scripts", name); }
+
+// Lazy accessors — resolved at call time, not import time
+const BUILD_ID_SCRIPT = () => scriptPath("build-id.js");
+const DK_INDEX_SCRIPT = () => scriptPath("gen-dk-index.js");
+const PROJECT_MAP_SCRIPT = () => scriptPath("gen-project-map.js");
 
 export const schema = z.object({
   buildCmd: z.string().nullable().default(null).describe("Build command (null = auto-detect from package.json)"),
@@ -63,7 +103,7 @@ function run(cmd, cwd) {
 function getBuildId(cwd) {
   try {
     return execSync(
-      `"${process.execPath}" "${BUILD_ID_SCRIPT}"`,
+      `"${process.execPath}" "${BUILD_ID_SCRIPT()}"`,
       { cwd, encoding: "utf8", timeout: 10_000 }
     ).trim();
   } catch (err) {
@@ -91,14 +131,14 @@ export async function handler(params) {
 
   // Regenerate deep-knowledge INDEX.md (idempotent, skips if unchanged)
   // 1. Plugin's own deep-knowledge
-  run(`"${process.execPath}" "${DK_INDEX_SCRIPT}"`, cwd);
+  run(`"${process.execPath}" "${DK_INDEX_SCRIPT()}"`, cwd);
   // 2. Project's deep-knowledge (if it exists)
   const projectDk = join(cwd, "deep-knowledge");
   if (existsSync(projectDk)) {
     run(`"${process.execPath}" "${DK_INDEX_SCRIPT}" "${projectDk}"`, cwd);
   }
   // 3. Project map (full codebase index)
-  run(`"${process.execPath}" "${PROJECT_MAP_SCRIPT}" "${cwd}"`, cwd);
+  run(`"${process.execPath}" "${PROJECT_MAP_SCRIPT()}" "${cwd}"`, cwd);
 
   // Build (skip if no build script detected/provided)
   if (buildCmd) {
