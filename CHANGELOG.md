@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.37.3] — 2026-04-11
+
+### Removed
+
+- **explain** — remove unused devops-explain skill; Claude handles code explanations natively without a dedicated skill
+
+### Fixed
+
+- **marketplace** — sync marketplace.json version to 0.37.2 (was 0.37.1)
+
 ## [0.37.2] — 2026-04-11
 
 ### Changed

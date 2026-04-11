@@ -10,7 +10,7 @@ description: >-
   "show me this as a page", "visualize this".
   Also auto-suggest when Claude completes analysis, planning, comparison,
   or concept work that would benefit from interactive decision-making.
-  Do NOT trigger for: simple code explanations (use /devops-explain), debugging
+  Do NOT trigger for: simple code explanations, debugging
   (use /devops-flow), or static documentation (use /devops-readme).
 argument-hint: "[topic, analysis result, plan, or concept to visualize]"
 allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__*
