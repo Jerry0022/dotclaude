@@ -41,11 +41,9 @@ All variables in `{{...}}`. Sections wrapped in `{{#if}}` are conditional per va
 
 {{#if usage}}
 ```
-5h  {{bar-5h}}  {{pct-5h}} ({{delta-5h}})  · Reset {{reset-5h}}{{pace-warn-5h}}
-    {{elapsed-arrow-5h}}
+5h  {{bar-5h}}  {{pct-5h}}{{delta-5h}}  · {{reset-5h}} left{{pace-warn-5h}}
 
-Wk  {{bar-wk}}  {{pct-wk}} ({{delta-wk}})  · Reset {{reset-wk}}{{pace-warn-wk}}
-    {{elapsed-arrow-wk}}
+Wk  {{bar-wk}}  {{pct-wk}}{{delta-wk}}  · {{reset-wk}} left{{pace-warn-wk}}
 ```
 
 ---
@@ -95,59 +93,58 @@ Wk  {{bar-wk}}  {{pct-wk}} ({{delta-wk}})  · Reset {{reset-wk}}{{pace-warn-wk}}
 
 ### Usage meter
 
-Directly under the title. Two ASCII bars with elapsed-time arrow, in a code block.
+Directly under the title. Two usage bars with inline elapsed-time marker, in a code block.
 If `usage-live.json` is missing: show error message instead of bars.
 
 **Example rendering:**
 
 ```
-5h  ▓▓▓▓▓▓▓▓░░░░   67% (+1%)  · Reset 1h 42m
-          ↑
-
-Wk  ▓▓▓░░░░░░░░░   25% (+8%)  · Reset 4d 11h  ⚠ Sonnet or new session
-        ↑
+5h  ━━━━━━━━━╏────   67%  +1%  · 1h 42m left
+Wk  ━━━━╇━━━──────   60%  +8% !!  · 4d 11h left  ⚠ Pace!
 ```
 
 **Error rendering (no data):**
 
 ```
-⚠ Usage data unavailable — monitoring issue
+⚠ Usage data unavailable
 ```
-
-- `↑` sits directly below the bar position of elapsed time.
-- No text, no label — just the arrow.
-- Arrow right of filled area = under budget, left = over budget.
 
 **Bar rendering:**
 
 ```
-total_blocks = 12
+total_blocks = 14
 filled       = round(usage_pct / 100 * total_blocks)
-empty        = total_blocks - filled
-bar          = "▓" × filled + "░" × empty
+elapsed_pos  = round(elapsed_pct / 100 * total_blocks)
 ```
 
-**Elapsed-time arrow:**
+Each position in the 14-character bar is one of:
+- `━` (heavy horizontal) — used area
+- `─` (light horizontal) — free area
+- `╇` (heavy + marker) — elapsed position within the used (filled) area
+- `╏` (light + marker) — elapsed position within the free (empty) area
+
+The elapsed marker replaces the character at `elapsed_pos` regardless of fill. No separate arrow line is used.
+
+**Elapsed-time calculation:**
 
 ```
 elapsed_pct (5h):  (300 - reset_minutes) / 300 * 100
 elapsed_pct (Wk):  (10080 - reset_minutes) / 10080 * 100
-
-arrow_pos = round(elapsed_pct / 100 * 12)
-arrow_line = " " × (4 + arrow_pos) + "↑"
 ```
-
-- `4` = offset for label + gap ("5h  ").
-- Arrow line directly below bar line. Blank line only after the arrow, before next window.
 
 **Delta display rules:**
 
-Only show the delta parenthetical when a previous `usage-live.json` snapshot exists **and** is less than 8 hours old. If no previous snapshot exists or it is stale (>8h), omit the parenthetical entirely — pad with 8 spaces to preserve column alignment.
+Only show the delta when a previous `usage-live.json` snapshot exists **and** is within the current reset window. If no previous snapshot exists or it is outside the current reset window, omit the delta entirely — no padding.
 
-Delta field is always 5 characters wide: `(+N%)`, no trailing markers.
-When omitted, 5 spaces are used instead to keep `· Reset` aligned.
+Delta format: `+N%` optionally followed by a severity marker:
 
-**Implementation:** Pass `delta5h: null` / `deltaWk: null` in the render-card input JSON when no valid previous snapshot is available. The renderer will omit the parenthetical and pad for alignment.
+| Threshold | Marker | Example |
+|-----------|--------|---------|
+| delta < 2pp | _(none)_ | `+1%` |
+| delta ≥ 2pp | `!` | `+3% !` |
+| delta ≥ 6pp | `!!` | `+8% !!` |
+
+**Implementation:** Pass `delta5h: null` / `deltaWk: null` in the render-card input JSON when no valid previous snapshot is available. The renderer will omit the delta field entirely.
 
 **Pace comparison (usage vs. elapsed time):**
 
@@ -158,35 +155,31 @@ pace_delta = usage_pct - elapsed_pct
 | pace_delta | Display |
 |------------|---------|
 | ≤ +10pp | _(nothing)_ |
-| > +10pp | `  ⚠ Sonnet or new session` at end of affected line |
+| > +10pp | `  ⚠ Pace!` at end of affected line |
 
 - Evaluated per window individually (5h, Wk, or both).
-- Never suggest reducing skills/agents — model switch is the lever (Opus → Sonnet).
 - Data source: `usage-live.json` (via `/devops-refresh-usage` before rendering).
 
 **Column alignment:**
 
-All columns fixed width so `· Reset` aligns in both lines.
-
 ```
 Column       Width    Content
 ──────────   ──────   ──────────────────────────
-Label         3 chr   "5h " / "Wk "
-Gap           1 chr   " "
-Bar          12 chr   ▓▓▓░░░ (always 12)
-Gap           3 chr   "   "
+Label         2 chr   "5h" / "Wk"
+Gap           2 chr   "  "
+Bar          14 chr   ━━━╇── (always 14)
+Gap           2 chr   "  "
 Pct           3 chr   right-aligned, space-padded
 Pct-suffix    1 chr   "%"
-Space         1 chr   " "
-Delta         5 chr   "(+N%)"
+Delta         var.    "  +N%" / "  +N% !" / "  +N% !!" — omitted when null
 Gap           2 chr   "  "
 Separator     2 chr   "· "
-Reset-label   6 chr   "Reset "
 Reset-value   var.    "1h 42m" / "4d 11h"
-Warn          var.    "  ⚠ Sonnet or new session" or empty
+Reset-suffix  5 chr   " left"
+Warn          var.    "  ⚠ Pace!" or empty
 ```
 
-- Fixed total width up to delta: **35 characters** → `· Reset` aligns.
+- `· {reset} left` aligns when delta is present; when delta is absent the `·` shifts left.
 
 | Variants | Behavior |
 |----------|----------|
@@ -212,7 +205,7 @@ Bullet list: what was tested, method and result.
 
 | Variants | Behavior |
 |----------|----------|
-| ship-successful, ready, test | **If tests/builds ran** — otherwise omit |
+| ship-successful, ready, test, ship-blocked | **If tests/builds ran** — otherwise omit |
 | analysis, test-minimal, aborted, fallback | **Omit** |
 
 ---
