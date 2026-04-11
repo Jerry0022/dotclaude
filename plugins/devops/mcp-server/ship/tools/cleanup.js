@@ -10,12 +10,12 @@ import { git, gitStrict, isWorktree, getWorktreeBranches } from "../lib/git.js";
 export const schema = z.object({
   branch: z.string().describe("Feature branch to delete"),
   base: z.string().default("main").describe("Base branch (should already be checked out)"),
-  cwd: z.string().nullable().default(null).describe("Working directory override (agent cwd) for worktree detection"),
+  cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
 export async function handler(params) {
-  const { branch, base, cwd: agentCwd } = params;
-  const cwd = agentCwd || process.cwd();
+  const { branch, base, cwd } = params;
+  if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const opts = { cwd };
   const intermediate = base !== "main";
   const cleaned = [];

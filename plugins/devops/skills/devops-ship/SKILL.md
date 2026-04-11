@@ -18,6 +18,11 @@ allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, G
 Ship completed work via PR using the `dotclaude-ship` MCP server tools.
 Supports two modes: **direct** (branch → main) and **intermediate** (sub-branch → feature branch).
 
+> **CRITICAL — `cwd` is required on every MCP tool call.**
+> The ship MCP server runs in the plugin directory, NOT the target repo.
+> Every `ship_*` tool call MUST include `cwd` set to the current working directory of this Claude session.
+> Omitting `cwd` will cause the tool to operate on the wrong repository.
+
 ## Pre-Step — Session Activity Guard
 
 Before anything else, check whether this session still has work in progress.
@@ -51,15 +56,17 @@ Project extensions define: quality gate commands, deploy targets, version files,
 
 ## Step 1 — Pre-Flight Safety Gate
 
-Call `ship_preflight` MCP tool (dotclaude-ship server):
+Call `ship_preflight` MCP tool (dotclaude-ship server).
+**CRITICAL:** Always pass `cwd` — the MCP server runs in the plugin directory, not the target repo.
+Use the current working directory of the Claude session as `cwd`.
 ```
-ship_preflight({ base: "main" })
+ship_preflight({ base: "main", cwd: "<current working directory>" })
 ```
 
 The tool **auto-detects** the correct base branch:
 - If on a sub-branch like `feat/42-video-filters/core`, it detects `feat/42-video-filters` as the parent and uses it as base.
 - If no parent branch is found, it ships to `main` (default).
-- You can override by passing an explicit base: `ship_preflight({ base: "feat/42" })`.
+- You can override by passing an explicit base: `ship_preflight({ base: "feat/42", cwd: "<cwd>" })`.
 
 Check the result:
 - `autoDetectedBase` — non-null if a parent branch was detected (confirms intermediate merge).
@@ -70,9 +77,9 @@ The tool checks: clean tree, commits ahead, all pushed, version consistency (ski
 
 ## Step 2 — Build + Quality Gates
 
-Call `ship_build` MCP tool:
+Call `ship_build` MCP tool (always pass `cwd`):
 ```
-ship_build({ buildCmd: "npm run build", lintCmd: "npm run lint" })
+ship_build({ buildCmd: "npm run build", lintCmd: "npm run lint", cwd: "<cwd>" })
 ```
 
 Pass project-specific commands from extensions if available.
@@ -105,9 +112,9 @@ Determine bump type based on changes:
 **Before calling ship_version_bump**, update CHANGELOG.md with the new version entry.
 The MCP tool updates JSON files and README — CHANGELOG is editorial and must be done by Claude.
 
-Then call `ship_version_bump` MCP tool:
+Then call `ship_version_bump` MCP tool (always pass `cwd`):
 ```
-ship_version_bump({ bump: "minor" })
+ship_version_bump({ bump: "minor", cwd: "<cwd>" })
 ```
 
 Returns: `{ success, vOld, vNew, filesUpdated, verified, mismatches }`.
@@ -128,7 +135,8 @@ ship_release({
   commitMessage: "chore(release): v0.18.0",
   tag: "v0.18.0",
   releaseNotes: "...",
-  prerelease: false
+  prerelease: false,
+  cwd: "<cwd>"
 })
 ```
 
@@ -140,7 +148,8 @@ ship_release({
   body: "## Summary\n...",
   commitMessage: null,
   tag: null,
-  releaseNotes: null
+  releaseNotes: null,
+  cwd: "<cwd>"
 })
 ```
 
@@ -175,14 +184,14 @@ This preserves the audit trail through squash-merges. Without these references, 
 If `ExitWorktree` **fails** (e.g. directory locked by another process): **STOP**. Do not proceed to cleanup.
 Report the error to the user. The merge already landed on GitHub — cleanup can be retried later.
 
-Then call `ship_cleanup` MCP tool with the `base` from Step 1:
+Then call `ship_cleanup` MCP tool with the `base` from Step 1 (always pass `cwd`):
 ```
-ship_cleanup({ branch: "claude/feature-branch", base: "main" })
+ship_cleanup({ branch: "claude/feature-branch", base: "main", cwd: "<cwd>" })
 ```
 
 For intermediate merges:
 ```
-ship_cleanup({ branch: "feat/42-video-filters/core", base: "feat/42-video-filters" })
+ship_cleanup({ branch: "feat/42-video-filters/core", base: "feat/42-video-filters", cwd: "<cwd>" })
 ```
 
 The tool deletes the sub-branch but **preserves the feature branch** for further sub-branch merges or final ship to main.

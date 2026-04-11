@@ -9,12 +9,13 @@ import { readVersion, verifyVersionFiles } from "../lib/version.js";
 
 export const schema = z.object({
   base: z.string().default("main").describe("Base branch to ship into (auto-detected from sub-branch naming if 'main')"),
-  cwd: z.string().optional().describe("Working directory override (e.g. worktree path). Falls back to process.cwd()."),
+  cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
 export async function handler(params) {
   let { base } = params;
-  const cwd = params.cwd || process.cwd();
+  const cwd = params.cwd;
+  if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const opts = { cwd };
   const checks = [];
   const errors = [];

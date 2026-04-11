@@ -16,12 +16,13 @@ export const schema = z.object({
   releaseNotes: z.string().nullable().default(null).describe("GitHub release notes (CHANGELOG mirror) — ignored for intermediate merges"),
   prerelease: z.boolean().default(false).describe("Mark as pre-release (for 0.x versions)"),
   commitMessage: z.string().nullable().default(null).describe("If set, stage all and commit with this message before pushing"),
-  cwd: z.string().optional().describe("Working directory override (e.g. worktree path). Falls back to process.cwd()."),
+  cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
 export async function handler(params) {
   const { base, title, body, tag, releaseNotes, prerelease, commitMessage } = params;
-  const cwd = params.cwd || process.cwd();
+  const cwd = params.cwd;
+  if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const opts = { cwd };
   const branch = currentBranch(opts);
   const intermediate = base !== "main";

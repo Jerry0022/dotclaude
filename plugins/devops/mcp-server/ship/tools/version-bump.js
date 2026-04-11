@@ -8,12 +8,13 @@ import { readVersion, bumpVersion, updateVersionFiles, verifyVersionFiles } from
 
 export const schema = z.object({
   bump: z.enum(["patch", "minor", "major", "none"]).describe("Semantic version bump type"),
-  cwd: z.string().optional().describe("Working directory override (e.g. worktree path). Falls back to process.cwd()."),
+  cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
 export async function handler(params) {
   const { bump } = params;
-  const cwd = params.cwd || process.cwd();
+  const cwd = params.cwd;
+  if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
 
   // Read current version
   const { version: vOld, type: projectType, file: sourceFile } = readVersion(cwd);

@@ -23,7 +23,7 @@ export const schema = z.object({
   lintCmd: z.string().nullable().default(null).describe("Lint command (null = auto-detect from package.json)"),
   testCmd: z.string().nullable().default(null).describe("Test command (null = auto-detect from package.json)"),
   buildIdOnly: z.boolean().default(false).describe("Skip build, only compute build-ID"),
-  cwd: z.string().optional().describe("Working directory override (e.g. worktree path). Falls back to process.cwd()."),
+  cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
 /**
@@ -73,7 +73,8 @@ function getBuildId(cwd) {
 }
 
 export async function handler(params) {
-  const cwd = params.cwd || process.cwd();
+  const cwd = params.cwd;
+  if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const { buildIdOnly } = params;
 
   if (buildIdOnly) {
