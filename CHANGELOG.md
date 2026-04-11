@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.36.7] — 2026-04-11
+
+### Fixed
+
+- **ship** — resolve build-id script path dynamically: after mid-session plugin cache rebuild, `__dirname` pointed to deleted old cache version causing `build-id.js` ENOENT; replaced static import-time resolution with lazy `pluginRoot()` fallback chain (env var → static path → cache parent scan)
+
 ## [0.36.6] — 2026-04-11
 
 ### Fixed
