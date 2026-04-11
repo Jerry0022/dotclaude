@@ -135,41 +135,38 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk) {
 // ---------------------------------------------------------------------------
 
 const VARIANTS = {
-  shipped:         { usage: true,  changes: true,  tests: true,  state: true,  userTest: false },
-  ready:           { usage: true,  changes: true,  tests: true,  state: true,  userTest: false },
-  blocked:         { usage: true,  changes: true,  tests: true,  state: true,  userTest: false },
-  test:            { usage: true,  changes: true,  tests: true,  state: true,  userTest: true  },
-  'minimal-start': { usage: false, changes: false, tests: false, state: false, userTest: false },
-  analysis:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
-  research:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false }, // legacy alias → analysis
-  aborted:         { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
-  fallback:        { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
+  'ship-successful': { usage: true,  changes: true,  tests: true,  state: true,  userTest: false },
+  ready:             { usage: true,  changes: true,  tests: true,  state: true,  userTest: false },
+  'ship-blocked':    { usage: true,  changes: true,  tests: true,  state: true,  userTest: false },
+  test:              { usage: true,  changes: true,  tests: true,  state: true,  userTest: true  },
+  'test-minimal':    { usage: false, changes: false, tests: false, state: false, userTest: false },
+  analysis:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
+  aborted:           { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
+  fallback:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
 };
 
 const CTA = {
   en: {
-    'shipped-bump':  '## \ud83d\ude80 SHIPPED. {vOld} \u2192 {vNew} ({bump}) \u2014 RELAX, all done',
-    'shipped-plain': '## \ud83d\ude80 SHIPPED. {version} \u2014 RELAX, all done',
-    ready:           '## \ud83d\udce6 READY. {info} \u2014 SHIP or CHANGE?',
-    blocked:         '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
-    test:            '## \ud83e\uddea DONE. {info} \u2014 SHIP after your TEST?',
-    'minimal-start': '## \ud83e\uddea STARTED. {description} \u2014 HAVE FUN',
-    analysis:        '## \ud83d\udccb DONE. {info} \u2014 READ through',
-    research:        '## \ud83d\udccb DONE. {info} \u2014 READ through',
-    aborted:         '## \ud83d\udeab ABORTED. {reason} \u2014 What should I TRY?',
-    fallback:        '## \ud83d\udccb DONE \u2014 Anything ELSE?',
+    'ship-successful-bump':  '## \ud83d\ude80 SHIPPED. {vOld} \u2192 {vNew} ({bump}) \u2014 RELAX, all done',
+    'ship-successful-plain': '## \ud83d\ude80 SHIPPED. {version} \u2014 RELAX, all done',
+    ready:                   '## \ud83d\udce6 READY. {info} \u2014 SHIP or CHANGE?',
+    'ship-blocked':          '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
+    test:                    '## \ud83e\uddea DONE. {info} \u2014 SHIP after your TEST?',
+    'test-minimal':          '## \ud83e\uddea STARTED. {description} \u2014 HAVE FUN',
+    analysis:                '## \ud83d\udccb DONE. {info} \u2014 READ through',
+    aborted:                 '## \ud83d\udeab ABORTED. {reason} \u2014 What should I TRY?',
+    fallback:                '## \ud83d\udd27 DONE \u2014 Anything ELSE?',
   },
   de: {
-    'shipped-bump':  '## \ud83d\ude80 SHIPPED. {vOld} \u2192 {vNew} ({bump}) \u2014 LEHN dich zurück, alles erledigt',
-    'shipped-plain': '## \ud83d\ude80 SHIPPED. {version} \u2014 LEHN dich zurück, alles erledigt',
-    ready:           '## \ud83d\udce6 READY. {info} \u2014 SHIP oder ÄNDERN?',
-    blocked:         '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
-    test:            '## \ud83e\uddea DONE. {info} \u2014 SHIP nach deinem TEST?',
-    'minimal-start': '## \ud83e\uddea STARTED. {description} \u2014 VIEL SPASS',
-    analysis:        '## \ud83d\udccb DONE. {info} \u2014 LIES dir durch',
-    research:        '## \ud83d\udccb DONE. {info} \u2014 LIES dir durch',
-    aborted:         '## \ud83d\udeab ABORTED. {reason} \u2014 Was soll ich VERSUCHEN?',
-    fallback:        '## \ud83d\udccb DONE \u2014 Noch was ANDERES?',
+    'ship-successful-bump':  '## \ud83d\ude80 SHIPPED. {vOld} \u2192 {vNew} ({bump}) \u2014 LEHN dich zurück, alles erledigt',
+    'ship-successful-plain': '## \ud83d\ude80 SHIPPED. {version} \u2014 LEHN dich zurück, alles erledigt',
+    ready:                   '## \ud83d\udce6 READY. {info} \u2014 SHIP oder ÄNDERN?',
+    'ship-blocked':          '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
+    test:                    '## \ud83e\uddea DONE. {info} \u2014 SHIP nach deinem TEST?',
+    'test-minimal':          '## \ud83e\uddea STARTED. {description} \u2014 VIEL SPASS',
+    analysis:                '## \ud83d\udccb DONE. {info} \u2014 LIES dir durch',
+    aborted:                 '## \ud83d\udeab ABORTED. {reason} \u2014 Was soll ich VERSUCHEN?',
+    fallback:                '## \ud83d\udd27 DONE \u2014 Noch was ANDERES?',
   },
 };
 
@@ -209,7 +206,7 @@ function renderTests(tests) {
 
 function renderState(state, variant) {
   if (!state) {
-    if (variant === 'analysis' || variant === 'research') return '\u2796 No changes to repo';
+    if (variant === 'analysis') return '\u2796 No changes to repo';
     return '';
   }
 
@@ -223,7 +220,7 @@ function renderState(state, variant) {
 
   const branch = state.branch || 'main';
   const branchStr = branch + (state.worktree ? ' (worktree)' : '');
-  const commitStr = state.commit ? 'git ' + state.commit : 'uncommitted';
+  const commitStr = state.commit ? state.commit : 'uncommitted';
   const pushStr = state.pushed ? 'pushed' : 'not pushed';
 
   let prStr = 'no PR';
@@ -232,7 +229,8 @@ function renderState(state, variant) {
   let mergeStr = 'not merged';
   if (state.merged) mergeStr = 'merged \u2192 ' + state.merged;
 
-  let line = icon + ' `' + branchStr + '` \u00b7 ' + commitStr + ' \u00b7 ' + pushStr + ' \u00b7 ' + prStr + ' \u00b7 ' + mergeStr;
+  // Order: most important first — merge · PR · push · commit · branch
+  let line = icon + ' ' + mergeStr + ' \u00b7 ' + prStr + ' \u00b7 ' + pushStr + ' \u00b7 ' + commitStr + ' \u00b7 `' + branchStr + '`';
 
   if (state.appStatus === 'running')     line += ' \u00b7 app running';
   if (state.appStatus === 'not-started') line += ' \u00b7 app not started';
@@ -251,10 +249,8 @@ function renderCTA(variant, cta, lang) {
   cta = cta || {};
 
   let key;
-  if (variant === 'shipped') {
-    key = (cta.vOld && cta.vNew) ? 'shipped-bump' : 'shipped-plain';
-  } else if (variant === 'research') {
-    key = 'analysis'; // legacy alias
+  if (variant === 'ship-successful') {
+    key = (cta.vOld && cta.vNew) ? 'ship-successful-bump' : 'ship-successful-plain';
   } else {
     key = variant;
   }
@@ -528,8 +524,8 @@ server.registerTool(
       "after the closing ---.",
     inputSchema: z.object({
       variant: z.enum([
-        "shipped", "ready", "blocked", "test",
-        "minimal-start", "analysis", "research", "aborted", "fallback",
+        "ship-successful", "ready", "ship-blocked", "test",
+        "test-minimal", "analysis", "aborted", "fallback",
       ]).describe("Card variant based on task outcome"),
       summary: z.string().max(80).describe("Max ~10 words, user's language"),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
@@ -584,15 +580,15 @@ server.registerTool(
     }),
   },
   async (params) => {
-    // 0. Variant guard — auto-correct "shipped" when state proves it wasn't
-    //    shipped: ONLY valid after ship_release ran (pushed + merged).
-    //    A commit, push, or PR alone is NEVER "shipped".
-    if (params.variant === 'shipped') {
+    // 0. Variant guard — auto-correct "ship-successful" when state proves it wasn't
+    //    ship-successful: ONLY valid after ship_release ran (pushed + merged).
+    //    A commit, push, or PR alone is NEVER "ship-successful".
+    if (params.variant === 'ship-successful') {
       const s = params.state || {};
       if (!s.pushed || !s.merged) {
-        const corrected = s.pushed ? 'ready' : 'ready';
+        const corrected = 'ready';
         console.error(
-          `[dotclaude-completion-mcp] Variant guard: "shipped" rejected ` +
+          `[dotclaude-completion-mcp] Variant guard: "ship-successful" rejected ` +
           `(pushed=${!!s.pushed}, merged=${!!s.merged}) → corrected to "${corrected}"`
         );
         params.variant = corrected;

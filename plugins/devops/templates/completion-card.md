@@ -1,7 +1,7 @@
 ---
 name: completion-card
 description: Master template for task completion cards — all variants derive from this single source.
-version: 0.8.0
+version: 0.9.0
 used-by: ship, test, start, commit, review, analysis, and any skill/agent that completes work
 ---
 
@@ -190,8 +190,8 @@ Warn          var.    "  ⚠ Sonnet or new session" or empty
 
 | Variants | Behavior |
 |----------|----------|
-| shipped, ready, test, blocked, analysis, aborted, fallback | **Show** |
-| minimal-start | **Omit** |
+| ship-successful, ready, test, ship-blocked, analysis, aborted, fallback | **Show** |
+| test-minimal | **Omit** |
 
 ### Changes
 
@@ -200,9 +200,9 @@ Bullet list (`*`), each bullet: `area → what happened`.
 
 | Variants | Behavior |
 |----------|----------|
-| shipped, ready, test, blocked | **Required** |
+| ship-successful, ready, test, ship-blocked | **Required** |
 | analysis, fallback | **Required** — describes what was investigated/planned/answered |
-| minimal-start | **Omit** |
+| test-minimal | **Omit** |
 | aborted | **Optional** — only if work happened before abort |
 
 ### Tests
@@ -212,8 +212,8 @@ Bullet list: what was tested, method and result.
 
 | Variants | Behavior |
 |----------|----------|
-| shipped, ready, test | **If tests/builds ran** — otherwise omit |
-| analysis, minimal-start, aborted, fallback | **Omit** |
+| ship-successful, ready, test | **If tests/builds ran** — otherwise omit |
+| analysis, test-minimal, aborted, fallback | **Omit** |
 
 ---
 
@@ -225,37 +225,37 @@ One-liner, no section header. Directly after Changes/Tests.
 
 `{{state-icon}} {{state-text}}`
 
-**Schema — all fields always present:**
+**Schema — all fields always present, most important first:**
 
 Every state line contains the same fields in the same order.
 Fields that don't apply are shown with explicit negative values.
 
 ```
-{{state-icon}} {{branch}} · {{commit}} · {{push}} · {{pr}} · {{merge}}
+{{state-icon}} {{merge}} · {{pr}} · {{push}} · {{commit}} · {{branch}}
 ```
 
 | Field | Positive | Negative |
 |-------|----------|----------|
-| branch | `feat/xyz` or `feat/xyz (worktree)` | `main` (no feature branch) |
-| commit | `abc1234` (committed hash) | `uncommitted` |
-| push | `pushed` | `not pushed` |
-| pr | `PR #N "Title"` | `no PR` |
 | merge | `merged → remote/main` | `not merged` |
+| pr | `PR #N "Title"` | `no PR` |
+| push | `pushed` | `not pushed` |
+| commit | `abc1234` (committed hash) | `uncommitted` |
+| branch | `feat/xyz` or `feat/xyz (worktree)` | `main` (no feature branch) |
 
 **Examples — all states:**
 
 | State | One-liner |
 |-------|-----------|
-| Fresh, nothing committed | 🔀 `feat/xyz` · uncommitted · not pushed · no PR · not merged |
-| Committed, not pushed | 🔀 `feat/xyz` · abc1234 · not pushed · no PR · not merged |
-| Pushed, no PR | 🔀 `feat/xyz` · abc1234 · pushed · no PR · not merged |
-| PR open | 🔀 `feat/xyz` · abc1234 · pushed · PR #42 "Filter refactor" · not merged |
-| Merged via PR | ✅ `feat/xyz` · abc1234 · pushed · PR #42 "Filter refactor" · merged → remote/main |
-| Direct push | ✅ `main` · abc1234 · pushed · no PR · remote/main |
-| Worktree, not pushed | 🔀 `feat/xyz` (worktree) · abc1234 · not pushed · no PR · not merged |
-| Worktree, PR open | 🔀 `feat/xyz` (worktree) · abc1234 · pushed · PR #42 "Filter refactor" · not merged |
-| App running (after edits) | 🟢 `feat/xyz` · abc1234 · not pushed · no PR · not merged · app running |
-| App needs start | 🟡 `feat/xyz` · abc1234 · not pushed · no PR · not merged · app not started |
+| Fresh, nothing committed | 🔀 not merged · no PR · not pushed · uncommitted · `feat/xyz` |
+| Committed, not pushed | 🔀 not merged · no PR · not pushed · abc1234 · `feat/xyz` |
+| Pushed, no PR | 🔀 not merged · no PR · pushed · abc1234 · `feat/xyz` |
+| PR open | 🔀 not merged · PR #42 "Filter refactor" · pushed · abc1234 · `feat/xyz` |
+| Merged via PR | ✅ merged → remote/main · PR #42 "Filter refactor" · pushed · abc1234 · `feat/xyz` |
+| Direct push | ✅ merged → remote/main · no PR · pushed · abc1234 · `main` |
+| Worktree, not pushed | 🔀 not merged · no PR · not pushed · abc1234 · `feat/xyz (worktree)` |
+| Worktree, PR open | 🔀 not merged · PR #42 "Filter refactor" · pushed · abc1234 · `feat/xyz (worktree)` |
+| App running (after edits) | 🟢 not merged · no PR · not pushed · abc1234 · `feat/xyz` · app running |
+| App needs start | 🟡 not merged · no PR · not pushed · abc1234 · `feat/xyz` · app not started |
 | No changes | ➖ No changes to repo |
 
 **State icons:**
@@ -270,9 +270,9 @@ Fields that don't apply are shown with explicit negative values.
 
 | Variants | Behavior |
 |----------|----------|
-| shipped, ready, test, blocked | **Required** |
+| ship-successful, ready, test, ship-blocked | **Required** |
 | analysis | Shows `➖ No changes to repo` |
-| minimal-start | **Omit** |
+| test-minimal | **Omit** |
 | aborted, fallback | **Dependent** — show what exists |
 
 ---
@@ -302,29 +302,29 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 
 | # | Variant | CTA |
 |---|---------|-----|
-| 1 | shipped (with bump) | `## 🚀 SHIPPED. {{vOld}} → {{vNew}} ({{bump}}) — RELAX, all done` |
-| 1 | shipped (no bump) | `## 🚀 SHIPPED. {{version}} — RELAX, all done` |
+| 1 | ship-successful (with bump) | `## 🚀 SHIPPED. {{vOld}} → {{vNew}} ({{bump}}) — RELAX, all done` |
+| 1 | ship-successful (no bump) | `## 🚀 SHIPPED. {{version}} — RELAX, all done` |
 | 2 | ready | `## 📦 READY. {{info}} — SHIP or CHANGE?` |
-| 3 | blocked | `## ⛔ BLOCKED. {{reason}} — FIX or SKIP?` |
+| 3 | ship-blocked | `## ⛔ BLOCKED. {{reason}} — FIX or SKIP?` |
 | 4 | test | `## 🧪 DONE. {{info}} — SHIP after your TEST?` |
-| 5 | minimal-start | `## 🧪 STARTED. {{user-facing-description}} — HAVE FUN` |
+| 5 | test-minimal | `## 🧪 STARTED. {{user-facing-description}} — HAVE FUN` |
 | 6 | analysis | `## 📋 DONE. {{info}} — READ through` |
 | 7 | aborted | `## 🚫 ABORTED. {{reason}} — What should I TRY?` |
-| 8 | fallback | `## 📋 DONE — Anything ELSE?` |
+| 8 | fallback | `## 🔧 DONE — Anything ELSE?` |
 
 **CTA translations (DE):**
 
 | # | Variant | CTA |
 |---|---------|-----|
-| 1 | shipped (with bump) | `## 🚀 SHIPPED. {{vOld}} → {{vNew}} ({{bump}}) — LEHN dich zurück, alles erledigt` |
-| 1 | shipped (no bump) | `## 🚀 SHIPPED. {{version}} — LEHN dich zurück, alles erledigt` |
+| 1 | ship-successful (with bump) | `## 🚀 SHIPPED. {{vOld}} → {{vNew}} ({{bump}}) — LEHN dich zurück, alles erledigt` |
+| 1 | ship-successful (no bump) | `## 🚀 SHIPPED. {{version}} — LEHN dich zurück, alles erledigt` |
 | 2 | ready | `## 📦 READY. {{info}} — SHIP oder ÄNDERN?` |
-| 3 | blocked | `## ⛔ BLOCKED. {{reason}} — FIX oder SKIP?` |
+| 3 | ship-blocked | `## ⛔ BLOCKED. {{reason}} — FIX oder SKIP?` |
 | 4 | test | `## 🧪 DONE. {{info}} — SHIP nach deinem TEST?` |
-| 5 | minimal-start | `## 🧪 STARTED. {{user-facing-description}} — VIEL SPASS` |
+| 5 | test-minimal | `## 🧪 STARTED. {{user-facing-description}} — VIEL SPASS` |
 | 6 | analysis | `## 📋 DONE. {{info}} — LIES dir durch` |
 | 7 | aborted | `## 🚫 ABORTED. {{reason}} — Was soll ich VERSUCHEN?` |
-| 8 | fallback | `## 📋 DONE — Noch was ANDERES?` |
+| 8 | fallback | `## 🔧 DONE — Noch was ANDERES?` |
 
 ---
 
@@ -332,52 +332,56 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 
 | # | Variant | CTA-Icon | Changes | Tests | User-Test | State | Usage |
 |---|---------|---------|---------|-------|-----------|-------|-------|
-| 1 | shipped | 🚀 | yes | yes | — | final | yes |
+| 1 | ship-successful | 🚀 | yes | yes | — | final | yes |
 | 2 | ready | 📦 | yes | if ran | — | branch | yes |
-| 3 | blocked | ⛔ | yes | if ran | — | branch | yes |
+| 3 | ship-blocked | ⛔ | yes | if ran | — | branch | yes |
 | 4 | test | 🧪 | yes | if ran | yes | app-status | yes |
-| 5 | minimal-start | 🧪 | — | — | — | — | — |
+| 5 | test-minimal | 🧪 | — | — | — | — | — |
 | 6 | analysis | 📋 | yes | — | — | none | yes |
 | 7 | aborted | 🚫 | opt. | — | — | dep. | yes |
-| 8 | **fallback** | 📋 | yes | — | — | dep. | yes |
+| 8 | **fallback** | 🔧 | yes | — | — | dep. | yes |
 
-- **shipped (1)**: PR vs. direct push → state line shows the difference.
-- **test (4)**: App running vs. needs start → state line shows the difference.
-- **analysis (6)**: No file changes — covers research, audit, plan, review, explanation. `research` is a legacy alias.
+- **ship-successful (1)**: ONLY after /devops-ship + successfully merged to remote/main. PR vs. direct push → state line shows the difference.
+- **ship-blocked (3)**: ONLY after /devops-ship + NOT merged (PR open, build fail, etc.).
+- **test (4)**: Claude starts app + code edits (app relevant).
+- **test-minimal (5)**: User starts app via prompt, no edits done yet.
+- **analysis (6)**: No file changes — covers audit, plan, review, explanation, investigation.
 
 ### CTA Icons
 
 | Icon | Meaning | Variants |
 |------|---------|----------|
-| 🚀 | Delivered — all done | shipped |
+| 🚀 | Delivered — all done | ship-successful |
 | 📦 | Ready — user decides next step | ready |
-| 🧪 | Test — user must verify | test, minimal-start |
-| ⛔ | Blocked — needs fix | blocked |
+| 🧪 | Test — user must verify | test, test-minimal |
+| ⛔ | Blocked — needs fix | ship-blocked |
 | 🚫 | Aborted — not feasible | aborted |
-| 📋 | Info — purely informational | analysis, fallback |
+| 📋 | Info — purely informational | analysis |
+| 🔧 | Default — miscellaneous/other | fallback |
 
 ### Variant Selection Rules
 
 ```
-if   ship pipeline ran (ship_release MCP tool called) → shipped (1)
-elif build/gate/merge failed                          → blocked (3)
-elif task aborted or not feasible                     → aborted (7)
-elif code edits + app relevant                        → test (4)
-elif user started app/session, no task completed yet  → minimal-start (5)
-elif code/doc changes, no app                         → ready (2)
-elif NO code changes (research/review/audit/plan/explanation) → analysis (6)
-else                                                  → fallback (8)
+if   ship pipeline ran + merged to remote/main  → ship-successful (1)
+elif ship pipeline ran + NOT merged              → ship-blocked (3)
+elif task aborted / infeasible / rate-limited    → aborted (7)
+elif code edits + app relevant                   → test (4)
+elif user started app, no edits yet              → test-minimal (5)
+elif code/doc changes (>=1 edit), no app         → ready (2)
+elif NO code changes (analysis/explanation/...)  → analysis (6)
+else                                             → fallback (8)
 ```
 
 **STRICT variant rules (never violate):**
 
-- **shipped**: ONLY after `/devops-ship` ran `ship_release` successfully. A commit, push, or PR alone is NEVER "shipped". Use `ready` instead.
-- **minimal-start**: ONLY when the user freshly starts the app/session. Never after a commit, task completion, or any other action. This is a session-start greeting, nothing else.
-- **ready**: Default for completed work (commits, PRs, code changes) that hasn't gone through the ship pipeline.
+- **ship-successful**: ONLY after `/devops-ship` ran `ship_release` and it was merged to remote/main. A commit, push, or PR alone is NEVER "ship-successful". Use `ready` instead.
+- **ship-blocked**: ONLY after `/devops-ship` ran but did NOT merge (build failed, PR open, gate failed). Never use for plain uncommitted/unpushed state.
+- **test-minimal**: ONLY when the user freshly starts the app via a prompt and no code edits have been made yet. Never after a commit, task completion, or any other action. This is a session-start greeting, nothing else.
+- **ready**: Default for any completed code/doc change (>=1 edit) that hasn't gone through the ship pipeline. Threshold is >=1 edit — not >5.
 
 **Key rule — `ready` vs `analysis`:**
 - `ready`: at least one file was modified/created/deleted → user can ship
-- `analysis`: zero files changed → read-only outcome (research, audit, plan, review, explain)
+- `analysis`: zero files changed → read-only outcome (audit, plan, review, explain, investigate)
 - When in doubt: if `git status` would be clean → `analysis`, not `ready`
 
 **Key rule — `test` variant + Desktop Testing:**
@@ -402,5 +406,5 @@ else                                                  → fallback (8)
 10. Usage meter always in code block, never as plain text.
 11. If `usage-live.json` is missing: show `⚠ Usage data unavailable — monitoring issue`.
 12. Build-ID always included — even for pure docs/config changes.
-13. State line always with all fields (branch, commit, push, PR, merge).
-14. Minimal-start `{{user-facing-description}}`: Prefer user-facing descriptions ("Website opens in Edge", "Window appears") over technical details ("Dev server on :3000"). Fall back to technical only when no user-visible outcome exists.
+13. State line always with all fields (merge, pr, push, commit, branch) — most important first.
+14. test-minimal `{{user-facing-description}}`: Prefer user-facing descriptions ("Website opens in Edge", "Window appears") over technical details ("Dev server on :3000"). Fall back to technical only when no user-visible outcome exists.
