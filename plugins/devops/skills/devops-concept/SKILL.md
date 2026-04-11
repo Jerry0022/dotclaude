@@ -142,6 +142,37 @@ Write to: `{project}/.claude/devops-concept/{timestamp}-{slug}.html`
 - Create the directory if it doesn't exist
 - Add `.claude/devops-concept/` to `.gitignore` if not already there
 
+### Post-Generation Validation (mandatory gate)
+
+After writing the HTML file, validate that all mandatory interactive patterns
+are present. **Grep the generated file** for each required pattern:
+
+| # | Pattern to grep | Purpose |
+|---|----------------|---------|
+| 1 | `concept-decisions` | Decision data JSON container |
+| 2 | `concept-submitted` | CSS class for monitoring detection signal |
+| 3 | `connection-warning` | Disconnection warning element |
+| 4 | `checkClaudeConnection` | Heartbeat checker function |
+| 5 | `HEARTBEAT_STALE_MS` | Heartbeat staleness threshold |
+| 6 | `claudeHeartbeat` | Heartbeat dataset target |
+| 7 | `panel-ready` | Ready-state panel element |
+| 8 | `panel-submitted` | Submitted-state panel element |
+| 9 | `sessionStorage` | Reload resilience (state persistence) |
+
+**If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
+then re-validate. This is a **blocking gate** — no exceptions, no "this
+page doesn't need it". Every concept page needs monitoring, every monitored
+page needs the heartbeat guard.
+
+**Common failures this gate catches:**
+- Heartbeat system omitted → submit button stays clickable without monitoring
+- Connection warning missing → user gets no feedback when Claude disconnects
+- Panel states missing → no visual transition on submit/reset cycle
+- sessionStorage missing → user selections lost on F5
+
+The patterns in `deep-knowledge/templates.md` (§ Claude Connection Heartbeat,
+§ Submit Handler, § State Persistence) provide the reference implementations.
+
 ## Step 3 — Open in Browser
 
 Open the generated HTML file as a **new tab in the existing Edge browser**.
