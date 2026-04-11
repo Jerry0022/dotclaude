@@ -156,13 +156,13 @@ After opening the page in Edge, immediately establish the monitoring connection:
    `$TAB_ID` — **must be a number** (coerce with `Number()` if captured as string)
 3. If `playwright` or `preview`: tab management is implicit, no explicit `$TAB_ID` needed
 4. If the waterfall fails entirely: skip browser monitoring, fall back to manual
-   `AskUserQuestion` flow (see `deep-knowledge/monitoring.md` § Manual Fallback)
+   `AskUserQuestion` flow (see `deep-knowledge/monitoring.md` § Manual Fallback (no browser tool available))
 
 See `deep-knowledge/monitoring.md` for the full polling protocol.
 
 **Polling logic:**
 - Before each poll, validate `$TAB_ID` is still alive (chrome-mcp only) —
-  see `deep-knowledge/monitoring.md` § Per-Poll Validation
+  see `deep-knowledge/monitoring.md` § Per-Poll Validation (chrome-mcp only)
 - Check: `document.body.classList.contains('concept-submitted')`  via the eval-based
   tool for `$BROWSER_TOOL` (see `deep-knowledge/monitoring.md` § Concept-Specific Calls)
 - If true → read decisions from `#concept-decisions` JSON using the same eval tool

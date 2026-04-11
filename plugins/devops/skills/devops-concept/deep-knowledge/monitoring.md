@@ -248,7 +248,7 @@ Each round appends to the same file (array of rounds), preserving full history:
 |-------|---------|----------|
 | tabId type error | MCP validation: "expected number, received string" | Coerce `$TAB_ID = Number($TAB_ID)`, retry |
 | Extension disconnected | Tool call times out or returns connection error | Re-run waterfall probe, update `$BROWSER_TOOL` and `$TAB_ID` |
-| Tab closed by user | `tabs_context_mcp` succeeds but `$TAB_ID` not in list | Stop monitoring, inform user: "Concept-Tab wurde geschlossen." |
+| Tab closed by user | `tabs_context_mcp` succeeds but `$TAB_ID` not in list | Stop monitoring, inform user: "Die Concept-Seite wurde geschlossen. Monitoring beendet." |
 | JS eval returns null/undefined | Element not found on page | Retry once (page might still be loading), then show raw error |
 | JSON parse error | `JSON.parse()` throws | Show raw content to user, ask to verify |
 | Empty decisions array | Parsed but `decisions.length === 0` | Ask if intentional (all defaults accepted) |
