@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.37.2] — 2026-04-11
+
+### Changed
+
+- **repo-health** — integrate devops-concept for interactive results: replace markdown report with dashboard concept page featuring repo context header, category filters (safe-delete/investigate/worktree/remote), batch action checkboxes, and decision panel sidebar; user filters, selects branches, and submits cleanup decisions directly from the browser
+
+## [0.37.1] — 2026-04-11
+
+### Added
+
+- **concept** — reload-resilient monitoring: page reload (F5) no longer kills the monitoring loop; eval failure + tab alive = wait & retry (up to 3x with 3s gaps), never stops monitoring for transient page unavailability
+- **concept** — sessionStorage persistence: user selections (toggles, radios, textareas, sliders, selects, theme) survive page reloads via sessionStorage keyed by page slug
+- **concept** — Claude heartbeat mechanism: monitoring poll injects `data-claude-heartbeat` timestamp; page checks freshness every 5s; stale heartbeat (>45s) disables submit button + shows warning banner
+- **concept** — connection-aware decision panel: three visual states (Ready / Disconnected / Submitted); disconnected state shows yellow warning + disabled button; submitted state shows success indicator + "switch to Claude chat" hint + waiting dots animation
+- **concept** — panel state reset: Claude resets panel from "submitted" back to "ready" after processing decisions, enabling the next feedback round
+
+### Fixed
+
+- **ship** — sync marketplace.json version to 0.37.0 (was 0.36.8)
+
+## [0.37.0] — 2026-04-11
+
+### Added
+
+- **concept** — collapsible decision panel: toggle button to collapse/expand the sidebar (default: expanded), collapsed state shrinks to 48px narrow strip with re-expand button
+- **concept** — live panel navigation: clickable section index in the decision panel that smooth-scrolls to the corresponding content area; scroll-spy highlights the active section; green dot for sections with completed decisions
+
+### Fixed
+
+- **concept** — harden browser monitoring with tab-alive detection and type safety: add tabId type invariant (must be number), mid-session reconnection protocol for extension disconnects, per-poll tab-alive check to prevent silent monitoring death, prohibit `get_page_text` for structured data (causes "page too large" errors), comprehensive error recovery matrix (8 error types)
+- **ship** — sync marketplace.json version to 0.36.8 (was 0.36.7 while other files had 0.36.8)
+- **ship** — align marketplace.json version (was stuck at 0.36.4 while other files had 0.36.7)
+
 ## [0.36.7] — 2026-04-11
 
 ### Fixed
