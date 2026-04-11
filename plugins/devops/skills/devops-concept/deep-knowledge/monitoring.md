@@ -6,15 +6,21 @@ How Claude monitors the concept page for user decisions, processes them
 ## Monitoring Architecture
 
 ```
-[Claude generates HTML] → [Opens in browser] → [User interacts]
-                                                       ↓
-[Claude polls page state] ←←←←←←←←←←←←←←←←← [User clicks Submit]
-         ↓
-[Parse decisions JSON] → [Process decisions] → [Update page in browser]
-         ↑                                              ↓
-         └←←←←←←←← [User reviews update] ←←←←←←←←←←←←┘
-                     [User can submit again]
+[Claude generates HTML] → [Bridge Server serves page] → [User interacts]
+                                                               ↓
+                         ┌─── HTTP ───┐                [User clicks Submit]
+                         │             │                       ↓
+Claude ──POST /heartbeat─→ Bridge     ←─POST /decisions── Page JS
+Claude ──GET /decisions──→ Server     ←─GET /heartbeat─── Page JS
+                         │             │
+                         └─────────────┘
+
+[Claude reads decisions via HTTP] → [Process] → [Update page via browser tool]
 ```
+
+The **concept bridge server** (`scripts/concept-server.py`) acts as the
+communication hub. Both Claude and the page talk to the server via HTTP —
+no Chrome MCP JS injection needed for heartbeat or decision exchange.
 
 This is an **iterative loop**, not a one-shot. After each submission,
 Claude processes the feedback, updates the page, and monitors again.
@@ -22,7 +28,22 @@ The loop continues until the user is done (closes page or says "fertig").
 
 ## Detection Signal
 
-The submit action adds a CSS class to `<body>`:
+### Primary: HTTP Bridge (preferred)
+
+Claude polls the bridge server for submitted decisions:
+
+```bash
+curl -s http://localhost:$PORT/decisions
+```
+
+Returns JSON with `"submitted": true` when the user has clicked Submit.
+The page POSTs decisions to `/decisions` on submit (see `templates.md`
+§ Submit Handler).
+
+### Fallback: JS eval (when bridge server unavailable)
+
+If the bridge server is not running (legacy concept pages, direct file open),
+fall back to the JS eval approach:
 
 ```javascript
 document.body.classList.contains('concept-submitted')  // → true when submitted
@@ -36,9 +57,12 @@ JSON.parse(document.getElementById('concept-decisions').textContent)
 
 ## Tool Selection
 
-Follow the **Browser Tool Strategy** (`deep-knowledge/browser-tool-strategy.md`)
-for tool selection. Use the waterfall to set `$BROWSER_TOOL`, then use the tool
-mapping table to pick the correct call for each action.
+**For heartbeat and decision reading:** Use HTTP (`curl` via Bash). No browser
+tool needed — this works regardless of Chrome MCP or Playwright availability.
+
+**For page updates (Step 5c):** Follow the **Browser Tool Strategy**
+(`deep-knowledge/browser-tool-strategy.md`) for JS eval. Page updates are
+optional enhancements — if no eval tool works, inform the user via chat instead.
 
 ## Known Limitation: `file://` URLs
 
@@ -53,101 +77,93 @@ which all browser tools can handle.
 
 ## Pre-Monitoring Setup
 
-Before starting the monitoring loop, establish and validate the browser connection:
+### 1. Verify bridge server is running
 
+The bridge server should already be started in SKILL.md Step 3. Verify:
+
+```bash
+curl -s http://localhost:$PORT/heartbeat
+```
+
+If this returns `{"ts": ...}` → bridge is running. If it fails → the server
+didn't start; debug before proceeding.
+
+### 2. Start heartbeat cron
+
+Set up a recurring heartbeat so the page knows Claude is monitoring:
+
+```
+CronCreate(cron: "* * * * *", prompt: "Run silently: curl -s -X POST http://localhost:{port}/heartbeat > /dev/null. Output nothing.")
+```
+
+Also send the first heartbeat immediately:
+
+```bash
+curl -s -X POST http://localhost:$PORT/heartbeat
+```
+
+Store the cron job ID as `$HEARTBEAT_CRON_ID` for cleanup.
+
+### 3. Optionally establish browser tool (for page updates only)
+
+Browser tools are **not required** for heartbeat or decision reading (those
+work via HTTP). They are only needed for live page updates in Step 5c.
+
+If you want live page updates:
 1. Run the **Browser Tool Strategy waterfall** (`deep-knowledge/browser-tool-strategy.md`)
-   to set `$BROWSER_TOOL`
-2. If `$BROWSER_TOOL` is `chrome-mcp`:
-   - The concept page must already be open via `navigate` in the MCP tab group
-     (opened in Step 3 via localhost HTTP server). Do NOT look for tabs opened
-     via `start "" msedge` — those are outside the MCP group.
-   - Call `tabs_context_mcp` to get the current tab group
-   - Identify the concept page tab (by URL or title) and store its ID as `$TAB_ID`
-   - **Validate the type:** `$TAB_ID` must be a number — if it was captured as a
-     string, coerce immediately: `$TAB_ID = Number($TAB_ID)`
-   - A string tabId causes MCP validation errors on every subsequent call
-3. If `$BROWSER_TOOL` is `playwright` or `preview`:
-   - Tab management is implicit — no explicit `$TAB_ID` needed
-4. If the waterfall fails entirely:
-   - Skip browser-based monitoring
-   - Fall back to the manual AskUserQuestion flow (see below)
-5. **Validate JS eval capability** (mandatory — immediately after step 1-3):
-   - Run a test heartbeat injection using `$BROWSER_TOOL`'s eval tool
-   - If it **succeeds** → `$EVAL_TOOL = $BROWSER_TOOL` (same tool for everything)
-   - If it **fails** → the tool has a **split capability** (tab management works,
-     JS eval doesn't). This is a known failure mode with Chrome MCP where
-     `tabs_context_mcp`, `navigate`, and `read_page` work but `javascript_tool`
-     returns "Cannot access chrome-extension:// URL" errors.
-   - On failure: fall through the eval waterfall independently:
+2. Store `$BROWSER_TOOL` and `$TAB_ID` if chrome-mcp
+3. If the waterfall fails → page updates won't be live, but monitoring still
+   works fully via HTTP
 
-     | Priority | Eval tool | Test call |
-     |----------|-----------|-----------|
-     | 1 | `$BROWSER_TOOL`'s eval | (already failed) |
-     | 2 | playwright `browser_evaluate` | Inject test heartbeat on the same localhost URL |
-     | 3 | preview `preview_eval` | Inject test heartbeat on the concept page |
+### HTTP Bridge Monitoring
 
-   - Set `$EVAL_TOOL` to the first eval tool that succeeds
-   - `$BROWSER_TOOL` stays unchanged — it still handles tab management, navigation,
-     and `read_page`. Only JS eval operations use `$EVAL_TOOL`.
-   - If NO eval tool works → fall back to the manual AskUserQuestion flow.
-     The submit button will be disabled (heartbeat never arrives) — this is
-     correct behavior, the page accurately reflects that monitoring is not active.
+**Heartbeat** (keeps the connection indicator green on the page):
+```bash
+curl -s -X POST http://localhost:$PORT/heartbeat
+```
+Sent by the cron job every ~60s, and additionally on each manual poll cycle.
 
-   **Why this matters:** The waterfall probe (`tabs_context_mcp`) only tests
-   connectivity, not JS eval capability. A tool can be partially functional —
-   tab management works but eval is broken. Without this validation step, the
-   monitoring loop silently fails: heartbeat never arrives, submit button stays
-   disabled, and the user sees a "Claude ist nicht verbunden" warning with no
-   explanation from Claude's side.
+**Check submission** (poll for user decisions):
+```bash
+curl -s http://localhost:$PORT/decisions
+```
+Returns JSON. Check the `submitted` field:
+- `true` → user has submitted, read the decisions from the same response
+- `false` → not yet submitted, wait and retry
 
-### Concept-Specific Calls
+**Read decisions** — they're in the same JSON response from `GET /decisions`:
+```json
+{"submitted": true, "decisions": [...], "comments": [...]}
+```
 
-Using `$EVAL_TOOL` (not `$BROWSER_TOOL` — see step 5 above), execute all JS
-eval operations. Tab management (alive checks, navigation) still uses `$BROWSER_TOOL`.
+No browser eval needed. No Chrome MCP JS injection needed. No split-capability
+issues. The bridge server handles everything.
 
-**Heartbeat injection (every poll, BEFORE checking submission):**
-- chrome-mcp: `javascript_tool("document.body.dataset.claudeHeartbeat = Date.now()")`
-- playwright: `browser_evaluate("document.body.dataset.claudeHeartbeat = Date.now()")`
-- preview: `preview_eval("document.body.dataset.claudeHeartbeat = Date.now()")`
+**Reset after processing** — tell the bridge server to clear decisions:
+```bash
+curl -s -X POST http://localhost:$PORT/reset
+```
 
-This tells the page that Claude is actively monitoring. The page's JS uses
-this to enable/disable the submit button and show a connection warning when
-the heartbeat goes stale (>45 seconds). See `templates.md` § Claude Connection
-Heartbeat. **Always inject the heartbeat first** — even before checking
-`concept-submitted`, because the heartbeat keeps the UI in a valid state.
+### Legacy Fallback: JS Eval (for page updates)
 
-**Check submission:**
-- chrome-mcp: `javascript_tool("document.body.classList.contains('concept-submitted')")`
-- playwright: `browser_evaluate("document.body.classList.contains('concept-submitted')")`
-- preview: `preview_eval("document.body.classList.contains('concept-submitted')")`
+For live page updates (Step 5c — updating content after processing decisions),
+browser eval tools are still useful:
 
-**Read decisions:**
-- chrome-mcp: `javascript_tool("document.getElementById('concept-decisions').textContent")`
-- playwright: `browser_evaluate("document.getElementById('concept-decisions').textContent")`
-- preview: `preview_eval("document.getElementById('concept-decisions').textContent")`
+- chrome-mcp: `javascript_tool("...")`
+- playwright: `browser_evaluate("...")`
+- preview: `preview_eval("...")`
 
-**Split-capability limitation:** When `$EVAL_TOOL` differs from `$BROWSER_TOOL`,
-the eval tool (Playwright/Preview) runs in its own browser instance — it cannot
-inject heartbeats into the user's Edge tab, and it cannot see user interactions
-there. The two browser contexts are completely separate.
-
-**Therefore, in split-capability mode, fall back to AskUserQuestion polling:**
-1. Inform the user that live monitoring is eingeschränkt
-2. Use AskUserQuestion to detect submission (see § Manual Fallback below)
-3. When user confirms → ask them to copy the decisions JSON from the
-   DevTools console: `document.getElementById('concept-decisions').textContent`
-4. The heartbeat guard will disable the submit button in Edge (expected —
-   Claude cannot inject heartbeats). Inform the user to use the DevTools
-   console to re-enable: `document.getElementById('submit-btn').disabled = false`
+If no eval tool works, inform the user via chat what was processed instead
+of updating the page live. The page can be manually refreshed.
 
 **WARNING:** NEVER use `get_page_text`, `browser_snapshot`, or `preview_snapshot`
 to read decisions. Concept pages contain large inline CSS/JS (self-contained HTML).
 These "read page" tools strip scripts and may fail with "page body too large".
-Always use the eval-based tools above for structured data extraction.
 
-### Manual Fallback (no browser tool available)
+### Manual Fallback (bridge server AND browser tools unavailable)
 
-If the browser tool strategy waterfall fails entirely:
+If both the bridge server and browser tools are unavailable (very rare — would
+require the HTTP server to crash):
 
 ```
 AskUserQuestion:
@@ -158,7 +174,7 @@ AskUserQuestion:
     - "Abbrechen"
 ```
 
-If user picks "Ja" but no browser tool can read the page, ask the user to
+If user picks "Ja" but no tool can read decisions, ask the user to
 copy-paste the JSON from the page's developer console:
 
 ```
@@ -183,54 +199,29 @@ Monitoring MUST NOT block the conversation:
 3. If the user says "fertig" / "done" / "abgeschickt" → immediately read decisions
 4. If the user asks for something unrelated → pause monitoring, handle request
 
-### Per-Poll Validation (chrome-mcp only)
+### Per-Poll Validation
 
-Before each poll attempt:
-1. Call `tabs_context_mcp`
-2. Verify `$TAB_ID` is still in the returned tab list
-3. If missing → tab was closed → stop monitoring, inform user:
-   > "Die Concept-Seite wurde geschlossen. Monitoring beendet."
-4. If `tabs_context_mcp` itself fails → extension disconnected → attempt reconnection
-   per the Mid-Session Reconnection Protocol in `deep-knowledge/browser-tool-strategy.md`
+On each poll cycle:
 
-This check ensures monitoring stops ONLY when the tab is actually closed,
-never because the extension had a transient hiccup.
+1. **Send heartbeat**: `curl -s -X POST http://localhost:$PORT/heartbeat`
+2. **Check decisions**: `curl -s http://localhost:$PORT/decisions`
+3. If curl fails → bridge server may have crashed → attempt restart
 
-### Page Reload Detection
+**Optional tab-alive check** (if Chrome MCP is available):
+- Call `tabs_context_mcp` and verify `$TAB_ID` is still in the list
+- If missing → tab closed → stop monitoring, inform user
+- If Chrome MCP is not available → skip this check (monitoring via HTTP continues)
 
-A page reload (F5 or user-triggered) keeps the tab alive but temporarily makes
-the page unreachable. This is **not** a tool failure — it's a transient state.
+### Page Reload Handling
 
-**Detection signal:** The eval call fails (error, timeout, or returns
-`undefined`/`null`) BUT `tabs_context_mcp` confirms `$TAB_ID` is still in the
-list. This means the tab exists but the page content is not ready.
+A page reload (F5) is **not a problem** with the HTTP bridge:
+- The bridge server keeps running independently of the page
+- Heartbeat cron keeps posting → page reconnects automatically after reload
+- `sessionStorage` preserves user selections (see `templates.md` § State Persistence)
+- The `concept-submitted` class resets (correct — user can re-submit)
+- Decisions in the bridge server persist across reloads
 
-**Recovery protocol:**
-
-1. Eval fails → call `tabs_context_mcp`
-2. `$TAB_ID` still in list → **page reload detected** (not tab closed, not
-   extension disconnected)
-3. Wait **3 seconds** (page needs time to load and execute inline JS)
-4. Retry eval — if it succeeds, resume normal polling
-5. If still failing → wait another **3 seconds**, retry once more
-6. If still failing after 3 retries (total ~9 seconds) → re-run the full
-   waterfall probe as a last resort, then retry
-7. **NEVER stop monitoring** due to a reload — the tab is alive, the page
-   will come back
-
-**Key distinction from other failures:**
-
-| Symptom | Diagnosis | Action |
-|---------|-----------|--------|
-| Eval fails + tab missing | Tab closed | Stop monitoring |
-| Eval fails + `tabs_context_mcp` fails | Extension disconnected | Reconnection protocol |
-| Eval fails + tab still alive | **Page reload** | Wait and retry (this section) |
-
-After a successful retry, the page is back to its initial state. This is
-expected behavior — `sessionStorage` persistence in the HTML ensures user
-selections survive the reload (see `deep-knowledge/templates.md` § State
-Persistence). The `concept-submitted` class will be `false` (correct — the
-user hasn't re-submitted), so normal polling continues.
+**No special recovery needed** — the HTTP bridge makes page reloads transparent.
 
 **Do NOT use sleep loops.** Instead, check the page state:
 - When the user sends a message that could indicate completion
@@ -308,28 +299,33 @@ Map decisions back to the original context:
 
 ### Live Page Update (after each round)
 
-After processing a submission, Claude MUST update the browser page:
+After processing a submission, Claude MUST reset the bridge server and
+update the browser page:
 
-1. **Reset submission state and decision panel:**
+1. **Reset bridge server state:**
+   ```bash
+   curl -s -X POST http://localhost:$PORT/reset
+   ```
+
+2. **Reset page UI** (via browser eval if available):
    ```javascript
-   // Via browser tool (javascript_tool / browser_evaluate / preview_eval)
    document.body.classList.remove('concept-submitted');
    document.getElementById('concept-decisions').textContent =
      JSON.stringify({submitted: false, round: N+1, decisions: [], comments: []});
-   // Switch panel back from "submitted" to "ready" state
    document.getElementById('panel-submitted').style.display = 'none';
    document.getElementById('panel-ready').style.display = 'block';
    document.getElementById('submit-btn').disabled = false;
    document.getElementById('submit-btn').textContent = 'Entscheidungen abschicken';
    ```
+   If no browser eval tool is available, inform the user to refresh the page.
 
-2. **Update content to reflect processed state:**
+3. **Update content to reflect processed state** (via browser eval if available):
    - Mark processed items visually (checkmark, "Verarbeitet" badge)
    - Show results of the processing (e.g., generated code, updated plan)
    - Add new decision points if the processing revealed further choices
    - Gray out discarded variants
 
-3. **Resume monitoring** — return to the polling loop for the next round
+4. **Resume monitoring** — return to the polling loop for the next round
 
 ### Persistence
 
@@ -353,25 +349,21 @@ Each round appends to the same file (array of rounds), preserving full history:
 
 | Error | Symptom | Recovery |
 |-------|---------|----------|
-| tabId type error | MCP validation: "expected number, received string" | Coerce `$TAB_ID = Number($TAB_ID)`, retry |
-| Extension disconnected | Tool call times out or returns connection error | Re-run waterfall probe, update `$BROWSER_TOOL` and `$TAB_ID` |
-| Tab closed by user | `tabs_context_mcp` succeeds but `$TAB_ID` not in list | Stop monitoring, inform user: "Die Concept-Seite wurde geschlossen. Monitoring beendet." |
-| **Page reload** | Eval fails but `$TAB_ID` still in tab list | **Wait 3s → retry up to 3 times** (see § Page Reload Detection). NEVER stop monitoring — the page will come back. |
-| **JS eval broken, tab alive** | `javascript_tool` returns "Cannot access chrome-extension://" but `tabs_context_mcp` and `read_page` work | **Split-capability** — Chrome MCP partially functional. Run eval waterfall (§ Pre-Monitoring Setup step 5) to find a working `$EVAL_TOOL`. If none works → AskUserQuestion fallback. |
-| JS eval returns null/undefined | Element not found on page | Retry once (page might still be loading), then show raw error |
-| JSON parse error | `JSON.parse()` throws | Show raw content to user, ask to verify |
+| Bridge server not responding | `curl /heartbeat` fails or times out | Check if server process is alive, restart if needed |
+| Bridge server crashed | Connection refused on all endpoints | Re-run `python concept-server.py $PORT "$DIR" &` |
+| Heartbeat cron stopped | Page shows "nicht verbunden" despite server running | Send manual `curl -s -X POST /heartbeat`, re-create cron |
+| Decisions JSON parse error | `curl /decisions` returns malformed JSON | Show raw content to user, ask to verify |
 | Empty decisions array | Parsed but `decisions.length === 0` | Ask if intentional (all defaults accepted) |
-| `get_page_text` used accidentally | "page body too large" or stripped content | Switch to `javascript_tool`/`browser_evaluate`/`preview_eval` — NEVER use `get_page_text` for concept pages |
-| All tools fail | Waterfall exhausted | Fall back to manual AskUserQuestion flow |
+| Tab closed by user | Chrome MCP `tabs_context_mcp` shows tab missing | Stop monitoring, inform user: "Die Concept-Seite wurde geschlossen." |
+| JS eval broken (page updates) | `javascript_tool` returns "Cannot access chrome-extension://" | Expected — page updates not possible, inform user via chat |
+| `get_page_text` used accidentally | "page body too large" or stripped content | Use HTTP bridge endpoints instead |
+| All tools fail | Bridge server + browser tools both unavailable | Fall back to manual AskUserQuestion flow |
 
 ### Retry Protocol
 
-1. **Single tool failure**: Check tab alive first (§ Page Reload Detection)
-   - Tab alive → page reload — wait 3s, retry up to 3 times
-   - Tab missing → tab closed — stop monitoring, inform user
-   - `tabs_context_mcp` fails → extension disconnected — go to step 2
-2. **Repeated failure after reload recovery (3x)**: Re-probe waterfall, switch `$BROWSER_TOOL`
-3. **Waterfall failure**: Manual fallback (AskUserQuestion + console.log)
+1. **Bridge server failure**: Restart the server, re-create heartbeat cron
+2. **Browser tool failure** (for page updates): Inform user, continue monitoring via HTTP
+3. **Both fail**: Manual fallback (AskUserQuestion + console.log)
 4. **NEVER silently stop monitoring** — always inform the user why monitoring ended
 
 ## Security

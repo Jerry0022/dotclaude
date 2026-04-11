@@ -541,11 +541,22 @@ function collectDecisions() {
 
 ### Submit Handler
 ```javascript
-document.getElementById('submit-btn').addEventListener('click', () => {
+document.getElementById('submit-btn').addEventListener('click', async () => {
   const data = collectDecisions();
   const container = document.getElementById('concept-decisions');
   container.textContent = JSON.stringify(data);
   document.body.classList.add('concept-submitted');
+
+  // POST decisions to bridge server — Claude reads via GET /decisions
+  try {
+    await fetch('/decisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  } catch (e) {
+    // Fallback: decisions are still in the DOM for JS eval reading
+  }
 
   // Switch panel to "submitted" state
   document.getElementById('panel-ready').style.display = 'none';
@@ -585,26 +596,38 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
 });
 ```
 
-### Claude Connection Heartbeat
+### Claude Connection Heartbeat (HTTP Bridge)
 
-Claude sets a heartbeat timestamp on the page during each monitoring poll.
-The page checks whether the heartbeat is fresh and updates the UI accordingly.
+The heartbeat uses the **HTTP Bridge** — the concept bridge server
+(`scripts/concept-server.py`) exposes `/heartbeat` endpoints that both Claude
+and the page communicate through. This bypasses Chrome MCP JS injection
+entirely.
 
 **How it works:**
-- Claude runs `document.body.dataset.claudeHeartbeat = Date.now()` via eval
-  on every poll cycle (every 15 seconds)
-- The page's JS checks this value every 5 seconds
+- Claude sends `curl -s -X POST localhost:{port}/heartbeat` every 10 seconds
+  (via CronCreate or the monitoring loop)
+- The page polls `GET /heartbeat` every 5 seconds via `fetch()`
 - If the heartbeat is older than 45 seconds (3 missed polls) or missing →
   the submit button is disabled and a warning is shown
 - If the heartbeat is fresh → submit is enabled, warning hidden
 
 ```javascript
-// --- Claude Connection Heartbeat ---
+// --- Claude Connection Heartbeat (HTTP Bridge) ---
 const HEARTBEAT_STALE_MS = 45000; // 3 missed polls = disconnected
+let _lastHeartbeatTs = 0;
+
+async function pollHeartbeat() {
+  try {
+    const res = await fetch('/heartbeat', { cache: 'no-store' });
+    const data = await res.json();
+    _lastHeartbeatTs = data.ts || 0;
+  } catch (e) {
+    // Server unreachable — heartbeat stays stale
+  }
+}
 
 function checkClaudeConnection() {
-  const hb = document.body.dataset.claudeHeartbeat;
-  const isConnected = hb && (Date.now() - Number(hb)) < HEARTBEAT_STALE_MS;
+  const isConnected = _lastHeartbeatTs && (Date.now() - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
   const warning = document.getElementById('connection-warning');
   const btn = document.getElementById('submit-btn');
   const panelSubmitted = document.getElementById('panel-submitted');
@@ -621,18 +644,23 @@ function checkClaudeConnection() {
   }
 }
 
-// Check every 5 seconds
-setInterval(checkClaudeConnection, 5000);
-// Initial grace period: 30 seconds — Claude needs time to run the browser
-// tool waterfall, find the tab, and inject the first heartbeat. A 2-second
-// grace period causes the button to be disabled before Claude can even start.
-setTimeout(checkClaudeConnection, 30000);
+// Poll heartbeat every 5 seconds, check connection after each poll
+setInterval(async () => { await pollHeartbeat(); checkClaudeConnection(); }, 5000);
+// Initial grace period: 30 seconds — Claude needs time to start the bridge
+// server, set up the heartbeat cron, and send the first POST.
+setTimeout(async () => { await pollHeartbeat(); checkClaudeConnection(); }, 30000);
 ```
 
-**Claude-side heartbeat injection** (executed by Claude via eval on each poll):
-```javascript
-document.body.dataset.claudeHeartbeat = Date.now();
+**Claude-side heartbeat** (executed by Claude via Bash or CronCreate):
+```bash
+curl -s -X POST http://localhost:{port}/heartbeat
 ```
 
-This single line is injected by Claude's monitoring loop on every poll cycle.
-See `monitoring.md` § Heartbeat Injection for integration into the polling protocol.
+No browser JS injection needed. See `monitoring.md` § HTTP Bridge Monitoring
+for integration into the monitoring protocol.
+
+**Legacy fallback:** If the bridge server is not available (e.g., someone opens
+a concept HTML file directly), the heartbeat check gracefully degrades — the
+`fetch('/heartbeat')` call fails silently, the heartbeat stays stale, and the
+submit button remains disabled. The user can still use the page for read-only
+review.
