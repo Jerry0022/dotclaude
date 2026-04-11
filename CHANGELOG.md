@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.39.0] — 2026-04-11
+
+### Added
+
+- **concept** — HTTP bridge server (`concept-server.py`) for heartbeat and decision exchange, bypassing Chrome MCP JS injection limitation entirely
+- **concept** — page heartbeat now polls `GET /heartbeat` via fetch instead of requiring `document.body.dataset.claudeHeartbeat` injection
+- **concept** — submit handler POSTs decisions to `/decisions` endpoint, Claude reads via `GET /decisions`
+- **concept** — `POST /reset` endpoint for clearing decisions between rounds
+
+### Changed
+
+- **concept** — SKILL.md Step 3 uses bridge server instead of `python -m http.server`
+- **concept** — SKILL.md Step 4 uses HTTP polling + CronCreate heartbeat instead of JS eval monitoring
+- **concept** — monitoring.md rewritten for HTTP-based protocol (JS eval only needed for optional page updates)
+- **concept** — validation gate: `claudeHeartbeat` pattern replaced with `pollHeartbeat`
+
 ## [0.38.6] — 2026-04-11
 
 ### Fixed
