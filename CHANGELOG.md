@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.39.2] — 2026-04-11
+
+### Changed
+
+- **self-calibration** — replaced cron-based trigger with Stop hook: calibration now runs only after real user interaction, never during idle sessions
+- **self-calibration** — cooldown is worktree-specific (MD5 of cwd), so parallel worktrees have independent 10-minute cooldowns
+- **self-calibration** — deprecated `prompt.flow.selfcalibration.js` (cron registration) and `prompt.flow.useractivity.js` (flag file mechanism), both are now no-ops
+
 ## [0.39.1] — 2026-04-11
 
 ### Changed
