@@ -63,10 +63,7 @@ function renderBar(pct, elapsedPct) {
 function formatDelta(delta) {
   if (delta == null) return '';
   if (isNaN(delta)) delta = 0;
-  let marker = '';
-  if (delta >= 6)      marker = '!!';
-  else if (delta >= 2) marker = '!';
-  return '+' + delta + '%' + (marker ? ' ' + marker : '');
+  return '+' + delta + '%';
 }
 
 function formatResetShort(minutes) {
@@ -88,7 +85,8 @@ function renderUsageLine(label, pct, elapsedPct, delta, resetMinutes) {
   const resetStr = formatResetShort(resetMinutes);
   const pace = pct - elapsedPct;
   const warn = pace > 10 ? '  \u26a0 Pace!' : '';
-  const deltaPart = deltaStr ? '  ' + deltaStr : '';
+  // Fixed-width delta column so · reset always aligns
+  const deltaPart = deltaStr ? (' ' + deltaStr).padEnd(5, ' ') : '     ';
   return label + '  ' + bar + '  ' + pctStr + deltaPart + '  \u00b7 ' + resetStr + ' left' + warn;
 }
 
@@ -116,7 +114,7 @@ function renderUsageMeter(usageData, delta5h, deltaWk) {
 // Usage-meter variant for completion card (with deltas + code fences)
 // ---------------------------------------------------------------------------
 
-function renderUsageMeterForCard(usageData, delta5h, deltaWk) {
+function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
   if (!usageData || !usageData.session) {
     return '```\n\u26a0 Usage data unavailable\n```';
   }
@@ -134,6 +132,13 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk) {
   }
 
   lines.push('```');
+
+  // Health line is the first line inside the code fence, above bars
+  if (healthLine) {
+    const idx = 1; // after opening ```
+    lines.splice(idx, 0, healthLine);
+  }
+
   return lines.join('\n');
 }
 
@@ -154,26 +159,26 @@ const VARIANTS = {
 
 const CTA = {
   en: {
-    'ship-successful-bump':  '## \ud83d\ude80 SHIPPED. {vOld} \u2192 {vNew} ({bump}) \u2014 RELAX, all done',
-    'ship-successful-plain': '## \ud83d\ude80 SHIPPED. {version} \u2014 RELAX, all done',
-    ready:                   '## \ud83d\udce6 READY. {info} \u2014 SHIP or CHANGE?',
-    'ship-blocked':          '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
-    test:                    '## \ud83e\uddea DONE. {info} \u2014 SHIP after your TEST?',
-    'test-minimal':          '## \u25b6\ufe0f STARTED. {description} \u2014 HAVE FUN',
-    analysis:                '## \ud83d\udccb DONE. {info} \u2014 READ through',
-    aborted:                 '## \ud83d\udeab ABORTED. {reason} \u2014 What should I TRY?',
-    fallback:                '## \ud83d\udd27 DONE \u2014 Anything ELSE?',
+    'ship-successful-merged': '## \ud83d\ude80 SHIPPED. merged \u2192 {merged} \u2014 All DONE',
+    'ship-successful-plain':  '## \ud83d\ude80 SHIPPED \u2014 All DONE',
+    ready:                    '## \ud83d\udce6 READY \u2014 SHIP or CHANGE?',
+    'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
+    test:                     '## \ud83e\uddea DONE \u2014 SHIP after your TEST?',
+    'test-minimal':           '## \u25b6\ufe0f STARTED. {description} \u2014 HAVE FUN',
+    analysis:                 '## \ud83d\udccb DONE \u2014 READ through',
+    aborted:                  '## \ud83d\udeab ABORTED. {reason} \u2014 What should I TRY?',
+    fallback:                 '## \ud83d\udd27 DONE \u2014 Anything ELSE?',
   },
   de: {
-    'ship-successful-bump':  '## \ud83d\ude80 SHIPPED. {vOld} \u2192 {vNew} ({bump}) \u2014 LEHN dich zurück, alles erledigt',
-    'ship-successful-plain': '## \ud83d\ude80 SHIPPED. {version} \u2014 LEHN dich zurück, alles erledigt',
-    ready:                   '## \ud83d\udce6 READY. {info} \u2014 SHIP oder ÄNDERN?',
-    'ship-blocked':          '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
-    test:                    '## \ud83e\uddea DONE. {info} \u2014 SHIP nach deinem TEST?',
-    'test-minimal':          '## \u25b6\ufe0f STARTED. {description} \u2014 VIEL SPASS',
-    analysis:                '## \ud83d\udccb DONE. {info} \u2014 LIES dir durch',
-    aborted:                 '## \ud83d\udeab ABORTED. {reason} \u2014 Was soll ich VERSUCHEN?',
-    fallback:                '## \ud83d\udd27 DONE \u2014 Noch was ANDERES?',
+    'ship-successful-merged': '## \ud83d\ude80 SHIPPED. merged \u2192 {merged} \u2014 Alles ERLEDIGT',
+    'ship-successful-plain':  '## \ud83d\ude80 SHIPPED \u2014 Alles ERLEDIGT',
+    ready:                    '## \ud83d\udce6 READY \u2014 SHIP oder ÄNDERN?',
+    'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
+    test:                     '## \ud83e\uddea DONE \u2014 SHIP nach deinem TEST?',
+    'test-minimal':           '## \u25b6\ufe0f STARTED. {description} \u2014 VIEL SPASS',
+    analysis:                 '## \ud83d\udccb DONE \u2014 LIES dir durch',
+    aborted:                  '## \ud83d\udeab ABORTED. {reason} \u2014 Was soll ich VERSUCHEN?',
+    fallback:                 '## \ud83d\udd27 DONE \u2014 Noch was ANDERES?',
   },
 };
 
@@ -195,8 +200,22 @@ function getBuildId(overrideCwd) {
   }
 }
 
-function renderTitle(summary, buildId) {
-  return '## \u2728\u2728\u2728 ' + summary + ' \u00b7 ' + buildId + ' \u2728\u2728\u2728';
+function renderTitle(summary) {
+  return '## \u2728\u2728\u2728 ' + summary + ' \u2728\u2728\u2728';
+}
+
+function renderFooter(buildId, cta, variant) {
+  // Footer line: 📌 version bump info (if available) + build ID in backticks
+  const pin = '\ud83d\udccc';
+  const bid = '`' + buildId + '`';
+  if (variant === 'ship-successful' && cta && cta.vOld && cta.vNew) {
+    const bump = cta.bump ? ' (' + cta.bump + ')' : '';
+    return pin + ' ' + cta.vOld + ' \u2192 ' + cta.vNew + bump + ' \u00b7 ' + bid;
+  }
+  if (variant === 'ship-successful' && cta && cta.version) {
+    return pin + ' ' + cta.version + ' \u00b7 ' + bid;
+  }
+  return pin + ' ' + bid;
 }
 
 function renderChanges(changes) {
@@ -251,19 +270,22 @@ function renderUserTest(steps) {
   return '**Please test**\n' + items.join('\n');
 }
 
-function renderCTA(variant, cta, lang) {
+function renderCTA(variant, cta, lang, state) {
   const templates = CTA[lang] || CTA.de;
   cta = cta || {};
 
   let key;
   if (variant === 'ship-successful') {
-    key = (cta.vOld && cta.vNew) ? 'ship-successful-bump' : 'ship-successful-plain';
+    // Show merge target in CTA if actually merged
+    key = (state && state.merged) ? 'ship-successful-merged' : 'ship-successful-plain';
   } else {
     key = variant;
   }
 
   let tpl = templates[key] || templates.fallback;
-  tpl = tpl.replace(/\{(\w+)\}/g, (_, k) => cta[k] || '');
+  // Merge state fields into cta for template substitution
+  const vars = Object.assign({}, cta, state ? { merged: state.merged || '' } : {});
+  tpl = tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] || '');
 
   return tpl;
 }
@@ -290,8 +312,8 @@ function readToolCallCount(sessionId) {
 
 function renderContextHealth(toolCallCount) {
   if (toolCallCount <= HEALTH_WARN_THRESHOLD) return '';
-  if (toolCallCount <= HEALTH_CRIT_THRESHOLD) return '\u26a1 ' + toolCallCount + ' tool calls \u2014 consider `/compact`';
-  return '\u26a0 ' + toolCallCount + ' tool calls \u2014 consider `/clear` + session summary';
+  if (toolCallCount <= HEALTH_CRIT_THRESHOLD) return toolCallCount + ' calls \u00b7 consider /compact';
+  return toolCallCount + ' calls \u00b7 consider /clear';
 }
 
 function renderCard(input, meterText, buildId) {
@@ -299,24 +321,13 @@ function renderCard(input, meterText, buildId) {
   const config = VARIANTS[variant] || VARIANTS.fallback;
   const lang = input.lang || 'de';
 
-  // Read tool-call counter for context health advisory
-  const toolCallCount = readToolCallCount(input.session_id);
-  const healthLine = config.usage ? renderContextHealth(toolCallCount) : '';
-
   const parts = [];
 
-  // Block A — What was done
+  // Block A — Title + Content (no build ID in title)
   parts.push('---');
-  if (config.usage && meterText) {
-    parts.push('');
-    parts.push(meterText);
-    if (healthLine) parts.push(healthLine);
-    parts.push('');
-    parts.push('---');
-  }
   parts.push('');
 
-  parts.push(renderTitle(input.summary || 'Task completed', buildId));
+  parts.push(renderTitle(input.summary || 'Task completed'));
   parts.push('');
 
   if (config.changes) {
@@ -335,7 +346,7 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
-  // Block B — End state
+  // Block B — End state (with extra blank line above for visual separation)
   if (config.state) {
     const stateLine = renderState(input.state, variant);
     if (stateLine) {
@@ -344,7 +355,7 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
-  // Block C — What happens now
+  // User test steps (test variant)
   if (config.userTest) {
     const testBlock = renderUserTest(input.userTest);
     if (testBlock) {
@@ -353,10 +364,26 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
-  parts.push(renderCTA(variant, input.cta, lang));
+  // Usage block (health line is first line inside the code fence)
+  if (config.usage && meterText) {
+    parts.push(meterText);
+    parts.push('');
+  }
+
+  // Block C — Footer + CTA
+  // Separator before footer (skip for test-minimal — too short, looks cluttered)
+  if (variant !== 'test-minimal') {
+    parts.push('---');
+    parts.push('');
+  }
+
+  // Footer: 📌 version bump + build ID (build ID in backticks for visibility)
+  parts.push(renderFooter(buildId, input.cta, variant));
   parts.push('');
 
-  // Closing fence
+  parts.push(renderCTA(variant, input.cta, lang, input.state));
+  parts.push('');
+
   parts.push('---');
 
   return parts.join('\n');
@@ -608,8 +635,10 @@ server.registerTool(
     const delta5h = usageResult.delta5h ?? null;
     const deltaWk = usageResult.deltaWk ?? null;
 
-    // 2. Render usage meter for card (with deltas + code fences)
-    const meterText = renderUsageMeterForCard(usageData, delta5h, deltaWk);
+    // 2. Render usage meter for card (with deltas + code fences + health line)
+    const toolCallCount = readToolCallCount(params.session_id);
+    const healthLine = renderContextHealth(toolCallCount);
+    const meterText = renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine);
 
     // 3. Use pre-computed build-ID if provided, otherwise compute from cwd
     const buildId = params.buildId || getBuildId(params.cwd);

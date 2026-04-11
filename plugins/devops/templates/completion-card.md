@@ -20,13 +20,13 @@ Sections within a block may be omitted per variant rules — but the block order
 ```
 ┌─────────────────────────────────────────────────────┐
 │  BLOCK A — What was done                            │
-│  Title · Usage · Changes · Tests                    │
+│  Title · Changes · Tests · State · User test        │
 ├─────────────────────────────────────────────────────┤
-│  BLOCK B — End state                                │
-│  State (one-liner)                                  │
+│  BLOCK B — Usage + Context health                   │
+│  Health warning · Usage meter                       │
 ├─────────────────────────────────────────────────────┤
-│  BLOCK C — What happens now                         │
-│  User test · CTA (one-liner)                        │
+│  BLOCK C — Footer + CTA                             │
+│  📌 Version + Build-ID · CTA (one-liner)            │
 ├─────────────────────────────────────────────────────┘
 ```
 
@@ -39,17 +39,7 @@ All variables in `{{...}}`. Sections wrapped in `{{#if}}` are conditional per va
 ```markdown
 ---
 
-{{#if usage}}
-```
-5h  {{bar-5h}}  {{pct-5h}}{{delta-5h}}  · {{reset-5h}} left{{pace-warn-5h}}
-
-Wk  {{bar-wk}}  {{pct-wk}}{{delta-wk}}  · {{reset-wk}} left{{pace-warn-wk}}
-```
-
----
-
-{{/if}}
-## ✨✨✨ {{summary}} · {{build-id}} ✨✨✨
+## ✨✨✨ {{summary}} ✨✨✨
 
 {{#if changes}}
 **Changes**
@@ -68,6 +58,20 @@ Wk  {{bar-wk}}  {{pct-wk}}{{delta-wk}}  · {{reset-wk}} left{{pace-warn-wk}}
 1. {{each: test-step}}
 {{/if}}
 
+{{#if usage}}
+{{context-health-line}}
+
+```
+5h  {{bar-5h}}  {{pct-5h}}{{delta-5h}}  · {{reset-5h}} left{{pace-warn-5h}}
+
+Wk  {{bar-wk}}  {{pct-wk}}{{delta-wk}}  · {{reset-wk}} left{{pace-warn-wk}}
+```
+{{/if}}
+
+---
+
+📌 {{version-bump-info}} · {{build-id}}
+
 ## {{cta-icon}} {{cta-text}}
 
 ---
@@ -79,17 +83,16 @@ Wk  {{bar-wk}}  {{pct-wk}}{{delta-wk}}  · {{reset-wk}} left{{pace-warn-wk}}
 
 ### Title line
 
-`## ✨✨✨ {{summary}} · {{build-id}} ✨✨✨`
+`## ✨✨✨ {{summary}} ✨✨✨`
 
 - `✨✨✨` before and after — "done, look here".
-- Summary first — the important part. Build-ID after as reference.
+- Summary only — no build-ID (moved to footer line).
 - Summary in user's language, max ~10 words, factual.
-- Build-ID via `node {PLUGIN_ROOT}/scripts/build-id.js` (7-char hash). **Always include** — even for docs/config.
 
 | Condition | Example |
 |-----------|---------|
-| Code changes | `## ✨✨✨ Filter dialog moved to settings · a3f9b21 ✨✨✨` |
-| No code changes | `## ✨✨✨ README updated · a3f9b21 ✨✨✨` |
+| Code changes | `## ✨✨✨ Filter dialog moved to settings ✨✨✨` |
+| No code changes | `## ✨✨✨ README updated ✨✨✨` |
 
 ### Usage meter
 
@@ -285,23 +288,23 @@ Numbered steps the user must perform manually.
 
 One-liner as `##` heading.
 
-Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
+Format: `## {icon} {STATUS}. {context} — {sentence with VERB}`
 
 - Status word: always English, always UPPERCASE.
-- Short-info: factual context (version, reason, etc.).
+- Context: merge target (shipped), reason (blocked/aborted), or empty. **No version info** — version is in the footer line.
 - CTA sentence after `—`: translated to user's language. Action verb UPPERCASE.
 
 **CTA definitions (EN master):**
 
 | # | Variant | CTA |
 |---|---------|-----|
-| 1 | ship-successful (with bump) | `## 🚀 SHIPPED. {{vOld}} → {{vNew}} ({{bump}}) — RELAX, all done` |
-| 1 | ship-successful (no bump) | `## 🚀 SHIPPED. {{version}} — RELAX, all done` |
-| 2 | ready | `## 📦 READY. {{info}} — SHIP or CHANGE?` |
+| 1 | ship-successful (merged) | `## 🚀 SHIPPED. merged → {{merged}} — RELAX, all done` |
+| 1 | ship-successful (plain) | `## 🚀 SHIPPED — RELAX, all done` |
+| 2 | ready | `## 📦 READY — SHIP or CHANGE?` |
 | 3 | ship-blocked | `## ⛔ BLOCKED. {{reason}} — FIX or SKIP?` |
-| 4 | test | `## 🧪 DONE. {{info}} — SHIP after your TEST?` |
+| 4 | test | `## 🧪 DONE — SHIP after your TEST?` |
 | 5 | test-minimal | `## ▶️ STARTED. {{user-facing-description}} — HAVE FUN` |
-| 6 | analysis | `## 📋 DONE. {{info}} — READ through` |
+| 6 | analysis | `## 📋 DONE — READ through` |
 | 7 | aborted | `## 🚫 ABORTED. {{reason}} — What should I TRY?` |
 | 8 | fallback | `## 🔧 DONE — Anything ELSE?` |
 
@@ -309,15 +312,31 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 
 | # | Variant | CTA |
 |---|---------|-----|
-| 1 | ship-successful (with bump) | `## 🚀 SHIPPED. {{vOld}} → {{vNew}} ({{bump}}) — LEHN dich zurück, alles erledigt` |
-| 1 | ship-successful (no bump) | `## 🚀 SHIPPED. {{version}} — LEHN dich zurück, alles erledigt` |
-| 2 | ready | `## 📦 READY. {{info}} — SHIP oder ÄNDERN?` |
+| 1 | ship-successful (merged) | `## 🚀 SHIPPED. merged → {{merged}} — LEHN dich zurück, alles erledigt` |
+| 1 | ship-successful (plain) | `## 🚀 SHIPPED — LEHN dich zurück, alles erledigt` |
+| 2 | ready | `## 📦 READY — SHIP oder ÄNDERN?` |
 | 3 | ship-blocked | `## ⛔ BLOCKED. {{reason}} — FIX oder SKIP?` |
-| 4 | test | `## 🧪 DONE. {{info}} — SHIP nach deinem TEST?` |
+| 4 | test | `## 🧪 DONE — SHIP nach deinem TEST?` |
 | 5 | test-minimal | `## ▶️ STARTED. {{user-facing-description}} — VIEL SPASS` |
-| 6 | analysis | `## 📋 DONE. {{info}} — LIES dir durch` |
+| 6 | analysis | `## 📋 DONE — LIES dir durch` |
 | 7 | aborted | `## 🚫 ABORTED. {{reason}} — Was soll ich VERSUCHEN?` |
 | 8 | fallback | `## 🔧 DONE — Noch was ANDERES?` |
+
+### Footer line
+
+`📌 {{version-bump}} · {{build-id}}`
+
+The footer line sits between the separator and the CTA. It contains:
+- **📌** — pin icon, fixed
+- **Version bump** (if available): `{{vOld}} → {{vNew}} ({{bump}})` — only for ship-successful with bump
+- **Build-ID**: always present, 7-char hash or `no build id`
+
+| Condition | Footer |
+|-----------|--------|
+| Ship with bump | `📌 0.38.4 → 0.38.5 (patch) · 3a16efe` |
+| Ship without bump | `📌 3a16efe` |
+| Any other variant | `📌 3a16efe` |
+| No build ID | `📌 no-build-id` |
 
 ---
 
