@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.38.0] — 2026-04-11
+
+### Changed
+
+- **completion-card** — variant refactoring: renamed shipped/blocked/minimal-start to ship-successful/ship-blocked/test-minimal; removed legacy research alias; ship variants now ONLY triggered via /devops-ship pipeline
+- **completion-card** — reversed state line order: most important first (merge/PR/push/commit/branch)
+- **completion-card** — fallback icon changed from clipboard to wrench; test-minimal icon changed from beaker to play button
+- **completion-card** — broadened test variant detection: applies to ANY project type (web, CLI, API, desktop, game), not just UI projects
+- **completion-card** — ready variant threshold lowered to >=1 code edit
+
+### Fixed
+
+- **completion-card** — critical: card-rendered flag key mismatch (latest vs unknown) causing false carry-over reminders
+- **completion-card** — template spec aligned with code: bar width 14, usage line format, inline elapsed markers, delta staleness threshold
+- **completion-card** — extracted magic numbers (BAR_WIDTH, WINDOW_5H_MIN, etc.) as named constants
+- **completion-card** — ship-blocked added to tests variant table
+
 ## [0.37.2] — 2026-04-11
 
 ### Changed
