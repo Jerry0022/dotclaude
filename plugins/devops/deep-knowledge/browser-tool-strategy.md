@@ -107,6 +107,19 @@ The distinction between "tab closed" and "extension disconnected" is critical:
 - **Tab closed** → stop the monitoring loop, inform the user
 - **Extension disconnected** → attempt reconnection (see Mid-Session Reconnection Protocol below)
 
+## Split-Capability Detection
+
+A browser tool can be **partially functional**: tab management works but JS eval
+doesn't. Known case: Chrome MCP's `tabs_context_mcp`, `navigate`, and `read_page`
+succeed while `javascript_tool` fails with "Cannot access a chrome-extension://
+URL of different extension".
+
+The waterfall probe (`tabs_context_mcp`) only tests connectivity — it does NOT
+validate JS eval capability. Skills that need eval (concept monitoring, heartbeat
+injection) MUST run a test eval immediately after the waterfall and fall through
+to the next tool's eval if it fails. See concept skill's `monitoring.md`
+§ Pre-Monitoring Setup step 5 for the implementation.
+
 ## Mid-Session Reconnection Protocol
 
 When a browser tool call fails **mid-session** (after the initial waterfall probe

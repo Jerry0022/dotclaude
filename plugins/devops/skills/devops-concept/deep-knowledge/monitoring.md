@@ -71,10 +71,39 @@ Before starting the monitoring loop, establish and validate the browser connecti
 4. If the waterfall fails entirely:
    - Skip browser-based monitoring
    - Fall back to the manual AskUserQuestion flow (see below)
+5. **Validate JS eval capability** (mandatory — immediately after step 1-3):
+   - Run a test heartbeat injection using `$BROWSER_TOOL`'s eval tool
+   - If it **succeeds** → `$EVAL_TOOL = $BROWSER_TOOL` (same tool for everything)
+   - If it **fails** → the tool has a **split capability** (tab management works,
+     JS eval doesn't). This is a known failure mode with Chrome MCP where
+     `tabs_context_mcp`, `navigate`, and `read_page` work but `javascript_tool`
+     returns "Cannot access chrome-extension:// URL" errors.
+   - On failure: fall through the eval waterfall independently:
+
+     | Priority | Eval tool | Test call |
+     |----------|-----------|-----------|
+     | 1 | `$BROWSER_TOOL`'s eval | (already failed) |
+     | 2 | playwright `browser_evaluate` | Inject test heartbeat on the same localhost URL |
+     | 3 | preview `preview_eval` | Inject test heartbeat on the concept page |
+
+   - Set `$EVAL_TOOL` to the first eval tool that succeeds
+   - `$BROWSER_TOOL` stays unchanged — it still handles tab management, navigation,
+     and `read_page`. Only JS eval operations use `$EVAL_TOOL`.
+   - If NO eval tool works → fall back to the manual AskUserQuestion flow.
+     The submit button will be disabled (heartbeat never arrives) — this is
+     correct behavior, the page accurately reflects that monitoring is not active.
+
+   **Why this matters:** The waterfall probe (`tabs_context_mcp`) only tests
+   connectivity, not JS eval capability. A tool can be partially functional —
+   tab management works but eval is broken. Without this validation step, the
+   monitoring loop silently fails: heartbeat never arrives, submit button stays
+   disabled, and the user sees a "Claude ist nicht verbunden" warning with no
+   explanation from Claude's side.
 
 ### Concept-Specific Calls
 
-Using `$BROWSER_TOOL`, execute:
+Using `$EVAL_TOOL` (not `$BROWSER_TOOL` — see step 5 above), execute all JS
+eval operations. Tab management (alive checks, navigation) still uses `$BROWSER_TOOL`.
 
 **Heartbeat injection (every poll, BEFORE checking submission):**
 - chrome-mcp: `javascript_tool("document.body.dataset.claudeHeartbeat = Date.now()")`
@@ -96,6 +125,20 @@ Heartbeat. **Always inject the heartbeat first** — even before checking
 - chrome-mcp: `javascript_tool("document.getElementById('concept-decisions').textContent")`
 - playwright: `browser_evaluate("document.getElementById('concept-decisions').textContent")`
 - preview: `preview_eval("document.getElementById('concept-decisions').textContent")`
+
+**Split-capability limitation:** When `$EVAL_TOOL` differs from `$BROWSER_TOOL`,
+the eval tool (Playwright/Preview) runs in its own browser instance — it cannot
+inject heartbeats into the user's Edge tab, and it cannot see user interactions
+there. The two browser contexts are completely separate.
+
+**Therefore, in split-capability mode, fall back to AskUserQuestion polling:**
+1. Inform the user that live monitoring is eingeschränkt
+2. Use AskUserQuestion to detect submission (see § Manual Fallback below)
+3. When user confirms → ask them to copy the decisions JSON from the
+   DevTools console: `document.getElementById('concept-decisions').textContent`
+4. The heartbeat guard will disable the submit button in Edge (expected —
+   Claude cannot inject heartbeats). Inform the user to use the DevTools
+   console to re-enable: `document.getElementById('submit-btn').disabled = false`
 
 **WARNING:** NEVER use `get_page_text`, `browser_snapshot`, or `preview_snapshot`
 to read decisions. Concept pages contain large inline CSS/JS (self-contained HTML).
@@ -314,6 +357,7 @@ Each round appends to the same file (array of rounds), preserving full history:
 | Extension disconnected | Tool call times out or returns connection error | Re-run waterfall probe, update `$BROWSER_TOOL` and `$TAB_ID` |
 | Tab closed by user | `tabs_context_mcp` succeeds but `$TAB_ID` not in list | Stop monitoring, inform user: "Die Concept-Seite wurde geschlossen. Monitoring beendet." |
 | **Page reload** | Eval fails but `$TAB_ID` still in tab list | **Wait 3s → retry up to 3 times** (see § Page Reload Detection). NEVER stop monitoring — the page will come back. |
+| **JS eval broken, tab alive** | `javascript_tool` returns "Cannot access chrome-extension://" but `tabs_context_mcp` and `read_page` work | **Split-capability** — Chrome MCP partially functional. Run eval waterfall (§ Pre-Monitoring Setup step 5) to find a working `$EVAL_TOOL`. If none works → AskUserQuestion fallback. |
 | JS eval returns null/undefined | Element not found on page | Retry once (page might still be loading), then show raw error |
 | JSON parse error | `JSON.parse()` throws | Show raw content to user, ask to verify |
 | Empty decisions array | Parsed but `decisions.length === 0` | Ask if intentional (all defaults accepted) |
