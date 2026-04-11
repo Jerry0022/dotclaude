@@ -146,18 +146,32 @@ After opening, inform the user:
 > Concept geöffnet. Triff deine Entscheidungen auf der Seite und klick
 > "Entscheidungen abschicken" wenn du fertig bist — ich übernehme dann.
 
-## Step 4 — Monitor for Feedback
+## Step 4 — Establish Monitoring Connection
 
-Poll the browser page for the submit signal. Use `$BROWSER_TOOL` as determined
-by the **Browser Tool Strategy** (`deep-knowledge/browser-tool-strategy.md`).
-Use the tool mapping table to pick the right eval call.
-If no browser tool is available → ask user to confirm manually via `AskUserQuestion`.
+After opening the page in Edge, immediately establish the monitoring connection:
+
+1. Run the **Browser Tool Strategy waterfall** (`deep-knowledge/browser-tool-strategy.md`)
+   → set `$BROWSER_TOOL`
+2. If `chrome-mcp`: call `tabs_context_mcp`, identify the concept tab, store its ID as
+   `$TAB_ID` — **must be a number** (coerce with `Number()` if captured as string)
+3. If `playwright` or `preview`: tab management is implicit, no explicit `$TAB_ID` needed
+4. If the waterfall fails entirely: skip browser monitoring, fall back to manual
+   `AskUserQuestion` flow (see `deep-knowledge/monitoring.md` § Manual Fallback (no browser tool available))
+
+See `deep-knowledge/monitoring.md` for the full polling protocol.
 
 **Polling logic:**
-- Check: `document.body.classList.contains('concept-submitted')`
-- If true → read decisions from `#concept-decisions` JSON
+- Before each poll, validate `$TAB_ID` is still alive (chrome-mcp only) —
+  see `deep-knowledge/monitoring.md` § Per-Poll Validation (chrome-mcp only)
+- Check: `document.body.classList.contains('concept-submitted')`  via the eval-based
+  tool for `$BROWSER_TOOL` (see `deep-knowledge/monitoring.md` § Concept-Specific Calls)
+- If true → read decisions from `#concept-decisions` JSON using the same eval tool
 - If false → wait and retry (max 5 minutes, check every 15 seconds)
 - If timeout → ask user if they need more time or want to skip
+
+**NEVER use `get_page_text` or equivalent read-page tools to read decisions** —
+always use eval-based tools (`javascript_tool` / `browser_evaluate` / `preview_eval`).
+See `deep-knowledge/monitoring.md` § Tool Selection for the reason.
 
 **Important:** While waiting, do NOT block the conversation. Inform the
 user that you're monitoring and they can continue chatting. If the user

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.8] — 2026-04-11
+
+### Fixed
+
+- **concept** — harden browser monitoring with tab-alive detection and type safety: add tabId type invariant (must be number), mid-session reconnection protocol for extension disconnects, per-poll tab-alive check to prevent silent monitoring death, prohibit `get_page_text` for structured data (causes "page too large" errors), comprehensive error recovery matrix (8 error types)
+- **ship** — align marketplace.json version (was stuck at 0.36.4 while other files had 0.36.7)
+
 ## [0.36.7] — 2026-04-11
 
 ### Fixed
