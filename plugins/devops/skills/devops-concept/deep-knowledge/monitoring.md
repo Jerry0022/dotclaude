@@ -62,6 +62,17 @@ Before starting the monitoring loop, establish and validate the browser connecti
 
 Using `$BROWSER_TOOL`, execute:
 
+**Heartbeat injection (every poll, BEFORE checking submission):**
+- chrome-mcp: `javascript_tool("document.body.dataset.claudeHeartbeat = Date.now()")`
+- playwright: `browser_evaluate("document.body.dataset.claudeHeartbeat = Date.now()")`
+- preview: `preview_eval("document.body.dataset.claudeHeartbeat = Date.now()")`
+
+This tells the page that Claude is actively monitoring. The page's JS uses
+this to enable/disable the submit button and show a connection warning when
+the heartbeat goes stale (>45 seconds). See `templates.md` § Claude Connection
+Heartbeat. **Always inject the heartbeat first** — even before checking
+`concept-submitted`, because the heartbeat keeps the UI in a valid state.
+
 **Check submission:**
 - chrome-mcp: `javascript_tool("document.body.classList.contains('concept-submitted')")`
 - playwright: `browser_evaluate("document.body.classList.contains('concept-submitted')")`
@@ -127,6 +138,42 @@ Before each poll attempt:
 
 This check ensures monitoring stops ONLY when the tab is actually closed,
 never because the extension had a transient hiccup.
+
+### Page Reload Detection
+
+A page reload (F5 or user-triggered) keeps the tab alive but temporarily makes
+the page unreachable. This is **not** a tool failure — it's a transient state.
+
+**Detection signal:** The eval call fails (error, timeout, or returns
+`undefined`/`null`) BUT `tabs_context_mcp` confirms `$TAB_ID` is still in the
+list. This means the tab exists but the page content is not ready.
+
+**Recovery protocol:**
+
+1. Eval fails → call `tabs_context_mcp`
+2. `$TAB_ID` still in list → **page reload detected** (not tab closed, not
+   extension disconnected)
+3. Wait **3 seconds** (page needs time to load and execute inline JS)
+4. Retry eval — if it succeeds, resume normal polling
+5. If still failing → wait another **3 seconds**, retry once more
+6. If still failing after 3 retries (total ~9 seconds) → re-run the full
+   waterfall probe as a last resort, then retry
+7. **NEVER stop monitoring** due to a reload — the tab is alive, the page
+   will come back
+
+**Key distinction from other failures:**
+
+| Symptom | Diagnosis | Action |
+|---------|-----------|--------|
+| Eval fails + tab missing | Tab closed | Stop monitoring |
+| Eval fails + `tabs_context_mcp` fails | Extension disconnected | Reconnection protocol |
+| Eval fails + tab still alive | **Page reload** | Wait and retry (this section) |
+
+After a successful retry, the page is back to its initial state. This is
+expected behavior — `sessionStorage` persistence in the HTML ensures user
+selections survive the reload (see `deep-knowledge/templates.md` § State
+Persistence). The `concept-submitted` class will be `false` (correct — the
+user hasn't re-submitted), so normal polling continues.
 
 **Do NOT use sleep loops.** Instead, check the page state:
 - When the user sends a message that could indicate completion
@@ -206,12 +253,15 @@ Map decisions back to the original context:
 
 After processing a submission, Claude MUST update the browser page:
 
-1. **Reset submission state:**
+1. **Reset submission state and decision panel:**
    ```javascript
    // Via browser tool (javascript_tool / browser_evaluate / preview_eval)
    document.body.classList.remove('concept-submitted');
    document.getElementById('concept-decisions').textContent =
      JSON.stringify({submitted: false, round: N+1, decisions: [], comments: []});
+   // Switch panel back from "submitted" to "ready" state
+   document.getElementById('panel-submitted').style.display = 'none';
+   document.getElementById('panel-ready').style.display = 'block';
    document.getElementById('submit-btn').disabled = false;
    document.getElementById('submit-btn').textContent = 'Entscheidungen abschicken';
    ```
@@ -249,6 +299,7 @@ Each round appends to the same file (array of rounds), preserving full history:
 | tabId type error | MCP validation: "expected number, received string" | Coerce `$TAB_ID = Number($TAB_ID)`, retry |
 | Extension disconnected | Tool call times out or returns connection error | Re-run waterfall probe, update `$BROWSER_TOOL` and `$TAB_ID` |
 | Tab closed by user | `tabs_context_mcp` succeeds but `$TAB_ID` not in list | Stop monitoring, inform user: "Die Concept-Seite wurde geschlossen. Monitoring beendet." |
+| **Page reload** | Eval fails but `$TAB_ID` still in tab list | **Wait 3s → retry up to 3 times** (see § Page Reload Detection). NEVER stop monitoring — the page will come back. |
 | JS eval returns null/undefined | Element not found on page | Retry once (page might still be loading), then show raw error |
 | JSON parse error | `JSON.parse()` throws | Show raw content to user, ask to verify |
 | Empty decisions array | Parsed but `decisions.length === 0` | Ask if intentional (all defaults accepted) |
@@ -257,8 +308,11 @@ Each round appends to the same file (array of rounds), preserving full history:
 
 ### Retry Protocol
 
-1. **Single tool failure**: Retry once with same tool
-2. **Repeated failure (2x)**: Re-probe waterfall, switch `$BROWSER_TOOL`
+1. **Single tool failure**: Check tab alive first (§ Page Reload Detection)
+   - Tab alive → page reload — wait 3s, retry up to 3 times
+   - Tab missing → tab closed — stop monitoring, inform user
+   - `tabs_context_mcp` fails → extension disconnected — go to step 2
+2. **Repeated failure after reload recovery (3x)**: Re-probe waterfall, switch `$BROWSER_TOOL`
 3. **Waterfall failure**: Manual fallback (AskUserQuestion + console.log)
 4. **NEVER silently stop monitoring** — always inform the user why monitoring ended
 
