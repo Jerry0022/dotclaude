@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.38.2] — 2026-04-11
+
+### Added
+
+- **concept** — post-generation validation gate: 9-pattern grep checklist blocks opening pages without heartbeat, connection warning, panel states, or sessionStorage
+- **concept** — localhost HTTP serving for concept pages (Chrome MCP cannot handle file:// URLs)
+
+### Fixed
+
+- **concept** — heartbeat initial grace period: 2s → 30s (Claude needs time for browser tool waterfall before first heartbeat)
+- **concept** — document file:// URL limitation and MCP tab group isolation in monitoring.md
+- **marketplace** — sync marketplace.json version 0.38.0 → 0.38.1
+
 ## [0.38.1] — 2026-04-11
 
 ### Fixed
