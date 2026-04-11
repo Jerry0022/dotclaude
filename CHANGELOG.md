@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.3] — 2026-04-11
+
+### Improved
+
+- **concept** — variant evaluation tri-state (Verwerfen/Miteinbeziehen/Exakt diese) now clearly labels each option as `Feedback` or `⚠️ Claude setzt um` so users know before clicking whether it's passive input or triggers action
+- **marketplace** — sync marketplace.json version to 0.38.2
+
 ## [0.38.2] — 2026-04-11
 
 ### Added

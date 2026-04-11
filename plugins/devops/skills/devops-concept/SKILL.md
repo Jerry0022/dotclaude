@@ -80,17 +80,27 @@ Build a single self-contained HTML file. Requirements:
 When the concept presents multiple variants (concept, comparison, or any
 multi-option output), each variant MUST include a **tri-state evaluation**:
 
-| State | Label | Behavior |
-|-------|-------|----------|
-| **Verwerfen** | "Verwerfen" | Variant is completely discarded |
-| **Miteinbeziehen** | "Miteinbeziehen" (default) | Variant is considered in the overall decision |
-| **Nur diese** | "Exakt diese Variante" | Select ONLY this variant, discard all others |
+| State | Label | Type | Behavior |
+|-------|-------|------|----------|
+| **Miteinbeziehen** | "Miteinbeziehen" (default) | Feedback | Informs Claude's decision — no immediate action taken |
+| **Verwerfen** | "Verwerfen" | ⚠️ Claude setzt um | Claude actively discards this variant and excludes it from all further steps |
+| **Nur diese** | "Exakt diese Variante" | ⚠️ Claude setzt um | Claude proceeds with only this variant and discards all others |
 
 - Default state for all variants: **Miteinbeziehen**
 - "Nur diese" is exclusive — selecting it for one variant auto-sets all others
   to "Verwerfen" (with visual feedback and undo option)
 - Each variant can ADDITIONALLY have rating, comments, and other controls
 - The overall submit sends the tri-state per variant PLUS any additional ratings
+
+**Visual indicators on the generated HTML page (mandatory):**
+Each tri-state option button MUST show a visual indicator so the user sees
+BEFORE clicking what kind of effect the selection has:
+- **Miteinbeziehen**: show a subtle info icon (ℹ) or "(Feedback)" label —
+  this is passive input, Claude will consider it but take no direct action
+- **Verwerfen** and **Exakt diese Variante**: show a `⚠️ Claude setzt um`
+  warning label directly on or below the button — the user must see this
+  before submitting, so they understand clicking Submit will cause Claude to
+  actively act on this choice (discard a variant, write code, update a plan, etc.)
 
 ### Reload Resilience
 
@@ -273,7 +283,12 @@ User submits → Claude reads → Claude processes → Claude updates page → U
 
 ### 5b. Process & Act
 1. **Summarize** what was selected/rejected/commented
-2. **Execute** the decisions immediately:
+2. **Execute** the decisions immediately — "Execute" means **Claude acts** based
+   on the submitted feedback. The concept page itself does nothing when the user
+   clicks Submit; it only records the decisions and signals Claude. It is Claude
+   who then reads those decisions and takes the actual action (writes code, updates
+   a plan, archives alternatives, etc.). The page is the input channel — Claude
+   is the actor:
    - For plans: proceed with approved steps, skip rejected ones
    - For analysis: focus on accepted findings, deprioritize rejected ones
    - For concepts: develop chosen variant, archive alternatives
