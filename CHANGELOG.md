@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.37.2] — 2026-04-11
+
+### Changed
+
+- **repo-health** — integrate devops-concept for interactive results: replace markdown report with dashboard concept page featuring repo context header, category filters (safe-delete/investigate/worktree/remote), batch action checkboxes, and decision panel sidebar; user filters, selects branches, and submits cleanup decisions directly from the browser
+
 ## [0.37.1] — 2026-04-11
 
 ### Added
