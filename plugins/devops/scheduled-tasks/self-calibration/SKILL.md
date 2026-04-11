@@ -1,14 +1,18 @@
 ---
 name: self-calibration
-description: Periodic self-audit and learning loop — review feedback, internalize skills, calibrate behavior.
-version: 0.2.0
-schedule: "*/10 * * * *"
+description: Stop-hook self-audit and learning loop — review feedback, internalize skills, calibrate behavior.
+version: 1.0.0
+trigger: stop-hook
+cooldown: 10m
+scope: per-worktree
 ---
 
 # Self-Calibration Loop
 
-Periodic self-audit to keep Claude aligned with the user's preferences and
-the plugin's rules. Runs every 10 minutes during active sessions.
+Self-audit to keep Claude aligned with the user's preferences and
+the plugin's rules. Triggered by the Stop hook after each response turn,
+with a 10-minute worktree-specific cooldown — runs only when there was
+real user interaction, never idle.
 
 ## Step 0 — Completion Flow Internalization (MANDATORY)
 
@@ -50,11 +54,10 @@ If a violation is found → correct immediately and briefly report.
 
 ### Why this is Step 0
 
-When the self-calibration task is first registered at session start, it runs
-immediately. This means the completion flow is internalized **before any user
-task begins** — ensuring zero missed cards from the very first interaction.
-Every 10-minute re-run reinforces this. Skipping or deprioritizing this step
-is itself a violation.
+The Stop hook triggers calibration after each response turn (with 10-min
+cooldown). Step 0 ensures the completion flow is re-internalized every cycle —
+reinforcing it after real user interaction. Skipping or deprioritizing this
+step is itself a violation.
 
 ## Step 1 — Self-Audit
 
