@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.selfcalibration
- * @version 0.6.0
+ * @version 0.7.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Register the self-calibration cron task once per session.
@@ -10,8 +10,17 @@
  *   priority than SessionStart system-reminders, which Claude may deprioritize
  *   in favor of the user's task.
  *
+ *   SINGLE REGISTRATION POINT (v0.7.0): This is now the ONLY hook that
+ *   registers the cron. The SessionStart variant (ss.flow.selfcalibration.js)
+ *   is disabled (no-op). This eliminates the double-registration bug where
+ *   both hooks used different runOnce keys and both fired.
+ *
+ *   SHARED GUARD KEY (v0.7.0): Uses a single runOnce key
+ *   'flow-selfcalibration' (no ss-/prompt- prefix) so even if the old
+ *   SessionStart hook is somehow re-enabled, it can't run alongside this one.
+ *
  *   If the task is not yet registered (CronList is empty for this task),
- *   also execute it immediately — no waiting for the first 30-minute tick.
+ *   also execute it immediately — no waiting for the first 10-minute tick.
  *   If the task already exists in CronList, skip everything (no duplicate
  *   registration, no immediate run).
  */
@@ -55,8 +64,10 @@ process.stdin.on('end', () => {
     sessionId = input.session_id;
   } catch {}
 
-  // Once-per-session guard — only inject on the very first user prompt
-  if (!runOnce('prompt-flow-selfcalibration', sessionId)) process.exit(0);
+  // Once-per-session guard — only inject on the very first user prompt.
+  // Uses a shared key (no ss-/prompt- prefix) so both SessionStart and
+  // UserPromptSubmit variants share the same guard — prevents double-fire.
+  if (!runOnce('flow-selfcalibration', sessionId)) process.exit(0);
 
   // Build compact, high-priority registration instruction.
   // Paths must survive mid-session cache rebuilds (ss.plugin.update deletes
@@ -105,10 +116,16 @@ process.stdin.on('end', () => {
     '',
   ];
 
+  // Cooldown marker: prevents multiple cron fires within the same 10-min window.
+  // The cron writes this after each successful run; next fire checks age.
+  const cooldownPath = sessionFile('dotclaude-devops-calibration-lastrun', sessionId).replace(/\\/g, '/');
+
   for (const t of tasks) {
     // Idle guard: check the session-scoped flag file before running the task.
     // If no user prompt arrived since the last cycle, skip entirely.
-    const idleGuard = `IDLE GUARD: First, run Bash to check if the file "${flagPath}" exists (test -f "${flagPath}"). If it does NOT exist, output nothing and stop — do NOT proceed with the task. If it DOES exist, delete it (rm "${flagPath}") and continue.`;
+    // Cooldown guard: even if the flag exists, skip if last run was <8 minutes ago
+    // (provides buffer below the 10-min cron interval to prevent overlapping runs).
+    const idleGuard = `IDLE GUARD: Run Bash with this script: FLAG="${flagPath}"; COOL="${cooldownPath}"; if [ ! -f "$FLAG" ]; then echo "SKIP"; exit 0; fi; if [ -f "$COOL" ]; then LAST=$(cat "$COOL"); NOW=$(date +%s); DIFF=$((NOW - LAST)); if [ "$DIFF" -lt 480 ]; then echo "COOLDOWN"; exit 0; fi; fi; rm -f "$FLAG"; echo "$NOW" > "$COOL"; echo "RUN". — If output is SKIP or COOLDOWN, output nothing and stop. If output is RUN, continue with the task.`;
 
     const cronPrompt = t.cronDiscoveryDir
       ? `${idleGuard} Execute the ${t.id} scheduled task as defined in the plugin. List the directory ${t.cronDiscoveryDir} to find the current version, then Read {version}/scheduled-tasks/${t.id}/SKILL.md — use the match to derive the plugin root (parent of scheduled-tasks/).`
