@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.5] — 2026-04-11
+
+### Fixed
+
+- **concept** — split-capability detection: Chrome MCP can be partially functional (tab management works, JS eval fails with "Cannot access chrome-extension://" error). Added `$EVAL_TOOL` validation step after waterfall probe with independent eval fallback chain
+- **browser-tool-strategy** — documented split-capability detection as known failure mode with Chrome MCP
+
 ## [0.38.4] — 2026-04-11
 
 ### Fixed
