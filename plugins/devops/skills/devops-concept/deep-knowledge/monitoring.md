@@ -40,6 +40,24 @@ Follow the **Browser Tool Strategy** (`deep-knowledge/browser-tool-strategy.md`)
 for tool selection. Use the waterfall to set `$BROWSER_TOOL`, then use the tool
 mapping table to pick the correct call for each action.
 
+## Pre-Monitoring Setup
+
+Before starting the monitoring loop, establish and validate the browser connection:
+
+1. Run the **Browser Tool Strategy waterfall** (`deep-knowledge/browser-tool-strategy.md`)
+   to set `$BROWSER_TOOL`
+2. If `$BROWSER_TOOL` is `chrome-mcp`:
+   - Call `tabs_context_mcp` to get the current tab group
+   - Identify the concept page tab (by URL or title) and store its ID as `$TAB_ID`
+   - **Validate the type:** `$TAB_ID` must be a number — if it was captured as a
+     string, coerce immediately: `$TAB_ID = Number($TAB_ID)`
+   - A string tabId causes MCP validation errors on every subsequent call
+3. If `$BROWSER_TOOL` is `playwright` or `preview`:
+   - Tab management is implicit — no explicit `$TAB_ID` needed
+4. If the waterfall fails entirely:
+   - Skip browser-based monitoring
+   - Fall back to the manual AskUserQuestion flow (see below)
+
 ### Concept-Specific Calls
 
 Using `$BROWSER_TOOL`, execute:
@@ -53,6 +71,11 @@ Using `$BROWSER_TOOL`, execute:
 - chrome-mcp: `javascript_tool("document.getElementById('concept-decisions').textContent")`
 - playwright: `browser_evaluate("document.getElementById('concept-decisions').textContent")`
 - preview: `preview_eval("document.getElementById('concept-decisions').textContent")`
+
+**WARNING:** NEVER use `get_page_text`, `browser_snapshot`, or `preview_snapshot`
+to read decisions. Concept pages contain large inline CSS/JS (self-contained HTML).
+These "read page" tools strip scripts and may fail with "page body too large".
+Always use the eval-based tools above for structured data extraction.
 
 ### Manual Fallback (no browser tool available)
 
@@ -91,6 +114,19 @@ Monitoring MUST NOT block the conversation:
 2. If the user sends a message → respond normally, then resume monitoring
 3. If the user says "fertig" / "done" / "abgeschickt" → immediately read decisions
 4. If the user asks for something unrelated → pause monitoring, handle request
+
+### Per-Poll Validation (chrome-mcp only)
+
+Before each poll attempt:
+1. Call `tabs_context_mcp`
+2. Verify `$TAB_ID` is still in the returned tab list
+3. If missing → tab was closed → stop monitoring, inform user:
+   > "Die Concept-Seite wurde geschlossen. Monitoring beendet."
+4. If `tabs_context_mcp` itself fails → extension disconnected → attempt reconnection
+   per the Mid-Session Reconnection Protocol in `deep-knowledge/browser-tool-strategy.md`
+
+This check ensures monitoring stops ONLY when the tab is actually closed,
+never because the extension had a transient hiccup.
 
 **Do NOT use sleep loops.** Instead, check the page state:
 - When the user sends a message that could indicate completion
@@ -206,13 +242,25 @@ Each round appends to the same file (array of rounds), preserving full history:
 
 ## Error Handling
 
-| Error | Response |
-|-------|----------|
-| Browser tool unavailable | Fall back to next tool in priority list |
-| Page closed before submit | Ask user to reopen or provide decisions manually |
-| JSON parse error | Show raw content, ask user to verify |
-| Empty decisions array | Ask if intentional (all defaults accepted) |
-| Network/file access error | Retry once, then fall back to manual |
+### Error Recovery Matrix
+
+| Error | Symptom | Recovery |
+|-------|---------|----------|
+| tabId type error | MCP validation: "expected number, received string" | Coerce `$TAB_ID = Number($TAB_ID)`, retry |
+| Extension disconnected | Tool call times out or returns connection error | Re-run waterfall probe, update `$BROWSER_TOOL` and `$TAB_ID` |
+| Tab closed by user | `tabs_context_mcp` succeeds but `$TAB_ID` not in list | Stop monitoring, inform user: "Concept-Tab wurde geschlossen." |
+| JS eval returns null/undefined | Element not found on page | Retry once (page might still be loading), then show raw error |
+| JSON parse error | `JSON.parse()` throws | Show raw content to user, ask to verify |
+| Empty decisions array | Parsed but `decisions.length === 0` | Ask if intentional (all defaults accepted) |
+| `get_page_text` used accidentally | "page body too large" or stripped content | Switch to `javascript_tool`/`browser_evaluate`/`preview_eval` — NEVER use `get_page_text` for concept pages |
+| All tools fail | Waterfall exhausted | Fall back to manual AskUserQuestion flow |
+
+### Retry Protocol
+
+1. **Single tool failure**: Retry once with same tool
+2. **Repeated failure (2x)**: Re-probe waterfall, switch `$BROWSER_TOOL`
+3. **Waterfall failure**: Manual fallback (AskUserQuestion + console.log)
+4. **NEVER silently stop monitoring** — always inform the user why monitoring ended
 
 ## Security
 
