@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.37.2] — 2026-04-11
+
+### Changed
+
+- **repo-health** — integrate devops-concept for interactive results: replace markdown report with dashboard concept page featuring repo context header, category filters (safe-delete/investigate/worktree/remote), batch action checkboxes, and decision panel sidebar; user filters, selects branches, and submits cleanup decisions directly from the browser
+
 ## [0.37.1] — 2026-04-11
 
 ### Added
@@ -23,13 +29,8 @@
 
 ### Fixed
 
-- **ship** — sync marketplace.json version to 0.36.8 (was 0.36.7 while other files had 0.36.8)
-
-## [0.36.8] — 2026-04-11
-
-### Fixed
-
 - **concept** — harden browser monitoring with tab-alive detection and type safety: add tabId type invariant (must be number), mid-session reconnection protocol for extension disconnects, per-poll tab-alive check to prevent silent monitoring death, prohibit `get_page_text` for structured data (causes "page too large" errors), comprehensive error recovery matrix (8 error types)
+- **ship** — sync marketplace.json version to 0.36.8 (was 0.36.7 while other files had 0.36.8)
 - **ship** — align marketplace.json version (was stuck at 0.36.4 while other files had 0.36.7)
 
 ## [0.36.7] — 2026-04-11
