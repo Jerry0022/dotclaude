@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.36.6] — 2026-04-11
+
+### Fixed
+
+- **ship** — require `cwd` on all 5 ship MCP tools: the MCP server runs in the plugin directory, not the target repo; silent `process.cwd()` fallback caused `gh pr create` to operate on the wrong repository when invoked from worktrees or other projects; schema now enforces required `cwd`, handler throws hard error if missing, SKILL.md examples updated
+
 ## [0.36.5] — 2026-04-11
 
 ### Fixed
