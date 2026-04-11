@@ -307,7 +307,7 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 | 2 | ready | `## 📦 READY. {{info}} — SHIP or CHANGE?` |
 | 3 | ship-blocked | `## ⛔ BLOCKED. {{reason}} — FIX or SKIP?` |
 | 4 | test | `## 🧪 DONE. {{info}} — SHIP after your TEST?` |
-| 5 | test-minimal | `## 🧪 STARTED. {{user-facing-description}} — HAVE FUN` |
+| 5 | test-minimal | `## ▶️ STARTED. {{user-facing-description}} — HAVE FUN` |
 | 6 | analysis | `## 📋 DONE. {{info}} — READ through` |
 | 7 | aborted | `## 🚫 ABORTED. {{reason}} — What should I TRY?` |
 | 8 | fallback | `## 🔧 DONE — Anything ELSE?` |
@@ -321,7 +321,7 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 | 2 | ready | `## 📦 READY. {{info}} — SHIP oder ÄNDERN?` |
 | 3 | ship-blocked | `## ⛔ BLOCKED. {{reason}} — FIX oder SKIP?` |
 | 4 | test | `## 🧪 DONE. {{info}} — SHIP nach deinem TEST?` |
-| 5 | test-minimal | `## 🧪 STARTED. {{user-facing-description}} — VIEL SPASS` |
+| 5 | test-minimal | `## ▶️ STARTED. {{user-facing-description}} — VIEL SPASS` |
 | 6 | analysis | `## 📋 DONE. {{info}} — LIES dir durch` |
 | 7 | aborted | `## 🚫 ABORTED. {{reason}} — Was soll ich VERSUCHEN?` |
 | 8 | fallback | `## 🔧 DONE — Noch was ANDERES?` |
@@ -336,15 +336,15 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 | 2 | ready | 📦 | yes | if ran | — | branch | yes |
 | 3 | ship-blocked | ⛔ | yes | if ran | — | branch | yes |
 | 4 | test | 🧪 | yes | if ran | yes | app-status | yes |
-| 5 | test-minimal | 🧪 | — | — | — | — | — |
+| 5 | test-minimal | ▶️ | — | — | — | — | — |
 | 6 | analysis | 📋 | yes | — | — | none | yes |
 | 7 | aborted | 🚫 | opt. | — | — | dep. | yes |
 | 8 | **fallback** | 🔧 | yes | — | — | dep. | yes |
 
 - **ship-successful (1)**: ONLY after /devops-ship + successfully merged to remote/main. PR vs. direct push → state line shows the difference.
 - **ship-blocked (3)**: ONLY after /devops-ship + NOT merged (PR open, build fail, etc.).
-- **test (4)**: Claude starts app + code edits (app relevant).
-- **test-minimal (5)**: User starts app via prompt, no edits done yet.
+- **test (4)**: Code edits + app/service started or startable. Applies to ANY project type (web, CLI, desktop, API, game — not just UI). If user needs to test, always use this variant and try to start the app.
+- **test-minimal (5)**: User starts app via prompt, no edits done yet. Minimal greeting card.
 - **analysis (6)**: No file changes — covers audit, plan, review, explanation, investigation.
 
 ### CTA Icons
@@ -353,7 +353,8 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 |------|---------|----------|
 | 🚀 | Delivered — all done | ship-successful |
 | 📦 | Ready — user decides next step | ready |
-| 🧪 | Test — user must verify | test, test-minimal |
+| 🧪 | Test — user must verify | test |
+| ▶️ | Started — app launched | test-minimal |
 | ⛔ | Blocked — needs fix | ship-blocked |
 | 🚫 | Aborted — not feasible | aborted |
 | 📋 | Info — purely informational | analysis |
@@ -365,8 +366,8 @@ Format: `## {icon} {STATUS}. {short-info} — {sentence with VERB}`
 if   ship pipeline ran + merged to remote/main  → ship-successful (1)
 elif ship pipeline ran + NOT merged              → ship-blocked (3)
 elif task aborted / infeasible / rate-limited    → aborted (7)
-elif code edits + app relevant                   → test (4)
-elif user started app, no edits yet              → test-minimal (5)
+elif code edits + app/service started or startable → test (4)
+elif user started app via prompt, no edits yet     → test-minimal (5)
 elif code/doc changes (>=1 edit), no app         → ready (2)
 elif NO code changes (analysis/explanation/...)  → analysis (6)
 else                                             → fallback (8)
@@ -384,10 +385,13 @@ else                                             → fallback (8)
 - `analysis`: zero files changed → read-only outcome (audit, plan, review, explain, investigate)
 - When in doubt: if `git status` would be clean → `analysis`, not `ready`
 
-**Key rule — `test` variant + Desktop Testing:**
-- If `test` variant AND 5+ code edits AND UI project detected → offer
-  automated desktop testing via Computer Use before rendering the card.
-- See `deep-knowledge/desktop-testing.md` for consent flow and warning rules.
+**Key rule — `test` variant:**
+- Use `test` when code edits were made AND the result can be tested by the user.
+  This is NOT limited to UI/web projects — applies to ANY project type: web apps,
+  CLI tools, APIs, desktop apps, games, scripts. If the user should test it, use `test`.
+- When possible, start the app/service for the user before rendering the card.
+- If 5+ code edits AND Desktop Testing available → offer automated visual testing
+  via Computer Use before rendering the card (see `deep-knowledge/desktop-testing.md`).
 - Desktop testing is optional — user can always decline and test manually.
 
 ---

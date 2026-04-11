@@ -33,11 +33,31 @@ starting points and inspiration — deviate freely when the content calls for it
     <!-- Decision panel: ~20% width, fixed sidebar, NOT overlay -->
     <aside class="concept-decision-panel">
       <h3>Entscheidungen</h3>
-      <div id="decision-summary">
-        <!-- Auto-populated summary of current selections -->
+
+      <!-- Connection warning — shown when Claude heartbeat is stale -->
+      <div id="connection-warning" class="panel-warning" style="display: none;">
+        <span class="warning-icon">⚠</span>
+        <span>Claude ist nicht verbunden. Stelle sicher, dass die Claude-Extension aktiv ist.</span>
       </div>
-      <button id="submit-btn" class="primary">Entscheidungen abschicken</button>
-      <p class="hint">Deine Auswahl wird direkt an Claude übermittelt.</p>
+
+      <!-- Normal state: decision summary + submit -->
+      <div id="panel-ready">
+        <div id="decision-summary">
+          <!-- Auto-populated summary of current selections -->
+        </div>
+        <button id="submit-btn" class="primary">Entscheidungen abschicken</button>
+        <p class="hint">Deine Auswahl wird direkt an Claude übermittelt.</p>
+      </div>
+
+      <!-- Post-submit state: waiting for Claude -->
+      <div id="panel-submitted" style="display: none;">
+        <div class="submitted-indicator">
+          <span class="check-icon">✓</span>
+          <strong>Entscheidungen übermittelt</strong>
+        </div>
+        <p class="submitted-hint">Claude verarbeitet deine Auswahl. Wechsle zum <strong>Claude Chat</strong> um den Fortschritt zu sehen.</p>
+        <div class="waiting-animation"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+      </div>
     </aside>
   </div>
 
@@ -85,6 +105,73 @@ starting points and inspiration — deviate freely when the content calls for it
     border-left: none;
     border-top: 1px solid var(--border-color);
   }
+}
+```
+
+### Decision Panel State CSS
+
+```css
+/* Connection warning */
+.panel-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning-color, #d29922) 15%, transparent);
+  border: 1px solid var(--warning-color, #d29922);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.panel-warning .warning-icon { font-size: 1.1rem; flex-shrink: 0; }
+
+/* Submitted state */
+.submitted-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent);
+  border: 1px solid var(--success-color, #3fb950);
+}
+.submitted-indicator .check-icon {
+  font-size: 1.3rem;
+  color: var(--success-color, #3fb950);
+}
+.submitted-hint {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+/* Waiting dots animation */
+.waiting-animation {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  padding: 0.5rem 0;
+}
+.waiting-animation .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent-color, #58a6ff);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.waiting-animation .dot:nth-child(2) { animation-delay: 0.2s; }
+.waiting-animation .dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes pulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+/* Disabled submit button when disconnected */
+#submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 ```
 
@@ -345,6 +432,86 @@ concept variants (see above): Verwerfen / Miteinbeziehen / Exakt diese.
 
 ## JavaScript Patterns
 
+### State Persistence
+
+Interactive element state MUST survive page reloads via `sessionStorage`.
+This prevents the user from losing their selections when they press F5.
+
+**Storage key:** `concept-state-{slug}` (derived from the page's filename slug)
+
+```javascript
+// --- State Persistence ---
+const STORAGE_KEY = 'concept-state-' + location.pathname.split('/').pop().replace('.html', '');
+
+function saveState() {
+  const state = {};
+  // Save toggles, checkboxes, radios
+  document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
+    if (el.name || el.id) state['input:' + (el.name || el.id) + ':' + el.value] = el.checked;
+  });
+  // Save text inputs, textareas
+  document.querySelectorAll('textarea, input[type="text"], input[type="number"]').forEach(el => {
+    if (el.id || el.dataset.comment) state['text:' + (el.id || el.dataset.comment)] = el.value;
+  });
+  // Save sliders
+  document.querySelectorAll('input[type="range"]').forEach(el => {
+    if (el.id || el.name) state['range:' + (el.id || el.name)] = el.value;
+  });
+  // Save select elements
+  document.querySelectorAll('select').forEach(el => {
+    if (el.id || el.name) state['select:' + (el.id || el.name)] = el.value;
+  });
+  // Save theme preference
+  state['theme'] = document.documentElement.getAttribute('data-theme');
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function restoreState() {
+  const raw = sessionStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+  try {
+    const state = JSON.parse(raw);
+    // Restore theme first (prevents flash)
+    if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+    // Restore inputs
+    Object.entries(state).forEach(([key, value]) => {
+      const [type, ...rest] = key.split(':');
+      if (type === 'input') {
+        const [name, val] = [rest.slice(0, -1).join(':'), rest[rest.length - 1]];
+        const el = document.querySelector(`input[name="${name}"][value="${val}"], input[id="${name}"][value="${val}"]`);
+        if (el) el.checked = value;
+      } else if (type === 'text') {
+        const id = rest.join(':');
+        const el = document.getElementById(id) || document.querySelector(`[data-comment="${id}"]`);
+        if (el) el.value = value;
+      } else if (type === 'range') {
+        const id = rest.join(':');
+        const el = document.getElementById(id) || document.querySelector(`input[name="${id}"]`);
+        if (el) { el.value = value; el.dispatchEvent(new Event('input')); }
+      } else if (type === 'select') {
+        const id = rest.join(':');
+        const el = document.getElementById(id) || document.querySelector(`select[name="${id}"]`);
+        if (el) el.value = value;
+      }
+    });
+  } catch (e) { /* corrupt storage — ignore, user starts fresh */ }
+}
+
+// Restore on load, save on every interaction
+document.addEventListener('DOMContentLoaded', restoreState);
+document.addEventListener('change', saveState);
+document.addEventListener('input', saveState);
+```
+
+**Rules:**
+- Use `sessionStorage` (not `localStorage`) — state is per-tab, per-session,
+  and auto-clears when the tab is closed. No stale state across sessions.
+- Save on every `change` and `input` event — not just on submit
+- Restore runs on `DOMContentLoaded` — before the user sees the page
+- The `concept-submitted` class is deliberately NOT persisted — after a reload
+  the page is back to "not yet submitted" (correct behavior)
+- Theme preference IS persisted — prevents dark/light flash on reload
+
 ### Collect Decisions
 ```javascript
 function collectDecisions() {
@@ -380,12 +547,33 @@ document.getElementById('submit-btn').addEventListener('click', () => {
   container.textContent = JSON.stringify(data);
   document.body.classList.add('concept-submitted');
 
-  // Visual confirmation
-  const btn = document.getElementById('submit-btn');
-  btn.textContent = 'Entscheidungen übermittelt ✓';
-  btn.disabled = true;
-  btn.classList.add('submitted');
+  // Switch panel to "submitted" state
+  document.getElementById('panel-ready').style.display = 'none';
+  document.getElementById('panel-submitted').style.display = 'block';
+
+  // Clear sessionStorage submitted flag so reload restores "ready" state
+  saveState();
 });
+```
+
+### Panel State Reset
+
+When Claude processes decisions and updates the page (Step 5c), it resets
+the panel back to the "ready" state via browser eval:
+
+```javascript
+// Called by Claude after processing — resets the panel for the next round
+document.getElementById('panel-submitted').style.display = 'none';
+document.getElementById('panel-ready').style.display = 'block';
+document.getElementById('submit-btn').disabled = false;
+document.getElementById('submit-btn').textContent = 'Entscheidungen abschicken';
+document.body.classList.remove('concept-submitted');
+```
+
+This is the visual cycle:
+```
+[Ready: button active] → User clicks Submit → [Submitted: waiting indicator]
+    → Claude processes → [Ready: button active again, new round]
 ```
 
 ### Theme Toggle
@@ -396,3 +584,53 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
   html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
 });
 ```
+
+### Claude Connection Heartbeat
+
+Claude sets a heartbeat timestamp on the page during each monitoring poll.
+The page checks whether the heartbeat is fresh and updates the UI accordingly.
+
+**How it works:**
+- Claude runs `document.body.dataset.claudeHeartbeat = Date.now()` via eval
+  on every poll cycle (every 15 seconds)
+- The page's JS checks this value every 5 seconds
+- If the heartbeat is older than 45 seconds (3 missed polls) or missing →
+  the submit button is disabled and a warning is shown
+- If the heartbeat is fresh → submit is enabled, warning hidden
+
+```javascript
+// --- Claude Connection Heartbeat ---
+const HEARTBEAT_STALE_MS = 45000; // 3 missed polls = disconnected
+
+function checkClaudeConnection() {
+  const hb = document.body.dataset.claudeHeartbeat;
+  const isConnected = hb && (Date.now() - Number(hb)) < HEARTBEAT_STALE_MS;
+  const warning = document.getElementById('connection-warning');
+  const btn = document.getElementById('submit-btn');
+  const panelSubmitted = document.getElementById('panel-submitted');
+
+  // Don't interfere with the "submitted" state
+  if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
+
+  if (isConnected) {
+    if (warning) warning.style.display = 'none';
+    if (btn) btn.disabled = false;
+  } else {
+    if (warning) warning.style.display = 'flex';
+    if (btn) btn.disabled = true;
+  }
+}
+
+// Check every 5 seconds
+setInterval(checkClaudeConnection, 5000);
+// Initial check after 2 seconds (give Claude time for first heartbeat)
+setTimeout(checkClaudeConnection, 2000);
+```
+
+**Claude-side heartbeat injection** (executed by Claude via eval on each poll):
+```javascript
+document.body.dataset.claudeHeartbeat = Date.now();
+```
+
+This single line is injected by Claude's monitoring loop on every poll cycle.
+See `monitoring.md` § Heartbeat Injection for integration into the polling protocol.

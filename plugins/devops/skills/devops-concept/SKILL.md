@@ -92,6 +92,16 @@ multi-option output), each variant MUST include a **tri-state evaluation**:
 - Each variant can ADDITIONALLY have rating, comments, and other controls
 - The overall submit sends the tri-state per variant PLUS any additional ratings
 
+### Reload Resilience
+
+The HTML page MUST persist interactive element state via `sessionStorage` so
+that user selections survive a page reload (F5). Include the state persistence
+pattern from `deep-knowledge/templates.md` § State Persistence in every
+generated concept page. Theme preference is also persisted to prevent flash.
+
+The `concept-submitted` class is NOT persisted — after a reload the page is
+back to "not yet submitted" (correct behavior, the user can re-submit).
+
 ### Feedback Mechanism
 
 The HTML page MUST include a feedback data layer:
@@ -112,8 +122,16 @@ signal Claude monitors.
 2. Collect all comment field values → `comments[]`
 3. Set `submitted: true` in the JSON block
 4. Add class `concept-submitted` to `<body>`
-5. Show visual confirmation ("Entscheidungen übermittelt")
-6. Disable the submit button to prevent double-submit
+5. Switch the decision panel from "ready" to "submitted" state — showing a
+   clear "Entscheidungen übermittelt" indicator with a hint to switch to the
+   Claude chat (see `deep-knowledge/templates.md` § Submit Handler)
+
+**Decision panel states:**
+- **Ready**: Submit button active, decision summary visible
+- **Disconnected**: Submit button disabled, warning banner visible (Claude
+  heartbeat stale — see `deep-knowledge/templates.md` § Claude Connection Heartbeat)
+- **Submitted**: Waiting indicator, "Wechsle zum Claude Chat" hint
+- After Claude processes and resets the page → back to **Ready**
 
 ### File Location
 
@@ -163,10 +181,15 @@ See `deep-knowledge/monitoring.md` for the full polling protocol.
 **Polling logic:**
 - Before each poll, validate `$TAB_ID` is still alive (chrome-mcp only) —
   see `deep-knowledge/monitoring.md` § Per-Poll Validation (chrome-mcp only)
-- Check: `document.body.classList.contains('concept-submitted')`  via the eval-based
-  tool for `$BROWSER_TOOL` (see `deep-knowledge/monitoring.md` § Concept-Specific Calls)
+- **First on each poll**: inject heartbeat via
+  `document.body.dataset.claudeHeartbeat = Date.now()` — this keeps the
+  submit button enabled and the connection warning hidden
+- Then check: `document.body.classList.contains('concept-submitted')` via the
+  eval-based tool for `$BROWSER_TOOL`
 - If true → read decisions from `#concept-decisions` JSON using the same eval tool
 - If false → wait and retry (max 5 minutes, check every 15 seconds)
+- If eval fails but tab alive → page reload detected, wait and retry
+  (see `deep-knowledge/monitoring.md` § Page Reload Detection)
 - If timeout → ask user if they need more time or want to skip
 
 **NEVER use `get_page_text` or equivalent read-page tools to read decisions** —
