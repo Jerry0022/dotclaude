@@ -23,6 +23,13 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, '..');
 
+// Named constants — avoid magic numbers scattered through the module
+const BAR_WIDTH              = 14;
+const WINDOW_5H_MIN          = 300;
+const WINDOW_WK_MIN          = 10080;
+const HEALTH_WARN_THRESHOLD  = 40;
+const HEALTH_CRIT_THRESHOLD  = 80;
+
 /** Safely parse a JSON string; returns the original value on failure. */
 function tryParse(v) {
   try { return JSON.parse(v); } catch { return v; }
@@ -36,7 +43,7 @@ const USAGE_JSON_PATH = join(homedir(), '.claude', 'usage-live.json');
 // ---------------------------------------------------------------------------
 
 function renderBar(pct, elapsedPct) {
-  const total = 14;
+  const total = BAR_WIDTH;
   const filled = Math.round((pct / 100) * total);
   const elapsedPos = Math.round(Math.max(0, Math.min(100, elapsedPct || 0)) / 100 * total);
 
@@ -94,11 +101,11 @@ function renderUsageMeter(usageData, delta5h, deltaWk) {
   const w = usageData.weekly;
   const lines = [];
 
-  const elapsed5hPct = s.resetInMinutes != null ? ((300 - s.resetInMinutes) / 300) * 100 : 0;
+  const elapsed5hPct = s.resetInMinutes != null ? ((WINDOW_5H_MIN - s.resetInMinutes) / WINDOW_5H_MIN) * 100 : 0;
   lines.push(renderUsageLine('5h', s.pct, elapsed5hPct, delta5h, s.resetInMinutes));
 
   if (w) {
-    const elapsedWkPct = ((10080 - w.resetInMinutes) / 10080) * 100;
+    const elapsedWkPct = ((WINDOW_WK_MIN - w.resetInMinutes) / WINDOW_WK_MIN) * 100;
     lines.push(renderUsageLine('Wk', w.pct, elapsedWkPct, deltaWk, w.resetInMinutes));
   }
 
@@ -118,11 +125,11 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk) {
   const w = usageData.weekly;
   const lines = ['```'];
 
-  const elapsed5hPct = s.resetInMinutes != null ? ((300 - s.resetInMinutes) / 300) * 100 : 0;
+  const elapsed5hPct = s.resetInMinutes != null ? ((WINDOW_5H_MIN - s.resetInMinutes) / WINDOW_5H_MIN) * 100 : 0;
   lines.push(renderUsageLine('5h', s.pct, elapsed5hPct, delta5h, s.resetInMinutes));
 
   if (w) {
-    const elapsedWkPct = ((10080 - w.resetInMinutes) / 10080) * 100;
+    const elapsedWkPct = ((WINDOW_WK_MIN - w.resetInMinutes) / WINDOW_WK_MIN) * 100;
     lines.push(renderUsageLine('Wk', w.pct, elapsedWkPct, deltaWk, w.resetInMinutes));
   }
 
@@ -282,8 +289,8 @@ function readToolCallCount(sessionId) {
 }
 
 function renderContextHealth(toolCallCount) {
-  if (toolCallCount <= 40) return '';
-  if (toolCallCount <= 80) return '\u26a1 ' + toolCallCount + ' tool calls \u2014 consider `/compact`';
+  if (toolCallCount <= HEALTH_WARN_THRESHOLD) return '';
+  if (toolCallCount <= HEALTH_CRIT_THRESHOLD) return '\u26a1 ' + toolCallCount + ' tool calls \u2014 consider `/compact`';
   return '\u26a0 ' + toolCallCount + ' tool calls \u2014 consider `/clear` + session summary';
 }
 
@@ -383,7 +390,7 @@ function refreshUsage() {
   // Delta is only meaningful when both scrapes fall in the same window.
   if (previous?.timestamp && previous?.session) {
     const ageMs = Date.now() - new Date(previous.timestamp).getTime();
-    const windowMs = (previous.session.resetInMinutes ?? 300) * 60_000;
+    const windowMs = (previous.session.resetInMinutes ?? WINDOW_5H_MIN) * 60_000;
     if (ageMs > windowMs) {
       try { unlinkSync(USAGE_JSON_PATH); } catch {}
       previous = null;
@@ -612,7 +619,7 @@ server.registerTool(
 
     // 5. Write card-rendered flag for stop.flow.guard
     try {
-      const key = params.session_id || 'latest';
+      const key = params.session_id || 'unknown';
       const flagPath = join(tmpdir(), 'dotclaude-devops-card-rendered-' + key);
       writeFileSync(flagPath, new Date().toISOString());
     } catch (e) {
