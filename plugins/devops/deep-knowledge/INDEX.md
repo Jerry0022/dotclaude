@@ -8,6 +8,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [agent-collaboration.md](agent-collaboration.md) | Agent Collaboration Protocol | How agents work together on multi-role tasks. |
 | [agent-conventions.md](agent-conventions.md) | Agent Naming & Collaboration Conventions | [role:X · Type] Task description |
 | [agent-proactivity.md](agent-proactivity.md) | Proactive Agent Orchestration | Cross-cutting rule for when to involve specialized agents without explicit us... |
+| [browser-tool-strategy.md](browser-tool-strategy.md) | Browser Tool Strategy | Cross-cutting rules for browser interaction across all skills. Every skill that |
 | [claude-directory-structure.md](claude-directory-structure.md) | Claude Directory Structure Convention | All Claude Code configuration belongs inside `.claude/`. Nothing Claude-specific |
 | [code-defaults.md](code-defaults.md) | Code Defaults | Standard coding conventions enforced across all projects using the devops plu... |
 | [codex-integration.md](codex-integration.md) | Codex Integration | Cross-cutting reference for all points where `codex-plugin-cc` skills are |

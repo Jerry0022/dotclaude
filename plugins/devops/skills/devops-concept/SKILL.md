@@ -148,13 +148,10 @@ After opening, inform the user:
 
 ## Step 4 — Monitor for Feedback
 
-Poll the browser page for the submit signal. Use the best available tool:
-
-**Priority order:**
-1. `mcp__Claude_in_Chrome__javascript_tool` — if browser MCP connected (works with Edge)
-2. `mcp__plugin_playwright_playwright__browser_evaluate` — if Playwright available
-3. `mcp__Claude_Preview__preview_eval` — if Preview available
-4. **Fallback**: Ask user to confirm manually via `AskUserQuestion`
+Poll the browser page for the submit signal. Use `$BROWSER_TOOL` as determined
+by the **Browser Tool Strategy** (`deep-knowledge/browser-tool-strategy.md`).
+Use the tool mapping table to pick the right eval call.
+If no browser tool is available → ask user to confirm manually via `AskUserQuestion`.
 
 **Polling logic:**
 - Check: `document.body.classList.contains('concept-submitted')`

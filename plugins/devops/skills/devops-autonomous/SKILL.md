@@ -72,11 +72,12 @@ Browser-based testing (Playwright, Preview) runs regardless of this choice — i
 operates in its own window and doesn't occupy the desktop. This question only
 controls whether computer-use (mouse/keyboard takeover) is used for **native apps**.
 
-**Edge/Chrome browser exception:** Even in "Hintergrund" mode, Claude is allowed to
-open, navigate, read, and interact with browser tabs via the **Claude-in-Chrome MCP**
-(`mcp__Claude_in_Chrome__*`). This is DOM-based — no mouse/keyboard takeover, no
-desktop occupation. The user can keep working while Claude autonomously tests, reads,
-and interacts with web pages in a browser tab. Prime these tools in Step 3b.
+**Browser interaction in background mode:** Even in "Hintergrund" mode, Claude has
+full read+write browser access via `$BROWSER_TOOL` (set in Step 3b). The waterfall
+(Chrome MCP → Playwright → Preview) ensures a working tool is always selected.
+All three are DOM/protocol-based — no mouse/keyboard takeover, no desktop occupation.
+**Never fall back to computer-use for browser tasks** — it only has read-tier access
+to browsers (screenshots only, no clicks or typing).
 
 In `analyze` mode, desktop is only used for visual inspection (screenshots), never for interaction.
 
@@ -102,12 +103,11 @@ Call `mcp__computer-use__request_access` with the list of applications needed
 Then take a test `mcp__computer-use__screenshot` to confirm access works.
 
 ### 3b — Browser Tools
-**Claude-in-Chrome** (`mcp__Claude_in_Chrome__*`): Always prime — runs in both
-desktop and background mode. Trigger a lightweight call (e.g., `tabs_context_mcp`)
-to confirm the extension is connected. This is the primary browser interface in
-background mode (DOM-based, no desktop takeover).
-**Playwright / Preview**: If the task involves web UI, additionally trigger a
-lightweight call (e.g., `browser_snapshot` or `preview_screenshot`) to prime.
+
+Follow the **Browser Tool Strategy** (`deep-knowledge/browser-tool-strategy.md`):
+Run the waterfall probe (Chrome MCP → Playwright → Preview), set `$BROWSER_TOOL`
+to the first responder. If none respond → show the error block from the strategy
+doc and abort browser-dependent work. Never use computer-use for browser tasks.
 
 ### 3c — File & Shell Tools
 Run a harmless `Bash` command (e.g., `echo "permission primed"`), `Read` a file,
@@ -121,8 +121,8 @@ trigger a lightweight read-only call to each to prime the permission.
 ### 3e — Confirmation Checklist
 Display a checklist of all primed permissions:
 ```
-✅ Computer-Use: {app1, app2} genehmigt
-✅ Browser: Playwright/Preview bereit
+✅ Browser: {$BROWSER_TOOL} aktiv (Chrome MCP / Playwright / Preview)
+✅ Computer-Use: {app1, app2} genehmigt  (nur wenn Desktop-Modus)
 ✅ Dateisystem: Lesen/Schreiben genehmigt
 ✅ Shell: Bash genehmigt
 ✅ MCP Tools: {list} genehmigt
@@ -178,8 +178,9 @@ tests, linters, installing dev deps.
 
 ### Live Testing (implement mode only)
 
-After implementation: run build, run tests, then use Preview/Playwright/computer-use
-to open the app, screenshot key flows, verify visually. Track progress via TodoWrite.
+After implementation: run build, run tests, then use `$BROWSER_TOOL` (from Step 3b)
+to open the app, screenshot key flows, verify visually. For native desktop apps
+(not browser), use computer-use if desktop mode was chosen. Track progress via TodoWrite.
 
 ## Step 6 — Error Handling
 
