@@ -27,23 +27,23 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 **NEVER show `[no data]` without exhausting ALL fallbacks first.**
 Run this chain top-to-bottom. Stop at first success.
 
-The script path is `${CLAUDE_PLUGIN_ROOT}/scripts/devops-refresh-usage-headless.js` (use the plugin root, NOT a relative path).
+The script path is `${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js` (use the plugin root, NOT a relative path).
 
 ### 1a. Try Edge CDP directly
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/devops-refresh-usage-headless.js" --quiet --check-only
+node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --check-only
 ```
 - Exit 0 → CDP ready → scrape:
   ```bash
-  node "${CLAUDE_PLUGIN_ROOT}/scripts/devops-refresh-usage-headless.js" --quiet --summary
+  node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
   ```
   → Done. Read `~/.claude/usage-live.json`.
 
 ### 1b. Edge not running (exit 7) → auto-start
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/devops-refresh-usage-headless.js" --auto-start --quiet --summary
+node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --auto-start --quiet --summary
 ```
 - Starts Edge with CDP in background, scrapes, done.
 - No user interaction needed.
@@ -51,12 +51,12 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/devops-refresh-usage-headless.js" --auto-sta
 ### 1c. Edge running without CDP (exit 5) → activate CDP
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/devops-refresh-usage-headless.js" --activate-cdp --quiet
+node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --activate-cdp --quiet
 ```
 - Restarts Edge with CDP flag (restores tabs via `--restore-last-session`).
 - Then scrape:
   ```bash
-  node "${CLAUDE_PLUGIN_ROOT}/scripts/devops-refresh-usage-headless.js" --quiet --summary
+  node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
   ```
 - This is autonomous — do NOT ask the user for permission. Edge restart is fast and restores all tabs.
 
@@ -78,7 +78,7 @@ Only after ALL of 1a–1e fail: show `[no data]` with the specific reason (e.g.,
 
 ## Step 2 — Parse and store
 
-Write results to `scripts/usage-live.json`:
+Write results to `~/.claude/usage-live.json`:
 
 ```json
 {
@@ -111,4 +111,4 @@ ratio > 1.3  → 🪫 + "Hoher Verbrauch — neue Session oder Haiku empfohlen"
 - **Silent execution** — CDP operations are invisible. Edge restart is autonomous (restores tabs).
 - **Playwright fallback is acceptable** — if CDP fails, opening a browser tab to scrape is fine.
 - **Delta computation**: Read `usage-live.json` before and after refresh. Delta = new_pct - old_pct.
-- **Script path**: Always use `${CLAUDE_PLUGIN_ROOT}/scripts/devops-refresh-usage-headless.js`, never a relative path.
+- **Script path**: Always use `${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js`, never a relative path.
