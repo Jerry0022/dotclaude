@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.36.5] — 2026-04-11
+
+### Fixed
+
+- **hooks** — eliminate self-calibration over-execution: disable SessionStart hook (no-op), add 60s debounce to useractivity flag, add 8-minute cooldown guard in cron prompt, unify runOnce key — reduces idle-session calibration from up to 6x/hour to maximum 1x
+
 ## [0.36.4] — 2026-04-11
 
 ### Added
