@@ -2,6 +2,10 @@
 
 ## [0.36.8] — 2026-04-11
 
+### Changed
+
+- **repo-health** — integrate devops-concept for interactive results: replace markdown report with dashboard concept page featuring repo context header, category filters (safe-delete/investigate/worktree/remote), batch action checkboxes, and decision panel sidebar; user filters, selects branches, and submits cleanup decisions directly from the browser
+
 ### Fixed
 
 - **concept** — harden browser monitoring with tab-alive detection and type safety: add tabId type invariant (must be number), mid-session reconnection protocol for extension disconnects, per-poll tab-alive check to prevent silent monitoring death, prohibit `get_page_text` for structured data (causes "page too large" errors), comprehensive error recovery matrix (8 error types)
