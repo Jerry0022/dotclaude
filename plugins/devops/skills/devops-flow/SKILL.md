@@ -8,8 +8,7 @@ description: >-
   "error", "crash", "blank screen", "warum geht das nicht", "funktioniert nicht",
   "something's off", "it just hangs", "unexpected behavior". Also triggers when
   the user pastes an error message or stack trace, or when post.flow.debug
-  hook detects repeated Bash failures. Do NOT trigger for general code questions
-  (use /devops-explain).
+  hook detects repeated Bash failures. Do NOT trigger for general code questions.
 argument-hint: "[optional: describe the symptom or paste error]"
 allowed-tools: Read, Grep, Glob, Bash(git log *), Bash(git diff *), Bash(git bisect *), Bash(npm *), Bash(node *), AskUserQuestion, mcp__plugin_devops_dotclaude-issues__*
 ---
