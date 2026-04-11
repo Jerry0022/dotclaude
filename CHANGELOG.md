@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.38.6] — 2026-04-11
+
+### Fixed
+
+- **refresh-usage** — SKILL.md referenced non-existent `devops-refresh-usage-headless.js` (actual: `refresh-usage-headless.js`), causing every manual refresh to fail silently with MODULE_NOT_FOUND
+- **refresh-usage** — SKILL.md write path was `scripts/usage-live.json` but scraper writes to `~/.claude/usage-live.json`, causing path desync and permanent "unavailable" state
+- **marketplace** — sync marketplace.json version to 0.38.5
+
 ## [0.38.5] — 2026-04-11
 
 ### Fixed
