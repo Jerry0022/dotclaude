@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.39.8] — 2026-04-12
+
+### Fixed
+
+- **mcp/completion** — fixed timeout mismatch in CDP usage scraper: MCP gave 30s but scraper needs up to 47s for Edge restart + page polling (30s→60s for escalation, 30s→45s for final scrape)
+- **mcp/completion** — stepwise CDP escalation: auto-start failure now falls through to activate-cdp instead of giving up
+- **mcp/completion** — added retry after scrape failure (3s delay, one retry) for Edge needing extra startup time
+- **mcp/completion** — stopped premature deletion of `usage-live.json` before scrape attempt; file now preserved as last-resort fallback
+- **mcp/completion** — specific error reasons in usage data response (not logged in, parse error, Edge restart failed, etc.) instead of generic "unavailable"
+- **mcp/completion** — stale data indicator in completion card meter when showing cached usage data
+- **versioning** — aligned marketplace.json to 0.39.7 (was lagging behind plugin.json/README/CHANGELOG)
+
 ## [0.39.7] — 2026-04-12
 
 ### Changed
