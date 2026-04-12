@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.40.1] — 2026-04-12
+
+### Fixed
+
+- **codex-integration** — skills (ship, flow, deep-research) and agents (QA, research) now load `codex-integration.md` at startup instead of relying on buried mid-flow references that were silently skipped
+
 ## [0.40.0] — 2026-04-12
 
 ### Added
