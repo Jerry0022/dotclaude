@@ -186,7 +186,12 @@ The patterns in `deep-knowledge/templates.md` (§ Claude Connection Heartbeat,
 ## Step 3 — Open in Browser
 
 Open the generated HTML file **inside the user's existing Edge window** — never
-open a separate browser window.
+open a separate browser window. Follow the **Edge Credo**
+(`deep-knowledge/browser-tool-strategy.md` § Edge Credo — Hard Rules):
+- Always the user's installed Edge with their profile/login context
+- New tab in running Edge — never a new window or sandboxed instance
+- Claude extension for browser interaction (computer-use only if user chose desktop takeover)
+- These rules apply regardless of execution mode (interactive, background, autonomous)
 
 ### Preferred: Concept Bridge Server (HTTP-based monitoring)
 

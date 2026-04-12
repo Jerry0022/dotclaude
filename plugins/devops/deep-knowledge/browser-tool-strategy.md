@@ -4,6 +4,90 @@ Cross-cutting rules for browser interaction across all skills. Every skill that
 needs to read, navigate, click, or evaluate JavaScript in a browser MUST follow
 this strategy. Do NOT duplicate browser tool selection logic in individual skills.
 
+---
+
+## Edge Credo — Hard Rules
+
+These rules are **absolute and non-negotiable**. Every skill, agent, hook, and
+autonomous flow MUST comply. No exceptions, no silent fallback to other browsers.
+
+### 1. Edge Only — No Other Browser
+
+Microsoft Edge is the **exclusive** browser. Never launch, control, or interact
+with Chrome, Firefox, or any other browser. The Chrome MCP extension
+(`mcp__Claude_in_Chrome__*`) is installed **in Edge** — its name contains
+"Chrome" because it's a Chromium extension, but it runs in Edge.
+
+### 2. Claude Extension First — Computer-Use for Browser Only on Explicit Request
+
+**Default:** All browser interaction goes through the **Claude-in-Chrome
+extension** running in Edge (or the Playwright/Preview fallback chain).
+
+**Exception:** Computer-use (`mcp__computer-use__*`) MAY be used for browser
+interaction **only** when the user explicitly requests desktop takeover:
+- User chooses "Desktop übernehmen" in `/devops-autonomous` Step 2
+- User explicitly asks for computer-use / desktop control
+- User explicitly invokes a flow that requires mouse/keyboard on the browser
+
+In all other cases — especially background mode, concept monitoring, autonomous
+background testing, silent operations — **never** use computer-use for browser
+interaction. Use the Claude extension or the waterfall fallback chain instead.
+
+**If the Claude extension is not connected and desktop takeover was NOT
+requested:** follow the waterfall fallback (Playwright → Preview). Do NOT
+silently fall back to computer-use mouse clicks on the Edge window.
+
+### 3. User's Installed Edge — Always With User Context
+
+Always use the user's **installed Edge instance** with their active profile
+(login sessions, cookies, extensions, saved passwords). Never:
+- Create a sandboxed or anonymous browser window via MCP
+- Launch a headless Edge instance without user context
+- Open a separate Edge profile or InPrivate window
+- Use Playwright's own browser instance for user-facing pages
+
+The user's context (logged-in state on claude.ai, GitHub, etc.) is essential.
+MCP-created browser windows run without this context and break authentication.
+
+### 4. Tab Reuse — No New Windows
+
+When Edge is already running:
+- **Open a new tab** in the existing Edge window — never a new Edge window
+- Use `tabs_create_mcp` (Chrome MCP) or `start "" msedge "{url}"` (which
+  adds a tab to the running instance, not a new window)
+
+When Edge is NOT running:
+- Launch a new Edge instance: `start "" msedge "{url}"`
+- This is the ONLY case where a new Edge window is acceptable
+
+**Never use `--new-window` or `--app=` flags** — they create isolated windows
+outside the user's normal tab context.
+
+### 5. Background and Autonomous Mode — Same Rules
+
+These rules apply identically regardless of execution context:
+- **Foreground** (user is present, interactive)
+- **Background** (concept monitoring, autonomous testing, burn mode)
+- **Autonomous** (user is AFK, `/devops-autonomous`)
+- **Headless/silent** (refresh-usage CDP scraping, health checks)
+
+Background mode does NOT mean "use a different browser" or "use computer-use
+instead". The Claude extension works in background — it operates via DOM/protocol,
+not mouse/keyboard, so it doesn't interfere with the user's work.
+
+### Quick Reference — What to Use When
+
+| Scenario | Default tool | Desktop-Takeover tool | Without takeover: NEVER use |
+|----------|-------------|----------------------|----------------------------|
+| Open URL in browser | Chrome MCP `navigate` / `start "" msedge` | Computer-use | Computer-use |
+| Read page content | Chrome MCP `get_page_text` / `read_page` | Computer-use screenshot | Computer-use |
+| Click in browser | Chrome MCP `computer` (click) | Computer-use `left_click` | Computer-use |
+| Fill form in browser | Chrome MCP `form_input` | Computer-use `type` | Computer-use |
+| Run JS in browser | Chrome MCP `javascript_tool` | Chrome MCP (still preferred) | — |
+| Test native desktop app | Computer-use (always) | Computer-use (always) | — |
+
+---
+
 ## Primary Tool: Claude-in-Chrome Extension in Edge
 
 The **Claude-in-Chrome MCP** (`mcp__Claude_in_Chrome__*`) is the primary and

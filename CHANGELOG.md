@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.39.3] — 2026-04-12
+
+### Added
+
+- **browser-tool-strategy** — Edge Credo: 5 hard rules for browser interaction (Edge only, Claude extension first, user profile context, tab reuse, identical rules in background mode)
+- **browser-tool-strategy** — computer-use for browser allowed only on explicit desktop takeover request
+
+### Changed
+
+- **devops-concept** — Step 3 references Edge Credo for browser opening
+- **devops-autonomous** — Step 3b and background mode section reference Edge Credo
+- **devops-burn** — Burn-Guidance includes Edge Credo section
+- **devops-repo-health** — Step 8 references Edge Credo for browser interaction
+- **desktop-testing** — replaced "Google Chrome" with Edge-only reference
+
 ## [0.39.2] — 2026-04-11
 
 ### Changed

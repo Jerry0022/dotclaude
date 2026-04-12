@@ -242,7 +242,9 @@ Write to: `{project}/.claude/devops-concept/{date}-repo-health.html`
 ## Step 8 — Open & Monitor
 
 Open the page in the browser and monitor for the submit signal.
-Follow `/devops-concept` Step 3 (Open) and Step 4 (Monitor).
+Follow `/devops-concept` Step 3 (Open) and Step 4 (Monitor), respecting the
+**Edge Credo** (`deep-knowledge/browser-tool-strategy.md` § Edge Credo):
+new tab in running Edge, user's profile context, Claude extension for interaction.
 
 ```bash
 start "" msedge "{filepath}"
