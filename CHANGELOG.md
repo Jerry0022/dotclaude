@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.39.4] — 2026-04-12
+
+### Added
+
+- **devops-concept** — decision panel doubles as navigation TOC with anchor links to variant sections
+- **devops-concept** — fullscreen + overlay layout mode for visual-heavy content (mockups, previews)
+- **devops-concept** — new deep-knowledge `interactive-components.md` with tested star rating, slider, toggle, and expandable section implementations
+- **devops-concept** — decision panel is now extensible with topic-specific controls between nav and submit
+
+### Fixed
+
+- **devops-concept** — tri-state labels: only "Exakt diese" shows "Claude setzt um", "Verwerfen" and "Miteinbeziehen" are both feedback
+- **devops-concept** — star rating: banned CSS-only `direction: rtl` hack, enforced JS-based left-to-right fill with hover preview and re-selection
+
 ## [0.39.3] — 2026-04-12
 
 ### Added
