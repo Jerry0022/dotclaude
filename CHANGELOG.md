@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.40.0] — 2026-04-12
+
+### Added
+
+- **hooks/ss.git.sync** — session-start hook registers a CronCreate job (every 10 min) to fetch remote main and merge parent chain into the current branch; keeps worktrees in sync even without user prompts
+- **scripts/git-sync** — extracted standalone sync logic (fetch, parent-chain merge, auto-resolve with `--ours`) shared by cron and prompt hook
+
+### Changed
+
+- **hooks/prompt.git.sync** — delegates to shared `scripts/git-sync.js` instead of inlining the sync logic; throttle (15 min) preserved as overlap guard
+
+### Fixed
+
+- **versioning** — aligned marketplace.json to 0.39.9 (was lagging at 0.39.8)
+
 ## [0.39.9] — 2026-04-12
 
 ### Fixed
