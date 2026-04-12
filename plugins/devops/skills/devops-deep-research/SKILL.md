@@ -27,6 +27,8 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 2. Project: `{project}/.claude/skills/deep-research/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
+4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill auto-delegates sub-questions to Codex for parallel research (§5 in that doc). Detect Codex availability now so Step 3 can act on it.
+
 ## Step 1 — Depth check
 
 Before spawning a full research agent, assess:
