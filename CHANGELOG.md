@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.40.2] — 2026-04-12
+
+### Added
+
+- **hooks** — `ss.knowledge.index.js`: SessionStart hook injects deep-knowledge INDEX.md into context (~500 tokens) so Claude knows all reference docs before message #1
+- **hooks** — `prompt.knowledge.dispatch.js`: UserPromptSubmit hook matches prompt keywords against topic map and injects relevant deep-knowledge files on-demand (once per session per topic, 8KB byte budget, specificity-sorted)
+- **hooks** — post-update notice in `ss.plugin.update.js` signals when deep-knowledge index may have changed
+
 ## [0.40.1] — 2026-04-12
 
 ### Fixed

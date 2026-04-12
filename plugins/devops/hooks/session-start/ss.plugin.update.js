@@ -273,6 +273,7 @@ const upgrades = updated.filter(u => !u.cacheRepair && u.verified);
 if (upgrades.length > 0) {
   const names = upgrades.map(u => `${u.name} v${u.to}`).join(', ');
   lines.push(`⚡ **Plugin updated (${names}) — restart Claude to activate the new version.**`);
+  lines.push('Deep-knowledge index may have changed — re-read INDEX.md on next relevant task.');
   lines.push('Show the user this restart notice as-is.');
   lines.push('');
   notifyDesktop('Claude Plugin Updated', `${names} — restart Claude to activate.`);
