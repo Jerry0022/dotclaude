@@ -108,7 +108,9 @@ full read+write browser access via `$BROWSER_TOOL` (set in Step 3b). The waterfa
 (Chrome MCP → Playwright → Preview) ensures a working tool is always selected.
 All three are DOM/protocol-based — no mouse/keyboard takeover, no desktop occupation.
 **Never fall back to computer-use for browser tasks** — it only has read-tier access
-to browsers (screenshots only, no clicks or typing).
+to browsers (screenshots only, no clicks or typing). The **Edge Credo** applies
+identically in background mode — same Edge instance, same user context, same tab
+reuse rules (see `deep-knowledge/browser-tool-strategy.md` § Edge Credo).
 
 In `analyze` mode, desktop is only used for visual inspection (screenshots), never for interaction.
 
@@ -135,7 +137,13 @@ Then take a test `mcp__computer-use__screenshot` to confirm access works.
 
 ### 3b — Browser Tools
 
-Follow the **Browser Tool Strategy** (`deep-knowledge/browser-tool-strategy.md`):
+Follow the **Browser Tool Strategy** (`deep-knowledge/browser-tool-strategy.md`),
+including the **Edge Credo** (§ Edge Credo — Hard Rules):
+- Edge only, Claude extension by default — computer-use for browser only if user chose "Desktop übernehmen"
+- Always use the user's installed Edge with their profile/login context
+- New tab in existing Edge window — never a new Edge window
+- These rules apply in BOTH foreground and background/autonomous mode
+
 Run the waterfall probe (Chrome MCP → Playwright → Preview), set `$BROWSER_TOOL`
 to the first responder. If none respond → show the error block from the strategy
 doc and abort browser-dependent work. Never use computer-use for browser tasks.

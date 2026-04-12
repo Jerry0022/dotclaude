@@ -58,7 +58,7 @@ Warning (in question text, MANDATORY):
 
 Call `request_access` with the required applications:
 
-- The browser running the app (typically "Google Chrome" or "Microsoft Edge")
+- **Microsoft Edge** (the ONLY browser — see `browser-tool-strategy.md` § Edge Credo)
 - Any other application visible in the test (if known)
 
 Reason: "Automatische visuelle Tests der UI-Änderungen durchführen"

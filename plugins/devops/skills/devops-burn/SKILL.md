@@ -216,6 +216,10 @@ BURN MODE ACTIVE — Maximale Parallelisierung.
 
 ## Burn-Guidance
 
+### Browser — Edge Credo
+- Alle Browser-Interaktion folgt dem Edge Credo (deep-knowledge/browser-tool-strategy.md § Edge Credo)
+- Edge only, Claude Extension only, User-Context, Tab-Reuse — auch im Burn-Modus
+
 ### Parallelisierung
 - IMMER die maximale Agent-Anzahl nutzen (full devops roster: core, frontend,
   ai, windows, designer, qa, po, research — je nach Relevanz)
