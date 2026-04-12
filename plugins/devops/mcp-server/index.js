@@ -15,7 +15,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, unlinkSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -129,6 +129,14 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
   if (w) {
     const elapsedWkPct = ((WINDOW_WK_MIN - w.resetInMinutes) / WINDOW_WK_MIN) * 100;
     lines.push(renderUsageLine('Wk', w.pct, elapsedWkPct, deltaWk, w.resetInMinutes));
+  }
+
+  // Stale/cached data indicator
+  if (usageData._cached && usageData._ageMinutes > 0) {
+    const ageLabel = usageData._ageMinutes >= 60
+      ? `${Math.round(usageData._ageMinutes / 60)}h ago`
+      : `${usageData._ageMinutes}m ago`;
+    lines.push(`\u26a0 stale (~${ageLabel})`);
   }
 
   lines.push('```');
@@ -413,44 +421,94 @@ function readUsageJson() {
 function refreshUsage() {
   let previous = readUsageJson();
 
-  // Discard stale data that's outside the current 5h reset window.
-  // Delta is only meaningful when both scrapes fall in the same window.
+  // Discard stale snapshot for delta computation only — keep file on disk
+  // as last-resort fallback if the live scrape fails entirely.
   if (previous?.timestamp && previous?.session) {
     const ageMs = Date.now() - new Date(previous.timestamp).getTime();
     const windowMs = (previous.session.resetInMinutes ?? WINDOW_5H_MIN) * 60_000;
     if (ageMs > windowMs) {
-      try { unlinkSync(USAGE_JSON_PATH); } catch {}
-      previous = null;
+      previous = null; // no delta, but file stays for fallback
     }
   }
 
+  // --- CDP escalation chain with proper timeouts ---
+  // Scraper worst-case: 20s restart + 24s page-poll = 44s.
+  // Timeouts must exceed that or execSync kills the scraper mid-operation.
+  let lastExitCode = null;
+
   try {
+    let cdpReady = false;
     try {
       execSync(`node "${SCRAPER_SCRIPT}" --check-only`, {
         timeout: 5000,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
+      cdpReady = true;
     } catch (checkErr) {
-      const exitCode = checkErr.status;
-      try {
-        if (exitCode === 7) {
+      lastExitCode = checkErr.status;
+    }
+
+    if (!cdpReady) {
+      // Escalation: auto-start → activate-cdp (stepwise)
+      let escalated = false;
+      if (lastExitCode === 7) {
+        // Edge not running — try non-destructive auto-start first
+        try {
           execSync(`node "${SCRAPER_SCRIPT}" --auto-start --quiet`, {
-            timeout: 30000,
+            timeout: 60000,
             stdio: ['pipe', 'pipe', 'pipe'],
           });
-        } else if (exitCode === 5) {
-          execSync(`node "${SCRAPER_SCRIPT}" --activate-cdp --quiet`, {
-            timeout: 30000,
-            stdio: ['pipe', 'pipe', 'pipe'],
-          });
+          escalated = true;
+        } catch (autoErr) {
+          console.error('[dotclaude-completion-mcp] auto-start failed:', autoErr.message);
+          // auto-start failed (Edge may have started without CDP) → try activate-cdp
+          try {
+            execSync(`node "${SCRAPER_SCRIPT}" --activate-cdp --quiet`, {
+              timeout: 60000,
+              stdio: ['pipe', 'pipe', 'pipe'],
+            });
+            escalated = true;
+          } catch (actErr) {
+            console.error('[dotclaude-completion-mcp] activate-cdp after auto-start failed:', actErr.message);
+            lastExitCode = actErr.status || 6;
+          }
         }
-      } catch (escalateErr) {
-        console.error('[dotclaude-completion-mcp] CDP escalation failed:', escalateErr.message);
+      } else if (lastExitCode === 5) {
+        // Edge running without CDP — activate directly
+        try {
+          execSync(`node "${SCRAPER_SCRIPT}" --activate-cdp --quiet`, {
+            timeout: 60000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+          });
+          escalated = true;
+        } catch (actErr) {
+          console.error('[dotclaude-completion-mcp] activate-cdp failed:', actErr.message);
+          lastExitCode = actErr.status || 6;
+        }
+      }
+
+      // If escalation wrote data, we can skip the final scrape
+      if (escalated) {
+        const escalatedData = readUsageJson();
+        if (escalatedData?.session) {
+          const ageMs = Date.now() - new Date(escalatedData.timestamp).getTime();
+          if (ageMs < 30_000) {
+            // Fresh data from escalation — use directly
+            let delta5h = null;
+            let deltaWk = null;
+            if (previous?.session) {
+              delta5h = (escalatedData.session?.pct || 0) - (previous.session?.pct || 0);
+              deltaWk = (escalatedData.weekly?.pct || 0) - (previous.weekly?.pct || 0);
+            }
+            return { success: true, data: escalatedData, delta5h, deltaWk };
+          }
+        }
       }
     }
 
+    // Final scrape attempt (CDP should be available now)
     execSync(`node "${SCRAPER_SCRIPT}" --quiet`, {
-      timeout: 30000,
+      timeout: 45000,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -466,9 +524,34 @@ function refreshUsage() {
     }
   } catch (err) {
     console.error('[dotclaude-completion-mcp] Scrape failed:', err.message);
+    lastExitCode = err.status || lastExitCode;
+
+    // Retry once after 3s — Edge may need a moment after restart
+    try {
+      execSync('timeout /t 3 /nobreak > NUL 2>&1 || sleep 3', {
+        timeout: 5000, shell: true, stdio: 'ignore',
+      });
+      execSync(`node "${SCRAPER_SCRIPT}" --quiet`, {
+        timeout: 45000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      const retryData = readUsageJson();
+      if (retryData?.session) {
+        let delta5h = null;
+        let deltaWk = null;
+        if (previous?.session) {
+          delta5h = (retryData.session?.pct || 0) - (previous.session?.pct || 0);
+          deltaWk = (retryData.weekly?.pct || 0) - (previous.weekly?.pct || 0);
+        }
+        return { success: true, data: retryData, delta5h, deltaWk };
+      }
+    } catch (retryErr) {
+      console.error('[dotclaude-completion-mcp] Retry also failed:', retryErr.message);
+      lastExitCode = retryErr.status || lastExitCode;
+    }
   }
 
-  // Fallback: use cached data if still within the current 5h reset window.
+  // Last resort: use any existing data (even stale) with age indicator
   const cached = readUsageJson();
   if (cached?.session) {
     cached._cached = true;
@@ -478,7 +561,17 @@ function refreshUsage() {
     return { success: true, data: cached, delta5h: null, deltaWk: null };
   }
 
-  return { success: false, data: null };
+  // Map exit codes to human-readable reasons
+  const reasons = {
+    2: 'not logged in to claude.ai',
+    3: 'usage page parse error',
+    4: 'CDP WebSocket failed',
+    5: 'Edge running without CDP — restart failed',
+    6: 'Edge restart failed',
+    7: 'Edge not installed or not startable',
+  };
+  const reason = reasons[lastExitCode] || `scrape exit code ${lastExitCode}`;
+  return { success: false, data: null, reason };
 }
 
 // ---------------------------------------------------------------------------
@@ -507,13 +600,15 @@ server.registerTool(
     const result = refreshUsage();
 
     if (!result.success) {
+      const reason = result.reason || 'unknown';
       return {
         content: [{
           type: "text",
           text: JSON.stringify({
             error: true,
-            message: "Usage data unavailable — scrape failed.",
-            renderedMeter: "\u26a0 Usage data unavailable \u2014 monitoring issue",
+            reason,
+            message: `Usage data unavailable \u2014 ${reason}`,
+            renderedMeter: `\u26a0 Usage data unavailable \u2014 ${reason}`,
           }),
         }],
       };
