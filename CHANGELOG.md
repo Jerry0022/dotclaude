@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.39.7] — 2026-04-12
+
+### Changed
+
+- **devops-concept** — state persistence upgraded from `sessionStorage` to `localStorage` with 24h TTL (survives tab close, browser restart, accidental reloads)
+- **devops-concept** — submit button stays enabled when Claude is disconnected (warning banner is sufficient)
+- **devops-concept** — removed 5-minute monitoring timeout and 20-poll limit; concept pages now run indefinitely until user ends session
+
+### Added
+
+- **devops-concept** — offline submit queue: decisions cached in `localStorage` when bridge server is unreachable, auto-delivered on reconnect via `retryPendingSubmission()`
+
 ## [0.39.6] — 2026-04-12
 
 ### Changed

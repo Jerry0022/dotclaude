@@ -169,8 +169,9 @@ console.log(document.getElementById('concept-decisions').textContent)
 - **Initial wait**: 10 seconds after opening (give the page time to load and
   the user time to orient)
 - **Poll interval**: 15 seconds
-- **Timeout**: 5 minutes (300 seconds)
-- **Max polls**: 20 attempts
+- **Timeout**: NONE — monitoring runs indefinitely until the user explicitly
+  ends it (says "fertig"/"done", closes the page, or closes Claude). The
+  heartbeat cron keeps the connection alive. Never impose artificial timeouts.
 
 ### Non-Blocking Behavior
 
@@ -200,7 +201,7 @@ On each poll cycle:
 A page reload (F5) is **not a problem** with the HTTP bridge:
 - The bridge server keeps running independently of the page
 - Heartbeat cron keeps posting → page reconnects automatically after reload
-- `sessionStorage` preserves user selections (see `templates.md` § State Persistence)
+- `localStorage` preserves user selections (see `templates.md` § State Persistence)
 - The `concept-submitted` class resets (correct — user can re-submit)
 - Decisions in the bridge server persist across reloads
 
@@ -211,18 +212,18 @@ A page reload (F5) is **not a problem** with the HTTP bridge:
 - When the user explicitly says they're done
 - Periodically if the conversation is idle (via cron or tool-based check)
 
-### Timeout Handling
+### No Timeout Policy
 
-After 5 minutes without submission:
+There is **no timeout**. The user decides when to submit — whether that takes
+2 minutes or 2 hours. Claude keeps the heartbeat cron alive and responds
+whenever the user submits or sends a chat message.
 
-```
-AskUserQuestion:
-  question: "Die Concept-Seite ist seit 5 Minuten offen. Wie soll ich weiter?"
-  options:
-    - "Brauche mehr Zeit" → extend by 5 minutes
-    - "Ergebnisse jetzt auslesen" → read current state even if not submitted
-    - "Abbrechen" → proceed without decisions
-```
+The monitoring loop ends ONLY when:
+- The user says "fertig" / "done" / "abbrechen" in chat
+- The user closes the browser tab (detected when bridge server stays alive
+  but no submissions arrive and the user confirms in chat)
+- The user closes Claude Desktop
+- The heartbeat cron expires after 7 days (platform limit, effectively infinite)
 
 ## Decision Processing
 
@@ -337,7 +338,8 @@ Each round appends to the same file (array of rounds), preserving full history:
 | Heartbeat cron stopped | Page shows "nicht verbunden" despite server running | Send manual `curl -s -X POST /heartbeat`, re-create cron |
 | Decisions JSON parse error | `curl /decisions` returns malformed JSON | Show raw content to user, ask to verify |
 | Empty decisions array | Parsed but `decisions.length === 0` | Ask if intentional (all defaults accepted) |
-| Tab closed by user | No submission past timeout, bridge server still alive | Ask user via AskUserQuestion |
+| Tab closed by user | Bridge server alive but no activity | Ask user via AskUserQuestion when they send a chat message |
+| Offline submission | User submitted while Claude was disconnected | Decisions cached in localStorage, auto-delivered on reconnect via `retryPendingSubmission()` |
 | JS eval broken (page updates) | `javascript_tool` returns "Cannot access chrome-extension://" | Expected — page updates not possible, inform user via chat |
 | `get_page_text` used accidentally | "page body too large" or stripped content | Use HTTP bridge endpoints instead |
 | All tools fail | Bridge server + browser tools both unavailable | Fall back to manual AskUserQuestion flow |
