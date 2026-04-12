@@ -131,8 +131,7 @@ For each wave:
    - **"Work autonomously. Do NOT use AskUserQuestion. Make reasonable decisions independently. Document all decisions in your commit messages."**
 3. **Continue with other work** or inform the user that agents are working
 4. **Collect results** when notified of completion
-5. **Merge** — ship each sub-branch via `/devops-ship` (sequential within wave)
-6. **Handoff** — pass completed contracts/findings to next wave
+5. **Handoff** — pass completed contracts/findings to next wave
 
 ### Wave Execution — Interactive Mode
 
@@ -149,8 +148,7 @@ For each wave:
    - **"Work interactively. Use AskUserQuestion with concrete options (2-4 choices) for design decisions, ambiguous requirements, or trade-offs. Provide detailed analysis and reasoning inline in the chat. Never decide silently — always explain your approach."**
 3. **Collect results** — wait for all agents in the wave to complete
 4. **Present interim results** — after each wave, summarize findings and decisions inline with analysis text
-5. **Merge** — ship each sub-branch via `/devops-ship` (sequential within wave)
-6. **Handoff** — pass completed contracts/findings to next wave
+5. **Handoff** — pass completed contracts/findings to next wave
 
 ### Single-Agent Shortcut
 
@@ -167,14 +165,15 @@ After all waves complete:
 1. Summarize what each agent accomplished
 2. List any unresolved findings or open questions
 3. Show final branch/PR state
-4. Trigger completion flow
+4. Remind the user to run `/devops-ship` manually when ready to merge
+5. Trigger completion flow
 
 ## Rules
 
 - **Never skip the plan step** — always present and confirm before executing
 - **Never run agents silently** — announce each agent launch
 - **Respect wave dependencies** — Core before Frontend, QA after all code changes
-- **Ship sub-branches sequentially** — parallel work is fine, parallel shipping is not
+- **Never ship automatically** — agents commit and push only. The user decides when to run `/devops-ship`
 - **Follow handoff protocol** — every agent-to-agent transition uses structured handoffs
 - If the user says "just do it" without agents → respect that, don't orchestrate
 - If only 1 domain is affected → consider if a single inline execution is simpler
