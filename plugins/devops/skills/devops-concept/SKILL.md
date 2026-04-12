@@ -61,20 +61,54 @@ Build a single self-contained HTML file. Requirements:
 - Professional typography, spacing, and color palette
 - Subtle animations for interactions (toggle, expand, submit)
 
-### Decision Panel Layout
-- The decision panel (submit button + global controls) is a **fixed sidebar**
-  on the right side, taking **~20% of the screen width** — NOT an overlay
-- Content area fills the remaining ~80% on the left
-- On mobile/narrow screens: decision panel collapses to bottom (sticky)
-- The panel is always visible while scrolling (position: fixed or sticky)
+### Layout Modes
+
+Choose the layout mode that fits the content best:
+
+| Mode | When | Panel | Content |
+|------|------|-------|---------|
+| **Sidebar** (default) | Most concepts, comparisons, plans | Fixed sidebar ~20% right | ~80% left, scrollable |
+| **Fullscreen + Overlay** | Visual prototypes, mockups, previews that need full width | Floating overlay button → slide-in panel | 100% content, panel overlays on demand |
+| **Stacked** | Mobile / narrow screens (auto-fallback) | Sticky bottom bar | Full width, scrollable |
+
+**Sidebar** is the default. Switch to **Fullscreen + Overlay** when the
+content has large visuals (mockups, diagrams, previews) that benefit from
+full-width display. The overlay panel is toggled via a floating action
+button (bottom-right corner).
+
+See `deep-knowledge/templates.md` § Layout Modes for CSS patterns.
+
+### Decision Panel
+
+The panel contains:
+1. **Variant Navigation (TOC)** — each variant gets a clickable entry that
+   smooth-scrolls to its section and shows the current evaluation state.
+   Only evaluable items are listed, not headers or context sections.
+   See `deep-knowledge/templates.md` § Variant Navigation for the pattern.
+2. **Topic-specific controls** — additional elements relevant to the specific
+   concept (e.g., global weight sliders for comparisons, filter toggles for
+   dashboards, priority selectors for plans). These are placed between the
+   navigation and the submit button. Adapt freely based on what the content
+   needs — the panel is extensible, not fixed.
+3. **Connection warning** — shown when Claude heartbeat is stale
+4. **Submit button** + hint text
+5. **Post-submit state** — waiting indicator
 
 ### Interactive Elements (per variant)
 - **Toggles/checkboxes**: For binary decisions (accept/reject, include/exclude)
 - **Selectors/sliders**: For prioritization, weighting, or rating
+- **Star ratings**: Use the JS-based implementation from
+  `deep-knowledge/interactive-components.md` — **never** use CSS-only
+  `direction: rtl` hacks. Stars fill left-to-right, support hover preview,
+  click-to-select, click-same-to-deselect, and re-selection.
 - **Comment fields**: Inline text areas for notes on each section —
   use `width: 100%` within their container, `min-height: 80px` for usability
 - **Submit button**: Prominent "Entscheidungen abschicken" button in the
   decision panel sidebar
+
+See `deep-knowledge/interactive-components.md` for tested reference
+implementations of all interactive components (star ratings, sliders,
+toggles, expandable sections, comment fields).
 
 ### Variant Evaluation (when variants exist)
 When the concept presents multiple variants (concept, comparison, or any
@@ -82,9 +116,9 @@ multi-option output), each variant MUST include a **tri-state evaluation**:
 
 | State | Label | Type | Behavior |
 |-------|-------|------|----------|
-| **Miteinbeziehen** | "Miteinbeziehen" (default) | Feedback | Informs Claude's decision — no immediate action taken |
-| **Verwerfen** | "Verwerfen" | ⚠️ Claude setzt um | Claude actively discards this variant and excludes it from all further steps |
-| **Nur diese** | "Exakt diese Variante" | ⚠️ Claude setzt um | Claude proceeds with only this variant and discards all others |
+| **Miteinbeziehen** | "Miteinbeziehen" (default) | Feedback | Informs Claude's decision — variant stays in consideration |
+| **Verwerfen** | "Verwerfen" | Feedback | Signals disinterest — Claude weighs this but takes no immediate action |
+| **Nur diese** | "Exakt diese Variante" | ⚠️ Claude setzt um | Claude proceeds with ONLY this variant and discards all others |
 
 - Default state for all variants: **Miteinbeziehen**
 - "Nur diese" is exclusive — selecting it for one variant auto-sets all others
@@ -95,12 +129,12 @@ multi-option output), each variant MUST include a **tri-state evaluation**:
 **Visual indicators on the generated HTML page (mandatory):**
 Each tri-state option button MUST show a visual indicator so the user sees
 BEFORE clicking what kind of effect the selection has:
-- **Miteinbeziehen**: show a subtle info icon (ℹ) or "(Feedback)" label —
-  this is passive input, Claude will consider it but take no direct action
-- **Verwerfen** and **Exakt diese Variante**: show a `⚠️ Claude setzt um`
-  warning label directly on or below the button — the user must see this
-  before submitting, so they understand clicking Submit will cause Claude to
-  actively act on this choice (discard a variant, write code, update a plan, etc.)
+- **Miteinbeziehen** and **Verwerfen**: show a "(Feedback)" label — these
+  are passive input, Claude considers them but takes no direct action
+- **Exakt diese Variante** only: show a `⚠️ Claude setzt um` warning label
+  directly on or below the button — the user must see this before submitting,
+  so they understand clicking Submit will cause Claude to actively act on
+  this choice (proceed with only this variant, discard all others)
 
 ### Reload Resilience
 
@@ -168,6 +202,7 @@ are present. **Grep the generated file** for each required pattern:
 | 7 | `panel-ready` | Ready-state panel element |
 | 8 | `panel-submitted` | Submitted-state panel element |
 | 9 | `sessionStorage` | Reload resilience (state persistence) |
+| 10 | `variant-nav` | Decision panel navigation / TOC (when variants exist) |
 
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. This is a **blocking gate** — no exceptions, no "this
