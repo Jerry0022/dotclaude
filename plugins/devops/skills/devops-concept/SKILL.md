@@ -104,13 +104,18 @@ BEFORE clicking what kind of effect the selection has:
 
 ### Reload Resilience
 
-The HTML page MUST persist interactive element state via `sessionStorage` so
-that user selections survive a page reload (F5). Include the state persistence
-pattern from `deep-knowledge/templates.md` § State Persistence in every
-generated concept page. Theme preference is also persisted to prevent flash.
+The HTML page MUST persist interactive element state via `localStorage` (with
+a 24-hour TTL) so that user selections survive page reloads, accidental tab
+closes, and even browser restarts. Include the state persistence pattern from
+`deep-knowledge/templates.md` § State Persistence in every generated concept
+page. Theme preference is also persisted to prevent flash.
 
 The `concept-submitted` class is NOT persisted — after a reload the page is
 back to "not yet submitted" (correct behavior, the user can re-submit).
+
+Additionally, the offline submit queue (`localStorage` key `{slug}-pending`)
+caches decisions submitted while Claude is disconnected and auto-delivers
+them when the connection is restored (see `templates.md` § Offline Submit Queue).
 
 ### Feedback Mechanism
 
@@ -190,7 +195,7 @@ are present. **Grep the generated file** for each required pattern:
 | 6 | `pollHeartbeat` | HTTP heartbeat polling function |
 | 7 | `panel-ready` | Ready-state panel element |
 | 8 | `panel-submitted` | Submitted-state panel element |
-| 9 | `sessionStorage` | Reload resilience (state persistence) |
+| 9 | `localStorage` | Reload resilience (state persistence with TTL) |
 
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. This is a **blocking gate** — no exceptions, no "this
@@ -201,7 +206,7 @@ page needs the heartbeat guard.
 - Heartbeat system omitted → submit button stays clickable without monitoring
 - Connection warning missing → user gets no feedback when Claude disconnects
 - Panel states missing → no visual transition on submit/reset cycle
-- sessionStorage missing → user selections lost on F5
+- localStorage missing → user selections lost on reload or tab close
 
 The patterns in `deep-knowledge/templates.md` (§ Claude Connection Heartbeat,
 § Submit Handler, § State Persistence) provide the reference implementations.
@@ -283,7 +288,8 @@ If `false` → wait and retry.
 **Polling schedule:**
 - **Initial wait**: 10 seconds after opening
 - **Poll interval**: 15 seconds (via conversation-driven checks or cron)
-- **Timeout**: 5 minutes → ask user via AskUserQuestion
+- **No timeout** — monitoring runs indefinitely until the user ends it
+  (says "fertig"/"done", closes the page, or closes Claude)
 - On each poll, also POST `/heartbeat` to keep the connection indicator green
 
 **Important:** While waiting, do NOT block the conversation. Inform the
