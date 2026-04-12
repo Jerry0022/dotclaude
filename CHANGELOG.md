@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.39.6] — 2026-04-12
+
+### Changed
+
+- **skills** — trimmed 6 hook-coupled skill description headers (~150-200 tokens saved): ship, commit, flow, repo-health, refresh-usage, self-update
+- **skills** — removed redundant trigger phrase lists and verbose wording; guards and determinism preserved
+
+### Added
+
+- **project** — added project-level `CLAUDE.md` (22 lines) for dotclaude repo development context
+
+### Fixed
+
+- **versioning** — aligned marketplace.json to 0.39.5 (was lagging behind plugin.json/README/CHANGELOG)
+
 ## [0.39.5] — 2026-04-12
 
 ### Changed

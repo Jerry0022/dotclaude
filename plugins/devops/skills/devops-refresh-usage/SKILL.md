@@ -2,10 +2,8 @@
 name: devops-refresh-usage
 version: 0.1.0
 description: >-
-  Fetch live token usage data for the completion card battery line. Supports
-  multiple backends: CLI-native (/usage), Edge CDP scraping, or graceful fallback.
-  Run silently before every completion card. Also manually: "refresh usage",
-  "wie viel hab ich verbraucht", "token budget".
+  Fetch live token usage for completion card battery line. Supports CLI-native,
+  Edge CDP, or graceful fallback. Run silently pre-card, or manually on request.
 allowed-tools: Bash(node *), Read
 ---
 

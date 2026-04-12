@@ -60,9 +60,9 @@ JSON.parse(document.getElementById('concept-decisions').textContent)
 **For heartbeat and decision reading:** Use HTTP (`curl` via Bash). No browser
 tool needed — this works entirely via the bridge server.
 
-**For page updates (Step 5c):** Use the browser tool waterfall
-(`deep-knowledge/browser-tool-strategy.md`) for JS eval. Page updates are
-optional enhancements — if no eval tool works, inform the user via chat instead.
+**For page updates (Step 5c):** Use Playwright or Preview eval tools for
+JS-based page updates. Page updates are optional enhancements — if no eval
+tool works, inform the user via chat instead.
 
 ## Why HTTP Server is Required
 
@@ -338,7 +338,7 @@ Each round appends to the same file (array of rounds), preserving full history:
 | Decisions JSON parse error | `curl /decisions` returns malformed JSON | Show raw content to user, ask to verify |
 | Empty decisions array | Parsed but `decisions.length === 0` | Ask if intentional (all defaults accepted) |
 | Tab closed by user | No submission past timeout, bridge server still alive | Ask user via AskUserQuestion |
-| JS eval broken (page updates) | Browser eval tool returns error | Expected — page updates not possible, inform user via chat |
+| JS eval broken (page updates) | `javascript_tool` returns "Cannot access chrome-extension://" | Expected — page updates not possible, inform user via chat |
 | `get_page_text` used accidentally | "page body too large" or stripped content | Use HTTP bridge endpoints instead |
 | All tools fail | Bridge server + browser tools both unavailable | Fall back to manual AskUserQuestion flow |
 
