@@ -2,13 +2,9 @@
 name: devops-repo-health
 version: 0.2.0
 description: >-
-  Analyze repository branch hygiene: find unmerged branches, stale local branches
-  with deleted remotes, orphaned worktrees, and verify all work landed in main.
-  Results are presented as an interactive concept page with filters and batch actions.
-  Use when the user wants a health check of their repo state. Triggers on:
-  "repo health", "branch cleanup", "branch check", "was liegt noch rum",
-  "unmerged branches", "git aufraumen", "branch hygiene", "repo audit".
-  Do NOT trigger automatically — only on explicit user request.
+  Analyze repository branch hygiene: unmerged branches, stale locals with deleted
+  remotes, orphaned worktrees, verify work landed in main. Results: interactive
+  concept page with filters and batch actions. Explicit user request only.
 argument-hint: "[optional: focus area — branches, worktrees, PRs]"
 allowed-tools: Bash(git *), Bash(gh *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*
 ---

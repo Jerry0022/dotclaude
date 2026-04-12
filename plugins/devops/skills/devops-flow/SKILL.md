@@ -5,10 +5,9 @@ description: >-
   Read session logs, runtime errors, and crash output to diagnose and fix the
   current issue — root-cause analysis first. Use when something is broken or
   behaving unexpectedly. Triggers on: "debug", "this is broken", "doesn't work",
-  "error", "crash", "blank screen", "warum geht das nicht", "funktioniert nicht",
-  "something's off", "it just hangs", "unexpected behavior". Also triggers when
-  the user pastes an error message or stack trace, or when post.flow.debug
-  hook detects repeated Bash failures. Do NOT trigger for general code questions.
+  "error", "crash", "warum geht das nicht", "funktioniert nicht". Also triggers
+  on pasted error/stack traces or when post.flow.debug hook detects repeated
+  Bash failures. Do NOT trigger for general code questions.
 argument-hint: "[optional: describe the symptom or paste error]"
 allowed-tools: Read, Grep, Glob, Bash(git log *), Bash(git diff *), Bash(git bisect *), Bash(npm *), Bash(node *), AskUserQuestion, mcp__plugin_devops_dotclaude-issues__*
 ---

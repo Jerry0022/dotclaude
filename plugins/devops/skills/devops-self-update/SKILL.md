@@ -2,12 +2,10 @@
 name: devops-self-update
 version: 0.3.0
 description: >-
-  Manually update the devops plugin to the latest version from GitHub.
-  Delegates to the ss.plugin.update hook for pull + cache rebuild + registry,
-  then adds changelog and verification report on top.
-  Triggers on: "update plugin", "plugin updaten", "self update",
-  "devops update", "plugin aktualisieren", "neue version installieren".
-  Do NOT trigger automatically — only on explicit user request.
+  Manually update the devops plugin to latest from GitHub. Delegates to
+  ss.plugin.update hook (pull + cache + registry), then adds changelog and
+  verification report. Triggers on: "update plugin", "plugin updaten",
+  "self update", "devops update", "neue version". Explicit user request only.
 allowed-tools: Bash(git *), Bash(node *), Read, Glob
 ---
 

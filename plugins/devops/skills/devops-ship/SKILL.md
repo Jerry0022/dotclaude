@@ -4,12 +4,10 @@ version: 0.4.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, render_completion_card,
-  then silent memory dream (consolidation).
-  Supports hierarchical merges: sub-branch → feature branch → main.
-  Use when work is complete and ready to land. Triggers on: "ship it",
-  "fertig", "merge it", "ab damit", "mach nen PR", "push and merge", "das kann rein".
-  Do NOT trigger when: user is still coding/debugging, mid-sprint, or just
-  committing without shipping.
+  then silent memory consolidation.
+  Supports hierarchical merges (sub-branch → feature → main).
+  Use when work is ready to land. Do NOT trigger during coding/debugging
+  or for commits without shipping.
 allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*
 ---
 
