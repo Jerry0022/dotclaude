@@ -20,7 +20,7 @@ Claude ──GET /decisions──→ Server     ←─GET /heartbeat─── Pa
 
 The **concept bridge server** (`scripts/concept-server.py`) acts as the
 communication hub. Both Claude and the page talk to the server via HTTP —
-no Chrome MCP JS injection needed for heartbeat or decision exchange.
+no browser tool injection needed for heartbeat or decision exchange.
 
 This is an **iterative loop**, not a one-shot. After each submission,
 Claude processes the feedback, updates the page, and monitors again.
@@ -58,22 +58,17 @@ JSON.parse(document.getElementById('concept-decisions').textContent)
 ## Tool Selection
 
 **For heartbeat and decision reading:** Use HTTP (`curl` via Bash). No browser
-tool needed — this works regardless of Chrome MCP or Playwright availability.
+tool needed — this works entirely via the bridge server.
 
-**For page updates (Step 5c):** Follow the **Browser Tool Strategy**
+**For page updates (Step 5c):** Use the browser tool waterfall
 (`deep-knowledge/browser-tool-strategy.md`) for JS eval. Page updates are
 optional enhancements — if no eval tool works, inform the user via chat instead.
 
-## Known Limitation: `file://` URLs
+## Why HTTP Server is Required
 
-Browser tools (Chrome MCP, Playwright) **cannot open or interact with `file://`
-URLs**. Chrome MCP's `navigate` tool always prepends `https://`, and Playwright
-blocks the `file:` protocol entirely. Additionally, tabs opened via `start ""
-msedge` land **outside the MCP tab group** and are invisible to monitoring.
-
-**Required workaround:** Serve concept pages via a local HTTP server (see
-SKILL.md Step 3). This makes the page accessible at `http://localhost:<port>/`
-which all browser tools can handle.
+Concept pages must be served via the bridge server (`http://localhost:<port>/`)
+rather than opened as `file://` URLs. The bridge server provides heartbeat and
+decision endpoints that the page relies on for Claude connectivity.
 
 ## Pre-Monitoring Setup
 
@@ -104,17 +99,6 @@ curl -s -X POST http://localhost:$PORT/heartbeat
 
 Store the cron job ID as `$HEARTBEAT_CRON_ID` for cleanup.
 
-### 3. Optionally establish browser tool (for page updates only)
-
-Browser tools are **not required** for heartbeat or decision reading (those
-work via HTTP). They are only needed for live page updates in Step 5c.
-
-If you want live page updates:
-1. Run the **Browser Tool Strategy waterfall** (`deep-knowledge/browser-tool-strategy.md`)
-2. Store `$BROWSER_TOOL` and `$TAB_ID` if chrome-mcp
-3. If the waterfall fails → page updates won't be live, but monitoring still
-   works fully via HTTP
-
 ### HTTP Bridge Monitoring
 
 **Heartbeat** (keeps the connection indicator green on the page):
@@ -136,8 +120,7 @@ Returns JSON. Check the `submitted` field:
 {"submitted": true, "decisions": [...], "comments": [...]}
 ```
 
-No browser eval needed. No Chrome MCP JS injection needed. No split-capability
-issues. The bridge server handles everything.
+No browser eval needed. The bridge server handles everything.
 
 **Reset after processing** — tell the bridge server to clear decisions:
 ```bash
@@ -149,7 +132,6 @@ curl -s -X POST http://localhost:$PORT/reset
 For live page updates (Step 5c — updating content after processing decisions),
 browser eval tools are still useful:
 
-- chrome-mcp: `javascript_tool("...")`
 - playwright: `browser_evaluate("...")`
 - preview: `preview_eval("...")`
 
@@ -207,10 +189,11 @@ On each poll cycle:
 2. **Check decisions**: `curl -s http://localhost:$PORT/decisions`
 3. If curl fails → bridge server may have crashed → attempt restart
 
-**Optional tab-alive check** (if Chrome MCP is available):
-- Call `tabs_context_mcp` and verify `$TAB_ID` is still in the list
-- If missing → tab closed → stop monitoring, inform user
-- If Chrome MCP is not available → skip this check (monitoring via HTTP continues)
+**Tab-alive check** (via HTTP):
+- If `curl /heartbeat` or `curl /decisions` fails with connection refused →
+  bridge server crashed → attempt restart
+- If bridge server responds but page never submits past timeout → user may
+  have closed the tab → ask via AskUserQuestion
 
 ### Page Reload Handling
 
@@ -330,7 +313,7 @@ update the browser page:
 ### Persistence
 
 Write processed decisions to:
-`{project}/.claude/devops-concept/{same-timestamp}-{same-slug}-decisions.json`
+`docs/concepts/{same-timestamp}-{same-slug}-v{same-version}-decisions.json`
 
 Each round appends to the same file (array of rounds), preserving full history:
 
@@ -354,8 +337,8 @@ Each round appends to the same file (array of rounds), preserving full history:
 | Heartbeat cron stopped | Page shows "nicht verbunden" despite server running | Send manual `curl -s -X POST /heartbeat`, re-create cron |
 | Decisions JSON parse error | `curl /decisions` returns malformed JSON | Show raw content to user, ask to verify |
 | Empty decisions array | Parsed but `decisions.length === 0` | Ask if intentional (all defaults accepted) |
-| Tab closed by user | Chrome MCP `tabs_context_mcp` shows tab missing | Stop monitoring, inform user: "Die Concept-Seite wurde geschlossen." |
-| JS eval broken (page updates) | `javascript_tool` returns "Cannot access chrome-extension://" | Expected — page updates not possible, inform user via chat |
+| Tab closed by user | No submission past timeout, bridge server still alive | Ask user via AskUserQuestion |
+| JS eval broken (page updates) | Browser eval tool returns error | Expected — page updates not possible, inform user via chat |
 | `get_page_text` used accidentally | "page body too large" or stripped content | Use HTTP bridge endpoints instead |
 | All tools fail | Bridge server + browser tools both unavailable | Fall back to manual AskUserQuestion flow |
 

@@ -13,7 +13,7 @@ description: >-
   Do NOT trigger for: simple code explanations, debugging
   (use /devops-flow), or static documentation (use /devops-readme).
 argument-hint: "[topic, analysis result, plan, or concept to visualize]"
-allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__*
+allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*
 ---
 
 # Concept
@@ -179,12 +179,35 @@ signal Claude monitors.
 
 ### File Location
 
-Write to: `{project}/.claude/devops-concept/{timestamp}-{slug}.html`
+Write to: `docs/concepts/{timestamp}-{slug}-v{version}.html`
 
-- `{timestamp}`: ISO date (`2026-04-05`)
-- `{slug}`: kebab-case summary of the topic (max 40 chars)
-- Create the directory if it doesn't exist
-- Add `.claude/devops-concept/` to `.gitignore` if not already there
+**Fixed naming pattern** (all three segments mandatory, in this order):
+
+| Segment | Format | Example |
+|---------|--------|---------|
+| `{timestamp}` | ISO date `YYYY-MM-DD` | `2026-04-12` |
+| `{slug}` | kebab-case topic summary, max 40 chars | `auth-middleware-redesign` |
+| `{version}` | Integer starting at `1`, incremented per revision of the same slug | `1` |
+
+Full example: `docs/concepts/2026-04-12-auth-middleware-redesign-v1.html`
+
+- Create the `docs/concepts/` directory if it doesn't exist
+- This directory is **git-tracked** — concepts are project artifacts meant
+  to be shared with other repo users
+- To determine the next version: glob for `docs/concepts/*-{slug}-v*.html`,
+  parse the highest existing version number, and increment by 1.
+  If no match exists, start at `v1`
+
+### Versioning vs. In-Place Update
+
+| Situation | Action | Version |
+|-----------|--------|---------|
+| Feedback loop iteration (Step 5c) | Update the **same file** in-place, refresh the existing tab | No bump — stays `v1` |
+| New concept session for the same topic (user revisits later) | Create a **new file** with incremented version | Bump → `v2`, `v3`, … |
+| Fundamental rework after feedback (user says "nochmal neu") | Create a **new file** with incremented version | Bump → next `vN` |
+
+**Rule of thumb:** within an active feedback loop, never bump the version.
+A version bump only happens when a new file is created.
 
 ### Post-Generation Validation (mandatory gate)
 
@@ -228,11 +251,10 @@ open a separate browser window. Follow the **Edge Credo**
 - Claude extension for browser interaction (computer-use only if user chose desktop takeover)
 - These rules apply regardless of execution mode (interactive, background, autonomous)
 
-### Preferred: Concept Bridge Server (HTTP-based monitoring)
+### Concept Bridge Server + Edge
 
-The **concept bridge server** (`scripts/concept-server.py`) replaces the plain
-`python -m http.server`. It serves static files AND provides HTTP endpoints for
-heartbeat and decision exchange — no Chrome MCP JS injection needed.
+The **concept bridge server** (`scripts/concept-server.py`) serves static files
+AND provides HTTP endpoints for heartbeat and decision exchange.
 
 1. Find the bridge server script:
    ```bash
@@ -257,33 +279,21 @@ heartbeat and decision exchange — no Chrome MCP JS injection needed.
    curl -s -X POST http://localhost:{port}/heartbeat
    ```
 
-5. Open via Chrome MCP (stays in the MCP tab group, visible to the user):
+5. Open in Edge (reuses the running instance, adds a tab):
+   ```bash
+   # Windows — per Edge Credo (see browser-tool-strategy.md)
+   start "" msedge "http://localhost:{port}/{filename}"
    ```
-   tabs_context_mcp(createIfEmpty: true)  → get/create tab group
-   navigate(url: "http://localhost:{port}/{filename}", tabId: $TAB_ID)
-   ```
+   On macOS: `open -a "Microsoft Edge" "http://…"`, on Linux: `microsoft-edge "http://…"`.
+
+   The empty `""` is required on Windows — without it, `cmd.exe` interprets
+   the first quoted argument as a window title.
 
 6. After monitoring ends, clean up:
    ```bash
    kill %1  # or track the PID
    ```
    Also delete the heartbeat cron via `CronDelete`.
-
-### Fallback: Direct Edge launch (not monitorable)
-
-If Chrome MCP is unavailable, fall back to direct launch. This opens in the
-user's existing Edge instance but **cannot be monitored** — use AskUserQuestion
-flow instead.
-
-```bash
-# Windows — reuses running Edge, adds tab (not a new window)
-start "" msedge "{filepath}"
-```
-
-On macOS: `open -a "Microsoft Edge" "{filepath}"`, on Linux: `microsoft-edge "{filepath}"`.
-
-The empty `""` is required on Windows — without it, `cmd.exe` interprets
-the first quoted argument as a window title.
 
 ### After opening, inform the user:
 
@@ -316,12 +326,6 @@ If `false` → wait and retry.
 - **Timeout**: 5 minutes → ask user via AskUserQuestion
 - On each poll, also POST `/heartbeat` to keep the connection indicator green
 
-**Browser tool strategy** (optional enhancement, not required):
-- If Chrome MCP or Playwright is available, it can still be used for
-  tab-alive checks and page content updates (Step 5c)
-- But heartbeat and decision reading work entirely via HTTP — no JS eval needed
-- If the browser tool waterfall fails, monitoring still works via HTTP
-
 **Important:** While waiting, do NOT block the conversation. Inform the
 user that you're monitoring and they can continue chatting. If the user
 sends a message while monitoring, pause monitoring and respond normally.
@@ -352,7 +356,9 @@ User submits → Claude reads → Claude processes → Claude updates page → U
    - For concepts: develop chosen variant, archive alternatives
    - For comparisons: proceed with selected winner
 ### 5c. Update the Page
-After processing, **update the HTML page in the browser** to reflect results:
+After processing, **update the HTML page in the browser** to reflect results.
+
+**In-place update (same version, normal case):**
 1. Reset `submitted` to `false` in `#concept-decisions`
 2. Remove `concept-submitted` class from `<body>`
 3. Re-enable the submit button
@@ -360,8 +366,31 @@ After processing, **update the HTML page in the browser** to reflect results:
    confirmation of completed actions
 5. Add a visual "Verarbeitet" indicator on processed items
 
+For JS eval, use the browser tool waterfall from
+`deep-knowledge/browser-tool-strategy.md` (Playwright → Preview).
+If no eval tool is available, inform the user to refresh the page manually.
+
 This allows the user to **review the updated state and submit again** for
 further refinement or additional decisions.
+
+**New version (version bump, e.g. after "nochmal neu"):**
+When a new version file is created while the old tab is still open:
+1. Write the new HTML file (`docs/concepts/…-v{N+1}.html`)
+2. The bridge server already serves all files in `docs/concepts/` — the new
+   file is immediately accessible at `http://localhost:{port}/{new-filename}`
+3. **Redirect the existing tab** by overwriting the old HTML file with a
+   minimal redirect page:
+   ```html
+   <!DOCTYPE html>
+   <html><head>
+     <meta http-equiv="refresh" content="0;url=http://localhost:{port}/{new-filename}">
+   </head><body>
+     <p>Neue Version: <a href="http://localhost:{port}/{new-filename}">{new-filename}</a></p>
+   </body></html>
+   ```
+   The user's tab auto-navigates to the new version within 1 second.
+4. Do NOT leave the old tab in "Entscheidungen übermittelt" state — the user
+   must never be stuck waiting on a tab that Claude is no longer monitoring
 
 ### 5d. Resume Monitoring
 Return to Step 4 (monitor for next submission). The loop continues until:
@@ -370,7 +399,7 @@ Return to Step 4 (monitor for next submission). The loop continues until:
 - There are no more decisions to make (all items processed)
 
 ### 5e. Persist
-Write a cumulative summary to `{project}/.claude/devops-concept/{same-slug}-decisions.json`
+Write a cumulative summary to `docs/concepts/{same-timestamp}-{same-slug}-v{same-version}-decisions.json`
 after each iteration (append, don't overwrite previous rounds).
 
 ## Step 6 — Completion
