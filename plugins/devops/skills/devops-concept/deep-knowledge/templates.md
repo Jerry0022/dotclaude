@@ -901,20 +901,20 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
 
 The heartbeat uses the **HTTP Bridge** — the concept bridge server
 (`scripts/concept-server.py`) exposes `/heartbeat` endpoints that both Claude
-and the page communicate through. This bypasses Chrome MCP JS injection
-entirely.
+and the page communicate through.
 
 **How it works:**
-- Claude sends `curl -s -X POST localhost:{port}/heartbeat` every 10 seconds
-  (via CronCreate or the monitoring loop)
+- Claude sends `curl -s -X POST localhost:{port}/heartbeat` every 60 seconds
+  (via CronCreate) plus on each monitoring poll cycle (~15s when active)
 - The page polls `GET /heartbeat` every 5 seconds via `fetch()`
-- If the heartbeat is older than 45 seconds (3 missed polls) or missing →
-  the submit button is disabled and a warning is shown
+- If the heartbeat is older than 90 seconds → the submit button is disabled
+  and a warning is shown (90s threshold safely covers the 60s cron interval
+  with buffer for timing jitter)
 - If the heartbeat is fresh → submit is enabled, warning hidden
 
 ```javascript
 // --- Claude Connection Heartbeat (HTTP Bridge) ---
-const HEARTBEAT_STALE_MS = 45000; // 3 missed polls = disconnected
+const HEARTBEAT_STALE_MS = 90000; // 90s — safely covers 60s cron interval + buffer
 let _lastHeartbeatTs = 0;
 
 async function pollHeartbeat() {

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.39.5] — 2026-04-12
+
+### Changed
+
+- **devops-concept** — concept files now saved to `docs/concepts/` (git-tracked) instead of `.claude/devops-concept/`
+- **devops-concept** — fixed naming pattern: `{timestamp}-{slug}-v{version}.html` with auto-versioning
+- **devops-concept** — clear versioning vs. in-place update rules (feedback loop = same file, new session = version bump)
+- **devops-concept** — tab redirect via `meta http-equiv="refresh"` on version bump
+- **devops-concept** — removed direct Chrome MCP references, uses global browser-tool-strategy waterfall
+
+### Fixed
+
+- **devops-concept** — heartbeat flicker: `HEARTBEAT_STALE_MS` raised from 45s to 90s (safely covers 60s cron interval)
+- **devops-concept** — corrected heartbeat docs: cron fires every 60s, not 10s
+
 ## [0.39.4] — 2026-04-12
 
 ### Added
