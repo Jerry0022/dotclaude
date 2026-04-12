@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.39.9] — 2026-04-12
+
+### Fixed
+
+- **devops-agents** — removed automatic `/devops-ship` from agent orchestration; agents now only commit and push, shipping is the user's explicit decision
+
 ## [0.39.8] — 2026-04-12
 
 ### Fixed
