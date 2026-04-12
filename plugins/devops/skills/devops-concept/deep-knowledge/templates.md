@@ -34,6 +34,21 @@ starting points and inspiration — deviate freely when the content calls for it
     <aside class="concept-decision-panel">
       <h3>Entscheidungen</h3>
 
+      <!-- Variant Navigation / TOC — each entry is an anchor link -->
+      <nav class="variant-nav" id="variant-nav">
+        <!-- Auto-populated: one entry per variant. Example: -->
+        <!--
+        <a href="#variant-a" class="variant-nav-item" data-variant="variant-a">
+          <span class="variant-nav-label">A Orbital Ring</span>
+          <span class="variant-nav-state">Miteinbeziehen</span>
+        </a>
+        <a href="#variant-b" class="variant-nav-item" data-variant="variant-b">
+          <span class="variant-nav-label">B Hexagonal</span>
+          <span class="variant-nav-state">Miteinbeziehen</span>
+        </a>
+        -->
+      </nav>
+
       <!-- Connection warning — shown when Claude heartbeat is stale -->
       <div id="connection-warning" class="panel-warning" style="display: none;">
         <span class="warning-icon">⚠</span>
@@ -69,7 +84,11 @@ starting points and inspiration — deviate freely when the content calls for it
 </html>
 ```
 
-### Decision Panel CSS
+### Layout Modes
+
+#### Sidebar (default)
+
+Content left (~80%), decision panel right (~20%). Best for most concepts.
 
 ```css
 .concept-layout {
@@ -106,6 +125,185 @@ starting points and inspiration — deviate freely when the content calls for it
     border-top: 1px solid var(--border-color);
   }
 }
+```
+
+#### Fullscreen + Overlay
+
+Content fills 100% of the viewport. Decision panel slides in from the right
+via a floating action button. Best for visual prototypes, mockups, previews,
+or any content that needs maximum display area.
+
+```html
+<div class="concept-layout fullscreen">
+  <div class="concept-content">
+    <!-- Full-width content: mockups, previews, diagrams -->
+  </div>
+
+  <!-- Floating toggle button -->
+  <button id="panel-toggle" class="panel-fab" aria-label="Entscheidungen öffnen">
+    <span class="fab-icon">☰</span>
+  </button>
+
+  <!-- Slide-in overlay panel -->
+  <aside class="concept-decision-panel overlay" id="decision-panel">
+    <button id="panel-close" class="panel-close-btn" aria-label="Schliessen">✕</button>
+    <h3>Entscheidungen</h3>
+    <nav class="variant-nav" id="variant-nav"><!-- ... --></nav>
+    <!-- rest of panel content -->
+  </aside>
+  <div class="panel-backdrop" id="panel-backdrop"></div>
+</div>
+```
+
+```css
+.concept-layout.fullscreen .concept-content {
+  width: 100%;
+  padding: 2rem;
+}
+.concept-layout.fullscreen .concept-decision-panel {
+  display: none;  /* hidden by default */
+}
+
+/* Floating action button */
+.panel-fab {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-color, #58a6ff);
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  z-index: 100;
+  transition: transform 0.2s, opacity 0.2s;
+}
+.panel-fab:hover { transform: scale(1.1); }
+.panel-fab.hidden { opacity: 0; pointer-events: none; }
+
+/* Slide-in panel overlay */
+.concept-decision-panel.overlay {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  right: -400px;
+  width: 360px;
+  max-width: 90vw;
+  height: 100vh;
+  padding: 1.5rem;
+  background: var(--panel-bg, #161b22);
+  border-left: 1px solid var(--border-color, #30363d);
+  z-index: 200;
+  overflow-y: auto;
+  transition: right 0.3s ease;
+}
+.concept-decision-panel.overlay.open {
+  right: 0;
+}
+.panel-close-btn {
+  align-self: flex-end;
+  background: none;
+  border: none;
+  color: var(--text-color, #c9d1d9);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+/* Backdrop */
+.panel-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 150;
+}
+.panel-backdrop.visible {
+  display: block;
+}
+```
+
+```javascript
+// --- Fullscreen Overlay Panel ---
+const panelToggle = document.getElementById('panel-toggle');
+const panelClose = document.getElementById('panel-close');
+const panel = document.getElementById('decision-panel');
+const backdrop = document.getElementById('panel-backdrop');
+
+function openPanel() {
+  panel.classList.add('open');
+  backdrop.classList.add('visible');
+  panelToggle.classList.add('hidden');
+}
+function closePanel() {
+  panel.classList.remove('open');
+  backdrop.classList.remove('visible');
+  panelToggle.classList.remove('hidden');
+}
+
+if (panelToggle) panelToggle.addEventListener('click', openPanel);
+if (panelClose) panelClose.addEventListener('click', closePanel);
+if (backdrop) backdrop.addEventListener('click', closePanel);
+
+// Close panel on variant nav click (scroll to section)
+document.querySelectorAll('.variant-nav-item').forEach(link => {
+  link.addEventListener('click', () => {
+    closePanel();
+    // small delay so panel closes before scroll
+    setTimeout(() => {
+      const target = document.querySelector(link.getAttribute('href'));
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
+  });
+});
+```
+
+### Variant Navigation CSS (Decision Panel as TOC)
+
+The decision panel doubles as a table-of-contents. Each variant gets a
+clickable nav entry that scrolls to it and shows the current evaluation state.
+
+```css
+.variant-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1rem;
+}
+.variant-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--text-color, #c9d1d9);
+  font-size: 0.9rem;
+  transition: background 0.15s;
+  cursor: pointer;
+}
+.variant-nav-item:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
+.variant-nav-state {
+  font-size: 0.8rem;
+  color: var(--accent-color, #58a6ff);
+  white-space: nowrap;
+}
+.variant-nav-state.state-discard { color: var(--danger-color, #f85149); }
+.variant-nav-state.state-only { color: var(--success-color, #3fb950); }
+```
+
+**Variant sections need matching `id` attributes:**
+```html
+<section id="variant-a" class="variant-card">...</section>
+<section id="variant-b" class="variant-card">...</section>
 ```
 
 ### Decision Panel State CSS
@@ -301,16 +499,80 @@ Every variant MUST include a tri-state selector:
 ```html
 <div class="variant-evaluation" data-decision="variant-a" data-label="Variant A">
   <div class="tri-state-group">
-    <label><input type="radio" name="eval-variant-a" value="discard"> Verwerfen</label>
-    <label><input type="radio" name="eval-variant-a" value="include" checked> Miteinbeziehen</label>
-    <label><input type="radio" name="eval-variant-a" value="only"> Exakt diese Variante</label>
+    <label class="tri-state-option">
+      <input type="radio" name="eval-variant-a" value="discard">
+      <span class="tri-state-label">Verwerfen</span>
+      <span class="tri-state-hint feedback">Feedback</span>
+    </label>
+    <label class="tri-state-option">
+      <input type="radio" name="eval-variant-a" value="include" checked>
+      <span class="tri-state-label">Miteinbeziehen</span>
+      <span class="tri-state-hint feedback">Feedback</span>
+    </label>
+    <label class="tri-state-option">
+      <input type="radio" name="eval-variant-a" value="only">
+      <span class="tri-state-label">Exakt diese</span>
+      <span class="tri-state-hint action">Claude setzt um</span>
+    </label>
   </div>
 </div>
 ```
 
+```css
+.tri-state-group {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.tri-state-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  text-align: center;
+  border-right: 1px solid var(--border-color, #30363d);
+  transition: background 0.15s;
+}
+.tri-state-option:last-child { border-right: none; }
+.tri-state-option:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 8%, transparent);
+}
+.tri-state-option input { display: none; }
+.tri-state-option input:checked ~ .tri-state-label { font-weight: 600; }
+.tri-state-option input:checked ~ .tri-state-hint { opacity: 1; }
+.tri-state-label { font-size: 0.9rem; }
+.tri-state-hint {
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  opacity: 0.7;
+}
+.tri-state-hint.feedback { color: var(--accent-color, #58a6ff); }
+.tri-state-hint.action { color: var(--warning-color, #d29922); }
+
+/* Active state backgrounds */
+.tri-state-option:has(input[value="include"]:checked) {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent);
+}
+.tri-state-option:has(input[value="discard"]:checked) {
+  background: color-mix(in srgb, var(--text-secondary, #6e7681) 15%, transparent);
+}
+.tri-state-option:has(input[value="only"]:checked) {
+  background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent);
+}
+```
+
+**Indicator rules (strict):**
+- **Verwerfen** and **Miteinbeziehen**: show "(Feedback)" — passive input
+- **Exakt diese** only: show "Claude setzt um" — this is the only option
+  that triggers direct action (proceed with this variant, discard all others)
+
 **Behavior:**
 - Default: "Miteinbeziehen" (all variants considered)
-- "Exakt diese Variante": auto-sets ALL other variants to "Verwerfen",
+- "Exakt diese": auto-sets ALL other variants to "Verwerfen",
   shows visual feedback + undo button per auto-changed variant
 - "Verwerfen": grays out the variant card visually (but keeps it accessible)
 
@@ -538,6 +800,45 @@ function collectDecisions() {
   return { submitted: true, decisions, comments };
 }
 ```
+
+### Variant Navigation JS
+
+Smooth-scrolls to the variant section and keeps the evaluation state label
+in sync with the tri-state radio selection.
+
+```javascript
+// --- Variant Navigation (Decision Panel as TOC) ---
+function updateVariantNav() {
+  document.querySelectorAll('.variant-nav-item').forEach(link => {
+    const variantId = link.dataset.variant;
+    const checked = document.querySelector(`input[name="eval-${variantId}"]:checked`);
+    const currentState = checked ? checked.value : 'include';
+    const stateEl = link.querySelector('.variant-nav-state');
+    if (stateEl) {
+      const labels = { include: 'Miteinbeziehen', discard: 'Verwerfen', only: 'Exakt diese' };
+      stateEl.textContent = labels[currentState] || currentState;
+      stateEl.className = 'variant-nav-state state-' + currentState;
+    }
+  });
+}
+
+// Smooth scroll on nav click
+document.querySelectorAll('.variant-nav-item').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const target = document.querySelector(link.getAttribute('href'));
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+
+// Keep nav state in sync
+document.addEventListener('change', updateVariantNav);
+document.addEventListener('DOMContentLoaded', updateVariantNav);
+```
+
+**Important:** The `data-variant` attribute on each nav item must match the
+radio button name pattern `eval-{variant-id}`. The variant section must have
+the matching `id` attribute for the anchor link to work.
 
 ### Submit Handler
 ```javascript
