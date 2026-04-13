@@ -1,5 +1,64 @@
 # Changelog
 
+## [0.40.2] — 2026-04-12
+
+### Added
+
+- **hooks** — `ss.knowledge.index.js`: SessionStart hook injects deep-knowledge INDEX.md into context (~500 tokens) so Claude knows all reference docs before message #1
+- **hooks** — `prompt.knowledge.dispatch.js`: UserPromptSubmit hook matches prompt keywords against topic map and injects relevant deep-knowledge files on-demand (once per session per topic, 8KB byte budget, specificity-sorted)
+- **hooks** — post-update notice in `ss.plugin.update.js` signals when deep-knowledge index may have changed
+
+## [0.40.1] — 2026-04-12
+
+### Fixed
+
+- **codex-integration** — skills (ship, flow, deep-research) and agents (QA, research) now load `codex-integration.md` at startup instead of relying on buried mid-flow references that were silently skipped
+
+## [0.40.0] — 2026-04-12
+
+### Added
+
+- **hooks/ss.git.sync** — session-start hook registers a CronCreate job (every 10 min) to fetch remote main and merge parent chain into the current branch; keeps worktrees in sync even without user prompts
+- **scripts/git-sync** — extracted standalone sync logic (fetch, parent-chain merge, auto-resolve with `--ours`) shared by cron and prompt hook
+
+### Changed
+
+- **hooks/prompt.git.sync** — delegates to shared `scripts/git-sync.js` instead of inlining the sync logic; throttle (15 min) preserved as overlap guard
+
+### Fixed
+
+- **versioning** — aligned marketplace.json to 0.39.9 (was lagging at 0.39.8)
+
+## [0.39.9] — 2026-04-12
+
+### Fixed
+
+- **devops-agents** — removed automatic `/devops-ship` from agent orchestration; agents now only commit and push, shipping is the user's explicit decision
+
+## [0.39.8] — 2026-04-12
+
+### Fixed
+
+- **mcp/completion** — fixed timeout mismatch in CDP usage scraper: MCP gave 30s but scraper needs up to 47s for Edge restart + page polling (30s→60s for escalation, 30s→45s for final scrape)
+- **mcp/completion** — stepwise CDP escalation: auto-start failure now falls through to activate-cdp instead of giving up
+- **mcp/completion** — added retry after scrape failure (3s delay, one retry) for Edge needing extra startup time
+- **mcp/completion** — stopped premature deletion of `usage-live.json` before scrape attempt; file now preserved as last-resort fallback
+- **mcp/completion** — specific error reasons in usage data response (not logged in, parse error, Edge restart failed, etc.) instead of generic "unavailable"
+- **mcp/completion** — stale data indicator in completion card meter when showing cached usage data
+- **versioning** — aligned marketplace.json to 0.39.7 (was lagging behind plugin.json/README/CHANGELOG)
+
+## [0.39.7] — 2026-04-12
+
+### Changed
+
+- **devops-concept** — state persistence upgraded from `sessionStorage` to `localStorage` with 24h TTL (survives tab close, browser restart, accidental reloads)
+- **devops-concept** — submit button stays enabled when Claude is disconnected (warning banner is sufficient)
+- **devops-concept** — removed 5-minute monitoring timeout and 20-poll limit; concept pages now run indefinitely until user ends session
+
+### Added
+
+- **devops-concept** — offline submit queue: decisions cached in `localStorage` when bridge server is unreachable, auto-delivered on reconnect via `retryPendingSubmission()`
+
 ## [0.39.6] — 2026-04-12
 
 ### Changed

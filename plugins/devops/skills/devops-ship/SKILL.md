@@ -53,6 +53,8 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 
 Project extensions define: quality gate commands, deploy targets, version files, CI specifics.
 
+4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill has a **mandatory** Codex review gate (§1 in that doc). Detect Codex availability now so Step 2 can act on it.
+
 ## Step 1 — Pre-Flight Safety Gate
 
 Call `ship_preflight` MCP tool (dotclaude-ship server).

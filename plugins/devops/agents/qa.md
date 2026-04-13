@@ -14,6 +14,10 @@ tools: ["Bash", "Read", "Glob", "Grep", "preview_screenshot", "preview_snapshot"
 
 Verify that changes work correctly. Run in parallel with implementation.
 
+## Context
+
+Before starting, read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` §4 (QA Agent). If codex-plugin-cc is installed, Codex adversarial review is **mandatory** for complex changes — not optional.
+
 ## Responsibilities
 
 - Run unit tests and report results

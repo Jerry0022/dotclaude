@@ -14,6 +14,10 @@ tools: ["WebSearch", "WebFetch", "Read", "Grep", "Glob"]
 
 Deep-dive into a topic and return structured findings.
 
+## Context
+
+Before starting, read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` §5 (Research Agent). If codex-plugin-cc is installed, parallel delegation to Codex is **mandatory** for 3+ research angles — not optional.
+
 ## Responsibilities
 
 - Break topic into 3-5 research angles

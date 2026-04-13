@@ -696,17 +696,20 @@ concept variants (see above): Verwerfen / Miteinbeziehen / Exakt diese.
 
 ### State Persistence
 
-Interactive element state MUST survive page reloads via `sessionStorage`.
-This prevents the user from losing their selections when they press F5.
+Interactive element state MUST survive page reloads AND accidental tab closes
+via `localStorage` with a time-to-live (TTL). This prevents the user from
+losing selections, comments, and ratings.
 
 **Storage key:** `concept-state-{slug}` (derived from the page's filename slug)
+**TTL:** 24 hours — auto-clears stale state from previous days
 
 ```javascript
-// --- State Persistence ---
+// --- State Persistence (localStorage + TTL) ---
 const STORAGE_KEY = 'concept-state-' + location.pathname.split('/').pop().replace('.html', '');
+const STATE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function saveState() {
-  const state = {};
+  const state = { _savedAt: Date.now() };
   // Save toggles, checkboxes, radios
   document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
     if (el.name || el.id) state['input:' + (el.name || el.id) + ':' + el.value] = el.checked;
@@ -725,18 +728,24 @@ function saveState() {
   });
   // Save theme preference
   state['theme'] = document.documentElement.getAttribute('data-theme');
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 function restoreState() {
-  const raw = sessionStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return;
   try {
     const state = JSON.parse(raw);
+    // TTL check — discard state older than 24 hours
+    if (state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) {
+      localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
     // Restore theme first (prevents flash)
     if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
     // Restore inputs
     Object.entries(state).forEach(([key, value]) => {
+      if (key.startsWith('_')) return; // skip metadata keys
       const [type, ...rest] = key.split(':');
       if (type === 'input') {
         const [name, val] = [rest.slice(0, -1).join(':'), rest[rest.length - 1]];
@@ -766,8 +775,9 @@ document.addEventListener('input', saveState);
 ```
 
 **Rules:**
-- Use `sessionStorage` (not `localStorage`) — state is per-tab, per-session,
-  and auto-clears when the tab is closed. No stale state across sessions.
+- Use `localStorage` with a 24-hour TTL — survives tab close, browser restart,
+  and accidental reloads. Stale state auto-clears after 24h so old concept
+  sessions don't pollute new ones
 - Save on every `change` and `input` event — not just on submit
 - Restore runs on `DOMContentLoaded` — before the user sees the page
 - The `concept-submitted` class is deliberately NOT persisted — after a reload
@@ -848,6 +858,10 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
   container.textContent = JSON.stringify(data);
   document.body.classList.add('concept-submitted');
 
+  // Switch panel to "submitted" state immediately (optimistic UI)
+  document.getElementById('panel-ready').style.display = 'none';
+  document.getElementById('panel-submitted').style.display = 'block';
+
   // POST decisions to bridge server — Claude reads via GET /decisions
   try {
     await fetch('/decisions', {
@@ -856,16 +870,29 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
       body: JSON.stringify(data)
     });
   } catch (e) {
-    // Fallback: decisions are still in the DOM for JS eval reading
+    // Bridge server unreachable — cache decisions for retry
+    localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data));
   }
 
-  // Switch panel to "submitted" state
-  document.getElementById('panel-ready').style.display = 'none';
-  document.getElementById('panel-submitted').style.display = 'block';
-
-  // Clear sessionStorage submitted flag so reload restores "ready" state
   saveState();
 });
+
+// --- Offline Submit Queue ---
+// If the user submitted while disconnected, retry delivery when the bridge
+// server comes back. Checked after each successful heartbeat poll.
+async function retryPendingSubmission() {
+  const pendingKey = STORAGE_KEY + '-pending';
+  const pending = localStorage.getItem(pendingKey);
+  if (!pending) return;
+  try {
+    const res = await fetch('/decisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: pending
+    });
+    if (res.ok) localStorage.removeItem(pendingKey);
+  } catch (e) { /* still offline — will retry next heartbeat cycle */ }
+}
 ```
 
 ### Panel State Reset
@@ -939,9 +966,14 @@ function checkClaudeConnection() {
   if (isConnected) {
     if (warning) warning.style.display = 'none';
     if (btn) btn.disabled = false;
+    // Retry any pending offline submission now that we're connected
+    retryPendingSubmission();
   } else {
     if (warning) warning.style.display = 'flex';
-    if (btn) btn.disabled = true;
+    // Submit button stays ENABLED even when disconnected — decisions are
+    // cached in localStorage and auto-delivered when Claude reconnects.
+    // The warning banner is enough to inform the user.
+    if (btn) btn.disabled = false;
   }
 }
 

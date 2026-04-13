@@ -29,6 +29,8 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 Project extensions define framework-specific log paths (e.g., Electron logs in
 `%APPDATA%/<app>/logs/`, Angular dev server console, etc.).
 
+4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill auto-invokes `/codex:rescue` on unclear root cause (§2 in that doc). Detect Codex availability now so Step 6 can act on it.
+
 ## Step 1 — Triage: what broke?
 
 If `$ARGUMENTS` is empty or vague, ask ONE focused question via `AskUserQuestion`:
