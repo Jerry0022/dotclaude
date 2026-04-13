@@ -1,6 +1,6 @@
 ---
 name: devops-repo-health
-version: 0.2.0
+version: 0.3.0
 description: >-
   Analyze repository branch hygiene: unmerged branches, stale locals with deleted
   remotes, orphaned worktrees, verify work landed in main. Results: interactive
@@ -56,6 +56,15 @@ Run in parallel:
 
 Build the **protected branch set** from worktree output. Every branch in this set
 is excluded from ALL subsequent steps — classification, recommendations, AND cleanup.
+
+4. **Analyze each active worktree** for content status:
+   - `git -C <worktree_path> status --porcelain` — uncommitted / untracked files
+   - `git log --oneline origin/main..<branch>` — commits not yet in main
+   - Classify each worktree:
+     - `has-changes` — uncommitted files OR untracked files OR commits ahead of main
+     - `clean` — no local modifications AND no commits ahead
+   - For `has-changes`: collect counts (modified, added, untracked files) and
+     commit-ahead count for display
 
 ## Step 3 — Branch Classification
 
@@ -132,16 +141,36 @@ the concept skill for full HTML/CSS/JS requirements).
   Last fetch timestamp
 
 [Summary KPI Cards]
-  Total branches | Safe to delete | Needs investigation | Active worktrees | Main sync status
+  Total branches | Safe to delete | Needs investigation | Active worktrees (X with changes / Y clean) | Main sync status
+
+[Active Worktrees Section — DEDICATED, separate from branch list]
+  Only shown if worktrees exist. NOT part of the branch list below.
+  Per worktree card:
+    Branch name (monospace) + worktree path (smaller, muted)
+    Status badge:
+      - "Mit Aenderungen" (amber badge) if has-changes
+      - "Sauber" (gray badge) if clean
+    If has-changes:
+      File summary: "X geaendert, Y ungetrackt" (compact inline)
+      Commits ahead: "Z Commits vor main" (if any)
+      Visual: info icon, no action controls, clearly labeled read-only
+      HARD RULE: NO delete, discard, reset, or cleanup options whatsoever
+    If clean:
+      "Keine lokalen Aenderungen"
+      Optional: "Worktree entfernen" checkbox (UNCHECKED by default)
+      Tooltip on checkbox — see Tooltip section below
+  Card styling: subtle border, lower visual weight than branch cards,
+  distinct background tint (e.g. blue-gray) to avoid confusion with branches
 
 [Filter Bar]
-  Category toggles: [Sicher loeschbar] [Untersuchen] [Worktrees] [Remote]
+  Category toggles: [Sicher loeschbar] [Untersuchen] [Remote]
+  (NO worktree toggle — worktrees have their own section above)
   Select all / Deselect all buttons (apply to visible items only)
 
-[Branch List — filterable]
+[Branch List — filterable, excludes worktree branches]
   Per branch card:
     Branch name (monospace, prominent)
-    Category badge (color-coded: green=safe, yellow=investigate, blue=worktree)
+    Category badge (color-coded: green=safe, yellow=investigate)
     PR reference (if exists): #123 — title
     Merge status: merged / squash-merged / unmerged / no PR
     Last commit: hash + message + relative date
@@ -150,12 +179,8 @@ the concept skill for full HTML/CSS/JS requirements).
 
     [Action controls — only for safe-delete and investigate categories]:
       Checkbox: "Loeschen" (pre-checked for safe-delete, unchecked for investigate)
+      Tooltip on checkbox — see Tooltip section below
       Optional comment field (collapsed by default, expandable)
-
-    [Worktree cards — info only]:
-      Worktree path shown
-      No action controls
-      Visual distinction (muted, no checkbox)
 
 [Main Sync Section]
   Current status: up to date / X commits behind
@@ -165,9 +190,28 @@ the concept skill for full HTML/CSS/JS requirements).
   Summary: "X Branches zum Loeschen ausgewaehlt"
   Live counter updates as checkboxes change
   Grouped summary: Y local + Z remote branches
-  Checkbox: "Remote-Branches auch loeschen" (default: checked)
-  Checkbox: "Worktrees prunen" (default: checked)
+  Checkbox: "Remote-Branches auch loeschen" (default: checked) + tooltip
+  Checkbox: "Worktrees prunen" (default: checked) + tooltip
   Submit button: "Aufraeumen starten"
+
+### Tooltip Explanations
+
+Every action control and global option MUST have an explanatory tooltip
+(HTML `title` attribute) so the user understands the effect before acting.
+
+| Element | Tooltip text |
+|---------|-------------|
+| "Loeschen" checkbox (safe-delete) | "Branch lokal loeschen. Arbeit ist bereits in main (merged/squash-merged)." |
+| "Loeschen" checkbox (investigate) | "Branch lokal loeschen. ACHTUNG: Aenderungen sind moeglicherweise NICHT in main!" |
+| "Remote-Branches auch loeschen" | "Loescht die Branches auch auf GitHub/origin. Betrifft nur die oben ausgewaehlten Branches." |
+| "Worktrees prunen" | "Entfernt verwaiste Worktree-Referenzen (bereits geloeschte Verzeichnisse). Aktive Worktrees werden NICHT beruehrt." |
+| "Main synchronisieren" | "Holt die neuesten Aenderungen von origin/main und aktualisiert den lokalen main-Branch." |
+| "Worktree entfernen" (clean only) | "Entfernt den Worktree und seinen Branch. Nur moeglich bei Worktrees ohne lokale Aenderungen." |
+| "Select all" button | "Alle sichtbaren Branches zum Loeschen markieren." |
+| "Deselect all" button | "Alle sichtbaren Branches abwaehlen." |
+
+Implement tooltips as `title` attributes on the label/checkbox wrapper.
+Keep text concise — one sentence max, no jargon.
 ```
 
 ### Filter Behavior
@@ -210,6 +254,26 @@ the concept skill for full HTML/CSS/JS requirements).
       "action": "skip"
     }
   ],
+  "worktrees": [
+    {
+      "branch": "claude/brave-pike",
+      "path": "/repo/.claude/worktrees/brave-pike",
+      "status": "has-changes",
+      "modified": 3,
+      "untracked": 1,
+      "commits_ahead": 2,
+      "action": "keep"
+    },
+    {
+      "branch": "claude/old-session",
+      "path": "/repo/.claude/worktrees/old-session",
+      "status": "clean",
+      "modified": 0,
+      "untracked": 0,
+      "commits_ahead": 0,
+      "action": "remove"
+    }
+  ],
   "options": {
     "delete_remote": true,
     "prune_worktrees": true,
@@ -231,7 +295,11 @@ Write to: `{project}/.claude/devops-concept/{date}-repo-health.html`
 - Category badges with distinct colors: green (safe), amber (investigate),
   blue (worktree), purple (remote-only)
 - Pre-check "Loeschen" for safe-delete branches to reduce clicks
-- Worktree cards are visually muted (lower opacity, no checkbox, info icon)
+- Worktree section is visually distinct from branch list (different background
+  tint, dedicated header, never mixed into the branch cards)
+- Worktrees with changes: amber badge, file summary, NO action controls at all
+- Worktrees without changes: gray badge, optional remove checkbox (unchecked)
+- Every action option has a `title` tooltip — see Tooltip Explanations table
 - "Remote-Branches auch loeschen" as a global toggle in the decision panel
   (not per-branch) — applies to all selected branches that have a remote
 - Smooth expand/collapse for comment fields
@@ -288,6 +356,23 @@ When the user submits via the concept page:
   the page was generated.
 - **Never push --delete a remote branch** that is attached to a local worktree.
 - **Log every action** with branch name and result (deleted / skipped / error).
+
+### Worktree Removal Safety
+
+Worktree removal (action `"remove"` in the decisions JSON) is only allowed
+for worktrees classified as `clean` in Step 2. Enforce these rules:
+
+1. **Re-check before removal:** Run `git -C <worktree_path> status --porcelain`
+   again immediately before acting. If ANY output → SKIP with warning:
+   "Worktree hat inzwischen Aenderungen — Entfernung abgebrochen."
+2. **Never force-remove:** Use `git worktree remove <path>` (without `--force`).
+   If it fails, report the error — do NOT retry with `--force`.
+3. **Never discard changes:** If a worktree has `status: has-changes`, the UI
+   must NOT render any action controls (no checkbox, no button, no option).
+   This is enforced in the HTML generation, not just in execution.
+4. **Branch cleanup after removal:** After successfully removing a clean
+   worktree, the associated branch can be deleted locally. But check that
+   the branch is not the current branch in the main repo first.
 
 ## Rules
 
