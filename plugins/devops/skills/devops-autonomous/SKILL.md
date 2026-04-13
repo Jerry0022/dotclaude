@@ -251,9 +251,13 @@ If during autonomous execution a permission is needed that wasn't primed in Step
 
 ### Strategy
 
-- **Simple**: work directly, no sub-agents
-- **Medium**: 2-3 parallel agents for independent domains
-- **Complex**: use devops agent roster (core, frontend, ai, qa, designer)
+Select agents and execute waves per `deep-knowledge/agent-orchestration.md`:
+- § Agent Selection for roster, criteria, and complexity tiers (Simple/Medium/Complex)
+- § Wave Execution for spawning mechanics, prompt template, and branch strategy
+- § Single-Agent Shortcut when only one domain is involved
+
+All agents use the **Autonomous** interaction directive (no AskUserQuestion).
+Collaboration protocol (handoffs, merge order): `deep-knowledge/agent-collaboration.md`.
 
 ### Live Testing (implement mode only)
 
