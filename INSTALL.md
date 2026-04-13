@@ -77,12 +77,8 @@ Then start a new session and run `/codex:setup` to configure authentication.
 
 | Skill | Purpose |
 |---|---|
-| `/codex:review` | Read-only code review against diffs |
-| `/codex:adversarial-review` | Devil's advocate review — challenges design trade-offs |
-| `/codex:rescue` | Delegate investigation or fix tasks to Codex |
-| `/codex:status` | Monitor running Codex jobs |
-| `/codex:result` | Retrieve completed job output |
-| `/codex:cancel` | Cancel active Codex tasks |
+| `/codex:rescue` | Delegate investigation, review, or fix tasks to Codex |
+| `/codex:setup` | Check Codex CLI readiness and configure review gate |
 
 ### How it works with devops
 
@@ -91,9 +87,8 @@ No extra configuration needed — install both and all skills are available.
 
 Typical combined workflows:
 
-- **Ship with review:** `/codex:review` → check feedback → `/devops-ship`
+- **Ship with review:** `/codex:rescue` for pre-ship code review → `/devops-ship`
 - **Delegate investigation:** `/codex:rescue` as alternative to `/devops-deep-research`
-- **Adversarial QA:** `/codex:adversarial-review` alongside the QA agent
 
 ### Troubleshooting
 
