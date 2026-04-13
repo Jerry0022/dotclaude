@@ -1,6 +1,6 @@
 ---
 name: devops-agents
-version: 0.3.0
+version: 0.4.0
 description: >-
   Evaluate which agents are useful for a task and orchestrate their parallel or
   sequential execution. Use when the user explicitly wants orchestrated agent
@@ -11,7 +11,7 @@ description: >-
   Do NOT trigger for: simple single-file edits, quick fixes, explanations,
   or research-only tasks (use /devops-deep-research).
 argument-hint: "[task description or goal]"
-allowed-tools: Agent, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*
+allowed-tools: Agent, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_list
 ---
 
 # Orchestrate
@@ -103,6 +103,9 @@ Collaboration protocol (handoffs, merge order, shipping): `deep-knowledge/agent-
 - **Interactive** (`$EXEC_MODE`): Use interaction directive "Interactive" from the
   orchestration doc. Spawn in foreground. Present interim results after each wave
   with inline analysis text.
+
+QA Wave testing protocol and single-agent shortcut: see `deep-knowledge/agent-orchestration.md`
+§ QA Wave — Testing Protocol and § Single-Agent Shortcut.
 
 ## Step 6 — Synthesis
 

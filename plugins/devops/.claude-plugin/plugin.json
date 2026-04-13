@@ -1,6 +1,6 @@
 {
   "name": "devops",
-  "version": "0.40.5",
+  "version": "0.40.7",
   "description": "Complete DevOps automation for Claude Code: hooks, skills, templates, and git hygiene.",
   "author": {
     "name": "Jerry0022",

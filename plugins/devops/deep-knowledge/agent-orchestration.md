@@ -15,7 +15,7 @@ Select agents based on domains touched, complexity, and risk:
 | **windows** | Platform-specific (system tray, native APIs) | 2 |
 | **ai** | AI/ML integration, embeddings, prompts | 2 |
 | **designer** | UX/UI decisions, design system, specs | 0 or 2 |
-| **qa** | Test, verify, screenshot | 3 |
+| **qa** | Unit tests, build check, browser-based visual verification | 3 |
 | **po** | Requirements validation, trade-off review | 4 |
 | **gamer** | End-user/player perspective | 3 or 4 |
 
@@ -77,7 +77,52 @@ If only 1 agent is selected (e.g., just research or just qa):
 - Autonomous/background: `run_in_background: true`
 - Interactive: foreground with inline questions
 
-### Branch Strategy
+## QA Wave — Testing Protocol
+
+The QA agent (Wave 3) MUST follow these testing rules. Include ALL applicable
+instructions in the QA agent prompt.
+
+**1. Unit/Integration Tests**
+Run relevant test suites via Bash (`npm test`, `npm run test:unit`, etc.).
+Target specific test files for changed modules — see `deep-knowledge/test-strategy.md`.
+
+**2. Build Verification**
+Run the build command (`npm run build` or equivalent) to verify compilation succeeds.
+
+**3. Browser-Based Visual Verification (UI projects)**
+For projects with a UI (web apps, Electron, etc.):
+- **Orchestrator** (before spawning QA): probe the browser tool waterfall from
+  `deep-knowledge/browser-tool-strategy.md` (Chrome MCP → Playwright → Preview).
+  Set `$BROWSER_TOOL` to the first responder. If Preview is selected, start a
+  server via `preview_start` and capture `$SERVER_ID`.
+- **QA agent** uses whichever tool the orchestrator selected:
+  - Chrome MCP: `computer` (screenshot), `read_page`
+  - Playwright: `browser_take_screenshot`, `browser_snapshot`
+  - Preview: `preview_screenshot`, `preview_snapshot` (pass `serverId`)
+- All three are DOM/protocol-based — no desktop takeover, no user interruption.
+- Skip visual verification for non-UI changes (config, scripts, docs).
+
+**4. Computer-Use Restriction — HARD RULE**
+**NEVER** use computer-use (`mcp__computer-use__*`) for testing unless the user
+**explicitly** requested desktop takeover (e.g., "Desktop übernehmen", "use
+computer-use", "nimm den Desktop", "desktop testing").
+
+Browser-based testing via the waterfall tools is always allowed and runs in the
+background. Computer-use is the **only** testing method that requires explicit
+user opt-in.
+
+**QA Agent Prompt — Append These Instructions:**
+```
+Test the changes:
+1. Run unit/integration tests for changed modules
+2. Run the build to verify it succeeds
+3. [If UI project] Use {$BROWSER_TOOL} to visually verify changed views —
+   take screenshots of key flows. Tool: {tool-specific instructions from waterfall}.
+4. Do NOT use computer-use or desktop takeover for testing
+5. Report results as: { method: "...", result: "pass" | "fail — reason" }
+```
+
+## Branch Strategy
 
 See `agent-collaboration.md` § Sub-Branch Strategy and § Branch Inheritance Protocol.
 The orchestrator (calling skill) is responsible for:

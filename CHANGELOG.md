@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.40.7] — 2026-04-13
+
+### Fixed
+
+- **skills** — `devops-repo-health` v0.3.0: separate worktree section from branch list to eliminate overlapping info, add tooltip explanations for all action options, analyze worktree content (modified/untracked files, commits ahead), enforce no-discard rule for worktrees with changes
+- **version** — sync marketplace.json to 0.40.6
+
+## [0.40.6] — 2026-04-13
+
+### Added
+
+- **skills** — QA Testing Protocol in `devops-agents`: unit tests, build check, browser-based visual verification via waterfall (Chrome MCP → Playwright → Preview); computer-use requires explicit user opt-in
+- **skills** — `devops-autonomous` Live Testing now references agents' QA protocol as single source of truth instead of duplicating testing logic
+
+### Fixed
+
+- **version** — sync marketplace.json to 0.40.5 (was left at 0.40.4 in prior release)
+
 ## [0.40.5] — 2026-04-13
 
 ### Added
