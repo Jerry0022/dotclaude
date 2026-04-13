@@ -3,8 +3,7 @@ name: devops-commit
 version: 0.1.0
 description: >-
   Create a conventional commit for staged/changed files — enforces type, scope,
-  co-author footer. Triggers on: "commit", "commit this", "speicher das",
-  "committe das", "einchecken". Handles amend for "update/fix last commit".
+  co-author footer. Handles amend for "update/fix last commit".
   Do NOT trigger for push, PR, or ship operations.
 disable-model-invocation: true
 allowed-tools: Bash(git *), AskUserQuestion

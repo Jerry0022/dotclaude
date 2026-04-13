@@ -5,8 +5,8 @@ description: >-
   Read session logs, runtime errors, and crash output to diagnose and fix the
   current issue — root-cause analysis first. Use when something is broken or
   behaving unexpectedly. Triggers on: "debug", "this is broken", "doesn't work",
-  "error", "crash", "blank screen", "warum geht das nicht", "funktioniert nicht",
-  "something's off", "it just hangs". Also triggers on pasted error/stack traces
+  "error", "crash", "blank screen", "warum geht das nicht", "funktioniert nicht".
+  Also triggers on pasted error/stack traces
   or when post.flow.debug hook detects repeated Bash failures.
   Do NOT trigger for general code questions.
 argument-hint: "[optional: describe the symptom or paste error]"
