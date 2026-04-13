@@ -253,13 +253,23 @@ If during autonomous execution a permission is needed that wasn't primed in Step
 
 - **Simple**: work directly, no sub-agents
 - **Medium**: 2-3 parallel agents for independent domains
-- **Complex**: use devops agent roster (core, frontend, ai, qa, designer)
+- **Complex**: follow devops-agents orchestration logic (Step 1-2 analysis, wave-based
+  execution with core, frontend, ai, qa, designer agents). Key differences in autonomous:
+  - **All agents run in background** (`run_in_background: true`, no interactive mode)
+  - **No AskUserQuestion** — agents decide autonomously, log decisions in commits
+  - **QA Testing Protocol applies** — see devops-agents SKILL.md § QA Wave for
+    unit tests, build checks, and browser-based visual verification rules
+  - **Computer-use restriction** — only if user chose "Desktop übernehmen" in Step 2
 
 ### Live Testing (implement mode only)
 
-After implementation: run build, run tests, then use `$BROWSER_TOOL` (from Step 3b)
-to open the app, screenshot key flows, verify visually. For native desktop apps
-(not browser), use computer-use if desktop mode was chosen. Track progress via TodoWrite.
+Follow the **QA Testing Protocol** from devops-agents SKILL.md § QA Wave.
+Use `$BROWSER_TOOL` (from Step 3b) for all browser-based visual verification.
+
+**Autonomous-specific additions:**
+- **Native desktop apps**: use computer-use **only** if user chose "Desktop
+  übernehmen" in Step 2. Otherwise skip native-app visual testing.
+- Track progress via TodoWrite.
 
 ## Step 6 — Error Handling
 
