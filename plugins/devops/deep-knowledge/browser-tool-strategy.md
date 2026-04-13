@@ -156,6 +156,46 @@ tasklist | grep -qi msedge || start msedge --restore-last-session
 Wait 5 seconds, then retry `tabs_context_mcp`. If still no response → show the
 error block above.
 
+## Tab Group Deduplication (Chrome MCP only)
+
+Applies only when `$BROWSER_TOOL = chrome-mcp`. Playwright and Preview do not
+manage tab groups — this section does not apply to those fallback paths.
+
+The Chrome MCP extension creates a **tab group** per Claude Code session. If the
+MCP connection drops and reconnects mid-session, the extension may treat the
+reconnection as a new session and create a **second group** — resulting in
+duplicate tab groups in Edge.
+
+**Rule:** Before creating any new tab, always check for existing tabs first:
+
+1. Call `tabs_context_mcp` to list current tabs
+2. If tabs already exist from this session → reuse them
+3. Only if no existing tabs are found → create a new tab
+
+**When opening a URL and a session tab already exists:**
+- Prefer navigating the existing tab (`navigate` with the existing `$TAB_ID`)
+  over creating a new tab — unless multiple tabs are genuinely needed
+- If a new tab IS needed, check the `tabs_context_mcp` response for the
+  existing group's ID and pass it to `tabs_create_mcp` so the new tab joins
+  the same group (verify the extension's actual parameter name at runtime)
+
+**After MCP reconnection:**
+- Re-probe with `tabs_context_mcp` to discover existing tabs and groups
+- Do NOT create new tabs without first checking — this is the primary cause
+  of duplicate groups
+- If duplicate groups are detected, work only with the first group. Do NOT
+  automatically close tabs from the duplicate — they may contain user content.
+  Instead, ignore the duplicate group and let the user clean it up
+
+**Concurrent agents (known limitation):** When multiple agents (e.g., from
+`/devops-burn` or `/devops-autonomous`) open browser tabs simultaneously, a
+race condition can occur: both agents probe, find no group, and each creates
+one. Mitigation: in multi-agent sessions, designate one agent as the tab
+manager, or add a short jitter (1-2 seconds) and re-probe before creating.
+
+This is a **hard rule** — duplicate tab groups confuse the user and waste screen
+space. One session = one group, always.
+
 ## tabId Type Invariant
 
 `tabId` MUST always be a **number**. The `tabs_context_mcp` call returns tab IDs

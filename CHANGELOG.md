@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.40.5] — 2026-04-13
+
+### Added
+
+- **deep-knowledge** — tab group deduplication rule in `browser-tool-strategy.md`: prevents duplicate Edge tab groups on Chrome MCP reconnect, scoped to Chrome MCP only, with concurrent-agent race condition documented as known limitation
+
+### Fixed
+
+- **version** — sync marketplace.json to 0.40.4 (was left at 0.40.3 in prior release)
+
 ## [0.40.4] — 2026-04-13
 
 ### Fixed
