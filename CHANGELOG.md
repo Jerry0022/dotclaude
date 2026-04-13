@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.40.3] — 2026-04-13
+
+### Fixed
+
+- **skills** — restore trigger phrases in ship, repo-health, refresh-usage, and flow skill descriptions that were accidentally removed during header trim (6fd39b0); removes ambiguous triggers ("fertig", "something's off") per Codex review
+
 ## [0.40.2] — 2026-04-12
 
 ### Added

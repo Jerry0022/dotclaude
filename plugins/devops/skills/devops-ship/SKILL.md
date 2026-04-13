@@ -6,8 +6,9 @@ description: >-
   ship_version_bump, ship_release, ship_cleanup, render_completion_card,
   then silent memory consolidation.
   Supports hierarchical merges (sub-branch → feature → main).
-  Use when work is ready to land. Do NOT trigger during coding/debugging
-  or for commits without shipping.
+  Use when work is ready to land. Triggers on: "ship it",
+  "ab damit", "push and merge", "das kann rein".
+  Do NOT trigger during coding/debugging or for commits without shipping.
 allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*
 ---
 
