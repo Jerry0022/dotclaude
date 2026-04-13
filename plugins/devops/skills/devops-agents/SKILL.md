@@ -1,6 +1,6 @@
 ---
 name: devops-agents
-version: 0.3.0
+version: 0.4.0
 description: >-
   Evaluate which agents are useful for a task and orchestrate their parallel or
   sequential execution. Use when the user explicitly wants orchestrated agent
@@ -11,7 +11,7 @@ description: >-
   Do NOT trigger for: simple single-file edits, quick fixes, explanations,
   or research-only tasks (use /devops-deep-research).
 argument-hint: "[task description or goal]"
-allowed-tools: Agent, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*
+allowed-tools: Agent, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_list
 ---
 
 # Orchestrate
@@ -51,7 +51,7 @@ Based on the analysis, select agents from the available pool:
 | **windows** | Platform-specific (system tray, native APIs) | 2 |
 | **ai** | AI/ML integration, embeddings, prompts | 2 |
 | **designer** | UX/UI decisions, design system, specs | 0 or 2 |
-| **qa** | Test, verify, screenshot | 3 |
+| **qa** | Unit tests, build check, browser-based visual verification | 3 |
 | **po** | Requirements validation, trade-off review | 4 |
 | **gamer** | End-user/player perspective | 3 or 4 |
 
@@ -149,6 +149,51 @@ For each wave:
 3. **Collect results** — wait for all agents in the wave to complete
 4. **Present interim results** — after each wave, summarize findings and decisions inline with analysis text
 5. **Handoff** — pass completed contracts/findings to next wave
+
+### QA Wave — Testing Protocol
+
+The QA agent (Wave 3) MUST follow these testing rules. Include ALL applicable
+instructions in the QA agent prompt.
+
+**1. Unit/Integration Tests**
+Run relevant test suites via Bash (`npm test`, `npm run test:unit`, etc.).
+Target specific test files for changed modules — see `deep-knowledge/test-strategy.md`.
+
+**2. Build Verification**
+Run the build command (`npm run build` or equivalent) to verify compilation succeeds.
+
+**3. Browser-Based Visual Verification (UI projects)**
+For projects with a UI (web apps, Electron, etc.):
+- **Orchestrator** (before spawning QA): probe the browser tool waterfall from
+  `deep-knowledge/browser-tool-strategy.md` (Chrome MCP → Playwright → Preview).
+  Set `$BROWSER_TOOL` to the first responder. If Preview is selected, start a
+  server via `preview_start` and capture `$SERVER_ID`.
+- **QA agent** uses whichever tool the orchestrator selected:
+  - Chrome MCP: `computer` (screenshot), `read_page`
+  - Playwright: `browser_take_screenshot`, `browser_snapshot`
+  - Preview: `preview_screenshot`, `preview_snapshot` (pass `serverId`)
+- All three are DOM/protocol-based — no desktop takeover, no user interruption.
+- Skip visual verification for non-UI changes (config, scripts, docs).
+
+**4. Computer-Use Restriction — HARD RULE**
+**NEVER** use computer-use (`mcp__computer-use__*`) for testing unless the user
+**explicitly** requested desktop takeover (e.g., "Desktop übernehmen", "use
+computer-use", "nimm den Desktop", "desktop testing").
+
+Browser-based testing via the waterfall tools is always allowed and runs in the
+background. Computer-use is the **only** testing method that requires explicit
+user opt-in.
+
+**QA Agent Prompt — Append These Instructions:**
+```
+Test the changes:
+1. Run unit/integration tests for changed modules
+2. Run the build to verify it succeeds
+3. [If UI project] Use {$BROWSER_TOOL} to visually verify changed views —
+   take screenshots of key flows. Tool: {tool-specific instructions from waterfall}.
+4. Do NOT use computer-use or desktop takeover for testing
+5. Report results as: { method: "...", result: "pass" | "fail — reason" }
+```
 
 ### Single-Agent Shortcut
 
