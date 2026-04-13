@@ -91,7 +91,7 @@ If `success: false` → call `render_completion_card` with variant `ship-blocked
 
 **MUST run** if codex-plugin-cc is installed — not optional, not suggested.
 
-1. patch/minor → `/codex:review`; major → `/codex:adversarial-review`
+1. Invoke `/codex:rescue` with the diff as context for independent code review
 2. Evaluate findings:
    - **No findings / clean** → continue to Step 3
    - **Auto-fixable** (typos, missing imports, style) → fix inline, continue

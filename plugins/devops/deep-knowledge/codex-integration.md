@@ -28,10 +28,9 @@ a hard gate), so automatic execution carries no risk of blocking workflows.
 ### 1. /devops-ship — Pre-PR Code Review (Step 2, Quality Gates)
 
 **When:** After build + lint + tests pass, before commit/push/PR.
-**Skill:** `/codex:review` (standard) or `/codex:adversarial-review` (major bumps).
+**Skill:** `/codex:rescue` (delegates diff review to Codex).
 **Behavior:**
-- patch/minor bump → **automatically run** `/codex:review` on the diff (read-only)
-- major bump → **automatically run** `/codex:adversarial-review` (challenges design trade-offs)
+- **Automatically run** `/codex:rescue` with the diff as context for independent code review
 - Evaluate findings:
   - No findings / clean → continue pipeline
   - Auto-fixable (typos, missing imports, style) → fix inline, continue
@@ -66,17 +65,17 @@ systematically. Tests verify behavior; Codex reviews design and logic.
 **Value:** Low-cost hint. The actual automatic invocation happens when `/devops-flow`
 runs and reaches Step 6 with an unclear root cause (see Integration Point 2).
 
-### 4. QA Agent — Adversarial Review
+### 4. QA Agent — Codex Review
 
 **When:** QA agent runs verification on changes.
-**Skill:** `/codex:adversarial-review`
+**Skill:** `/codex:rescue`
 **Behavior:**
-- **Automatically run** `/codex:adversarial-review` when QA detects high-risk
+- **Automatically run** `/codex:rescue` when QA detects high-risk
   or complex changes (multi-file, architectural, security-sensitive)
 - For simple changes (single file, trivial fix) → skip Codex, standard QA only
 - Findings included in QA_RESULT output under `codex_review`
 
-**Value:** Harder review that challenges assumptions, not just verifies correctness.
+**Value:** Independent review from a second AI that challenges assumptions.
 
 ### 5. Research Agent — Parallel Delegation
 
@@ -95,10 +94,9 @@ runs and reaches Step 6 with an unclear root cause (see Integration Point 2).
 | Integration Point | Estimated Cost | Frequency |
 |---|---|---|
 | /devops-ship review | ~20-40K tokens | Per ship (~2-5/week) |
-| /devops-ship adversarial | ~30-60K tokens | Major bumps only |
 | /devops-flow rescue | ~30-50K tokens | When stuck (~1-3/week) |
 | post.flow.debug | 0 (suggestion only) | N/A |
-| QA adversarial | ~20-40K tokens | Per QA run |
+| QA review | ~20-40K tokens | Per QA run |
 | Research delegation | ~20-40K tokens | Per research task |
 
 Note: These tokens are consumed on the **Codex/OpenAI side**, not the Claude
@@ -108,7 +106,7 @@ session budget. The only Claude-side cost is the skill invocation overhead.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `/codex:review` not found | Plugin not installed | Install via Settings → Plugins |
+| `/codex:rescue` not found | Plugin not installed | Install via Settings → Plugins |
 | Codex auth error | Token expired | Run `codex auth` in terminal |
 | Review returns empty | No diff to review | Ensure changes exist vs. main |
-| Rescue hangs | Codex job stuck | `/codex:cancel` then retry |
+| Rescue hangs | Codex job stuck | Cancel and retry |

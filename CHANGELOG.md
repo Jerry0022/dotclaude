@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.4] — 2026-04-13
+
+### Fixed
+
+- **codex** — replace phantom skill references (`/codex:review`, `/codex:adversarial-review`, `/codex:cancel`) with actual available skills (`/codex:rescue`, `/codex:setup`) across ship SKILL, QA agent, codex-integration deep-knowledge, INSTALL, README, and architecture diagram
+- **version** — align marketplace.json with current release version
+
 ## [0.40.3] — 2026-04-13
 
 ### Fixed
