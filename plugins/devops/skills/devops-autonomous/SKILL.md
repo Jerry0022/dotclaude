@@ -251,19 +251,18 @@ If during autonomous execution a permission is needed that wasn't primed in Step
 
 ### Strategy
 
-- **Simple**: work directly, no sub-agents
-- **Medium**: 2-3 parallel agents for independent domains
-- **Complex**: follow devops-agents orchestration logic (Step 1-2 analysis, wave-based
-  execution with core, frontend, ai, qa, designer agents). Key differences in autonomous:
-  - **All agents run in background** (`run_in_background: true`, no interactive mode)
-  - **No AskUserQuestion** — agents decide autonomously, log decisions in commits
-  - **QA Testing Protocol applies** — see devops-agents SKILL.md § QA Wave for
-    unit tests, build checks, and browser-based visual verification rules
-  - **Computer-use restriction** — only if user chose "Desktop übernehmen" in Step 2
+Select agents and execute waves per `deep-knowledge/agent-orchestration.md`:
+- § Agent Selection for roster, criteria, and complexity tiers (Simple/Medium/Complex)
+- § Wave Execution for spawning mechanics, prompt template, and branch strategy
+- § QA Wave — Testing Protocol for unit tests, build checks, and browser-based visual verification
+- § Single-Agent Shortcut when only one domain is involved
+
+All agents use the **Autonomous** interaction directive (no AskUserQuestion).
+Collaboration protocol (handoffs, merge order): `deep-knowledge/agent-collaboration.md`.
 
 ### Live Testing (implement mode only)
 
-Follow the **QA Testing Protocol** from devops-agents SKILL.md § QA Wave.
+Follow the **QA Testing Protocol** from `deep-knowledge/agent-orchestration.md` § QA Wave.
 Use `$BROWSER_TOOL` (from Step 3b) for all browser-based visual verification.
 
 **Autonomous-specific additions:**

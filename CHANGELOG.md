@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.40.8] — 2026-04-13
+
+### Changed
+
+- **deep-knowledge** — new `agent-orchestration.md`: shared orchestration logic (agent selection, wave execution, QA testing protocol, prompt template, single-agent shortcut) extracted from `devops-agents` and `devops-autonomous` skills
+- **skills** — `devops-agents` and `devops-autonomous` now reference `agent-orchestration.md` as single source of truth instead of duplicating orchestration logic
+
+### Fixed
+
+- **version** — align marketplace.json to 0.40.7
+
 ## [0.40.7] — 2026-04-13
 
 ### Fixed

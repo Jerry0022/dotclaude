@@ -41,26 +41,8 @@ If `$ARGUMENTS` is empty or vague, ask ONE focused question via `AskUserQuestion
 
 ## Step 2 — Agent Selection
 
-Based on the analysis, select agents from the available pool:
-
-| Agent | When to include | Wave |
-|-------|----------------|------|
-| **research** | Topic needs investigation first | 0 (pre-work) |
-| **core** | Business logic, APIs, data models | 1 |
-| **frontend** | UI components, templates, styling | 2 |
-| **windows** | Platform-specific (system tray, native APIs) | 2 |
-| **ai** | AI/ML integration, embeddings, prompts | 2 |
-| **designer** | UX/UI decisions, design system, specs | 0 or 2 |
-| **qa** | Unit tests, build check, browser-based visual verification | 3 |
-| **po** | Requirements validation, trade-off review | 4 |
-| **gamer** | End-user/player perspective | 3 or 4 |
-
-**Selection criteria:**
-
-- Include an agent only if it adds **concrete value** — not for coverage
-- Prefer fewer agents with clear purpose over many with vague roles
-- Always include **qa** for any code changes (Wave 3)
-- Include **po** only for feature-level work, not bugfixes or refactoring
+Select agents using the roster, criteria, and complexity tiers from
+`deep-knowledge/agent-orchestration.md` § Agent Selection.
 
 ## Step 3 — Present Plan
 
@@ -108,100 +90,22 @@ Store the result as `$EXEC_MODE` (`background` or `interactive`).
 
 ## Step 5 — Execution
 
-Follow the collaboration protocol from `deep-knowledge/agent-collaboration.md`:
+Follow `deep-knowledge/agent-orchestration.md` § Wave Execution for spawning mechanics,
+agent prompt template, branch strategy, and single-agent shortcut.
 
-### Branch Strategy
+Collaboration protocol (handoffs, merge order, shipping): `deep-knowledge/agent-collaboration.md`.
 
-1. Create integration branch if not already on a feature branch
-2. Push integration branch to origin before spawning sub-agents
-3. Each agent works in an isolated worktree (`isolation: "worktree"`)
+### Mode-Specific Behavior
 
-### Wave Execution — Background Mode
+- **Background** (`$EXEC_MODE`): Use interaction directive "Autonomous" from the
+  orchestration doc. Spawn with `run_in_background: true`. Continue with other work
+  or inform the user. Collect results when notified.
+- **Interactive** (`$EXEC_MODE`): Use interaction directive "Interactive" from the
+  orchestration doc. Spawn in foreground. Present interim results after each wave
+  with inline analysis text.
 
-When `$EXEC_MODE` is `background`:
-
-For each wave:
-
-1. **Spawn agents** with `run_in_background: true` — parallel within the same wave
-2. **Include in every agent prompt:**
-   - Parent branch name
-   - Task description specific to their role
-   - Context from previous waves (handoff data)
-   - Instruction to follow commit conventions from `/devops-commit`
-   - **"Work autonomously. Do NOT use AskUserQuestion. Make reasonable decisions independently. Document all decisions in your commit messages."**
-3. **Continue with other work** or inform the user that agents are working
-4. **Collect results** when notified of completion
-5. **Handoff** — pass completed contracts/findings to next wave
-
-### Wave Execution — Interactive Mode
-
-When `$EXEC_MODE` is `interactive`:
-
-For each wave:
-
-1. **Spawn agents** in foreground — parallel within the same wave, sequential across waves
-2. **Include in every agent prompt:**
-   - Parent branch name
-   - Task description specific to their role
-   - Context from previous waves (handoff data)
-   - Instruction to follow commit conventions from `/devops-commit`
-   - **"Work interactively. Use AskUserQuestion with concrete options (2-4 choices) for design decisions, ambiguous requirements, or trade-offs. Provide detailed analysis and reasoning inline in the chat. Never decide silently — always explain your approach."**
-3. **Collect results** — wait for all agents in the wave to complete
-4. **Present interim results** — after each wave, summarize findings and decisions inline with analysis text
-5. **Handoff** — pass completed contracts/findings to next wave
-
-### QA Wave — Testing Protocol
-
-The QA agent (Wave 3) MUST follow these testing rules. Include ALL applicable
-instructions in the QA agent prompt.
-
-**1. Unit/Integration Tests**
-Run relevant test suites via Bash (`npm test`, `npm run test:unit`, etc.).
-Target specific test files for changed modules — see `deep-knowledge/test-strategy.md`.
-
-**2. Build Verification**
-Run the build command (`npm run build` or equivalent) to verify compilation succeeds.
-
-**3. Browser-Based Visual Verification (UI projects)**
-For projects with a UI (web apps, Electron, etc.):
-- **Orchestrator** (before spawning QA): probe the browser tool waterfall from
-  `deep-knowledge/browser-tool-strategy.md` (Chrome MCP → Playwright → Preview).
-  Set `$BROWSER_TOOL` to the first responder. If Preview is selected, start a
-  server via `preview_start` and capture `$SERVER_ID`.
-- **QA agent** uses whichever tool the orchestrator selected:
-  - Chrome MCP: `computer` (screenshot), `read_page`
-  - Playwright: `browser_take_screenshot`, `browser_snapshot`
-  - Preview: `preview_screenshot`, `preview_snapshot` (pass `serverId`)
-- All three are DOM/protocol-based — no desktop takeover, no user interruption.
-- Skip visual verification for non-UI changes (config, scripts, docs).
-
-**4. Computer-Use Restriction — HARD RULE**
-**NEVER** use computer-use (`mcp__computer-use__*`) for testing unless the user
-**explicitly** requested desktop takeover (e.g., "Desktop übernehmen", "use
-computer-use", "nimm den Desktop", "desktop testing").
-
-Browser-based testing via the waterfall tools is always allowed and runs in the
-background. Computer-use is the **only** testing method that requires explicit
-user opt-in.
-
-**QA Agent Prompt — Append These Instructions:**
-```
-Test the changes:
-1. Run unit/integration tests for changed modules
-2. Run the build to verify it succeeds
-3. [If UI project] Use {$BROWSER_TOOL} to visually verify changed views —
-   take screenshots of key flows. Tool: {tool-specific instructions from waterfall}.
-4. Do NOT use computer-use or desktop takeover for testing
-5. Report results as: { method: "...", result: "pass" | "fail — reason" }
-```
-
-### Single-Agent Shortcut
-
-If only 1 agent was selected (e.g., just research or just qa):
-- Skip branching strategy
-- Launch the agent directly with full context
-- In background mode: `run_in_background: true`, autonomous
-- In interactive mode: foreground, with inline questions and analysis
+QA Wave testing protocol and single-agent shortcut: see `deep-knowledge/agent-orchestration.md`
+§ QA Wave — Testing Protocol and § Single-Agent Shortcut.
 
 ## Step 6 — Synthesis
 
