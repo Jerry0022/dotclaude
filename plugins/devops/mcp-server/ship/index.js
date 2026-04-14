@@ -16,6 +16,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { register as registerHeartbeat } from "../lib/heartbeat.js";
 
 import { schema as preflightSchema, handler as preflightHandler } from "./tools/preflight.js";
 import { schema as buildSchema, handler as buildHandler } from "./tools/build.js";
@@ -97,4 +98,5 @@ registerTool(
 // Connect and start
 const transport = new StdioServerTransport();
 await server.connect(transport);
+registerHeartbeat("dotclaude-ship");
 console.error("[dotclaude-ship-mcp] Server started on stdio");

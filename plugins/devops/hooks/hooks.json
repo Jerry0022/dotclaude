@@ -27,6 +27,12 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.ship.guard.js" }
         ],
         "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.mcp.health.js" }
+        ],
+        "matcher": "mcp__plugin_devops_"
       }
     ],
     "PostToolUse": [
