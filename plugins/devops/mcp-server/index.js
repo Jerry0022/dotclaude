@@ -306,7 +306,10 @@ function renderState(state, variant, repoUrl) {
   }
 
   // Order: most important first — merge · PR · push · commit · branch
-  let line = icon + ' ' + mergeStr + ' \u00b7 ' + prStr + ' \u00b7 ' + pushStr + ' \u00b7 ' + commitStr + ' \u00b7 ' + branchStr;
+  // Skip trailing branch when it duplicates the merge target (e.g. "merged → main … `main`")
+  const showBranch = !state.merged || state.merged !== branch;
+  let line = icon + ' ' + mergeStr + ' \u00b7 ' + prStr + ' \u00b7 ' + pushStr + ' \u00b7 ' + commitStr;
+  if (showBranch) line += ' \u00b7 ' + branchStr;
 
   if (state.appStatus === 'running')     line += ' \u00b7 app running';
   if (state.appStatus === 'not-started') line += ' \u00b7 app not started';
