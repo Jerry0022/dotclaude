@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.4] — 2026-04-14
+
+### Fixed
+
+- **completion** — state line no longer shows redundant branch when it matches the merge target (e.g. `merged → main … main` → `merged → main`)
+- **version** — aligned marketplace.json to 0.41.3 (was stuck at 0.40.8 from previous releases)
+
 ## [0.41.3] — 2026-04-14
 
 ### Fixed
