@@ -16,6 +16,15 @@
         "name": "Jerry0022"
       },
       "source": "./plugins/devops"
+    },
+    {
+      "name": "local-llm",
+      "description": "Local LLM integration — delegates mechanical coding tasks to Gemma 4 E4B via llama.cpp to save tokens.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Jerry0022"
+      },
+      "source": "./plugins/local-llm"
     }
   ]
 }
