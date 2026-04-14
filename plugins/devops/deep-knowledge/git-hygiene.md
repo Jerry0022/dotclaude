@@ -13,6 +13,15 @@ Cross-cutting git rules referenced by `/devops-commit`, `/devops-ship`, and hook
 - Never use `git add -A` or `git add .` — always stage specific files.
 - For >5 changed files, use `AskUserQuestion` to let the user choose which subset to commit.
 
+## Merge safety
+
+- **Never** use `--ours`, `--theirs`, or any strategy that silently picks one side.
+- Conflict resolution follows `deep-knowledge/merge-safety.md`.
+- The `git-sync` cron detects conflicts and defers resolution to Claude.
+- Complementary changes (both additions, non-overlapping edits) → AI resolves automatically.
+- Mutually exclusive design decisions (user-facing choices) → user decides via `AskUserQuestion`.
+- After resolving conflicts, verify the merged code is semantically correct (not just textually).
+
 ## Branch hygiene
 
 - Feature branches are short-lived — ship and delete promptly.

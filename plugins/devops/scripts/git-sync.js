@@ -5,9 +5,9 @@
  * @plugin devops
  * @description Core git sync logic — fetch remote, merge parent chain into
  *   current branch. Supports branch hierarchy (feat/auth/login merges
- *   main → feat → feat/auth). Conflicts are resolved semantically by
- *   Claude when possible. Only truly ambiguous conflicts produce a warning
- *   for the developer to handle.
+ *   main → feat → feat/auth). Trivial conflicts are resolved automatically.
+ *   Ambiguous conflicts are aborted and reported for AI-based semantic
+ *   resolution (see deep-knowledge/merge-safety.md).
  *   Standalone: called by prompt.git.sync hook and session-start cron.
  */
 
@@ -197,7 +197,8 @@ function resolveFile(filePath) {
 }
 
 // Try merging source into HEAD. Resolve trivial conflicts automatically,
-// warn only for genuinely ambiguous conflicts that need human judgment.
+// warn only for genuinely ambiguous conflicts that need semantic resolution.
+// See deep-knowledge/merge-safety.md for the full resolution protocol.
 function tryMerge(source) {
   const behind = git(`rev-list --count HEAD..${source}`);
   if (!behind || parseInt(behind) === 0) return null; // already up to date
@@ -232,6 +233,13 @@ function tryMerge(source) {
   if (totalAmbiguous > 0) {
     // Some conflicts couldn't be resolved — abort and warn
     git('merge --abort');
+
+    // Verify abort succeeded — if tree is still dirty, the abort failed
+    const postAbort = git('status --porcelain');
+    if (postAbort) {
+      return { source, commits: count, failed: true };
+    }
+
     return {
       source,
       commits: count,
@@ -266,13 +274,15 @@ for (const parent of parents) {
   const result = tryMerge(parent);
   if (!result) continue;
 
-  if (result.conflict) {
+  if (result.failed) {
+    messages.push(`✗ ${parent} → ${branch}: merge failed (unknown error)`);
+  } else if (result.conflict) {
     const partialNote = result.partialResolve
       ? ` (${result.partialResolve} conflict(s) auto-resolved)`
       : '';
     messages.push(
-      `✗ ${parent} → ${branch}: ${result.files.length} file(s) with ambiguous conflicts — ` +
-      `merge aborted${partialNote}. These conflicts need your input:\n` +
+      `⚠ ${parent} → ${branch}: ${result.files.length} file(s) with ambiguous conflicts — ` +
+      `merge aborted${partialNote}. Resolution required:\n` +
       `  ${result.files.join(', ')}`
     );
   } else if (result.autoResolved) {

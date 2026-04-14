@@ -162,6 +162,27 @@ The Feature agent orchestrates shipping one sub-branch at a time:
 This prevents merge conflicts from concurrent PRs targeting the same feature branch.
 Parallel **work** within a wave is fine — only the **shipping** must be sequential.
 
+### Conflict resolution during integration
+
+When the Feature agent merges sub-agent branches into the integration branch and
+conflicts occur, follow `deep-knowledge/merge-safety.md` strictly:
+
+1. **Attempt merge**: `git merge --no-ff <sub-branch>`
+2. **On conflict** — for each conflicted file:
+   - Read both sides and the common ancestor to understand intent
+   - Classify each hunk: complementary, redundant, superseding, or mutually exclusive
+   - **Complementary** (both agents added different functions, imports, config entries): keep both
+   - **Redundant** (both agents made the same or equivalent change): keep one copy
+   - **Superseding** (one agent refined what the other started): keep the more complete version
+   - **Technical choice** (different import paths, utility names): AI picks the better option
+   - **Design decision** (different user-facing behavior): ask the user
+3. **Semantic verification**: after textual resolution, read the merged file and verify
+   logical correctness. Watch for silent semantic conflicts — code that merges cleanly
+   but is logically broken (e.g., function signature changed by Core, new call added
+   by Frontend without the new parameter).
+4. **Never skip a conflict**: every hunk must be explicitly resolved. No `--ours`, no `--theirs`.
+5. **Never leave markers**: `<<<<<<<` must never be committed.
+
 ## Issue Creation as Team Refinement
 
 Creating an issue is a refinement session, not a solo task. All relevant roles participate:
@@ -178,7 +199,7 @@ All happens within the single `/devops-new-issue` execution.
 - **Never skip a wave.** Core must commit contracts before Frontend starts.
 - **Never skip QA review.** Even "trivial" changes get reviewed.
 - **Handoff data is mandatory.** No agent starts without knowing what came before.
-- **Conflicts resolve at integration.** The Feature agent handles merge conflicts.
+- **Conflicts resolve at integration.** The Feature agent handles merge conflicts per `deep-knowledge/merge-safety.md`. Never use `--ours`/`--theirs`. Auto-resolve complementary changes; escalate design decisions to user.
 - **Parallel agents don't cross-depend.** Frontend and Windows never import from each other.
 - **Push integration branch before spawning sub-agents.** Sub-agents rely on the branch existing on origin for auto-detection.
 - **Ship sub-branches sequentially.** Parallel work is fine, but shipping must be one at a time to avoid merge conflicts.

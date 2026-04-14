@@ -44,6 +44,16 @@ process.stdout.write(
   `Register a recurring git-sync cron job for this session. ` +
   `Call CronCreate with cron "*/10 * * * *" (recurring: true) ` +
   `and prompt: 'Silently run via Bash: node "${scriptPath}". ` +
-  `Only mention output to the user if there are unresolvable merge conflicts (lines containing ✗). ` +
-  `Otherwise do not produce any output.'\n`
+  `If output contains ⚠ (merge conflicts detected), YOU MUST resolve the conflicts — do not just report them. ` +
+  `Follow this procedure: ` +
+  `(1) Extract the source branch from the ⚠ line (format: "⚠ <source> → <target>: ..."). ` +
+  `(2) Re-run the merge: git merge <extracted-source> --no-edit. ` +
+  `(3) For each conflicted file: read the file with conflict markers, read both sides via git diff :1:<file> :2:<file> (ours) and git diff :1:<file> :3:<file> (theirs). ` +
+  `(4) Classify each conflict hunk per deep-knowledge/merge-safety.md Step 3 (complementary, redundant, superseding, technical, design, delete-vs-modify). ` +
+  `(5) Edit each conflicted file to contain the semantically correct merged result — keep both sides when complementary, pick the better option for technical choices. ` +
+  `(6) Only ask the user (via AskUserQuestion) for mutually exclusive design decisions (e.g. both sides changed the same value to different things). ` +
+  `(7) Stage resolved files: git add <file>. Complete the merge: git commit --no-edit. ` +
+  `(8) Verify: read the merged files and check for logical consistency (e.g. changed function signatures with stale callers). ` +
+  `If output contains ✗ (unresolvable errors), inform the user. ` +
+  `If no conflict markers (only ✓), produce no output.'\n`
 );
