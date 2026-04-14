@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import { git, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, branchExists } from "../lib/git.js";
+import { git, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, branchExists, fileOverlap, getConfig } from "../lib/git.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
 
 export const schema = z.object({
@@ -99,7 +99,36 @@ export async function handler(params) {
     checks.push({ name: "base-ahead", value: 0, ok: true });
   }
 
-  // 9. Version consistency (skip for intermediate merges — versions only matter on main)
+  // 9. File overlap detection — files modified in BOTH branch and base since divergence
+  const overlap = fileOverlap(originBase, opts);
+  if (overlap.overlap.length > 0) {
+    checks.push({
+      name: "file-overlap",
+      ok: false,
+      count: overlap.overlap.length,
+      files: overlap.overlap.slice(0, 20),
+      totalBranchFiles: overlap.branchFiles.length,
+      totalBaseFiles: overlap.baseFiles.length,
+      mergeBase: overlap.mergeBase?.slice(0, 8),
+    });
+    errors.push(
+      `${overlap.overlap.length} file(s) modified in both your branch and ${base} since divergence — ` +
+      `rebase required before merge to prevent silent overwrites: ${overlap.overlap.slice(0, 5).join(", ")}` +
+      (overlap.overlap.length > 5 ? ` (+${overlap.overlap.length - 5} more)` : "")
+    );
+  } else {
+    checks.push({ name: "file-overlap", ok: true, count: 0 });
+  }
+
+  // 10. Git config recommendations
+  const conflictStyle = getConfig("merge.conflictstyle", opts);
+  if (conflictStyle !== "diff3" && conflictStyle !== "zdiff3") {
+    checks.push({ name: "config-conflictstyle", ok: false, current: conflictStyle, recommended: "diff3" });
+  } else {
+    checks.push({ name: "config-conflictstyle", ok: true, current: conflictStyle });
+  }
+
+  // Version consistency (skip for intermediate merges — versions only matter on main)
   let versionInfo = { version: null, type: null };
   if (!intermediate) {
     versionInfo = readVersion(cwd);
@@ -118,7 +147,7 @@ export async function handler(params) {
     checks.push({ name: "version-consistent", ok: true, skipped: true, reason: "intermediate merge" });
   }
 
-  // 10. Worktree detection
+  // Worktree detection
   const inWorktree = isWorktree(opts);
   checks.push({ name: "worktree", value: inWorktree });
 

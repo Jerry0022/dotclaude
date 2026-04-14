@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
-import { git, gitStrict, currentBranch, headShort, dirtyState, isWorktree } from "../lib/git.js";
+import { git, gitStrict, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap } from "../lib/git.js";
 import { createPR, mergePR, createRelease, findExistingPR } from "../lib/github.js";
 
 export const schema = z.object({
@@ -16,11 +16,12 @@ export const schema = z.object({
   releaseNotes: z.string().nullable().default(null).describe("GitHub release notes (CHANGELOG mirror) — ignored for intermediate merges"),
   prerelease: z.boolean().default(false).describe("Mark as pre-release (for 0.x versions)"),
   commitMessage: z.string().nullable().default(null).describe("If set, stage all and commit with this message before pushing"),
+  mergeStrategy: z.enum(["squash", "merge", "rebase"]).default("squash").describe("PR merge strategy. Use 'merge' for overlapping files to preserve ancestry chain."),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
 export async function handler(params) {
-  const { base, title, body, tag, releaseNotes, prerelease, commitMessage } = params;
+  const { base, title, body, tag, releaseNotes, prerelease, commitMessage, mergeStrategy } = params;
   const cwd = params.cwd;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const opts = { cwd };
@@ -68,26 +69,49 @@ export async function handler(params) {
       result.commit = headShort(opts);
     }
 
+    // Safety gate: verify branch is rebased onto latest base (prevents silent overwrites)
+    gitStrict(`fetch origin ${base}`, { cwd, timeout: 30_000 });
+    if (!isRebasedOnto(`origin/${base}`, opts)) {
+      // Check overlap to give actionable context
+      const overlap = fileOverlap(`origin/${base}`, opts);
+      result.success = false;
+      result.rebaseRequired = true;
+      result.overlapFiles = overlap.overlap;
+      result.error =
+        `Branch is not rebased onto origin/${base} (${base} has commits HEAD doesn't include). ` +
+        `Run: git rebase origin/${base} — then retry ship_release. ` +
+        (overlap.overlap.length > 0
+          ? `${overlap.overlap.length} overlapping file(s): ${overlap.overlap.slice(0, 10).join(", ")}`
+          : "No file overlap detected — rebase should be clean.");
+      return result;
+    }
+    result.rebased = true;
+
     // Push (use longer timeout for large repos / slow networks)
-    gitStrict(`push -u origin ${branch}`, { cwd, timeout: 60_000 });
+    gitStrict(`push -u origin ${branch} --force-with-lease`, { cwd, timeout: 60_000 });
     result.pushed = true;
 
     // Check for existing open PR before creating a new one
     const existingPR = findExistingPR({ base, head: branch }, opts);
     let pr;
     if (existingPR) {
+      if (existingPR.mergeable === "CONFLICTING") {
+        result.success = false;
+        result.error = `Existing PR #${existingPR.number} is in CONFLICTING state — branch needs updating. Close the PR or rebase and force-push.`;
+        return result;
+      }
       pr = existingPR;
       result.prReused = true;
     } else {
       pr = createPR({ title, body, base, head: branch }, opts);
     }
     result.pr = { number: pr.number, url: pr.url, title };
+    result.mergeStrategy = mergeStrategy;
 
-    // Merge PR (squash + delete branch; skip --delete-branch in worktrees
+    // Merge PR (delete branch; skip --delete-branch in worktrees
     // where gh tries to switch to base locally — cleanup handles branch deletion)
-    gitStrict(`fetch origin ${base}`, opts);
     const worktree = isWorktree(opts);
-    const mergeSha = mergePR(pr.number, base, opts, { skipDeleteBranch: worktree });
+    const mergeSha = mergePR(pr.number, base, opts, { skipDeleteBranch: worktree, strategy: mergeStrategy });
     result.merged = base;
     result.mergeSha = mergeSha;
 

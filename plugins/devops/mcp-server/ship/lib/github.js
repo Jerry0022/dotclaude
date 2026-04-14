@@ -41,16 +41,18 @@ export function createPR({ title, body, base = "main", head }, opts) {
 }
 
 /**
- * Squash-merge a PR by number, delete remote branch.
+ * Merge a PR by number, delete remote branch.
  * Verifies merge actually succeeded via PR state check. Returns merge commit sha.
  * @param {number} prNumber
  * @param {string} base - Base branch name (e.g. "main", "develop")
  * @param {object} [opts]
  * @param {object} [flags]
  * @param {boolean} [flags.skipDeleteBranch=false] - Skip --delete-branch (e.g. in worktrees where local branch switch fails)
+ * @param {"squash"|"merge"|"rebase"} [flags.strategy="squash"] - Merge strategy. Use "merge" for overlapping files to preserve ancestry.
  */
 export function mergePR(prNumber, base = "main", opts, flags = {}) {
-  const args = ["pr", "merge", String(prNumber), "--squash", "--admin"];
+  const strategy = flags.strategy || "squash";
+  const args = ["pr", "merge", String(prNumber), `--${strategy}`, "--admin"];
   if (!flags.skipDeleteBranch) args.push("--delete-branch");
   gh(args, opts);
   // Verify the PR is actually in MERGED state (retry up to 3 times with 2s backoff
@@ -88,16 +90,20 @@ export function mergePR(prNumber, base = "main", opts, flags = {}) {
 
 /**
  * Check if an open PR already exists for head → base.
- * Returns { number, url } if found, null otherwise.
+ * Returns { number, url, mergeable } if found, null otherwise.
+ * Includes mergeability state to detect stale PRs that need updating.
  */
 export function findExistingPR({ base, head }, opts) {
   try {
     const raw = gh(
-      ["pr", "list", "--head", head, "--base", base, "--state", "open", "--json", "number,url", "--limit", "1"],
+      ["pr", "list", "--head", head, "--base", base, "--state", "open", "--json", "number,url,mergeable", "--limit", "1"],
       opts,
     );
     const list = JSON.parse(raw);
-    return list.length > 0 ? list[0] : null;
+    if (list.length === 0) return null;
+    const pr = list[0];
+    // mergeable: "MERGEABLE", "CONFLICTING", "UNKNOWN"
+    return { number: pr.number, url: pr.url, mergeable: pr.mergeable || "UNKNOWN" };
   } catch {
     return null; // Network error or no PR — safe to proceed
   }
