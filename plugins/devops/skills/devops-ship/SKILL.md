@@ -55,11 +55,14 @@ Project extensions define: quality gate commands, deploy targets, version files,
 
 4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill has a **mandatory** Codex review gate (§1 in that doc). Detect Codex availability now so Step 2 can act on it.
 
-## Step 1 — Pre-Flight Safety Gate
+## Step 1 — Pre-Flight & Rebase Loop
+
+Run preflight, resolve any merge-safety issues autonomously, and re-check — repeat until the branch is clean.
+
+### 1a. Run preflight
 
 Call `ship_preflight` MCP tool (dotclaude-ship server).
 **CRITICAL:** Always pass `cwd` — the MCP server runs in the plugin directory, not the target repo.
-Use the current working directory of the Claude session as `cwd`.
 ```
 ship_preflight({ base: "main", cwd: "<current working directory>" })
 ```
@@ -73,22 +76,16 @@ Check the result:
 - `autoDetectedBase` — non-null if a parent branch was detected (confirms intermediate merge).
 - `intermediate` — `true` if merging into a feature branch instead of main.
 - `ready: false` → report errors and **STOP**. Do not proceed.
+- `needsRebase: true` → continue to 1b (do NOT stop).
 
 The tool checks: clean tree, commits ahead, all pushed, version consistency (skipped for intermediate), worktree detection.
+Merge-safety issues (`base-ahead`, `file-overlap`, `config-conflictstyle`) are **warnings, not errors** — they are resolved autonomously below.
 
-## Step 1.5 — Rebase & Merge Safety
+### 1b. Resolve merge-safety warnings
 
-**Purpose:** Prevent silent overwrites when parallel developers ship to the same base.
+**Only runs when `needsRebase: true`.** Otherwise skip to Step 2.
 
-### When to trigger
-Run this step if **any** of these preflight checks failed:
-- `file-overlap` — files modified in both branch and base
-- `base-ahead` — base has commits HEAD doesn't include
-- `config-conflictstyle` — merge.conflictstyle not set to diff3/zdiff3
-
-### Rebase flow
-
-1. **Set diff3** (if not configured): Run `git config merge.conflictstyle diff3` in the repo.
+1. **Set diff3** (if `config-conflictstyle` warning): `git config merge.conflictstyle diff3`
 
 2. **Rebase onto base**:
    ```bash
@@ -96,25 +93,39 @@ Run this step if **any** of these preflight checks failed:
    git rebase origin/<base>
    ```
 
-3. **If rebase succeeds** (no conflicts): continue to Step 2.
+3. **If rebase succeeds** (no conflicts): push and re-check (go to 1c).
 
-4. **If rebase has conflicts** — resolve them directly (do NOT ask user):
-   a. Run `git diff --name-only --diff-filter=U` to list conflicting files.
+4. **If rebase has conflicts** — resolve them autonomously (do NOT ask user):
+   a. `git diff --name-only --diff-filter=U` to list conflicting files.
    b. For each conflicting file:
-      - Read the file (contains `<<<<<<<`/`=======`/`>>>>>>>` markers with diff3 base section)
-      - Analyze **both sides semantically**: what did the branch change? what did base change?
+      - Read the file (contains `<<<<<<<`/`|||||||`/`=======`/`>>>>>>>` markers with diff3 base section)
+      - Analyze **both sides semantically**: what did our branch change vs. what did base change?
+      - Check **chronological context**: which change is newer? Do they contradict or complement each other?
       - Produce a merged version that preserves **both** intents
       - Write the resolved file, then `git add <file>`
-   c. Run `git rebase --continue`
+   c. `git rebase --continue`
    d. If more conflicts appear (multi-commit rebase), repeat (b)–(c)
+   e. **Truly ambiguous conflicts** (both sides change the same logic in contradictory ways and the correct resolution is not determinable from code context): abort the rebase (`git rebase --abort`) and ask the user via AskUserQuestion with a clear, developer-readable explanation:
+      - Show the conflicting snippet (both sides + base)
+      - Explain what each side intended
+      - Ask which intent should win, or whether both need manual reconciliation
 
-5. **After successful rebase**: run `git push --force-with-lease` to update the remote branch.
+5. **Push**: `git push --force-with-lease` to update the remote branch.
 
-6. **Verification test**: Run the full test suite (`npm test` or project-specific test command) to confirm the rebase + resolution didn't break anything. If tests fail, diagnose and fix before proceeding.
+6. **Verification test**: Run the full test suite to confirm nothing broke. If tests fail, diagnose and fix before proceeding.
+
+### 1c. Re-run preflight
+
+After rebase + push + tests pass, **re-run `ship_preflight`** with the same parameters.
+- `needsRebase: false` and `ready: true` → proceed to Step 2.
+- `needsRebase: true` → someone pushed to base during our rebase. Go back to 1b.
+- `ready: false` (hard errors) → report errors and **STOP**.
+
+This loop naturally terminates — each iteration brings the branch closer to base.
 
 ### Merge strategy decision
 
-Based on preflight `file-overlap`:
+Based on the `file-overlap` check from the **final** preflight run:
 - **No overlap** → use `mergeStrategy: "squash"` (default, clean history)
 - **Overlap detected** → use `mergeStrategy: "merge"` (preserves ancestry chain for future three-way merges)
 
@@ -215,7 +226,7 @@ The tool handles: commit (optional), rebase verification, push (force-with-lease
 
 Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, merged, mergeStrategy, intermediate, tag, tagVerified, release }`.
 
-**If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1.5 and rebase before retrying.
+**If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1b and rebase before retrying.
 
 If `success: false` → do NOT proceed to cleanup. Report error and render completion card with variant `ship-blocked`.
 

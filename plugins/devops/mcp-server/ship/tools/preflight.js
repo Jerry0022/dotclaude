@@ -86,20 +86,19 @@ export async function handler(params) {
   }
   checks.push({ name: "all-pushed", value: unpushed, ok: unpushed === 0 || unpushed === null });
 
-  // 8. Base branch ahead check (merge-conflict risk)
-  const _behind = commitsAhead("HEAD", { ...opts, base: originBase });
+  // 8. Base branch ahead check (warning — resolved autonomously by ship skill)
   const baseBehindCount = (() => {
     const count = git(`rev-list --count HEAD..${originBase}`, opts);
     return count ? parseInt(count, 10) : 0;
   })();
-  if (baseBehindCount > 0) {
-    checks.push({ name: "base-ahead", value: baseBehindCount, ok: false });
-    errors.push(`Base branch '${base}' is ${baseBehindCount} commit(s) ahead of HEAD — merge or rebase base first to avoid conflicts`);
-  } else {
-    checks.push({ name: "base-ahead", value: 0, ok: true });
-  }
+  checks.push({
+    name: "base-ahead",
+    value: baseBehindCount,
+    ok: baseBehindCount === 0,
+    ...(baseBehindCount > 0 && { warning: `Base branch '${base}' is ${baseBehindCount} commit(s) ahead — rebase will be handled automatically` }),
+  });
 
-  // 9. File overlap detection — files modified in BOTH branch and base since divergence
+  // 9. File overlap detection (warning — resolved autonomously by ship skill)
   const overlap = fileOverlap(originBase, opts);
   if (overlap.overlap.length > 0) {
     checks.push({
@@ -110,20 +109,16 @@ export async function handler(params) {
       totalBranchFiles: overlap.branchFiles.length,
       totalBaseFiles: overlap.baseFiles.length,
       mergeBase: overlap.mergeBase?.slice(0, 8),
+      warning: `${overlap.overlap.length} file(s) modified in both branches — will be resolved during rebase`,
     });
-    errors.push(
-      `${overlap.overlap.length} file(s) modified in both your branch and ${base} since divergence — ` +
-      `rebase required before merge to prevent silent overwrites: ${overlap.overlap.slice(0, 5).join(", ")}` +
-      (overlap.overlap.length > 5 ? ` (+${overlap.overlap.length - 5} more)` : "")
-    );
   } else {
     checks.push({ name: "file-overlap", ok: true, count: 0 });
   }
 
-  // 10. Git config recommendations
+  // 10. Git config check (warning — auto-fixed by ship skill)
   const conflictStyle = getConfig("merge.conflictstyle", opts);
   if (conflictStyle !== "diff3" && conflictStyle !== "zdiff3") {
-    checks.push({ name: "config-conflictstyle", ok: false, current: conflictStyle, recommended: "diff3" });
+    checks.push({ name: "config-conflictstyle", ok: false, current: conflictStyle, recommended: "diff3", warning: "Will be set automatically before rebase" });
   } else {
     checks.push({ name: "config-conflictstyle", ok: true, current: conflictStyle });
   }
@@ -151,6 +146,14 @@ export async function handler(params) {
   const inWorktree = isWorktree(opts);
   checks.push({ name: "worktree", value: inWorktree });
 
+  // Collect warnings from checks (non-blocking issues resolved autonomously)
+  const warnings = checks.filter(c => c.warning).map(c => c.warning);
+
+  // Determine if rebase is needed (any merge-safety warnings present)
+  const needsRebase = checks.some(c =>
+    !c.ok && (c.name === "base-ahead" || c.name === "file-overlap" || c.name === "config-conflictstyle")
+  );
+
   const ready = errors.length === 0;
   return {
     ready,
@@ -161,9 +164,11 @@ export async function handler(params) {
     ahead,
     unpushed,
     inWorktree,
+    needsRebase,
     version: versionInfo.version,
     projectType: versionInfo.type,
     checks,
+    warnings,
     errors,
   };
 }
