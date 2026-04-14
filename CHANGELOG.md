@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.42.0] — 2026-04-14
+
+### Added
+
+- **local-llm** — new plugin: delegates mechanical coding tasks to local Gemma 4 E4B model via llama.cpp or Ollama
+- **local-llm** — MCP server with `local_generate`, `local_status`, `local_shutdown` tools
+- **local-llm** — lazy backend lifecycle: auto-start on first call, idle shutdown after 10 min
+- **local-llm** — auto-download: model GGUF fetched automatically if not found (huggingface-cli → curl → PowerShell fallback)
+- **local-llm** — deep-knowledge delegation rules: GREEN/YELLOW/RED decision matrix for when to delegate vs. handle directly
+- **local-llm** — SessionStart hook: health check, config validation, delegation instruction injection
+- **local-llm** — dual backend support: llama-cpp (recommended for GTX 2080 Super) and Ollama
+
 ## [0.41.6] — 2026-04-14
 
 ### Fixed
