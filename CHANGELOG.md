@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.41.5] — 2026-04-14
+
+### Fixed
+
+- **merge** — `git-sync.js`: ambiguous conflicts now use `⚠` marker (was `✗`) so the cron callback triggers Claude's semantic resolution instead of just reporting an error
+- **merge** — `git-sync.js`: post-abort guard verifies working tree is actually clean after `git merge --abort`; returns hard failure if tree is still dirty
+- **merge** — cron prompt: explicit 8-step procedure for conflict resolution — Claude MUST resolve conflicts (edit files, stage, commit), not just report them
+- **merge** — `merge-safety.md`: added conflict classification protocol (complementary, redundant, superseding, technical, design, delete-vs-modify), timestamp caveat, rebase/cherry-pick polarity table, escalation rules, and anti-patterns
+- **merge** — `agent-collaboration.md`: expanded conflict resolution section with concrete hunk classification and semantic verification steps
+- **merge** — `git-hygiene.md`: added merge safety cross-reference section
+- **version** — aligned marketplace.json to 0.41.4 (was at 0.41.3)
+
 ## [0.41.4] — 2026-04-14
 
 ### Fixed
