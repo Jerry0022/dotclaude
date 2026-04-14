@@ -131,17 +131,17 @@ function parseUsageText(text) {
 
   // Fallback: when weekly reset is < 24h away, claude.ai shows duration format
   // ("Zurücksetzung in X Std. Y Min." or just "X Min.") instead of day+time.
-  // The weekly section comes LAST after per-model sections, so we collect all
-  // duration-style resets after "Alle Modelle" and take the last one.
+  // "Alle Modelle" appears FIRST under weekly limits, followed by per-model
+  // sections (e.g. "Nur Sonnet"). Take the FIRST duration match after
+  // "Alle Modelle" — that's the weekly reset, not a per-model one.
   if (weeklyResetMinutes == null) {
     const afterAllModels = text.match(/(?:Alle Modelle|All Models)([\s\S]*)/);
     if (afterAllModels) {
-      const allDurations = [...afterAllModels[1].matchAll(
-        /(?:Zurücksetzung in|Resets? in)\s+(?:(\d+)\s*(?:Std\.|hr)\.?\s*)?(\d+)\s*(?:Min\.|min)/g
-      )];
-      if (allDurations.length > 0) {
-        const last = allDurations[allDurations.length - 1];
-        weeklyResetMinutes = (parseInt(last[1]) || 0) * 60 + (parseInt(last[2]) || 0);
+      const firstDuration = afterAllModels[1].match(
+        /(?:Zurücksetzung in|Resets? in)\s+(?:(\d+)\s*(?:Std\.|hr)\.?\s*)?(\d+)\s*(?:Min\.|min)/
+      );
+      if (firstDuration) {
+        weeklyResetMinutes = (parseInt(firstDuration[1]) || 0) * 60 + (parseInt(firstDuration[2]) || 0);
       }
     }
   }
@@ -149,12 +149,11 @@ function parseUsageText(text) {
   if (weeklyResetMinutes == null) {
     const afterAllModels = text.match(/(?:Alle Modelle|All Models)([\s\S]*)/);
     if (afterAllModels) {
-      const allHoursDurations = [...afterAllModels[1].matchAll(
-        /(?:Zurücksetzung in|Resets? in)\s+(\d+)\s*(?:Std\.|hr)/g
-      )];
-      if (allHoursDurations.length > 0) {
-        const last = allHoursDurations[allHoursDurations.length - 1];
-        weeklyResetMinutes = (parseInt(last[1]) || 0) * 60;
+      const firstHoursDuration = afterAllModels[1].match(
+        /(?:Zurücksetzung in|Resets? in)\s+(\d+)\s*(?:Std\.|hr)/
+      );
+      if (firstHoursDuration) {
+        weeklyResetMinutes = (parseInt(firstHoursDuration[1]) || 0) * 60;
       }
     }
   }
@@ -219,8 +218,12 @@ async function autoStartEdgeWithCDP() {
 async function restartEdgeWithCDP() {
   log('Restarting Edge with CDP on port', CDP_PORT, '...');
 
+  // Graceful shutdown first — gives Edge time to save session state for --restore-last-session
+  try { execSync('taskkill /IM msedge.exe', { stdio: 'ignore' }); } catch {}
+  await new Promise(r => setTimeout(r, 4000));
+  // Force-kill any remaining processes
   try { execSync('taskkill /F /IM msedge.exe', { stdio: 'ignore' }); } catch {}
-  await new Promise(r => setTimeout(r, 3000));
+  await new Promise(r => setTimeout(r, 1000));
 
   const child = spawn(EDGE_EXE, [
     `--remote-debugging-port=${CDP_PORT}`,
