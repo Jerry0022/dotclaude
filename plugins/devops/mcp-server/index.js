@@ -19,6 +19,7 @@ import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { register as registerHeartbeat } from "./lib/heartbeat.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, '..');
@@ -814,4 +815,5 @@ server.registerTool(
 // Connect and start
 const transport = new StdioServerTransport();
 await server.connect(transport);
+registerHeartbeat("dotclaude-completion");
 console.error("[dotclaude-completion-mcp] Server started on stdio");

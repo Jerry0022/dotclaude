@@ -16,6 +16,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { execSync } from "node:child_process";
 import { tokenize, scoreIssue } from "./matching.js";
+import { register as registerHeartbeat } from "../lib/heartbeat.js";
 
 // ---------------------------------------------------------------------------
 // Issue cache
@@ -123,3 +124,5 @@ setInterval(fetchIssues, REFRESH_INTERVAL_MS);
 // Start
 const transport = new StdioServerTransport();
 await server.connect(transport);
+registerHeartbeat("dotclaude-issues");
+console.error("[dotclaude-issues-mcp] Server started on stdio");
