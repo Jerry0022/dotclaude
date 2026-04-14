@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.3] — 2026-04-14
+
+### Fixed
+
+- **usage** — Edge restart uses graceful shutdown before force-kill, preserving user tabs via `--restore-last-session`
+- **usage** — weekly reset duration fallback now takes first match after "Alle Modelle" instead of last, preventing Sonnet-specific reset time from being reported as the weekly value
+
 ## [0.41.2] — 2026-04-14
 
 ### Fixed
