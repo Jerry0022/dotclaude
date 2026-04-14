@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.6] — 2026-04-14
+
+### Fixed
+
+- **usage** — delta computation now detects cycle resets: when a usage window resets (e.g. weekly 100% → 2%), baseline is treated as 0 instead of the stale previous-cycle value (was: `+-98%` instead of `+2%`)
+- **usage** — `formatDelta` no longer prepends `+` on negative values (was: `+-98%`)
+
 ## [0.41.5] — 2026-04-14
 
 ### Fixed
