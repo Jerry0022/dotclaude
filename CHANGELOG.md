@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.42.1] — 2026-04-14
+
+### Fixed
+
+- **concept** — heartbeat connection check no longer fires before the 30s grace period, fixing false "nicht verbunden" warning on page load
+- **concept** — panel reset now clears localStorage so stale decisions don't resurface on reload
+- **concept** — added `HEARTBEAT_GRACE_MS` to post-generation validation gate (pattern #6)
+- **version** — aligned marketplace.json to 0.42.0 (was stuck at 0.41.5)
+
 ## [0.42.0] — 2026-04-14
 
 ### Added
