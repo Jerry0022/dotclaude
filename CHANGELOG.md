@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.1] — 2026-04-14
+
+### Added
+
+- **hooks** — MCP server health check: detects dead servers after hard PC shutdowns via PID heartbeat files, blocks with clear message instead of cryptic MCP errors
+- **mcp-server** — heartbeat module: each server registers its PID on startup, cleans up on graceful exit
+
 ## [0.40.9] — 2026-04-14
 
 ### Changed
