@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.9] — 2026-04-14
+
+### Changed
+
+- **completion** — state line elements (commit, branch, PR, merge target) now render as clickable GitHub links
+- **completion** — merge target changed from `main` to `origin/main` for clarity (state line + CTA)
+
 ## [0.41.0] — 2026-04-14
 
 ### Added

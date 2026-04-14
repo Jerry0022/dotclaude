@@ -230,35 +230,43 @@ Fields that don't apply are shown with explicit negative values.
 {{state-icon}} {{merge}} · {{pr}} · {{push}} · {{commit}} · {{branch}}
 ```
 
+Elements are linked to their GitHub page when the repo URL can be resolved:
+- commit hash → `[abc1234](https://github.com/owner/repo/commit/abc1234)`
+- branch → [`feat/xyz`](https://github.com/owner/repo/tree/feat/xyz)
+- PR → [PR #N "Title"](https://github.com/owner/repo/pull/N)
+- merge target → [origin/main](https://github.com/owner/repo/tree/main)
+
+Falls back to plain text when no GitHub remote is detected.
+
 | Field | Positive | Negative |
 |-------|----------|----------|
-| merge | `merged → remote/main` | `not merged` |
-| pr | `PR #N "Title"` | `no PR` |
+| merge | `merged → [origin/main](…/tree/main)` | `not merged` |
+| pr | `[PR #N "Title"](…/pull/N)` | `no PR` |
 | push | `pushed` | `not pushed` |
-| commit | `abc1234` (committed hash) | `uncommitted` |
-| branch | `feat/xyz` or `feat/xyz (worktree)` | `main` (no feature branch) |
+| commit | `[abc1234](…/commit/abc1234)` | `uncommitted` |
+| branch | [`feat/xyz`](…/tree/feat/xyz) or [`feat/xyz (worktree)`](…/tree/feat/xyz) | [`main`](…/tree/main) |
 
 **Examples — all states:**
 
 | State | One-liner |
 |-------|-----------|
-| Fresh, nothing committed | 🔀 not merged · no PR · not pushed · uncommitted · `feat/xyz` |
-| Committed, not pushed | 🔀 not merged · no PR · not pushed · abc1234 · `feat/xyz` |
-| Pushed, no PR | 🔀 not merged · no PR · pushed · abc1234 · `feat/xyz` |
-| PR open | 🔀 not merged · PR #42 "Filter refactor" · pushed · abc1234 · `feat/xyz` |
-| Merged via PR | ✅ merged → remote/main · PR #42 "Filter refactor" · pushed · abc1234 · `feat/xyz` |
-| Direct push | ✅ merged → remote/main · no PR · pushed · abc1234 · `main` |
-| Worktree, not pushed | 🔀 not merged · no PR · not pushed · abc1234 · `feat/xyz (worktree)` |
-| Worktree, PR open | 🔀 not merged · PR #42 "Filter refactor" · pushed · abc1234 · `feat/xyz (worktree)` |
-| App running (after edits) | 🟢 not merged · no PR · not pushed · abc1234 · `feat/xyz` · app running |
-| App needs start | 🟡 not merged · no PR · not pushed · abc1234 · `feat/xyz` · app not started |
+| Fresh, nothing committed | 🔀 not merged · no PR · not pushed · uncommitted · [`feat/xyz`](…/tree/feat/xyz) |
+| Committed, not pushed | 🔀 not merged · no PR · not pushed · [abc1234](…/commit/abc1234) · [`feat/xyz`](…/tree/feat/xyz) |
+| Pushed, no PR | 🔀 not merged · no PR · pushed · [abc1234](…/commit/abc1234) · [`feat/xyz`](…/tree/feat/xyz) |
+| PR open | 🔀 not merged · [PR #42 "Filter refactor"](…/pull/42) · pushed · [abc1234](…/commit/abc1234) · [`feat/xyz`](…/tree/feat/xyz) |
+| Merged via PR | ✅ merged → [origin/main](…/tree/main) · [PR #42 "Filter refactor"](…/pull/42) · pushed · [abc1234](…/commit/abc1234) · [`feat/xyz`](…/tree/feat/xyz) |
+| Direct push | ✅ merged → [origin/main](…/tree/main) · no PR · pushed · [abc1234](…/commit/abc1234) · [`main`](…/tree/main) |
+| Worktree, not pushed | 🔀 not merged · no PR · not pushed · [abc1234](…/commit/abc1234) · [`feat/xyz (worktree)`](…/tree/feat/xyz) |
+| Worktree, PR open | 🔀 not merged · [PR #42 "Filter refactor"](…/pull/42) · pushed · [abc1234](…/commit/abc1234) · [`feat/xyz (worktree)`](…/tree/feat/xyz) |
+| App running (after edits) | 🟢 not merged · no PR · not pushed · [abc1234](…/commit/abc1234) · [`feat/xyz`](…/tree/feat/xyz) · app running |
+| App needs start | 🟡 not merged · no PR · not pushed · [abc1234](…/commit/abc1234) · [`feat/xyz`](…/tree/feat/xyz) · app not started |
 | No changes | ➖ No changes to repo |
 
 **State icons:**
 
 | Icon | Meaning |
 |------|---------|
-| ✅ | Final — on remote/main, all done |
+| ✅ | Final — on origin/main, all done |
 | 🔀 | In progress — branch/worktree, not on main yet |
 | 🟢 | App running — user must test |
 | 🟡 | App not started — user must start |
@@ -353,7 +361,7 @@ The footer line sits between the separator and the CTA. It contains:
 | 7 | aborted | 🚫 | opt. | — | — | dep. | yes |
 | 8 | **fallback** | 🔧 | yes | — | — | dep. | yes |
 
-- **ship-successful (1)**: ONLY after /devops-ship + successfully merged to remote/main. PR vs. direct push → state line shows the difference.
+- **ship-successful (1)**: ONLY after /devops-ship + successfully merged to origin/main. PR vs. direct push → state line shows the difference.
 - **ship-blocked (3)**: ONLY after /devops-ship + NOT merged (PR open, build fail, etc.).
 - **test (4)**: Code edits + app/service started or startable. Applies to ANY project type (web, CLI, desktop, API, game — not just UI). If user needs to test, always use this variant and try to start the app.
 - **test-minimal (5)**: User starts app via prompt, no edits done yet. Minimal greeting card.
@@ -375,7 +383,7 @@ The footer line sits between the separator and the CTA. It contains:
 ### Variant Selection Rules
 
 ```
-if   ship pipeline ran + merged to remote/main  → ship-successful (1)
+if   ship pipeline ran + merged to origin/main  → ship-successful (1)
 elif ship pipeline ran + NOT merged              → ship-blocked (3)
 elif task aborted / infeasible / rate-limited    → aborted (7)
 elif code edits + app/service started or startable → test (4)
@@ -387,7 +395,7 @@ else                                             → fallback (8)
 
 **STRICT variant rules (never violate):**
 
-- **ship-successful**: ONLY after `/devops-ship` ran `ship_release` and it was merged to remote/main. A commit, push, or PR alone is NEVER "ship-successful". Use `ready` instead.
+- **ship-successful**: ONLY after `/devops-ship` ran `ship_release` and it was merged to origin/main. A commit, push, or PR alone is NEVER "ship-successful". Use `ready` instead.
 - **ship-blocked**: ONLY after `/devops-ship` ran but did NOT merge (build failed, PR open, gate failed). Never use for plain uncommitted/unpushed state.
 - **test-minimal**: ONLY when the user freshly starts the app via a prompt and no code edits have been made yet. Never after a commit, task completion, or any other action. This is a session-start greeting, nothing else.
 - **ready**: Default for any completed code/doc change (>=1 edit) that hasn't gone through the ship pipeline. Threshold is >=1 edit — not >5.
