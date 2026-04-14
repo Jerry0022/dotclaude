@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
  * @script git-sync
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Core git sync logic — fetch remote, merge parent chain into
  *   current branch. Supports branch hierarchy (feat/auth/login merges
- *   main → feat → feat/auth). Auto-resolves conflicts with --ours.
+ *   main → feat → feat/auth). Conflicts are NEVER auto-resolved —
+ *   merge is aborted and the user is warned to rebase manually.
  *   Standalone: called by prompt.git.sync hook and session-start cron.
  */
 
@@ -50,44 +51,25 @@ function getParentChain(branchName) {
   return parents;
 }
 
-// Try merging source into HEAD. On conflict, auto-resolve with --ours
-// (keep current branch's version). Only abort if resolution fails.
+// Try merging source into HEAD. On conflict, ABORT and warn —
+// never auto-resolve to prevent silent overwrites of parallel work.
 function tryMerge(source) {
   const behind = git(`rev-list --count HEAD..${source}`);
   if (!behind || parseInt(behind) === 0) return null; // already up to date
 
   const count = parseInt(behind);
 
-  // Normal merge
+  // Normal merge (clean — no conflicts)
   if (git(`merge ${source} --no-edit --quiet`) !== null) {
     return { source, commits: count };
   }
 
-  // Merge conflicted — try to auto-resolve each file with --ours
+  // Merge conflicted — collect info, then ABORT. Never auto-resolve.
   const conflictOutput = git('diff --name-only --diff-filter=U');
-  if (!conflictOutput) {
-    // No conflict markers but merge still failed → unknown error, abort
-    git('merge --abort');
-    return { source, commits: count, failed: true };
-  }
-
-  const files = conflictOutput.split('\n').filter(Boolean);
-
-  for (const file of files) {
-    if (git(`checkout --ours -- "${file}"`) === null) {
-      git('merge --abort');
-      return { source, commits: count, failed: true };
-    }
-    git(`add -- "${file}"`);
-  }
-
-  // Complete the merge with resolved files
-  if (git('commit --no-edit') !== null) {
-    return { source, commits: count, autoResolved: files };
-  }
-
   git('merge --abort');
-  return { source, commits: count, failed: true };
+
+  const files = conflictOutput ? conflictOutput.split('\n').filter(Boolean) : [];
+  return { source, commits: count, conflict: true, files };
 }
 
 // Fetch main
@@ -110,12 +92,11 @@ for (const parent of parents) {
   const result = tryMerge(parent);
   if (!result) continue;
 
-  if (result.failed) {
-    messages.push(`✗ ${parent} → ${branch}: Konflikt, nicht lösbar`);
-  } else if (result.autoResolved) {
+  if (result.conflict) {
     messages.push(
-      `⚠ ${parent} → ${branch}: ${result.commits} commit(s), ` +
-      `${result.autoResolved.length} Konflikt(e) auto-resolved (--ours)`
+      `✗ ${parent} → ${branch}: ${result.files.length} file(s) in conflict — ` +
+      `merge aborted. Rebase before shipping: git rebase origin/${parent}\n` +
+      `  Conflicting: ${result.files.join(', ')}`
     );
   } else {
     messages.push(`✓ ${parent} → ${branch}: ${result.commits} commit(s)`);

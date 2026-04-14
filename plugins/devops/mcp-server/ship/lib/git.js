@@ -130,6 +130,41 @@ export function branchExists(name, opts) {
 }
 
 /**
+ * Detect files modified in both the current branch and the base since their common ancestor.
+ * Returns { mergeBase, branchFiles, baseFiles, overlap }.
+ */
+export function fileOverlap(base, opts) {
+  const mergeBase = git(`merge-base HEAD ${base}`, opts);
+  if (!mergeBase) return { mergeBase: null, branchFiles: [], baseFiles: [], overlap: [] };
+
+  const branchRaw = git(`diff --name-only ${mergeBase} HEAD`, opts) || "";
+  const baseRaw = git(`diff --name-only ${mergeBase} ${base}`, opts) || "";
+
+  const branchFiles = branchRaw.split("\n").filter(Boolean);
+  const baseFiles = baseRaw.split("\n").filter(Boolean);
+  const baseSet = new Set(baseFiles);
+  const overlap = branchFiles.filter((f) => baseSet.has(f));
+
+  return { mergeBase, branchFiles, baseFiles, overlap };
+}
+
+/**
+ * Check if the current branch contains all commits from the given base ref.
+ * Returns true if HEAD is up-to-date with (or ahead of) base.
+ */
+export function isRebasedOnto(base, opts) {
+  const behind = git(`rev-list --count HEAD..${base}`, opts);
+  return behind !== null && parseInt(behind, 10) === 0;
+}
+
+/**
+ * Check git config value. Returns the value or null.
+ */
+export function getConfig(key, opts) {
+  return git(`config --get ${key}`, opts);
+}
+
+/**
  * Detect parent branch from sub-branch naming convention.
  * Convention: sub-branches are `<parent>/<role>` (e.g. feat/42-video-filters/core).
  * Strips the last path segment and checks if the remainder exists as a branch.

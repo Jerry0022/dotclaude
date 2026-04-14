@@ -17,6 +17,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [desktop-testing.md](desktop-testing.md) | Automated Desktop Testing (Computer Use) | Rules for when and how Claude takes over the desktop to run visual UI tests |
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |
 | [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/devops-commit`, `/devops-ship`, and h... |
+| [merge-safety.md](merge-safety.md) | Merge Safety — Parallel Development | Preventing silent overwrites: rebase gates, diff3, Mergiraf, branch protection |
 | [plugin-behavior.md](plugin-behavior.md) | Plugin Behavior Rules | Core behavioral rules enforced by the devops plugin. |
 | [skill-extension-guide.md](skill-extension-guide.md) | Skill Extension Guide — For Plugin Integrators | How to customize devops skills and agents for your project. |
 | [test-strategy.md](test-strategy.md) | Test Execution Strategy | Cross-cutting rules for when and how to test. Referenced by the completion flow |

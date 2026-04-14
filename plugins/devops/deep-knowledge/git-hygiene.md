@@ -19,3 +19,11 @@ Cross-cutting git rules referenced by `/devops-commit`, `/devops-ship`, and hook
 - Never force-push to `main`/`master` without explicit user confirmation.
 - After merge: local branch is deleted, remote branch is deleted by `--delete-branch`.
 - Stale branches (upstream gone, no worktree) are cleaned up by the ship flow.
+
+## Parallel development safety
+
+See [merge-safety.md](merge-safety.md) for full details on preventing silent overwrites.
+
+- **Rebase before merge** — mandatory when base has diverged (enforced by `ship_release`)
+- **diff3 conflict style** — required for all developers (`git config merge.conflictstyle diff3`)
+- **No auto-resolve** — `git-sync.js` never uses `--ours`; conflicts abort and warn

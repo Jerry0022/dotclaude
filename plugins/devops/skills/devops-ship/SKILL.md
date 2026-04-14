@@ -76,6 +76,50 @@ Check the result:
 
 The tool checks: clean tree, commits ahead, all pushed, version consistency (skipped for intermediate), worktree detection.
 
+## Step 1.5 — Rebase & Merge Safety
+
+**Purpose:** Prevent silent overwrites when parallel developers ship to the same base.
+
+### When to trigger
+Run this step if **any** of these preflight checks failed:
+- `file-overlap` — files modified in both branch and base
+- `base-ahead` — base has commits HEAD doesn't include
+- `config-conflictstyle` — merge.conflictstyle not set to diff3/zdiff3
+
+### Rebase flow
+
+1. **Set diff3** (if not configured): Run `git config merge.conflictstyle diff3` in the repo.
+
+2. **Rebase onto base**:
+   ```bash
+   git fetch origin <base>
+   git rebase origin/<base>
+   ```
+
+3. **If rebase succeeds** (no conflicts): continue to Step 2.
+
+4. **If rebase has conflicts** — resolve them directly (do NOT ask user):
+   a. Run `git diff --name-only --diff-filter=U` to list conflicting files.
+   b. For each conflicting file:
+      - Read the file (contains `<<<<<<<`/`=======`/`>>>>>>>` markers with diff3 base section)
+      - Analyze **both sides semantically**: what did the branch change? what did base change?
+      - Produce a merged version that preserves **both** intents
+      - Write the resolved file, then `git add <file>`
+   c. Run `git rebase --continue`
+   d. If more conflicts appear (multi-commit rebase), repeat (b)–(c)
+
+5. **After successful rebase**: run `git push --force-with-lease` to update the remote branch.
+
+6. **Verification test**: Run the full test suite (`npm test` or project-specific test command) to confirm the rebase + resolution didn't break anything. If tests fail, diagnose and fix before proceeding.
+
+### Merge strategy decision
+
+Based on preflight `file-overlap`:
+- **No overlap** → use `mergeStrategy: "squash"` (default, clean history)
+- **Overlap detected** → use `mergeStrategy: "merge"` (preserves ancestry chain for future three-way merges)
+
+Pass the chosen strategy to `ship_release`.
+
 ## Step 2 — Build + Quality Gates
 
 Call `ship_build` MCP tool (always pass `cwd`):
@@ -137,6 +181,7 @@ ship_release({
   tag: "v0.18.0",
   releaseNotes: "...",
   prerelease: false,
+  mergeStrategy: "squash",
   cwd: "<cwd>"
 })
 ```
@@ -150,15 +195,27 @@ ship_release({
   commitMessage: null,
   tag: null,
   releaseNotes: null,
+  mergeStrategy: "squash",
+  cwd: "<cwd>"
+})
+```
+
+**With file overlap (use merge commit to preserve ancestry):**
+```
+ship_release({
+  ...
+  mergeStrategy: "merge",
   cwd: "<cwd>"
 })
 ```
 
 For intermediate merges: no tag, no release notes, no version commit. The tool automatically skips tag/release creation when `base` is not `main`.
 
-The tool handles: commit (optional), push, PR create (or reuse existing), squash-merge, tag (main only), GitHub release (main only).
+The tool handles: commit (optional), rebase verification, push (force-with-lease after rebase), PR create (or reuse with mergeability check), merge (squash or merge commit), tag (main only), GitHub release (main only).
 
-Returns: `{ branch, commit, pushed, pr: {number, url}, merged, intermediate, tag, tagVerified, release }`.
+Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, merged, mergeStrategy, intermediate, tag, tagVerified, release }`.
+
+**If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1.5 and rebase before retrying.
 
 If `success: false` → do NOT proceed to cleanup. Report error and render completion card with variant `ship-blocked`.
 
