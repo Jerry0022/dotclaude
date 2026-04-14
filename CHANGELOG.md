@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.41.2] — 2026-04-14
+
+### Fixed
+
+- **ship** — preflight: `base-ahead`, `file-overlap`, `config-conflictstyle` are now warnings (not hard errors), returns `needsRebase` flag for autonomous resolution
+- **ship** — SKILL.md: Step 1 is now a preflight → resolve → re-check loop instead of linear Step 1 → Step 1.5; only truly ambiguous conflicts trigger AskUserQuestion
+- **ship** — `git-sync.js` v0.3.0: trivial conflict auto-resolver (one-side-unchanged, identical changes, whitespace-only) — only ambiguous conflicts warn the user
+- **deep-knowledge** — `merge-safety.md` updated to reflect tiered conflict resolution behavior
+
 ## [0.41.1] — 2026-04-14
 
 ### Added

@@ -1,7 +1,7 @@
 # Merge Safety — Parallel Development
 
 Cross-cutting reference for preventing silent overwrites when multiple developers
-ship to the same branch. Referenced by `/devops-ship` (Step 1.5) and `git-sync.js`.
+ship to the same branch. Referenced by `/devops-ship` (Step 1) and `git-sync.js`.
 
 ## Why Squash Merges Cause Data Loss
 
@@ -69,15 +69,20 @@ unsupported or unparseable files.
 
 ## How git-sync.js Handles Conflicts
 
-As of v0.2.0, `git-sync.js` **never auto-resolves conflicts**. When a merge from a
-parent branch (e.g., main → feature) conflicts:
+As of v0.3.0, `git-sync.js` resolves conflicts in two tiers:
 
-1. The merge is **aborted** immediately
-2. A warning is printed with the list of conflicting files
-3. The developer must rebase manually before shipping
+1. **Trivial conflicts** — resolved automatically without user intervention:
+   - One side unchanged from base → take the other side
+   - Both sides made identical changes → take either
+   - Only whitespace differences on one side → take the substantive change
 
-This prevents the previous behavior where `--ours` silently discarded parent branch
-changes — the #1 cause of lost work in parallel development.
+2. **Ambiguous conflicts** — merge is aborted, warning printed:
+   - Both sides changed the same code in different ways
+   - No trivial resolution determinable from the diff alone
+   - The developer (or Claude during `/devops-ship`) resolves semantically
+
+This replaces v0.1.0's blind `--ours` (lost remote work) and v0.2.0's blind abort
+(bothered the user for trivially resolvable conflicts).
 
 ## How ship_release Prevents Overwrites
 
@@ -86,7 +91,7 @@ The release tool verifies the branch is rebased before allowing merge:
 1. `git fetch origin <base>` — get latest base
 2. `isRebasedOnto(origin/<base>)` — verify HEAD includes all base commits
 3. If not rebased → return `rebaseRequired: true` with overlap analysis
-4. The ship skill (Step 1.5) handles rebase + AI conflict resolution + test
+4. The ship skill (Step 1 loop) handles rebase + AI conflict resolution + test
 
 Additionally, when file overlap is detected in preflight, the skill switches from
 `squash` to `merge` strategy to preserve the ancestry chain for future merges.
