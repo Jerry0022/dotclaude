@@ -64,7 +64,16 @@ function renderBar(pct, elapsedPct) {
 function formatDelta(delta) {
   if (delta == null) return '';
   if (isNaN(delta)) delta = 0;
-  return '+' + delta + '%';
+  const sign = delta >= 0 ? '+' : '';
+  return sign + delta + '%';
+}
+
+// Compute delta between two usage snapshots, handling cycle resets.
+// If fresh pct < previous pct, a new cycle started — baseline is 0.
+function computeDelta(freshPct, prevPct) {
+  const f = freshPct || 0;
+  const p = prevPct || 0;
+  return f < p ? f : f - p;
 }
 
 function formatResetShort(minutes) {
@@ -543,8 +552,8 @@ function refreshUsage() {
             let delta5h = null;
             let deltaWk = null;
             if (previous?.session) {
-              delta5h = (escalatedData.session?.pct || 0) - (previous.session?.pct || 0);
-              deltaWk = (escalatedData.weekly?.pct || 0) - (previous.weekly?.pct || 0);
+              delta5h = computeDelta(escalatedData.session?.pct, previous.session?.pct);
+              deltaWk = computeDelta(escalatedData.weekly?.pct, previous.weekly?.pct);
             }
             return { success: true, data: escalatedData, delta5h, deltaWk };
           }
@@ -563,8 +572,8 @@ function refreshUsage() {
       let delta5h = null;
       let deltaWk = null;
       if (previous?.session) {
-        delta5h = (freshData.session?.pct || 0) - (previous.session?.pct || 0);
-        deltaWk = (freshData.weekly?.pct || 0) - (previous.weekly?.pct || 0);
+        delta5h = computeDelta(freshData.session?.pct, previous.session?.pct);
+        deltaWk = computeDelta(freshData.weekly?.pct, previous.weekly?.pct);
       }
       return { success: true, data: freshData, delta5h, deltaWk };
     }
@@ -586,8 +595,8 @@ function refreshUsage() {
         let delta5h = null;
         let deltaWk = null;
         if (previous?.session) {
-          delta5h = (retryData.session?.pct || 0) - (previous.session?.pct || 0);
-          deltaWk = (retryData.weekly?.pct || 0) - (previous.weekly?.pct || 0);
+          delta5h = computeDelta(retryData.session?.pct, previous.session?.pct);
+          deltaWk = computeDelta(retryData.weekly?.pct, previous.weekly?.pct);
         }
         return { success: true, data: retryData, delta5h, deltaWk };
       }
