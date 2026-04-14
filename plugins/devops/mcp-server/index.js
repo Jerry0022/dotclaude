@@ -167,7 +167,7 @@ const VARIANTS = {
 
 const CTA = {
   en: {
-    'ship-successful-merged': '## \ud83d\ude80 SHIPPED. merged \u2192 {merged} \u2014 All DONE',
+    'ship-successful-merged': '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 All DONE',
     'ship-successful-plain':  '## \ud83d\ude80 SHIPPED \u2014 All DONE',
     ready:                    '## \ud83d\udce6 READY \u2014 SHIP or CHANGE?',
     'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
@@ -178,7 +178,7 @@ const CTA = {
     fallback:                 '## \ud83d\udd27 DONE \u2014 Anything ELSE?',
   },
   de: {
-    'ship-successful-merged': '## \ud83d\ude80 SHIPPED. merged \u2192 {merged} \u2014 Alles ERLEDIGT',
+    'ship-successful-merged': '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 Alles ERLEDIGT',
     'ship-successful-plain':  '## \ud83d\ude80 SHIPPED \u2014 Alles ERLEDIGT',
     ready:                    '## \ud83d\udce6 READY \u2014 SHIP oder ÄNDERN?',
     'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
@@ -189,6 +189,28 @@ const CTA = {
     fallback:                 '## \ud83d\udd27 DONE \u2014 Noch was ANDERES?',
   },
 };
+
+/**
+ * Resolve the GitHub HTTPS base URL from the git remote origin.
+ * Returns e.g. "https://github.com/owner/repo" or '' on failure.
+ */
+function getRepoUrl(cwd) {
+  try {
+    const raw = execSync('git remote get-url origin', {
+      encoding: 'utf8', timeout: 5000,
+      cwd: cwd || undefined,
+    }).trim();
+    // SSH: git@github.com:owner/repo.git
+    const sshMatch = raw.match(/git@github\.com:(.+?)(?:\.git)?$/);
+    if (sshMatch) return 'https://github.com/' + sshMatch[1];
+    // HTTPS: https://github.com/owner/repo.git
+    const httpsMatch = raw.match(/https:\/\/github\.com\/(.+?)(?:\.git)?$/);
+    if (httpsMatch) return 'https://github.com/' + httpsMatch[1];
+    return '';
+  } catch {
+    return '';
+  }
+}
 
 function getBuildId(overrideCwd) {
   try {
@@ -238,7 +260,7 @@ function renderTests(tests) {
   return '**Tests**\n' + items.join('\n');
 }
 
-function renderState(state, variant) {
+function renderState(state, variant, repoUrl) {
   if (!state) {
     if (variant === 'analysis') return '\u2796 No changes to repo';
     return '';
@@ -253,18 +275,37 @@ function renderState(state, variant) {
   else                                         icon = '\u2796';
 
   const branch = state.branch || 'main';
-  const branchStr = branch + (state.worktree ? ' (worktree)' : '');
-  const commitStr = state.commit ? state.commit : 'uncommitted';
+  const branchLabel = branch + (state.worktree ? ' (worktree)' : '');
+  const branchStr = repoUrl
+    ? '[`' + branchLabel + '`](' + repoUrl + '/tree/' + branch + ')'
+    : '`' + branchLabel + '`';
+
+  const commitStr = state.commit
+    ? (repoUrl
+      ? '[' + state.commit + '](' + repoUrl + '/commit/' + state.commit + ')'
+      : state.commit)
+    : 'uncommitted';
+
   const pushStr = state.pushed ? 'pushed' : 'not pushed';
 
   let prStr = 'no PR';
-  if (state.pr) prStr = 'PR #' + state.pr.number + ' "' + state.pr.title + '"';
+  if (state.pr) {
+    const prLabel = 'PR #' + state.pr.number + ' "' + state.pr.title + '"';
+    prStr = repoUrl
+      ? '[' + prLabel + '](' + repoUrl + '/pull/' + state.pr.number + ')'
+      : prLabel;
+  }
 
   let mergeStr = 'not merged';
-  if (state.merged) mergeStr = 'merged \u2192 ' + state.merged;
+  if (state.merged) {
+    const target = 'origin/' + state.merged;
+    mergeStr = repoUrl
+      ? 'merged \u2192 [' + target + '](' + repoUrl + '/tree/' + state.merged + ')'
+      : 'merged \u2192 ' + target;
+  }
 
   // Order: most important first — merge · PR · push · commit · branch
-  let line = icon + ' ' + mergeStr + ' \u00b7 ' + prStr + ' \u00b7 ' + pushStr + ' \u00b7 ' + commitStr + ' \u00b7 `' + branchStr + '`';
+  let line = icon + ' ' + mergeStr + ' \u00b7 ' + prStr + ' \u00b7 ' + pushStr + ' \u00b7 ' + commitStr + ' \u00b7 ' + branchStr;
 
   if (state.appStatus === 'running')     line += ' \u00b7 app running';
   if (state.appStatus === 'not-started') line += ' \u00b7 app not started';
@@ -356,7 +397,8 @@ function renderCard(input, meterText, buildId) {
 
   // Block B — End state (with extra blank line above for visual separation)
   if (config.state) {
-    const stateLine = renderState(input.state, variant);
+    const repoUrl = getRepoUrl(input.cwd);
+    const stateLine = renderState(input.state, variant, repoUrl);
     if (stateLine) {
       parts.push(stateLine);
       parts.push('');
