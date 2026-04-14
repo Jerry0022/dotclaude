@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.41.0] — 2026-04-14
+
+### Added
+
+- **ship** — merge safety system to prevent silent overwrites in parallel development:
+  - `git-sync.js` v0.2.0: conflicts abort + warn instead of auto-resolving with `--ours`
+  - `preflight.js`: file overlap detection (branch vs base), `merge.conflictstyle` config check
+  - `release.js`: mandatory rebase-gate before merge, configurable merge strategy (squash/merge/rebase)
+  - `github.js`: PR mergeability re-check on reuse, strategy parameter for `mergePR()`
+  - `SKILL.md` Step 1.5: AI-driven rebase, conflict resolution, and post-rebase test run
+- **deep-knowledge** — `merge-safety.md`: reference doc covering diff3, Mergiraf, branch protection, squash ancestry problem
+
+### Fixed
+
+- **version** — align marketplace.json to 0.40.8
+
 ## [0.40.8] — 2026-04-13
 
 ### Changed
