@@ -192,10 +192,11 @@ are present. **Grep the generated file** for each required pattern:
 | 3 | `connection-warning` | Disconnection warning element |
 | 4 | `checkClaudeConnection` | Heartbeat checker function |
 | 5 | `HEARTBEAT_STALE_MS` | Heartbeat staleness threshold |
-| 6 | `pollHeartbeat` | HTTP heartbeat polling function |
-| 7 | `panel-ready` | Ready-state panel element |
-| 8 | `panel-submitted` | Submitted-state panel element |
-| 9 | `localStorage` | Reload resilience (state persistence with TTL) |
+| 6 | `HEARTBEAT_GRACE_MS` | Grace period — suppresses warning during startup |
+| 7 | `pollHeartbeat` | HTTP heartbeat polling function |
+| 8 | `panel-ready` | Ready-state panel element |
+| 9 | `panel-submitted` | Submitted-state panel element |
+| 10 | `localStorage` | Reload resilience (state persistence with TTL) |
 
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. This is a **blocking gate** — no exceptions, no "this
