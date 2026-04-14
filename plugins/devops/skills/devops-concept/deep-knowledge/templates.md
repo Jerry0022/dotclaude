@@ -907,6 +907,9 @@ document.getElementById('panel-ready').style.display = 'block';
 document.getElementById('submit-btn').disabled = false;
 document.getElementById('submit-btn').textContent = 'Entscheidungen abschicken';
 document.body.classList.remove('concept-submitted');
+// Clear cached decisions so reload doesn't resurrect stale selections
+const slug = location.pathname.split('/').pop().replace('.html', '');
+localStorage.removeItem('concept-state-' + slug);
 ```
 
 This is the visual cycle:
@@ -942,6 +945,8 @@ and the page communicate through.
 ```javascript
 // --- Claude Connection Heartbeat (HTTP Bridge) ---
 const HEARTBEAT_STALE_MS = 90000; // 90s — safely covers 60s cron interval + buffer
+const HEARTBEAT_GRACE_MS = 30000; // 30s — Claude needs time to start bridge + cron
+const _pageLoadedAt = Date.now();
 let _lastHeartbeatTs = 0;
 
 async function pollHeartbeat() {
@@ -955,6 +960,10 @@ async function pollHeartbeat() {
 }
 
 function checkClaudeConnection() {
+  // Suppress warning during grace period — Claude needs time to start the
+  // bridge server, set up the heartbeat cron, and send the first POST.
+  if (Date.now() - _pageLoadedAt < HEARTBEAT_GRACE_MS) return;
+
   const isConnected = _lastHeartbeatTs && (Date.now() - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
   const warning = document.getElementById('connection-warning');
   const btn = document.getElementById('submit-btn');
@@ -977,11 +986,10 @@ function checkClaudeConnection() {
   }
 }
 
-// Poll heartbeat every 5 seconds, check connection after each poll
+// Poll heartbeat every 5 seconds — starts immediately so data arrives ASAP.
+// checkClaudeConnection() is a no-op during grace period, so the warning
+// won't flash before Claude has had time to set up.
 setInterval(async () => { await pollHeartbeat(); checkClaudeConnection(); }, 5000);
-// Initial grace period: 30 seconds — Claude needs time to start the bridge
-// server, set up the heartbeat cron, and send the first POST.
-setTimeout(async () => { await pollHeartbeat(); checkClaudeConnection(); }, 30000);
 ```
 
 **Claude-side heartbeat** (executed by Claude via Bash or CronCreate):
