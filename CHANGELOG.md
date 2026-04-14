@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- **hooks** — `ss.team.changelog`: only show team changes since last display (was: all commits since user's last own commit, repeating already-seen changes across sessions)
+- **hooks** — `ss.team.changelog`: persist "last shown" timestamp to `%TEMP%` keyed by repo remote URL hash (worktree-independent)
+- **hooks** — `ss.team.changelog`: resolve GitHub login via `gh api user` for identity matching — fixes `isMe()` mismatches when local git config differs from GitHub noreply email (e.g. web UI commits, Claude Code Desktop)
 - **merge** — `git-sync.js`: ambiguous conflicts now use `⚠` marker (was `✗`) so the cron callback triggers Claude's semantic resolution instead of just reporting an error
 - **merge** — `git-sync.js`: post-abort guard verifies working tree is actually clean after `git merge --abort`; returns hard failure if tree is still dirty
 - **merge** — cron prompt: explicit 8-step procedure for conflict resolution — Claude MUST resolve conflicts (edit files, stage, commit), not just report them
