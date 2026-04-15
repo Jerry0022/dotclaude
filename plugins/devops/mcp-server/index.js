@@ -314,7 +314,11 @@ function renderState(state, variant, repoUrl) {
   }
 
   // Order: most important first — merge · PR · push · commit · branch
-  let line = icon + ' ' + mergeStr + ' \u00b7 ' + prStr + ' \u00b7 ' + pushStr + ' \u00b7 ' + commitStr + ' \u00b7 ' + branchStr;
+  // When merged, "pushed" is redundant (you can't merge without pushing)
+  const segments = [mergeStr, prStr];
+  if (!state.merged) segments.push(pushStr);
+  segments.push(commitStr, branchStr);
+  let line = icon + ' ' + segments.join(' \u00b7 ');
 
   if (state.appStatus === 'running')     line += ' \u00b7 app running';
   if (state.appStatus === 'not-started') line += ' \u00b7 app not started';
