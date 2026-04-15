@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.43.2] — 2026-04-15
+
+### Fixed
+
+- **completion** — removed redundant "pushed" from status line when merged (implied by merge target)
+
 ## [0.43.1] — 2026-04-15
 
 ### Fixed
