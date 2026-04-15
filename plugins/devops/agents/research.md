@@ -5,7 +5,8 @@ description: >-
   practices. Runs in isolated context to keep main conversation clean.
   <example>Compare React vs Vue for our use case</example>
   <example>Research current best practices for API rate limiting</example>
-model: sonnet
+model: opus
+effort: high
 color: cyan
 tools: ["WebSearch", "WebFetch", "Read", "Grep", "Glob"]
 ---
