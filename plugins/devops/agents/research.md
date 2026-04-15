@@ -9,6 +9,7 @@ model: opus
 effort: high
 color: cyan
 tools: ["WebSearch", "WebFetch", "Read", "Grep", "Glob"]
+skills: ["devops-deep-research"]
 ---
 
 # Research Agent
@@ -29,7 +30,7 @@ Before starting, read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` §5 (R
 
 ## Output format
 
-See /devops-deep-research skill for full format specification.
+Follow the methodology and output format from the preloaded devops-deep-research skill.
 
 ## Rules
 
