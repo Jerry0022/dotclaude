@@ -30,6 +30,15 @@ _lock = threading.Lock()
 
 class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
 
+    def end_headers(self):
+        # No-cache on ALL responses — static HTML files included.
+        # Without this, the browser heuristic-caches HTML and Ctrl+F5
+        # still serves stale content when Claude updates the file in-place.
+        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+        self.send_header('Pragma', 'no-cache')
+        self.send_header('Expires', '0')
+        super().end_headers()
+
     def do_GET(self):
         if self.path == '/heartbeat':
             with _lock:
@@ -86,7 +95,6 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.send_header('Cache-Control', 'no-cache, no-store')
 
     def log_message(self, fmt, *args):
         pass  # suppress per-request logging

@@ -6,6 +6,7 @@ description: >-
   <example>Create the user service with CRUD operations</example>
   <example>Add a database migration for the new schema</example>
 model: sonnet
+effort: medium
 color: yellow
 tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
 ---
