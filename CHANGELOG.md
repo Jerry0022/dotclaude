@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.43.0] — 2026-04-15
+
+### Added
+
+- **agents** — `effort` frontmatter field for po (high) and research (high) agents, enabling deeper reasoning for strategic decisions and fact verification
+- **agents** — po and research agents upgraded from sonnet to opus model
+- **agents** — research agent preloads devops-deep-research skill via `skills:` frontmatter for full methodology access
+- **orchestration** — model & effort defaults reference table in agent-orchestration.md, consumed by `/devops-agents` and `/devops-autonomous`
+- **agents** — effort caveat in feature agent docs: warns against haiku + high-effort combinations when overriding model at invocation time
+
+### Fixed
+
+- **version** — marketplace.json synced to 0.42.1 (root, devops, and local-llm entries were stale)
+
 ## [0.42.1] — 2026-04-14
 
 ### Fixed
