@@ -7,7 +7,8 @@ description: >-
   feature ships balanced for all stakeholders.
   <example>Evaluate whether this feature justifies its complexity for end users</example>
   <example>Challenge the scaling implications of the proposed architecture</example>
-model: sonnet
+model: opus
+effort: high
 color: yellow
 tools: ["Bash", "Read", "Grep", "Glob", "AskUserQuestion"]
 ---

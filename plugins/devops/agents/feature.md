@@ -111,9 +111,14 @@ Choose the model for each sub-agent based on task complexity:
 **Use haiku** when the sub-agent only reads, searches, or summarizes — no code output.
 **Use opus** only when sonnet's output quality is insufficient for the specific task.
 
+**Effort caveat:** `effort` cannot be overridden at invocation time — it comes from the
+target agent's frontmatter. When downgrading `model` (e.g. research from opus to haiku),
+the frontmatter `effort` still applies. Avoid spawning haiku with agents that define
+`effort: high` (po, research) — either omit the model override or use sonnet instead.
+
 Example: spawning a research agent for a simple lookup:
 ```
-Agent({ subagent_type: "research", model: "haiku", prompt: "..." })
+Agent({ subagent_type: "research", model: "sonnet", prompt: "..." })
 ```
 
 ## Rules
