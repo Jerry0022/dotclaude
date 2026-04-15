@@ -7,7 +7,6 @@ description: >-
   <example>Design the onboarding flow with wireframes and visual specs</example>
   <example>Create a design system with tokens, components, and usage guidelines</example>
 model: sonnet
-effort: medium
 color: purple
 tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Agent",
         "get_design_context", "get_metadata", "get_screenshot", "get_variable_defs",

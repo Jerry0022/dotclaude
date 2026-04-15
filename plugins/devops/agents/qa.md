@@ -6,7 +6,6 @@ description: >-
   <example>Run the tests and check for console errors</example>
   <example>Build the project and verify everything compiles</example>
 model: sonnet
-effort: medium
 color: green
 tools: ["Bash", "Read", "Glob", "Grep", "preview_screenshot", "preview_snapshot", "preview_console_logs"]
 ---

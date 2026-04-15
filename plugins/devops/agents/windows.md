@@ -6,7 +6,6 @@ description: >-
   <example>Add system tray support with notifications</example>
   <example>Create the Windows installer with auto-update</example>
 model: sonnet
-effort: medium
 color: red
 tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
 ---

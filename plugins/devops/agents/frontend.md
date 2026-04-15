@@ -6,7 +6,6 @@ description: >-
   <example>Build the settings page with dark mode toggle</example>
   <example>Fix the responsive layout on mobile viewports</example>
 model: sonnet
-effort: medium
 color: blue
 tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "preview_screenshot", "preview_snapshot"]
 ---
