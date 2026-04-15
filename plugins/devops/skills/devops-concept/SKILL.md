@@ -113,6 +113,20 @@ page. Theme preference is also persisted to prevent flash.
 The `concept-submitted` class is NOT persisted — after a reload the page is
 back to "not yet submitted" (correct behavior, the user can re-submit).
 
+### Page Version Tag
+
+Set `data-page-version="{timestamp}"` on the `<html>` element (use the
+ISO timestamp of generation, e.g. `2026-04-15T14:30:00`). This value is
+stored alongside localStorage state. When the page version changes (new
+generation), old localStorage state is automatically discarded so the user
+sees a clean new version instead of stale selections from a previous page.
+
+**Rules:**
+- In-place feedback-loop updates (Step 5c): keep the SAME `data-page-version`
+  → user selections survive the update cycle
+- New version file (version bump or "nochmal neu"): set a NEW timestamp
+  → old state auto-clears, fresh page
+
 Additionally, the offline submit queue (`localStorage` key `{slug}-pending`)
 caches decisions submitted while Claude is disconnected and auto-delivers
 them when the connection is restored (see `templates.md` § Offline Submit Queue).
@@ -197,6 +211,7 @@ are present. **Grep the generated file** for each required pattern:
 | 8 | `panel-ready` | Ready-state panel element |
 | 9 | `panel-submitted` | Submitted-state panel element |
 | 10 | `localStorage` | Reload resilience (state persistence with TTL) |
+| 11 | `data-page-version` | Page version tag for localStorage invalidation |
 
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. This is a **blocking gate** — no exceptions, no "this

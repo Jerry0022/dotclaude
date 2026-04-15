@@ -8,6 +8,7 @@ description: >-
   <example>Evaluate the onboarding flow from a player perspective</example>
   <example>Review the UI for controller navigation usability</example>
 model: sonnet
+effort: low
 color: green
 tools: ["Read", "Grep", "Glob", "preview_screenshot", "preview_snapshot", "AskUserQuestion"]
 ---

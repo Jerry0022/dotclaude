@@ -6,6 +6,7 @@ description: >-
   <example>Integrate the OpenAI API for text classification</example>
   <example>Set up a vector store for semantic search</example>
 model: sonnet
+effort: medium
 color: magenta
 tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"]
 ---

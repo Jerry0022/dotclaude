@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.43.1] — 2026-04-15
+
+### Fixed
+
+- **concept** — bridge server now sends `Cache-Control: no-cache` on all responses including static HTML, fixing stale page on in-place update even with Ctrl+F5
+- **concept** — tri-state buttons redesigned with colored ring, checkmark badge, and color-coded states for clear visual feedback and obvious switchability
+- **concept** — `restoreState()` lookup order fixed: `data-comment` before `getElementById` prevents collision with section IDs (comments were lost on reload)
+- **concept** — `data-page-version` tag auto-invalidates localStorage on new iteration while preserving user input on in-place updates
+
+### Added
+
+- **deep-knowledge** — snapshot-based browser verification as default before desktop takeover
+
 ## [0.43.0] — 2026-04-15
 
 ### Added

@@ -8,7 +8,7 @@ starting points and inspiration — deviate freely when the content calls for it
 
 ```html
 <!DOCTYPE html>
-<html lang="de" data-theme="dark">
+<html lang="de" data-theme="dark" data-page-version="{generation-timestamp}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -534,34 +534,98 @@ Every variant MUST include a tri-state selector:
   padding: 0.75rem 1rem;
   cursor: pointer;
   text-align: center;
+  position: relative;
   border-right: 1px solid var(--border-color, #30363d);
-  transition: background 0.15s;
+  transition: background 0.2s, box-shadow 0.2s;
 }
 .tri-state-option:last-child { border-right: none; }
+
+/* Unselected hover — shows "you can click me" */
 .tri-state-option:hover {
-  background: color-mix(in srgb, var(--accent-color, #58a6ff) 8%, transparent);
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
 }
+
 .tri-state-option input { display: none; }
-.tri-state-option input:checked ~ .tri-state-label { font-weight: 600; }
-.tri-state-option input:checked ~ .tri-state-hint { opacity: 1; }
-.tri-state-label { font-size: 0.9rem; }
+
+/* Selected label — bold + color */
+.tri-state-option:has(input:checked) .tri-state-label {
+  font-weight: 700;
+}
+
+/* Hint always visible but faded; full opacity when selected */
 .tri-state-hint {
   font-size: 0.75rem;
   margin-top: 0.25rem;
-  opacity: 0.7;
+  opacity: 0.5;
+  transition: opacity 0.2s;
 }
+.tri-state-option:has(input:checked) .tri-state-hint { opacity: 1; }
 .tri-state-hint.feedback { color: var(--accent-color, #58a6ff); }
 .tri-state-hint.action { color: var(--warning-color, #d29922); }
 
-/* Active state backgrounds */
+.tri-state-label { font-size: 0.9rem; transition: font-weight 0.15s; }
+
+/* Checkmark badge on the selected option */
+.tri-state-option:has(input:checked)::after {
+  content: '✓';
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* ── Active state backgrounds + ring + checkmark colors ── */
+
+/* Miteinbeziehen (default, info) */
 .tri-state-option:has(input[value="include"]:checked) {
   background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent);
+  box-shadow: inset 0 0 0 2px var(--accent-color, #58a6ff);
 }
+.tri-state-option:has(input[value="include"]:checked)::after {
+  background: var(--accent-color, #58a6ff);
+  color: white;
+}
+
+/* Verwerfen (discard, muted) */
 .tri-state-option:has(input[value="discard"]:checked) {
-  background: color-mix(in srgb, var(--text-secondary, #6e7681) 15%, transparent);
+  background: color-mix(in srgb, var(--danger-color, #f85149) 12%, transparent);
+  box-shadow: inset 0 0 0 2px var(--danger-color, #f85149);
 }
+.tri-state-option:has(input[value="discard"]:checked)::after {
+  background: var(--danger-color, #f85149);
+  color: white;
+}
+.tri-state-option:has(input[value="discard"]:checked) .tri-state-label {
+  color: var(--danger-color, #f85149);
+}
+
+/* Exakt diese (only, success/action) */
 .tri-state-option:has(input[value="only"]:checked) {
   background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent);
+  box-shadow: inset 0 0 0 2px var(--success-color, #3fb950);
+}
+.tri-state-option:has(input[value="only"]:checked)::after {
+  background: var(--success-color, #3fb950);
+  color: white;
+}
+.tri-state-option:has(input[value="only"]:checked) .tri-state-label {
+  color: var(--success-color, #3fb950);
+}
+
+/* ── Unselected state — clearly "not chosen" ── */
+.tri-state-option:has(input:not(:checked)) {
+  opacity: 0.7;
+}
+.tri-state-option:has(input:not(:checked)):hover {
+  opacity: 1;
 }
 ```
 
@@ -709,7 +773,10 @@ const STORAGE_KEY = 'concept-state-' + location.pathname.split('/').pop().replac
 const STATE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function saveState() {
-  const state = { _savedAt: Date.now() };
+  const state = {
+    _savedAt: Date.now(),
+    _pageVersion: document.documentElement.dataset.pageVersion || ''
+  };
   // Save toggles, checkboxes, radios
   document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
     if (el.name || el.id) state['input:' + (el.name || el.id) + ':' + el.value] = el.checked;
@@ -741,6 +808,14 @@ function restoreState() {
       localStorage.removeItem(STORAGE_KEY);
       return;
     }
+    // Version check — discard state from a different page version
+    // (Claude sets data-page-version on <html> when generating the page;
+    // in-place feedback-loop updates keep the same value, new versions change it)
+    const currentVersion = document.documentElement.dataset.pageVersion || '';
+    if (state._pageVersion && state._pageVersion !== currentVersion) {
+      localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
     // Restore theme first (prevents flash)
     if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
     // Restore inputs
@@ -753,7 +828,8 @@ function restoreState() {
         if (el) el.checked = value;
       } else if (type === 'text') {
         const id = rest.join(':');
-        const el = document.getElementById(id) || document.querySelector(`[data-comment="${id}"]`);
+        // data-comment first — getElementById can collide with section IDs
+        const el = document.querySelector(`[data-comment="${id}"]`) || document.querySelector(`textarea#${CSS.escape(id)}, input#${CSS.escape(id)}`);
         if (el) el.value = value;
       } else if (type === 'range') {
         const id = rest.join(':');

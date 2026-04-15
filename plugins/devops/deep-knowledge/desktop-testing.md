@@ -7,6 +7,12 @@ automatically using the Computer Use MCP tools.
 (`browser-tool-strategy.md`) over computer-use. Computer-use has read-only tier
 for browsers (no clicks/typing). Only use computer-use for native desktop apps.
 
+**Before offering desktop takeover**, always attempt **snapshot-based testing**
+first (see `test-strategy.md` § Browser Testing without Desktop Takeover).
+Snapshots verify element presence, text, roles, and interactive state without
+interrupting the user. Only escalate to desktop takeover when pixel-level
+visual verification is genuinely required (layout, styling, image rendering).
+
 ## When to Offer
 
 All three conditions must be true:

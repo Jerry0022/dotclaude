@@ -19,7 +19,6 @@ import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { register as registerHeartbeat } from "./lib/heartbeat.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, '..');
@@ -315,10 +314,7 @@ function renderState(state, variant, repoUrl) {
   }
 
   // Order: most important first — merge · PR · push · commit · branch
-  // Skip trailing branch when it duplicates the merge target (e.g. "merged → main … `main`")
-  const showBranch = !state.merged || state.merged !== branch;
-  let line = icon + ' ' + mergeStr + ' \u00b7 ' + prStr + ' \u00b7 ' + pushStr + ' \u00b7 ' + commitStr;
-  if (showBranch) line += ' \u00b7 ' + branchStr;
+  let line = icon + ' ' + mergeStr + ' \u00b7 ' + prStr + ' \u00b7 ' + pushStr + ' \u00b7 ' + commitStr + ' \u00b7 ' + branchStr;
 
   if (state.appStatus === 'running')     line += ' \u00b7 app running';
   if (state.appStatus === 'not-started') line += ' \u00b7 app not started';
@@ -827,5 +823,4 @@ server.registerTool(
 // Connect and start
 const transport = new StdioServerTransport();
 await server.connect(transport);
-registerHeartbeat("dotclaude-completion");
 console.error("[dotclaude-completion-mcp] Server started on stdio");
