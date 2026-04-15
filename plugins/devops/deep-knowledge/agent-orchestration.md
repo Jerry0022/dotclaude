@@ -26,6 +26,29 @@ Select agents based on domains touched, complexity, and risk:
 - Always include **qa** for any code changes (Wave 3)
 - Include **po** only for feature-level work, not bugfixes or refactoring
 
+### Model & Effort Defaults
+
+Each agent defines `model` and optionally `effort` in its frontmatter.
+The orchestrator can override `model` at invocation time but **not** `effort`.
+
+| Agent | model | effort | Notes |
+|-------|-------|--------|-------|
+| **po** | opus | high | Strategic decisions — needs deep reasoning |
+| **research** | opus | high | Cross-referencing, fact verification |
+| **core** | sonnet | *(default)* | Standard code generation |
+| **frontend** | sonnet | *(default)* | Standard code generation |
+| **ai** | sonnet | *(default)* | Standard code generation |
+| **windows** | sonnet | *(default)* | Standard code generation |
+| **designer** | sonnet | *(default)* | Design specs |
+| **qa** | sonnet | *(default)* | Test execution + evaluation |
+| **gamer** | sonnet | *(default)* | Quick UX feedback |
+| **feature** | inherit | *(inherit)* | Inherits from parent session |
+
+**Model override rules:**
+- Override `model` at invocation for cost control: `Agent({ subagent_type: "research", model: "sonnet", ... })`
+- **Never downgrade to haiku** for agents with `effort: high` (po, research) — haiku + high effort wastes tokens without quality gain
+- Upgrading to opus is fine for any agent when task complexity warrants it
+
 ### Complexity Tiers
 
 | Tier | Signals | Strategy |
