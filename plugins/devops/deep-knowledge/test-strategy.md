@@ -28,6 +28,27 @@ If the full suite already passed on the **same build-ID** earlier in the
 session → ship quality gates skip redundant execution. Tests re-run if
 build-ID changed (source code changed since last run).
 
+## Browser Testing without Desktop Takeover
+
+For UI changes that need verification but don't warrant desktop takeover,
+use **accessibility snapshots** to verify structure and content without
+screenshots or computer-use:
+
+1. Ensure dev server is running (Preview, or manually started)
+2. Navigate to the relevant page
+3. Take a **snapshot** (`preview_snapshot` / `browser_snapshot` / `read_page`)
+4. Verify: elements present, text correct, interactive state as expected
+5. Optionally: use `preview_inspect` for CSS property verification (colors,
+   spacing, fonts) — more accurate than screenshots for style checks
+
+This is the **default** for browser-based UI testing. It works in all modes
+(foreground, background, autonomous) without interrupting the user's desktop.
+
+**Never abort testing because screenshots are unavailable.** Snapshots cover
+element presence, text content, roles, and interactive state. Only escalate
+to desktop takeover (computer-use) when pixel-level visual verification is
+explicitly needed.
+
 ## Automated Desktop Testing (Computer Use)
 
 For larger changes (5+ code edits) to UI/web applications, Claude can
