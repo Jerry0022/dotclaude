@@ -27,8 +27,8 @@ const PLUGIN_ROOT = resolve(__dirname, '..');
 const BAR_WIDTH              = 14;
 const WINDOW_5H_MIN          = 300;
 const WINDOW_WK_MIN          = 10080;
-const HEALTH_WARN_THRESHOLD  = 40;
-const HEALTH_CRIT_THRESHOLD  = 80;
+const HEALTH_WARN_THRESHOLD  = 120;
+const HEALTH_CRIT_THRESHOLD  = 200;
 
 /** Safely parse a JSON string; returns the original value on failure. */
 function tryParse(v) {
@@ -140,20 +140,22 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
     lines.push(renderUsageLine('Wk', w.pct, elapsedWkPct, deltaWk, w.resetInMinutes));
   }
 
-  // Stale/cached data indicator
-  if (usageData._cached && usageData._ageMinutes > 0) {
+  // Stale/cached data indicator — only show when data is notably old (>30min)
+  if (usageData._cached && usageData._ageMinutes > 30) {
     const ageLabel = usageData._ageMinutes >= 60
-      ? `${Math.round(usageData._ageMinutes / 60)}h ago`
-      : `${usageData._ageMinutes}m ago`;
-    lines.push(`\u26a0 stale (~${ageLabel})`);
+      ? `~${Math.round(usageData._ageMinutes / 60)}h old`
+      : `~${usageData._ageMinutes}m old`;
+    lines.push('');
+    lines.push(`cached \u00b7 ${ageLabel}`);
   }
 
   lines.push('```');
 
   // Health line is the first line inside the code fence, above bars
+  // Add blank line after health line to visually separate it from the bars
   if (healthLine) {
     const idx = 1; // after opening ```
-    lines.splice(idx, 0, healthLine);
+    lines.splice(idx, 0, healthLine, '');
   }
 
   return lines.join('\n');
