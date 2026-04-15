@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.43.3] — 2026-04-15
+
+### Fixed
+
+- **usage card** — context-health thresholds raised from 40/80 to 120/200 calls, appropriate for Opus 1M sessions
+- **usage card** — added blank line spacing around meter bars for better readability
+- **usage card** — replaced cryptic `▲ stale` indicator with clear `cached · ~2h old` label, hidden when data is <30min old
+
 ## [0.43.2] — 2026-04-15
 
 ### Fixed
