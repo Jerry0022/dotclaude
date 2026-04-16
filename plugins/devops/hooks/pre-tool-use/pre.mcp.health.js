@@ -78,39 +78,49 @@ process.stdin.on('end', () => {
 
   // Stale-after-update check: if the sentinel is newer than the PID file, the
   // running MCP process was spawned before the plugin upgrade wiped its
-  // installPath. If the PID file is newer (or there is no sentinel matching
-  // this server), the server was respawned after the upgrade — clear the
-  // sentinel so future calls pass through.
+  // installPath. If the PID file is newer-or-equal (>= handles same-millisecond
+  // writes on fast disks), the server was respawned after the upgrade — clear
+  // the sentinel so future calls pass through.
+  //
+  // Corrupt/unparseable sentinels are deleted rather than treated as hard
+  // blocks; otherwise a truncated file would wedge every MCP call until the
+  // user removed it manually.
   if (fs.existsSync(sentinelFile)) {
-    let sentinel;
+    let sentinel = null;
+    let sentinelCorrupt = false;
     try { sentinel = JSON.parse(fs.readFileSync(sentinelFile, 'utf8')); }
-    catch { sentinel = null; }
-    const sentinelMtime = fs.statSync(sentinelFile).mtimeMs;
-    const affectsThisServer = sentinel?.plugins?.some(p => p.name === 'devops') ?? true;
+    catch { sentinelCorrupt = true; }
 
-    if (affectsThisServer) {
-      if (pidMtime > sentinelMtime) {
-        // Server was respawned after the upgrade — safe. Drop the sentinel.
-        try { fs.unlinkSync(sentinelFile); } catch { /* ignore */ }
-      } else {
-        const upgrades = (sentinel?.plugins || [])
-          .map(p => `${p.name} ${p.from} → ${p.to}`)
-          .join(', ') || 'plugin';
-        const W = 60;
-        const line = '─'.repeat(W);
-        console.error('');
-        console.error(`⚠️  MCP SERVER STALE — ${serverName}`);
-        console.error(line);
-        console.error(`Plugin upgraded this session: ${upgrades}.`);
-        console.error('The running MCP process was spawned from the old');
-        console.error('installPath, which has been replaced. File reads will');
-        console.error('fail or return stale data.');
-        console.error('');
-        console.error('Fix: Start a new Claude Code session. MCP servers are');
-        console.error('only spawned on session init — they cannot be');
-        console.error('reconnected mid-conversation.');
-        console.error(line);
-        process.exit(2);
+    if (sentinelCorrupt) {
+      try { fs.unlinkSync(sentinelFile); } catch { /* ignore */ }
+    } else {
+      const sentinelMtime = fs.statSync(sentinelFile).mtimeMs;
+      const affectsThisServer = sentinel?.plugins?.some(p => p.name === 'devops') ?? true;
+
+      if (affectsThisServer) {
+        if (pidMtime >= sentinelMtime && pidMtime > 0) {
+          // Server was respawned after the upgrade — safe. Drop the sentinel.
+          try { fs.unlinkSync(sentinelFile); } catch { /* ignore */ }
+        } else {
+          const upgrades = (sentinel?.plugins || [])
+            .map(p => `${p.name} ${p.from} → ${p.to}`)
+            .join(', ') || 'plugin';
+          const W = 60;
+          const line = '─'.repeat(W);
+          console.error('');
+          console.error(`⚠️  MCP SERVER STALE — ${serverName}`);
+          console.error(line);
+          console.error(`Plugin upgraded this session: ${upgrades}.`);
+          console.error('The running MCP process was spawned from the old');
+          console.error('installPath, which has been replaced. File reads will');
+          console.error('fail or return stale data.');
+          console.error('');
+          console.error('Fix: Start a new Claude Code session. MCP servers are');
+          console.error('only spawned on session init — they cannot be');
+          console.error('reconnected mid-conversation.');
+          console.error(line);
+          process.exit(2);
+        }
       }
     }
   }

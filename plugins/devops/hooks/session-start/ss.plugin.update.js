@@ -170,7 +170,15 @@ function rebuildCache(marketplace, pluginName, pluginDir, version, sha) {
   return { ok: true };
 }
 
-if (!fs.existsSync(marketplacesDir)) process.exit(0);
+// If the marketplaces directory is missing, there are no updates to run.
+// Still clean up any lingering sentinel from a prior session — otherwise it
+// would block every MCP tool call indefinitely.
+if (!fs.existsSync(marketplacesDir)) {
+  if (fs.existsSync(sentinelFile)) {
+    try { fs.unlinkSync(sentinelFile); } catch { /* ignore */ }
+  }
+  process.exit(0);
+}
 
 const updated = [];
 // Tracks plugins whose installPath moved and that expose MCP servers.
