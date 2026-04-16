@@ -8,7 +8,7 @@ description: >-
   readme", "improve the readme", "README erstellen", "README aktualisieren".
   Do NOT trigger for minor one-line edits like bumping a version number.
 argument-hint: "[--preview] [--update]"
-allowed-tools: Read, Grep, Glob, Bash, AskUserQuestion, Write, Edit
+allowed-tools: Read, Grep, Glob, Bash, AskUserQuestion, Write, Edit, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
 # README Generator
@@ -104,6 +104,20 @@ Ask for confirmation before generating.
 ## Step 8 — Generate
 
 Write with `Write` (new) or `Edit` (update).
+
+## Step 9 — Completion Card
+
+After writing the README, call
+`mcp__plugin_devops_dotclaude-completion__render_completion_card`:
+
+| Situation | Variant |
+|-----------|---------|
+| New README or substantial update (file written) | `ready` |
+| Preview mode only (no file written) | `analysis` |
+
+Pass: `variant`, `summary`, `lang`, `session_id`, `changes` (sections added/updated),
+and `state` when a file was written. Output the markdown VERBATIM as the LAST thing
+in the response — nothing after the closing `---`.
 
 ## Style rules
 

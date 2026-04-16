@@ -11,7 +11,7 @@ description: >-
   questions that can be answered with a single WebSearch.
 argument-hint: "[topic or question]"
 context: fork
-allowed-tools: WebSearch, WebFetch, Read, Grep, Glob
+allowed-tools: WebSearch, WebFetch, Read, Grep, Glob, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
 # Deep Research
@@ -113,6 +113,17 @@ Match output depth to question complexity:
 ### Ausblick
 - ...
 ```
+
+## Step 8 — Completion Card
+
+Research is read-only (no file changes). Call
+`mcp__plugin_devops_dotclaude-completion__render_completion_card` with variant
+`analysis`.
+
+Pass: `variant: "analysis"`, `summary` (≤10 words describing the research topic),
+`lang`, `session_id`, and `changes` (up to 3 bullets: the key findings or angles
+investigated). Output the markdown VERBATIM as the LAST thing in the response —
+AFTER the "Soll ich…" follow-up question from Step 7, the card closes the turn.
 
 ## Rules
 
