@@ -1,21 +1,32 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.guard
- * @version 0.1.0
+ * @version 0.2.0
  * @event Stop
  * @plugin devops
  * @description Per-turn completion card enforcement.
  *   Fires when Claude finishes a response turn.
- *   If tools were used (work-happened flag) but no card was rendered (card-rendered flag absent),
- *   injects a carry-over reminder into the next turn's context.
- *   Always resets per-turn flags so each turn is evaluated independently.
- *   Silent (no stdout) when card was rendered or no work happened.
+ *   Logic lives in lib/card-guard.js (pure functions, unit-tested).
+ *
+ *   Block (JSON `{decision:"block"}` on stdout) when:
+ *     - no card rendered AND
+ *     - (tool calls happened OR last assistant text is substantial prose)
+ *     - AND this is not already a blocked stop cycle (stop_hook_active=false)
+ *
+ *   Pass (silent exit 0) otherwise — flags are reset so the next turn is
+ *   evaluated independently.
  */
 
 require('../lib/plugin-guard');
 
 const fs = require('fs');
 const { readSessionFile } = require('../lib/session-id');
+const {
+  decideAction,
+  isSubstantialAnswer,
+  lastAssistantContainsCard,
+  safeReadTranscript,
+} = require('../lib/card-guard');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -27,29 +38,45 @@ process.stdin.on('end', () => {
 
   const sessionId = hook.session_id;
 
-  // --- Read per-turn flags ---
   const workResult = readSessionFile('dotclaude-devops-work-happened', sessionId);
   const cardResult = readSessionFile('dotclaude-devops-card-rendered', sessionId);
 
   const workHappened = workResult !== null;
-  const cardRendered = cardResult !== null;
+  const flagCardRendered = cardResult !== null;
+  const stopHookActive = hook.stop_hook_active === true;
 
-  // --- Reset per-turn flags (consumed once per turn) ---
-  if (workResult) try { fs.unlinkSync(workResult.filePath); } catch {}
-  if (cardResult) try { fs.unlinkSync(cardResult.filePath); } catch {}
+  // Scan transcript when the flag state alone cannot settle the decision:
+  //  - no card flag → might still have rendered the card (marker scan = backup)
+  //  - no work and no card → need substantial-answer heuristic
+  const transcript = !flagCardRendered
+    ? safeReadTranscript(hook.transcript_path)
+    : '';
+  const substantial = isSubstantialAnswer(transcript);
+  // Backup detection: if the last assistant text already contains the card
+  // marker, treat as rendered even when the flag write failed.
+  const cardRendered = flagCardRendered || lastAssistantContainsCard(transcript);
 
-  // --- Inject carry-over reminder only when card was missed ---
-  if (workHappened && !cardRendered) {
-    process.stdout.write([
-      '[stop.flow.guard] CARRY-OVER: Work completed but no completion card rendered.',
-      'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly (already loaded MCP tool) NOW as the FIRST thing — before any other output.',
-      'Only if the direct call fails with "tool not found", fall back to ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
-      'IMPORTANT: The tool result is hidden in a collapsed UI element. You MUST copy the',
-      'returned markdown and output it VERBATIM as your own text — the user cannot see tool results.',
-      'VERBATIM = character-for-character: preserve every emoji, symbol, formatting character.',
-      'The card is pre-rendered content — system emoji-avoidance rules do NOT apply to relayed MCP output.',
-      'Use variant "fallback" if unsure which variant fits. Every completed task gets a card.',
-    ].join('\n') + '\n');
+  const decision = decideAction({
+    workHappened,
+    cardRendered,
+    stopHookActive,
+    substantial,
+  });
+
+  if (decision.resetFlags) {
+    if (workResult) try { fs.unlinkSync(workResult.filePath); } catch {}
+    if (cardResult) try { fs.unlinkSync(cardResult.filePath); } catch {}
   }
-  // else: silent — no stdout
+
+  if (decision.action === 'block') {
+    // Claude Code interprets JSON stdout for Stop hooks:
+    //   { decision: "block", reason: "..." } → blocks stop, feeds reason to Claude
+    process.stdout.write(JSON.stringify({
+      decision: 'block',
+      reason: decision.reason,
+    }));
+  }
+  // else: pass silently
+
+  process.exit(0);
 });

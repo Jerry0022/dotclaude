@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark" data-page-version="2026-04-16T20:50:00">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept — Completion-Card Enforcement Hardening</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg-elev: #161b22; --panel-bg: #161b22;
+    --text: #c9d1d9; --text-muted: #8b949e;
+    --border-color: #30363d;
+    --accent-color: #58a6ff;
+    --success-color: #3fb950;
+    --warning-color: #d29922;
+    --danger-color: #f85149;
+    --code-bg: #0d1117;
+    --code-border: #30363d;
+  }
+  [data-theme="light"] {
+    --bg: #ffffff; --bg-elev: #f6f8fa; --panel-bg: #f6f8fa;
+    --text: #24292f; --text-muted: #57606a;
+    --border-color: #d0d7de;
+    --accent-color: #0969da;
+    --success-color: #1a7f37;
+    --warning-color: #9a6700;
+    --danger-color: #cf222e;
+    --code-bg: #f6f8fa;
+    --code-border: #d0d7de;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .concept-layout { display: flex; min-height: 100vh; }
+  .concept-content {
+    flex: 1; padding: 2rem 2.5rem; overflow-y: auto; min-width: 0;
+  }
+  .concept-decision-panel {
+    width: 22%; min-width: 280px; max-width: 360px;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 1.5rem;
+    border-left: 1px solid var(--border-color);
+    background: var(--panel-bg);
+  }
+  @media (max-width: 900px) {
+    .concept-layout { flex-direction: column; }
+    .concept-decision-panel {
+      width: 100%; max-width: none; height: auto;
+      position: sticky; bottom: 0; top: auto;
+      border-left: none; border-top: 1px solid var(--border-color);
+    }
+  }
+
+  header.page-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 1rem; margin-bottom: 2rem; padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+  header.page-head h1 {
+    font-size: 1.75rem; margin: 0 0 0.5rem; font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  header.page-head .subtitle {
+    color: var(--text-muted); margin: 0; font-size: 0.95rem;
+  }
+  #theme-toggle {
+    background: none; border: 1px solid var(--border-color);
+    color: var(--text); cursor: pointer;
+    padding: 0.4rem 0.7rem; border-radius: 8px; font-size: 1.1rem;
+    transition: background 0.2s;
+  }
+  #theme-toggle:hover { background: var(--bg-elev); }
+
+  .stats-row {
+    display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 2rem;
+  }
+  .stat {
+    flex: 1; min-width: 130px;
+    background: var(--bg-elev); border: 1px solid var(--border-color);
+    border-radius: 10px; padding: 0.9rem 1rem;
+  }
+  .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-value { font-size: 1.4rem; font-weight: 700; margin-top: 0.15rem; }
+  .stat.ok .stat-value { color: var(--success-color); }
+  .stat.warn .stat-value { color: var(--warning-color); }
+
+  section.fix {
+    background: var(--bg-elev); border: 1px solid var(--border-color);
+    border-radius: 12px; padding: 1.5rem 1.75rem;
+    margin-bottom: 2rem;
+  }
+  section.fix h2 {
+    margin: 0 0 0.25rem; font-size: 1.25rem;
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  section.fix .fix-tag {
+    display: inline-block;
+    padding: 0.1rem 0.5rem; border-radius: 6px;
+    background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+    color: var(--accent-color);
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em;
+    vertical-align: middle;
+  }
+  section.fix .fix-meta {
+    color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;
+  }
+  section.fix h3 {
+    margin: 1.25rem 0 0.5rem; font-size: 0.95rem;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted); font-weight: 600;
+  }
+  section.fix p { margin: 0 0 0.75rem; }
+  section.fix ul { margin: 0.25rem 0 0.75rem; padding-left: 1.25rem; }
+  section.fix li { margin-bottom: 0.25rem; }
+
+  pre.diff, pre.code {
+    background: var(--code-bg); border: 1px solid var(--code-border);
+    border-radius: 8px; padding: 0.9rem 1rem;
+    font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+    font-size: 0.82rem; line-height: 1.5;
+    overflow-x: auto; margin: 0.5rem 0 1rem;
+    white-space: pre;
+  }
+  pre.diff .add { color: var(--success-color); display: block; }
+  pre.diff .rem { color: var(--danger-color); display: block; }
+  pre.diff .ctx { color: var(--text-muted); display: block; }
+  pre.diff .hunk { color: var(--accent-color); display: block; margin-top: 0.25rem; }
+
+  .files-touched {
+    display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0 0.25rem;
+  }
+  .file-chip {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    background: var(--bg); border: 1px solid var(--border-color);
+    padding: 0.15rem 0.55rem; border-radius: 6px;
+    font-family: 'Cascadia Code', monospace; font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .file-chip.new { border-color: var(--success-color); color: var(--success-color); }
+  .file-chip.mod { border-color: var(--accent-color); color: var(--accent-color); }
+
+  .test-results {
+    display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.25rem 0 1rem;
+  }
+  .test-pill {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: color-mix(in srgb, var(--success-color) 15%, transparent);
+    border: 1px solid var(--success-color); color: var(--success-color);
+    padding: 0.25rem 0.6rem; border-radius: 6px;
+    font-size: 0.8rem; font-weight: 600;
+  }
+  .test-pill.neutral {
+    background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+    border-color: var(--accent-color); color: var(--accent-color);
+  }
+
+  .kv-table {
+    width: 100%; border-collapse: collapse; margin: 0.25rem 0 1rem;
+    font-size: 0.88rem;
+  }
+  .kv-table th, .kv-table td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .kv-table th {
+    color: var(--text-muted); font-weight: 600;
+    font-size: 0.75rem; text-transform: uppercase;
+  }
+  .kv-table td code {
+    background: var(--code-bg); padding: 0.1rem 0.35rem;
+    border-radius: 4px; font-size: 0.82rem;
+  }
+
+  /* ============== Tri-state (custom labels for review) ============== */
+  .review-controls {
+    margin-top: 1.25rem; padding-top: 1.25rem;
+    border-top: 1px dashed var(--border-color);
+  }
+  .review-controls h3 { margin-top: 0; }
+  .tri-state-group {
+    display: flex; gap: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px; overflow: hidden; margin-bottom: 0.75rem;
+  }
+  .tri-state-option {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    padding: 0.75rem 0.85rem; cursor: pointer; text-align: center;
+    position: relative;
+    border-right: 1px solid var(--border-color);
+    transition: background 0.2s, box-shadow 0.2s, opacity 0.2s;
+  }
+  .tri-state-option:last-child { border-right: none; }
+  .tri-state-option:hover {
+    background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  }
+  .tri-state-option input { display: none; }
+  .tri-state-option:has(input:checked) .tri-state-label { font-weight: 700; }
+  .tri-state-label { font-size: 0.9rem; transition: font-weight 0.15s; }
+  .tri-state-hint {
+    font-size: 0.72rem; margin-top: 0.2rem; opacity: 0.55;
+    transition: opacity 0.2s;
+  }
+  .tri-state-option:has(input:checked) .tri-state-hint { opacity: 1; }
+  .tri-state-hint.feedback { color: var(--accent-color); }
+  .tri-state-hint.action { color: var(--warning-color); }
+  .tri-state-hint.danger { color: var(--danger-color); }
+
+  .tri-state-option:has(input[value="approve"]:checked) {
+    background: color-mix(in srgb, var(--success-color) 15%, transparent);
+    box-shadow: inset 0 0 0 2px var(--success-color);
+  }
+  .tri-state-option:has(input[value="approve"]:checked) .tri-state-label {
+    color: var(--success-color);
+  }
+  .tri-state-option:has(input[value="tweak"]:checked) {
+    background: color-mix(in srgb, var(--warning-color) 15%, transparent);
+    box-shadow: inset 0 0 0 2px var(--warning-color);
+  }
+  .tri-state-option:has(input[value="tweak"]:checked) .tri-state-label {
+    color: var(--warning-color);
+  }
+  .tri-state-option:has(input[value="reject"]:checked) {
+    background: color-mix(in srgb, var(--danger-color) 12%, transparent);
+    box-shadow: inset 0 0 0 2px var(--danger-color);
+  }
+  .tri-state-option:has(input[value="reject"]:checked) .tri-state-label {
+    color: var(--danger-color);
+  }
+  .tri-state-option:has(input:not(:checked)) { opacity: 0.7; }
+  .tri-state-option:has(input:not(:checked)):hover { opacity: 1; }
+  .tri-state-option:has(input:checked)::after {
+    content: '✓'; position: absolute; top: 4px; right: 6px;
+    font-size: 0.7rem; font-weight: 700;
+    width: 16px; height: 16px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    color: white; background: var(--accent-color);
+  }
+  .tri-state-option:has(input[value="approve"]:checked)::after { background: var(--success-color); }
+  .tri-state-option:has(input[value="tweak"]:checked)::after { background: var(--warning-color); }
+  .tri-state-option:has(input[value="reject"]:checked)::after { background: var(--danger-color); }
+
+  textarea.comment {
+    width: 100%; min-height: 80px;
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border-color);
+    border-radius: 8px; padding: 0.6rem 0.75rem;
+    font-family: inherit; font-size: 0.9rem;
+    resize: vertical; box-sizing: border-box;
+  }
+  textarea.comment:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 25%, transparent);
+  }
+  textarea.comment::placeholder { color: var(--text-muted); }
+
+  /* ============== Decision panel (sidebar) ============== */
+  .concept-decision-panel h3 {
+    font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted); margin: 0 0 1rem;
+  }
+  .variant-nav {
+    display: flex; flex-direction: column; gap: 2px;
+    margin-bottom: 1.25rem; padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .variant-nav-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.5rem 0.75rem; border-radius: 6px;
+    text-decoration: none; color: var(--text);
+    font-size: 0.85rem; transition: background 0.15s;
+    cursor: pointer;
+  }
+  .variant-nav-item:hover {
+    background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  }
+  .variant-nav-label { font-weight: 500; }
+  .variant-nav-state {
+    font-size: 0.72rem; color: var(--text-muted); white-space: nowrap;
+    padding: 0.1rem 0.4rem; border-radius: 4px;
+    background: var(--bg);
+  }
+  .variant-nav-state.state-approve { color: var(--success-color); background: color-mix(in srgb, var(--success-color) 15%, transparent); }
+  .variant-nav-state.state-tweak   { color: var(--warning-color); background: color-mix(in srgb, var(--warning-color) 15%, transparent); }
+  .variant-nav-state.state-reject  { color: var(--danger-color);  background: color-mix(in srgb, var(--danger-color) 15%, transparent); }
+
+  .panel-warning {
+    display: flex; align-items: flex-start; gap: 0.5rem;
+    padding: 0.75rem; margin-bottom: 1rem;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--warning-color) 15%, transparent);
+    border: 1px solid var(--warning-color);
+    font-size: 0.8rem; line-height: 1.4;
+  }
+  .panel-warning .warning-icon { font-size: 1rem; flex-shrink: 0; }
+
+  #panel-ready #decision-summary {
+    background: var(--bg); border: 1px solid var(--border-color);
+    border-radius: 8px; padding: 0.75rem;
+    font-size: 0.82rem; margin-bottom: 0.75rem;
+    max-height: 200px; overflow-y: auto;
+  }
+  .summary-row {
+    display: flex; justify-content: space-between; gap: 0.5rem;
+    padding: 0.25rem 0;
+  }
+  .summary-row .sid { color: var(--text-muted); }
+  .summary-row .sval { font-weight: 600; }
+
+  #submit-btn {
+    width: 100%; padding: 0.75rem;
+    background: var(--accent-color); color: white;
+    border: none; border-radius: 8px;
+    font-size: 0.95rem; font-weight: 600; cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  #submit-btn:hover { opacity: 0.9; }
+  #submit-btn:active { transform: scale(0.98); }
+  #submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .hint {
+    font-size: 0.78rem; color: var(--text-muted);
+    margin: 0.5rem 0 0; line-height: 1.4;
+  }
+
+  .submitted-indicator {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 1rem; margin-bottom: 0.75rem;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--success-color) 15%, transparent);
+    border: 1px solid var(--success-color);
+  }
+  .check-icon { font-size: 1.2rem; color: var(--success-color); }
+  .submitted-hint {
+    font-size: 0.85rem; line-height: 1.5;
+    color: var(--text-muted); margin: 0 0 1rem;
+  }
+  .waiting-animation {
+    display: flex; gap: 6px; justify-content: center; padding: 0.5rem 0;
+  }
+  .waiting-animation .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent-color);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .waiting-animation .dot:nth-child(2) { animation-delay: 0.2s; }
+  .waiting-animation .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulse {
+    0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1); }
+  }
+
+  ul.list-plain { list-style: none; padding-left: 0; }
+  ul.list-plain li {
+    padding: 0.35rem 0; border-bottom: 1px dashed var(--border-color);
+  }
+  ul.list-plain li:last-child { border-bottom: none; }
+
+  details.collapsible {
+    background: var(--bg); border: 1px solid var(--border-color);
+    border-radius: 8px; padding: 0.5rem 0.75rem; margin: 0.5rem 0 1rem;
+  }
+  details.collapsible summary {
+    cursor: pointer; font-weight: 600; font-size: 0.9rem;
+    padding: 0.25rem 0;
+  }
+  details[open].collapsible { padding-bottom: 1rem; }
+
+  .badge-new {
+    display: inline-block; font-size: 0.68rem; padding: 0.1rem 0.4rem;
+    border-radius: 4px; background: var(--success-color); color: white;
+    margin-left: 0.35rem; vertical-align: middle; font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+</style>
+</head>
+<body>
+<div class="concept-layout">
+  <div class="concept-content">
+    <header class="page-head">
+      <div>
+        <h1>Completion-Card Enforcement Hardening</h1>
+        <p class="subtitle">Review &amp; Approval · Branch <code>claude/hungry-bohr-a144d0</code> · 3 Fixes · 2026-04-16</p>
+      </div>
+      <button id="theme-toggle" aria-label="Toggle theme">🌙</button>
+    </header>
+
+    <div class="stats-row">
+      <div class="stat ok"><div class="stat-label">Tests</div><div class="stat-value">82/82</div></div>
+      <div class="stat ok"><div class="stat-label">Card-Guard</div><div class="stat-value">21 unit</div></div>
+      <div class="stat ok"><div class="stat-label">E2E Smoke</div><div class="stat-value">14/14</div></div>
+      <div class="stat ok"><div class="stat-label">Lint</div><div class="stat-value">clean</div></div>
+      <div class="stat"><div class="stat-label">Files</div><div class="stat-value">+2 · Δ4</div></div>
+      <div class="stat"><div class="stat-label">LOC</div><div class="stat-value">+105 / −29</div></div>
+    </div>
+
+    <section class="fix" id="fix-1">
+      <h2><span class="fix-tag">FIX 1</span> Stop-Hook blockierende Enforcement</h2>
+      <p class="fix-meta"><code>plugins/devops/hooks/stop/stop.flow.guard.js</code> · v0.1.0 → v0.2.0</p>
+
+      <h3>Problem</h3>
+      <p>Alter Hook hat nur einen Text-Reminder in den <em>nächsten</em> Turn injiziert. Wenn Claude die Karte im aktuellen Turn vergessen hat, ging sie verloren. Zusätzlich feuerte der Hook gar nicht bei reinen Chat-Antworten (kein Tool-Use → kein work-happened-Flag).</p>
+
+      <h3>Lösung</h3>
+      <ul>
+        <li><strong>JSON-Block-Decision</strong>: <code>{"decision":"block","reason":"…"}</code> zwingt Claude <em>im selben Turn</em> zurück, die Karte zu rendern.</li>
+        <li><strong>Substantial-Answer-Heuristik</strong>: Transkript wird gelesen; bei ≥400 Zeichen Assistant-Prose wird auch ohne Tool-Use geblockt.</li>
+        <li><strong>Loop-Break</strong> via <code>stop_hook_active</code>: zweiter Hook-Fire in gleichem Zyklus passt immer durch — Endlosschleife ausgeschlossen.</li>
+        <li><strong>Flag-Reset</strong> nur bei pass, nicht bei block — Zustand bleibt konsistent über die zweite Fire hinweg.</li>
+      </ul>
+
+      <h3>Diff (gekürzt)</h3>
+      <pre class="diff"><span class="hunk">@@ description (alt → neu) @@</span><span class="rem">-   If tools were used but no card was rendered, inject carry-over reminder</span><span class="rem">-   into the NEXT turn's context. Always reset flags.</span><span class="add">+   Block (JSON {decision:"block"}) when no card rendered AND</span><span class="add">+     (tool calls happened OR last assistant text is substantial prose)</span><span class="add">+     AND NOT stop_hook_active.</span><span class="hunk">@@ decision flow @@</span><span class="rem">-   if (workHappened && !cardRendered) {</span><span class="rem">-     process.stdout.write([... text reminder ...].join('\n'));</span><span class="rem">-   }</span><span class="add">+   const decision = decideAction({ workHappened, cardRendered,</span><span class="add">+                                    stopHookActive, substantial });</span><span class="add">+   if (decision.action === 'block') {</span><span class="add">+     process.stdout.write(JSON.stringify({</span><span class="add">+       decision: 'block', reason: decision.reason,</span><span class="add">+     }));</span><span class="add">+   }</span></pre>
+
+      <h3>Test-Coverage</h3>
+      <div class="test-results">
+        <span class="test-pill">✓ BLOCK bei work + no card</span>
+        <span class="test-pill">✓ SILENT bei work + card</span>
+        <span class="test-pill">✓ BLOCK bei substantial prose</span>
+        <span class="test-pill">✓ SILENT bei trivial chat</span>
+        <span class="test-pill">✓ Loop-Break via stop_hook_active</span>
+        <span class="test-pill">✓ Malformed JSON → exit 0</span>
+      </div>
+
+      <div class="review-controls">
+        <h3>Deine Entscheidung</h3>
+        <div class="tri-state-group" data-decision="fix-1" data-label="Fix 1: Stop-Hook Block-Enforcement">
+          <label class="tri-state-option">
+            <input type="radio" name="eval-fix-1" value="approve" checked>
+            <span class="tri-state-label">Übernehmen</span>
+            <span class="tri-state-hint feedback">commit as-is</span>
+          </label>
+          <label class="tri-state-option">
+            <input type="radio" name="eval-fix-1" value="tweak">
+            <span class="tri-state-label">Anpassen</span>
+            <span class="tri-state-hint action">Claude ändert nach Kommentar</span>
+          </label>
+          <label class="tri-state-option">
+            <input type="radio" name="eval-fix-1" value="reject">
+            <span class="tri-state-label">Verwerfen</span>
+            <span class="tri-state-hint danger">Claude revertiert</span>
+          </label>
+        </div>
+        <textarea class="comment" data-comment="fix-1"
+          placeholder="Optional: Kommentar / Tweak-Wünsche. Z.B. 'Threshold auf 300 Zeichen senken', 'Block-Reason kürzen', 'Substantial-Heuristik weglassen und nur auf work-happened bauen'…"></textarea>
+      </div>
+    </section>
+
+    <section class="fix" id="fix-2">
+      <h2><span class="fix-tag">FIX 2</span> Card-Guard Bibliothek<span class="badge-new">NEU</span></h2>
+      <p class="fix-meta"><code>plugins/devops/hooks/lib/card-guard.js</code> + <code>card-guard.test.js</code></p>
+
+      <h3>Warum eigenes Modul?</h3>
+      <p>Die Entscheidungslogik wurde aus <code>stop.flow.guard.js</code> herausgezogen in reine, <em>testbare</em> Funktionen. Der Hook-Wrapper bleibt dünn (nur stdin→stdout-Glue), die Regeln sind unit-getestet ohne Mocking von Temp-Files oder Prozessen.</p>
+
+      <div class="files-touched">
+        <span class="file-chip new">+ lib/card-guard.js (95 Zeilen)</span>
+        <span class="file-chip new">+ lib/card-guard.test.js (215 Zeilen)</span>
+      </div>
+
+      <h3>Exportierte API</h3>
+      <table class="kv-table">
+        <thead><tr><th>Export</th><th>Zweck</th></tr></thead>
+        <tbody>
+          <tr><td><code>SUBSTANTIAL_CHARS</code></td><td>Schwellwert = 400 Zeichen (justierbar)</td></tr>
+          <tr><td><code>lastAssistantTextLength(content)</code></td><td>Parst JSONL-Transkript, liefert Zeichenanzahl der letzten Assistant-Text-Blöcke</td></tr>
+          <tr><td><code>isSubstantialAnswer(content, threshold?)</code></td><td>Bool — überschreitet Schwellwert?</td></tr>
+          <tr><td><code>decideAction({work,card,active,substantial})</code></td><td>→ <code>{ action, resetFlags, reason? }</code></td></tr>
+          <tr><td><code>buildBlockReason()</code></td><td>Generiert den Block-Reason-Text mit Variant-Baum</td></tr>
+          <tr><td><code>safeReadTranscript(path)</code></td><td>Liest Transkript, '' bei jedem Fehler</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Entscheidungsmatrix</h3>
+      <table class="kv-table">
+        <thead><tr><th>work</th><th>card</th><th>active</th><th>substantial</th><th>→ Aktion</th></tr></thead>
+        <tbody>
+          <tr><td>*</td><td>*</td><td>✓</td><td>*</td><td>pass + reset (loop-break)</td></tr>
+          <tr><td>✓</td><td>✓</td><td>✗</td><td>*</td><td>pass + reset</td></tr>
+          <tr><td>✓</td><td>✗</td><td>✗</td><td>*</td><td><strong>block</strong> (keep flags)</td></tr>
+          <tr><td>✗</td><td>✗</td><td>✗</td><td>✓</td><td><strong>block</strong> (keep flags)</td></tr>
+          <tr><td>✗</td><td>✗</td><td>✗</td><td>✗</td><td>pass + reset</td></tr>
+          <tr><td>✗</td><td>✓</td><td>✗</td><td>*</td><td>pass + reset</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Test-Coverage</h3>
+      <div class="test-results">
+        <span class="test-pill neutral">lastAssistantTextLength: 8 Szenarien</span>
+        <span class="test-pill neutral">isSubstantialAnswer: 4 Szenarien</span>
+        <span class="test-pill neutral">decideAction: 7 Szenarien</span>
+        <span class="test-pill neutral">buildBlockReason: 2 Contract-Checks</span>
+        <span class="test-pill">✓ 21/21 unit-tests</span>
+      </div>
+
+      <details class="collapsible">
+        <summary>Block-Reason-Text (wird an Claude zurückgegeben)</summary>
+        <pre class="code">[stop.flow.guard] Completion card required — not yet rendered this turn.
+
+Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW as the FIRST action.
+If the direct call fails with "tool not found", fall back to ToolSearch:
+  select:mcp__plugin_devops_dotclaude-completion__render_completion_card
+
+Variant decision (pick exactly one):
+  ship pipeline ran + merged → ship-successful  (ONLY after /devops-ship + merge)
+  ship pipeline ran + NOT merged → ship-blocked
+  task aborted / infeasible → aborted
+  code edits + app/service startable → test
+  user started app, no edits yet → test-minimal
+  code/doc changes (≥1 edit), no app → ready
+  zero file changes (analysis/explain/audit) → analysis
+  unsure → fallback
+
+IMPORTANT: The MCP result is hidden in a collapsed UI block.
+Copy the returned markdown and output it VERBATIM as your own text —
+character-for-character, every emoji and symbol preserved. …
+Card must be the LAST thing in the response — nothing after the closing ---.</pre>
+      </details>
+
+      <div class="review-controls">
+        <h3>Deine Entscheidung</h3>
+        <div class="tri-state-group" data-decision="fix-2" data-label="Fix 2: Card-Guard-Bibliothek">
+          <label class="tri-state-option">
+            <input type="radio" name="eval-fix-2" value="approve" checked>
+            <span class="tri-state-label">Übernehmen</span>
+            <span class="tri-state-hint feedback">commit as-is</span>
+          </label>
+          <label class="tri-state-option">
+            <input type="radio" name="eval-fix-2" value="tweak">
+            <span class="tri-state-label">Anpassen</span>
+            <span class="tri-state-hint action">Claude ändert nach Kommentar</span>
+          </label>
+          <label class="tri-state-option">
+            <input type="radio" name="eval-fix-2" value="reject">
+            <span class="tri-state-label">Verwerfen</span>
+            <span class="tri-state-hint danger">Claude revertiert</span>
+          </label>
+        </div>
+        <textarea class="comment" data-comment="fix-2"
+          placeholder="Optional: API-Namen ändern, mehr/weniger Tests, Threshold justieren, Block-Reason-Text kürzen oder erweitern…"></textarea>
+      </div>
+    </section>
+
+    <section class="fix" id="fix-3">
+      <h2><span class="fix-tag">FIX 3</span> Skill-Steps mit explizitem Card-Call</h2>
+      <p class="fix-meta">3 Skills · analog zu <code>/devops-ship</code> Step 6</p>
+
+      <h3>Problem</h3>
+      <p>Skills vertrauten auf Hook-Reminders, hatten aber keinen konkreten Schritt, der die Karte erzwingt. <code>/devops-ship</code> ist das einzige Skill, das deterministisch rendert — alle anderen sind weich.</p>
+
+      <h3>Änderungen</h3>
+
+      <table class="kv-table">
+        <thead><tr><th>Skill</th><th>Neuer Schritt</th><th>Variant(s)</th><th>Zeilen</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>devops-commit</code></td>
+            <td>Step 10 — Completion Card</td>
+            <td><code>ready</code></td>
+            <td>135 → 154 ✓</td>
+          </tr>
+          <tr>
+            <td><code>devops-flow</code></td>
+            <td>Step 9 — Completion Card</td>
+            <td><code>test</code> / <code>ready</code> / <code>analysis</code> / <code>aborted</code></td>
+            <td>100 → 118 ✓</td>
+          </tr>
+          <tr>
+            <td><code>devops-concept</code></td>
+            <td>Step 6 — Completion Card (umbenannt)</td>
+            <td><code>analysis</code> / <code>ready</code> / <code>aborted</code></td>
+            <td>417 → 434 ⚠</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p><strong>Soft-Limit 200 Zeilen pro Skill:</strong> commit und flow weit darunter, concept war bereits vorher über 200 — durch die Step-Umschreibung um 17 Zeilen gewachsen, aber nicht meaningful verschlimmert.</p>
+
+      <h3>Was wurde gelöscht?</h3>
+      <p><em>Nur in <code>devops-concept</code> wurden 3 Zeilen des alten vagen "Step 6 — Completion" Blocks ersetzt.</em> Ein Frontmatter-Eintrag (<code>allowed-tools</code>) wurde in commit/flow erweitert — concept hatte bereits alles Nötige.</p>
+
+      <details class="collapsible">
+        <summary>Diff: devops-commit (Step 10 neu)</summary>
+        <pre class="diff"><span class="hunk">@@ allowed-tools @@</span><span class="rem">-allowed-tools: Bash(git *), AskUserQuestion</span><span class="add">+allowed-tools: Bash(git *), AskUserQuestion, mcp__plugin_devops_dotclaude-completion__render_completion_card</span><span class="hunk">@@ after Step 9 — Report @@</span><span class="add">+## Step 10 — Completion Card</span><span class="add">+</span><span class="add">+Call render_completion_card with variant `ready`</span><span class="add">+(a commit is a code change, not a ship — `shipped` only after /devops-ship).</span><span class="add">+</span><span class="add">+Pass: variant, summary, lang, session_id, changes, state.</span><span class="add">+Output the returned markdown VERBATIM as the LAST thing in the response.</span></pre>
+      </details>
+
+      <details class="collapsible">
+        <summary>Diff: devops-flow (Step 9 neu, variant-abhängig)</summary>
+        <pre class="diff"><span class="hunk">@@ after Step 8 — Report @@</span><span class="add">+## Step 9 — Completion Card</span><span class="add">+</span><span class="add">+Variant per outcome:</span><span class="add">+  Fix + app testable  → test (include userTest)</span><span class="add">+  Fix, no UI test     → ready</span><span class="add">+  Diagnosed only      → analysis</span><span class="add">+  Can't reproduce     → aborted (include cta.reason)</span></pre>
+      </details>
+
+      <details class="collapsible">
+        <summary>Diff: devops-concept (Step 6 umbenannt von "Completion" → "Completion Card")</summary>
+        <pre class="diff"><span class="hunk">@@ Step 6 block — vorher 3 Zeilen, jetzt 21 Zeilen @@</span><span class="rem">-## Step 6 — Completion</span><span class="rem">-The feedback loop ends when the user is satisfied. Then continue with the</span><span class="rem">-normal workflow. If the concept was the primary task, render a completion</span><span class="rem">-card. If it was part of a larger task, proceed to the next step.</span><span class="add">+## Step 6 — Completion Card</span><span class="add">+</span><span class="add">+The feedback loop ends when the user is satisfied (…"fertig"/"done"…).</span><span class="add">+Then render a completion card.</span><span class="add">+</span><span class="add">+Variant matrix: analysis / ready / aborted</span><span class="add">+Pass: variant, summary, lang, session_id, changes, state.</span><span class="add">+Output VERBATIM as LAST thing.</span><span class="add">+</span><span class="add">+(Sub-skill case preserved: parent skill renders the card.)</span></pre>
+      </details>
+
+      <div class="review-controls">
+        <h3>Deine Entscheidung</h3>
+        <div class="tri-state-group" data-decision="fix-3" data-label="Fix 3: Skill-Steps mit explizitem Card-Call">
+          <label class="tri-state-option">
+            <input type="radio" name="eval-fix-3" value="approve" checked>
+            <span class="tri-state-label">Übernehmen</span>
+            <span class="tri-state-hint feedback">commit as-is</span>
+          </label>
+          <label class="tri-state-option">
+            <input type="radio" name="eval-fix-3" value="tweak">
+            <span class="tri-state-label">Anpassen</span>
+            <span class="tri-state-hint action">Claude ändert nach Kommentar</span>
+          </label>
+          <label class="tri-state-option">
+            <input type="radio" name="eval-fix-3" value="reject">
+            <span class="tri-state-label">Verwerfen</span>
+            <span class="tri-state-hint danger">Claude revertiert</span>
+          </label>
+        </div>
+        <textarea class="comment" data-comment="fix-3"
+          placeholder="Optional: Einzelne Skills ausklammern ('concept nicht anfassen'), weitere Skills hinzufügen ('auch readme + new-issue'), Variant-Matrix anpassen…"></textarea>
+      </div>
+    </section>
+
+    <section class="fix" id="open-questions">
+      <h2>Offene Fragen &amp; optionale Erweiterungen</h2>
+      <p class="fix-meta">Nicht blockierend — markiere welche du zusätzlich umgesetzt haben willst.</p>
+
+      <ul class="list-plain">
+        <li>
+          <label>
+            <input type="checkbox" data-decision="extra-more-skills" data-label="Mehr Skills mit Step-N" data-field="included">
+            <strong>Weitere Skills analog erweitern</strong>
+            — <code>devops-readme</code>, <code>devops-new-issue</code>, <code>devops-deep-research</code>, <code>devops-repo-health</code>, <code>devops-project-setup</code>, <code>devops-claude-md-lint</code> (alle unter 200 Zeilen)
+          </label>
+        </li>
+        <li>
+          <label>
+            <input type="checkbox" data-decision="extra-threshold-tune" data-label="Substantial-Threshold justieren" data-field="included">
+            <strong>Schwellwert feinjustieren</strong>
+            — aktuell 400 Zeichen. Optionen: 300 (aggressiver), 500 (konservativer), oder aus config lesen.
+          </label>
+        </li>
+        <li>
+          <label>
+            <input type="checkbox" data-decision="extra-grep-card-markers" data-label="Text-Scan nach Card-Markern als Backup" data-field="included">
+            <strong>Backup-Detection</strong>
+            — zusätzlich im Transkript nach <code>✨✨✨</code> suchen, falls card-rendered-Flag mal fehlschlägt.
+          </label>
+        </li>
+        <li>
+          <label>
+            <input type="checkbox" data-decision="extra-commit-now" data-label="Direkt committen nach Review" data-field="included">
+            <strong>Direkt committen</strong>
+            — nach dem Review automatisch <code>/devops-commit</code> anstoßen (statt manuell).
+          </label>
+        </li>
+        <li>
+          <label>
+            <input type="checkbox" data-decision="extra-memory-update" data-label="Memory-Eintrag zum neuen Verhalten" data-field="included">
+            <strong>Memory-Feedback</strong>
+            — Eintrag speichern: "Completion card enforcement ist jetzt hart — keine Karten mehr vergessen."
+          </label>
+        </li>
+      </ul>
+    </section>
+
+  </div>
+
+  <aside class="concept-decision-panel">
+    <h3>Übersicht</h3>
+
+    <nav class="variant-nav" id="variant-nav">
+      <a href="#fix-1" class="variant-nav-item" data-variant="fix-1">
+        <span class="variant-nav-label">Fix 1 · Stop-Hook</span>
+        <span class="variant-nav-state">Übernehmen</span>
+      </a>
+      <a href="#fix-2" class="variant-nav-item" data-variant="fix-2">
+        <span class="variant-nav-label">Fix 2 · Card-Guard</span>
+        <span class="variant-nav-state">Übernehmen</span>
+      </a>
+      <a href="#fix-3" class="variant-nav-item" data-variant="fix-3">
+        <span class="variant-nav-label">Fix 3 · Skills</span>
+        <span class="variant-nav-state">Übernehmen</span>
+      </a>
+      <a href="#open-questions" class="variant-nav-item" data-variant="extras">
+        <span class="variant-nav-label">Optional</span>
+        <span class="variant-nav-state">0 gewählt</span>
+      </a>
+    </nav>
+
+    <div id="connection-warning" class="panel-warning" style="display: none;">
+      <span class="warning-icon">⚠</span>
+      <span>Claude ist nicht verbunden. Deine Auswahl wird lokal zwischengespeichert und automatisch übertragen, sobald Claude wieder online ist.</span>
+    </div>
+
+    <div id="panel-ready">
+      <div id="decision-summary"></div>
+      <button id="submit-btn" class="primary">Entscheidungen abschicken</button>
+      <p class="hint">Claude verarbeitet deine Auswahl nach dem Abschicken und committet (oder passt an / revertiert).</p>
+    </div>
+
+    <div id="panel-submitted" style="display: none;">
+      <div class="submitted-indicator">
+        <span class="check-icon">✓</span>
+        <strong>Entscheidungen übermittelt</strong>
+      </div>
+      <p class="submitted-hint">Wechsle zum <strong>Claude Chat</strong> — der nächste Schritt wird dort ausgeführt.</p>
+      <div class="waiting-animation"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+    </div>
+  </aside>
+</div>
+
+<script type="application/json" id="concept-decisions">
+  {"submitted": false, "decisions": [], "comments": []}
+</script>
+
+<script>
+  // ============================================================
+  // State Persistence (localStorage + TTL)
+  // ============================================================
+  const STORAGE_KEY = 'concept-state-' + location.pathname.split('/').pop().replace('.html', '');
+  const STATE_TTL_MS = 24 * 60 * 60 * 1000;
+
+  function saveState() {
+    const state = {
+      _savedAt: Date.now(),
+      _pageVersion: document.documentElement.dataset.pageVersion || ''
+    };
+    document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
+      if (el.name || el.id) state['input:' + (el.name || el.id) + ':' + el.value] = el.checked;
+    });
+    document.querySelectorAll('textarea, input[type="text"]').forEach(el => {
+      if (el.id || el.dataset.comment) state['text:' + (el.id || el.dataset.comment)] = el.value;
+    });
+    state['theme'] = document.documentElement.getAttribute('data-theme');
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+  }
+
+  function restoreState() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const state = JSON.parse(raw);
+      if (state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) {
+        localStorage.removeItem(STORAGE_KEY); return;
+      }
+      const currentVersion = document.documentElement.dataset.pageVersion || '';
+      if (state._pageVersion && state._pageVersion !== currentVersion) {
+        localStorage.removeItem(STORAGE_KEY); return;
+      }
+      if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+      Object.entries(state).forEach(([key, value]) => {
+        if (key.startsWith('_') || key === 'theme') return;
+        const [type, ...rest] = key.split(':');
+        if (type === 'input') {
+          const name = rest.slice(0, -1).join(':');
+          const val = rest[rest.length - 1];
+          const el = document.querySelector(
+            `input[name="${CSS.escape(name)}"][value="${CSS.escape(val)}"]`);
+          if (el) el.checked = value;
+        } else if (type === 'text') {
+          const id = rest.join(':');
+          const el = document.querySelector(`[data-comment="${CSS.escape(id)}"]`)
+                  || document.getElementById(id);
+          if (el) el.value = value;
+        }
+      });
+    } catch {}
+  }
+
+  // ============================================================
+  // Variant Nav — state label
+  // ============================================================
+  const STATE_LABELS = { approve: 'Übernehmen', tweak: 'Anpassen', reject: 'Verwerfen' };
+
+  function updateVariantNav() {
+    document.querySelectorAll('.variant-nav-item').forEach(link => {
+      const variantId = link.dataset.variant;
+      const stateEl = link.querySelector('.variant-nav-state');
+      if (!stateEl) return;
+      if (variantId === 'extras') {
+        const count = document.querySelectorAll(
+          '#open-questions input[type="checkbox"]:checked').length;
+        stateEl.textContent = count + ' gewählt';
+        stateEl.className = 'variant-nav-state' + (count > 0 ? ' state-approve' : '');
+        return;
+      }
+      const checked = document.querySelector(`input[name="eval-${variantId}"]:checked`);
+      const state = checked ? checked.value : 'approve';
+      stateEl.textContent = STATE_LABELS[state] || state;
+      stateEl.className = 'variant-nav-state state-' + state;
+    });
+    updateDecisionSummary();
+  }
+
+  // ============================================================
+  // Decision Summary
+  // ============================================================
+  function updateDecisionSummary() {
+    const summary = document.getElementById('decision-summary');
+    if (!summary) return;
+    const rows = [];
+    ['fix-1', 'fix-2', 'fix-3'].forEach(id => {
+      const checked = document.querySelector(`input[name="eval-${id}"]:checked`);
+      const state = checked ? checked.value : 'approve';
+      const label = STATE_LABELS[state] || state;
+      const colorClass = 'state-' + state;
+      rows.push(
+        `<div class="summary-row"><span class="sid">${id}</span>` +
+        `<span class="sval variant-nav-state ${colorClass}">${label}</span></div>`);
+    });
+    const extras = document.querySelectorAll(
+      '#open-questions input[type="checkbox"]:checked').length;
+    rows.push(
+      `<div class="summary-row"><span class="sid">Optional</span>` +
+      `<span class="sval">${extras} / 5</span></div>`);
+    summary.innerHTML = rows.join('');
+  }
+
+  // ============================================================
+  // Submit Handler
+  // ============================================================
+  function collectDecisions() {
+    const decisions = [];
+    const comments = [];
+
+    ['fix-1', 'fix-2', 'fix-3'].forEach(id => {
+      const group = document.querySelector(`[data-decision="${id}"]`);
+      const checked = document.querySelector(`input[name="eval-${id}"]:checked`);
+      decisions.push({
+        id,
+        label: group?.dataset.label || id,
+        evaluation: checked ? checked.value : 'approve',
+      });
+    });
+
+    document.querySelectorAll('#open-questions input[type="checkbox"]').forEach(cb => {
+      decisions.push({
+        id: cb.dataset.decision,
+        label: cb.dataset.label || cb.dataset.decision,
+        included: cb.checked,
+      });
+    });
+
+    document.querySelectorAll('[data-comment]').forEach(el => {
+      if (el.value && el.value.trim()) {
+        comments.push({ id: el.dataset.comment, text: el.value.trim() });
+      }
+    });
+
+    return { submitted: true, decisions, comments, ts: Date.now() };
+  }
+
+  async function retryPendingSubmission() {
+    const pendingKey = STORAGE_KEY + '-pending';
+    const pending = localStorage.getItem(pendingKey);
+    if (!pending) return;
+    try {
+      const res = await fetch('/decisions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: pending
+      });
+      if (res.ok) localStorage.removeItem(pendingKey);
+    } catch {}
+  }
+
+  document.getElementById('submit-btn').addEventListener('click', async () => {
+    const data = collectDecisions();
+    const container = document.getElementById('concept-decisions');
+    container.textContent = JSON.stringify(data);
+    document.body.classList.add('concept-submitted');
+    document.getElementById('panel-ready').style.display = 'none';
+    document.getElementById('panel-submitted').style.display = 'block';
+    try {
+      await fetch('/decisions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data));
+    }
+    saveState();
+  });
+
+  // ============================================================
+  // Theme Toggle
+  // ============================================================
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const html = document.documentElement;
+    const current = html.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    document.getElementById('theme-toggle').textContent = next === 'dark' ? '🌙' : '☀️';
+    saveState();
+  });
+
+  // ============================================================
+  // Claude Connection Heartbeat (HTTP Bridge)
+  // ============================================================
+  const HEARTBEAT_STALE_MS = 90000;
+  const HEARTBEAT_GRACE_MS = 30000;
+  const _pageLoadedAt = Date.now();
+  let _lastHeartbeatTs = 0;
+
+  async function pollHeartbeat() {
+    try {
+      const res = await fetch('/heartbeat', { cache: 'no-store' });
+      const data = await res.json();
+      _lastHeartbeatTs = data.ts || 0;
+    } catch {}
+  }
+
+  function checkClaudeConnection() {
+    if (Date.now() - _pageLoadedAt < HEARTBEAT_GRACE_MS) return;
+    const isConnected = _lastHeartbeatTs
+      && (Date.now() - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
+    const warning = document.getElementById('connection-warning');
+    const btn = document.getElementById('submit-btn');
+    const panelSubmitted = document.getElementById('panel-submitted');
+    if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
+    if (isConnected) {
+      if (warning) warning.style.display = 'none';
+      if (btn) btn.disabled = false;
+      retryPendingSubmission();
+    } else {
+      if (warning) warning.style.display = 'flex';
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  setInterval(async () => { await pollHeartbeat(); checkClaudeConnection(); }, 5000);
+
+  // ============================================================
+  // Init
+  // ============================================================
+  document.addEventListener('DOMContentLoaded', () => {
+    restoreState();
+    updateVariantNav();
+    // sync theme toggle icon
+    const theme = document.documentElement.getAttribute('data-theme');
+    document.getElementById('theme-toggle').textContent = theme === 'dark' ? '🌙' : '☀️';
+  });
+
+  document.addEventListener('change', () => { saveState(); updateVariantNav(); });
+  document.addEventListener('input', saveState);
+</script>
+</body>
+</html>

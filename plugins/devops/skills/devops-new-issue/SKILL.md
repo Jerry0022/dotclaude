@@ -9,7 +9,7 @@ description: >-
   "mach ein Issue", "new issue", "milestone planen", "plan a milestone".
   Do NOT trigger for: PR creation (use /devops-ship), commit operations (use /devops-commit),
   or code implementation.
-allowed-tools: Bash(gh *), AskUserQuestion, Read, Grep, mcp__plugin_devops_dotclaude-issues__*
+allowed-tools: Bash(gh *), AskUserQuestion, Read, Grep, mcp__plugin_devops_dotclaude-issues__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
 # New Issue — GitHub Issue & Milestone Management
@@ -70,6 +70,16 @@ Missing required items = hard error. Fix before reporting success.
 ## Milestone Creation
 
 See deep-knowledge/milestone-rules.md for naming conventions and level prefixes.
+
+## Step 5 — Completion Card
+
+After the issue/milestone is created and verified, call
+`mcp__plugin_devops_dotclaude-completion__render_completion_card` with variant
+`fallback` (no code change, no ship — just a GitHub artifact created).
+
+Pass: `variant: "fallback"`, `summary` (e.g. "Issue #123 created"), `lang`,
+`session_id`, and `changes` (issue number → title, labels, milestone).
+Output the markdown VERBATIM as the LAST thing in the response.
 
 ## Rules
 

@@ -9,7 +9,7 @@ description: >-
   "Projekt einrichten", "Repo aufsetzen". Do NOT trigger for README generation
   (/devops-readme), CLAUDE.md edits, or source code changes.
 argument-hint: "[--audit | --init] [--fix]"
-allowed-tools: Read, Grep, Glob, Bash, AskUserQuestion, Write, Edit, WebFetch
+allowed-tools: Read, Grep, Glob, Bash, AskUserQuestion, Write, Edit, WebFetch, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
 # Project Setup & Repo Hygiene
@@ -190,3 +190,16 @@ extensions for any plugin skill:
 ### Plugin Extensions
 - [INFO] Run /devops-extend-skill to scaffold extensions for plugin skills
 ```
+
+## Step 9 — Completion Card
+
+Call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
+
+| Situation | Variant |
+|-----------|---------|
+| Files created/modified (.gitignore, LICENSE, project-map.md, …) | `ready` |
+| Audit only, nothing written | `analysis` |
+
+Pass: `variant`, `summary`, `lang`, `session_id`, `changes` (per-file summary),
+and `state` when files were written. Output the markdown VERBATIM as the LAST
+thing in the response.

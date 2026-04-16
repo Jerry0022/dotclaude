@@ -10,7 +10,7 @@ description: >-
   or when post.flow.debug hook detects repeated Bash failures.
   Do NOT trigger for general code questions.
 argument-hint: "[optional: describe the symptom or paste error]"
-allowed-tools: Read, Grep, Glob, Bash(git log *), Bash(git diff *), Bash(git bisect *), Bash(npm *), Bash(node *), AskUserQuestion, mcp__plugin_devops_dotclaude-issues__*
+allowed-tools: Read, Grep, Glob, Bash(git log *), Bash(git diff *), Bash(git bisect *), Bash(npm *), Bash(node *), AskUserQuestion, mcp__plugin_devops_dotclaude-issues__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
 # Flow
@@ -91,6 +91,24 @@ Always report:
 - **What was wrong**: the broken assumption or logic error
 - **What was fixed**: the change made (or proposed)
 - **Confidence level**: "Sicher behoben" vs. "Hypothese — braucht Verifizierung"
+
+## Step 9 — Completion Card
+
+Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` with the
+variant that matches the outcome — variant is NOT fixed for this skill:
+
+| Outcome | Variant |
+|---------|---------|
+| Fix applied + app/service can be tested | `test` (prefer — include `userTest` steps) |
+| Fix applied, no user-visible testing needed | `ready` |
+| Diagnosed only, no fix made (proposal/architectural) | `analysis` |
+| Could not reproduce / infeasible / aborted | `aborted` (include `cta.reason`) |
+
+Pass: `variant`, `summary`, `lang`, `session_id`, `changes` (file:line of root cause
+→ what was fixed), and `state` when files changed.
+
+Output the returned markdown VERBATIM as the LAST thing in the response —
+nothing after the closing `---`.
 
 ## Rules
 

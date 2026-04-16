@@ -8,7 +8,7 @@ description: >-
   "branch cleanup", "was liegt noch rum", "git aufräumen", "branch hygiene".
   Explicit user request only.
 argument-hint: "[optional: focus area — branches, worktrees, PRs]"
-allowed-tools: Bash(git *), Bash(gh *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*
+allowed-tools: Bash(git *), Bash(gh *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
 # Repo Health Check
@@ -373,6 +373,22 @@ for worktrees classified as `clean` in Step 2. Enforce these rules:
 4. **Branch cleanup after removal:** After successfully removing a clean
    worktree, the associated branch can be deleted locally. But check that
    the branch is not the current branch in the main repo first.
+
+## Step 10 — Completion Card
+
+After Step 9 finishes executing (or the user ends the monitor without any
+deletions), call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
+
+| Situation | Variant |
+|-----------|---------|
+| Branches / remotes / worktrees deleted | `ready` |
+| User reviewed but didn't delete anything | `analysis` |
+| User aborted mid-flow | `aborted` |
+
+Pass: `variant`, `summary` (e.g. "Repo hygiene — 4 branches cleaned"), `lang`,
+`session_id`, `changes` (counts per action: local/remote/worktrees removed),
+and `state` when git operations happened. Output the markdown VERBATIM as the
+LAST thing in the response.
 
 ## Rules
 

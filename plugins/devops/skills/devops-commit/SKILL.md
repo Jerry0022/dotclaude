@@ -6,7 +6,7 @@ description: >-
   co-author footer. Handles amend for "update/fix last commit".
   Do NOT trigger for push, PR, or ship operations.
 disable-model-invocation: true
-allowed-tools: Bash(git *), AskUserQuestion
+allowed-tools: Bash(git *), AskUserQuestion, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
 # Commit
@@ -125,6 +125,25 @@ Show commit hash, title, and stats:
 ```bash
 git log --oneline -1 && git diff --stat HEAD~1
 ```
+
+## Step 10 — Completion Card
+
+Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` with variant `ready`
+(a commit is a code change, not a ship — `shipped` only after `/devops-ship`).
+
+```
+render_completion_card({
+  variant: "ready",
+  summary: "<~10 words, user's language>",
+  lang: "<de|en>",
+  session_id: "<from hook input>",
+  changes: [{ area, description }, ...],   // from the staged diff
+  state: { branch, commit: "<short sha>", pushed: <bool>, merged: null }
+})
+```
+
+Output the returned markdown VERBATIM as the LAST thing in the response —
+character-for-character, no text after the closing `---`.
 
 ## Rules
 

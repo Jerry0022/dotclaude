@@ -9,7 +9,7 @@ description: >-
   "CLAUDE.md zu lang", "audit claude md", "claude md audit".
   Do NOT trigger for editing CLAUDE.md content or for /devops-project-setup.
 argument-hint: "[--fix]"
-allowed-tools: Read, Glob, Bash, Write, Edit
+allowed-tools: Read, Glob, Bash, Write, Edit, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
 # CLAUDE.md Lint
@@ -127,3 +127,16 @@ Do NOT auto-fix without `--fix` — only report.
 ### Recommendation
 {specific actionable suggestions}
 ```
+
+## Step 6 — Completion Card
+
+Call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
+
+| Situation | Variant |
+|-----------|---------|
+| `--fix` mode ran and files were written | `ready` |
+| Audit only (no file changes) | `analysis` |
+
+Pass: `variant`, `summary`, `lang`, `session_id`, `changes` (per file: OK/WARNING/CRITICAL
++ extraction count), and `state` when `--fix` wrote files. Output the markdown
+VERBATIM as the LAST thing in the response.

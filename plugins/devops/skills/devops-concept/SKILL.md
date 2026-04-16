@@ -248,12 +248,35 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    ```
    Use a random port (8700-8999) to avoid conflicts. Store the port as `$PORT`.
 
-3. Set up the heartbeat cron (keeps the connection indicator green):
+3. Set up the **combined heartbeat + auto-poll cron**. This single cron keeps
+   the connection indicator green AND automatically picks up user submissions
+   — no manual trigger needed from the user.
+
    ```
-   CronCreate(cron: "* * * * *", prompt: "Run: curl -s -X POST http://localhost:{port}/heartbeat > /dev/null")
+   CronCreate(cron: "* * * * *", recurring: true, prompt: <<EOF
+   Silently run both steps for the concept bridge on port {port}:
+
+   (1) Heartbeat POST:
+       Bash: curl -s -X POST http://localhost:{port}/heartbeat > /dev/null
+
+   (2) Decision poll:
+       Bash: curl -s http://localhost:{port}/decisions
+
+       If the response contains `"submitted":true` →
+         • Parse the JSON (decisions + comments).
+         • Process them per Step 5 (Live Feedback Loop) — act on the user's
+           choices (approve/tweak/reject, included options, comment-driven tweaks).
+         • After processing, reset the server state:
+           Bash: curl -s -X POST http://localhost:{port}/reset > /dev/null
+         • Report the outcome to the user.
+
+       If `"submitted":false` → produce NO user-visible output. Silent tick.
+   EOF)
    ```
-   This fires every ~60s. For tighter heartbeat, also send an initial POST
-   immediately and on each monitoring poll via Bash.
+
+   **Why combined, not two crons?** One cron minimizes race conditions and makes
+   the contract explicit: every tick does both. Minimum cron resolution is 1 min,
+   so the max submit-to-process lag is ~60 s — acceptable for interactive flows.
 
 4. Send the first heartbeat immediately:
    ```bash
@@ -302,11 +325,15 @@ Parse the JSON response. If `submitted` is `true` → process decisions (Step 5)
 If `false` → wait and retry.
 
 **Polling schedule:**
-- **Initial wait**: 10 seconds after opening
-- **Poll interval**: 15 seconds (via conversation-driven checks or cron)
+- **Primary mechanism**: the combined cron from Step 3 fires every minute and
+  handles heartbeat + decision pickup + reset automatically. No manual polling
+  needed from Claude between user turns.
+- **Initial wait**: 10 seconds after opening, then send one manual heartbeat +
+  decision check to close the 0–60 s gap before the first cron tick lands.
 - **No timeout** — monitoring runs indefinitely until the user ends it
-  (says "fertig"/"done", closes the page, or closes Claude)
-- On each poll, also POST `/heartbeat` to keep the connection indicator green
+  (says "fertig"/"done", closes the page, or closes Claude).
+- **On demand**: if the user asks "did my submission arrive?", do a manual
+  `curl http://localhost:$PORT/decisions` — do NOT wait for the next cron tick.
 
 **Important:** While waiting, do NOT block the conversation. Inform the
 user that you're monitoring and they can continue chatting. If the user
@@ -380,11 +407,28 @@ Return to Step 4 (monitor for next submission). The loop continues until:
 Write a cumulative summary to `docs/concepts/{same-timestamp}-{same-slug}-v{same-version}-decisions.json`
 after each iteration (append, don't overwrite previous rounds).
 
-## Step 6 — Completion
+## Step 6 — Completion Card
 
-The feedback loop ends when the user is satisfied. Then continue with the
-normal workflow. If the concept was the primary task, render a completion
-card. If it was part of a larger task, proceed to the next step.
+The feedback loop ends when the user is satisfied (user says "fertig"/"done",
+closes the page, or all items are processed). Then render a completion card.
+
+Call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
+
+| Situation | Variant |
+|-----------|---------|
+| Concept was the primary task (read-only result) | `analysis` |
+| Concept submitted decisions → Claude executed code changes in Step 5b | `ready` (code edits happened) |
+| Concept discarded / user aborted | `aborted` |
+
+Pass: `variant`, `summary` (e.g. "Concept auth-middleware-redesign finalized"),
+`lang`, `session_id`, `changes` (what the concept covered and which decisions
+were acted on), and `state` when files changed.
+
+Output the returned markdown VERBATIM as the LAST thing in the response —
+nothing after the closing `---`.
+
+If the concept is part of a larger task (e.g. called mid-flow from another
+skill), skip the card and return control — the parent skill renders its own.
 
 ## Smart Trigger Rules
 
