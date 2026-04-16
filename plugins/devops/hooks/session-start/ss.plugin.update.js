@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.5.0
+ * @version 0.6.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
  *   Workaround for anthropics/claude-code#14061 — Desktop never runs git pull
  *   on marketplace clones and never rebuilds the plugin cache.
  *   Shares the same update logic as /devops-self-update (see SKILL.md).
+ *
+ *   When a plugin with an MCP server is upgraded mid-session, the running
+ *   MCP processes point at the now-deleted old installPath. A sentinel file
+ *   (~/.claude/plugins/.mcp-stale.json) is written so pre.mcp.health can
+ *   block MCP tool calls until the user restarts Claude Code.
  */
 
 require('../lib/plugin-guard');
@@ -20,6 +25,7 @@ const home = process.env.HOME || process.env.USERPROFILE || '';
 const marketplacesDir = path.join(home, '.claude', 'plugins', 'marketplaces');
 const cacheDir = path.join(home, '.claude', 'plugins', 'cache');
 const registryFile = path.join(home, '.claude', 'plugins', 'installed_plugins.json');
+const sentinelFile = path.join(home, '.claude', 'plugins', '.mcp-stale.json');
 
 function run(cmd, cwd) {
   try {
@@ -164,9 +170,20 @@ function rebuildCache(marketplace, pluginName, pluginDir, version, sha) {
   return { ok: true };
 }
 
-if (!fs.existsSync(marketplacesDir)) process.exit(0);
+// If the marketplaces directory is missing, there are no updates to run.
+// Still clean up any lingering sentinel from a prior session — otherwise it
+// would block every MCP tool call indefinitely.
+if (!fs.existsSync(marketplacesDir)) {
+  if (fs.existsSync(sentinelFile)) {
+    try { fs.unlinkSync(sentinelFile); } catch { /* ignore */ }
+  }
+  process.exit(0);
+}
 
 const updated = [];
+// Tracks plugins whose installPath moved and that expose MCP servers.
+// Used at the end to either write or clear the stale sentinel.
+const mcpAffected = [];
 
 for (const marketplace of fs.readdirSync(marketplacesDir)) {
   const mDir = path.join(marketplacesDir, marketplace);
@@ -253,8 +270,40 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
         cacheRepair: (cacheMissing || cacheStale) && !versionChanged,
         error: result.ok ? null : (result.missing || result.mismatch),
       });
+
+      // Real version upgrades of MCP-bearing plugins invalidate running MCP
+      // processes — they were spawned from the now-deleted installPath.
+      // Cache repairs at the same version overwrite files in place, so the
+      // running Node process (code already in RAM) keeps working.
+      if (versionChanged && result.ok && fs.existsSync(path.join(dir, '.mcp.json'))) {
+        mcpAffected.push({
+          name,
+          marketplace,
+          from: beforeVersions[name] || '?',
+          to: after,
+        });
+      }
     }
   }
+}
+
+// Manage the MCP-stale sentinel. Writing it here is safe even if Claude Code
+// spawns MCP servers AFTER this hook runs — pre.mcp.health compares the PID
+// file's mtime against the sentinel's mtime, so a fresh spawn clears it on
+// the first tool call. Stale sentinels from a previous session are cleaned
+// up when this hook runs without MCP-affecting changes.
+if (mcpAffected.length > 0) {
+  try {
+    fs.writeFileSync(
+      sentinelFile,
+      JSON.stringify({ stampedAt: new Date().toISOString(), plugins: mcpAffected }, null, 2),
+    );
+  } catch {
+    // Sentinel write failed — MCP tools will still work, just without the guard
+  }
+} else if (fs.existsSync(sentinelFile)) {
+  // Nothing moved this run — any lingering sentinel is from a prior session
+  try { fs.unlinkSync(sentinelFile); } catch { /* ignore */ }
 }
 
 if (updated.length === 0) process.exit(0);
