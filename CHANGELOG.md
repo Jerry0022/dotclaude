@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.44.1] — 2026-04-16
+
+### Fixed
+
+- **mcp** — block stale MCP tool calls after a mid-session plugin upgrade. `ss.plugin.update` writes `~/.claude/plugins/.mcp-stale.json` when a plugin's installPath moves; `pre.mcp.health` compares that sentinel against the MCP server's PID-file mtime and refuses `mcp__plugin_devops_*` calls with a clear restart message until the servers are respawned. Cache repairs at the same version overwrite in place and do NOT trigger the guard.
+- **mcp** — hardened sentinel logic: `>=` mtime comparison tolerates same-millisecond writes, corrupt sentinel JSON is deleted and passes through instead of wedging all MCP calls, and the cleanup path runs before the early exit when the marketplaces directory is absent
+- **release** — aligned `.claude-plugin/marketplace.json` from stale 0.43.3 to 0.44.0 (pre-0.44.1 ship blocker)
+
 ## [0.44.0] — 2026-04-16
 
 ### Added
