@@ -119,19 +119,40 @@ function buildBlockReason() {
   ].join('\n');
 }
 
+/** Cap transcript bytes read into memory — we only need the last assistant message. */
+const TRANSCRIPT_TAIL_BYTES = 200 * 1024; // 200 KB
+
 /**
  * Safely read a transcript file — returns '' on any error so decideAction
  * treats it as a non-substantial chat turn.
+ *
+ * Only reads the last TRANSCRIPT_TAIL_BYTES of the file. Since each JSONL
+ * line is one message and we scan backwards for the LAST assistant entry,
+ * a truncated first line at the buffer boundary is harmless — malformed
+ * JSON lines are already skipped by lastAssistantText.
  */
 function safeReadTranscript(transcriptPath) {
   if (!transcriptPath) return '';
-  try { return fs.readFileSync(transcriptPath, 'utf8'); }
-  catch { return ''; }
+  let fd;
+  try {
+    const size = fs.statSync(transcriptPath).size;
+    const start = Math.max(0, size - TRANSCRIPT_TAIL_BYTES);
+    const length = size - start;
+    fd = fs.openSync(transcriptPath, 'r');
+    const buf = Buffer.alloc(length);
+    fs.readSync(fd, buf, 0, length, start);
+    return buf.toString('utf8');
+  } catch {
+    return '';
+  } finally {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch {}
+  }
 }
 
 module.exports = {
   SUBSTANTIAL_CHARS,
   CARD_MARKER,
+  TRANSCRIPT_TAIL_BYTES,
   lastAssistantText,
   lastAssistantTextLength,
   isSubstantialAnswer,

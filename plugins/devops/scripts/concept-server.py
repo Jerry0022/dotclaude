@@ -4,6 +4,9 @@ Concept Bridge Server — HTTP-based heartbeat and decision bridge.
 Replaces `python -m http.server` with a custom server that adds:
 - GET/POST /heartbeat — Claude signals presence via curl, page polls via fetch
 - GET/POST /decisions — Page submits decisions via POST, Claude reads via GET
+- POST /reset — Claude clears decisions after processing; conditional on
+  version to avoid dropping submissions that land between GET and POST
+  (see /reset docs below).
 
 This bypasses Chrome MCP JS injection limitations entirely. The page
 communicates with Claude through HTTP endpoints instead of requiring
@@ -25,6 +28,12 @@ import threading
 
 _heartbeat_ts = 0
 _decisions = '{"submitted": false, "decisions": [], "comments": []}'
+# Monotonic counter — incremented on every POST /decisions. Used by /reset
+# for optimistic concurrency: Claude reads version via GET, processes, then
+# POSTs the same version back. If the user submitted again in the meantime,
+# the server version has advanced and the reset is rejected with 409 so the
+# second submission is not silently dropped.
+_version = 0
 _lock = threading.Lock()
 
 
@@ -45,14 +54,25 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 ts = _heartbeat_ts
             self._json_response({"ts": ts})
         elif self.path == '/decisions':
+            # Return the stored decisions payload with the current server
+            # version appended as `_version`. Claude must pass this value back
+            # to POST /reset for the optimistic-concurrency check to work.
             with _lock:
                 data = _decisions
-            self._send_raw_json(data)
+                version = _version
+            try:
+                obj = json.loads(data)
+                if not isinstance(obj, dict):
+                    obj = {"submitted": False, "decisions": [], "comments": []}
+            except Exception:
+                obj = {"submitted": False, "decisions": [], "comments": []}
+            obj["_version"] = version
+            self._json_response(obj)
         else:
             super().do_GET()
 
     def do_POST(self):
-        global _heartbeat_ts, _decisions
+        global _heartbeat_ts, _decisions, _version
         if self.path == '/heartbeat':
             with _lock:
                 _heartbeat_ts = int(time.time() * 1000)
@@ -63,11 +83,36 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             body = self.rfile.read(length).decode()
             with _lock:
                 _decisions = body
-            self._json_response({"ok": True})
+                _version += 1
+                version = _version
+            self._json_response({"ok": True, "version": version})
         elif self.path == '/reset':
+            # Optional body: {"version": N}. When present, only reset if N
+            # matches the current server version — otherwise a newer submission
+            # arrived between Claude's GET and this POST, and resetting would
+            # drop it. In that case we respond 409 so Claude can re-fetch.
+            # Backward-compat: empty body or missing version = unconditional
+            # reset (legacy behavior, use with care).
+            length = int(self.headers.get('Content-Length', 0))
+            expected = None
+            if length > 0:
+                try:
+                    raw = self.rfile.read(length).decode()
+                    expected = json.loads(raw).get('version') if raw else None
+                except Exception:
+                    expected = None
             with _lock:
-                _decisions = '{"submitted": false, "decisions": [], "comments": []}'
-            self._json_response({"ok": True})
+                if expected is None or expected == _version:
+                    _decisions = '{"submitted": false, "decisions": [], "comments": []}'
+                    self._json_response({"ok": True, "version": _version})
+                else:
+                    # Mismatch — newer submission landed after Claude read
+                    self._conflict_response({
+                        "ok": False,
+                        "reason": "version_mismatch",
+                        "current": _version,
+                        "expected": expected,
+                    })
         else:
             self.send_error(404)
 
@@ -79,6 +124,14 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
     def _json_response(self, data):
         body = json.dumps(data).encode()
         self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self._cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _conflict_response(self, data):
+        body = json.dumps(data).encode()
+        self.send_response(409)
         self.send_header('Content-Type', 'application/json')
         self._cors_headers()
         self.end_headers()

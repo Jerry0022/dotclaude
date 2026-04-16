@@ -882,7 +882,8 @@ Card must be the LAST thing in the response — nothing after the closing ---.</
         body: JSON.stringify(data)
       });
     } catch {
-      localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data));
+      try { localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data)); }
+      catch {}
     }
     saveState();
   });

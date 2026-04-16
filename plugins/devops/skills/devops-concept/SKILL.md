@@ -259,15 +259,21 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    (1) Heartbeat POST:
        Bash: curl -s -X POST http://localhost:{port}/heartbeat > /dev/null
 
-   (2) Decision poll:
+   (2) Decision poll with optimistic-concurrency reset:
        Bash: curl -s http://localhost:{port}/decisions
 
        If the response contains `"submitted":true` →
-         • Parse the JSON (decisions + comments).
+         • Note the `_version` field from the response.
+         • Parse the JSON (decisions + comments) — strip `_version` before processing.
          • Process them per Step 5 (Live Feedback Loop) — act on the user's
            choices (approve/tweak/reject, included options, comment-driven tweaks).
-         • After processing, reset the server state:
-           Bash: curl -s -X POST http://localhost:{port}/reset > /dev/null
+         • After processing, reset conditionally — pass the noted version:
+           Bash: curl -s -X POST -H "Content-Type: application/json" \
+                       -d '{"version": <noted>}' http://localhost:{port}/reset
+         • If the response is `409` (version mismatch) → the user submitted
+           again while you were processing. Re-fetch `/decisions`, process the
+           new payload (which supersedes what you just finished), then retry
+           the conditional reset with the new `_version`.
          • Report the outcome to the user.
 
        If `"submitted":false` → produce NO user-visible output. Silent tick.
