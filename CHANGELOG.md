@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.44.0] — 2026-04-16
+
+### Added
+
+- **completion** — `stop.flow.guard` now blocks the turn via JSON `decision:block` when a card is required but not rendered, instead of only injecting a next-turn reminder. Works for tool-use turns AND substantial chat-only answers (≥400 chars) — no more missed `analysis`/`ready` cards after conversational turns
+- **completion** — new `hooks/lib/card-guard.js` module (pure decision matrix, 28 unit tests) with `✨✨✨` card-marker backup detection for when the flag-file write fails
+- **skills** — 9 skills now render the completion card explicitly, analogous to `/devops-ship` Step 6: commit, flow, concept, readme, new-issue, deep-research, claude-md-lint, project-setup, repo-health
+- **concept** — bridge server `/reset` is now conditional on a `_version` counter to prevent losing user submissions that arrive between Claude's GET and POST; stale resets return HTTP 409
+- **concept** — Step 3 cron combines heartbeat + decision poll + conditional reset in one tick, so user submissions are auto-picked up within ~60 s without a manual trigger
+
+### Fixed
+
+- **hooks** — transcript reads in `stop.flow.guard` capped at the last 200 KB to avoid unbounded I/O and JSON parsing on long session logs
+- **concept** — offline-submit `localStorage.setItem` now wrapped in try/catch to survive quota-exceeded or storage-disabled browsers
+- **version** — marketplace.json synced from stale 0.42.1 to 0.43.3 (pre-0.44.0 ship blocker)
+
 ## [0.43.3] — 2026-04-15
 
 ### Fixed
