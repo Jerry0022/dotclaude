@@ -1,6 +1,6 @@
 ---
 name: devops-self-update
-version: 0.3.0
+version: 0.4.0
 description: >-
   Manually update the devops plugin to latest from GitHub. Delegates to
   ss.plugin.update hook (pull + cache + registry), then adds changelog and
@@ -108,6 +108,10 @@ Commits: {count} new commits
 Verified: ✓ version aligned, ✓ cache complete, ✓ {skill_count} skills
 Restart the session for hooks and MCP tools to take effect.
 Skills are available immediately.
+
+⚠ MCP tools (/devops-ship, /devops-new-issue, completion card) will be
+blocked by pre.mcp.health until restart — the running MCP processes
+point at the now-deleted old installPath.
 ```
 
 ## Known Issues
@@ -122,3 +126,11 @@ Skills are available immediately.
 - **Plugin key naming**: Marketplace and plugin name must differ
   (`devops@dotclaude`, not `devops@devops`). Identical names hide the
   plugin from the Customize UI.
+
+- **MCP stale after upgrade**: When the plugin version changes, the
+  marketplace clone's old cache dir is wiped and a new installPath is
+  registered. MCP servers spawned earlier in the session still point at
+  the deleted path. `ss.plugin.update` writes `.mcp-stale.json` so
+  `pre.mcp.health` blocks further MCP calls until the user restarts.
+  Cache repairs at the same version overwrite files in place and do NOT
+  trigger the sentinel.

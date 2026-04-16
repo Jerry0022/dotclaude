@@ -1,16 +1,23 @@
 #!/usr/bin/env node
 /**
  * @hook pre.mcp.health
- * @version 0.1.0
+ * @version 0.2.0
  * @event PreToolUse
  * @plugin devops
- * @description Detects dead MCP servers before tool calls fail cryptically.
+ * @description Detects dead or stale MCP servers before tool calls fail cryptically.
  *   Each MCP server writes a PID file on startup (via mcp-server/lib/heartbeat.js).
- *   This hook checks if the PID is still alive. If not, it blocks with a clear
- *   message telling the user to start a new session.
+ *   This hook checks two conditions in order:
  *
- *   Typical cause: hard PC shutdown (Stop-Computer -Force) kills MCP processes,
- *   but the resumed conversation still references them.
+ *   1. Stale-after-update: ss.plugin.update writes ~/.claude/plugins/.mcp-stale.json
+ *      when a plugin's installPath moves (real version upgrade). If that sentinel
+ *      is newer than the server's PID file, the running MCP process is pointing at
+ *      deleted files → block with a restart message.
+ *
+ *   2. Dead process: PID file exists but the process no longer runs (typical cause:
+ *      hard PC shutdown). Block with a restart message and clean up the stale PID.
+ *
+ *   If the PID file is newer than the sentinel, the server was respawned after
+ *   the update — the sentinel is cleared so subsequent calls pass through.
  */
 
 require('../lib/plugin-guard');
@@ -20,6 +27,8 @@ const path = require('path');
 const os = require('os');
 
 const PREFIX = 'dotclaude-mcp-';
+const home = process.env.HOME || process.env.USERPROFILE || '';
+const sentinelFile = path.join(home, '.claude', 'plugins', '.mcp-stale.json');
 
 // Map tool-name prefixes to MCP server names
 const SERVER_MAP = {
@@ -65,6 +74,46 @@ process.stdin.on('end', () => {
   if (!serverName) process.exit(0);
 
   const pidFile = pidFileFor(serverName);
+  const pidMtime = fs.existsSync(pidFile) ? fs.statSync(pidFile).mtimeMs : 0;
+
+  // Stale-after-update check: if the sentinel is newer than the PID file, the
+  // running MCP process was spawned before the plugin upgrade wiped its
+  // installPath. If the PID file is newer (or there is no sentinel matching
+  // this server), the server was respawned after the upgrade — clear the
+  // sentinel so future calls pass through.
+  if (fs.existsSync(sentinelFile)) {
+    let sentinel;
+    try { sentinel = JSON.parse(fs.readFileSync(sentinelFile, 'utf8')); }
+    catch { sentinel = null; }
+    const sentinelMtime = fs.statSync(sentinelFile).mtimeMs;
+    const affectsThisServer = sentinel?.plugins?.some(p => p.name === 'devops') ?? true;
+
+    if (affectsThisServer) {
+      if (pidMtime > sentinelMtime) {
+        // Server was respawned after the upgrade — safe. Drop the sentinel.
+        try { fs.unlinkSync(sentinelFile); } catch { /* ignore */ }
+      } else {
+        const upgrades = (sentinel?.plugins || [])
+          .map(p => `${p.name} ${p.from} → ${p.to}`)
+          .join(', ') || 'plugin';
+        const W = 60;
+        const line = '─'.repeat(W);
+        console.error('');
+        console.error(`⚠️  MCP SERVER STALE — ${serverName}`);
+        console.error(line);
+        console.error(`Plugin upgraded this session: ${upgrades}.`);
+        console.error('The running MCP process was spawned from the old');
+        console.error('installPath, which has been replaced. File reads will');
+        console.error('fail or return stale data.');
+        console.error('');
+        console.error('Fix: Start a new Claude Code session. MCP servers are');
+        console.error('only spawned on session init — they cannot be');
+        console.error('reconnected mid-conversation.');
+        console.error(line);
+        process.exit(2);
+      }
+    }
+  }
 
   // No PID file → server never registered (old version or first run) — pass through
   if (!fs.existsSync(pidFile)) process.exit(0);
