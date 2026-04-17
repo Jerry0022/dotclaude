@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.46.0] — 2026-04-17
+
+### Changed
+
+- **concept** — iterations of a concept page now live as tab sections inside a single HTML file instead of separate `-v{N}` files. The tab bar is anchored in the content header above the variants; past iterations are frozen (disabled inputs + readonly comments preserving the user's submitted values) and remain clickable so users can review their own feedback history. Step 5c of the skill now appends a new `<section data-iteration="N">` and signals the browser — no more `meta refresh` redirect files
+- **concept** — filenames drop the `-v{version}` segment: one concept session = one file (`{date}-{slug}.html`)
+
+### Added
+
+- **concept** — `/reload` counter endpoint on the concept bridge server. Claude POSTs after rewriting the HTML; the browser's `pollReload` loop issues `location.reload()` when the counter advances. Closes the gap where iteration 2+ was written to disk but the existing tab kept showing iteration 1's submitted state
+- **concept** — origin guard on `/reload`: rejects POSTs with a foreign `Origin` header so random localhost pages cannot hijack reloads
+
+### Fixed
+
+- **concept** — `showIteration()` now also hides `panel-submitted` when switching to a frozen iteration, preventing a mid-processing spinner from bleeding through the historical snapshot
+- **release** — aligned `.claude-plugin/marketplace.json` from stale 0.44.0 to 0.45.0 (pre-0.46.0 ship blocker)
+
 ## [0.45.0] — 2026-04-17
 
 ### Added
