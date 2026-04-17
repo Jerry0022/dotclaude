@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.45.0] — 2026-04-17
+
+### Added
+
+- **autonomous** — 3-minute auto-start timer via one-shot `CronCreate`. Step 4 arms a cron at `now+3min` with an `AUTONOMOUS_AUTOSTART:` prompt that encodes the full execution context (task, mode, desktop, shutdown, branch). "Ja, los!" cancels the timer; "Noch nicht" re-arms fresh +3 min so the user can ask clarifying questions. No answer → cron fires and Step 0.1 picks up execution. Re-arm guard: if autostart fires while another `AskUserQuestion` is pending, the timer is re-armed instead of interrupting the open question
+- **autonomous** — new `deep-knowledge/autonomous-execution.md` containing the execution mode gate, safety guardrails (forbidden ops in both modes), and late-permission protocol (previously inline in SKILL.md)
+- **autonomous** — `evals/evals.json` with 15 should/should-not-trigger cases to lock down the skill description
+
+### Changed
+
+- **autonomous** — SKILL.md description tightened to ~60 words with explicit SHUTDOWN-risk disclaimer; `version:` frontmatter key removed; `argument-hint` gained a concrete example; emojis in Step 3e checklist replaced with `[OK]`/`[--]` ASCII markers; Browser-Credo duplicate collapsed to a short reference to `browser-tool-strategy.md`
+- **autonomous** — triggers pruned to a tighter canonical list (dropped `devops-autonomous`, `autonom weiter`, `ich bin gleich weg`, `ich geh kurz weg`, `unattended mode`, `mach weiter ohne mich`)
+
+### Fixed
+
+- **release** — aligned `.claude-plugin/marketplace.json` from stale 0.44.0 to 0.44.1 (pre-0.45.0 ship blocker)
+
 ## [0.44.1] — 2026-04-16
 
 ### Fixed
