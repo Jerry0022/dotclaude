@@ -241,6 +241,7 @@ are present. **Grep the generated file** for each required pattern:
 | 13 | `iteration-tabs` | Tab bar container in the decision panel |
 | 14 | `pollReload` | Reload-signal poller (picks up file rewrites) |
 | 15 | `sec.hidden` | Tab-switch JS toggles the `hidden` attribute — prevents all iterations rendering at once |
+| 16 | `pollProcessedState` | Auto-reset poll handler — restores the ready panel when the server's `_processed_at` advances past the local `_submittedAt` |
 
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. This is a **blocking gate** — no exceptions, no "this
@@ -288,26 +289,40 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    (1) Heartbeat POST:
        Bash: curl -s -X POST http://localhost:{port}/heartbeat > /dev/null
 
-   (2) Decision poll with optimistic-concurrency reset:
-       Bash: curl -s http://localhost:{port}/decisions
+   (2) Pending check — use the deterministic /pending endpoint, NOT a
+       substring match on /decisions. The response is a strict JSON object
+       `{"pending": true|false, "version": N}` with no free-form content.
+       Bash (produces ONLY the literal string "true" or "false"):
+         curl -s http://localhost:{port}/pending | python -c "import sys,json; d=json.load(sys.stdin); print('true' if d.get('pending') else 'false')"
 
-       If the response contains `"submitted":true` →
-         • Note the `_version` field from the response.
-         • Parse the JSON (decisions + comments) — strip `_version` before processing.
-         • Process them per Step 5 (Live Feedback Loop) — act on the user's
-           choices (approve/tweak/reject, included options, comment-driven tweaks).
+       If the output is exactly "false" → produce NO user-visible output. Silent tick.
+
+       If the output is exactly "true" → fetch the full payload and process:
+         Bash: curl -s http://localhost:{port}/decisions
+         • Parse the JSON. Note `_version`. Strip `_version` and `_processed_at`
+           before treating the rest as decision data.
+         • Process per Step 5 (Live Feedback Loop) — act on the user's choices
+           (approve/tweak/reject, included options, comment-driven tweaks).
          • After processing, reset conditionally — pass the noted version:
-           Bash: curl -s -X POST -H "Content-Type: application/json" \
+           Bash: curl -s -o /dev/null -w "%{http_code}" -X POST \
+                       -H "Content-Type: application/json" \
                        -d '{"version": <noted>}' http://localhost:{port}/reset
-         • If the response is `409` (version mismatch) → the user submitted
-           again while you were processing. Re-fetch `/decisions`, process the
+         • If the HTTP code is 409 (version mismatch) → the user submitted
+           again while you were processing. Re-fetch /decisions, process the
            new payload (which supersedes what you just finished), then retry
            the conditional reset with the new `_version`.
-         • Report the outcome to the user.
-
-       If `"submitted":false` → produce NO user-visible output. Silent tick.
+         • Report the outcome to the user. The browser's panel auto-resets
+           within 5s via the `_processed_at` heartbeat poll — no browser-eval
+           injection required.
    EOF)
    ```
+
+   **Why `/pending` + `python -c` instead of a substring check?** The
+   `/decisions` JSON response is formatted via Python's default
+   `json.dumps`, which emits `"submitted": true` **with** a space after the
+   colon — a literal `contains "submitted":true` test silently misses every
+   submission. `/pending` collapses the signal to a strict boolean so the
+   cron body cannot drift into false negatives between ticks.
 
    **Why combined, not two crons?** One cron minimizes race conditions and makes
    the contract explicit: every tick does both. Minimum cron resolution is 1 min,
@@ -404,7 +419,14 @@ After processing, **append a new iteration tab** to the same HTML file and
 signal the browser to reload. This is the ONLY update path — there is no
 separate "in-place edit" vs. "new file" distinction anymore.
 
-Procedure on every iteration (including the very first response to feedback):
+Procedure on every iteration (including the very first response to feedback).
+Before the steps below, POST `/reset` with the captured `_version` (see cron
+prompt in Step 3). This stamps `_processed_at` on the server so the
+browser's `pollProcessedState` can restore the panel to the ready state
+automatically — Claude does NOT send a browser-eval reset. The subsequent
+`pollReload` tick picks up the file rewrite and the tab reloads onto the
+new active iteration. See `deep-knowledge/templates.md` § Panel State Reset
+for the polling contract.
 
 1. Read the existing HTML file (same path, always).
 2. Freeze the currently-active iteration section per the rules in

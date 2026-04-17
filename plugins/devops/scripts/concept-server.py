@@ -3,10 +3,15 @@ Concept Bridge Server — HTTP-based heartbeat and decision bridge.
 
 Replaces `python -m http.server` with a custom server that adds:
 - GET/POST /heartbeat — Claude signals presence via curl, page polls via fetch
-- GET/POST /decisions — Page submits decisions via POST, Claude reads via GET
+- GET/POST /decisions — Page submits decisions via POST, Claude reads via GET.
+  GET response includes `_version` (for optimistic /reset concurrency) and
+  `_processed_at` (ISO timestamp of the last successful /reset — the browser
+  uses this to auto-restore the panel to the ready state after Claude processes).
+- GET /pending — Deterministic signal for Claude's cron: returns
+  `{"pending": bool, "version": int}` with no free-form content to fuzzy-match.
 - POST /reset — Claude clears decisions after processing; conditional on
   version to avoid dropping submissions that land between GET and POST
-  (see /reset docs below).
+  (see /reset docs below). Updates `_processed_at` on success.
 - GET/POST /reload — Claude bumps a counter after rewriting the HTML file;
   the browser polls and reloads when the counter advances.
 
@@ -27,6 +32,7 @@ import os
 import sys
 import time
 import threading
+from datetime import datetime, timezone
 
 _heartbeat_ts = 0
 _decisions = '{"submitted": false, "decisions": [], "comments": []}'
@@ -36,6 +42,12 @@ _decisions = '{"submitted": false, "decisions": [], "comments": []}'
 # the server version has advanced and the reset is rejected with 409 so the
 # second submission is not silently dropped.
 _version = 0
+# ISO-8601 UTC timestamp of the last successful /reset (i.e. when Claude
+# finished processing a submission). The browser polls /decisions, compares
+# `processed_at` against its own `submittedAt`, and auto-restores the panel
+# to the ready state when it sees a newer processed_at than its submission.
+# Empty string until the first reset; clients treat that as "never processed".
+_processed_at = ''
 # Reload counter — bumped by Claude via POST /reload after the HTML file is
 # rewritten (new iteration appended, content refreshed, etc). The browser
 # polls GET /reload and issues location.reload() when the counter advances.
@@ -43,6 +55,10 @@ _version = 0
 # tab keeps showing stale content.
 _reload_counter = 0
 _lock = threading.Lock()
+
+
+def _iso_now():
+    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
 
 
 class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
@@ -65,9 +81,13 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             # Return the stored decisions payload with the current server
             # version appended as `_version`. Claude must pass this value back
             # to POST /reset for the optimistic-concurrency check to work.
+            # `processed_at` is the ISO timestamp of the last /reset and lets
+            # the browser detect "Claude finished processing" without a JS
+            # eval round-trip — see templates.md § Panel State Reset.
             with _lock:
                 data = _decisions
                 version = _version
+                processed_at = _processed_at
             try:
                 obj = json.loads(data)
                 if not isinstance(obj, dict):
@@ -75,7 +95,22 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             except Exception:
                 obj = {"submitted": False, "decisions": [], "comments": []}
             obj["_version"] = version
+            obj["_processed_at"] = processed_at
             self._json_response(obj)
+        elif self.path == '/pending':
+            # Deterministic one-shot signal for Claude's cron: unambiguous
+            # {"pending": bool, "version": int} so the cron instruction does
+            # not have to substring-match against free-form JSON. Avoids
+            # the "submitted:true vs submitted: true" fuzzy-match trap.
+            with _lock:
+                data = _decisions
+                version = _version
+            try:
+                obj = json.loads(data)
+                pending = bool(isinstance(obj, dict) and obj.get('submitted') is True)
+            except Exception:
+                pending = False
+            self._json_response({"pending": pending, "version": version})
         elif self.path == '/reload':
             with _lock:
                 counter = _reload_counter
@@ -84,7 +119,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
-        global _heartbeat_ts, _decisions, _version, _reload_counter
+        global _heartbeat_ts, _decisions, _version, _processed_at, _reload_counter
         if self.path == '/heartbeat':
             with _lock:
                 _heartbeat_ts = int(time.time() * 1000)
@@ -137,7 +172,8 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             with _lock:
                 if expected is None or expected == _version:
                     _decisions = '{"submitted": false, "decisions": [], "comments": []}'
-                    self._json_response({"ok": True, "version": _version})
+                    _processed_at = _iso_now()
+                    self._json_response({"ok": True, "version": _version, "processed_at": _processed_at})
                 else:
                     # Mismatch — newer submission landed after Claude read
                     self._conflict_response({
