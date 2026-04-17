@@ -1,18 +1,13 @@
 ---
 name: devops-autonomous
-version: 0.1.0
 description: >-
-  Activate fully autonomous agent orchestration for when the user is leaving
-  their PC. Collects the task, primes permissions, then runs agents autonomously
-  (implementation, computer-use desktop interaction, live browser/app testing).
-  Delivers a structured report and completion card when done.
-  Optionally shuts down the PC after completion.
-  Triggers on: "devops-autonomous", "autonomous", "autonomer modus",
-  "ich geh kurz weg", "mach das alleine", "run this while I'm away",
-  "autonom weiter", "ich bin gleich weg", "afk mode", "unattended mode",
-  "mach weiter ohne mich", "autopilot". Do NOT trigger for normal orchestration
-  where the user stays present — use /devops-agents instead.
-argument-hint: "[optional: task description]"
+  Fully autonomous agent orchestration for when the user is away from the PC.
+  Runs agents without supervision (implementation, desktop interaction, live
+  browser/app tests) and can OPTIONALLY SHUT DOWN THE PC after completion.
+  Triggers: "autonomous", "autonomer modus", "mach das alleine",
+  "run this while I'm away", "afk mode", "autopilot". Do NOT trigger when the user
+  stays present — use /devops-agents instead.
+argument-hint: "[task, e.g. 'refactor auth module and run tests']"
 allowed-tools: >-
   Bash(*), Read, Write, Edit, Glob, Grep, Agent,
   AskUserQuestion, CronCreate, CronDelete, CronList,
@@ -36,6 +31,23 @@ Silently check (do not surface "not found"):
 1. `~/.claude/skills/autonomous/SKILL.md` + `reference.md`
 2. `{project}/.claude/skills/autonomous/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
+
+## Step 0.1 — Auto-Start Prompt Detection
+
+If the incoming user message starts with `AUTONOMOUS_AUTOSTART:`, this is the
+3-minute timeout from Step 4 firing. The user is likely AFK.
+
+1. **Pending-question guard:** If an `AskUserQuestion` is currently active (the
+   Step 4b confirmation, a clarifying question, or anything else), do NOT
+   auto-start. Re-arm a fresh one-shot cron at `now + 3min` with the same
+   `AUTONOMOUS_AUTOSTART:` prompt and context, log "Autostart verschoben —
+   offene Frage aktiv", continue waiting.
+2. If no question is pending: parse `task`, `mode`, `desktop`, `shutdown`,
+   `branch` from the prompt.
+3. Output once: **"3-Minuten-Timeout — starte jetzt autonom."**
+4. Skip Steps 1-4 entirely. Permissions were already primed in the parent session.
+5. Jump directly to Step 5 with the parsed context. The Post-Confirmation Lockout
+   is active from this moment.
 
 ## Step 0.5 — Resume Detection
 
@@ -99,18 +111,11 @@ Save the choice as `$EXEC_MODE` (`implement` if option 1, `analyze` if option 2)
 > 1. label: "Hintergrund (empfohlen)" — description: "Kein Desktop-Takeover, du kannst den PC weiter nutzen. Browser-Tests (Playwright/Preview) laufen trotzdem."
 > 2. label: "Desktop übernehmen" — description: "Computer-Use für volle Desktop-/Native-App-Interaktion (Maus/Tastatur)."
 
-Browser-based testing (Playwright, Preview) runs regardless of this choice — it
-operates in its own window and doesn't occupy the desktop. This question only
-controls whether computer-use (mouse/keyboard takeover) is used for **native apps**.
-
-**Browser interaction in background mode:** Even in "Hintergrund" mode, Claude has
-full read+write browser access via `$BROWSER_TOOL` (set in Step 3b). The waterfall
-(Chrome MCP → Playwright → Preview) ensures a working tool is always selected.
-All three are DOM/protocol-based — no mouse/keyboard takeover, no desktop occupation.
-**Never fall back to computer-use for browser tasks** — it only has read-tier access
-to browsers (screenshots only, no clicks or typing). The **Edge Credo** applies
-identically in background mode — same Edge instance, same user context, same tab
-reuse rules (see `deep-knowledge/browser-tool-strategy.md` § Edge Credo).
+This question only controls whether computer-use (mouse/keyboard takeover) is used
+for **native apps**. Browser tools (`$BROWSER_TOOL` from Step 3b) work in both modes
+and never occupy the desktop. Never fall back to computer-use for browser tasks —
+see `deep-knowledge/browser-tool-strategy.md` (§ Edge Credo applies identically
+in autonomous mode).
 
 In `analyze` mode, desktop is only used for visual inspection (screenshots), never for interaction.
 
@@ -160,29 +165,77 @@ trigger a lightweight read-only call to each to prime the permission.
 ### 3e — Confirmation Checklist
 Display a checklist of all primed permissions:
 ```
-✅ Browser: {$BROWSER_TOOL} aktiv (Chrome MCP / Playwright / Preview)
-✅ Computer-Use: {app1, app2} genehmigt  (nur wenn Desktop-Modus)
-✅ Dateisystem: Lesen/Schreiben genehmigt
-✅ Shell: Bash genehmigt
-✅ MCP Tools: {list} genehmigt
+[OK] Browser: {$BROWSER_TOOL} aktiv (Chrome MCP / Playwright / Preview)
+[OK] Computer-Use: {app1, app2} genehmigt  (nur wenn Desktop-Modus)
+[OK] Dateisystem: Lesen/Schreiben genehmigt
+[OK] Shell: Bash genehmigt
+[OK] MCP Tools: {list} genehmigt
 ```
-Mark tools that weren't needed as "—  nicht benötigt".
+Mark tools that weren't needed as `[--] nicht benötigt`.
 
-## Step 4 — Final Confirmation
+## Step 4 — Final Confirmation with 3-Minute Auto-Start
 
-Ask: **"Alle Berechtigungen erteilt. Soll ich jetzt autonom starten?"** → "Ja, los!" / "Noch nicht"
+**The user may already be walking away.** The confirmation must NOT block autonomous
+execution if the user doesn't answer. Implement the 3-minute auto-start via a
+one-shot cron BEFORE asking the question.
 
-**Auto-start:** If no user response and no new messages for 3 minutes, start
-automatically. Output: "3 Minuten ohne Antwort — starte jetzt autonom."
+### 4a — Arm the Auto-Start Timer
+
+Compute `now + 3 minutes` in local time. Derive the 5-field cron expression
+(minute, hour, day-of-month, month, `*`). Example for "today 14:26":
+`26 14 <today_dom> <today_month> *`.
+
+Call `CronCreate` with `recurring: false` and a prompt that encodes the full
+execution context (the user will not be there to re-enter it):
+
+```
+CronCreate({
+  cron: "<M> <H> <D> <Mo> *",
+  recurring: false,
+  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume devops-autonomous Step 5 with: task=<goal>, mode=<EXEC_MODE>, desktop=<yes|no>, shutdown=<yes|no>, branch=<current-branch>."
+})
+```
+
+Save the returned `jobId` as `$TIMEOUT_JOB_ID`.
+
+### 4b — Ask Confirmation
+
+Ask via `AskUserQuestion`:
+> header: "Start"
+> question: "Alle Berechtigungen erteilt. Soll ich jetzt autonom starten? (Ohne Antwort starte ich nach 3 Minuten automatisch.)"
+> Options (fixed order):
+> 1. label: "Ja, los!" — description: "Sofort starten, PC kann verlassen werden."
+> 2. label: "Noch nicht" — description: "Timer um 3 Minuten zurücksetzen — ich kann noch Rückfragen stellen."
+
+### 4c — Resolve
+
+- **"Ja, los!"** → `CronDelete($TIMEOUT_JOB_ID)`, proceed to Step 5.
+- **"Noch nicht"** → `CronDelete($TIMEOUT_JOB_ID)`, then re-arm fresh: `CronCreate`
+  one-shot at `now + 3min` with the same `AUTONOMOUS_AUTOSTART:` prompt, save
+  new `$TIMEOUT_JOB_ID`. The user may now ask clarifying questions or reconsider.
+  Every additional "Noch nicht" resets the timer again. The only way out is
+  "Ja, los!" (start) or full session close (user abandoned).
+- **No answer / timeout fires** → see Step 0.1 for the auto-start handler.
+
+**Re-arm guard (cron fires while another question is pending):** If the
+`AUTONOMOUS_AUTOSTART:` prompt arrives WHILE an `AskUserQuestion` is still
+active (e.g. a clarifying question from Claude), do NOT auto-start. Instead
+re-arm a fresh one-shot cron at `now + 3min` and continue waiting for the
+pending answer. This prevents the auto-start from interrupting a legitimate
+in-flight question. Log once: "Autostart verschoben — offene Frage aktiv."
+
+**Critical:** The cron is session-only (in-memory). If the user fully closes the
+Claude session before the timeout elapses, auto-start will NOT fire. Tell the
+user verbally: the session must stay running.
 
 ### Post-Confirmation Lockout
 
-**After the user confirms (or auto-start triggers), ZERO user interaction is allowed.**
+**After the user confirms, ZERO user interaction is allowed.**
 No `AskUserQuestion`, no inline questions, no confirmation prompts, no permission
 requests. The user is AFK — they will not see anything.
 
 If something unexpected happens during autonomous execution:
-- **Missing permission** → trigger Late Permission Protocol (Step 5, "Late Permission Handling")
+- **Missing permission** → trigger Late Permission Protocol (see `deep-knowledge/autonomous-execution.md`)
 - **Ambiguous decision** → choose the safer/simpler option, log the choice in the report
 - **Blocked action** → log it, continue with remaining work
 - **Shutdown was requested** → always execute shutdown, even if work is incomplete (after saving progress)
@@ -192,62 +245,14 @@ after confirmation is the next session (via Resume Detection in Step 0.5).
 
 ## Step 5 — Autonomous Execution
 
-### Execution Mode Gate
+Behavior depends on `$EXEC_MODE` from Step 2. The full execution gate, safety
+guardrails, and late-permission protocol live in
+`deep-knowledge/autonomous-execution.md` — read that file at the start of Step 5.
 
-Behavior depends on `$EXEC_MODE` from Step 2:
-
-**`analyze` mode:**
-- **Allowed:** Read, Glob, Grep, WebFetch, WebSearch, Agent (research only),
-  screenshots (visual inspection), git log/blame/diff
-- **Forbidden:** Write, Edit, Bash (except read-only commands like `ls`, `git log`,
-  `npm list`, `cat`), git commit, any file modification
-- **Output:** Analysis report with findings, architecture insights, recommendations,
-  code quality observations, potential improvements — but NO changes applied
-- Desktop (if chosen): take screenshots for visual verification, never interact
-
-**`implement` mode:**
-- **Phase 1 — Analyse:** Erst vollständige Analyse wie im `analyze`-Modus (Code lesen,
-  Architektur verstehen, Abhängigkeiten prüfen, Strategie festlegen).
-- **Phase 2 — Implementierung:** Dann implementieren, testen, builden, verifizieren.
-- Kein Ship — alles bleibt lokal bis der User zurück ist.
-
-### Safety Guardrails (both modes)
-
-**Forbidden (always):** git push (any branch), force-push, /ship or /devops-ship,
-creating PRs, external communications (Discord, email, Slack, GitHub
-comments/issues), purchases, account creation, destructive git ops (reset --hard,
-clean -f, branch -D), deleting files outside project, modifying system config.
-All changes stay local — the user reviews and decides to ship when they return.
-Log as "blocked action" if needed for the task.
-
-**Additional allowed in `implement` mode:** git commit (current sub-branch),
-git pull/fetch, file ops within project, browser/desktop automation, builds,
-tests, linters, installing dev deps.
-
-### Late Permission Handling
-
-If during autonomous execution a permission is needed that wasn't primed in Step 3:
-
-1. **Do NOT ask the user.** They are AFK. The Post-Confirmation Lockout is absolute.
-2. Log the missing permission and what it was needed for.
-3. Complete as much remaining work as possible WITHOUT the missing permission.
-4. Commit all progress locally (implement mode) or save analysis state.
-5. Write `AUTONOMOUS-RESUME.json` to project root:
-   ```json
-   {
-     "task": "<original goal>",
-     "mode": "<implement|analyze>",
-     "missingPermission": "<what was needed and why>",
-     "progress": "<summary of what was completed>",
-     "remaining": "<what couldn't be done>",
-     "shutdownRequested": true|false,
-     "branch": "<current-branch-name>",
-     "timestamp": "<ISO-8601>"
-   }
-   ```
-6. Proceed to Step 7 (Report) with status **INTERRUPTED**.
-7. Proceed to Step 8 (Shutdown) — **shutdown IS executed** if the user chose it.
-   The resume file ensures continuity on next boot.
+Quick summary:
+- `analyze` → read-only (Read, Glob, Grep, WebFetch, git log/blame/diff, screenshots). No Write/Edit/commit.
+- `implement` → Phase 1 analyse, Phase 2 implement+test+build+verify. No push/ship/PR.
+- **Forbidden in both modes:** push, force-push, /ship, create PRs, external comms, purchases, destructive git ops, system config changes.
 
 ### Strategy
 

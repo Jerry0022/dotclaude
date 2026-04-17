@@ -1,0 +1,81 @@
+{
+  "skill": "devops-autonomous",
+  "description": "Trigger evaluation for devops-autonomous. High-stakes skill (can shut down PC) — triggers must be precise.",
+  "evals": [
+    {
+      "query": "Ich geh kurz weg, kannst du das alleine fertig machen?",
+      "should_trigger": true,
+      "reason": "Contains 'mach das alleine' semantic — canonical trigger via 'alleine fertig machen'."
+    },
+    {
+      "query": "afk mode — refactor the auth module and run tests while I'm gone",
+      "should_trigger": true,
+      "reason": "Explicit 'afk mode' keyword plus autonomous task."
+    },
+    {
+      "query": "Autopilot: fix the failing CI tests and ship when green",
+      "should_trigger": true,
+      "reason": "'Autopilot' trigger keyword."
+    },
+    {
+      "query": "Mach das alleine, ich bin gleich weg",
+      "should_trigger": true,
+      "reason": "Two canonical German triggers combined."
+    },
+    {
+      "query": "Run this while I'm away at lunch",
+      "should_trigger": true,
+      "reason": "Explicit 'while I'm away' phrasing."
+    },
+    {
+      "query": "Autonomer Modus bitte — analysiere die Codebase und erstelle einen Report",
+      "should_trigger": true,
+      "reason": "Explicit 'autonomer modus' keyword plus analyze task."
+    },
+    {
+      "query": "Kannst du bitte die Auth-Module refactoren?",
+      "should_trigger": false,
+      "reason": "Normal task request — user is present. Should use /devops-agents or inline work."
+    },
+    {
+      "query": "Use agents to refactor the auth module in parallel",
+      "should_trigger": false,
+      "reason": "Explicit agent orchestration but user is present — /devops-agents."
+    },
+    {
+      "query": "Fix this bug",
+      "should_trigger": false,
+      "reason": "Simple inline task, no AFK signal."
+    },
+    {
+      "query": "Erklär mir bitte wie der Auth-Flow funktioniert",
+      "should_trigger": false,
+      "reason": "Explanation request, not autonomous work."
+    },
+    {
+      "query": "Debug this error",
+      "should_trigger": false,
+      "reason": "Debugging task — use /devops-flow."
+    },
+    {
+      "query": "Research the state of edge computing in 2026",
+      "should_trigger": false,
+      "reason": "Research-only task — use /devops-deep-research."
+    },
+    {
+      "query": "Lass die Agents das parallel machen",
+      "should_trigger": false,
+      "reason": "Agent orchestration without AFK signal — /devops-agents."
+    },
+    {
+      "query": "Unattended mode: build the release, run full test suite, shutdown when done",
+      "should_trigger": true,
+      "reason": "Canonical 'unattended mode' + shutdown intent."
+    },
+    {
+      "query": "Mach weiter ohne mich — ich bin in einem Meeting",
+      "should_trigger": true,
+      "reason": "'Mach weiter ohne mich' canonical trigger."
+    }
+  ]
+}
