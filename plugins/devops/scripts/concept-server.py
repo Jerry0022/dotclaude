@@ -7,6 +7,8 @@ Replaces `python -m http.server` with a custom server that adds:
 - POST /reset — Claude clears decisions after processing; conditional on
   version to avoid dropping submissions that land between GET and POST
   (see /reset docs below).
+- GET/POST /reload — Claude bumps a counter after rewriting the HTML file;
+  the browser polls and reloads when the counter advances.
 
 This bypasses Chrome MCP JS injection limitations entirely. The page
 communicates with Claude through HTTP endpoints instead of requiring
@@ -34,6 +36,12 @@ _decisions = '{"submitted": false, "decisions": [], "comments": []}'
 # the server version has advanced and the reset is rejected with 409 so the
 # second submission is not silently dropped.
 _version = 0
+# Reload counter — bumped by Claude via POST /reload after the HTML file is
+# rewritten (new iteration appended, content refreshed, etc). The browser
+# polls GET /reload and issues location.reload() when the counter advances.
+# This closes the gap where Claude mutates the file on disk but the existing
+# tab keeps showing stale content.
+_reload_counter = 0
 _lock = threading.Lock()
 
 
@@ -68,11 +76,15 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 obj = {"submitted": False, "decisions": [], "comments": []}
             obj["_version"] = version
             self._json_response(obj)
+        elif self.path == '/reload':
+            with _lock:
+                counter = _reload_counter
+            self._json_response({"counter": counter})
         else:
             super().do_GET()
 
     def do_POST(self):
-        global _heartbeat_ts, _decisions, _version
+        global _heartbeat_ts, _decisions, _version, _reload_counter
         if self.path == '/heartbeat':
             with _lock:
                 _heartbeat_ts = int(time.time() * 1000)
@@ -86,6 +98,27 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 _version += 1
                 version = _version
             self._json_response({"ok": True, "version": version})
+        elif self.path == '/reload':
+            # Claude POSTs here after rewriting the HTML file (e.g. appending
+            # a new iteration section). The browser poller sees the bumped
+            # counter and reloads the tab — guaranteeing the DOM matches disk.
+            #
+            # Origin guard: only Claude (no Origin header — curl) or the
+            # concept page itself (same-origin fetch) may bump the counter.
+            # A cross-origin browser page would send a foreign Origin and is
+            # rejected. Localhost binding already limits blast radius, but
+            # this stops random tabs from hijacking reloads.
+            origin = self.headers.get('Origin')
+            host = self.headers.get('Host', '')
+            if origin is not None:
+                allowed = {f'http://{host}', f'http://localhost:{host.split(":")[-1]}', f'http://127.0.0.1:{host.split(":")[-1]}'}
+                if origin not in allowed:
+                    self.send_error(403, "forbidden origin")
+                    return
+            with _lock:
+                _reload_counter += 1
+                counter = _reload_counter
+            self._json_response({"ok": True, "counter": counter})
         elif self.path == '/reset':
             # Optional body: {"version": N}. When present, only reset if N
             # matches the current server version — otherwise a newer submission

@@ -122,10 +122,11 @@ generation), old localStorage state is automatically discarded so the user
 sees a clean new version instead of stale selections from a previous page.
 
 **Rules:**
-- In-place feedback-loop updates (Step 5c): keep the SAME `data-page-version`
-  → user selections survive the update cycle
-- New version file (version bump or "nochmal neu"): set a NEW timestamp
-  → old state auto-clears, fresh page
+- Every iteration append (Step 5c): keep the SAME `data-page-version`
+  → user selections on earlier frozen tabs survive the reload
+- A fresh `data-page-version` is only ever set if the user explicitly
+  starts a brand-new concept session for the same slug (rare — usually
+  a new date means a new file anyway)
 
 Additionally, the offline submit queue (`localStorage` key `{slug}-pending`)
 caches decisions submitted while Claude is disconnected and auto-delivers
@@ -164,35 +165,59 @@ signal Claude monitors.
 
 ### File Location
 
-Write to: `docs/concepts/{timestamp}-{slug}-v{version}.html`
+Write to: `docs/concepts/{timestamp}-{slug}.html`
 
-**Fixed naming pattern** (all three segments mandatory, in this order):
+**Fixed naming pattern** (both segments mandatory, in this order):
 
 | Segment | Format | Example |
 |---------|--------|---------|
 | `{timestamp}` | ISO date `YYYY-MM-DD` | `2026-04-12` |
 | `{slug}` | kebab-case topic summary, max 40 chars | `auth-middleware-redesign` |
-| `{version}` | Integer starting at `1`, incremented per revision of the same slug | `1` |
 
-Full example: `docs/concepts/2026-04-12-auth-middleware-redesign-v1.html`
+Full example: `docs/concepts/2026-04-12-auth-middleware-redesign.html`
 
 - Create the `docs/concepts/` directory if it doesn't exist
 - This directory is **git-tracked** — concepts are project artifacts meant
   to be shared with other repo users
-- To determine the next version: glob for `docs/concepts/*-{slug}-v*.html`,
-  parse the highest existing version number, and increment by 1.
-  If no match exists, start at `v1`
+- **One file per concept session** — all iterations live inside the same
+  HTML file as separate `<section data-iteration="N">` blocks, switched via
+  tabs in the decision panel (see "Iteration Tabs" below). There are no
+  `-v2`, `-v3` files.
+- If a file for the same slug already exists on the same day and the user
+  starts a genuinely new topic, append a short disambiguator (e.g.
+  `…-auth-middleware-redesign-2.html`) — do NOT treat this as a version bump.
 
-### Versioning vs. In-Place Update
+### Iteration Tabs (single file, many iterations)
 
-| Situation | Action | Version |
-|-----------|--------|---------|
-| Feedback loop iteration (Step 5c) | Update the **same file** in-place, refresh the existing tab | No bump — stays `v1` |
-| New concept session for the same topic (user revisits later) | Create a **new file** with incremented version | Bump → `v2`, `v3`, … |
-| Fundamental rework after feedback (user says "nochmal neu") | Create a **new file** with incremented version | Bump → next `vN` |
+Every concept page is a stack of iteration tabs. The **tab bar lives in the
+decision panel at the top** of the content area (a slim strip above the
+variants, not in the right sidebar — the sidebar stays reserved for submit
+controls). Each tab shows exactly one iteration; the active one is interactive,
+all earlier ones are frozen (disabled inputs showing the user's submitted
+selections, read-only comments).
 
-**Rule of thumb:** within an active feedback loop, never bump the version.
-A version bump only happens when a new file is created.
+| Situation | Action | Result |
+|-----------|--------|--------|
+| First generation | Write the file with `<section data-iteration="1" data-active>` and one tab "Iteration 1" | Tab 1 active |
+| Feedback loop iteration (Step 5c) | Append `<section data-iteration="N+1" data-active>` to the same file, remove `data-active` from the previous section, freeze it, add a new tab and make it active | New tab "Iteration N+1" auto-active, old tab selectable and read-only |
+| Fundamental rework ("nochmal neu") | Same as a feedback iteration — just another tab. The full history stays visible. | Another tab appended |
+
+**Rules:**
+- **Never create a second file** for iterations of the same concept — always
+  append a section to the existing file and POST `/reload` (see Step 5c).
+- The active iteration is the only one that accepts input. Submit sends
+  decisions for the active iteration only.
+- Freeze previous iterations visually: disabled tri-state buttons showing
+  which state the user submitted, read-only comment fields with the text
+  the user entered. Users can click back to earlier tabs to review their
+  own past feedback at any time.
+- Only the active tab runs the heartbeat / submit UI ("music"). Clicking
+  an older tab shows its frozen snapshot but does not re-arm submit.
+- Tab bar must stay compact (one line, horizontally scrollable if many
+  iterations) so it does not push variant content out of view.
+
+See `deep-knowledge/templates.md` § Iteration Tabs for the reference
+HTML/CSS/JS.
 
 ### Post-Generation Validation (mandatory gate)
 
@@ -212,6 +237,10 @@ are present. **Grep the generated file** for each required pattern:
 | 9 | `panel-submitted` | Submitted-state panel element |
 | 10 | `localStorage` | Reload resilience (state persistence with TTL) |
 | 11 | `data-page-version` | Page version tag for localStorage invalidation |
+| 12 | `data-iteration` | Iteration section marker |
+| 13 | `iteration-tabs` | Tab bar container in the decision panel |
+| 14 | `pollReload` | Reload-signal poller (picks up file rewrites) |
+| 15 | `sec.hidden` | Tab-switch JS toggles the `hidden` attribute — prevents all iterations rendering at once |
 
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. This is a **blocking gate** — no exceptions, no "this
@@ -371,37 +400,39 @@ User submits → Claude reads → Claude processes → Claude updates page → U
    - For concepts: develop chosen variant, archive alternatives
    - For comparisons: proceed with selected winner
 ### 5c. Update the Page
-After processing, **update the HTML page in the browser** to reflect results.
+After processing, **append a new iteration tab** to the same HTML file and
+signal the browser to reload. This is the ONLY update path — there is no
+separate "in-place edit" vs. "new file" distinction anymore.
 
-**In-place update (same version, normal case):**
-1. Reset `submitted` to `false` in `#concept-decisions`
-2. Remove `concept-submitted` class from `<body>`
-3. Re-enable the submit button
-4. Update the page content to show processed results, next decisions, or
-   confirmation of completed actions
-5. Add a visual "Verarbeitet" indicator on processed items
+Procedure on every iteration (including the very first response to feedback):
 
-This allows the user to **review the updated state and submit again** for
-further refinement or additional decisions.
+1. Read the existing HTML file (same path, always).
+2. Freeze the currently-active iteration section per the rules in
+   `deep-knowledge/templates.md` § Freezing Past Iterations (authoritative
+   source). In short: remove `data-active`, add `hidden`, disable every
+   `input`/`textarea`/`select`/`button` inside the section, set `readonly`
+   on text inputs and textareas, preserve the submitted values exactly
+   (read them from the just-processed decisions JSON).
+3. Append a new `<section data-iteration="{N+1}" data-active>` with the
+   updated / next-round content (new variants, refined options, whatever
+   the feedback produced). Set `submitted: false` in `#concept-decisions`,
+   remove `concept-submitted` from `<body>`, re-enable the submit button.
+4. Append a new entry in the `.iteration-tabs` bar for iteration N+1 and
+   mark it active (set `aria-selected="true"`, remove that attribute from
+   the previous tab — but keep the previous tab clickable so the user can
+   re-read their frozen history).
+5. POST to the bridge: `curl -s -X POST http://localhost:{port}/reload`.
+   The browser's `pollReload` loop sees the counter bump and calls
+   `location.reload()`. The reload lands on the new active iteration
+   because the HTML declares it via `data-active`.
 
-**New version (version bump, e.g. after "nochmal neu"):**
-When a new version file is created while the old tab is still open:
-1. Write the new HTML file (`docs/concepts/…-v{N+1}.html`)
-2. The bridge server already serves all files in `docs/concepts/` — the new
-   file is immediately accessible at `http://localhost:{port}/{new-filename}`
-3. **Redirect the existing tab** by overwriting the old HTML file with a
-   minimal redirect page:
-   ```html
-   <!DOCTYPE html>
-   <html><head>
-     <meta http-equiv="refresh" content="0;url=http://localhost:{port}/{new-filename}">
-   </head><body>
-     <p>Neue Version: <a href="http://localhost:{port}/{new-filename}">{new-filename}</a></p>
-   </body></html>
-   ```
-   The user's tab auto-navigates to the new version within 1 second.
-4. Do NOT leave the old tab in "Entscheidungen übermittelt" state — the user
-   must never be stuck waiting on a tab that Claude is no longer monitoring
+The tab bar is anchored at the top of the content area inside the decision
+panel header — it must never shift into the right-side submit sidebar, and
+it must stay on a single row (horizontal scroll if it overflows).
+
+Do NOT write a redirect file. Do NOT create a new `-v{N}` file. The entire
+concept session — first render, every iteration, "nochmal neu" reworks —
+lives in the single `{date}-{slug}.html`.
 
 ### 5d. Resume Monitoring
 Return to Step 4 (monitor for next submission). The loop continues until:
@@ -410,8 +441,9 @@ Return to Step 4 (monitor for next submission). The loop continues until:
 - There are no more decisions to make (all items processed)
 
 ### 5e. Persist
-Write a cumulative summary to `docs/concepts/{same-timestamp}-{same-slug}-v{same-version}-decisions.json`
-after each iteration (append, don't overwrite previous rounds).
+Write a cumulative summary to `docs/concepts/{same-timestamp}-{same-slug}-decisions.json`
+after each iteration (append a new entry per iteration — don't overwrite
+previous rounds; each entry records its `iteration` number).
 
 ## Step 6 — Completion Card
 
