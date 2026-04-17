@@ -25,8 +25,25 @@ starting points and inspiration — deviate freely when the content calls for it
         <button id="theme-toggle" aria-label="Toggle theme">🌙/☀️</button>
       </header>
 
+      <!-- Iteration tabs — one entry per iteration, active = current round.
+           Older tabs are clickable but show a frozen snapshot. Anchored here
+           above <main> so the tab bar lives in the decision panel header
+           without crowding the variant content. -->
+      <nav class="iteration-tabs" role="tablist" aria-label="Iterationen">
+        <!-- Auto-populated, one tab per <section data-iteration="N">:
+        <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="false">Iteration 1</button>
+        <button class="iteration-tab" role="tab" data-iteration="2" aria-selected="true">Iteration 2</button>
+        -->
+      </nav>
+
       <main>
-        <!-- Variant-specific content -->
+        <!-- One <section data-iteration="N"> per iteration. Exactly one has
+             data-active. All others render their controls disabled/readonly
+             and preserve the values the user submitted that round. -->
+        <!--
+        <section data-iteration="1" hidden>...frozen first round...</section>
+        <section data-iteration="2" data-active>...current round (active)...</section>
+        -->
       </main>
     </div>
 
@@ -810,7 +827,8 @@ function restoreState() {
     }
     // Version check — discard state from a different page version
     // (Claude sets data-page-version on <html> when generating the page;
-    // in-place feedback-loop updates keep the same value, new versions change it)
+    // iteration appends keep the same value so frozen-tab state survives;
+    // only a fresh concept session for the same slug bumps the value)
     const currentVersion = document.documentElement.dataset.pageVersion || '';
     if (state._pageVersion && state._pageVersion !== currentVersion) {
       localStorage.removeItem(STORAGE_KEY);
@@ -1081,3 +1099,174 @@ a concept HTML file directly), the heartbeat check gracefully degrades — the
 `fetch('/heartbeat')` call fails silently, the heartbeat stays stale, and the
 submit button remains disabled. The user can still use the page for read-only
 review.
+
+## Iteration Tabs
+
+Iterations of a concept page are appended as `<section data-iteration="N">`
+blocks inside the same HTML file. The tab bar lives **inside the content
+area's header, above `<main>`** — NOT in the right-side decision sidebar
+(which stays reserved for submit controls).
+
+### Tab Bar HTML
+
+```html
+<nav class="iteration-tabs" role="tablist" aria-label="Iterationen">
+  <button class="iteration-tab" role="tab"
+          data-iteration="1"
+          aria-selected="false"
+          aria-controls="iter-1">
+    Iteration 1
+  </button>
+  <button class="iteration-tab" role="tab"
+          data-iteration="2"
+          aria-selected="true"
+          aria-controls="iter-2">
+    Iteration 2
+  </button>
+</nav>
+
+<main>
+  <section id="iter-1" data-iteration="1" hidden>…frozen round 1…</section>
+  <section id="iter-2" data-iteration="2" data-active>…active round 2…</section>
+</main>
+```
+
+Rules:
+- Exactly one section carries `data-active`. The matching tab has
+  `aria-selected="true"`.
+- Non-active sections get the `hidden` attribute AND are frozen
+  (see "Freezing Past Iterations" below).
+- Tabs stay clickable — switching tab reveals the chosen section and
+  hides all others. Tabs never disappear.
+
+### Tab Bar CSS
+
+```css
+.iteration-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 8px 0 0;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: thin;
+}
+.iteration-tab {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: var(--bg-subtle);
+  color: var(--fg-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.iteration-tab:hover { background: var(--bg-hover); color: var(--fg); }
+.iteration-tab[aria-selected="true"] {
+  background: var(--bg);
+  color: var(--fg);
+  border-color: var(--accent);
+  font-weight: 600;
+  position: relative;
+}
+.iteration-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 2px;
+  background: var(--bg);
+}
+/* Frozen (non-active) iteration: slightly dimmed, no pointer events on inputs */
+section[data-iteration]:not([data-active]) {
+  opacity: 0.85;
+}
+section[data-iteration]:not([data-active]) .tri-state-btn,
+section[data-iteration]:not([data-active]) input,
+section[data-iteration]:not([data-active]) textarea,
+section[data-iteration]:not([data-active]) select {
+  pointer-events: none;
+  filter: grayscale(0.4);
+}
+```
+
+### Freezing Past Iterations
+
+When appending iteration N+1, Claude must freeze the previous section so
+the user sees exactly what they submitted:
+
+1. Remove `data-active`, add `hidden` to the previous `<section>`.
+2. On every `input`, `textarea`, `select`, `button` inside it: set `disabled`.
+3. On every `textarea`, `input[type="text"]`: set `readonly`.
+4. For tri-state buttons: keep the `aria-pressed`/selected class exactly as
+   the user submitted it — do NOT clear selections.
+5. Add a small "Eingefroren — Iteration N" banner at the top of the section
+   (optional but strongly recommended) so the user knows why it is read-only.
+
+### Tab Switch JS
+
+```javascript
+// --- Iteration Tabs ---
+function showIteration(n) {
+  document.querySelectorAll('section[data-iteration]').forEach(sec => {
+    const match = String(sec.dataset.iteration) === String(n);
+    sec.hidden = !match;
+  });
+  document.querySelectorAll('.iteration-tab').forEach(tab => {
+    const match = String(tab.dataset.iteration) === String(n);
+    tab.setAttribute('aria-selected', match ? 'true' : 'false');
+  });
+  // Heartbeat/submit "music" only runs for the active iteration. Older
+  // iterations are frozen snapshots — no re-submit, no new decisions.
+  const activeSec = document.querySelector('section[data-iteration][data-active]');
+  const isLive = activeSec && String(activeSec.dataset.iteration) === String(n);
+  document.body.classList.toggle('viewing-frozen', !isLive);
+  const panelReady = document.getElementById('panel-ready');
+  if (panelReady) panelReady.style.display = isLive ? 'block' : 'none';
+}
+
+document.querySelectorAll('.iteration-tab').forEach(tab => {
+  tab.addEventListener('click', () => showIteration(tab.dataset.iteration));
+});
+
+// On load, show whichever iteration is marked data-active.
+document.addEventListener('DOMContentLoaded', () => {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (active) showIteration(active.dataset.iteration);
+});
+```
+
+### Reload Polling (pick up file rewrites)
+
+Every iteration append rewrites the HTML file on disk, then Claude POSTs
+`/reload` on the bridge server. The browser polls `/reload` and reloads
+when the counter advances — guaranteeing the tab matches disk without any
+browser MCP injection.
+
+```javascript
+// --- Reload Poller ---
+// The bridge server exposes /reload with a monotonic counter. Claude POSTs
+// to bump it after rewriting the HTML file. The page polls and reloads
+// when it sees a newer counter than the one it booted with.
+let _bootReloadCounter = null;
+async function pollReload() {
+  try {
+    const res = await fetch('/reload', { cache: 'no-store' });
+    if (!res.ok) return;
+    const { counter } = await res.json();
+    if (_bootReloadCounter === null) { _bootReloadCounter = counter; return; }
+    if (counter > _bootReloadCounter) {
+      // New iteration landed on disk — reload so the tab bar and new
+      // section appear. localStorage preserves frozen-tab state.
+      location.reload();
+    }
+  } catch (e) { /* bridge offline — ignore, retry next tick */ }
+}
+setInterval(pollReload, 3000);
+document.addEventListener('DOMContentLoaded', pollReload);
+```
+
+**Why 3 s?** Fast enough that the new iteration appears within a blink
+after Claude finishes writing, slow enough that idle pages do not hammer
+the server. The cron tick for heartbeat runs every 60 s — those two loops
+are independent.
