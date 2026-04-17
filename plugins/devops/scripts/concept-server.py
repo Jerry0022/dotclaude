@@ -102,6 +102,19 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             # Claude POSTs here after rewriting the HTML file (e.g. appending
             # a new iteration section). The browser poller sees the bumped
             # counter and reloads the tab — guaranteeing the DOM matches disk.
+            #
+            # Origin guard: only Claude (no Origin header — curl) or the
+            # concept page itself (same-origin fetch) may bump the counter.
+            # A cross-origin browser page would send a foreign Origin and is
+            # rejected. Localhost binding already limits blast radius, but
+            # this stops random tabs from hijacking reloads.
+            origin = self.headers.get('Origin')
+            host = self.headers.get('Host', '')
+            if origin is not None:
+                allowed = {f'http://{host}', f'http://localhost:{host.split(":")[-1]}', f'http://127.0.0.1:{host.split(":")[-1]}'}
+                if origin not in allowed:
+                    self.send_error(403, "forbidden origin")
+                    return
             with _lock:
                 _reload_counter += 1
                 counter = _reload_counter

@@ -240,6 +240,7 @@ are present. **Grep the generated file** for each required pattern:
 | 12 | `data-iteration` | Iteration section marker |
 | 13 | `iteration-tabs` | Tab bar container in the decision panel |
 | 14 | `pollReload` | Reload-signal poller (picks up file rewrites) |
+| 15 | `sec.hidden` | Tab-switch JS toggles the `hidden` attribute — prevents all iterations rendering at once |
 
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. This is a **blocking gate** — no exceptions, no "this
@@ -406,12 +407,12 @@ separate "in-place edit" vs. "new file" distinction anymore.
 Procedure on every iteration (including the very first response to feedback):
 
 1. Read the existing HTML file (same path, always).
-2. Freeze the currently-active iteration section:
-   - Remove its `data-active` attribute.
-   - Set `disabled` on every tri-state button, checkbox, slider, radio inside it.
-   - Set `readonly` on every textarea/input inside it.
-   - Preserve the submitted values so the frozen snapshot shows exactly what
-     the user sent (read the values from the just-processed decisions JSON).
+2. Freeze the currently-active iteration section per the rules in
+   `deep-knowledge/templates.md` § Freezing Past Iterations (authoritative
+   source). In short: remove `data-active`, add `hidden`, disable every
+   `input`/`textarea`/`select`/`button` inside the section, set `readonly`
+   on text inputs and textareas, preserve the submitted values exactly
+   (read them from the just-processed decisions JSON).
 3. Append a new `<section data-iteration="{N+1}" data-active>` with the
    updated / next-round content (new variants, refined options, whatever
    the feedback produced). Set `submitted: false` in `#concept-decisions`,

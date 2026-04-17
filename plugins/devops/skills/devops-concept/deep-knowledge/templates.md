@@ -1221,8 +1221,20 @@ function showIteration(n) {
   const activeSec = document.querySelector('section[data-iteration][data-active]');
   const isLive = activeSec && String(activeSec.dataset.iteration) === String(n);
   document.body.classList.toggle('viewing-frozen', !isLive);
+  // Hide ALL live panel states when viewing a frozen iteration — otherwise
+  // a mid-processing spinner (panel-submitted) or the ready panel can bleed
+  // through and misrepresent the frozen snapshot as interactive.
   const panelReady = document.getElementById('panel-ready');
+  const panelSubmitted = document.getElementById('panel-submitted');
+  const panelFrozen = document.getElementById('panel-frozen');
   if (panelReady) panelReady.style.display = isLive ? 'block' : 'none';
+  if (panelSubmitted) {
+    // Only show panel-submitted when live AND concept-submitted is set
+    const submitted = document.body.classList.contains('concept-submitted');
+    panelSubmitted.style.display = (isLive && submitted) ? 'block' : 'none';
+  }
+  // Optional passive hint while viewing history
+  if (panelFrozen) panelFrozen.style.display = isLive ? 'none' : 'block';
 }
 
 document.querySelectorAll('.iteration-tab').forEach(tab => {
