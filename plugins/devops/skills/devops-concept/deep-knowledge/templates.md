@@ -946,11 +946,17 @@ the matching `id` attribute for the anchor link to work.
 
 ### Submit Handler
 ```javascript
+// Timestamp of the most recent submit click. Compared against the server's
+// `_processed_at` in the heartbeat poll to detect "Claude finished processing"
+// and auto-restore the ready panel without a JS eval round-trip.
+let _submittedAt = 0;
+
 document.getElementById('submit-btn').addEventListener('click', async () => {
   const data = collectDecisions();
   const container = document.getElementById('concept-decisions');
   container.textContent = JSON.stringify(data);
   document.body.classList.add('concept-submitted');
+  _submittedAt = Date.now();
 
   // Switch panel to "submitted" state immediately (optimistic UI)
   document.getElementById('panel-ready').style.display = 'none';
@@ -991,25 +997,34 @@ async function retryPendingSubmission() {
 
 ### Panel State Reset
 
-When Claude processes decisions and updates the page (Step 5c), it resets
-the panel back to the "ready" state via browser eval:
+When Claude finishes processing, it calls `POST /reset` on the bridge server.
+The server stamps `_processed_at` with the current time. The page's heartbeat
+poll (see § Claude Connection Heartbeat) reads that timestamp on the next
+tick and — if it's newer than `_submittedAt` — runs `restorePanelToReady()`
+locally. No browser eval injection from Claude needed; the page self-heals.
 
 ```javascript
-// Called by Claude after processing — resets the panel for the next round
-document.getElementById('panel-submitted').style.display = 'none';
-document.getElementById('panel-ready').style.display = 'block';
-document.getElementById('submit-btn').disabled = false;
-document.getElementById('submit-btn').textContent = 'Entscheidungen abschicken';
-document.body.classList.remove('concept-submitted');
-// Clear cached decisions so reload doesn't resurrect stale selections
-const slug = location.pathname.split('/').pop().replace('.html', '');
-localStorage.removeItem('concept-state-' + slug);
+// Called by the heartbeat poll when the server's processed_at has advanced
+// past our last submit. Also safe to call manually for legacy eval paths.
+function restorePanelToReady() {
+  document.getElementById('panel-submitted').style.display = 'none';
+  document.getElementById('panel-ready').style.display = 'block';
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = false;
+  btn.textContent = 'Entscheidungen abschicken';
+  document.body.classList.remove('concept-submitted');
+  _submittedAt = 0;
+  // Clear cached decisions so reload doesn't resurrect stale selections
+  const slug = location.pathname.split('/').pop().replace('.html', '');
+  localStorage.removeItem('concept-state-' + slug);
+}
 ```
 
 This is the visual cycle:
 ```
 [Ready: button active] → User clicks Submit → [Submitted: waiting indicator]
-    → Claude processes → [Ready: button active again, new round]
+    → Claude processes → POST /reset → heartbeat poll sees processed_at >
+    submittedAt → restorePanelToReady() → [Ready: button active, new round]
 ```
 
 ### Theme Toggle
@@ -1053,6 +1068,26 @@ async function pollHeartbeat() {
   }
 }
 
+// Poll /decisions for the server's `_processed_at` timestamp. When the
+// server stamp is newer than our last submit we know Claude ran POST /reset
+// and we should flip the panel back to ready — fully client-driven, no
+// browser-eval injection from Claude needed.
+async function pollProcessedState() {
+  if (!_submittedAt) return; // nothing pending locally
+  try {
+    const res = await fetch('/decisions', { cache: 'no-store' });
+    const data = await res.json();
+    const processedIso = data && data._processed_at;
+    if (!processedIso) return;
+    const processedMs = Date.parse(processedIso);
+    if (Number.isFinite(processedMs) && processedMs > _submittedAt) {
+      restorePanelToReady();
+    }
+  } catch (e) {
+    // Server unreachable — will retry next tick
+  }
+}
+
 function checkClaudeConnection() {
   // Suppress warning during grace period — Claude needs time to start the
   // bridge server, set up the heartbeat cron, and send the first POST.
@@ -1083,7 +1118,11 @@ function checkClaudeConnection() {
 // Poll heartbeat every 5 seconds — starts immediately so data arrives ASAP.
 // checkClaudeConnection() is a no-op during grace period, so the warning
 // won't flash before Claude has had time to set up.
-setInterval(async () => { await pollHeartbeat(); checkClaudeConnection(); }, 5000);
+setInterval(async () => {
+  await pollHeartbeat();
+  checkClaudeConnection();
+  await pollProcessedState();
+}, 5000);
 ```
 
 **Claude-side heartbeat** (executed by Claude via Bash or CronCreate):

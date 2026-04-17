@@ -30,15 +30,32 @@ The loop continues until the user is done (closes page or says "fertig").
 
 ### Primary: HTTP Bridge (preferred)
 
-Claude polls the bridge server for submitted decisions:
+Claude's cron polls the bridge server for the deterministic pending flag:
+
+```bash
+curl -s http://localhost:$PORT/pending
+# → {"pending": true|false, "version": N}
+```
+
+`/pending` is a strict, machine-readable one-shot signal — use it instead
+of substring-matching `/decisions`. The `/decisions` JSON response is
+formatted via `json.dumps` which emits `"submitted": true` **with** a space
+after the colon, so a literal `contains "submitted":true` check silently
+misses every real submission. The cron in SKILL.md Step 3 pipes `/pending`
+through `python -c` and only falls back to `/decisions` when pending is
+true, eliminating that class of bug.
+
+Once pending is true, Claude fetches the full payload:
 
 ```bash
 curl -s http://localhost:$PORT/decisions
 ```
 
-Returns JSON with `"submitted": true` when the user has clicked Submit.
-The page POSTs decisions to `/decisions` on submit (see `templates.md`
-§ Submit Handler).
+The response contains the user's decisions plus two metadata fields:
+- `_version` — monotonic counter. Pass back to POST /reset for
+  optimistic-concurrency checking.
+- `_processed_at` — ISO-8601 UTC timestamp of the last successful /reset.
+  The **browser** uses this to self-restore the panel; Claude can ignore it.
 
 ### Fallback: JS eval (when bridge server unavailable)
 
@@ -122,10 +139,21 @@ Returns JSON. Check the `submitted` field:
 
 No browser eval needed. The bridge server handles everything.
 
-**Reset after processing** — tell the bridge server to clear decisions:
+**Reset after processing** — tell the bridge server to clear decisions.
+Always pass the captured `_version` so a submission that races with your
+reset is not silently dropped (409 = retry):
 ```bash
-curl -s -X POST http://localhost:$PORT/reset
+curl -s -o /dev/null -w "%{http_code}" -X POST \
+     -H "Content-Type: application/json" \
+     -d '{"version": <noted>}' http://localhost:$PORT/reset
 ```
+
+On success the server stamps `_processed_at` with the current UTC time.
+The browser polls `/decisions` every 5 s, compares `_processed_at` against
+its local `_submittedAt`, and — when the server stamp is newer — flips the
+panel back to the ready state by itself. **No JS eval injection from
+Claude required.** See `templates.md` § Panel State Reset for the client
+contract.
 
 ### Legacy Fallback: JS Eval (for page updates)
 
@@ -286,22 +314,20 @@ Map decisions back to the original context:
 After processing a submission, Claude MUST reset the bridge server and
 update the browser page:
 
-1. **Reset bridge server state:**
+1. **Reset bridge server state (conditional on `_version`):**
    ```bash
-   curl -s -X POST http://localhost:$PORT/reset
+   curl -s -o /dev/null -w "%{http_code}" -X POST \
+        -H "Content-Type: application/json" \
+        -d '{"version": <noted>}' http://localhost:$PORT/reset
    ```
+   A 200 stamps `_processed_at`; a 409 means a newer submission arrived —
+   re-fetch `/decisions` and process that instead.
 
-2. **Reset page UI** (via browser eval if available):
-   ```javascript
-   document.body.classList.remove('concept-submitted');
-   document.getElementById('concept-decisions').textContent =
-     JSON.stringify({submitted: false, round: N+1, decisions: [], comments: []});
-   document.getElementById('panel-submitted').style.display = 'none';
-   document.getElementById('panel-ready').style.display = 'block';
-   document.getElementById('submit-btn').disabled = false;
-   document.getElementById('submit-btn').textContent = 'Entscheidungen abschicken';
-   ```
-   If no browser eval tool is available, inform the user to refresh the page.
+2. **Page UI auto-resets** — the browser's 5 s heartbeat tick sees the
+   new `_processed_at` and calls `restorePanelToReady()` locally. No
+   browser eval needed from Claude. If the page is disconnected (closed
+   tab / crashed tool), the reset still applies server-side and will take
+   effect the next time the page loads.
 
 3. **Update content to reflect processed state** (via browser eval if available):
    - Mark processed items visually (checkmark, "Verarbeitet" badge)

@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.46.1] — 2026-04-17
+
+### Fixed
+
+- **concept** — Claude's cron was missing user submissions silently. The prompt substring-matched `"submitted":true` (no space), but the `/decisions` JSON is emitted via `json.dumps` as `"submitted": true` (with space). The check never fired and Claude kept ticking on `false` until the user intervened manually
+- **concept** — browser panel no longer gets stuck on "Entscheidungen übermittelt". Server stamps `_processed_at` on every successful `/reset`; the existing 5 s heartbeat tick polls `/decisions`, compares against the local `_submittedAt`, and calls `restorePanelToReady()` when the server stamp is newer. No JS-eval injection from Claude needed
+
+### Added
+
+- **concept** — `GET /pending` endpoint returns strict `{"pending": bool, "version": int}` so the cron can pipe through `python -c` and get exactly `true` / `false` with no fuzzy-match risk
+- **concept** — `_processed_at` field on `/decisions` responses (ISO-8601 UTC, empty string until first reset). Browser-side `pollProcessedState()` compares against local `_submittedAt` to auto-restore the ready panel
+- **concept** — Pattern #16 in Post-Generation Validation (`pollProcessedState`) guarantees generated pages carry the auto-reset poll handler
+
+### Changed
+
+- **concept** — cron prompt in SKILL.md Step 3 rewritten to use `/pending` + `python -c`. Explicit note about why fuzzy matching was dropped
+- **concept** — SKILL.md Step 5c: `/reset` is now documented as a prerequisite of the iteration rewrite, coupling cleanly with `pollProcessedState` + `pollReload`
+
 ## [0.46.0] — 2026-04-17
 
 ### Changed
