@@ -41,6 +41,7 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 
 ## Rules
 
+- Read `{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` before non-trivial implementation.
 - Define interfaces/contracts before implementation
 - Commit contracts separately from implementation (clear git bisect point)
 - Never depend on frontend — frontend depends on core

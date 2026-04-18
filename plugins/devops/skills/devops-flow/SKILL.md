@@ -79,6 +79,15 @@ Find the actual broken invariant — not just the symptom. Ask:
 
 ## Step 7 — Implement fix (if appropriate)
 
+Before writing the fix, run the inline pre-mortem from
+`{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` — with special focus on the
+question: **"How could this fix break something else?"** A fix that resolves
+the reported symptom while regressing a sibling path is a net loss. Cover:
+
+- Which other callers rely on the behaviour I'm about to change?
+- Does this fix paper over a deeper invariant violation?
+- Could the root cause reappear in a different branch of the same code path?
+
 Apply the fix. Then verify:
 1. The specific error no longer occurs
 2. Related functionality still works
