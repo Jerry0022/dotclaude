@@ -1,6 +1,6 @@
 {
   "name": "local-llm",
-  "version": "0.47.0",
+  "version": "0.48.0",
   "description": "Local LLM integration for Claude Code — delegates mechanical coding tasks to Gemma 4 E4B via llama.cpp to save tokens without sacrificing quality.",
   "author": {
     "name": "Jerry0022",

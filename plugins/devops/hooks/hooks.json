@@ -24,9 +24,16 @@
       },
       {
         "hooks": [
-          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.ship.guard.js" }
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.ship.guard.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.main.guard.js" }
         ],
         "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.edit.branch.js" }
+        ],
+        "matcher": "Edit|Write|NotebookEdit"
       },
       {
         "hooks": [

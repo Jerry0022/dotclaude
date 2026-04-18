@@ -2,6 +2,22 @@
 
 Cross-cutting git rules referenced by `/devops-commit`, `/devops-ship`, and hooks.
 
+## Main-branch protection (hard rule)
+
+- **HEAD must never be `main`/`master` while editing or committing.** New work always
+  starts from a branch derived from `origin/main`:
+  `git fetch origin && git switch -c <feat/topic> origin/main`.
+- **Never commit, merge, push, rebase, cherry-pick, reset --hard, revert, apply or
+  am on main/master directly.** The only path back to `main` is `/devops-ship`.
+- **Never create PRs manually** (`gh pr create` / `gh pr merge`). Always via
+  `/devops-ship` so build-ID, version bump, tag and completion card stay consistent.
+- Enforcement: `pre.main.guard` (Bash) and `pre.edit.branch` (Edit/Write/NotebookEdit)
+  block these actions unless a sentinel file `.claude/.ship-in-progress` is present
+  (written by `ship_preflight`, cleared by `ship_cleanup`) or `DEVOPS_ALLOW_MAIN=1`
+  is set for an explicit one-shot bypass.
+- These rules only apply inside a git working tree. Outside a repo, the guards are
+  no-ops.
+
 ## Before every commit
 
 - Run `git status --short` — verify **zero `??` (untracked)** entries.
@@ -28,6 +44,9 @@ Cross-cutting git rules referenced by `/devops-commit`, `/devops-ship`, and hook
 - Never force-push to `main`/`master` without explicit user confirmation.
 - After merge: local branch is deleted, remote branch is deleted by `--delete-branch`.
 - Stale branches (upstream gone, no worktree) are cleaned up by the ship flow.
+- After ship, `main` is checked out locally as a side-effect of cleanup. The next
+  unit of work must start with a fresh branch (`git switch -c ... origin/main`)
+  before any edits — see "Main-branch protection" above.
 
 ## Parallel development safety
 

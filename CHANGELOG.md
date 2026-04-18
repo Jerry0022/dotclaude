@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.48.0] — 2026-04-18
+
+### Added
+
+- **hooks/pre-tool-use/pre.main.guard.js** — new PreToolUse Bash guard. Blocks destructive git operations (`commit|merge|rebase|cherry-pick|revert|reset --hard|apply|am|push|restore|stash pop/drop/apply/clear|update-ref|clean` and destructive `checkout --ours/--theirs/-p/-- <path>`) when `HEAD` is on local `main`/`master`. Bypasses: not in a git repo, HEAD off main, sentinel `.claude/.ship-in-progress` present, or env `DEVOPS_ALLOW_MAIN=1`
+- **hooks/pre-tool-use/pre.edit.branch.js** — new PreToolUse guard for `Edit|Write|NotebookEdit`. Blocks file edits inside a repo when HEAD is main/master. Canonicalizes target paths (incl. symlinks pointing outside the repo) so the containment check cannot be bypassed via symlink
+- **hooks/lib/ship-sentinel.js + mcp-server/ship/lib/sentinel.js** — ship-in-progress sentinel (15 min TTL). Lets the ship pipeline run Bash fallbacks without tripping the new main guards. `ship_preflight` writes it only after all hard gates pass; `ship_cleanup` clears it on every exit path (success + all failure branches)
+- **deep-knowledge/git-hygiene.md** — new "Main-branch protection (hard rule)" section defining the policy so agents and sub-agents inherit it
+
+### Changed
+
+- **marketplace.json** — version aligned from stale 0.46.2 to 0.47.0 baseline (drive-by fix to unblock preflight)
+
 ## [0.47.0] — 2026-04-18
 
 ### Added

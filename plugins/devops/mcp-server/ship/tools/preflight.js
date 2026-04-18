@@ -6,6 +6,7 @@
 import { z } from "zod";
 import { git, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, branchExists, fileOverlap, getConfig } from "../lib/git.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
+import { writeSentinel } from "../lib/sentinel.js";
 
 export const schema = z.object({
   base: z.string().default("main").describe("Base branch to ship into (auto-detected from sub-branch naming if 'main')"),
@@ -155,6 +156,12 @@ export async function handler(params) {
   );
 
   const ready = errors.length === 0;
+
+  // Mark the ship pipeline as in-progress only after all hard gates passed,
+  // so pre.main.guard / pre.edit.branch don't block ship internals when Claude
+  // falls back to Bash. Cleared by ship_cleanup on every exit path.
+  if (ready) writeSentinel(cwd);
+
   return {
     ready,
     branch,
