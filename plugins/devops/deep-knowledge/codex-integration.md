@@ -10,6 +10,47 @@ Before calling any `/codex:*` skill, check availability. The simplest method:
 attempt to invoke the skill and handle graceful failure. Do NOT block workflows
 if Codex is unavailable.
 
+## Hard Timeout & Failure-Tolerance (MANDATORY)
+
+Codex calls **MUST** be wrapped so they cannot stall the main session. The
+`/codex:rescue` subagent and `codex-companion.mjs task` helper have no built-in
+wall-clock ceiling — when the user's Codex usage limit is exhausted, auth
+expires, or the upstream service stalls, the Codex process hangs silently and
+the calling devops workflow waits forever.
+
+**Rule:** From every devops integration point (skills and agents), invoke
+Codex via the plugin wrapper `{PLUGIN_ROOT}/scripts/codex-safe.sh` using the
+Bash tool — NOT via `Agent(subagent_type: "codex:codex-rescue")` and NOT via
+raw `node codex-companion.mjs` calls.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" "<prompt text>"
+# or with a custom ceiling / model:
+CODEX_SAFE_TIMEOUT=180 bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" \
+  --model gpt-5.3-codex "<prompt text>"
+```
+
+The wrapper enforces a **5-minute** default ceiling
+(`CODEX_SAFE_TIMEOUT`, seconds) and exits deterministically:
+
+| rc   | Meaning                          | Required Action                                                 |
+|------|----------------------------------|-----------------------------------------------------------------|
+| 0    | Codex returned output            | Use stdout as advisory input                                    |
+| 124  | Timeout exceeded                 | **Continue without Codex findings.** Log "Codex timed out — proceeding without review." Do NOT retry. |
+| 126  | `DEVOPS_DISABLE_CODEX=1`         | Skip silently                                                   |
+| 127  | `codex` CLI missing              | Skip silently (graceful unavailability)                         |
+| *    | Codex error (auth, quota, etc.)  | Skip Codex findings, note stderr briefly, continue              |
+
+**Hard constraints:**
+
+- Never retry on rc=124. One shot, then move on.
+- Never block the user on a Codex result — all findings are advisory.
+- Do NOT call `/codex:rescue` via the Agent tool from inside any devops
+  skill or agent. The Agent tool has no timeout; if Codex hangs, the whole
+  session hangs.
+- Users can preemptively disable Codex integration for a session by setting
+  `DEVOPS_DISABLE_CODEX=1` in `.claude/settings.local.json` env.
+
 **Pattern used across all integration points:**
 
 ```

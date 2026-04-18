@@ -17,7 +17,7 @@ Verify that changes work correctly. Run in parallel with implementation.
 
 ## Context
 
-Before starting, read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` §4 (QA Agent). If codex-plugin-cc is installed, Codex review via `/codex:rescue` is **mandatory** for complex changes — not optional.
+Before starting, read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` §4 (QA Agent) AND the "Hard Timeout & Failure-Tolerance" section. If codex-plugin-cc is installed, Codex review is **mandatory** for complex changes — not optional — but MUST be invoked via the `codex-safe.sh` wrapper (5-min hard timeout), never via the `/codex:rescue` Agent call.
 
 ## Responsibilities
 
@@ -26,7 +26,7 @@ Before starting, read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` §4 (Q
 - Take screenshots of UI changes
 - Check console logs for errors
 - Generate build-ID after successful build
-- **Automatically run** `/codex:rescue` for complex or high-risk changes (multi-file, architectural, security-sensitive). Skip for trivial single-file fixes. If codex-plugin-cc is not installed → skip silently.
+- **Automatically run** Codex review via Bash: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" "<review prompt with diff>"` — for complex or high-risk changes (multi-file, architectural, security-sensitive). Skip for trivial single-file fixes. Handle exit codes per codex-integration.md: rc=124 → log timeout and continue without findings; rc=126/127 → skip silently; other non-zero → note and continue. **Never** invoke `/codex:rescue` via the Agent tool.
 - Report findings in structured format
 
 ## Output format

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.50.0] — 2026-04-18
+
+### Added
+
+- **plugins/devops/scripts/codex-safe.sh** — Bash wrapper around `codex exec` with a hard 5-minute wall-clock ceiling (override via `CODEX_SAFE_TIMEOUT` env var) and deterministic exit codes: `0` = output, `124` = timeout, `126` = disabled via `DEVOPS_DISABLE_CODEX=1`, `127` = `codex` CLI missing. Prevents the main Claude session from hanging when the user's Codex usage limit is exhausted, auth expires, or the upstream service stalls
+- **plugins/devops/deep-knowledge/codex-integration.md** — new mandatory "Hard Timeout & Failure-Tolerance" section documenting the wrapper contract, exit-code matrix, and the `DEVOPS_DISABLE_CODEX` kill-switch for `.claude/settings.local.json`
+
+### Changed
+
+- **plugins/devops/skills/devops-ship** — Codex review gate now invokes `codex-safe.sh` via Bash (not `/codex:rescue` via the Agent tool). `rc=124` (5-min timeout) explicitly proceeds without review rather than blocking the ship; `rc=126/127` skip silently; other non-zero surfaces stderr and continues
+- **plugins/devops/skills/devops-flow** — unclear-root-cause branch calls Codex through the wrapper with the same exit-code handling
+- **plugins/devops/skills/devops-deep-research** — parallel sub-question delegation goes through the wrapper
+- **plugins/devops/agents/{qa,research}.md** — both agents now use the wrapper with background Bash where applicable
+
 ## [0.49.0] — 2026-04-18
 
 ### Changed

@@ -53,7 +53,7 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 
 Project extensions define: quality gate commands, deploy targets, version files, CI specifics.
 
-4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill has a **mandatory** Codex review gate (§1 in that doc). Detect Codex availability now so Step 2 can act on it.
+4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill has a **mandatory** Codex review gate (§1 in that doc), which MUST be called via `{PLUGIN_ROOT}/scripts/codex-safe.sh` (5-min hard timeout, see "Hard Timeout & Failure-Tolerance" section), NEVER via the `/codex:rescue` Agent tool. Detect Codex availability now so Step 2 can act on it.
 
 ## Step 1 — Pre-Flight & Rebase Loop
 
@@ -146,12 +146,15 @@ If `success: false` → call `render_completion_card` with variant `ship-blocked
 
 **MUST run** if codex-plugin-cc is installed — not optional, not suggested.
 
-1. Invoke `/codex:rescue` with the diff as context for independent code review
-2. Evaluate findings:
-   - **No findings / clean** → continue to Step 3
-   - **Auto-fixable** (typos, missing imports, style) → fix inline, continue
-   - **Judgment required** (design concerns, logic flaws, security) →
+1. Invoke Codex via Bash with hard timeout: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" "<review prompt containing git diff>"`. Do NOT use the `/codex:rescue` Agent tool.
+2. Evaluate by exit code (see `deep-knowledge/codex-integration.md` "Hard Timeout & Failure-Tolerance"):
+   - **rc=0, no findings / clean** → continue to Step 3
+   - **rc=0, auto-fixable** (typos, missing imports, style) → fix inline, continue
+   - **rc=0, judgment required** (design concerns, logic flaws, security) →
      AskUserQuestion with findings + options: "Fixen", "Ignorieren", "Abbrechen"
+   - **rc=124** (timeout, 5 min) → log "Codex review timed out — proceeding without review" in the ship log, continue to Step 3. Do NOT retry, do NOT block the ship.
+   - **rc=126** (`DEVOPS_DISABLE_CODEX=1`) or **rc=127** (codex CLI missing) → skip silently
+   - **other non-zero** → surface first line of stderr, continue to Step 3
 3. If codex-plugin-cc not installed → skip silently
 
 ## Step 3 — Version Bump

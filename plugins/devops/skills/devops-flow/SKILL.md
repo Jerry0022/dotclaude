@@ -29,7 +29,7 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 Project extensions define framework-specific log paths (e.g., Electron logs in
 `%APPDATA%/<app>/logs/`, Angular dev server console, etc.).
 
-4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill auto-invokes `/codex:rescue` on unclear root cause (§2 in that doc). Detect Codex availability now so Step 6 can act on it.
+4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill auto-invokes Codex on unclear root cause (§2 in that doc). Codex **MUST** be called via `{PLUGIN_ROOT}/scripts/codex-safe.sh` (5-min hard timeout, see "Hard Timeout & Failure-Tolerance" section), NEVER via the `/codex:rescue` Agent tool. Detect Codex availability now so Step 6 can act on it.
 
 ## Step 1 — Triage: what broke?
 
@@ -74,7 +74,7 @@ Find the actual broken invariant — not just the symptom. Ask:
 | **Trivial fix** (typo, missing import, off-by-one) | Fix immediately, report what was wrong |
 | **Clear root cause, low risk** (single file) | Fix immediately, explain root cause |
 | **Clear root cause, medium risk** (multiple files) | Propose fix via `AskUserQuestion` |
-| **Unclear root cause** | Present findings, propose 2-3 hypotheses, ask user. **Automatically invoke** `/codex:rescue` for parallel independent investigation (if codex-plugin-cc installed — skip silently if not) |
+| **Unclear root cause** | Present findings, propose 2-3 hypotheses, ask user. **Automatically invoke** Codex via Bash: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" "<investigation prompt>"` for parallel independent investigation. Handle exit codes per codex-integration.md "Hard Timeout" section: rc=124 → continue without Codex findings, note "Codex timed out"; rc=126/127 → skip silently. Never use the `/codex:rescue` Agent tool. |
 | **Architectural issue** | Report root cause, do NOT fix — recommend planned approach |
 
 ## Step 7 — Implement fix (if appropriate)
