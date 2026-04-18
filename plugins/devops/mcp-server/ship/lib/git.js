@@ -48,16 +48,57 @@ export function currentBranch(opts) {
 
 /**
  * Check if working tree is dirty. Returns { dirty, untracked, modified, lines }.
+ *
+ * Uses `--porcelain -z` so the output is NUL-separated with unescaped paths.
+ * This avoids two bugs of the plain-porcelain + trim() approach:
+ *   1. `.trim()` on the whole output consumed the leading space of the first
+ *      line, shifting `slice(3)` off-by-one for dotfile paths (e.g. the first
+ *      line " M .claude-plugin/marketplace.json" became
+ *      "M .claude-plugin/..." → slice(3) = "claude-plugin/..." with the
+ *      leading dot eaten, making `git add` fail with "pathspec did not match").
+ *   2. Paths with special characters were quoted/escaped in porcelain v1.
+ *
+ * Paths are returned relative to the repository root (porcelain semantics),
+ * regardless of `opts.cwd`.
  */
 export function dirtyState(opts) {
-  const status = git("status --porcelain", opts) || "";
-  const lines = status.split("\n").filter(Boolean);
-  const untracked = lines.filter((l) => l.startsWith("??"));
-  const modified = lines.filter((l) => !l.startsWith("??"));
+  const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts || {};
+  let raw;
+  try {
+    raw = execSync("git status --porcelain -z", {
+      cwd,
+      encoding: "utf8",
+      timeout,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch {
+    return { dirty: false, untracked: [], modified: [], lines: [] };
+  }
+
+  const tokens = raw.split("\0");
+  const lines = [];
+  const untracked = [];
+  const modified = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (!tok || tok.length < 3) continue;
+    const xy = tok.slice(0, 2);
+    const path = tok.slice(3);
+    lines.push(tok);
+
+    if (xy === "??") untracked.push(path);
+    else modified.push(path);
+
+    // Rename/copy entries emit the source path as a separate NUL-terminated
+    // token right after — consume it so it does not become a phantom entry.
+    if (xy[0] === "R" || xy[0] === "C" || xy[1] === "R" || xy[1] === "C") i++;
+  }
+
   return {
     dirty: lines.length > 0,
-    untracked: untracked.map((l) => l.slice(3)),
-    modified: modified.map((l) => l.slice(3)),
+    untracked,
+    modified,
     lines,
   };
 }
