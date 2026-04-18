@@ -34,15 +34,19 @@ export async function handler(params) {
     if (commitMessage) {
       const state = dirtyState(opts);
       if (state.modified.length > 0) {
-        for (const file of state.modified) {
-          git(`add -- ${file}`, opts);
-        }
+        // Stage every tracked modification across the repo in one call.
+        // The `:/` pathspec anchors at the repo root, so this works whether
+        // cwd is the repo root or a plugin subdirectory (dirtyState returns
+        // repo-root-relative paths, which `git add` from cwd would otherwise
+        // misresolve).
+        git(`add -u :/`, opts);
       }
       if (state.untracked.length > 0) {
         const safePatterns = ["CHANGELOG.md", "changelog.md"];
         for (const file of state.untracked) {
           if (safePatterns.some(p => file.endsWith(p))) {
-            git(`add -- ${file}`, opts);
+            // `:/${file}` resolves against repo root regardless of cwd.
+            git(`add -- :/${file}`, opts);
           }
         }
         const skipped = state.untracked.filter(f => !safePatterns.some(p => f.endsWith(p)));

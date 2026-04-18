@@ -79,21 +79,46 @@ describe("dirtyState", () => {
     expect(state.lines).toEqual([]);
   });
 
-  test("modified and untracked files", () => {
-    // Use "M " (staged) for first line — leading space in " M" gets eaten by trim()
-    execSync.mockReturnValue("M  src/index.js\n?? new-file.txt\n");
+  test("modified and untracked files (-z format)", () => {
+    // -z: NUL-terminated, first entry unstaged modification, second untracked.
+    execSync.mockReturnValue(" M src/index.js\0?? new-file.txt\0");
     const state = dirtyState();
     expect(state.dirty).toBe(true);
     expect(state.modified).toEqual(["src/index.js"]);
     expect(state.untracked).toEqual(["new-file.txt"]);
   });
 
-  test("multiple modified files", () => {
-    execSync.mockReturnValue("MM a.js\n M b.js\nA  c.js\n");
+  test("first line unstaged dotfile preserves leading dot (regression: v0.48 ship)", () => {
+    // Repro for the bug that made ship_release silently drop
+    // .claude-plugin/marketplace.json from marketplace-project release
+    // commits: the first porcelain line " M .claude-plugin/..." lost its
+    // leading space to trim(), and slice(3) then stripped the leading dot
+    // — making `git add -- claude-plugin/marketplace.json` fail silently.
+    execSync.mockReturnValue(
+      " M .claude-plugin/marketplace.json\0 M README.md\0 M plugins/devops/.claude-plugin/plugin.json\0",
+    );
+    const state = dirtyState();
+    expect(state.modified).toEqual([
+      ".claude-plugin/marketplace.json",
+      "README.md",
+      "plugins/devops/.claude-plugin/plugin.json",
+    ]);
+    expect(state.untracked).toEqual([]);
+  });
+
+  test("multiple modified files with mixed index/worktree status", () => {
+    execSync.mockReturnValue("MM a.js\0 M b.js\0A  c.js\0");
     const state = dirtyState();
     expect(state.dirty).toBe(true);
-    expect(state.modified).toHaveLength(3);
+    expect(state.modified).toEqual(["a.js", "b.js", "c.js"]);
     expect(state.untracked).toHaveLength(0);
+  });
+
+  test("rename entry consumes source-path token", () => {
+    // `R  NEW\0OLD\0` — the old path must not leak into modified[].
+    execSync.mockReturnValue("R  new.js\0old.js\0 M other.js\0");
+    const state = dirtyState();
+    expect(state.modified).toEqual(["new.js", "other.js"]);
   });
 
   test("returns empty on git failure", () => {
