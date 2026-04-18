@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.50.2] — 2026-04-18
+
+### Added
+
+- **plugins/devops/hooks/session-start/ss.permissions.ensure.js** — new SessionStart hook that idempotently adds `Write(~/.claude/devops-concepts/**)` and `Edit(~/.claude/devops-concepts/**)` to the user's `~/.claude/settings.json` allow-list, and ensures the `~/.claude/devops-concepts/` directory exists. Eliminates repeated permission prompts when report-writing skills persist ephemeral review artifacts. Applies automatically to every consumer of the plugin — no manual per-project setup
+
+### Changed
+
+- **plugins/devops/skills/devops-repo-health** — report output (`{date}-repo-health.html` and `{date}-repo-health-decisions.json`) now writes to the user-global `~/.claude/devops-concepts/` directory instead of `{project}/.claude/devops-concept/`. Reports are ephemeral review artifacts, not repo content, and no longer pollute consumer project trees or trigger permission prompts
+
 ## [0.50.1] — 2026-04-18
 
 ### Fixed
