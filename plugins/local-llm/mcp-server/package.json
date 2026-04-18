@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "MCP server that delegates code generation to a local Gemma 4 E4B instance via llama.cpp or Ollama.",
+  "description": "MCP server that delegates code generation to a local AnythingLLM Desktop workspace.",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.25.0"

@@ -28,6 +28,7 @@ node_modules/
 .credentials.json
 *.env
 .env.*
+.claude/local-llm/config.json
 
 # OS
 .DS_Store

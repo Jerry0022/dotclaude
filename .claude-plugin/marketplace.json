@@ -19,7 +19,7 @@
     },
     {
       "name": "local-llm",
-      "description": "Local LLM integration — delegates mechanical coding tasks to Gemma 4 E4B via llama.cpp to save tokens.",
+      "description": "Local LLM integration — delegates mechanical coding tasks to a local AnythingLLM Desktop workspace to save tokens.",
       "version": "0.48.1",
       "author": {
         "name": "Jerry0022"

@@ -8,7 +8,7 @@ description: >-
 model: sonnet
 effort: medium
 color: blue
-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "preview_screenshot", "preview_snapshot"]
+tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "preview_screenshot", "preview_snapshot", "local_generate", "local_status"]
 ---
 
 # Frontend Agent
@@ -41,6 +41,7 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 ## Rules
 
 - Read `{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` before non-trivial implementation.
+- For mechanical UI boilerplate (prop-typed components, form scaffolds, barrel exports, repeated variants, >20 lines): read `{PLUGIN_ROOT}/deep-knowledge/local-llm-delegation.md` and delegate to `local_generate` when the gate is green.
 - Always verify visual output with screenshots
 - Follow existing component patterns in the project
 - CSS changes need responsive verification

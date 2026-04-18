@@ -8,7 +8,7 @@ description: >-
 model: sonnet
 effort: medium
 color: magenta
-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"]
+tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch", "local_generate", "local_status"]
 ---
 
 # AI Agent
@@ -42,6 +42,7 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 ## Rules
 
 - Read `{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` before non-trivial implementation.
+- For mechanical integration boilerplate (client DTOs, schema → type conversion, repeated wrappers, >20 lines): read `{PLUGIN_ROOT}/deep-knowledge/local-llm-delegation.md` and delegate to `local_generate` when the gate is green.
 - Always handle API rate limits and timeouts
 - Implement fallbacks for model unavailability
 - Never hardcode API keys — use environment variables
