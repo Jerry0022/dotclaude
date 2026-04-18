@@ -20,6 +20,7 @@
 
 require('../lib/plugin-guard');
 
+const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('node:child_process');
 const { isActive: sentinelActive } = require('../lib/ship-sentinel');
@@ -51,10 +52,29 @@ function extractTargetPath(toolName, input) {
   return null;
 }
 
+function canonicalize(p) {
+  try { return fs.realpathSync.native(p); } catch { return null; }
+}
+
 function isInside(repoRoot, target) {
   if (!repoRoot || !target) return false;
   try {
-    const rel = path.relative(repoRoot, path.resolve(target));
+    const realRoot = canonicalize(repoRoot) || repoRoot;
+    const absTarget = path.resolve(target);
+    // Target may not exist yet (Write creates new files) — canonicalize the
+    // closest existing ancestor instead, so a symlinked parent is resolved.
+    let probe = absTarget;
+    let realTarget = canonicalize(probe);
+    while (!realTarget && probe !== path.dirname(probe)) {
+      probe = path.dirname(probe);
+      realTarget = canonicalize(probe);
+      if (realTarget) {
+        realTarget = path.join(realTarget, path.relative(probe, absTarget));
+        break;
+      }
+    }
+    if (!realTarget) realTarget = absTarget;
+    const rel = path.relative(realRoot, realTarget);
     return !rel.startsWith('..') && !path.isAbsolute(rel);
   } catch {
     return false;

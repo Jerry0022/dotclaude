@@ -21,11 +21,6 @@ export async function handler(params) {
   const checks = [];
   const errors = [];
 
-  // Mark the ship pipeline as in-progress so pre.main.guard / pre.edit.branch
-  // hooks don't block ship internals when Claude falls back to Bash.
-  // Cleared by ship_cleanup (both success and failure paths).
-  writeSentinel(cwd);
-
   // 1. Current branch
   const branch = currentBranch(opts);
   if (!branch || branch === "HEAD") {
@@ -161,6 +156,12 @@ export async function handler(params) {
   );
 
   const ready = errors.length === 0;
+
+  // Mark the ship pipeline as in-progress only after all hard gates passed,
+  // so pre.main.guard / pre.edit.branch don't block ship internals when Claude
+  // falls back to Bash. Cleared by ship_cleanup on every exit path.
+  if (ready) writeSentinel(cwd);
+
   return {
     ready,
     branch,

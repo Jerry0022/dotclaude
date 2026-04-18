@@ -37,6 +37,12 @@ const WRITE_PATTERNS = [
   /^\s*git\s+apply(\s|$)/,
   /^\s*git\s+am(\s|$)/,
   /^\s*git\s+push(\s|$)/,
+  /^\s*git\s+restore(\s|$)/,
+  /^\s*git\s+checkout\s+(--ours|--theirs|--patch|-p)(\s|$)/,
+  /^\s*git\s+checkout\s+.*\s--\s/,
+  /^\s*git\s+clean(\s|$)/,
+  /^\s*git\s+stash\s+(pop|drop|apply|clear)(\s|$)/,
+  /^\s*git\s+update-ref(\s|$)/,
 ];
 
 function currentBranch(cwd) {

@@ -24,6 +24,7 @@ export async function handler(params) {
 
   // Guard: refuse to run inside a worktree
   if (isWorktree(opts)) {
+    clearSentinel(cwd);
     return {
       success: false,
       error: "Still inside a worktree. Call ExitWorktree(action: 'remove') first, then retry ship_cleanup.",
@@ -35,6 +36,7 @@ export async function handler(params) {
   // Guard: refuse to delete a branch attached to an active worktree
   const worktreeBranches = getWorktreeBranches(opts);
   if (worktreeBranches.has(branch)) {
+    clearSentinel(cwd);
     return {
       success: false,
       error: `Branch '${branch}' is attached to an active worktree. Cannot delete — worktree session would break. Remove the worktree first (ExitWorktree action:'remove'), then retry.`,
