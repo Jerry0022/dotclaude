@@ -287,7 +287,11 @@ Keep text concise — one sentence max, no jargon.
 
 ### File Location
 
-Write to: `{project}/.claude/devops-concept/{date}-repo-health.html`
+Write to: `~/.claude/devops-concepts/{date}-repo-health.html`
+(resolves to `$USERPROFILE/.claude/devops-concepts/` on Windows, `$HOME/.claude/devops-concepts/` on Unix).
+User-global, not project-scoped — reports are ephemeral review artifacts, not repo content.
+The `ss.permissions.ensure.js` SessionStart hook pre-approves writes to this path so no permission prompt fires.
+Create the directory if missing: `mkdir -p ~/.claude/devops-concepts` (Unix) or `mkdir "%USERPROFILE%\.claude\devops-concepts" 2>nul` (Windows).
 
 ### Important Design Details
 
@@ -350,7 +354,7 @@ When the user submits via the concept page:
    - Show summary: "X Branches geloescht, Y uebersprungen"
    - Reset submit state for potential second round
 
-6. **Persist results** to `{project}/.claude/devops-concept/{date}-repo-health-decisions.json`
+6. **Persist results** to `~/.claude/devops-concepts/{date}-repo-health-decisions.json`
 
 ### Safety Invariants
 
