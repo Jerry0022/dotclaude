@@ -317,9 +317,14 @@ function renderState(state, variant, repoUrl) {
 
   // Order: most important first — merge · PR · push · commit · branch
   // When merged, "pushed" is redundant (you can't merge without pushing)
+  // When branch equals the merge target, the trailing branch is also redundant
+  // (use raw state.branch — do NOT use the 'main' fallback, or a card with
+  // unknown branch would silently drop the segment when merged === 'main')
+  const rawBranch = state.branch;
   const segments = [mergeStr, prStr];
   if (!state.merged) segments.push(pushStr);
-  segments.push(commitStr, branchStr);
+  segments.push(commitStr);
+  if (!(state.merged && rawBranch && state.merged === rawBranch)) segments.push(branchStr);
   let line = icon + ' ' + segments.join(' \u00b7 ');
 
   if (state.appStatus === 'running')     line += ' \u00b7 app running';
@@ -413,6 +418,12 @@ function renderCard(input, meterText, buildId) {
   // Block B — End state (with extra blank line above for visual separation)
   if (config.state) {
     const repoUrl = getRepoUrl(input.cwd);
+    if (!repoUrl && input.state && (input.state.pr || input.state.merged || input.state.commit || input.state.branch)) {
+      console.warn(
+        '[dotclaude-completion-mcp] repoUrl empty — card will render without clickable links. ' +
+        'Pass cwd set to the target repo to fix.'
+      );
+    }
     const stateLine = renderState(input.state, variant, repoUrl);
     if (stateLine) {
       parts.push(stateLine);
@@ -715,7 +726,7 @@ server.registerTool(
       ]).describe("Card variant based on task outcome"),
       summary: z.string().max(80).describe("Max ~10 words, user's language"),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
-      cwd: z.string().optional().describe("Working directory for build-ID computation (e.g. worktree path). Falls back to git toplevel if omitted."),
+      cwd: z.string().optional().describe("Working directory of the target repo. STRONGLY RECOMMENDED for ship-* variants — without it, getRepoUrl falls back to the MCP server's own cwd (plugin dir) and the card cannot render clickable PR/commit/branch links."),
       buildId: z.string().optional().describe("Pre-computed build-ID (from ship_build). If provided, skips internal computation. Use this when the worktree/branch state may have changed after building (e.g. post-merge)."),
       session_id: z.string().optional().describe("Session ID for flag writing"),
       changes: z.preprocess(

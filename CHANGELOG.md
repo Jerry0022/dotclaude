@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.48.1] — 2026-04-18
+
+### Fixed
+
+- **completion-card** — trailing branch segment is no longer duplicated when the card already says `merged → origin/<base>`. The `` `main` `` at the end of the state line after a merge to main was redundant. Branch segment is now suppressed when `state.merged && state.branch === state.merged`. Uses the raw `state.branch` (no `'main'` fallback) so a card without a known branch doesn't get silently stripped
+- **completion-card** — warn-log when the card would render without clickable links because `cwd` is missing (empty `repoUrl` + any of `pr`/`merged`/`commit`/`branch` set). Callers of `render_completion_card` should pass `cwd` pointing at the target repo; without it, `getRepoUrl` falls back to the MCP server's plugin dir and all links turn into plain text
+
+### Changed
+
+- **schema/render_completion_card** — `cwd` description tightened: "STRONGLY RECOMMENDED for ship-* variants — without it the card cannot render clickable PR/commit/branch links"
+- **skills/devops-ship** — Step 6 (Completion Card) now explicitly documents the `cwd` requirement and shows it in the example call
+
 ## [0.48.0] — 2026-04-18
 
 ### Added
