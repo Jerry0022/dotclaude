@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.1] — 2026-04-18
+
+### Fixed
+
+- **mcp-server/ship/lib/git.js** — `dirtyState` now parses `git status --porcelain -z` (NUL-separated, unescaped) instead of the plain porcelain output. The previous code `.trim()`-ed the full stdout and then `slice(3)`-ed each line, which silently consumed the leading space of the first porcelain line. For unstaged modifications whose path starts with `.` (notably `.claude-plugin/marketplace.json`, which sorts before any letter), the leading dot was eaten, producing `claude-plugin/marketplace.json` — a pathspec `git add --` rejects. Because the `git()` helper swallows errors, the staging failure was invisible. Symptom: v0.48.0, v0.48.1, v0.49.0, v0.50.0 ships all needed a manual rescue commit to include `marketplace.json`. Regression test added to `git.test.js`
+- **mcp-server/ship/tools/release.js** — staging switched to `git add -u :/` for tracked modifications and `git add -- :/${file}` for untracked files. The `:/` pathspec anchors at the repo root regardless of `opts.cwd`, so plugin-dev ships (cwd is a plugin subdirectory) stage correctly too. Previously `git add -- <path>` resolved `<path>` against `cwd`, while porcelain always reports repo-root-relative paths — a mismatch that silently dropped every stage call when cwd ≠ repo root
+
 ## [0.50.0] — 2026-04-18
 
 ### Added
