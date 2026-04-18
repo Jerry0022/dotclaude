@@ -20,7 +20,6 @@
 
 require('../lib/plugin-guard');
 
-const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('node:child_process');
 const { isActive: sentinelActive } = require('../lib/ship-sentinel');
