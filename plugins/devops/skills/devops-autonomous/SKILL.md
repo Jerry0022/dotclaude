@@ -249,6 +249,15 @@ Behavior depends on `$EXEC_MODE` from Step 2. The full execution gate, safety
 guardrails, and late-permission protocol live in
 `deep-knowledge/autonomous-execution.md` — read that file at the start of Step 5.
 
+**Mandatory pre-mortem before any executing step (implement mode):**
+Unsupervised execution means no user is there to catch a bad call mid-flight.
+Before the first Write/Edit/Bash that mutates state, apply the inline pre-mortem
+from `deep-knowledge/pre-mortem.md` — full question set, all triggers treated
+as active by default (security, migration, breaking-change, refactor, concurrency,
+destructive, external). Fold the output into guards, tests, and scope cuts.
+If a `high`-severity risk has no concrete mitigation, pause execution and write
+it to `AUTONOMOUS-RESUME.json` as a BLOCKER rather than proceeding.
+
 Quick summary:
 - `analyze` → read-only (Read, Glob, Grep, WebFetch, git log/blame/diff, screenshots). No Write/Edit/commit.
 - `implement` → Phase 1 analyse, Phase 2 implement+test+build+verify. No push/ship/PR.

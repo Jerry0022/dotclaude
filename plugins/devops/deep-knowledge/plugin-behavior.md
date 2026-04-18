@@ -49,6 +49,15 @@ about emoji avoidance do NOT apply when relaying MCP tool output.
 "too small", no file is "outside scope". Only valid skip: clearly mid-task turns
 where Claude is still executing a multi-step plan.
 
+## Pre-Mortem Before Substantial Changes
+
+Before implementing security-sensitive, migration, breaking-change, or
+destructive work, apply the inline pre-mortem from
+[`pre-mortem.md`](pre-mortem.md). Trigger/skip lists and the question set
+live there. Results fold into the implementation (guards, tests, narrower
+scope) — never as a separate artifact. For high-stakes work, escalate to
+the `redteam` agent in Wave 0.
+
 ## Token Awareness
 
 - `ss.tokens.scan` scans for expensive files at session start

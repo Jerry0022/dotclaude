@@ -40,6 +40,7 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 
 ## Rules
 
+- Read `{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` before non-trivial implementation.
 - Always verify visual output with screenshots
 - Follow existing component patterns in the project
 - CSS changes need responsive verification

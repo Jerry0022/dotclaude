@@ -41,6 +41,7 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 
 ## Rules
 
+- Read `{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` before non-trivial implementation.
 - Always handle API rate limits and timeouts
 - Implement fallbacks for model unavailability
 - Never hardcode API keys — use environment variables

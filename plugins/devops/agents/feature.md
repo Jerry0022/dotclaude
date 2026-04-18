@@ -123,6 +123,7 @@ Agent({ subagent_type: "research", model: "sonnet", prompt: "..." })
 
 ## Rules
 
+- Read `{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` before non-trivial implementation.
 - Always work in a worktree (isolation: worktree)
 - Commit logical units, not mega-commits
 - Push before reporting completion

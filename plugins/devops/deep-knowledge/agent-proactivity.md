@@ -47,6 +47,14 @@ When the task requires investigation before implementation:
 - Competitive analysis → research agent
 - User perspective validation → gamer agent
 
+### Before Substantial Changes — Pre-Mortem
+
+Before any non-trivial implementation, apply the inline pre-mortem defined
+in [`pre-mortem.md`](pre-mortem.md). Trigger list (security paths, migrations,
+breaking contracts, refactors >3 files, concurrency, destructive ops, external
+integrations) is canonical there. For higher-stakes work, escalate to the
+`redteam` agent in Wave 0, parallel to `po`.
+
 ## When NOT to Orchestrate
 
 - Single-file, single-domain edits (typo fix, add a log line, rename a variable)
