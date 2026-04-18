@@ -189,73 +189,19 @@ Full example: `docs/concepts/2026-04-12-auth-middleware-redesign.html`
 
 ### Iteration Tabs (single file, many iterations)
 
-Every concept page is a stack of iteration tabs. The **tab bar lives in the
-decision panel at the top** of the content area (a slim strip above the
-variants, not in the right sidebar — the sidebar stays reserved for submit
-controls). Each tab shows exactly one iteration; the active one is interactive,
-all earlier ones are frozen (disabled inputs showing the user's submitted
-selections, read-only comments).
-
-| Situation | Action | Result |
-|-----------|--------|--------|
-| First generation | Write the file with `<section data-iteration="1" data-active>` and one tab "Iteration 1" | Tab 1 active |
-| Feedback loop iteration (Step 5c) | Append `<section data-iteration="N+1" data-active>` to the same file, remove `data-active` from the previous section, freeze it, add a new tab and make it active | New tab "Iteration N+1" auto-active, old tab selectable and read-only |
-| Fundamental rework ("nochmal neu") | Same as a feedback iteration — just another tab. The full history stays visible. | Another tab appended |
-
-**Rules:**
-- **Never create a second file** for iterations of the same concept — always
-  append a section to the existing file and POST `/reload` (see Step 5c).
-- The active iteration is the only one that accepts input. Submit sends
-  decisions for the active iteration only.
-- Freeze previous iterations visually: disabled tri-state buttons showing
-  which state the user submitted, read-only comment fields with the text
-  the user entered. Users can click back to earlier tabs to review their
-  own past feedback at any time.
-- Only the active tab runs the heartbeat / submit UI ("music"). Clicking
-  an older tab shows its frozen snapshot but does not re-arm submit.
-- Tab bar must stay compact (one line, horizontally scrollable if many
-  iterations) so it does not push variant content out of view.
-
-See `deep-knowledge/templates.md` § Iteration Tabs for the reference
-HTML/CSS/JS.
+Every concept page is a stack of iteration tabs — the decision-panel tab
+bar shows each iteration, only the active one accepts input, earlier ones
+freeze their submitted state. See `deep-knowledge/iteration-rules.md` for
+the full rules (tab placement, freeze behavior, single-file invariant)
+and `deep-knowledge/templates.md` § Iteration Tabs for the reference HTML.
 
 ### Post-Generation Validation (mandatory gate)
 
-After writing the HTML file, validate that all mandatory interactive patterns
-are present. **Grep the generated file** for each required pattern:
-
-| # | Pattern to grep | Purpose |
-|---|----------------|---------|
-| 1 | `concept-decisions` | Decision data JSON container |
-| 2 | `concept-submitted` | CSS class for monitoring detection signal |
-| 3 | `connection-warning` | Disconnection warning element |
-| 4 | `checkClaudeConnection` | Heartbeat checker function |
-| 5 | `HEARTBEAT_STALE_MS` | Heartbeat staleness threshold |
-| 6 | `HEARTBEAT_GRACE_MS` | Grace period — suppresses warning during startup |
-| 7 | `pollHeartbeat` | HTTP heartbeat polling function |
-| 8 | `panel-ready` | Ready-state panel element |
-| 9 | `panel-submitted` | Submitted-state panel element |
-| 10 | `localStorage` | Reload resilience (state persistence with TTL) |
-| 11 | `data-page-version` | Page version tag for localStorage invalidation |
-| 12 | `data-iteration` | Iteration section marker |
-| 13 | `iteration-tabs` | Tab bar container in the decision panel |
-| 14 | `pollReload` | Reload-signal poller (picks up file rewrites) |
-| 15 | `sec.hidden` | Tab-switch JS toggles the `hidden` attribute — prevents all iterations rendering at once |
-| 16 | `pollProcessedState` | Auto-reset poll handler — restores the ready panel when the server's `_processed_at` advances past the local `_submittedAt` |
-
+After writing the HTML file, grep it for the 16 mandatory interactive
+patterns (heartbeat, panel states, iteration tabs, reload polling, etc.).
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
-then re-validate. This is a **blocking gate** — no exceptions, no "this
-page doesn't need it". Every concept page needs monitoring, every monitored
-page needs the heartbeat guard.
-
-**Common failures this gate catches:**
-- Heartbeat system omitted → submit button stays clickable without monitoring
-- Connection warning missing → user gets no feedback when Claude disconnects
-- Panel states missing → no visual transition on submit/reset cycle
-- localStorage missing → user selections lost on reload or tab close
-
-The patterns in `deep-knowledge/templates.md` (§ Claude Connection Heartbeat,
-§ Submit Handler, § State Persistence) provide the reference implementations.
+then re-validate. See `deep-knowledge/validation-gate.md` for the full
+pattern list and common failure modes.
 
 ## Step 3 — Open in Browser
 
@@ -264,90 +210,14 @@ open a separate browser window.
 
 ### Concept Bridge Server + Edge
 
-The **concept bridge server** (`scripts/concept-server.py`) serves static files
-AND provides HTTP endpoints for heartbeat and decision exchange.
+Start the bridge server (`scripts/concept-server.py`) on a random port
+(8700-8999), arm the combined heartbeat + auto-poll cron (fires every
+minute, handles heartbeat + decision pickup + conditional reset), send
+the first heartbeat, and open the page in the user's existing Edge window.
 
-1. Find the bridge server script:
-   ```bash
-   PLUGIN_ROOT=$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-server.py 2>/dev/null | head -1)
-   ```
-
-2. Start the bridge server in the concept directory:
-   ```bash
-   python "$PLUGIN_ROOT" {random-port} "{concept-dir}" &
-   ```
-   Use a random port (8700-8999) to avoid conflicts. Store the port as `$PORT`.
-
-3. Set up the **combined heartbeat + auto-poll cron**. This single cron keeps
-   the connection indicator green AND automatically picks up user submissions
-   — no manual trigger needed from the user.
-
-   ```
-   CronCreate(cron: "* * * * *", recurring: true, prompt: <<EOF
-   Silently run both steps for the concept bridge on port {port}:
-
-   (1) Heartbeat POST:
-       Bash: curl -s -X POST http://localhost:{port}/heartbeat > /dev/null
-
-   (2) Pending check — use the deterministic /pending endpoint, NOT a
-       substring match on /decisions. The response is a strict JSON object
-       `{"pending": true|false, "version": N}` with no free-form content.
-       Bash (produces ONLY the literal string "true" or "false"):
-         curl -s http://localhost:{port}/pending | python -c "import sys,json; d=json.load(sys.stdin); print('true' if d.get('pending') else 'false')"
-
-       If the output is exactly "false" → produce NO user-visible output. Silent tick.
-
-       If the output is exactly "true" → fetch the full payload and process:
-         Bash: curl -s http://localhost:{port}/decisions
-         • Parse the JSON. Note `_version`. Strip `_version` and `_processed_at`
-           before treating the rest as decision data.
-         • Process per Step 5 (Live Feedback Loop) — act on the user's choices
-           (approve/tweak/reject, included options, comment-driven tweaks).
-         • After processing, reset conditionally — pass the noted version:
-           Bash: curl -s -o /dev/null -w "%{http_code}" -X POST \
-                       -H "Content-Type: application/json" \
-                       -d '{"version": <noted>}' http://localhost:{port}/reset
-         • If the HTTP code is 409 (version mismatch) → the user submitted
-           again while you were processing. Re-fetch /decisions, process the
-           new payload (which supersedes what you just finished), then retry
-           the conditional reset with the new `_version`.
-         • Report the outcome to the user. The browser's panel auto-resets
-           within 5s via the `_processed_at` heartbeat poll — no browser-eval
-           injection required.
-   EOF)
-   ```
-
-   **Why `/pending` + `python -c` instead of a substring check?** The
-   `/decisions` JSON response is formatted via Python's default
-   `json.dumps`, which emits `"submitted": true` **with** a space after the
-   colon — a literal `contains "submitted":true` test silently misses every
-   submission. `/pending` collapses the signal to a strict boolean so the
-   cron body cannot drift into false negatives between ticks.
-
-   **Why combined, not two crons?** One cron minimizes race conditions and makes
-   the contract explicit: every tick does both. Minimum cron resolution is 1 min,
-   so the max submit-to-process lag is ~60 s — acceptable for interactive flows.
-
-4. Send the first heartbeat immediately:
-   ```bash
-   curl -s -X POST http://localhost:{port}/heartbeat
-   ```
-
-5. Open in Edge (reuses the running instance, adds a tab):
-   ```bash
-   # Windows
-   start "" msedge "http://localhost:{port}/{filename}"
-   ```
-   On macOS: `open -a "Microsoft Edge" "http://…"`, on Linux: `microsoft-edge "http://…"`.
-
-   The empty `""` is required on Windows — without it, `cmd.exe` interprets
-   the first quoted argument as a window title.
-
-6. After monitoring ends, clean up:
-   ```bash
-   kill %1  # or track the PID
-   ```
-   Also delete the heartbeat cron via `CronDelete`.
+See `deep-knowledge/bridge-server.md` for the full setup — script lookup,
+launch command, cron body, rationale for `/pending` over substring checks,
+and cleanup.
 
 ### After opening, inform the user:
 

@@ -8,7 +8,7 @@ See @.claude/project-map.md for directory structure.
 - `npm run lint:fix` — eslint autofix
 
 ## Architecture
-- Monorepo: single plugin under `plugins/devops/`
+- Monorepo: `plugins/devops/` (core) + `plugins/local-llm/` (token saver)
 - Skills, hooks, agents, MCP server, templates, deep-knowledge, scheduled-tasks
 - Versioning: SemVer in `.claude-plugin/plugin.json`, tags `v0.x.y`
 - Conventions: `plugins/devops/CONVENTIONS.md` (hook naming, skill structure, etc.)

@@ -61,27 +61,10 @@ A hook version bumps when:
 
 ### Directory Structure
 
-```
-hooks/
-├── hooks.json                  ← Registry (declares all hooks + matchers)
-├── session-start/
-│   ├── ss.git.check.js
-│   ├── ss.mcp.deps.js
-│   ├── ss.tokens.scan.js
-│   └── ss.flow.selfcalibration.js
-├── pre-tool-use/
-│   └── pre.tokens.guard.js
-├── post-tool-use/
-│   ├── post.flow.completion.js
-│   └── post.flow.debug.js
-├── user-prompt-submit/
-│   ├── prompt.git.sync.js
-│   ├── prompt.issue.detect.js
-│   ├── prompt.ship.detect.js
-│   └── prompt.flow.appstart.js
-└── stop/
-    └── stop.flow.guard.js
-```
+Hooks are organized by event under `hooks/{event}/` (e.g. `session-start/`,
+`pre-tool-use/`, `post-tool-use/`, `user-prompt-submit/`, `stop/`).
+The authoritative list of registered hooks and their matchers is
+`hooks/hooks.json` — read that file for the current roster.
 
 ### Exit Codes
 

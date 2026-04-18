@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.50.3] — 2026-04-18
+
+### Fixed
+
+- **CLAUDE.md** — "Monorepo: single plugin under `plugins/devops/`" claim contradicted the actual tree (`plugins/devops/` + `plugins/local-llm/`). Replaced with the accurate two-plugin list
+- **plugins/devops/CONVENTIONS.md** — the "Directory Structure" section listed a stale hook tree that was missing five session-start hooks (`ss.git.sync`, `ss.knowledge.index`, `ss.permissions.ensure`, `ss.plugin.update`, `ss.team.changelog`) and still showed `prompt.git.sync.js` under `user-prompt-submit/` even though that hook moved to `session-start/`. Replaced the hand-maintained tree with a one-liner pointing at `hooks/hooks.json` — the authoritative registry — so the doc cannot drift again
+
+### Changed
+
+- **plugins/devops/skills/devops-concept** — extracted the Post-Generation Validation gate (16-pattern grep table), the Concept Bridge Server + Edge setup (server launch, combined heartbeat + auto-poll cron, `/pending` rationale, cleanup), and the Iteration Tabs rules (tab-bar placement, freeze behavior, single-file invariant) into `deep-knowledge/validation-gate.md`, `deep-knowledge/bridge-server.md`, and `deep-knowledge/iteration-rules.md`. SKILL.md: 521 → 391 lines
+- **plugins/devops/skills/devops-repo-health** — extracted the full Page Structure ASCII mockup and the mandatory Tooltip Explanations table into `deep-knowledge/page-structure.md`; the Decision Schema JSON payload moved to `deep-knowledge/decision-schema.md`. SKILL.md: 408 → 277 lines
+- **plugins/devops/skills/devops-ship** — extracted the three reference `ship_release` call payloads (final-to-main, intermediate, overlap-with-merge), the direct-ship and intermediate-ship data-flow diagrams, and the hierarchical merge workflow into `deep-knowledge/call-examples.md`, `deep-knowledge/data-flow.md`, and `deep-knowledge/hierarchical-merge.md`. SKILL.md: 400 → 305 lines
+- **plugins/devops/skills/devops-autonomous** — extracted the Step 7b HTML report structure (header, completion-card widget, per-mode sections, footer) and the design guidelines into `deep-knowledge/html-report.md`. SKILL.md: 381 → 351 lines
+- **plugins/devops/skills/devops-burn** — extracted the full Step 7 composite prompt template (burn-guidance, parallelization, throughput, task ordering, consolidation) into `deep-knowledge/composite-prompt.md`. SKILL.md: 267 → 225 lines
+
+All extractions are content-preserving: every SKILL.md keeps a short pointer to its moved block, no rules or behavior changed, no test changes. 91/91 vitest green.
+
 ## [0.50.2] — 2026-04-18
 
 ### Added
