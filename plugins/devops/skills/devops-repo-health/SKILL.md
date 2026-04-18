@@ -313,8 +313,13 @@ Follow `/devops-concept` Step 3 (Open) and Step 4 (Monitor), respecting the
 new tab in running Edge, user's profile context, Claude extension for interaction.
 
 ```bash
-start "" msedge "{filepath}"
+start "" msedge "file:///$(cygpath -m "{filepath}")"
 ```
+
+**Windows note:** always run `{filepath}` through `cygpath -m` before
+prefixing `file:///` — raw `$(pwd)`-style paths produce a broken
+`file:///c/Users/...` URL (missing drive colon → `ERR_FILE_NOT_FOUND`).
+See `deep-knowledge/browser-file-urls.md`.
 
 Inform the user:
 

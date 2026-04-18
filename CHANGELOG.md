@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.46.2] — 2026-04-18
+
+### Fixed
+
+- **devops-autonomous** — `AUTONOMOUS-REPORT.html` failed to open in Edge on Windows. `start msedge "file://$(pwd)/..."` produced `file:///c/Users/...` (MSYS path without drive colon), which Chromium cannot resolve (`ERR_FILE_NOT_FOUND`). Now runs the path through `cygpath -m` → valid `file:///C:/Users/...` URL
+- **devops-repo-health** — same `file://` trap fixed in the "Open & Monitor" step. The `{filepath}` placeholder is now wrapped in `cygpath -m` before prefixing `file:///`
+
+### Added
+
+- **deep-knowledge** — new cross-cutting doc `browser-file-urls.md` documenting the Git-Bash / Chromium file:// URL trap on Windows, with the canonical `cygpath -m` recipe and a smoke-test. Indexed in `INDEX.md`
+
+### Changed
+
+- **marketplace.json** — version re-synced from `0.46.0` (stale) to the actual release line. Prevents future `ship_preflight` version-consistency errors
+
 ## [0.46.1] — 2026-04-17
 
 ### Fixed

@@ -342,10 +342,16 @@ Use a clean, modern dark-theme design. Structure:
 
 ### 7c — Open in Browser
 
-After writing the HTML file, open it in Edge:
+After writing the HTML file, open it in Edge. **Always convert the Git-Bash
+path to a native Windows path first** — `$(pwd)` returns `/c/Users/...` which
+produces a broken `file:///c/Users/...` URL (Chromium/Edge can't resolve the
+missing drive colon → `ERR_FILE_NOT_FOUND`):
+
 ```bash
-start msedge "file://$(pwd)/AUTONOMOUS-REPORT.html"
+start msedge "file:///$(cygpath -m "$(pwd)")/AUTONOMOUS-REPORT.html"
 ```
+
+See `deep-knowledge/browser-file-urls.md` for the full rule.
 
 The completion card is still rendered in the CLI as the last visible output
 (VERBATIM relay as always). The HTML report is the **primary deliverable** —

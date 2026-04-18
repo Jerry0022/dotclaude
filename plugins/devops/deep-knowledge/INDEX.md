@@ -10,6 +10,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [agent-orchestration.md](agent-orchestration.md) | Agent Orchestration | Shared orchestration logic for agent selection, prompting, and wave execution. |
 | [agent-proactivity.md](agent-proactivity.md) | Proactive Agent Orchestration | Cross-cutting rule for when to involve specialized agents without explicit us... |
 | [autonomous-execution.md](autonomous-execution.md) | Autonomous Execution — Gate, Guardrails, Late-Permission Protocol | Detailed execution rules for `devops-autonomous` Step 5. Read this at the sta... |
+| [browser-file-urls.md](browser-file-urls.md) | Browser File URLs (Windows + Git-Bash) | Cross-cutting rule: whenever a skill opens a local HTML file in a browser |
 | [browser-tool-strategy.md](browser-tool-strategy.md) | Browser Tool Strategy | Cross-cutting rules for browser interaction across all skills. Every skill that |
 | [claude-directory-structure.md](claude-directory-structure.md) | Claude Directory Structure Convention | All Claude Code configuration belongs inside `.claude/`. Nothing Claude-specific |
 | [code-defaults.md](code-defaults.md) | Code Defaults | Standard coding conventions enforced across all projects using the devops plu... |
