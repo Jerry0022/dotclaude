@@ -274,13 +274,16 @@ If `success: false` → log warning but continue to Step 6. Cleanup failures are
 
 ## Step 6 — Completion Card
 
-Call `render_completion_card` MCP tool (dotclaude-completion server) with data from previous steps:
+Call `render_completion_card` MCP tool (dotclaude-completion server) with data from previous steps.
+
+**CRITICAL — `cwd` is required for clickable links.** Without `cwd`, `getRepoUrl` falls back to the MCP server's own working directory (plugin dir, not your target repo) and the card renders PR/commit/branch as plain text. Always pass the same `cwd` you used for the ship tools.
 
 ```
 render_completion_card({
   variant: "ship-successful",
   summary: "<~10 words, user's language>",
   lang: "de",
+  cwd: "<current working directory — same as ship_release>",
   buildId: <from ship_build.buildId>,
   changes: [<from ship_build/devops-ship_version_bump results>],
   tests: [<from ship_build results>],
