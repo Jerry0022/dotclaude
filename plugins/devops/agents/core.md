@@ -8,7 +8,7 @@ description: >-
 model: sonnet
 effort: medium
 color: yellow
-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
+tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "local_generate", "local_status"]
 ---
 
 # Core Agent
@@ -42,6 +42,7 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 ## Rules
 
 - Read `{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` before non-trivial implementation.
+- For mechanical code generation (DTOs, CRUD, schema, test boilerplate, >20 lines): read `{PLUGIN_ROOT}/deep-knowledge/local-llm-delegation.md` and delegate to `local_generate` when the gate is green.
 - Define interfaces/contracts before implementation
 - Commit contracts separately from implementation (clear git bisect point)
 - Never depend on frontend — frontend depends on core

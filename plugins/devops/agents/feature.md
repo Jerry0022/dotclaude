@@ -8,7 +8,7 @@ description: >-
   <example>Build the user settings page with backend and frontend</example>
 model: inherit
 color: cyan
-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Agent", "AskUserQuestion"]
+tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Agent", "AskUserQuestion", "local_generate", "local_status"]
 ---
 
 # Feature Worker Agent
@@ -124,6 +124,7 @@ Agent({ subagent_type: "research", model: "sonnet", prompt: "..." })
 ## Rules
 
 - Read `{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` before non-trivial implementation.
+- When implementing mechanical code directly (not via sub-agent): read `{PLUGIN_ROOT}/deep-knowledge/local-llm-delegation.md` and delegate to `local_generate` when the gate is green.
 - Always work in a worktree (isolation: worktree)
 - Commit logical units, not mega-commits
 - Push before reporting completion

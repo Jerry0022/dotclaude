@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.49.0] — 2026-04-18
+
+### Changed
+
+- **plugins/local-llm** — complete backend pivot from bundled `llama-server`/`llama.cpp` to a local **AnythingLLM Desktop** workspace. The plugin no longer manages any model itself; it speaks HTTP to the app's REST API on `http://localhost:3001`. Consumers must install AnythingLLM Desktop, generate an API key (Settings → Developer API), and run the new `local-llm-setup` skill to save it. The SessionStart hook runs a non-blocking 7-phase state machine (`ready | needs_api_key | not_installed | starting | network_blocked | auth_failed | configuring`) — a missing key or an offline backend never blocks the prompt
+
+### Added
+
+- **plugins/local-llm/hooks/lib/anythingllm-{http,lifecycle,config}.js** — shared CJS library consumed by both the SessionStart hook and the MCP server (via `createRequire` across the ESM boundary). HTTP client covers `/api/ping`, `/api/v1/auth`, workspaces, and OpenAI-compat completions. Windows lifecycle helpers detect 5 common install paths, check `tasklist`, and launch detached without `unref` surprises. Config layering: defaults → project → user; the API key is read **only** from the user layer (`~/.claude/local-llm/config.json`) to prevent accidental commits
+- **plugins/local-llm/skills/local-llm-setup** — interactive skill for first-time setup. Prompts the user for the API key in chat (without echoing), calls `scripts/save-api-key.js` to persist + verify, auto-creates the `claude-code` workspace, and reports the resulting phase
+- **plugins/local-llm/scripts/save-api-key.js** — CLI used by the setup skill. Writes the key, probes AnythingLLM, and emits a single JSON line with the current phase
+- **plugins/devops/deep-knowledge/local-llm-delegation.md** — new cross-cutting rule for all implementation agents. Defines the one-shot gate (`check-local-llm.js`), GREEN/RED tier matrix, and delegation prompt template
+- **plugins/devops/scripts/check-local-llm.js** — single-call JSON status probe with a 30s on-disk cache at `$TMP/dotclaude-local-llm-check.json`, so parallel agents do not all ping AnythingLLM simultaneously. Resolves the local-llm library from either the source repo or the installed cache
+- **plugins/devops/agents/{core,frontend,feature,ai}.md** — each gains `local_generate` + `local_status` in the tools whitelist and a one-line rule pointing to the new deep-knowledge doc
+
+### Removed
+
+- **plugins/local-llm** — old `llama-server` child-process management, GGUF auto-download chain (HF CLI / curl / PowerShell), idle-timer shutdown, Ollama sidecar launch, and the `llama-cpp.*` / `ollama.*` / `model.*` / `server.*` config fields. The model location, GPU offload, KV-cache quantization, and context size are now managed inside AnythingLLM's UI — outside this plugin's scope
+
 ## [0.48.1] — 2026-04-18
 
 ### Fixed

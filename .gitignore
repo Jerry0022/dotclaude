@@ -13,6 +13,7 @@ node_modules/
 .claude/token-config.json
 .claude/scheduled_tasks.lock
 .claude/usage-live.json
+.claude/.ship-in-progress
 # Plugin-managed runtime dirs
 .claude/.plugin-version
 .claude/hooks/
@@ -28,6 +29,7 @@ node_modules/
 .credentials.json
 *.env
 .env.*
+.claude/local-llm/config.json
 
 # OS
 .DS_Store

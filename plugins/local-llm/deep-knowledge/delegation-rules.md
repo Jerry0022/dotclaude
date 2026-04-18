@@ -1,7 +1,7 @@
 # Local LLM Delegation Rules
 
 Cross-cutting reference for when Claude should delegate code generation to the
-local Gemma 4 E4B model via `mcp__plugin_local-llm_dotclaude-local-llm__local_generate`.
+local model via `mcp__plugin_local-llm_dotclaude-local-llm__local_generate`.
 
 ## Philosophy
 
@@ -9,10 +9,12 @@ local Gemma 4 E4B model via `mcp__plugin_local-llm_dotclaude-local-llm__local_ge
 The local model is a fast code printer for mechanical tasks — it saves Claude's output
 tokens on work that doesn't need frontier-model intelligence.
 
-The local model (Gemma 4 E4B, ~4.5B effective parameters, Q4_K_M quantization) is:
+The backend is a local AnythingLLM Desktop workspace. The actual model is
+whatever AnythingLLM is configured to use (recommended: Ollama + `gemma4:e4b`).
+Broad capability assumptions:
 - **Good at:** Pattern completion, syntax, following exact specs, single-function code
 - **Bad at:** Multi-step reasoning, cross-file context, ambiguity resolution, API knowledge
-- **Context limit:** 8K tokens practical (model + KV cache in 8GB VRAM)
+- **Context limit:** assume ≈8K tokens practical — keep prompts tight
 
 ## Decision Matrix
 
