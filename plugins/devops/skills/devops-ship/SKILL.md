@@ -185,45 +185,10 @@ If `verified: false` → fix mismatches manually, then retry.
 
 Call `ship_release` MCP tool. Use the `base` from Step 1 (auto-detected or explicit).
 
-**Final ship to main:**
-```
-ship_release({
-  base: "main",
-  title: "feat(ship): add MCP server for ship pipeline",
-  body: "## Summary\n...\n\nCloses #N",
-  commitMessage: "chore(release): v0.18.0",
-  tag: "v0.18.0",
-  releaseNotes: "...",
-  prerelease: false,
-  mergeStrategy: "squash",
-  cwd: "<cwd>"
-})
-```
-
-**Intermediate ship (sub-branch → feature branch):**
-```
-ship_release({
-  base: "feat/42-video-filters",
-  title: "feat(core): add video filter data models",
-  body: "## Summary\n...",
-  commitMessage: null,
-  tag: null,
-  releaseNotes: null,
-  mergeStrategy: "squash",
-  cwd: "<cwd>"
-})
-```
-
-**With file overlap (use merge commit to preserve ancestry):**
-```
-ship_release({
-  ...
-  mergeStrategy: "merge",
-  cwd: "<cwd>"
-})
-```
-
-For intermediate merges: no tag, no release notes, no version commit. The tool automatically skips tag/release creation when `base` is not `main`.
+See `deep-knowledge/call-examples.md` for the three reference payloads
+(final ship to main, intermediate ship, overlap-with-merge-commit).
+For intermediate merges: no tag, no release notes, no version commit —
+the tool automatically skips tag/release creation when `base` is not `main`.
 
 The tool handles: commit (optional), rebase verification, push (force-with-lease after rebase), PR create (or reuse with mergeability check), merge (squash or merge commit), tag (main only), GitHub release (main only).
 
@@ -330,71 +295,11 @@ Silent memory consolidation after shipping. Runs **after** the completion card s
 - Never touch `CLAUDE.md` — only `memory/` files
 - If consolidation finds nothing to change → done, no writes needed
 
-## Data Flow Summary
+## Data Flow & Hierarchical Merges
 
-### Direct ship (branch → main)
-
-```
-ship_preflight → { ready, branch, base: "main", intermediate: false }
-      ↓
-ship_build → { success, buildId, steps }
-      ↓
-ship_version_bump → { vOld, vNew, filesUpdated, verified }
-      ↓
-ship_release → { commit, pushed, pr, merged, tag }
-      ↓
-[ExitWorktree if needed]
-      ↓
-ship_cleanup → { cleaned }
-      ↓
-render_completion_card → card markdown (VERBATIM)
-      ↓
-[memory dream — silent, only if memories touched]
-```
-
-### Intermediate ship (sub-branch → feature branch)
-
-```
-ship_preflight → { ready, branch, base: "feat/42", intermediate: true, autoDetectedBase: "feat/42" }
-      ↓
-ship_build → { success, buildId, steps }
-      ↓
-[SKIP version bump]
-      ↓
-ship_release → { commit, pushed, pr, merged: "feat/42", tag: null }
-      ↓
-[ExitWorktree if needed]
-      ↓
-ship_cleanup → { cleaned, intermediate: true }  ← feature branch preserved
-      ↓
-render_completion_card → card markdown (VERBATIM)
-      ↓
-[memory dream — silent, only if memories touched]
-```
-
-Each tool produces structured JSON that feeds directly into the next step or the completion card.
-No Bash parsing, no regex extraction — deterministic data flow.
-
-## Hierarchical Merge Workflow
-
-When multiple agents work on sub-branches of a feature branch:
-
-```
-feat/42-video-filters              ← feature branch (integration)
-├── feat/42-video-filters/core     ← sub-branch (Core agent)
-├── feat/42-video-filters/frontend ← sub-branch (Frontend agent)
-└── feat/42-video-filters/ai       ← sub-branch (AI agent)
-```
-
-Each sub-agent ships independently via `/devops-ship`. The pipeline auto-detects the parent:
-
-1. **Core finishes** → `/devops-ship` on `feat/42-video-filters/core`
-   - Preflight detects base: `feat/42-video-filters`
-   - Squash-merges into feature branch, no tag/version
-2. **Frontend finishes** → `/devops-ship` on `feat/42-video-filters/frontend`
-   - Same: intermediate merge into feature branch
-3. **All sub-branches merged** → `/devops-ship` on `feat/42-video-filters`
-   - No parent detected → ships to `main`
-   - Full release: version bump, tag, GitHub release
-
-This requires no manual `base` parameter — detection is automatic based on branch naming convention (`<parent>/<role>`).
+- **Data flow** (preflight → build → version-bump → release → cleanup →
+  completion card): see `deep-knowledge/data-flow.md` for the direct-ship
+  and intermediate-ship diagrams.
+- **Hierarchical merges** (sub-branch → feature branch → main, automatic
+  parent detection via `<parent>/<role>` naming): see
+  `deep-knowledge/hierarchical-merge.md`.
