@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.47.0] — 2026-04-18
+
+### Added
+
+- **deep-knowledge** — new cross-cutting doc `pre-mortem.md` defining inline adversarial self-critique before non-trivial changes: 7 triggers (security, migrations, breaking contracts, refactors >3 files, concurrency, destructive ops, external integrations), explicit skip list, 7-question set, inline-only output rule, stop criterion. Indexed in `INDEX.md`
+- **agents** — new `redteam` agent for escalated adversarial review. Read-only tools, structured `REDTEAM_REVIEW` output (risks with file/line, severity, mitigation shape), never writes code. Runs parallel to `po` in Wave 0
+- **deep-knowledge/agent-proactivity.md + plugin-behavior.md** — cross-references to the new pre-mortem doc so substantial changes trigger the self-critique without explicit user intent
+- **agents/core.md, feature.md, frontend.md, ai.md** — each gains a pre-mortem read-line in its Rules block
+- **skills/devops-autonomous** — Step 5 now mandates the pre-mortem before any mutating op, with `high`-severity risks blocking execution (written into `AUTONOMOUS-RESUME.json` as BLOCKER)
+- **skills/devops-flow** — Step 7 adds the "how could this fix break something else?" pre-mortem before writing the fix
+
+### Changed
+
+- **marketplace.json** — version aligned from stale 0.46.1 to 0.46.2 baseline (drive-by fix to unblock preflight)
+
 ## [0.46.2] — 2026-04-18
 
 ### Fixed
