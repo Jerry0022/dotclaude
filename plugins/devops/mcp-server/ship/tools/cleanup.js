@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { git, gitStrict, isWorktree, getWorktreeBranches } from "../lib/git.js";
+import { clearSentinel } from "../lib/sentinel.js";
 
 export const schema = z.object({
   branch: z.string().describe("Feature branch to delete"),
@@ -53,6 +54,7 @@ export async function handler(params) {
       gitStrict(`pull origin ${base}`, opts);
       cleaned.push(`checkout:${base}`);
     } catch (e) {
+      clearSentinel(cwd);
       return {
         success: false,
         error: `Failed to checkout ${base}: ${e.message}`,
@@ -103,6 +105,7 @@ export async function handler(params) {
     }
   }
 
+  clearSentinel(cwd);
   return {
     success: true,
     intermediate,
