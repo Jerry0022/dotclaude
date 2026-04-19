@@ -1066,17 +1066,21 @@ The heartbeat uses the **HTTP Bridge** — the concept bridge server
 and the page communicate through.
 
 **How it works:**
-- Claude sends `curl -s -X POST localhost:{port}/heartbeat` every 60 seconds
-  (via CronCreate) plus on each monitoring poll cycle (~15s when active)
-- The page polls `GET /heartbeat` every 5 seconds via `fetch()`
-- If the heartbeat is older than 90 seconds → the submit button is disabled
-  and a warning is shown (90s threshold safely covers the 60s cron interval
-  with buffer for timing jitter)
-- If the heartbeat is fresh → submit is enabled, warning hidden
+- The bridge server self-pulses `_heartbeat_ts` every 30s from a daemon
+  thread. As long as the process is alive, the timestamp stays fresh —
+  even while Claude's REPL is busy and cron jobs can't fire.
+- Claude additionally POSTs `/heartbeat` via cron and on each monitoring
+  poll (~15s when active). Redundant with the self-pulse, kept for
+  belt-and-suspenders in case the server thread stalls.
+- The page polls `GET /heartbeat` every 5 seconds via `fetch()`.
+- If the heartbeat is older than 90 seconds → warning is shown (90s
+  comfortably covers a 30s self-pulse interval; a stale reading means
+  the server process itself is gone).
+- If the heartbeat is fresh → warning hidden.
 
 ```javascript
 // --- Claude Connection Heartbeat (HTTP Bridge) ---
-const HEARTBEAT_STALE_MS = 90000; // 90s — safely covers 60s cron interval + buffer
+const HEARTBEAT_STALE_MS = 90000; // 90s — 3× the server's 30s self-pulse; stale means the server process is gone
 const HEARTBEAT_GRACE_MS = 30000; // 30s — Claude needs time to start bridge + cron
 const _pageLoadedAt = Date.now();
 let _lastHeartbeatTs = 0;

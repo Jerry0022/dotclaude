@@ -124,6 +124,11 @@ curl -s -X POST http://localhost:$PORT/heartbeat
 ```
 Sent by the cron job every ~60s, and additionally on each manual poll cycle.
 
+The bridge server also self-pulses `_heartbeat_ts` every 30s from a daemon
+thread — so the indicator stays green even while Claude's REPL is busy and
+session-scoped crons can't fire. The Claude-side POSTs above are redundant
+with that self-pulse (kept as a fallback in case the thread stalls).
+
 **Check submission** (poll for user decisions):
 ```bash
 curl -s http://localhost:$PORT/decisions
