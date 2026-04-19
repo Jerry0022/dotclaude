@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.54.1**
+**Version: 0.54.2**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -8,31 +8,78 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 
 > ⚠ **AI runs commands on your machine.** Hooks, skills, and agents execute shell commands, edit files, push to remotes, and launch apps autonomously. Built-in safeguards reduce risk but do not replace your review.
 >
-> Work in a versioned tree. Keep backups. Read what Claude proposes before approving. **Use at your own risk** — MIT license disclaims all warranty.
+> Work in a versioned tree. Keep backups. Read what Claude proposes before approving. **Use at your own risk.**
+
+**Token math — costs and payoff:**
+- **Costs:** ~0.7M tokens/week — hooks, prompt guards, self-calibration
+- **Plan share:** 1–4% on Max plans · up to ~23% on Pro + Opus
+- **Saves (context):** ~1–4M tokens/week — token guard blocks expensive reads before they land
+- **Saves (time):** 2–4 hours/week — auto git state, ship pipeline, root-cause debug
+- **Net:** plugin pays itself back 1.5–6× via prevented context waste
+
+<details>
+<summary><strong>Detailed token math</strong> — weekly breakdown, plan %, what you get back</summary>
+
+### Weekly plugin overhead (estimated)
+
+| Source | Tokens/week | Notes |
+|---|---|---|
+| Startup hooks (4x per session) | ~8K | Update check, git check, token scan, MCP deps |
+| Prompt guards (per message) | ~150K–250K | Ship detection, issue tracking, git sync — most exit silently |
+| Tool guards (per tool call) | ~100K–200K | Token budget + ship enforcement — early-exit when clean |
+| Self-calibration (every 10 min) | ~200K–400K | Deep-knowledge rotation, skill internalization |
+| Skill invocations (~15–25/week) | ~15K–30K | Only when you call /devops-ship, /devops-commit, etc. |
+| **Total** | **~500K–900K** | **~0.7M tokens/week on average** |
+
+### Percentage of your plan
+
+Based on ~0.7M tokens/week plugin overhead:
+
+| Plan | Model | Weekly budget (approx.) | Plugin overhead |
+|---|---|---|---|
+| Pro ($20) | Sonnet | ~10M | **~7%** |
+| Pro ($20) | Opus | ~3M | **~23%** |
+| Max 5x ($100) | Sonnet | ~55M | **~1.3%** |
+| Max 5x ($100) | Opus | ~18M | **~3.9%** |
+| Max 20x ($200) | Sonnet | ~225M | **~0.3%** |
+| Max 20x ($200) | Opus | ~75M | **~0.9%** |
+
+*Budgets are rough estimates and vary by usage pattern. Anthropic adjusts limits dynamically.*
+
+### What you get back
+
+| Without plugin | With plugin |
+|---|---|
+| "Wait, did I push that?" | Git state checked on every session start |
+| `git push --force` to main at 2 AM | Blocked before it happens |
+| Forgetting to bump the version | /devops-ship handles version, PR, merge, cleanup |
+| "Why is my context window gone?" | Token guard kills expensive reads before they land |
+| Debugging the same error 4 times | /devops-flow kicks in after the second failure |
+| Writing commit messages by hand | Conventional commits, auto-staged, one command |
+
+**Token guard payoff:** The token guard blocks any single operation above 2% of your session window (~20K tokens). In a typical session, Claude attempts 5–15 broad searches or large-file reads that would each burn 20–80K tokens — that's 100–400K tokens/session evaporating into context you never asked for. Across ~10 sessions/week, the guard saves roughly **1–4M tokens/week** in prevented waste. The plugin's own overhead (~0.7M tokens/week for hooks, startup checks, and skill prompts) pays for itself 1.5–6x over just by keeping Claude from reading files it doesn't need.
+
+Your mileage may vary. Your sanity will not.
+
+</details>
 
 ## Table of Contents
 
-- [Features](#features)
+**Setup**
 - [Installation](#installation)
 - [Updates](#updates)
-- [What it does](#what-it-does)
-- [Customization](#customization)
-- [Integrations](#integrations)
 - [Supported Stacks](#supported-stacks)
-- [Project Structure](#project-structure)
-- [Token Overhead](#token-overhead)
+- [Integrations](#integrations)
+- [Customization](#customization)
+
+**Use**
+- [Features](#features)
+- [What it does](#what-it-does)
 - [Completion Cards](#completion-cards)
+
+**Details**
+- [Project Structure](#project-structure)
 - [Troubleshooting](#troubleshooting)
-- [License](#license)
-
-## Features
-
-- **13 Hooks** — automated guards and triggers across the full session lifecycle
-- **15 Skills** — devops-ship, devops-commit, devops-flow, devops-deep-research, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-self-update, devops-autonomous
-- **10 Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Research, Windows
-- **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
-- **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
-- **3-Layer Extension Model** — customize any skill or agent per-project without forking
 
 ## Installation
 
@@ -53,6 +100,79 @@ claude plugin update devops@Jerry0022
 ```
 
 Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**. Semantic versioning — breaking changes only in major versions.
+
+## Supported Stacks
+
+This plugin is built and actively tested against a specific stack. Outside that stack, hooks and skills may work, degrade gracefully, or not run at all — anything not listed as **supported** is best-effort.
+
+| Area | Supported | Behavior outside |
+|---|---|---|
+| **OS** | Windows, macOS, Linux | Other platforms: AnythingLLM lifecycle reports `unsupported-platform`; core git / skill flows still run via Node + git |
+| **Shell** | bash (Git-Bash on Windows), zsh | PowerShell / cmd are untested — use Git-Bash or WSL on Windows |
+| **Git hosting** | GitHub (via `gh` CLI) | GitLab / Gitea / Bitbucket / self-hosted: issue tracking, PR creation, and ship release will fail. Local / push-only flows still work |
+| **Default branch** | Auto-detected from `origin/HEAD` (`main`, `master`, or any other name) | Detached HEAD or missing `origin/HEAD`: falls back to `main` |
+| **Build system** | `npm` — auto-detects `build`, `lint`, `test` scripts in `package.json` | No `package.json`: build / lint / test steps are **silently skipped**. pnpm, yarn, pytest, cargo, go test, maven, gradle etc. are **not invoked** |
+| **Local LLM** | AnythingLLM Desktop (HTTP API) | Feature degrades gracefully — `local_generate` becomes unavailable, all main flows continue normally |
+| **Node runtime** | Node.js 20+ | Older Node: MCP server and hooks may fail to start |
+
+If your stack differs, extend the plugin per-project via the 3-layer extension model — see [Customization](#customization).
+
+## Integrations
+
+### Codex (optional)
+
+Install [codex-plugin-cc](https://github.com/openai/codex-plugin-cc) alongside
+this plugin for AI-powered code review and task delegation via OpenAI Codex.
+Both plugins coexist as independent skill providers — no configuration needed.
+
+Combined workflows: `/codex:rescue` for pre-ship code review, parallel investigation
+as alternative to `/devops-deep-research`, and QA-integrated review for complex changes.
+
+See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
+
+## Customization
+
+Every skill and agent supports **three-layer extensions**:
+
+```
+Layer 1: Plugin (this plugin)         ← defaults
+Layer 2: User global (~/.claude/)     ← your personal overrides
+Layer 3: Project ({project}/.claude/) ← project-specific rules
+```
+
+To extend any plugin skill for your project, create a directory matching the
+skill's name under `.claude/skills/` in your project:
+
+```
+your-project/.claude/skills/{skill-name}/
+├── SKILL.md        ← override or add steps
+└── reference.md    ← project-specific context
+```
+
+The plugin reads your extensions before executing and merges them. Your rules win on conflict.
+Both files are optional — create only what you need.
+
+**Example** — extending `/devops-ship` with project-specific quality gates and deploy targets:
+
+```
+your-project/.claude/skills/devops-ship/
+├── SKILL.md        ← "Before PR: run ng build --prod"
+└── reference.md    ← "Deploy via SSH to 192.168.178.32"
+```
+
+Run `/devops-extend-skill` to interactively scaffold an extension for any plugin skill.
+It detects existing extensions and lets you adapt them.
+
+For the full extension guide with examples per skill, see `deep-knowledge/skill-extension-guide.md`.
+
+## Features
+
+- **13 Hooks** — automated guards and triggers across the full session lifecycle
+- **15 Skills** — devops-ship, devops-commit, devops-flow, devops-deep-research, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-self-update, devops-autonomous
+- **10 Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Research, Windows
+- **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
+- **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
+- **3-Layer Extension Model** — customize any skill or agent per-project without forking
 
 ## What it does
 
@@ -170,131 +290,6 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 | **qa** | Test, verify, screenshot |
 | **research** | Deep-dive investigations |
 | **windows** | Platform-specific features |
-
-## Customization
-
-Every skill and agent supports **three-layer extensions**:
-
-```
-Layer 1: Plugin (this plugin)         ← defaults
-Layer 2: User global (~/.claude/)     ← your personal overrides
-Layer 3: Project ({project}/.claude/) ← project-specific rules
-```
-
-To extend any plugin skill for your project, create a directory matching the
-skill's name under `.claude/skills/` in your project:
-
-```
-your-project/.claude/skills/{skill-name}/
-├── SKILL.md        ← override or add steps
-└── reference.md    ← project-specific context
-```
-
-The plugin reads your extensions before executing and merges them. Your rules win on conflict.
-Both files are optional — create only what you need.
-
-**Example** — extending `/devops-ship` with project-specific quality gates and deploy targets:
-
-```
-your-project/.claude/skills/devops-ship/
-├── SKILL.md        ← "Before PR: run ng build --prod"
-└── reference.md    ← "Deploy via SSH to 192.168.178.32"
-```
-
-Run `/devops-extend-skill` to interactively scaffold an extension for any plugin skill.
-It detects existing extensions and lets you adapt them.
-
-For the full extension guide with examples per skill, see `deep-knowledge/skill-extension-guide.md`.
-
-## Integrations
-
-### Codex (optional)
-
-Install [codex-plugin-cc](https://github.com/openai/codex-plugin-cc) alongside
-this plugin for AI-powered code review and task delegation via OpenAI Codex.
-Both plugins coexist as independent skill providers — no configuration needed.
-
-Combined workflows: `/codex:rescue` for pre-ship code review, parallel investigation
-as alternative to `/devops-deep-research`, and QA-integrated review for complex changes.
-
-See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
-
-## Supported Stacks
-
-This plugin is built and actively tested against a specific stack. Outside that stack, hooks and skills may work, degrade gracefully, or not run at all — anything not listed as **supported** is best-effort.
-
-| Area | Supported | Behavior outside |
-|---|---|---|
-| **OS** | Windows, macOS, Linux | Other platforms: AnythingLLM lifecycle reports `unsupported-platform`; core git / skill flows still run via Node + git |
-| **Shell** | bash (Git-Bash on Windows), zsh | PowerShell / cmd are untested — use Git-Bash or WSL on Windows |
-| **Git hosting** | GitHub (via `gh` CLI) | GitLab / Gitea / Bitbucket / self-hosted: issue tracking, PR creation, and ship release will fail. Local / push-only flows still work |
-| **Default branch** | Auto-detected from `origin/HEAD` (`main`, `master`, or any other name) | Detached HEAD or missing `origin/HEAD`: falls back to `main` |
-| **Build system** | `npm` — auto-detects `build`, `lint`, `test` scripts in `package.json` | No `package.json`: build / lint / test steps are **silently skipped**. pnpm, yarn, pytest, cargo, go test, maven, gradle etc. are **not invoked** |
-| **Local LLM** | AnythingLLM Desktop (HTTP API) | Feature degrades gracefully — `local_generate` becomes unavailable, all main flows continue normally |
-| **Node runtime** | Node.js 20+ | Older Node: MCP server and hooks may fail to start |
-
-If your stack differs, extend the plugin per-project via the 3-layer extension model — see [Customization](#customization).
-
-## Project Structure
-
-```
-devops/
-├── .claude-plugin/plugin.json     ← Plugin manifest
-├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← 13 hook scripts (JS)
-├── skills/                        ← 16 skill definitions (SKILL.md)
-├── agents/                        ← 10 agent definitions
-├── deep-knowledge/                ← Cross-cutting reference docs
-├── templates/                     ← Output format templates
-└── scripts/                       ← Utility scripts (build-id, usage)
-```
-
-## Token Overhead
-
-This plugin runs hooks, injects guard prompts, and periodically self-calibrates. That costs tokens. Here's what you're signing up for — and what you get back.
-
-### Weekly plugin overhead (estimated)
-
-| Source | Tokens/week | Notes |
-|---|---|---|
-| Startup hooks (4x per session) | ~8K | Update check, git check, token scan, MCP deps |
-| Prompt guards (per message) | ~150K–250K | Ship detection, issue tracking, git sync — most exit silently |
-| Tool guards (per tool call) | ~100K–200K | Token budget + ship enforcement — early-exit when clean |
-| Self-calibration (every 10 min) | ~200K–400K | Deep-knowledge rotation, skill internalization |
-| Skill invocations (~15–25/week) | ~15K–30K | Only when you call /devops-ship, /devops-commit, etc. |
-| **Total** | **~500K–900K** | **~0.7M tokens/week on average** |
-
-### What percentage of your plan is that?
-
-Based on ~0.7M tokens/week plugin overhead:
-
-| Plan | Model | Weekly budget (approx.) | Plugin overhead |
-|---|---|---|---|
-| Pro ($20) | Sonnet | ~10M | **~7%** |
-| Pro ($20) | Opus | ~3M | **~23%** |
-| Max 5x ($100) | Sonnet | ~55M | **~1.3%** |
-| Max 5x ($100) | Opus | ~18M | **~3.9%** |
-| Max 20x ($200) | Sonnet | ~225M | **~0.3%** |
-| Max 20x ($200) | Opus | ~75M | **~0.9%** |
-
-*Budgets are rough estimates and vary by usage pattern. Anthropic adjusts limits dynamically.*
-
-### What you get back
-
-| Without plugin | With plugin |
-|---|---|
-| "Wait, did I push that?" | Git state checked on every session start |
-| `git push --force` to main at 2 AM | Blocked before it happens |
-| Forgetting to bump the version | /devops-ship handles version, PR, merge, cleanup |
-| "Why is my context window gone?" | Token guard kills expensive reads before they land |
-| Debugging the same error 4 times | /devops-flow kicks in after the second failure |
-| Writing commit messages by hand | Conventional commits, auto-staged, one command |
-
-**Net calculation:** ~0.7M tokens/week buys you roughly 2–4 hours of not fighting git, not forgetting steps, and not explaining to your future self why the build broke. Per hour saved, that's about 200K tokens — or roughly the cost of Claude reading this README seventeen times.
-
-**Token guard payoff:** The token guard blocks any single operation above 2% of your session window (~20K tokens). In a typical session, Claude attempts 5–15 broad searches or large-file reads that would each burn 20–80K tokens — that's 100–400K tokens/session evaporating into context you never asked for. Across ~10 sessions/week, the guard saves roughly **1–4M tokens/week** in prevented waste. The plugin's own overhead (~0.7M tokens/week for hooks, startup checks, and skill prompts) pays for itself 1.5–6x over just by keeping Claude from reading files it doesn't need.
-
-Your mileage may vary. Your sanity will not.
 
 ## Completion Cards
 
@@ -600,6 +595,20 @@ Wk  ━━──╏─────────   15% +1%   · 4d 22h left
 
 8 variants total. The card always fires — see [completion-card.md](plugins/devops/templates/completion-card.md) for the full template spec.
 
+## Project Structure
+
+```
+devops/
+├── .claude-plugin/plugin.json     ← Plugin manifest
+├── CONVENTIONS.md                 ← Naming, versioning, extension rules
+├── hooks/                         ← 13 hook scripts (JS)
+├── skills/                        ← 16 skill definitions (SKILL.md)
+├── agents/                        ← 10 agent definitions
+├── deep-knowledge/                ← Cross-cutting reference docs
+├── templates/                     ← Output format templates
+└── scripts/                       ← Utility scripts (build-id, usage)
+```
+
 ## Troubleshooting
 
 ### Plugin update not showing
@@ -619,7 +628,3 @@ rm -f ~/.claude/plugins/install-counts-cache.json
 ```
 
 Then run `claude plugin update devops@Jerry0022` again. Start a new session for changes to take effect.
-
-## License
-
-MIT

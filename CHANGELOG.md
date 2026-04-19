@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.54.2] — 2026-04-19
+
+### Changed
+
+- **README.md** — restructured the **Table of Contents** into three grouped sections (**Setup** → Installation, Updates, Supported Stacks, Integrations, Customization · **Use** → Features, What it does, Completion Cards · **Details** → Project Structure, Troubleshooting) and reordered the document body to match. The **License** section was removed — the MIT badge in the header already conveys the license. The previous **Token Overhead** section was condensed into a 5-line costs-and-payoff bilance in the preamble (`Costs · Plan share · Saves (context) · Saves (time) · Net`); the detailed weekly-overhead table, plan-percentage table, and "what you get back" comparison are preserved inside a new collapsible `<details>` block below the bilance. First-paint noise is significantly reduced while every number from the old section remains one click away
+
 ## [0.54.1] — 2026-04-19
 
 ### Changed
