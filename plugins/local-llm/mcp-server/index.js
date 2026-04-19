@@ -42,6 +42,21 @@ const TEMPERATURE_DEFAULT = CONFIG.generation?.temperature ?? 0.2;
 const MAX_TOKENS_DEFAULT = CONFIG.generation?.maxTokens ?? 4096;
 
 // ---------------------------------------------------------------------------
+// Output sanitization
+// ---------------------------------------------------------------------------
+
+// Strip a single outer markdown fence ```lang ... ``` if present. Local
+// models often ignore "no markdown" instructions and wrap their output, so
+// callers consistently get a fenced block. We unwrap exactly one outer pair
+// and leave inner fences (multi-block answers) untouched.
+function stripOuterFence(text) {
+  if (typeof text !== "string") return text;
+  const trimmed = text.trim();
+  const match = trimmed.match(/^```[a-zA-Z0-9_+\-.#]*\n([\s\S]*?)\n```$/);
+  return match ? match[1] : trimmed;
+}
+
+// ---------------------------------------------------------------------------
 // Status
 // ---------------------------------------------------------------------------
 
@@ -207,7 +222,7 @@ server.registerTool(
       content: [{
         type: "text",
         text: JSON.stringify({
-          code: result.content,
+          code: stripOuterFence(result.content),
           tokensUsed: result.tokensUsed,
           finishReason: result.finishReason,
           workspace: WORKSPACE_SLUG,

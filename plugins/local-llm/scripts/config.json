@@ -6,7 +6,12 @@
     "workspaceName": "Claude Code",
     "autoLaunch": true,
     "launchTimeoutMs": 30000,
-    "pollIntervalMs": 1000
+    "pollIntervalMs": 1000,
+    "chatProvider": "anythingllm_ollama",
+    "chatModel": "hf.co/bartowski/google_gemma-4-e4b-it-gguf:q4_k_m",
+    "fallbackChatModel": "gemma3n:e4b",
+    "pinWorkspace": true,
+    "probeOnPin": true
   },
   "generation": {
     "temperature": 0.2,

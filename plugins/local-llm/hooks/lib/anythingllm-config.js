@@ -12,9 +12,11 @@
  *   are ignored to prevent accidental commits. The user config path is
  *   also where the setup skill writes the key.
  *
- *   Fixed model: AnythingLLM manages the underlying LLM via its workspace
- *   settings — the user picks Ollama + gemma4:e4b once in the AnythingLLM
- *   UI during setup. This plugin only addresses workspaces, not models.
+ *   Model pinning: the plugin sets `chatProvider`/`chatModel` on the
+ *   workspace via `POST /api/v1/workspace/{slug}/update`. Primary and
+ *   fallback model tags live under `anythingllm.chatModel` and
+ *   `anythingllm.fallbackChatModel`. The SessionStart hook probes the
+ *   primary, and on failure pins the fallback.
  */
 
 'use strict';

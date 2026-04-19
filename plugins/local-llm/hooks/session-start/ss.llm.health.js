@@ -39,6 +39,11 @@ const WORKSPACE_SLUG = CONFIG.anythingllm?.workspaceSlug || 'claude-code';
 const WORKSPACE_NAME = CONFIG.anythingllm?.workspaceName || 'Claude Code';
 const AUTO_LAUNCH = CONFIG.anythingllm?.autoLaunch !== false;
 const API_KEY = CONFIG.anythingllm?.apiKey || '';
+const CHAT_PROVIDER = CONFIG.anythingllm?.chatProvider || 'anythingllm_ollama';
+const CHAT_MODEL = CONFIG.anythingllm?.chatModel || 'gemma4:e4b';
+const FALLBACK_CHAT_MODEL = CONFIG.anythingllm?.fallbackChatModel || 'gemma3n:e4b';
+const PIN_WORKSPACE = CONFIG.anythingllm?.pinWorkspace !== false;
+const PROBE_ON_PIN = CONFIG.anythingllm?.probeOnPin !== false;
 
 function emit(phase, instructions) {
   process.stdout.write(`[local-llm] phase: ${phase}\n${instructions}\n`);
@@ -52,10 +57,12 @@ function disabledHint(reason) {
   );
 }
 
-function readyInstructions() {
+function readyInstructions(activeModel) {
+  const modelLine = activeModel ? `Model: ${activeModel} (pinned).\n` : '';
   return (
     `[local-llm] Local LLM is ready via mcp__plugin_local-llm_dotclaude-local-llm__local_generate.\n` +
     `Backend: AnythingLLM @ ${BASE_URL}, workspace "${WORKSPACE_SLUG}".\n` +
+    modelLine +
     `\n` +
     `Quick rules — delegate to local_generate ONLY when ALL are true:\n` +
     `  1. Mechanical code generation (boilerplate, DTOs, test files, CRUD, type defs)\n` +
@@ -65,6 +72,75 @@ function readyInstructions() {
     `  5. Output will be reviewed before use\n` +
     `NEVER delegate complex reasoning, debugging, refactoring, or ambiguous tasks.\n`
   );
+}
+
+async function probeChat() {
+  const res = await http.chatCompletion(BASE_URL, API_KEY, {
+    workspaceSlug: WORKSPACE_SLUG,
+    messages: [{ role: 'user', content: 'ping' }],
+    temperature: 0,
+    maxTokens: 4,
+  });
+  return res.ok && typeof res.content === 'string';
+}
+
+async function pinWorkspace(model) {
+  const res = await http.updateWorkspace(BASE_URL, API_KEY, WORKSPACE_SLUG, {
+    chatProvider: CHAT_PROVIDER,
+    chatModel: model,
+  });
+  return res.ok && res.workspace?.chatModel === model;
+}
+
+// Try a candidate model: pin → probe. Returns model name on success, null on failure.
+async function tryModel(model) {
+  if (!model) return null;
+  const pinned = await pinWorkspace(model);
+  if (!pinned) return null;
+  if (!PROBE_ON_PIN) return model;
+  const works = await probeChat();
+  return works ? model : null;
+}
+
+async function ensureWorkspacePin() {
+  if (!PIN_WORKSPACE) return null;
+
+  const current = await http.getWorkspace(BASE_URL, API_KEY, WORKSPACE_SLUG);
+  const currentModel = current.workspace?.chatModel || null;
+
+  // Already on a configured target — trust it without re-probing (avoids
+  // burning a chat on every SessionStart).
+  if (currentModel === CHAT_MODEL || (FALLBACK_CHAT_MODEL && currentModel === FALLBACK_CHAT_MODEL)) {
+    return currentModel;
+  }
+
+  const primary = await tryModel(CHAT_MODEL);
+  if (primary) {
+    process.stderr.write(`[local-llm] pinned workspace to primary model: ${primary}\n`);
+    return primary;
+  }
+
+  if (FALLBACK_CHAT_MODEL && FALLBACK_CHAT_MODEL !== CHAT_MODEL) {
+    const fallback = await tryModel(FALLBACK_CHAT_MODEL);
+    if (fallback) {
+      process.stderr.write(
+        `[local-llm] primary model "${CHAT_MODEL}" unavailable — pinned fallback: ${fallback}\n`
+      );
+      return fallback;
+    }
+  }
+
+  // Both candidates failed. Restore the previous model so the workspace
+  // stays usable, and surface the situation on stderr.
+  if (currentModel) {
+    await pinWorkspace(currentModel);
+    process.stderr.write(
+      `[local-llm] neither "${CHAT_MODEL}" nor "${FALLBACK_CHAT_MODEL || '(none)'}" is loaded in ` +
+      `AnythingLLM. Restored "${currentModel}". Pull a configured model in AnythingLLM ` +
+      `Settings → AI Providers, or change "chatModel" in the plugin config.\n`
+    );
+  }
+  return currentModel;
 }
 
 (async () => {
@@ -105,7 +181,8 @@ function readyInstructions() {
 
     const exists = ws.workspaces.some((w) => w.slug === WORKSPACE_SLUG);
     if (exists) {
-      emit('ready', readyInstructions());
+      const activeModel = await ensureWorkspacePin();
+      emit('ready', readyInstructions(activeModel));
       return;
     }
 
