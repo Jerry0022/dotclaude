@@ -1,6 +1,6 @@
 {
   "name": "local-llm",
-  "version": "0.54.2",
+  "version": "0.54.3",
   "description": "Local LLM integration for Claude Code — delegates mechanical coding tasks to a local AnythingLLM Desktop workspace to save tokens without sacrificing quality.",
   "author": {
     "name": "Jerry0022",

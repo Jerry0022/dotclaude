@@ -19,6 +19,13 @@ This bypasses Chrome MCP JS injection limitations entirely. The page
 communicates with Claude through HTTP endpoints instead of requiring
 JavaScript eval injection into the browser tab.
 
+A daemon thread self-pulses `_heartbeat_ts` every 30s so the browser's
+connection indicator reflects "bridge server alive" rather than "Claude's
+REPL is currently idle". Session-based crons only fire while the REPL is
+idle, which is exactly not the case while Claude actively builds the page
+or processes submissions — the self-pulse closes that false-negative gap.
+POST /heartbeat still works for belt-and-suspenders signaling.
+
 Usage:
     python concept-server.py <port> [directory]
 
@@ -222,10 +229,25 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         pass  # suppress per-request logging
 
 
+def _heartbeat_self_pulse(interval_s: int = 30):
+    global _heartbeat_ts
+    while True:
+        with _lock:
+            _heartbeat_ts = int(time.time() * 1000)
+        time.sleep(interval_s)
+
+
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8700
     directory = sys.argv[2] if len(sys.argv) > 2 else '.'
     os.chdir(directory)
+
+    # Prime + self-pulse: the browser checks the heartbeat within 5s of page
+    # load, so set it once before serving and then refresh every 30s from a
+    # daemon thread that dies with the server process.
+    _heartbeat_ts = int(time.time() * 1000)
+    threading.Thread(target=_heartbeat_self_pulse, daemon=True).start()
+
     with http.server.HTTPServer(('', port), ConceptBridgeHandler) as httpd:
         print(f"Concept bridge server on http://localhost:{port}/")
         print(f"Serving: {os.getcwd()}")

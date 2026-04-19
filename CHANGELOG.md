@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.3] — 2026-04-19
+
+### Fixed
+
+- **plugins/devops/scripts/concept-server.py** — the concept bridge server now self-pulses `_heartbeat_ts` every 30 s from a daemon thread. Previously the browser's connection indicator relied solely on Claude's `* * * * *` heartbeat cron, but session-scoped crons only fire while the REPL is idle — exactly not the case during active concept work (building the page, opening Edge, processing submissions). The indicator flipped to "Claude ist nicht verbunden" during every multi-minute operation even though the bridge server was fully alive and submissions would have been received. The self-pulse reframes the indicator semantic to "bridge server alive", which is what the user actually cares about. Claude-side POST `/heartbeat` kept as belt-and-suspenders fallback in case the thread stalls
+- **plugins/devops/skills/devops-concept/deep-knowledge/monitoring.md** + **templates.md** — doc-sync: describe the self-pulse, correct the stale `HEARTBEAT_STALE_MS = 90000` comment (was "covers 60 s cron interval"; now "3× the 30 s self-pulse")
+
 ## [0.54.2] — 2026-04-19
 
 ### Changed
