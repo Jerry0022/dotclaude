@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.53.0] — 2026-04-19
+
+### Added
+
+- **plugins/local-llm/hooks/lib/anythingllm-lifecycle.js** — cross-platform support for macOS (`/Applications/AnythingLLM.app`, `~/Applications/AnythingLLM.app`, launched via `open -a`) and Linux (`.deb`/`.rpm` targets under `/usr/bin`, `/opt`, plus AppImage discovery in `~/Applications`, `~/.local/share/AnythingLLM`, `~/Downloads`). Process detection uses `pgrep -f -i anythingllm` on POSIX platforms and the existing `tasklist` probe on Windows. Unsupported platforms return `installed: false` with an `unsupported-platform:<platform>` reason so the SessionStart state machine degrades gracefully instead of silently failing
+- **plugins/devops/mcp-server/ship/lib/git.js** — `detectDefaultBranch(opts)` resolves the repository's default branch from `origin/HEAD` via `git symbolic-ref --short refs/remotes/origin/HEAD`, returning `null` when `origin/HEAD` is not set so callers can decide on a fallback
+- **README.md** — new **Supported Stacks** matrix (OS, shell, git hosting, default branch, build system, local LLM, Node runtime) documenting what is explicitly supported vs. best-effort, and an explicit **AI automation / data-loss warning** block near the top clarifying that the plugin drives shell commands, branch rewrites, and pushes on the user's behalf
+
+### Changed
+
+- **plugins/devops/mcp-server/ship/tools/preflight.js** — `base` is now optional and auto-resolved at call time. Sub-branch parent detection and the "base is default branch" checks compare against the dynamically detected default branch (from `detectDefaultBranch`) instead of a hardcoded `"main"`, so repositories using `master` or any other default branch ship correctly. Falls back to `"main"` only when `origin/HEAD` is not set
+- **plugins/devops/skills/devops-ship/SKILL.md** — preflight example now omits `base` to let the tool auto-detect it, and the auto-detection rules explain the `origin/HEAD` resolution step
+
 ## [0.52.0] — 2026-04-19
 
 ### Added
