@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.2] — 2026-04-19
+
+### Changed
+
+- **README.md** — tightened the AI-automation warning callout from a verbose H2 block with bulleted risk enumeration into a compact 3-line blockquote. Same intent (responsibility, side effects, MIT disclaimer), one-third the length
+- **README.md** — restructured the **Completion Cards** section so only the canonical `shipped` example stays visible by default. The previously-open `test` example and the existing 8-variant `<details>` block were merged into a single collapsible (`See all other variants — test, ready, blocked, minimal-start, research, aborted, fallback`), reducing first-paint noise while preserving every example
+
 ## [0.53.1] — 2026-04-19
 
 ### Changed
