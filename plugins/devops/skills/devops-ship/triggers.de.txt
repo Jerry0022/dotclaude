@@ -1,0 +1,3 @@
+# German trigger phrases for devops-ship.
+ab damit
+das kann rein

@@ -5,11 +5,10 @@ description: >-
   Evaluate which agents are useful for a task and orchestrate their parallel or
   sequential execution. Use when the user explicitly wants orchestrated agent
   work instead of inline execution, or when a task clearly benefits from
-  multi-agent collaboration. Triggers on: "agents", "orchestrate", "orchestriere",
-  "agents einsetzen", "use agents", "parallel agents", "multi-agent",
-  "lass agents das machen", "delegate to agents", "agent workflow".
-  Do NOT trigger for: simple single-file edits, quick fixes, explanations,
-  or research-only tasks (use /devops-deep-research).
+  multi-agent collaboration. Triggers on: "agents", "orchestrate",
+  "use agents", "parallel agents", "multi-agent", "delegate to agents",
+  "agent workflow". Do NOT trigger for: simple single-file edits, quick fixes,
+  explanations, or research-only tasks (use /devops-deep-research).
 argument-hint: "[task description or goal]"
 allowed-tools: Agent, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_list
 ---
@@ -36,8 +35,10 @@ Analyze `$ARGUMENTS` to understand:
 3. **Dependencies** — what must happen before what?
 4. **Risk level** — does this need QA/PO review?
 
-If `$ARGUMENTS` is empty or vague, ask ONE focused question via `AskUserQuestion`:
-- "Was genau soll orchestriert werden? (Feature, Refactoring, Bugfix, Research...)"
+If `$ARGUMENTS` is empty or vague, ask ONE focused question via `AskUserQuestion`.
+Use the wording matching the active `[ui-locale: ...]` (defaults to `en`):
+- en: "What exactly should be orchestrated? (Feature, refactoring, bugfix, research...)"
+- de: "Was genau soll orchestriert werden? (Feature, Refactoring, Bugfix, Research...)"
 
 ## Step 2 — Agent Selection
 
@@ -46,36 +47,60 @@ Select agents using the roster, criteria, and complexity tiers from
 
 ## Step 3 — Present Plan
 
-Present the orchestration plan to the user:
+Present the orchestration plan to the user. Use the headings/labels for the
+active `[ui-locale: ...]` (defaults to `en`):
+
+| Key             | en               | de                  |
+|-----------------|------------------|---------------------|
+| `plan.heading`  | Orchestration plan | Orchestrierungsplan |
+| `plan.task_col` | Task             | Aufgabe             |
+| `plan.deps`     | Dependencies     | Abhängigkeiten      |
+| `plan.estimate` | Estimated agents | Geschätzte Agents   |
+
+Template (`{key}` → resolved per locale):
 
 ```
-## Orchestrierungsplan: <task summary>
+## {plan.heading}: <task summary>
 
 ### Agents (N selected)
 
-| Wave | Agent(s) | Aufgabe |
-|------|----------|---------|
+| Wave | Agent(s) | {plan.task_col} |
+|------|----------|-----------------|
 | 0 | research | <what they investigate> |
 | 1 | core | <what contracts/APIs they define> |
 | 2 | frontend, windows | <what they build, in parallel> |
 | 3 | qa | <what they verify> |
 
-### Abhängigkeiten
-- Wave 2 wartet auf Wave 1 (Core-Contracts)
-- Wave 3 prüft alle Änderungen aus Wave 1+2
+### {plan.deps}
+- Wave 2 waits on Wave 1 (core contracts)   [de: Wave 2 wartet auf Wave 1 (Core-Contracts)]
+- Wave 3 verifies all changes from Wave 1+2  [de: Wave 3 prüft alle Änderungen aus Wave 1+2]
 
-### Geschaetzte Agents: N
+### {plan.estimate}: N
 ```
 
 Wait for user confirmation before proceeding. Accept:
-- "ja" / "go" / "mach" → proceed as planned
+- en: "yes" / "go" / "do it" → proceed as planned
+- de: "ja" / "go" / "mach" → proceed as planned
 - Modifications → adjust plan
-- "weniger" / "nur X" → reduce scope
+- en: "less" / "only X" — de: "weniger" / "nur X" → reduce scope
 
 ## Step 4 — Execution Mode
 
-After the plan is confirmed, ask the user for the execution mode via `AskUserQuestion`:
+After the plan is confirmed, ask the user for the execution mode via
+`AskUserQuestion`. Use the version matching the active `[ui-locale: ...]`:
 
+**en:**
+```
+question: "How should the agents work?"
+header: "Mode"
+options:
+  - label: "Background (recommended)"
+    description: "Agents run autonomously in the background. You get a single final report."
+  - label: "Interactive"
+    description: "Agents ask on decisions and stream interim results inline in chat."
+```
+
+**de:**
 ```
 question: "Wie sollen die Agents arbeiten?"
 header: "Modus"

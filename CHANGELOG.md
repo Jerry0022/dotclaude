@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.52.0] — 2026-04-19
+
+### Added
+
+- **plugins/devops/hooks/lib/locale.js** — session-scoped UI locale detection. Heuristically picks `de` or `en` from the first user prompt of a session (curated German wordlist + umlaut/eszett shortcut), persists the choice in a session file via the existing `session-id` lib, and exposes `ensureLocale`/`getLocale`/`t` helpers so hooks and skills can read the same locale without re-detecting. Defaults to `en` so the plugin stays safe for an open-source audience
+- **plugins/devops/skills/{devops-agents,devops-autonomous,devops-concept,devops-extend-skill,devops-project-setup,devops-repo-health,devops-ship}/triggers.de.txt** — per-skill German trigger glossary, one phrase per line. Loaded lazily by the prompt-knowledge-dispatch hook (only on the first prompt of a German session) and injected as a single `[skill-aliases/de]` line. Pattern scales to N languages — add `triggers.<lang>.txt` files, no preload growth
+
+### Changed
+
+- **plugins/devops/hooks/user-prompt-submit/prompt.knowledge.dispatch.js** — re-injects a compact `[ui-locale: <lang>]` tag (~14 bytes) on every prompt so context-compaction cannot silently drop the locale, and emits the lazy trigger-glossary on the first prompt of each session. Deep-knowledge dispatch logic is unchanged
+- **plugins/devops/hooks/post-tool-use/post.flow.completion.js** — desktop-test `AskUserQuestion` strings (header, question, warning, options) are now bilingual via the new `t()` helper instead of hardcoded German, so English-speaking users no longer see German prompts after 5+ edits
+- **plugins/devops/skills/devops-{agents,autonomous,concept,extend-skill,project-setup,repo-health,ship}/SKILL.md** — German trigger phrases removed from the always-preloaded `description:` frontmatter; they now live in the per-skill `triggers.de.txt` files. `devops-burn` keeps its German negative-trigger list in the description on purpose — the model must see those phrases at preload time to suppress false-positive triggers
+- **plugins/devops/skills/devops-concept/SKILL.md** + **deep-knowledge/templates.md** — concept-page inform text and the panel HTML template are now bilingual. `templates.md` introduces a `{key}`-substitution table at the top with `en`/`de` columns, and the example HTML uses placeholders like `{{panel.submit}}` instead of hardcoded German strings
+- **plugins/devops/skills/devops-agents/SKILL.md** — orchestration-plan template, dependencies/estimate headings, and the execution-mode `AskUserQuestion` are presented as `en`/`de` variants tied to the active `[ui-locale: …]`
+
 ## [0.51.0] — 2026-04-19
 
 ### Added

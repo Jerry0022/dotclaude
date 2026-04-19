@@ -1,0 +1,5 @@
+# German trigger phrases for devops-concept.
+mach mir eine seite
+zeig mir das interaktiv
+als webseite
+interaktive Übersicht

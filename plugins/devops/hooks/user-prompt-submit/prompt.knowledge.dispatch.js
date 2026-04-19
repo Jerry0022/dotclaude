@@ -15,6 +15,7 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const path = require('path');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
+const { ensureLocale } = require('../lib/locale');
 
 /**
  * Topic-to-file keyword map.
@@ -109,6 +110,44 @@ const TOPIC_MAP = [
 const MAX_INJECT_PER_PROMPT = 2;
 const MAX_INJECT_BYTES = 8192;
 
+// Trigger glossary cap: hard limit on the per-prompt injected aliases payload
+// so we never blow context as more skills add `triggers.<lang>.txt` files.
+const MAX_TRIGGER_GLOSSARY_BYTES = 1024;
+
+/**
+ * Scan all skills for a `triggers.<lang>.txt` file and build a one-line
+ * alias glossary. Returns the formatted string or '' when nothing is found.
+ * Format: `[skill-aliases/<lang>] skill-a: phrase1, phrase2 | skill-b: …`
+ */
+function loadTriggerGlossary(pluginRoot, lang) {
+  const skillsDir = path.join(pluginRoot, 'skills');
+  let entries;
+  try { entries = fs.readdirSync(skillsDir, { withFileTypes: true }); }
+  catch { return ''; }
+
+  const aliases = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const triggerFile = path.join(skillsDir, entry.name, `triggers.${lang}.txt`);
+    let raw;
+    try { raw = fs.readFileSync(triggerFile, 'utf8'); }
+    catch { continue; }
+    const phrases = raw
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('#'));
+    if (phrases.length === 0) continue;
+    aliases.push(`${entry.name}: ${phrases.join(', ')}`);
+  }
+  if (aliases.length === 0) return '';
+
+  let payload = `[skill-aliases/${lang}] ${aliases.join(' | ')}`;
+  if (Buffer.byteLength(payload, 'utf8') > MAX_TRIGGER_GLOSSARY_BYTES) {
+    payload = payload.slice(0, MAX_TRIGGER_GLOSSARY_BYTES - 3) + '...';
+  }
+  return payload;
+}
+
 let inputData = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', d => { inputData += d; });
@@ -120,6 +159,12 @@ process.stdin.on('end', () => {
   const userMessage = (hook.user_message || hook.message || '').toLowerCase().trim();
   if (!userMessage || userMessage.length < 5) process.exit(0);
 
+  const sessionId = hook.session_id || 'unknown';
+
+  // Detect + cache UI locale once per session. First prompt sets it; later
+  // prompts read the cache so all hooks/skills agree on a single language.
+  const { lang, isFresh } = ensureLocale(sessionId, hook.user_message || hook.message || '');
+
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT
     || path.resolve(__dirname, '..', '..');
   const dkDir = path.join(pluginRoot, 'deep-knowledge');
@@ -129,10 +174,7 @@ process.stdin.on('end', () => {
     .filter(t => t.patterns.some(re => re.test(userMessage)))
     .sort((a, b) => b.specificity - a.specificity);
 
-  if (matched.length === 0) process.exit(0);
-
   // Session-scoped dedup via session-id lib (atomic writes, fallback on mismatch)
-  const sessionId = hook.session_id || 'unknown';
   const markerFile = sessionFile('dotclaude-dk-injected', sessionId);
 
   let injected = new Set();
@@ -143,7 +185,6 @@ process.stdin.on('end', () => {
 
   // Filter out already-injected, apply count cap
   const candidates = matched.filter(t => !injected.has(t.file));
-  if (candidates.length === 0) process.exit(0);
 
   // Read file contents with byte budget
   const sections = [];
@@ -162,22 +203,44 @@ process.stdin.on('end', () => {
     } catch {}
   }
 
-  if (sections.length === 0) process.exit(0);
+  // Persist DK injection state (atomic write via session-id lib)
+  if (sections.length > 0) {
+    try {
+      writeSessionFile(markerFile, [...injected].join('\n'));
+    } catch {}
+  }
 
-  // Persist injection state (atomic write via session-id lib)
-  try {
-    writeSessionFile(markerFile, [...injected].join('\n'));
-  } catch {}
+  // Compose additionalContext.
+  //   1. Always re-inject the compact locale tag — Claude's auto-compaction
+  //      can drop old context, and the tag costs only ~14 bytes per prompt.
+  //   2. On the first prompt of a session, also inject the trigger-glossary
+  //      so non-English skill aliases work without bloating preload.
+  //   3. DK sections when matched (lazy, one-shot per file).
+  const blocks = [`[ui-locale: ${lang}]`];
 
-  // Output as additionalContext
+  if (isFresh) {
+    const glossary = loadTriggerGlossary(pluginRoot, lang);
+    if (glossary) {
+      blocks.push(
+        glossary,
+        `(These are localized aliases for the same skills — treat each phrase as ` +
+        `equivalent to invoking the named skill, in addition to its English description.)`,
+      );
+    }
+  }
+
+  if (sections.length > 0) {
+    blocks.push(
+      `[deep-knowledge dispatch] Injecting ${sections.length} reference doc(s) relevant to this prompt:`,
+      '',
+      ...sections,
+    );
+  }
+
   const output = {
     hookSpecificOutput: {
       hookEventName: 'UserPromptSubmit',
-      additionalContext: [
-        `[deep-knowledge dispatch] Injecting ${sections.length} reference doc(s) relevant to this prompt:`,
-        '',
-        ...sections,
-      ].join('\n'),
+      additionalContext: blocks.join('\n'),
     },
   };
 

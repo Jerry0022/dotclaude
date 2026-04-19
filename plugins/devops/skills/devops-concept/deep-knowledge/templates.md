@@ -4,11 +4,32 @@
 layout, elements, and design to fit the specific content. Use these as
 starting points and inspiration — deviate freely when the content calls for it.
 
+## UI Locale
+
+Every UI string below has English (default) and German variants. When the
+session locale (`[ui-locale: ...]` injected by the prompt-knowledge-dispatch
+hook) is `de`, swap the matching strings into the rendered HTML and set
+`<html lang="de">`. For `en` (default) keep the English strings and
+`<html lang="en">`. Add more locales by extending the table.
+
+| Key | en | de |
+|---|---|---|
+| `panel.heading`         | Decisions                      | Entscheidungen |
+| `panel.submit`          | Submit decisions               | Entscheidungen abschicken |
+| `panel.submit_hint`     | Your selection goes straight to Claude. | Deine Auswahl wird direkt an Claude übermittelt. |
+| `panel.submitted`       | Decisions submitted            | Entscheidungen übermittelt |
+| `panel.submitted_hint`  | Claude is processing your selection. Switch to the **Claude chat** to follow progress. | Claude verarbeitet deine Auswahl. Wechsle zum **Claude Chat** um den Fortschritt zu sehen. |
+| `panel.disconnected`    | Claude is not connected. Make sure the Claude extension is active. | Claude ist nicht verbunden. Stelle sicher, dass die Claude-Extension aktiv ist. |
+| `panel.toggle_open`     | Open decisions                 | Entscheidungen öffnen |
+| `panel.close`           | Close                          | Schliessen |
+| `variant.include`       | Include                        | Miteinbeziehen |
+| `iteration.label`       | Iterations                     | Iterationen |
+
 ## Common Structure (all variants)
 
 ```html
 <!DOCTYPE html>
-<html lang="de" data-theme="dark" data-page-version="{generation-timestamp}">
+<html lang="en" data-theme="dark" data-page-version="{generation-timestamp}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -29,7 +50,7 @@ starting points and inspiration — deviate freely when the content calls for it
            Older tabs are clickable but show a frozen snapshot. Anchored here
            above <main> so the tab bar lives in the decision panel header
            without crowding the variant content. -->
-      <nav class="iteration-tabs" role="tablist" aria-label="Iterationen">
+      <nav class="iteration-tabs" role="tablist" aria-label="Iterations">
         <!-- Auto-populated, one tab per <section data-iteration="N">:
         <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="false">Iteration 1</button>
         <button class="iteration-tab" role="tab" data-iteration="2" aria-selected="true">Iteration 2</button>
@@ -49,7 +70,9 @@ starting points and inspiration — deviate freely when the content calls for it
 
     <!-- Decision panel: ~20% width, fixed sidebar, NOT overlay -->
     <aside class="concept-decision-panel">
-      <h3>Entscheidungen</h3>
+      <!-- All visible strings are referenced by key in the locale table above.
+           Swap to the `de` column when [ui-locale: de] is active. -->
+      <h3>{{panel.heading}}</h3>
 
       <!-- Variant Navigation / TOC — each entry is an anchor link -->
       <nav class="variant-nav" id="variant-nav">
@@ -57,11 +80,11 @@ starting points and inspiration — deviate freely when the content calls for it
         <!--
         <a href="#variant-a" class="variant-nav-item" data-variant="variant-a">
           <span class="variant-nav-label">A Orbital Ring</span>
-          <span class="variant-nav-state">Miteinbeziehen</span>
+          <span class="variant-nav-state">{{variant.include}}</span>
         </a>
         <a href="#variant-b" class="variant-nav-item" data-variant="variant-b">
           <span class="variant-nav-label">B Hexagonal</span>
-          <span class="variant-nav-state">Miteinbeziehen</span>
+          <span class="variant-nav-state">{{variant.include}}</span>
         </a>
         -->
       </nav>
@@ -69,7 +92,7 @@ starting points and inspiration — deviate freely when the content calls for it
       <!-- Connection warning — shown when Claude heartbeat is stale -->
       <div id="connection-warning" class="panel-warning" style="display: none;">
         <span class="warning-icon">⚠</span>
-        <span>Claude ist nicht verbunden. Stelle sicher, dass die Claude-Extension aktiv ist.</span>
+        <span>{{panel.disconnected}}</span>
       </div>
 
       <!-- Normal state: decision summary + submit -->
@@ -77,17 +100,17 @@ starting points and inspiration — deviate freely when the content calls for it
         <div id="decision-summary">
           <!-- Auto-populated summary of current selections -->
         </div>
-        <button id="submit-btn" class="primary">Entscheidungen abschicken</button>
-        <p class="hint">Deine Auswahl wird direkt an Claude übermittelt.</p>
+        <button id="submit-btn" class="primary">{{panel.submit}}</button>
+        <p class="hint">{{panel.submit_hint}}</p>
       </div>
 
       <!-- Post-submit state: waiting for Claude -->
       <div id="panel-submitted" style="display: none;">
         <div class="submitted-indicator">
           <span class="check-icon">✓</span>
-          <strong>Entscheidungen übermittelt</strong>
+          <strong>{{panel.submitted}}</strong>
         </div>
-        <p class="submitted-hint">Claude verarbeitet deine Auswahl. Wechsle zum <strong>Claude Chat</strong> um den Fortschritt zu sehen.</p>
+        <p class="submitted-hint">{{panel.submitted_hint}}</p>
         <div class="waiting-animation"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
       </div>
     </aside>
@@ -157,14 +180,14 @@ or any content that needs maximum display area.
   </div>
 
   <!-- Floating toggle button -->
-  <button id="panel-toggle" class="panel-fab" aria-label="Entscheidungen öffnen">
+  <button id="panel-toggle" class="panel-fab" aria-label="{{panel.toggle_open}}">
     <span class="fab-icon">☰</span>
   </button>
 
   <!-- Slide-in overlay panel -->
   <aside class="concept-decision-panel overlay" id="decision-panel">
-    <button id="panel-close" class="panel-close-btn" aria-label="Schliessen">✕</button>
-    <h3>Entscheidungen</h3>
+    <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
+    <h3>{{panel.heading}}</h3>
     <nav class="variant-nav" id="variant-nav"><!-- ... --></nav>
     <!-- rest of panel content -->
   </aside>

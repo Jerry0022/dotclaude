@@ -1,0 +1,3 @@
+# German trigger phrases for devops-extend-skill.
+Skill erweitern
+Skill anpassen
