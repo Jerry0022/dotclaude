@@ -1,0 +1,5 @@
+# German trigger phrases for devops-repo-health.
+# See devops-project-setup/triggers.de.txt header for usage.
+was liegt noch rum
+git aufräumen
+branch hygiene

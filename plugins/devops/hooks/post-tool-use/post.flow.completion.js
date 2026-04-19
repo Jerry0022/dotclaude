@@ -16,6 +16,35 @@ require('../lib/plugin-guard');
 
 const fs = require('fs');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
+const { getLocale, t } = require('../lib/locale');
+
+// Bilingual strings for the desktop-test AskUserQuestion prompt.
+// Keys correspond to fields the user sees in Claude Code's question UI.
+const DESKTOP_TEST_DICT = {
+  en: {
+    header: 'Desktop test',
+    question: 'Should I take over the desktop to visually test the changes automatically?',
+    warning:
+      'WARNING: During automated tests the desktop is periodically controlled — ' +
+      'mouse and keyboard move on their own. You can keep working, but your work ' +
+      'will be briefly interrupted. Games, video calls, or time-critical tasks ' +
+      'should NOT run during this window.',
+    optYes: 'Yes, take over the desktop',
+    optNo: 'No, test manually',
+  },
+  de: {
+    header: 'Desktop-Test',
+    question: 'Soll ich den Desktop übernehmen, um die Änderungen automatisch visuell zu testen?',
+    warning:
+      'WARNUNG: Während der automatischen Tests wird der Desktop periodisch ' +
+      'gesteuert — Maus und Tastatur werden automatisch bewegt. Du kannst ' +
+      'weiterarbeiten, aber deine Arbeit wird dabei kurzzeitig unterbrochen. ' +
+      'Spiele, Videocalls oder zeitkritische Aufgaben sollten in diesem ' +
+      'Zeitraum NICHT laufen.',
+    optYes: 'Ja, Desktop übernehmen',
+    optNo: 'Nein, manuell testen',
+  },
+};
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -97,6 +126,7 @@ process.stdin.on('end', () => {
     );
 
     // --- 2b. Desktop testing prompt for UI projects (5+ edits) ---
+    const lang = getLocale(hook.session_id);
     lines.push(
       '',
       '[desktop-testing] 5+ code edits reached.',
@@ -105,13 +135,10 @@ process.stdin.on('end', () => {
       '     or ANY project with a startable UI — web, Electron, Tauri, game, etc.)',
       '  2. Is the variant "test" (code edits + app/service startable)?',
       'If BOTH true → ask the user via AskUserQuestion:',
-      '  Header: "Desktop-Test"',
-      '  Question: "Soll ich den Desktop übernehmen, um die Änderungen automatisch visuell zu testen?"',
-      '  Warning in question: "WARNUNG: Während der automatischen Tests wird der Desktop',
-      '    periodisch gesteuert — Maus und Tastatur werden automatisch bewegt. Du kannst',
-      '    weiterarbeiten, aber deine Arbeit wird dabei kurzzeitig unterbrochen.',
-      '    Spiele, Videocalls oder zeitkritische Aufgaben sollten in diesem Zeitraum NICHT laufen."',
-      '  Options: "Ja, Desktop übernehmen" / "Nein, manuell testen"',
+      `  Header: "${t('header', lang, DESKTOP_TEST_DICT)}"`,
+      `  Question: "${t('question', lang, DESKTOP_TEST_DICT)}"`,
+      `  Warning in question: "${t('warning', lang, DESKTOP_TEST_DICT)}"`,
+      `  Options: "${t('optYes', lang, DESKTOP_TEST_DICT)}" / "${t('optNo', lang, DESKTOP_TEST_DICT)}"`,
       '  If yes → run Computer Use visual tests (see deep-knowledge/desktop-testing.md)',
       '  If no → use manual userTest steps in the completion card as usual.',
       'If NOT a UI project → skip silently, use normal test flow.',

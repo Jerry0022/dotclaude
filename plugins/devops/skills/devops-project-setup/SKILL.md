@@ -5,9 +5,9 @@ description: >-
   Audit or initialize a project's repository hygiene: .gitignore, LICENSE,
   README, .editorconfig, .gitattributes, and AI tooling config. Also scaffolds
   plugin skill extensions for the project. Triggers on: "set up this project",
-  "init repo", "audit gitignore", "add license", "fix gitignore", "repo hygiene",
-  "Projekt einrichten", "Repo aufsetzen". Do NOT trigger for README generation
-  (/devops-readme), CLAUDE.md edits, or source code changes.
+  "init repo", "audit gitignore", "add license", "fix gitignore", "repo hygiene".
+  Do NOT trigger for README generation (/devops-readme), CLAUDE.md edits,
+  or source code changes.
 argument-hint: "[--audit | --init] [--fix]"
 allowed-tools: Read, Grep, Glob, Bash, AskUserQuestion, Write, Edit, WebFetch, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

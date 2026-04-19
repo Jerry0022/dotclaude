@@ -5,8 +5,7 @@ description: >-
   Generate an interactive HTML page for analysis, plans, concepts, prototypes,
   comparisons, or creative work — open it in the browser and monitor user
   decisions (toggles, selections, comments) to feed them back into the workflow.
-  Triggers on: "concept", "mach mir eine seite", "zeig mir das interaktiv",
-  "als webseite", "interaktive Übersicht", "concept page", "interactive plan",
+  Triggers on: "concept", "concept page", "interactive plan",
   "show me this as a page", "visualize this".
   Also auto-suggest when Claude completes analysis, planning, comparison,
   or concept work that would benefit from interactive decision-making.
@@ -221,6 +220,14 @@ and cleanup.
 
 ### After opening, inform the user:
 
+Pick the wording that matches the `[ui-locale: ...]` hint injected by
+`prompt.knowledge.dispatch.js` (defaults to `en`):
+
+**en:**
+> Concept opened. Make your decisions on the page and click
+> "Submit decisions" when you're done — I'll take it from there.
+
+**de:**
 > Concept geöffnet. Triff deine Entscheidungen auf der Seite und klick
 > "Entscheidungen abschicken" wenn du fertig bist — ich übernehme dann.
 

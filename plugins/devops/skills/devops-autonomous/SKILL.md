@@ -4,9 +4,8 @@ description: >-
   Fully autonomous agent orchestration for when the user is away from the PC.
   Runs agents without supervision (implementation, desktop interaction, live
   browser/app tests) and can OPTIONALLY SHUT DOWN THE PC after completion.
-  Triggers: "autonomous", "autonomer modus", "mach das alleine",
-  "run this while I'm away", "afk mode", "autopilot". Do NOT trigger when the user
-  stays present — use /devops-agents instead.
+  Triggers: "autonomous", "run this while I'm away", "afk mode", "autopilot".
+  Do NOT trigger when the user stays present — use /devops-agents instead.
 argument-hint: "[task, e.g. 'refactor auth module and run tests']"
 allowed-tools: >-
   Bash(*), Read, Write, Edit, Glob, Grep, Agent,

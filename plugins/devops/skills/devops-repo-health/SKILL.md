@@ -5,8 +5,7 @@ description: >-
   Analyze repository branch hygiene: unmerged branches, stale locals with deleted
   remotes, orphaned worktrees, verify work landed in main. Results: interactive
   concept page with filters and batch actions. Triggers on: "repo health",
-  "branch cleanup", "was liegt noch rum", "git aufräumen", "branch hygiene".
-  Explicit user request only.
+  "branch cleanup", "branch hygiene". Explicit user request only.
 argument-hint: "[optional: focus area — branches, worktrees, PRs]"
 allowed-tools: Bash(git *), Bash(gh *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
