@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.51.0] — 2026-04-19
+
+### Added
+
+- **plugins/local-llm/hooks/session-start/ss.llm.health.js** — SessionStart hook now pins `chatProvider`/`chatModel` on the AnythingLLM workspace via `POST /api/v1/workspace/{slug}/update` and sends a 4-token probe chat to verify the pinned model actually loads. If the primary model fails, the hook falls back to a configured secondary model; if both fail, it restores the previous pin so the workspace stays usable. Surfaces the chosen model in the `ready` instructions so agents know which LLM they are talking to
+- **plugins/local-llm/hooks/lib/anythingllm-http.js** — `getWorkspace()` and `updateWorkspace()` helpers covering the `GET /api/v1/workspace/{slug}` and `POST /api/v1/workspace/{slug}/update` endpoints
+- **plugins/local-llm/scripts/config.json** — new config keys: `chatProvider` (default `anythingllm_ollama`), `chatModel` (default `hf.co/bartowski/google_gemma-4-e4b-it-gguf:q4_k_m` — Gemma 4 E4B Q4_K_M from HuggingFace/Bartowski), `fallbackChatModel` (default `gemma3n:e4b`), `pinWorkspace` (default `true`), `probeOnPin` (default `true`)
+
+### Fixed
+
+- **plugins/local-llm/hooks/lib/anythingllm-lifecycle.js** — installation detection missed the `...\AppData\Local\Programs\AnythingLLM\AnythingLLM.exe` path (no `-desktop`/`Desktop` suffix) used by the current installer, so the SessionStart hook reported `not_installed` on machines where AnythingLLM was actually installed. Added that path and also checks the `AnythingLLMDesktop.exe` runtime image name alongside `AnythingLLM.exe` — the Electron manifest can rename the runtime image, so the installer filename and `tasklist` image name do not always match
+- **plugins/local-llm/mcp-server/index.js** — `local_generate` now strips a single outer markdown fence (```lang ... ```) from the local model's response. The small models ignore "no markdown fences" in the system prompt and consistently wrap their output, so callers were getting code they had to strip themselves. Inner fences (multi-block answers) are left intact
+
 ## [0.50.3] — 2026-04-18
 
 ### Fixed
