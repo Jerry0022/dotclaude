@@ -40,7 +40,7 @@ const WORKSPACE_NAME = CONFIG.anythingllm?.workspaceName || 'Claude Code';
 const AUTO_LAUNCH = CONFIG.anythingllm?.autoLaunch !== false;
 const API_KEY = CONFIG.anythingllm?.apiKey || '';
 const CHAT_PROVIDER = CONFIG.anythingllm?.chatProvider || 'anythingllm_ollama';
-const CHAT_MODEL = CONFIG.anythingllm?.chatModel || 'gemma4:e4b';
+const CHAT_MODEL = CONFIG.anythingllm?.chatModel || 'hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16';
 const FALLBACK_CHAT_MODEL = CONFIG.anythingllm?.fallbackChatModel || 'gemma3n:e4b';
 const PIN_WORKSPACE = CONFIG.anythingllm?.pinWorkspace !== false;
 const PROBE_ON_PIN = CONFIG.anythingllm?.probeOnPin !== false;
@@ -57,9 +57,18 @@ function disabledHint(reason) {
   );
 }
 
-function readyInstructions(activeModel) {
+function readyInstructions(activeModel, primaryModel) {
   const modelLine = activeModel ? `Model: ${activeModel} (pinned).\n` : '';
+  let warning = '';
+  if (activeModel && primaryModel && activeModel !== primaryModel) {
+    const looksLikeUrl = primaryModel.startsWith('hf.co/') || primaryModel.includes('://');
+    const howToLoad = looksLikeUrl
+      ? `AnythingLLM has not loaded the configured primary model yet. Integrate it via this link (HuggingFace GGUF — supported by Ollama ≥ v0.3.13):\n   ${primaryModel}\nPull it in AnythingLLM → Settings → AI Providers → Ollama, or from a terminal: \`ollama pull ${primaryModel}\`.`
+      : `AnythingLLM has not loaded the configured primary model "${primaryModel}". Pull it in AnythingLLM → Settings → AI Providers.`;
+    warning = `[local-llm] ⚠ Using fallback model "${activeModel}" — primary not available.\n${howToLoad}\n\n`;
+  }
   return (
+    warning +
     `[local-llm] Local LLM is ready via mcp__plugin_local-llm_dotclaude-local-llm__local_generate.\n` +
     `Backend: AnythingLLM @ ${BASE_URL}, workspace "${WORKSPACE_SLUG}".\n` +
     modelLine +
@@ -182,7 +191,7 @@ async function ensureWorkspacePin() {
     const exists = ws.workspaces.some((w) => w.slug === WORKSPACE_SLUG);
     if (exists) {
       const activeModel = await ensureWorkspacePin();
-      emit('ready', readyInstructions(activeModel));
+      emit('ready', readyInstructions(activeModel, CHAT_MODEL));
       return;
     }
 
