@@ -40,15 +40,18 @@ process.stdin.on('end', () => {
 
   const workResult = readSessionFile('dotclaude-devops-work-happened', sessionId);
   const cardResult = readSessionFile('dotclaude-devops-card-rendered', sessionId);
+  const silentResult = readSessionFile('dotclaude-devops-silent-turn', sessionId);
 
   const workHappened = workResult !== null;
   const flagCardRendered = cardResult !== null;
+  const silent = silentResult !== null;
   const stopHookActive = hook.stop_hook_active === true;
 
   // Scan transcript when the flag state alone cannot settle the decision:
   //  - no card flag → might still have rendered the card (marker scan = backup)
   //  - no work and no card → need substantial-answer heuristic
-  const transcript = !flagCardRendered
+  // Silent turns skip the transcript scan entirely — enforcement is off.
+  const transcript = (!flagCardRendered && !silent)
     ? safeReadTranscript(hook.transcript_path)
     : '';
   const substantial = isSubstantialAnswer(transcript);
@@ -61,11 +64,13 @@ process.stdin.on('end', () => {
     cardRendered,
     stopHookActive,
     substantial,
+    silent,
   });
 
   if (decision.resetFlags) {
     if (workResult) try { fs.unlinkSync(workResult.filePath); } catch {}
     if (cardResult) try { fs.unlinkSync(cardResult.filePath); } catch {}
+    if (silentResult) try { fs.unlinkSync(silentResult.filePath); } catch {}
   }
 
   if (decision.action === 'block') {

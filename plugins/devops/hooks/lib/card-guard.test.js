@@ -215,6 +215,35 @@ describe("decideAction", () => {
     expect(d.action).toBe("pass");
     expect(d.resetFlags).toBe(true);
   });
+
+  test("silent turn → pass + reset, regardless of work/card/substantial", () => {
+    // Background ticks (cron git-sync, concept bridge poll, autonomous loop)
+    // must never force a second card. Reset flags so the next real turn
+    // starts from a clean slate.
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: true,
+      silent: true,
+    });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+  });
+
+  test("silent turn short-circuits before stop_hook_active check", () => {
+    // Even if stop_hook_active somehow flips, silent should take precedence
+    // and still pass cleanly.
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: true,
+      substantial: false,
+      silent: true,
+    });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

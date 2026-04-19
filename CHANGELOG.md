@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.55.0] — 2026-04-19
+
+### Fixed
+
+- **plugins/devops/hooks/user-prompt-submit/prompt.flow.silent-turn.js** (new) + **plugins/devops/hooks/post-tool-use/post.flow.completion.js** + **plugins/devops/hooks/lib/card-guard.js** + **plugins/devops/hooks/stop/stop.flow.guard.js** + **plugins/devops/hooks/hooks.json** — suppress the duplicate completion card after every background tick. A new `UserPromptSubmit` hook flags turns whose prompt begins with `Silently run` / `Run silently` or carries the `<<autonomous-loop[-dynamic]>>` sentinel (cron git-sync, concept bridge poll, autonomous loops). On a flagged turn, `post.flow.completion` skips the card-reminder injection AND the work-happened flag write, and `stop.flow.guard` passes without enforcement (new `silent` param threaded into `decideAction`, flag cleaned up with the others on reset). Before: every git-sync cron tick after a real card forced a second card, and every concept-monitor tick during `/devops-concept` rendered its own card — the user only ever wants the card from their real interaction
+
+### Changed
+
+- **plugins/devops/hooks/lib/card-guard.test.js** + **plugins/devops/hooks/user-prompt-submit/prompt.flow.silent-turn.test.js** (new) — cover the new decision path (silent short-circuits ahead of `stop_hook_active`) and the cron-prompt pattern matcher (git-sync, concept bridge, `Run silently` alt phrasing, loop sentinels, case-insensitive, leading-whitespace-tolerant, negative cases)
+
 ## [0.54.3] — 2026-04-19
 
 ### Fixed

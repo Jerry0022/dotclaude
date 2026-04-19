@@ -54,6 +54,14 @@ process.stdin.on('end', () => {
   try { hook = JSON.parse(inputData); }
   catch { process.exit(0); }
 
+  // Silent turn (cron git-sync, concept bridge poll, autonomous loop tick):
+  // skip the completion-card reminder and do not mark work-happened. The real
+  // user turn already rendered its card; this background tick must not trigger
+  // a second one. Flag is written by prompt.flow.silent-turn and cleared by
+  // stop.flow.guard at turn end.
+  const silentResult = readSessionFile('dotclaude-devops-silent-turn', hook.session_id);
+  if (silentResult) process.exit(0);
+
   const toolName = hook.tool_name || '';
   const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
 

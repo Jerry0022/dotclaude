@@ -71,9 +71,18 @@ function lastAssistantContainsCard(transcriptContent) {
  * @param {boolean} s.cardRendered   — render_completion_card was invoked
  * @param {boolean} s.stopHookActive — prior Stop hook already blocked this cycle
  * @param {boolean} s.substantial    — last assistant turn had substantial prose
+ * @param {boolean} [s.silent]       — turn was triggered by cron/autonomous loop,
+ *                                     not the user. Never enforce the card.
  * @returns {{ action: 'block' | 'pass', resetFlags: boolean, reason?: string }}
  */
-function decideAction({ workHappened, cardRendered, stopHookActive, substantial }) {
+function decideAction({ workHappened, cardRendered, stopHookActive, substantial, silent }) {
+  if (silent) {
+    // Background tick (cron git-sync, concept bridge poll, autonomous loop).
+    // The real user turn already rendered its card — forcing another here
+    // produces duplicates. Reset all flags so the next real turn starts clean.
+    return { action: 'pass', resetFlags: true };
+  }
+
   if (stopHookActive) {
     // Never block twice in a row — prevents infinite loops even if the card
     // write flag fails for whatever reason. Flags are reset so the next turn
