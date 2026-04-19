@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.54.1] — 2026-04-19
+
+### Changed
+
+- **README.md** — added a **Table of Contents** (12 GitHub-compatible anchor links) and rewrote all 10 **Completion Cards** examples to match the actual renderer output of `completion-card.md` v0.9.0: heavy/light bar glyphs (`━ ─ ╇ ╏`) replace the old `▓ ░` + separate `↑` arrow, the state line is reordered to `merge · pr · push · commit · branch`, and the new `📌 version · build-id` footer sits between the separator and the CTA. Variant names fixed (`minimal-start` → `test-minimal`, `research` → `analysis`). Card examples use outer ```` ```` ```` fences with an inner ``` ``` ``` block for the usage meter so GitHub renders the nested code fence cleanly. Link to the template spec now points at `plugins/devops/templates/completion-card.md` instead of the stale `templates/completion-card.md`
+
 ## [0.54.0] — 2026-04-19
 
 ### Changed

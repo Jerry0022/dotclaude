@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.54.0**
+**Version: 0.54.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -9,6 +9,21 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 > ⚠ **AI runs commands on your machine.** Hooks, skills, and agents execute shell commands, edit files, push to remotes, and launch apps autonomously. Built-in safeguards reduce risk but do not replace your review.
 >
 > Work in a versioned tree. Keep backups. Read what Claude proposes before approving. **Use at your own risk** — MIT license disclaims all warranty.
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Updates](#updates)
+- [What it does](#what-it-does)
+- [Customization](#customization)
+- [Integrations](#integrations)
+- [Supported Stacks](#supported-stacks)
+- [Project Structure](#project-structure)
+- [Token Overhead](#token-overhead)
+- [Completion Cards](#completion-cards)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
 
 ## Features
 
@@ -285,18 +300,12 @@ Your mileage may vary. Your sanity will not.
 
 Every task ends with a completion card — a structured signal showing what happened, the repo state, and what comes next. The card is always the last thing in the response.
 
-**shipped** — after a successful PR merge:
+**ship-successful** — after a successful PR merge:
 
-```
+````
 ---
 
-5h  ▓▓▓▓░░░░░░░░   33% (+2% ! )  · Reset 3h 12m
-        ↑
-
-Wk  ▓▓░░░░░░░░░░   18% (+2% ! )  · Reset 5d 3h
-             ↑
-
-## ✨✨✨ Filter dialog moved to settings · a3f9b21 ✨✨✨
+## ✨✨✨ Filter dialog moved to settings ✨✨✨
 
 **Changes**
 * Settings → Filter tab as new section with drag & drop
@@ -304,32 +313,35 @@ Wk  ▓▓░░░░░░░░░░   18% (+2% ! )  · Reset 5d 3h
 * Tests → 3 unit tests added for new settings section
 
 **Tests**
-* Build: npm run build successful
-* Unit: 47/47 passed, 3 new tests
-* Preview: Filter tab rendered correctly, drag & drop functional
+* Build → npm run build successful
+* Unit → 47/47 passed, 3 new tests
+* Preview → Filter tab rendered correctly, drag & drop functional
 
-✅ feat/filter-settings · a3f9b21 · pushed · PR #42 "Filter dialog to settings" · merged → remote/main
+✅ merged → origin/main · PR #42 "Filter dialog to settings" · a3f9b21 · feat/filter-settings
 
-## 🚀 SHIPPED. v0.8.2 → v0.8.3 (patch) — RELAX, all done
+```
+5h  ━━━━━╏────────   33% +2%   · 3h 12m left
+Wk  ━━━─╏─────────   18% +2%   · 5d 3h left
+```
 
 ---
-```
+
+📌 0.8.2 → 0.8.3 (patch) · `a3f9b21`
+
+## 🚀 SHIPPED. merged → origin/main — All DONE
+
+---
+````
 
 <details>
-<summary><strong>See all other variants</strong> — test, ready, blocked, minimal-start, research, aborted, fallback</summary>
+<summary><strong>See all other variants</strong> — ready, ship-blocked, test, test-minimal, analysis, aborted, fallback, ship-successful (direct push)</summary>
 
-### test — app running, user must verify
+### test — code edits + app running, user must verify
 
-```
+````
 ---
 
-5h  ▓▓▓▓▓▓░░░░░░   50% (+3% ! )  · Reset 2h 30m
-         ↑
-
-Wk  ▓▓▓░░░░░░░░░   27% (+3% ! )  · Reset 4d 16h
-              ↑
-
-## ✨✨✨ Live search in contact book · e82a0f7 ✨✨✨
+## ✨✨✨ Live search in contact book ✨✨✨
 
 **Changes**
 * ContactBook → Debounced live search with 300ms delay
@@ -337,56 +349,36 @@ Wk  ▓▓▓░░░░░░░░░   27% (+3% ! )  · Reset 4d 16h
 * UI → Search field with clear button and loading spinner
 
 **Tests**
-* Build: successful
-* Unit: 38/38 passed
+* Build → successful
+* Unit → 38/38 passed
 
-🟢 feat/contact-search · e82a0f7 · not pushed · no PR · not merged · app running
+🟢 not merged · no PR · not pushed · e82a0f7 · feat/contact-search · app running
 
 **Please test**
 1. Open contact book, type "Mue" in search field
 2. Verify: results filter after ~300ms, spinner visible
 3. Click clear button, verify list resets
 
-## 🧪 DONE. Live search ready — SHIP after your TEST?
-
----
+```
+5h  ━━━━━━━╏──────   50% +3%   · 2h 30m left
+Wk  ━━━━─╏────────   27% +3%   · 4d 16h left
 ```
 
-### shipped (direct push, no version bump)
-
-```
 ---
 
-5h  ▓▓░░░░░░░░░░   12% (+1%   )  · Reset 4h 31m
-  ↑
+📌 `e82a0f7`
 
-Wk  ▓▓░░░░░░░░░░   15% (+1%   )  · Reset 4d 22h
-          ↑
-
-## ✨✨✨ Typo in error handler fixed · b7e2c44 ✨✨✨
-
-**Changes**
-* ErrorHandler → "Unerwareter" corrected to "Unerwarteter"
-
-✅ main · b7e2c44 · pushed · no PR · remote/main
-
-## 🚀 SHIPPED. v0.8.3 — RELAX, all done
+## 🧪 DONE — SHIP after your TEST?
 
 ---
-```
+````
 
-### ready
+### ready — code complete, awaiting ship decision
 
-```
+````
 ---
 
-5h  ▓▓▓▓▓▓▓░░░░░   58% (+4% ! )  · Reset 2h 5m
-          ↑
-
-Wk  ▓▓▓░░░░░░░░░   22% (+4% ! )  · Reset 5d 1h
-             ↑
-
-## ✨✨✨ Dark mode for dashboard implemented · c91d3e8 ✨✨✨
+## ✨✨✨ Dark mode for dashboard implemented ✨✨✨
 
 **Changes**
 * Theme → Dark mode palette as CSS custom properties
@@ -394,28 +386,31 @@ Wk  ▓▓▓░░░░░░░░░   22% (+4% ! )  · Reset 5d 1h
 * Settings → Dark mode toggle with localStorage persistence
 
 **Tests**
-* Build: successful
-* Unit: 52/52 passed
+* Build → successful
+* Unit → 52/52 passed
 
-🔀 feat/dark-mode · c91d3e8 · not pushed · no PR · not merged
-
-## 📦 READY. Code complete — SHIP or CHANGE?
-
----
-```
-
-### blocked
+🔀 not merged · no PR · not pushed · c91d3e8 · feat/dark-mode
 
 ```
+5h  ━━━━━━━━╏─────   58% +4%   · 2h 5m left
+Wk  ━━━─╏─────────   22% +4%   · 5d 1h left
+```
+
 ---
 
-5h  ▓▓▓▓▓░░░░░░░   42% (+3% ! )  · Reset 2h 48m
-        ↑
+📌 `c91d3e8`
 
-Wk  ▓▓▓░░░░░░░░░   24% (+3% ! )  · Reset 4d 19h
-            ↑
+## 📦 READY — SHIP or CHANGE?
 
-## ✨✨✨ API rate limiting added · d44f1a2 ✨✨✨
+---
+````
+
+### ship-blocked — ship pipeline failed
+
+````
+---
+
+## ✨✨✨ API rate limiting added ✨✨✨
 
 **Changes**
 * Middleware → RateLimiter with token bucket algorithm
@@ -423,28 +418,31 @@ Wk  ▓▓▓░░░░░░░░░   24% (+3% ! )  · Reset 4d 19h
 * Tests → Integration tests for throttling behavior
 
 **Tests**
-* Build: successful
-* Unit: 3/5 FAILED — testBurstLimit and testConcurrentRequests timeout
+* Build → successful
+* Unit → 3/5 FAILED — testBurstLimit and testConcurrentRequests timeout
 
-🔀 feat/rate-limiting · d44f1a2 · not pushed · no PR · not merged
+🔀 not merged · no PR · not pushed · d44f1a2 · feat/rate-limiting
+
+```
+5h  ━━━━━━╏───────   42% +3%   · 2h 48m left
+Wk  ━━━─╏─────────   24% +3%   · 4d 19h left
+```
+
+---
+
+📌 `d44f1a2`
 
 ## ⛔ BLOCKED. 2 tests failed — FIX or SKIP?
 
 ---
-```
+````
 
-### test (app needs start)
+### test — code edits + app not started
 
-```
+````
 ---
 
-5h  ▓▓▓▓▓▓▓▓░░░░   67% (+5% ! )  · Reset 1h 40m
-       ↑
-
-Wk  ▓▓▓▓░░░░░░░░   30% (+5% ! )  · Reset 4d 9h
-             ↑
-
-## ✨✨✨ Push notifications for mobile · f1b3d99 ✨✨✨
+## ✨✨✨ Push notifications for mobile ✨✨✨
 
 **Changes**
 * Mobile → Firebase Cloud Messaging integration
@@ -452,45 +450,50 @@ Wk  ▓▓▓▓░░░░░░░░   30% (+5% ! )  · Reset 4d 9h
 * Settings → Push notification opt-in/opt-out toggle
 
 **Tests**
-* Build: successful
-* Unit: 29/29 passed
+* Build → successful
+* Unit → 29/29 passed
 
-🟡 feat/push-notifications · f1b3d99 · not pushed · no PR · not merged · app not started
+🟡 not merged · no PR · not pushed · f1b3d99 · feat/push-notifications · app not started
 
 **Please test**
 1. Start app on phone, grant push permission
 2. Send a test message from another device
 3. Verify: push appears, tap opens correct view
 
-## 🧪 DONE. Push notifications ready — SHIP after your TEST?
-
----
+```
+5h  ━━━━━━━━━╏────   67% +5%   · 1h 40m left
+Wk  ━━━━─╏────────   30% +5%   · 4d 9h left
 ```
 
-### minimal-start
-
-```
 ---
 
-## ✨✨✨ Dev server started · a3f9b21 ✨✨✨
+📌 `f1b3d99`
 
-## 🧪 STARTED. Website opens in Edge — HAVE FUN
+## 🧪 DONE — SHIP after your TEST?
 
 ---
-```
+````
 
-### research
+### test-minimal — app freshly started via user prompt
 
-```
+````
 ---
 
-5h  ▓▓▓░░░░░░░░░   25% (+2% ! )  · Reset 3h 45m
-       ↑
+## ✨✨✨ Dev server started ✨✨✨
 
-Wk  ▓▓░░░░░░░░░░   19% (+2% ! )  · Reset 5d 6h
-              ↑
+📌 `a3f9b21`
 
-## ✨✨✨ Hook lifecycle analyzed · a3f9b21 ✨✨✨
+## ▶️ STARTED. Website opens in Edge — HAVE FUN
+
+---
+````
+
+### analysis — read-only outcome (audit, plan, review)
+
+````
+---
+
+## ✨✨✨ Hook lifecycle analyzed ✨✨✨
 
 **Changes**
 * Analysis → PostToolUse hooks fire only on Edit/Write, not Read
@@ -499,47 +502,53 @@ Wk  ▓▓░░░░░░░░░░   19% (+2% ! )  · Reset 5d 6h
 
 ➖ No changes to repo
 
-## 📋 DONE. Hook lifecycle documented — READ through
-
----
+```
+5h  ━━━━╏─────────   25% +2%   · 3h 45m left
+Wk  ━━━─╏─────────   19% +2%   · 5d 6h left
 ```
 
-### aborted
-
-```
 ---
 
-5h  ▓▓▓▓▓▓▓▓▓░░░   75% (+6% !!)  · Reset 1h 15m
-      ↑
+📌 `a3f9b21`
 
-Wk  ▓▓▓▓░░░░░░░░   35% (+6% !!)  · Reset 4d 2h  ⚠ Sonnet or new session
-            ↑
+## 📋 DONE — READ through
 
-## ✨✨✨ WebSocket migration aborted · a3f9b21 ✨✨✨
+---
+````
+
+### aborted — task infeasible or rate-limited
+
+````
+---
+
+## ✨✨✨ WebSocket migration aborted ✨✨✨
 
 **Changes**
 * Analysis → existing REST polling architecture incompatible with WS
 * Spike → prototype shows migration requires new session management
 
-🔀 spike/websocket · abc1234 · not pushed · no PR · not merged
+🔀 not merged · no PR · not pushed · abc1234 · spike/websocket
+
+```
+5h  ━━━━━━━━━━━╏──   75% +6%   · 1h 15m left
+Wk  ━━━━━─╏───────   35% +6%   · 4d 2h left
+```
+
+---
+
+📌 `abc1234`
 
 ## 🚫 ABORTED. Architecture incompatibility — What should I TRY?
 
 ---
-```
+````
 
-### fallback
+### fallback — miscellaneous / default
 
-```
+````
 ---
 
-5h  ▓▓░░░░░░░░░░   15% (+1%   )  · Reset 4h 10m
-    ↑
-
-Wk  ▓▓░░░░░░░░░░   16% (+1%   )  · Reset 5d 0h
-           ↑
-
-## ✨✨✨ Configuration verified · a3f9b21 ✨✨✨
+## ✨✨✨ Configuration verified ✨✨✨
 
 **Changes**
 * .editorconfig → settings match team standard
@@ -547,14 +556,49 @@ Wk  ▓▓░░░░░░░░░░   16% (+1%   )  · Reset 5d 0h
 
 ➖ No changes to repo
 
-## 📋 DONE — Anything ELSE?
+```
+5h  ━━╏───────────   15% +1%   · 4h 10m left
+Wk  ━━──╏─────────   16% +1%   · 5d 0h left
+```
 
 ---
+
+📌 `a3f9b21`
+
+## 🔧 DONE — Anything ELSE?
+
+---
+````
+
+### ship-successful (direct push, no version bump)
+
+````
+---
+
+## ✨✨✨ Typo in error handler fixed ✨✨✨
+
+**Changes**
+* ErrorHandler → "Unerwareter" corrected to "Unerwarteter"
+
+✅ merged → origin/main · no PR · b7e2c44
+
 ```
+5h  ━╇────────────   12% +1%   · 4h 31m left
+Wk  ━━──╏─────────   15% +1%   · 4d 22h left
+```
+
+---
+
+📌 `b7e2c44`
+
+## 🚀 SHIPPED. merged → origin/main — All DONE
+
+---
+````
 
 </details>
 
-8 variants total. The card always fires — see [completion-card.md](templates/completion-card.md) for the full template spec.
+8 variants total. The card always fires — see [completion-card.md](plugins/devops/templates/completion-card.md) for the full template spec.
 
 ## Troubleshooting
 
