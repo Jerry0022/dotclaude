@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "Complete DevOps automation for Claude Code: hooks, skills, templates, and git hygiene.",
-    "version": "0.54.1"
+    "version": "0.54.2"
   },
   "plugins": [
     {
       "name": "devops",
       "description": "Complete DevOps automation for Claude Code: hooks, skills, agents, and templates.",
-      "version": "0.54.1",
+      "version": "0.54.2",
       "author": {
         "name": "Jerry0022"
       },
@@ -20,7 +20,7 @@
     {
       "name": "local-llm",
       "description": "Local LLM integration — delegates mechanical coding tasks to a local AnythingLLM Desktop workspace to save tokens.",
-      "version": "0.54.1",
+      "version": "0.54.2",
       "author": {
         "name": "Jerry0022"
       },
