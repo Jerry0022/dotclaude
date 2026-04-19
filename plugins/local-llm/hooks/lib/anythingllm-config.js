@@ -12,11 +12,10 @@
  *   are ignored to prevent accidental commits. The user config path is
  *   also where the setup skill writes the key.
  *
- *   Model pinning: the plugin sets `chatProvider`/`chatModel` on the
- *   workspace via `POST /api/v1/workspace/{slug}/update`. Primary and
- *   fallback model tags live under `anythingllm.chatModel` and
- *   `anythingllm.fallbackChatModel`. The SessionStart hook probes the
- *   primary, and on failure pins the fallback.
+ *   Model choice: the plugin does NOT pin or override the workspace's chat
+ *   model — that is owned by the user inside AnythingLLM. The hook only
+ *   reads `chatModel` from the workspace and surfaces a recommendation via
+ *   `anythingllm.recommendedModel` when none is set.
  */
 
 'use strict';
