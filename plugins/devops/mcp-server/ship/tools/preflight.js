@@ -4,12 +4,12 @@
  */
 
 import { z } from "zod";
-import { git, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, branchExists, fileOverlap, getConfig } from "../lib/git.js";
+import { git, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, detectDefaultBranch, branchExists, fileOverlap, getConfig } from "../lib/git.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
 import { writeSentinel } from "../lib/sentinel.js";
 
 export const schema = z.object({
-  base: z.string().default("main").describe("Base branch to ship into (auto-detected from sub-branch naming if 'main')"),
+  base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
@@ -28,26 +28,35 @@ export async function handler(params) {
     checks.push({ name: "branch", value: branch, ok: false });
   }
 
-  // 2. Auto-detect parent branch for sub-branch → feature-branch merges
-  //    Only when base is "main" (default) and current branch has a parent.
+  // Resolve the repo's default branch once — used both as a fallback for `base`
+  // and as the reference point for the "intermediate merge" check below.
+  const defaultBranch = detectDefaultBranch(opts) || "main";
+  const baseWasExplicit = typeof base === "string" && base.length > 0;
+
+  // 2. Auto-detect parent branch for sub-branch → feature-branch merges.
+  //    Only when the caller didn't pass an explicit base.
   let autoDetectedBase = null;
-  if (base === "main" && branch && branch !== "main") {
+  if (!baseWasExplicit && branch && branch !== defaultBranch) {
     const parent = detectParentBranch(branch, opts);
     if (parent) {
       autoDetectedBase = parent.parent;
       base = parent.parent;
     }
   }
-  const intermediate = base !== "main";
+  // No explicit base and no parent detected → fall back to the repo default.
+  if (!base) base = defaultBranch;
+
+  const intermediate = base !== defaultBranch;
 
   if (branch === base) {
     errors.push(`Cannot ship from '${branch}' — already on base branch '${base}'`);
   }
   checks.push({ name: "branch", value: branch, ok: !errors.length });
 
+  checks.push({ name: "default-branch", value: defaultBranch });
   if (autoDetectedBase) {
     checks.push({ name: "auto-detected-base", value: autoDetectedBase, source: "sub-branch naming" });
-  } else if (base === "main" && branch && (branch.match(/\//g) || []).length >= 2) {
+  } else if (!baseWasExplicit && base === defaultBranch && branch && (branch.match(/\//g) || []).length >= 2) {
     checks.push({ name: "sub-branch-warning", value: branch, message: "Branch looks like a sub-branch but no parent branch was found. Push the integration branch first." });
     errors.push(`Branch '${branch}' looks like a sub-branch (2+ path segments) but no parent branch exists. Push the integration branch first, or pass an explicit base.`);
   }

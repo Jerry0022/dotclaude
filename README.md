@@ -6,6 +6,16 @@
 
 Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and templates that make shipping faster, safer, and smarter.
 
+> ## ⚠ Warning — AI automation can affect your system in ways you can't fully predict
+>
+> This plugin drives AI-powered automation (hooks, skills, agents) that runs shell commands, modifies files, rewrites branches, pushes to remotes, and launches external apps on your behalf. **Claude's behavior cannot be fully foreseen.** Under edge cases this plugin may contribute to:
+>
+> - **Data or code loss** — bad merges, overwritten work, resets to the wrong commit, deletion of uncommitted changes
+> - **Unintended external side effects** — commits, PRs, or comments published before you meant to share them; automatic app launches; dependency installs
+> - **System changes** — modified git config, installed packages, background processes
+>
+> Built-in safeguards (ship enforcement, token guards, merge-safety rules) reduce the risk but **never replace your own review**. Work in a version-controlled tree, keep backups of anything you cannot afford to lose, and read what Claude is about to do before approving a shell command or confirming a ship. **Use this plugin at your own risk** — the MIT license disclaims all warranty.
+
 ## Features
 
 - **13 Hooks** — automated guards and triggers across the full session lifecycle
@@ -199,6 +209,22 @@ Combined workflows: `/codex:rescue` for pre-ship code review, parallel investiga
 as alternative to `/devops-deep-research`, and QA-integrated review for complex changes.
 
 See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
+
+## Supported Stacks
+
+This plugin is built and actively tested against a specific stack. Outside that stack, hooks and skills may work, degrade gracefully, or not run at all — anything not listed as **supported** is best-effort.
+
+| Area | Supported | Behavior outside |
+|---|---|---|
+| **OS** | Windows, macOS, Linux | Other platforms: AnythingLLM lifecycle reports `unsupported-platform`; core git / skill flows still run via Node + git |
+| **Shell** | bash (Git-Bash on Windows), zsh | PowerShell / cmd are untested — use Git-Bash or WSL on Windows |
+| **Git hosting** | GitHub (via `gh` CLI) | GitLab / Gitea / Bitbucket / self-hosted: issue tracking, PR creation, and ship release will fail. Local / push-only flows still work |
+| **Default branch** | Auto-detected from `origin/HEAD` (`main`, `master`, or any other name) | Detached HEAD or missing `origin/HEAD`: falls back to `main` |
+| **Build system** | `npm` — auto-detects `build`, `lint`, `test` scripts in `package.json` | No `package.json`: build / lint / test steps are **silently skipped**. pnpm, yarn, pytest, cargo, go test, maven, gradle etc. are **not invoked** |
+| **Local LLM** | AnythingLLM Desktop (HTTP API) | Feature degrades gracefully — `local_generate` becomes unavailable, all main flows continue normally |
+| **Node runtime** | Node.js 20+ | Older Node: MCP server and hooks may fail to start |
+
+If your stack differs, extend the plugin per-project via the 3-layer extension model — see [Customization](#customization).
 
 ## Project Structure
 
