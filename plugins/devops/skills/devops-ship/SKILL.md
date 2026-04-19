@@ -62,13 +62,14 @@ Run preflight, resolve any merge-safety issues autonomously, and re-check — re
 
 Call `ship_preflight` MCP tool (dotclaude-ship server).
 **CRITICAL:** Always pass `cwd` — the MCP server runs in the plugin directory, not the target repo.
+Omit `base` to let the tool auto-detect it.
 ```
-ship_preflight({ base: "main", cwd: "<current working directory>" })
+ship_preflight({ cwd: "<current working directory>" })
 ```
 
 The tool **auto-detects** the correct base branch:
 - If on a sub-branch like `feat/42-video-filters/core`, it detects `feat/42-video-filters` as the parent and uses it as base.
-- If no parent branch is found, it ships to `main` (default).
+- Otherwise it uses the repository's default branch (resolves `origin/HEAD` — typically `main`, but `master` or any other name works too). Falls back to `main` if `origin/HEAD` is not set.
 - You can override by passing an explicit base: `ship_preflight({ base: "feat/42", cwd: "<cwd>" })`.
 
 Check the result:

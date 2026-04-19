@@ -160,6 +160,21 @@ export function getWorktreeBranches(opts) {
 }
 
 /**
+ * Detect the repository's default branch (the branch `origin/HEAD` points to,
+ * typically "main" or "master"). Returns null if origin/HEAD is not set.
+ *
+ * Callers should fall back to "main" when null is returned — a repo without
+ * origin/HEAD is either a fresh local repo or one whose remote.origin.HEAD
+ * was never resolved (`git remote set-head origin --auto`).
+ */
+export function detectDefaultBranch(opts) {
+  const ref = git("symbolic-ref --short refs/remotes/origin/HEAD", opts);
+  if (!ref) return null;
+  // `symbolic-ref --short` returns e.g. "origin/main" — strip the remote prefix.
+  return ref.startsWith("origin/") ? ref.slice("origin/".length) : ref;
+}
+
+/**
  * Check if a branch exists locally or on origin.
  */
 export function branchExists(name, opts) {
