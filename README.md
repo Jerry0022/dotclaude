@@ -1,20 +1,14 @@
 # dotclaude
 
-**Version: 0.53.1**
+**Version: 0.53.2**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
 Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and templates that make shipping faster, safer, and smarter.
 
-> ## ⚠ Warning — AI automation can affect your system in ways you can't fully predict
+> ⚠ **AI runs commands on your machine.** Hooks, skills, and agents execute shell commands, edit files, push to remotes, and launch apps autonomously. Built-in safeguards reduce risk but do not replace your review.
 >
-> This plugin drives AI-powered automation (hooks, skills, agents) that runs shell commands, modifies files, rewrites branches, pushes to remotes, and launches external apps on your behalf. **Claude's behavior cannot be fully foreseen.** Under edge cases this plugin may contribute to:
->
-> - **Data or code loss** — bad merges, overwritten work, resets to the wrong commit, deletion of uncommitted changes
-> - **Unintended external side effects** — commits, PRs, or comments published before you meant to share them; automatic app launches; dependency installs
-> - **System changes** — modified git config, installed packages, background processes
->
-> Built-in safeguards (ship enforcement, token guards, merge-safety rules) reduce the risk but **never replace your own review**. Work in a version-controlled tree, keep backups of anything you cannot afford to lose, and read what Claude is about to do before approving a shell command or confirming a ship. **Use this plugin at your own risk** — the MIT license disclaims all warranty.
+> Work in a versioned tree. Keep backups. Read what Claude proposes before approving. **Use at your own risk** — MIT license disclaims all warranty.
 
 ## Features
 
@@ -291,7 +285,7 @@ Your mileage may vary. Your sanity will not.
 
 Every task ends with a completion card — a structured signal showing what happened, the repo state, and what comes next. The card is always the last thing in the response.
 
-**Shipped example** — after a successful PR merge:
+**shipped** — after a successful PR merge:
 
 ```
 ---
@@ -321,7 +315,10 @@ Wk  ▓▓░░░░░░░░░░   18% (+2% ! )  · Reset 5d 3h
 ---
 ```
 
-**Test example** — app running, user must verify:
+<details>
+<summary><strong>See all other variants</strong> — test, ready, blocked, minimal-start, research, aborted, fallback</summary>
+
+### test — app running, user must verify
 
 ```
 ---
@@ -354,9 +351,6 @@ Wk  ▓▓▓░░░░░░░░░   27% (+3% ! )  · Reset 4d 16h
 
 ---
 ```
-
-<details>
-<summary><strong>All 8 variants</strong></summary>
 
 ### shipped (direct push, no version bump)
 
