@@ -1,44 +1,50 @@
 # Model Configuration Reference — AnythingLLM Backend
 
 The backend app is **AnythingLLM Desktop** — the user installs it once and
-generates an API key. The plugin then talks to a workspace via HTTP, **pins
-the workspace to a specific chat model** (so a system-default change does
-not silently swap the model), and falls back to a secondary model if the
-primary is unavailable.
+generates an API key. The plugin then talks to a workspace via HTTP.
+
+**The chat model is owned by the user inside AnythingLLM.** The plugin does
+not pin, swap, or probe models. Whatever the workspace is configured with is
+what `local_generate` will use. The SessionStart hook only reads the active
+`chatModel` and surfaces a recommendation when none is set.
 
 ## Recommended setup
 
 | Property | Value |
 |----------|-------|
 | Backend app | AnythingLLM Desktop (https://anythingllm.com/download) |
-| Provider key (API) | `anythingllm_ollama` (AnythingLLM's built-in native LLM) |
-| Primary model | `hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16` (Gemma 4 E4B, HF/Bartowski, bf16 full precision) |
-| Fallback model | `gemma3n:e4b` (Gemma 3n 4B effective, ~7.5 GB, from Ollama registry) |
+| Provider | Ollama (built-in native LLM in AnythingLLM) |
+| Recommended model | **Gemma 4 E4B** (Bartowski GGUF, bf16 full precision) |
+| → HuggingFace page | https://huggingface.co/bartowski/google_gemma-4-E4B-it-GGUF |
+| → Ollama pull tag | `hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16` |
 | Plugin workspace slug | `claude-code` |
 | API port | 3001 (AnythingLLM default) |
 
 The plugin:
 
 1. Auto-creates the `claude-code` workspace on first successful connect.
-2. Pins `chatProvider` and `chatModel` on the workspace.
-3. Sends a 4-token probe chat. If the primary model fails, the plugin
-   re-pins the workspace to the fallback model.
+2. Reads the workspace's `chatModel` on each SessionStart and shows it in
+   the ready banner.
+3. If no model is configured, emits a one-shot recommendation with the
+   HuggingFace GGUF URL and the `ollama pull` command. Any other model the
+   user sets in AnythingLLM also works — the plugin does not enforce.
 
-GPU offload, KV-cache quantization, and context size remain inside
-AnythingLLM's settings — outside this plugin's scope.
-
-> **Note on the provider name.** The API key is `anythingllm_ollama`, but
-> AnythingLLM Desktop ships its own bundled native LLM runtime. It is not
-> the standalone Ollama daemon on port 11434.
+GPU offload, KV-cache quantization, context size, temperature caps, and
+model selection all remain inside AnythingLLM's settings — outside this
+plugin's scope.
 
 ## One-time user steps
 
 1. Install AnythingLLM Desktop.
 2. Open it → Settings → **Developer API** → **Generate API Key**.
-3. Provider setup: pick **Ollama**, pull `hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16`
-   (HuggingFace GGUF URL — supported by Ollama ≥ v0.3.13; must be pulled via
-   the AnythingLLM UI or `ollama pull`, the AnythingLLM REST API cannot trigger
-   the download). Alternatively select another model — the plugin does not enforce.
+3. Provider setup: pick **Ollama**, pull the recommended model
+   **Gemma 4 E4B** —
+   HuggingFace page: <https://huggingface.co/bartowski/google_gemma-4-E4B-it-GGUF>,
+   Ollama pull tag: `hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16`
+   (HuggingFace GGUF — supported by Ollama ≥ v0.3.13; must be pulled via the
+   AnythingLLM UI or `ollama pull`, the AnythingLLM REST API cannot trigger
+   the download).
+   Any other model works too — the plugin uses whatever is configured.
 4. Run the `local-llm-setup` skill in Claude Code to save the API key.
 
 ## Config layering
@@ -74,11 +80,8 @@ The setup skill always writes to the user layer.
     "autoLaunch": true,
     "launchTimeoutMs": 30000,
     "pollIntervalMs": 1000,
-    "chatProvider": "anythingllm_ollama",
-    "chatModel": "hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16",
-    "fallbackChatModel": "gemma3n:e4b",
-    "pinWorkspace": true,
-    "probeOnPin": true
+    "recommendedModel": "hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16",
+    "recommendedModelUrl": "https://huggingface.co/bartowski/google_gemma-4-E4B-it-GGUF"
   },
   "generation": {
     "temperature": 0.2,
@@ -92,13 +95,11 @@ The setup skill always writes to the user layer.
 | `baseUrl` | AnythingLLM API root. Keep default unless the app runs on a different port/host. |
 | `apiKey` | User-global secret. Only read from `~/.claude/local-llm/config.json`. |
 | `workspaceSlug` | Workspace the plugin talks to. Auto-created if missing. |
+| `workspaceName` | Human-readable name used when the workspace is auto-created. |
 | `autoLaunch` | If true, the SessionStart hook launches AnythingLLM when installed but not running. |
 | `launchTimeoutMs` | How long the hook waits for the API to become reachable after launch (advisory; the hook itself never blocks the prompt). |
-| `chatProvider` | Provider key passed to AnythingLLM workspace update. Default `anythingllm_ollama` (built-in native LLM). |
-| `chatModel` | Primary model the workspace is pinned to. |
-| `fallbackChatModel` | Used if the probe chat against `chatModel` fails. Set to `null` to disable fallback. |
-| `pinWorkspace` | Default `true`. If `false`, plugin leaves workspace at AnythingLLM's system default. |
-| `probeOnPin` | Default `true`. After pinning, sends a 4-token chat to verify the model loads. |
+| `recommendedModel` | Ollama pull tag shown in the ready banner when the workspace has no `chatModel` set. Not enforced — the user's AnythingLLM selection always wins. |
+| `recommendedModelUrl` | HuggingFace page for the recommended model, shown alongside the Ollama tag in the recommendation block. |
 | `generation.temperature` | Default sampling temperature for `local_generate`. Keep ≤ 0.5 for code. |
 | `generation.maxTokens` | Upper bound on completion length. |
 
@@ -127,3 +128,4 @@ The SessionStart hook and `local_status` tool return one of these phases:
 | Slow first completion | Ollama is loading the model into VRAM | One-time — subsequent calls are fast |
 | `auth_failed` after a working day | User regenerated the key in AnythingLLM UI | Re-run `local-llm-setup` |
 | Garbage or truncated output | `temperature` too high or `maxTokens` too low | Adjust `generation.*` in user config |
+| No `Model:` line in ready banner | Workspace has no `chatModel` set | Configure a chat model in AnythingLLM → Workspace Settings → Chat Settings |

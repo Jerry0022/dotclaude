@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.llm.health
- * @version 0.2.0
+ * @version 0.3.0
  * @event SessionStart
  * @plugin local-llm
  * @description AnythingLLM health probe + non-blocking auto-setup.
@@ -15,6 +15,10 @@
  *     5. auth_failed       — /api/v1/auth returned 401/403
  *     6. configuring       — API reachable, workspace missing; create async
  *     7. ready             — API reachable, workspace present → tool enabled
+ *
+ *   Model choice is owned by the user inside AnythingLLM. This hook never
+ *   pins or overrides it; it only reads whatever `chatModel` the workspace
+ *   is currently on and surfaces a recommendation if none is set.
  *
  *   The hook NEVER blocks the prompt for long-running work. Model loading,
  *   workspace creation, and first-time app launches run async in the
@@ -39,11 +43,8 @@ const WORKSPACE_SLUG = CONFIG.anythingllm?.workspaceSlug || 'claude-code';
 const WORKSPACE_NAME = CONFIG.anythingllm?.workspaceName || 'Claude Code';
 const AUTO_LAUNCH = CONFIG.anythingllm?.autoLaunch !== false;
 const API_KEY = CONFIG.anythingllm?.apiKey || '';
-const CHAT_PROVIDER = CONFIG.anythingllm?.chatProvider || 'anythingllm_ollama';
-const CHAT_MODEL = CONFIG.anythingllm?.chatModel || 'hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16';
-const FALLBACK_CHAT_MODEL = CONFIG.anythingllm?.fallbackChatModel || 'gemma3n:e4b';
-const PIN_WORKSPACE = CONFIG.anythingllm?.pinWorkspace !== false;
-const PROBE_ON_PIN = CONFIG.anythingllm?.probeOnPin !== false;
+const RECOMMENDED_MODEL = CONFIG.anythingllm?.recommendedModel || 'hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16';
+const RECOMMENDED_MODEL_URL = CONFIG.anythingllm?.recommendedModelUrl || 'https://huggingface.co/bartowski/google_gemma-4-E4B-it-GGUF';
 
 function emit(phase, instructions) {
   process.stdout.write(`[local-llm] phase: ${phase}\n${instructions}\n`);
@@ -57,16 +58,23 @@ function disabledHint(reason) {
   );
 }
 
-function readyInstructions(activeModel, primaryModel) {
-  const modelLine = activeModel ? `Model: ${activeModel} (pinned).\n` : '';
-  let warning = '';
-  if (activeModel && primaryModel && activeModel !== primaryModel) {
-    const looksLikeUrl = primaryModel.startsWith('hf.co/') || primaryModel.includes('://');
-    const howToLoad = looksLikeUrl
-      ? `AnythingLLM has not loaded the configured primary model yet. Integrate it via this link (HuggingFace GGUF — supported by Ollama ≥ v0.3.13):\n   ${primaryModel}\nPull it in AnythingLLM → Settings → AI Providers → Ollama, or from a terminal: \`ollama pull ${primaryModel}\`.`
-      : `AnythingLLM has not loaded the configured primary model "${primaryModel}". Pull it in AnythingLLM → Settings → AI Providers.`;
-    warning = `[local-llm] ⚠ Using fallback model "${activeModel}" — primary not available.\n${howToLoad}\n\n`;
-  }
+function recommendationBlock() {
+  return (
+    `[local-llm] ⚠ No chat model configured in workspace "${WORKSPACE_SLUG}".\n` +
+    `Recommended: Gemma 4 E4B (Bartowski GGUF, bf16 full precision).\n` +
+    `   HuggingFace: ${RECOMMENDED_MODEL_URL}\n` +
+    `   Ollama tag:  ${RECOMMENDED_MODEL}\n` +
+    `Pull via AnythingLLM → Settings → AI Providers → Ollama (paste the Ollama tag — ` +
+    `supported by Ollama ≥ v0.3.13), or from a terminal: \`ollama pull ${RECOMMENDED_MODEL}\`.\n` +
+    `Any other model configured in AnythingLLM will also work.\n\n`
+  );
+}
+
+function readyInstructions(activeModel) {
+  const warning = activeModel ? '' : recommendationBlock();
+  const modelLine = activeModel
+    ? `Model: ${activeModel} (as configured in AnythingLLM).\n`
+    : '';
   return (
     warning +
     `[local-llm] Local LLM is ready via mcp__plugin_local-llm_dotclaude-local-llm__local_generate.\n` +
@@ -83,73 +91,9 @@ function readyInstructions(activeModel, primaryModel) {
   );
 }
 
-async function probeChat() {
-  const res = await http.chatCompletion(BASE_URL, API_KEY, {
-    workspaceSlug: WORKSPACE_SLUG,
-    messages: [{ role: 'user', content: 'ping' }],
-    temperature: 0,
-    maxTokens: 4,
-  });
-  return res.ok && typeof res.content === 'string';
-}
-
-async function pinWorkspace(model) {
-  const res = await http.updateWorkspace(BASE_URL, API_KEY, WORKSPACE_SLUG, {
-    chatProvider: CHAT_PROVIDER,
-    chatModel: model,
-  });
-  return res.ok && res.workspace?.chatModel === model;
-}
-
-// Try a candidate model: pin → probe. Returns model name on success, null on failure.
-async function tryModel(model) {
-  if (!model) return null;
-  const pinned = await pinWorkspace(model);
-  if (!pinned) return null;
-  if (!PROBE_ON_PIN) return model;
-  const works = await probeChat();
-  return works ? model : null;
-}
-
-async function ensureWorkspacePin() {
-  if (!PIN_WORKSPACE) return null;
-
-  const current = await http.getWorkspace(BASE_URL, API_KEY, WORKSPACE_SLUG);
-  const currentModel = current.workspace?.chatModel || null;
-
-  // Already on a configured target — trust it without re-probing (avoids
-  // burning a chat on every SessionStart).
-  if (currentModel === CHAT_MODEL || (FALLBACK_CHAT_MODEL && currentModel === FALLBACK_CHAT_MODEL)) {
-    return currentModel;
-  }
-
-  const primary = await tryModel(CHAT_MODEL);
-  if (primary) {
-    process.stderr.write(`[local-llm] pinned workspace to primary model: ${primary}\n`);
-    return primary;
-  }
-
-  if (FALLBACK_CHAT_MODEL && FALLBACK_CHAT_MODEL !== CHAT_MODEL) {
-    const fallback = await tryModel(FALLBACK_CHAT_MODEL);
-    if (fallback) {
-      process.stderr.write(
-        `[local-llm] primary model "${CHAT_MODEL}" unavailable — pinned fallback: ${fallback}\n`
-      );
-      return fallback;
-    }
-  }
-
-  // Both candidates failed. Restore the previous model so the workspace
-  // stays usable, and surface the situation on stderr.
-  if (currentModel) {
-    await pinWorkspace(currentModel);
-    process.stderr.write(
-      `[local-llm] neither "${CHAT_MODEL}" nor "${FALLBACK_CHAT_MODEL || '(none)'}" is loaded in ` +
-      `AnythingLLM. Restored "${currentModel}". Pull a configured model in AnythingLLM ` +
-      `Settings → AI Providers, or change "chatModel" in the plugin config.\n`
-    );
-  }
-  return currentModel;
+async function readWorkspaceModel() {
+  const res = await http.getWorkspace(BASE_URL, API_KEY, WORKSPACE_SLUG);
+  return res.ok ? (res.workspace?.chatModel || null) : null;
 }
 
 (async () => {
@@ -190,8 +134,8 @@ async function ensureWorkspacePin() {
 
     const exists = ws.workspaces.some((w) => w.slug === WORKSPACE_SLUG);
     if (exists) {
-      const activeModel = await ensureWorkspacePin();
-      emit('ready', readyInstructions(activeModel, CHAT_MODEL));
+      const activeModel = await readWorkspaceModel();
+      emit('ready', readyInstructions(activeModel));
       return;
     }
 

@@ -7,11 +7,8 @@
     "autoLaunch": true,
     "launchTimeoutMs": 30000,
     "pollIntervalMs": 1000,
-    "chatProvider": "anythingllm_ollama",
-    "chatModel": "hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16",
-    "fallbackChatModel": "gemma3n:e4b",
-    "pinWorkspace": true,
-    "probeOnPin": true
+    "recommendedModel": "hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16",
+    "recommendedModelUrl": "https://huggingface.co/bartowski/google_gemma-4-E4B-it-GGUF"
   },
   "generation": {
     "temperature": 0.2,
