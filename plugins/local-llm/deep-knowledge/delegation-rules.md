@@ -10,7 +10,7 @@ The local model is a fast code printer for mechanical tasks — it saves Claude'
 tokens on work that doesn't need frontier-model intelligence.
 
 The backend is a local AnythingLLM Desktop workspace. The actual model is
-whatever AnythingLLM is configured to use (recommended: Ollama + `gemma4:e4b`).
+whatever AnythingLLM is configured to use (recommended: Ollama + `hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16`).
 Broad capability assumptions:
 - **Good at:** Pattern completion, syntax, following exact specs, single-function code
 - **Bad at:** Multi-step reasoning, cross-file context, ambiguity resolution, API knowledge

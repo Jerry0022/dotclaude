@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.53.1] — 2026-04-19
+
+### Changed
+
+- **plugins/local-llm/scripts/config.json** + **plugins/local-llm/hooks/session-start/ss.llm.health.js** + **plugins/local-llm/skills/local-llm-setup/SKILL.md** + **plugins/local-llm/deep-knowledge/{delegation-rules,model-config}.md** — unified primary-model identifier across config, defaults, setup skill, and docs. Previously the config/defaults used the full HuggingFace URL while the docs recommended the short Ollama tag `gemma4:e4b` (which is not in Ollama's public registry and would never match the pinned workspace). All references now agree on `hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16` (bf16 full-precision variant, verified pullable via `ollama pull`)
+
+### Added
+
+- **plugins/local-llm/hooks/session-start/ss.llm.health.js** — `readyInstructions()` now renders a `⚠ Using fallback model` warning block in the SessionStart banner when the active model differs from the configured primary. The warning surfaces the HuggingFace link and the exact `ollama pull <url>` command so the user can load the primary model without leaving chat. Fires whenever the probe-backed pin cascade (primary → fallback) lands on anything other than the configured primary
+
 ## [0.53.0] — 2026-04-19
 
 ### Added

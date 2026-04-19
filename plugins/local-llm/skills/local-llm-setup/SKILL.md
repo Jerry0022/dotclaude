@@ -26,7 +26,8 @@ Before asking for the key, tell the user what they need:
 >   1. Open AnythingLLM.
 >   2. Settings → **Developer API** → **Generate API Key**.
 >   3. Copy the key.
->   4. (Recommended) Configure the LLM provider to **Ollama** with model **`gemma4:e4b`**.
+>   4. (Recommended) Configure the LLM provider to **Ollama** with model **`hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16`**
+>      (HuggingFace GGUF — supported by Ollama ≥ v0.3.13; pull via the AnythingLLM UI or `ollama pull`).
 >      If Ollama is not installed, AnythingLLM can download it during the provider setup.
 
 ## Step 2 — Ask for the key

@@ -12,7 +12,7 @@ primary is unavailable.
 |----------|-------|
 | Backend app | AnythingLLM Desktop (https://anythingllm.com/download) |
 | Provider key (API) | `anythingllm_ollama` (AnythingLLM's built-in native LLM) |
-| Primary model | `hf.co/bartowski/google_gemma-4-e4b-it-gguf:q4_k_m` (Gemma 4 E4B, HF/Bartowski, Q4_K_M) |
+| Primary model | `hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16` (Gemma 4 E4B, HF/Bartowski, bf16 full precision) |
 | Fallback model | `gemma3n:e4b` (Gemma 3n 4B effective, ~7.5 GB, from Ollama registry) |
 | Plugin workspace slug | `claude-code` |
 | API port | 3001 (AnythingLLM default) |
@@ -35,8 +35,10 @@ AnythingLLM's settings — outside this plugin's scope.
 
 1. Install AnythingLLM Desktop.
 2. Open it → Settings → **Developer API** → **Generate API Key**.
-3. Provider setup: pick **Ollama**, let AnythingLLM pull `gemma4:e4b` (or
-   select another model if the user prefers; the plugin does not enforce).
+3. Provider setup: pick **Ollama**, pull `hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16`
+   (HuggingFace GGUF URL — supported by Ollama ≥ v0.3.13; must be pulled via
+   the AnythingLLM UI or `ollama pull`, the AnythingLLM REST API cannot trigger
+   the download). Alternatively select another model — the plugin does not enforce.
 4. Run the `local-llm-setup` skill in Claude Code to save the API key.
 
 ## Config layering
@@ -73,7 +75,7 @@ The setup skill always writes to the user layer.
     "launchTimeoutMs": 30000,
     "pollIntervalMs": 1000,
     "chatProvider": "anythingllm_ollama",
-    "chatModel": "hf.co/bartowski/google_gemma-4-e4b-it-gguf:q4_k_m",
+    "chatModel": "hf.co/bartowski/google_gemma-4-e4b-it-gguf:bf16",
     "fallbackChatModel": "gemma3n:e4b",
     "pinWorkspace": true,
     "probeOnPin": true
