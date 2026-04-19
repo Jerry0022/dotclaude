@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.54.0] — 2026-04-19
+
+### Changed
+
+- **plugins/local-llm/scripts/config.json** + **plugins/local-llm/hooks/session-start/ss.llm.health.js** + **plugins/local-llm/hooks/lib/anythingllm-config.js** — dropped workspace model pinning. The plugin no longer sets `chatProvider`/`chatModel` on the workspace, no longer runs a 4-token probe, and no longer falls back to a secondary model. `local_generate` uses whatever the user configured in AnythingLLM. This removes ~60 lines of stateful pin/probe/fallback logic and the failure mode where SessionStart silently rewrites the user's model selection
+- **plugins/local-llm/deep-knowledge/model-config.md** + **plugins/local-llm/skills/local-llm-setup/SKILL.md** — docs reframed around "the user owns the model"; recommendation now cites the HuggingFace page alongside the Ollama pull tag so users can verify the source before pulling
+
+### Added
+
+- **plugins/local-llm/scripts/config.json** — new `anythingllm.recommendedModel` (Ollama pull tag) and `anythingllm.recommendedModelUrl` (HuggingFace page) fields. Used only to render the one-shot recommendation banner when the workspace has no `chatModel` set. Both overridable per user/project layer
+- **plugins/local-llm/hooks/session-start/ss.llm.health.js** — recommendation block in the ready banner (emitted only when `workspace.chatModel` is empty) listing the HF page, the Ollama tag, and the `ollama pull` command
+
+### Removed
+
+- **plugins/local-llm/scripts/config.json** — `anythingllm.chatProvider`, `anythingllm.chatModel`, `anythingllm.fallbackChatModel`, `anythingllm.pinWorkspace`, `anythingllm.probeOnPin`. Any values at user/project layer are now silently ignored — no migration needed, the plugin simply stops touching model settings
+
 ## [0.53.2] — 2026-04-19
 
 ### Changed
