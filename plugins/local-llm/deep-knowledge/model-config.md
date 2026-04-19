@@ -1,23 +1,35 @@
 # Model Configuration Reference — AnythingLLM Backend
 
-This plugin does not manage any model itself. The local LLM is owned by
-**AnythingLLM Desktop** — the user installs it once, generates an API key,
-and configures the underlying LLM inside the AnythingLLM UI. This plugin
-just speaks HTTP to the workspace.
+The backend app is **AnythingLLM Desktop** — the user installs it once and
+generates an API key. The plugin then talks to a workspace via HTTP, **pins
+the workspace to a specific chat model** (so a system-default change does
+not silently swap the model), and falls back to a secondary model if the
+primary is unavailable.
 
 ## Recommended setup
 
 | Property | Value |
 |----------|-------|
 | Backend app | AnythingLLM Desktop (https://anythingllm.com/download) |
-| LLM provider | Ollama |
-| Model | `gemma4:e4b` (≈4.5B effective params, dense transformer) |
+| Provider key (API) | `anythingllm_ollama` (AnythingLLM's built-in native LLM) |
+| Primary model | `hf.co/bartowski/google_gemma-4-e4b-it-gguf:q4_k_m` (Gemma 4 E4B, HF/Bartowski, Q4_K_M) |
+| Fallback model | `gemma3n:e4b` (Gemma 3n 4B effective, ~7.5 GB, from Ollama registry) |
 | Plugin workspace slug | `claude-code` |
 | API port | 3001 (AnythingLLM default) |
 
-The plugin auto-creates the `claude-code` workspace on first successful
-connect. Model choice, GPU offload, KV-cache quantization, and context size
-are all managed inside AnythingLLM's settings — outside this plugin's scope.
+The plugin:
+
+1. Auto-creates the `claude-code` workspace on first successful connect.
+2. Pins `chatProvider` and `chatModel` on the workspace.
+3. Sends a 4-token probe chat. If the primary model fails, the plugin
+   re-pins the workspace to the fallback model.
+
+GPU offload, KV-cache quantization, and context size remain inside
+AnythingLLM's settings — outside this plugin's scope.
+
+> **Note on the provider name.** The API key is `anythingllm_ollama`, but
+> AnythingLLM Desktop ships its own bundled native LLM runtime. It is not
+> the standalone Ollama daemon on port 11434.
 
 ## One-time user steps
 
@@ -59,7 +71,12 @@ The setup skill always writes to the user layer.
     "workspaceName": "Claude Code",
     "autoLaunch": true,
     "launchTimeoutMs": 30000,
-    "pollIntervalMs": 1000
+    "pollIntervalMs": 1000,
+    "chatProvider": "anythingllm_ollama",
+    "chatModel": "hf.co/bartowski/google_gemma-4-e4b-it-gguf:q4_k_m",
+    "fallbackChatModel": "gemma3n:e4b",
+    "pinWorkspace": true,
+    "probeOnPin": true
   },
   "generation": {
     "temperature": 0.2,
@@ -75,6 +92,11 @@ The setup skill always writes to the user layer.
 | `workspaceSlug` | Workspace the plugin talks to. Auto-created if missing. |
 | `autoLaunch` | If true, the SessionStart hook launches AnythingLLM when installed but not running. |
 | `launchTimeoutMs` | How long the hook waits for the API to become reachable after launch (advisory; the hook itself never blocks the prompt). |
+| `chatProvider` | Provider key passed to AnythingLLM workspace update. Default `anythingllm_ollama` (built-in native LLM). |
+| `chatModel` | Primary model the workspace is pinned to. |
+| `fallbackChatModel` | Used if the probe chat against `chatModel` fails. Set to `null` to disable fallback. |
+| `pinWorkspace` | Default `true`. If `false`, plugin leaves workspace at AnythingLLM's system default. |
+| `probeOnPin` | Default `true`. After pinning, sends a 4-token chat to verify the model loads. |
 | `generation.temperature` | Default sampling temperature for `local_generate`. Keep ≤ 0.5 for code. |
 | `generation.maxTokens` | Upper bound on completion length. |
 

@@ -19,19 +19,34 @@ const { spawn, execFileSync } = require('node:child_process');
 
 const DOWNLOAD_URL = 'https://anythingllm.com/download';
 
+// Observed executable and process names across AnythingLLM Desktop installers.
+// The installer name (the .exe on disk) and the runtime image name (what
+// Windows reports in tasklist) are NOT guaranteed to match — the Electron
+// app manifest can rename the runtime image.
+const EXE_NAMES = ['AnythingLLM.exe', 'AnythingLLMDesktop.exe'];
+const PROCESS_NAMES = ['AnythingLLMDesktop.exe', 'AnythingLLM.exe'];
+
 function candidatePaths() {
   const home = os.homedir();
   const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
   const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
   const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
 
-  return [
-    path.join(localAppData, 'Programs', 'anythingllm-desktop', 'AnythingLLM.exe'),
-    path.join(localAppData, 'Programs', 'AnythingLLMDesktop', 'AnythingLLM.exe'),
-    path.join(localAppData, 'AnythingLLM', 'AnythingLLM.exe'),
-    path.join(programFiles, 'AnythingLLM', 'AnythingLLM.exe'),
-    path.join(programFilesX86, 'AnythingLLM', 'AnythingLLM.exe'),
+  // Directory layouts observed across installer versions.
+  const dirs = [
+    path.join(localAppData, 'Programs', 'AnythingLLM'),
+    path.join(localAppData, 'Programs', 'anythingllm-desktop'),
+    path.join(localAppData, 'Programs', 'AnythingLLMDesktop'),
+    path.join(localAppData, 'AnythingLLM'),
+    path.join(programFiles, 'AnythingLLM'),
+    path.join(programFilesX86, 'AnythingLLM'),
   ];
+
+  const paths = [];
+  for (const d of dirs) {
+    for (const exe of EXE_NAMES) paths.push(path.join(d, exe));
+  }
+  return paths;
 }
 
 function detectInstallation() {
@@ -45,16 +60,17 @@ function detectInstallation() {
 
 function isProcessRunning() {
   if (process.platform !== 'win32') return false;
-  try {
-    const out = execFileSync(
-      'tasklist',
-      ['/FI', 'IMAGENAME eq AnythingLLM.exe', '/NH'],
-      { encoding: 'utf8', timeout: 3000 }
-    );
-    return /AnythingLLM\.exe/i.test(out);
-  } catch {
-    return false;
+  for (const name of PROCESS_NAMES) {
+    try {
+      const out = execFileSync(
+        'tasklist',
+        ['/FI', `IMAGENAME eq ${name}`, '/NH'],
+        { encoding: 'utf8', timeout: 3000 }
+      );
+      if (new RegExp(name.replace('.', '\\.'), 'i').test(out)) return true;
+    } catch { /* try next */ }
   }
+  return false;
 }
 
 function launch(exePath) {
