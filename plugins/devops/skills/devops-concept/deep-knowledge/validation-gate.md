@@ -21,6 +21,8 @@ are present. **Grep the generated file** for each required pattern:
 | 14 | `pollReload` | Reload-signal poller (picks up file rewrites) |
 | 15 | `sec.hidden` | Tab-switch JS toggles the `hidden` attribute — prevents all iterations rendering at once |
 | 16 | `pollProcessedState` | Auto-reset poll handler — restores the ready panel when the server's `_processed_at` advances past the local `_submittedAt` |
+| 17 | `section-nav` | Generalised panel TOC — every `data-nav-label` section (variants AND plain sections) gets a scroll anchor |
+| 18 | `data-nav-label` | Marker on nav-eligible sections — required so `buildSectionNav()` can populate the TOC |
 
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. This is a **blocking gate** — no exceptions, no "this

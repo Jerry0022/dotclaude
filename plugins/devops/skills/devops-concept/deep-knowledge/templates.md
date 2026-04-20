@@ -24,6 +24,7 @@ hook) is `de`, swap the matching strings into the rendered HTML and set
 | `panel.close`           | Close                          | Schliessen |
 | `variant.include`       | Include                        | Miteinbeziehen |
 | `iteration.label`       | Iterations                     | Iterationen |
+| `nav.sections`          | Sections                       | Abschnitte |
 
 ## Common Structure (all variants)
 
@@ -41,26 +42,22 @@ hook) is `de`, swap the matching strings into the rendered HTML and set
     <!-- Main content: ~80% width -->
     <div class="concept-content">
       <header>
+        <!-- HEADER MUST STAY LEAN.
+             Keep to <h1> + ONE short subtitle line (or omit subtitle entirely).
+             Do NOT repeat the iteration title/intro here — that belongs INSIDE
+             the active <section data-iteration="N">. Double-intros (header +
+             iteration-intro) eat vertical space and duplicate context. -->
         <h1>{title}</h1>
-        <p class="subtitle">{context line}</p>
+        <p class="subtitle">{optional one-line context — omit if not needed}</p>
         <button id="theme-toggle" aria-label="Toggle theme">🌙/☀️</button>
       </header>
-
-      <!-- Iteration tabs — one entry per iteration, active = current round.
-           Older tabs are clickable but show a frozen snapshot. Anchored here
-           above <main> so the tab bar lives in the decision panel header
-           without crowding the variant content. -->
-      <nav class="iteration-tabs" role="tablist" aria-label="Iterations">
-        <!-- Auto-populated, one tab per <section data-iteration="N">:
-        <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="false">Iteration 1</button>
-        <button class="iteration-tab" role="tab" data-iteration="2" aria-selected="true">Iteration 2</button>
-        -->
-      </nav>
 
       <main>
         <!-- One <section data-iteration="N"> per iteration. Exactly one has
              data-active. All others render their controls disabled/readonly
-             and preserve the values the user submitted that round. -->
+             and preserve the values the user submitted that round.
+             Each iteration section may open with its own iteration-intro
+             block (title + one paragraph) BEFORE the variant/content cards. -->
         <!--
         <section data-iteration="1" hidden>...frozen first round...</section>
         <section data-iteration="2" data-active>...current round (active)...</section>
@@ -72,19 +69,39 @@ hook) is `de`, swap the matching strings into the rendered HTML and set
     <aside class="concept-decision-panel">
       <!-- All visible strings are referenced by key in the locale table above.
            Swap to the `de` column when [ui-locale: de] is active. -->
+
+      <!-- Iteration tabs — live at the TOP of the decision panel (not in the
+           content area). Compact vertical chip list; the active tab shows
+           the current round, older tabs stay clickable but show frozen
+           snapshots when selected. Auto-populated, one entry per
+           <section data-iteration="N">. -->
+      <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}">
+        <!--
+        <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="false">Iteration 1</button>
+        <button class="iteration-tab" role="tab" data-iteration="2" aria-selected="true">Iteration 2 · active</button>
+        -->
+      </nav>
+
       <h3>{{panel.heading}}</h3>
 
-      <!-- Variant Navigation / TOC — each entry is an anchor link -->
-      <nav class="variant-nav" id="variant-nav">
-        <!-- Auto-populated: one entry per variant. Example: -->
+      <!-- Section TOC — auto-populated from EVERY <section id="..."
+           data-nav-label="..."> inside the active iteration, not just variants.
+           Sections that carry a tri-state radio group (eval-{id}) display their
+           current state label; plain sections (Ist-Zustand, Context, Design-Notes,
+           etc.) just show the label and anchor-scroll on click. -->
+      <nav class="section-nav" id="section-nav" aria-label="{{nav.sections}}">
+        <!-- Auto-populated examples: -->
         <!--
-        <a href="#variant-a" class="variant-nav-item" data-variant="variant-a">
-          <span class="variant-nav-label">A Orbital Ring</span>
-          <span class="variant-nav-state">{{variant.include}}</span>
+        <a href="#ist-zustand" class="section-nav-item" data-section-id="ist-zustand">
+          <span class="section-nav-label">Ist-Zustand</span>
         </a>
-        <a href="#variant-b" class="variant-nav-item" data-variant="variant-b">
-          <span class="variant-nav-label">B Hexagonal</span>
-          <span class="variant-nav-state">{{variant.include}}</span>
+        <a href="#variant-a" class="section-nav-item" data-section-id="variant-a" data-variant>
+          <span class="section-nav-label">A Orbital Ring</span>
+          <span class="section-nav-state">{{variant.include}}</span>
+        </a>
+        <a href="#variant-b" class="section-nav-item" data-section-id="variant-b" data-variant>
+          <span class="section-nav-label">B Hexagonal</span>
+          <span class="section-nav-state">{{variant.include}}</span>
         </a>
         -->
       </nav>
@@ -184,11 +201,13 @@ or any content that needs maximum display area.
     <span class="fab-icon">☰</span>
   </button>
 
-  <!-- Slide-in overlay panel -->
+  <!-- Slide-in overlay panel — same content order as the sidebar variant:
+       iteration-tabs, section-nav, decision summary, submit. -->
   <aside class="concept-decision-panel overlay" id="decision-panel">
     <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
+    <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}"><!-- chips --></nav>
     <h3>{{panel.heading}}</h3>
-    <nav class="variant-nav" id="variant-nav"><!-- ... --></nav>
+    <nav class="section-nav" id="section-nav" aria-label="{{nav.sections}}"><!-- TOC --></nav>
     <!-- rest of panel content -->
   </aside>
   <div class="panel-backdrop" id="panel-backdrop"></div>
@@ -289,26 +308,33 @@ if (panelToggle) panelToggle.addEventListener('click', openPanel);
 if (panelClose) panelClose.addEventListener('click', closePanel);
 if (backdrop) backdrop.addEventListener('click', closePanel);
 
-// Close panel on variant nav click (scroll to section)
-document.querySelectorAll('.variant-nav-item').forEach(link => {
-  link.addEventListener('click', () => {
-    closePanel();
-    // small delay so panel closes before scroll
-    setTimeout(() => {
-      const target = document.querySelector(link.getAttribute('href'));
-      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 150);
-  });
-});
+// Close panel on section nav click (scroll to section). Delegated so it
+// works for auto-populated TOC links. Takes precedence over the default
+// smooth-scroll handler because we need to close the overlay first.
+document.addEventListener('click', e => {
+  const link = e.target.closest('.section-nav-item');
+  if (!link) return;
+  if (!document.getElementById('decision-panel')?.classList.contains('open')) return;
+  e.preventDefault();
+  e.stopPropagation();
+  closePanel();
+  setTimeout(() => {
+    const target = document.querySelector(link.getAttribute('href'));
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 150);
+}, true);
 ```
 
-### Variant Navigation CSS (Decision Panel as TOC)
+### Section Navigation CSS (Decision Panel as TOC)
 
-The decision panel doubles as a table-of-contents. Each variant gets a
-clickable nav entry that scrolls to it and shows the current evaluation state.
+The decision panel doubles as a full table-of-contents for the active
+iteration. EVERY major `<section id="…" data-nav-label="…">` inside the
+current iteration gets a clickable nav entry — not just variants. Sections
+with a tri-state radio group additionally display the current evaluation
+state.
 
 ```css
-.variant-nav {
+.section-nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -316,7 +342,7 @@ clickable nav entry that scrolls to it and shows the current evaluation state.
   border-bottom: 1px solid var(--border-color);
   padding-bottom: 1rem;
 }
-.variant-nav-item {
+.section-nav-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -328,22 +354,94 @@ clickable nav entry that scrolls to it and shows the current evaluation state.
   transition: background 0.15s;
   cursor: pointer;
 }
-.variant-nav-item:hover {
+.section-nav-item:hover {
   background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
 }
-.variant-nav-state {
+/* Plain (non-variant) section: only label, centered vertically */
+.section-nav-item:not([data-variant]) .section-nav-label {
+  font-weight: 500;
+  opacity: 0.9;
+}
+/* Variant section: label + state badge */
+.section-nav-state {
   font-size: 0.8rem;
   color: var(--accent-color, #58a6ff);
   white-space: nowrap;
 }
-.variant-nav-state.state-discard { color: var(--danger-color, #f85149); }
-.variant-nav-state.state-only { color: var(--success-color, #3fb950); }
+.section-nav-state.state-discard { color: var(--danger-color, #f85149); }
+.section-nav-state.state-only { color: var(--success-color, #3fb950); }
+/* Active (scrolled-into-view) item */
+.section-nav-item.is-active {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 18%, transparent);
+  font-weight: 600;
+}
 ```
 
-**Variant sections need matching `id` attributes:**
+**Every navigable section needs a matching `id` AND a `data-nav-label`:**
 ```html
-<section id="variant-a" class="variant-card">...</section>
-<section id="variant-b" class="variant-card">...</section>
+<!-- Plain section — TOC entry, scroll only -->
+<section id="ist-zustand" data-nav-label="Ist-Zustand">...</section>
+
+<!-- Variant section — TOC entry + tri-state evaluation -->
+<section id="variant-a" class="variant-card" data-nav-label="A Orbital Ring">...</section>
+<section id="variant-b" class="variant-card" data-nav-label="B Hexagonal">...</section>
+```
+
+Sections without `data-nav-label` are skipped by the TOC auto-populator —
+use that to hide intro/outro blocks that shouldn't appear as anchors.
+
+#### Freeform (no variant evaluation)
+
+When the concept does NOT evaluate mutually-exclusive variants — design
+concepts, mockups, tutorials, explainers, design-system walkthroughs — the
+content area may be fully free-form and the decision panel drops the
+tri-state summary in favor of a single comment + submit block.
+
+Mark the iteration section with `data-freeform`:
+
+```html
+<section id="iter-3" data-iteration="3" data-active data-freeform data-nav-label="Design concept">
+  <header class="iteration-intro">
+    <h2>Iteration 3 · Visual design concept</h2>
+    <p>Your picks from iteration 2 are locked in. This iteration shows the visual treatment.</p>
+  </header>
+
+  <!-- Free-form content: full-width mockup grid, design notes, rationale blocks.
+       Individual subsections still get id + data-nav-label so the panel TOC
+       auto-populates scroll anchors for "Ist-Zustand", "Design notes", etc. -->
+  <section id="ist-zustand" data-nav-label="Ist-Zustand">...</section>
+  <section id="design-notes" data-nav-label="Design notes">...</section>
+  <section id="mockups" data-nav-label="Mockups">...</section>
+</section>
+```
+
+Freeform signals to the panel:
+- No tri-state summary renders in `#decision-summary`
+- The submit block shows a single optional comment field + "Submit"
+- `collectDecisions()` returns `{ submitted: true, decisions: [], comments: [...] }`
+- The TOC still populates from every nested `data-nav-label` section
+
+```css
+/* Freeform iterations: allow full-width content, drop variant-card framing */
+section[data-iteration][data-freeform] {
+  display: block;
+}
+section[data-iteration][data-freeform] > section[id][data-nav-label] {
+  margin-block: 2rem;
+}
+/* Hide the tri-state decision summary when viewing a freeform iteration */
+body.viewing-freeform #decision-summary .variant-summary { display: none; }
+```
+
+```javascript
+// Toggle the freeform body class whenever the active iteration changes.
+// Hook this into showIteration() after it applies data-active / hidden.
+function syncFreeformFlag() {
+  const active = document.querySelector('section[data-iteration][data-active]:not([hidden])');
+  const visible = active || document.querySelector('section[data-iteration]:not([hidden])');
+  document.body.classList.toggle('viewing-freeform', !!(visible && visible.hasAttribute('data-freeform')));
+}
+document.addEventListener('DOMContentLoaded', syncFreeformFlag);
 ```
 
 ### Decision Panel State CSS
@@ -928,44 +1026,107 @@ function collectDecisions() {
 }
 ```
 
-### Variant Navigation JS
+### Section Navigation JS
 
-Smooth-scrolls to the variant section and keeps the evaluation state label
-in sync with the tri-state radio selection.
+Auto-populates the panel TOC from every `<section data-nav-label>` inside
+the active iteration, smooth-scrolls on click, and keeps the evaluation
+state label in sync with the tri-state radio selection (for sections that
+have one). Plain sections without tri-state just get a scroll link.
 
 ```javascript
-// --- Variant Navigation (Decision Panel as TOC) ---
-function updateVariantNav() {
-  document.querySelectorAll('.variant-nav-item').forEach(link => {
-    const variantId = link.dataset.variant;
-    const checked = document.querySelector(`input[name="eval-${variantId}"]:checked`);
+// --- Section Navigation (Decision Panel as TOC) ---
+function buildSectionNav() {
+  const nav = document.getElementById('section-nav');
+  if (!nav) return;
+  const activeIteration = document.querySelector('section[data-iteration][data-active]');
+  if (!activeIteration) return;
+  // Find every nested section with a nav label inside the active iteration.
+  // The iteration section itself is skipped (it has no data-nav-label).
+  const sections = activeIteration.querySelectorAll('section[id][data-nav-label]');
+  nav.innerHTML = '';
+  sections.forEach(sec => {
+    const id = sec.id;
+    const label = sec.dataset.navLabel;
+    const hasTriState = !!sec.querySelector(`input[name="eval-${id}"]`);
+    const link = document.createElement('a');
+    link.href = '#' + id;
+    link.className = 'section-nav-item';
+    link.dataset.sectionId = id;
+    if (hasTriState) link.setAttribute('data-variant', '');
+    const labelEl = document.createElement('span');
+    labelEl.className = 'section-nav-label';
+    labelEl.textContent = label;
+    link.appendChild(labelEl);
+    if (hasTriState) {
+      const stateEl = document.createElement('span');
+      stateEl.className = 'section-nav-state';
+      link.appendChild(stateEl);
+    }
+    nav.appendChild(link);
+  });
+  updateSectionNavState();
+}
+
+function updateSectionNavState() {
+  // i18n labels — swap via the locale table when [ui-locale: de] is active
+  const labels = { include: 'Miteinbeziehen', discard: 'Verwerfen', only: 'Exakt diese' };
+  document.querySelectorAll('.section-nav-item[data-variant]').forEach(link => {
+    const id = link.dataset.sectionId;
+    const checked = document.querySelector(`input[name="eval-${id}"]:checked`);
     const currentState = checked ? checked.value : 'include';
-    const stateEl = link.querySelector('.variant-nav-state');
+    const stateEl = link.querySelector('.section-nav-state');
     if (stateEl) {
-      const labels = { include: 'Miteinbeziehen', discard: 'Verwerfen', only: 'Exakt diese' };
       stateEl.textContent = labels[currentState] || currentState;
-      stateEl.className = 'variant-nav-state state-' + currentState;
+      stateEl.className = 'section-nav-state state-' + currentState;
     }
   });
 }
 
-// Smooth scroll on nav click
-document.querySelectorAll('.variant-nav-item').forEach(link => {
-  link.addEventListener('click', e => {
-    e.preventDefault();
-    const target = document.querySelector(link.getAttribute('href'));
-    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
+// Smooth scroll on nav click (delegated — works for auto-populated links)
+document.addEventListener('click', e => {
+  const link = e.target.closest('.section-nav-item');
+  if (!link) return;
+  e.preventDefault();
+  const target = document.querySelector(link.getAttribute('href'));
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
+// Highlight the current section in the TOC as the user scrolls
+function installScrollSpy() {
+  const items = document.querySelectorAll('.section-nav-item');
+  if (!items.length) return;
+  const byId = new Map();
+  items.forEach(i => byId.set(i.dataset.sectionId, i));
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      const item = byId.get(en.target.id);
+      if (!item) return;
+      if (en.isIntersecting) {
+        items.forEach(i => i.classList.remove('is-active'));
+        item.classList.add('is-active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px', threshold: 0 });
+  byId.forEach((_, id) => {
+    const sec = document.getElementById(id);
+    if (sec) io.observe(sec);
+  });
+}
+
 // Keep nav state in sync
-document.addEventListener('change', updateVariantNav);
-document.addEventListener('DOMContentLoaded', updateVariantNav);
+document.addEventListener('change', updateSectionNavState);
+document.addEventListener('DOMContentLoaded', () => {
+  buildSectionNav();
+  installScrollSpy();
+});
 ```
 
-**Important:** The `data-variant` attribute on each nav item must match the
-radio button name pattern `eval-{variant-id}`. The variant section must have
-the matching `id` attribute for the anchor link to work.
+**Important:**
+- Every navigable `<section>` needs `id` AND `data-nav-label`.
+- If a section has a tri-state radio group, its `name` MUST be `eval-{section-id}`
+  so the TOC can mirror the current state.
+- `buildSectionNav()` must run again after every iteration switch — call it
+  from the `showIteration()` handler so the TOC reflects the active round.
 
 ### Submit Handler
 ```javascript
@@ -1169,9 +1330,10 @@ review.
 ## Iteration Tabs
 
 Iterations of a concept page are appended as `<section data-iteration="N">`
-blocks inside the same HTML file. The tab bar lives **inside the content
-area's header, above `<main>`** — NOT in the right-side decision sidebar
-(which stays reserved for submit controls).
+blocks inside the same HTML file. The tab bar lives **at the top of the
+right-side decision panel** (a compact vertical chip list, rendered above
+the section TOC and submit block). It must NEVER appear inside the
+left-hand content area — the content area is reserved for the concept.
 
 ### Tab Bar HTML
 
@@ -1207,41 +1369,45 @@ Rules:
 
 ### Tab Bar CSS
 
+The tab bar lives at the TOP of the right-side decision panel — not inside
+the content area. Render as a compact vertical chip list (one chip per
+iteration). Falls back to horizontal scroll only when the panel is very
+narrow.
+
 ```css
 .iteration-tabs {
   display: flex;
+  flex-direction: column;
   gap: 4px;
-  overflow-x: auto;
-  padding: 8px 0 0;
-  border-bottom: 1px solid var(--border);
-  scrollbar-width: thin;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-color, #30363d);
 }
 .iteration-tab {
   flex: 0 0 auto;
-  padding: 8px 16px;
-  border: 1px solid var(--border);
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
-  background: var(--bg-subtle);
-  color: var(--fg-muted);
-  font-size: 0.9rem;
+  text-align: left;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 6px;
+  background: var(--bg-subtle, transparent);
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.85rem;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.iteration-tab:hover { background: var(--bg-hover); color: var(--fg); }
+.iteration-tab:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+  color: var(--text-color, #c9d1d9);
+}
 .iteration-tab[aria-selected="true"] {
-  background: var(--bg);
-  color: var(--fg);
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent);
+  color: var(--text-color, #c9d1d9);
+  border-color: var(--accent-color, #58a6ff);
   font-weight: 600;
-  position: relative;
 }
-.iteration-tab[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  left: 0; right: 0; bottom: -1px;
-  height: 2px;
-  background: var(--bg);
+.iteration-tab[aria-selected="true"]::before {
+  content: "● ";
+  color: var(--accent-color, #58a6ff);
 }
 /* Frozen (non-active) iteration: slightly dimmed, no pointer events on inputs */
 section[data-iteration]:not([data-active]) {
@@ -1301,6 +1467,11 @@ function showIteration(n) {
   }
   // Optional passive hint while viewing history
   if (panelFrozen) panelFrozen.style.display = isLive ? 'none' : 'block';
+  // Rebuild the section TOC so it reflects the currently-visible iteration.
+  // (Only the active iteration is navigable; frozen tabs reuse their own
+  // sections but should still be browsable.)
+  if (typeof buildSectionNav === 'function') buildSectionNav();
+  if (typeof syncFreeformFlag === 'function') syncFreeformFlag();
 }
 
 document.querySelectorAll('.iteration-tab').forEach(tab => {
