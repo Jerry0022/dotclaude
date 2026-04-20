@@ -60,12 +60,41 @@ Build a single self-contained HTML file. Requirements:
 - Professional typography, spacing, and color palette
 - Subtle animations for interactions (toggle, expand, submit)
 
+### Page Header (keep it lean)
+
+The `<header>` inside `.concept-content` renders the concept title ONCE.
+
+- `<h1>` with the concept title
+- Optional: one short subtitle line for session context. Omit if not needed.
+- Theme toggle button
+
+**DO NOT** render the iteration title/intro in the page header — that
+duplicates context and burns vertical space before the user reaches actual
+content. The iteration title (e.g. "Iteration 3 · Visual design concept")
+and its intro paragraph live INSIDE the active `<section data-iteration="N">`,
+as a compact `.iteration-intro` block right after the opening tag.
+
 ### Decision Panel Layout
 - The decision panel (submit button + global controls) is a **fixed sidebar**
   on the right side, taking **~20% of the screen width** — NOT an overlay
 - Content area fills the remaining ~80% on the left
 - On mobile/narrow screens: decision panel collapses to bottom (sticky)
 - The panel is always visible while scrolling (position: fixed or sticky)
+
+**Panel top-to-bottom order:**
+1. **Iteration tabs** (`.iteration-tabs`) — compact vertical chip list,
+   one per iteration. Active chip = current round; older chips stay
+   clickable to review frozen snapshots.
+2. **Section TOC** (`.section-nav`) — auto-populated from EVERY
+   `<section id="…" data-nav-label="…">` inside the active iteration.
+   Not limited to variants: Ist-Zustand, context blocks, design notes,
+   mockups — anything with a nav label gets a scroll anchor here.
+3. Decision summary + submit button (or freeform comment + submit when the
+   active iteration carries `data-freeform`).
+4. Connection warning + post-submit state (unchanged).
+
+The iteration tab bar must NOT live inside the left-hand content area.
+The content area is reserved for the actual concept.
 
 ### Interactive Elements (per variant)
 - **Toggles/checkboxes**: For binary decisions (accept/reject, include/exclude)
@@ -75,8 +104,13 @@ Build a single self-contained HTML file. Requirements:
 - **Submit button**: Prominent "Entscheidungen abschicken" button in the
   decision panel sidebar
 
-### Variant Evaluation (when variants exist)
-When the concept presents multiple variants (concept, comparison, or any
+### Variant Evaluation (optional — only when variants exist)
+
+**Variants are a content pattern, not a mandatory structure.** Many concepts
+have no variants to evaluate (design concepts, mockups, tutorials, single-
+approach plans). Those pages run in **freeform mode** — see below.
+
+When the concept DOES present multiple variants (concept, comparison, or any
 multi-option output), each variant MUST include a **tri-state evaluation**:
 
 | State | Label | Type | Behavior |
@@ -100,6 +134,32 @@ BEFORE clicking what kind of effect the selection has:
   warning label directly on or below the button — the user must see this
   before submitting, so they understand clicking Submit will cause Claude to
   actively act on this choice (discard a variant, write code, update a plan, etc.)
+
+### Freeform Mode (no variant evaluation)
+
+When the iteration has nothing to evaluate as mutually-exclusive options
+(design concepts, mockups, tutorials, single-track plans), mark the
+iteration section with `data-freeform`:
+
+```html
+<section id="iter-3" data-iteration="3" data-active data-freeform
+         data-nav-label="Design concept">
+  <!-- Full-width content — no variant-card framing, no tri-state per block -->
+</section>
+```
+
+Effects:
+- Content area may use the full width/layout it needs (mockup grids,
+  full-bleed imagery, diagrams).
+- Decision panel hides the variant summary; shows a single optional
+  comment field + Submit.
+- `collectDecisions()` returns empty `decisions[]` and whatever the user
+  typed into the comment field.
+- Section TOC still auto-populates from every nested `<section id=""
+  data-nav-label="">` — use this to list Ist-Zustand, Design notes,
+  Mockups, Rationale as scroll anchors in the panel.
+
+See `deep-knowledge/templates.md` § Freeform for the CSS/JS helpers.
 
 ### Reload Resilience
 
@@ -188,16 +248,18 @@ Full example: `docs/concepts/2026-04-12-auth-middleware-redesign.html`
 
 ### Iteration Tabs (single file, many iterations)
 
-Every concept page is a stack of iteration tabs — the decision-panel tab
-bar shows each iteration, only the active one accepts input, earlier ones
-freeze their submitted state. See `deep-knowledge/iteration-rules.md` for
-the full rules (tab placement, freeze behavior, single-file invariant)
+Every concept page is a stack of iteration tabs. The tab bar lives at the
+**top of the right-side decision panel** (compact vertical chip list) —
+NOT in the left-hand content area. Only the active iteration accepts input;
+earlier ones are clickable but frozen. See `deep-knowledge/iteration-rules.md`
+for the full rules (panel placement, freeze behavior, single-file invariant)
 and `deep-knowledge/templates.md` § Iteration Tabs for the reference HTML.
 
 ### Post-Generation Validation (mandatory gate)
 
-After writing the HTML file, grep it for the 16 mandatory interactive
-patterns (heartbeat, panel states, iteration tabs, reload polling, etc.).
+After writing the HTML file, grep it for the 18 mandatory interactive
+patterns (heartbeat, panel states, iteration tabs, section TOC, reload
+polling, etc.).
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. See `deep-knowledge/validation-gate.md` for the full
 pattern list and common failure modes.
@@ -325,9 +387,9 @@ for the polling contract.
    `location.reload()`. The reload lands on the new active iteration
    because the HTML declares it via `data-active`.
 
-The tab bar is anchored at the top of the content area inside the decision
-panel header — it must never shift into the right-side submit sidebar, and
-it must stay on a single row (horizontal scroll if it overflows).
+The tab bar is anchored at the top of the right-side decision panel —
+above the section TOC and the submit block. It must never appear inside
+the left-hand content area. Render as a compact vertical chip list.
 
 Do NOT write a redirect file. Do NOT create a new `-v{N}` file. The entire
 concept session — first render, every iteration, "nochmal neu" reworks —

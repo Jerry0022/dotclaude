@@ -1,10 +1,11 @@
 # Iteration Tabs (single file, many iterations)
 
-Every concept page is a stack of iteration tabs. The **tab bar lives in the
-decision panel at the top** of the content area (a slim strip above the
-variants, not in the right sidebar — the sidebar stays reserved for submit
-controls). Each tab shows exactly one iteration; the active one is interactive,
-all earlier ones are frozen (disabled inputs showing the user's submitted
+Every concept page is a stack of iteration tabs. The **tab bar lives at the
+top of the right-side decision panel** (a compact vertical chip list, above
+the section TOC and submit block). It must NEVER render inside the left-hand
+content area — the content area is reserved for the actual concept. Each
+chip represents exactly one iteration; the active one is interactive, all
+earlier ones are frozen (disabled inputs showing the user's submitted
 selections, read-only comments).
 
 | Situation | Action | Result |
@@ -24,7 +25,8 @@ selections, read-only comments).
   own past feedback at any time.
 - Only the active tab runs the heartbeat / submit UI ("music"). Clicking
   an older tab shows its frozen snapshot but does not re-arm submit.
-- Tab bar must stay compact (one line, horizontally scrollable if many
-  iterations) so it does not push variant content out of view.
+- Tab bar must stay compact — vertical chip list in the panel header.
+  Falls back to horizontal scroll only when the panel collapses to the
+  bottom on narrow screens.
 
 See `templates.md` § Iteration Tabs for the reference HTML/CSS/JS.

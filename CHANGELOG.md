@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.56.0] — 2026-04-20
+
+### Changed
+
+- **plugins/devops/skills/devops-concept/SKILL.md** + **deep-knowledge/templates.md** + **deep-knowledge/iteration-rules.md** — concept page layout refactor. The `<header>` is now kept lean: `<h1>` + optional one-line subtitle, no iteration intro duplication (the iteration title/intro moves into the active `<section data-iteration="N">`). Iteration tabs relocated from the content area to the **top of the right-side decision panel** as a compact vertical chip list, so the content area stays reserved for the actual concept. Before: the header grew a second "Iteration N · …" block above `<main>`, plus the tab bar sat in the content column — both ate vertical space before the user reached the variants
+
+### Added
+
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — generalised the old `.variant-nav` into a full `.section-nav` TOC. An auto-populator (`buildSectionNav()`) scans the active iteration for every `<section id="…" data-nav-label="…">` and renders a scroll anchor for each — not only variants but also Ist-Zustand, context blocks, design notes, mockups. Sections that carry a tri-state radio group (`name="eval-{id}"`) continue to mirror their current evaluation state in the nav entry. Added an `IntersectionObserver`-based ScrollSpy that highlights the TOC entry for whatever section is currently in view
+- **plugins/devops/skills/devops-concept/SKILL.md** + **deep-knowledge/templates.md** — new **freeform mode**: mark an iteration `<section data-freeform>` when the concept has nothing to evaluate as mutually-exclusive variants (design concepts, mockups, tutorials, single-track plans). Freeform iterations render full-width content, drop the tri-state summary in the decision panel, and show a single comment + submit block instead. `collectDecisions()` returns empty `decisions[]` + whatever the user typed; the section TOC still populates from nested `data-nav-label` sections
+- **plugins/devops/skills/devops-concept/deep-knowledge/validation-gate.md** — 2 new mandatory grep patterns: `section-nav` and `data-nav-label`. The gate now enforces 18 patterns instead of 16
+
 ## [0.55.0] — 2026-04-19
 
 ### Fixed
