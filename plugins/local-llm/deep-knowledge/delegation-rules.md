@@ -16,25 +16,43 @@ Broad capability assumptions:
 - **Bad at:** Multi-step reasoning, cross-file context, ambiguity resolution, API knowledge
 - **Context limit:** assume ≈8K tokens practical — keep prompts tight
 
+## Economics first
+
+Delegation is NOT free. Every call costs:
+- Prompt construction (Claude thinks + emits tokens for `task` + `context`)
+- MCP roundtrip + 7B inference latency
+- Review pass (Claude reads output + validates against spec)
+
+Break-even is higher than it looks. **Rule of thumb: delegate when the raw output would be > 60 lines of near-pure boilerplate.** Below that, Claude emitting directly beats delegation + review.
+
+Biggest wins come from tasks where the output dwarfs the spec: a 10-line schema → 500 lines of seed INSERT, a 1-line key list → 200 lines of i18n JSON, an OpenAPI operation → a full DTO + validator. When output/spec ratio is < ~5×, just write it.
+
 ## Decision Matrix
 
-### GREEN — Delegate (when output >20 lines)
+### GREEN — Delegate (output > 60 lines of boilerplate, spec is short)
 
-These tasks are mechanical, well-bounded, and benefit from delegation:
+These tasks are mechanical, well-bounded, and benefit from delegation.
+**Top sweet spots** (high output/spec ratio — delegate first):
+
+| Task | Why it pays off | Prompt pattern |
+|------|-----------------|----------------|
+| **Seed data / migration dumps** | ~10-line schema → hundreds of INSERT rows | Schema + count/list → generate rows |
+| **i18n / translation JSON expansion** | one key-list → N language files | Base JSON + target languages → generate each |
+| **Mock data / fixtures** (Faker-style) | short type → many records | Type + count → generate |
+| **Repetitive variations** (N entities, same pattern) | one template → N files | Pattern + entity list → generate each |
+| **DTO / type definitions from OpenAPI/JSON-Schema** | short schema → full DTO + validators | Schema + target format → generate |
+
+**Other valid candidates** (only if output > 60 lines):
 
 | Task | Why safe | Prompt pattern |
 |------|----------|----------------|
-| **Type/interface definitions** from a schema or description | Deterministic, no logic | List fields + types → generate |
-| **DTO / data class** generation | Mechanical mapping | Source type + target format → generate |
+| **Schema definitions** (SQL DDL, Prisma, Zod, JSON Schema) | Declarative, deterministic | Field list + constraints → generate |
+| **Serializer / deserializer** | Mechanical field mapping | Source type + target format → generate |
 | **Test file from existing pattern** | Pattern-match: copy structure, change values | Existing test + new function signature → generate |
 | **CRUD boilerplate** (repository, service, controller) | Repetitive, well-structured | Entity + framework conventions → generate |
-| **Serializer / deserializer** | Mechanical field mapping | Source type + target format → generate |
-| **Schema definitions** (SQL DDL, Prisma, Zod, JSON Schema) | Declarative, deterministic | Field list + constraints → generate |
-| **Repetitive variations** (N entities, same pattern) | Copy-paste with substitution | Pattern + list of entities → generate each |
 | **Import/export barrel files** | Mechanical listing | Directory listing → generate index |
 | **Enum / constant definitions** | Direct mapping | Value list → generate |
 | **Migration files** (adding columns, creating tables) | Declarative, reversible | Schema diff → generate up/down |
-| **Mock data / fixtures** | Creative but bounded | Types + count → generate |
 | **Simple format conversions** (JS→TS types, JSON→YAML schema) | Syntax transformation | Input format → output format |
 
 ### YELLOW — Delegate with extra review
@@ -62,9 +80,9 @@ These require frontier-model intelligence. Delegation wastes time and produces w
 | **Performance-critical hot paths** | Requires profiling knowledge and algorithmic understanding |
 | **External API integration** | Model's API knowledge is frozen and may be outdated/wrong |
 | **Error handling design** | Requires understanding failure modes in the specific system |
-| **Code review** | Requires deep reasoning about correctness and intent |
+| **Code review** | Requires reasoning about intent, edge cases, security. 7B produces generic noise ("consider error handling", "add types") that costs more context to process than it saves. |
 | **Ambiguous user requests** | Model amplifies ambiguity — garbage in, garbage out |
-| **Small tasks (<20 lines)** | Overhead of formulating prompt + reviewing output exceeds direct writing |
+| **Small tasks (<60 lines)** | Prompt-construction + review-pass tokens exceed direct writing. Threshold moved up after real-world calibration — 20 was too low. |
 | **Anything requiring project conventions** beyond what fits in the prompt | 8K context too small for whole-codebase awareness |
 | **Commit messages, PR descriptions** | Requires understanding the semantic intent of changes |
 | **Complex business logic** | Multi-step reasoning, domain knowledge |
@@ -178,6 +196,9 @@ If any check fails: **fix directly** (Claude writes the fix). Do NOT re-delegate
 
 ## Token Savings Heuristic
 
-Delegation saves tokens when: `local_model_output_lines > 20 AND prompt_construction_effort < output_size`.
+Delegation saves tokens when ALL hold:
+- `output_lines > 60` AND
+- `output_size / spec_size > 5×` (high leverage — spec dwarfed by output) AND
+- `prompt_construction_time < 30s` of Claude's thought (if longer, Claude's already almost done)
 
-Rule of thumb: if constructing the prompt takes more thought than writing the code, just write it directly.
+Rule of thumb: if constructing the prompt takes more thought than writing the code, just write it directly. And if the review pass needs real reasoning, the task was above the 7B's quality bar to begin with — rewrite inline.

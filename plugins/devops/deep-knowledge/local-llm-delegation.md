@@ -23,11 +23,16 @@ Cache the answer in memory for the rest of the agent run. If `ready: false`, nev
 
 Delegate when ALL of these are true:
 
-1. **Mechanical.** Boilerplate, DTOs, test files from a pattern, CRUD, type defs, barrel files, enum lists, migration skeletons, serializers, fixture data.
+1. **Task falls in a sweet-spot category** (not just "mechanical"):
+   - Seed/migration dumps from a schema (N×many rows of INSERT, fixtures)
+   - i18n / translation JSON expansion (one key → N languages)
+   - DTO / type definitions from an OpenAPI/JSON schema
+   - Repetitive variations (N entities, same pattern — CRUD controllers, serializers)
+   - Barrel files, enum lists, constants from a source list
 2. **Complete spec writable.** You can state signature + types + behavior in one paragraph without hedging.
-3. **Output > 20 lines.** Below that, writing directly is faster than prompt + review.
+3. **Output > 60 lines** of near-pure boilerplate. Below that, prompt-formulation + review-pass costs more tokens than Claude emitting the code directly.
 4. **No cross-file reasoning.** The code is self-contained or follows a single pattern you can paste as context.
-5. **You will review the output.** Compile-check, type-check, spot-check the logic.
+5. **Review is trivially verifiable** (compile-check, shape-check, diff against the spec). If review needs real thought, the task is too complex for the 7B model anyway.
 
 ## Never delegate (RED tier — always direct)
 
@@ -35,8 +40,9 @@ Delegate when ALL of these are true:
 - Architectural decisions, multi-file refactors
 - Security-sensitive code (auth, crypto, input validation, SQL construction)
 - External API integration (the local model's API knowledge is stale)
-- Commit messages, PR descriptions, code review
+- Commit messages, PR descriptions, **code review** (needs reasoning about intent, edge cases, security — 7B produces generic noise that costs more to process than it saves)
 - Anything where the user's request is ambiguous
+- Short outputs (<60 lines) even if mechanical — delegation overhead dominates
 
 ## How to delegate
 

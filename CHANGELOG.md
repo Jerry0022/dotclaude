@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.56.1] — 2026-04-21
+
+### Fixed
+
+- **plugins/local-llm/hooks/session-start/ss.llm.deps.js** — the deps hook now verifies that `@modelcontextprotocol/sdk` and `zod` are actually resolvable inside `mcp-server/node_modules` before skipping install. The previous "real directory → skip" branch let a partial/corrupt install pass, which silently broke the MCP server (`ERR_MODULE_NOT_FOUND` at startup, no PID file, tool invisible to Claude) while the health hook still emitted `phase: ready`. When a corrupt real-dir is detected, it's now replaced with a junction to the authoritative `PLUGIN_DATA/node_modules`. `REQUIRED_DEPS` list lives at the top of the file so new runtime deps can be added in one place
+
+### Changed
+
+- **plugins/devops/deep-knowledge/local-llm-delegation.md** + **plugins/local-llm/deep-knowledge/delegation-rules.md** — tightened the delegation thresholds based on real-session calibration. Output gate moved from `>20` to `>60 lines of near-pure boilerplate`: the previous threshold didn't cover prompt construction + review-pass overhead. Promoted the real sweet spots (seed/migration dumps, i18n/translation expansion, fixtures, repetitive variations, DTOs from schema) to the top of the GREEN matrix — they dominate the `output_size / spec_size` leverage curve. Made "code review" an explicit RED entry with rationale: 7B produces generic noise ("consider error handling", "add types") that costs more context to process than it saves. Added an economics section explaining why break-even is higher than it looks
+
 ## [0.56.0] — 2026-04-20
 
 ### Changed
