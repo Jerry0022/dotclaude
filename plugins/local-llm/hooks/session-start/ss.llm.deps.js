@@ -9,7 +9,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, symlinkSync, mkdirSync, existsSync, unlinkSync, lstatSync } from "node:fs";
+import { readFileSync, writeFileSync, symlinkSync, mkdirSync, existsSync, unlinkSync, lstatSync, rmSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,8 +25,17 @@ const SOURCE_PKG = join(PLUGIN_ROOT, "mcp-server", "package.json");
 const CACHED_PKG = join(PLUGIN_DATA, "package.json");
 const DATA_MODULES = join(PLUGIN_DATA, "node_modules");
 
+// Required top-level deps that must be present after install. Add any new
+// runtime dep here so a corrupt/partial node_modules gets detected and redone.
+const REQUIRED_DEPS = ["@modelcontextprotocol/sdk", "zod"];
+
+function dataModulesIntact() {
+  if (!existsSync(DATA_MODULES)) return false;
+  return REQUIRED_DEPS.every((dep) => existsSync(join(DATA_MODULES, dep)));
+}
+
 function needsInstall() {
-  if (!existsSync(CACHED_PKG) || !existsSync(DATA_MODULES)) return true;
+  if (!existsSync(CACHED_PKG) || !dataModulesIntact()) return true;
   try {
     const source = readFileSync(SOURCE_PKG, "utf8");
     const cached = readFileSync(CACHED_PKG, "utf8");
@@ -56,12 +65,28 @@ if (needsInstall()) {
   }
 }
 
-// Symlink node_modules for ESM resolution
+// Symlink node_modules into mcp-server/ for ESM resolution.
+// If a real directory is already there, verify it has the required deps —
+// if not, it's a stale/corrupt leftover and we replace it with a symlink
+// pointing at the authoritative PLUGIN_DATA install.
 const target = join(PLUGIN_ROOT, "mcp-server", "node_modules");
+
+function targetIsIntact(p) {
+  return REQUIRED_DEPS.every((dep) => existsSync(join(p, dep)));
+}
+
 try {
   if (existsSync(target)) {
     const stat = lstatSync(target);
-    if (stat.isSymbolicLink() || stat.isDirectory()) process.exit(0);
+    if (stat.isSymbolicLink()) process.exit(0);
+    if (stat.isDirectory()) {
+      if (targetIsIntact(target)) process.exit(0);
+      // Corrupt leftover — wipe and re-symlink.
+      console.error("[local-llm] mcp-server/node_modules is incomplete — replacing with symlink.");
+      rmSync(target, { recursive: true, force: true });
+    }
   }
   symlinkSync(DATA_MODULES, target, "junction");
-} catch {}
+} catch (err) {
+  console.error("[local-llm] Symlink step failed:", err.message);
+}
