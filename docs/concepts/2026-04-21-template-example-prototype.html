@@ -155,11 +155,12 @@ section[data-screen][hidden] { display: none; }
 #panel-ready { position: relative; }
 .panel-warning {
   position: absolute; inset: 0; z-index: 5;
+  pointer-events: none;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 0.75rem; text-align: center; padding: 1.5rem;
   border-radius: 10px; border: 1px solid var(--warning-color);
-  background: color-mix(in srgb, var(--panel-bg) 94%, transparent);
-  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  background: color-mix(in srgb, var(--panel-bg) 70%, transparent);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
   color: var(--text); }
 .panel-warning .warning-icon { font-size: 2.25rem; color: var(--warning-color); line-height: 1; }
 .panel-warning strong { color: var(--warning-color); font-size: 1rem; }
@@ -282,7 +283,7 @@ body[data-single-screen="true"] .feedback-section:has(#screen-textareas) { displ
       <div id="connection-warning" class="panel-warning" style="display: none;">
         <span class="warning-icon" aria-hidden="true">⚠</span>
         <strong>Claude ist nicht verbunden</strong>
-        <p class="warning-message">Submit ist pausiert, bis die Verbindung wieder steht. Deine Eingaben bleiben erhalten.</p>
+        <p class="warning-message">Du kannst trotzdem absenden — der Klick wird gespeichert und gesendet, sobald Claude wieder da ist.</p>
       </div>
       <button id="submit-iterate-btn" class="primary submit-btn">Zur nächsten Iteration</button>
       <p class="hint">Per-Screen-Notizen + allgemeine Anmerkungen gehen an Claude. Kein Code wird geschrieben.</p>
@@ -372,8 +373,9 @@ document.addEventListener('input', saveState);
 
 // --- Build screen textareas and screen-nav ---
 function buildScreenUI() {
-  const active = document.querySelector('section[data-iteration][data-active]'); if (!active) return;
-  const screens = [...active.querySelectorAll('section[data-screen][id]')];
+  // Read from the VISIBLE iteration so frozen tabs rebuild correctly.
+  const visible = document.querySelector('section[data-iteration]:not([hidden])'); if (!visible) return;
+  const screens = [...visible.querySelectorAll('section[data-screen][id]')];
   const total = screens.length;
   document.getElementById('total-screens').textContent = total;
 
@@ -407,7 +409,7 @@ function buildScreenUI() {
 }
 
 function showScreen(id) {
-  const screens = document.querySelectorAll('section[data-iteration][data-active] section[data-screen][id]');
+  const screens = document.querySelectorAll('section[data-iteration]:not([hidden]) section[data-screen][id]');
   let idx = 0;
   screens.forEach((s, i) => {
     const match = s.id === id;
@@ -480,9 +482,14 @@ function showIteration(n) {
     tab.setAttribute('aria-selected', String(tab.dataset.iteration) === String(n) ? 'true' : 'false');
   });
   buildScreenUI();
-  // Default: first screen active
-  const firstScreen = document.querySelector('section[data-iteration][data-active] section[data-screen]');
-  if (firstScreen) showScreen(firstScreen.id);
+  // Try to preserve the previously active screen if it still exists in the
+  // newly visible iteration; otherwise fall back to the first screen.
+  const visible = document.querySelector('section[data-iteration]:not([hidden])');
+  const prevId = document.querySelector('[data-screen][data-screen-active="true"]')?.id;
+  const stillThere = prevId && visible?.querySelector(`section[data-screen]#${CSS.escape(prevId)}`);
+  const firstScreen = visible?.querySelector('section[data-screen]');
+  const target = stillThere ? prevId : firstScreen?.id;
+  if (target) showScreen(target);
 }
 document.querySelectorAll('.iteration-tab').forEach(tab => tab.addEventListener('click', () => showIteration(tab.dataset.iteration)));
 
@@ -614,7 +621,7 @@ document.addEventListener('click', e => {
   const link = e.target.closest('[data-screen-link]');
   if (!link) return;
   const dest = link.dataset.screenLink;
-  const screens = [...document.querySelectorAll('section[data-iteration][data-active] section[data-screen]')];
+  const screens = [...document.querySelectorAll('section[data-iteration]:not([hidden]) section[data-screen]')];
   const currentIdx = screens.findIndex(s => s.dataset.screenActive === 'true');
   let targetId = null;
   if (dest === 'next') targetId = screens[Math.min(currentIdx + 1, screens.length - 1)]?.id;
@@ -630,7 +637,7 @@ document.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if (dock.dataset.open === 'true' || panel.classList.contains('open')) return;
   if (e.target.matches('textarea, input')) return;
-  const screens = [...document.querySelectorAll('section[data-iteration][data-active] section[data-screen]')];
+  const screens = [...document.querySelectorAll('section[data-iteration]:not([hidden]) section[data-screen]')];
   const currentIdx = screens.findIndex(s => s.dataset.screenActive === 'true');
   if (currentIdx < 0) return;
   let nextIdx = currentIdx;

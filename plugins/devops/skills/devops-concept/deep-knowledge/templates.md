@@ -4,9 +4,9 @@ Three page-level **templates** (layout modes) cover every concept use case:
 
 | Template | Layout | When to use |
 |---|---|---|
-| **decision** | Sidebar (~80/~20), multi-variant cards | Multi-option evaluation, trade-offs, architecture or tech decisions — the canonical "pick one" flow with tri-state per variant and multiple iterations |
+| **decision** | Sidebar (~80/~20), multi-variant cards | Multi-option evaluation, trade-offs, architecture or tech decisions — the canonical "pick one" flow with bi-state (Verwerfen / Miteinbeziehen) per variant and multiple iterations |
 | **prototype** | Fullscreen content + overlay decision panel (FAB-toggled, right) + collapsible feedback dock (bottom, per-screen comments) | UI mockups, wireframes, visual design concepts, click-through flows — one artefact that needs maximum screen real estate, plus structured per-screen feedback |
-| **free** | Sidebar (~80/~20), freeform body content | Analysis, walkthrough, brainstorm, explainer, timeline — structured content without forced variant framing. Tri-state evaluation is optional (opt-in per section) |
+| **free** | Sidebar (~80/~20), freeform body content | Analysis, walkthrough, brainstorm, explainer, timeline — structured content without forced variant framing. Bi-state evaluation is optional (opt-in per section) |
 
 **Content variants (analysis, plan, concept, comparison, dashboard, creative)
 are sub-structures of the decision template** — they describe how to lay out
@@ -54,7 +54,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.submitted`              | Decisions submitted            | Entscheidungen übermittelt |
 | `panel.submitted_hint`         | Claude is processing your selection. Switch to the **Claude chat** to follow progress. | Claude verarbeitet deine Auswahl. Wechsle zum **Claude Chat** um den Fortschritt zu sehen. |
 | `panel.disconnected_title`     | Claude is not connected        | Claude ist nicht verbunden |
-| `panel.disconnected_hint`      | Submit is paused until the connection is back. Your input stays. | Submit ist pausiert, bis die Verbindung wieder steht. Deine Eingaben bleiben erhalten. |
+| `panel.disconnected_hint`      | You can still submit — your click is queued and delivered as soon as Claude is back. | Du kannst trotzdem absenden — der Klick wird gespeichert und gesendet, sobald Claude wieder da ist. |
 | `panel.connecting_title`       | Claude is connecting           | Claude verbindet sich |
 | `panel.connecting_hint`        | One moment — establishing the connection. | Einen Moment — die Verbindung wird aufgebaut. |
 | `panel.toggle_open`            | Open decisions                 | Entscheidungen öffnen |
@@ -139,7 +139,7 @@ the `[ui-locale: ...]` hint produced.
 
       <!-- Section TOC — auto-populated from EVERY <section id="..."
            data-nav-label="..."> inside the active iteration, not just variants.
-           Sections that carry a tri-state radio group (eval-{id}) display their
+           Sections that carry a bi-state radio group (eval-{id}) display their
            current state label; plain sections (Ist-Zustand, Context, Design-Notes,
            etc.) just show the label and anchor-scroll on click. -->
       <nav class="section-nav" id="section-nav" aria-label="{{nav.sections}}">
@@ -209,7 +209,7 @@ Set `data-template` on the `<html>` element to one of `decision` | `prototype` |
 # Template: decision
 
 Multi-variant evaluation with sidebar layout. This is the canonical flow:
-Claude presents 2+ options, user picks tri-state per variant, submits,
+Claude presents 2+ options, user picks bi-state per variant, submits,
 Claude iterates.
 
 ## Layout — Sidebar
@@ -503,7 +503,7 @@ of the variant cards — not a different page layout.
 [Decision panel sidebar: summary + submit]
 ```
 
-Each option in the comparison gets the same **tri-state evaluation** as
+Each option in the comparison gets the same **bi-state evaluation** as
 concept variants. Decision schema matches the decision template schema, with
 additional `weight-*` entries for weight sliders.
 
@@ -890,11 +890,12 @@ DOM (just hidden), so each one's value persists independently via
   if (document.documentElement.dataset.template !== 'prototype') return;
 
   // Build screen-nav buttons (☰) and per-screen textareas (💬) from every
-  // <section data-screen> inside the active iteration.
+  // <section data-screen> inside the VISIBLE iteration (may be a frozen
+  // tab the user clicked back to, not necessarily the live one).
   function buildScreenUI() {
-    const active = document.querySelector('section[data-iteration][data-active]');
-    if (!active) return;
-    const screens = [...active.querySelectorAll('section[data-screen][id]')];
+    const visible = document.querySelector('section[data-iteration]:not([hidden])');
+    if (!visible) return;
+    const screens = [...visible.querySelectorAll('section[data-screen][id]')];
     document.getElementById('total-screens').textContent = screens.length;
 
     // Single-screen prototypes: hide screen-nav + per-screen feedback.
@@ -931,7 +932,7 @@ DOM (just hidden), so each one's value persists independently via
 
   window.showScreen = function(id) {
     const screens = document.querySelectorAll(
-      'section[data-iteration][data-active] section[data-screen][id]');
+      'section[data-iteration]:not([hidden]) section[data-screen][id]');
     let idx = 0;
     screens.forEach((s, i) => {
       const match = s.id === id;
@@ -1013,10 +1014,16 @@ DOM (just hidden), so each one's value persists independently via
   });
 
   // Rebuild after iteration switches (fresh screens, fresh textareas).
+  // Preserve the previously active screen if it still exists in the newly
+  // visible iteration; otherwise fall back to the first screen.
   document.addEventListener('iteration:changed', () => {
     buildScreenUI();
-    const first = document.querySelector('section[data-iteration][data-active] section[data-screen]');
-    if (first) showScreen(first.id);
+    const visible = document.querySelector('section[data-iteration]:not([hidden])');
+    const prevId = document.querySelector('[data-screen][data-screen-active="true"]')?.id;
+    const stillThere = prevId && visible?.querySelector(`section[data-screen]#${CSS.escape(prevId)}`);
+    const first = visible?.querySelector('section[data-screen]');
+    const target = stillThere ? prevId : first?.id;
+    if (target) showScreen(target);
   });
 
   // Keyboard: Arrow Left/Right (and Space) jump between screens when no
@@ -1025,7 +1032,7 @@ DOM (just hidden), so each one's value persists independently via
     if (dock.dataset.open === 'true' || panel.classList.contains('open')) return;
     if (e.target.matches('textarea, input')) return;
     const screens = [...document.querySelectorAll(
-      'section[data-iteration][data-active] section[data-screen]')];
+      'section[data-iteration]:not([hidden]) section[data-screen]')];
     const currentIdx = screens.findIndex(s => s.dataset.screenActive === 'true');
     if (currentIdx < 0) return;
     let nextIdx = currentIdx;
@@ -1054,7 +1061,7 @@ document.addEventListener('click', e => {
   if (!link) return;
   const dest = link.dataset.screenLink;
   const screens = [...document.querySelectorAll(
-    'section[data-iteration][data-active] section[data-screen]')];
+    'section[data-iteration]:not([hidden]) section[data-screen]')];
   const currentIdx = screens.findIndex(s => s.dataset.screenActive === 'true');
   let targetId = null;
   if (dest === 'next') targetId = screens[Math.min(currentIdx + 1, screens.length - 1)]?.id;
@@ -1159,7 +1166,7 @@ sense.
 
 Identical to the decision layout (sticky sidebar, ~80/~20 split). The
 difference is in the body: no forced variant-card framing, no mandatory
-tri-state. Claude chooses the structure that fits the content.
+bi-state. Claude chooses the structure that fits the content.
 
 ```html
 <html data-template="free">
@@ -1187,31 +1194,24 @@ tri-state. Claude chooses the structure that fits the content.
 
           <section id="finding-1" data-nav-label="Finding: latency spike">
             <p>…</p>
-            <!-- OPT-IN tri-state: only present when Claude wants the user to
+            <!-- OPT-IN bi-state: only present when Claude wants the user to
                  confirm the finding is valid. Section id MUST match the
                  radio name suffix (eval-{id}). -->
             <div class="tri-state-group">
               <label class="tri-state-option">
                 <input type="radio" name="eval-finding-1" value="discard">
                 <span class="tri-state-label">Verwerfen</span>
-                <span class="tri-state-hint feedback">Feedback</span>
               </label>
               <label class="tri-state-option">
                 <input type="radio" name="eval-finding-1" value="include" checked>
                 <span class="tri-state-label">Miteinbeziehen</span>
-                <span class="tri-state-hint feedback">Feedback</span>
-              </label>
-              <label class="tri-state-option">
-                <input type="radio" name="eval-finding-1" value="only">
-                <span class="tri-state-label">Exakt diese</span>
-                <span class="tri-state-hint action">Claude setzt um</span>
               </label>
             </div>
             <textarea data-comment="finding-1" placeholder="Anmerkung…"></textarea>
           </section>
 
           <section id="recommendation" data-nav-label="Recommendation">
-            <!-- plain section, no tri-state — just content -->
+            <!-- plain section, no bi-state — just content -->
             <p>…</p>
           </section>
         </section>
@@ -1227,16 +1227,16 @@ tri-state. Claude chooses the structure that fits the content.
 </html>
 ```
 
-## Optional tri-state auto-detection
+## Optional bi-state auto-detection
 
 The section nav auto-detects whether a `<section data-nav-label>` contains an
 `eval-{id}` radio group and mirrors its current state (Miteinbeziehen /
-Verwerfen / Exakt diese). Sections without a radio group just get a scroll
-anchor. See Shared Systems § Section Navigation for the implementation.
+Verwerfen). Sections without a radio group just get a scroll anchor. See
+Shared Systems § Section Navigation for the implementation.
 
 ## Decision schema
 
-The free template emits **only the sections that actually have tri-state
+The free template emits **only the sections that actually have bi-state
 radios**, plus whatever comments the user typed:
 
 ```json
@@ -1252,7 +1252,7 @@ radios**, plus whatever comments the user typed:
 }
 ```
 
-If no section has tri-state markers, `decisions` is an empty array and the
+If no section has bi-state markers, `decisions` is an empty array and the
 submit payload is effectively a general-notes post.
 
 ## collectDecisions (free branch)
@@ -1291,7 +1291,7 @@ applies uniformly.
 The decision panel doubles as a full table-of-contents for the active
 iteration. EVERY major `<section id="…" data-nav-label="…">` inside the
 current iteration gets a clickable nav entry — not just variants. Sections
-with a tri-state radio group additionally display the current evaluation
+with a bi-state radio group additionally display the current evaluation
 state.
 
 ```css
@@ -1340,7 +1340,7 @@ state.
 <!-- Plain section — TOC entry, scroll only -->
 <section id="ist-zustand" data-nav-label="Ist-Zustand">...</section>
 
-<!-- Variant section — TOC entry + tri-state evaluation -->
+<!-- Variant section — TOC entry + bi-state evaluation -->
 <section id="variant-a" class="variant-card" data-nav-label="A Orbital Ring">...</section>
 ```
 
@@ -1351,7 +1351,9 @@ Sections without `data-nav-label` are skipped by the TOC auto-populator.
 function buildSectionNav() {
   const nav = document.getElementById('section-nav');
   if (!nav) return;
-  const activeIteration = document.querySelector('section[data-iteration][data-active]');
+  // Use :not([hidden]) so the nav reflects the VISIBLE iteration (may be
+  // a frozen tab the user is reviewing), not the live/latest one.
+  const activeIteration = document.querySelector('section[data-iteration]:not([hidden])');
   if (!activeIteration) return;
   const sections = activeIteration.querySelectorAll('section[id][data-nav-label]');
   nav.innerHTML = '';
@@ -1379,7 +1381,7 @@ function buildSectionNav() {
 }
 
 function updateSectionNavState() {
-  const labels = { include: 'Miteinbeziehen', discard: 'Verwerfen', only: 'Exakt diese' };
+  const labels = { include: 'Miteinbeziehen', discard: 'Verwerfen' };
   document.querySelectorAll('.section-nav-item[data-variant]').forEach(link => {
     const id = link.dataset.sectionId;
     const checked = document.querySelector(`input[name="eval-${id}"]:checked`);
@@ -1430,25 +1432,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
 **Important:**
 - Every navigable `<section>` needs `id` AND `data-nav-label`.
-- If a section has a tri-state radio group, its `name` MUST be `eval-{section-id}`.
+- If a section has a bi-state radio group, its `name` MUST be `eval-{section-id}`.
 - `buildSectionNav()` must run again after every iteration switch.
 
 ## Decision Panel State CSS
 
 ```css
 /* Connection warning — overlays the submit area when Claude is offline.
-   Requires #panel-ready to be position: relative. */
+   Requires #panel-ready to be position: relative.
+   pointer-events: none so the user can still click the submit buttons
+   through the overlay — clicks land in the offline queue and are
+   auto-delivered on reconnect. */
 #panel-ready { position: relative; }
 .panel-warning {
   position: absolute; inset: 0; z-index: 5;
+  pointer-events: none;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   gap: 0.75rem; text-align: center; padding: 1.5rem;
   border-radius: 10px;
   border: 1px solid var(--warning-color, #d29922);
-  background: color-mix(in srgb, var(--panel-bg, #161b22) 94%, transparent);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 70%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   color: var(--text-color, #c9d1d9);
 }
 .panel-warning .warning-icon { font-size: 2.25rem; color: var(--warning-color, #d29922); line-height: 1; }
@@ -1972,7 +1978,7 @@ When appending iteration N+1, Claude must freeze the previous section:
 1. Remove `data-active`, add `hidden` to the previous `<section>`.
 2. On every `input`, `textarea`, `select`, `button` inside it: set `disabled`.
 3. On every `textarea`, `input[type="text"]`: set `readonly`.
-4. For tri-state buttons: keep the `aria-pressed`/selected class exactly as
+4. For bi-state buttons: keep the `aria-pressed`/selected class exactly as
    the user submitted it — do NOT clear selections.
 5. Add a small "Eingefroren — Iteration N" banner at the top (optional).
 
