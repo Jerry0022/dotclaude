@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark" data-page-version="2026-04-21T10:00:00" data-template="decision">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept — Auth-Middleware Redesign (decision)</title>
+<style>
+:root {
+  --bg: #0d1117; --text: #c9d1d9; --text-secondary: #8b949e;
+  --panel-bg: #161b22; --border-color: #30363d; --input-bg: #0d1117;
+  --accent-color: #58a6ff; --success-color: #3fb950; --warning-color: #d29922; --danger-color: #f85149;
+}
+html[data-theme="light"] {
+  --bg: #ffffff; --text: #24292f; --text-secondary: #57606a;
+  --panel-bg: #f6f8fa; --border-color: #d0d7de; --input-bg: #ffffff;
+  --accent-color: #0969da;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
+button { font-family: inherit; }
+
+.concept-layout { display: flex; min-height: 100vh; }
+.concept-content { flex: 1; padding: 2rem; overflow-y: auto; }
+.concept-decision-panel {
+  width: 20%; min-width: 260px; max-width: 360px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  padding: 1.5rem; border-left: 1px solid var(--border-color); background: var(--panel-bg);
+}
+@media (max-width: 768px) {
+  .concept-layout { flex-direction: column; }
+  .concept-decision-panel { width: 100%; max-width: none; height: auto;
+    position: sticky; bottom: 0; border-left: none; border-top: 1px solid var(--border-color); }
+}
+
+header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+header h1 { margin: 0; font-size: 1.75rem; }
+header .subtitle { color: var(--text-secondary); margin: 0; flex: 1; }
+#theme-toggle { background: none; border: 1px solid var(--border-color); color: var(--text);
+  padding: 0.5rem 0.75rem; border-radius: 8px; cursor: pointer; }
+
+.iteration-intro { border-left: 3px solid var(--accent-color); padding: 0.75rem 1rem;
+  margin-bottom: 2rem; background: color-mix(in srgb, var(--accent-color) 8%, transparent); border-radius: 0 8px 8px 0; }
+.iteration-intro h2 { margin: 0 0 0.25rem 0; font-size: 1.1rem; }
+.iteration-intro p { margin: 0; color: var(--text-secondary); }
+
+.variant-card { border: 1px solid var(--border-color); border-radius: 10px;
+  padding: 1.5rem; margin-bottom: 2rem; background: color-mix(in srgb, var(--panel-bg) 50%, transparent); }
+.variant-card h3 { margin-top: 0; }
+.variant-card .procons { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
+.variant-card .procons ul { margin: 0; padding-left: 1.2rem; font-size: 0.9rem; }
+.variant-card .procons .pros li { color: var(--success-color); }
+.variant-card .procons .cons li { color: var(--danger-color); }
+
+.tri-state-group { display: flex; gap: 0; border: 1px solid var(--border-color);
+  border-radius: 8px; overflow: hidden; margin-top: 1rem; }
+.tri-state-option { flex: 1; display: flex; flex-direction: column; align-items: center;
+  padding: 0.75rem 1rem; cursor: pointer; text-align: center; position: relative;
+  border-right: 1px solid var(--border-color); transition: background 0.2s, box-shadow 0.2s; }
+.tri-state-option:last-child { border-right: none; }
+.tri-state-option:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.tri-state-option input { display: none; }
+.tri-state-option:has(input:checked) .tri-state-label { font-weight: 700; }
+.tri-state-hint { font-size: 0.72rem; margin-top: 0.25rem; opacity: 0.5; transition: opacity 0.2s; }
+.tri-state-option:has(input:checked) .tri-state-hint { opacity: 1; }
+.tri-state-hint.feedback { color: var(--accent-color); }
+.tri-state-hint.action { color: var(--warning-color); }
+.tri-state-label { font-size: 0.9rem; transition: font-weight 0.15s; }
+.tri-state-option:has(input:checked)::after {
+  content: '✓'; position: absolute; top: 4px; right: 6px; font-size: 0.7rem; font-weight: 700;
+  width: 18px; height: 18px; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; pointer-events: none; }
+.tri-state-option:has(input[value="include"]:checked) {
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  box-shadow: inset 0 0 0 2px var(--accent-color); }
+.tri-state-option:has(input[value="include"]:checked)::after { background: var(--accent-color); color: white; }
+.tri-state-option:has(input[value="discard"]:checked) {
+  background: color-mix(in srgb, var(--danger-color) 12%, transparent);
+  box-shadow: inset 0 0 0 2px var(--danger-color); }
+.tri-state-option:has(input[value="discard"]:checked)::after { background: var(--danger-color); color: white; }
+.tri-state-option:has(input[value="discard"]:checked) .tri-state-label { color: var(--danger-color); }
+.tri-state-option:has(input[value="only"]:checked) {
+  background: color-mix(in srgb, var(--success-color) 15%, transparent);
+  box-shadow: inset 0 0 0 2px var(--success-color); }
+.tri-state-option:has(input[value="only"]:checked)::after { background: var(--success-color); color: white; }
+.tri-state-option:has(input[value="only"]:checked) .tri-state-label { color: var(--success-color); }
+.tri-state-option:has(input:not(:checked)) { opacity: 0.7; }
+.tri-state-option:has(input:not(:checked)):hover { opacity: 1; }
+
+.comment-field { margin-top: 1rem; }
+.comment-field textarea { width: 100%; min-height: 80px; padding: 0.75rem;
+  border: 1px solid var(--border-color); border-radius: 8px; background: var(--input-bg);
+  color: var(--text); font-family: inherit; font-size: 0.9rem; line-height: 1.5; resize: vertical; }
+.comment-field textarea:focus { outline: none; border-color: var(--accent-color); }
+
+.iteration-tabs { display: flex; flex-direction: column; gap: 4px; margin-bottom: 1rem;
+  padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); }
+.iteration-tab { flex: 0 0 auto; text-align: left; padding: 6px 10px;
+  border: 1px solid var(--border-color); border-radius: 6px; background: transparent;
+  color: var(--text-secondary); font-size: 0.85rem; cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s; }
+.iteration-tab:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); color: var(--text); }
+.iteration-tab[aria-selected="true"] { background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  color: var(--text); border-color: var(--accent-color); font-weight: 600; }
+.iteration-tab[aria-selected="true"]::before { content: "● "; color: var(--accent-color); }
+
+.section-nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+.section-nav-item { display: flex; align-items: center; justify-content: space-between;
+  padding: 0.5rem 0.75rem; border-radius: 6px; text-decoration: none; color: var(--text);
+  font-size: 0.9rem; transition: background 0.15s; cursor: pointer; }
+.section-nav-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.section-nav-state { font-size: 0.8rem; color: var(--accent-color); white-space: nowrap; }
+.section-nav-state.state-discard { color: var(--danger-color); }
+.section-nav-state.state-only { color: var(--success-color); }
+.section-nav-item.is-active { background: color-mix(in srgb, var(--accent-color) 18%, transparent); font-weight: 600; }
+
+#panel-ready { position: relative; }
+.panel-warning {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.75rem; text-align: center; padding: 1.5rem;
+  border-radius: 10px; border: 1px solid var(--warning-color);
+  background: color-mix(in srgb, var(--panel-bg) 94%, transparent);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  color: var(--text); }
+.panel-warning .warning-icon { font-size: 2.25rem; color: var(--warning-color); line-height: 1; }
+.panel-warning strong { color: var(--warning-color); font-size: 1rem; }
+.panel-warning .warning-message { font-size: 0.88rem; color: var(--text-secondary);
+  line-height: 1.5; max-width: 280px; margin: 0; }
+/* Connecting variant — same overlay, accent color + pulsing icon */
+.panel-warning--connecting { border-color: var(--accent-color); }
+.panel-warning--connecting .warning-icon { color: var(--accent-color); animation: pulse-connect 1.4s ease-in-out infinite; }
+.panel-warning--connecting strong { color: var(--accent-color); }
+@keyframes pulse-connect { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+.submitted-indicator { display: flex; align-items: center; gap: 0.5rem; padding: 1rem;
+  margin-bottom: 0.75rem; border-radius: 8px;
+  background: color-mix(in srgb, var(--success-color) 15%, transparent);
+  border: 1px solid var(--success-color); }
+.submitted-indicator .check-icon { font-size: 1.3rem; color: var(--success-color); }
+.submitted-hint { font-size: 0.9rem; line-height: 1.5; color: var(--text-secondary); margin-bottom: 1rem; }
+.waiting-animation { display: flex; gap: 6px; justify-content: center; padding: 0.5rem 0; }
+.waiting-animation .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-color);
+  animation: pulse 1.4s ease-in-out infinite; }
+.waiting-animation .dot:nth-child(2) { animation-delay: 0.2s; }
+.waiting-animation .dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes pulse { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+.submit-btn, .implement-btn { width: 100%; padding: 0.8rem 1rem; border-radius: 10px;
+  font-weight: 600; font-size: 0.95rem; cursor: pointer; margin-top: 0.5rem; font-family: inherit; }
+.submit-btn { border: none; background: var(--accent-color); color: white; }
+.submit-btn:disabled, .implement-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.submit-gap { height: 2rem; }
+.implement-btn { background: transparent; color: var(--warning-color);
+  border: 1px solid var(--warning-color);
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+.implement-btn:hover { background: color-mix(in srgb, var(--warning-color) 15%, transparent); }
+.implement-btn .warn-icon { font-size: 1rem; }
+.hint-warn { color: var(--warning-color); }
+.hint { font-size: 0.8rem; color: var(--text-secondary); margin: 0.5rem 0 0 0; }
+h3 { margin-top: 1rem; font-size: 1rem; }
+</style>
+</head>
+<body>
+<div class="concept-layout">
+  <div class="concept-content">
+    <header>
+      <h1>Auth-Middleware Redesign</h1>
+      <p class="subtitle">Entscheidung zwischen drei Authentifizierungsansätzen</p>
+      <button id="theme-toggle" aria-label="Toggle theme">🌙/☀️</button>
+    </header>
+    <main>
+      <section id="iter-1" data-iteration="1" data-active>
+        <header class="iteration-intro">
+          <h2>Iteration 1 · Variantenvergleich</h2>
+          <p>Drei Middleware-Ansätze für die neue Auth-Schicht. Stimme pro Variante ab — "Exakt diese" wählt genau eine aus und verwirft die anderen.</p>
+        </header>
+
+        <section id="variant-jwt" class="variant-card" data-nav-label="A · JWT stateless">
+          <h3>Variante A · JWT stateless</h3>
+          <p>Token wird client-seitig gehalten, Signatur via Edge-Worker verifiziert. Keine Session-Tabelle.</p>
+          <div class="procons">
+            <div class="pros"><strong>Pros</strong><ul><li>Horizontal skalierbar</li><li>Kein DB-Roundtrip</li><li>Stateless Edge-Ready</li></ul></div>
+            <div class="cons"><strong>Cons</strong><ul><li>Revocation kompliziert</li><li>Token-Größe</li><li>Kein serverseitiger Logout</li></ul></div>
+          </div>
+          <div class="tri-state-group" data-decision="variant-jwt" data-label="A · JWT stateless">
+            <label class="tri-state-option"><input type="radio" name="eval-variant-jwt" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+            <label class="tri-state-option"><input type="radio" name="eval-variant-jwt" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+          </div>
+          <div class="comment-field"><textarea data-comment="variant-jwt" placeholder="Anmerkungen zu JWT…"></textarea></div>
+        </section>
+
+        <section id="variant-session" class="variant-card" data-nav-label="B · Session Cookie">
+          <h3>Variante B · Session Cookie (Redis-backed)</h3>
+          <p>Klassisches Session-Cookie mit signed ID, Mapping in Redis.</p>
+          <div class="procons">
+            <div class="pros"><strong>Pros</strong><ul><li>Einfacher Logout</li><li>Revocation sofort</li><li>Klein auf Wire</li></ul></div>
+            <div class="cons"><strong>Cons</strong><ul><li>Redis als SPOF</li><li>Session-Sticky-Routing nötig</li></ul></div>
+          </div>
+          <div class="tri-state-group" data-decision="variant-session" data-label="B · Session Cookie">
+            <label class="tri-state-option"><input type="radio" name="eval-variant-session" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+            <label class="tri-state-option"><input type="radio" name="eval-variant-session" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+          </div>
+          <div class="comment-field"><textarea data-comment="variant-session" placeholder="Anmerkungen zu Session Cookies…"></textarea></div>
+        </section>
+
+        <section id="variant-oauth" class="variant-card" data-nav-label="C · OAuth Delegation">
+          <h3>Variante C · OAuth Delegation (Auth0/Clerk)</h3>
+          <p>Delegation an externen Identity Provider, nur Token-Validierung lokal.</p>
+          <div class="procons">
+            <div class="pros"><strong>Pros</strong><ul><li>Compliance out-of-the-box</li><li>SSO + MFA gratis</li><li>Weniger Eigenbetrieb</li></ul></div>
+            <div class="cons"><strong>Cons</strong><ul><li>Vendor-Lock</li><li>Kostenfaktor pro MAU</li><li>Externe Latenz</li></ul></div>
+          </div>
+          <div class="tri-state-group" data-decision="variant-oauth" data-label="C · OAuth Delegation">
+            <label class="tri-state-option"><input type="radio" name="eval-variant-oauth" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+            <label class="tri-state-option"><input type="radio" name="eval-variant-oauth" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+          </div>
+          <div class="comment-field"><textarea data-comment="variant-oauth" placeholder="Anmerkungen zu OAuth…"></textarea></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <aside class="concept-decision-panel">
+    <nav class="iteration-tabs" role="tablist" aria-label="Iterationen">
+      <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="true" aria-controls="iter-1">Iteration 1 · aktiv</button>
+    </nav>
+    <h3>Entscheidungen</h3>
+    <nav class="section-nav" id="section-nav" aria-label="Abschnitte"></nav>
+    <div id="panel-ready">
+      <div id="decision-summary"></div>
+      <div id="connection-connecting" class="panel-warning panel-warning--connecting" style="display: flex;">
+        <span class="warning-icon" aria-hidden="true">⋯</span>
+        <strong>Claude verbindet sich</strong>
+        <p class="warning-message">Einen Moment — die Verbindung wird aufgebaut.</p>
+      </div>
+      <div id="connection-warning" class="panel-warning" style="display: none;">
+        <span class="warning-icon" aria-hidden="true">⚠</span>
+        <strong>Claude ist nicht verbunden</strong>
+        <p class="warning-message">Submit ist pausiert, bis die Verbindung wieder steht. Deine Eingaben bleiben erhalten.</p>
+      </div>
+      <button id="submit-iterate-btn" class="primary submit-btn">Zur nächsten Iteration</button>
+      <p class="hint">Deine Auswahl geht an Claude für die nächste Iteration. Es wird kein Code geschrieben.</p>
+      <div class="submit-gap" aria-hidden="true"></div>
+      <button id="submit-implement-btn" class="implement-btn">
+        <span class="warn-icon" aria-hidden="true">⚠</span>
+        Mit Feedback implementieren
+      </button>
+      <p class="hint hint-warn">Claude setzt die Auswahl jetzt in echte Änderungen um.</p>
+    </div>
+    <div id="panel-submitted" style="display: none;">
+      <div class="submitted-indicator"><span class="check-icon">✓</span><strong>Entscheidungen übermittelt</strong></div>
+      <p class="submitted-hint">Claude verarbeitet deine Auswahl. Wechsle zum <strong>Claude Chat</strong>.</p>
+      <div class="waiting-animation"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+    </div>
+  </aside>
+</div>
+
+<script type="application/json" id="concept-decisions">
+{"submitted": false, "decisions": [], "comments": []}
+</script>
+<script>
+// --- State Persistence ---
+const STORAGE_KEY = 'concept-state-' + location.pathname.split('/').pop().replace('.html', '');
+const STATE_TTL_MS = 24 * 60 * 60 * 1000;
+function saveState() {
+  const state = { _savedAt: Date.now(), _pageVersion: document.documentElement.dataset.pageVersion || '' };
+  document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
+    if (el.name || el.id) state['input:' + (el.name || el.id) + ':' + el.value] = el.checked; });
+  document.querySelectorAll('textarea, input[type="text"]').forEach(el => {
+    if (el.id || el.dataset.comment) state['text:' + (el.id || el.dataset.comment)] = el.value; });
+  state['theme'] = document.documentElement.getAttribute('data-theme');
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+function restoreState() {
+  const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return;
+  try { const state = JSON.parse(raw);
+    if (state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) { localStorage.removeItem(STORAGE_KEY); return; }
+    const currentVersion = document.documentElement.dataset.pageVersion || '';
+    if (state._pageVersion && state._pageVersion !== currentVersion) { localStorage.removeItem(STORAGE_KEY); return; }
+    if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+    Object.entries(state).forEach(([key, value]) => {
+      if (key.startsWith('_')) return;
+      const [type, ...rest] = key.split(':');
+      if (type === 'input') { const [name, val] = [rest.slice(0, -1).join(':'), rest[rest.length - 1]];
+        const el = document.querySelector(`input[name="${name}"][value="${val}"]`); if (el) el.checked = value; }
+      else if (type === 'text') { const id = rest.join(':');
+        const el = document.querySelector(`[data-comment="${id}"]`) || document.getElementById(id); if (el) el.value = value; }
+    });
+  } catch (e) {}
+}
+document.addEventListener('DOMContentLoaded', restoreState);
+document.addEventListener('change', saveState);
+document.addEventListener('input', saveState);
+
+// --- Section Nav ---
+function buildSectionNav() {
+  const nav = document.getElementById('section-nav'); if (!nav) return;
+  const activeIteration = document.querySelector('section[data-iteration][data-active]'); if (!activeIteration) return;
+  const sections = activeIteration.querySelectorAll('section[id][data-nav-label]');
+  nav.innerHTML = '';
+  sections.forEach(sec => {
+    const id = sec.id, label = sec.dataset.navLabel;
+    const hasTriState = !!sec.querySelector(`input[name="eval-${id}"]`);
+    const link = document.createElement('a');
+    link.href = '#' + id; link.className = 'section-nav-item'; link.dataset.sectionId = id;
+    if (hasTriState) link.setAttribute('data-variant', '');
+    const labelEl = document.createElement('span'); labelEl.className = 'section-nav-label'; labelEl.textContent = label;
+    link.appendChild(labelEl);
+    if (hasTriState) { const s = document.createElement('span'); s.className = 'section-nav-state'; link.appendChild(s); }
+    nav.appendChild(link);
+  });
+  updateSectionNavState();
+}
+function updateSectionNavState() {
+  const labels = { include: 'Miteinbeziehen', discard: 'Verwerfen', only: 'Exakt diese' };
+  document.querySelectorAll('.section-nav-item[data-variant]').forEach(link => {
+    const id = link.dataset.sectionId;
+    const checked = document.querySelector(`input[name="eval-${id}"]:checked`);
+    const currentState = checked ? checked.value : 'include';
+    const stateEl = link.querySelector('.section-nav-state');
+    if (stateEl) { stateEl.textContent = labels[currentState] || currentState; stateEl.className = 'section-nav-state state-' + currentState; }
+  });
+}
+document.addEventListener('click', e => {
+  const link = e.target.closest('.section-nav-item'); if (!link) return;
+  e.preventDefault();
+  const target = document.querySelector(link.getAttribute('href'));
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+document.addEventListener('change', updateSectionNavState);
+
+// --- Iteration tabs + freeze ---
+function showIteration(n) {
+  document.querySelectorAll('section[data-iteration]').forEach(sec => { sec.hidden = String(sec.dataset.iteration) !== String(n); });
+  document.querySelectorAll('.iteration-tab').forEach(tab => {
+    tab.setAttribute('aria-selected', String(tab.dataset.iteration) === String(n) ? 'true' : 'false'); });
+  const activeSec = document.querySelector('section[data-iteration][data-active]');
+  const isLive = activeSec && String(activeSec.dataset.iteration) === String(n);
+  document.body.classList.toggle('viewing-frozen', !isLive);
+  const panelReady = document.getElementById('panel-ready');
+  const panelSubmitted = document.getElementById('panel-submitted');
+  if (panelReady) panelReady.style.display = isLive ? 'block' : 'none';
+  if (panelSubmitted) {
+    const submitted = document.body.classList.contains('concept-submitted');
+    panelSubmitted.style.display = (isLive && submitted) ? 'block' : 'none';
+  }
+  buildSectionNav();
+  document.dispatchEvent(new CustomEvent('iteration:changed'));
+}
+document.querySelectorAll('.iteration-tab').forEach(tab => tab.addEventListener('click', () => showIteration(tab.dataset.iteration)));
+document.addEventListener('DOMContentLoaded', () => {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (active) showIteration(active.dataset.iteration);
+});
+
+// --- Theme ---
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const html = document.documentElement;
+  html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+
+// --- collectDecisions (decision branch) ---
+function collectDecisions(action = 'iterate') {
+  const decisions = [], comments = [];
+  document.querySelectorAll('[data-decision]').forEach(el => {
+    const id = el.dataset.decision;
+    const checked = document.querySelector(`input[name="eval-${id}"]:checked`);
+    decisions.push({ id, label: el.dataset.label || '', evaluation: checked ? checked.value : 'include' });
+  });
+  document.querySelectorAll('[data-comment]').forEach(el => {
+    if (el.value.trim()) comments.push({ id: el.dataset.comment, text: el.value.trim() });
+  });
+  return { submitted: true, template: 'decision', action, decisions, comments };
+}
+
+// --- Submit + heartbeat (degrades gracefully if bridge offline) ---
+let _submittedAt = 0;
+async function submitWithAction(action) {
+  const data = collectDecisions(action);
+  document.getElementById('concept-decisions').textContent = JSON.stringify(data);
+  document.body.classList.add('concept-submitted');
+  _submittedAt = Date.now();
+  document.getElementById('panel-ready').style.display = 'none';
+  document.getElementById('panel-submitted').style.display = 'block';
+  try { await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); }
+  catch (e) { localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data)); }
+  saveState();
+}
+document.getElementById('submit-iterate-btn').addEventListener('click', () => submitWithAction('iterate'));
+document.getElementById('submit-implement-btn').addEventListener('click', () => {
+  if (!confirm('Mit Feedback echt implementieren? Claude schreibt jetzt Code-Änderungen.')) return;
+  submitWithAction('implement');
+});
+async function retryPendingSubmission() {
+  const pending = localStorage.getItem(STORAGE_KEY + '-pending'); if (!pending) return;
+  try { const res = await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: pending });
+    if (res.ok) localStorage.removeItem(STORAGE_KEY + '-pending'); } catch (e) {}
+}
+function restorePanelToReady() {
+  document.getElementById('panel-submitted').style.display = 'none';
+  document.getElementById('panel-ready').style.display = 'block';
+  ['submit-iterate-btn', 'submit-implement-btn'].forEach(id => {
+    const btn = document.getElementById(id); if (btn) btn.disabled = false;
+  });
+  document.body.classList.remove('concept-submitted'); _submittedAt = 0;
+  localStorage.removeItem(STORAGE_KEY);
+}
+const HEARTBEAT_STALE_MS = 90000, HEARTBEAT_GRACE_MS = 30000;
+const _pageLoadedAt = Date.now(); let _lastHeartbeatTs = 0;
+async function pollHeartbeat() {
+  try { const res = await fetch('/heartbeat', { cache: 'no-store' }); const data = await res.json(); _lastHeartbeatTs = data.ts || 0; }
+  catch (e) {}
+}
+async function pollProcessedState() {
+  if (!_submittedAt) return;
+  try { const res = await fetch('/decisions', { cache: 'no-store' }); const data = await res.json();
+    const processedIso = data && data._processed_at; if (!processedIso) return;
+    const processedMs = Date.parse(processedIso);
+    if (Number.isFinite(processedMs) && processedMs > _submittedAt) restorePanelToReady();
+  } catch (e) {}
+}
+function checkClaudeConnection() {
+  const isConnected = _lastHeartbeatTs && (Date.now() - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
+  const inGrace = Date.now() - _pageLoadedAt < HEARTBEAT_GRACE_MS;
+  const connecting = document.getElementById('connection-connecting');
+  const warning = document.getElementById('connection-warning');
+  const btns = ['submit-iterate-btn', 'submit-implement-btn']
+    .map(id => document.getElementById(id)).filter(Boolean);
+  const panelSubmitted = document.getElementById('panel-submitted');
+  if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
+  if (isConnected) {
+    if (connecting) connecting.style.display = 'none';
+    if (warning) warning.style.display = 'none';
+    btns.forEach(b => b.disabled = false);
+    retryPendingSubmission();
+  } else if (inGrace) {
+    if (connecting) connecting.style.display = 'flex';
+    if (warning) warning.style.display = 'none';
+    btns.forEach(b => b.disabled = false);
+  } else {
+    if (connecting) connecting.style.display = 'none';
+    if (warning) warning.style.display = 'flex';
+    btns.forEach(b => b.disabled = false);
+  }
+}
+setInterval(async () => { await pollHeartbeat(); checkClaudeConnection(); await pollProcessedState(); }, 5000);
+
+// --- Reload poller ---
+let _bootReloadCounter = null;
+async function pollReload() {
+  try { const res = await fetch('/reload', { cache: 'no-store' }); if (!res.ok) return;
+    const { counter } = await res.json();
+    if (_bootReloadCounter === null) { _bootReloadCounter = counter; return; }
+    if (counter > _bootReloadCounter) location.reload();
+  } catch (e) {}
+}
+setInterval(pollReload, 3000);
+document.addEventListener('DOMContentLoaded', pollReload);
+</script>
+</body>
+</html>

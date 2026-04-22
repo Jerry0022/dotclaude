@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark" data-page-version="2026-04-21T10:00:00" data-template="prototype">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept — Onboarding-Flow Prototype</title>
+<style>
+:root {
+  --bg: #0d1117; --text: #c9d1d9; --text-secondary: #8b949e;
+  --panel-bg: #161b22; --border-color: #30363d; --input-bg: #0d1117;
+  --accent-color: #58a6ff; --success-color: #3fb950; --warning-color: #d29922; --danger-color: #f85149;
+}
+html[data-theme="light"] {
+  --bg: #ffffff; --text: #24292f; --text-secondary: #57606a;
+  --panel-bg: #f6f8fa; --border-color: #d0d7de; --input-bg: #ffffff;
+  --accent-color: #0969da;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body { background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6;
+  overflow: hidden; }
+button { font-family: inherit; }
+
+.concept-layout.prototype.fullscreen { display: block; width: 100vw; height: 100vh; overflow: hidden; }
+.concept-layout.prototype .concept-content { position: absolute; inset: 0; overflow: hidden; }
+
+/* Each iteration fills the full viewport. Only the active iteration is
+   shown; within the active iteration, exactly one screen is visible. */
+section[data-iteration] { position: absolute; inset: 0; }
+section[data-iteration][hidden] { display: none; }
+
+/* Full-viewport prototype screens — one visible at a time */
+section[data-screen] {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 2rem;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent-color) 6%, var(--bg)),
+    var(--bg));
+  overflow-y: auto;
+}
+section[data-screen][hidden] { display: none; }
+
+/* Device-like frame that holds the mocked screen content */
+.device-frame {
+  width: 100%; max-width: 420px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.55), 0 2px 0 color-mix(in srgb, var(--accent-color) 30%, transparent) inset;
+  padding: 2rem;
+  display: flex; flex-direction: column; gap: 1rem;
+}
+.device-frame h4 { margin: 0; font-size: 1.3rem; }
+.device-frame p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; }
+.mock-input { padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: 10px;
+  background: var(--input-bg); color: var(--text-secondary); font-size: 0.95rem; }
+.mock-btn { padding: 0.8rem 1rem; border: none; border-radius: 10px; background: var(--accent-color);
+  color: white; font-weight: 600; font-size: 1rem; text-align: center; cursor: pointer; }
+.mock-btn.secondary { background: transparent; color: var(--accent-color); border: 1px solid var(--accent-color); }
+.mock-divider { height: 1px; background: var(--border-color); margin: 0.5rem 0; }
+.mock-check { display: flex; align-items: center; gap: 0.6rem; font-size: 0.9rem; color: var(--text-secondary); }
+.mock-check::before { content: "☐"; font-size: 1.1rem; }
+.mock-hero { display: flex; align-items: center; justify-content: center;
+  padding: 2rem; font-size: 4rem; border-radius: 14px;
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent); }
+.mock-hero.success { background: color-mix(in srgb, var(--success-color) 14%, transparent); }
+
+/* Subtle screen-counter overlay (top-left) */
+.screen-indicator {
+  position: fixed; top: 1rem; left: 1rem; z-index: 90;
+  padding: 0.4rem 0.75rem; border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary); font-size: 0.8rem;
+  backdrop-filter: blur(6px);
+}
+.screen-indicator strong { color: var(--text); }
+
+/* ── Panel FAB + overlay ── */
+.panel-fab, .feedback-fab {
+  position: fixed; width: 56px; height: 56px; border-radius: 50%; border: none;
+  color: white; font-size: 1.5rem; cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35); z-index: 100;
+  transition: transform 0.2s, opacity 0.2s;
+  display: flex; align-items: center; justify-content: center; }
+.panel-fab { bottom: 2rem; right: 2rem; background: var(--accent-color); }
+.feedback-fab { bottom: 2rem; left: 2rem; background: var(--warning-color); }
+.panel-fab:hover, .feedback-fab:hover { transform: scale(1.1); }
+.panel-fab.hidden, .feedback-fab.hidden { opacity: 0; pointer-events: none; }
+
+.concept-layout.prototype .concept-decision-panel {
+  display: flex; flex-direction: column;
+  position: fixed; top: 0; right: -440px; width: 400px; max-width: 92vw;
+  height: 100vh; padding: 1.5rem;
+  background: var(--panel-bg); border-left: 1px solid var(--border-color);
+  z-index: 200; overflow-y: auto; transition: right 0.3s ease; }
+.concept-layout.prototype .concept-decision-panel.open { right: 0; }
+.panel-close-btn, .feedback-close-btn { align-self: flex-end; background: none; border: none;
+  color: var(--text); font-size: 1.5rem; cursor: pointer; padding: 0.25rem; }
+.panel-backdrop { display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55); z-index: 150; }
+.panel-backdrop.visible { display: block; }
+
+/* ── Screen navigation (inside ☰ panel) ── */
+.screen-nav { display: flex; flex-direction: column; gap: 4px;
+  margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
+.screen-nav-item { display: flex; align-items: center; justify-content: space-between;
+  padding: 0.6rem 0.85rem; border-radius: 8px; text-decoration: none; color: var(--text);
+  font-size: 0.95rem; border: 1px solid var(--border-color); background: transparent;
+  cursor: pointer; transition: all 0.15s; text-align: left; }
+.screen-nav-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.screen-nav-item[data-active="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+  border-color: var(--accent-color); font-weight: 600; }
+.screen-nav-item .screen-idx { color: var(--accent-color); font-weight: 600; margin-right: 0.5rem; }
+.screen-nav-item .has-notes { color: var(--warning-color); font-size: 0.75rem; }
+
+/* ── Feedback dock ── */
+.feedback-dock {
+  position: fixed; left: 0; right: 0; bottom: -100%; max-height: 70vh;
+  padding: 1.5rem; background: var(--panel-bg);
+  border-top: 1px solid var(--border-color);
+  box-shadow: 0 -6px 20px rgba(0,0,0,0.35); z-index: 180; overflow-y: auto;
+  transition: bottom 0.3s ease; display: flex; flex-direction: column; gap: 1.25rem; }
+.feedback-dock[data-open="true"] { bottom: 0; }
+.feedback-dock-header { display: flex; justify-content: space-between; align-items: center; }
+.feedback-dock-header strong { font-size: 1.05rem; }
+.feedback-section { display: flex; flex-direction: column; gap: 0.4rem; }
+.feedback-section label { font-size: 0.9rem; color: var(--text-secondary); font-weight: 500; }
+.feedback-section label strong { color: var(--accent-color); }
+.feedback-section textarea { width: 100%; padding: 0.8rem; border: 1px solid var(--border-color);
+  border-radius: 10px; background: var(--input-bg); color: var(--text);
+  font-family: inherit; font-size: 0.95rem; line-height: 1.5; resize: vertical; min-height: 90px; }
+.feedback-section textarea:focus { outline: none; border-color: var(--accent-color); }
+.feedback-divider { height: 1px; background: var(--border-color); margin: 0.25rem 0; }
+
+/* ── Iteration tabs in ☰ panel ── */
+.iteration-tabs { display: flex; flex-direction: column; gap: 4px; margin-bottom: 1rem;
+  padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); }
+.iteration-tab { flex: 0 0 auto; text-align: left; padding: 6px 10px;
+  border: 1px solid var(--border-color); border-radius: 6px; background: transparent;
+  color: var(--text-secondary); font-size: 0.85rem; cursor: pointer; }
+.iteration-tab[aria-selected="true"] { background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  color: var(--text); border-color: var(--accent-color); font-weight: 600; }
+.iteration-tab[aria-selected="true"]::before { content: "● "; color: var(--accent-color); }
+
+/* Panel header (title + theme toggle) */
+.panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.panel-header h3 { margin: 0; font-size: 1rem; }
+.panel-header .panel-subtitle { margin: 0; font-size: 0.85rem; color: var(--text-secondary); }
+#theme-toggle { background: none; border: 1px solid var(--border-color); color: var(--text);
+  padding: 0.4rem 0.6rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+
+#panel-ready { position: relative; }
+.panel-warning {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.75rem; text-align: center; padding: 1.5rem;
+  border-radius: 10px; border: 1px solid var(--warning-color);
+  background: color-mix(in srgb, var(--panel-bg) 94%, transparent);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  color: var(--text); }
+.panel-warning .warning-icon { font-size: 2.25rem; color: var(--warning-color); line-height: 1; }
+.panel-warning strong { color: var(--warning-color); font-size: 1rem; }
+.panel-warning .warning-message { font-size: 0.88rem; color: var(--text-secondary);
+  line-height: 1.5; max-width: 280px; margin: 0; }
+.panel-warning--connecting { border-color: var(--accent-color); }
+.panel-warning--connecting .warning-icon { color: var(--accent-color); animation: pulse-connect 1.4s ease-in-out infinite; }
+.panel-warning--connecting strong { color: var(--accent-color); }
+@keyframes pulse-connect { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+.submitted-indicator { display: flex; align-items: center; gap: 0.5rem; padding: 1rem;
+  margin-bottom: 0.75rem; border-radius: 8px;
+  background: color-mix(in srgb, var(--success-color) 15%, transparent);
+  border: 1px solid var(--success-color); }
+.submitted-indicator .check-icon { font-size: 1.3rem; color: var(--success-color); }
+.submitted-hint { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem; }
+.waiting-animation { display: flex; gap: 6px; justify-content: center; padding: 0.5rem 0; }
+.waiting-animation .dot { width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent-color); animation: pulse 1.4s ease-in-out infinite; }
+.waiting-animation .dot:nth-child(2) { animation-delay: 0.2s; }
+.waiting-animation .dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes pulse { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+.submit-btn, .implement-btn { width: 100%; padding: 0.85rem 1rem; border-radius: 10px;
+  font-weight: 600; font-size: 0.95rem; cursor: pointer; margin-top: 0.5rem; font-family: inherit; }
+.submit-btn { border: none; background: var(--accent-color); color: white; }
+.submit-btn:disabled, .implement-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.submit-gap { height: 2rem; }
+.implement-btn { background: transparent; color: var(--warning-color);
+  border: 1px solid var(--warning-color);
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+.implement-btn:hover { background: color-mix(in srgb, var(--warning-color) 15%, transparent); }
+.implement-btn .warn-icon { font-size: 1rem; }
+.hint-warn { color: var(--warning-color); }
+.hint { font-size: 0.8rem; color: var(--text-secondary); margin: 0.5rem 0 0 0; }
+
+/* Screen transitions */
+section[data-screen] { animation: screen-in 0.25s ease; }
+@keyframes screen-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.section-nav { display: none; }
+
+/* Single-screen prototype: hide screen-nav + per-screen feedback */
+body[data-single-screen="true"] #screen-nav,
+body[data-single-screen="true"] .feedback-section:has(#screen-textareas) { display: none; }
+</style>
+</head>
+<body>
+<div class="concept-layout prototype fullscreen">
+  <div class="concept-content">
+    <main>
+      <section data-iteration="1" data-active>
+        <section id="screen-welcome" data-screen data-nav-label="Welcome" data-screen-active="true">
+          <div class="device-frame">
+            <div class="mock-hero">👋</div>
+            <h4>Willkommen bei Orbit</h4>
+            <p>Starte in wenigen Schritten — wir holen dich dort ab, wo du bist.</p>
+            <div class="mock-divider"></div>
+            <button class="mock-btn" data-screen-link="screen-credentials">Los geht's →</button>
+            <button class="mock-btn secondary" data-screen-link="screen-success">Bereits Konto? Anmelden</button>
+          </div>
+        </section>
+
+        <section id="screen-credentials" data-screen data-nav-label="Credentials" hidden>
+          <div class="device-frame">
+            <h4>Account anlegen</h4>
+            <p>E-Mail und Passwort wählen.</p>
+            <div class="mock-input">name@firma.de</div>
+            <div class="mock-input">••••••••</div>
+            <div class="mock-check">Ich akzeptiere AGB & Datenschutz</div>
+            <div class="mock-divider"></div>
+            <button class="mock-btn" data-screen-link="screen-success">Konto erstellen →</button>
+            <button class="mock-btn secondary" data-screen-link="prev">← Zurück</button>
+          </div>
+        </section>
+
+        <section id="screen-success" data-screen data-nav-label="Success" hidden>
+          <div class="device-frame">
+            <div class="mock-hero success">✓</div>
+            <h4>Alles bereit</h4>
+            <p>Dein Workspace ist eingerichtet. Wir haben dir eine Willkommens-Mail geschickt.</p>
+            <div class="mock-divider"></div>
+            <button class="mock-btn" data-screen-link="screen-welcome">Zum Dashboard ↺</button>
+            <p style="text-align:center; font-size:0.85rem; color:var(--text-secondary); margin: 0;">Demo: "Zum Dashboard" startet den Flow von vorn.</p>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <!-- Screen counter overlay -->
+  <div class="screen-indicator">
+    Screen <strong id="active-screen-idx">1</strong> / <span id="total-screens">3</span> · <span id="active-screen-label">Welcome</span>
+  </div>
+
+  <!-- FABs -->
+  <button id="panel-toggle" class="panel-fab" aria-label="Entscheidungen öffnen">☰</button>
+  <button id="feedback-toggle" class="feedback-fab" aria-label="Feedback öffnen">💬</button>
+
+  <!-- Decision panel (☰) -->
+  <aside class="concept-decision-panel" id="decision-panel">
+    <button id="panel-close" class="panel-close-btn" aria-label="Schliessen">✕</button>
+    <div class="panel-header">
+      <div>
+        <h3>Onboarding-Flow</h3>
+        <p class="panel-subtitle">3-Schritt Registrierung</p>
+      </div>
+      <button id="theme-toggle">🌙/☀️</button>
+    </div>
+    <nav class="iteration-tabs" role="tablist" aria-label="Iterationen">
+      <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="true">Iteration 1 · aktiv</button>
+    </nav>
+    <nav class="screen-nav" id="screen-nav" aria-label="Screens">
+      <!-- auto-populated -->
+    </nav>
+    <div id="panel-ready">
+      <div id="connection-connecting" class="panel-warning panel-warning--connecting" style="display: flex;">
+        <span class="warning-icon" aria-hidden="true">⋯</span>
+        <strong>Claude verbindet sich</strong>
+        <p class="warning-message">Einen Moment — die Verbindung wird aufgebaut.</p>
+      </div>
+      <div id="connection-warning" class="panel-warning" style="display: none;">
+        <span class="warning-icon" aria-hidden="true">⚠</span>
+        <strong>Claude ist nicht verbunden</strong>
+        <p class="warning-message">Submit ist pausiert, bis die Verbindung wieder steht. Deine Eingaben bleiben erhalten.</p>
+      </div>
+      <button id="submit-iterate-btn" class="primary submit-btn">Zur nächsten Iteration</button>
+      <p class="hint">Per-Screen-Notizen + allgemeine Anmerkungen gehen an Claude. Kein Code wird geschrieben.</p>
+      <div class="submit-gap" aria-hidden="true"></div>
+      <button id="submit-implement-btn" class="implement-btn">
+        <span class="warn-icon" aria-hidden="true">⚠</span>
+        Mit Feedback implementieren
+      </button>
+      <p class="hint hint-warn">Claude baut den Prototyp jetzt als echten Code um.</p>
+    </div>
+    <div id="panel-submitted" style="display: none;">
+      <div class="submitted-indicator"><span class="check-icon">✓</span><strong>Feedback übermittelt</strong></div>
+      <p class="submitted-hint">Claude verarbeitet deine Notizen.</p>
+      <div class="waiting-animation"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+    </div>
+  </aside>
+  <div class="panel-backdrop" id="panel-backdrop"></div>
+
+  <!-- Feedback dock (💬) — current screen + general -->
+  <aside class="feedback-dock" id="feedback-dock" data-open="false">
+    <div class="feedback-dock-header">
+      <strong>Feedback</strong>
+      <button id="feedback-close" class="feedback-close-btn" aria-label="Schliessen">✕</button>
+    </div>
+
+    <div class="feedback-section">
+      <label>Aktueller Screen: <strong id="dock-screen-label">Welcome</strong></label>
+      <!-- One textarea per screen; only the active one is visible. They all
+           live in the DOM so their state is independently persisted. -->
+      <div id="screen-textareas">
+        <!-- auto-populated, one textarea per data-screen -->
+      </div>
+    </div>
+
+    <div class="feedback-divider"></div>
+
+    <div class="feedback-section">
+      <label>Allgemeine Anmerkungen (screen-übergreifend)</label>
+      <textarea id="proto-general-feedback" data-comment="general"
+                placeholder="Allgemeine Gedanken zum Prototyp — bleibt bei jedem Screen sichtbar."></textarea>
+    </div>
+  </aside>
+
+  <section class="section-nav" id="section-nav" aria-hidden="true"></section>
+</div>
+
+<script type="application/json" id="concept-decisions">
+{"submitted": false, "decisions": [], "comments": []}
+</script>
+<script>
+// --- State persistence ---
+const STORAGE_KEY = 'concept-state-' + location.pathname.split('/').pop().replace('.html', '');
+const STATE_TTL_MS = 24 * 60 * 60 * 1000;
+function saveState() {
+  const state = {
+    _savedAt: Date.now(),
+    _pageVersion: document.documentElement.dataset.pageVersion || '',
+    _activeScreen: document.querySelector('[data-screen][data-screen-active="true"]')?.id || ''
+  };
+  document.querySelectorAll('textarea, input[type="text"]').forEach(el => {
+    if (el.id || el.dataset.comment) state['text:' + (el.id || el.dataset.comment)] = el.value;
+  });
+  state['theme'] = document.documentElement.getAttribute('data-theme');
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+function restoreState() {
+  const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return null;
+  try {
+    const state = JSON.parse(raw);
+    if (state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) { localStorage.removeItem(STORAGE_KEY); return null; }
+    if (state._pageVersion && state._pageVersion !== (document.documentElement.dataset.pageVersion || '')) { localStorage.removeItem(STORAGE_KEY); return null; }
+    if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+    Object.entries(state).forEach(([key, value]) => {
+      if (key.startsWith('_')) return;
+      const [type, ...rest] = key.split(':');
+      if (type === 'text') {
+        const id = rest.join(':');
+        const el = document.querySelector(`[data-comment="${id}"]`) || document.getElementById(id);
+        if (el) el.value = value;
+      }
+    });
+    return state;
+  } catch (e) { return null; }
+}
+document.addEventListener('change', saveState);
+document.addEventListener('input', saveState);
+
+// --- Build screen textareas and screen-nav ---
+function buildScreenUI() {
+  const active = document.querySelector('section[data-iteration][data-active]'); if (!active) return;
+  const screens = [...active.querySelectorAll('section[data-screen][id]')];
+  const total = screens.length;
+  document.getElementById('total-screens').textContent = total;
+
+  // Single-screen: hide screen-nav + per-screen feedback (only general notes)
+  document.body.dataset.singleScreen = total <= 1 ? 'true' : 'false';
+  if (total <= 1) {
+    const indicator = document.querySelector('.screen-indicator');
+    if (indicator) indicator.style.display = 'none';
+  }
+
+  // Screen-nav in ☰
+  const nav = document.getElementById('screen-nav'); nav.innerHTML = '';
+  screens.forEach((sec, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'screen-nav-item'; btn.dataset.screenId = sec.id;
+    btn.innerHTML = `<span><span class="screen-idx">${idx + 1}.</span>${sec.dataset.navLabel || sec.id}</span>
+      <span class="has-notes" data-note-marker></span>`;
+    btn.addEventListener('click', () => { showScreen(sec.id); closePanel(); });
+    nav.appendChild(btn);
+  });
+
+  // Per-screen textareas in feedback dock
+  const container = document.getElementById('screen-textareas'); container.innerHTML = '';
+  screens.forEach(sec => {
+    const ta = document.createElement('textarea');
+    ta.dataset.comment = sec.id; ta.dataset.screenComment = sec.id;
+    ta.placeholder = `Notiz zu ${sec.dataset.navLabel || sec.id}…`;
+    ta.hidden = true;
+    container.appendChild(ta);
+  });
+}
+
+function showScreen(id) {
+  const screens = document.querySelectorAll('section[data-iteration][data-active] section[data-screen][id]');
+  let idx = 0;
+  screens.forEach((s, i) => {
+    const match = s.id === id;
+    s.hidden = !match;
+    s.dataset.screenActive = match ? 'true' : 'false';
+    if (match) idx = i;
+  });
+  // Indicator
+  const screen = document.getElementById(id);
+  const label = screen?.dataset.navLabel || id;
+  document.getElementById('active-screen-label').textContent = label;
+  document.getElementById('active-screen-idx').textContent = idx + 1;
+  document.getElementById('dock-screen-label').textContent = label;
+  // Dock: show matching textarea
+  document.querySelectorAll('[data-screen-comment]').forEach(ta => {
+    ta.hidden = ta.dataset.screenComment !== id;
+  });
+  // Nav: active
+  document.querySelectorAll('.screen-nav-item').forEach(item => {
+    item.dataset.active = String(item.dataset.screenId === id);
+  });
+  updateNoteMarkers();
+  saveState();
+}
+
+function updateNoteMarkers() {
+  document.querySelectorAll('.screen-nav-item').forEach(item => {
+    const id = item.dataset.screenId;
+    const ta = document.querySelector(`[data-screen-comment="${id}"]`);
+    const marker = item.querySelector('[data-note-marker]');
+    if (marker) marker.textContent = (ta && ta.value.trim()) ? '● Notiz' : '';
+  });
+}
+
+// --- Panel toggle ---
+const panel = document.getElementById('decision-panel');
+const panelToggle = document.getElementById('panel-toggle');
+const panelCloseBtn = document.getElementById('panel-close');
+const backdrop = document.getElementById('panel-backdrop');
+function openPanel() { panel.classList.add('open'); backdrop.classList.add('visible'); panelToggle.classList.add('hidden'); }
+function closePanel() { panel.classList.remove('open'); backdrop.classList.remove('visible'); panelToggle.classList.remove('hidden'); }
+panelToggle.addEventListener('click', openPanel);
+panelCloseBtn.addEventListener('click', closePanel);
+backdrop.addEventListener('click', closePanel);
+
+// Dock toggle
+const dock = document.getElementById('feedback-dock');
+const dockToggle = document.getElementById('feedback-toggle');
+const dockClose = document.getElementById('feedback-close');
+function closeDock() { dock.dataset.open = 'false'; dockToggle.classList.remove('hidden'); }
+dockToggle.addEventListener('click', () => { dock.dataset.open = 'true'; dockToggle.classList.add('hidden'); });
+dockClose.addEventListener('click', closeDock);
+
+// Click outside the dock (anywhere on the prototype screen) closes it.
+// Uses capture so it runs before other handlers; returns early when the
+// click originated inside the dock or on its toggle FAB.
+document.addEventListener('click', (e) => {
+  if (dock.dataset.open !== 'true') return;
+  if (e.target.closest('#feedback-dock')) return;
+  if (e.target.closest('#feedback-toggle')) return;
+  closeDock();
+}, true);
+
+// --- Iteration tabs (single iteration here but same mechanism) ---
+function showIteration(n) {
+  document.querySelectorAll('section[data-iteration]').forEach(sec => {
+    sec.hidden = String(sec.dataset.iteration) !== String(n);
+  });
+  document.querySelectorAll('.iteration-tab').forEach(tab => {
+    tab.setAttribute('aria-selected', String(tab.dataset.iteration) === String(n) ? 'true' : 'false');
+  });
+  buildScreenUI();
+  // Default: first screen active
+  const firstScreen = document.querySelector('section[data-iteration][data-active] section[data-screen]');
+  if (firstScreen) showScreen(firstScreen.id);
+}
+document.querySelectorAll('.iteration-tab').forEach(tab => tab.addEventListener('click', () => showIteration(tab.dataset.iteration)));
+
+// --- Theme ---
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const html = document.documentElement;
+  html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  saveState();
+});
+
+// --- Init ---
+document.addEventListener('DOMContentLoaded', () => {
+  buildScreenUI();
+  const state = restoreState();
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (active) {
+    const firstScreen = active.querySelector('section[data-screen]');
+    const restored = state && state._activeScreen && document.getElementById(state._activeScreen);
+    showScreen(restored ? state._activeScreen : (firstScreen ? firstScreen.id : ''));
+  }
+  updateNoteMarkers();
+  document.addEventListener('input', updateNoteMarkers);
+});
+
+// --- collectDecisions (prototype) ---
+function collectPrototypeDecisions() {
+  const comments = [];
+  const general = document.getElementById('proto-general-feedback');
+  if (general && general.value.trim()) comments.push({ id: 'general', text: general.value.trim() });
+  document.querySelectorAll('[data-screen-comment]').forEach(el => {
+    if (!el.value.trim()) return;
+    const id = el.dataset.screenComment;
+    const screenEl = document.getElementById(id);
+    comments.push({ id, label: screenEl ? (screenEl.dataset.navLabel || id) : id, text: el.value.trim() });
+  });
+  return { submitted: true, template: 'prototype', decisions: [], comments };
+}
+function collectDecisions(action = 'iterate') {
+  const data = collectPrototypeDecisions();
+  data.action = action;
+  return data;
+}
+
+// --- Submit + heartbeat ---
+let _submittedAt = 0;
+async function submitWithAction(action) {
+  const data = collectDecisions(action);
+  document.getElementById('concept-decisions').textContent = JSON.stringify(data);
+  document.body.classList.add('concept-submitted');
+  _submittedAt = Date.now();
+  document.getElementById('panel-ready').style.display = 'none';
+  document.getElementById('panel-submitted').style.display = 'block';
+  try { await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); }
+  catch (e) { localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data)); }
+  saveState();
+}
+document.getElementById('submit-iterate-btn').addEventListener('click', () => submitWithAction('iterate'));
+document.getElementById('submit-implement-btn').addEventListener('click', () => {
+  if (!confirm('Prototyp jetzt in echten Code umsetzen? Claude schreibt Code-Änderungen.')) return;
+  submitWithAction('implement');
+});
+async function retryPendingSubmission() {
+  const pending = localStorage.getItem(STORAGE_KEY + '-pending'); if (!pending) return;
+  try { const res = await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: pending });
+    if (res.ok) localStorage.removeItem(STORAGE_KEY + '-pending'); } catch (e) {}
+}
+function restorePanelToReady() {
+  document.getElementById('panel-submitted').style.display = 'none';
+  document.getElementById('panel-ready').style.display = 'block';
+  ['submit-iterate-btn', 'submit-implement-btn'].forEach(id => {
+    const btn = document.getElementById(id); if (btn) btn.disabled = false;
+  });
+  document.body.classList.remove('concept-submitted'); _submittedAt = 0;
+  localStorage.removeItem(STORAGE_KEY);
+}
+const HEARTBEAT_STALE_MS = 90000, HEARTBEAT_GRACE_MS = 30000;
+const _pageLoadedAt = Date.now(); let _lastHeartbeatTs = 0;
+async function pollHeartbeat() {
+  try { const res = await fetch('/heartbeat', { cache: 'no-store' }); const data = await res.json(); _lastHeartbeatTs = data.ts || 0; } catch (e) {}
+}
+async function pollProcessedState() {
+  if (!_submittedAt) return;
+  try { const res = await fetch('/decisions', { cache: 'no-store' }); const data = await res.json();
+    const processedIso = data && data._processed_at; if (!processedIso) return;
+    const processedMs = Date.parse(processedIso);
+    if (Number.isFinite(processedMs) && processedMs > _submittedAt) restorePanelToReady();
+  } catch (e) {}
+}
+function checkClaudeConnection() {
+  const isConnected = _lastHeartbeatTs && (Date.now() - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
+  const inGrace = Date.now() - _pageLoadedAt < HEARTBEAT_GRACE_MS;
+  const connecting = document.getElementById('connection-connecting');
+  const warning = document.getElementById('connection-warning');
+  const btns = ['submit-iterate-btn', 'submit-implement-btn']
+    .map(id => document.getElementById(id)).filter(Boolean);
+  const panelSubmitted = document.getElementById('panel-submitted');
+  if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
+  if (isConnected) {
+    if (connecting) connecting.style.display = 'none';
+    if (warning) warning.style.display = 'none';
+    btns.forEach(b => b.disabled = false);
+    retryPendingSubmission();
+  } else if (inGrace) {
+    if (connecting) connecting.style.display = 'flex';
+    if (warning) warning.style.display = 'none';
+    btns.forEach(b => b.disabled = false);
+  } else {
+    if (connecting) connecting.style.display = 'none';
+    if (warning) warning.style.display = 'flex';
+    btns.forEach(b => b.disabled = false);
+  }
+}
+setInterval(async () => { await pollHeartbeat(); checkClaudeConnection(); await pollProcessedState(); }, 5000);
+
+// --- Reload poller ---
+let _bootReloadCounter = null;
+async function pollReload() {
+  try { const res = await fetch('/reload', { cache: 'no-store' }); if (!res.ok) return;
+    const { counter } = await res.json();
+    if (_bootReloadCounter === null) { _bootReloadCounter = counter; return; }
+    if (counter > _bootReloadCounter) location.reload();
+  } catch (e) {}
+}
+setInterval(pollReload, 3000);
+document.addEventListener('DOMContentLoaded', pollReload);
+
+// Click-through: buttons with data-screen-link navigate between screens
+document.addEventListener('click', e => {
+  const link = e.target.closest('[data-screen-link]');
+  if (!link) return;
+  const dest = link.dataset.screenLink;
+  const screens = [...document.querySelectorAll('section[data-iteration][data-active] section[data-screen]')];
+  const currentIdx = screens.findIndex(s => s.dataset.screenActive === 'true');
+  let targetId = null;
+  if (dest === 'next') targetId = screens[Math.min(currentIdx + 1, screens.length - 1)]?.id;
+  else if (dest === 'prev') targetId = screens[Math.max(currentIdx - 1, 0)]?.id;
+  else targetId = dest;
+  if (!targetId || !document.getElementById(targetId)) return;
+  e.preventDefault();
+  closePanel();
+  showScreen(targetId);
+});
+
+// Keyboard: arrow keys jump between screens
+document.addEventListener('keydown', e => {
+  if (dock.dataset.open === 'true' || panel.classList.contains('open')) return;
+  if (e.target.matches('textarea, input')) return;
+  const screens = [...document.querySelectorAll('section[data-iteration][data-active] section[data-screen]')];
+  const currentIdx = screens.findIndex(s => s.dataset.screenActive === 'true');
+  if (currentIdx < 0) return;
+  let nextIdx = currentIdx;
+  if (e.key === 'ArrowRight' || e.key === ' ') nextIdx = Math.min(currentIdx + 1, screens.length - 1);
+  else if (e.key === 'ArrowLeft') nextIdx = Math.max(currentIdx - 1, 0);
+  else return;
+  e.preventDefault();
+  showScreen(screens[nextIdx].id);
+});
+</script>
+</body>
+</html>

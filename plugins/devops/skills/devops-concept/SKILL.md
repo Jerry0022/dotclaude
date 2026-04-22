@@ -29,29 +29,121 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 2. Project: `{project}/.claude/skills/concept/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
-## Step 1 — Determine Variant
+## Step 1 — Pick Template, then Content Variant
 
-Assess the content and select the appropriate variant:
+### 1a. Pick the page template (layout mode)
+
+Every concept page uses one of three layout **templates**. Pick via the
+**strict ordered check below** — first matching template wins, free is the
+explicit fallback when neither of the first two applies. Do NOT skip the
+order; `free` must never be chosen while `prototype` or `decision` would
+also fit.
+
+**Order of evaluation (mandatory):**
+
+1. **Is this a PROTOTYPE?**
+   Visual mockup, wireframe, click-through flow, screen-by-screen UI design,
+   any "design me / sketch / lay out a UI" task. If the output needs maximum
+   viewport real estate and per-screen feedback → `prototype`. **Stop.**
+
+   **Prototype is almost always a click-dummy.** If there are 2+ screens,
+   the mockup's own buttons/links MUST be wired to navigate between screens
+   (not just styled rectangles) — clicking "Continue" on screen 1 lands on
+   screen 2, "Back" returns, etc. See `deep-knowledge/templates.md`
+   § Template: prototype for the `data-screen-link` attribute pattern.
+
+   **"Screen" is a logical state, not a full page.** A screen can be a
+   distinct view (welcome → credentials → success), but it can also be a
+   meaningful state of the same view (modal closed → modal open → form
+   submitted, tab A → tab B, collapsed drawer → expanded drawer, empty
+   list → populated list). Every state the user should be able to give
+   feedback on separately becomes its own `<section data-screen>`.
+
+   **Single-screen prototype (exactly one `data-screen`):** no screen-nav,
+   no per-screen feedback textarea — the dock shows ONLY the general-notes
+   textarea. A static single-screen prototype needs no click-dummy wiring.
+   Do NOT invent artificial "screens" to justify the template; if the
+   artefact has no meaningful secondary states, one screen is correct.
+
+   **Design system:** the prototype MUST follow the project's existing
+   design system (colors, typography, component shapes, spacing) unless
+   the user explicitly asks for a different style in the request. Check
+   `design-tokens.*`, `theme.*`, `tailwind.config.*`, Figma tokens via
+   the design MCP, or the existing UI code before inventing a look.
+
+2. **Is this a DECISION?**
+   Multi-option evaluation where the user must pick from 2+ mutually-exclusive
+   alternatives (architecture, tech, strategy, library, approach, …). If there
+   are explicit variants A/B/C with pros/cons to weigh → `decision`. **Stop.**
+
+3. **Otherwise → FREE.**
+   Only reach this step after 1 AND 2 have both been ruled out. Analysis,
+   walkthrough, brainstorm, explainer, timeline, status deep-dive, retro,
+   post-mortem — structured content that has no forced variant framing.
+   Tri-state is opt-in per section (Claude adds it only where a finding
+   genuinely needs user evaluation).
+
+| Template | Layout signature |
+|---|---|
+| **prototype** | Fullscreen content, overlay decision panel (FAB right), bottom feedback dock (per-screen comments) |
+| **decision** | Sidebar (~80/~20), variant cards, tri-state per variant |
+| **free** | Sidebar (~80/~20), Claude-authored freeform body, optional tri-state per section |
+
+**Tie-breakers:**
+- A page with variants AND mockups (rare) is a `decision` with inline mockups,
+  not a `prototype` — prototype is reserved for single-artefact presentation.
+- A page that presents one recommended approach (no alternatives) is `free`,
+  not `decision` — decision requires ≥2 mutually-exclusive options.
+
+Set `<html data-template="...">` on the generated file so `collectDecisions`
+picks the right branch and template-specific CSS/JS activates. See
+`deep-knowledge/templates.md` for the full layout reference.
+
+### 1b. If template is `decision`: pick a content variant
+
+The decision template has six content sub-variants that shape the variant
+cards:
 
 | Variant | When to use | Interactive elements |
 |---------|------------|---------------------|
-| **analysis** | Data analysis, metrics review, findings | Toggles to accept/reject findings, priority selectors |
-| **plan** | Implementation plans, roadmaps, migration strategies | Checkboxes to approve/skip steps, reorder drag, comments per step |
-| **concept** | Architecture concepts, design proposals, feature specs | Toggle variants on/off, rate options, comment fields |
-| **comparison** | Technology comparison, option evaluation | Side-by-side toggles, winner selection, weight sliders |
-| **prototype** | UI mockups, flow prototypes, wireframes | Interactive UI elements, click-through flows |
+| **analysis** | Data analysis, metrics review, findings | Tri-state per finding, priority selectors |
+| **plan** | Implementation plans, roadmaps, migration strategies | Checkboxes to approve/skip steps, effort tags, comments per step |
+| **concept** | Architecture concepts, design proposals, feature specs | Tri-state per variant, rate options, comment fields |
+| **comparison** | Technology comparison, option evaluation | Criteria matrix, weight sliders, winner selection, tri-state per option |
 | **dashboard** | Status overviews, metric dashboards, health checks | Filters, toggles, expandable sections |
 | **creative** | Brainstorming, ideation, mind maps | Add/remove ideas, grouping, voting |
 
-These variants are **recommendations, not rigid categories**. Mix elements
-across variants, create hybrid layouts, or invent new structures when the
-content calls for it. The table above is a starting point — adapt freely.
+Prototype and free templates have no sub-variants — their body is
+content-specific (prototype = visual mockup; free = Claude-authored).
 
-See `deep-knowledge/templates.md` for layout inspiration (also non-mandatory).
+These are **recommendations, not rigid categories**. Mix elements across
+variants, create hybrid layouts, or invent new structures when the content
+calls for it.
 
 ## Step 2 — Generate HTML
 
 Build a single self-contained HTML file. Requirements:
+
+### Localisation (mandatory — do NOT hard-code German/English)
+
+Read the `[ui-locale: xx]` hint injected by `prompt.knowledge.dispatch`. If
+the hint is absent, infer from the user's chat language (the language they
+are writing to Claude in THIS conversation). Then:
+
+1. Set `<html lang="{locale}">` on the generated page.
+2. Render every user-facing label (decision panel, buttons, feedback dock,
+   screen counter, warnings, confirms, placeholders) from the matching
+   column of the UI Locale table in `deep-knowledge/templates.md` § UI Locale.
+3. If the user's locale isn't a column in the table yet (`fr`, `hi`, `ja`,
+   `pt-br`, `zh`, …), Claude MUST translate every key inline at generation
+   time and also append a new column to the table in `templates.md` so the
+   next session has it cached. Fallback per-key: `en` value if translation
+   is impossible.
+
+User-authored content (concept title, subtitle, variant descriptions,
+pro/con lists, mockup copy, finding text, …) is always in the user's
+language — same rule, same locale hint. Do not mix languages inside one
+page.
 
 ### Design
 - Modern, clean design with dark/light mode toggle
@@ -74,14 +166,20 @@ content. The iteration title (e.g. "Iteration 3 · Visual design concept")
 and its intro paragraph live INSIDE the active `<section data-iteration="N">`,
 as a compact `.iteration-intro` block right after the opening tag.
 
-### Decision Panel Layout
-- The decision panel (submit button + global controls) is a **fixed sidebar**
-  on the right side, taking **~20% of the screen width** — NOT an overlay
-- Content area fills the remaining ~80% on the left
-- On mobile/narrow screens: decision panel collapses to bottom (sticky)
-- The panel is always visible while scrolling (position: fixed or sticky)
+### Decision Panel Layout (template-specific)
 
-**Panel top-to-bottom order:**
+Panel layout depends on the template picked in Step 1a:
+
+| Template | Panel mode | Extras |
+|---|---|---|
+| **decision** | Fixed sticky sidebar (~20% screen width), always visible | — |
+| **prototype** | Overlay panel (360px slide-in from right), FAB-toggled | Collapsible **feedback dock** at the bottom with per-screen comments |
+| **free** | Fixed sticky sidebar (~20%), always visible | — |
+
+On narrow screens (<768px), sidebar-mode panels collapse to a sticky bottom
+bar. Overlay panels already work on mobile via the FAB.
+
+**Panel top-to-bottom order (identical across all templates):**
 1. **Iteration tabs** (`.iteration-tabs`) — compact vertical chip list,
    one per iteration. Active chip = current round; older chips stay
    clickable to review frozen snapshots.
@@ -89,11 +187,10 @@ as a compact `.iteration-intro` block right after the opening tag.
    `<section id="…" data-nav-label="…">` inside the active iteration.
    Not limited to variants: Ist-Zustand, context blocks, design notes,
    mockups — anything with a nav label gets a scroll anchor here.
-3. Decision summary + submit button (or freeform comment + submit when the
-   active iteration carries `data-freeform`).
-4. Connection warning + post-submit state (unchanged).
+3. Decision summary + submit button.
+4. Connection warning + post-submit state.
 
-The iteration tab bar must NOT live inside the left-hand content area.
+The iteration tab bar must NEVER live inside the left-hand content area.
 The content area is reserved for the actual concept.
 
 ### Interactive Elements (per variant)
@@ -104,62 +201,65 @@ The content area is reserved for the actual concept.
 - **Submit button**: Prominent "Entscheidungen abschicken" button in the
   decision panel sidebar
 
-### Variant Evaluation (optional — only when variants exist)
+### Evaluation Rules (by template) — bi-state
 
-**Variants are a content pattern, not a mandatory structure.** Many concepts
-have no variants to evaluate (design concepts, mockups, tutorials, single-
-approach plans). Those pages run in **freeform mode** — see below.
+Variant/section evaluation uses a **bi-state selector** (not tri-state):
 
-When the concept DOES present multiple variants (concept, comparison, or any
-multi-option output), each variant MUST include a **tri-state evaluation**:
+| Template | Evaluation behavior |
+|---|---|
+| **decision** | **Mandatory per variant card.** Every variant MUST carry the bi-state selector. |
+| **prototype** | **No evaluation.** Feedback is collected via the bottom feedback dock (per-screen textareas + general notes). |
+| **free** | **Opt-in per section.** Claude decides per section whether user evaluation is useful; sections with an `eval-{id}` radio group get evaluated, plain sections just show content. |
 
-| State | Label | Type | Behavior |
-|-------|-------|------|----------|
-| **Miteinbeziehen** | "Miteinbeziehen" (default) | Feedback | Informs Claude's decision — no immediate action taken |
-| **Verwerfen** | "Verwerfen" | ⚠️ Claude setzt um | Claude actively discards this variant and excludes it from all further steps |
-| **Nur diese** | "Exakt diese Variante" | ⚠️ Claude setzt um | Claude proceeds with only this variant and discards all others |
+**The two states:**
 
-- Default state for all variants: **Miteinbeziehen**
-- "Nur diese" is exclusive — selecting it for one variant auto-sets all others
-  to "Verwerfen" (with visual feedback and undo option)
-- Each variant can ADDITIONALLY have rating, comments, and other controls
-- The overall submit sends the tri-state per variant PLUS any additional ratings
+| State | Label | Behavior |
+|-------|-------|----------|
+| **Miteinbeziehen** | "Miteinbeziehen" (default) | Claude considers this variant/finding in the next iteration or implementation |
+| **Verwerfen** | "Verwerfen" | Claude discards this variant/finding and excludes it from all further steps |
 
-**Visual indicators on the generated HTML page (mandatory):**
-Each tri-state option button MUST show a visual indicator so the user sees
-BEFORE clicking what kind of effect the selection has:
-- **Miteinbeziehen**: show a subtle info icon (ℹ) or "(Feedback)" label —
-  this is passive input, Claude will consider it but take no direct action
-- **Verwerfen** and **Exakt diese Variante**: show a `⚠️ Claude setzt um`
-  warning label directly on or below the button — the user must see this
-  before submitting, so they understand clicking Submit will cause Claude to
-  actively act on this choice (discard a variant, write code, update a plan, etc.)
+- Default: **Miteinbeziehen** for every variant/section
+- No "Nur diese"/"only" option — the user implicitly picks a single option by
+  setting all other variants to "Verwerfen"
+- No "Claude setzt um" / "Feedback" hint labels — bi-state makes the intent
+  self-explanatory, and the action-vs-feedback distinction is now handled by
+  the two submit buttons, not the evaluation selector
+- Each variant/section can ADDITIONALLY have rating, comments, and other controls
 
-### Freeform Mode (no variant evaluation)
+### Submit actions — iterate vs. implement
 
-When the iteration has nothing to evaluate as mutually-exclusive options
-(design concepts, mockups, tutorials, single-track plans), mark the
-iteration section with `data-freeform`:
+The decision panel always shows **two submit buttons**, never one. A
+decision-panel submit by itself MUST NEVER trigger code changes — that only
+happens when the user explicitly clicks the implement button.
 
-```html
-<section id="iter-3" data-iteration="3" data-active data-freeform
-         data-nav-label="Design concept">
-  <!-- Full-width content — no variant-card framing, no tri-state per block -->
-</section>
-```
+| Button | Label (de / en) | Action | Style |
+|---|---|---|---|
+| Primary | "Zur nächsten Iteration" / "Next iteration" | `action: "iterate"` — Claude processes the feedback and appends a new iteration section (no code changes) | Full-width, accent color |
+| Secondary | "Mit Feedback implementieren" / "Implement with feedback" | `action: "implement"` — Claude applies the selections as actual code/file changes | Warning-colored border, extra top margin (~2rem) so the user cannot misclick, ⚠ icon |
 
-Effects:
-- Content area may use the full width/layout it needs (mockup grids,
-  full-bleed imagery, diagrams).
-- Decision panel hides the variant summary; shows a single optional
-  comment field + Submit.
-- `collectDecisions()` returns empty `decisions[]` and whatever the user
-  typed into the comment field.
-- Section TOC still auto-populates from every nested `<section id=""
-  data-nav-label="">` — use this to list Ist-Zustand, Design notes,
-  Mockups, Rationale as scroll anchors in the panel.
+The click-away handler in the feedback dock does NOT apply to these buttons
+— they are explicit commits. The extra gap before the implement button is
+mandatory: the user must move the mouse deliberately to reach it.
 
-See `deep-knowledge/templates.md` § Freeform for the CSS/JS helpers.
+`collectDecisions()` adds `action: "iterate" | "implement"` to the payload
+based on which button was clicked. Claude reads that field and either runs
+another iteration (Step 5c) or executes code changes (Step 5b).
+
+This applies to **all three templates** — even prototype (implement = "build
+what we prototyped with the feedback") and free (implement = "act on the
+findings I marked Miteinbeziehen").
+
+### Prototype Feedback Dock
+
+The prototype template has no tri-state. Instead, a collapsible **feedback
+dock** at the bottom of the viewport holds structured feedback:
+
+- A top-level textarea for general notes on the prototype
+- One textarea per `<section data-screen>` inside the active iteration,
+  auto-populated by the dock (label = `data-nav-label` of that screen)
+
+The dock is toggled via a floating action button (bottom-left). See
+`deep-knowledge/templates.md` § Template: prototype for the full HTML/CSS/JS.
 
 ### Reload Resilience
 
@@ -341,18 +441,34 @@ User submits → Claude reads → Claude processes → Claude updates page → U
 1. Read the JSON from `#concept-decisions`
 2. Parse into structured decisions and comments
 
-### 5b. Process & Act
+### 5b. Process & Act — branch by `action`
+
+The submit payload carries an `action` field (`"iterate"` or `"implement"`).
+Branch on it:
+
+**`action: "iterate"` (default — "Zur nächsten Iteration" button):**
 1. **Summarize** what was selected/rejected/commented
-2. **Execute** the decisions immediately — "Execute" means **Claude acts** based
-   on the submitted feedback. The concept page itself does nothing when the user
-   clicks Submit; it only records the decisions and signals Claude. It is Claude
-   who then reads those decisions and takes the actual action (writes code, updates
-   a plan, archives alternatives, etc.). The page is the input channel — Claude
-   is the actor:
-   - For plans: proceed with approved steps, skip rejected ones
-   - For analysis: focus on accepted findings, deprioritize rejected ones
-   - For concepts: develop chosen variant, archive alternatives
-   - For comparisons: proceed with selected winner
+2. **Do NOT modify code, files, or external systems** — iterate ONLY updates
+   the concept page
+3. Proceed to Step 5c (append next iteration with refined options that
+   reflect the Miteinbeziehen/Verwerfen choices)
+
+**`action: "implement"` ("Mit Feedback implementieren" button):**
+1. **Summarize** what was selected/rejected/commented
+2. **Execute** the decisions as real changes — "Execute" means Claude acts:
+   - For plans: implement the approved steps
+   - For concepts: develop the chosen variant, archive alternatives
+   - For comparisons: proceed with the implicitly-selected winner (all
+     others marked Verwerfen)
+   - For free-template findings: apply the Miteinbeziehen findings as fixes
+   - For prototypes: build the designed UI/flow with the feedback applied
+3. After the implementation is done, still append a new iteration that
+   shows "implementiert — siehe commit {hash}" as a frozen record, so the
+   concept page stays the source of truth for what happened
+
+**Critical invariant:** a submit with `action: "iterate"` MUST NEVER cause
+code or file changes outside of the concept HTML file itself. The user
+relies on that guarantee to explore ideas safely.
 ### 5c. Update the Page
 After processing, **append a new iteration tab** to the same HTML file and
 signal the browser to reload. This is the ONLY update path — there is no
