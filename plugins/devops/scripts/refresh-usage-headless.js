@@ -1,30 +1,32 @@
 #!/usr/bin/env node
 /**
  * @script refresh-usage-headless
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  *
  * Headless Usage Scraper for claude.ai
  *
- * Connects to the user's running Edge browser via Chrome DevTools Protocol (CDP).
- * Opens a background tab, scrapes usage data, closes the tab — invisible to the user.
- * Uses raw WebSocket CDP protocol (no Playwright for scraping) to avoid Edge focus stealing.
+ * Spawns a dedicated, isolated Edge instance with its own user-data-dir under
+ * ~/.claude/edge-usage-profile — completely independent of the user's main
+ * Edge windows/tabs. Scrapes usage via raw CDP WebSocket, then kills only
+ * that dedicated instance (by PID tree). The user's main Edge is never
+ * touched.
+ *
+ * Login: the scraper profile starts empty. On first run it needs a one-time
+ * visible login to claude.ai; cookies then persist in the scraper profile
+ * and subsequent runs are fully headless/invisible.
  *
  * Exit codes:
  *   0 = success
- *   1 = no browser context
- *   2 = not logged in
+ *   2 = not logged in (visible login window was opened)
  *   3 = parse error
  *   4 = scrape failed
- *   5 = CDP not available (Edge not running with --remote-debugging-port)
- *   6 = Edge restart requested but failed
+ *   5 = scraper instance could not be launched
  *
  * Flags:
- *   --quiet           suppress output (debug logs only; --summary still prints)
- *   --summary         after successful scrape, print formatted usage box to stdout
- *   --activate-cdp    restart Edge with CDP flag (visible, one-time)
- *   --auto-start      start Edge with CDP only if no Edge process is running (non-destructive)
- *   --check-only      only check if CDP is available, exit 0 or 5
+ *   --quiet           suppress debug logs (--summary still prints)
+ *   --summary         after success, print formatted usage box
+ *   --check-only      report whether the scraper CDP is currently alive (0/5)
  */
 
 const { execSync, spawn } = require('child_process');
@@ -35,7 +37,10 @@ const os = require('os');
 // Store usage data in ~/.claude — same location regardless of CWD or worktree
 const SCRIPTS_DIR = path.join(os.homedir(), '.claude');
 const USAGE_LIVE_PATH = path.join(SCRIPTS_DIR, 'usage-live.json');
+const SCRAPER_PROFILE_DIR = path.join(SCRIPTS_DIR, 'edge-usage-profile');
+const SCRAPER_PID_FILE = path.join(SCRIPTS_DIR, 'edge-usage-scraper.pid');
 const USAGE_URL = 'https://claude.ai/settings/usage';
+const LOGIN_URL = 'https://claude.ai/login';
 const CDP_PORT = 9223;
 const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
 const EDGE_EXE = findEdgeExecutable();
@@ -76,8 +81,6 @@ if (process.platform !== 'win32') {
 
 const isQuiet = process.argv.includes('--quiet');
 const printSummary = process.argv.includes('--summary');
-const activateCDP = process.argv.includes('--activate-cdp');
-const autoStart = process.argv.includes('--auto-start');
 const checkOnly = process.argv.includes('--check-only');
 
 function log(...args) {
@@ -179,68 +182,56 @@ async function isCDPAvailable() {
   } catch { return false; }
 }
 
-/** Check if any Edge process is currently running. */
-function isEdgeRunning() {
+/** Kill the previously-spawned scraper instance (PID tree). Never touches the user's main Edge. */
+function killScraperInstance() {
   try {
-    const out = execSync('tasklist /FI "IMAGENAME eq msedge.exe" /NH', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
-    return out.includes('msedge.exe');
-  } catch { return false; }
+    const pid = parseInt(fs.readFileSync(SCRAPER_PID_FILE, 'utf8').trim(), 10);
+    if (pid > 0) {
+      try { execSync(`taskkill /F /PID ${pid} /T`, { stdio: 'ignore' }); } catch {}
+    }
+  } catch {}
+  try { fs.unlinkSync(SCRAPER_PID_FILE); } catch {}
 }
 
-/** Start Edge with CDP — only when no Edge process is running. Non-destructive. */
-async function autoStartEdgeWithCDP() {
-  if (isEdgeRunning()) {
-    log('Edge is running without CDP — auto-start skipped (would need restart)');
-    return false;
-  }
+/**
+ * Launch a dedicated Edge instance with its own user-data-dir and CDP port.
+ * Runs fully isolated from the user's main Edge — separate cookies, separate
+ * processes, separate tabs. Main Edge is never touched.
+ *
+ * @param {{ visible?: boolean, url?: string }} opts
+ *   visible: true opens a window (needed for first-time login); false runs headless.
+ *   url: initial URL to load.
+ * @returns {Promise<number|null>} child PID on success, null on timeout
+ */
+async function launchScraperInstance({ visible = false, url = USAGE_URL } = {}) {
+  try { fs.mkdirSync(SCRAPER_PROFILE_DIR, { recursive: true }); } catch {}
 
-  log('Edge not running — starting with CDP on port', CDP_PORT, '...');
-  const child = spawn(EDGE_EXE, [
+  const args = [
+    `--user-data-dir=${SCRAPER_PROFILE_DIR}`,
     `--remote-debugging-port=${CDP_PORT}`,
     '--no-first-run',
-    '--no-default-browser-check'
-  ], { detached: true, stdio: 'ignore' });
-  child.unref();
-
-  for (let i = 0; i < 15; i++) {
-    await new Promise(r => setTimeout(r, 1000));
-    if (await isCDPAvailable()) {
-      log('Edge auto-started with CDP on port', CDP_PORT);
-      return true;
-    }
+    '--no-default-browser-check',
+    '--disable-features=msEdgeFeatureOverrides',
+  ];
+  if (!visible) {
+    args.push('--headless=new', '--disable-gpu');
   }
+  args.push(url);
 
-  log('Edge auto-start failed within 15 seconds');
-  return false;
-}
-
-/** Restart Edge with CDP flag. Visible to user — use only with explicit consent. */
-async function restartEdgeWithCDP() {
-  log('Restarting Edge with CDP on port', CDP_PORT, '...');
-
-  // Graceful shutdown first — gives Edge time to save session state for --restore-last-session
-  try { execSync('taskkill /IM msedge.exe', { stdio: 'ignore' }); } catch {}
-  await new Promise(r => setTimeout(r, 4000));
-  // Force-kill any remaining processes
-  try { execSync('taskkill /F /IM msedge.exe', { stdio: 'ignore' }); } catch {}
-  await new Promise(r => setTimeout(r, 1000));
-
-  const child = spawn(EDGE_EXE, [
-    `--remote-debugging-port=${CDP_PORT}`,
-    '--restore-last-session'
-  ], { detached: true, stdio: 'ignore' });
+  log(`Launching dedicated scraper instance (${visible ? 'visible' : 'headless'})...`);
+  const child = spawn(EDGE_EXE, args, { detached: true, stdio: 'ignore' });
   child.unref();
+  try { fs.writeFileSync(SCRAPER_PID_FILE, String(child.pid)); } catch {}
 
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 1000));
     if (await isCDPAvailable()) {
-      log('Edge started with CDP on port', CDP_PORT);
-      return true;
+      log('Scraper CDP ready on port', CDP_PORT);
+      return child.pid;
     }
   }
-
-  log('Edge did not start with CDP within 20 seconds');
-  return false;
+  log('Scraper instance did not become ready within 20 seconds');
+  return null;
 }
 
 /**
@@ -455,51 +446,60 @@ function markCached(ageMin) {
   } catch {}
 }
 
-(async () => {
-  const cdpReady = await isCDPAvailable();
-
-  if (checkOnly) {
-    // Extended check: also report whether Edge is running (exit 7 = not running at all)
-    if (cdpReady) process.exit(0);
-    process.exit(isEdgeRunning() ? 5 : 7);
-  }
-
-  if (!cdpReady) {
-    if (autoStart) {
-      // Non-destructive: only start Edge if it's not running at all
-      if (!(await autoStartEdgeWithCDP())) {
-        // Auto-start failed or Edge is running without CDP — fall back to cache
-        const cacheAge = getCacheAge();
-        if (cacheAge >= 0) {
-          log(`Using cached data (${cacheAge}m old) — Edge auto-start not possible`);
-          markCached(cacheAge);
-          if (printSummary) printUsageSummary();
-          process.exit(0);
-        }
-        process.exit(5);
-      }
-    } else if (activateCDP) {
-      // Destructive: restart Edge (requires user consent)
-      if (!(await restartEdgeWithCDP())) process.exit(6);
-    } else {
-      log('CDP not available on port', CDP_PORT);
-      process.exit(5);
-    }
-  }
-
-  const code = await scrapeViaCDP();
-  if (code === 0) {
-    if (printSummary) printUsageSummary();
-    process.exit(0);
-  }
-
-  // Scrape failed — try cache as last resort
+function useCacheOrExit(code) {
   const cacheAge = getCacheAge();
   if (cacheAge >= 0) {
-    log(`Scrape failed (code ${code}), using cached data (${cacheAge}m old)`);
+    log(`Falling back to cached data (${cacheAge}m old)`);
     markCached(cacheAge);
     if (printSummary) printUsageSummary();
     process.exit(0);
   }
   process.exit(code);
+}
+
+(async () => {
+  if (checkOnly) {
+    process.exit((await isCDPAvailable()) ? 0 : 5);
+  }
+
+  // If CDP is already up, a scraper instance from a previous run is still
+  // alive — reuse it silently, no relaunch. Otherwise spawn a fresh
+  // dedicated instance (main Edge is never touched either way).
+  const cdpAlreadyUp = await isCDPAvailable();
+  if (!cdpAlreadyUp) {
+    killScraperInstance(); // clear any stale PID file
+    const pid = await launchScraperInstance({ visible: false, url: USAGE_URL });
+    if (!pid) {
+      log('Could not launch scraper instance');
+      useCacheOrExit(5);
+      return;
+    }
+  }
+
+  const code = await scrapeViaCDP();
+
+  if (code === 0) {
+    // Leave the headless scraper alive for fast reuse on the next invocation.
+    // It's a single background msedge.exe with its own isolated profile —
+    // no visible window, no interference with the user's main Edge.
+    if (printSummary) printUsageSummary();
+    process.exit(0);
+  }
+
+  if (code === 2) {
+    // Not logged in — kill the headless instance, open a VISIBLE window
+    // for one-time login. Caller (SKILL.md) tells the user inline.
+    killScraperInstance();
+    log('LOGIN_REQUIRED: scraper profile is not logged in to claude.ai');
+    await launchScraperInstance({ visible: true, url: LOGIN_URL });
+    // Leave the visible window alive — the user will interact with it.
+    // Drop the PID file so the next scrape run can't kill this login window.
+    try { fs.unlinkSync(SCRAPER_PID_FILE); } catch {}
+    process.exit(2);
+  }
+
+  // Scrape failed (parse/CDP error) — kill so next run relaunches fresh,
+  // then fall back to cached data.
+  killScraperInstance();
+  useCacheOrExit(code);
 })();
