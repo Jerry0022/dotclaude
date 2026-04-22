@@ -60,7 +60,7 @@ Options: `["Ja, burn starten", "Nein, abbrechen"]`
 Fetch current usage data to understand how much budget remains:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/devops-refresh-usage-headless.js" --auto-start --quiet --summary
+node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
 ```
 
 Read `~/.claude/usage-live.json` and compute:

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.58.0] — 2026-04-22
+
+### Changed
+
+- **plugins/devops/scripts/refresh-usage-headless.js** + **plugins/devops/skills/devops-refresh-usage/SKILL.md** + **plugins/devops/mcp-server/index.js** + **plugins/devops/skills/devops-burn/SKILL.md** — usage scraper no longer restarts the user's Edge browser. Previous flow (`taskkill /IM msedge.exe` + `--restore-last-session`) killed every Edge window to gain CDP access, then rebuilt the session. Replaced with a dedicated, isolated Edge instance under `~/.claude/edge-usage-profile` with its own `user-data-dir` and CDP port — spawned headless on demand, persisted between invocations for silent CDP reuse, killed only by its own PID tree. The user's main Edge (windows, tabs, cookies) is never touched. First run requires a one-time visible login to claude.ai in the scraper profile; cookies then persist and all subsequent scrapes run invisibly in the background. `mcp-server/index.js::refreshUsage` collapsed from a ~130-line CDP escalation chain to a single `execSync` call now that the script manages its own lifecycle. Removed obsolete `--auto-start` / `--activate-cdp` flags and exit codes `6`/`7`; new exit code `2` (not logged in) opens a visible login window and is surfaced inline to the user
+
 ## [0.57.0] — 2026-04-22
 
 ### Changed
