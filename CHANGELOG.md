@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.57.0] — 2026-04-22
+
+### Changed
+
+- **plugins/devops/skills/devops-concept/SKILL.md** + **deep-knowledge/templates.md** + **deep-knowledge/validation-gate.md** — concept skill reorganised around three explicit **page templates** with strict ordered auto-selection (prototype → decision → free). `decision` is the canonical multi-variant flow (sidebar layout + bi-state eval per variant); `prototype` is a fullscreen single-screen click-dummy with overlay decision panel (☰, FAB right) + collapsible feedback dock (💬, bottom) holding a context-sensitive per-screen textarea and a persistent general-notes field; `free` is a Claude-authored freeform body with opt-in bi-state per section. Content variants (analysis, plan, concept, comparison, dashboard, creative) are now scoped under the decision template as sub-structures, not separate page templates
+- **plugins/devops/skills/devops-concept/SKILL.md** Step 5b — tri-state "Exakt diese / only" collapsed to **bi-state** (Verwerfen / Miteinbeziehen). `collectDecisions()` now emits an explicit `action: "iterate" | "implement"` field driven by two separate submit buttons. The primary "Zur nächsten Iteration" button NEVER causes code changes — it only feeds feedback into the next concept iteration. The secondary "Mit Feedback implementieren" button (warning-colored, separated by a mandatory 2rem gap, confirm dialog) is the only path that triggers real file/code changes. This removes the old "Claude setzt um" ambiguity on individual evaluation options
+
+### Added
+
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — connection-overlay now has **two states**: an accent-pulsing "Claude verbindet sich" overlay shown during the 30s grace period after page load, and a warning-colored "Claude ist nicht verbunden" overlay once the heartbeat stays stale past grace. Overlay uses `pointer-events: none` so the submit buttons remain clickable — clicks queue in `localStorage` and auto-deliver on reconnect. Wording matches the actual behaviour ("Klick wird gespeichert", not "Submit pausiert")
+- **plugins/devops/skills/devops-concept/SKILL.md** Step 2 Localisation — explicit mandate: read `[ui-locale: xx]` hint, set `<html lang="{locale}">`, pull every user-facing string from the expanded UI locale table in templates.md. If the user's locale is not yet a column, Claude translates all keys inline AND appends the column to templates.md so the next session has it cached
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — prototype template new mechanics: fullscreen body with exactly one `<section data-screen>` visible at a time, screen-nav in the ☰ panel, click-dummy wiring via `data-screen-link="next|prev|{screen-id}"`, per-screen textareas stay in the DOM (only active one shown) so each screen's notes persist independently. Feedback dock closes on outside click; general-notes textarea stays visible across all screens
+- **docs/concepts/2026-04-21-template-example-{decision,prototype,free}.html** — three reference example pages exercising the full new stack (bi-state eval where applicable, dual-action submit, connecting/disconnected overlay, click-dummy with screen navigation, localisation scaffolding)
+- **plugins/devops/skills/devops-concept/deep-knowledge/validation-gate.md** — gate now enforces 20 shared patterns (adds `submit-iterate-btn`, `submit-implement-btn`, `connection-connecting`) plus template-specific patterns per decision/prototype/free
+
 ## [0.56.1] — 2026-04-21
 
 ### Fixed
