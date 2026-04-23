@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.60.0] — 2026-04-23
+
+### Added
+
+- **plugins/local-llm/mcp-server/index.js** — `local_generate` gains an optional `instructions` parameter so Claude can attach task-specific guidance (style, library choice, output shape, naming conventions, "no thinking output", etc.) without the plugin needing to re-bake a static base prompt. Instructions are appended to the existing base system prompt under a clearly delimited `Additional task-specific instructions:` section; the base prompt itself stays the SSOT for output discipline (no fences, no commentary)
+
+### Fixed
+
+- **plugins/local-llm/mcp-server/index.js** — reasoning models (qwen3-vl, deepseek-r1, etc.) inline a `<think>…</think>` block at the start of `content` when reached via AnythingLLM's OpenAI-compat endpoint (the API does not split the block into a separate `reasoning` field). Generated code returned to Claude was therefore prefixed with the model's chain-of-thought, which broke direct use of the output in `Write` calls. New `stripThinkingBlock()` removes all `<think>` and `<thinking>` blocks (case-insensitive, multiple occurrences), composed via `sanitizeOutput()` together with the existing `stripOuterFence()`. Base prompt now also explicitly forbids `<think>` blocks as a belt-and-braces hint to compliant models
+- **plugins/local-llm/hooks/lib/anythingllm-http.js** — `COMPLETION_TIMEOUT_MS` raised from 120s to 300s. Reasoning-heavy 8B models with thinking overhead routinely take 90–180s for outputs above ~300 tokens even when AnythingLLM correctly forwards to Ollama, hitting the previous timeout for tasks that perfectly fit the delegation criteria (e.g. a 25-test Vitest file). 300s leaves headroom for cold-start model load (~10s) plus thinking + answer generation at the typical 6–8 tok/s of qwen3-vl:8b
+
 ## [0.59.0] — 2026-04-23
 
 ### Added

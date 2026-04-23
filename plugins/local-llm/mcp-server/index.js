@@ -56,6 +56,19 @@ function stripOuterFence(text) {
   return match ? match[1] : trimmed;
 }
 
+// Reasoning models (qwen3, deepseek-r1, etc.) inline a <think>…</think> or
+// <thinking>…</thinking> block before the actual answer. The OpenAI-compat
+// endpoint does NOT split it into a separate field — it lands in `content`.
+// Strip ALL such blocks (not just the first) and return only the answer.
+function stripThinkingBlock(text) {
+  if (typeof text !== "string") return text;
+  return text.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, "").trim();
+}
+
+function sanitizeOutput(text) {
+  return stripOuterFence(stripThinkingBlock(text));
+}
+
 // ---------------------------------------------------------------------------
 // Status
 // ---------------------------------------------------------------------------
@@ -170,9 +183,16 @@ server.registerTool(
       temperature: z.number().min(0).max(1).optional().describe(
         "Generation temperature. Default 0.2 (deterministic). Never above 0.5 for code."
       ),
+      instructions: z.string().optional().describe(
+        "Optional task-specific guidance appended to the base system prompt. " +
+        "Use this to enforce style, library choices, output shape, naming, or " +
+        "to suppress reasoning output (e.g. 'no thinking, output code only', " +
+        "'use vitest', 'prefer arrow functions', 'no type assertions'). " +
+        "Keep it short — system context counts against the model's window."
+      ),
     }),
   },
-  async ({ task, context, language, temperature }) => {
+  async ({ task, context, language, temperature, instructions }) => {
     const phase = await getPhase();
     if (!phase.ready) {
       return {
@@ -184,11 +204,14 @@ server.registerTool(
     }
 
     const lang = language || "the appropriate language";
-    const systemPrompt =
+    const baseSystemPrompt =
       "You are a code generation assistant. Output ONLY the requested code — " +
-      "no explanations, no markdown fences, no commentary. " +
+      "no explanations, no markdown fences, no commentary, no <think> blocks. " +
       "If the task specifies a function signature, match it exactly. " +
       "Follow the coding style shown in the context if provided.";
+    const systemPrompt = instructions
+      ? `${baseSystemPrompt}\n\nAdditional task-specific instructions:\n${instructions}`
+      : baseSystemPrompt;
 
     let userPrompt = `Language: ${lang}\n\nTask: ${task}`;
     if (context) userPrompt += `\n\nContext (existing code to follow):\n${context}`;
@@ -222,7 +245,7 @@ server.registerTool(
       content: [{
         type: "text",
         text: JSON.stringify({
-          code: stripOuterFence(result.content),
+          code: sanitizeOutput(result.content),
           tokensUsed: result.tokensUsed,
           finishReason: result.finishReason,
           workspace: WORKSPACE_SLUG,
