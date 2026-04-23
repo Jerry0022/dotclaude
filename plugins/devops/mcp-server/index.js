@@ -91,12 +91,14 @@ function renderUsageLine(label, pct, elapsedPct, delta, resetMinutes) {
   const bar = renderBar(pct, elapsedPct);
   const pctStr = String(pct).padStart(3, ' ') + '%';
   const deltaStr = formatDelta(delta);
-  const resetStr = formatResetShort(resetMinutes);
+  // Fixed-width reset column (max '23h 59m' = 7 chars) so both lines align
+  // regardless of whether one shows '30m' and the other '1d 17h'.
+  const resetStr = formatResetShort(resetMinutes).padEnd(7, ' ');
   const pace = pct - elapsedPct;
   const warn = pace > 10 ? '  \u26a0 Pace!' : '';
   // Fixed-width delta column so · reset always aligns
   const deltaPart = deltaStr ? (' ' + deltaStr).padEnd(5, ' ') : '     ';
-  return label + '  ' + bar + '  ' + pctStr + deltaPart + '  \u00b7 ' + resetStr + ' left' + warn;
+  return label + '  ' + bar + '  ' + pctStr + deltaPart + '  \u00b7 ' + resetStr + warn;
 }
 
 function renderUsageMeter(usageData, delta5h, deltaWk) {
@@ -140,13 +142,18 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
     lines.push(renderUsageLine('Wk', w.pct, elapsedWkPct, deltaWk, w.resetInMinutes));
   }
 
-  // Stale/cached data indicator — only show when data is notably old (>30min)
-  if (usageData._cached && usageData._ageMinutes > 30) {
+  // Failure indicator — login required is always shown prominently regardless
+  // of cache age (the scraper can't refresh until the user logs in once).
+  if (usageData._loginRequired) {
+    lines.push('');
+    lines.push('\u26a0 Scraper not logged in \u2014 Edge login window opened, log in once (then fresh data on every card)');
+  } else if (usageData._cached && usageData._ageMinutes > 30) {
     const ageLabel = usageData._ageMinutes >= 60
       ? `~${Math.round(usageData._ageMinutes / 60)}h old`
       : `~${usageData._ageMinutes}m old`;
+    const suffix = usageData._failureReason ? ` (${usageData._failureReason})` : '';
     lines.push('');
-    lines.push(`cached \u00b7 ${ageLabel}`);
+    lines.push(`cached \u00b7 ${ageLabel}${suffix}`);
   }
 
   lines.push('```');
@@ -521,6 +528,14 @@ function refreshUsage() {
     console.error('[dotclaude-completion-mcp] Scrape failed (exit', lastExitCode, '):', err.message);
   }
 
+  const reasons = {
+    2: 'scraper profile not logged in — visible login window was opened, log in once and retry',
+    3: 'usage page parse error',
+    4: 'CDP WebSocket failed',
+    5: 'scraper instance could not launch (Edge not installed?)',
+  };
+  const reason = reasons[lastExitCode] || (lastExitCode ? `scrape exit code ${lastExitCode}` : null);
+
   // Last resort: use any existing data (even stale) with age indicator
   const cached = readUsageJson();
   if (cached?.session) {
@@ -528,17 +543,12 @@ function refreshUsage() {
     cached._ageMinutes = Math.round(
       (Date.now() - new Date(cached.timestamp).getTime()) / 60_000
     );
+    if (reason) cached._failureReason = reason;
+    if (lastExitCode === 2) cached._loginRequired = true;
     return { success: true, data: cached, delta5h: null, deltaWk: null };
   }
 
-  const reasons = {
-    2: 'scraper profile not logged in — visible login window was opened, log in once and retry',
-    3: 'usage page parse error',
-    4: 'CDP WebSocket failed',
-    5: 'scraper instance could not launch (Edge not installed?)',
-  };
-  const reason = reasons[lastExitCode] || `scrape exit code ${lastExitCode}`;
-  return { success: false, data: null, reason };
+  return { success: false, data: null, reason: reason || 'no usage data available' };
 }
 
 // ---------------------------------------------------------------------------

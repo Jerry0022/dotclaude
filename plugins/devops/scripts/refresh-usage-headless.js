@@ -313,6 +313,9 @@ async function scrapeViaCDP() {
     log('Attached to target, sessionId:', sessionId);
 
     // Wait for page to load — poll until content appears or timeout
+    // Detect logged-out state via URL redirect, OR by the presence of a
+    // login button / email input (claude.ai sometimes renders the login UI
+    // at /settings/usage without changing the URL).
     let evalData = null;
     for (let attempt = 0; attempt < 12; attempt++) {
       await new Promise(r => setTimeout(r, 2000));
@@ -320,6 +323,12 @@ async function scrapeViaCDP() {
         expression: `(() => {
           const url = window.location.href;
           if (url.includes('/login') || url.includes('/logout')) return JSON.stringify({ notLoggedIn: true });
+          // Login UI heuristics — these appear on the public login page
+          if (document.querySelector('input[type="email"], input[name="email"]')) return JSON.stringify({ notLoggedIn: true });
+          const bodyText = (document.body && document.body.innerText) || '';
+          if (/Continue with Google|Mit Google fortfahren|Log in to Claude|Bei Claude anmelden/i.test(bodyText)) {
+            return JSON.stringify({ notLoggedIn: true });
+          }
           const main = document.querySelector('main');
           if (!main) return JSON.stringify({ noMain: true });
           const text = main.innerText;
@@ -332,6 +341,15 @@ async function scrapeViaCDP() {
       evalData = JSON.parse(evalResult.result?.value || '{}');
       if (evalData.notLoggedIn || evalData.text) break;
       log(`Page not ready yet (attempt ${attempt + 1}/12)...`);
+    }
+
+    // If we never got usage text AND never found a login signal, the page
+    // probably failed to render. Assume logged-out (most common cause) so
+    // the caller opens a visible login window instead of serving silently
+    // stale cached data forever.
+    if (evalData && !evalData.text && !evalData.notLoggedIn) {
+      log('Page did not render usage content — treating as not-logged-in');
+      evalData = { notLoggedIn: true };
     }
 
     // Close the background target
