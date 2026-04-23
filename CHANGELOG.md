@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.60.1] — 2026-04-24
+
+### Fixed
+
+- **plugins/devops/scripts/refresh-usage-headless.js** — three issues with the dedicated Edge usage scraper that caused visible windows to keep popping over the user's other windows. (1) `--headless=new` is detected by claude.ai which serves the login page despite valid cookies, so each scrape returned `notLoggedIn` and spawned yet another visible login window. Replaced with a real (non-headless) Edge instance positioned off-screen at `--window-position=-32000,-32000` with `--window-size=1,1` and `--silent-launch` — same auth/cookie behaviour as the visible login session, but invisible. (2) Rapid back-to-back invocations (e.g. multiple completion cards in a turn) re-launched Edge each time even when the previous result was seconds old. New `FRESH_CACHE_MAX_AGE_SECONDS = 15` short-circuit reads the cached `usage-live.json` and exits before any Edge spawn when data is fresh enough. (3) When a visible login window was spawned but the user had not yet logged in, the next scrape would spawn another login window because the PID file had been intentionally deleted. New `LOGIN_PID_FILE` tracks the visible login window's PID separately from the scraper PID; `loginWindowAlive()` checks via `tasklist` and short-circuits with cached data instead of duplicating windows. PID file is cleared on the next successful scrape
+
 ## [0.60.0] — 2026-04-23
 
 ### Added

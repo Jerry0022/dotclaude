@@ -39,6 +39,11 @@ const SCRIPTS_DIR = path.join(os.homedir(), '.claude');
 const USAGE_LIVE_PATH = path.join(SCRIPTS_DIR, 'usage-live.json');
 const SCRAPER_PROFILE_DIR = path.join(SCRIPTS_DIR, 'edge-usage-profile');
 const SCRAPER_PID_FILE = path.join(SCRIPTS_DIR, 'edge-usage-scraper.pid');
+const LOGIN_PID_FILE = path.join(SCRIPTS_DIR, 'edge-usage-login.pid');
+// If the cached usage-live.json is fresher than this, skip the Edge launch
+// entirely and just print the cached summary. Prevents window-spam when the
+// card is rendered in rapid succession.
+const FRESH_CACHE_MAX_AGE_SECONDS = 15;
 const USAGE_URL = 'https://claude.ai/settings/usage';
 const LOGIN_URL = 'https://claude.ai/login';
 const CDP_PORT = 9223;
@@ -214,7 +219,16 @@ async function launchScraperInstance({ visible = false, url = USAGE_URL } = {}) 
     '--disable-features=msEdgeFeatureOverrides',
   ];
   if (!visible) {
-    args.push('--headless=new', '--disable-gpu');
+    // Don't use --headless=new: claude.ai detects it and serves the login page
+    // even with valid cookies. Run a real Edge window but off-screen + tiny so
+    // it stays invisible. Auth/cookies behave identically to the visible login
+    // session.
+    args.push(
+      '--window-position=-32000,-32000',
+      '--window-size=1,1',
+      '--disable-gpu',
+      '--silent-launch'
+    );
   }
   args.push(url);
 
@@ -475,9 +489,34 @@ function useCacheOrExit(code) {
   process.exit(code);
 }
 
+/** Is the visible login window (from a previous run) still alive? */
+function loginWindowAlive() {
+  try {
+    const pid = parseInt(fs.readFileSync(LOGIN_PID_FILE, 'utf8').trim(), 10);
+    if (!(pid > 0)) return false;
+    // tasklist exits 0 if process exists
+    const out = execSync(`tasklist /FI "PID eq ${pid}" /NH`, {
+      encoding: 'utf8', timeout: 3000, stdio: ['pipe', 'pipe', 'ignore']
+    });
+    return /msedge\.exe/i.test(out);
+  } catch { return false; }
+}
+
 (async () => {
   if (checkOnly) {
     process.exit((await isCDPAvailable()) ? 0 : 5);
+  }
+
+  // 15s short-circuit: if cached data is fresh enough, skip Edge entirely.
+  // Eliminates window-spam from rapid back-to-back invocations.
+  const cacheAgeMin = getCacheAge();
+  if (cacheAgeMin >= 0) {
+    const ageSec = Math.round((Date.now() - new Date(JSON.parse(fs.readFileSync(USAGE_LIVE_PATH, 'utf8')).timestamp).getTime()) / 1000);
+    if (ageSec < FRESH_CACHE_MAX_AGE_SECONDS) {
+      log(`Using fresh cache (${ageSec}s old, < ${FRESH_CACHE_MAX_AGE_SECONDS}s threshold)`);
+      if (printSummary) printUsageSummary();
+      process.exit(0);
+    }
   }
 
   // If CDP is already up, a scraper instance from a previous run is still
@@ -497,22 +536,35 @@ function useCacheOrExit(code) {
   const code = await scrapeViaCDP();
 
   if (code === 0) {
-    // Leave the headless scraper alive for fast reuse on the next invocation.
-    // It's a single background msedge.exe with its own isolated profile —
+    // Successful scrape means we're logged in — clear any stale login-PID
+    // marker so future failures can spawn a fresh login window if needed.
+    try { fs.unlinkSync(LOGIN_PID_FILE); } catch {}
+    // Leave the hidden scraper alive for fast reuse on the next invocation.
+    // It's a single off-screen msedge.exe with its own isolated profile —
     // no visible window, no interference with the user's main Edge.
     if (printSummary) printUsageSummary();
     process.exit(0);
   }
 
   if (code === 2) {
-    // Not logged in — kill the headless instance, open a VISIBLE window
-    // for one-time login. Caller (SKILL.md) tells the user inline.
+    // Not logged in. If a previous login window is still open, do NOT spawn
+    // another one — user is presumably still working on it.
+    if (loginWindowAlive()) {
+      log('LOGIN_REQUIRED: visible login window from previous run still open — not spawning another');
+      useCacheOrExit(2);
+      return;
+    }
+    // Kill the hidden scraper instance, open a VISIBLE window for one-time
+    // login. Caller (SKILL.md) tells the user inline.
     killScraperInstance();
     log('LOGIN_REQUIRED: scraper profile is not logged in to claude.ai');
-    await launchScraperInstance({ visible: true, url: LOGIN_URL });
-    // Leave the visible window alive — the user will interact with it.
-    // Drop the PID file so the next scrape run can't kill this login window.
+    const loginPid = await launchScraperInstance({ visible: true, url: LOGIN_URL });
+    // Move the PID into a separate login-pid file so the next scrape run
+    // (a) can't kill this login window, and (b) can detect it's still open.
     try { fs.unlinkSync(SCRAPER_PID_FILE); } catch {}
+    if (loginPid) {
+      try { fs.writeFileSync(LOGIN_PID_FILE, String(loginPid)); } catch {}
+    }
     process.exit(2);
   }
 
