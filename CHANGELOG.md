@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.59.0] — 2026-04-23
+
+### Added
+
+- **plugins/devops/deep-knowledge/test-strategy.md** — three new SSOT sections covering previously ambiguous testing territory. (1) *Web Tech → Always Browser-Test (Mocks OK)* makes browser verification mandatory for any change that touches browser-renderable code (HTML/CSS/JS framework files, UI deps, static `index.html`) — mocks for missing backends are expected, no "browser not needed" exit. Closes the gap where an Electron app was classified as "no web tech" and skipped verification. (2) *Electron / Native UI — Dev-Browser + User-Final-Test* splits testing: renderer-level via mounted HTML in Edge with mocks during dev, packaged-app final test only via computer-use when the user chose "Desktop übernehmen", otherwise flagged in the completion card. (3) *Third-Party Integrations — Mock-First + User-Final-Test* requires automated mock tests (MSW/nock/fixtures) for integration shape, then always flags the real-world validation as user-final-test-required-after-deployment. Mock step is never a substitute for the real step
+- **plugins/devops/mcp-server/index.js** + **plugins/devops/templates/completion-card.md** — new `userFinalTest` input for `render_completion_card` (array of strings or `{ action, afterDeployment }` objects). Renders a unified `🧑 TESTE bitte noch:` (DE) / `🧑 Please TEST:` (EN) block in Block A of all variants except `test-minimal`, with a per-bullet `— nach Deployment` / `— after deployment` suffix for 3rd-party items. Wording matches the existing CTA style (imperative CAPS verb + casual tone)
+- **plugins/devops/deep-knowledge/test-strategy.md** *Completion-Card Handoff* section — explicit contract that any caller of `render_completion_card` (inline Claude, agents, `/devops-autonomous`) must populate `userFinalTest` when Electron-packaged or 3rd-party rules apply. This is the only signal the user sees about work automation could not cover
+
+### Changed
+
+- **plugins/devops/deep-knowledge/agent-orchestration.md** QA-Wave testing protocol — expanded from 4 to 6 rules. Rule 3 references test-strategy's Web-Tech-Always rule instead of duplicating it. New rule 4 (Electron/Native UI) and rule 5 (3rd-party integrations) map directly to the new test-strategy sections. Rule 6 (computer-use restriction) unchanged in spirit but now carves a clean exception for packaged-Electron final tests under desktop takeover. QA agent prompt template now instructs QA to emit `userFinalTest` items for forward-propagation to the completion card
+- **plugins/devops/skills/devops-autonomous/SKILL.md** Step 3b — browser probing is now **mandatory** when any web-tech gate signal is true, including Electron/Tauri renderers. Removes the previous `[--] Browser nicht benötigt (Electron-App)` misclassification. Step 5 Live Testing and Step 7a Gather Completion Data both instruct forwarding `userFinalTest` items from QA to the completion card
+- **plugins/devops/agents/qa.md** + **plugins/devops/agents/frontend.md** — responsibilities updated to reference the new Web-Tech-Always rule; QA output schema gains a structured `userFinalTest` field that is forwarded 1:1 to `render_completion_card` (orchestrator must not rename or drop it)
+
 ## [0.58.1] — 2026-04-23
 
 ### Fixed

@@ -58,6 +58,11 @@ All variables in `{{...}}`. Sections wrapped in `{{#if}}` are conditional per va
 1. {{each: test-step}}
 {{/if}}
 
+{{#if user-final-test}}
+🧑 **TESTE bitte noch:**
+* {{each: action}}{{#if afterDeployment}} — nach Deployment{{/if}}
+{{/if}}
+
 {{#if usage}}
 {{context-health-line}}
 
@@ -292,6 +297,44 @@ Numbered steps the user must perform manually.
 | test | **Required** |
 | all others | **Omit** |
 
+### User-final-test
+
+Flags work that **cannot be automated** — even when automated tests pass. Two
+sources (see `deep-knowledge/test-strategy.md` § Electron / Native UI and
+§ Third-Party Integrations):
+
+- **Packaged Electron/Tauri without desktop takeover** → a final check on the
+  real app that only the user can click through.
+- **Third-party integrations** (OAuth, payments, webhooks, external APIs) → mocks
+  covered the shape, but real endpoints need real credentials in a deployed env.
+
+Wording is identical across both cases — only the `— nach Deployment` / `— after
+deployment` suffix distinguishes the 3rd-party case:
+
+```
+🧑 **TESTE bitte noch:**
+* Electron-App öffnen → Settings-Dialog testen
+* Login mit Google in Prod-Umgebung testen — nach Deployment
+```
+
+```
+🧑 **Please TEST:**
+* Open Electron app → test Settings dialog
+* Test Google login in prod environment — after deployment
+```
+
+**Input contract:** `userFinalTest` is an array; each item is either a plain
+string (no deployment suffix) or `{ action: string, afterDeployment: true }`.
+The header is always rendered once; the suffix is attached per bullet.
+
+| Variants | Behavior |
+|----------|----------|
+| ship-successful, ready, ship-blocked, test, analysis, aborted, fallback | **If QA flagged one** — otherwise omit |
+| test-minimal | **Omit** (session greeting, no QA context) |
+
+Rendered between state/user-test and the usage meter so it sits in Block A's
+"what you still need to do" region, not buried in CTA.
+
 ### CTA (Call to Action)
 
 One-liner as `##` heading.
@@ -350,16 +393,16 @@ The footer line sits between the separator and the CTA. It contains:
 
 ## Variant Table
 
-| # | Variant | CTA-Icon | Changes | Tests | User-Test | State | Usage |
-|---|---------|---------|---------|-------|-----------|-------|-------|
-| 1 | ship-successful | 🚀 | yes | yes | — | final | yes |
-| 2 | ready | 📦 | yes | if ran | — | branch | yes |
-| 3 | ship-blocked | ⛔ | yes | if ran | — | branch | yes |
-| 4 | test | 🧪 | yes | if ran | yes | app-status | yes |
-| 5 | test-minimal | ▶️ | — | — | — | — | — |
-| 6 | analysis | 📋 | yes | — | — | none | yes |
-| 7 | aborted | 🚫 | opt. | — | — | dep. | yes |
-| 8 | **fallback** | 🔧 | yes | — | — | dep. | yes |
+| # | Variant | CTA-Icon | Changes | Tests | User-Test | User-Final-Test | State | Usage |
+|---|---------|---------|---------|-------|-----------|-----------------|-------|-------|
+| 1 | ship-successful | 🚀 | yes | yes | — | if flagged | final | yes |
+| 2 | ready | 📦 | yes | if ran | — | if flagged | branch | yes |
+| 3 | ship-blocked | ⛔ | yes | if ran | — | if flagged | branch | yes |
+| 4 | test | 🧪 | yes | if ran | yes | if flagged | app-status | yes |
+| 5 | test-minimal | ▶️ | — | — | — | — | — | — |
+| 6 | analysis | 📋 | yes | — | — | if flagged | none | yes |
+| 7 | aborted | 🚫 | opt. | — | — | if flagged | dep. | yes |
+| 8 | **fallback** | 🔧 | yes | — | — | if flagged | dep. | yes |
 
 - **ship-successful (1)**: ONLY after /devops-ship + successfully merged to origin/main. PR vs. direct push → state line shows the difference.
 - **ship-blocked (3)**: ONLY after /devops-ship + NOT merged (PR open, build fail, etc.).

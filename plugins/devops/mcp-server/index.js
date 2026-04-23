@@ -173,14 +173,14 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
 // ---------------------------------------------------------------------------
 
 const VARIANTS = {
-  'ship-successful': { usage: true,  changes: true,  tests: true,  state: true,  userTest: false },
-  ready:             { usage: true,  changes: true,  tests: true,  state: true,  userTest: false },
-  'ship-blocked':    { usage: true,  changes: true,  tests: true,  state: true,  userTest: false },
-  test:              { usage: true,  changes: true,  tests: true,  state: true,  userTest: true  },
-  'test-minimal':    { usage: false, changes: false, tests: false, state: false, userTest: false },
-  analysis:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
-  aborted:           { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
-  fallback:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false },
+  'ship-successful': { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
+  ready:             { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
+  'ship-blocked':    { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
+  test:              { usage: true,  changes: true,  tests: true,  state: true,  userTest: true,  userFinalTest: true  },
+  'test-minimal':    { usage: false, changes: false, tests: false, state: false, userTest: false, userFinalTest: false },
+  analysis:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true  },
+  aborted:           { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true  },
+  fallback:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true  },
 };
 
 const CTA = {
@@ -346,6 +346,22 @@ function renderUserTest(steps) {
   return '**Please test**\n' + items.join('\n');
 }
 
+const USER_FINAL_TEST_LABEL = {
+  de: { header: '\uD83E\uDDD1 **TESTE bitte noch:**', suffix: ' \u2014 nach Deployment' },
+  en: { header: '\uD83E\uDDD1 **Please TEST:**',      suffix: ' \u2014 after deployment' },
+};
+
+function renderUserFinalTest(items, lang) {
+  if (!items || items.length === 0) return '';
+  const labels = USER_FINAL_TEST_LABEL[lang] || USER_FINAL_TEST_LABEL.de;
+  const bullets = items.map(it => {
+    const action = typeof it === 'string' ? it : (it && it.action) || '';
+    const afterDeployment = typeof it === 'object' && it && it.afterDeployment;
+    return '* ' + action + (afterDeployment ? labels.suffix : '');
+  });
+  return labels.header + '\n' + bullets.join('\n');
+}
+
 function renderCTA(variant, cta, lang, state) {
   const templates = CTA[lang] || CTA.de;
   cta = cta || {};
@@ -443,6 +459,17 @@ function renderCard(input, meterText, buildId) {
     const testBlock = renderUserTest(input.userTest);
     if (testBlock) {
       parts.push(testBlock);
+      parts.push('');
+    }
+  }
+
+  // User-final-test flag (Electron without takeover, 3rd-party integrations)
+  // Available in all variants except test-minimal — so e.g. a ship-successful
+  // card can still flag "test the real Stripe integration in prod".
+  if (config.userFinalTest) {
+    const finalBlock = renderUserFinalTest(input.userFinalTest, lang);
+    if (finalBlock) {
+      parts.push(finalBlock);
       parts.push('');
     }
   }
@@ -683,6 +710,16 @@ server.registerTool(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.string()).optional(),
       ).describe("Manual test steps (test variant only)"),
+      userFinalTest: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.array(z.union([
+          z.string(),
+          z.object({
+            action: z.string(),
+            afterDeployment: z.boolean().optional(),
+          }),
+        ])).optional(),
+      ).describe("User-final-test items — for changes where automation cannot cover the last step (packaged Electron/Tauri without desktop takeover, 3rd-party integrations). Pass strings for local final tests; pass { action, afterDeployment: true } for 3rd-party items that require deployment first. Available in all variants except test-minimal."),
     }),
   },
   async (params) => {

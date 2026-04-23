@@ -42,7 +42,10 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 
 - Read `{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` before non-trivial implementation.
 - For mechanical UI boilerplate (prop-typed components, form scaffolds, barrel exports, repeated variants, >20 lines): read `{PLUGIN_ROOT}/deep-knowledge/local-llm-delegation.md` and delegate to `local_generate` when the gate is green.
-- Always verify visual output with screenshots
+- Always verify visual output in a real browser (follow
+  `{PLUGIN_ROOT}/deep-knowledge/test-strategy.md` § Web Tech → Always Browser-Test).
+  Mocks for missing backends/APIs are expected. For Electron/Tauri renderers,
+  mount the renderer HTML in Edge with main-process calls mocked.
 - Follow existing component patterns in the project
 - CSS changes need responsive verification
 - Prefer HTML rendering for design, Mermaid for flows
