@@ -22,7 +22,7 @@ const { URL } = require('node:url');
 
 const HEALTH_TIMEOUT_MS = 2000;
 const REQUEST_TIMEOUT_MS = 60_000;
-const COMPLETION_TIMEOUT_MS = 120_000;
+const COMPLETION_TIMEOUT_MS = 300_000;
 
 function requestJson({ baseUrl, path, method = 'GET', apiKey, body, timeoutMs = REQUEST_TIMEOUT_MS }) {
   return new Promise((resolve) => {
