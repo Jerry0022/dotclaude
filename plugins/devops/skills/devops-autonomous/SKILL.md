@@ -148,9 +148,20 @@ including the **Edge Credo** (§ Edge Credo — Hard Rules):
 - New tab in existing Edge window — never a new Edge window
 - These rules apply in BOTH foreground and background/autonomous mode
 
+**Browser probing is MANDATORY when any web-tech gate signal is true** (see
+`deep-knowledge/test-strategy.md` § Web Tech → Always Browser-Test). This includes
+Electron/Tauri: their renderer is web tech and must be verified in a browser with
+mocks, even though the packaged app itself cannot be driven via Chrome-MCP. Never
+skip browser probing with "Electron app, no preview server" — the renderer still
+needs browser-based component verification.
+
 Run the waterfall probe (Chrome MCP → Playwright → Preview), set `$BROWSER_TOOL`
 to the first responder. If none respond → show the error block from the strategy
 doc and abort browser-dependent work. Never use computer-use for browser tasks.
+
+Mark `[--] Browser nicht benötigt` ONLY for pure non-UI work (CLI tool without
+web frontend, backend-only service, config/docs/scripts). If ANY web-tech gate
+signal applies, `$BROWSER_TOOL` must be active before proceeding.
 
 ### 3c — File & Shell Tools
 Run a harmless `Bash` command (e.g., `echo "permission primed"`), `Read` a file,
@@ -279,8 +290,16 @@ Follow the **QA Testing Protocol** from `deep-knowledge/agent-orchestration.md` 
 Use `$BROWSER_TOOL` (from Step 3b) for all browser-based visual verification.
 
 **Autonomous-specific additions:**
-- **Native desktop apps**: use computer-use **only** if user chose "Desktop
-  übernehmen" in Step 2. Otherwise skip native-app visual testing.
+- **Web tech**: browser verification is MANDATORY (rule 3). Mocks are expected.
+  Never skip because "no preview server".
+- **Packaged Electron/Tauri**: renderer tested via `$BROWSER_TOOL` with mocks
+  (rule 4). If user chose "Desktop übernehmen", run the packaged-app final test
+  via computer-use. Otherwise add a `userFinalTest` item (string form) for the
+  completion card — renders as `🧑 TESTE bitte noch:`.
+- **3rd-party integrations**: mock automated tests (rule 5). Always add a
+  `userFinalTest` item with `afterDeployment: true` — renders under the same
+  `🧑 TESTE bitte noch:` block with `— nach Deployment` suffix. Never mark the
+  integration "verified" on mocks alone.
 - Track progress via TodoWrite.
 
 ## Step 6 — Error Handling
@@ -308,6 +327,12 @@ Call `render_completion_card` (variant per status: "ship-successful" for COMPLET
 "ship-blocked" for BLOCKED, "ready" for INTERRUPTED,
 "analysis" for analyze-mode COMPLETED; pushed: false, pr: null).
 **Capture the full card output** — it will be embedded in the HTML report.
+
+**Always forward `userFinalTest` items** collected during Step 5 Live Testing
+(packaged Electron/Tauri without takeover, 3rd-party integrations). The card
+renders a unified `🧑 TESTE bitte noch:` block — this is the only signal the
+user sees about work that automation couldn't cover, so never drop or summarize
+these items away.
 
 ### 7b — Build HTML Report
 
