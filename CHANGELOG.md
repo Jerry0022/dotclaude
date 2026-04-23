@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.58.1] — 2026-04-23
+
+### Fixed
+
+- **plugins/devops/mcp-server/index.js** + **plugins/devops/scripts/refresh-usage-headless.js** — usage card now surfaces scraper login status instead of silently serving stale data. The MCP server's `refreshUsage` catch-block propagates the scraper exit code: on `2` (not logged in) the cached usage JSON is tagged with `_loginRequired: true` and `renderUsageMeterForCard` renders a prominent `⚠ Scraper not logged in — Edge login window opened, log in once` warning. Previously the failure path fell through silently and consumers saw day-old "cached" data with no indication that a one-time login was needed. The scraper itself now detects logged-out state even when claude.ai does not redirect away from `/settings/usage`: checks for email input fields and login-button text in the page body, and after the 24s poll window treats any "no `<main>` element" result as logged-out (the most common cause) rather than as a generic parse error
+- **plugins/devops/mcp-server/index.js** `renderUsageLine` — both usage bars are now the same total length regardless of reset-time width. `resetStr` is padded to a fixed 7 chars (matches `23h 59m`, the widest possible value), and the trailing ` left` label is removed — redundant given the `Xh Ym` / `Xd Yh` format already implies duration. Previously a `5h` reset like `30m` and a `Wk` reset like `1d 17h` produced visibly different line lengths
+
 ## [0.58.0] — 2026-04-22
 
 ### Changed
