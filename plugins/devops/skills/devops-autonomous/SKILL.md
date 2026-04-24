@@ -371,24 +371,34 @@ the shutdown command, poll `~/.claude/projects/**/*.jsonl` mtimes. A jsonl modif
 within the last 2 minutes means that session is mid-thought or mid-tool-call.
 Exclude our own project tree entirely (our main session + any subagents we spawned).
 
-Self-detection: env vars like `CLAUDE_SESSION_ID` are not exposed to Bash. Use
-`basename($PWD)` — Claude encodes the project path as a directory under
-`~/.claude/projects/` whose name ends with the worktree/project basename
-(e.g. `…-eager-rubin-98f8d6`).
+Self-detection: env vars like `CLAUDE_SESSION_ID` are not exposed to Bash.
+Reconstruct the encoded project-dir name from `$PWD` — Claude encodes the
+Windows path under `~/.claude/projects/` by replacing `\`, `:`, `.` with `-`
+(e.g. `C:\…\eager-rubin-98f8d6` → `C--…--claude-worktrees-eager-rubin-98f8d6`).
 
 Loop max 30 minutes, then proceed regardless (avoid indefinite hang):
 
 ```bash
 PROJECTS="$HOME/.claude/projects"
-BASE=$(basename "$PWD")
-SELF_DIR=$(find "$PROJECTS" -maxdepth 1 -type d -name "*-${BASE}" 2>/dev/null | head -1)
+ENCODED=$(cygpath -w "$PWD" 2>/dev/null | sed 's/[\\:.]/-/g')
+[ -z "$ENCODED" ] && ENCODED=$(basename "$PWD")  # non-Windows fallback
+SELF_DIR="$PROJECTS/$ENCODED"
+[ -d "$SELF_DIR" ] || SELF_DIR=""
+# Sentinel prevents grep -vF '/' from filtering ALL absolute paths when SELF_DIR is empty
+SELF_PATTERN="${SELF_DIR:+${SELF_DIR}/}"
+[ -z "$SELF_PATTERN" ] && SELF_PATTERN="@@NO_SELF_MATCH@@"
 for i in $(seq 1 60); do
   active=$(find "$PROJECTS" -name '*.jsonl' -newermt '2 minutes ago' 2>/dev/null \
-            | grep -vF -- "${SELF_DIR}/" | head -1)
+            | grep -vF -- "$SELF_PATTERN" | head -1)
   [ -z "$active" ] && break
   sleep 30
 done
 ```
+
+Failure mode: if encoding doesn't match (unexpected path layout), `SELF_DIR`
+stays empty and the sentinel falls through. The loop then waits on its own
+session too — burns the full 30 min cap before shutdown. Safer than cutting
+off other sessions by accident.
 
 ### 8b — Execute Shutdown
 
