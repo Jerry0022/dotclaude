@@ -54,6 +54,25 @@ Project extensions define: quality gate commands, deploy targets, version files,
 
 4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill has a **mandatory** Codex review gate (§1 in that doc), which MUST be called via `{PLUGIN_ROOT}/scripts/codex-safe.sh` (5-min hard timeout, see "Hard Timeout & Failure-Tolerance" section), NEVER via the `/codex:rescue` Agent tool. Detect Codex availability now so Step 2 can act on it.
 
+## Step 0.5 — Load Deferred MCP Schemas
+
+Ship tools from the `dotclaude-ship` MCP server are often **deferred** in large-tool-inventory sessions (their names appear in the SessionStart deferred-tools list, but their schemas are NOT loaded yet). Calling them directly before the schema is loaded fails with `InputValidationError`.
+
+See `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md` for the full pattern.
+
+**Before Step 1**, load all ship tool schemas in ONE `ToolSearch` call:
+
+```
+ToolSearch({
+  query: "select:mcp__plugin_devops_dotclaude-ship__ship_preflight,mcp__plugin_devops_dotclaude-ship__ship_build,mcp__plugin_devops_dotclaude-ship__ship_version_bump,mcp__plugin_devops_dotclaude-ship__ship_release,mcp__plugin_devops_dotclaude-ship__ship_cleanup",
+  max_results: 5
+})
+```
+
+If the `ToolSearch` result contains all five `<function>` entries, proceed. If ANY are missing from the returned block, the server is genuinely not registered — STOP and report to the user (do NOT fall back to `gh pr create`; the guard hook will block it).
+
+Do NOT skip this step even if you "think" the tools are available. `analysis` / `ready` / `test` cards have no ship-tool dependency and won't hit this — only the full pipeline does.
+
 ## Step 1 — Pre-Flight & Rebase Loop
 
 Run preflight, resolve any merge-safety issues autonomously, and re-check — repeat until the branch is clean.
