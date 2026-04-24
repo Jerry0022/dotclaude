@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.60.3] — 2026-04-25
+
+### Changed
+
+- **plugins/devops/skills/devops-concept/SKILL.md** + **deep-knowledge/validation-gate.md** + **deep-knowledge/templates.md** + **deep-knowledge/iteration-rules.md** — generic form-collection coverage gate. Concept pages must now implement `collectDecisions()` via a generic catch-all (`querySelectorAll('input, select, textarea')` scoped to `section[data-iteration][data-active]`) that ships every named control as `allFields` in the submit payload, not via hand-listed selectors per field. Hand-listed selectors written for iteration N silently miss new fields added in iteration N+1: the user sees the panel turn green, but Claude receives a truncated payload and can only act on the iteration-N keys. Validation gate grows from 20 to 22 mandatory shared patterns (#21 catch-all selector, #22 `[data-active]` scope); reference `collectAllFormFields()` lives in templates.md and is wired into the dispatcher so typed sub-objects (`decisions[]`, `comments[]`) coexist with the catch-all rather than replacing it. SKILL.md Step 5 grows a coverage check that compares submitted `allFields` against the DOM of the just-frozen iteration; new Step 5c.2.5 is a verify-collection gate that reads existing `collectDecisions()` JS and forces a fix BEFORE appending iteration N+1 if the catch-all is missing. iteration-rules.md gains the matching append-checklist + procedure entry
+
 ## [0.60.2] — 2026-04-24
 
 ### Added
