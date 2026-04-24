@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.60.2] — 2026-04-24
+
+### Added
+
+- **plugins/devops/deep-knowledge/mcp-deferred-tools.md** — new cross-cutting reference documenting the deferred-tools pattern. In sessions with a large tool inventory, MCP tool schemas land deferred: their names appear in the SessionStart `<system-reminder>` deferred list, but their JSONSchema is NOT loaded until `ToolSearch` is explicitly invoked with `select:<tool-name>`. A previous ship attempt misdiagnosed this as a missing MCP server, then deadlocked on the guard hook blocking the manual PR-creation fallback. Doc explains the detection heuristic (presence in deferred list = registered), the single-roundtrip bulk-load pattern (`select:name1,name2,...` in one ToolSearch call), and anti-patterns (do not conclude "server missing" from a deferred entry, do not fall back to manual PR-creation when the guard fires)
+
+### Changed
+
+- **plugins/devops/skills/devops-ship/SKILL.md** — new `Step 0.5 — Load Deferred MCP Schemas` between `Step 0` (extensions) and `Step 1` (preflight). Mandatory bulk-load of all five `ship_*` tool schemas via a single `ToolSearch({ query: "select:...", max_results: 5 })` call before Step 1 runs. Step also defines the failure contract: if any of the five schemas are missing from the returned `<functions>` block, the MCP server is genuinely unregistered — STOP and report, do NOT fall back to `gh pr create` (the guard blocks it anyway). Prevents the previous-session deadlock where the pipeline was never entered because Claude assumed the tools were absent
+- **plugins/devops/hooks/pre-tool-use/pre.ship.guard.js** bumped to 0.3.0 — block message for manual PR creation/merge now includes the exact `ToolSearch` recovery query with all five `ship_*` tool names pre-filled, plus a pointer to `deep-knowledge/mcp-deferred-tools.md`. Hook behaviour (Bash-only, regex patterns) unchanged; only the stderr message grew more helpful
+
 ## [0.60.1] — 2026-04-24
 
 ### Fixed
