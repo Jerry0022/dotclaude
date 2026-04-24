@@ -72,7 +72,7 @@ If found:
    > multiSelect: false
    > Options (fixed order):
    > 1. label: "Nur Bericht (empfohlen)" — description: "Ergebnisse als Report, PC bleibt an."
-   > 2. label: "Herunterfahren" — description: "PC fährt nach Abschluss automatisch herunter."
+   > 2. label: "Herunterfahren" — description: "PC fährt nach Abschluss herunter. Wartet vorher, falls andere Claude-Sessions (egal welches Projekt) noch arbeiten."
 - Delete the resume file
 - Skip Steps 1-4, jump directly to Step 5 with the resumed context
 - On completion, proceed normally through Steps 7-8
@@ -124,7 +124,7 @@ In `analyze` mode, desktop is only used for visual inspection (screenshots), nev
 > multiSelect: false
 > Options (fixed order):
 > 1. label: "Nein, nur Bericht (empfohlen)" — description: "Ergebnisse als Report, PC bleibt an."
-> 2. label: "Ja, herunterfahren" — description: "PC fährt 60s nach Abschluss automatisch herunter."
+> 2. label: "Ja, herunterfahren" — description: "PC fährt 60s nach Abschluss herunter. Wartet vorher, falls andere Claude-Sessions (egal welches Projekt) noch arbeiten."
 
 ## Step 3 — Permission Priming (ALL permissions BEFORE confirmation)
 
@@ -362,14 +362,44 @@ the CLI card is the quick confirmation.
 
 ## Step 8 — Shutdown
 
-Execute if user chose "Ja, herunterfahren" AND status is COMPLETED or INTERRUPTED:
+Execute if user chose "Ja, herunterfahren" AND status is COMPLETED or INTERRUPTED.
+
+### 8a — Wait for Other Active Claude Sessions
+
+Never cut off another running Claude session — any project, any worktree. Before
+the shutdown command, poll `~/.claude/projects/**/*.jsonl` mtimes. A jsonl modified
+within the last 2 minutes means that session is mid-thought or mid-tool-call.
+Exclude our own project tree entirely (our main session + any subagents we spawned).
+
+Self-detection: env vars like `CLAUDE_SESSION_ID` are not exposed to Bash. Use
+`basename($PWD)` — Claude encodes the project path as a directory under
+`~/.claude/projects/` whose name ends with the worktree/project basename
+(e.g. `…-eager-rubin-98f8d6`).
+
+Loop max 30 minutes, then proceed regardless (avoid indefinite hang):
+
+```bash
+PROJECTS="$HOME/.claude/projects"
+BASE=$(basename "$PWD")
+SELF_DIR=$(find "$PROJECTS" -maxdepth 1 -type d -name "*-${BASE}" 2>/dev/null | head -1)
+for i in $(seq 1 60); do
+  active=$(find "$PROJECTS" -name '*.jsonl' -newermt '2 minutes ago' 2>/dev/null \
+            | grep -vF -- "${SELF_DIR}/" | head -1)
+  [ -z "$active" ] && break
+  sleep 30
+done
+```
+
+### 8b — Execute Shutdown
+
 ```bash
 shutdown /s /t 60 /c "Autonomous task completed. Shutting down in 60s. Run 'shutdown /a' to abort."
 ```
+
 **INTERRUPTED:** Shutdown is safe because progress is saved in `AUTONOMOUS-RESUME.json`
 and committed locally. The user can resume on next boot via Step 0.5.
 
 **BLOCKED:** Skip shutdown — user must intervene immediately, data integrity may be at risk.
 
 **Never ask about shutdown inline.** The decision was made in Step 2 (or Step 0.5 on
-resume). Just execute it.
+resume). Just execute it (after the 8a wait).
