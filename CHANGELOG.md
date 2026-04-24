@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.60.4] — 2026-04-25
+
+### Changed
+
+- **plugins/devops/skills/devops-autonomous/SKILL.md** — `/devops-autonomous` shutdown option now waits for other active Claude sessions before powering off the PC, instead of cutting them off mid-thought. New Step 8a polls `~/.claude/projects/**/*.jsonl` mtimes: a file modified within the last 2 minutes signals that another session (any project, any worktree, including subagents) is still in a tool-call or thinking phase. Loop sleeps in 30 s intervals up to 30 min hard cap, then proceeds regardless to avoid indefinite hangs. Self-detection reconstructs the encoded project-dir name from `cygpath -w "$PWD"` with `[\:.] → -` substitution to match the exact directory under `~/.claude/projects/`, so the entire own session tree (main session + spawned subagents) is excluded — not just a single jsonl picked by an unreliable "freshest globally" heuristic. A sentinel value (`@@NO_SELF_MATCH@@`) replaces an empty `SELF_DIR` so `grep -vF '/'` cannot collapse to "filter all absolute paths" and trigger an immediate shutdown when self-detection fails (codex review caught this). Step 2 Q3 + Step 0.5 resume question option descriptions mention the wait so the user understands the new behaviour at decision time
+
 ## [0.60.3] — 2026-04-25
 
 ### Changed
