@@ -20,6 +20,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |
 | [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/devops-commit`, `/devops-ship`, and h... |
 | [local-llm-delegation.md](local-llm-delegation.md) | Local LLM Delegation | Cross-cutting rule for all implementation agents (core, frontend, feature, ai) |
+| [mcp-deferred-tools.md](mcp-deferred-tools.md) | MCP Deferred Tools | Cross-cutting rule: in sessions with a large tool inventory (Computer Use, Ch... |
 | [merge-safety.md](merge-safety.md) | Merge Safety — Parallel Development | Cross-cutting reference for preventing silent overwrites when multiple develo... |
 | [plugin-behavior.md](plugin-behavior.md) | Plugin Behavior Rules | Core behavioral rules enforced by the devops plugin. |
 | [pre-mortem.md](pre-mortem.md) | Pre-Mortem / Red-Team Self-Critique | Cross-cutting rule for reducing blind spots before non-trivial changes. |

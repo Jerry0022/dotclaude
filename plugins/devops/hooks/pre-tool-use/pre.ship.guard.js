@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.ship.guard
- * @version 0.2.0
+ * @version 0.3.0
  * @event PreToolUse
  * @plugin devops
  * @description Block manual PR creation/merging via Bash.
@@ -42,7 +42,16 @@ process.stdin.on('end', () => {
   process.stderr.write(
     'BLOCKED: Manual PR creation/merging detected. ' +
     'Use /devops-ship for shipping. ' +
-    'The ship pipeline ensures build-ID, safety checks, version bumps, and proper completion cards.\n'
+    'The ship pipeline ensures build-ID, safety checks, version bumps, and proper completion cards.\n' +
+    '\n' +
+    'If ship_* MCP tools appear missing: they are likely DEFERRED, not unregistered. ' +
+    'Load their schemas via ToolSearch before calling:\n' +
+    '  ToolSearch({ query: "select:mcp__plugin_devops_dotclaude-ship__ship_preflight,' +
+    'mcp__plugin_devops_dotclaude-ship__ship_build,' +
+    'mcp__plugin_devops_dotclaude-ship__ship_version_bump,' +
+    'mcp__plugin_devops_dotclaude-ship__ship_release,' +
+    'mcp__plugin_devops_dotclaude-ship__ship_cleanup", max_results: 5 })\n' +
+    'See {PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md for details.\n'
   );
   process.exit(2);
 });
