@@ -30,3 +30,38 @@ selections, read-only comments).
   bottom on narrow screens.
 
 See `templates.md` § Iteration Tabs for the reference HTML/CSS/JS.
+
+## Iteration append checklist
+
+When appending a new iteration section (Step 5c of `SKILL.md`), verify
+**before** posting `/reload`:
+
+1. ☐ All new form elements live inside the new
+      `<section data-iteration="N">`.
+2. ☐ Each form element has either a `name`, `id`, or `data-*` attribute
+      that `collectAllFormFields()` can use as a key.
+3. ☐ No new `data-*` attributes are introduced without checking the
+      collection function picks them up (the catch-all should, but
+      verify — see `validation-gate.md` § Generic Form Collection).
+4. ☐ Locally test: open the page, submit, inspect `#concept-decisions`.
+      Every input/select/textarea in the active iteration MUST appear in
+      the JSON. If any is missing → the catch-all is broken, fix BEFORE
+      reload.
+
+## Procedure on every iteration — coverage gate (Step 5c, Step 2.5)
+
+Before appending the new iteration section, insert this verification step
+between "freeze previous" (step 2 of the SKILL.md procedure) and "append
+new section" (step 3):
+
+**2.5. Verify form collection coverage.** Read the existing JS for
+`collectDecisions()` (or its template-specific variant). Confirm it uses
+a generic `querySelectorAll('input, select, textarea')` scoped to
+`[data-active]`. If it uses hand-listed selectors instead, fix it NOW
+before appending the new iteration — otherwise the new section's fields
+will silently fail to upload at submit time.
+
+This gate exists because hand-listed selectors written for iteration N
+will not pick up new fields introduced in iteration N+1, and the failure
+is silent: the user sees the panel turn green, but Claude receives a
+truncated payload.

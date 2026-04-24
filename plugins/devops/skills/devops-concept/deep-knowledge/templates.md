@@ -1615,14 +1615,52 @@ The submit handler picks the branch based on `data-template` on `<html>`.
 An `action` (`iterate` | `implement`) is passed in from the button that was
 clicked and merged into the payload.
 
+The dispatcher ALSO runs a generic catch-all scoped to the active
+iteration (`section[data-iteration][data-active]`) so every named form
+element ships in `allFields`, regardless of whether the template-specific
+branch was updated for new fields. This is the safety net mandated by
+`validation-gate.md` § Generic Form Collection — never remove it, never
+replace it with hand-listed selectors. The typed sub-objects (`decisions`,
+`comments`) live alongside `allFields` for ergonomics; they do not
+substitute for it.
+
 ```javascript
+function collectAllFormFields(scope) {
+  const fields = {};
+  // Catch-all: every named input, select, textarea inside scope.
+  scope.querySelectorAll('input, select, textarea').forEach(el => {
+    const key = el.dataset.field
+             || el.dataset.v4
+             || el.dataset.confirm
+             || el.dataset.rename
+             || el.dataset.entities
+             || el.dataset.comment
+             || el.name
+             || el.id;
+    if (!key) return;  // unnamed control — skip
+    if (el.type === 'checkbox') {
+      fields[key] = el.checked;
+    } else if (el.type === 'radio') {
+      if (el.checked) fields[el.name] = el.value;
+    } else {
+      fields[key] = el.value;
+    }
+  });
+  return fields;
+}
+
 function collectDecisions(action = 'iterate') {
+  const active = document.querySelector('section[data-iteration][data-active]')
+              || document.body;
+  const allFields = collectAllFormFields(active);
+
   const template = document.documentElement.dataset.template || 'decision';
   let payload;
   if (template === 'prototype') payload = collectPrototypeDecisions();
   else if (template === 'free') payload = collectFreeDecisions();
   else payload = collectDecisionDecisions();
   payload.action = action;
+  payload.allFields = allFields;
   return payload;
 }
 

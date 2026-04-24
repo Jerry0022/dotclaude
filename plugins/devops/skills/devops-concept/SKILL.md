@@ -357,9 +357,10 @@ and `deep-knowledge/templates.md` § Iteration Tabs for the reference HTML.
 
 ### Post-Generation Validation (mandatory gate)
 
-After writing the HTML file, grep it for the 18 mandatory interactive
+After writing the HTML file, grep it for the 22 mandatory interactive
 patterns (heartbeat, panel states, iteration tabs, section TOC, reload
-polling, etc.).
+polling, generic form-collection catch-all scoped to the active
+iteration, etc.).
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. See `deep-knowledge/validation-gate.md` for the full
 pattern list and common failure modes.
@@ -441,6 +442,14 @@ User submits → Claude reads → Claude processes → Claude updates page → U
 1. Read the JSON from `#concept-decisions`
 2. Parse into structured decisions and comments
 
+**Coverage check:** before processing decisions, verify every named form
+field that exists in the just-frozen iteration HTML appears in the
+`decisions` payload (specifically the `allFields` catch-all). If a field
+is in the DOM but missing in the payload, flag it to the user immediately
+("the JS missed these fields, please re-submit after I fix the collection
+function"). See `deep-knowledge/validation-gate.md` § Generic Form
+Collection for the required pattern.
+
 ### 5b. Process & Act — branch by `action`
 
 The submit payload carries an `action` field (`"iterate"` or `"implement"`).
@@ -490,6 +499,15 @@ for the polling contract.
    `input`/`textarea`/`select`/`button` inside the section, set `readonly`
    on text inputs and textareas, preserve the submitted values exactly
    (read them from the just-processed decisions JSON).
+2.5. **Verify form collection coverage.** Read the existing JS for
+   `collectDecisions()` (or its template-specific variant). Confirm it
+   uses a generic `querySelectorAll('input, select, textarea')` scoped
+   to `[data-active]`. If it uses hand-listed selectors instead, fix it
+   NOW before appending the new iteration — otherwise the new section's
+   fields will silently fail to upload at submit time. See
+   `deep-knowledge/iteration-rules.md` § Procedure on every iteration —
+   coverage gate and `deep-knowledge/validation-gate.md` § Generic Form
+   Collection for the required pattern.
 3. Append a new `<section data-iteration="{N+1}" data-active>` with the
    updated / next-round content (new variants, refined options, whatever
    the feedback produced). Set `submitted: false` in `#concept-decisions`,
