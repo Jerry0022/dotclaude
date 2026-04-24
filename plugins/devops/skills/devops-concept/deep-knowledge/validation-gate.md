@@ -7,7 +7,7 @@ template-specific extras selected by `<html data-template="...">`.
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 20 patterns, regardless of template:
+Every concept page must contain these 22 patterns, regardless of template:
 
 | # | Pattern to grep | Purpose |
 |---|----------------|---------|
@@ -32,6 +32,65 @@ Every concept page must contain these 20 patterns, regardless of template:
 | 18 | `data-nav-label` | Marker on nav-eligible sections |
 | 19 | `submit-iterate-btn` | Primary submit: iterate action (no code changes) |
 | 20 | `submit-implement-btn` | Secondary submit: implement action (real changes) |
+| 21 | `querySelectorAll('input, select, textarea')` inside `collectDecisions` | Generic form catch-all (no hand-listed selectors per field) |
+| 22 | `data-active]` selector inside `collectDecisions` | Catch-all is scoped to the active iteration only |
+
+**Failure for 21 / 22:** if either pattern is missing, the page is rejected
+at the post-generation gate. See § Generic Form Collection below for the
+required pattern.
+
+## Generic Form Collection (mandatory for all templates)
+
+**Problem:** When iterations are appended, custom `collectDecisions()` code
+written for an earlier iteration silently misses new fields added in later
+iterations. The user submits, sees the panel turn green, but Claude
+receives incomplete data.
+
+**Rule:** `collectDecisions()` MUST collect every form element inside the
+active iteration via a generic selector — NOT via hand-listed selectors
+per field. Specific selectors (for grouped sub-objects like `decisions[]`,
+`comments[]`) are allowed *in addition* but must never replace the
+catch-all.
+
+### Required pattern (free, decision, and prototype branches)
+
+```javascript
+function collectAllFormFields(scope) {
+  const fields = {};
+  // Catch-all: every named input, select, textarea inside scope
+  scope.querySelectorAll('input, select, textarea').forEach(el => {
+    const key = el.dataset.field
+             || el.dataset.v4
+             || el.dataset.confirm
+             || el.dataset.rename
+             || el.dataset.entities
+             || el.dataset.comment
+             || el.name
+             || el.id;
+    if (!key) return;  // unnamed control — skip
+    if (el.type === 'checkbox') {
+      fields[key] = el.checked;
+    } else if (el.type === 'radio') {
+      if (el.checked) fields[el.name] = el.value;
+    } else {
+      fields[key] = el.value;
+    }
+  });
+  return fields;
+}
+
+function collectDecisions(action) {
+  const active = document.querySelector('section[data-iteration][data-active]')
+              || document.body;
+  const allFields = collectAllFormFields(active);
+  // Optional: also build typed sub-objects (decisions[], comments[], …)
+  // for ergonomics — but NEVER as a replacement for allFields.
+  return { submitted: true, action, allFields, /* …typed objects… */ };
+}
+```
+
+See `templates.md` § collectDecisions (dispatcher) for the live reference
+implementation that wires this into the per-template branches.
 
 Additionally, the `<html>` element MUST carry `data-template="decision"` (or
 `prototype`, or `free`) so `collectDecisions()` dispatches to the correct
