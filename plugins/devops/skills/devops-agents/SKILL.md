@@ -40,6 +40,30 @@ Use the wording matching the active `[ui-locale: ...]` (defaults to `en`):
 - en: "What exactly should be orchestrated? (Feature, refactoring, bugfix, research...)"
 - de: "Was genau soll orchestriert werden? (Feature, Refactoring, Bugfix, Research...)"
 
+## Step 1.5 — Permission Audit
+
+Before spawning agents, scan recent sessions for MCP tools that were used but
+are NOT covered by the current `~/.claude/settings.json` allow-list. Prevents
+permission prompts from interrupting wave execution — especially painful with
+parallel agents.
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --days=7 --quiet
+```
+
+Parse the JSON `suggestions` array:
+
+- **Empty** → skip silently, continue to Step 2.
+- **Only `low`-risk** entries (user-installed plugin/runtime MCPs, prefix
+  `mcp__plugin_*` or `mcp__ccd_*`) → silently append each `rule` to
+  `~/.claude/settings.json` `permissions.allow`. Log one line:
+  **`🔒 Permission-Audit: N sichere Regel(n) hinzugefügt`**.
+- **Any `medium`-risk** entries (third-party / unknown MCPs) → ask once via
+  `AskUserQuestion` with a single multi-select listing each rule + count + rationale.
+  Apply only the rules the user approved.
+
+The audit is read-only and silent on no findings — never blocks the flow.
+
 ## Step 2 — Agent Selection
 
 Select agents using the roster, criteria, and complexity tiers from

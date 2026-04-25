@@ -79,6 +79,31 @@ If found:
 
 **If starting fresh:** delete the resume file and proceed to Step 1.
 
+## Step 0.7 — Permission Audit
+
+Before any permission priming, scan recent sessions for MCP tools that were used
+but are NOT covered by the current `~/.claude/settings.json` allow-list. Closes
+the gap that causes mid-run prompts after the user has gone AFK.
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --days=7 --quiet
+```
+
+Parse the JSON `suggestions` array:
+
+- **Empty** → skip silently, continue to Step 1.
+- **Only `low`-risk** entries (user-installed plugin/runtime MCPs, prefix
+  `mcp__plugin_*` or `mcp__ccd_*`) → silently append each `rule` to
+  `~/.claude/settings.json` `permissions.allow`. Log one line:
+  **`🔒 Permission-Audit: N sichere Regel(n) hinzugefügt`**.
+- **Any `medium`-risk** entries (third-party / unknown MCPs) → ask once via
+  `AskUserQuestion` with a single multi-select listing each rule + count + rationale.
+  Apply only the rules the user approved.
+
+If `tamper_protected_writes` is non-empty, append a warning to the Step 3e
+checklist: **"⚠ Tamper-Protection-Pfade erkannt — werden trotzdem prompten."**
+These cannot be allow-listed by design; the user must be aware before AFK.
+
 ## Step 1 — Task Intake
 
 Use `$ARGUMENTS` if provided, otherwise ask: **"Was soll ich autonom erledigen?"**
