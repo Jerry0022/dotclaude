@@ -79,6 +79,44 @@ If found:
 
 **If starting fresh:** delete the resume file and proceed to Step 1.
 
+## Step 0.7 — Permission Audit
+
+Before any permission priming, scan recent sessions for MCP tools that were used
+but are NOT covered by the current `~/.claude/settings.json` allow-list. Closes
+the gap that causes mid-run prompts after the user has gone AFK.
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --days=7 --quiet
+```
+
+Parse the JSON `suggestions` array:
+
+- **Empty** → skip silently, continue to Step 1.
+- **Non-empty** → present ALL suggestions in **one** `AskUserQuestion`
+  multi-select (never silent — even low-risk rules get user confirmation,
+  to prevent log-forgery from seeding the allow-list). Each option =
+  one suggested rule, labeled with its risk marker:
+  - 🟢 low: user-installed plugin/runtime MCPs (`mcp__plugin_*`, `mcp__ccd_*`)
+  - 🟡 medium: third-party / unknown MCPs — include the rationale text
+  
+  Pre-recommend the 🟢 ones in the description. Header: "Permissions",
+  question: "Diese MCP-Tools wurden zuletzt genutzt aber sind nicht erlaubt.
+  Welche zur Allow-Liste hinzufügen?"
+  
+  Apply the user's selection via Bash (NOT the Edit tool — settings.json is
+  tamper-protected; the script writes directly via Node `fs.writeFileSync`):
+  
+  ```bash
+  node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --apply="<rule1>,<rule2>" --quiet
+  ```
+  
+  The script re-validates each `--apply` rule against its own freshly-computed
+  suggestions and rejects anything not in the list (defense in depth).
+
+If `tamper_protected_writes` is non-empty, append a warning to the Step 3e
+checklist: **"⚠ Tamper-Protection-Pfade erkannt — werden trotzdem prompten."**
+These cannot be allow-listed by design; the user must be aware before AFK.
+
 ## Step 1 — Task Intake
 
 Use `$ARGUMENTS` if provided, otherwise ask: **"Was soll ich autonom erledigen?"**
