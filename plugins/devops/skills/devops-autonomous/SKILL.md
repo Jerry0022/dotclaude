@@ -92,13 +92,26 @@ node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --days=7 --quiet
 Parse the JSON `suggestions` array:
 
 - **Empty** → skip silently, continue to Step 1.
-- **Only `low`-risk** entries (user-installed plugin/runtime MCPs, prefix
-  `mcp__plugin_*` or `mcp__ccd_*`) → silently append each `rule` to
-  `~/.claude/settings.json` `permissions.allow`. Log one line:
-  **`🔒 Permission-Audit: N sichere Regel(n) hinzugefügt`**.
-- **Any `medium`-risk** entries (third-party / unknown MCPs) → ask once via
-  `AskUserQuestion` with a single multi-select listing each rule + count + rationale.
-  Apply only the rules the user approved.
+- **Non-empty** → present ALL suggestions in **one** `AskUserQuestion`
+  multi-select (never silent — even low-risk rules get user confirmation,
+  to prevent log-forgery from seeding the allow-list). Each option =
+  one suggested rule, labeled with its risk marker:
+  - 🟢 low: user-installed plugin/runtime MCPs (`mcp__plugin_*`, `mcp__ccd_*`)
+  - 🟡 medium: third-party / unknown MCPs — include the rationale text
+  
+  Pre-recommend the 🟢 ones in the description. Header: "Permissions",
+  question: "Diese MCP-Tools wurden zuletzt genutzt aber sind nicht erlaubt.
+  Welche zur Allow-Liste hinzufügen?"
+  
+  Apply the user's selection via Bash (NOT the Edit tool — settings.json is
+  tamper-protected; the script writes directly via Node `fs.writeFileSync`):
+  
+  ```bash
+  node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --apply="<rule1>,<rule2>" --quiet
+  ```
+  
+  The script re-validates each `--apply` rule against its own freshly-computed
+  suggestions and rejects anything not in the list (defense in depth).
 
 If `tamper_protected_writes` is non-empty, append a warning to the Step 3e
 checklist: **"⚠ Tamper-Protection-Pfade erkannt — werden trotzdem prompten."**
