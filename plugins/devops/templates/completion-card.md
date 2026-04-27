@@ -199,6 +199,38 @@ Warn          var.    "  ⚠ Pace!" or empty
 Bullet list (`*`), each bullet: `area → what happened`.
 **Max 3 bullets.** Summarize if more than 3 changes. No nested bullets.
 
+**Both `area` AND description must be functional.** Keep the `area → description`
+pattern — it's the strength of this section. But both halves describe what the
+user perceives or what behaves differently, not how the code is structured.
+Use technical wording only when the topic itself is genuinely technical (a
+build flag, a parser bug, a protocol detail) — never as a default.
+
+- ✅ `Completion card → Changes-Bullets sind jetzt funktional formuliert`
+- ✅ `Branch cleanup → fragt vor dem Entfernen eines Worktrees nach`
+- ✅ `Ship pipeline → versionsbump überspringt unveränderte Plugins`
+- ❌ `mcp-server/index.js → renderChanges() angepasst`
+- ❌ `templates, schema → Beschreibung erweitert`
+
+**File names only when the file is the artifact itself.** A skill, a keybindings
+file, a settings.json entry, a CLAUDE.md, a hook script — these *are* the
+deliverable, so naming them is the functional description. Implementation files
+(renderers, helpers, internal modules) are not.
+
+- ✅ `keybindings.json → Ctrl+S auf Submit umgemappt` (file = deliverable)
+- ✅ `Skill devops-ship → Pre-flight prüft jetzt branch protection` (skill = deliverable)
+- ❌ `lib/card-guard.js → neue Validierung hinzugefügt` (internal module)
+
+**Purely technical topic = technical wording is fine.** If the change really is
+about a parser, a flag, a protocol, a perf fix — describe it as such. The rule
+is "default to functional", not "forbid technical".
+
+- ✅ `JSON parser → akzeptiert jetzt trailing commas`
+- ✅ `Build cache → invalidiert bei plugin.json-Änderung`
+
+**`area`** is the functional surface (what the user perceives or what the change
+is *about*), e.g. `Completion card`, `Ship pipeline`, `Branch cleanup`,
+`Skill devops-flow`. Not a file path, not an internal module name.
+
 | Variants | Behavior |
 |----------|----------|
 | ship-successful, ready, test, ship-blocked | **Required** |
