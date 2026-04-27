@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.61.1] — 2026-04-27
+
+### Changed
+
+- **plugins/devops/scripts/build-id.js** + **plugins/devops/skills/devops-ship/deep-knowledge/build-id.md** — build-ID is now a pure 7-char content hash, no worktree-name prefix. The previous `<worktree>-<hash>` format broke the script's stated property "same source = same hash, deterministic, idempotent" — two worktrees with byte-identical content produced different build-IDs solely because of the path they happened to live in. Restored the original reproducibility contract: a build-ID is a content fingerprint, period. Worktree origin is still observable via Claude Code's system-prompt context (the `Worktree path` / `Worktree name` lines that the harness now injects automatically when running inside a worktree) and via `git worktree list`, so removing the prefix loses no information that wasn't recoverable elsewhere. Header version bumped to `0.2.0` to mark the script's output-contract change. In-repo consumers (`ship_build`, `render_completion_card`) treat the buildId as opaque text — verified via codex review — so no caller updates are needed
+
 ## [0.61.0] — 2026-04-25
 
 ### Added
