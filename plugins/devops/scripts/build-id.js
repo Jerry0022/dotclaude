@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script build-id
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Compute build-ID from source code and assets only.
  *   Excludes config, docs, build artifacts, lock files, and metadata.
@@ -10,19 +10,6 @@
  */
 
 const { execSync } = require('child_process');
-
-// Detect worktree name (used as prefix, not replacement).
-function getWorktreeName() {
-  try {
-    const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf8' }).trim();
-    const match = gitDir.match(/[/\\]worktrees[/\\]([^/\\]+)$/);
-    return match ? match[1] : null;
-  } catch {
-    return null;
-  }
-}
-
-const worktreeName = getWorktreeName();
 
 // Patterns excluded from the build hash — only source code and assets matter.
 const EXCLUDE = [
@@ -93,8 +80,7 @@ try {
   }).trim();
 
   const hash = combined.substring(0, 7);
-  const buildId = worktreeName ? `${worktreeName}-${hash}` : hash;
-  process.stdout.write(buildId + '\n');
+  process.stdout.write(hash + '\n');
 } catch (e) {
   process.stderr.write(`build-id error: ${e.message}\n`);
   process.exit(1);
