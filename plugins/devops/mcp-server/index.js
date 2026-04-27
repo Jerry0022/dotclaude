@@ -668,10 +668,10 @@ server.registerTool(
       changes: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.object({
-          area: z.string(),
-          description: z.string(),
+          area: z.string().describe("Functional surface the user perceives or the change is about (e.g. 'Completion card', 'Ship pipeline', 'Branch cleanup', 'Skill devops-flow'). NOT a file path or internal module name. Technical wording only when the topic itself is purely technical (parser, flag, protocol)."),
+          description: z.string().describe("What behaves differently now, in user-domain language. Describe the functional/user-visible effect — same rule as `area`: technical phrasing only when the topic is genuinely technical."),
         })).max(3).optional(),
-      ).describe("What changed (max 3)"),
+      ).describe("Top 3 FUNCTIONAL changes — both `area` AND description should describe what the user perceives or what behaves differently, not which files were edited. Keep the 'area → description' shape. Files/paths only when the file IS the deliverable (skill, keybindings.json, settings.json, CLAUDE.md, hook script). Internal helpers/renderers/libs never appear. Good: 'Completion card → Changes-Bullets jetzt funktional formuliert'. Good (purely technical topic): 'JSON parser → akzeptiert trailing commas'. Bad: 'mcp-server/index.js → renderChanges() angepasst'."),
       tests: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.object({

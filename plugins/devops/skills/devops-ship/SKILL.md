@@ -272,7 +272,7 @@ render_completion_card({
   lang: "de",
   cwd: "<current working directory — same as ship_release>",
   buildId: <from ship_build.buildId>,
-  changes: [<from ship_build/devops-ship_version_bump results>],
+  changes: [<top 3 FUNCTIONAL changes — user-perceived effect, phrased as behavior. Derive from ship_build/version_bump results but do NOT list files/modules. See completion-card template § Changes.>],
   tests: [<from ship_build results>],
   state: {
     branch: "main",

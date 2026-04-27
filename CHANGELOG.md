@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.61.2] — 2026-04-27
+
+### Changed
+
+- **plugins/devops/templates/completion-card.md** + **plugins/devops/mcp-server/index.js** + **plugins/devops/skills/devops-commit/SKILL.md** + **plugins/devops/skills/devops-ship/SKILL.md** — completion-card `Changes` section is now functional-by-default. Both halves of the `area → description` bullet must describe what the user perceives or what behaves differently, not which files were edited. The `area → description` shape stays — it's the strength of the section — but `area` is now the functional surface (`Completion card`, `Ship pipeline`, `Skill devops-flow`), never a file path or internal module name. File names are allowed only when the file IS the deliverable: a skill, `keybindings.json`, `settings.json`, `CLAUDE.md`, a hook script. Internal helpers/renderers/libs (`mcp-server/index.js`, `lib/card-guard.js`) never appear. Technical wording stays legitimate when the topic itself is genuinely technical (parser, build flag, protocol). Producer skills (`devops-commit`, `devops-ship`) now point at this rule explicitly so callers don't bias their summaries back toward staged-diff / ship-result file lists. Schema `describe()` text on `changes.area` and `changes.description` carries do/don't examples so any caller that only reads the tool schema gets the same constraint. Codex review flagged producer-skill drift as a real risk; both producer skills updated in the same commit
+
 ## [0.61.1] — 2026-04-27
 
 ### Changed

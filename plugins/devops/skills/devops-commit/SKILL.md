@@ -137,7 +137,7 @@ render_completion_card({
   summary: "<~10 words, user's language>",
   lang: "<de|en>",
   session_id: "<from hook input>",
-  changes: [{ area, description }, ...],   // from the staged diff
+  changes: [{ area, description }, ...],   // top 3 FUNCTIONAL changes (user-perceived effect), derived from the staged diff but phrased as behavior — not file lists. See completion-card template § Changes.
   state: { branch, commit: "<short sha>", pushed: <bool>, merged: null }
 })
 ```
