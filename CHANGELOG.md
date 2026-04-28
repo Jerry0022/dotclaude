@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.61.3] — 2026-04-28
+
+### Changed
+
+- **plugins/devops/hooks/stop/stop.flow.selfcalibration.js** + **plugins/devops/scheduled-tasks/self-calibration/SKILL.md** — Step 4 (Skill Internalization) cycle math now lives in the Stop hook itself, not in SKILL.md prose. The hook discovers `{PLUGIN_ROOT}/deep-knowledge/*.md` and `{PLUGIN_ROOT}/skills/*/deep-knowledge/*.md`, computes `batchSize = ceil(total * 0.25)` and `startIndex = (cycle * batchSize) % total`, reads + advances + persists the cycle index to `$TMPDIR/dotclaude-devops-calibration-cycle.json`, and emits the current batch's file paths directly in its prompt — Claude only reads. Previously the cycle file was never created in practice because the hook prompt asked for "Step 0" only and the SKILL.md batch math was LLM-discretionary; later deep-knowledge files were systematically underread. Persistence uses atomic write-temp-then-rename (same pattern as `hooks/lib/session-id.js#writeSessionFile`) so concurrent Stop hooks from parallel worktrees cannot observe a half-written cycle file. There is intentionally no inter-process lock around the read-modify-write sequence — interleaved reads can lose one increment (worst case: one batch repeats, no crash, no data loss). SKILL.md now describes coverage as "best-effort eventual" instead of claiming guarantees, including the unwritable-tmpdir degradation. Empty-discovery status line fixed (was misleading "files 0..-1 of 0"). Codex review flagged the persistence robustness as the main correctness concern; atomic-write fix landed in the same ship
+
 ## [0.61.2] — 2026-04-27
 
 ### Changed
