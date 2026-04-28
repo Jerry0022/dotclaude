@@ -110,10 +110,13 @@ What you do:
 1. Read the project's CLAUDE.md (if exists)
 2. Read each file the hook listed under "Step 4 batch" — silently, no output
 
-This ensures Claude stays familiar with all plugin rules, even those
-not directly triggered in the current session. The hook-driven cycle
-index guarantees even coverage across sessions — every file gets read
-in rotation regardless of which session triggers calibration.
+This keeps Claude familiar with plugin rules that aren't directly
+triggered in the current session. Coverage is **best-effort eventual**,
+not guaranteed: persistence uses atomic write-temp-then-rename but no
+inter-process lock, so two Stop events that interleave their cycle
+read+write can lose one increment (worst case: one batch repeats — no
+crash, no data loss). Over many cycles, every file still gets read in
+rotation.
 
 ## Step 5 — Baseline Review
 
@@ -141,7 +144,11 @@ Example extensions:
 - Batch math: `batchSize = ceil(total * 0.25)`,
   `startIndex = (cycle * batchSize) % total`
 - Cycle index persisted to `$TMPDIR/dotclaude-devops-calibration-cycle.json`
-  for cross-session continuity (written by the hook)
+  via atomic write-temp+rename. No inter-process lock — concurrent Stop
+  events from different worktrees may lose one increment (acceptable
+  best-effort behavior; one repeated batch, no crash)
+- Cooldown marker uses the same atomic-write pattern. If `$TMPDIR` is
+  unwritable, the cooldown silently degrades to "fire every turn"
 - This task fires automatically on the Stop event with a 10-minute
   worktree-specific cooldown
 - Token budget: ~5K-15K per cycle (mostly reads, minimal writes)

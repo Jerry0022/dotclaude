@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.selfcalibration
- * @version 1.1.0
+ * @version 1.2.0
  * @event Stop
  * @plugin devops
  * @description Run self-calibration when Claude finishes a response turn.
@@ -16,6 +16,13 @@
  *
  *   Worktree-specific cooldown: timestamp is keyed to process.cwd(), so
  *   parallel worktrees have independent cooldowns.
+ *
+ *   Persistence is best-effort with atomic write-temp-then-rename. There is
+ *   no inter-process lock, so two Stop events that interleave their
+ *   read-modify-write of the cycle file can lose one increment (worst case:
+ *   one batch repeats — no crash, no data loss). On unwritable tmpdir the
+ *   cooldown silently degrades to "fire every turn" — acceptable for a
+ *   calibration loop, surfaced in SKILL.md.
  */
 
 require('../lib/plugin-guard');
@@ -36,6 +43,19 @@ function worktreeKey() {
 
 function lastRunFile() {
   return path.join(os.tmpdir(), `dotclaude-devops-calibration-wt-${worktreeKey()}`);
+}
+
+// Atomic write: write to .tmp then rename. Prevents partial reads from
+// concurrent Stop hooks observing a half-written file. Same pattern as
+// hooks/lib/session-id.js#writeSessionFile.
+function atomicWrite(filePath, content) {
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  try {
+    fs.writeFileSync(tmp, content, 'utf8');
+    fs.renameSync(tmp, filePath);
+  } catch {
+    try { fs.unlinkSync(tmp); } catch {}
+  }
 }
 
 function discoverDeepKnowledge() {
@@ -77,9 +97,7 @@ function readCycle() {
 }
 
 function writeCycle(cycle) {
-  try {
-    fs.writeFileSync(CYCLE_FILE, JSON.stringify({ cycle }), 'utf8');
-  } catch {}
+  atomicWrite(CYCLE_FILE, JSON.stringify({ cycle }));
 }
 
 function pickBatch(files, cycle) {
@@ -113,9 +131,7 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
-  try {
-    fs.writeFileSync(file, String(Date.now()), 'utf8');
-  } catch {}
+  atomicWrite(file, String(Date.now()));
 
   const allFiles = discoverDeepKnowledge();
   const cycle = readCycle();
@@ -123,14 +139,17 @@ process.stdin.on('end', () => {
   writeCycle(cycle + 1);
 
   const skillPathFwd = skillPath.replace(/\\/g, '/');
+  const batchHeader = total === 0
+    ? `Step 4 batch — no deep-knowledge files discovered, skip Step 4:`
+    : `Step 4 batch — cycle ${cycle}, files ${startIndex}..${startIndex + batchSize - 1} of ${total}:`;
   const batchList = batch.length
     ? batch.map(f => `  - ${f.replace(/\\/g, '/')}`).join('\n')
-    : '  (no deep-knowledge files discovered — skip Step 4)';
+    : '  (none)';
 
   process.stdout.write(
     `Execute self-calibration: Read ${skillPathFwd} and run ALL steps (0 through 5).\n` +
     `Use the file's parent of scheduled-tasks/ as the plugin root.\n\n` +
-    `Step 4 batch — cycle ${cycle}, files ${startIndex}..${startIndex + batchSize - 1} of ${total}:\n` +
+    `${batchHeader}\n` +
     `${batchList}\n\n` +
     `The hook has already advanced the cycle index and persisted it to ` +
     `${CYCLE_FILE.replace(/\\/g, '/')} — just silently read the listed files for Step 4.\n`
