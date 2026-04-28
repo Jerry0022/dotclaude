@@ -1,16 +1,28 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.selfcalibration
- * @version 1.0.0
+ * @version 1.2.0
  * @event Stop
  * @plugin devops
  * @description Run self-calibration when Claude finishes a response turn.
  *   Only fires if >10 minutes have passed since the last calibration in
- *   the current worktree. Replaces the cron-based approach (v0.7.0) to
- *   ensure calibration only runs after real user interaction, never idle.
+ *   the current worktree.
  *
- *   Worktree-specific: timestamp is keyed to process.cwd(), so parallel
- *   worktrees have independent cooldowns.
+ *   Step 4 (Skill Internalization) batch math runs in the hook itself —
+ *   discovery, cycle rotation, and persistence are deterministic JS, so
+ *   they no longer depend on the LLM following SKILL.md prose. The hook
+ *   emits the current batch's file paths in its prompt; Claude just reads
+ *   them silently.
+ *
+ *   Worktree-specific cooldown: timestamp is keyed to process.cwd(), so
+ *   parallel worktrees have independent cooldowns.
+ *
+ *   Persistence is best-effort with atomic write-temp-then-rename. There is
+ *   no inter-process lock, so two Stop events that interleave their
+ *   read-modify-write of the cycle file can lose one increment (worst case:
+ *   one batch repeats — no crash, no data loss). On unwritable tmpdir the
+ *   cooldown silently degrades to "fire every turn" — acceptable for a
+ *   calibration loop, surfaced in SKILL.md.
  */
 
 require('../lib/plugin-guard');
@@ -21,7 +33,8 @@ const crypto = require('crypto');
 const os = require('os');
 
 const PLUGIN_DIR = path.resolve(__dirname, '..', '..');
-const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+const COOLDOWN_MS = 10 * 60 * 1000;
+const CYCLE_FILE = path.join(os.tmpdir(), 'dotclaude-devops-calibration-cycle.json');
 
 function worktreeKey() {
   const cwd = process.cwd().replace(/\\/g, '/');
@@ -32,37 +45,113 @@ function lastRunFile() {
   return path.join(os.tmpdir(), `dotclaude-devops-calibration-wt-${worktreeKey()}`);
 }
 
+// Atomic write: write to .tmp then rename. Prevents partial reads from
+// concurrent Stop hooks observing a half-written file. Same pattern as
+// hooks/lib/session-id.js#writeSessionFile.
+function atomicWrite(filePath, content) {
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  try {
+    fs.writeFileSync(tmp, content, 'utf8');
+    fs.renameSync(tmp, filePath);
+  } catch {
+    try { fs.unlinkSync(tmp); } catch {}
+  }
+}
+
+function discoverDeepKnowledge() {
+  const files = [];
+
+  const pluginDk = path.join(PLUGIN_DIR, 'deep-knowledge');
+  try {
+    for (const f of fs.readdirSync(pluginDk)) {
+      if (f.endsWith('.md') && f !== 'INDEX.md') {
+        files.push(path.join(pluginDk, f));
+      }
+    }
+  } catch {}
+
+  const skillsDir = path.join(PLUGIN_DIR, 'skills');
+  try {
+    for (const skill of fs.readdirSync(skillsDir)) {
+      const skillDk = path.join(skillsDir, skill, 'deep-knowledge');
+      try {
+        for (const f of fs.readdirSync(skillDk)) {
+          if (f.endsWith('.md')) {
+            files.push(path.join(skillDk, f));
+          }
+        }
+      } catch {}
+    }
+  } catch {}
+
+  return files.sort();
+}
+
+function readCycle() {
+  try {
+    const raw = fs.readFileSync(CYCLE_FILE, 'utf8');
+    const data = JSON.parse(raw);
+    if (Number.isInteger(data.cycle) && data.cycle >= 0) return data.cycle;
+  } catch {}
+  return 0;
+}
+
+function writeCycle(cycle) {
+  atomicWrite(CYCLE_FILE, JSON.stringify({ cycle }));
+}
+
+function pickBatch(files, cycle) {
+  const total = files.length;
+  if (total === 0) return { batch: [], total: 0, batchSize: 0, startIndex: 0 };
+  const batchSize = Math.ceil(total * 0.25);
+  const startIndex = (cycle * batchSize) % total;
+  const batch = [];
+  for (let i = 0; i < batchSize; i++) {
+    batch.push(files[(startIndex + i) % total]);
+  }
+  return { batch, total, batchSize, startIndex };
+}
+
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', () => {});
 process.stdin.on('end', () => {
   const file = lastRunFile();
 
-  // Check worktree-specific cooldown
   try {
     const stat = fs.statSync(file);
     if (Date.now() - stat.mtimeMs < COOLDOWN_MS) {
-      process.exit(0); // Cooldown active
+      process.exit(0);
     }
-  } catch {
-    // File doesn't exist — first run in this worktree
-  }
+  } catch {}
 
-  // Find SKILL.md
   const skillPath = path.join(PLUGIN_DIR, 'scheduled-tasks', 'self-calibration', 'SKILL.md');
   try {
     fs.readFileSync(skillPath, 'utf8');
   } catch {
-    process.exit(0); // No skill file
+    process.exit(0);
   }
 
-  // Update timestamp before emitting (prevents double-fire)
-  try {
-    fs.writeFileSync(file, String(Date.now()), 'utf8');
-  } catch {}
+  atomicWrite(file, String(Date.now()));
 
-  const resolvedPath = skillPath.replace(/\\/g, '/');
+  const allFiles = discoverDeepKnowledge();
+  const cycle = readCycle();
+  const { batch, total, batchSize, startIndex } = pickBatch(allFiles, cycle);
+  writeCycle(cycle + 1);
+
+  const skillPathFwd = skillPath.replace(/\\/g, '/');
+  const batchHeader = total === 0
+    ? `Step 4 batch — no deep-knowledge files discovered, skip Step 4:`
+    : `Step 4 batch — cycle ${cycle}, files ${startIndex}..${startIndex + batchSize - 1} of ${total}:`;
+  const batchList = batch.length
+    ? batch.map(f => `  - ${f.replace(/\\/g, '/')}`).join('\n')
+    : '  (none)';
+
   process.stdout.write(
-    `Execute self-calibration: Read ${resolvedPath} and run Step 0 (Completion Flow Internalization). ` +
-    `Use the file's parent of scheduled-tasks/ as the plugin root.\n`
+    `Execute self-calibration: Read ${skillPathFwd} and run ALL steps (0 through 5).\n` +
+    `Use the file's parent of scheduled-tasks/ as the plugin root.\n\n` +
+    `${batchHeader}\n` +
+    `${batchList}\n\n` +
+    `The hook has already advanced the cycle index and persisted it to ` +
+    `${CYCLE_FILE.replace(/\\/g, '/')} — just silently read the listed files for Step 4.\n`
   );
 });
