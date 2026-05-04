@@ -1768,6 +1768,13 @@ deliberately to reach the implement button.
 
 ```javascript
 let _submittedAt = 0;
+// Reload counter captured at submit time. The panel only flips back to
+// "ready" via _processed_at when the server's reload counter has advanced
+// past this — i.e. Claude has actually written the new iteration. Without
+// this gate, /reset stamps _processed_at while Claude is still mid-write
+// and the user sees re-enabled buttons on the still-active old iteration.
+let _submittedReloadCounter = null;
+let _submitInFlight = false;
 
 function wireSubmit(btnId, action) {
   const btn = document.getElementById(btnId);
@@ -1776,11 +1783,18 @@ function wireSubmit(btnId, action) {
 }
 
 async function submitWithAction(action) {
+  // Belt-and-suspenders guard: if a submission is already in flight (panel
+  // shows "submitted"), ignore further clicks. restorePanelToReady() resets
+  // _submittedAt to 0, so this only blocks while we're actually waiting.
+  if (_submitInFlight || _submittedAt) return;
+  _submitInFlight = true;
+
   const data = collectDecisions(action);
   const container = document.getElementById('concept-decisions');
   container.textContent = JSON.stringify(data);
   document.body.classList.add('concept-submitted');
   _submittedAt = Date.now();
+  _submittedReloadCounter = _bootReloadCounter;
 
   document.getElementById('panel-ready').style.display = 'none';
   document.getElementById('panel-submitted').style.display = 'block';
@@ -1795,6 +1809,7 @@ async function submitWithAction(action) {
     localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data));
   }
   saveState();
+  _submitInFlight = false;
 }
 
 wireSubmit('submit-iterate-btn', 'iterate');
@@ -1823,9 +1838,15 @@ Claude-side: on receiving the payload, branch on `action`:
 
 ## Panel State Reset
 
-When Claude finishes processing, it POSTs `/reset` on the bridge server.
-The server stamps `_processed_at`; the page's heartbeat poll sees the
-updated timestamp and restores the ready panel. No browser eval injection.
+The primary reset is the page reload itself: Claude POSTs `/reload` after
+writing the new iteration, the browser's `pollReload` calls
+`location.reload()`, and the freshly loaded page is in ready state because
+the `concept-submitted` class is not persisted.
+
+`restorePanelToReady()` is a safety-net — only called when `_processed_at`
+indicates Claude finished AND a reload counter advance has been observed
+(i.e. a reload is imminent / about to happen) OR a long stale timeout has
+elapsed (recovery for closed tabs / JS errors where reload never fired).
 
 ```javascript
 function restorePanelToReady() {
@@ -1837,6 +1858,8 @@ function restorePanelToReady() {
   });
   document.body.classList.remove('concept-submitted');
   _submittedAt = 0;
+  _submittedReloadCounter = null;
+  _submitInFlight = false;
   const slug = location.pathname.split('/').pop().replace('.html', '');
   localStorage.removeItem('concept-state-' + slug);
 }
@@ -1868,6 +1891,15 @@ async function pollHeartbeat() {
   } catch (e) { /* server unreachable */ }
 }
 
+// Safety-net timeout — if Claude /reset stamped _processed_at but no
+// reload counter advance ever followed (closed tab, JS error, server
+// went down between /reload and /reset), we still want to recover the
+// panel rather than leaving the user stuck staring at "submitted".
+// 5 minutes is long enough that any well-behaved iteration will have
+// reloaded the page first, and short enough that a real stuck state
+// recovers without manual intervention.
+const PROCESSED_SAFETY_MS = 5 * 60 * 1000;
+
 async function pollProcessedState() {
   if (!_submittedAt) return;
   try {
@@ -1876,7 +1908,33 @@ async function pollProcessedState() {
     const processedIso = data && data._processed_at;
     if (!processedIso) return;
     const processedMs = Date.parse(processedIso);
-    if (Number.isFinite(processedMs) && processedMs > _submittedAt) {
+    if (!Number.isFinite(processedMs) || processedMs <= _submittedAt) return;
+
+    // _processed_at IS newer than submission. Two paths to actually
+    // restore the panel:
+    //   (a) The reload counter has advanced past submit-time → Claude
+    //       wrote a new iteration; pollReload will trigger location.reload()
+    //       within 3s. Restoring eagerly here is a no-op visually but
+    //       cleans local state.
+    //   (b) A long safety timeout elapsed → reload never fired (closed
+    //       tab, JS error, network blip); recover so the user is not
+    //       stuck on a frozen "submitted" panel.
+    // Otherwise: Claude is mid-processing (e.g. /reset arrived but file
+    // write + /reload is still pending, or the protocol order was wrong).
+    // Keep the panel in "submitted" state so the user cannot duplicate-
+    // submit on the still-active old iteration.
+    let reloadAdvanced = false;
+    try {
+      const r2 = await fetch('/reload', { cache: 'no-store' });
+      if (r2.ok) {
+        const { counter } = await r2.json();
+        reloadAdvanced = (_submittedReloadCounter !== null) &&
+                         (counter > _submittedReloadCounter);
+      }
+    } catch (_) { /* ignore — fall back to safety timer */ }
+
+    const longStale = (Date.now() - _submittedAt) > PROCESSED_SAFETY_MS;
+    if (reloadAdvanced || longStale) {
       restorePanelToReady();
     }
   } catch (e) { /* retry next tick */ }

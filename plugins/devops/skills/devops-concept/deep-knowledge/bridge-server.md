@@ -39,7 +39,10 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
            before treating the rest as decision data.
          • Process per Step 5 (Live Feedback Loop) — act on the user's choices
            (approve/tweak/reject, included options, comment-driven tweaks).
-         • After processing, reset conditionally — pass the noted version:
+           Step 5c writes the new iteration to the HTML file and POSTs
+           `/reload` BEFORE the reset below. Reset is the LAST action.
+         • After the file rewrite AND the `/reload` POST have completed,
+           reset conditionally — pass the noted version:
            Bash: curl -s -o /dev/null -w "%{http_code}" -X POST \
                        -H "Content-Type: application/json" \
                        -d '{"version": <noted>}' http://localhost:{port}/reset
@@ -47,9 +50,10 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
            again while you were processing. Re-fetch /decisions, process the
            new payload (which supersedes what you just finished), then retry
            the conditional reset with the new `_version`.
-         • Report the outcome to the user. The browser's panel auto-resets
-           within 5s via the `_processed_at` heartbeat poll — no browser-eval
-           injection required.
+         • Report the outcome to the user. The visible panel reset happens
+           via the `/reload`-triggered `location.reload()` in the browser —
+           the page reloads onto the new iteration with a fresh ready panel.
+           The `_processed_at` poll is only a safety-net for stuck states.
    EOF)
    ```
 
