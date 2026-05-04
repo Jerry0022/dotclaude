@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.concept.resume
- * @version 0.1.0
+ * @version 0.2.0
  * @event SessionStart
  * @plugin devops
  * @description Recover an open concept session after a Claude restart.
@@ -11,6 +11,21 @@
  *   submission immediately. Without this hook the polling cron (which is
  *   session-only) dies with the prior session and any pending submission
  *   silently rots in the bridge server until the user notices.
+ *
+ *   Trust model: `.claude/concept-active.json` is treated as a per-project
+ *   state file, NOT as authenticated control input. We accept that anyone
+ *   with write access to the project tree can author it, but we do NOT let
+ *   `html_path` steer Claude at arbitrary paths — it must be a clean
+ *   relative path under `docs/concepts/` and end in `.html`. The file is
+ *   also gitignored so a malicious branch cannot smuggle one in via PR.
+ *
+ *   Multi-session caveat: this hook does not coordinate ownership across
+ *   parallel Claude sessions on the same project. If two sessions are open,
+ *   both will arm a polling cron and both may process the same submission;
+ *   the bridge's optimistic /reset (409 on version mismatch) prevents data
+ *   loss but cannot prevent duplicate Step 5 work. This is a known limit —
+ *   the realistic case (one user, one active session per worktree) is
+ *   the only one we optimize for.
  */
 
 require('../lib/plugin-guard');
@@ -26,11 +41,36 @@ const STATE_PATH = path.join(cwd, '.claude', 'concept-active.json');
 // we just delete the orphan. Real concept sessions almost never run that long.
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Validate the html_path field. Constraints:
+ *   - relative (no drive letter, no leading / or \)
+ *   - no traversal segments (`..`)
+ *   - lives under `docs/concepts/`
+ *   - ends in `.html`
+ * The hook injects this string into stdout instructions that Claude will
+ * act on, so we tighten the allowed shape to make sure a forged state
+ * file cannot point Claude at arbitrary repository files.
+ */
+function isValidHtmlPath(p) {
+  if (typeof p !== 'string' || p.length === 0 || p.length > 256) return false;
+  if (/^[a-zA-Z]:[\\/]/.test(p)) return false; // windows drive
+  if (p.startsWith('/') || p.startsWith('\\')) return false; // absolute posix
+  const norm = p.replace(/\\/g, '/');
+  if (norm.split('/').includes('..')) return false; // traversal
+  if (!norm.startsWith('docs/concepts/')) return false;
+  if (!norm.endsWith('.html')) return false;
+  return true;
+}
+
 function readState() {
   try {
     const raw = fs.readFileSync(STATE_PATH, 'utf8');
     const obj = JSON.parse(raw);
     if (!obj || typeof obj.port !== 'number') return null;
+    if (!Number.isInteger(obj.port) || obj.port < 1 || obj.port > 65535) return null;
+    if (!isValidHtmlPath(obj.html_path)) return null;
+    if (obj.slug !== undefined && typeof obj.slug !== 'string') return null;
+    if (obj.slug && !/^[a-zA-Z0-9._-]{1,80}$/.test(obj.slug)) return null;
     return obj;
   } catch {
     return null;
@@ -91,8 +131,20 @@ function probe(port, pathname, timeoutMs = 1500) {
   }
 
   // Server is alive. Check whether a submission is sitting unprocessed.
+  // We must distinguish three states explicitly:
+  //   - probe ok, pending: false → safe to wait on cron schedule
+  //   - probe ok, pending: true  → process immediately
+  //   - probe failed              → AMBIGUOUS, do NOT pretend it's false.
+  //     Hiding "I don't know" as "no submission pending" is the worst
+  //     failure mode for a waiting user. Tell Claude to fetch /decisions
+  //     once now so the answer is resolved authoritatively.
   const pending = await probe(state.port, '/pending');
-  const hasPending = !!(pending && pending.pending);
+  let pendingState; // 'pending' | 'idle' | 'unknown'
+  if (pending && typeof pending.pending === 'boolean') {
+    pendingState = pending.pending ? 'pending' : 'idle';
+  } else {
+    pendingState = 'unknown';
+  }
 
   const cronBody =
     `Silently run both steps for the concept bridge on port ${state.port}: ` +
@@ -109,12 +161,19 @@ function probe(port, pathname, timeoutMs = 1500) {
     `Re-arm it now: call CronCreate with cron "* * * * *" (recurring: true) and prompt: '${cronBody}'.`
   );
 
-  if (hasPending) {
+  if (pendingState === 'pending') {
     lines.push(
       `IMMEDIATELY ALSO process the pending submission BEFORE waiting for the first cron tick: ` +
       `curl -s http://localhost:${state.port}/decisions, parse, then run devops-concept SKILL.md Step 5 ` +
       `(rewrite HTML at ${state.html_path}, POST /reload, conditional /reset with the captured _version). ` +
       `The user already submitted and is waiting — do not delay this on the cron schedule.`
+    );
+  } else if (pendingState === 'unknown') {
+    lines.push(
+      `The /pending probe was inconclusive (timeout, non-200, or malformed JSON). ` +
+      `Do NOT assume idle. Fetch /decisions once now: curl -s http://localhost:${state.port}/decisions. ` +
+      `If submitted=true, run Step 5 immediately (rewrite ${state.html_path}, /reload, conditional /reset). ` +
+      `If submitted=false, just continue with the cron — the next tick will catch any later submission.`
     );
   } else {
     lines.push(
