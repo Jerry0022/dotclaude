@@ -1877,6 +1877,24 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
 
 ## Claude Connection Heartbeat (HTTP Bridge)
 
+The server response splits the heartbeat into TWO timestamps:
+
+- `claude_ts` — last `POST /heartbeat` from Claude (the polling cron is alive
+  and Claude will pick up submissions). This is the field the indicator must
+  gate on.
+- `server_ts` — daemon-thread self-pulse (the bridge process is alive). Used
+  only to distinguish "server crashed" from "Claude not polling" in error
+  messaging — never to decide whether the indicator goes green.
+- `ts` — legacy alias of `claude_ts` for back-compat with older pages that
+  pre-date the split. Always equal to `claude_ts` on a current server.
+
+Gating on `server_ts` would keep the indicator green even after Claude's
+session restarts (cron is session-only and dies with the session) — silently
+hiding the case where submissions fall into a black hole. The bug that
+motivated the split: `_heartbeat_ts` used to be a single field that the
+self-pulse refreshed every 30s, so the page showed "Claude verbunden"
+indefinitely no matter what Claude was actually doing.
+
 ```javascript
 const HEARTBEAT_STALE_MS = 90000;
 const HEARTBEAT_GRACE_MS = 30000;
@@ -1887,7 +1905,11 @@ async function pollHeartbeat() {
   try {
     const res = await fetch('/heartbeat', { cache: 'no-store' });
     const data = await res.json();
-    _lastHeartbeatTs = data.ts || 0;
+    // Prefer `claude_ts` (post-split server); fall back to `ts` for
+    // back-compat with legacy server builds that only expose the merged field.
+    // NEVER use `server_ts` here — the daemon self-pulse would falsely
+    // light up the indicator while Claude's polling cron is dead.
+    _lastHeartbeatTs = data.claude_ts || data.ts || 0;
   } catch (e) { /* server unreachable */ }
 }
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.63.0] — 2026-05-04
+
+### Added
+
+- **plugins/devops/hooks/session-start/ss.concept.resume.js** + **plugins/devops/hooks/hooks.json** — new SessionStart hook recovers an open `/devops-concept` session after Claude restarts. Reads `.claude/concept-active.json` (port, html_path, slug, server_pid, cron_id, started_at), probes the bridge with `GET /heartbeat`, and instructs Claude to re-arm the polling cron — and to immediately process any submission already sitting in `/pending` rather than waiting for the next 60s tick. The polling cron is session-only and dies with the previous session; before this hook, a Claude restart left the bridge running but unmonitored, so submissions silently rotted until the user noticed manually. Stale state (24h+, server gone) is auto-pruned. State file is gitignored and `html_path` is validated to a `docs/concepts/*.html` shape so a forged or committed state file cannot steer Claude at arbitrary paths (codex review finding). `/pending` probe failures are reported as `unknown` instead of falsely collapsing to `idle`, so an inconclusive probe makes Claude fetch `/decisions` once authoritatively. Both the SKILL.md Step 3 (write the file before opening Edge) and Step 6 (delete the file with `kill $SERVER_PID + rm -f` before the completion card) document the lifecycle so the resume signal cannot misfire on a closed concept
+
+### Fixed
+
+- **plugins/devops/scripts/concept-server.py** + **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** + **deep-knowledge/bridge-server.md** — split the bridge heartbeat into two distinct timestamps so the page connection indicator can no longer lie about Claude's reachability. The single `_heartbeat_ts` was driven by both the daemon-thread self-pulse (every 30s, proves the server is alive) AND Claude's `POST /heartbeat` from the cron — collapsing those into one field meant the indicator stayed green forever from the self-pulse alone, even after Claude's session restarted and the polling cron died. Submissions then sat unprocessed in the bridge with the page falsely reporting "Claude verbunden". Server now exposes `server_ts` (self-pulse, server alive) and `claude_ts` (last Claude POST, polling cron alive) separately; `GET /heartbeat` returns both plus `ts` as a legacy alias of `claude_ts` for back-compat with older page JS. The browser-side `pollHeartbeat` reads `data.claude_ts || data.ts`, never `server_ts`, so a dead Claude polling cron now correctly flips the indicator to "nicht verbunden" within the existing 90s stale window — surfacing the real problem instead of hiding it. Old pages still in user tabs continue to work via the `ts`-alias path; new pages get the explicit `claude_ts` field
+
 ## [0.62.0] — 2026-05-04
 
 ### Added

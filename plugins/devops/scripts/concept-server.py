@@ -2,7 +2,15 @@
 Concept Bridge Server — HTTP-based heartbeat and decision bridge.
 
 Replaces `python -m http.server` with a custom server that adds:
-- GET/POST /heartbeat — Claude signals presence via curl, page polls via fetch
+- GET/POST /heartbeat — Claude signals presence via POST, page polls via GET.
+  GET response is `{ server_ts, claude_ts, ts }`:
+    * `server_ts` — daemon-thread self-pulse (server alive, Claude state unknown).
+    * `claude_ts` — last POST /heartbeat from Claude (Claude is actively polling).
+    * `ts` — legacy alias = `claude_ts` for backwards compat with older page JS.
+  The browser MUST gate the connection indicator on `claude_ts`, not `server_ts`.
+  Otherwise the server's own self-pulse falsely shows "Claude connected" even
+  when Claude's polling cron is dead (e.g. after a session restart) and
+  submissions silently rot in the bridge until the user notices manually.
 - GET/POST /decisions — Page submits decisions via POST, Claude reads via GET.
   GET response includes `_version` (for optimistic /reset concurrency) and
   `_processed_at` (ISO timestamp of the last successful /reset — the browser
@@ -19,12 +27,13 @@ This bypasses Chrome MCP JS injection limitations entirely. The page
 communicates with Claude through HTTP endpoints instead of requiring
 JavaScript eval injection into the browser tab.
 
-A daemon thread self-pulses `_heartbeat_ts` every 30s so the browser's
-connection indicator reflects "bridge server alive" rather than "Claude's
-REPL is currently idle". Session-based crons only fire while the REPL is
-idle, which is exactly not the case while Claude actively builds the page
-or processes submissions — the self-pulse closes that false-negative gap.
-POST /heartbeat still works for belt-and-suspenders signaling.
+A daemon thread self-pulses `_server_ts` every 30s so the browser can tell
+"bridge server is alive" from "Claude is actively polling". The split
+heartbeat replaces the older single `_heartbeat_ts` which conflated both
+signals — a server-only pulse used to render as "Claude connected", which
+hid the case where Claude's polling cron had died (session restart, busy
+REPL) while the server kept ticking. POST /heartbeat now updates ONLY
+`_claude_ts`, and the browser gates the indicator on that.
 
 Usage:
     python concept-server.py <port> [directory]
@@ -41,7 +50,8 @@ import time
 import threading
 from datetime import datetime, timezone
 
-_heartbeat_ts = 0
+_server_ts = 0
+_claude_ts = 0
 _decisions = '{"submitted": false, "decisions": [], "comments": []}'
 # Monotonic counter — incremented on every POST /decisions. Used by /reset
 # for optimistic concurrency: Claude reads version via GET, processes, then
@@ -82,8 +92,17 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/heartbeat':
             with _lock:
-                ts = _heartbeat_ts
-            self._json_response({"ts": ts})
+                server_ts = _server_ts
+                claude_ts = _claude_ts
+            # `ts` is a legacy alias of `claude_ts` for older page JS that
+            # only knows the single-field response. Gating on `ts` then
+            # transparently means "gating on Claude's heartbeat" — which is
+            # exactly what we want even before the page is regenerated.
+            self._json_response({
+                "server_ts": server_ts,
+                "claude_ts": claude_ts,
+                "ts": claude_ts,
+            })
         elif self.path == '/decisions':
             # Return the stored decisions payload with the current server
             # version appended as `_version`. Claude must pass this value back
@@ -126,12 +145,16 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
-        global _heartbeat_ts, _decisions, _version, _processed_at, _reload_counter
+        global _server_ts, _claude_ts, _decisions, _version, _processed_at, _reload_counter
         if self.path == '/heartbeat':
+            # POST /heartbeat is reserved for Claude (curl from cron). Updates
+            # ONLY `_claude_ts` — the server's own self-pulse touches `_server_ts`
+            # and must not be conflated with "Claude is reachable". See module
+            # docstring for the full rationale.
             with _lock:
-                _heartbeat_ts = int(time.time() * 1000)
-                ts = _heartbeat_ts
-            self._json_response({"ok": True, "ts": ts})
+                _claude_ts = int(time.time() * 1000)
+                ts = _claude_ts
+            self._json_response({"ok": True, "ts": ts, "claude_ts": ts})
         elif self.path == '/decisions':
             length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(length).decode()
@@ -229,11 +252,14 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         pass  # suppress per-request logging
 
 
-def _heartbeat_self_pulse(interval_s: int = 30):
-    global _heartbeat_ts
+def _server_self_pulse(interval_s: int = 30):
+    """Updates ONLY `_server_ts` — proves the server process and its event
+    loop are alive. Has nothing to do with whether Claude is reachable; the
+    browser must gate the connection indicator on `_claude_ts`."""
+    global _server_ts
     while True:
         with _lock:
-            _heartbeat_ts = int(time.time() * 1000)
+            _server_ts = int(time.time() * 1000)
         time.sleep(interval_s)
 
 
@@ -243,10 +269,11 @@ if __name__ == '__main__':
     os.chdir(directory)
 
     # Prime + self-pulse: the browser checks the heartbeat within 5s of page
-    # load, so set it once before serving and then refresh every 30s from a
-    # daemon thread that dies with the server process.
-    _heartbeat_ts = int(time.time() * 1000)
-    threading.Thread(target=_heartbeat_self_pulse, daemon=True).start()
+    # load, so set `_server_ts` once before serving and then refresh every 30s
+    # from a daemon thread that dies with the server process. `_claude_ts`
+    # stays 0 until Claude actually POSTs — that's the whole point of the split.
+    _server_ts = int(time.time() * 1000)
+    threading.Thread(target=_server_self_pulse, daemon=True).start()
 
     with http.server.HTTPServer(('', port), ConceptBridgeHandler) as httpd:
         print(f"Concept bridge server on http://localhost:{port}/")

@@ -374,12 +374,22 @@ open a separate browser window.
 
 Start the bridge server (`scripts/concept-server.py`) on a random port
 (8700-8999), arm the combined heartbeat + auto-poll cron (fires every
-minute, handles heartbeat + decision pickup + conditional reset), send
-the first heartbeat, and open the page in the user's existing Edge window.
+minute, handles heartbeat + decision pickup + conditional reset), write
+`.claude/concept-active.json` so a future SessionStart can rediscover this
+concept, send the first heartbeat, and open the page in the user's
+existing Edge window.
+
+The state file (`port`, `html_path`, `slug`, `server_pid`, `cron_id`,
+`started_at`) is what makes the concept survivable across Claude restarts:
+the `ss.concept.resume` SessionStart hook reads it, verifies the bridge
+is still running via `GET /heartbeat`, and tells the new session whether
+to re-arm the polling cron or pick up an unprocessed submission. Without
+the state file the new session has no way to know a concept was ever
+opened — the polling cron is session-only and dies with the old session.
 
 See `deep-knowledge/bridge-server.md` for the full setup — script lookup,
-launch command, cron body, rationale for `/pending` over substring checks,
-and cleanup.
+launch command, cron body, state-file schema, rationale for `/pending`
+over substring checks, and cleanup ordering.
 
 ### After opening, inform the user:
 
@@ -549,7 +559,27 @@ previous rounds; each entry records its `iteration` number).
 ## Step 6 — Completion Card
 
 The feedback loop ends when the user is satisfied (user says "fertig"/"done",
-closes the page, or all items are processed). Then render a completion card.
+closes the page, or all items are processed). Then **clean up the
+bridge-server state** and render a completion card.
+
+### 6a. Clean up the active-concept state
+
+Before rendering the completion card, dispose of the bridge server and
+its state file in this exact order (per `deep-knowledge/bridge-server.md`
+§ Step 7):
+
+```bash
+kill $SERVER_PID 2>/dev/null
+rm -f .claude/concept-active.json
+```
+
+Then `CronDelete <cron_id>`. Removing `concept-active.json` is mandatory
+— if the file lingers, the next SessionStart's `ss.concept.resume` hook
+will surface a phantom resume hint pointing at a server that no longer
+exists. The `kill` is best-effort: if the user already closed the
+terminal that spawned the server, the PID may be gone, which is fine.
+
+### 6b. Render the completion card
 
 Call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
 
