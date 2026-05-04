@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.61.4] — 2026-05-04
+
+### Fixed
+
+- **plugins/devops/skills/devops-concept/SKILL.md** + **deep-knowledge/bridge-server.md** + **deep-knowledge/monitoring.md** + **deep-knowledge/templates.md** — fixed a UI race in the concept skill where the submit panel flipped back to "ready" while Claude was still mid-write, letting the user fire duplicate submissions on the still-active old iteration. Step 5c instructed Claude to POST `/reset` BEFORE the file rewrite and `/reload`, which stamped `_processed_at` on the server immediately. The browser's `pollProcessedState` (5s tick) saw the fresh stamp, called `restorePanelToReady()`, and re-enabled the submit buttons — even though the new iteration was not yet on disk and the old one was still the active section. The bug window stretched across the seconds Claude spent reading + generating + writing the new iteration. Fix reorders the protocol so `/reset` is the LAST step (after `/reload`), and the visible panel reset now happens via the `/reload`-triggered `location.reload()` (fresh page, no `concept-submitted` class — naturally in ready state). `pollProcessedState` is now a true safety-net: it only flips the panel locally when a reload-counter advance has been observed (= new iteration is imminent) OR a 5-minute stale timeout elapses (recovery for closed tabs / JS errors where reload never fired). Defense-in-depth at the submit handler too — `_submitInFlight` lock + non-zero `_submittedAt` guard at function entry blocks duplicate clicks even if the UI ever flickers back to ready prematurely. `_submittedReloadCounter` is captured at submit time as the gate variable. Existing concept pages already in user tabs benefit from the protocol reorder (server-side change); newly generated pages additionally get the browser-side hardening
+
 ## [0.61.3] — 2026-04-28
 
 ### Changed
