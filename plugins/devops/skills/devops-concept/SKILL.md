@@ -484,13 +484,13 @@ signal the browser to reload. This is the ONLY update path — there is no
 separate "in-place edit" vs. "new file" distinction anymore.
 
 Procedure on every iteration (including the very first response to feedback).
-Before the steps below, POST `/reset` with the captured `_version` (see cron
-prompt in Step 3). This stamps `_processed_at` on the server so the
-browser's `pollProcessedState` can restore the panel to the ready state
-automatically — Claude does NOT send a browser-eval reset. The subsequent
-`pollReload` tick picks up the file rewrite and the tab reloads onto the
-new active iteration. See `deep-knowledge/templates.md` § Panel State Reset
-for the polling contract.
+
+**Order matters — `/reset` is the LAST step, NOT the first.** Posting `/reset`
+early stamps `_processed_at` on the server, which makes the browser's
+`pollProcessedState` flip the panel back to "ready" before the new iteration
+is on disk. The user then sees the still-active OLD iteration with
+re-enabled submit buttons and can fire a duplicate submission. The new
+iteration must be live in the browser BEFORE the server signals "processed".
 
 1. Read the existing HTML file (same path, always).
 2. Freeze the currently-active iteration section per the rules in
@@ -520,6 +520,12 @@ for the polling contract.
    The browser's `pollReload` loop sees the counter bump and calls
    `location.reload()`. The reload lands on the new active iteration
    because the HTML declares it via `data-active`.
+6. **Only now** POST `/reset` with the captured `_version` (see cron
+   prompt in Step 3). This stamps `_processed_at` on the server as the
+   final step. The browser's `pollProcessedState` is a safety-net —
+   it will only restore the panel state when a reload counter advance
+   has been observed OR a long stale timeout elapses. See
+   `deep-knowledge/templates.md` § Panel State Reset for the polling contract.
 
 The tab bar is anchored at the top of the right-side decision panel —
 above the section TOC and the submit block. It must never appear inside

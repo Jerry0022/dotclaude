@@ -146,7 +146,9 @@ No browser eval needed. The bridge server handles everything.
 
 **Reset after processing** — tell the bridge server to clear decisions.
 Always pass the captured `_version` so a submission that races with your
-reset is not silently dropped (409 = retry):
+reset is not silently dropped (409 = retry). **`/reset` is the LAST step
+of every processing cycle, after the file rewrite and `/reload`** — see
+§ Live Page Update below.
 ```bash
 curl -s -o /dev/null -w "%{http_code}" -X POST \
      -H "Content-Type: application/json" \
@@ -154,11 +156,11 @@ curl -s -o /dev/null -w "%{http_code}" -X POST \
 ```
 
 On success the server stamps `_processed_at` with the current UTC time.
-The browser polls `/decisions` every 5 s, compares `_processed_at` against
-its local `_submittedAt`, and — when the server stamp is newer — flips the
-panel back to the ready state by itself. **No JS eval injection from
-Claude required.** See `templates.md` § Panel State Reset for the client
-contract.
+The visible panel reset already happened via `location.reload()` (triggered
+by `/reload` in the previous step). The browser's `pollProcessedState` only
+flips the panel locally as a safety-net — when a reload counter advance
+has been observed OR a long stale timeout elapses. See `templates.md`
+§ Panel State Reset for the client contract.
 
 ### Legacy Fallback: JS Eval (for page updates)
 
@@ -316,10 +318,24 @@ Map decisions back to the original context:
 
 ### Live Page Update (after each round)
 
-After processing a submission, Claude MUST reset the bridge server and
-update the browser page:
+After processing a submission, Claude MUST update the browser page and
+THEN reset the bridge server. **Order is mandatory** — resetting before
+the new iteration is on disk causes a phantom "ready" panel on the still
+active old iteration, allowing duplicate submissions before the reload
+lands.
 
-1. **Reset bridge server state (conditional on `_version`):**
+1. **Rewrite the HTML file** with the new iteration appended (Step 5c
+   in `SKILL.md`).
+
+2. **Trigger reload** — bump the reload counter:
+   ```bash
+   curl -s -X POST http://localhost:$PORT/reload
+   ```
+   The browser's `pollReload` (every 3 s) sees the counter advance and
+   calls `location.reload()`. The freshly loaded page is in ready state
+   automatically (`concept-submitted` is not persisted).
+
+3. **Reset bridge server state (conditional on `_version`)** — LAST step:
    ```bash
    curl -s -o /dev/null -w "%{http_code}" -X POST \
         -H "Content-Type: application/json" \
@@ -328,19 +344,19 @@ update the browser page:
    A 200 stamps `_processed_at`; a 409 means a newer submission arrived —
    re-fetch `/decisions` and process that instead.
 
-2. **Page UI auto-resets** — the browser's 5 s heartbeat tick sees the
-   new `_processed_at` and calls `restorePanelToReady()` locally. No
-   browser eval needed from Claude. If the page is disconnected (closed
-   tab / crashed tool), the reset still applies server-side and will take
-   effect the next time the page loads.
+4. **Page UI** — the visual reset already happened via `location.reload()`
+   in step 2. The `_processed_at` stamp from step 3 is a safety-net read
+   by the browser's `pollProcessedState` only when a reload counter
+   advance has been observed OR a long stale timeout elapses (recovery
+   for the rare case where reload didn't fire — closed tab, JS error).
 
-3. **Update content to reflect processed state** (via browser eval if available):
+5. **Update content to reflect processed state** (via browser eval if available):
    - Mark processed items visually (checkmark, "Verarbeitet" badge)
    - Show results of the processing (e.g., generated code, updated plan)
    - Add new decision points if the processing revealed further choices
    - Gray out discarded variants
 
-4. **Resume monitoring** — return to the polling loop for the next round
+6. **Resume monitoring** — return to the polling loop for the next round
 
 ### Persistence
 
