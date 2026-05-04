@@ -12,7 +12,11 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    ```bash
    python "$PLUGIN_ROOT" {random-port} "{concept-dir}" &
    ```
-   Use a random port (8700-8999) to avoid conflicts. Store the port as `$PORT`.
+   Use a random port (8700-8999) to avoid conflicts. Store the port as `$PORT`
+   and the spawned background PID as `$SERVER_PID` (`echo $!` immediately
+   after the `&`-launch). Both are written to `.claude/concept-active.json`
+   in step 6 so the SessionStart resume hook can find this server again
+   after a Claude restart.
 
 3. Set up the **combined heartbeat + auto-poll cron**. This single cron keeps
    the connection indicator green AND automatically picks up user submissions
@@ -68,12 +72,47 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    the contract explicit: every tick does both. Minimum cron resolution is 1 min,
    so the max submit-to-process lag is ~60 s — acceptable for interactive flows.
 
-4. Send the first heartbeat immediately:
+4. **Persist active-concept state.** Write `.claude/concept-active.json` in
+   the project root with the metadata the SessionStart resume hook
+   (`ss.concept.resume`) needs to recover this concept after a Claude
+   restart. Do this BEFORE the first heartbeat — once the file exists, any
+   subsequent SessionStart can rediscover the running server.
+
+   ```json
+   {
+     "port": 8742,
+     "html_path": "docs/concepts/2026-04-12-auth-middleware-redesign.html",
+     "slug": "auth-middleware-redesign",
+     "server_pid": 12345,
+     "cron_id": "ab12cd34",
+     "started_at": "2026-04-12T14:30:00.000Z"
+   }
+   ```
+
+   - `port` — the bridge port chosen in step 2.
+   - `html_path` — relative path inside the project; the hook uses it to
+     verify the concept file still exists.
+   - `slug` — kebab-case topic from the filename, used in resume messaging.
+   - `server_pid` — captured via `echo $!` after the `python … &` launch.
+   - `cron_id` — the ID `CronCreate` returned in step 3. A new session
+     refreshes the polling cron, the old ID is just informational (the old
+     session-only cron died with the prior session and cannot be reaped).
+   - `started_at` — ISO-8601 UTC. Lets the hook age-out stale state after
+     ~24 h even if cleanup did not run.
+
+   Path: ALWAYS `<project-cwd>/.claude/concept-active.json` (NOT a worktree
+   subpath, NOT under `docs/`). The hook reads this exact path and silently
+   exits when missing. Create `.claude/` if needed; do not commit the file
+   (add `concept-active.json` to `.gitignore` if not already covered by
+   `.claude/`).
+
+5. Send the first heartbeat immediately (POST = Claude pulse, not the
+   server self-pulse — see `templates.md` § Claude Connection Heartbeat):
    ```bash
    curl -s -X POST http://localhost:{port}/heartbeat
    ```
 
-5. Open in Edge (reuses the running instance, adds a tab):
+6. Open in Edge (reuses the running instance, adds a tab):
    ```bash
    # Windows
    start "" msedge "http://localhost:{port}/{filename}"
@@ -83,8 +122,13 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    The empty `""` is required on Windows — without it, `cmd.exe` interprets
    the first quoted argument as a window title.
 
-6. After monitoring ends, clean up:
+7. After monitoring ends (user says "fertig"/"done", aborts, or Step 6 of
+   SKILL.md fires the completion card), clean up in this order:
    ```bash
-   kill %1  # or track the PID
+   kill $SERVER_PID 2>/dev/null  # or `kill %1` if still in shell scope
+   rm -f .claude/concept-active.json
    ```
-   Also delete the heartbeat cron via `CronDelete`.
+   Also delete the polling cron via `CronDelete <cron_id>`. The state file
+   MUST be removed when the concept session is intentionally ended,
+   otherwise the next SessionStart will surface a phantom resume hint for a
+   server that no longer exists.
