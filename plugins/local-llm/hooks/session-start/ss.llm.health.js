@@ -1,29 +1,37 @@
 #!/usr/bin/env node
 /**
  * @hook ss.llm.health
- * @version 0.3.0
+ * @version 0.4.0
  * @event SessionStart
  * @plugin local-llm
- * @description AnythingLLM health probe + non-blocking auto-setup.
+ * @description AnythingLLM health probe + tier-aware delegation rules.
  *
  *   State machine (first match wins):
  *     1. needs_api_key     — no API key in user config
  *     2. not_installed     — AnythingLLM binary not found on disk
  *     3. starting          — binary found, process absent or API not yet up;
- *                             launch detached, return immediately
+ *                             launch detached + minimize-to-tray
  *     4. network_blocked   — process running but HTTP unreachable past timeout
  *     5. auth_failed       — /api/v1/auth returned 401/403
  *     6. configuring       — API reachable, workspace missing; create async
- *     7. ready             — API reachable, workspace present → tool enabled
+ *     7. ready             — API reachable, workspace present → delegation
+ *                             rules emitted, scaled by benchmark tier
  *
- *   Model choice is owned by the user inside AnythingLLM. This hook never
- *   pins or overrides it; it only reads whatever `chatModel` the workspace
- *   is currently on and surfaces a recommendation if none is set.
+ *   Tier system:
+ *     - Persistent benchmark cache at ~/.claude/cache/local-llm-benchmark.json
+ *     - Cache invalidates when the workspace's chatModel changes OR > 90 days
+ *     - When the cache is missing/stale, a detached benchmark process is
+ *       spawned via plugins/local-llm/scripts/run-benchmark.js — the current
+ *       SessionStart returns immediately with neutral rules, the next
+ *       SessionStart picks up the new tier
+ *     - Tier shapes the delegation guidance:
+ *         high   → delegate boilerplate AND simple, well-specified logic
+ *         medium → delegate ONLY pure boilerplate (types, simple DTOs)
+ *         low    → delegation effectively disabled
  *
  *   The hook NEVER blocks the prompt for long-running work. Model loading,
- *   workspace creation, and first-time app launches run async in the
- *   background; the current session continues and picks up the new state on
- *   the next SessionStart.
+ *   workspace creation, tray minimize, and benchmarks all run in the
+ *   background.
  *
  *   Stdout → injected into Claude's context as system instructions.
  *   Stderr → shown collapsed under the hook output.
@@ -33,9 +41,13 @@
 
 require('../lib/plugin-guard');
 
+const { spawn } = require('node:child_process');
+const path = require('node:path');
+
 const http = require('../lib/anythingllm-http');
 const lifecycle = require('../lib/anythingllm-lifecycle');
-const { resolveConfig, hasApiKey, USER_CONFIG_PATH } = require('../lib/anythingllm-config');
+const tierCache = require('../lib/anythingllm-tier-cache');
+const { resolveConfig, hasApiKey, USER_CONFIG_PATH, PLUGIN_ROOT } = require('../lib/anythingllm-config');
 
 const CONFIG = resolveConfig();
 const BASE_URL = CONFIG.anythingllm?.baseUrl || 'http://localhost:3001';
@@ -70,7 +82,67 @@ function recommendationBlock() {
   );
 }
 
-function readyInstructions(activeModel) {
+// ---------------------------------------------------------------------------
+// Tier-aware rule blocks
+// ---------------------------------------------------------------------------
+
+function rulesHigh() {
+  return (
+    `Benchmark tier: HIGH (model handled all probe tasks correctly).\n` +
+    `DELEGATE PROACTIVELY via local_generate when ALL are true:\n` +
+    `  1. Mechanical or simple-logic generation (boilerplate, DTOs, type defs,\n` +
+    `     CRUD scaffolds, test files from a clear pattern, debounce/throttle/\n` +
+    `     parser-of-known-grammar style helpers)\n` +
+    `  2. Complete, unambiguous spec writable (signatures + types + behavior)\n` +
+    `  3. Output > 20 lines (below that, writing directly is faster)\n` +
+    `  4. No cross-file reasoning, debugging, security, or architecture work\n` +
+    `  5. Output will be reviewed before use\n` +
+    `NEVER delegate complex reasoning, debugging, refactoring, or ambiguous tasks.\n`
+  );
+}
+
+function rulesMedium() {
+  return (
+    `Benchmark tier: MEDIUM (model handles boilerplate but stumbles on logic).\n` +
+    `Delegate to local_generate ONLY for pure boilerplate:\n` +
+    `  - Type definitions, interfaces, enums\n` +
+    `  - Simple DTOs / data classes without behavior\n` +
+    `  - Repetitive variations of an already-shown pattern\n` +
+    `DO NOT delegate anything with branching logic, error handling,\n` +
+    `assertions, or non-trivial control flow. Write that yourself.\n`
+  );
+}
+
+function rulesLow(score) {
+  return (
+    `Benchmark tier: LOW (score ${score.toFixed(2)} — model failed probe tasks).\n` +
+    `Delegation to local_generate is effectively DISABLED. Write code directly.\n` +
+    `Consider switching to a stronger model in AnythingLLM and rerun the\n` +
+    `benchmark by deleting ~/.claude/cache/local-llm-benchmark.json.\n`
+  );
+}
+
+function rulesPending() {
+  return (
+    `Benchmark tier: PENDING (running in background).\n` +
+    `For this session, delegate to local_generate ONLY when ALL are true:\n` +
+    `  1. Mechanical code generation (boilerplate, DTOs, type defs)\n` +
+    `  2. Complete, unambiguous spec writable\n` +
+    `  3. Output > 20 lines\n` +
+    `  4. No cross-file reasoning, debugging, security work\n` +
+    `  5. Output will be reviewed before use\n` +
+    `Tier-scaled rules will be available on the next SessionStart.\n`
+  );
+}
+
+function tierBlock(cache, currentModel) {
+  if (!tierCache.isValid(cache, currentModel)) return rulesPending();
+  if (cache.tier === 'high') return rulesHigh();
+  if (cache.tier === 'medium') return rulesMedium();
+  return rulesLow(cache.score ?? 0);
+}
+
+function readyInstructions(activeModel, cache) {
   const warning = activeModel ? '' : recommendationBlock();
   const modelLine = activeModel
     ? `Model: ${activeModel} (as configured in AnythingLLM).\n`
@@ -81,19 +153,29 @@ function readyInstructions(activeModel) {
     `Backend: AnythingLLM @ ${BASE_URL}, workspace "${WORKSPACE_SLUG}".\n` +
     modelLine +
     `\n` +
-    `Quick rules — delegate to local_generate ONLY when ALL are true:\n` +
-    `  1. Mechanical code generation (boilerplate, DTOs, test files, CRUD, type defs)\n` +
-    `  2. Complete, unambiguous spec writable (signature + types + behavior)\n` +
-    `  3. Output > 20 lines (below that, writing directly is faster)\n` +
-    `  4. No cross-file reasoning, debugging, security, or architecture work\n` +
-    `  5. Output will be reviewed before use\n` +
-    `NEVER delegate complex reasoning, debugging, refactoring, or ambiguous tasks.\n`
+    tierBlock(cache, activeModel)
   );
 }
 
 async function readWorkspaceModel() {
   const res = await http.getWorkspace(BASE_URL, API_KEY, WORKSPACE_SLUG);
   return res.ok ? (res.workspace?.chatModel || null) : null;
+}
+
+function spawnBenchmark(model) {
+  if (tierCache.isRunning()) return;
+  tierCache.markRunning(model);
+  try {
+    const script = path.join(PLUGIN_ROOT, 'scripts', 'run-benchmark.js');
+    const child = spawn(process.execPath, [script], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    child.unref();
+  } catch {
+    tierCache.clearRunning();
+  }
 }
 
 (async () => {
@@ -134,8 +216,18 @@ async function readWorkspaceModel() {
 
     const exists = ws.workspaces.some((w) => w.slug === WORKSPACE_SLUG);
     if (exists) {
+      // Process is up and workspace exists. AnythingLLM may still have its
+      // window restored from a previous session — opportunistically minimize.
+      lifecycle.minimizeIfVisible();
+
       const activeModel = await readWorkspaceModel();
-      emit('ready', readyInstructions(activeModel));
+      const cache = tierCache.readCache();
+
+      if (activeModel && !tierCache.isValid(cache, activeModel) && !tierCache.isRunning()) {
+        spawnBenchmark(activeModel);
+      }
+
+      emit('ready', readyInstructions(activeModel, cache));
       return;
     }
 
@@ -168,7 +260,7 @@ async function readWorkspaceModel() {
     const result = lifecycle.launch(install.path);
     if (result.ok) {
       emit('starting', disabledHint(
-        `AnythingLLM was not running — launched detached (pid ${result.pid}). ` +
+        `AnythingLLM was not running — launched detached (pid ${result.pid}) and minimizing to tray. ` +
         `Available on next SessionStart once it has fully started.`
       ));
     } else {
