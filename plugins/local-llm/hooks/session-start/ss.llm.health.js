@@ -135,11 +135,21 @@ function rulesPending() {
   );
 }
 
+function rulesNoModel() {
+  return (
+    `Benchmark tier: UNAVAILABLE (no chat model configured in workspace).\n` +
+    `Configure a model in AnythingLLM first — until then, do NOT delegate to\n` +
+    `local_generate. Once a model is set, the next SessionStart will trigger\n` +
+    `the benchmark.\n`
+  );
+}
+
 function tierBlock(cache, currentModel) {
+  if (!currentModel) return rulesNoModel();
   if (!tierCache.isValid(cache, currentModel)) return rulesPending();
   if (cache.tier === 'high') return rulesHigh();
   if (cache.tier === 'medium') return rulesMedium();
-  return rulesLow(cache.score ?? 0);
+  return rulesLow(Number(cache.score) || 0);
 }
 
 function readyInstructions(activeModel, cache) {

@@ -39,12 +39,19 @@ const SCHEMA_VERSION = 1;
 const MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 const RUNNING_STALE_MS = 30 * 60 * 1000; // older than 30min → considered crashed
 
+const VALID_TIERS = new Set(['low', 'medium', 'high']);
+
 function readCache() {
   try {
     const raw = fs.readFileSync(CACHE_PATH, 'utf8');
     const data = JSON.parse(raw);
     if (data?.schemaVersion !== SCHEMA_VERSION) return null;
-    return data;
+    if (typeof data.model !== 'string' || !data.model) return null;
+    if (typeof data.ranAt !== 'string' || !Number.isFinite(Date.parse(data.ranAt))) return null;
+    if (!VALID_TIERS.has(data.tier)) return null;
+    const score = Number(data.score);
+    if (!Number.isFinite(score)) return null;
+    return { ...data, score };
   } catch {
     return null;
   }

@@ -55,6 +55,26 @@ function scoreChecks(output, checks) {
   return hits / checks.length;
 }
 
+// Structural sanity: balanced braces/parens. Cheap pre-gate to reject the
+// most common hallucinations (truncated output, runaway code) before the
+// regex score even runs.
+function looksWellFormed(output) {
+  if (!output) return false;
+  let curly = 0;
+  let paren = 0;
+  let bracket = 0;
+  for (const ch of output) {
+    if (ch === '{') curly += 1;
+    else if (ch === '}') curly -= 1;
+    else if (ch === '(') paren += 1;
+    else if (ch === ')') paren -= 1;
+    else if (ch === '[') bracket += 1;
+    else if (ch === ']') bracket -= 1;
+    if (curly < 0 || paren < 0 || bracket < 0) return false;
+  }
+  return curly === 0 && paren === 0 && bracket === 0;
+}
+
 const SYSTEM_PROMPT =
   'You are a code generation assistant. Output ONLY the requested code — ' +
   'no explanations, no markdown fences, no commentary, no <think> blocks. ' +
@@ -85,11 +105,14 @@ const TESTS = [
       '(fn: T, ms: number): T\n\nIt should return a wrapped function that ' +
       'delays calling `fn` until `ms` ms have passed since the last call. ' +
       'Use setTimeout/clearTimeout.',
+    // Behavioral gates: must SCHEDULE fn (not just mention it) and CANCEL
+    // on re-entry. Pure token-presence regexes were too easy to satisfy
+    // with code that returns `fn` unchanged.
     checks: [
       /\bdebounce\b/,
-      /\bsetTimeout\b/,
-      /\bclearTimeout\b/,
-      /\bfn\b/,
+      /\bclearTimeout\b/,                // must cancel
+      /setTimeout\s*\(\s*(?:\(\)\s*=>|function)/, // must schedule a callback
+      /\bfn\s*\(/,                        // must actually CALL fn somewhere
       /\bms\b/,
     ],
   },
@@ -101,12 +124,13 @@ const TESTS = [
       '`function mergeSorted(a: number[], b: number[]): number[]` that ' +
       'merges two pre-sorted ascending arrays into a single sorted array. ' +
       'Do not use external libraries. Two-pointer or concat+sort both fine.',
+    // Must reference BOTH inputs in the body and produce an array result.
     checks: [
       /\bmergeSorted\s*\(/,
       /:\s*number\[\]/,
-      /\b(while|for)\b/,
-      /\b(push|concat|\.\.\.)/,
-      /\breturn\b/,
+      /\ba\b[\s\S]*\bb\b|\bb\b[\s\S]*\ba\b/, // both inputs touched
+      /\b(while|for|concat|\.\.\.)/,         // iteration or spread/concat
+      /return\s+(?:result|merged|out|res|\[|\.\.\.|[a-z]+\s*[;.])/i,
     ],
   },
 ];
@@ -127,6 +151,11 @@ async function runOneTest(test) {
     return { name: test.name, passed: false, score: 0, latencyMs, error: res.error || res.errorType };
   }
   const output = clean(res.content);
+  // Structurally broken output (unbalanced braces/parens) → score 0.
+  // No amount of regex hits should rescue obvious garbage.
+  if (!looksWellFormed(output)) {
+    return { name: test.name, passed: false, score: 0, latencyMs, output: output.slice(0, 240), error: 'malformed' };
+  }
   const score = scoreChecks(output, test.checks);
   return {
     name: test.name,
