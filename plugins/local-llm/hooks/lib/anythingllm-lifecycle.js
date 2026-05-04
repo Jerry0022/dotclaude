@@ -23,6 +23,8 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawn, execFileSync } = require('node:child_process');
 
+const tray = require('./anythingllm-tray');
+
 const DOWNLOAD_URL = 'https://anythingllm.com/download';
 const SUPPORTED_PLATFORMS = new Set(['win32', 'darwin', 'linux']);
 
@@ -206,6 +208,9 @@ function launch(exePath) {
       windowsHide: false,
     });
     child.unref();
+    // Windows: poll for the main window and minimize it once it appears.
+    // Fire-and-forget; never blocks readiness polling.
+    tray.minimizeAfterLaunch();
     return { ok: true, pid: child.pid };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -217,5 +222,6 @@ module.exports = {
   detectInstallation,
   isProcessRunning,
   launch,
+  minimizeIfVisible: tray.minimizeAfterLaunch,
   DOWNLOAD_URL,
 };
