@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.64.0] — 2026-05-10
+
+### Added
+
+- **plugins/devops/hooks/session-start/ss.mcp.envcheck.js** + **plugins/devops/hooks/hooks.json** — new SessionStart hook scans every globally-enabled plugin's `.mcp.json` for `${VAR_NAME}` placeholders and surfaces any that are unset before they can crash a tool call. Without it, an enabled plugin with a missing env (e.g. `github@claude-plugins-official` without `GITHUB_PERSONAL_ACCESS_TOKEN`) produced a cryptic mid-session `Plugin MCP server error - mcp-config-invalid: Missing environment variables: …` and corrupted the conversation tool_use/tool_result pairing as a side effect. The hook prints a structured action block — list of affected plugins, missing variables, and two concrete fix options (set the variable user-globally, or flip the plugin to `false` in `enabledPlugins`) — so Claude can ask the user which path applies per plugin instead of crashing later. Walks `~/.claude/plugins/cache/<marketplace>/<plugin>/[<version>/].mcp.json`, accepts both the legacy `enabledPlugins[key] === true` shorthand and the `{ enabled, config }` object form (same lenient contract ss.tokens.scan.js already uses), exits silently when nothing is missing. Never `exit(2)` — env-var setup is a user choice, not a hard block
+
+### Fixed
+
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — two UX flaws in the concept-page decision panel that let accidental clicks burn a Claude iteration. (1) Empty-submit guard: every `Next iteration` / `Implement with feedback` click is now gated on `_userInteracted` (driven only by `event.isTrusted` so `restoreState()`-fired events don't count) and asks for confirmation if nothing was modified in the active iteration. The flag persists across reloads via localStorage so a user who entered feedback before reload isn't asked to confirm work he already authored. (2) Connection overlay: the `connecting` and `disconnected` overlays previously had `pointer-events: none` so clicks fell through to the submit buttons below — the user couldn't tell which button he was firing. Both overlays now carry an explicit `Verstanden` button (the only interactive element), the submit buttons stay `disabled` until the user acknowledges, and a small per-button cache hint (`gecached — wird beim Verbinden gesendet`) replaces the click-through behaviour. Ack state resets unconditionally on reconnect — including while `panel-submitted` is visible — so a subsequent disconnect always re-shows the overlay rather than silently inheriting the prior acknowledgement. Both flows added to decision and prototype templates so behaviour is identical across layouts. Codex review flagged the panel-submitted ack-leak and the unsaved-flag-after-reload bug as real state leaks; both fixes landed in the same ship
+
 ## [0.63.0] — 2026-05-04
 
 ### Added
