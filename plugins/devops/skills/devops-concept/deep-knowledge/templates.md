@@ -57,6 +57,10 @@ must see their own language. The locale hint is authoritative.
 | `panel.disconnected_hint`      | You can still submit — your click is queued and delivered as soon as Claude is back. | Du kannst trotzdem absenden — der Klick wird gespeichert und gesendet, sobald Claude wieder da ist. |
 | `panel.connecting_title`       | Claude is connecting           | Claude verbindet sich |
 | `panel.connecting_hint`        | One moment — establishing the connection. | Einen Moment — die Verbindung wird aufgebaut. |
+| `panel.acknowledge`            | Got it                         | Verstanden |
+| `panel.btn_cache_hint`         | cached — sent on reconnect     | gecached — wird beim Verbinden gesendet |
+| `panel.empty_iterate_confirm`  | Nothing was changed. Submit "Next iteration" anyway? | Du hast nichts geändert. Trotzdem "Zur nächsten Iteration" absenden? |
+| `panel.empty_implement_confirm`| Nothing was changed. Implement with feedback anyway? Claude will still write code. | Du hast nichts geändert. Trotzdem mit Feedback implementieren? Claude schreibt dann Code. |
 | `panel.toggle_open`            | Open decisions                 | Entscheidungen öffnen |
 | `panel.close`                  | Close                          | Schliessen |
 | `variant.include`              | Include                        | Miteinbeziehen |
@@ -160,26 +164,39 @@ the `[ui-locale: ...]` hint produced.
              2. Heartbeat confirmed fresh → both hidden.
              3. Past grace period AND heartbeat stale → #connection-warning
                 visible, connecting hidden.
-             Both are absolute overlays on top of #panel-ready. -->
+             Both are absolute overlays on top of #panel-ready. The "Got it"
+             button is the ONLY clickable element while the overlay is visible
+             (panel-warning has pointer-events: auto). The submit buttons stay
+             disabled with a small cache-hint label until the user
+             acknowledges, at which point the overlay slides away and the
+             submit buttons become clickable (still cached if disconnected). -->
         <div id="connection-connecting" class="panel-warning panel-warning--connecting" style="display: flex;">
           <span class="warning-icon" aria-hidden="true">⋯</span>
           <strong>{{panel.connecting_title}}</strong>
           <p class="warning-message">{{panel.connecting_hint}}</p>
+          <button type="button" class="panel-warning__ack-btn" data-ack="connecting">{{panel.acknowledge}}</button>
         </div>
         <div id="connection-warning" class="panel-warning" style="display: none;">
           <span class="warning-icon" aria-hidden="true">⚠</span>
           <strong>{{panel.disconnected_title}}</strong>
           <p class="warning-message">{{panel.disconnected_hint}}</p>
+          <button type="button" class="panel-warning__ack-btn" data-ack="warning">{{panel.acknowledge}}</button>
         </div>
 
         <button id="submit-iterate-btn" class="primary submit-btn">{{panel.submit_iterate}}</button>
         <p class="hint">{{panel.submit_iterate_hint}}</p>
+        <p class="hint hint-cache" data-cache-hint="iterate" hidden>
+          <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+        </p>
         <div class="submit-gap" aria-hidden="true"></div>
         <button id="submit-implement-btn" class="implement-btn">
           <span class="warn-icon" aria-hidden="true">⚠</span>
           {{panel.submit_implement}}
         </button>
         <p class="hint hint-warn">{{panel.submit_implement_hint}}</p>
+        <p class="hint hint-cache" data-cache-hint="implement" hidden>
+          <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+        </p>
       </div>
 
       <!-- Post-submit state: waiting for Claude -->
@@ -691,14 +708,38 @@ The wiring is a single delegated click handler installed alongside
              AND closes the panel. -->
       </nav>
       <div id="panel-ready">
+        <!-- Connection overlays — same contract as the sidebar templates.
+             Show "connecting" / "disconnected" with a "Got it" button; the
+             submit buttons stay disabled until the user acknowledges, then
+             unlock with a small cache-hint label (offline submissions are
+             auto-queued by retryPendingSubmission). -->
+        <div id="connection-connecting" class="panel-warning panel-warning--connecting" style="display: flex;">
+          <span class="warning-icon" aria-hidden="true">⋯</span>
+          <strong>{{panel.connecting_title}}</strong>
+          <p class="warning-message">{{panel.connecting_hint}}</p>
+          <button type="button" class="panel-warning__ack-btn" data-ack="connecting">{{panel.acknowledge}}</button>
+        </div>
+        <div id="connection-warning" class="panel-warning" style="display: none;">
+          <span class="warning-icon" aria-hidden="true">⚠</span>
+          <strong>{{panel.disconnected_title}}</strong>
+          <p class="warning-message">{{panel.disconnected_hint}}</p>
+          <button type="button" class="panel-warning__ack-btn" data-ack="warning">{{panel.acknowledge}}</button>
+        </div>
+
         <button id="submit-iterate-btn" class="primary submit-btn">{{panel.submit_iterate}}</button>
         <p class="hint">{{panel.submit_iterate_hint}}</p>
+        <p class="hint hint-cache" data-cache-hint="iterate" hidden>
+          <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+        </p>
         <div class="submit-gap" aria-hidden="true"></div>
         <button id="submit-implement-btn" class="implement-btn">
           <span class="warn-icon" aria-hidden="true">⚠</span>
           {{panel.submit_implement}}
         </button>
         <p class="hint hint-warn">{{panel.submit_implement_hint}}</p>
+        <p class="hint hint-cache" data-cache-hint="implement" hidden>
+          <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+        </p>
       </div>
       <div id="panel-submitted" style="display: none;"><!-- waiting state --></div>
     </aside>
@@ -1438,21 +1479,23 @@ document.addEventListener('DOMContentLoaded', () => {
 ## Decision Panel State CSS
 
 ```css
-/* Connection warning — overlays the submit area when Claude is offline.
-   Requires #panel-ready to be position: relative.
-   pointer-events: none so the user can still click the submit buttons
-   through the overlay — clicks land in the offline queue and are
-   auto-delivered on reconnect. */
+/* Connection warning — overlays the submit area while Claude is connecting
+   or unreachable. Requires #panel-ready to be position: relative.
+   pointer-events: auto so the only clickable element while the overlay is
+   visible is its "Got it" button — the underlying submit buttons stay
+   blocked. After the user acknowledges, the overlay is hidden via JS, the
+   submit buttons are enabled, and a small cache-hint stays under each
+   button so the user knows offline submissions are queued. */
 #panel-ready { position: relative; }
 .panel-warning {
   position: absolute; inset: 0; z-index: 5;
-  pointer-events: none;
+  pointer-events: auto;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   gap: 0.75rem; text-align: center; padding: 1.5rem;
   border-radius: 10px;
   border: 1px solid var(--warning-color, #d29922);
-  background: color-mix(in srgb, var(--panel-bg, #161b22) 70%, transparent);
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 88%, transparent);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
   color: var(--text-color, #c9d1d9);
@@ -1463,6 +1506,25 @@ document.addEventListener('DOMContentLoaded', () => {
   font-size: 0.88rem; color: var(--text-secondary, #8b949e);
   line-height: 1.5; max-width: 280px; margin: 0;
 }
+.panel-warning__ack-btn {
+  margin-top: 0.5rem;
+  padding: 0.45rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid var(--warning-color, #d29922);
+  background: color-mix(in srgb, var(--warning-color, #d29922) 15%, transparent);
+  color: var(--warning-color, #d29922);
+  font-weight: 600; font-size: 0.88rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.panel-warning__ack-btn:hover {
+  background: var(--warning-color, #d29922);
+  color: var(--panel-bg, #161b22);
+}
+.panel-warning__ack-btn:focus-visible {
+  outline: 2px solid var(--warning-color, #d29922);
+  outline-offset: 2px;
+}
 /* Connecting variant — same overlay, accent color + pulsing icon */
 .panel-warning--connecting { border-color: var(--accent-color, #58a6ff); }
 .panel-warning--connecting .warning-icon {
@@ -1470,10 +1532,33 @@ document.addEventListener('DOMContentLoaded', () => {
   animation: pulse-connect 1.4s ease-in-out infinite;
 }
 .panel-warning--connecting strong { color: var(--accent-color, #58a6ff); }
+.panel-warning--connecting .panel-warning__ack-btn {
+  border-color: var(--accent-color, #58a6ff);
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent);
+  color: var(--accent-color, #58a6ff);
+}
+.panel-warning--connecting .panel-warning__ack-btn:hover {
+  background: var(--accent-color, #58a6ff);
+  color: var(--panel-bg, #161b22);
+}
+.panel-warning--connecting .panel-warning__ack-btn:focus-visible {
+  outline-color: var(--accent-color, #58a6ff);
+}
 @keyframes pulse-connect {
   0%, 100% { opacity: 0.45; }
   50% { opacity: 1; }
 }
+
+/* Per-button cache hint — shown only when overlay was acknowledged but
+   Claude is still connecting / disconnected. Toggled via [hidden]. */
+.hint-cache {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin: 0.25rem 0 0;
+  color: var(--warning-color, #d29922);
+  display: flex; align-items: center; gap: 0.35rem;
+}
+.hint-cache[hidden] { display: none; }
 
 /* Submitted state */
 .submitted-indicator {
@@ -1775,6 +1860,24 @@ let _submittedAt = 0;
 // and the user sees re-enabled buttons on the still-active old iteration.
 let _submittedReloadCounter = null;
 let _submitInFlight = false;
+// Tracks whether the user has actually changed any field in the active
+// iteration. restoreState() and DOMContentLoaded fire change/input events
+// that are NOT user-driven, so we gate on event.isTrusted to ignore them.
+// Reset to false on iteration-switch / reload — collectDecisions still
+// ships the full payload, but submitWithAction asks for confirmation if
+// the user clicks submit without having touched anything.
+let _userInteracted = false;
+function _markUserInteracted(e) {
+  if (e && e.isTrusted) _userInteracted = true;
+}
+document.addEventListener('change', _markUserInteracted, true);
+document.addEventListener('input', _markUserInteracted, true);
+document.addEventListener('iteration:changed', () => { _userInteracted = false; });
+
+const _emptyConfirmKey = {
+  iterate: 'panel.empty_iterate_confirm',
+  implement: 'panel.empty_implement_confirm'
+};
 
 function wireSubmit(btnId, action) {
   const btn = document.getElementById(btnId);
@@ -1787,6 +1890,17 @@ async function submitWithAction(action) {
   // shows "submitted"), ignore further clicks. restorePanelToReady() resets
   // _submittedAt to 0, so this only blocks while we're actually waiting.
   if (_submitInFlight || _submittedAt) return;
+
+  // Empty-submit guard: if the user clicks submit without having modified
+  // any field in the active iteration, ask before sending. Avoids burning
+  // a Claude turn on accidental clicks.
+  if (!_userInteracted) {
+    const msg = (action === 'implement')
+      ? '{{panel.empty_implement_confirm}}'
+      : '{{panel.empty_iterate_confirm}}';
+    if (!window.confirm(msg)) return;
+  }
+
   _submitInFlight = true;
 
   const data = collectDecisions(action);
@@ -1962,6 +2076,28 @@ async function pollProcessedState() {
   } catch (e) { /* retry next tick */ }
 }
 
+// Acknowledged-overlay state. Each overlay (connecting / warning) is
+// independent: acknowledging "connecting" should NOT silently dismiss the
+// stronger "warning" overlay if the connection actually went stale later.
+// Cleared automatically when isConnected becomes true.
+const _overlayAck = { connecting: false, warning: false };
+
+document.addEventListener('click', (e) => {
+  const btn = e.target && e.target.closest && e.target.closest('.panel-warning__ack-btn');
+  if (!btn) return;
+  const which = btn.dataset.ack;
+  if (which === 'connecting' || which === 'warning') {
+    _overlayAck[which] = true;
+    checkClaudeConnection();
+  }
+});
+
+function _setCacheHints(visible) {
+  document.querySelectorAll('[data-cache-hint]').forEach(el => {
+    el.hidden = !visible;
+  });
+}
+
 function checkClaudeConnection() {
   const isConnected = _lastHeartbeatTs && (Date.now() - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
   const inGrace = Date.now() - _pageLoadedAt < HEARTBEAT_GRACE_MS;
@@ -1974,21 +2110,32 @@ function checkClaudeConnection() {
   if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
 
   if (isConnected) {
+    // Reset ack state so a future drop re-shows the overlay rather than
+    // silently leaving the user in offline-cache mode.
+    _overlayAck.connecting = false;
+    _overlayAck.warning = false;
     if (connecting) connecting.style.display = 'none';
     if (warning) warning.style.display = 'none';
+    _setCacheHints(false);
     btns.forEach(b => b.disabled = false);
     retryPendingSubmission();
   } else if (inGrace) {
-    // Still in grace period — show "connecting" overlay, no warning yet
-    if (connecting) connecting.style.display = 'flex';
+    // Grace period: heartbeat not yet confirmed. Show "connecting" overlay
+    // with a "Got it" button. Submit buttons are disabled until the user
+    // acknowledges, then they unlock with a small cache-hint label so the
+    // user knows the submission will be queued.
+    if (connecting) connecting.style.display = _overlayAck.connecting ? 'none' : 'flex';
     if (warning) warning.style.display = 'none';
-    btns.forEach(b => b.disabled = false);
+    _setCacheHints(_overlayAck.connecting);
+    btns.forEach(b => b.disabled = !_overlayAck.connecting);
   } else {
-    // Past grace AND heartbeat stale → disconnected warning
+    // Past grace AND heartbeat stale → disconnected warning. Same ack flow:
+    // overlay until "Got it", then buttons unlock and offline submissions
+    // are cached + auto-retried by retryPendingSubmission().
     if (connecting) connecting.style.display = 'none';
-    if (warning) warning.style.display = 'flex';
-    // Buttons stay enabled: offline submissions are cached & retried
-    btns.forEach(b => b.disabled = false);
+    if (warning) warning.style.display = _overlayAck.warning ? 'none' : 'flex';
+    _setCacheHints(_overlayAck.warning);
+    btns.forEach(b => b.disabled = !_overlayAck.warning);
   }
 }
 
