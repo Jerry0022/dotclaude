@@ -78,7 +78,12 @@ function collectEnvRefs(configStr) {
 const issues = [];
 
 for (const [key, enabled] of Object.entries(enabledPlugins)) {
-  if (enabled !== true) continue;
+  // enabledPlugins values can be either `true` (legacy boolean shorthand) or
+  // an object like `{ enabled: true, config: { ... } }`. Treat anything other
+  // than an explicit `false` / `{enabled:false}` as enabled — same lenient
+  // contract ss.tokens.scan.js already relies on.
+  if (enabled === false) continue;
+  if (enabled && typeof enabled === 'object' && enabled.enabled === false) continue;
   const at = key.lastIndexOf('@');
   if (at < 1) continue;
   const pluginName = key.slice(0, at);

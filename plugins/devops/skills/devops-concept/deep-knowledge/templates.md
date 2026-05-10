@@ -1640,6 +1640,13 @@ function saveState() {
     if (el.id || el.name) state['select:' + (el.id || el.name)] = el.value;
   });
   state['theme'] = document.documentElement.getAttribute('data-theme');
+  // Persist the user-interacted flag so a reload while the user has unsaved
+  // edits does not re-arm the empty-submit confirm dialog. Restored values
+  // would otherwise look like "untouched defaults" because change/input
+  // events fire from restoreState() (isTrusted=false) and are ignored.
+  if (typeof _userInteracted !== 'undefined' && _userInteracted) {
+    state['_userInteracted'] = true;
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
@@ -1658,6 +1665,10 @@ function restoreState() {
       return;
     }
     if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+    // Preserve the user's prior interaction flag across reloads — see saveState().
+    if (state._userInteracted && typeof _userInteracted !== 'undefined') {
+      _userInteracted = true;
+    }
     Object.entries(state).forEach(([key, value]) => {
       if (key.startsWith('_')) return;
       const [type, ...rest] = key.split(':');
@@ -2107,13 +2118,20 @@ function checkClaudeConnection() {
     .map(id => document.getElementById(id)).filter(Boolean);
   const panelSubmitted = document.getElementById('panel-submitted');
 
+  // Always clear ack state on reconnect — even while the submitted-state
+  // early-return below is active. Otherwise: user acks `warning`, reconnects
+  // while `panel-submitted` is showing, drops again before reload → the
+  // next outage would silently inherit the prior ack and skip the warning.
+  if (isConnected) {
+    _overlayAck.connecting = false;
+    _overlayAck.warning = false;
+  }
+
   if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
 
   if (isConnected) {
-    // Reset ack state so a future drop re-shows the overlay rather than
-    // silently leaving the user in offline-cache mode.
-    _overlayAck.connecting = false;
-    _overlayAck.warning = false;
+    // Ack state already cleared above so a future drop re-shows the overlay
+    // rather than silently leaving the user in offline-cache mode.
     if (connecting) connecting.style.display = 'none';
     if (warning) warning.style.display = 'none';
     _setCacheHints(false);
