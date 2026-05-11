@@ -50,7 +50,7 @@ function renderBar(pct, elapsedPct) {
   let bar = '';
   for (let i = 0; i < total; i++) {
     if (i === elapsedPos) {
-      bar += i < filled ? '\u2547' : '\u254f'; // ╇ heavy+marker / ╏ light+marker
+      bar += '\u254f'; // ╏ light dashed vertical — consistent marker glyph in both filled and free zones
     } else if (i < filled) {
       bar += '\u2501'; // ━ heavy horizontal — used
     } else {
