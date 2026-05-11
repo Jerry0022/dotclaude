@@ -108,7 +108,7 @@ If `usage-live.json` is missing: show error message instead of bars.
 
 ```
 5h  ━━━━━━━━━╏────   67%  +1%  · 1h 42m left
-Wk  ━━━━╇━━━──────   60%  +8% !!  · 4d 11h left  ⚠ Pace!
+Wk  ━━━━╏━━━──────   60%  +8% !!  · 4d 11h left  ⚠ Pace!
 ```
 
 **Error rendering (no data):**
@@ -128,8 +128,7 @@ elapsed_pos  = round(elapsed_pct / 100 * total_blocks)
 Each position in the 14-character bar is one of:
 - `━` (heavy horizontal) — used area
 - `─` (light horizontal) — free area
-- `╇` (heavy + marker) — elapsed position within the used (filled) area
-- `╏` (light + marker) — elapsed position within the free (empty) area
+- `╏` (light dashed vertical) — elapsed-time marker, same glyph regardless of fill zone
 
 The elapsed marker replaces the character at `elapsed_pos` regardless of fill. No separate arrow line is used.
 
@@ -175,7 +174,7 @@ Column       Width    Content
 ──────────   ──────   ──────────────────────────
 Label         2 chr   "5h" / "Wk"
 Gap           2 chr   "  "
-Bar          14 chr   ━━━╇── (always 14)
+Bar          14 chr   ━━━╏── (always 14)
 Gap           2 chr   "  "
 Pct           3 chr   right-aligned, space-padded
 Pct-suffix    1 chr   "%"

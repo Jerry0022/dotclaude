@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.64.1] — 2026-05-11
+
+### Fixed
+
+- **plugins/devops/mcp-server/index.js** + **plugins/devops/templates/completion-card.md** — completion-card battery line now uses a single marker glyph (`╏`, light dashed vertical) for the elapsed-time position regardless of whether the marker falls inside the heavy-filled used zone or the light free zone. Previously the marker switched to `╇` (heavy horizontal + light up vertical) when it landed inside the filled zone, producing a `+`-shaped cross between two heavy dashes that read like a corrupted underscore in monospace fonts — visible in the Wk row whenever weekly usage was ahead of elapsed time. The 5h row almost always rendered the marker in the free zone, so its `╏` looked clean; the inconsistency between the two rows was the actual UX complaint. Branch in `renderBar()` simplified to an unconditional `╏`; template doc updated (example bar, glyph legend, column reference). No behavior change beyond the glyph swap — marker position, bar width, and pace warning logic untouched
+
 ## [0.64.0] — 2026-05-10
 
 ### Added
