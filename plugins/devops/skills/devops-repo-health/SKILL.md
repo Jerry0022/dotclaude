@@ -1,11 +1,12 @@
 ---
 name: devops-repo-health
-version: 0.3.0
+version: 0.4.0
 description: >-
   Analyze repository branch hygiene: unmerged branches, stale locals with deleted
   remotes, orphaned worktrees, verify work landed in main. Results: interactive
-  concept page with filters and batch actions. Triggers on: "repo health",
-  "branch cleanup", "branch hygiene". Explicit user request only.
+  concept page with filters, batch actions, and an "Untersuchen" follow-up loop
+  for deeper per-item analysis. Triggers on: "repo health", "branch cleanup",
+  "branch hygiene". Explicit user request only.
 argument-hint: "[optional: focus area — branches, worktrees, PRs]"
 allowed-tools: Bash(git *), Bash(gh *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
@@ -89,11 +90,11 @@ For each local branch (excluding worktree branches):
 
 Classify each branch into one of:
 
-| Category | Meaning | Default action |
-|----------|---------|----------------|
-| `safe-delete` | MERGED or SQUASH-MERGED | Pre-checked for deletion |
-| `investigate` | UNMERGED, no PR or open PR | Unchecked, needs review |
-| `worktree` | Attached to a worktree | Info only, no action controls |
+| Category | Meaning | Default action (iteration 1) |
+|----------|---------|-------------------------------|
+| `safe-delete` | MERGED or SQUASH-MERGED | Radio default: `delete` |
+| `investigate` | UNMERGED, no PR or open PR | Radio default: `skip` (Behalten); user can opt into `investigate` for deep-dive |
+| `worktree` | Attached to a worktree | Info only; clean worktrees expose `remove`/`investigate`/`keep` radio (default `keep`); has-changes worktrees expose only an opt-in `investigate` checkbox |
 
 ## Step 4 — Remote Branch Audit
 
@@ -150,8 +151,11 @@ the mandatory tooltip table for every action control live in
 ### Decision Schema
 
 The submit payload shape (repo metadata, filter state, per-branch decisions,
-worktree actions, global options, comments) is documented in
-`deep-knowledge/decision-schema.md`.
+worktree actions, global options, comments, iteration counter) is documented in
+`deep-knowledge/decision-schema.md`. The schema supports a third action —
+`"investigate"` — which defers the item to a deep-dive iteration; see Step 9b
+and `deep-knowledge/investigation.md` for what data Claude gathers and how
+reclassification recommendations are computed.
 
 ### File Location
 
@@ -166,11 +170,15 @@ Create the directory if missing: `mkdir -p ~/.claude/devops-concepts` (Unix) or 
 - Branch names in monospace font, visually prominent
 - Category badges with distinct colors: green (safe), amber (investigate),
   blue (worktree), purple (remote-only)
-- Pre-check "Loeschen" for safe-delete branches to reduce clicks
+- Branch action controls are a radio group (Loeschen / Untersuchen / Behalten);
+  default = Loeschen for safe-delete category, Behalten for investigate category
 - Worktree section is visually distinct from branch list (different background
   tint, dedicated header, never mixed into the branch cards)
-- Worktrees with changes: amber badge, file summary, NO action controls at all
-- Worktrees without changes: gray badge, optional remove checkbox (unchecked)
+- Worktrees with changes: amber badge, file summary, NO destructive controls.
+  The only allowed interactive element is an opt-in "Untersuchen" checkbox
+  (unchecked by default) for requesting a deep-dive iteration
+- Worktrees without changes: gray badge, radio group (Entfernen / Untersuchen
+  / Behalten) defaulting to Behalten
 - Every action option has a `title` tooltip — see Tooltip Explanations table
 - "Remote-Branches auch loeschen" as a global toggle in the decision panel
   (not per-branch) — applies to all selected branches that have a remote
@@ -193,22 +201,40 @@ prefixing `file:///` — raw `$(pwd)`-style paths produce a broken
 `file:///c/Users/...` URL (missing drive colon → `ERR_FILE_NOT_FOUND`).
 See `deep-knowledge/browser-file-urls.md`.
 
-Inform the user:
+Inform the user (iteration 1):
 
-> Repo-Health geoeffnet. Filtere nach Kategorien, waehle Branches zum
-> Loeschen aus und klick "Aufraeumen starten" — ich fuehre es dann aus.
+> Repo-Health geoeffnet. Filtere nach Kategorien, waehle pro Branch /
+> Worktree zwischen Loeschen, Untersuchen oder Behalten und klick den
+> Submit-Button — bei Untersuchen-Markierungen mache ich eine zweite
+> Iteration mit Detail-Analyse, sonst raeume ich direkt auf.
+
+On iteration ≥ 2 (after a deep-dive round), inform the user:
+
+> Iteration {N}: Detail-Analyse fertig. Jede untersuchte Position hat
+> jetzt eine Empfehlung (Commit-Log, Diff, Branch-Alter). Entscheide
+> erneut — du kannst auch nochmal "Untersuchen" anklicken fuer eine
+> tiefere Runde.
 
 ## Step 9 — Execute Decisions
 
 When the user submits via the concept page:
 
-1. **Read decisions** from `#concept-decisions` JSON
-2. **Re-check worktree branches** — run `git worktree list --porcelain` again
+1. **Read decisions** from `#concept-decisions` JSON, including the
+   `iteration` counter.
+2. **Partition items by action:**
+   - Branches with `action: "delete"` -> Step 9a (cleanup)
+   - Worktrees with `action: "remove"` -> Step 9a (cleanup)
+   - Anything with `action: "investigate"` -> Step 9b (deep-dive)
+   - `action: "skip"` / `"keep"` -> no-op
+3. **Re-check worktree branches** — run `git worktree list --porcelain` again
    and rebuild the protected set. NEVER trust cached data for deletion.
-3. **Validate** every branch marked for deletion:
+4. **Validate** every branch marked for deletion:
    - Is it in the protected set? -> SKIP with warning, update page
    - Does it still exist? -> Skip silently if already gone
-4. **Execute in order:**
+
+### Step 9a — Cleanup (delete / remove items)
+
+Execute in order:
    a. Delete selected local branches: `git branch -D <branch>`
    b. If `delete_remote` is true: `git push origin --delete <branch>` for
       each selected branch that has a remote
@@ -216,13 +242,44 @@ When the user submits via the concept page:
    d. `git remote prune origin`
    e. If `sync_main` is true: `git checkout main && git pull origin main`,
       then return to original branch
-5. **Update the concept page** via browser eval:
+
+Update the concept page via browser eval:
    - Mark completed deletions with a green checkmark
    - Mark skipped items with a warning icon + reason
    - Show summary: "X Branches geloescht, Y uebersprungen"
-   - Reset submit state for potential second round
 
-6. **Persist results** to `~/.claude/devops-concepts/{date}-repo-health-decisions.json`
+Persist results to `~/.claude/devops-concepts/{date}-repo-health-decisions.json`.
+
+### Step 9b — Deep-Dive (investigate items)
+
+Triggered when at least one branch or worktree has `action: "investigate"`.
+Runs IN PARALLEL with Step 9a — cleanup is not blocked by deep-dive.
+
+1. **Gather per-item data** as documented in
+   `deep-knowledge/investigation.md` — full commit log, diff stats by file,
+   branch age, PR cross-reference, squash-merge cross-check (branches only),
+   modified/untracked file lists (worktrees only).
+2. **Apply recommendation rules** from `investigation.md` to attach a
+   `deepDive` block per item (`recommendation`, `rationale`, raw data).
+3. **Regenerate the concept page** as iteration N+1:
+   - Increment `iteration` in the embedded JSON
+   - Header badge: "Iteration 2 — Deep Dive" (or higher counter)
+   - Render `deepDive` blocks inline inside the cards for investigated items
+     (see `page-structure.md` § Iteration ≥ 2)
+   - Flip the action radio default to the recommended action
+   - Items NOT investigated retain their previous-iteration decision as the
+     new default so the user doesn't have to re-decide them
+4. **Reload the page** through the bridge `/reload` endpoint (same protocol
+   `/devops-concept` uses). The user now sees enriched info and a fresh
+   submit cycle.
+5. **No deletion** happens for investigated items in this iteration. Their
+   fate is decided in iteration N+1 (where the user can choose
+   `delete` / `keep` / again `investigate` for a deeper loop).
+
+Iteration count is unbounded in theory; practically the recommendation engine
+should converge in 1-2 follow-up rounds. Log a warning if iteration > 4 —
+likely indicates the user is using investigate as a "later" parking spot
+rather than a deep-dive request.
 
 ### Safety Invariants
 
@@ -245,21 +302,30 @@ for worktrees classified as `clean` in Step 2. Enforce these rules:
 2. **Never force-remove:** Use `git worktree remove <path>` (without `--force`).
    If it fails, report the error — do NOT retry with `--force`.
 3. **Never discard changes:** If a worktree has `status: has-changes`, the UI
-   must NOT render any action controls (no checkbox, no button, no option).
-   This is enforced in the HTML generation, not just in execution.
+   must NOT render any DESTRUCTIVE action controls — no Entfernen, no
+   "discard", no "reset", no implicit-cleanup option. The ONLY allowed
+   interactive element is an opt-in "Untersuchen" checkbox (read-only
+   deep-dive request, see Step 9b). Even when iteration 2 recommends
+   `discard`, the action stays advisory: the user must commit or checkout
+   manually. This is enforced in the HTML generation, not just in execution.
 4. **Branch cleanup after removal:** After successfully removing a clean
    worktree, the associated branch can be deleted locally. But check that
    the branch is not the current branch in the main repo first.
 
 ## Step 10 — Completion Card
 
-After Step 9 finishes executing (or the user ends the monitor without any
-deletions), call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
+Trigger this step only when the run is **done** — i.e. the user closed the
+monitor or the most recent submit produced no `investigate` items. If
+Step 9b regenerated the page for another iteration, SKIP the completion
+card and continue monitoring (Step 8). The card fires once per repo-health
+run, not once per iteration.
+
+When triggered, call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
 
 | Situation | Variant |
 |-----------|---------|
-| Branches / remotes / worktrees deleted | `ready` |
-| User reviewed but didn't delete anything | `analysis` |
+| Branches / remotes / worktrees deleted across any iteration | `ready` |
+| User reviewed (possibly multiple iterations) but didn't delete anything | `analysis` |
 | User aborted mid-flow | `aborted` |
 
 Pass: `variant`, `summary` (e.g. "Repo hygiene — 4 branches cleaned"), `lang`,
