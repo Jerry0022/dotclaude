@@ -163,3 +163,61 @@ Worktree example:
 
 The iteration 2 page renders `deepDive` inline inside the corresponding
 card (see `page-structure.md` § Iteration ≥ 2 — Deep-Dive Panel).
+
+## Tombstone Shape (item disappeared between iterations)
+
+When SKILL.md Step 9b revalidation finds an investigate target no longer
+present in the fresh git state (branch deleted in another terminal,
+worktree path removed, etc.), the item is rendered as a tombstone instead
+of a deepDive panel:
+
+```json
+{
+  "id": "branch-old-experiment",
+  "branch": "old-experiment",
+  "category": "investigate",
+  "tombstone": {
+    "reason": "branch-missing",
+    "detectedAt": "2026-05-11T13:35:00+02:00",
+    "lastKnownStatus": "investigate"
+  }
+}
+```
+
+`reason` values: `"branch-missing"`, `"worktree-path-missing"`,
+`"branch-attached-to-worktree"` (race: moved to worktree section instead).
+Tombstone cards show a single "Bestaetigen" button that drops the item
+from the next submit payload — no further action is available.
+
+## Convergence Digest
+
+Step 9b's convergence check (terminate vs. allow another deep-dive round)
+hashes a stable subset of the `deepDive` payload. The digest is recomputed
+each iteration; if it matches the previous iteration's digest verbatim,
+the "Untersuchen" radio is suppressed for that item — no new evidence
+exists, so another round would be pure noise.
+
+**Branch digest input** (in order, JSON-stringify with sorted keys, then SHA-1):
+```
+{
+  "recommendation": "<value>",
+  "commits": [<sorted by hash ascending, hash field only>],
+  "files": [<sorted by path ascending, {path, added, deleted}>]
+}
+```
+
+**Worktree digest input:**
+```
+{
+  "recommendation": "<value>",
+  "modifiedFiles": [<sorted by path, {path, added, deleted}>],
+  "commitsAhead": [<sorted by hash ascending, hash field only>]
+}
+```
+
+Excluded from the digest on purpose: relative-date strings ("vor 4 Tagen"
+changes every render but does not represent new information), the
+free-form `rationale` text, and PR metadata (PR state can flip while
+nothing about the branch content has changed — track that via a separate
+"PR-Status changed" badge if needed in future iterations, not by gating
+convergence on it).

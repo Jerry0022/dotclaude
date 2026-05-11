@@ -87,3 +87,11 @@ cleanup decisions.
   removed, or otherwise modified in this iteration. Claude gathers deep-dive
   data on it and regenerates the page as iteration 2 with enriched info and
   a recommended reclassification.
+- On iteration ≥ 2, an item may also carry a `tombstone` block instead of a
+  `deepDive` block (see `investigation.md` § Tombstone Shape). Tombstones
+  represent items that disappeared between iterations and accept only a
+  "Bestaetigen" action (drop from next submit) — no `action: "delete"` or
+  similar is valid for them.
+- Iterations are capped at 5. On iteration 5 the "Untersuchen" option is
+  globally suppressed; the page accepts only terminal actions
+  (`delete` / `skip` / `keep` / `remove` / `confirm`).

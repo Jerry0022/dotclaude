@@ -77,6 +77,30 @@
       rebase-needed -> default "Behalten"
       wip-keep      -> default "Behalten"
 
+  [Iteration ≥ 2 — Tombstone card (item disappeared)]
+    Replaces the normal card when SKILL.md Step 9b revalidation finds the
+    branch / worktree no longer present in fresh git state:
+      Visual: gray-out, strikethrough on the branch name
+      Header: "Nicht mehr vorhanden" badge + reason label
+        (branch-missing / worktree-path-missing / branch-attached-to-worktree)
+      Body: lastKnownStatus + detectedAt timestamp, no deepDive data
+      Single button: "Bestaetigen" — drops the item from the next submit
+      NO radio group, NO Untersuchen, NO destructive actions
+
+  [Iteration ≥ 2 — Convergence-suppressed card]
+    When SKILL.md Step 9b detects an identical deepDive digest vs. the
+    previous iteration for an investigate item, render the deepDive
+    normally BUT remove the "Untersuchen" radio option (only Loeschen /
+    Behalten for branches, only Entfernen / Behalten for clean worktrees,
+    only Behalten for has-changes worktrees). Show a small info chip:
+    "Keine neuen Erkenntnisse — bitte entscheiden."
+
+  [Iteration 5 banner]
+    Render at the top of the branch + worktree sections on iteration 5:
+    "Letzte Iteration — bitte abschliessend entscheiden. Untersuchen ist
+    deaktiviert." Untersuchen is suppressed across ALL cards regardless
+    of digest stability.
+
 [Main Sync Section]
   Current status: up to date / X commits behind
   Checkbox: "Main synchronisieren" (pre-checked if behind)

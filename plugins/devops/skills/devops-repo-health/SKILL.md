@@ -253,33 +253,77 @@ Persist results to `~/.claude/devops-concepts/{date}-repo-health-decisions.json`
 ### Step 9b — Deep-Dive (investigate items)
 
 Triggered when at least one branch or worktree has `action: "investigate"`.
-Runs IN PARALLEL with Step 9a — cleanup is not blocked by deep-dive.
 
-1. **Gather per-item data** as documented in
-   `deep-knowledge/investigation.md` — full commit log, diff stats by file,
-   branch age, PR cross-reference, squash-merge cross-check (branches only),
-   modified/untracked file lists (worktrees only).
-2. **Apply recommendation rules** from `investigation.md` to attach a
+**Ordering vs. Step 9a:** 9b runs **AFTER** 9a finishes. Sequential, not
+parallel. Reason: 9b must build iteration N+1 from the post-cleanup git
+state — otherwise just-deleted branches can be rendered again, or a
+`delete` that hit the worktree-protection validation skip silently carries
+a stale "delete" preselection into the next round. Cleanup typically takes
+seconds; the wait does not meaningfully delay the user.
+
+1. **Re-fetch git state:** `git fetch --all --prune`,
+   `git worktree list --porcelain`, `git branch -a --no-color`. Build the
+   fresh protected branch set and the fresh existing-branch set. Treat
+   these as ground truth for what is now in the repo.
+2. **Revalidate every investigate target against fresh state:**
+   - **Branch missing** (not in `git branch -a` anymore — e.g. deleted in
+     another terminal between iterations): render an "Already removed"
+     tombstone card in iteration N+1 with a single "Bestaetigen" button
+     to drop it from the next submit. No deepDive data is gathered.
+   - **Branch newly attached to a worktree** (race condition): move it to
+     the worktree section as a `has-changes`/`clean` card, with
+     "Untersuchen" preserved if appropriate. Drop any `investigate` flag
+     from the branch list rendering.
+   - **Worktree path missing** (`git -C <path> status` fails): tombstone,
+     same as above.
+   - **Target still valid** → continue to step 3.
+3. **Reconcile Step 9a results into the iteration model:**
+   - Items that 9a actually deleted/removed: drop from iteration N+1 entirely.
+   - Items that 9a SKIPPED (validation failures): re-include them with a
+     warning banner and default action = `Behalten`. Never carry forward a
+     failed `delete` as the new default.
+   - Items with `action: "skip"` / `"keep"` from iteration N: only carry
+     forward if still present in the fresh git state.
+4. **Gather per-item deep-dive data** for revalidated investigate targets
+   as documented in `deep-knowledge/investigation.md` — full commit log,
+   diff stats by file, branch age, PR cross-reference, squash-merge
+   cross-check (branches only), modified/untracked file lists (worktrees
+   only).
+5. **Apply recommendation rules** from `investigation.md` to attach a
    `deepDive` block per item (`recommendation`, `rationale`, raw data).
-3. **Regenerate the concept page** as iteration N+1:
+6. **Convergence check** — for each investigate item already carrying a
+   `deepDive` from iteration N−1: compute a stable digest over
+   `recommendation` + `commits[].hash` + `files[].path+added+deleted` (for
+   branches) or `modifiedFiles[].path+added+deleted` +
+   `commitsAhead[].hash` (for worktrees). If digest is **identical** to
+   the previous iteration's digest, the page has produced no new
+   information for that item. In iteration N+1: render the deepDive as
+   usual but **suppress the "Untersuchen" radio option** for that card —
+   only `Loeschen` / `Behalten` (branches) or `Behalten` / `Entfernen`
+   (clean worktrees) / `Behalten` (has-changes worktrees) remain. Force a
+   terminal decision.
+7. **Regenerate the concept page** as iteration N+1:
    - Increment `iteration` in the embedded JSON
    - Header badge: "Iteration 2 — Deep Dive" (or higher counter)
-   - Render `deepDive` blocks inline inside the cards for investigated items
+   - Render `deepDive` blocks inline inside cards for investigated items
      (see `page-structure.md` § Iteration ≥ 2)
+   - Render tombstone cards for items detected as missing in step 2
    - Flip the action radio default to the recommended action
-   - Items NOT investigated retain their previous-iteration decision as the
-     new default so the user doesn't have to re-decide them
-4. **Reload the page** through the bridge `/reload` endpoint (same protocol
+   - Honor the convergence suppression from step 6
+8. **Reload the page** through the bridge `/reload` endpoint (same protocol
    `/devops-concept` uses). The user now sees enriched info and a fresh
    submit cycle.
-5. **No deletion** happens for investigated items in this iteration. Their
+9. **No deletion** happens for investigated items in this iteration. Their
    fate is decided in iteration N+1 (where the user can choose
-   `delete` / `keep` / again `investigate` for a deeper loop).
+   `delete` / `keep` / again `investigate` for a deeper loop — unless
+   suppressed by convergence).
 
-Iteration count is unbounded in theory; practically the recommendation engine
-should converge in 1-2 follow-up rounds. Log a warning if iteration > 4 —
-likely indicates the user is using investigate as a "later" parking spot
-rather than a deep-dive request.
+**Hard cap:** iterations are capped at **5 rounds**. On iteration 5, the
+"Untersuchen" radio option is suppressed for ALL items regardless of
+digest stability. Render a banner: "Letzte Iteration — bitte abschliessend
+entscheiden." If iteration N+1 would be > 5, refuse to regenerate and
+proceed to Step 10 instead. This is a guard against the spec being used
+as an infinite parking lot rather than a deep-dive tool.
 
 ### Safety Invariants
 
