@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.72.0] — 2026-05-13
+
+### Changed
+
+- **plugins/devops/skills/devops-learn/SKILL.md** — `/devops-learn` now prunes duplicate `feedback_*.md` entries from auto-memory after persisting the canonical rule to its proper file (skill / extension / deep-knowledge / CLAUDE.md). New Step 6 resolves the project memory dir at `~/.claude/projects/<encoded-cwd>/memory/` (using the **main** worktree path derived from `git worktree list --porcelain` — not `git-common-dir` trimming, which breaks for `core.worktree`/`core.bare`/separate-git-dir/submodule layouts; encoded path is realpath-resolved with native drive-letter casing, UNC paths skip silently), globs `feedback_*.md`, matches semantically against the just-persisted learning (same intent + trigger condition + non-trivial overlap, conservative), and offers deletion via AskUserQuestion per match (Löschen recommended, Behalten, Anzeigen) including removal of the bullet from `MEMORY.md`. Skipped for cross-project routing (5d) — feedback memory belongs to *this* session, not the target. Only `feedback_*.md` ever touched; `user_*`/`project_*`/`reference_*` have different lifecycles. Rules section narrowed: "never create or update content" with explicit carve-out for Step 6 cleanup writes
+- **plugins/devops/skills/devops-learn/SKILL.md** — frontmatter `disable-model-invocation: true` removed as workaround for a Claude Code harness bug where the flag was being applied to user-typed `/devops-learn` slash commands too broadly, blocking BOTH the slash dispatcher AND the model's Skill-tool fallback. With the flag set, a user-typed `/devops-learn` would silently fail and the model — having no working path to the skill — fell back to writing personal `feedback_*.md` memory directly, which is the exact behavior the skill exists to prevent. The description's existing "Triggers ONLY on explicit invocation" language plus the explicit trigger-phrase list (`/devops-learn`, "lerne das", "merk dir das fürs Projekt", "remember this for the project", "capture learning") replaces the flag's defense-in-depth role with prose-level discipline. Trade-off: model can now in principle auto-trigger the skill on conversational matches, but the trigger phrases are deliberately narrow and explicit. Upstream harness bug should still be filed against anthropics/claude-code so the flag's semantics get fixed at the dispatcher layer
+
 ## [0.71.0] — 2026-05-13
 
 ### Removed
@@ -19,7 +26,7 @@
 
 - **plugins/devops/.claude-plugin/plugin.json** — version `0.70.0 → 0.71.0`
 
-
+## [0.70.0] — 2026-05-13
 
 ### Added
 
