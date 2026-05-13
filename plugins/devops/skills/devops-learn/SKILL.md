@@ -4,7 +4,9 @@ version: 0.1.0
 description: >-
   Capture a long-term learning/correction and route it to the correct project-
   specific instructions (skill, skill-extension, deep-knowledge, or as a last
-  resort CLAUDE.md) — NOT to personal feedback memory. Handles four targets:
+  resort CLAUDE.md) — NOT to personal feedback memory. After persisting, prunes
+  any now-duplicate `feedback_*.md` auto-memory entries with confirmation.
+  Handles four targets:
   (1) the devops plugin source itself when invoked from dotclaude, (2) a project-
   specific skill-extension when invoked from a consumer project and the learning
   fits an existing plugin skill, (3) a new project-specific skill or deep-knowledge
@@ -15,7 +17,6 @@ description: >-
   fürs Projekt", "remember this for the project", "capture learning". Do NOT
   trigger for one-off conversational corrections or for personal feedback memory.
 argument-hint: "<learning text>"
-disable-model-invocation: true
 allowed-tools: Bash(git *), AskUserQuestion, Read, Write, Edit, Glob, Grep, Skill, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
@@ -212,7 +213,53 @@ anywhere outside any single project — **stop and ask first** via AskUserQuesti
 
 Never write to `~/.claude/CLAUDE.md` without explicit confirmation.
 
-## Step 6 — Confirm and report
+## Step 6 — Clean up duplicate feedback memory
+
+The canonical rule now lives in its proper file. Any pre-existing entry in
+**auto-memory feedback** that covers the same ground is now a stale duplicate
+— auto-memory is for personal style/tone preferences, not project rules, so
+the duplicate should be removed once the sorted Claude instructions own it.
+
+Skip this step entirely for 5d (cross-project): the feedback memory belongs
+to *this* session, not the target project — leave it alone.
+
+1. **Resolve the project memory dir.** The path is
+   `~/.claude/projects/<encoded-cwd>/memory/` where `<encoded-cwd>` replaces
+   each `:`, `\`, and `/` in the path with `-`. If the current repo is a
+   worktree, use the **main** project path, not the worktree path (per the
+   existing `feedback_memory_in_main_project` convention) — derive it from
+   `git rev-parse --git-common-dir` (strip the trailing `/.git*` segments).
+   Use Glob to confirm the dir exists; skip silently if not.
+
+2. **List candidates.** Glob `feedback_*.md` in that dir AND read `MEMORY.md`
+   (which is the index). Skip silently if no `feedback_*` files.
+
+3. **Match semantically against the just-persisted learning.** For each
+   feedback file, read its frontmatter `description` and the first ~10 body
+   lines. Same rule = same intent + same trigger condition + non-trivial
+   overlap with the rule we just wrote (not merely "same broad topic").
+   Be conservative — if in doubt, treat as non-match and skip.
+
+4. If 0 matches: produce no output, continue to Step 7.
+
+5. If 1+ matches: list them via AskUserQuestion (one question per match if
+   multiple, or `multiSelect` if the user wants to handle them in bulk). For
+   each, show the file name + description + which new file now owns the rule.
+   Options per match:
+   - **Löschen** (Recommended) — Regel lebt jetzt in `<new file>`
+   - **Behalten** — bleibt als persönliche Präferenz relevant
+   - **Erst vollständig anzeigen**
+
+6. For each chosen deletion:
+   - Delete the `feedback_*.md` file
+   - Remove its bullet line from `MEMORY.md` (Edit, not Write)
+   - Add the path to the Step 7 report
+
+Only target `feedback_*.md` files. **Never** touch `user_*`, `project_*`, or
+`reference_*` memories — those have different lifecycles and are not what
+the learn skill replaces.
+
+## Step 7 — Confirm and report
 
 After persisting, show the user:
 
@@ -220,11 +267,12 @@ After persisting, show the user:
 - The verbatim rule that was added
 - If a CLAUDE.md was touched: the `/devops-claude-md-lint` result for that file
   (don't re-count lines manually — relay the lint output)
+- If Step 6 deleted any feedback memories: list the removed file names
 
 For 5d issue creation: show the issue URL.
 For 5d prompt: show the copy-pastable block.
 
-## Step 7 — Completion Card
+## Step 8 — Completion Card
 
 Call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
 
@@ -248,8 +296,9 @@ write this skill performs.
 
 ## Rules
 
-- **Never** write to user feedback memory from this skill — that is a separate
-  channel handled by auto-memory.
+- **Never write** to user feedback memory from this skill — auto-memory owns
+  that channel. The skill **may delete** duplicate `feedback_*.md` entries
+  (Step 6) once the canonical rule is in place, with user confirmation.
 - **Always** prefer deep-knowledge > skill/extension > CLAUDE.md.
 - **Respect the soft caps** above; re-route to the next-larger container
   before busting CLAUDE.md or SKILL.md targets.
