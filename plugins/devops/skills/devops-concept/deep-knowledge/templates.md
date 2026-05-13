@@ -227,6 +227,7 @@ the `[ui-locale: ...]` hint produced.
           </li>
           <li data-step="implemented" data-state="pending" hidden>
             <span class="step-icon" aria-hidden="true">○</span>
+            <span class="step-label" data-state-label="pending">{{panel.step_waiting}}</span>
             <span class="step-label" data-state-label="active">{{panel.step_implemented_active}}</span>
             <span class="step-label" data-state-label="done">{{panel.step_implemented}}</span>
           </li>
@@ -785,6 +786,7 @@ The wiring is a single delegated click handler installed alongside
           </li>
           <li data-step="implemented" data-state="pending" hidden>
             <span class="step-icon" aria-hidden="true">○</span>
+            <span class="step-label" data-state-label="pending">{{panel.step_waiting}}</span>
             <span class="step-label" data-state-label="active">{{panel.step_implemented_active}}</span>
             <span class="step-label" data-state-label="done">{{panel.step_implemented}}</span>
           </li>
@@ -1684,7 +1686,7 @@ document.addEventListener('DOMContentLoaded', () => {
 .status-steps li .step-label[data-state-label] {
   display: none;
 }
-.status-steps li[data-state="pending"] .step-label[data-state-label="active"],
+.status-steps li[data-state="pending"] .step-label[data-state-label="pending"],
 .status-steps li[data-state="active"] .step-label[data-state-label="active"],
 .status-steps li[data-state="done"] .step-label[data-state-label="done"] {
   display: inline;
