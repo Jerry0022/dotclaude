@@ -1,5 +1,8 @@
 # Test Execution Strategy
 
+> **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.md](test-autonomy.md).
+> This file retains Web Tech browser-test rules, Electron split, 3rd-party mock-first protocol.
+
 Cross-cutting rules for when and how to test. Referenced by the completion flow
 hook and the ship skill.
 

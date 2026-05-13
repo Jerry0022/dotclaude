@@ -1,0 +1,35 @@
+{
+  "profile": "electron-ow",
+  "description": "Electron app (OverwolfElectron or standard). Renderer tested via Chrome-MCP; packaged-app final test requires Must-Ask.",
+  "detection": {
+    "files_required": [],
+    "files_optional": ["electron-builder.json", "electron-builder.yml", "package.json"],
+    "package_json_deps": ["electron", "ow-electron"]
+  },
+  "tool_chain": [
+    {
+      "step": 1,
+      "tool": "Bash(npm run dev)",
+      "purpose": "Start Electron in dev mode so renderer is reachable via Chrome-MCP"
+    },
+    {
+      "step": 2,
+      "tool": "preview_snapshot",
+      "purpose": "Verify renderer DOM content and element presence"
+    },
+    {
+      "step": 3,
+      "tool": "preview_screenshot",
+      "purpose": "Capture rendered visual layout of the renderer window"
+    },
+    {
+      "step": 4,
+      "tool": "NOTE — packaged app test",
+      "purpose": "Testing the packaged (built) binary requires computer-use. Only proceed after must-ask trigger 'packaged_electron_final_test' is confirmed by user."
+    }
+  ],
+  "viewports": [],
+  "allowed_actions": ["read", "write_via_dom"],
+  "blocked_actions": ["computer-use"],
+  "must_ask_triggers": ["packaged_electron_final_test"]
+}

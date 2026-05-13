@@ -1,0 +1,50 @@
+{
+  "profile": "web-vite",
+  "description": "Modern Vite / SPA project with a browser-based UI.",
+  "detection": {
+    "files_required": ["vite.config.ts", "vite.config.js", "vite.config.mjs"],
+    "files_optional": ["package.json"],
+    "package_json_deps": []
+  },
+  "tool_chain": [
+    {
+      "step": 1,
+      "tool": "Bash(npm run dev -- --port 5173)",
+      "purpose": "Start Vite dev server if not already running"
+    },
+    {
+      "step": 2,
+      "tool": "preview_snapshot",
+      "purpose": "Verify DOM content, element presence, and ARIA state"
+    },
+    {
+      "step": 3,
+      "tool": "javascript_tool + preview_screenshot",
+      "purpose": "Set viewport to iPhone SE (375x667) and capture visual layout"
+    },
+    {
+      "step": 4,
+      "tool": "javascript_tool + preview_screenshot",
+      "purpose": "Set viewport to Pixel 7 / Android phone (393x851) and capture visual layout"
+    },
+    {
+      "step": 5,
+      "tool": "javascript_tool + preview_screenshot",
+      "purpose": "Set viewport to iPad (768x1024) and capture visual layout"
+    },
+    {
+      "step": 6,
+      "tool": "javascript_tool + preview_screenshot",
+      "purpose": "Set viewport to Galaxy Tab S9 / Android tablet (800x1280) and capture visual layout"
+    },
+    {
+      "step": 7,
+      "tool": "javascript_tool + preview_screenshot",
+      "purpose": "Set viewport to Desktop (1280x800) and capture visual layout"
+    }
+  ],
+  "viewports": ["mobile-ios", "mobile-android", "tablet-ios", "tablet-android", "desktop"],
+  "allowed_actions": ["read", "write_via_dom"],
+  "blocked_actions": ["computer-use"],
+  "must_ask_triggers": []
+}
