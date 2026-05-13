@@ -1,5 +1,16 @@
 # Changelog
 
+<<<<<<< HEAD
+## [0.69.0] — 2026-05-13
+
+### Changed
+
+- **BREAKING** — **plugins/devops/skills/devops-plugin-update/SKILL.md** (renamed from `devops-self-update`) + **README.md** + **INSTALL.md** + **CLAUDE.md** + **plugins/devops/hooks/session-start/ss.plugin.update.js** — slash-command renamed `/devops-self-update` → `/devops-plugin-update` for clarity: the old name was ambiguous about *what* updates (the session? the user? the plugin?), the new name explicitly states the plugin is the target. Skill `name:` field, directory, heading, README Features bullet + skills table, INSTALL alternative-install paragraph, CLAUDE.md test-instruction, and the hook header comment all updated. Trigger phrases in the description (`"self update"`, `"plugin updaten"`, `"update plugin"`, `"neue version"`) unchanged for backward compatibility — so the model still matches old phrasings even though the literal slash-command is gone. CHANGELOG history references to the old name are preserved verbatim as historical record. Migration: any external automation or muscle-memory invoking `/devops-self-update` must switch to `/devops-plugin-update`
+
+### Fixed
+
+- **README.md** — skill count corrected from 15 to 17 (added missing `devops-burn` and `devops-learn` to both the Features bullet and the slash-command table). Stale-count miss was surfaced during the rename refactor and fixed inline since the same lines were already being touched
+
 ## [0.68.0] — 2026-05-13
 
 ### Changed
