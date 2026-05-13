@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.72.1] — 2026-05-13
+
+### Fixed
+
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — submitted-panel progress step 3 no longer shows the contradictory "Implementierung abgeschlossen" / ⏳ pairing while still mid-implementation. The `<li data-step="implemented">` now carries three sibling `<span class="step-label" data-state-label="…">` elements (`pending` / `active` / `done`) and the matching CSS rule `.status-steps li[data-state="X"] .step-label[data-state-label="X"] { display: inline; }` swaps the visible copy based on the li's `data-state`. Pending shows the existing `panel.step_waiting` ("Warten…" / "Waiting…"), active shows the new `panel.step_implemented_active` ("Implementierung läuft" / "Implementation in progress"), done keeps `panel.step_implemented` ("Implementierung abgeschlossen" / "Implementation complete"). `_setStep` stays icon-only — no JS change. Steps without `data-state-label` spans (the `submitted` and `received` rows) are unaffected because the visibility rule is scoped to `.step-label[data-state-label]`. Bug only surfaces in regenerated concept pages — existing HTML files retain the old static label
+
+### Changed
+
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.72.0 → 0.72.1`
+
 ## [0.72.0] — 2026-05-13
 
 ### Changed
