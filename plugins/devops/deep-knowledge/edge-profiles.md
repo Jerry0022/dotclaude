@@ -35,8 +35,8 @@ user's normal browsing session. The Chrome-MCP extension in the main profile
 must not open automated tabs that clutter the user's workspace or risk
 interfering with an active login flow.
 
-Tests and HA dashboard navigation use the main profile because those tasks
-require the user's persisted cookies (Home Assistant session, GitHub login,
+Tests and dashboard navigation use the main profile because those tasks
+require the user's persisted cookies (project sessions, GitHub login, SSO,
 etc.). The scraper profile handles only the Claude-usage page, which needs its
 own isolated session to avoid token conflicts.
 

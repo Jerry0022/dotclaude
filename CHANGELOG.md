@@ -1,6 +1,25 @@
 # Changelog
 
-## [0.70.0] — 2026-05-13
+## [0.71.0] — 2026-05-13
+
+### Removed
+
+- **BREAKING** — **plugins/devops/skills/devops-test-plan/profiles/ha-config.json** + **plugins/devops/skills/devops-test-plan/profiles/ha-integration.json** — domain-specific Home Assistant profiles deleted from the plugin. Plugin core now ships only generic stack profiles (`web-vite`, `web-angular`, `electron-ow`, `cli-node`, `lib`, `generic`). Projects that relied on these profiles must register them as a **project skill extension** under `{project}/.claude/skills/devops-test-plan/profiles/<name>.json` together with a `detection.json` that adds the corresponding markers (see new Step 2a in the skill). The skill remains 100 % source-compatible for all other profiles — only the JSONs themselves moved out of the plugin
+- **plugins/devops/skills/devops-test-plan/SKILL.md** — Step 2 Profile Detection table no longer lists `configuration.yaml → ha-config` or `custom_components/*/manifest.json → ha-integration` priority rows. Detection priority numbers re-spaced (100/200/300/400/500/999) so project-extension rules can slot in below plugin defaults
+- **plugins/devops/deep-knowledge/test-autonomy.md** — Decision Matrix rows for `ha-config` and `ha-integration` removed; "Everything else — including Home Assistant service calls" generalized to "service calls in dev/test environments"; replaced HA-specific 5-viewport sweep paragraph with a generic note that project-extension profiles register their own viewports
+- **plugins/devops/deep-knowledge/responsive-testing.md** — `ha-config` row removed from "When to Use"; `ha-integration` bullet removed from "When NOT to Use". Both replaced with generic "project-extension profile with empty/non-empty viewports" language
+- **plugins/devops/deep-knowledge/edge-profiles.md** — Cookies example reworked: "Home Assistant session, GitHub login" → "project sessions, GitHub login, SSO" so the rationale carries without naming a specific platform
+- **plugins/devops/CONVENTIONS.md** — Skill-extension example renamed `ha-finance/` → `my-project/` and the SSH host `192.168.178.32` swapped for the generic placeholder `<internal-host>` so the convention page no longer leaks personal infrastructure into the plugin docs
+
+### Added
+
+- **plugins/devops/skills/devops-test-plan/SKILL.md** — new **Step 2a — Custom Profiles from Project Extension**. Project skill extensions can now contribute additional profile definitions AND detection rules without forking the skill. Detection rules live in `{project}/.claude/skills/devops-test-plan/detection.json` with schema `{ rules: [{ priority, marker, profile }] }`; profile JSONs in `{project}/.claude/skills/devops-test-plan/profiles/<name>.json` follow the same shape as plugin profiles. Step 4 load order updated to resolve project profiles before plugin profiles so an extension can override a plugin profile name (e.g. ship a stricter `web-angular.json`) without touching the plugin. Skill version bumped `0.1.0 → 0.2.0`. Closing rule added under Rules: "No domain-specific knowledge in this skill or in `profiles/*.json` under the plugin"
+
+### Changed
+
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.70.0 → 0.71.0`
+
+
 
 ### Added
 

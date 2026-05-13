@@ -82,7 +82,9 @@ Trigger responsive testing on every UI change in web profiles:
 
 - `web-vite` — any component, style, or template change
 - `web-angular` — any component, template, or SCSS change
-- `ha-config` — any dashboard card or Lovelace UI change
+- Any project-extension profile whose `viewports` field is non-empty —
+  multi-device frontends register here via
+  `{project}/.claude/skills/devops-test-plan/profiles/<name>.json`
 
 The [decision matrix in test-autonomy.md](test-autonomy.md) maps change scope
 to tool-chain for each profile.
@@ -96,5 +98,6 @@ Skip responsive testing entirely for:
 - Backend-only changes (API routes, database models, services)
 - CLI projects (`cli-node` profile)
 - Library projects (`lib` profile) without a UI
-- Home Assistant integrations (`ha-integration` profile — Python only, no frontend)
+- Any project-extension profile whose `viewports` field is empty (no frontend
+  to verify)
 - Pure config or build/infra changes with no visual output
