@@ -95,9 +95,10 @@ Store as `{topic}` ∈ {`plugin`, `project`}.
 ## Step 5 — Route by target × topic
 
 Use this decision table. **In every branch: prefer deep-knowledge over skill
-over CLAUDE.md** — see the Conventions section below for soft caps and the
-self-reference rule. CLAUDE.md target is ~20 lines (soft); skill files ~200
-lines (soft); deep-knowledge unbounded.
+over CLAUDE.md** — see the Conventions section below for soft caps, re-route
+triggers, and the self-reference rule. Single source:
+`deep-knowledge/content-conventions.md` (CLAUDE.md target ~20 lines, re-route
+above ~25).
 
 | `{target_project}`     | `{topic}`  | Action                                           |
 |------------------------|------------|--------------------------------------------------|
@@ -122,8 +123,9 @@ The user is editing the plugin source. Choose target file:
 4. **Hook behavior** → edit `plugins/devops/hooks/<phase>/<hook>.js`.
 
 Only touch `plugins/devops/CLAUDE.md` or root `CLAUDE.md` if neither skill nor
-deep-knowledge fits and the rule is a one-liner. Re-run the lint mental check:
-~20 lines after the edit (soft cap — see Conventions).
+deep-knowledge fits and the rule is a one-liner. Bias: keep CLAUDE.md at
+~20 lines (target). After any CLAUDE.md edit, invoke `/devops-claude-md-lint`
+via the **Skill** tool to verify size and structure — do not eyeball line counts.
 
 ### 5b — Consumer project, plugin topic, fits a skill
 
@@ -158,7 +160,9 @@ Decide between project-skill and project-deep-knowledge:
     (b) fall back to deep-knowledge
 
 Only as last resort append a one-line pointer to `{project}/CLAUDE.md` so the
-new file gets discovered. CLAUDE.md target ~20 lines (soft cap, see Conventions).
+new file gets discovered. Bias: keep CLAUDE.md at ~20 lines (target). After
+any CLAUDE.md edit, invoke `/devops-claude-md-lint` via the **Skill** tool —
+single source of truth for size/structure checks.
 
 ### 5d — Different project (cross-project)
 
@@ -214,7 +218,8 @@ After persisting, show the user:
 
 - Which file(s) changed (path + line count delta)
 - The verbatim rule that was added
-- Any pointer line added to CLAUDE.md (with reminder of current line count)
+- If a CLAUDE.md was touched: the `/devops-claude-md-lint` result for that file
+  (don't re-count lines manually — relay the lint output)
 
 For 5d issue creation: show the issue URL.
 For 5d prompt: show the copy-pastable block.

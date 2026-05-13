@@ -7,7 +7,9 @@ description: >-
   recommended maximum for index-style CLAUDE.md). Suggests creating one if
   missing. Triggers on: "lint claude md", "claude md check", "check claude md",
   "CLAUDE.md zu lang", "audit claude md", "claude md audit".
-  Do NOT trigger for editing CLAUDE.md content or for /devops-project-setup.
+  Do NOT auto-trigger from user phrasing for editing CLAUDE.md content or
+  for /devops-project-setup. MAY be invoked explicitly via the Skill tool
+  by other skills (devops-learn, devops-project-setup) as a post-edit gate.
 argument-hint: "[--fix]"
 allowed-tools: Read, Glob, Bash, Write, Edit, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
