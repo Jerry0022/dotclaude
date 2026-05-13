@@ -233,6 +233,23 @@ Feature: Video filters (end-to-end)
 
 This preserves the audit trail through squash-merges. Without these references, `git log` on main only shows one commit with no link back to the sub-branch work.
 
+### Step 4a — Delivery extension hook
+
+After `ship_release` succeeds, check `{project}/.claude/skills/ship/reference.md` for a
+`deliver:` field:
+
+- **Default (`git+gh` or field absent):** existing behavior — PR + merge already done in Step 4.
+- **`ssh-rsync`:** rsync build output to the configured `target`. (Future work — currently falls through to `none`.)
+- **`ha-rest`:** POST to Home Assistant REST API at `base_url`. (Future work — currently falls through to `none`.)
+- **`none`:** skip delivery entirely.
+
+When `deliver` is set, the MCP `ship_release` tool dispatches to the corresponding
+handler. Handlers `ssh-rsync` and `ha-rest` are extension points documented for
+consumer configuration — not yet implemented in this release (they fall through to
+`none` intentionally).
+
+See `deep-knowledge/skill-extension-guide.md -> Delivery targets` for reference.md examples.
+
 ## Step 5 — Cleanup
 
 **If in a worktree**: call `ExitWorktree(action: "remove")` FIRST to release the CWD lock.

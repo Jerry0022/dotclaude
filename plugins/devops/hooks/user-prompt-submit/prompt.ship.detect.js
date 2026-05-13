@@ -12,7 +12,24 @@
 
 require('../lib/plugin-guard');
 
+const { execFileSync } = require('child_process');
 const { readSessionFile } = require('../lib/session-id');
+
+/**
+ * Returns true if cwd is inside a git work tree.
+ * @param {string} cwd
+ * @returns {boolean}
+ */
+function isGitRepo(cwd) {
+  try {
+    execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -90,6 +107,11 @@ process.stdin.on('end', () => {
     if (cacheWarning) {
       process.stdout.write(cacheWarning + '\n');
     }
+    process.exit(0);
+  }
+
+  // --- Guard: skip injection in non-git directories ---
+  if (!isGitRepo(process.cwd())) {
     process.exit(0);
   }
 

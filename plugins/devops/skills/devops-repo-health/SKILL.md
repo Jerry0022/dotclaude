@@ -16,6 +16,20 @@ allowed-tools: Bash(git *), Bash(gh *), Bash(start *), Bash(cmd *), Read, Write,
 Analyze the repository for branch hygiene, unmerged work, and cleanup opportunities.
 Present results as an interactive concept page with filters and decision controls.
 
+## Step 0 — Repo-mode check
+
+Before any git command, verify this directory is a git repository:
+
+```bash
+git rev-parse --is-inside-work-tree
+```
+
+If this fails (exit != 0), abort:
+
+> Repo health analysiert git-Branches/PRs/Worktrees — in einer Nicht-Git-Dir gibt es nichts zu pruefen. Aborting.
+
+Do NOT proceed. End the skill.
+
 ## SAFETY: Worktree Branch Protection
 
 **HARD RULE — no exceptions:**
