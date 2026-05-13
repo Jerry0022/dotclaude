@@ -166,15 +166,15 @@ Silently check for optional overrides (do not surface "not found" in output):
 (via `/skill-creator` or manually), always include the Step 0 extension
 load sequence. Skills that skip this step are non-compliant.
 
-**Example: A user extends `/devops-ship` for their HA-Finance project:**
+**Example: A user extends `/devops-ship` for their own project:**
 
 ```
-ha-finance/
+my-project/
 └── .claude/
     └── skills/
         └── ship/
             ├── SKILL.md        ← "Before PR: run npm test && npm run lint"
-            └── reference.md    ← "Deploy via SSH to 192.168.178.32"
+            └── reference.md    ← "Deploy via SSH to <internal-host>"
 ```
 
 The plugin's `/devops-ship` reads these before executing and integrates the rules.

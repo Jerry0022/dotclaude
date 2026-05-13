@@ -56,8 +56,8 @@ Ask the user before proceeding in exactly these situations:
 3. **Explicit user instruction for desktop takeover** — user says "take the
    desktop", "desktop übernehmen", or "computer use". Reason: opt-in only.
 
-Everything else — including Home Assistant service calls, form fills in a dev
-environment, and responsive-layout checks — is autonomous.
+Everything else — including service calls in dev/test environments,
+form fills, and responsive-layout checks — is autonomous.
 
 ---
 
@@ -71,8 +71,6 @@ tool-chain. "Chrome-MCP" means Chrome-MCP extension running in Edge.
 | `web-vite` | Snapshot + Screenshot × 5 viewports | Snapshot + Screenshot × 5 viewports | Snapshot | Snapshot | npm test only |
 | `web-angular` | Snapshot + Screenshot × 5 viewports | Snapshot + Screenshot × 5 viewports | Snapshot | Snapshot | npm test only |
 | `electron-ow` | Snapshot + Screenshot (renderer) | Snapshot + Screenshot (renderer) | Snapshot | Snapshot | Must-Ask (packaged) |
-| `ha-config` | Chrome-MCP navigate + Snapshot | Chrome-MCP navigate + Snapshot + JS state-check | Chrome-MCP JS state-check | Chrome-MCP read | — |
-| `ha-integration` | — | pytest | pytest | manifest validation | pytest |
 | `cli-node` | — | npm test + CLI run | npm test | npm test | npm test |
 | `lib` | — | npm test | npm test | — | npm run build |
 | `generic` | Manual review | npm test or pytest | npm test or pytest | Manual review | Manual review |
@@ -81,9 +79,11 @@ Viewports for web profiles (5 total): iPhone SE 375×667, Pixel 7 393×851
 (Android phone), iPad 768×1024, Galaxy Tab S9 800×1280 (Android tablet),
 Desktop 1280×800 (see [responsive-testing.md](responsive-testing.md)).
 
-For `ha-config` the same 5-viewport sweep applies — Lovelace dashboards are
-multi-device by design, so add the viewport rotation to the tool-chain even
-though it's not in the matrix row above.
+Project skill extensions can register additional profiles via
+`{project}/.claude/skills/devops-test-plan/` (see the
+[skill SKILL.md, Step 2a](../skills/devops-test-plan/SKILL.md)). The same tier
+order and must-ask rules apply — extension profiles inherit autonomy defaults
+unless their JSON sets `must_ask_triggers` explicitly.
 
 ---
 
