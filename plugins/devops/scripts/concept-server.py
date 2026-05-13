@@ -164,7 +164,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             # to come from Claude's cron, not from a UI poll.
             with _lock:
                 data = _decisions
-                version = _version
+                version_seen = _version
             try:
                 obj = json.loads(data)
                 pending = bool(isinstance(obj, dict) and obj.get('submitted') is True)
@@ -172,9 +172,17 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 pending = False
             if pending:
                 with _lock:
-                    if not _picked_up_at:
+                    # Only stamp _picked_up_at if the submission we just saw
+                    # is still the current one. If _version has advanced in
+                    # the meantime, a newer POST /decisions arrived and
+                    # cleared _picked_up_at — we must NOT re-stamp it onto
+                    # the new (not-yet-picked-up) submission, because that
+                    # would falsely advance the UI's "Claude verarbeitet"
+                    # step before Claude's cron has actually seen the new
+                    # version.
+                    if _version == version_seen and not _picked_up_at:
                         _picked_up_at = _iso_now()
-            self._json_response({"pending": pending, "version": version})
+            self._json_response({"pending": pending, "version": version_seen})
         elif self.path == '/reload':
             with _lock:
                 counter = _reload_counter
@@ -208,25 +216,42 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 _phase = ''
             self._json_response({"ok": True, "version": version})
         elif self.path == '/status':
-            # Free-form phase channel: Claude POSTs {"phase": "implemented"}
-            # after the implement branch finished its code changes (and
-            # before /reload). The browser's pollProcessedState lights up
-            # the third progress step ("Implementierung abgeschlossen")
+            # Free-form phase channel: Claude POSTs {"phase": "implemented",
+            # "version": N} after the implement branch finished its code
+            # changes (and before /reload). The browser's pollProcessedState
+            # lights up the third progress step ("Implementierung abgeschlossen")
             # when it sees this. Unknown phases are still stored — Claude
             # can introduce new states without a server change.
+            #
+            # Optimistic concurrency: `version` is the _version Claude
+            # observed at Step 5a. If a newer POST /decisions has landed in
+            # the meantime, the server rejects with 409 so a stale Claude
+            # worker cannot pin "implemented" onto a submission it never
+            # processed. Same contract as /reset. Backward-compat: empty
+            # body or missing version = unconditional write (legacy).
             length = int(self.headers.get('Content-Length', 0))
             phase_val = ''
+            expected_version = None
             if length > 0:
                 try:
                     raw = self.rfile.read(length).decode()
                     payload = json.loads(raw) if raw else {}
                     phase_val = str(payload.get('phase') or '')
+                    expected_version = payload.get('version')
                 except Exception:
                     phase_val = ''
+                    expected_version = None
             with _lock:
-                _phase = phase_val
-                phase_now = _phase
-            self._json_response({"ok": True, "phase": phase_now})
+                if expected_version is None or expected_version == _version:
+                    _phase = phase_val
+                    self._json_response({"ok": True, "phase": _phase, "version": _version})
+                else:
+                    self._conflict_response({
+                        "ok": False,
+                        "reason": "version_mismatch",
+                        "current": _version,
+                        "expected": expected_version,
+                    })
         elif self.path == '/reload':
             # Claude POSTs here after rewriting the HTML file (e.g. appending
             # a new iteration section). The browser poller sees the bumped

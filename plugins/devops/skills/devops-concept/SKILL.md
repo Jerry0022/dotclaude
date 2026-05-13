@@ -487,11 +487,19 @@ Branch on it:
 3. **Signal completion to the panel.** Right after the implementation work
    is done — and BEFORE the iteration append + `/reload` in Step 5c — POST
    the implemented phase so the submit panel's third progress step lights
-   up while the user is still looking at it:
+   up while the user is still looking at it. Pass the `_version` noted in
+   Step 5a so a stale worker cannot pin "implemented" onto a newer
+   submission:
    ```bash
    curl -s -X POST -H "Content-Type: application/json" \
-        -d '{"phase":"implemented"}' http://localhost:$PORT/status
+        -d "{\"phase\":\"implemented\",\"version\":$NOTED_VERSION}" \
+        http://localhost:$PORT/status
    ```
+   The server responds 409 if a newer `POST /decisions` has landed since
+   Step 5a — in that case the user re-submitted and our implement work is
+   superseded, so skip the rest of Step 5b (no /reload, no /reset) and
+   loop back to Step 5a to fetch the new payload.
+
    The browser polls `/decisions` every 5 s and reads `_phase` from the
    response — so the ✓ next to "Implementierung abgeschlossen" appears
    within ~5 s. The subsequent `/reload` (Step 5c) replaces the panel

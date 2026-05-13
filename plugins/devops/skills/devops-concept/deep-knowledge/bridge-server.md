@@ -141,25 +141,37 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    concept session then sits behind a green "Claude verbunden" indicator
    that never actually was true.
 
-   Do both halves and assert on the response:
+   Do a **pre/post compare**, not just `claude_ts > 0`. A bare check
+   passes on any process that has ever seen a heartbeat — including a
+   stale bridge left running on the same port from a prior session. We
+   need proof that *our* POST landed on the running handler.
 
    ```bash
-   # (a) Claude pulse
+   # (a) Read claude_ts BEFORE our POST.
+   pre=$(curl -s --max-time 3 http://localhost:$PORT/heartbeat \
+     | python -c "import sys,json; print(int(json.load(sys.stdin).get('claude_ts') or 0))" \
+     2>/dev/null)
+   pre=${pre:-0}
+
+   # (b) Send Claude pulse.
    curl -s -X POST http://localhost:$PORT/heartbeat > /dev/null
 
-   # (b) Read back. The server returns claude_ts in MILLISECONDS since
-   #     epoch (same units as JS Date.now()) — see § Timestamp unit
-   #     convention above. A claude_ts of 0 means the POST never landed
-   #     on the running process (likely a stale port or PID mismatch).
-   verify=$(curl -s --max-time 3 http://localhost:$PORT/heartbeat \
-     | python -c "import sys,json; d=json.load(sys.stdin); print('OK' if int(d.get('claude_ts') or 0) > 0 else 'FAIL')")
+   # (c) Read claude_ts AFTER our POST. The server returns ms since epoch
+   #     (same units as JS Date.now()) — see § Timestamp unit convention
+   #     above. Our POST must have advanced the timestamp; if post <= pre,
+   #     either the POST never landed on the intended fresh bridge or the
+   #     bridge is wedged.
+   post=$(curl -s --max-time 3 http://localhost:$PORT/heartbeat \
+     | python -c "import sys,json; print(int(json.load(sys.stdin).get('claude_ts') or 0))" \
+     2>/dev/null)
+   post=${post:-0}
 
-   if [ "$verify" != "OK" ]; then
-     echo "Bridge server on port $PORT did not echo a fresh heartbeat — aborting."
+   if [ "$post" -le "$pre" ]; then
+     echo "Bridge server on port $PORT did not advance claude_ts ($pre -> $post) — aborting."
      kill $SERVER_PID 2>/dev/null
      rm -f .claude/concept-active.json
      # Tell the user; DO NOT proceed to step 6 (opening the browser would
-     # land on a dead bridge).
+     # land on a dead or stale bridge).
      exit 1
    fi
    ```
@@ -167,9 +179,10 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    The 3-second timeout matters: a hung TCP connect is the failure mode
    we are trying to catch, not a slow JSON response. If you cannot run
    the `python -c` snippet for some reason (locked-down environment),
-   substitute any tool that parses the JSON and checks `claude_ts > 0`
-   — never accept HTTP 200 alone, because the daemon self-pulse keeps
-   `server_ts` fresh even when the request-handling thread is wedged.
+   substitute any tool that parses the JSON and compares `claude_ts`
+   numerically — never accept HTTP 200 alone, because the daemon
+   self-pulse keeps `server_ts` fresh even when the request-handling
+   thread is wedged.
 
 6. Open in Edge (reuses the running instance, adds a tab):
    ```bash

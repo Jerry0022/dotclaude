@@ -2158,6 +2158,14 @@ function updateStatusSteps(data) {
     }
   }
   if (data && data._phase === 'implemented' && _submittedAction === 'implement') {
+    // implemented implies received — if /status arrives before the cron's
+    // /pending=true has stamped _picked_up_at (rare but possible: Claude
+    // POSTed /status before its first /pending fetch landed), step 2 must
+    // still flip to done so the list stays monotonically consistent.
+    const recv = _stepEl('received');
+    if (recv && recv.dataset.state !== 'done') {
+      _setStep('received', 'done', '✓');
+    }
     const impl = _stepEl('implemented');
     if (impl && !impl.hidden && impl.dataset.state !== 'done') {
       _setStep('implemented', 'done', '✓');
