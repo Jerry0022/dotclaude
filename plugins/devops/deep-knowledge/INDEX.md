@@ -15,6 +15,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [claude-directory-structure.md](claude-directory-structure.md) | Claude Directory Structure Convention | All Claude Code configuration belongs inside `.claude/`. Nothing Claude-specific |
 | [code-defaults.md](code-defaults.md) | Code Defaults | Standard coding conventions enforced across all projects using the devops plu... |
 | [codex-integration.md](codex-integration.md) | Codex Integration | Cross-cutting reference for all points where `codex-plugin-cc` skills are |
+| [content-conventions.md](content-conventions.md) | Content Conventions — Sizing & Self-Reference | How to size and structure project-persistent content (CLAUDE.md, skills, |
 | [decision-format.md](decision-format.md) | Decision Format | When presenting multiple options (via AskUserQuestion or inline), use this |
 | [desktop-testing.md](desktop-testing.md) | Automated Desktop Testing (Computer Use) | Rules for when and how Claude takes over the desktop to run visual UI tests |
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |

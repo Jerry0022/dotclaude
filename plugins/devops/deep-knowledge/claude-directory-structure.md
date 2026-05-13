@@ -12,6 +12,7 @@ should live at root level (except `CLAUDE.md` and `.claudeignore`).
 └── .claude/
     ├── commands/                ← Slash commands (tracked)
     ├── skills/                  ← Project skills + plugin extensions (tracked)
+    ├── deep-knowledge/          ← Project reference docs (tracked, optional)
     ├── hooks/                   ← Hook scripts (tracked)
     ├── scripts/                 ← Claude-specific helpers (tracked)
     ├── agents/                  ← Agent definitions (tracked)
@@ -43,3 +44,12 @@ Users extend plugin skills by creating files in their project:
 ```
 
 These are read by the plugin skill's Step 0 (Load Extensions).
+
+## Project-level deep-knowledge
+
+Projects may keep reference docs at `{project}/.claude/deep-knowledge/<topic>.md`
+— mirrors the plugin's `plugins/devops/deep-knowledge/` layout. Used for
+architecture notes, data-flow diagrams, conventions, and anything else that
+exceeds the CLAUDE.md ~20-line budget. Referenced from `CLAUDE.md` via a
+one-line pointer. The `/devops-learn` skill writes here for project-specific
+reference content (see `content-conventions.md`).
