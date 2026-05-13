@@ -133,9 +133,9 @@ question: "How should the agents work?"
 header: "Mode"
 options:
   - label: "Background (recommended)"
-    description: "Agents run autonomously in the background. You get a single final report."
+    description: "Agents run autonomously. Single final report at the end."
   - label: "Interactive"
-    description: "Agents ask on decisions and stream interim results inline in chat."
+    description: "Agents actively involve you on design/concept decisions — AskUserQuestion for short trade-offs, /devops-concept for richer comparisons. Expect ≥1 checkpoint per wave."
 ```
 
 **de:**
@@ -144,9 +144,9 @@ question: "Wie sollen die Agents arbeiten?"
 header: "Modus"
 options:
   - label: "Hintergrund (Recommended)"
-    description: "Agents arbeiten autonom im Hintergrund. Du bekommst am Ende einen Gesamtbericht."
+    description: "Agents arbeiten autonom. Am Ende ein Gesamtbericht."
   - label: "Interaktiv"
-    description: "Agents fragen bei Entscheidungen nach und liefern Zwischenergebnisse inline im Chat."
+    description: "Agents binden dich aktiv bei Design-/Konzeptentscheidungen ein — AskUserQuestion für kurze Trade-offs, /devops-concept für komplexere Vergleiche. Rechne mit ≥1 Checkpoint pro Wave."
 ```
 
 Store the result as `$EXEC_MODE` (`background` or `interactive`).
@@ -166,6 +166,11 @@ Collaboration protocol (handoffs, merge order, shipping): `deep-knowledge/agent-
 - **Interactive** (`$EXEC_MODE`): Use interaction directive "Interactive" from the
   orchestration doc. Spawn in foreground. Present interim results after each wave
   with inline analysis text.
+  The **orchestrator itself** also follows the Engagement Rules — for
+  cross-wave conceptual decisions (overall approach, contract shape between
+  waves, evaluation criteria, scope cuts) use `AskUserQuestion` or
+  `/devops-concept` *before* spawning the relevant wave, not only inside it.
+  Treat the user as a collaborator on the plan, not just a recipient of results.
 
 QA Wave testing protocol and single-agent shortcut: see `deep-knowledge/agent-orchestration.md`
 § QA Wave — Testing Protocol and § Single-Agent Shortcut.
