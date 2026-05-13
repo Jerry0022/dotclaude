@@ -35,6 +35,8 @@ function latestMtime(dir, depth) {
   return max
 }
 
+// Cosmetic-only: used in completion-card display for file-only mode.
+// NOT a stable identity token — collisions within 1s, depth limited to 2.
 function pseudoCommit(mtimeMs) {
   const ts = Math.floor(mtimeMs / 1000)
   return createHash("sha1").update("mtime-" + ts).digest("hex").slice(0, 7)

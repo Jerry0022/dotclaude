@@ -128,9 +128,11 @@ Configure how `/devops-ship` delivers the release by setting a `deliver:` field 
 No extension needed. `/devops-ship` creates a PR via `gh`, merges it, and pushes the
 tag. This is the built-in behavior when no `deliver:` field is present.
 
-### 2. `ssh-rsync`
+### 2. `ssh-rsync` *(future work)*
 
-Copies build output to a remote server after the PR merges.
+Planned extension that will copy build output to a remote server after the PR merges.
+Currently the value is accepted but falls through to `none` — the documented schema is
+stable so consumer reference.md files can be authored now.
 
 ```yaml
 # .claude/skills/ship/reference.md
@@ -139,11 +141,12 @@ target: user@host:/var/www/app
 rsync_args: ["-az", "--delete"]
 ```
 
-Prerequisites: SSH key in `~/.ssh/` and host in `known_hosts`.
+Prerequisites (when implemented): SSH key in `~/.ssh/` and host in `known_hosts`.
 
-### 3. `ha-rest`
+### 3. `ha-rest` *(future work)*
 
-Pushes config to a Home Assistant instance after ship.
+Planned extension that will push config to a Home Assistant instance after ship.
+Currently the value is accepted but falls through to `none`.
 
 ```yaml
 # .claude/skills/ship/reference.md
@@ -152,8 +155,8 @@ base_url: http://homeassistant.local:8123
 token_env: HA_TOKEN
 ```
 
-After delivering, the consumer calls `POST /api/services/homeassistant/reload_core_config`.
-Canonical use case: shipping HA YAML configs managed in git.
+When implemented, the handler will `POST /api/services/homeassistant/reload_core_config`
+after upload. Canonical use case: shipping HA YAML configs managed in git.
 
 ### 4. `none`
 

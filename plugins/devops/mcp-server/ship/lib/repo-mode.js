@@ -1,32 +1,25 @@
 import { execFileSync } from "node:child_process"
 
-const cache = new Map()
+// No cache: long-lived MCP server could see git init / remote changes
+// between calls. Each detectRepoMode runs <5ms; staleness is the bigger risk.
 
 export function detectRepoMode(cwd) {
-  if (cache.has(cwd)) return cache.get(cwd)
-
-  let mode
   try {
     execFileSync("git", ["rev-parse", "--is-inside-work-tree"], {
       cwd, encoding: "utf8", stdio: "ignore",
     })
   } catch {
-    mode = "none"
-    cache.set(cwd, mode)
-    return mode
+    return "none"
   }
 
   try {
     execFileSync("git", ["remote", "get-url", "origin"], {
       cwd, encoding: "utf8", stdio: "ignore",
     })
-    mode = "git"
+    return "git"
   } catch {
-    mode = "git-no-remote"
+    return "git-no-remote"
   }
-
-  cache.set(cwd, mode)
-  return mode
 }
 
 export function isGitRepo(cwd) {
