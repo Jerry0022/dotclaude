@@ -1,6 +1,11 @@
 # Changelog
 
-<<<<<<< HEAD
+## [0.69.1] — 2026-05-13
+
+### Changed
+
+- **plugins/devops/skills/devops-learn/SKILL.md** + **plugins/devops/skills/devops-claude-md-lint/SKILL.md** — `/devops-learn` now delegates CLAUDE.md size and structure checks to `/devops-claude-md-lint` instead of "mental line counts". Step 5a (plugin repo) and Step 5c (consumer project) both invoke the lint skill via the Skill tool after any CLAUDE.md edit; Step 6 relays the lint output instead of re-counting lines. Inline duplication of the ~20-line soft cap removed — single source of truth is `deep-knowledge/content-conventions.md`, referenced explicitly with the canonical "target ~20 lines, re-route above ~25" note kept inline as a bias reminder so the soft cap does not collapse into the lint's hard `>25` warning threshold. `/devops-claude-md-lint` description clarified to distinguish auto-trigger filtering (still off for CLAUDE.md content edits) from explicit invocation by other skills (now allowed and documented). Closes the only "inline duplication" gap surfaced by an audit of plugin-wide CLAUDE.md handling — `/devops-ship` (Step 7) still says "Never touch CLAUDE.md" and stays correct as-is
+
 ## [0.69.0] — 2026-05-13
 
 ### Changed
