@@ -1,0 +1,30 @@
+{
+  "profile": "cli-node",
+  "description": "Node.js CLI tool. No browser. npm test + manual CLI run with fixture arguments.",
+  "detection": {
+    "files_required": ["package.json"],
+    "files_optional": [],
+    "package_json_deps": []
+  },
+  "tool_chain": [
+    {
+      "step": 1,
+      "tool": "Bash(npm test)",
+      "purpose": "Run the test suite"
+    },
+    {
+      "step": 2,
+      "tool": "Bash(node <entrypoint> <fixture-args>)",
+      "purpose": "Manual CLI run with representative fixture arguments to verify output"
+    },
+    {
+      "step": 3,
+      "tool": "Grep",
+      "purpose": "Assert expected output patterns in CLI stdout"
+    }
+  ],
+  "viewports": [],
+  "allowed_actions": ["read", "run_tests", "run_cli"],
+  "blocked_actions": ["computer-use", "browser-actions"],
+  "must_ask_triggers": []
+}

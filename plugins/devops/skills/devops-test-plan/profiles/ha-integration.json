@@ -1,0 +1,30 @@
+{
+  "profile": "ha-integration",
+  "description": "Home Assistant custom integration (Python). No browser. Pytest + manifest validation only.",
+  "detection": {
+    "files_required": ["custom_components"],
+    "files_optional": ["custom_components/*/manifest.json", "tests/"],
+    "package_json_deps": []
+  },
+  "tool_chain": [
+    {
+      "step": 1,
+      "tool": "Bash(python -m compileall -q custom_components)",
+      "purpose": "Syntax-check all Python source files in the integration"
+    },
+    {
+      "step": 2,
+      "tool": "Bash(pytest)",
+      "purpose": "Run pytest suite if a tests/ directory exists"
+    },
+    {
+      "step": 3,
+      "tool": "Read + Grep",
+      "purpose": "Validate manifest.json schema (required fields: domain, name, version, etc.)"
+    }
+  ],
+  "viewports": [],
+  "allowed_actions": ["read", "run_tests"],
+  "blocked_actions": ["computer-use", "browser-actions"],
+  "must_ask_triggers": []
+}

@@ -1,0 +1,25 @@
+{
+  "profile": "lib",
+  "description": "JavaScript / TypeScript library. No app entry point. npm test + build verification only.",
+  "detection": {
+    "files_required": ["package.json"],
+    "files_optional": [],
+    "package_json_deps": []
+  },
+  "tool_chain": [
+    {
+      "step": 1,
+      "tool": "Bash(npm test)",
+      "purpose": "Run the test suite"
+    },
+    {
+      "step": 2,
+      "tool": "Bash(npm run build)",
+      "purpose": "Verify build succeeds and dist artifacts are produced (run only if build script exists)"
+    }
+  ],
+  "viewports": [],
+  "allowed_actions": ["read", "run_tests"],
+  "blocked_actions": ["computer-use", "browser-actions", "package-publish"],
+  "must_ask_triggers": []
+}

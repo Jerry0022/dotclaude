@@ -1,0 +1,30 @@
+{
+  "profile": "generic",
+  "description": "Fallback profile for unrecognized project types. Tries standard test commands; falls back to manual review.",
+  "detection": {
+    "files_required": [],
+    "files_optional": ["package.json", "requirements.txt", "pyproject.toml"],
+    "package_json_deps": []
+  },
+  "tool_chain": [
+    {
+      "step": 1,
+      "tool": "Bash(npm test)",
+      "purpose": "Try npm test if package.json is present"
+    },
+    {
+      "step": 2,
+      "tool": "Bash(pytest)",
+      "purpose": "Try pytest if Python test files are found"
+    },
+    {
+      "step": 3,
+      "tool": "Read + manual review",
+      "purpose": "If no test runner succeeds, read changed files and summarize what changed for user review"
+    }
+  ],
+  "viewports": [],
+  "allowed_actions": ["read"],
+  "blocked_actions": ["computer-use"],
+  "must_ask_triggers": []
+}

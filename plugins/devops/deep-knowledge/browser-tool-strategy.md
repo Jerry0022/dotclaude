@@ -1,5 +1,8 @@
 # Browser Tool Strategy
 
+> **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.md](test-autonomy.md).
+> This file retains Edge Credo + tool waterfall (Chrome-MCP → Playwright → Preview).
+
 Cross-cutting rules for browser interaction across all skills. Every skill that
 needs to read, navigate, click, or evaluate JavaScript in a browser MUST follow
 this strategy. Do NOT duplicate browser tool selection logic in individual skills.
@@ -49,19 +52,33 @@ Always use the user's **installed Edge instance** with their active profile
 The user's context (logged-in state on claude.ai, GitHub, etc.) is essential.
 MCP-created browser windows run without this context and break authentication.
 
-### 4. Tab Reuse — No New Windows
+### 4. Testing Window — Always Separate
+
+Claude's test work runs in a **separate Edge window** from the user's working
+tabs, using the user's main profile so logins/cookies still work.
 
 When Edge is already running:
-- **Open a new tab** in the existing Edge window — never a new Edge window
-- Use `tabs_create_mcp` (Chrome MCP) or `start "" msedge "{url}"` (which
-  adds a tab to the running instance, not a new window)
+- **Always open a new Edge window** via
+  `start "" msedge --new-window "{url}"` for test/automation work
+- The new window inherits the user's profile → all cookies, logins, and
+  extensions are available (including the Chrome-MCP extension itself)
+- Edge groups same-profile windows under one taskbar icon — that's a Windows+Edge
+  design limitation. Visual separation via Alt-Tab and window list is preserved.
+- Once Claude's testing window exists, **reuse tabs within it** via Chrome MCP
+  `tabs_create_mcp` / `tabs_context_mcp`. Do NOT spawn additional windows per tab.
 
 When Edge is NOT running:
-- Launch a new Edge instance: `start "" msedge "{url}"`
-- This is the ONLY case where a new Edge window is acceptable
+- Launch normally: `start "" msedge "{url}"` — the new instance is the only window.
+- Subsequent test tabs reuse this window (no further `--new-window` flag needed).
 
-**Never use `--new-window` or `--app=` flags** — they create isolated windows
-outside the user's normal tab context.
+**Never use `--app=` flag** — it produces a chromeless window that loses tab
+context and confuses tab-group deduplication.
+
+**Rationale for the separation:** Before this rule, Claude's test tabs landed
+inside the user's working window — confusing because Tab Group color helped
+but didn't prevent accidental tab switching. The separate window gives a clean
+visual handoff while keeping the shared profile so HA, GitHub, Supabase, etc.
+logins continue to work without per-service re-authentication.
 
 ### 5. Background and Autonomous Mode — Same Rules
 

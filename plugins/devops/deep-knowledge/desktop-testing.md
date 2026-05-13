@@ -1,5 +1,8 @@
 # Automated Desktop Testing (Computer Use)
 
+> **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.md](test-autonomy.md).
+> This file retains Computer-use desktop takeover flow (only when user explicitly requested).
+
 Rules for when and how Claude takes over the desktop to run visual UI tests
 automatically using the Computer Use MCP tools.
 

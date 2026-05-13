@@ -1,5 +1,8 @@
 # Visual Verification Methods
 
+> **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.md](test-autonomy.md).
+> This file retains Method selection table (screenshot vs snapshot vs simulated output).
+
 How to verify changes visually. Referenced by the completion flow hook.
 
 ## Method selection

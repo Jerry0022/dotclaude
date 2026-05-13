@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.14.0
+ * @version 0.15.0
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -127,29 +127,37 @@ process.stdin.on('end', () => {
     'Card LAST, nothing after the closing ---.',
   );
 
+  if (editCount === 1) {
+    lines.push(
+      '',
+      '[test-autonomy] First code edit this session.',
+      'Before any test action: invoke /devops-test-plan to pin $TEST_PROFILE.',
+      'Then follow the profile tool_chain — do NOT default to computer-use.',
+      'Ask user ONLY at the must-ask triggers listed in $TEST_PROFILE.must_ask_triggers',
+      '(see deep-knowledge/test-autonomy.md for the canonical list — 3 triggers total).',
+    );
+  }
+
   if (editCount >= 5) {
     lines.push(
       '',
       `SHIP: ${editCount} code edits this session. Recommend /devops-ship when task is done.`,
     );
-
-    // --- 2b. Desktop testing prompt for UI projects (5+ edits) ---
+    // Desktop-takeover question — only inject if profile lists packaged_electron_final_test as must-ask
     const lang = getLocale(hook.session_id);
     lines.push(
       '',
       '[desktop-testing] 5+ code edits reached.',
-      'BEFORE rendering the completion card with variant "test", check:',
-      '  1. Can the project be tested visually? (preview server running, desktop app,',
-      '     or ANY project with a startable UI — web, Electron, Tauri, game, etc.)',
-      '  2. Is the variant "test" (code edits + app/service startable)?',
-      'If BOTH true → ask the user via AskUserQuestion:',
+      'BEFORE asking user for desktop takeover, check $TEST_PROFILE.must_ask_triggers:',
+      '  - If "packaged_electron_final_test" is listed AND the change touched main-process code → ask',
+      '  - Otherwise → skip the question entirely, use snapshot/screenshot via Chrome-MCP instead',
+      'If asking, use the existing AskUserQuestion template below:',
       `  Header: "${t('header', lang, DESKTOP_TEST_DICT)}"`,
       `  Question: "${t('question', lang, DESKTOP_TEST_DICT)}"`,
       `  Warning in question: "${t('warning', lang, DESKTOP_TEST_DICT)}"`,
       `  Options: "${t('optYes', lang, DESKTOP_TEST_DICT)}" / "${t('optNo', lang, DESKTOP_TEST_DICT)}"`,
-      '  If yes → run Computer Use visual tests (see deep-knowledge/desktop-testing.md)',
-      '  If no → use manual userTest steps in the completion card as usual.',
-      'If NOT a UI project → skip silently, use normal test flow.',
+      '  If yes → computer-use visual tests (see deep-knowledge/desktop-testing.md)',
+      '  If no → manual userTest steps in completion card',
     );
   }
 

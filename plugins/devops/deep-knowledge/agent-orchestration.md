@@ -1,5 +1,8 @@
 # Agent Orchestration
 
+> **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.md](test-autonomy.md).
+> This file retains Agent wave model + QA testing protocol.
+
 Shared orchestration logic for agent selection, prompting, and wave execution.
 Referenced by `/devops-agents` and `/devops-autonomous`.
 

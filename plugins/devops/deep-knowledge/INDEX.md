@@ -7,17 +7,18 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 |------|-------|---------|
 | [agent-collaboration.md](agent-collaboration.md) | Agent Collaboration Protocol | How agents work together on multi-role tasks. |
 | [agent-conventions.md](agent-conventions.md) | Agent Naming & Collaboration Conventions | [role:X · Type] Task description |
-| [agent-orchestration.md](agent-orchestration.md) | Agent Orchestration | Shared orchestration logic for agent selection, prompting, and wave execution. |
+| [agent-orchestration.md](agent-orchestration.md) | Agent Orchestration | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [agent-proactivity.md](agent-proactivity.md) | Proactive Agent Orchestration | Cross-cutting rule for when to involve specialized agents without explicit us... |
 | [autonomous-execution.md](autonomous-execution.md) | Autonomous Execution — Gate, Guardrails, Late-Permission Protocol | Detailed execution rules for `devops-autonomous` Step 5. Read this at the sta... |
 | [browser-file-urls.md](browser-file-urls.md) | Browser File URLs (Windows + Git-Bash) | Cross-cutting rule: whenever a skill opens a local HTML file in a browser |
-| [browser-tool-strategy.md](browser-tool-strategy.md) | Browser Tool Strategy | Cross-cutting rules for browser interaction across all skills. Every skill that |
+| [browser-tool-strategy.md](browser-tool-strategy.md) | Browser Tool Strategy | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [claude-directory-structure.md](claude-directory-structure.md) | Claude Directory Structure Convention | All Claude Code configuration belongs inside `.claude/`. Nothing Claude-specific |
 | [code-defaults.md](code-defaults.md) | Code Defaults | Standard coding conventions enforced across all projects using the devops plu... |
 | [codex-integration.md](codex-integration.md) | Codex Integration | Cross-cutting reference for all points where `codex-plugin-cc` skills are |
 | [content-conventions.md](content-conventions.md) | Content Conventions — Sizing & Self-Reference | How to size and structure project-persistent content (CLAUDE.md, skills, |
 | [decision-format.md](decision-format.md) | Decision Format | When presenting multiple options (via AskUserQuestion or inline), use this |
-| [desktop-testing.md](desktop-testing.md) | Automated Desktop Testing (Computer Use) | Rules for when and how Claude takes over the desktop to run visual UI tests |
+| [desktop-testing.md](desktop-testing.md) | Automated Desktop Testing (Computer Use) | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
+| [edge-profiles.md](edge-profiles.md) | Edge Profiles | Configuration and usage rules for the two Microsoft Edge profiles used by thi... |
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |
 | [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/devops-commit`, `/devops-ship`, and h... |
 | [local-llm-delegation.md](local-llm-delegation.md) | Local LLM Delegation | Cross-cutting rule for all implementation agents (core, frontend, feature, ai) |
@@ -25,7 +26,9 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [merge-safety.md](merge-safety.md) | Merge Safety — Parallel Development | Cross-cutting reference for preventing silent overwrites when multiple develo... |
 | [plugin-behavior.md](plugin-behavior.md) | Plugin Behavior Rules | Core behavioral rules enforced by the devops plugin. |
 | [pre-mortem.md](pre-mortem.md) | Pre-Mortem / Red-Team Self-Critique | Cross-cutting rule for reducing blind spots before non-trivial changes. |
+| [responsive-testing.md](responsive-testing.md) | Responsive Testing — Multi-Viewport Verification via Edge DevTools | Multi-device web apps require verification at phone, tablet, and desktop |
 | [skill-extension-guide.md](skill-extension-guide.md) | Skill Extension Guide — For Plugin Integrators | How to customize devops skills and agents for your project. |
-| [test-strategy.md](test-strategy.md) | Test Execution Strategy | Cross-cutting rules for when and how to test. Referenced by the completion flow |
+| [test-autonomy.md](test-autonomy.md) | Test Autonomy — Cross-Cutting Rules for Test Tool Selection | Cross-cutting rule for every skill, hook, and agent that performs or triggers |
+| [test-strategy.md](test-strategy.md) | Test Execution Strategy | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [tool-selection.md](tool-selection.md) | Tool Selection (Windows) | Preferred tool usage when operating on Windows environments. |
-| [visual-verification.md](visual-verification.md) | Visual Verification Methods | How to verify changes visually. Referenced by the completion flow hook. |
+| [visual-verification.md](visual-verification.md) | Visual Verification Methods | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
