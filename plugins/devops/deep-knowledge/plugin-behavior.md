@@ -86,3 +86,12 @@ All skills and agents support three-layer extensions:
 Plugin default → User global (~/.claude/) → Project ({project}/.claude/)
 ```
 Most specific wins. See `CONVENTIONS.md` for details.
+
+## Issue Creation — Always Delegate
+
+When a skill or hook needs to create a GitHub issue, it MUST delegate to
+`/devops-new-issue` via the **Skill** tool — never call `gh issue create`
+directly. The new-issue skill enforces title format, label set, milestone,
+project-board placement, and loads project-specific extensions from
+`{project}/.claude/skills/new-issue/`. Direct `gh issue create` calls
+bypass all of that and silently drift from the project's conventions.
