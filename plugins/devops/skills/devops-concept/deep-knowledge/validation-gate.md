@@ -7,7 +7,7 @@ template-specific extras selected by `<html data-template="...">`.
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 22 patterns, regardless of template:
+Every concept page must contain these 27 patterns, regardless of template:
 
 | # | Pattern to grep | Purpose |
 |---|----------------|---------|
@@ -34,6 +34,11 @@ Every concept page must contain these 22 patterns, regardless of template:
 | 20 | `submit-implement-btn` | Secondary submit: implement action (real changes) |
 | 21 | `querySelectorAll('input, select, textarea')` inside `collectDecisions` | Generic form catch-all (no hand-listed selectors per field) |
 | 22 | `data-active]` selector inside `collectDecisions` | Catch-all is scoped to the active iteration only |
+| 23 | `status-steps` | Submit-panel progress list (Übermittelt → Verarbeitet → Implementiert) — see templates.md § Submit Progress Steps |
+| 24 | `updateStatusSteps` | Wires `_picked_up_at` / `_phase` from `/decisions` polling into the progress list |
+| 25 | `data.claude_ts` inside `pollHeartbeat` | The poller MUST read JSON and assign `claude_ts` (not `server_ts`, not the raw response object). HTTP-200 alone is not enough — the daemon self-pulse keeps `server_ts` fresh forever, so an HTTP-only check leaves the indicator green while Claude's cron is dead. |
+| 26 | `b.disabled = ` (or `btn.disabled = `) inside `checkClaudeConnection` | The heartbeat checker MUST actually toggle the submit buttons' `disabled` property — a visual-only warning lets the user keep submitting into a black hole during a stale heartbeat. |
+| 27 | `Date.now() - _lastHeartbeatTs` (millis vs. millis) | Both sides of the staleness comparison MUST be in milliseconds since the Unix epoch. Server returns `claude_ts` in ms; browser uses `Date.now()`. Never divide either side by 1000 — a millis-vs-seconds mix-up produces a giant negative age that always evaluates as "fresh" and silently hides outages. |
 
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
 at the post-generation gate. See § Generic Form Collection below for the
@@ -157,6 +162,9 @@ This is a **blocking gate** — no exceptions, no "this page doesn't need it".
 - localStorage missing → user selections lost on reload or tab close
 - `data-template` missing → `collectDecisions` can't pick the right branch
 - Prototype without `data-screen` → feedback dock renders empty
+- Heartbeat poller does an HTTP-only check (no `await r.json()` + `claude_ts` assignment) → indicator stays green forever because the server self-pulse always returns 200, even when Claude's cron is dead
+- Heartbeat checker only toggles a CSS class, never sets `disabled` on the submit buttons → user can keep clicking submit during a stale heartbeat, every click rots in the bridge unnoticed
+- Staleness math mixes seconds and milliseconds (`Date.now() / 1000`, or `_lastHeartbeatTs * 1000`) → comparison flips negative, page renders "Claude verbunden" even when the heartbeat is hours old
 
 The patterns in `templates.md` (§ Claude Connection Heartbeat, § Submit
 Handler, § State Persistence, § Template: prototype, § Template: free)
