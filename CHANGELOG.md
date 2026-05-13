@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.73.0] — 2026-05-13
+
+### Added
+
+- **plugins/devops/mcp-server/ship/lib/repo-mode.js** — new lib exporting `detectRepoMode(cwd)` returning `"git" | "git-no-remote" | "none"` and `isGitRepo(cwd)`. Foundation for non-VCS / non-remote project support. No module-level cache: the MCP server is long-lived and stale repo-mode readings would silently break ship pipelines after `git init` / `git remote add`. Each call costs <5 ms (two `git rev-parse` invocations max)
+- **plugins/devops/mcp-server/ship/tools/preflight.js** — `repoMode === "none"` short-circuit returns a synthetic preflight result with `mode: "file-only"`, pseudo-branch `<file-only>`, and a cosmetic pseudo-commit derived from `floor(latestMtime/1000)` (SHA-1 short, depth-2 directory scan, ignores `.git`/`node_modules`). `git-no-remote` mode skips fetch / unpushed-count / base-ahead / file-overlap checks (all require `origin/` refs) and surfaces a warning instead of errors. New top-level `mode` field on the result so downstream tools can branch
+- **plugins/devops/mcp-server/ship/tools/release.js** — early-return for `repoMode === "none"` (`{ success: true, skipped: true, reason: "file-only-mode", delivered: "none" }`) and `"git-no-remote"` (`delivered: "local-commit-only"`). No `git push` / `gh pr create` attempted when there's nothing to push to. Result carries `mode` field
+- **plugins/devops/mcp-server/index.js** — new completion-card variant `ready-files` and a `state.mode === "file-only"` rendering branch in `renderState()` that emits `📂 files: N modified · delivered: <target>` instead of the branch/commit/pushed/merged segments. Misleading `state.branch || 'main'` fallback removed — empty branch now omits the branch segment entirely instead of fabricating `main`
+- **plugins/devops/hooks/user-prompt-submit/prompt.ship.detect.js** — `isGitRepo(cwd)` guard wraps the ship-instruction injection block (placed AFTER throttle / session-id detection so the cheap exits still happen first). In non-git directories the hook silently exits 0 instead of injecting a `MANDATORY Skill("devops-ship")` directive that would crash preflight downstream
+- **plugins/devops/hooks/user-prompt-submit/prompt.git.sync.js** — `isGitRepo(cwd)` guard wraps the `scripts/git-sync.js` spawn so non-git dirs no longer produce stderr noise on every user prompt. Both hooks duplicate the `isGitRepo()` helper inline (CommonJS) rather than importing the ESM `repo-mode.js` lib — intentional to avoid ESM/CJS interop in the hook path
+- **plugins/devops/skills/devops-commit/SKILL.md** — new **Step 0.5 — Repo-mode check** between the existing `disable-model-invocation` note and Step 1 intent detection. `git rev-parse --is-inside-work-tree` runs first; on non-zero exit the skill emits a structured abort message pointing to either `git init` or the new delivery-target extension in `.claude/skills/ship/reference.md`. Replaces the previous hard-crash on `git status` in non-git dirs
+- **plugins/devops/skills/devops-repo-health/SKILL.md** — new **Step 0 — Repo-mode check** before the SAFETY block. Same `git rev-parse --is-inside-work-tree` guard with a tailored abort message ("Repo health analysiert git-Branches/PRs/Worktrees — in einer Nicht-Git-Dir gibt es nichts zu prüfen")
+- **plugins/devops/deep-knowledge/skill-extension-guide.md** — new top-level `## Delivery targets` section with four worked examples for `{project}/.claude/skills/ship/reference.md`: `git+gh` (default, no extension), `ssh-rsync` (marked *future work* — schema stable but handler not yet implemented), `ha-rest` (marked *future work* — Home Assistant REST + `reload_core_config` planned), `none` (skip delivery entirely). Aligns terminology with `devops-ship/SKILL.md` Step 4a so consumers see consistent "future work" status across both files
+- **plugins/devops/skills/devops-ship/SKILL.md** — new **Step 4a — Delivery extension hook** after the squash-merge traceability section. Documents that `/devops-ship` reads `{project}/.claude/skills/ship/reference.md` for a `deliver:` field, dispatches to `git+gh` (default), `ssh-rsync` (future), `ha-rest` (future), or `none`. Explicit note that the two future handlers fall through to `none` in this release — the extension point is documented for forward compatibility so consumer reference.md files written today remain valid
+
+### Changed
+
+- **plugins/devops/mcp-server/ship/tools/version-bump.js** — "no manifest found" path changed from hard error (`{ success: false, error: ... }`) to soft skip (`{ success: true, skipped: true, reason: "no-manifest" }` for normal git repos, `reason: "no-manifest-in-file-only-mode"` for `repoMode === "none"`). Allows shipping docs-only / config-only repos without forcing a synthetic version manifest. Trade-off acknowledged: previously the hard error gated bad-state ships; consumers shipping git repos without manifests now get through silently — relying on the surrounding pipeline (preflight, build, release) to catch missing essentials
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.72.1 → 0.73.0`
+
 ## [0.72.1] — 2026-05-13
 
 ### Fixed
