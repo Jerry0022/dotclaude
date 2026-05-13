@@ -105,7 +105,7 @@ lines (soft); deep-knowledge unbounded.
 | current (consumer)     | plugin     | **5b.** Skill-extension if it fits; else 5c      |
 | current (consumer)     | project    | **5c.** Project-specific skill or deep-knowledge |
 | other project (any)    | any        | **5d.** Cross-project — issue or prompt          |
-| global / cross-project | any        | **5e.** ASK FIRST — do not auto-write            |
+| global / ambiguous     | any        | **5e.** ASK FIRST — do not auto-write            |
 
 ### 5a — Plugin repo, plugin topic
 
@@ -144,8 +144,11 @@ If a clear skill match exists:
 
 Decide between project-skill and project-deep-knowledge:
 
-- **Reference / explanation / mental model** → `deep-knowledge/`
-  - If `{project}/deep-knowledge/` does not exist, create it
+- **Reference / explanation / mental model** → `{project}/.claude/deep-knowledge/`
+  (mirrors the plugin's `plugins/devops/deep-knowledge/` layout — under
+  `.claude/` so all project-level Claude config sits in one place per
+  `deep-knowledge/claude-directory-structure.md`)
+  - Create `{project}/.claude/deep-knowledge/` if missing
   - Pick or create `<topic>.md` (e.g. `architecture.md`, `data-flow.md`)
   - Append the learning with a short heading
 - **Behavioral rule (when X, do Y)** → project-specific skill
@@ -233,16 +236,10 @@ VERBATIM as the LAST thing in the response.
 
 ## Conventions
 
-Before persisting, apply the rules in
-`plugins/devops/deep-knowledge/content-conventions.md`:
-
-- Soft size caps: CLAUDE.md ~20 lines, SKILL.md ~200 lines, deep-knowledge
-  unbounded. Re-route triggers at ~25 / ~250.
-- **Reference over duplicate** — if the rule restates something an existing
-  skill / agent / hook / deep-knowledge file already says, reference it
-  instead. Extend the referenced doc if it is incomplete; never produce a
-  parallel inferior copy.
-- Tone: imperative, short, capture **why** and **when** the rule applies.
+Before persisting, apply `deep-knowledge/content-conventions.md` —
+specifically its "Size budgets", "Re-route triggers", "Self- and plugin-
+references over command redundancy", and "Tone" sections. They govern every
+write this skill performs.
 
 ## Rules
 
