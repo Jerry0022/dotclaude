@@ -7,7 +7,7 @@
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
  *   Workaround for anthropics/claude-code#14061 — Desktop never runs git pull
  *   on marketplace clones and never rebuilds the plugin cache.
- *   Shares the same update logic as /devops-self-update (see SKILL.md).
+ *   Shares the same update logic as /devops-plugin-update (see SKILL.md).
  *
  *   When a plugin with an MCP server is upgraded mid-session, the running
  *   MCP processes point at the now-deleted old installPath. A sentinel file

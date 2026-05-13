@@ -1,6 +1,6 @@
 ---
-name: devops-self-update
-version: 0.4.0
+name: devops-plugin-update
+version: 0.5.0
 description: >-
   Manually update the devops plugin to latest from GitHub. Delegates to
   ss.plugin.update hook (pull + cache + registry), then adds changelog and
@@ -9,7 +9,7 @@ description: >-
 allowed-tools: Bash(git *), Bash(node *), Read, Glob
 ---
 
-# Self-Update Plugin
+# Plugin Update
 
 Manually trigger a plugin update with user-facing reporting.
 

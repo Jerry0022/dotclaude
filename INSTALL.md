@@ -28,10 +28,10 @@ claude plugin update devops@Jerry0022
 
 Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**.
 
-Alternatively, use the built-in self-update skill:
+Alternatively, use the built-in plugin-update skill:
 
 ```
-/devops-self-update
+/devops-plugin-update
 ```
 
 ## Project-specific extensions (optional)

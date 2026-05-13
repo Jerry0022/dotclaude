@@ -168,7 +168,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 ## Features
 
 - **13 Hooks** — automated guards and triggers across the full session lifecycle
-- **15 Skills** — devops-ship, devops-commit, devops-flow, devops-deep-research, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-self-update, devops-autonomous
+- **15 Skills** — devops-ship, devops-commit, devops-flow, devops-deep-research, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-plugin-update, devops-autonomous
 - **10 Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
@@ -270,7 +270,7 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 | `/devops-refresh-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
 | `/devops-extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
 | `/devops-repo-health` | Explicit | Repository branch hygiene analysis and cleanup |
-| `/devops-self-update` | Explicit | Update the plugin to the latest version from GitHub |
+| `/devops-plugin-update` | Explicit | Update the plugin to the latest version from GitHub |
 | `/devops-claude-md-lint` | Explicit | Audit CLAUDE.md files for size, structure, and token efficiency |
 | `/devops-concept` | Explicit | Interactive HTML page for analysis, plans, concepts, and prototypes |
 | `/devops-agents` | Explicit | Evaluate agents and orchestrate parallel execution |
