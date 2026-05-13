@@ -85,17 +85,31 @@ The calling skill sets the interaction mode for all spawned agents:
 ### Interactive Mode — Engagement Rules
 
 The user chose interactive because they want to shape the work, not just receive
-it. Default to involving them; silent execution is the exception. The user's
-working assumption is that interactive means at least **two separate decision
-points** OR one decision too large/multi-dimensional to describe textually —
-otherwise they would have picked background.
+it. Default to involving them; silent execution is the exception. Their reason
+for picking interactive is usually that the task has **2+ conceptual forks**
+across the run OR one fork too large / multi-dimensional to settle textually —
+otherwise they would have picked background. Match that expectation: even though
+the operational floor below is "≥1 checkpoint per wave", a fully silent
+orchestration is almost certainly wrong for interactive mode.
 
-**Baseline expectation per agent / per wave:** at least one conceptual checkpoint
-with the user, unless the task is mechanically unambiguous (apply a known refactor
-pattern, fix an explicit bug, run tests, mechanical rename). If you genuinely have
-no question worth asking, state that explicitly in the wave summary ("no conceptual
-forks — proceeded directly") so the user can see the silence was intentional, not
-laziness.
+**Precedence rule — what counts as a checkpoint:**
+Ask for **user-visible** decisions and **plan-shaping conceptual forks**
+(architecture pattern, contract shape between waves, scope cuts, public naming,
+strategy picks). Proceed **silently** on implementation details once the
+shaping decisions are fixed (variable layout, internal helper names, file order,
+library minor versions, code style choices already covered by conventions).
+
+**Operational floor — at least one checkpoint per wave** (not per agent), unless
+the wave is mechanically unambiguous (apply a known refactor pattern, fix an
+explicit bug, run tests, mechanical rename). With multiple agents in one wave,
+one shared checkpoint covers the wave — don't fan out the same question per
+agent.
+
+**Reporting silence:**
+- **Sub-agent** — if you genuinely have no fork worth asking about, state that
+  in your return / handoff: `"no conceptual forks — proceeded directly"`.
+- **Orchestrator** — aggregate these signals into the wave summary so the user
+  can see the silence was intentional, not laziness.
 
 **Use `AskUserQuestion` for lightweight, in-chat decisions:**
 - Mode / strategy picks with 2–4 named alternatives
