@@ -56,6 +56,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.step_submitted`         | Submitted                      | Übermittelt |
 | `panel.step_received`          | Claude is processing           | Claude verarbeitet |
 | `panel.step_implemented`       | Implementation complete        | Implementierung abgeschlossen |
+| `panel.step_implemented_active`| Implementation in progress     | Implementierung läuft |
 | `panel.step_waiting`           | Waiting…                       | Warten… |
 | `panel.disconnected_title`     | Claude is not connected        | Claude ist nicht verbunden |
 | `panel.disconnected_hint`      | You can still submit — your click is queued and delivered as soon as Claude is back. | Du kannst trotzdem absenden — der Klick wird gespeichert und gesendet, sobald Claude wieder da ist. |
@@ -226,7 +227,8 @@ the `[ui-locale: ...]` hint produced.
           </li>
           <li data-step="implemented" data-state="pending" hidden>
             <span class="step-icon" aria-hidden="true">○</span>
-            <span class="step-label">{{panel.step_implemented}}</span>
+            <span class="step-label" data-state-label="active">{{panel.step_implemented_active}}</span>
+            <span class="step-label" data-state-label="done">{{panel.step_implemented}}</span>
           </li>
         </ol>
         <p class="submitted-hint">{{panel.submitted_hint}}</p>
@@ -783,7 +785,8 @@ The wiring is a single delegated click handler installed alongside
           </li>
           <li data-step="implemented" data-state="pending" hidden>
             <span class="step-icon" aria-hidden="true">○</span>
-            <span class="step-label">{{panel.step_implemented}}</span>
+            <span class="step-label" data-state-label="active">{{panel.step_implemented_active}}</span>
+            <span class="step-label" data-state-label="done">{{panel.step_implemented}}</span>
           </li>
         </ol>
         <p class="submitted-hint">{{panel.submitted_hint}}</p>
@@ -1671,6 +1674,20 @@ document.addEventListener('DOMContentLoaded', () => {
 @keyframes step-pulse {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
+}
+/* State-dependent step labels. When an <li> carries multiple
+   .step-label[data-state-label] spans, only the one matching the li's
+   current data-state is visible. Used by the "implemented" step where
+   "Implementierung läuft" (active) reads differently than "Implementierung
+   abgeschlossen" (done). Steps without data-state-label spans are
+   unaffected — their plain .step-label stays visible always. */
+.status-steps li .step-label[data-state-label] {
+  display: none;
+}
+.status-steps li[data-state="pending"] .step-label[data-state-label="active"],
+.status-steps li[data-state="active"] .step-label[data-state-label="active"],
+.status-steps li[data-state="done"] .step-label[data-state-label="done"] {
+  display: inline;
 }
 
 /* Waiting dots animation */
