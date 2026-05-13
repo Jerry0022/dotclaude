@@ -225,11 +225,19 @@ to *this* session, not the target project — leave it alone.
 
 1. **Resolve the project memory dir.** The path is
    `~/.claude/projects/<encoded-cwd>/memory/` where `<encoded-cwd>` replaces
-   each `:`, `\`, and `/` in the path with `-`. If the current repo is a
-   worktree, use the **main** project path, not the worktree path (per the
-   existing `feedback_memory_in_main_project` convention) — derive it from
-   `git rev-parse --git-common-dir` (strip the trailing `/.git*` segments).
-   Use Glob to confirm the dir exists; skip silently if not.
+   each `:`, `\`, and `/` in the **canonical absolute path** with `-`. Before
+   encoding: resolve symlinks (`realpath` semantics) and preserve the OS's
+   native drive-letter case (Windows: as reported by `git rev-parse`).
+   If the current repo is a worktree, use the **main** project path, not the
+   worktree path (per the existing `feedback_memory_in_main_project`
+   convention). Derive the main path robustly via
+   `git worktree list --porcelain` and take the first `worktree` entry — that
+   is always the primary checkout. Do NOT trim `git-common-dir`: it fails for
+   `core.worktree`, `core.bare`, separate-git-dir, and submodule layouts.
+   Use Glob to confirm the resulting `~/.claude/projects/<encoded>/memory/`
+   exists; if not, skip Step 6 silently. For non-standard paths (UNC,
+   network shares): if encoding looks ambiguous (e.g. leading `\\server`),
+   skip silently rather than guess.
 
 2. **List candidates.** Glob `feedback_*.md` in that dir AND read `MEMORY.md`
    (which is the index). Skip silently if no `feedback_*` files.
@@ -296,9 +304,10 @@ write this skill performs.
 
 ## Rules
 
-- **Never write** to user feedback memory from this skill — auto-memory owns
-  that channel. The skill **may delete** duplicate `feedback_*.md` entries
-  (Step 6) once the canonical rule is in place, with user confirmation.
+- **Never create or update content in** user feedback memory from this skill
+  — auto-memory owns that channel. The **only** permitted writes are Step 6
+  duplicate-cleanup: deleting matched `feedback_*.md` files and removing
+  their bullets from `MEMORY.md`, both requiring user confirmation per match.
 - **Always** prefer deep-knowledge > skill/extension > CLAUDE.md.
 - **Respect the soft caps** above; re-route to the next-larger container
   before busting CLAUDE.md or SKILL.md targets.
