@@ -357,7 +357,7 @@ and `deep-knowledge/templates.md` § Iteration Tabs for the reference HTML.
 
 ### Post-Generation Validation (mandatory gate)
 
-After writing the HTML file, grep it for the 22 mandatory interactive
+After writing the HTML file, grep it for the 27 mandatory interactive
 patterns (heartbeat, panel states, iteration tabs, section TOC, reload
 polling, generic form-collection catch-all scoped to the active
 iteration, etc.).
@@ -376,8 +376,11 @@ Start the bridge server (`scripts/concept-server.py`) on a random port
 (8700-8999), arm the combined heartbeat + auto-poll cron (fires every
 minute, handles heartbeat + decision pickup + conditional reset), write
 `.claude/concept-active.json` so a future SessionStart can rediscover this
-concept, send the first heartbeat, and open the page in the user's
-existing Edge window.
+concept, **send the first heartbeat AND verify it round-trips with a
+non-zero `claude_ts`** (see `deep-knowledge/bridge-server.md` § Step 5 —
+the read-back is mandatory; a naked POST leaves a dead-bridge failure
+mode invisible until the user submits and gets no response), then open
+the page in the user's existing Edge window.
 
 The state file (`port`, `html_path`, `slug`, `server_pid`, `cron_id`,
 `started_at`) is what makes the concept survivable across Claude restarts:
@@ -481,7 +484,27 @@ Branch on it:
      others marked Verwerfen)
    - For free-template findings: apply the Miteinbeziehen findings as fixes
    - For prototypes: build the designed UI/flow with the feedback applied
-3. After the implementation is done, still append a new iteration that
+3. **Signal completion to the panel.** Right after the implementation work
+   is done — and BEFORE the iteration append + `/reload` in Step 5c — POST
+   the implemented phase so the submit panel's third progress step lights
+   up while the user is still looking at it. Pass the `_version` noted in
+   Step 5a so a stale worker cannot pin "implemented" onto a newer
+   submission:
+   ```bash
+   curl -s -X POST -H "Content-Type: application/json" \
+        -d "{\"phase\":\"implemented\",\"version\":$NOTED_VERSION}" \
+        http://localhost:$PORT/status
+   ```
+   The server responds 409 if a newer `POST /decisions` has landed since
+   Step 5a — in that case the user re-submitted and our implement work is
+   superseded, so skip the rest of Step 5b (no /reload, no /reset) and
+   loop back to Step 5a to fetch the new payload.
+
+   The browser polls `/decisions` every 5 s and reads `_phase` from the
+   response — so the ✓ next to "Implementierung abgeschlossen" appears
+   within ~5 s. The subsequent `/reload` (Step 5c) replaces the panel
+   with the new iteration shortly after.
+4. After the implementation is done, still append a new iteration that
    shows "implementiert — siehe commit {hash}" as a frozen record, so the
    concept page stays the source of truth for what happened
 

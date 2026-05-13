@@ -3,6 +3,26 @@
 The **concept bridge server** (`scripts/concept-server.py`) serves static files
 AND provides HTTP endpoints for heartbeat and decision exchange.
 
+> **Timestamp unit convention (read before writing any client code).**
+> Every timestamp the server exposes — `server_ts`, `claude_ts`, `ts` —
+> is **milliseconds since the Unix epoch**, byte-compatible with JavaScript's
+> `Date.now()`. The browser compares them directly, with no conversion:
+> ```js
+> Date.now() - _lastHeartbeatTs < HEARTBEAT_STALE_MS   // both in ms
+> ```
+> **Never divide either side by 1000.** A snippet copied from elsewhere that
+> assumes seconds-since-epoch (`claude_ts / 1000`, `Date.now() / 1000`) flips
+> the staleness math negative and silently renders "Claude verbunden" forever
+> while submissions rot in the bridge. This is the single most expensive
+> silent-failure mode of the whole concept system, because neither the user
+> nor Claude notices anything is wrong until days later.
+>
+> `_processed_at` and `_picked_up_at` are **ISO-8601 UTC strings** (parsed
+> client-side via `Date.parse`). The split is deliberate: heartbeat math
+> needs cheap numeric comparisons every 5 s, while the processed/pickup
+> markers are read once per cycle and benefit from human-readable
+> serialization in `/decisions` payloads.
+
 1. Find the bridge server script:
    ```bash
    PLUGIN_ROOT=$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-server.py 2>/dev/null | head -1)
@@ -68,6 +88,14 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    submission. `/pending` collapses the signal to a strict boolean so the
    cron body cannot drift into false negatives between ticks.
 
+   **Side effect — submit-panel progress list.** The first `/pending=true`
+   response also stamps `_picked_up_at` on the server. The browser reads
+   that field from `/decisions` and advances the "Claude verarbeitet" step
+   in the submitted panel — no extra Claude action required. For the
+   implement branch, additionally POST `/status` once code changes are done
+   (see SKILL.md Step 5b · implement, sub-step 3) so the third step
+   ("Implementierung abgeschlossen") lights up before the page reloads.
+
    **Why combined, not two crons?** One cron minimizes race conditions and makes
    the contract explicit: every tick does both. Minimum cron resolution is 1 min,
    so the max submit-to-process lag is ~60 s — acceptable for interactive flows.
@@ -106,11 +134,55 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    (add `concept-active.json` to `.gitignore` if not already covered by
    `.claude/`).
 
-5. Send the first heartbeat immediately (POST = Claude pulse, not the
-   server self-pulse — see `templates.md` § Claude Connection Heartbeat):
+5. **Verified heartbeat round-trip.** A naked `POST /heartbeat` with no
+   read-back is not enough — if the server failed to bind, never started,
+   or crashed on the first request, the POST exits 0 and the next step
+   opens a tab against a dead bridge with no error surfaced. The whole
+   concept session then sits behind a green "Claude verbunden" indicator
+   that never actually was true.
+
+   Do a **pre/post compare**, not just `claude_ts > 0`. A bare check
+   passes on any process that has ever seen a heartbeat — including a
+   stale bridge left running on the same port from a prior session. We
+   need proof that *our* POST landed on the running handler.
+
    ```bash
-   curl -s -X POST http://localhost:{port}/heartbeat
+   # (a) Read claude_ts BEFORE our POST.
+   pre=$(curl -s --max-time 3 http://localhost:$PORT/heartbeat \
+     | python -c "import sys,json; print(int(json.load(sys.stdin).get('claude_ts') or 0))" \
+     2>/dev/null)
+   pre=${pre:-0}
+
+   # (b) Send Claude pulse.
+   curl -s -X POST http://localhost:$PORT/heartbeat > /dev/null
+
+   # (c) Read claude_ts AFTER our POST. The server returns ms since epoch
+   #     (same units as JS Date.now()) — see § Timestamp unit convention
+   #     above. Our POST must have advanced the timestamp; if post <= pre,
+   #     either the POST never landed on the intended fresh bridge or the
+   #     bridge is wedged.
+   post=$(curl -s --max-time 3 http://localhost:$PORT/heartbeat \
+     | python -c "import sys,json; print(int(json.load(sys.stdin).get('claude_ts') or 0))" \
+     2>/dev/null)
+   post=${post:-0}
+
+   if [ "$post" -le "$pre" ]; then
+     echo "Bridge server on port $PORT did not advance claude_ts ($pre -> $post) — aborting."
+     kill $SERVER_PID 2>/dev/null
+     rm -f .claude/concept-active.json
+     # Tell the user; DO NOT proceed to step 6 (opening the browser would
+     # land on a dead or stale bridge).
+     exit 1
+   fi
    ```
+
+   The 3-second timeout matters: a hung TCP connect is the failure mode
+   we are trying to catch, not a slow JSON response. If you cannot run
+   the `python -c` snippet for some reason (locked-down environment),
+   substitute any tool that parses the JSON and compares `claude_ts`
+   numerically — never accept HTTP 200 alone, because the daemon
+   self-pulse keeps `server_ts` fresh even when the request-handling
+   thread is wedged.
 
 6. Open in Edge (reuses the running instance, adds a tab):
    ```bash

@@ -53,6 +53,10 @@ must see their own language. The locale hint is authoritative.
 | `panel.submit_implement_confirm` | Implement with feedback now? Claude will write code changes. | Mit Feedback jetzt implementieren? Claude schreibt jetzt Code-Änderungen. |
 | `panel.submitted`              | Decisions submitted            | Entscheidungen übermittelt |
 | `panel.submitted_hint`         | Claude is processing your selection. Switch to the **Claude chat** to follow progress. | Claude verarbeitet deine Auswahl. Wechsle zum **Claude Chat** um den Fortschritt zu sehen. |
+| `panel.step_submitted`         | Submitted                      | Übermittelt |
+| `panel.step_received`          | Claude is processing           | Claude verarbeitet |
+| `panel.step_implemented`       | Implementation complete        | Implementierung abgeschlossen |
+| `panel.step_waiting`           | Waiting…                       | Warten… |
 | `panel.disconnected_title`     | Claude is not connected        | Claude ist nicht verbunden |
 | `panel.disconnected_hint`      | You can still submit — your click is queued and delivered as soon as Claude is back. | Du kannst trotzdem absenden — der Klick wird gespeichert und gesendet, sobald Claude wieder da ist. |
 | `panel.connecting_title`       | Claude is connecting           | Claude verbindet sich |
@@ -199,12 +203,32 @@ the `[ui-locale: ...]` hint produced.
         </p>
       </div>
 
-      <!-- Post-submit state: waiting for Claude -->
+      <!-- Post-submit state: waiting for Claude. The progress list shows
+           three steps so the user can see whether the submission has only
+           been sent (step 1), whether Claude's cron has picked it up
+           (step 2), and — for implement-action submissions — whether the
+           actual code change finished (step 3). The third <li> stays
+           hidden for iterate-action submissions; submitWithAction sets
+           the `hidden` attribute based on the action. -->
       <div id="panel-submitted" style="display: none;">
         <div class="submitted-indicator">
           <span class="check-icon">✓</span>
           <strong>{{panel.submitted}}</strong>
         </div>
+        <ol class="status-steps" id="status-steps" aria-live="polite">
+          <li data-step="submitted" data-state="done">
+            <span class="step-icon" aria-hidden="true">✓</span>
+            <span class="step-label">{{panel.step_submitted}}</span>
+          </li>
+          <li data-step="received" data-state="active">
+            <span class="step-icon" aria-hidden="true">⏳</span>
+            <span class="step-label">{{panel.step_received}}</span>
+          </li>
+          <li data-step="implemented" data-state="pending" hidden>
+            <span class="step-icon" aria-hidden="true">○</span>
+            <span class="step-label">{{panel.step_implemented}}</span>
+          </li>
+        </ol>
         <p class="submitted-hint">{{panel.submitted_hint}}</p>
         <div class="waiting-animation"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
       </div>
@@ -741,7 +765,29 @@ The wiring is a single delegated click handler installed alongside
           <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
         </p>
       </div>
-      <div id="panel-submitted" style="display: none;"><!-- waiting state --></div>
+      <div id="panel-submitted" style="display: none;">
+        <!-- Same progress-list structure as the decision/free templates;
+             see § Common Structure for the full markup and locale keys. -->
+        <div class="submitted-indicator">
+          <span class="check-icon">✓</span>
+          <strong>{{panel.submitted}}</strong>
+        </div>
+        <ol class="status-steps" id="status-steps" aria-live="polite">
+          <li data-step="submitted" data-state="done">
+            <span class="step-icon" aria-hidden="true">✓</span>
+            <span class="step-label">{{panel.step_submitted}}</span>
+          </li>
+          <li data-step="received" data-state="active">
+            <span class="step-icon" aria-hidden="true">⏳</span>
+            <span class="step-label">{{panel.step_received}}</span>
+          </li>
+          <li data-step="implemented" data-state="pending" hidden>
+            <span class="step-icon" aria-hidden="true">○</span>
+            <span class="step-label">{{panel.step_implemented}}</span>
+          </li>
+        </ol>
+        <p class="submitted-hint">{{panel.submitted_hint}}</p>
+      </div>
     </aside>
     <div class="panel-backdrop" id="panel-backdrop"></div>
 
@@ -1582,6 +1628,51 @@ document.addEventListener('DOMContentLoaded', () => {
   margin-bottom: 1rem;
 }
 
+/* Progress steps inside the submitted panel.
+   Three states per <li>:
+     data-state="pending" → not yet started (muted, ○ icon)
+     data-state="active"  → currently happening (full text color, ⏳ icon
+                            with a slow pulse so the user sees motion)
+     data-state="done"    → completed (success color, ✓ icon)
+   The third <li> (data-step="implemented") is only revealed for
+   action="implement" submissions; submitWithAction sets its `hidden`. */
+.status-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+.status-steps li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary, #8b949e);
+  transition: color 0.2s ease;
+}
+.status-steps li[data-state="active"] {
+  color: var(--text-color, #c9d1d9);
+  font-weight: 500;
+}
+.status-steps li[data-state="done"] {
+  color: var(--success-color, #3fb950);
+}
+.status-steps .step-icon {
+  display: inline-block;
+  width: 1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+.status-steps li[data-state="active"] .step-icon {
+  animation: step-pulse 1.4s ease-in-out infinite;
+}
+@keyframes step-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
 /* Waiting dots animation */
 .waiting-animation {
   display: flex;
@@ -1871,6 +1962,10 @@ let _submittedAt = 0;
 // and the user sees re-enabled buttons on the still-active old iteration.
 let _submittedReloadCounter = null;
 let _submitInFlight = false;
+// Action picked at submit time ("iterate" | "implement"). Drives whether
+// the third progress step ("Implementierung abgeschlossen") is shown.
+// Reset on restorePanelToReady.
+let _submittedAction = null;
 // Tracks whether the user has actually changed any field in the active
 // iteration. restoreState() and DOMContentLoaded fire change/input events
 // that are NOT user-driven, so we gate on event.isTrusted to ignore them.
@@ -1920,6 +2015,12 @@ async function submitWithAction(action) {
   document.body.classList.add('concept-submitted');
   _submittedAt = Date.now();
   _submittedReloadCounter = _bootReloadCounter;
+  _submittedAction = action;
+
+  // Reset progress list to the just-submitted baseline. The third step
+  // is only revealed for implement-action submissions — iterate ends at
+  // step 2 (panel reload onto the new iteration restores the ready panel).
+  resetStatusSteps(action);
 
   document.getElementById('panel-ready').style.display = 'none';
   document.getElementById('panel-submitted').style.display = 'block';
@@ -1985,8 +2086,91 @@ function restorePanelToReady() {
   _submittedAt = 0;
   _submittedReloadCounter = null;
   _submitInFlight = false;
+  _submittedAction = null;
   const slug = location.pathname.split('/').pop().replace('.html', '');
   localStorage.removeItem('concept-state-' + slug);
+}
+```
+
+## Submit Progress Steps
+
+The submitted panel renders a three-step progress list so the user can
+see exactly where the submission is in Claude's pipeline. The states the
+list tracks:
+
+| Step | Trigger | Visible? |
+|---|---|---|
+| 1 · Übermittelt | The user just clicked submit (POST /decisions succeeded) | Always |
+| 2 · Claude verarbeitet | First `/pending=true` response on the server (Claude's cron picked up the submission) — surfaces via `_picked_up_at` in `/decisions` | Always |
+| 3 · Implementierung abgeschlossen | Claude POSTs `/status {phase: "implemented"}` after the implement branch finishes — surfaces via `_phase === "implemented"` in `/decisions` | Only for `action: "implement"` submissions |
+
+The browser only writes step state in `submitWithAction` (reset to baseline)
+and in `updateStatusSteps` (advance based on server fields). After
+`/reload` lands, the freshly loaded page is in ready state, so the steps
+naturally reset for the next submission.
+
+```javascript
+// Lookup helper — every step access goes through this.
+function _stepEl(name) {
+  return document.querySelector('#status-steps li[data-step="' + name + '"]');
+}
+
+function _setStep(name, state, icon) {
+  const li = _stepEl(name);
+  if (!li) return;
+  li.dataset.state = state;
+  const iconEl = li.querySelector('.step-icon');
+  if (iconEl && icon) iconEl.textContent = icon;
+}
+
+// Baseline shown immediately after a submit click. Step 1 done, step 2
+// active (waiting for /pending pickup), step 3 either hidden (iterate)
+// or pending-and-visible (implement).
+function resetStatusSteps(action) {
+  _setStep('submitted', 'done', '✓');
+  _setStep('received', 'active', '⏳');
+  const impl = _stepEl('implemented');
+  if (impl) {
+    impl.hidden = (action !== 'implement');
+    impl.dataset.state = 'pending';
+    const iconEl = impl.querySelector('.step-icon');
+    if (iconEl) iconEl.textContent = '○';
+  }
+}
+
+// Called from pollProcessedState on every tick. Idempotent — re-applying
+// the same server state is a no-op.
+function updateStatusSteps(data) {
+  if (!_submittedAt) return;
+  if (data && data._picked_up_at) {
+    const recv = _stepEl('received');
+    if (recv && recv.dataset.state !== 'done') {
+      _setStep('received', 'done', '✓');
+      // If implement is the queued action, the third step now becomes
+      // the active waiter. For iterate, step 3 stays hidden and the
+      // /reload-driven page reload is the implicit "done".
+      if (_submittedAction === 'implement') {
+        const impl = _stepEl('implemented');
+        if (impl && !impl.hidden && impl.dataset.state === 'pending') {
+          _setStep('implemented', 'active', '⏳');
+        }
+      }
+    }
+  }
+  if (data && data._phase === 'implemented' && _submittedAction === 'implement') {
+    // implemented implies received — if /status arrives before the cron's
+    // /pending=true has stamped _picked_up_at (rare but possible: Claude
+    // POSTed /status before its first /pending fetch landed), step 2 must
+    // still flip to done so the list stays monotonically consistent.
+    const recv = _stepEl('received');
+    if (recv && recv.dataset.state !== 'done') {
+      _setStep('received', 'done', '✓');
+    }
+    const impl = _stepEl('implemented');
+    if (impl && !impl.hidden && impl.dataset.state !== 'done') {
+      _setStep('implemented', 'done', '✓');
+    }
+  }
 }
 ```
 
@@ -2052,6 +2236,11 @@ async function pollProcessedState() {
   try {
     const res = await fetch('/decisions', { cache: 'no-store' });
     const data = await res.json();
+    // Advance the submit-panel progress list based on the per-submission
+    // signals on the server. Done before the processed_at gate so the
+    // user sees pickup/implementation states even while the panel is
+    // still in the submitted state (i.e. before /reset).
+    updateStatusSteps(data);
     const processedIso = data && data._processed_at;
     if (!processedIso) return;
     const processedMs = Date.parse(processedIso);
