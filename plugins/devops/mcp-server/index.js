@@ -175,6 +175,7 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
 const VARIANTS = {
   'ship-successful': { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
   ready:             { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
+  'ready-files':     { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
   'ship-blocked':    { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
   test:              { usage: true,  changes: true,  tests: true,  state: true,  userTest: true,  userFinalTest: true  },
   'test-minimal':    { usage: false, changes: false, tests: false, state: false, userTest: false, userFinalTest: false },
@@ -284,6 +285,12 @@ function renderState(state, variant, repoUrl) {
     return '';
   }
 
+  if (state.mode === 'file-only') {
+    const filesModified = state.filesModified || 0;
+    const delivered = state.delivered || 'none';
+    return '\ud83d\udcc2 files: ' + filesModified + ' modified \u00b7 delivered: ' + delivered;
+  }
+
   let icon;
   if (state.merged)                            icon = '\u2705';
   else if (state.appStatus === 'running')      icon = '\ud83d\udfe2';
@@ -292,7 +299,7 @@ function renderState(state, variant, repoUrl) {
   else if (state.pushed)                       icon = '\u2705';
   else                                         icon = '\u2796';
 
-  const branch = state.branch || 'main';
+  const branch = state.branch || '';
   const branchLabel = branch + (state.worktree ? ' (worktree)' : '');
   const branchStr = repoUrl
     ? '[`' + branchLabel + '`](' + repoUrl + '/tree/' + branch + ')'
@@ -331,7 +338,7 @@ function renderState(state, variant, repoUrl) {
   const segments = [mergeStr, prStr];
   if (!state.merged) segments.push(pushStr);
   segments.push(commitStr);
-  if (!(state.merged && rawBranch && state.merged === rawBranch)) segments.push(branchStr);
+  if (branch && !(state.merged && rawBranch && state.merged === rawBranch)) segments.push(branchStr);
   let line = icon + ' ' + segments.join(' \u00b7 ');
 
   if (state.appStatus === 'running')     line += ' \u00b7 app running';

@@ -4,14 +4,41 @@
  */
 
 import { z } from "zod";
+import { createHash } from "node:crypto";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { git, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, detectDefaultBranch, branchExists, fileOverlap, getConfig } from "../lib/git.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
 import { writeSentinel } from "../lib/sentinel.js";
+import { detectRepoMode } from "../lib/repo-mode.js";
 
 export const schema = z.object({
   base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
+
+function latestMtime(dir, depth) {
+  let max = 0
+  let entries
+  try { entries = readdirSync(dir) } catch { return max }
+  for (const name of entries) {
+    if (name === ".git" || name === "node_modules") continue
+    const full = join(dir, name)
+    let st
+    try { st = statSync(full) } catch { continue }
+    if (st.mtimeMs > max) max = st.mtimeMs
+    if (depth > 0 && st.isDirectory()) {
+      const child = latestMtime(full, depth - 1)
+      if (child > max) max = child
+    }
+  }
+  return max
+}
+
+function pseudoCommit(mtimeMs) {
+  const ts = Math.floor(mtimeMs / 1000)
+  return createHash("sha1").update("mtime-" + ts).digest("hex").slice(0, 7)
+}
 
 export async function handler(params) {
   let { base } = params;
@@ -20,6 +47,34 @@ export async function handler(params) {
   const opts = { cwd };
   const checks = [];
   const errors = [];
+
+  const repoMode = detectRepoMode(cwd)
+
+  // file-only: not a git repo — return synthetic preflight result immediately
+  if (repoMode === "none") {
+    const mtime = latestMtime(cwd, 2)
+    const commit = pseudoCommit(mtime)
+    return {
+      ready: true,
+      mode: "file-only",
+      branch: "<file-only>",
+      base: null,
+      autoDetectedBase: null,
+      intermediate: false,
+      ahead: null,
+      unpushed: null,
+      inWorktree: false,
+      needsRebase: false,
+      version: null,
+      projectType: null,
+      checks: [{ name: "repo-mode", value: "none", ok: true }],
+      warnings: [],
+      errors: [],
+      commit,
+    }
+  }
+
+  const noRemote = repoMode === "git-no-remote"
 
   // 1. Current branch
   const branch = currentBranch(opts);
@@ -78,51 +133,60 @@ export async function handler(params) {
   }
   checks.push({ name: "clean-tree", ok: !state.dirty, modified: state.modified.length, untracked: state.untracked.length });
 
-  // 5. Fetch base from origin to ensure accurate commit count
-  git(`fetch origin ${base}`, opts);
+  // 5. Fetch base from origin to ensure accurate commit count (skip when no remote)
+  if (!noRemote) git(`fetch origin ${base}`, opts);
 
   // 6. Commits ahead (compare against origin/ ref for accuracy)
   const originBase = `origin/${base}`;
-  const ahead = commitsAhead(baseExists === "remote" || baseExists === "local" ? originBase : base, opts);
+  const aheadRef = !noRemote && (baseExists === "remote" || baseExists === "local") ? originBase : base;
+  const ahead = commitsAhead(aheadRef, opts);
   if (ahead === 0) {
     errors.push(`No commits ahead of ${base} — nothing to ship`);
   }
   checks.push({ name: "commits-ahead", value: ahead, ok: ahead > 0 });
 
-  // 7. Unpushed commits (hard gate — must be 0 before shipping)
-  const unpushed = unpushedCommits(opts);
-  if (unpushed !== null && unpushed > 0) {
+  // 7. Unpushed commits (hard gate — must be 0 before shipping; skip when no remote)
+  const unpushed = noRemote ? null : unpushedCommits(opts);
+  if (!noRemote && unpushed !== null && unpushed > 0) {
     errors.push(`${unpushed} unpushed commit(s) — push before shipping`);
   }
-  checks.push({ name: "all-pushed", value: unpushed, ok: unpushed === 0 || unpushed === null });
+  checks.push({ name: "all-pushed", value: unpushed, ok: unpushed === 0 || unpushed === null, ...(noRemote && { skipped: true, reason: "no-remote" }) });
 
-  // 8. Base branch ahead check (warning — resolved autonomously by ship skill)
-  const baseBehindCount = (() => {
-    const count = git(`rev-list --count HEAD..${originBase}`, opts);
-    return count ? parseInt(count, 10) : 0;
-  })();
-  checks.push({
-    name: "base-ahead",
-    value: baseBehindCount,
-    ok: baseBehindCount === 0,
-    ...(baseBehindCount > 0 && { warning: `Base branch '${base}' is ${baseBehindCount} commit(s) ahead — rebase will be handled automatically` }),
-  });
-
-  // 9. File overlap detection (warning — resolved autonomously by ship skill)
-  const overlap = fileOverlap(originBase, opts);
-  if (overlap.overlap.length > 0) {
+  // 8. Base branch ahead check (skip when no remote — nothing to compare against)
+  if (!noRemote) {
+    const baseBehindCount = (() => {
+      const count = git(`rev-list --count HEAD..${originBase}`, opts);
+      return count ? parseInt(count, 10) : 0;
+    })();
     checks.push({
-      name: "file-overlap",
-      ok: false,
-      count: overlap.overlap.length,
-      files: overlap.overlap.slice(0, 20),
-      totalBranchFiles: overlap.branchFiles.length,
-      totalBaseFiles: overlap.baseFiles.length,
-      mergeBase: overlap.mergeBase?.slice(0, 8),
-      warning: `${overlap.overlap.length} file(s) modified in both branches — will be resolved during rebase`,
+      name: "base-ahead",
+      value: baseBehindCount,
+      ok: baseBehindCount === 0,
+      ...(baseBehindCount > 0 && { warning: `Base branch '${base}' is ${baseBehindCount} commit(s) ahead — rebase will be handled automatically` }),
     });
   } else {
-    checks.push({ name: "file-overlap", ok: true, count: 0 });
+    checks.push({ name: "base-ahead", value: 0, ok: true, skipped: true, reason: "no-remote" });
+  }
+
+  // 9. File overlap detection (skip when no remote — no origin ref to compare)
+  if (!noRemote) {
+    const overlap = fileOverlap(originBase, opts);
+    if (overlap.overlap.length > 0) {
+      checks.push({
+        name: "file-overlap",
+        ok: false,
+        count: overlap.overlap.length,
+        files: overlap.overlap.slice(0, 20),
+        totalBranchFiles: overlap.branchFiles.length,
+        totalBaseFiles: overlap.baseFiles.length,
+        mergeBase: overlap.mergeBase?.slice(0, 8),
+        warning: `${overlap.overlap.length} file(s) modified in both branches — will be resolved during rebase`,
+      });
+    } else {
+      checks.push({ name: "file-overlap", ok: true, count: 0 });
+    }
+  } else {
+    checks.push({ name: "file-overlap", ok: true, count: 0, skipped: true, reason: "no-remote" });
   }
 
   // 10. Git config check (warning — auto-fixed by ship skill)
@@ -158,6 +222,7 @@ export async function handler(params) {
 
   // Collect warnings from checks (non-blocking issues resolved autonomously)
   const warnings = checks.filter(c => c.warning).map(c => c.warning);
+  if (noRemote) warnings.push("No origin remote — push, PR creation, and merge will be skipped");
 
   // Determine if rebase is needed (any merge-safety warnings present)
   const needsRebase = checks.some(c =>
@@ -173,6 +238,7 @@ export async function handler(params) {
 
   return {
     ready,
+    mode: repoMode,
     branch,
     base,
     autoDetectedBase,

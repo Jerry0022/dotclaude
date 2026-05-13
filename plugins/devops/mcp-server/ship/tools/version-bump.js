@@ -5,6 +5,7 @@
 
 import { z } from "zod";
 import { readVersion, bumpVersion, updateVersionFiles, verifyVersionFiles } from "../lib/version.js";
+import { detectRepoMode } from "../lib/repo-mode.js";
 
 export const schema = z.object({
   bump: z.enum(["patch", "minor", "major", "none"]).describe("Semantic version bump type"),
@@ -19,10 +20,10 @@ export async function handler(params) {
   // Read current version
   const { version: vOld, type: projectType, file: sourceFile } = readVersion(cwd);
   if (!vOld) {
-    return {
-      success: false,
-      error: "No version file found (no plugin.json or package.json)",
-    };
+    if (detectRepoMode(cwd) === "none") {
+      return { success: true, skipped: true, reason: "no-manifest-in-file-only-mode", version: null };
+    }
+    return { success: true, skipped: true, reason: "no-manifest" };
   }
 
   // Skip if no bump
