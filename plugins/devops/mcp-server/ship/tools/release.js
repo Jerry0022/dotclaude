@@ -7,6 +7,7 @@ import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { git, gitStrict, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap } from "../lib/git.js";
 import { createPR, mergePR, createRelease, findExistingPR } from "../lib/github.js";
+import { detectRepoMode } from "../lib/repo-mode.js";
 
 export const schema = z.object({
   base: z.string().default("main").describe("Base branch for PR (may be a feature branch for intermediate merges)"),
@@ -25,9 +26,18 @@ export async function handler(params) {
   const cwd = params.cwd;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const opts = { cwd };
+
+  const repoMode = detectRepoMode(cwd)
+  if (repoMode === "none") {
+    return { success: true, skipped: true, reason: "file-only-mode", delivered: "none" }
+  }
+  if (repoMode === "git-no-remote") {
+    return { success: true, skipped: true, reason: "no-remote", delivered: "local-commit-only" }
+  }
+
   const branch = currentBranch(opts);
   const intermediate = base !== "main";
-  const result = { branch, base, intermediate };
+  const result = { branch, base, intermediate, mode: repoMode };
 
   try {
     // Optional: commit version-bumped files

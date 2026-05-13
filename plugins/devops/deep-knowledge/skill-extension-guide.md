@@ -118,6 +118,51 @@ Every plugin skill starts with Step 0:
 - module:auth, module:dashboard, module:api
 ```
 
+## Delivery targets
+
+Configure how `/devops-ship` delivers the release by setting a `deliver:` field in
+`{project}/.claude/skills/ship/reference.md`.
+
+### 1. `git+gh` (default)
+
+No extension needed. `/devops-ship` creates a PR via `gh`, merges it, and pushes the
+tag. This is the built-in behavior when no `deliver:` field is present.
+
+### 2. `ssh-rsync` *(future work)*
+
+Planned extension that will copy build output to a remote server after the PR merges.
+Currently the value is accepted but falls through to `none` — the documented schema is
+stable so consumer reference.md files can be authored now.
+
+```yaml
+# .claude/skills/ship/reference.md
+deliver: ssh-rsync
+target: user@host:/var/www/app
+rsync_args: ["-az", "--delete"]
+```
+
+Prerequisites (when implemented): SSH key in `~/.ssh/` and host in `known_hosts`.
+
+### 3. `ha-rest` *(future work)*
+
+Planned extension that will push config to a Home Assistant instance after ship.
+Currently the value is accepted but falls through to `none`.
+
+```yaml
+# .claude/skills/ship/reference.md
+deliver: ha-rest
+base_url: http://homeassistant.local:8123
+token_env: HA_TOKEN
+```
+
+When implemented, the handler will `POST /api/services/homeassistant/reload_core_config`
+after upload. Canonical use case: shipping HA YAML configs managed in git.
+
+### 4. `none`
+
+For projects that only edit files in-place with no delivery step. `deliver: none` makes
+`/devops-ship` skip Step 4a entirely.
+
 ## Agent extensions
 
 Same pattern applies to agents:

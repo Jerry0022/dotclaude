@@ -11,10 +11,26 @@
 
 require('../lib/plugin-guard');
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+
+/**
+ * Returns true if cwd is inside a git work tree.
+ * @param {string} cwd
+ * @returns {boolean}
+ */
+function isGitRepo(cwd) {
+  try {
+    execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const THROTTLE_FILE = path.join(os.tmpdir(), `dotclaude-devops-git-sync-${process.ppid}`);
 const THROTTLE_MS = 15 * 60 * 1000; // 15 minutes
@@ -31,6 +47,11 @@ try {
 
 // Update throttle timestamp immediately
 try { fs.writeFileSync(THROTTLE_FILE, Date.now().toString()); } catch {}
+
+// Guard: skip in non-git directories
+if (!isGitRepo(process.cwd())) {
+  process.exit(0);
+}
 
 // Delegate to shared sync script
 const scriptPath = path.resolve(__dirname, '../../scripts/git-sync.js');

@@ -27,6 +27,23 @@ explicit user commands (`/devops-commit`), never by model initiative. Extensions
 still loaded and merged normally — `disable-model-invocation` only controls
 trigger behavior, not extension resolution.
 
+## Step 0.5 — Repo-mode check
+
+Before any git command, verify this directory is a git repository:
+
+```bash
+git rev-parse --is-inside-work-tree
+```
+
+If this fails (exit != 0), abort with a structured message:
+
+> Dieses Verzeichnis ist nicht versioniert. `/devops-commit` requires git.
+> Options:
+> - `git init` to start version control here
+> - Or configure a non-git delivery target in `.claude/skills/ship/reference.md` (see skill-extension-guide.md -> Delivery targets)
+
+Do NOT proceed with any git command. End the skill.
+
 ## Step 1 — Detect intent
 
 - **Amend**: user says "amend", "update last commit", "fix last commit" → amend flow in Step 8
