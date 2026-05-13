@@ -51,12 +51,16 @@ most-specific rule (listed top-to-bottom — earlier = more specific).
 |----------|--------|---------|
 | 1 | `configuration.yaml` at project root (HA root file) | `ha-config` |
 | 2 | `custom_components/*/manifest.json` | `ha-integration` |
-| 3 | `angular.json` | `web-angular` |
-| 4 | `vite.config.ts`, `vite.config.js`, or `vite.config.mjs` | `web-vite` |
-| 5 | `electron-builder.json` or `electron-builder.yml`; OR `package.json` deps contain `ow-electron` | `electron-ow` |
+| 3 | `electron-builder.json` or `electron-builder.yml`; OR `package.json` deps contain `electron`, `ow-electron`, or `@electron-forge/*` | `electron-ow` |
+| 4 | `angular.json` | `web-angular` |
+| 5 | `vite.config.ts`, `vite.config.js`, or `vite.config.mjs` | `web-vite` |
 | 6 | `package.json` with a `bin` field OR a script named `start`/`cli` but without UI framework deps | `cli-node` |
 | 7 | `package.json` with only `main` and/or `module` field (library, no app entry) | `lib` |
 | 8 | — | `generic` |
+
+Electron is checked BEFORE Vite/Angular because Electron apps commonly use
+Vite or Angular for the renderer — a naive Vite-first check would shadow the
+packaged-desktop testing path (Must-Ask trigger `packaged_electron_final_test`).
 
 Store result as `{detected_profile}`.
 
@@ -138,7 +142,9 @@ plan from Step 5 as the final response — the plan itself IS the output.
 - Never invoke computer-use from this skill under any circumstances.
 - If detection is ambiguous (multiple markers match), pick the most specific
   profile per the priority table in Step 2.
-- Cache-invalidate when `--reset` is passed: delete the cache file and re-run
+- Cache-invalidate when `--reset` is passed: delete the cache file via
+  `Bash(node -e "require('fs').rmSync(<cache-path>, {force: true})")` (the
+  skill's allowed-tools list authorizes `Bash(node *)`, not `rm`), then re-run
   from Step 2.
 - When a project override merges a different `profile` name, use that name to
   load the corresponding profiles JSON (Step 4), not the detected name.

@@ -1,6 +1,6 @@
 {
   "profile": "electron-ow",
-  "description": "Electron app (OverwolfElectron or standard). Renderer tested via Chrome-MCP; packaged-app final test requires Must-Ask.",
+  "description": "Electron app (OverwolfElectron or standard). Renderer tested via Chrome-MCP (no computer-use). Packaged-app final test requires Must-Ask trigger 'packaged_electron_final_test' — only then is computer-use authorized for that specific final step.",
   "detection": {
     "files_required": [],
     "files_optional": ["electron-builder.json", "electron-builder.yml", "package.json"],
@@ -30,6 +30,6 @@
   ],
   "viewports": [],
   "allowed_actions": ["read", "write_via_dom"],
-  "blocked_actions": ["computer-use"],
+  "blocked_actions": [],
   "must_ask_triggers": ["packaged_electron_final_test"]
 }

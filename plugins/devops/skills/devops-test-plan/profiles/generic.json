@@ -26,5 +26,5 @@
   "viewports": [],
   "allowed_actions": ["read"],
   "blocked_actions": ["computer-use"],
-  "must_ask_triggers": ["user_decides_test_method"]
+  "must_ask_triggers": []
 }

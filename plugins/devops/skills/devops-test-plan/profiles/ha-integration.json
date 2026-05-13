@@ -9,7 +9,7 @@
   "tool_chain": [
     {
       "step": 1,
-      "tool": "Bash(python -m py_compile)",
+      "tool": "Bash(python -m compileall -q custom_components)",
       "purpose": "Syntax-check all Python source files in the integration"
     },
     {

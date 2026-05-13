@@ -131,9 +131,10 @@ process.stdin.on('end', () => {
     lines.push(
       '',
       '[test-autonomy] First code edit this session.',
-      'Default test mode: Edge browser testing in background (Chrome-MCP). NO computer-use.',
-      'Before any test action: invoke /devops-test-plan to pin $TEST_PROFILE for this session.',
-      'Ask user ONLY at must-ask triggers (see deep-knowledge/test-autonomy.md).',
+      'Before any test action: invoke /devops-test-plan to pin $TEST_PROFILE.',
+      'Then follow the profile tool_chain — do NOT default to computer-use.',
+      'Ask user ONLY at the must-ask triggers listed in $TEST_PROFILE.must_ask_triggers',
+      '(see deep-knowledge/test-autonomy.md for the canonical list — 3 triggers total).',
     );
   }
 
