@@ -5,7 +5,7 @@ Three page-level **templates** (layout modes) cover every concept use case:
 | Template | Layout | When to use |
 |---|---|---|
 | **decision** | Sidebar (~80/~20), multi-variant cards | Multi-option evaluation, trade-offs, architecture or tech decisions — the canonical "pick one" flow with bi-state (Verwerfen / Miteinbeziehen) per variant and multiple iterations |
-| **prototype** | Fullscreen content + overlay decision panel (FAB-toggled, right) + collapsible feedback dock (bottom, per-screen comments) | UI mockups, wireframes, visual design concepts, click-through flows — one artefact that needs maximum screen real estate, plus structured per-screen feedback |
+| **prototype** | Fullscreen content + overlay decision panel (☰ FAB right) + speech-bubble feedback dock anchored to the 💬 FAB (bottom-left), stops before the ☰ FAB so both stay clickable | UI mockups, wireframes, visual design concepts, click-through flows — one artefact that needs maximum screen real estate, plus structured per-screen feedback |
 | **free** | Sidebar (~80/~20), freeform body content | Analysis, walkthrough, brainstorm, explainer, timeline — structured content without forced variant framing. Bi-state evaluation is optional (opt-in per section) |
 
 **Content variants (analysis, plan, concept, comparison, dashboard, creative)
@@ -68,6 +68,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.empty_implement_confirm`| Nothing was changed. Implement with feedback anyway? Claude will still write code. | Du hast nichts geändert. Trotzdem mit Feedback implementieren? Claude schreibt dann Code. |
 | `panel.toggle_open`            | Open decisions                 | Entscheidungen öffnen |
 | `panel.close`                  | Close                          | Schliessen |
+| `panel.minimize`               | Minimize                       | Minimieren |
 | `variant.include`              | Include                        | Miteinbeziehen |
 | `variant.discard`              | Discard                        | Verwerfen |
 | `iteration.label`              | Iterations                     | Iterationen |
@@ -719,9 +720,16 @@ The wiring is a single delegated click handler installed alongside
       · <span id="active-screen-label">Welcome</span>
     </div>
 
-    <!-- Two FABs — the only floating UI besides the screen itself. -->
+    <!-- Two FABs — the only floating UI besides the screen itself.
+         The 💬 FAB carries two labels: the dock toggle swaps aria-label
+         between them based on aria-expanded so screen-reader users
+         always hear the correct next action ("Open" vs "Minimize"). -->
     <button id="panel-toggle" class="panel-fab" aria-label="{{panel.toggle_open}}">☰</button>
-    <button id="feedback-toggle" class="feedback-fab" aria-label="{{proto.feedback_toggle}}">💬</button>
+    <button id="feedback-toggle" class="feedback-fab"
+            aria-label="{{proto.feedback_toggle}}"
+            aria-expanded="false"
+            data-label-open="{{proto.feedback_toggle}}"
+            data-label-close="{{panel.minimize}}">💬</button>
 
     <!-- Decision panel (☰) — contains: iteration-tabs, screen-nav, submit.
          No section-TOC here: the screen-nav replaces it for prototype. -->
@@ -796,13 +804,19 @@ The wiring is a single delegated click handler installed alongside
     </aside>
     <div class="panel-backdrop" id="panel-backdrop"></div>
 
-    <!-- Feedback dock (💬) — context-sensitive.
+    <!-- Feedback dock (💬) — context-sensitive Speech-Bubble overlay.
+         Anchored to the 💬 FAB (bottom-left): the FAB stays visible and
+         clickable, the dock floats above/around it like a chat bubble.
+         The right edge stops before the ☰ Menü-FAB so the user can still
+         reach decisions while the dock is open.
+         The close button minimises (does not destroy state) — user input
+         is preserved on close, no value is lost.
          * Top: ONE textarea for the active screen (swapped on navigation).
          * Bottom: ONE textarea for general notes, always visible. -->
     <aside class="feedback-dock" id="feedback-dock" data-open="false">
       <div class="feedback-dock-header">
         <strong>Feedback</strong>
-        <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.close}}">✕</button>
+        <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" title="{{panel.minimize}}">−</button>
       </div>
       <div class="feedback-section">
         <label>Aktueller Screen: <strong id="dock-screen-label">Welcome</strong></label>
@@ -895,8 +909,10 @@ section[data-screen][hidden] { display: none; }
 .feedback-fab { bottom: 2rem; left: 2rem; background: var(--warning-color, #d29922); }
 .panel-fab:hover,
 .feedback-fab:hover { transform: scale(1.1); }
-.panel-fab.hidden,
-.feedback-fab.hidden { opacity: 0; pointer-events: none; }
+/* Only the ☰ panel FAB hides when its panel opens (the decision panel is
+   a full overlay). The 💬 feedback FAB stays visible while the dock is
+   open so the user can toggle it back closed via the same FAB. */
+.panel-fab.hidden { opacity: 0; pointer-events: none; }
 
 .panel-close-btn,
 .feedback-close-btn {
@@ -934,17 +950,73 @@ section[data-screen][hidden] { display: none; }
 .screen-nav-item .screen-idx { color: var(--accent-color); font-weight: 600; margin-right: 0.5rem; }
 .screen-nav-item .has-notes { color: var(--warning-color); font-size: 0.75rem; }
 
-/* ── Feedback Dock (bottom, collapsible, context-sensitive) ── */
+/* ── Feedback Dock — Speech-Bubble anchored to the 💬 FAB ──
+   Geometry:
+   * left = FAB.left (2rem)               → bubble's left edge aligns with FAB
+   * right = FAB.right + 56 + 1rem        → reserves the ☰ Menü-FAB area
+   * bottom = FAB.bottom + 56 + 6px       → bubble sits directly above the FAB
+                                            with a hair of overlap so the
+                                            visual connection reads as "the
+                                            bubble grows out of the FAB".
+   * padding-left = 80px                  → input fields start to the right
+                                            of where the FAB visually lives,
+                                            so labels/textareas never sit
+                                            behind it (the FAB stays clickable
+                                            on top via higher z-index).
+   The FAB keeps its z-index above the dock so it remains visible and
+   clickable while the dock is open — clicking the FAB toggles the dock. */
 .feedback-dock {
-  position: fixed; left: 0; right: 0; bottom: -100%; max-height: 70vh;
-  padding: 1.5rem; background: var(--panel-bg, #161b22);
-  border-top: 1px solid var(--border-color, #30363d);
-  box-shadow: 0 -6px 20px rgba(0,0,0,0.35); z-index: 180; overflow-y: auto;
-  transition: bottom 0.3s ease;
-  display: flex; flex-direction: column; gap: 1.25rem;
+  position: fixed;
+  left: 2rem;
+  right: calc(2rem + 56px + 1rem);
+  bottom: calc(2rem + 56px - 6px);
+  max-height: min(60vh, 520px);
+  padding: 1.25rem 1.5rem 1.5rem 80px;
+  background: var(--panel-bg, #161b22);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.25);
+  z-index: 180;
+  overflow-y: auto;
+  display: none;
+  flex-direction: column;
+  gap: 1.1rem;
+  transform-origin: 28px calc(100% + 22px); /* anchor: 💬 FAB centre below dock-bottom-left */
 }
-.feedback-dock[data-open="true"] { bottom: 0; }
-.feedback-dock-header { display: flex; justify-content: space-between; align-items: center; }
+.feedback-dock[data-open="true"] {
+  display: flex;
+  animation: feedback-dock-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes feedback-dock-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* FAB sits above the dock so it stays visible AND clickable while the dock
+   is open. The dock's bottom edge overlaps the FAB's top edge by ~6px, so
+   the bubble visually reads as growing out of the FAB. */
+.feedback-fab { z-index: 220; }
+
+.feedback-dock-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.25rem;
+}
+.feedback-dock-header strong { font-size: 1rem; }
+
+/* Minimise button — visual cue is the underscore-low minus, not an ✕,
+   so the user understands their text is preserved (not destroyed). */
+.feedback-close-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-secondary, #8b949e);
+  font-size: 1.6rem; line-height: 1; font-weight: 500;
+  padding: 0 0.4rem 0.2rem; border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+.feedback-close-btn:hover {
+  background: color-mix(in srgb, var(--text-color) 12%, transparent);
+  color: var(--text-color, #c9d1d9);
+}
+
 .feedback-section { display: flex; flex-direction: column; gap: 0.4rem; }
 .feedback-section label { font-size: 0.9rem; color: var(--text-secondary); font-weight: 500; }
 .feedback-section label strong { color: var(--accent-color); }
@@ -956,6 +1028,22 @@ section[data-screen][hidden] { display: none; }
 }
 .feedback-section textarea:focus { outline: none; border-color: var(--accent-color); }
 .feedback-divider { height: 1px; background: var(--border-color); margin: 0.25rem 0; }
+
+/* Narrow viewports (≤560px): lift the bubble ABOVE the 💬 FAB instead
+   of having it overlap. With ~150px reserved for FAB + Menü-FAB on a
+   320px phone the inner content column would otherwise collapse to an
+   unusable width. The FAB ends up below the dock, still visible and
+   still toggleable. */
+@media (max-width: 560px) {
+  .feedback-dock {
+    left: 0.75rem;
+    right: calc(0.75rem + 56px + 0.5rem);
+    bottom: calc(1rem + 56px + 8px);
+    padding: 1rem;
+    border-radius: 14px;
+    transform-origin: 28px calc(100% + 28px);
+  }
+}
 
 /* Hidden per-screen textareas inside #screen-textareas: only active shown */
 #screen-textareas textarea[hidden] { display: none; }
@@ -1071,9 +1159,37 @@ DOM (just hidden), so each one's value persists independently via
   const dock = document.getElementById('feedback-dock');
   const dockToggle = document.getElementById('feedback-toggle');
   const dockClose = document.getElementById('feedback-close');
-  function closeDock() { dock.dataset.open = 'false'; dockToggle.classList.remove('hidden'); }
+  // The dock is a Speech-Bubble anchored to the 💬 FAB — the FAB stays
+  // visible and clickable while the dock is open, so clicking it toggles
+  // (open ↔ minimised). The X button is a *minimise*, not a destroy:
+  // closing the dock leaves all textarea content intact (localStorage
+  // persistence is untouched).
+  // Accessibility:
+  //   * aria-expanded reflects open/closed state on the FAB
+  //   * aria-label swaps between data-label-open / data-label-close so
+  //     screen-reader users hear the correct next action
+  //   * on close, focus is restored to the FAB if it was inside the dock
+  //     (the dock disappears via display:none, so leaving focus there
+  //     would orphan it)
+  const LABEL_OPEN = dockToggle.dataset.labelOpen || dockToggle.getAttribute('aria-label');
+  const LABEL_CLOSE = dockToggle.dataset.labelClose || LABEL_OPEN;
+  function openDock() {
+    dock.dataset.open = 'true';
+    dockToggle.setAttribute('aria-expanded', 'true');
+    dockToggle.setAttribute('aria-label', LABEL_CLOSE);
+  }
+  function closeDock() {
+    const focusWasInside = dock.contains(document.activeElement);
+    dock.dataset.open = 'false';
+    dockToggle.setAttribute('aria-expanded', 'false');
+    dockToggle.setAttribute('aria-label', LABEL_OPEN);
+    if (focusWasInside) dockToggle.focus();
+  }
   window.closeDock = closeDock;
-  dockToggle.addEventListener('click', () => { dock.dataset.open = 'true'; dockToggle.classList.add('hidden'); });
+  dockToggle.addEventListener('click', () => {
+    if (dock.dataset.open === 'true') closeDock();
+    else openDock();
+  });
   dockClose.addEventListener('click', closeDock);
 
   // Click outside the dock (anywhere on the prototype screen) closes it.
