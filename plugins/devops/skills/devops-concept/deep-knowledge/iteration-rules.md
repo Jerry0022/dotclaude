@@ -13,6 +13,8 @@ selections, read-only comments).
 | First generation | Write the file with `<section data-iteration="1" data-active>` and one tab "Iteration 1" | Tab 1 active |
 | Feedback loop iteration (Step 5c) | Append `<section data-iteration="N+1" data-active>` to the same file, remove `data-active` from the previous section, freeze it, add a new tab and make it active | New tab "Iteration N+1" auto-active, old tab selectable and read-only |
 | Fundamental rework ("nochmal neu") | Same as a feedback iteration — just another tab. The full history stays visible. | Another tab appended |
+| Implementation finished (Step 5b implement branch) | Append `<section data-iteration="N+1" data-final-report data-active>` with the Abschlussbericht structure. Add a new tab carrying `data-final-report` and label `{{iteration.final_tab}}` ("Abschlussbericht" / "Final report") — NEVER "Iteration N+1". Freeze the previous section the same way. | New tab "Abschlussbericht" auto-active. Right panel switches to `panel-final-report` (no iterate/implement buttons). At most one final-report section per concept session. |
+| Issues created from final report (`action: "create-issues"`) | Do NOT append a new section. Rewrite the existing `[data-open-questions]` `<li>` items: add `disabled` to processed checkboxes, append an `.oq-issue-link` `<a>` with the GitHub issue URL. Keep `data-active` on the final-report section. | Same final-report tab stays active; routed items become read-only audit entries. `updateCreateIssuesPanel()` auto-hides the button once every checkbox in the section is disabled. |
 
 **Rules:**
 - **Never create a second file** for iterations of the same concept — always
