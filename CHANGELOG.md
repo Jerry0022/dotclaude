@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.75.0] — 2026-05-14
+
+### Changed
+
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — prototype-template feedback dock redesigned from a full-width bottom bar into a speech-bubble overlay anchored to the 💬 FAB. Geometry: `left: 2rem` (FAB-aligned), `right: calc(2rem + 56px + 1rem)` (reserves the ☰ Menü-FAB area), `bottom: calc(2rem + 56px - 6px)` (sits directly above the FAB with a hair of overlap so the bubble reads as growing out of the FAB), `padding-left: 80px` (content starts beside the FAB, never behind it), `border-radius: 18px`, soft pop-in animation with `transform-origin` anchored at the FAB centre. Mobile breakpoint (≤560px) lifts the bubble fully above the FAB instead of overlapping, so phones don't squeeze the inner content column. The 💬 FAB itself gets `z-index: 220` so it stays visible AND clickable while the dock is open — clicking it toggles open↔close.
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — close button changed from `✕` to `−` (minimise) with `aria-label="{{panel.minimize}}"`. The button is a *minimise*, not a destroy: dock textarea content is preserved in localStorage across close/reopen cycles. Locale table gains new key `panel.minimize` (Minimize / Minimieren).
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — accessibility polish on the 💬 FAB toggle: `aria-expanded` reflects open/closed state, and `aria-label` swaps between two strings via new `data-label-open` / `data-label-close` data attributes (so screen-reader users hear "Feedback öffnen" when closed and "Minimieren" when open). `closeDock()` restores focus to the FAB when the close originated from inside the dock (previously the dock disappeared via `display: none` and left focus orphaned on a detached element)
+- **plugins/devops/skills/devops-concept/SKILL.md** — "Prototype Feedback Dock" section rewritten to describe the speech-bubble + minimise semantics
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.74.0 → 0.75.0`
+
 ## [0.74.0] — 2026-05-14
 
 ### Added
