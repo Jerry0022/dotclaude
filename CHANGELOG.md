@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.76.0] — 2026-05-14
+
+### Added
+
+- **plugins/devops/skills/devops-concept/SKILL.md** — implement-action path now produces an **Abschlussbericht** (final report) instead of another regular iteration. New `Final-report append (implement only)` subsection in Step 5c describes the structure: a `<section data-iteration="N+1" data-final-report data-active>` containing several `<section id data-nav-label>` blocks (Zusammenfassung, Geänderte Dateien, Tests, optional Offene Fragen & TODOs, optional Nächste Schritte). Right panel auto-switches to `panel-final-report` mode — no iterate/implement buttons. New `action: "create-issues"` handling in Step 5b (and new "Critical invariant" note): processes the selected open-questions items via the `devops-new-issue` skill, then rewrites the HTML so each routed item carries a linked `[Issue #NNN]` badge and a disabled checkbox.
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — new `Final Report Panel` reference section with HTML pattern for the report body, the `<section data-open-questions>` checkbox list (items default `checked`, attributes `data-issue-title` / `data-issue-type` drive the create-issues payload), and the after-routing rewrite pattern (disabled checkbox + `.oq-issue-link` anchor). New `panel-final-report` HTML block in the shared decision-panel skeleton with a conditional `#panel-create-issues` sub-block. Locale-table gains 12 keys: `iteration.final_tab`, `final.status`, `final.hint`, `final.open_questions`, `final.create_issues_btn`, `final.create_issues_hint`, `final.create_issues_none`, `final.create_issues_running`, `final.create_issues_done`, `final.issue_link_prefix` (de + en).
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — `updateCreateIssuesPanel()` gating function (recomputes on `DOMContentLoaded`, `iteration:changed`, and any `change` inside `[data-open-questions]`). Panel visible iff active section has `data-final-report` AND contains a `[data-open-questions]` block AND that block has at least one non-disabled checkbox. Button enabled iff additionally at least one checkbox is currently checked. `submitCreateIssues()` collects selected items, POSTs `{action: "create-issues", items: [...]}` to `/decisions`, falls back to the offline submit queue on network error.
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — `showIteration()` detects `data-final-report` on the active section and swaps `panel-ready` for `panel-final-report` (also gates `panel-submitted` to non-final live iterations). Iteration-tabs example updated to show the `data-final-report` tab variant with label `{{iteration.final_tab}}`. New CSS for `.iteration-tab[data-final-report]` (success-color border + ✓ prefix), `#panel-final-report` indicator + hint, `#panel-create-issues` state hints (none / running / done), and `.open-questions-list` items with `.oq-issue-link` badge styling.
+- **plugins/devops/skills/devops-concept/deep-knowledge/iteration-rules.md** — situation table gains two new rows: "Implementation finished (Step 5b implement branch)" → append `data-final-report` section + tab labelled `{{iteration.final_tab}}`; "Issues created from final report (`action: "create-issues"`)" → rewrite open-questions `<li>` items in place (disabled checkbox + `.oq-issue-link`), no new section appended.
+- **plugins/devops/skills/devops-concept/deep-knowledge/validation-gate.md** — Phase-1 mandatory pattern count bumped from 27 to 29. New patterns: 28 `panel-final-report` (final-report panel element), 29 `updateCreateIssuesPanel` (panel-gating function called from `showIteration()`).
+
+### Changed
+
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.75.0 → 0.76.0`
+
 ## [0.75.0] — 2026-05-14
 
 ### Changed

@@ -73,7 +73,17 @@ must see their own language. The locale hint is authoritative.
 | `variant.discard`              | Discard                        | Verwerfen |
 | `iteration.label`              | Iterations                     | Iterationen |
 | `iteration.active_suffix`      | · active                       | · aktiv |
+| `iteration.final_tab`          | Final report                   | Abschlussbericht |
 | `nav.sections`                 | Sections                       | Abschnitte |
+| `final.status`                 | Implementation complete        | Implementierung abgeschlossen |
+| `final.hint`                   | The implementation is done. Review the report on the left. | Die Implementierung ist abgeschlossen. Sieh dir den Bericht links an. |
+| `final.open_questions`         | Open questions & TODOs         | Offene Fragen & TODOs |
+| `final.create_issues_btn`      | Create issues                  | Issues erstellen |
+| `final.create_issues_hint`     | Creates GitHub issues for the selected items via devops-new-issue. | Erstellt GitHub-Issues für die ausgewählten Punkte via devops-new-issue. |
+| `final.create_issues_none`     | No items selected.             | Keine Punkte ausgewählt. |
+| `final.create_issues_running`  | Creating issues …              | Issues werden erstellt … |
+| `final.create_issues_done`     | Issues created                 | Issues erstellt |
+| `final.issue_link_prefix`      | Issue                          | Issue |
 | `proto.feedback_title`         | Feedback                       | Feedback |
 | `proto.feedback_toggle`        | Open feedback                  | Feedback öffnen |
 | `proto.feedback_general`       | General notes on this prototype | Allgemeine Anmerkungen zum Prototyp |
@@ -235,6 +245,32 @@ the `[ui-locale: ...]` hint produced.
         </ol>
         <p class="submitted-hint">{{panel.submitted_hint}}</p>
         <div class="waiting-animation"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+      </div>
+
+      <!-- Final-report state: shown when the active section carries
+           data-final-report. No iterate/implement submit; the only
+           interactive control is the conditional "Issues erstellen"
+           button, gated on the presence of a [data-open-questions]
+           block with at least one un-created checkable item. -->
+      <div id="panel-final-report" style="display: none;">
+        <div class="final-report-indicator">
+          <span class="check-icon">✓</span>
+          <strong>{{final.status}}</strong>
+        </div>
+        <p class="final-report-hint">{{final.hint}}</p>
+        <div id="panel-create-issues" hidden>
+          <button id="create-issues-btn" class="primary submit-btn" disabled>{{final.create_issues_btn}}</button>
+          <p class="hint">{{final.create_issues_hint}}</p>
+          <p class="hint hint-none" data-issues-state="none" hidden>
+            <span aria-hidden="true">⚠</span> {{final.create_issues_none}}
+          </p>
+          <p class="hint hint-running" data-issues-state="running" hidden>
+            <span aria-hidden="true">⏳</span> {{final.create_issues_running}}
+          </p>
+          <p class="hint hint-done" data-issues-state="done" hidden>
+            <span aria-hidden="true">✓</span> {{final.create_issues_done}}
+          </p>
+        </div>
       </div>
     </aside>
   </div>
@@ -1833,6 +1869,99 @@ document.addEventListener('DOMContentLoaded', () => {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Final-report panel. No iterate/implement controls — only the closing
+   indicator + optional "Issues erstellen" block. Uses the same indicator
+   visual language as the submitted panel for continuity. */
+#panel-final-report .final-report-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--success-color, #3fb950);
+  font-weight: 600;
+}
+#panel-final-report .check-icon {
+  font-size: 1.1rem;
+}
+#panel-final-report .final-report-hint {
+  margin: 0 0 1rem 0;
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+#panel-create-issues #create-issues-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+#panel-create-issues .hint[data-issues-state="running"] {
+  color: var(--accent-color, #58a6ff);
+}
+#panel-create-issues .hint[data-issues-state="done"] {
+  color: var(--success-color, #3fb950);
+}
+#panel-create-issues .hint[data-issues-state="none"] {
+  color: var(--warning-color, #d29922);
+}
+
+/* Iteration tab styling for the final-report tab — distinct from
+   numbered iteration tabs so the closing step reads as a milestone. */
+.iteration-tab[data-final-report] {
+  border-color: var(--success-color, #3fb950);
+  color: var(--success-color, #3fb950);
+}
+.iteration-tab[data-final-report][aria-selected="true"] {
+  background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent);
+  border-color: var(--success-color, #3fb950);
+  color: var(--text-color, #c9d1d9);
+}
+.iteration-tab[data-final-report][aria-selected="true"]::before {
+  content: "✓ ";
+  color: var(--success-color, #3fb950);
+}
+.iteration-tab[data-final-report]:not([aria-selected="true"])::before {
+  content: "";
+}
+
+/* Open-questions section — checkbox list with optional "[Issue #NNN]"
+   linked badges once items have been routed to GitHub. */
+section[data-open-questions] .open-questions-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+section[data-open-questions] .open-questions-list li {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 6px;
+  background: var(--bg-subtle, transparent);
+}
+section[data-open-questions] .open-questions-list label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+section[data-open-questions] .open-questions-list input[type="checkbox"]:disabled + .oq-label {
+  opacity: 0.7;
+}
+section[data-open-questions] .oq-issue-link {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 1px 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--success-color, #3fb950);
+  border: 1px solid var(--success-color, #3fb950);
+  border-radius: 4px;
+  text-decoration: none;
+}
+section[data-open-questions] .oq-issue-link:hover {
+  background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent);
+}
 ```
 
 ## State Persistence (localStorage + TTL)
@@ -2176,6 +2305,105 @@ async function submitWithAction(action) {
 wireSubmit('submit-iterate-btn', 'iterate');
 wireSubmit('submit-implement-btn', 'implement');
 
+// --- Final-report "Issues erstellen" action ---
+// Gating rules (only ALL of these true → panel visible + button enabled):
+//   1. Active section carries data-final-report.
+//   2. Active section contains a [data-open-questions] block.
+//   3. That block has at least one un-created (still-checkable, not
+//      disabled) checkbox.
+//   4. At least one of those checkboxes is currently checked.
+// On click: POST /decisions { action: "create-issues", items: [...] }
+// then disable + show "running" hint. Claude rewrites the open-questions
+// HTML with linked [Issue #NNN] labels and POSTs /reload — the reload
+// re-enters this gating logic with disabled checkboxes, so the button
+// auto-hides once all items are routed.
+function updateCreateIssuesPanel() {
+  const wrap = document.getElementById('panel-create-issues');
+  const btn = document.getElementById('create-issues-btn');
+  if (!wrap || !btn) return;
+  const active = document.querySelector('section[data-iteration][data-active]');
+  const isFinal = !!(active && active.hasAttribute('data-final-report'));
+  const oqBlock = isFinal ? active.querySelector('[data-open-questions]') : null;
+  const pendingBoxes = oqBlock
+    ? oqBlock.querySelectorAll('input[type="checkbox"]:not(:disabled)')
+    : [];
+  const visible = isFinal && pendingBoxes.length > 0;
+  wrap.hidden = !visible;
+  if (!visible) return;
+  const checked = Array.from(pendingBoxes).some(el => el.checked);
+  btn.disabled = !checked;
+  // Reset transient state hints whenever the gating recomputes (e.g.
+  // after a reload that added Issue badges to some items).
+  wrap.querySelectorAll('.hint[data-issues-state]').forEach(el => {
+    el.hidden = el.dataset.issuesState !== 'none' || checked;
+  });
+}
+
+async function submitCreateIssues() {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (!active || !active.hasAttribute('data-final-report')) return;
+  const oqBlock = active.querySelector('[data-open-questions]');
+  if (!oqBlock) return;
+
+  const items = Array.from(
+    oqBlock.querySelectorAll('input[type="checkbox"]:not(:disabled)')
+  )
+    .filter(el => el.checked)
+    .map(el => {
+      const labelEl = el.closest('label')?.querySelector('.oq-label');
+      return {
+        id: el.name || el.id || '',
+        title: el.dataset.issueTitle
+            || (labelEl ? labelEl.textContent.trim() : ''),
+        type: el.dataset.issueType || 'chore',
+        selected: true
+      };
+    });
+
+  const wrap = document.getElementById('panel-create-issues');
+  const btn = document.getElementById('create-issues-btn');
+  if (!items.length) {
+    wrap?.querySelector('.hint[data-issues-state="none"]')
+        ?.removeAttribute('hidden');
+    return;
+  }
+
+  btn.disabled = true;
+  wrap.querySelectorAll('.hint[data-issues-state]').forEach(el => {
+    el.hidden = el.dataset.issuesState !== 'running';
+  });
+
+  const payload = { submitted: true, action: 'create-issues', items };
+  const container = document.getElementById('concept-decisions');
+  if (container) container.textContent = JSON.stringify(payload);
+  document.body.classList.add('concept-submitted');
+
+  try {
+    await fetch('/decisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {
+    // Offline — queue alongside the regular pending submit so it retries
+    // on reconnect via retryPendingSubmission().
+    localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(payload));
+  }
+}
+
+document.getElementById('create-issues-btn')
+  ?.addEventListener('click', submitCreateIssues);
+
+// Recompute gating whenever the user toggles a checkbox inside the
+// open-questions section. The generic change listener (for saveState)
+// fires the same event, so we just hook into the same channel.
+document.addEventListener('change', e => {
+  if (e.target && e.target.matches('section[data-open-questions] input[type="checkbox"]')) {
+    updateCreateIssuesPanel();
+  }
+});
+document.addEventListener('DOMContentLoaded', updateCreateIssuesPanel);
+
 // --- Offline Submit Queue ---
 async function retryPendingSubmission() {
   const pendingKey = STORAGE_KEY + '-pending';
@@ -2510,14 +2738,27 @@ prototype and free include them identically.
     Iteration 1
   </button>
   <button class="iteration-tab" role="tab"
-          data-iteration="2" aria-selected="true" aria-controls="iter-2">
+          data-iteration="2" aria-selected="false" aria-controls="iter-2">
     Iteration 2
+  </button>
+  <!-- Final-report tab: same DOM contract (data-iteration carries the
+       running counter), distinct labelling + the data-final-report
+       flag so .iteration-tab[data-final-report] CSS + panel JS pick
+       it up. The label is the locale string {{iteration.final_tab}},
+       NEVER "Iteration N". Only the implement-action path appends
+       this — at most one per concept session. -->
+  <button class="iteration-tab" role="tab" data-final-report
+          data-iteration="3" aria-selected="true" aria-controls="iter-3">
+    {{iteration.final_tab}}
   </button>
 </nav>
 
 <main>
   <section id="iter-1" data-iteration="1" hidden>…frozen round 1…</section>
-  <section id="iter-2" data-iteration="2" data-active>…active round 2…</section>
+  <section id="iter-2" data-iteration="2" hidden>…frozen round 2…</section>
+  <section id="iter-3" data-iteration="3" data-final-report data-active>
+    …final report (Abschlussbericht)…
+  </section>
 </main>
 ```
 
@@ -2528,6 +2769,10 @@ Rules:
   (see "Freezing Past Iterations").
 - Tabs stay clickable — switching tab reveals the chosen section and
   hides all others.
+- A concept session has **at most one** `data-final-report` section.
+  Once it exists, no further iterate/implement submissions are
+  accepted (the panel-final-report has no such buttons). Only
+  `action: "create-issues"` may still fire from the final-report tab.
 
 ### Tab Bar CSS
 
@@ -2603,17 +2848,25 @@ function showIteration(n) {
   });
   const activeSec = document.querySelector('section[data-iteration][data-active]');
   const isLive = activeSec && String(activeSec.dataset.iteration) === String(n);
+  // The live section may be a regular iteration OR a final report. The
+  // panel switches between three live states (ready / submitted / final)
+  // plus the frozen state for non-live tabs.
+  const isFinal = isLive && activeSec.hasAttribute('data-final-report');
   document.body.classList.toggle('viewing-frozen', !isLive);
+  document.body.classList.toggle('viewing-final', !!isFinal);
   const panelReady = document.getElementById('panel-ready');
   const panelSubmitted = document.getElementById('panel-submitted');
   const panelFrozen = document.getElementById('panel-frozen');
-  if (panelReady) panelReady.style.display = isLive ? 'block' : 'none';
+  const panelFinal = document.getElementById('panel-final-report');
+  if (panelReady) panelReady.style.display = (isLive && !isFinal) ? 'block' : 'none';
   if (panelSubmitted) {
     const submitted = document.body.classList.contains('concept-submitted');
-    panelSubmitted.style.display = (isLive && submitted) ? 'block' : 'none';
+    panelSubmitted.style.display = (isLive && !isFinal && submitted) ? 'block' : 'none';
   }
+  if (panelFinal) panelFinal.style.display = isFinal ? 'block' : 'none';
   if (panelFrozen) panelFrozen.style.display = isLive ? 'none' : 'block';
   if (typeof buildSectionNav === 'function') buildSectionNav();
+  if (typeof updateCreateIssuesPanel === 'function') updateCreateIssuesPanel();
   document.dispatchEvent(new CustomEvent('iteration:changed'));
 }
 
@@ -2645,6 +2898,143 @@ async function pollReload() {
 setInterval(pollReload, 3000);
 document.addEventListener('DOMContentLoaded', pollReload);
 ```
+
+## Final Report Panel
+
+The final-report section closes a concept session. It is appended via the
+implement-action branch of Step 5b (see `SKILL.md` § Final-report append).
+The right-side panel automatically switches to `panel-final-report` mode
+when `showIteration()` detects `data-final-report` on the active section
+— no iterate / implement buttons, only an optional "Issues erstellen"
+button gated on the presence of open questions / TODOs.
+
+### Final-report section HTML
+
+The body of the section is structured like a multi-section freeform
+report — every `<section id data-nav-label>` inside it surfaces in the
+section TOC automatically. Open questions / TODOs use a dedicated
+`<section data-open-questions>` wrapper around a checkbox list.
+
+```html
+<section id="iter-3" data-iteration="3" data-final-report data-active>
+  <div class="iteration-intro">
+    <h2>{{iteration.final_tab}}</h2>
+    <p>Kurze Einleitung — was wurde umgesetzt, in welcher Form.</p>
+  </div>
+
+  <section id="summary" data-nav-label="Zusammenfassung">
+    <h3>Zusammenfassung</h3>
+    <p>Was wurde gebaut, mit welchem Commit.</p>
+  </section>
+
+  <section id="changed-files" data-nav-label="Geänderte Dateien">
+    <h3>Geänderte Dateien</h3>
+    <ul>
+      <li><code>src/auth/middleware.ts</code> — Token-Validierung neu</li>
+    </ul>
+  </section>
+
+  <section id="tests" data-nav-label="Tests &amp; Verifikation">
+    <h3>Tests &amp; Verifikation</h3>
+    <p>Was lief, was wurde übersprungen, mit Begründung.</p>
+  </section>
+
+  <!-- Optional — render only when there are real follow-ups to track.
+       Each <li> is one item; data-issue-title + data-issue-type drive
+       the "Issues erstellen" payload. Checkboxes default to `checked`. -->
+  <section id="open-questions"
+           data-nav-label="{{final.open_questions}}"
+           data-open-questions>
+    <h3>{{final.open_questions}}</h3>
+    <ul class="open-questions-list">
+      <li>
+        <label>
+          <input type="checkbox"
+                 name="oq-saml-edge"
+                 data-issue-title="[BUG] Auth fails for SAML users"
+                 data-issue-type="bug"
+                 checked>
+          <span class="oq-label">Auth fails for SAML users — observed during smoke test, out of scope here</span>
+        </label>
+      </li>
+      <li>
+        <label>
+          <input type="checkbox"
+                 name="oq-docs-refresh"
+                 data-issue-title="[DOCS] Update auth README"
+                 data-issue-type="docs"
+                 checked>
+          <span class="oq-label">Update auth README to reflect new middleware contract</span>
+        </label>
+      </li>
+    </ul>
+  </section>
+
+  <section id="next-steps" data-nav-label="Nächste Schritte">
+    <h3>Nächste Schritte</h3>
+    <ul>
+      <li>Performance-Profiling unter Last (siehe offene Frage oben)</li>
+    </ul>
+  </section>
+</section>
+```
+
+### Open-questions item attributes
+
+| Attribute | Purpose |
+|---|---|
+| `name` (or `id`) | Stable identifier reused in the `create-issues` payload's `item.id` |
+| `data-issue-title` | Verbatim title used by `devops-new-issue` (`[TYPE] Imperative title`). REQUIRED for the button to produce a valid GitHub issue |
+| `data-issue-type` | Maps to the issue label (`bug`, `feature`, `refactor`, `chore`, `docs`, `design`). Defaults to `chore` if omitted |
+| `checked` | Default `true` — user opts out, not in |
+| `disabled` | Set by Claude after the item has been routed (becomes `[Issue #NNN]`) so the gating logic in `updateCreateIssuesPanel()` ignores it |
+
+### After issues are created — HTML rewrite pattern
+
+When Claude processes `action: "create-issues"`, the response loop
+rewrites each routed `<li>` so the user sees the resulting issue
+number + link. The checkbox stays in the DOM but is disabled, which
+keeps `restoreState()` consistent across reloads:
+
+```html
+<li>
+  <label>
+    <input type="checkbox"
+           name="oq-saml-edge"
+           data-issue-title="[BUG] Auth fails for SAML users"
+           data-issue-type="bug"
+           checked disabled>
+    <span class="oq-label">Auth fails for SAML users — observed during smoke test, out of scope here</span>
+    <a class="oq-issue-link"
+       href="https://github.com/{owner}/{repo}/issues/123"
+       target="_blank"
+       rel="noopener noreferrer">{{final.issue_link_prefix}} #123</a>
+  </label>
+</li>
+```
+
+Once every `<li>` in the section is `disabled`, `updateCreateIssuesPanel()`
+hides the "Issues erstellen" button automatically — the section becomes a
+read-only audit log of what was routed.
+
+### Panel gating rules
+
+`updateCreateIssuesPanel()` (see § Two-Button Submit) recomputes on:
+- `DOMContentLoaded`
+- `iteration:changed` (via `showIteration()`)
+- any `change` event on a `[data-open-questions] input[type="checkbox"]`
+
+The panel is **visible** iff all of:
+1. Active section has `data-final-report`.
+2. Active section contains a `[data-open-questions]` block.
+3. That block has at least one `:not(:disabled)` checkbox.
+
+The button is **enabled** iff additionally at least one of those
+checkboxes is currently checked.
+
+Both gates run client-side only — Claude never enables/disables the
+button via the bridge; instead it controls visibility indirectly by
+disabling checkboxes when it writes the issue-routed HTML.
 
 ## Design System
 

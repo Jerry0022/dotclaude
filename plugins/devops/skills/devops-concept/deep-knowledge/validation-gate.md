@@ -7,7 +7,7 @@ template-specific extras selected by `<html data-template="...">`.
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 27 patterns, regardless of template:
+Every concept page must contain these 29 patterns, regardless of template:
 
 | # | Pattern to grep | Purpose |
 |---|----------------|---------|
@@ -39,6 +39,8 @@ Every concept page must contain these 27 patterns, regardless of template:
 | 25 | `data.claude_ts` inside `pollHeartbeat` | The poller MUST read JSON and assign `claude_ts` (not `server_ts`, not the raw response object). HTTP-200 alone is not enough — the daemon self-pulse keeps `server_ts` fresh forever, so an HTTP-only check leaves the indicator green while Claude's cron is dead. |
 | 26 | `b.disabled = ` (or `btn.disabled = `) inside `checkClaudeConnection` | The heartbeat checker MUST actually toggle the submit buttons' `disabled` property — a visual-only warning lets the user keep submitting into a black hole during a stale heartbeat. |
 | 27 | `Date.now() - _lastHeartbeatTs` (millis vs. millis) | Both sides of the staleness comparison MUST be in milliseconds since the Unix epoch. Server returns `claude_ts` in ms; browser uses `Date.now()`. Never divide either side by 1000 — a millis-vs-seconds mix-up produces a giant negative age that always evaluates as "fresh" and silently hides outages. |
+| 28 | `panel-final-report` | Final-report panel element. Auto-shown by `showIteration()` when the active section carries `data-final-report`; replaces `panel-ready` (no iterate/implement buttons). |
+| 29 | `updateCreateIssuesPanel` | Gating function that toggles the "Issues erstellen" button visibility + enabled state based on the active section's `[data-open-questions]` content. Must be called from `showIteration()` so panel state stays consistent on tab switch. |
 
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
 at the post-generation gate. See § Generic Form Collection below for the

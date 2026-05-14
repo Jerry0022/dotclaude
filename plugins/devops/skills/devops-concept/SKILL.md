@@ -361,7 +361,7 @@ and `deep-knowledge/templates.md` § Iteration Tabs for the reference HTML.
 
 ### Post-Generation Validation (mandatory gate)
 
-After writing the HTML file, grep it for the 27 mandatory interactive
+After writing the HTML file, grep it for the 29 mandatory interactive
 patterns (heartbeat, panel states, iteration tabs, section TOC, reload
 polling, generic form-collection catch-all scoped to the active
 iteration, etc.).
@@ -489,7 +489,7 @@ Branch on it:
    - For free-template findings: apply the Miteinbeziehen findings as fixes
    - For prototypes: build the designed UI/flow with the feedback applied
 3. **Signal completion to the panel.** Right after the implementation work
-   is done — and BEFORE the iteration append + `/reload` in Step 5c — POST
+   is done — and BEFORE the final-report append + `/reload` in Step 5c — POST
    the implemented phase so the submit panel's third progress step lights
    up while the user is still looking at it. Pass the `_version` noted in
    Step 5a so a stale worker cannot pin "implemented" onto a newer
@@ -507,18 +507,44 @@ Branch on it:
    The browser polls `/decisions` every 5 s and reads `_phase` from the
    response — so the ✓ next to "Implementierung abgeschlossen" appears
    within ~5 s. The subsequent `/reload` (Step 5c) replaces the panel
-   with the new iteration shortly after.
-4. After the implementation is done, still append a new iteration that
-   shows "implementiert — siehe commit {hash}" as a frozen record, so the
-   concept page stays the source of truth for what happened
+   with the final report shortly after.
+4. After the implementation is done, append a **Final Report**
+   (`Abschlussbericht`) section instead of a regular iteration. This is the
+   closing artefact of the concept session — see Step 5c §
+   "Final-report append (implement only)" for the structure.
+
+**`action: "create-issues"` ("Issues erstellen" button — only on final report):**
+1. Read the `items` array from the payload — each entry is a selected open
+   question / TODO `{ id, title, type, selected: true }`.
+2. For each selected item, invoke the **devops-new-issue** skill with the
+   item's title and type. Capture the resulting issue number + URL.
+3. Update the final-report HTML: in the open-questions section, replace
+   each created item's label with `[Issue #NNN] {title}` (linked to the
+   issue URL), disable the checkbox, and add a small ✓ badge.
+4. POST `/reload` so the browser shows the updated state. If every item
+   was processed, the "Issues erstellen" button auto-hides on reload
+   (panel JS gates it on the presence of un-created checkable items).
+5. Then POST `/reset` with the captured `_version` as usual.
+6. The concept session stays open — the user may still review previous
+   iteration tabs but cannot trigger further iterate/implement actions
+   from the final report.
 
 **Critical invariant:** a submit with `action: "iterate"` MUST NEVER cause
 code or file changes outside of the concept HTML file itself. The user
-relies on that guarantee to explore ideas safely.
+relies on that guarantee to explore ideas safely. `action: "create-issues"`
+only writes GitHub issues + the final-report HTML — no code/file changes
+in the project tree.
 ### 5c. Update the Page
-After processing, **append a new iteration tab** to the same HTML file and
-signal the browser to reload. This is the ONLY update path — there is no
+After processing, **append a new tab** to the same HTML file and signal
+the browser to reload. This is the ONLY update path — there is no
 separate "in-place edit" vs. "new file" distinction anymore.
+
+For `action: "iterate"` → append a regular iteration section.
+For `action: "implement"` → append a **final-report section** (one-time,
+see § "Final-report append (implement only)" below).
+For `action: "create-issues"` → no new section; rewrite the existing
+final-report HTML in place (replace processed items with linked
+`[Issue #NNN]` labels) and POST `/reload`.
 
 Procedure on every iteration (including the very first response to feedback).
 
@@ -572,11 +598,63 @@ Do NOT write a redirect file. Do NOT create a new `-v{N}` file. The entire
 concept session — first render, every iteration, "nochmal neu" reworks —
 lives in the single `{date}-{slug}.html`.
 
+### Final-report append (implement only)
+
+When `action: "implement"` is being processed, step 3 of the procedure above
+differs: instead of appending a regular iteration, append a **final-report
+section**. Everything else (freeze previous, /reload, /reset, version
+preservation) stays identical.
+
+1. Freeze the previous iteration the same way (step 1–2 above).
+2. Append a `<section data-iteration="{N+1}" data-final-report data-active>`
+   to the same file. This carries the `data-final-report` flag so the
+   panel auto-switches to `panel-final-report` mode (no iterate/implement
+   buttons — see `deep-knowledge/templates.md` § Final Report Panel).
+3. Inside, render a structured report with several `<section id data-nav-label>`
+   blocks so the existing TOC auto-populates. Recommended structure
+   (Claude picks which sections actually fit the concept):
+   - **Zusammenfassung** — what was implemented in one paragraph + commit hash
+   - **Geänderte Dateien** — bulleted list with brief rationale per file
+   - **Tests / Verifikation** — what was run, what passed, what was skipped
+   - **Offene Fragen & TODOs** *(optional, see below)* — checkbox list of
+     things noted during implementation that were intentionally left out,
+     bugs found but not fixed, doc gaps, future improvements
+   - **Nächste Schritte** *(optional)* — recommendations for follow-up work
+4. Append a new entry in the `.iteration-tabs` bar for the final report.
+   **Tab label MUST be `iteration.final_tab`** (locale: "Abschlussbericht" /
+   "Final report"), NOT "Iteration N+1". Mark it `aria-selected="true"` and
+   carry `data-final-report` so the tab-bar JS can style it distinctly.
+5. Set `submitted: false` in `#concept-decisions`, remove `concept-submitted`
+   from `<body>`. The submit-button reset is irrelevant because the
+   final-report panel doesn't surface iterate/implement at all.
+6. /reload → /reset as steps 5–6 above.
+
+**Open questions / TODOs section — when to include:**
+
+Include the `<section data-open-questions>` block only when there are real
+items worth tracking as GitHub issues — things you knowingly deferred,
+bugs surfaced but out of scope, doc gaps, follow-up refactors. Skip it
+entirely (do NOT render an empty stub) when the implementation is
+genuinely clean. The presence of this section is what surfaces the
+"Issues erstellen" button in the panel — see `deep-knowledge/templates.md`
+§ Final Report Panel for the HTML pattern. Default each `<input
+type="checkbox">` to `checked` so the user opts items OUT rather than IN.
+
+**No further iterations from the final report.** The panel deliberately
+omits the iterate/implement buttons. If the user wants more work after
+the final report, they can start a new concept session — that's a clear
+new scope, not an additional iteration on a closed one.
+
 ### 5d. Resume Monitoring
 Return to Step 4 (monitor for next submission). The loop continues until:
 - The user closes the page
 - The user says "fertig" / "done" in chat
 - There are no more decisions to make (all items processed)
+
+If the active section is the final report, the only submission Claude
+expects is `action: "create-issues"` (when open questions / TODOs are
+present). All other action types from the final-report panel should be
+treated as protocol errors and reported back to the user.
 
 ### 5e. Persist
 Write a cumulative summary to `docs/concepts/{same-timestamp}-{same-slug}-decisions.json`
