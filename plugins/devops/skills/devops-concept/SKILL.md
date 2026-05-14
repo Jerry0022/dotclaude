@@ -251,14 +251,18 @@ findings I marked Miteinbeziehen").
 
 ### Prototype Feedback Dock
 
-The prototype template has no tri-state. Instead, a collapsible **feedback
-dock** at the bottom of the viewport holds structured feedback:
+The prototype template has no tri-state. Instead, a **speech-bubble feedback
+dock** anchored to the 💬 FAB (bottom-left) holds structured feedback:
 
 - A top-level textarea for general notes on the prototype
 - One textarea per `<section data-screen>` inside the active iteration,
   auto-populated by the dock (label = `data-nav-label` of that screen)
 
-The dock is toggled via a floating action button (bottom-left). See
+The dock is toggled via the 💬 FAB. The FAB stays visible AND clickable
+while the dock is open (clicking it toggles closed again), and the dock's
+right edge stops before the ☰ Menü-FAB so decisions remain reachable
+during feedback. The close button is a **minimise** (`−`), not a destroy:
+text content stays intact in `localStorage` when the dock is closed. See
 `deep-knowledge/templates.md` § Template: prototype for the full HTML/CSS/JS.
 
 ### Reload Resilience
