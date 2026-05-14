@@ -720,9 +720,16 @@ The wiring is a single delegated click handler installed alongside
       · <span id="active-screen-label">Welcome</span>
     </div>
 
-    <!-- Two FABs — the only floating UI besides the screen itself. -->
+    <!-- Two FABs — the only floating UI besides the screen itself.
+         The 💬 FAB carries two labels: the dock toggle swaps aria-label
+         between them based on aria-expanded so screen-reader users
+         always hear the correct next action ("Open" vs "Minimize"). -->
     <button id="panel-toggle" class="panel-fab" aria-label="{{panel.toggle_open}}">☰</button>
-    <button id="feedback-toggle" class="feedback-fab" aria-label="{{proto.feedback_toggle}}">💬</button>
+    <button id="feedback-toggle" class="feedback-fab"
+            aria-label="{{proto.feedback_toggle}}"
+            aria-expanded="false"
+            data-label-open="{{proto.feedback_toggle}}"
+            data-label-close="{{panel.minimize}}">💬</button>
 
     <!-- Decision panel (☰) — contains: iteration-tabs, screen-nav, submit.
          No section-TOC here: the screen-nav replaces it for prototype. -->
@@ -1022,16 +1029,19 @@ section[data-screen][hidden] { display: none; }
 .feedback-section textarea:focus { outline: none; border-color: var(--accent-color); }
 .feedback-divider { height: 1px; background: var(--border-color); margin: 0.25rem 0; }
 
-/* Narrow viewports: drop the padding-left reservation for the FAB and
-   let the bubble span almost the full width. The FAB still overlaps the
-   bottom-left corner, but on phone widths the user can scroll around it. */
+/* Narrow viewports (≤560px): lift the bubble ABOVE the 💬 FAB instead
+   of having it overlap. With ~150px reserved for FAB + Menü-FAB on a
+   320px phone the inner content column would otherwise collapse to an
+   unusable width. The FAB ends up below the dock, still visible and
+   still toggleable. */
 @media (max-width: 560px) {
   .feedback-dock {
     left: 0.75rem;
     right: calc(0.75rem + 56px + 0.5rem);
-    bottom: calc(1rem + 56px - 4px);
-    padding: 1rem 1rem 1rem 64px;
+    bottom: calc(1rem + 56px + 8px);
+    padding: 1rem;
     border-radius: 14px;
+    transform-origin: 28px calc(100% + 28px);
   }
 }
 
@@ -1154,10 +1164,28 @@ DOM (just hidden), so each one's value persists independently via
   // (open ↔ minimised). The X button is a *minimise*, not a destroy:
   // closing the dock leaves all textarea content intact (localStorage
   // persistence is untouched).
-  function openDock() { dock.dataset.open = 'true'; dockToggle.setAttribute('aria-expanded', 'true'); }
-  function closeDock() { dock.dataset.open = 'false'; dockToggle.setAttribute('aria-expanded', 'false'); }
+  // Accessibility:
+  //   * aria-expanded reflects open/closed state on the FAB
+  //   * aria-label swaps between data-label-open / data-label-close so
+  //     screen-reader users hear the correct next action
+  //   * on close, focus is restored to the FAB if it was inside the dock
+  //     (the dock disappears via display:none, so leaving focus there
+  //     would orphan it)
+  const LABEL_OPEN = dockToggle.dataset.labelOpen || dockToggle.getAttribute('aria-label');
+  const LABEL_CLOSE = dockToggle.dataset.labelClose || LABEL_OPEN;
+  function openDock() {
+    dock.dataset.open = 'true';
+    dockToggle.setAttribute('aria-expanded', 'true');
+    dockToggle.setAttribute('aria-label', LABEL_CLOSE);
+  }
+  function closeDock() {
+    const focusWasInside = dock.contains(document.activeElement);
+    dock.dataset.open = 'false';
+    dockToggle.setAttribute('aria-expanded', 'false');
+    dockToggle.setAttribute('aria-label', LABEL_OPEN);
+    if (focusWasInside) dockToggle.focus();
+  }
   window.closeDock = closeDock;
-  dockToggle.setAttribute('aria-expanded', 'false');
   dockToggle.addEventListener('click', () => {
     if (dock.dataset.open === 'true') closeDock();
     else openDock();
