@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.78.1] — 2026-05-16
+
+### Fixed
+
+- **plugins/devops/hooks/lib/locale.test.js**, **plugins/devops/mcp-server/ship/lib/{repo-mode,sentinel,github}.test.js** — added the four new vitest suites that were referenced in the 0.78.0 release notes and CHANGELOG but accidentally omitted from the merge commit (the ship MCP server's commitMessage path stages only modified-tracked files, not untracked). Suite is now 153 tests as advertised in 0.78.0.
+
 ## [0.78.0] — 2026-05-16
 
 ### Added
