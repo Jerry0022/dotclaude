@@ -32,6 +32,7 @@ const LIB_ROOT = resolve(__dirname, "..", "hooks", "lib");
 
 const http = require(join(LIB_ROOT, "anythingllm-http.js"));
 const lifecycle = require(join(LIB_ROOT, "anythingllm-lifecycle.js"));
+const tierCache = require(join(LIB_ROOT, "anythingllm-tier-cache.js"));
 const { resolveConfig, hasApiKey, USER_CONFIG_PATH } = require(join(LIB_ROOT, "anythingllm-config.js"));
 
 const CONFIG = resolveConfig();
@@ -203,6 +204,27 @@ server.registerTool(
       };
     }
 
+    // Hard-gate at tier=low — the SessionStart hook says "DISABLED" in prose,
+    // but a noncompliant agent could still call this tool. Enforce in code.
+    const cache = tierCache.readCache();
+    if (cache && cache.tier === "low") {
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            error: true,
+            phase: "tier_disabled",
+            tier: "low",
+            score: cache.score,
+            hint: `Local model failed probe tasks (tier LOW, score ${Number(cache.score).toFixed(2)}). ` +
+                  `Generation is gated off to prevent token waste on broken output. ` +
+                  `Switch to a stronger model in AnythingLLM, then delete ~/.claude/cache/local-llm-benchmark.json ` +
+                  `to trigger a re-benchmark on the next session.`,
+          }),
+        }],
+      };
+    }
+
     const lang = language || "the appropriate language";
     const baseSystemPrompt =
       "You are a code generation assistant. Output ONLY the requested code — " +
@@ -217,7 +239,7 @@ server.registerTool(
     if (context) userPrompt += `\n\nContext (existing code to follow):\n${context}`;
     userPrompt += "\n\nGenerate the code:";
 
-    const result = await http.chatCompletion(BASE_URL, API_KEY, {
+    const completionArgs = {
       workspaceSlug: WORKSPACE_SLUG,
       messages: [
         { role: "system", content: systemPrompt },
@@ -225,9 +247,28 @@ server.registerTool(
       ],
       temperature: temperature ?? TEMPERATURE_DEFAULT,
       maxTokens: MAX_TOKENS_DEFAULT,
-    });
+    };
+
+    let result = await http.chatCompletion(BASE_URL, API_KEY, completionArgs);
+
+    // Auto-fallback: 1× retry on transient backend failure (5xx or timeout).
+    // Ollama frequently 500's on first request after a model swap (cold load)
+    // and on VRAM contention. A single retry catches both without blocking
+    // the agent or wasting more tokens than necessary.
+    const isTransient = !result.ok && (
+      (typeof result.status === "number" && result.status >= 500) ||
+      result.errorType === "timeout"
+    );
+    if (isTransient) {
+      result = await http.chatCompletion(BASE_URL, API_KEY, completionArgs);
+    }
 
     if (!result.ok) {
+      const baseHint = result.error || result.errorType || "unknown";
+      const guidance = isTransient
+        ? " — retried once, still failing. The local backend likely crashed or is out of VRAM. " +
+          "Restart Ollama / AnythingLLM and try again, or fall back to writing the code directly."
+        : "";
       return {
         content: [{
           type: "text",
@@ -235,7 +276,8 @@ server.registerTool(
             error: true,
             phase: "request_failed",
             status: result.status,
-            hint: result.error || result.errorType,
+            retried: isTransient,
+            hint: baseHint + guidance,
           }),
         }],
       };

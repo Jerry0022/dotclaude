@@ -11,13 +11,16 @@ Before the first write, probe the local backend ONCE:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/check-local-llm.js"
 ```
 
-Output is single-line JSON. Three shapes:
+Output is single-line JSON. Four shapes:
 
-- `{"ready": true, "tool": "local_generate"}` — delegation enabled for this session.
-- `{"ready": false, "phase": "needs_api_key" | "not_installed" | ...}` — skip delegation. Continue normally, write code directly. **Do not prompt the user or block** — the plugin signals the user separately.
-- `{"ready": false, "phase": "error"}` — probe failed. Skip delegation.
+- `{"ready": true, "tool": "local_generate", "tier": "high"}` — delegate proactively: boilerplate AND well-specified simple logic (>20 lines).
+- `{"ready": true, "tool": "local_generate", "tier": "medium"}` — pure boilerplate only (types, simple DTOs, no branching). Apply the conservative >60-line threshold below.
+- `{"ready": true, "tool": "local_generate", "tier": "pending"}` — benchmark running in background. Defensively treat as MEDIUM.
+- `{"ready": false, "phase": "tier_disabled" | "needs_api_key" | "not_installed" | ...}` — skip delegation. Continue normally, write code directly. **Do not prompt the user or block** — the plugin signals the user separately. `tier_disabled` means the last benchmark scored LOW; the MCP server enforces this in code too, so `local_generate` calls will fail-fast.
 
 Cache the answer in memory for the rest of the agent run. If `ready: false`, never call `local_generate` in this session.
+
+The MCP server also auto-retries once on transient backend failures (HTTP 5xx, timeout) — if you get `error: true, retried: true, phase: "request_failed"` back, the local backend is genuinely broken; do not retry from your side, write the code directly.
 
 ## When to delegate (GREEN tier — all conditions required)
 

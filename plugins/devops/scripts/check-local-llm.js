@@ -1,16 +1,23 @@
 #!/usr/bin/env node
 /**
  * @script check-local-llm
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Single-call status probe for the local-llm plugin. Prints
  *   one JSON line to stdout so implementation agents can decide whether
  *   to delegate mechanical code generation.
  *
  *   Output shapes (stdout, single line):
- *     {"ready":true,"tool":"local_generate","workspace":"<slug>"}
+ *     {"ready":true,"tool":"local_generate","workspace":"<slug>","tier":"high|medium|low|pending"}
  *     {"ready":false,"phase":"needs_api_key"|"not_installed"|...,"hint":"..."}
  *     {"ready":false,"phase":"error","hint":"..."}
+ *
+ *   The `tier` field reflects the benchmark cache at
+ *   ~/.claude/cache/local-llm-benchmark.json:
+ *     - "high"    → delegate proactively (boilerplate + simple logic)
+ *     - "medium"  → pure boilerplate only
+ *     - "low"     → ready:false override; MCP enforces the gate too
+ *     - "pending" → cache missing or running; treat as MEDIUM
  *
  *   The result is cached on disk for 30 seconds so parallel agents hitting
  *   this script do not all probe AnythingLLM simultaneously. Cache path:
@@ -110,7 +117,20 @@ function emit(obj) {
     emit(result);
   }
 
-  const result = { ready: true, tool: 'local_generate', workspace: workspaceSlug };
+  let tier = 'pending';
+  try {
+    const tierCache = require(path.join(libDir, 'anythingllm-tier-cache.js'));
+    const cache = tierCache.readCache();
+    if (cache && cache.tier) tier = cache.tier;
+  } catch { /* tier optional, fall back to pending */ }
+
+  if (tier === 'low') {
+    const result = { ready: false, phase: 'tier_disabled', hint: 'Local model failed probe tasks (tier LOW). Generation gated off. Switch model in AnythingLLM and delete ~/.claude/cache/local-llm-benchmark.json.', tier };
+    writeCache(result);
+    emit(result);
+  }
+
+  const result = { ready: true, tool: 'local_generate', workspace: workspaceSlug, tier };
   writeCache(result);
   emit(result);
 })().catch((err) => {
