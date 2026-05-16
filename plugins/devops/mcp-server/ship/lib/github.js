@@ -7,6 +7,9 @@ import { execSync, execFileSync } from "node:child_process";
 
 const DEFAULT_TIMEOUT = 30_000;
 
+// ANSI escape pattern built at runtime to avoid literal control chars in source.
+const ANSI_PATTERN = new RegExp(String.fromCharCode(27) + "\\[[0-9;]*[A-Za-z]", "g");
+
 function gh(args, opts = {}) {
   const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts;
   return execFileSync("gh", args, {
@@ -55,23 +58,28 @@ export function mergePR(prNumber, base = "main", opts, flags = {}) {
   const args = ["pr", "merge", String(prNumber), `--${strategy}`, "--admin"];
   if (!flags.skipDeleteBranch) args.push("--delete-branch");
   gh(args, opts);
-  // Verify the PR is actually in MERGED state (retry up to 3 times with 2s backoff
-  // to handle transient network errors or GitHub eventual consistency)
+  // Verify the PR is actually in MERGED state with exponential backoff + jitter
+  // (1s, 3s typical) to handle transient network errors or GitHub eventual consistency
   let state = null;
+  let lastError = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       state = gh(["pr", "view", String(prNumber), "--json", "state", "-q", ".state"], opts);
       if (state === "MERGED") break;
-    } catch {
-      // Network error on state check — retry
+    } catch (e) {
+      const raw = e.stderr?.toString() || e.message || "";
+      // Strip ANSI escape sequences; cap to 500 chars to avoid leaking long auth-bearing output
+      lastError = raw.replace(ANSI_PATTERN, "").slice(0, 500);
     }
     if (attempt < 3) {
-      // Synchronous sleep for retry backoff
-      execSync(`node -e "setTimeout(()=>{},${attempt * 2000})"`, { timeout: 10_000 });
+      const baseMs = 1000 * Math.pow(3, attempt - 1);
+      const jitterMs = Math.round(baseMs * (0.9 + Math.random() * 0.2));
+      execSync(`node -e "setTimeout(()=>{},${jitterMs})"`, { timeout: 15_000 });
     }
   }
   if (state !== "MERGED") {
-    throw new Error(`PR #${prNumber} merge verification failed after 3 attempts — state is "${state || "unknown"}", expected "MERGED"`);
+    const detail = lastError ? ` (last error: ${lastError.trim()})` : "";
+    throw new Error(`PR #${prNumber} merge verification failed after 3 attempts — state is "${state || "unknown"}", expected "MERGED"${detail}`);
   }
   // Fetch updated base branch and get the merge commit
   execSync(`git fetch origin ${base}`, {
@@ -125,4 +133,3 @@ export function createRelease({ tag, title, notes, prerelease = false }, opts) {
     stdio: ["pipe", "pipe", "pipe"],
   });
 }
-

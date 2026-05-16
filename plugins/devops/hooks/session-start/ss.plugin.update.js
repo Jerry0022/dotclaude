@@ -20,6 +20,29 @@ require('../lib/plugin-guard');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { t } = require('../lib/locale');
+
+// Translations for user-facing output. SessionStart fires before any user
+// prompt — there is no detected locale yet and no session_id in hook input
+// here. Default to English; the DICT is pre-wired so a future improvement
+// (e.g. reading hook stdin for session_id and calling getLocale) can switch
+// languages without restructuring the output.
+const DICT = {
+  en: {
+    header: 'Plugin updates applied (workaround for claude-code#14061):',
+    restart: '⚡ **Plugin updated ({names}) — restart Claude to activate the new version.**',
+    dk_reread: 'Deep-knowledge index may have changed — re-read INDEX.md on next relevant task.',
+    show_asis: 'Show the user this restart notice as-is.',
+  },
+  de: {
+    header: 'Plugin-Updates angewendet (Workaround für claude-code#14061):',
+    restart: '⚡ **Plugin aktualisiert ({names}) — Claude neu starten, um die neue Version zu aktivieren.**',
+    dk_reread: 'Deep-Knowledge-Index hat sich evtl. geändert — INDEX.md beim nächsten relevanten Task neu lesen.',
+    show_asis: 'Diese Restart-Notice dem User unverändert zeigen.',
+  },
+};
+
+const lang = 'en';
 
 const home = process.env.HOME || process.env.USERPROFILE || '';
 const marketplacesDir = path.join(home, '.claude', 'plugins', 'marketplaces');
@@ -308,7 +331,7 @@ if (mcpAffected.length > 0) {
 
 if (updated.length === 0) process.exit(0);
 
-const lines = ['Plugin updates applied (workaround for claude-code#14061):'];
+const lines = [t('header', lang, DICT)];
 lines.push('');
 for (const u of updated) {
   const status = u.verified ? '✓ cache rebuilt' : `⚠ ${u.error}`;
@@ -321,9 +344,9 @@ lines.push('');
 const upgrades = updated.filter(u => !u.cacheRepair && u.verified);
 if (upgrades.length > 0) {
   const names = upgrades.map(u => `${u.name} v${u.to}`).join(', ');
-  lines.push(`⚡ **Plugin updated (${names}) — restart Claude to activate the new version.**`);
-  lines.push('Deep-knowledge index may have changed — re-read INDEX.md on next relevant task.');
-  lines.push('Show the user this restart notice as-is.');
+  lines.push(t('restart', lang, DICT).replace('{names}', names));
+  lines.push(t('dk_reread', lang, DICT));
+  lines.push(t('show_asis', lang, DICT));
   lines.push('');
   notifyDesktop('Claude Plugin Updated', `${names} — restart Claude to activate.`);
 }

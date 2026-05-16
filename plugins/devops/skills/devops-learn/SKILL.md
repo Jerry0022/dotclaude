@@ -4,18 +4,12 @@ version: 0.1.0
 description: >-
   Capture a long-term learning/correction and route it to the correct project-
   specific instructions (skill, skill-extension, deep-knowledge, or as a last
-  resort CLAUDE.md) — NOT to personal feedback memory. After persisting, prunes
-  any now-duplicate `feedback_*.md` auto-memory entries with confirmation.
-  Handles four targets:
-  (1) the devops plugin source itself when invoked from dotclaude, (2) a project-
-  specific skill-extension when invoked from a consumer project and the learning
-  fits an existing plugin skill, (3) a new project-specific skill or deep-knowledge
-  file otherwise, (4) a different project entirely — via GitHub issue if the repo
-  has a GitHub remote, otherwise via a copy-pastable prompt block. Asks before
-  any global or cross-project file change that is not an issue.
-  Triggers ONLY on explicit invocation: "/devops-learn", "lerne das", "merk dir das
-  fürs Projekt", "remember this for the project", "capture learning". Do NOT
-  trigger for one-off conversational corrections or for personal feedback memory.
+  resort CLAUDE.md) — NOT to personal feedback memory. Also prunes now-duplicate
+  `feedback_*.md` entries with confirmation. Routing details live in the skill
+  body (Step 5 table). Triggers ONLY on explicit invocation: "/devops-learn",
+  "lerne das", "merk dir das fürs Projekt", "remember this for the project",
+  "capture learning". Do NOT trigger for one-off conversational corrections or
+  for personal feedback memory.
 argument-hint: "<learning text>"
 allowed-tools: Bash(git *), AskUserQuestion, Read, Write, Edit, Glob, Grep, Skill, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
