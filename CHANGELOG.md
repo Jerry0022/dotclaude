@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.77.0] — 2026-05-16
+
+### Added
+
+- **plugins/devops/scripts/check-local-llm.js** — now surfaces the benchmark `tier` (`high` | `medium` | `low` | `pending`) in its single-line JSON output so sub-agents can scale delegation ambition without having to read the SessionStart hook themselves. When `tier === "low"` the probe returns `ready: false, phase: "tier_disabled"` instead of `ready: true` — sub-agents get an explicit skip signal where previously they only saw `ready: true` and had no tier context (the LOW prose directive emitted by `ss.llm.health.js` never reached freshly-spawned sub-agent contexts).
+- **plugins/local-llm/mcp-server/index.js** — `local_generate` enforces the tier=LOW gate in code: it reads the benchmark cache before each call and fails fast with `phase: "tier_disabled"` (no AnythingLLM round-trip, no 5-minute Ollama timeout). Previously the gate was prose-only, so a noncompliant agent could still drive the local backend.
+- **plugins/local-llm/mcp-server/index.js** — auto-retry once on transient backend failure (HTTP 5xx or `errorType: "timeout"`). Catches Ollama cold-loads after model swaps and VRAM contention without the agent having to retry from its side. On second failure the hint includes "retried once, still failing — restart Ollama / AnythingLLM" so the user knows the local backend, not the request, is at fault. The error JSON now also carries `retried: true|false`.
+
+### Changed
+
+- **plugins/devops/deep-knowledge/local-llm-delegation.md** — Gate section documents the new four-shape JSON contract (high/medium/pending → ready, tier_disabled → not ready) plus the MCP-side auto-retry, so agents stop double-retrying on transient failures.
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.76.0 → 0.77.0`
+- **plugins/local-llm/.claude-plugin/plugin.json** — version `0.76.0 → 0.77.0`
+
 ## [0.76.0] — 2026-05-14
 
 ### Added
