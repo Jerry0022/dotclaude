@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.78.0] — 2026-05-16
+
+### Added
+
+- **plugins/devops/mcp-server/ship/lib/repo-mode.test.js** — new vitest suite (7 tests) covering `detectRepoMode` (`none` / `git` / `git-no-remote` branches) and `isGitRepo`. Uses `vi.mock('node:child_process')` to stub `execFileSync`; asserts cwd is propagated and the second `git remote get-url` invocation only runs after `rev-parse` succeeds.
+- **plugins/devops/mcp-server/ship/lib/sentinel.test.js** — new vitest suite (10 tests) covering `sentinelPath` (platform-correct trailing path, starts-with cwd, POSIX constant), `writeSentinel` (empty/null/undefined cwd → false, ts+pid JSON shape, auto-creates `.claude/`, false when cwd is a file), and `clearSentinel` (empty cwd, removes existing, no-throw on missing). Uses `fs.mkdtempSync` per test for isolation.
+- **plugins/devops/hooks/lib/locale.test.js** — new vitest suite (18 tests) covering `DEFAULT_LOCALE`/`SUPPORTED` constants, `detectFromPrompt` (umlaut, multi-marker, single-marker, case-insensitive), `getLocale`/`setLocale` round-trip + unsupported-value rejection, `ensureLocale` fresh/cached semantics, and `t()` fallback chain (lang bucket → en bucket → key itself). `beforeEach` purges only `dotclaude-locale-vitest-locale-*` tmp files to avoid touching live Claude Code session caches.
+- **plugins/devops/mcp-server/ship/lib/github.test.js** — new vitest suite (15 tests) covering `createPR` (URL parse, stdin body), `mergePR` success (squash default, `--delete-branch` flag, merge-strategy override), and the new exp-backoff retry path: ANSI-stripped stderr in error messages, 500-char cap, throws on persistent CLOSED state, throws after 3 failed attempts with sanitized stderr. Mocks `node:child_process`.
+
+### Changed
+
+- **plugins/devops/mcp-server/ship/lib/github.js** — `mergePR` retry block now captures stderr from each failed `gh pr view` attempt, strips ANSI escape sequences (regex built at runtime via `String.fromCharCode(27)` to keep no-control-regex eslint rule happy), caps to 500 chars, and appends to the final error message. Linear `2s, 4s` backoff replaced with exponential `1s ± 10%`, `3s ± 10%` (`Math.pow(3, attempt-1)` × `0.9 + Math.random() * 0.2`). execSync timeout bumped 10s → 15s to accommodate the wider jitter band.
+- **plugins/devops/hooks/session-start/ss.plugin.update.js** — output strings refactored to go through `locale.t(key, lang, DICT)` instead of hard-coded English. New DE translations supplied for all 4 user-facing strings (header, restart notice, deep-knowledge re-read hint, "show as-is" instruction). SessionStart fires before any user prompt, so `lang` is currently hard-coded to `'en'`; the DICT is pre-wired so a future improvement that reads hook stdin for `session_id` can switch languages without restructuring.
+- **plugins/devops/hooks/pre-tool-use/pre.main.guard.js** — all 4 lines of BLOCKED stderr output now carry an explicit `[pre.main.guard]` prefix so Claude can attribute the message when multiple hooks output simultaneously.
+- **plugins/devops/hooks/user-prompt-submit/prompt.git.sync.js** — throttle skip is no longer silent: writes `[prompt.git.sync] ✓ skipped (throttled, last sync Xm ago, retry in Ym)` to stderr before exit so the deferred sync is visible in hook output.
+- **plugins/local-llm/hooks/session-start/ss.llm.deps.js** — silent `process.exit(0)` on unset `CLAUDE_PLUGIN_DATA` now prefixed with a `console.error('[local-llm] ⚠ ...')` warning so users see why local-llm features aren't bootstrapped.
+- **plugins/devops/scripts/build-id.js** — error message now carries the `✗ ` emoji prefix to match the convention used in hooks (✓/⚠/✗).
+- **plugins/devops/skills/devops-autonomous/SKILL.md** — added `version: 0.1.0` to frontmatter (matched the dominant pattern across other skills).
+- **plugins/devops/skills/devops-learn/SKILL.md** — `description` frontmatter trimmed from ~13 to ~8 lines (removed the `Handles four targets: (1)..(4)` enumeration; targets are still listed inline as `(skill, skill-extension, deep-knowledge, or as a last resort CLAUDE.md)` and the full routing table lives in body Step 5). Reduces Claude skill-matcher load.
+- **plugins/devops/docs/architecture.html** — version label bumped `v0.18.2 → v0.76.0`, headline counts updated (`10 → 29 hooks, 10 → 20 skills, 10 → 11 agents`), nav-link counts realigned. Added a `<div role="note">` warning banner under the lead paragraph indicating that content below still mirrors the v0.18.2 baseline and skill/hook/agent listings need regeneration. New CSS: `nav a:focus-visible` (2px accent outline + 2px offset, no background override so focus is distinct from hover), `@media (prefers-reduced-motion: reduce)` block disabling transitions on nav links and summary chevrons. `<nav>` element gains `role="navigation"` + `aria-label="Main navigation"` for screen readers.
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.77.0 → 0.78.0`
+
 ## [0.77.0] — 2026-05-16
 
 ### Added

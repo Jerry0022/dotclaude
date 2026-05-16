@@ -24,6 +24,7 @@
   nav h2:first-child { margin-top: 0; }
   nav a { display: block; padding: .3rem .6rem; color: var(--accent); text-decoration: none; font-size: .9rem; border-radius: 4px; transition: background .15s; }
   nav a:hover { background: var(--bg3); }
+  nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .nav-brand { font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: .3rem; display: block; }
   .nav-version { font-size: .75rem; color: var(--text2); display: block; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
 
@@ -95,6 +96,12 @@
     main { margin-left: 0; padding: 1.5rem; }
   }
 
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    nav a { transition: none; }
+    summary::before { transition: none; }
+  }
+
   /* Scroll offset for anchors */
   [id] { scroll-margin-top: 1rem; }
 
@@ -112,9 +119,9 @@
 <div class="wrapper">
 
 <!-- ==================== SIDEBAR NAV ==================== -->
-<nav>
+<nav role="navigation" aria-label="Main navigation">
   <span class="nav-brand">devops</span>
-  <span class="nav-version">v0.18.2 &middot; MIT &middot; Jerry0022</span>
+  <span class="nav-version">v0.76.0 &middot; MIT &middot; Jerry0022</span>
 
   <h2>Overview</h2>
   <a href="#overview">Architecture Overview</a>
@@ -122,11 +129,11 @@
   <a href="#extension-model">3-Layer Extension Model</a>
 
   <h2>Lifecycle</h2>
-  <a href="#hooks">Hooks (10)</a>
+  <a href="#hooks">Hooks (29)</a>
   <a href="#hook-flow">Hook Execution Flow</a>
 
   <h2>Skills</h2>
-  <a href="#skills">Skills Overview (10)</a>
+  <a href="#skills">Skills Overview (20)</a>
   <a href="#skill-ship">/devops-ship</a>
   <a href="#skill-commit">/devops-commit</a>
   <a href="#skill-flow">/devops-flow</a>
@@ -144,7 +151,7 @@
   <a href="#mcp-ship">dotclaude-ship (5 tools)</a>
 
   <h2>Agents</h2>
-  <a href="#agents">Agents (10)</a>
+  <a href="#agents">Agents (11)</a>
 
   <h2>Automation</h2>
   <a href="#scheduled-tasks">Scheduled Tasks</a>
@@ -161,11 +168,15 @@
 
 <!-- ===== OVERVIEW ===== -->
 <section id="overview">
-<h1>Architecture Documentation <small>devops v0.18.2</small></h1>
+<h1>Architecture Documentation <small>devops v0.76.0</small></h1>
 <p class="lead">
-  A comprehensive DevOps automation plugin for Claude Code &mdash; 10 hooks, 10 skills, 10 agents,
+  A comprehensive DevOps automation plugin for Claude Code &mdash; 29 hooks, 20 skills, 11 agents,
   2 MCP servers, a deterministic completion card engine, and a 3-layer extension system.
 </p>
+<div role="note" style="margin:.4rem 0 1.4rem;padding:.6rem .9rem;background:var(--bg2);border-left:3px solid var(--warn);border-radius:4px;color:var(--text2);font-size:.85rem;">
+  &#9888; Content below mirrors the v0.18.2 baseline. Skill/hook/agent listings are not auto-regenerated yet &mdash;
+  see <code>plugins/devops/skills/</code>, <code>hooks/hooks.json</code>, and <code>agents/</code> for the canonical roster.
+</div>
 
 <div class="card-grid">
   <div class="card">
@@ -1094,7 +1105,7 @@
 <hr>
 
 <footer style="text-align:center;color:var(--text2);font-size:.8rem;padding:2rem 0">
-  devops v0.18.2 &middot; MIT License &middot; Jerry0022<br>
+  devops v0.76.0 &middot; MIT License &middot; Jerry0022<br>
   Generated 2026-04-01
 </footer>
 

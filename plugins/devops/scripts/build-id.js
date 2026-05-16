@@ -82,6 +82,6 @@ try {
   const hash = combined.substring(0, 7);
   process.stdout.write(hash + '\n');
 } catch (e) {
-  process.stderr.write(`build-id error: ${e.message}\n`);
+  process.stderr.write(`✗ build-id error: ${e.message}\n`);
   process.exit(1);
 }

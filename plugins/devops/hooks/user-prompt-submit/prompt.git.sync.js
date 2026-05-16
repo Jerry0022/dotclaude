@@ -39,7 +39,11 @@ const THROTTLE_MS = 15 * 60 * 1000; // 15 minutes
 try {
   if (fs.existsSync(THROTTLE_FILE)) {
     const lastSync = parseInt(fs.readFileSync(THROTTLE_FILE, 'utf8'), 10);
-    if (Date.now() - lastSync < THROTTLE_MS) {
+    const ageMs = Date.now() - lastSync;
+    if (ageMs < THROTTLE_MS) {
+      const ageMin = Math.round(ageMs / 60000);
+      const remainMin = Math.ceil((THROTTLE_MS - ageMs) / 60000);
+      process.stderr.write(`[prompt.git.sync] ✓ skipped (throttled, last sync ${ageMin}m ago, retry in ${remainMin}m)\n`);
       process.exit(0);
     }
   }

@@ -18,6 +18,7 @@ const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || resolve(__dirname, "../.."
 
 const PLUGIN_DATA = process.env.CLAUDE_PLUGIN_DATA;
 if (!PLUGIN_DATA) {
+  console.error("[local-llm] ⚠ CLAUDE_PLUGIN_DATA not set — skipping MCP dependency install. Local-LLM features will be unavailable.");
   process.exit(0);
 }
 

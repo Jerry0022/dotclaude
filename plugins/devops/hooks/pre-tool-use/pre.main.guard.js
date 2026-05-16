@@ -91,10 +91,10 @@ process.stdin.on('end', () => {
   if (branch !== 'main' && branch !== 'master') process.exit(0);
 
   process.stderr.write(
-    `BLOCKED: Write operation on local '${branch}' is not allowed.\n` +
-    `Rule: Never commit/merge/push directly on ${branch}. Work on a branch derived from origin/${branch} and land via /devops-ship.\n` +
-    `Fix: git fetch origin && git switch -c <feat/topic> origin/${branch}\n` +
-    `Bypass (only if the user explicitly asked to work on ${branch}): set env DEVOPS_ALLOW_MAIN=1 for this single command.\n`
+    `[pre.main.guard] BLOCKED: Write operation on local '${branch}' is not allowed.\n` +
+    `[pre.main.guard] Rule: Never commit/merge/push directly on ${branch}. Work on a branch derived from origin/${branch} and land via /devops-ship.\n` +
+    `[pre.main.guard] Fix: git fetch origin && git switch -c <feat/topic> origin/${branch}\n` +
+    `[pre.main.guard] Bypass (only if the user explicitly asked to work on ${branch}): set env DEVOPS_ALLOW_MAIN=1 for this single command.\n`
   );
   process.exit(2);
 });
