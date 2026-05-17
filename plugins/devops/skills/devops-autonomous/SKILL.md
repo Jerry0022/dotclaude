@@ -74,6 +74,8 @@ If found:
    > Options (fixed order):
    > 1. label: "Nur Bericht (empfohlen)" — description: "Ergebnisse als Report, PC bleibt an."
    > 2. label: "Herunterfahren" — description: "PC fährt nach Abschluss herunter. Wartet vorher, falls andere Claude-Sessions (egal welches Projekt) noch arbeiten."
+- **If shutdown=yes**: run Step 4d to re-arm the external watchdog (the previous
+  watchdog already fired or was deleted — we need a fresh one for this run).
 - Delete the resume file
 - Skip Steps 1-4, jump directly to Step 5 with the resumed context
 - On completion, proceed normally through Steps 7-8
@@ -277,6 +279,48 @@ in-flight question. Log once: "Autostart verschoben — offene Frage aktiv."
 Claude session before the timeout elapses, auto-start will NOT fire. Tell the
 user verbally: the session must stay running.
 
+### 4d — External Shutdown Watchdog (only if shutdown=yes)
+
+**Skip entirely if Step 2 Question 3 was "Nein, nur Bericht".** Nothing to enforce.
+
+If the user chose "Ja, herunterfahren", register a Windows Scheduled Task that
+fires after 8 hours as a deadman switch. The task checks for a done-flag (which
+**Step 8c** writes after a successful shutdown call); if the flag is missing,
+it force-shuts the PC down via the absolute `shutdown.exe` path.
+
+This is the **last line of defense** against:
+- Anthropic API rate-limit hangs (Step 6 retry exhaustion or unhandled cases)
+- Subagent crashes that leave the orchestrator waiting
+- Wakelocks, hung file handles, or any "session alive but not progressing" failure mode
+- Bash quoting bugs in the in-session shutdown command itself
+
+The watchdog runs **outside** Claude — it cannot be blocked by anything inside
+the session. That's its whole point.
+
+```bash
+FLAG_PATH="$PWD/AUTONOMOUS-DONE.flag"
+WATCHDOG_OUT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-watchdog.js" register "$FLAG_PATH" 8)
+echo "$WATCHDOG_OUT"  # → {"ok":true, "taskName":"ClaudeAutonomousWatchdog-...", ...}
+```
+
+The absolute `$FLAG_PATH` is **persisted in the watchdog sentinel** (TEMP file)
+at registration time. Step 8c reads it back from the sentinel rather than
+recomputing it from `$PWD` — that way a later `cd` in some tool step can't
+make Step 8c write a flag the watchdog doesn't check.
+
+Parse the JSON output:
+- `ok: true` → save `taskName` as `$WATCHDOG_TASK`, set `$WATCHDOG_REGISTERED=true`
+- `ok: false` or `skipped: true` (non-Windows) → set `$WATCHDOG_REGISTERED=false`,
+  log a one-line warning into the report ("⚠ External watchdog konnte nicht
+  angelegt werden — in-session shutdown ist alleinige Absicherung"). Continue.
+
+**Budget tuning**: 8h covers realistic autonomous-task durations (analysis +
+implement + tests + build + verify + report) with headroom that includes the
+worst-case Step 8a wait (30 min) plus the API-error backoff schedule (~12 min)
+without crowding the watchdog firing window. Override only if the user
+declared an explicitly long task during intake ("12h migration", "run
+overnight benchmark") — bump to `12` or `24` (script enforces ≤ 24h).
+
 ### Post-Confirmation Lockout
 
 **After the user confirms, ZERO user interaction is allowed.**
@@ -347,13 +391,21 @@ Use `$BROWSER_TOOL` (from Step 3b) for all browser-based visual verification.
 - **Late Permission** (unanticipated permission needed during execution): save progress,
   write `AUTONOMOUS-RESUME.json`, generate INTERRUPTED report, **execute shutdown if
   requested**. See "Late Permission Handling" in Step 5.
+- **API Rate-Limit / Server Throttle** (Anthropic or 3rd-party API returns "Server
+  is temporarily limiting requests", "Rate limited", HTTP 429, etc.): exponential
+  backoff (30s → 2min → 10min), then save progress and bail to INTERRUPTED. See
+  full protocol in `deep-knowledge/autonomous-execution.md` § API-Error-Handling.
+  Flag-writing is handled by Step 8c's decision matrix — if rate-limiting
+  prevents Step 7 or Step 8 from running at all, no flag is written and the
+  external watchdog from Step 4d fires as the safety net.
 - **Minor** (single test fail, linter warning, optional enhancement): log and continue
 - **Related bugs** in same codebase context: fix them, log in report
 - **Truly stuck**: commit work locally, write report with BLOCKED status, never shut down
 
 **Status hierarchy:** COMPLETED > INTERRUPTED > BLOCKED.
-INTERRUPTED means useful work was done but couldn't finish due to missing permission.
-The resume file enables continuation. Shutdown is safe because progress is saved.
+INTERRUPTED means useful work was done but couldn't finish due to missing permission
+or an upstream rate-limit. The resume file enables continuation. Shutdown is safe
+because progress is saved.
 
 ## Step 7 — Report & Completion
 
@@ -439,16 +491,66 @@ stays empty and the sentinel falls through. The loop then waits on its own
 session too — burns the full 30 min cap before shutdown. Safer than cutting
 off other sessions by accident.
 
-### 8b — Execute Shutdown
+### 8b — Execute Shutdown (COMPLETED / INTERRUPTED)
+
+**Always shell out via PowerShell with an absolute path to `shutdown.exe`.**
+The naked Bash form (`shutdown /s /t 60 /c "..."`) is unreliable in two cases
+seen in production:
+
+1. **UNC CWD** (e.g. session running from `\\nas\share\...`): cmd.exe rejects
+   UNC paths as CWD ("UNC-Pfade werden nicht unterstützt") and silently switches
+   to `%SystemRoot%`, breaking the rest of the command line.
+2. **Bash quoting**: single-quoted args (`'shutdown /s /t 60'`) work in Bash but
+   CMD treats `'` as a literal — the whole token becomes one unknown command.
+
+PowerShell tolerates UNC CWDs natively, and the absolute `$env:SystemRoot\System32\shutdown.exe`
+path bypasses any PATH/CWD interaction:
 
 ```bash
-shutdown /s /t 60 /c "Autonomous task completed. Shutting down in 60s. Run 'shutdown /a' to abort."
+powershell.exe -NoProfile -Command '& "$env:SystemRoot\System32\shutdown.exe" /s /t 60 /c "Autonomous task completed. Shutting down in 60s. shutdown /a to abort."; exit $LASTEXITCODE'
+SHUTDOWN_EXIT=$?
 ```
+
+**Capture the exit code** as `$SHUTDOWN_EXIT`. The trailing `; exit $LASTEXITCODE`
+is **mandatory** — without it, `$?` in Bash captures `powershell.exe`'s own exit
+(usually 0 even when the inner native call failed), not `shutdown.exe`'s exit.
+`shutdown.exe` returns 0 on success; anything else means the call did NOT
+schedule a shutdown. Step 8c uses this to decide whether to disarm the watchdog.
 
 **INTERRUPTED:** Shutdown is safe because progress is saved in `AUTONOMOUS-RESUME.json`
 and committed locally. The user can resume on next boot via Step 0.5.
 
-**BLOCKED:** Skip shutdown — user must intervene immediately, data integrity may be at risk.
+**BLOCKED:** Do NOT run Step 8b at all — jump straight to Step 8c. Original rule
+stands: data integrity may be at risk, user must intervene.
 
 **Never ask about shutdown inline.** The decision was made in Step 2 (or Step 0.5 on
 resume). Just execute it (after the 8a wait).
+
+### 8c — Watchdog Done-Flag Handling
+
+Only relevant if Step 4d armed a watchdog (`$WATCHDOG_REGISTERED == true`).
+Skip entirely if no watchdog was registered (shutdown=no or registration failed).
+
+Decision matrix — when to write `AUTONOMOUS-DONE.flag` (which tells the watchdog
+to **not** shut down when it fires):
+
+| Status      | Step 8b exit | Write flag? | Why |
+|-------------|--------------|-------------|-----|
+| COMPLETED   | 0 (success)  | **Yes**     | In-session shutdown handled it; watchdog must stand down |
+| INTERRUPTED | 0 (success)  | **Yes**     | Same — shutdown is happening, watchdog redundant |
+| COMPLETED   | ≠ 0 (failed) | **No**      | In-session shutdown failed → watchdog is the fallback, let it fire |
+| INTERRUPTED | ≠ 0 (failed) | **No**      | Same — watchdog enforces what 8b couldn't |
+| BLOCKED     | (skipped)    | **Yes**     | Original rule: BLOCKED never shuts down. Stand the watchdog down too |
+
+Command (only when writing the flag) — **omit the path** so the script reads
+the persisted `flagPath` from the sentinel rather than re-deriving it from
+`$PWD`:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-watchdog.js" flag
+```
+
+We deliberately do NOT call `unregister` on the scheduled task — leaving it
+armed but flag-satisfied is simpler and self-cleans (the task fires once, sees
+the flag, exits, and removes its helper script). If you ever need to clean it
+up earlier (e.g. user manually resumes), use the `unregister` subcommand.
