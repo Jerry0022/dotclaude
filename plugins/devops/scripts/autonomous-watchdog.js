@@ -15,7 +15,10 @@
  *                                  Stores sentinel under TEMP for later cleanup.
  *                                  → { ok, taskName, flagPath, fireAt }
  *
- *   flag <flag-path>               Write the completion flag (signals success).
+ *   flag [flag-path]               Write the completion flag (signals success).
+ *                                  If omitted, reads flagPath from the sentinel
+ *                                  written at register time — recommended path,
+ *                                  avoids cwd drift between arm and flag-write.
  *                                  → { ok, flagPath }
  *
  *   unregister [task-name]         Delete the scheduled task + helper script.
@@ -71,6 +74,33 @@ function deleteSentinel() {
   }
 }
 
+// --- Validation guards for sentinel-derived destructive operations ---
+// The sentinel file lives under %TEMP% and is world-writable in same-user
+// scope. Any same-user process could tamper with it to redirect deletions
+// to arbitrary task names or files. Validate strictly before acting.
+
+const SCRIPT_PREFIX = 'claude-autonomous-watchdog-';
+const SCRIPT_SUFFIX = '.ps1';
+
+function isValidWatchdogTaskName(taskName) {
+  if (typeof taskName !== 'string') return false;
+  // Must match exactly: <PREFIX>-<digits>
+  const re = new RegExp(`^${TASK_PREFIX}-\\d+$`);
+  return re.test(taskName);
+}
+
+function isValidWatchdogScriptPath(scriptPath) {
+  if (typeof scriptPath !== 'string' || scriptPath.length === 0) return false;
+  const tempDir = path.resolve(os.tmpdir());
+  const absPath = path.resolve(scriptPath);
+  // Must live directly under TEMP (no traversal, no sibling dirs)
+  if (path.dirname(absPath).toLowerCase() !== tempDir.toLowerCase()) return false;
+  const basename = path.basename(absPath);
+  if (!basename.startsWith(SCRIPT_PREFIX)) return false;
+  if (!basename.endsWith(SCRIPT_SUFFIX)) return false;
+  return true;
+}
+
 if (subcmd === 'register') {
   const [flagPathRaw, hoursRaw] = args;
   if (!flagPathRaw || !hoursRaw) fail('Usage: register <flag-path> <hours>');
@@ -81,13 +111,15 @@ if (subcmd === 'register') {
   const flagPath = path.resolve(flagPathRaw);
 
   // Clean up any previous watchdog first — only one active at a time.
+  // Sentinel is untrusted (same-user TEMP); validate before destructive ops.
   const prev = readSentinel();
-  if (prev?.taskName) {
+  if (prev?.taskName && isValidWatchdogTaskName(prev.taskName)) {
     spawnSync('schtasks.exe', ['/Delete', '/TN', prev.taskName, '/F'],
       { encoding: 'utf8' });
-    if (prev.scriptPath && fs.existsSync(prev.scriptPath)) {
-      try { fs.unlinkSync(prev.scriptPath); } catch { /* ignore */ }
-    }
+  }
+  if (prev?.scriptPath && isValidWatchdogScriptPath(prev.scriptPath) &&
+      fs.existsSync(prev.scriptPath)) {
+    try { fs.unlinkSync(prev.scriptPath); } catch { /* ignore */ }
   }
 
   const taskName = `${TASK_PREFIX}-${Date.now()}`;
@@ -146,12 +178,24 @@ try { Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction Silentl
 
 if (subcmd === 'flag') {
   const [flagPathRaw] = args;
-  if (!flagPathRaw) fail('Usage: flag <flag-path>');
-  const flagPath = path.resolve(flagPathRaw);
+  let flagPath;
+  if (flagPathRaw) {
+    flagPath = path.resolve(flagPathRaw);
+  } else {
+    // No path supplied → use the one persisted at registration time.
+    // This is the recommended path because it avoids cwd-drift between
+    // arm-time and flag-write-time (Codex finding #2).
+    const sentinel = readSentinel();
+    if (!sentinel?.flagPath) {
+      fail('No flag-path supplied and no sentinel found ' +
+        '(call register first, or pass an explicit path).');
+    }
+    flagPath = sentinel.flagPath;
+  }
   fs.mkdirSync(path.dirname(flagPath), { recursive: true });
   fs.writeFileSync(flagPath, JSON.stringify({
     doneAt: new Date().toISOString(),
-    note: 'Autonomous session reached completion (Step 7).',
+    note: 'Autonomous session reached completion (Step 8c).',
   }, null, 2));
   ok({ flagPath });
 }
@@ -162,6 +206,12 @@ if (subcmd === 'unregister') {
   if (!taskName) {
     if (!sentinel) ok({ skipped: true, reason: 'no sentinel' });
     taskName = sentinel.taskName;
+  }
+
+  // Reject task names that don't match our prefix — protects against a
+  // tampered sentinel pointing at unrelated scheduled tasks.
+  if (!isValidWatchdogTaskName(taskName)) {
+    fail(`Refusing to delete task with unexpected name format: ${taskName}`);
   }
 
   const result = spawnSync('schtasks.exe',
@@ -175,8 +225,10 @@ if (subcmd === 'unregister') {
     fail(`schtasks /Delete failed: ${(result.stderr || result.stdout || '').trim()}`);
   }
 
-  // Best-effort cleanup of helper script
-  if (sentinel?.scriptPath && fs.existsSync(sentinel.scriptPath)) {
+  // Best-effort cleanup of helper script (only if path matches expected layout)
+  if (sentinel?.scriptPath &&
+      isValidWatchdogScriptPath(sentinel.scriptPath) &&
+      fs.existsSync(sentinel.scriptPath)) {
     try { fs.unlinkSync(sentinel.scriptPath); } catch { /* ignore */ }
   }
   deleteSentinel();

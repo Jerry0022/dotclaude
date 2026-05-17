@@ -284,9 +284,9 @@ user verbally: the session must stay running.
 **Skip entirely if Step 2 Question 3 was "Nein, nur Bericht".** Nothing to enforce.
 
 If the user chose "Ja, herunterfahren", register a Windows Scheduled Task that
-fires after 6 hours as a deadman switch. The task checks for a done-flag (which
-Step 7 writes on successful completion); if the flag is missing, it force-shuts
-the PC down via the absolute `shutdown.exe` path.
+fires after 8 hours as a deadman switch. The task checks for a done-flag (which
+**Step 8c** writes after a successful shutdown call); if the flag is missing,
+it force-shuts the PC down via the absolute `shutdown.exe` path.
 
 This is the **last line of defense** against:
 - Anthropic API rate-limit hangs (Step 6 retry exhaustion or unhandled cases)
@@ -299,9 +299,14 @@ the session. That's its whole point.
 
 ```bash
 FLAG_PATH="$PWD/AUTONOMOUS-DONE.flag"
-WATCHDOG_OUT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-watchdog.js" register "$FLAG_PATH" 6)
+WATCHDOG_OUT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-watchdog.js" register "$FLAG_PATH" 8)
 echo "$WATCHDOG_OUT"  # → {"ok":true, "taskName":"ClaudeAutonomousWatchdog-...", ...}
 ```
+
+The absolute `$FLAG_PATH` is **persisted in the watchdog sentinel** (TEMP file)
+at registration time. Step 8c reads it back from the sentinel rather than
+recomputing it from `$PWD` — that way a later `cd` in some tool step can't
+make Step 8c write a flag the watchdog doesn't check.
 
 Parse the JSON output:
 - `ok: true` → save `taskName` as `$WATCHDOG_TASK`, set `$WATCHDOG_REGISTERED=true`
@@ -309,9 +314,11 @@ Parse the JSON output:
   log a one-line warning into the report ("⚠ External watchdog konnte nicht
   angelegt werden — in-session shutdown ist alleinige Absicherung"). Continue.
 
-**Budget tuning**: 6h covers realistic autonomous-task durations (analysis +
-implement + tests + build + verify + report) with headroom. Override only if
-the user declared an explicitly long task during intake ("8h migration", "run
+**Budget tuning**: 8h covers realistic autonomous-task durations (analysis +
+implement + tests + build + verify + report) with headroom that includes the
+worst-case Step 8a wait (30 min) plus the API-error backoff schedule (~12 min)
+without crowding the watchdog firing window. Override only if the user
+declared an explicitly long task during intake ("12h migration", "run
 overnight benchmark") — bump to `12` or `24` (script enforces ≤ 24h).
 
 ### Post-Confirmation Lockout
@@ -388,8 +395,9 @@ Use `$BROWSER_TOOL` (from Step 3b) for all browser-based visual verification.
   is temporarily limiting requests", "Rate limited", HTTP 429, etc.): exponential
   backoff (30s → 2min → 10min), then save progress and bail to INTERRUPTED. See
   full protocol in `deep-knowledge/autonomous-execution.md` § API-Error-Handling.
-  **Do NOT write the watchdog done-flag** — the external watchdog from Step 4d
-  is the ultimate fallback if Claude itself can't reach the API to run Steps 7-8.
+  Flag-writing is handled by Step 8c's decision matrix — if rate-limiting
+  prevents Step 7 or Step 8 from running at all, no flag is written and the
+  external watchdog from Step 4d fires as the safety net.
 - **Minor** (single test fail, linter warning, optional enhancement): log and continue
 - **Related bugs** in same codebase context: fix them, log in report
 - **Truly stuck**: commit work locally, write report with BLOCKED status, never shut down
@@ -499,13 +507,15 @@ PowerShell tolerates UNC CWDs natively, and the absolute `$env:SystemRoot\System
 path bypasses any PATH/CWD interaction:
 
 ```bash
-powershell.exe -NoProfile -Command '& "$env:SystemRoot\System32\shutdown.exe" /s /t 60 /c "Autonomous task completed. Shutting down in 60s. shutdown /a to abort."'
+powershell.exe -NoProfile -Command '& "$env:SystemRoot\System32\shutdown.exe" /s /t 60 /c "Autonomous task completed. Shutting down in 60s. shutdown /a to abort."; exit $LASTEXITCODE'
 SHUTDOWN_EXIT=$?
 ```
 
-**Capture the exit code** as `$SHUTDOWN_EXIT`. `shutdown.exe` returns 0 on
-success; anything else means the call did NOT schedule a shutdown. Step 8c
-uses this to decide whether to disarm the watchdog.
+**Capture the exit code** as `$SHUTDOWN_EXIT`. The trailing `; exit $LASTEXITCODE`
+is **mandatory** — without it, `$?` in Bash captures `powershell.exe`'s own exit
+(usually 0 even when the inner native call failed), not `shutdown.exe`'s exit.
+`shutdown.exe` returns 0 on success; anything else means the call did NOT
+schedule a shutdown. Step 8c uses this to decide whether to disarm the watchdog.
 
 **INTERRUPTED:** Shutdown is safe because progress is saved in `AUTONOMOUS-RESUME.json`
 and committed locally. The user can resume on next boot via Step 0.5.
@@ -532,10 +542,12 @@ to **not** shut down when it fires):
 | INTERRUPTED | ≠ 0 (failed) | **No**      | Same — watchdog enforces what 8b couldn't |
 | BLOCKED     | (skipped)    | **Yes**     | Original rule: BLOCKED never shuts down. Stand the watchdog down too |
 
-Command (only when writing the flag):
+Command (only when writing the flag) — **omit the path** so the script reads
+the persisted `flagPath` from the sentinel rather than re-deriving it from
+`$PWD`:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-watchdog.js" flag "$PWD/AUTONOMOUS-DONE.flag"
+node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-watchdog.js" flag
 ```
 
 We deliberately do NOT call `unregister` on the scheduled task — leaving it
