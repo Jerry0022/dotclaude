@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.79.0] — 2026-05-17
+
+### Added
+
+- **plugins/devops/scripts/autonomous-watchdog.js** — new helper that registers a Windows Scheduled Task as an external deadman switch for `/devops-autonomous`. Subcommands `register <flag-path> <hours>` / `flag [flag-path]` / `unregister [task-name]` / `status [task-name]`. The scheduled task fires at the configured hour mark, checks for the done-flag, and force-shuts the PC via the absolute `$env:SystemRoot\System32\shutdown.exe` path if the flag is missing. Sentinel-driven destructive operations validate strictly: task names must match `^ClaudeAutonomousWatchdog-\d+$`, helper-script paths must live directly under `%TEMP%` with the expected `claude-autonomous-watchdog-*.ps1` filename. No-arg `flag` reads the persisted `flagPath` from the sentinel so cwd drift between arm-time and write-time cannot misroute the signal. No-op on non-Windows platforms.
+- **plugins/devops/skills/devops-autonomous/SKILL.md** — new Step 4d "External Shutdown Watchdog" (only when shutdown=yes) registers the scheduled task with an 8h default budget. Step 0.5 (Resume) re-arms the watchdog when resuming with shutdown=yes. New Step 8c "Watchdog Done-Flag Handling" with a Status × shutdown-exit decision matrix (COMPLETED + 8b success → flag yes; INTERRUPTED + 8b success → flag yes; either + 8b fail → flag no, watchdog fires; BLOCKED → flag yes per the original never-shut-down rule).
+- **plugins/devops/deep-knowledge/autonomous-execution.md** — new "API-Error-Handling" section: rate-limit detection signals (`Server is temporarily limiting requests`, `429 Too Many Requests`, `overloaded_error`, etc.), exponential-backoff schedule (30s → 2min → 10min), and bail protocol that writes a `blockedOn` field into `AUTONOMOUS-RESUME.json` and falls through to Step 8. Documents why the in-skill rate-limit logic doesn't see Anthropic API errors on Claude's own inference calls and the external watchdog is the only defense for that mode.
+
+### Changed
+
+- **plugins/devops/skills/devops-autonomous/SKILL.md** — Step 8b shutdown command rewritten to route via PowerShell with an absolute `$env:SystemRoot\System32\shutdown.exe` path. Replaces the previous `shutdown /s /t 60 /c "..."` Bash form that silently failed under UNC CWDs (cmd.exe drops to `%SystemRoot%`) and was vulnerable to quote-stripping when wrapped in `cmd.exe /c '...'`. Trailing `; exit $LASTEXITCODE` on the PowerShell command ensures `$?` in Bash captures the native `shutdown.exe` exit, not powershell.exe's. Step 8b also captures `$SHUTDOWN_EXIT` so Step 8c's matrix can detect failed in-session shutdowns and leave the external watchdog armed.
+- **plugins/devops/skills/devops-autonomous/SKILL.md** — Step 6 (Error Handling) gains a new category "API Rate-Limit / Server Throttle" pointing at the deep-knowledge protocol. Status hierarchy unchanged (COMPLETED > INTERRUPTED > BLOCKED), but INTERRUPTED is now also the resting state after rate-limit bail.
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.78.1 → 0.79.0`
+
 ## [0.78.1] — 2026-05-16
 
 ### Fixed
