@@ -11,11 +11,14 @@
  *   Workspace check (current repo only):
  *     - On main/master without worktree → high-priority warning, suggests
  *       worktree + feature branch (or ship-first if uncommitted exist).
+ *     - Detached HEAD without worktree → high-priority warning (commits
+ *       would not belong to any branch).
  *     - Not in worktree on feature branch → mild suggestion to isolate.
  *     - In worktree on main → silent (prompt.worktree.branch-guard handles).
  *
  *   Bypass for workspace check (stale check still runs):
- *     - DEVOPS_ALLOW_MAIN=1 in environment
+ *     - DEVOPS_ALLOW_MAIN=1 silences only the main-branch case (its
+ *       semantic scope), not detached-HEAD or feature-branch-no-worktree
  *     - .claude/.ship-in-progress sentinel exists (ship pipeline active)
  */
 
@@ -137,17 +140,22 @@ function checkRepo(dir) {
 }
 
 function currentBranch(dir) {
-  return run('git symbolic-ref --quiet --short HEAD', dir);
+  return run('git symbolic-ref --quiet --short HEAD', dir) || null;
 }
 
 function checkWorkspace(dir) {
-  if (process.env.DEVOPS_ALLOW_MAIN === '1') return null;
   if (sentinelActive(dir)) return null;
-  const branch = currentBranch(dir);
-  if (!branch) return null;
   const inWorktree = isLinkedWorktree(dir);
   if (inWorktree) return null;
+  const branch = currentBranch(dir);
+  if (!branch) {
+    // Detached HEAD in repo root — always high severity (risky state).
+    return { type: 'detached-no-worktree', branch: 'detached HEAD', severity: 'high' };
+  }
   const onMain = branch === 'main' || branch === 'master';
+  // DEVOPS_ALLOW_MAIN scopes to the main-branch case only — its semantic
+  // meaning is "I'm allowed to work on main", not a global mute.
+  if (onMain && process.env.DEVOPS_ALLOW_MAIN === '1') return null;
   return {
     type: onMain ? 'on-main-no-worktree' : 'no-worktree',
     branch,
@@ -228,28 +236,43 @@ if (workspace) {
   out.push('Workspace check at session start. Show this summary AS-IS and call AskUserQuestion as the FIRST action of this turn:');
   out.push('');
   out.push('**Workspace setup**');
-  if (workspace.severity === 'high') {
-    out.push(`- ⚠ On \`${workspace.branch}\` in repo root (not in a worktree) — write ops will be blocked by pre.main.guard / pre.edit.branch`);
-  } else {
-    out.push(`- On \`${workspace.branch}\` in repo root (not in a worktree)`);
+  switch (workspace.type) {
+    case 'on-main-no-worktree':
+      out.push(`- ⚠ On \`${workspace.branch}\` in repo root (not in a worktree) — write ops will be blocked by pre.main.guard / pre.edit.branch`);
+      break;
+    case 'detached-no-worktree':
+      out.push('- ⚠ Detached HEAD in repo root (not in a worktree) — commits will not belong to any branch');
+      break;
+    default:
+      out.push(`- On \`${workspace.branch}\` in repo root (not in a worktree)`);
   }
   if (hasChanges) {
     out.push(`- Pending: ${pendingIssues.map(i => i.label).join(', ')}`);
   }
   out.push('');
   out.push('Ask the user (in their language) via AskUserQuestion. Suggested options:');
-  out.push('  - Worktree + Feature-Branch anlegen (recommended)');
   if (hasChanges) {
-    out.push(`  - Erst Changes auf \`${workspace.branch}\` shippen, dann Worktree anlegen`);
+    out.push('  - Worktree + Feature-Branch anlegen');
+    out.push('  - Erst aktuelle Changes shippen (commit + push), dann Worktree anlegen (recommended)');
     out.push('  - Changes mitnehmen in neuen Worktree (git stash → create → pop)');
+  } else {
+    out.push('  - Worktree + Feature-Branch anlegen (recommended)');
   }
-  out.push('  - Hier bleiben (bypass: DEVOPS_ALLOW_MAIN=1 für diese Session)');
+  if (workspace.severity === 'high' && workspace.type === 'on-main-no-worktree') {
+    out.push('  - Hier bleiben (bypass: DEVOPS_ALLOW_MAIN=1 für diese Session)');
+  } else {
+    out.push('  - Hier bleiben (Warning bleibt informativ — kein Bypass-Flag nötig)');
+  }
   out.push('');
   out.push('Resolution per option:');
   out.push('  - Worktree+branch: `git worktree add ../<feature> -b claude/<feature>` then cd there');
-  out.push('  - Ship-first: invoke /devops-ship, then create worktree');
-  out.push('  - Take-along: `git stash`, create worktree, `cd <worktree>`, `git stash pop`');
-  out.push('  - Stay: set env `DEVOPS_ALLOW_MAIN=1` for this session');
+  if (hasChanges) {
+    out.push('  - Ship-first: invoke /devops-ship, then create worktree');
+    out.push('  - Take-along: `git stash`, create worktree, `cd <worktree>`, `git stash pop`');
+  }
+  if (workspace.type === 'on-main-no-worktree') {
+    out.push('  - Stay: set env `DEVOPS_ALLOW_MAIN=1` for this session to silence main-branch checks');
+  }
   out.push('');
 }
 
