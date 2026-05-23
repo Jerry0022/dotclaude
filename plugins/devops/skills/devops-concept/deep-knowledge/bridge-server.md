@@ -194,8 +194,9 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    The empty `""` is required on Windows — without it, `cmd.exe` interprets
    the first quoted argument as a window title.
 
-7. After monitoring ends (user says "fertig"/"done", aborts, or Step 6 of
-   SKILL.md fires the completion card), clean up in this order:
+7. After monitoring ends (user says "fertig"/"done", aborts, clicks
+   "Concept beenden" on the final-report panel, or Step 6 of SKILL.md
+   fires the completion card), run the bridge-side cleanup:
    ```bash
    kill $SERVER_PID 2>/dev/null  # or `kill %1` if still in shell scope
    rm -f .claude/concept-active.json
@@ -204,3 +205,11 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    MUST be removed when the concept session is intentionally ended,
    otherwise the next SessionStart will surface a phantom resume hint for a
    server that no longer exists.
+
+   The **on-disk concept artefacts** (`docs/concepts/{date}-{slug}.html`
+   and the matching `-decisions.json`) are handled by `SKILL.md` § Step 6a
+   — Cleanup-By-Disposition. The bridge-side cleanup above is concerned
+   only with the server / state file / cron; disposition of the HTML
+   itself is driven by the user's final-report choice (`discard` /
+   `keep` / `gitignore` + optional `moveTo`) and runs as part of the
+   same Step 6 in SKILL.md.

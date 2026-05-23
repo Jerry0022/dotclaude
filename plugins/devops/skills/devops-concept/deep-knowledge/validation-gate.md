@@ -41,10 +41,19 @@ Every concept page must contain these 29 patterns, regardless of template:
 | 27 | `Date.now() - _lastHeartbeatTs` (millis vs. millis) | Both sides of the staleness comparison MUST be in milliseconds since the Unix epoch. Server returns `claude_ts` in ms; browser uses `Date.now()`. Never divide either side by 1000 — a millis-vs-seconds mix-up produces a giant negative age that always evaluates as "fresh" and silently hides outages. |
 | 28 | `panel-final-report` | Final-report panel element. Auto-shown by `showIteration()` when the active section carries `data-final-report`; replaces `panel-ready` (no iterate/implement buttons). |
 | 29 | `updateCreateIssuesPanel` | Gating function that toggles the "Issues erstellen" button visibility + enabled state based on the active section's `[data-open-questions]` content. Must be called from `showIteration()` so panel state stays consistent on tab switch. |
+| 30 | `ensureCommentSlots` | Auto-injects an adjacent `<textarea data-comment="$decisionId-note">` for every `[data-decision]` bi-state group that lacks one. MUST be called from `DOMContentLoaded` BEFORE `restoreState` so the restore step rehydrates the typed values onto real nodes. See templates.md § Comment Slot Injection. |
+| 31 | `panel-dispose-concept` | Disposition fieldset on the final-report panel. Always visible while `panel-final-report` is active; carries the discard / keep / gitignore radio group + optional `moveTo` input. See templates.md § Disposition Control. |
+| 32 | `submitDisposeConcept` | JS handler wired to `#dispose-concept-btn`. POSTs `action: "dispose-concept"` with the current disposition payload so Step 6a can run the cleanup branch. |
 
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
 at the post-generation gate. See § Generic Form Collection below for the
 required pattern.
+
+**Failure for 30:** if the page renders bi-state cards without comment slots
+AND `ensureCommentSlots` is missing, the user has nowhere to attach
+free-form overrides to their include/discard choices. Fix the HTML (emit
+the textarea inline per § Bi-State Variant Evaluation) and ship the JS
+safety net (per § Comment Slot Injection) before opening.
 
 ## Generic Form Collection (mandatory for all templates)
 

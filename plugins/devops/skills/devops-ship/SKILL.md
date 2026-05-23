@@ -252,6 +252,20 @@ See `deep-knowledge/skill-extension-guide.md -> Delivery targets` for reference.
 
 ## Step 5 — Cleanup
 
+### 5a. Capture session context
+
+**Before any cleanup action**, capture two pieces of state for Step 5c:
+
+1. The current worktree path (if running inside one) — capture via
+   `pwd` / `git rev-parse --show-toplevel` BEFORE `ExitWorktree` runs.
+   Save it as `$WORKTREE_PATH`. Skip this if not in a worktree.
+2. The resolved main-repo root via `git rev-parse --git-common-dir` and
+   walking to its parent (or `git worktree list --porcelain` first entry).
+   Save it as `$MAIN_REPO_ROOT`. Step 5c re-resolves this internally but
+   capturing it here makes the cleanup trail easier to log.
+
+### 5b. Exit worktree + ship_cleanup
+
 **If in a worktree**: call `ExitWorktree(action: "remove")` FIRST to release the CWD lock.
 
 If `ExitWorktree` **fails** (e.g. directory locked by another process): **STOP**. Do not proceed to cleanup.
@@ -274,7 +288,46 @@ The tool will refuse to run if still inside a worktree — it returns an error r
 **Only own branch/worktree.** Never clean up other branches or worktrees.
 **Only after confirmed merge.** If Step 4 failed, preserve everything.
 
-If `success: false` → log warning but continue to Step 6. Cleanup failures are non-fatal — the merge already landed.
+If `success: false` → log warning but continue to Step 5c (re-opening files
+is still useful) then Step 6. Cleanup failures are non-fatal — the merge
+already landed.
+
+### 5c. Re-open session-opened files from main-repo path
+
+After `ship_cleanup` completes, every file:// URL the session opened from
+inside `$WORKTREE_PATH` is now dead (the worktree directory has been
+pruned). The merged HTML still lives at the equivalent path inside the
+main repo, so re-open every tracked file from there so the user's browser
+tab silently picks up the live version.
+
+Skip this step entirely when `$WORKTREE_PATH` was empty in 5a (the ship
+ran directly from the main checkout, no path rewrite needed).
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" reopen-main \
+  --worktree="$WORKTREE_PATH"
+```
+
+The script:
+- Reads `<main-repo>/.claude/session-opened-files.json` (the tracking
+  file is anchored at the main repo root so it survives worktree
+  cleanup — see `scripts/session-open-tracker.js` for the storage
+  contract).
+- Filters tracked entries to those that were under `$WORKTREE_PATH`.
+- Maps each filtered entry to the main-repo equivalent (`relative
+  path within worktree` → `<main-repo>/<relative>`).
+- Opens every still-existing file in Edge via the standard
+  `start "" msedge "file:///…"` pattern.
+- Prints a JSON summary `{ reopened: [...], missing: [...], consumed }`.
+
+Treat the summary as informational. Any entries listed under `missing`
+mean the file did not survive the merge (likely deleted during the
+session) — that is expected and not a ship failure.
+
+**Background — issue #160.** Without this step, `/devops-ship` silently
+invalidates every browser tab that was pointing into the worktree. The
+user sees a 404 / blank tab and reasonably concludes the concept page
+itself is broken, when in reality the content is fine at the main path.
 
 ## Step 6 — Completion Card
 
