@@ -90,7 +90,9 @@ registerTool(
   "ship_cleanup",
   "Ship Cleanup",
   "Delete shipped feature branch (local + remote if lingering), prune worktrees and remotes. " +
-  "IMPORTANT: If in a worktree, Claude must call ExitWorktree BEFORE this tool.",
+  "IMPORTANT: If in a worktree, Claude must call ExitWorktree BEFORE this tool. " +
+  "EXCEPTION: when keep:true is passed, the tool only clears the ship-in-progress sentinel " +
+  "and leaves the worktree + branch intact — safe to call from inside the worktree.",
   cleanupSchema,
   cleanupHandler,
 );
