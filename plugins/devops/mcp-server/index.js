@@ -186,8 +186,10 @@ const VARIANTS = {
 
 const CTA = {
   en: {
-    'ship-successful-merged': '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 All DONE',
-    'ship-successful-plain':  '## \ud83d\ude80 SHIPPED \u2014 All DONE',
+    'ship-successful-merged':      '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 All DONE',
+    'ship-successful-merged-kept': '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 KEEP CODING in `{branch}`',
+    'ship-successful-plain':       '## \ud83d\ude80 SHIPPED \u2014 All DONE',
+    'ship-successful-plain-kept':  '## \ud83d\ude80 SHIPPED \u2014 KEEP CODING in `{branch}`',
     ready:                    '## \ud83d\udce6 READY \u2014 SHIP or CHANGE?',
     'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
     test:                     '## \ud83e\uddea DONE \u2014 SHIP after your TEST?',
@@ -197,8 +199,10 @@ const CTA = {
     fallback:                 '## \ud83d\udd27 DONE \u2014 Anything ELSE?',
   },
   de: {
-    'ship-successful-merged': '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 Alles ERLEDIGT',
-    'ship-successful-plain':  '## \ud83d\ude80 SHIPPED \u2014 Alles ERLEDIGT',
+    'ship-successful-merged':      '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 Alles ERLEDIGT',
+    'ship-successful-merged-kept': '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 WEITER in `{branch}`',
+    'ship-successful-plain':       '## \ud83d\ude80 SHIPPED \u2014 Alles ERLEDIGT',
+    'ship-successful-plain-kept':  '## \ud83d\ude80 SHIPPED \u2014 WEITER in `{branch}`',
     ready:                    '## \ud83d\udce6 READY \u2014 SHIP oder ÄNDERN?',
     'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
     test:                     '## \ud83e\uddea DONE \u2014 SHIP nach deinem TEST?',
@@ -375,15 +379,17 @@ function renderCTA(variant, cta, lang, state) {
 
   let key;
   if (variant === 'ship-successful') {
-    // Show merge target in CTA if actually merged
-    key = (state && state.merged) ? 'ship-successful-merged' : 'ship-successful-plain';
+    // Show merge target in CTA if actually merged; "-kept" suffix when keep-mode
+    // kept the worktree/branch alive for follow-up work.
+    const base = (state && state.merged) ? 'ship-successful-merged' : 'ship-successful-plain';
+    key = (state && state.kept) ? `${base}-kept` : base;
   } else {
     key = variant;
   }
 
   let tpl = templates[key] || templates.fallback;
   // Merge state fields into cta for template substitution
-  const vars = Object.assign({}, cta, state ? { merged: state.merged || '' } : {});
+  const vars = Object.assign({}, cta, state ? { merged: state.merged || '', branch: state.branch || '' } : {});
   tpl = tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] || '');
 
   return tpl;
@@ -699,6 +705,7 @@ server.registerTool(
           }).nullable().optional(),
           merged: z.string().nullable().optional(),
           appStatus: z.enum(["running", "not-started"]).nullable().optional(),
+          kept: z.boolean().optional().describe("Ship cleanup was skipped — branch + worktree preserved for follow-up work. Switches the ship-successful CTA from 'All DONE' to 'KEEP CODING in {branch}'."),
         }).optional(),
       ).describe("Repository state"),
       cta: z.preprocess(

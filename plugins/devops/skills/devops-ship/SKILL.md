@@ -250,7 +250,53 @@ consumer configuration — not yet implemented in this release (they fall throug
 
 See `deep-knowledge/skill-extension-guide.md -> Delivery targets` for reference.md examples.
 
-## Step 5 — Cleanup
+## Step 5a — Continue-Intent Check (auto-detect keep-mode)
+
+Before cleanup, decide whether **follow-up work** is expected in this same branch/worktree.
+If yes → **keep-mode** (skip Step 5b's destructive cleanup, jump to 5c).
+If no → **normal cleanup** (Step 5b).
+
+**Default is normal cleanup.** Only switch to keep-mode when a signal is clear — false-positives
+accumulate unmerged branches and orphan worktrees.
+
+### Signals that trigger keep-mode
+
+Evaluate all sources; ANY positive hit → keep-mode.
+
+1. **Open TodoWrite tasks not covered by this ship.** Call `TaskList` and check for `pending` or
+   `in_progress` items that describe work NOT delivered by the current PR's diff. Tasks that
+   were *about* this ship (e.g. "Run npm test", "Bump version") and are still open due to a
+   tracking slip do NOT count — only genuine follow-up scope.
+
+2. **Explicit follow-up signals in recent user messages** (this session, last ~10 turns):
+   - German: `"danach"`, `"dann noch"`, `"anschließend"`, `"weiter mit"`, `"als nächstes"`,
+     `"Phase 2"`, `"wir sind nicht fertig"`, `"noch nicht durch"`, `"zwischendurch"`,
+     `"erstmal X, dann Y"`, `"shippen aber wir machen weiter"`
+   - English: `"after this"`, `"then we"`, `"next up"`, `"phase 2"`, `"still need to"`,
+     `"we'll continue"`, `"ship but keep going"`, `"intermediate ship"`
+
+3. **Multiple distinct scopes announced earlier.** If the user laid out a sequence of
+   logically separate work blocks and only the first is being shipped now → keep-mode.
+
+4. **Explicit ship-but-keep wording in the trigger.** If the prompt that started this ship
+   says something like `"ship das aber wir machen weiter"`, `"ship und weiter"`,
+   `"keep worktree"`, `"--keep"`, `"ohne cleanup"` → keep-mode (highest priority).
+
+### When the signal is ambiguous
+
+If you considered keep-mode but the signal is weak (e.g. one borderline phrase, no clear
+follow-up scope), default to **normal cleanup**. Cleanup is recoverable — the branch can be
+re-created from the merge commit. Orphan worktrees from false-positive keep-mode are not.
+
+### Decision logging
+
+In the completion card's `changes` or `summary`, mention the chosen mode briefly when
+keep-mode triggers — e.g. `"Worktree behalten — Folge-Arbeit erkannt"` — so the user sees
+what was decided and can override (`"nein, doch räum auf"` for a follow-up cleanup).
+
+## Step 5b — Cleanup (normal mode)
+
+**Skip this step entirely if Step 5a chose keep-mode** — jump to Step 5c.
 
 ### 5a. Capture session context
 
@@ -329,6 +375,27 @@ invalidates every browser tab that was pointing into the worktree. The
 user sees a 404 / blank tab and reasonably concludes the concept page
 itself is broken, when in reality the content is fine at the main path.
 
+## Step 5c — Keep-mode cleanup (sentinel only)
+
+**Only runs when Step 5a chose keep-mode.**
+
+Do NOT call `ExitWorktree` — the worktree stays. Do NOT delete the branch.
+
+Call `ship_cleanup` with `keep: true` to clear the ship-in-progress sentinel (so Edit/branch
+guards reset) without touching anything else:
+```
+ship_cleanup({ branch: "claude/feature-branch", base: "main", cwd: "<cwd>", keep: true })
+```
+
+Returns `{ success: true, kept: true, cleaned: ["sentinel"], warnings: [...] }`.
+
+The remote branch was deleted by the GitHub merge — that's expected. The next commit + push
+in this worktree will re-create it via `git push --set-upstream origin <branch>` automatically.
+
+In Step 6, pass `state.kept: true` and `state.branch: "<feature-branch>"` to
+`render_completion_card` so the CTA renders `KEEP CODING in <branch>` / `WEITER in <branch>`
+instead of `All DONE` / `Alles ERLEDIGT`.
+
 ## Step 6 — Completion Card
 
 Call `render_completion_card` MCP tool (dotclaude-completion server) with data from previous steps.
@@ -358,6 +425,32 @@ render_completion_card({
   }
 })
 ```
+
+**Keep-mode variant** (Step 5a chose keep, Step 5c ran):
+```
+render_completion_card({
+  variant: "ship-successful",
+  summary: "<~10 words — mention 'Worktree behalten' or similar>",
+  lang: "de",
+  cwd: "<current working directory — still the worktree path>",
+  buildId: <from ship_build.buildId>,
+  changes: [...],
+  tests: [...],
+  state: {
+    branch: "<feature-branch name, NOT 'main' — the kept branch>",
+    worktree: true,
+    commit: <from ship_release.commit>,
+    pushed: true,
+    pr: { number: <from ship_release.pr.number>, title: <PR title> },
+    merged: "main",
+    kept: true
+  },
+  cta: { vOld, vNew, bump }
+})
+```
+
+The renderer flips the CTA from `All DONE` / `Alles ERLEDIGT` to
+`KEEP CODING in <branch>` / `WEITER in <branch>` when `state.kept: true`.
 
 Output the card markdown VERBATIM — card is the last **visible** output, nothing after closing `---`.
 

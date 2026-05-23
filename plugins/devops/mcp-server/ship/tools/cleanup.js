@@ -12,15 +12,30 @@ export const schema = z.object({
   branch: z.string().describe("Feature branch to delete"),
   base: z.string().default("main").describe("Base branch (should already be checked out)"),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
+  keep: z.boolean().default(false).describe("Keep-mode: skip all branch/worktree deletion. Only clears the ship-in-progress sentinel so Edit guards reset. Use when follow-up work is expected in this same branch/worktree."),
 });
 
 export async function handler(params) {
-  const { branch, base, cwd } = params;
+  const { branch, base, cwd, keep } = params;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const opts = { cwd };
   const intermediate = base !== "main";
   const cleaned = [];
   const warnings = [];
+
+  // Keep-mode: skip all destructive cleanup. Only the sentinel needs clearing
+  // so Edit/branch guards stop treating this as "ship in progress".
+  if (keep) {
+    clearSentinel(cwd);
+    return {
+      success: true,
+      kept: true,
+      intermediate,
+      branchBeforeCleanup: git("rev-parse --abbrev-ref HEAD", opts) || null,
+      cleaned: ["sentinel"],
+      warnings: [`Keep-mode: branch '${branch}' and worktree preserved for follow-up work`],
+    };
+  }
 
   // Guard: refuse to run inside a worktree
   if (isWorktree(opts)) {
