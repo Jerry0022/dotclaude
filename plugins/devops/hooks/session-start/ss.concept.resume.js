@@ -81,6 +81,24 @@ function deleteState() {
   try { fs.unlinkSync(STATE_PATH); } catch { /* already gone */ }
 }
 
+/**
+ * Fire-and-forget POST /shutdown. We don't wait for the response — even on
+ * Windows with PID recycling, the server's listening socket is on the port
+ * we know, and the watchdog already handles the no-response case. Best-effort
+ * graceful termination; the watchdog is the safety net.
+ */
+function postShutdown(port, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    const req = http.request(
+      { host: '127.0.0.1', port, path: '/shutdown', method: 'POST', timeout: timeoutMs },
+      (res) => { res.resume(); res.on('end', resolve); }
+    );
+    req.on('timeout', () => { req.destroy(); resolve(); });
+    req.on('error', () => resolve());
+    req.end();
+  });
+}
+
 function isStale(state) {
   if (!state.started_at) return false;
   const t = Date.parse(state.started_at);
@@ -122,6 +140,20 @@ function probe(port, pathname, timeoutMs = 1500) {
   const state = readState();
   if (!state) process.exit(0);
 
+  // Consistency check: the concept HTML on disk is the source of truth for
+  // "is this session still real?" If the file is gone, the concept was
+  // discarded / moved / never persisted and any running bridge is an orphan.
+  // We do this BEFORE the heartbeat probe so a still-running ghost server
+  // gets shut down explicitly — relying on the watchdog alone would leave
+  // the server alive for up to 30 s after this hook returns, surfacing
+  // misleading "concept active" state in the meantime.
+  const htmlAbs = path.join(cwd, state.html_path);
+  if (!fs.existsSync(htmlAbs)) {
+    await postShutdown(state.port);
+    deleteState();
+    process.exit(0);
+  }
+
   const heartbeat = await probe(state.port, '/heartbeat');
   if (!heartbeat) {
     // Server gone. If the file is also stale, prune it; otherwise leave it
@@ -147,7 +179,13 @@ function probe(port, pathname, timeoutMs = 1500) {
   }
 
   const cronBody =
-    `Silently run both steps for the concept bridge on port ${state.port}: ` +
+    `Silently service the concept bridge on port ${state.port}. ` +
+    `(0) Self-cleanup gate (FIRST step every tick): Read \`.claude/concept-active.json\`. ` +
+    `Cleanup triggers if the file is missing, OR state.port ≠ ${state.port}, OR state.html_path does not exist on disk. ` +
+    `On trigger: (a) Bash: curl -s -X POST http://localhost:${state.port}/shutdown > /dev/null 2>&1 || true; ` +
+    `(b) CronDelete the cron_id from the still-readable state file — or, if the state file is gone, ` +
+    `CronList and delete every cron whose prompt mentions \`port ${state.port}\`. ` +
+    `Produce NO output and skip steps 1+2. ` +
     `(1) Heartbeat POST: Bash: curl -s -X POST http://localhost:${state.port}/heartbeat > /dev/null. ` +
     `(2) Pending check via /pending: Bash: curl -s http://localhost:${state.port}/pending | python -c "import sys,json; d=json.load(sys.stdin); print(\\'true\\' if d.get(\\'pending\\') else \\'false\\')". ` +
     `If exactly "false" → produce NO output (silent tick). ` +

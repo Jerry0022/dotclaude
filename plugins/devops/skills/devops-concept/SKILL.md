@@ -734,15 +734,19 @@ via the final-report panel.
 **Cleanup procedure (always):**
 
 ```bash
-kill $SERVER_PID 2>/dev/null
+curl -s -X POST http://localhost:$PORT/shutdown > /dev/null 2>&1 || true
 rm -f .claude/concept-active.json
 ```
 
-Then `CronDelete <cron_id>`. Removing `concept-active.json` is mandatory
-— if the file lingers, the next SessionStart's `ss.concept.resume` hook
-will surface a phantom resume hint pointing at a server that no longer
-exists. The `kill` is best-effort: if the user already closed the
-terminal that spawned the server, the PID may be gone, which is fine.
+Then `CronDelete <cron_id>`. `/shutdown` replaces the older `kill $SERVER_PID`:
+on Windows the PID could already be reused by an unrelated process, and
+swallowing `kill` errors hid that case. The HTTP endpoint targets the live
+server by port and is a no-op when the server is already dead. Removing
+`concept-active.json` is mandatory — if the file lingers, the next
+SessionStart's `ss.concept.resume` hook will surface a phantom resume hint
+pointing at a server that no longer exists. Even if `/shutdown` fails (server
+already gone, port unbound), the watchdog terminates any surviving instance
+within 30 s once the cron stops POSTing heartbeats.
 
 **Apply disposition on the concept files.** Files are named
 `docs/concepts/{date}-{slug}.html` and `docs/concepts/{date}-{slug}-decisions.json`
