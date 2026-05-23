@@ -28,9 +28,12 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    PLUGIN_ROOT=$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-server.py 2>/dev/null | head -1)
    ```
 
-2. Start the bridge server in the concept directory:
+2. Start the bridge server in the **project root** (NOT the worktree root —
+   the watchdog resolves `--html` against the cwd, and concept HTML lives in
+   the main project tree):
    ```bash
-   python "$PLUGIN_ROOT" {random-port} "{concept-dir}" &
+   python "$PLUGIN_ROOT" {random-port} "{project-root}" \
+       --html "docs/concepts/{date}-{slug}.html" &
    ```
    Use a random port (8700-8999) to avoid conflicts. Store the port as `$PORT`
    and the spawned background PID as `$SERVER_PID` (`echo $!` immediately
@@ -38,13 +41,39 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    in step 6 so the SessionStart resume hook can find this server again
    after a Claude restart.
 
+   **The `--html` flag is mandatory.** It arms the server-side watchdog:
+   if the concept HTML file disappears for > 10 s, the watchdog terminates
+   the bridge automatically — no orphan server can survive a manual
+   `rm docs/concepts/…`, a failed disposition step, or a worktree wipe.
+   The watchdog ALSO terminates if Claude's heartbeat goes stale for > 5
+   min (`--heartbeat-timeout-ms` default `300000`), catching the dead-cron
+   case (session closed without /shutdown, cron prompt loop dropped). Both
+   conditions independently guarantee the server cannot become a ghost.
+
 3. Set up the **combined heartbeat + auto-poll cron**. This single cron keeps
    the connection indicator green AND automatically picks up user submissions
    — no manual trigger needed from the user.
 
    ```
    CronCreate(cron: "* * * * *", recurring: true, prompt: <<EOF
-   Silently run both steps for the concept bridge on port {port}:
+   Silently service the concept bridge on port {port}.
+
+   (0) Self-cleanup gate (FIRST step every tick).
+       Read `.claude/concept-active.json` from the project root. Cleanup
+       triggers when ANY of these is true:
+         - The state file is missing.
+         - State.port ≠ {port} (this cron is for a stale session — a
+           newer concept overwrote the state file with a different port).
+         - State.html_path does not exist on disk.
+       On trigger:
+         - Bash: curl -s -X POST http://localhost:{port}/shutdown > /dev/null 2>&1 || true
+         - Then call CronDelete with the id from the (still-readable)
+           state file's `cron_id` field — OR, if the state file is gone
+           entirely, list crons via CronList and delete every cron whose
+           prompt mentions `port {port}` (a missing state file proves
+           the session is unrecoverable; sweeping by-port catches the
+           orphan even when the id is lost).
+       Produce NO user-visible output. Skip steps 1 and 2.
 
    (1) Heartbeat POST:
        Bash: curl -s -X POST http://localhost:{port}/heartbeat > /dev/null
@@ -198,13 +227,23 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    "Concept beenden" on the final-report panel, or Step 6 of SKILL.md
    fires the completion card), run the bridge-side cleanup:
    ```bash
-   kill $SERVER_PID 2>/dev/null  # or `kill %1` if still in shell scope
+   # Graceful shutdown via HTTP — survives PID recycling on Windows where
+   # `kill $SERVER_PID` may target a process that already exited and got
+   # its PID reused by an unrelated program. The server replies 200 then
+   # calls os._exit(0); the listening socket is released within ~100 ms.
+   curl -s -X POST http://localhost:$PORT/shutdown > /dev/null 2>&1 || true
    rm -f .claude/concept-active.json
    ```
    Also delete the polling cron via `CronDelete <cron_id>`. The state file
    MUST be removed when the concept session is intentionally ended,
    otherwise the next SessionStart will surface a phantom resume hint for a
    server that no longer exists.
+
+   **Fallback if /shutdown fails.** If the curl POST returns non-zero (server
+   already dead, port unbound, etc.) just continue — the state file removal
+   and cron deletion still need to happen. A PID-kill is no longer required
+   because the watchdog (added in step 2) would terminate any surviving
+   process within 30 s when the cron stops POSTing heartbeats.
 
    The **on-disk concept artefacts** (`docs/concepts/{date}-{slug}.html`
    and the matching `-decisions.json`) are handled by `SKILL.md` § Step 6a

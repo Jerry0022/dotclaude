@@ -31,6 +31,24 @@ Replaces `python -m http.server` with a custom server that adds:
   `_picked_up_at` / `_phase` on success.
 - GET/POST /reload — Claude bumps a counter after rewriting the HTML file;
   the browser polls and reloads when the counter advances.
+- POST /shutdown — Graceful self-termination. Same-origin gate (curl with
+  no Origin header, or fetch from the served page). Used by the cleanup
+  path in /devops-concept Step 6 and by the watchdog when state files
+  vanish. PID-based kill is unreliable on Windows after process
+  recycling — an HTTP endpoint targets the live process by port.
+
+A background **watchdog daemon** terminates the process when:
+- `--html <path>` was passed and the file disappeared for > 10 s
+  (10 s grace covers the brief window during which Claude rewrites the
+  file in-place for the next iteration). This catches "concept HTML was
+  manually deleted / moved / never persisted" without needing the cron.
+- `_claude_ts` is older than `--heartbeat-timeout-ms` (default 5 min)
+  AND non-zero. A claude_ts of 0 means Claude has never pinged — that
+  is the bootstrap window before the first cron tick lands, NOT a dead
+  cron, so the watchdog tolerates it indefinitely until the first POST.
+The watchdog runs every 30 s. Both branches call `os._exit(0)` so the
+listening socket is released immediately — no graceful drain — because
+the only client at that point is a cron that should also be dying.
 
 This bypasses Chrome MCP JS injection limitations entirely. The page
 communicates with Claude through HTTP endpoints instead of requiring
@@ -45,12 +63,15 @@ REPL) while the server kept ticking. POST /heartbeat now updates ONLY
 `_claude_ts`, and the browser gates the indicator on that.
 
 Usage:
-    python concept-server.py <port> [directory]
+    python concept-server.py <port> [directory] [--html <relative-path>]
+                                                [--heartbeat-timeout-ms <ms>]
 
 Example:
-    python concept-server.py 8742 /path/to/.claude/devops-concept
+    python concept-server.py 8742 /path/to/project \
+        --html docs/concepts/2026-04-12-auth-redesign.html
 """
 
+import argparse
 import http.server
 import json
 import os
@@ -273,6 +294,33 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 _reload_counter += 1
                 counter = _reload_counter
             self._json_response({"ok": True, "counter": counter})
+        elif self.path == '/shutdown':
+            # Graceful self-termination. Accepted only from same-origin or
+            # no-Origin (curl). Cross-origin browser requests are rejected
+            # so a random tab can't kill the bridge. We reply 200 BEFORE
+            # exiting so the caller doesn't see a connection-reset error
+            # they'd have to special-case.
+            origin = self.headers.get('Origin')
+            host = self.headers.get('Host', '')
+            if origin is not None:
+                port_part = host.split(':')[-1] if ':' in host else ''
+                allowed = {
+                    f'http://{host}',
+                    f'http://localhost:{port_part}',
+                    f'http://127.0.0.1:{port_part}',
+                }
+                if origin not in allowed:
+                    self.send_error(403, "forbidden origin")
+                    return
+            self._json_response({"ok": True, "shutting_down": True})
+            # Flush the response, then exit on a short delay so the wfile
+            # has time to drain before the socket closes. os._exit skips
+            # atexit handlers; that's intentional — we don't want the
+            # daemon-thread teardown to hang.
+            threading.Thread(
+                target=lambda: (time.sleep(0.1), os._exit(0)),
+                daemon=True,
+            ).start()
         elif self.path == '/reset':
             # Optional body: {"version": N}. When present, only reset if N
             # matches the current server version — otherwise a newer submission
@@ -356,10 +404,80 @@ def _server_self_pulse(interval_s: int = 30):
         time.sleep(interval_s)
 
 
+def _watchdog(html_path, heartbeat_timeout_ms, interval_s=30, html_grace_s=10):
+    """Self-terminate when the concept state has obviously gone away.
+
+    Two independent conditions trigger shutdown:
+
+    1. **HTML disappeared.** If `--html` was given and the file no longer
+       exists, the concept session has been wiped out (manual delete,
+       failed write, never persisted on disk). We allow a `html_grace_s`
+       window during which the file can be absent without triggering
+       shutdown — this covers the brief moment Claude truncates the file
+       to rewrite it for the next iteration. The first absence stamps a
+       deadline; only an absence still present AFTER the deadline kills
+       the server. A re-appearance clears the deadline.
+
+    2. **Claude heartbeat stale.** Once `_claude_ts` is non-zero (Claude
+       has pinged at least once), the watchdog enforces that the gap to
+       now stays under `heartbeat_timeout_ms`. A dead cron — session
+       closed without cleanup, prompt loop dropped — will stop POSTing
+       and the watchdog reaps the server. A `_claude_ts` of 0 is the
+       legitimate bootstrap window before the first tick and is NEVER
+       a shutdown trigger; otherwise we'd race against the cron's first
+       fire and kill the server before it ever sees Claude.
+    """
+    html_missing_since = None
+    while True:
+        time.sleep(interval_s)
+        now_ms = int(time.time() * 1000)
+
+        if html_path:
+            exists = os.path.exists(html_path)
+            if not exists:
+                if html_missing_since is None:
+                    html_missing_since = now_ms
+                elif (now_ms - html_missing_since) > html_grace_s * 1000:
+                    sys.stderr.write(
+                        f"[watchdog] html_path gone for > {html_grace_s}s: "
+                        f"{html_path} — shutting down\n"
+                    )
+                    os._exit(0)
+            else:
+                html_missing_since = None
+
+        with _lock:
+            claude_ts = _claude_ts
+        if claude_ts > 0 and (now_ms - claude_ts) > heartbeat_timeout_ms:
+            sys.stderr.write(
+                f"[watchdog] claude_ts stale by {now_ms - claude_ts}ms "
+                f"(threshold {heartbeat_timeout_ms}ms) — shutting down\n"
+            )
+            os._exit(0)
+
+
 if __name__ == '__main__':
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8700
-    directory = sys.argv[2] if len(sys.argv) > 2 else '.'
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('port', nargs='?', default='8700')
+    parser.add_argument('directory', nargs='?', default='.')
+    parser.add_argument('--html', default=None,
+                        help='Relative path to the concept HTML inside <directory>. '
+                             'When set, the watchdog terminates the server if this '
+                             'file disappears for more than 10 s.')
+    parser.add_argument('--heartbeat-timeout-ms', type=int, default=5 * 60 * 1000,
+                        help='Max age of _claude_ts before the watchdog terminates. '
+                             'Default 300000 (5 min).')
+    args = parser.parse_args()
+
+    port = int(args.port)
+    directory = args.directory
     os.chdir(directory)
+
+    # The watchdog resolves `--html` against cwd AFTER chdir, so callers can
+    # pass repo-relative paths. We capture the absolute path so a later
+    # cwd-change (unlikely, but cheap to be defensive) cannot misdirect the
+    # existence check.
+    html_path = os.path.abspath(args.html) if args.html else None
 
     # Prime + self-pulse: the browser checks the heartbeat within 5s of page
     # load, so set `_server_ts` once before serving and then refresh every 30s
@@ -367,8 +485,15 @@ if __name__ == '__main__':
     # stays 0 until Claude actually POSTs — that's the whole point of the split.
     _server_ts = int(time.time() * 1000)
     threading.Thread(target=_server_self_pulse, daemon=True).start()
+    threading.Thread(
+        target=_watchdog,
+        args=(html_path, args.heartbeat_timeout_ms),
+        daemon=True,
+    ).start()
 
     with http.server.HTTPServer(('', port), ConceptBridgeHandler) as httpd:
         print(f"Concept bridge server on http://localhost:{port}/")
         print(f"Serving: {os.getcwd()}")
+        if html_path:
+            print(f"Watching: {html_path}")
         httpd.serve_forever()

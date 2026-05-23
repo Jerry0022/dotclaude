@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.84.0] — 2026-05-24
+
+### Added
+
+- **plugins/devops/scripts/concept-server.py** — server-side watchdog daemon. New `--html <relative-path>` and `--heartbeat-timeout-ms <ms>` CLI args. A daemon thread terminates the process when (a) `--html` is set and the watched concept HTML disappears for > 10 s (10 s grace covers mid-rewrite races), or (b) `_claude_ts` is non-zero and older than the heartbeat timeout (default 5 min). Closes the silent-failure mode where a deleted concept HTML left the bridge polling forever, accepting heartbeats from a cron whose Claude session was long gone.
+- **plugins/devops/scripts/concept-server.py** — `POST /shutdown` HTTP endpoint. Same-origin guard (no-Origin curl or page-served fetch are allowed; foreign Origin → 403). Replaces the unreliable `kill $SERVER_PID` cleanup which could target unrelated processes after Windows PID recycling. Responds 200 first, then exits via a short-delay daemon thread so the caller never sees a connection-reset error.
+- **plugins/devops/skills/devops-concept/deep-knowledge/bridge-server.md** — Step 3 cron template gains a Step 0 self-cleanup gate that runs BEFORE the heartbeat. The gate reads `.claude/concept-active.json` each tick and triggers `/shutdown` + `CronDelete` when the state file is missing, the port disagrees, or `html_path` is gone — preventing the cron from outliving the concept session it polls for.
+
+### Changed
+
+- **plugins/devops/scripts/concept-server.py** — argument parsing migrated from positional-only to `argparse` so the new flags don't break the existing `python concept-server.py <port> <directory>` call shape.
+- **plugins/devops/skills/devops-concept/deep-knowledge/bridge-server.md** — Step 2 (server launch) now passes `--html "docs/concepts/{date}-{slug}.html"` and the project root as the directory (NOT the worktree root — the watchdog resolves `--html` relative to cwd). Step 7 (cleanup) replaces `kill $SERVER_PID` with `curl -X POST /shutdown`; the PID-kill fallback was removed because the watchdog reaps any survivor within 30 s.
+- **plugins/devops/skills/devops-concept/SKILL.md** — Step 6a cleanup procedure switched to `/shutdown` with the same rationale.
+- **plugins/devops/hooks/session-start/ss.concept.resume.js** — consistency check before the heartbeat probe: `fs.existsSync(html_path)` runs first. When the file is gone, the hook POSTs `/shutdown` to any running bridge and deletes the state file, so no phantom resume hint is surfaced. The re-arm cron prompt mirrors the new Step 0 cleanup gate.
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.83.0 → 0.84.0`
+
 ## [0.83.0] — 2026-05-23
 
 ### Added
