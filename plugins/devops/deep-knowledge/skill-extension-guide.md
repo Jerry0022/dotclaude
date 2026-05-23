@@ -173,6 +173,49 @@ Same pattern applies to agents:
 
 Override responsibilities, tools, or collaboration rules per project.
 
+## Session-opened files (file:// URL tracking)
+
+When a project-side skill extension opens a local HTML file in the browser
+via `file://` (instead of the bridge-server's `http://localhost:…`), the
+URL becomes invalid as soon as `/devops-ship` cleans up the worktree the
+file lived in. The user sees a 404 / blank tab and thinks the content
+itself is broken — when in reality the merged HTML is fine at the
+equivalent path inside the main repo.
+
+To opt into the automatic re-open behaviour, call the session-open
+tracker right after every `start msedge "file://…"` your extension issues:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
+  "<absolute native path of the file>" \
+  --context=<short-tag>
+```
+
+- `<absolute native path>`: on Windows, run `cygpath -w` over a Git-Bash
+  path first; on macOS/Linux a plain absolute path is enough.
+- `--context=<tag>` is optional metadata used in `/devops-ship` logs
+  (e.g. `concept`, `prototype`, `mockup`, `report`). Pick whatever makes
+  the trail readable.
+
+`/devops-ship` Step 5c invokes the tracker's `reopen-main` subcommand
+after `ship_cleanup` removes the worktree:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" reopen-main \
+  --worktree="$WORKTREE_PATH"
+```
+
+The script reads `<main-repo>/.claude/session-opened-files.json`,
+filters entries that lived under the cleaned-up worktree, maps each to
+the main-repo equivalent path, and re-opens every still-existing file
+in Edge.
+
+**When to opt in:** every skill extension that ships an interactive HTML
+artefact (decision panel, prototype, analysis report) anchored to a
+worktree path. If you only ever open `http://localhost:…` URLs (e.g. via
+the concept bridge server), tracking is unnecessary because the URL is
+already invalid the moment the bridge server is killed.
+
 ## Scaffolding
 
 Run `/devops-extend-skill` to interactively scaffold an extension for any plugin skill.

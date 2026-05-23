@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.82.0] — 2026-05-23
+
+### Added
+
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — per-decision note textareas (closes [#158](https://github.com/Jerry0022/dotclaude/issues/158)). Every Bi-State `[data-decision]` group now ships with an adjacent `<textarea data-comment="$id-note">` so the user can attach a free-form override ("only for X", "with variant Y") to the include/discard choice. New `ensureCommentSlots()` JS safety net auto-injects the slot on `DOMContentLoaded` (idempotent, runs before `restoreState` so typed values survive reload). New locale keys `decision.comment_label` / `decision.comment_placeholder`. Validation gate pattern #31 enforces the helper's presence.
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — disposition control on the final-report panel (closes [#159](https://github.com/Jerry0022/dotclaude/issues/159)). New `panel-dispose-concept` fieldset (always visible while `panel-final-report` is active) carries three radios (discard / keep / gitignore) plus an optional `moveTo` text input and a new "Concept beenden" button. `submitDisposeConcept()` POSTs `action: "dispose-concept"`; `submitCreateIssues()` also includes the current disposition state in its payload. Validation gate patterns #32 / #33. Locale keys `final.dispose_*` (heading, hint, mode labels, button, status). Default = `discard`.
+- **plugins/devops/skills/devops-concept/SKILL.md** — Step 6a is rewritten as Cleanup-By-Disposition (closes [#159](https://github.com/Jerry0022/dotclaude/issues/159)). Explicit branches for `discard` / `keep` / `gitignore` modes with optional `moveTo`. Safety rules: project-root-relative `moveTo` (reject `..` and absolute paths), full filename gitignore patterns (`docs/concepts/{date}-{slug}.*` — bare `{slug}.*` does NOT match), shell-quoted `--` terminated path commands, append-only `.gitignore` edits with dedupe grep, swallow `git rm --cached` errors for never-tracked files.
+- **plugins/devops/scripts/session-open-tracker.js** — new CLI script (closes [#160](https://github.com/Jerry0022/dotclaude/issues/160)). Tracks every `file://` URL the session opens (`track <abs-path> [--context=<tag>]`) and re-opens them from the main-repo path after `ship_cleanup` removes the worktree (`reopen-main --worktree=<abs-path>`). Storage at `<main-repo>/.claude/session-opened-files.json` (24h TTL, 50-entry cap, path-normalized de-dupe). Browser launch failures preserve entries for retry; genuinely-missing main-repo files are consumed. Wired into `/devops-ship` Step 5c, `devops-autonomous` Step 7c, `devops-repo-health` Step 8.
+- **plugins/devops/deep-knowledge/browser-file-urls.md** + **plugins/devops/deep-knowledge/skill-extension-guide.md** — documented the tracker contract for project-side skill extensions that open `file://` URLs.
+
+### Changed
+
+- **plugins/devops/skills/devops-concept/SKILL.md** — `File Location` section reflects new ephemeral-by-default policy (concept HTMLs only land in git when the user explicitly picks "Im Projekt behalten"). Step 5b adds `action: "dispose-concept"` to the expected final-report submissions. Submit-handler step for `create-issues` now records the bundled `disposition` for Step 6a.
+- **plugins/devops/skills/devops-concept/deep-knowledge/bridge-server.md** — Step 7 cleanup explicitly defers on-disk artefact disposition to SKILL.md § Step 6a — Cleanup-By-Disposition.
+- **plugins/devops/skills/devops-concept/deep-knowledge/validation-gate.md** — mandatory shared-pattern count `30 → 33`. New patterns #31 `ensureCommentSlots`, #32 `panel-dispose-concept`, #33 `submitDisposeConcept`.
+- **plugins/devops/skills/devops-ship/SKILL.md** — Step 5 split into 5a (capture session context) / 5b (ExitWorktree + ship_cleanup) / 5c (re-open session-opened files). Step 5c invokes `session-open-tracker.js reopen-main --worktree=$WORKTREE_PATH` after cleanup so browser tabs into the deleted worktree silently switch to the merged main-repo path.
+- **plugins/devops/skills/devops-autonomous/SKILL.md** — Step 7c pairs the `start msedge file://…` open with a `session-open-tracker.js track` call (context `autonomous-report`).
+- **plugins/devops/skills/devops-repo-health/SKILL.md** — Step 8 pairs its `start msedge file://…` open with a `session-open-tracker.js track` call (context `repo-health`).
+- **plugins/devops/skills/devops-project-setup/SKILL.md** + **.gitignore** — `.claude/session-opened-files.json` (and `concept-active.json`) added to the recommended consumer `.gitignore` block, plus this repo's own `.gitignore`.
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.81.0 → 0.82.0`
+
 ## [0.81.0] — 2026-05-23
 
 ### Added

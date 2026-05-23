@@ -198,6 +198,14 @@ The content area is reserved for the actual concept.
 - **Selectors/sliders**: For prioritization, weighting, or rating
 - **Comment fields**: Inline text areas for notes on each section —
   use `width: 100%` within their container, `min-height: 80px` for usability
+- **Per-decision note textarea (MANDATORY for every `[data-decision]` group):**
+  every Bi-State variant/finding card MUST carry an adjacent
+  `<textarea data-comment="$decisionId-note">` so the user can attach a
+  free-form override (e.g. "only for X", "with variant Y") to the include/
+  discard choice. See `deep-knowledge/templates.md` § Comment Slot Injection
+  for the HTML pattern, the `ensureCommentSlots()` JS safety net, and the
+  rationale. Skipping this is the most common interactive-element regression
+  — the user has nowhere to caveat their selection.
 - **Submit button**: Prominent "Entscheidungen abschicken" button in the
   decision panel sidebar
 
@@ -344,8 +352,13 @@ Write to: `docs/concepts/{timestamp}-{slug}.html`
 Full example: `docs/concepts/2026-04-12-auth-middleware-redesign.html`
 
 - Create the `docs/concepts/` directory if it doesn't exist
-- This directory is **git-tracked** — concepts are project artifacts meant
-  to be shared with other repo users
+- The directory is git-tracked by default, but **individual concept files
+  default to discard**. See § Disposition Control in
+  `deep-knowledge/templates.md` and Step 6a. Concepts are project artifacts
+  only when the user explicitly chooses "Im Projekt behalten" on the
+  final-report panel; the default cleanup deletes both HTML and decisions
+  JSON. Power users may also opt for "Nur lokal / .gitignore" to keep
+  files locally without polluting the repo
 - **One file per concept session** — all iterations live inside the same
   HTML file as separate `<section data-iteration="N">` blocks, switched via
   tabs in the decision panel (see "Iteration Tabs" below). There are no
@@ -520,24 +533,43 @@ Branch on it:
 **`action: "create-issues"` ("Issues erstellen" button — only on final report):**
 1. Read the `items` array from the payload — each entry is a selected open
    question / TODO `{ id, title, type, selected: true }`.
-2. For each selected item, invoke the **devops-new-issue** skill with the
+2. Read the `disposition` sub-object from the same payload — even if the
+   user never touches "Concept beenden", `submitCreateIssues` always
+   bundles the current disposition state for Step 6 cleanup. Store it
+   for use in Step 6a; do NOT apply it now — issue routing and cleanup
+   are decoupled so the user can still review the page before closing.
+3. For each selected item, invoke the **devops-new-issue** skill with the
    item's title and type. Capture the resulting issue number + URL.
-3. Update the final-report HTML: in the open-questions section, replace
+4. Update the final-report HTML: in the open-questions section, replace
    each created item's label with `[Issue #NNN] {title}` (linked to the
    issue URL), disable the checkbox, and add a small ✓ badge.
-4. POST `/reload` so the browser shows the updated state. If every item
+5. POST `/reload` so the browser shows the updated state. If every item
    was processed, the "Issues erstellen" button auto-hides on reload
    (panel JS gates it on the presence of un-created checkable items).
-5. Then POST `/reset` with the captured `_version` as usual.
-6. The concept session stays open — the user may still review previous
+6. Then POST `/reset` with the captured `_version` as usual.
+7. The concept session stays open — the user may still review previous
    iteration tabs but cannot trigger further iterate/implement actions
    from the final report.
+
+**`action: "dispose-concept"` ("Concept beenden" button — only on final report):**
+1. Read the `disposition` sub-object from the payload — shape
+   `{ mode: "discard" | "keep" | "gitignore", moveTo: string | null }`.
+2. Do NOT apply the cleanup here — instead, record the disposition for
+   Step 6a (which is the authoritative cleanup step) and signal session
+   end. Treat this submission as the explicit "fertig" signal from the
+   user.
+3. POST `/reset` with the captured `_version` so the bridge stops
+   surfacing this submission as `_pending`.
+4. Proceed to Step 6 — Completion Card. The disposition recorded here
+   drives the cleanup branch in Step 6a.
 
 **Critical invariant:** a submit with `action: "iterate"` MUST NEVER cause
 code or file changes outside of the concept HTML file itself. The user
 relies on that guarantee to explore ideas safely. `action: "create-issues"`
 only writes GitHub issues + the final-report HTML — no code/file changes
-in the project tree.
+in the project tree. `action: "dispose-concept"` only triggers Step 6
+cleanup — no code/file changes either, just disposition of the concept's
+own HTML / decisions JSON artefacts.
 ### 5c. Update the Page
 After processing, **append a new tab** to the same HTML file and signal
 the browser to reload. This is the ONLY update path — there is no
@@ -655,10 +687,16 @@ Return to Step 4 (monitor for next submission). The loop continues until:
 - The user says "fertig" / "done" in chat
 - There are no more decisions to make (all items processed)
 
-If the active section is the final report, the only submission Claude
-expects is `action: "create-issues"` (when open questions / TODOs are
-present). All other action types from the final-report panel should be
-treated as protocol errors and reported back to the user.
+If the active section is the final report, the submissions Claude expects
+are:
+- `action: "create-issues"` — fired by the "Issues erstellen" button when
+  open questions / TODOs are present and at least one is selected.
+- `action: "dispose-concept"` — fired by the always-visible "Concept
+  beenden" button. Carries the file disposition decision (discard /
+  keep / gitignore + optional moveTo).
+
+All other action types from the final-report panel should be treated as
+protocol errors and reported back to the user.
 
 ### 5e. Persist
 Write a cumulative summary to `docs/concepts/{same-timestamp}-{same-slug}-decisions.json`
@@ -671,11 +709,29 @@ The feedback loop ends when the user is satisfied (user says "fertig"/"done",
 closes the page, or all items are processed). Then **clean up the
 bridge-server state** and render a completion card.
 
-### 6a. Clean up the active-concept state
+### 6a. Clean up the active-concept state — Cleanup-By-Disposition
 
-Before rendering the completion card, dispose of the bridge server and
-its state file in this exact order (per `deep-knowledge/bridge-server.md`
-§ Step 7):
+Before rendering the completion card, dispose of the bridge server, its
+state file, AND the on-disk concept artefacts. The on-disk steps depend
+on the user's disposition choice (see `deep-knowledge/templates.md`
+§ Disposition Control for the UI + payload shape).
+
+**Determine the disposition** in this order of preference:
+
+1. The last `dispose-concept` payload received this session → use its
+   `disposition` field directly.
+2. Otherwise, the last `create-issues` payload's `disposition` field.
+3. Otherwise (no payload carried a disposition — old session, user
+   aborted, page closed before clicking either final-report button):
+   default to `{ mode: "discard", moveTo: null }`.
+
+The default = `discard` is deliberate. Most concept sessions are one-shot
+refinements whose outcome already landed in commits / GitHub issues /
+the implement step. Persisting the HTML in git by default accumulates
+silt in `docs/concepts/`. Power users opt in to `keep` or `gitignore`
+via the final-report panel.
+
+**Cleanup procedure (always):**
 
 ```bash
 kill $SERVER_PID 2>/dev/null
@@ -687,6 +743,54 @@ Then `CronDelete <cron_id>`. Removing `concept-active.json` is mandatory
 will surface a phantom resume hint pointing at a server that no longer
 exists. The `kill` is best-effort: if the user already closed the
 terminal that spawned the server, the PID may be gone, which is fine.
+
+**Apply disposition on the concept files.** Files are named
+`docs/concepts/{date}-{slug}.html` and `docs/concepts/{date}-{slug}-decisions.json`
+— always include the `{date}-` prefix in patterns; bare `{slug}` does
+NOT match.
+
+| `mode` | `moveTo` | Action |
+|---|---|---|
+| `discard` | (any) | `rm -f -- "<html>" "<decisions.json>"` — `moveTo` is ignored. |
+| `keep` | null | No file change. Files remain at their original git-tracked path. |
+| `keep` | set | `mkdir -p -- "<moveTo>"` then `git mv -- "<html>" "<moveTo>/"` (if tracked, else `mv -- "<html>" "<moveTo>/"`); same for the decisions JSON. Files remain git-tracked at the new path. |
+| `gitignore` | null | Files stay at original path. Append `docs/concepts/{date}-{slug}.*` to `.gitignore` if not already covered. Run `git rm --cached -- "<html>" "<decisions.json>"` to untrack them if they were already added. |
+| `gitignore` | set | `mkdir -p -- "<moveTo>"` then `mv -- "<html>" "<moveTo>/"`; same for the decisions JSON. Append `<moveTo>/{date}-{slug}.*` to `.gitignore` if not already covered. Run `git rm --cached -- "<original-html>" "<original-decisions.json>"` on the original tracked entries. |
+
+**Safety rules:**
+
+- `moveTo` is treated as a project-relative path. Resolve it relative to
+  the project root (NOT the worktree root if you happen to be in one).
+  Reject any path that resolves outside the project root, contains
+  `..`, or is absolute — fall back to the non-`moveTo` branch and
+  surface a warning to the user.
+- All path-bearing shell commands (`rm`, `mv`, `git mv`, `git rm`,
+  `mkdir`) MUST use the `--` argument terminator AND double-quote
+  every path interpolation, so `moveTo` values containing spaces or
+  shell metacharacters land as a single literal argument. Never
+  inline a raw `{path}` substitution.
+- `.gitignore` patterns use the FULL filename including the date
+  prefix (`docs/concepts/{date}-{slug}.*`), NOT bare `{slug}.*` — the
+  shorter pattern silently fails to match the timestamp-prefixed
+  files this skill produces.
+- Never delete a file that does NOT match the
+  `docs/concepts/{date}-{slug}.*` pattern for THIS session's slug.
+  Other concept HTML files in `docs/concepts/` belong to other
+  sessions and MUST be preserved.
+- `.gitignore` edits are append-only. Before appending, grep for an
+  existing exact match (the full `docs/concepts/{date}-{slug}.*` line)
+  — if it already exists, skip the append. Never rewrite or reorder
+  the file.
+- If `git rm --cached` errors because the file was never tracked,
+  swallow the error and continue — the file is already in the right
+  state for `.gitignore`.
+
+**Reporting:** the completion card's `changes` array should include one
+short line describing the disposition action that was applied (e.g.
+"Concept-Files verworfen", "Concept-Files behalten unter docs/architecture/",
+"Concept-Files in .gitignore aufgenommen"). Skip this line for the
+default `discard` path when the user explicitly aborted the session
+without ever opening the final-report panel.
 
 ### 6b. Render the completion card
 

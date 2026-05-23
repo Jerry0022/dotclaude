@@ -7,7 +7,7 @@ template-specific extras selected by `<html data-template="...">`.
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 30 patterns, regardless of template:
+Every concept page must contain these 33 patterns, regardless of template:
 
 | # | Pattern to grep | Purpose |
 |---|----------------|---------|
@@ -42,10 +42,19 @@ Every concept page must contain these 30 patterns, regardless of template:
 | 28 | `panel-final-report` | Final-report panel element. Auto-shown by `showIteration()` when the active section carries `data-final-report`; replaces `panel-ready` (no iterate/implement buttons). |
 | 29 | `updateCreateIssuesPanel` | Gating function that toggles the "Issues erstellen" button visibility + enabled state based on the active section's `[data-open-questions]` content. Must be called from `showIteration()` so panel state stays consistent on tab switch. |
 | 30 | `content-dimmer` | Shared post-submit focus overlay. After a submit, `body.content-dimmed` flips it on; the decision panel + FABs sit at higher z-index and paint above it. Click-to-dismiss; auto-clears on page reload. See `templates.md` § Common Structure (HTML) and § Decision Panel State CSS for the reference implementation. |
+| 31 | `ensureCommentSlots` | Auto-injects an adjacent `<textarea data-comment="$decisionId-note">` for every `[data-decision]` bi-state group that lacks one. MUST be called from `DOMContentLoaded` BEFORE `restoreState` so the restore step rehydrates the typed values onto real nodes. See templates.md § Comment Slot Injection. |
+| 32 | `panel-dispose-concept` | Disposition fieldset on the final-report panel. Always visible while `panel-final-report` is active; carries the discard / keep / gitignore radio group + optional `moveTo` input. See templates.md § Disposition Control. |
+| 33 | `submitDisposeConcept` | JS handler wired to `#dispose-concept-btn`. POSTs `action: "dispose-concept"` with the current disposition payload so Step 6a can run the cleanup branch. |
 
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
 at the post-generation gate. See § Generic Form Collection below for the
 required pattern.
+
+**Failure for 31:** if the page renders bi-state cards without comment slots
+AND `ensureCommentSlots` is missing, the user has nowhere to attach
+free-form overrides to their include/discard choices. Fix the HTML (emit
+the textarea inline per § Bi-State Variant Evaluation) and ship the JS
+safety net (per § Comment Slot Injection) before opening.
 
 ## Generic Form Collection (mandatory for all templates)
 

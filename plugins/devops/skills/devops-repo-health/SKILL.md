@@ -208,6 +208,12 @@ new tab in running Edge, user's profile context, Claude extension for interactio
 
 ```bash
 start "" msedge "file:///$(cygpath -m "{filepath}")"
+
+# Track the opened report so /devops-ship can re-open it from the main-repo
+# path after a future worktree cleanup (issue #160).
+node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
+  "$(cygpath -w "{filepath}")" \
+  --context=repo-health
 ```
 
 **Windows note:** always run `{filepath}` through `cygpath -m` before

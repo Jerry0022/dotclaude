@@ -443,6 +443,14 @@ missing drive colon → `ERR_FILE_NOT_FOUND`):
 
 ```bash
 start msedge "file:///$(cygpath -m "$(pwd)")/AUTONOMOUS-REPORT.html"
+
+# Track the opened report so /devops-ship can re-open it from the main-repo
+# path after worktree cleanup (issue #160). cygpath -w yields a Windows-style
+# absolute path that session-open-tracker.js can compare against the
+# worktree root later.
+node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
+  "$(cygpath -w "$(pwd)/AUTONOMOUS-REPORT.html")" \
+  --context=autonomous-report
 ```
 
 See `deep-knowledge/browser-file-urls.md` for the full rule.

@@ -15,6 +15,7 @@ node_modules/
 .claude/usage-live.json
 .claude/.ship-in-progress
 .claude/concept-active.json
+.claude/session-opened-files.json
 # Plugin-managed runtime dirs
 .claude/.plugin-version
 .claude/hooks/

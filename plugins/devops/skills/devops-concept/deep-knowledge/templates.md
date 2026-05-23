@@ -72,6 +72,8 @@ must see their own language. The locale hint is authoritative.
 | `panel.dim_dismiss`            | Dismiss overlay                | Schimmer entfernen |
 | `variant.include`              | Include                        | Miteinbeziehen |
 | `variant.discard`              | Discard                        | Verwerfen |
+| `decision.comment_label`       | Note / override (optional)     | Notiz / Override (optional) |
+| `decision.comment_placeholder` | e.g. "only for X", "with variant Y"… | z.B. „nur für X", „mit Variante Y"… |
 | `iteration.label`              | Iterations                     | Iterationen |
 | `iteration.active_suffix`      | · active                       | · aktiv |
 | `iteration.final_tab`          | Final report                   | Abschlussbericht |
@@ -85,6 +87,20 @@ must see their own language. The locale hint is authoritative.
 | `final.create_issues_running`  | Creating issues …              | Issues werden erstellt … |
 | `final.create_issues_done`     | Issues created                 | Issues erstellt |
 | `final.issue_link_prefix`      | Issue                          | Issue |
+| `final.dispose_heading`        | Keep concept files?            | Concept-Files behalten? |
+| `final.dispose_hint`           | Default = discard. Decisions already landed in commits/issues — the HTML rarely needs to live in git. | Default = verwerfen. Entscheidungen sind bereits in Commits/Issues — die HTML-Datei muss selten in git bleiben. |
+| `final.dispose_discard`        | Discard (default)              | Verwerfen (Standard) |
+| `final.dispose_discard_hint`   | Delete HTML + decisions JSON, no git entry. | HTML + Decisions-JSON löschen, kein git-Eintrag. |
+| `final.dispose_keep`           | Keep in project                | Im Projekt behalten |
+| `final.dispose_keep_hint`      | Files stay in docs/concepts/ and become git-tracked artefacts. | Files bleiben in docs/concepts/ und sind git-getrackte Artefakte. |
+| `final.dispose_gitignore`      | Local only / .gitignore        | Nur lokal / .gitignore |
+| `final.dispose_gitignore_hint` | Files stay locally, an entry is appended to .gitignore. | Files bleiben lokal, ein Eintrag wird zur .gitignore hinzugefügt. |
+| `final.dispose_move_label`     | Move to (optional):            | Verschieben nach (optional): |
+| `final.dispose_move_placeholder` | e.g. docs/architecture/      | z.B. docs/architecture/ |
+| `final.dispose_btn`            | End concept                    | Concept beenden |
+| `final.dispose_btn_hint`       | Closes the concept session and applies the file disposition above. | Schliesst die Concept-Session und wendet die Datei-Disposition oben an. |
+| `final.dispose_running`        | Cleaning up …                  | Räume auf … |
+| `final.dispose_done`           | Concept ended.                 | Concept beendet. |
 | `proto.feedback_title`         | Feedback                       | Feedback |
 | `proto.feedback_toggle`        | Open feedback                  | Feedback öffnen |
 | `proto.feedback_general`       | General notes on this prototype | Allgemeine Anmerkungen zum Prototyp |
@@ -249,10 +265,10 @@ the `[ui-locale: ...]` hint produced.
       </div>
 
       <!-- Final-report state: shown when the active section carries
-           data-final-report. No iterate/implement submit; the only
-           interactive control is the conditional "Issues erstellen"
-           button, gated on the presence of a [data-open-questions]
-           block with at least one un-created checkable item. -->
+           data-final-report. No iterate/implement submit; controls are
+           the conditional "Issues erstellen" button (gated on
+           [data-open-questions] content) and the always-visible
+           disposition fieldset that drives Step 6 cleanup. -->
       <div id="panel-final-report" style="display: none;">
         <div class="final-report-indicator">
           <span class="check-icon">✓</span>
@@ -272,6 +288,65 @@ the `[ui-locale: ...]` hint produced.
             <span aria-hidden="true">✓</span> {{final.create_issues_done}}
           </p>
         </div>
+
+        <!-- Disposition fieldset: always visible on the final-report panel.
+             Drives Step 6 cleanup behaviour (discard / keep / gitignore /
+             optional moveTo). Default = discard, matching the typical
+             one-shot refinement workflow where decisions already landed
+             in commits/issues and the HTML is no longer needed. -->
+        <fieldset id="panel-dispose-concept" class="dispose-fieldset">
+          <legend>{{final.dispose_heading}}</legend>
+          <p class="hint dispose-hint">{{final.dispose_hint}}</p>
+
+          <label class="dispose-option">
+            <input type="radio" name="dispose-mode" value="discard" checked>
+            <span class="dispose-label">
+              <strong>{{final.dispose_discard}}</strong>
+              <span class="dispose-sub">{{final.dispose_discard_hint}}</span>
+            </span>
+          </label>
+
+          <label class="dispose-option">
+            <input type="radio" name="dispose-mode" value="keep">
+            <span class="dispose-label">
+              <strong>{{final.dispose_keep}}</strong>
+              <span class="dispose-sub">{{final.dispose_keep_hint}}</span>
+            </span>
+          </label>
+
+          <label class="dispose-option">
+            <input type="radio" name="dispose-mode" value="gitignore">
+            <span class="dispose-label">
+              <strong>{{final.dispose_gitignore}}</strong>
+              <span class="dispose-sub">{{final.dispose_gitignore_hint}}</span>
+            </span>
+          </label>
+
+          <div class="dispose-move-row">
+            <label for="dispose-move-to">{{final.dispose_move_label}}</label>
+            <input id="dispose-move-to"
+                   name="dispose-move-to"
+                   type="text"
+                   autocomplete="off"
+                   spellcheck="false"
+                   placeholder="{{final.dispose_move_placeholder}}">
+          </div>
+
+          <div class="submit-gap" aria-hidden="true"></div>
+
+          <button id="dispose-concept-btn" class="implement-btn dispose-btn">
+            <span aria-hidden="true">⤓</span>
+            {{final.dispose_btn}}
+          </button>
+          <p class="hint hint-warn">{{final.dispose_btn_hint}}</p>
+
+          <p class="hint hint-running" data-dispose-state="running" hidden>
+            <span aria-hidden="true">⏳</span> {{final.dispose_running}}
+          </p>
+          <p class="hint hint-done" data-dispose-state="done" hidden>
+            <span aria-hidden="true">✓</span> {{final.dispose_done}}
+          </p>
+        </fieldset>
       </div>
     </aside>
   </div>
@@ -371,6 +446,13 @@ exactly two options.
 
 ### HTML
 
+Every `[data-decision]` group MUST be followed by an adjacent
+`<textarea data-comment="$decisionId-note">` so the user can attach a
+free-form override (e.g. "only for X", "with variant Y") to the bi-state
+choice. Place the textarea inside the same row container so the comment is
+visually anchored to the card. The catch-all `collectAllFormFields` picks
+it up via `data-comment` without any collector change.
+
 ```html
 <div class="variant-evaluation" data-decision="variant-a" data-label="Variant A">
   <div class="eval-group">
@@ -383,12 +465,26 @@ exactly two options.
       <span class="eval-label">Miteinbeziehen</span>
     </label>
   </div>
+  <div class="field-row decision-comment-row">
+    <label for="variant-a-note">{{decision.comment_label}}</label>
+    <textarea id="variant-a-note"
+              data-comment="variant-a-note"
+              placeholder="{{decision.comment_placeholder}}"
+              rows="2"></textarea>
+  </div>
 </div>
 ```
 
 Legacy class names `tri-state-group` / `tri-state-option` / `tri-state-label`
 are deprecated but still accepted by the CSS selectors below for backward
 compatibility.
+
+**Backwards compatibility:** older pages that emitted the bi-state group
+without the textarea are upgraded at runtime by `ensureCommentSlots()` (see
+§ Shared Systems → Comment Slot Injection). Generated pages SHOULD still
+emit the textarea inline so the validation gate and `localStorage` restore
+see it immediately, but the JS safety net guarantees the user always has
+the override slot.
 
 ### CSS
 
@@ -482,6 +578,45 @@ compatibility.
 .eval-option:has(input:not(:checked)):hover,
 .tri-state-option:has(input:not(:checked)):hover {
   opacity: 1;
+}
+
+/* Per-decision comment row — slotted directly under the bi-state group so
+   the override is visually anchored to the variant card. Width tracks the
+   group width via the container; min-height keeps it usable on dense pages. */
+.decision-comment-row {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.decision-comment-row label {
+  font-size: 0.78rem;
+  color: var(--text-muted, #8b949e);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.decision-comment-row textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #30363d);
+  background: color-mix(in srgb, var(--bg-color, #0d1117) 80%, transparent);
+  color: var(--text-color, #c9d1d9);
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.decision-comment-row textarea:focus {
+  outline: none;
+  border-color: var(--accent-color, #58a6ff);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color, #58a6ff) 30%, transparent);
+}
+.decision-comment-row textarea::placeholder {
+  color: var(--text-muted, #8b949e);
+  opacity: 0.6;
 }
 ```
 
@@ -1963,6 +2098,96 @@ body.content-dimmed .content-dimmer:not([hidden]) {
   color: var(--warning-color, #d29922);
 }
 
+/* Disposition fieldset — controls Step 6 cleanup. Always rendered on the
+   final-report panel; default selection is "discard" (matches the typical
+   one-shot refinement workflow). The fieldset visually separates from the
+   create-issues block above with a thin top divider. */
+.dispose-fieldset {
+  margin-top: 1.25rem;
+  padding: 0.85rem 0.95rem 1rem;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-color, #0d1117) 70%, transparent);
+}
+.dispose-fieldset legend {
+  padding: 0 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-color, #c9d1d9);
+}
+.dispose-fieldset .dispose-hint {
+  margin: 0 0 0.75rem 0;
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+.dispose-fieldset .dispose-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.dispose-fieldset .dispose-option:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 8%, transparent);
+}
+.dispose-fieldset .dispose-option input[type="radio"] {
+  margin-top: 0.25rem;
+  accent-color: var(--accent-color, #58a6ff);
+}
+.dispose-fieldset .dispose-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.dispose-fieldset .dispose-label strong {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.dispose-fieldset .dispose-sub {
+  font-size: 0.74rem;
+  color: var(--text-secondary, #8b949e);
+  line-height: 1.4;
+}
+.dispose-fieldset .dispose-move-row {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed var(--border-color, #30363d);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.dispose-fieldset .dispose-move-row label {
+  font-size: 0.78rem;
+  color: var(--text-secondary, #8b949e);
+  font-weight: 500;
+}
+.dispose-fieldset .dispose-move-row input {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #30363d);
+  background: color-mix(in srgb, var(--bg-color, #0d1117) 80%, transparent);
+  color: var(--text-color, #c9d1d9);
+  font: inherit;
+  font-size: 0.82rem;
+}
+.dispose-fieldset .dispose-move-row input:focus {
+  outline: none;
+  border-color: var(--accent-color, #58a6ff);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color, #58a6ff) 30%, transparent);
+}
+.dispose-fieldset .dispose-btn { margin-top: 0; }
+.dispose-fieldset .dispose-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.dispose-fieldset .hint[data-dispose-state="running"] {
+  color: var(--accent-color, #58a6ff);
+}
+.dispose-fieldset .hint[data-dispose-state="done"] {
+  color: var(--success-color, #3fb950);
+}
+
 /* Iteration tab styling for the final-report tab — distinct from
    numbered iteration tabs so the closing step reads as a milestone. */
 .iteration-tab[data-final-report] {
@@ -2107,7 +2332,13 @@ function restoreState() {
   } catch (e) { /* corrupt storage — ignore */ }
 }
 
-document.addEventListener('DOMContentLoaded', restoreState);
+document.addEventListener('DOMContentLoaded', () => {
+  // Inject missing per-decision comment slots BEFORE restoring state so the
+  // restored textarea values land on real DOM nodes. See § Comment Slot
+  // Injection for why this safety net exists.
+  if (typeof ensureCommentSlots === 'function') ensureCommentSlots();
+  restoreState();
+});
 document.addEventListener('change', saveState);
 document.addEventListener('input', saveState);
 ```
@@ -2116,8 +2347,87 @@ document.addEventListener('input', saveState);
 - Use `localStorage` with a 24-hour TTL
 - Save on every `change` and `input` event — not just on submit
 - Restore runs on `DOMContentLoaded` — before the user sees the page
+- `ensureCommentSlots()` runs IMMEDIATELY before `restoreState()` — see
+  § Comment Slot Injection for the rationale (must inject the slots before
+  the restore step rehydrates their values)
 - The `concept-submitted` class is NOT persisted
 - Theme preference IS persisted — prevents dark/light flash on reload
+
+## Comment Slot Injection
+
+Every Bi-State `[data-decision]` group SHOULD ship with an inline adjacent
+`<textarea data-comment="$decisionId-note">` so the user can attach a
+free-form override to their include/discard choice (e.g. "only for X",
+"with variant Y", or any open question that does not fit a binary toggle).
+
+Generated pages must emit the textarea inline. To upgrade older pages that
+were generated before this rule existed — and as a runtime safety net if
+Claude forgets to add it during a one-off generation — every concept page
+also ships `ensureCommentSlots()`. It iterates over every `[data-decision]`
+group and injects a textarea where one is missing. The function runs once
+on `DOMContentLoaded` BEFORE `restoreState()` so the restore step can
+rehydrate previously typed comments into the newly-injected nodes.
+
+The catch-all `collectAllFormFields` picks up the textareas via
+`data-comment` without any collector change (see § collectDecisions
+dispatcher — the dispatcher already reads `el.dataset.comment` as a
+fallback key).
+
+```javascript
+function ensureCommentSlots() {
+  document.querySelectorAll('[data-decision]').forEach(group => {
+    // Anchor: prefer the surrounding card/section so the textarea ends up
+    // inside the same visual unit. Fall back to the group's parent if no
+    // recognised wrapper exists.
+    const card = group.closest('.pattern-card, .role-card, .variant-evaluation, section[id]')
+              || group.parentElement;
+    if (!card) return;
+
+    // Skip if the card already has a comment slot — works for both inline
+    // emission and prior runs of ensureCommentSlots().
+    if (card.querySelector('textarea[data-comment]')) return;
+
+    const id = (group.dataset.decision || group.id || '').trim();
+    if (!id) return;  // unnamed group — nothing useful to key the textarea by
+    const commentKey = id + '-note';
+
+    const row = document.createElement('div');
+    row.className = 'field-row decision-comment-row';
+
+    const label = document.createElement('label');
+    label.setAttribute('for', commentKey);
+    label.textContent = '{{decision.comment_label}}';
+
+    const ta = document.createElement('textarea');
+    ta.id = commentKey;
+    ta.dataset.comment = commentKey;
+    ta.placeholder = '{{decision.comment_placeholder}}';
+    ta.rows = 2;
+
+    row.appendChild(label);
+    row.appendChild(ta);
+
+    // Insert right after the bi-state group when both share the same parent;
+    // otherwise append to the card so the override is visually attached.
+    if (group.nextSibling && group.parentNode === card) {
+      group.parentNode.insertBefore(row, group.nextSibling);
+    } else {
+      card.appendChild(row);
+    }
+  });
+}
+```
+
+**Notes:**
+- `{{decision.comment_label}}` and `{{decision.comment_placeholder}}` MUST be
+  replaced with the locale-resolved strings at generation time (see § UI Locale).
+- `ensureCommentSlots()` is idempotent — re-running it does nothing once
+  every group has a textarea, so it is safe to call multiple times (e.g.
+  after a Claude-driven iteration append).
+- Iteration appends MUST also call `ensureCommentSlots()` after the new
+  section is inserted; the `DOMContentLoaded` hook only fires on full
+  reloads. Either trigger it manually or rely on the next `/reload` POST
+  which forces a `location.reload()`.
 
 ## collectDecisions (dispatcher)
 
@@ -2461,7 +2771,16 @@ async function submitCreateIssues() {
     el.hidden = el.dataset.issuesState !== 'running';
   });
 
-  const payload = { submitted: true, action: 'create-issues', items };
+  // Always ship the current disposition state so Claude can apply Step 6
+  // cleanup based on the user's choice. If the user only clicks
+  // "Issues erstellen" and the disposition button never fires, this
+  // payload still carries the disposition for cleanup.
+  const payload = {
+    submitted: true,
+    action: 'create-issues',
+    items,
+    disposition: collectDisposition()
+  };
   const container = document.getElementById('concept-decisions');
   if (container) container.textContent = JSON.stringify(payload);
   document.body.classList.add('concept-submitted', 'content-dimmed');
@@ -2482,6 +2801,57 @@ async function submitCreateIssues() {
 
 document.getElementById('create-issues-btn')
   ?.addEventListener('click', submitCreateIssues);
+
+// --- Final-report "Concept beenden" / dispose-concept action ---
+// Always available on the final-report panel. Submits the user's
+// disposition choice (discard | keep | gitignore + optional moveTo) and
+// signals Claude to run Step 6 cleanup. Independent from create-issues —
+// the user may end the concept without ever creating issues, or click
+// both in any order.
+function collectDisposition() {
+  const radio = document.querySelector('input[name="dispose-mode"]:checked');
+  const moveEl = document.getElementById('dispose-move-to');
+  const mode = radio ? radio.value : 'discard';
+  const moveTo = (moveEl && moveEl.value.trim()) ? moveEl.value.trim() : null;
+  return { mode, moveTo };
+}
+
+async function submitDisposeConcept() {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (!active || !active.hasAttribute('data-final-report')) return;
+
+  const fs = document.getElementById('panel-dispose-concept');
+  const btn = document.getElementById('dispose-concept-btn');
+  if (!fs || !btn) return;
+
+  btn.disabled = true;
+  fs.querySelectorAll('.hint[data-dispose-state]').forEach(el => {
+    el.hidden = el.dataset.disposeState !== 'running';
+  });
+
+  const payload = {
+    submitted: true,
+    action: 'dispose-concept',
+    disposition: collectDisposition()
+  };
+  const container = document.getElementById('concept-decisions');
+  if (container) container.textContent = JSON.stringify(payload);
+  document.body.classList.add('concept-submitted', 'content-dimmed');
+  showContentDimmer();
+
+  try {
+    await fetch('/decisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {
+    localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(payload));
+  }
+}
+
+document.getElementById('dispose-concept-btn')
+  ?.addEventListener('click', submitDisposeConcept);
 
 // Recompute gating whenever the user toggles a checkbox inside the
 // open-questions section. The generic change listener (for saveState)
@@ -3125,6 +3495,68 @@ checkboxes is currently checked.
 Both gates run client-side only — Claude never enables/disables the
 button via the bridge; instead it controls visibility indirectly by
 disabling checkboxes when it writes the issue-routed HTML.
+
+### Disposition Control
+
+The disposition fieldset (`#panel-dispose-concept`) is **always visible**
+when the panel is in `panel-final-report` mode — it is not gated on
+open-questions content. Its three radios + optional `moveTo` text input
+drive Step 6 cleanup behaviour. The user chooses how the concept files
+should land on disk before closing the session.
+
+**Disposition modes:**
+
+| `mode` | Step 6 cleanup behaviour |
+|---|---|
+| `discard` *(default)* | Delete the concept HTML AND the matching `-decisions.json` from `docs/concepts/`. |
+| `keep` | Leave the files in place (or under `moveTo` if set). They remain git-tracked. |
+| `gitignore` | Leave the files in place (or under `moveTo` if set) AND append `docs/concepts/{slug}.*` (or the moved path glob) to the repo's `.gitignore` if not already covered. |
+
+**Optional `moveTo` (string):** the user may type a target directory
+(e.g. `docs/architecture/decisions/`). When set, Claude `mv`s both the
+HTML file AND the decisions JSON to that directory FIRST, then applies
+the `mode` semantics. Empty / whitespace-only input is treated as null.
+
+**Payload shape:**
+
+```json
+{ "mode": "discard" | "keep" | "gitignore", "moveTo": "docs/architecture/" | null }
+```
+
+Both `create-issues` and `dispose-concept` payloads carry the same
+`disposition` sub-object. The contract is documented in `SKILL.md`
+§ Step 6 — Cleanup-By-Disposition.
+
+**Backward compatibility:** old concept sessions that submitted a
+`create-issues` payload without a `disposition` field, or any submission
+that ended the session before this control existed, default to
+`disposition: { mode: "discard", moveTo: null }`. The default is
+intentionally aggressive — most one-shot refinements do not need to
+persist the HTML in git, and a stray opt-out is cheaper to fix
+(re-render or check-in manually) than a stale concept directory full of
+forgotten artefacts.
+
+### `submitCreateIssues` + `submitDisposeConcept` interplay
+
+The two final-report submissions are independent and may fire in any
+order, including just one of them:
+
+- **Issues only** — user clicks "Issues erstellen" with checked items.
+  Payload `action: "create-issues"` carries `items[]` + `disposition`.
+  Claude routes issues per Step 5b § create-issues branch, then runs
+  Step 6 cleanup with the bundled disposition.
+- **Dispose only** — user clicks "Concept beenden" without ever
+  touching the issue list (or there is no `[data-open-questions]`
+  block at all). Payload `action: "dispose-concept"` carries only
+  `disposition`. Claude skips issue routing and runs Step 6 cleanup
+  directly.
+- **Issues then dispose** — both fire in sequence. Step 6 runs after
+  the second submission with the latest disposition state. Issue
+  routing is not repeated.
+
+A `disposition` payload is **never replayed** — once Step 6 has been
+applied, subsequent payloads (e.g. an offline-queue replay) are
+ignored on the server side by the standard `_version` mismatch guard.
 
 ## Design System
 
