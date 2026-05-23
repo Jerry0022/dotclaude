@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.83.0] — 2026-05-23
+
+### Added
+
+- **plugins/devops/skills/devops-ship/SKILL.md** — Step 5a Continue-Intent Check. Before cleanup, the ship pipeline now auto-detects whether follow-up work is expected in the same branch/worktree (open `TodoWrite` items unrelated to this ship, German/English follow-up phrases in recent user messages, multiple distinct scopes announced earlier, or explicit "ship und weiter" / "--keep" wording in the trigger). When a signal fires, the destructive cleanup is skipped: worktree + local branch stay alive, ready for the next commit. Default remains normal cleanup — false-positives accumulate orphan branches.
+- **plugins/devops/skills/devops-ship/SKILL.md** — new Step 5c (keep-mode cleanup). Calls `ship_cleanup` with `keep: true` to clear only the ship-in-progress sentinel; no `ExitWorktree`, no branch deletion. Remote branch was deleted by the GitHub merge — the next push will re-create it via `--set-upstream` automatically.
+- **plugins/devops/mcp-server/ship/tools/cleanup.js** — `keep: boolean` parameter on `ship_cleanup`. When `true`, the tool only clears the sentinel and returns `{ success, kept: true, cleaned: ["sentinel"] }`. Tool description updated so orchestrators know the worktree-exit guard does not apply to keep-mode.
+- **plugins/devops/mcp-server/index.js** — `state.kept` field on `render_completion_card`. Two new CTA variants `ship-successful-{merged,plain}-kept` flip the call-to-action from "All DONE / Alles ERLEDIGT" to "KEEP CODING in `<branch>` / WEITER in `<branch>`". `renderState()` renders the kept branch as plain text with "(kept locally)" suffix — the remote branch is gone after merge, so a GitHub link would 404.
+
+### Changed
+
+- **plugins/devops/skills/devops-ship/SKILL.md** — Step 5b's internal sections renamed from `5a/5b/5c` to `Substep 1/2/3` to avoid colliding with the new top-level `Step 5a/5b/5c` structure. Frontmatter `allowed-tools` gains `TaskList`, `TaskCreate`, `TaskUpdate` so Step 5a can actually inspect open Todo items.
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.82.0 → 0.83.0`
+
 ## [0.82.0] — 2026-05-23
 
 ### Added

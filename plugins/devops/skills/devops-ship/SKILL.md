@@ -298,19 +298,19 @@ what was decided and can override (`"nein, doch räum auf"` for a follow-up clea
 
 **Skip this step entirely if Step 5a chose keep-mode** — jump to Step 5c.
 
-### 5a. Capture session context
+### Substep 1 — Capture session context
 
-**Before any cleanup action**, capture two pieces of state for Step 5c:
+**Before any cleanup action**, capture two pieces of state for Substep 3:
 
 1. The current worktree path (if running inside one) — capture via
    `pwd` / `git rev-parse --show-toplevel` BEFORE `ExitWorktree` runs.
    Save it as `$WORKTREE_PATH`. Skip this if not in a worktree.
 2. The resolved main-repo root via `git rev-parse --git-common-dir` and
    walking to its parent (or `git worktree list --porcelain` first entry).
-   Save it as `$MAIN_REPO_ROOT`. Step 5c re-resolves this internally but
+   Save it as `$MAIN_REPO_ROOT`. Substep 3 re-resolves this internally but
    capturing it here makes the cleanup trail easier to log.
 
-### 5b. Exit worktree + ship_cleanup
+### Substep 2 — Exit worktree + ship_cleanup
 
 **If in a worktree**: call `ExitWorktree(action: "remove")` FIRST to release the CWD lock.
 
@@ -334,11 +334,11 @@ The tool will refuse to run if still inside a worktree — it returns an error r
 **Only own branch/worktree.** Never clean up other branches or worktrees.
 **Only after confirmed merge.** If Step 4 failed, preserve everything.
 
-If `success: false` → log warning but continue to Step 5c (re-opening files
+If `success: false` → log warning but continue to Substep 3 (re-opening files
 is still useful) then Step 6. Cleanup failures are non-fatal — the merge
 already landed.
 
-### 5c. Re-open session-opened files from main-repo path
+### Substep 3 — Re-open session-opened files from main-repo path
 
 After `ship_cleanup` completes, every file:// URL the session opened from
 inside `$WORKTREE_PATH` is now dead (the worktree directory has been
@@ -346,7 +346,7 @@ pruned). The merged HTML still lives at the equivalent path inside the
 main repo, so re-open every tracked file from there so the user's browser
 tab silently picks up the live version.
 
-Skip this step entirely when `$WORKTREE_PATH` was empty in 5a (the ship
+Skip this step entirely when `$WORKTREE_PATH` was empty in Substep 1 (the ship
 ran directly from the main checkout, no path rewrite needed).
 
 ```bash
