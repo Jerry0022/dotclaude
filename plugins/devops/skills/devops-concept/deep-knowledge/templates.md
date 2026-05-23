@@ -2385,6 +2385,13 @@ function hideContentDimmer() {
 }
 document.getElementById('content-dimmer')
   ?.addEventListener('click', hideContentDimmer);
+// Keyboard escape — keyboard-only users can't click the dimmer, so let
+// Escape dismiss it. Only acts while the dimmer is actually visible.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const dim = document.getElementById('content-dimmer');
+  if (dim && !dim.hidden) hideContentDimmer();
+});
 
 // --- Final-report "Issues erstellen" action ---
 // Gating rules (only ALL of these true → panel visible + button enabled):
