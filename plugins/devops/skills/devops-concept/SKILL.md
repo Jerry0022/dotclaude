@@ -314,7 +314,11 @@ signal Claude monitors.
 1. Collect all toggle/checkbox states → `decisions[]`
 2. Collect all comment field values → `comments[]`
 3. Set `submitted: true` in the JSON block
-4. Add class `concept-submitted` to `<body>`
+4. Add classes `concept-submitted` and `content-dimmed` to `<body>` and
+   reveal `#content-dimmer` so the content area visually fades. The decision
+   panel + FABs sit at higher z-index and stay clear + interactive. The
+   dimmer is click-to-dismiss; otherwise it auto-clears on the next page
+   reload (next iteration / final report).
 5. Switch the decision panel from "ready" to "submitted" state — showing a
    clear "Entscheidungen übermittelt" indicator with a hint to switch to the
    Claude chat (see `deep-knowledge/templates.md` § Submit Handler)
@@ -361,10 +365,10 @@ and `deep-knowledge/templates.md` § Iteration Tabs for the reference HTML.
 
 ### Post-Generation Validation (mandatory gate)
 
-After writing the HTML file, grep it for the 29 mandatory interactive
+After writing the HTML file, grep it for the 30 mandatory interactive
 patterns (heartbeat, panel states, iteration tabs, section TOC, reload
 polling, generic form-collection catch-all scoped to the active
-iteration, etc.).
+iteration, post-submit content dimmer, etc.).
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. See `deep-knowledge/validation-gate.md` for the full
 pattern list and common failure modes.

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.81.0] — 2026-05-23
+
+### Added
+
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — post-submit content dimmer (`#content-dimmer`, `body.content-dimmed`). After a submit (`iterate`, `implement`, or `create-issues`), a fixed `rgba(0,0,0,0.4)` overlay with a 1.5 px backdrop blur is shown over the concept content area to focus attention on the decision panel and FABs. The dimmer is click-to-dismiss; an `Escape` keydown handler also dismisses it for keyboard-only users. It auto-clears on the next page reload (next iteration / final report) because `content-dimmed` is not persisted. Decision panel + FABs sit at higher z-index (`.concept-decision-panel` sidebar bumped to `z-index: 100`; prototype FABs/dock/backdrop/indicator already ≥ 90) so they paint above the dimmer and remain interactive. New helpers `showContentDimmer()` / `hideContentDimmer()`; `submitWithAction` and `submitCreateIssues` now add the body class and reveal the element, `restorePanelToReady` clears both.
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — new `panel.dim_dismiss` locale key (en: "Dismiss overlay" / de: "Schimmer entfernen") used as `aria-label` + `title` on the dimmer element. Element is added to the Common Structure HTML and the prototype + free template HTML examples.
+
+### Changed
+
+- **plugins/devops/skills/devops-concept/deep-knowledge/validation-gate.md** — mandatory shared-pattern count `29 → 30`. New pattern #30 (`content-dimmer`) — generation without the dimmer is now rejected by the post-generation gate.
+- **plugins/devops/skills/devops-concept/SKILL.md** — submit-button behavior step 4 documents the new dimmer flip; the "29 mandatory interactive patterns" reference is updated to 30.
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.80.0 → 0.81.0`
+
 ## [0.80.0] — 2026-05-23
 
 ### Added

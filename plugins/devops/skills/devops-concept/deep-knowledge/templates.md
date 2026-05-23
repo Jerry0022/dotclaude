@@ -69,6 +69,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.toggle_open`            | Open decisions                 | Entscheidungen öffnen |
 | `panel.close`                  | Close                          | Schliessen |
 | `panel.minimize`               | Minimize                       | Minimieren |
+| `panel.dim_dismiss`            | Dismiss overlay                | Schimmer entfernen |
 | `variant.include`              | Include                        | Miteinbeziehen |
 | `variant.discard`              | Discard                        | Verwerfen |
 | `iteration.label`              | Iterations                     | Iterationen |
@@ -275,6 +276,18 @@ the `[ui-locale: ...]` hint produced.
     </aside>
   </div>
 
+  <!-- Submitted-state content dimmer (all templates).
+       After a submit, body.content-dimmed flips this on. The dimmer covers
+       the content area and directs focus to the decision panel / FAB. The
+       panel + FABs are above z-index 50 so they paint over the dimmer and
+       stay visually clear and clickable. The dimmer itself is click-to-
+       dismiss; otherwise it auto-clears on the next page reload (new
+       iteration / final report) because `content-dimmed` is not persisted. -->
+  <div class="content-dimmer" id="content-dimmer"
+       role="button" tabindex="-1"
+       aria-label="{{panel.dim_dismiss}}"
+       title="{{panel.dim_dismiss}}" hidden></div>
+
   <script type="application/json" id="concept-decisions">
     {"submitted": false, "decisions": [], "comments": []}
   </script>
@@ -319,6 +332,9 @@ structured evaluation where the user wants to see the panel at all times.
   padding: 1.5rem;
   border-left: 1px solid var(--border-color);
   background: var(--panel-bg);
+  /* Above .content-dimmer (z-index 50) so the panel's solid background
+     visually punches through the dimmer instead of being tinted by it. */
+  z-index: 100;
 }
 /* Mobile: collapse to sticky bottom */
 @media (max-width: 768px) {
@@ -870,6 +886,12 @@ The wiring is a single delegated click handler installed alongside
       </div>
     </aside>
   </div>
+
+  <!-- Shared content dimmer — see Common Structure for behavior + CSS. -->
+  <div class="content-dimmer" id="content-dimmer"
+       role="button" tabindex="-1"
+       aria-label="{{panel.dim_dismiss}}"
+       title="{{panel.dim_dismiss}}" hidden></div>
 </body>
 </html>
 ```
@@ -1467,6 +1489,12 @@ bi-state. Claude chooses the structure that fits the content.
            have eval-{id} radios and mirrors their current state. -->
     </aside>
   </div>
+
+  <!-- Shared content dimmer — see Common Structure for behavior + CSS. -->
+  <div class="content-dimmer" id="content-dimmer"
+       role="button" tabindex="-1"
+       aria-label="{{panel.dim_dismiss}}"
+       title="{{panel.dim_dismiss}}" hidden></div>
 </body>
 </html>
 ```
@@ -1762,6 +1790,37 @@ document.addEventListener('DOMContentLoaded', () => {
   display: flex; align-items: center; gap: 0.35rem;
 }
 .hint-cache[hidden] { display: none; }
+
+/* Content dimmer — covers the content area after submit so the user's focus
+   lands on the decision panel / FAB. Decision panel, FABs, feedback dock,
+   panel backdrop, and screen-indicator all sit at z-index ≥ 90 (and the
+   sidebar panel was bumped to z-index 100), so they paint above the dimmer
+   and stay clear + interactive. The dimmer itself is click-to-dismiss.
+   Auto-clears on page reload (next iteration / final report) because the
+   body class is not persisted. */
+.content-dimmer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  /* Theme-neutral grey overlay — works on dark and light backgrounds without
+     a CSS variable dependency. Same opacity range as .panel-backdrop. */
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+body.content-dimmed .content-dimmer:not([hidden]) {
+  opacity: 1;
+  pointer-events: auto;
+}
+.content-dimmer[hidden] { display: none; }
+.content-dimmer:focus-visible {
+  outline: 2px solid var(--accent-color, #58a6ff);
+  outline-offset: -4px;
+}
 
 /* Submitted state */
 .submitted-indicator {
@@ -2276,7 +2335,8 @@ async function submitWithAction(action) {
   const data = collectDecisions(action);
   const container = document.getElementById('concept-decisions');
   container.textContent = JSON.stringify(data);
-  document.body.classList.add('concept-submitted');
+  document.body.classList.add('concept-submitted', 'content-dimmed');
+  showContentDimmer();
   _submittedAt = Date.now();
   _submittedReloadCounter = _bootReloadCounter;
   _submittedAction = action;
@@ -2304,6 +2364,34 @@ async function submitWithAction(action) {
 
 wireSubmit('submit-iterate-btn', 'iterate');
 wireSubmit('submit-implement-btn', 'implement');
+
+// --- Content dimmer (focus shifter after submit) ---
+// After a submit the user's attention belongs on the decision panel / FAB,
+// not on the now-frozen content. showContentDimmer reveals a fixed overlay
+// over the content area; the panel + FABs sit at higher z-index and stay
+// clear and clickable. The dimmer itself is click-to-dismiss — clicking
+// anywhere on it removes `content-dimmed` and hides the overlay, letting
+// the user re-engage with the content without losing the submitted state.
+// On page reload (next iteration / final report) the body class is naturally
+// gone, so no extra cleanup is needed.
+function showContentDimmer() {
+  const dim = document.getElementById('content-dimmer');
+  if (dim) dim.hidden = false;
+}
+function hideContentDimmer() {
+  const dim = document.getElementById('content-dimmer');
+  if (dim) dim.hidden = true;
+  document.body.classList.remove('content-dimmed');
+}
+document.getElementById('content-dimmer')
+  ?.addEventListener('click', hideContentDimmer);
+// Keyboard escape — keyboard-only users can't click the dimmer, so let
+// Escape dismiss it. Only acts while the dimmer is actually visible.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const dim = document.getElementById('content-dimmer');
+  if (dim && !dim.hidden) hideContentDimmer();
+});
 
 // --- Final-report "Issues erstellen" action ---
 // Gating rules (only ALL of these true → panel visible + button enabled):
@@ -2376,7 +2464,8 @@ async function submitCreateIssues() {
   const payload = { submitted: true, action: 'create-issues', items };
   const container = document.getElementById('concept-decisions');
   if (container) container.textContent = JSON.stringify(payload);
-  document.body.classList.add('concept-submitted');
+  document.body.classList.add('concept-submitted', 'content-dimmed');
+  showContentDimmer();
 
   try {
     await fetch('/decisions', {
@@ -2445,7 +2534,8 @@ function restorePanelToReady() {
     const btn = document.getElementById(id);
     if (btn) btn.disabled = false;
   });
-  document.body.classList.remove('concept-submitted');
+  document.body.classList.remove('concept-submitted', 'content-dimmed');
+  hideContentDimmer();
   _submittedAt = 0;
   _submittedReloadCounter = null;
   _submitInFlight = false;
