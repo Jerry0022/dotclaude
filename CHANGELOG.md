@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.80.0] — 2026-05-23
+
+### Added
+
+- **plugins/devops/hooks/session-start/ss.git.check.js** — extended to flag workspace-setup issues alongside the existing stale-changes check. New `checkWorkspace(cwd)` raises three cases at session start: ⚠ on `main`/`master` in the repo root (write ops would be blocked reactively by `pre.main.guard`/`pre.edit.branch`), ⚠ detached `HEAD` in the repo root (commits would not belong to any branch), and a mild suggestion when in the repo root on a feature branch. In-worktree-on-main stays silent — handled by `prompt.worktree.branch-guard`. When raised, the hook writes a stdout instruction telling Claude to call `AskUserQuestion` as the first action with three resolution paths (worktree+branch / ship-first / take-along via stash + pop). Hook version `0.3.0 → 0.4.0`.
+
+### Changed
+
+- **plugins/devops/hooks/session-start/ss.git.check.js** — when both workspace and stale issues are detected, the uncommitted/unpushed lines for the current repo collapse into a single `Pending:` line under the Workspace section so the AskUserQuestion has the full picture; remaining stale items (stash, other repos) render under an `Additional in current repo:` / `**<label>**` sub-header. `dirty.push` now records the repo `dir` so the workspace section can locate the current-repo issues.
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.79.0 → 0.80.0`
+
+### Notes
+
+- `DEVOPS_ALLOW_MAIN=1` scopes to the main-branch case only (its semantic meaning). Detached-HEAD and feature-branch-no-worktree are not silenced by that flag.
+- `.claude/.ship-in-progress` sentinel silences the workspace check completely while the ship pipeline runs.
+
 ## [0.79.0] — 2026-05-17
 
 ### Added
