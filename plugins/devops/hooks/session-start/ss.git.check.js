@@ -1,15 +1,26 @@
 #!/usr/bin/env node
 /**
  * @hook ss.git.check
- * @version 0.3.0
+ * @version 0.4.0
  * @event SessionStart
  * @plugin devops
- * @description Check for stale uncommitted/unpushed changes at session start.
- *   Filters out active worktree branches to avoid false positives.
+ * @description Check for stale changes AND workspace setup issues at session
+ *   start. Filters out active worktree branches to avoid false positives.
  *   Silent when clean. Outputs structured CTAs when issues are found.
+ *
+ *   Workspace check (current repo only):
+ *     - On main/master without worktree → high-priority warning, suggests
+ *       worktree + feature branch (or ship-first if uncommitted exist).
+ *     - Not in worktree on feature branch → mild suggestion to isolate.
+ *     - In worktree on main → silent (prompt.worktree.branch-guard handles).
+ *
+ *   Bypass for workspace check (stale check still runs):
+ *     - DEVOPS_ALLOW_MAIN=1 in environment
+ *     - .claude/.ship-in-progress sentinel exists (ship pipeline active)
  */
 
 require('../lib/plugin-guard');
+const { isActive: sentinelActive } = require('../lib/ship-sentinel');
 
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -125,6 +136,25 @@ function checkRepo(dir) {
   return issues;
 }
 
+function currentBranch(dir) {
+  return run('git symbolic-ref --quiet --short HEAD', dir);
+}
+
+function checkWorkspace(dir) {
+  if (process.env.DEVOPS_ALLOW_MAIN === '1') return null;
+  if (sentinelActive(dir)) return null;
+  const branch = currentBranch(dir);
+  if (!branch) return null;
+  const inWorktree = isLinkedWorktree(dir);
+  if (inWorktree) return null;
+  const onMain = branch === 'main' || branch === 'master';
+  return {
+    type: onMain ? 'on-main-no-worktree' : 'no-worktree',
+    branch,
+    severity: onMain ? 'high' : 'low',
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Cleanup stale session temp files (older than 24h)
 // ---------------------------------------------------------------------------
@@ -174,31 +204,88 @@ const dirty = [];
 for (const repo of repos) {
   const issues = checkRepo(repo.dir);
   if (issues.length > 0) {
-    dirty.push({ label: repo.label, issues });
+    dirty.push({ label: repo.label, dir: repo.dir, issues });
   }
 }
 
-if (dirty.length === 0) {
+const workspace = checkWorkspace(cwd);
+
+if (dirty.length === 0 && !workspace) {
   process.exit(0);
 }
 
 // Build structured output with CTAs
-const out = ['Stale changes found at session start. Show the user this summary as-is:'];
-out.push('');
+const out = [];
+
+if (workspace) {
+  const stagedTypes = new Set(['uncommitted', 'unpushed']);
+  const currentDirty = dirty.find(d => d.dir === cwd);
+  const pendingIssues = currentDirty
+    ? currentDirty.issues.filter(i => stagedTypes.has(i.type))
+    : [];
+  const hasChanges = pendingIssues.length > 0;
+
+  out.push('Workspace check at session start. Show this summary AS-IS and call AskUserQuestion as the FIRST action of this turn:');
+  out.push('');
+  out.push('**Workspace setup**');
+  if (workspace.severity === 'high') {
+    out.push(`- ⚠ On \`${workspace.branch}\` in repo root (not in a worktree) — write ops will be blocked by pre.main.guard / pre.edit.branch`);
+  } else {
+    out.push(`- On \`${workspace.branch}\` in repo root (not in a worktree)`);
+  }
+  if (hasChanges) {
+    out.push(`- Pending: ${pendingIssues.map(i => i.label).join(', ')}`);
+  }
+  out.push('');
+  out.push('Ask the user (in their language) via AskUserQuestion. Suggested options:');
+  out.push('  - Worktree + Feature-Branch anlegen (recommended)');
+  if (hasChanges) {
+    out.push(`  - Erst Changes auf \`${workspace.branch}\` shippen, dann Worktree anlegen`);
+    out.push('  - Changes mitnehmen in neuen Worktree (git stash → create → pop)');
+  }
+  out.push('  - Hier bleiben (bypass: DEVOPS_ALLOW_MAIN=1 für diese Session)');
+  out.push('');
+  out.push('Resolution per option:');
+  out.push('  - Worktree+branch: `git worktree add ../<feature> -b claude/<feature>` then cd there');
+  out.push('  - Ship-first: invoke /devops-ship, then create worktree');
+  out.push('  - Take-along: `git stash`, create worktree, `cd <worktree>`, `git stash pop`');
+  out.push('  - Stay: set env `DEVOPS_ALLOW_MAIN=1` for this session');
+  out.push('');
+}
+
+const staleHeaderShown = !workspace && dirty.length > 0;
+if (staleHeaderShown) {
+  out.push('Stale changes found at session start. Show the user this summary as-is:');
+  out.push('');
+}
+
 for (const r of dirty) {
-  out.push(`**${r.label}**`);
+  const lines = [];
   for (const issue of r.issues) {
+    if (workspace && r.dir === cwd
+        && (issue.type === 'uncommitted' || issue.type === 'unpushed')) {
+      continue;
+    }
     switch (issue.type) {
       case 'uncommitted':
       case 'unpushed':
-        out.push(`- ${issue.label} → run \`/devops-ship\` to commit, push & create PR`);
+        lines.push(`- ${issue.label} → run \`/devops-ship\` to commit, push & create PR`);
         break;
       case 'stash':
-        out.push(`- ${issue.label} → review with \`git stash list\`, then \`git stash pop\` or \`git stash drop\``);
+        lines.push(`- ${issue.label} → review with \`git stash list\`, then \`git stash pop\` or \`git stash drop\``);
         break;
     }
   }
-  out.push('');
+  if (lines.length > 0) {
+    const header = workspace && r.dir === cwd
+      ? 'Additional in current repo:'
+      : `**${r.label}**`;
+    out.push(header);
+    out.push(...lines);
+    out.push('');
+  }
 }
+
+if (out.length === 0) process.exit(0);
 
 process.stdout.write(out.join('\n'));
