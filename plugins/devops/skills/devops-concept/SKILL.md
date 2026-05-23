@@ -744,16 +744,18 @@ will surface a phantom resume hint pointing at a server that no longer
 exists. The `kill` is best-effort: if the user already closed the
 terminal that spawned the server, the PID may be gone, which is fine.
 
-**Apply disposition on the concept files** (`docs/concepts/{date}-{slug}.html`
-and `docs/concepts/{date}-{slug}-decisions.json`):
+**Apply disposition on the concept files.** Files are named
+`docs/concepts/{date}-{slug}.html` and `docs/concepts/{date}-{slug}-decisions.json`
+— always include the `{date}-` prefix in patterns; bare `{slug}` does
+NOT match.
 
 | `mode` | `moveTo` | Action |
 |---|---|---|
-| `discard` | (any) | `rm -f <html> <decisions.json>` — `moveTo` is ignored. |
+| `discard` | (any) | `rm -f -- "<html>" "<decisions.json>"` — `moveTo` is ignored. |
 | `keep` | null | No file change. Files remain at their original git-tracked path. |
-| `keep` | set | `mkdir -p <moveTo>` then `git mv` (if tracked, else `mv`) both files into `<moveTo>/`. Files remain git-tracked at the new path. |
-| `gitignore` | null | Files stay at original path. Append `docs/concepts/{slug}.*` to `.gitignore` if not already covered. Run `git rm --cached <html> <decisions.json>` to untrack them if they were already added. |
-| `gitignore` | set | `mkdir -p <moveTo>` then `mv` both files into `<moveTo>/`. Append `<moveTo>/{slug}.*` to `.gitignore` if not already covered. Run `git rm --cached` on the original tracked entries. |
+| `keep` | set | `mkdir -p -- "<moveTo>"` then `git mv -- "<html>" "<moveTo>/"` (if tracked, else `mv -- "<html>" "<moveTo>/"`); same for the decisions JSON. Files remain git-tracked at the new path. |
+| `gitignore` | null | Files stay at original path. Append `docs/concepts/{date}-{slug}.*` to `.gitignore` if not already covered. Run `git rm --cached -- "<html>" "<decisions.json>"` to untrack them if they were already added. |
+| `gitignore` | set | `mkdir -p -- "<moveTo>"` then `mv -- "<html>" "<moveTo>/"`; same for the decisions JSON. Append `<moveTo>/{date}-{slug}.*` to `.gitignore` if not already covered. Run `git rm --cached -- "<original-html>" "<original-decisions.json>"` on the original tracked entries. |
 
 **Safety rules:**
 
@@ -762,13 +764,23 @@ and `docs/concepts/{date}-{slug}-decisions.json`):
   Reject any path that resolves outside the project root, contains
   `..`, or is absolute — fall back to the non-`moveTo` branch and
   surface a warning to the user.
+- All path-bearing shell commands (`rm`, `mv`, `git mv`, `git rm`,
+  `mkdir`) MUST use the `--` argument terminator AND double-quote
+  every path interpolation, so `moveTo` values containing spaces or
+  shell metacharacters land as a single literal argument. Never
+  inline a raw `{path}` substitution.
+- `.gitignore` patterns use the FULL filename including the date
+  prefix (`docs/concepts/{date}-{slug}.*`), NOT bare `{slug}.*` — the
+  shorter pattern silently fails to match the timestamp-prefixed
+  files this skill produces.
 - Never delete a file that does NOT match the
   `docs/concepts/{date}-{slug}.*` pattern for THIS session's slug.
   Other concept HTML files in `docs/concepts/` belong to other
   sessions and MUST be preserved.
 - `.gitignore` edits are append-only. Before appending, grep for an
-  existing exact match (the `{slug}.*` or `{slug}.html` line) — if it
-  already exists, skip the append. Never rewrite or reorder the file.
+  existing exact match (the full `docs/concepts/{date}-{slug}.*` line)
+  — if it already exists, skip the append. Never rewrite or reorder
+  the file.
 - If `git rm --cached` errors because the file was never tracked,
   swallow the error and continue — the file is already in the right
   state for `.gitignore`.

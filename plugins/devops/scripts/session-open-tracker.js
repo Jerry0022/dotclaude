@@ -256,9 +256,9 @@ function cmdReopenMain(argv) {
   const store = pruneStale(loadStore(file));
   const wtNorm = normalizePath(wt);
 
-  const consumed = [];
   const reopened = [];
   const missing = [];
+  const launchFailed = [];
 
   const surviving = [];
   for (const entry of store.files) {
@@ -273,14 +273,17 @@ function cmdReopenMain(argv) {
     // Compute the relative path within the worktree, then re-anchor to main.
     const relative = path.relative(wt, entry.path);
     if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      // Defensive: relative path escapes the worktree — skip this entry.
+      // Defensive: relative path escapes the worktree — keep so it doesn't
+      // silently disappear from the audit trail.
       surviving.push(entry);
       continue;
     }
     const mainPath = path.resolve(mainRoot, relative);
-    consumed.push(entry);
 
     if (!fs.existsSync(mainPath)) {
+      // File genuinely doesn't exist at the main path (deleted during the
+      // session, never made it through the merge). No point keeping the
+      // entry — drop it.
       missing.push(mainPath);
       continue;
     }
@@ -288,11 +291,21 @@ function cmdReopenMain(argv) {
     if (dryRun) {
       console.log(`[dry-run] would open ${mainPath}`);
       reopened.push(mainPath);
+      // Don't mutate `surviving` in dry-run — the store stays as-is.
+      surviving.push(entry);
       continue;
     }
 
-    if (openInBrowser(mainPath)) reopened.push(mainPath);
-    else missing.push(mainPath);
+    if (openInBrowser(mainPath)) {
+      reopened.push(mainPath);
+      // Successful open — drop the entry from the store (consumed).
+    } else {
+      // Browser launch failed (spawn error). Preserve the entry so a
+      // future invocation can retry once the launcher is healthy again,
+      // and so the user's audit trail isn't silently lost.
+      launchFailed.push(mainPath);
+      surviving.push(entry);
+    }
   }
 
   store.files = surviving;
@@ -304,7 +317,8 @@ function cmdReopenMain(argv) {
     worktree: wt,
     reopened,
     missing,
-    consumed: consumed.length
+    launchFailed,
+    consumed: reopened.length + missing.length
   };
   console.log(JSON.stringify(summary, null, 2));
 }
