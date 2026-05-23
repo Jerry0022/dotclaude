@@ -304,8 +304,11 @@ function renderState(state, variant, repoUrl) {
   else                                         icon = '\u2796';
 
   const branch = state.branch || '';
-  const branchLabel = branch + (state.worktree ? ' (worktree)' : '');
-  const branchStr = repoUrl
+  // In keep-mode the remote branch was deleted by the merge — linking to GitHub
+  // would 404. Render plain text with a "(kept)" hint instead.
+  const branchSuffix = state.kept ? ' (kept locally)' : (state.worktree ? ' (worktree)' : '');
+  const branchLabel = branch + branchSuffix;
+  const branchStr = (repoUrl && !state.kept)
     ? '[`' + branchLabel + '`](' + repoUrl + '/tree/' + branch + ')'
     : '`' + branchLabel + '`';
 

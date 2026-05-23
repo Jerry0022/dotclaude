@@ -8,7 +8,7 @@ description: >-
   Supports hierarchical merges (sub-branch → feature → main).
   Use when work is ready to land. Triggers on: "ship it", "push and merge".
   Do NOT trigger during coding/debugging or for commits without shipping.
-allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*
+allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, TaskList, TaskCreate, TaskUpdate, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*
 ---
 
 # Ship
