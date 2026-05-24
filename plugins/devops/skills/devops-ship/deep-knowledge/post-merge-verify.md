@@ -84,6 +84,20 @@ verify:
 
 Note: `$VERSION` is also expanded in `command` mode.
 
+### Security note for `command:` mode
+
+The `command:` string is passed to `spawnSync(cmd, { shell: true })` from the
+watcher process — so anything in this field runs with your user's permissions,
+in the watcher's working directory, with no sandboxing. **Only enable
+`command:` mode for repositories you trust to author this field.** A malicious
+PR that adds a `command:` line could exfiltrate or destroy data the next time
+a ship completes.
+
+If you operate a multi-contributor repo where untrusted PRs can modify
+`reference.md`, prefer `mode: http` exclusively, or move the verify block
+into a file outside the repo (point `--verify-config` at e.g.
+`~/.claude/verify/<repo>.md`).
+
 ## Example: Static site with version meta tag
 
 ```yaml

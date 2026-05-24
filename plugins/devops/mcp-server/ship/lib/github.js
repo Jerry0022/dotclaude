@@ -121,10 +121,14 @@ export function findExistingPR({ base, head }, opts) {
  * Watch a PR's CI checks until they complete, fail, or timeout.
  *
  * Returns:
- *   { status: "passed",     checks: [...] }                       — all green
- *   { status: "no-checks",  checks: [] }                          — no CI configured on this PR
- *   { status: "failed",     checks, failed, pending, error }      — at least one check failed
- *   { status: "timeout",    checks, failed, pending, error }      — did not complete within timeoutSec
+ *   { status: "passed",      checks: [...] }                       — all green
+ *   { status: "no-checks",   checks: [] }                          — no CI configured on this PR
+ *   { status: "failed",      checks, failed, pending, error }      — at least one check failed
+ *   { status: "timeout",     checks, failed, pending, error }      — did not complete within timeoutSec, OR
+ *                                                                    watch exited unexpectedly while checks were still pending
+ *   { status: "probe-error", error }                                — initial probe failed (auth/network) and the
+ *                                                                    state could not be determined; treated as block-worthy
+ *                                                                    by the caller so the gate is fail-closed.
  *
  * Never throws — callers branch on `status`.
  */
@@ -144,8 +148,9 @@ export function watchPRChecks(prNumber, opts, { timeoutSec = 600, intervalSec = 
     }
     // gh exits 8 = checks pending — that's expected, fall through to watch
     if (e.status !== 8) {
-      // Real failure (auth, network, PR not found) — surface but don't block
-      return { status: "no-checks", checks: [], probeError: stderr.slice(0, 300) };
+      // Real failure (auth, network, PR not found) — fail-closed: do NOT silently
+      // treat as "no checks", or the gate becomes a no-op when auth breaks.
+      return { status: "probe-error", error: `gh pr checks probe failed: ${stderr.slice(0, 300)}` };
     }
     initial = e.stdout?.toString() || "[]";
   }
@@ -216,8 +221,21 @@ export function watchPRChecks(prNumber, opts, { timeoutSec = 600, intervalSec = 
         error: `${failed.length} check(s) failed: ${failed.map((c) => c.name || c.workflow).join(", ")}`,
       };
     }
-    // Watch errored but no failures recorded — treat as transient, allow merge
+    // No failures recorded — but if checks are still pending, watch died early.
+    // Treating that as "passed" would let the merge race ahead of pending CI;
+    // surface it as timeout so the caller blocks (fail-closed).
     const stderr = (watchErr.stderr?.toString() || watchErr.message || "").replace(ANSI_PATTERN, "");
+    if (pending.length > 0) {
+      return {
+        status: "timeout",
+        checks: finalChecks,
+        failed,
+        pending,
+        error: `gh pr checks --watch exited early with ${pending.length} check(s) still pending: ${stderr.slice(0, 200)}`,
+      };
+    }
+    // No failures, no pending — everything had already finished cleanly before
+    // the noise. Treat as passed, but record the warning for the result.
     return { status: "passed", checks: finalChecks, watchWarning: stderr.slice(0, 300) };
   }
 

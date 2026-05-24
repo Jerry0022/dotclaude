@@ -135,7 +135,7 @@ export async function handler(params) {
         failed: checkResult.failed?.length || 0,
         pending: checkResult.pending?.length || 0,
       };
-      if (checkResult.status === "failed" || checkResult.status === "timeout") {
+      if (checkResult.status === "failed" || checkResult.status === "timeout" || checkResult.status === "probe-error") {
         result.success = false;
         result.checksBlocked = true;
         result.failedChecks = (checkResult.failed || []).map((c) => ({

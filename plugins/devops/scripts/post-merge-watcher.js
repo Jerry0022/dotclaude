@@ -224,6 +224,11 @@ function notifyToast(title, message) {
   } catch { /* best-effort */ }
 }
 
+// Module-scope handle to the in-flight state so the top-level fatal handler
+// can mark it complete even when main() throws after the initial write.
+let activeState = null;
+let activeStateFile = null;
+
 async function main() {
   const args = parseArgs(process.argv);
   const cwd = args.cwd;
@@ -258,6 +263,8 @@ async function main() {
     hasVerifyConfig: !!verifyConfig,
   };
   writeState(stateFile, state);
+  activeState = state;
+  activeStateFile = stateFile;
 
   // Phase 1: locate the workflow run for our merge SHA
   let run = null;
@@ -332,5 +339,18 @@ async function main() {
 
 main().catch((e) => {
   console.error("post-merge-watcher fatal:", e.message);
+  // Ensure the state file does not stay in "watching" forever — flip it to
+  // a terminal failure so the SessionStart hook surfaces the crash instead of
+  // pretending the job is still running.
+  if (activeState && activeStateFile) {
+    try {
+      activeState.status = "complete";
+      activeState.overall = "failed";
+      activeState.finishedAt = new Date().toISOString();
+      activeState.fatalError = e.message?.slice(0, 500) || "unknown fatal error";
+      writeState(activeStateFile, activeState);
+      notifyToast("Ship Verify: Watcher Crashed", `${activeState.fatalError}`);
+    } catch { /* best-effort */ }
+  }
   process.exit(1);
 });
