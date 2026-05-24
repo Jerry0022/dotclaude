@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { git, gitStrict, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap } from "../lib/git.js";
-import { createPR, mergePR, createRelease, findExistingPR } from "../lib/github.js";
+import { createPR, mergePR, createRelease, findExistingPR, watchPRChecks } from "../lib/github.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
 
 export const schema = z.object({
@@ -18,11 +18,13 @@ export const schema = z.object({
   prerelease: z.boolean().default(false).describe("Mark as pre-release (for 0.x versions)"),
   commitMessage: z.string().nullable().default(null).describe("If set, stage all and commit with this message before pushing"),
   mergeStrategy: z.enum(["squash", "merge", "rebase"]).default("squash").describe("PR merge strategy. Use 'merge' for overlapping files to preserve ancestry chain."),
+  skipChecks: z.boolean().default(false).describe("Skip the pre-merge CI checks gate. Use only for hot-fixes when CI is broken. Env DEVOPS_SHIP_SKIP_CHECKS=1 also forces skip."),
+  checksTimeoutSec: z.number().int().min(30).max(3600).default(600).describe("Max seconds to wait for PR CI checks before merging. Default 10 min."),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
 export async function handler(params) {
-  const { base, title, body, tag, releaseNotes, prerelease, commitMessage, mergeStrategy } = params;
+  const { base, title, body, tag, releaseNotes, prerelease, commitMessage, mergeStrategy, skipChecks, checksTimeoutSec } = params;
   const cwd = params.cwd;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const opts = { cwd };
@@ -121,6 +123,34 @@ export async function handler(params) {
     }
     result.pr = { number: pr.number, url: pr.url, title };
     result.mergeStrategy = mergeStrategy;
+
+    // Pre-Merge Checks Gate — wait for CI on the PR before merging.
+    // Bypass via skipChecks param or DEVOPS_SHIP_SKIP_CHECKS=1 env.
+    const checksBypassed = skipChecks || process.env.DEVOPS_SHIP_SKIP_CHECKS === "1";
+    if (!checksBypassed) {
+      const checkResult = watchPRChecks(pr.number, opts, { timeoutSec: checksTimeoutSec });
+      result.checks = {
+        status: checkResult.status,
+        passed: checkResult.checks?.filter((c) => c.bucket === "pass").length || 0,
+        failed: checkResult.failed?.length || 0,
+        pending: checkResult.pending?.length || 0,
+      };
+      if (checkResult.status === "failed" || checkResult.status === "timeout") {
+        result.success = false;
+        result.checksBlocked = true;
+        result.failedChecks = (checkResult.failed || []).map((c) => ({
+          name: c.name || c.workflow,
+          link: c.link,
+        }));
+        result.error =
+          `${checkResult.error}. PR #${pr.number} not merged. ` +
+          `Fix the failing checks and retry, or pass skipChecks:true for hot-fix override.`;
+        return result;
+      }
+      // status === "passed" or "no-checks" → continue
+    } else {
+      result.checks = { status: "skipped", reason: skipChecks ? "skipChecks param" : "DEVOPS_SHIP_SKIP_CHECKS env" };
+    }
 
     // Merge PR (delete branch; skip --delete-branch in worktrees
     // where gh tries to switch to base locally — cleanup handles branch deletion)

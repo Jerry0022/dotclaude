@@ -32,4 +32,25 @@ Create project-specific ship rules in your project:
 - `src/version.ts` contains `export const VERSION = 'X.Y.Z'`
 ```
 
+## Post-merge deploy verification (opt-in)
+
+Add a `verify:` block to **this** `reference.md` to make the post-merge
+watcher probe production after CI goes green. See
+[`deep-knowledge/post-merge-verify.md`](deep-knowledge/post-merge-verify.md)
+for the full field reference. Quick example:
+
+```yaml
+verify:
+  mode: http
+  url: https://my-app.example.com
+  expected_status: 200
+  selector: '<meta name="version" content="([^"]+)"'
+  expected: "$VERSION"
+  timeout_seconds: 600
+```
+
+Without a `verify:` block the watcher only confirms the GitHub Actions
+run on the merge commit. Failures (CI or verify) surface at the next
+SessionStart and via Windows toast.
+
 This pattern applies to ALL plugin skills, not just ship.

@@ -118,6 +118,114 @@ export function findExistingPR({ base, head }, opts) {
 }
 
 /**
+ * Watch a PR's CI checks until they complete, fail, or timeout.
+ *
+ * Returns:
+ *   { status: "passed",     checks: [...] }                       — all green
+ *   { status: "no-checks",  checks: [] }                          — no CI configured on this PR
+ *   { status: "failed",     checks, failed, pending, error }      — at least one check failed
+ *   { status: "timeout",    checks, failed, pending, error }      — did not complete within timeoutSec
+ *
+ * Never throws — callers branch on `status`.
+ */
+export function watchPRChecks(prNumber, opts, { timeoutSec = 600, intervalSec = 10 } = {}) {
+  // Initial probe — distinguishes "no checks at all" from "checks present".
+  // gh exits non-zero with "no checks reported" when nothing is wired up.
+  let initial;
+  try {
+    initial = gh(
+      ["pr", "checks", String(prNumber), "--json", "bucket,state,name,workflow,link"],
+      opts,
+    );
+  } catch (e) {
+    const stderr = (e.stderr?.toString() || e.message || "").replace(ANSI_PATTERN, "");
+    if (/no checks/i.test(stderr) || /no required checks/i.test(stderr)) {
+      return { status: "no-checks", checks: [] };
+    }
+    // gh exits 8 = checks pending — that's expected, fall through to watch
+    if (e.status !== 8) {
+      // Real failure (auth, network, PR not found) — surface but don't block
+      return { status: "no-checks", checks: [], probeError: stderr.slice(0, 300) };
+    }
+    initial = e.stdout?.toString() || "[]";
+  }
+
+  let initialChecks;
+  try {
+    initialChecks = JSON.parse(initial);
+  } catch {
+    initialChecks = [];
+  }
+  if (!initialChecks || initialChecks.length === 0) {
+    return { status: "no-checks", checks: [] };
+  }
+
+  // Block on gh's own --watch loop. Wrap with our own timeout to bound it hard.
+  let watchErr = null;
+  try {
+    execFileSync(
+      "gh",
+      ["pr", "checks", String(prNumber), "--watch", "--fail-fast", "--interval", String(intervalSec)],
+      {
+        cwd: opts?.cwd || process.cwd(),
+        encoding: "utf8",
+        timeout: timeoutSec * 1000,
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
+  } catch (e) {
+    watchErr = e;
+  }
+
+  // Snapshot final state regardless of watch outcome.
+  let finalChecks = [];
+  try {
+    const raw = gh(
+      ["pr", "checks", String(prNumber), "--json", "bucket,state,name,workflow,link"],
+      opts,
+    );
+    finalChecks = JSON.parse(raw);
+  } catch (e) {
+    // gh exit 8 = pending; still try to read stdout
+    if (e.stdout) {
+      try { finalChecks = JSON.parse(e.stdout.toString()); } catch { /* keep [] */ }
+    }
+  }
+
+  const failed = finalChecks.filter((c) => c.bucket === "fail" || c.bucket === "cancel");
+  const pending = finalChecks.filter((c) => c.bucket === "pending");
+
+  if (watchErr) {
+    const isTimeout = watchErr.code === "ETIMEDOUT" || watchErr.signal === "SIGTERM";
+    if (isTimeout) {
+      return {
+        status: "timeout",
+        checks: finalChecks,
+        failed,
+        pending,
+        error: `PR checks did not complete within ${timeoutSec}s (${pending.length} still pending)`,
+      };
+    }
+    // gh exits non-zero when at least one check failed
+    if (failed.length > 0) {
+      return {
+        status: "failed",
+        checks: finalChecks,
+        failed,
+        pending,
+        error: `${failed.length} check(s) failed: ${failed.map((c) => c.name || c.workflow).join(", ")}`,
+      };
+    }
+    // Watch errored but no failures recorded — treat as transient, allow merge
+    const stderr = (watchErr.stderr?.toString() || watchErr.message || "").replace(ANSI_PATTERN, "");
+    return { status: "passed", checks: finalChecks, watchWarning: stderr.slice(0, 300) };
+  }
+
+  // Watch exited cleanly — all checks passed
+  return { status: "passed", checks: finalChecks };
+}
+
+/**
  * Create a GitHub release for a tag.
  * Notes are passed via stdin to avoid shell escaping issues.
  */

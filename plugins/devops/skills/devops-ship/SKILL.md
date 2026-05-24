@@ -209,9 +209,15 @@ See `deep-knowledge/call-examples.md` for the three reference payloads
 For intermediate merges: no tag, no release notes, no version commit —
 the tool automatically skips tag/release creation when `base` is not `main`.
 
-The tool handles: commit (optional), rebase verification, push (force-with-lease after rebase), PR create (or reuse with mergeability check), merge (squash or merge commit), tag (main only), GitHub release (main only).
+The tool handles: commit (optional), rebase verification, push (force-with-lease after rebase), PR create (or reuse with mergeability check), **pre-merge CI checks gate (waits for green)**, merge (squash or merge commit), tag (main only), GitHub release (main only).
 
-Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, merged, mergeStrategy, intermediate, tag, tagVerified, release }`.
+Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeStrategy, intermediate, tag, tagVerified, release }`.
+
+**Pre-merge CI gate** (default ON): after PR create, `ship_release` runs `gh pr checks --watch` (default 600s timeout). If checks fail or timeout → `success: false`, `checksBlocked: true`, PR stays open, branch not deleted. Render `ship-blocked` card with the failing check names + run URLs.
+
+- Hot-fix bypass: pass `skipChecks: true` or set `DEVOPS_SHIP_SKIP_CHECKS=1`. Result records `checks.status: "skipped"` so the card flags it.
+- Tune timeout per call: `checksTimeoutSec: <30..3600>`.
+- See `deep-knowledge/quality-gates.md → Pre-Merge CI Checks Gate` for the full state matrix.
 
 **If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1b and rebase before retrying.
 
@@ -249,6 +255,44 @@ consumer configuration — not yet implemented in this release (they fall throug
 `none` intentionally).
 
 See `deep-knowledge/skill-extension-guide.md -> Delivery targets` for reference.md examples.
+
+## Step 4b — Spawn Post-Merge Watcher (final ship only)
+
+**Skip this step for intermediate merges** — only relevant when shipping to main.
+
+After `ship_release` returns `success: true` and `merged: "main"`, spawn the post-merge
+watcher in the background. It waits for the GitHub Actions run triggered by the merge
+and (if configured) probes the production URL — all without blocking the ship flow.
+
+```bash
+# Background — fire and forget; result lands in <cwd>/.claude/.ship-watcher/<sha>.json
+nohup node "${CLAUDE_PLUGIN_ROOT}/scripts/post-merge-watcher.js" \
+  --cwd "<cwd>" \
+  --base "main" \
+  --merge-sha "<ship_release.mergeSha>" \
+  --pr "<ship_release.pr.number>" \
+  --max-wait 1800 \
+  --verify-config "<cwd>/.claude/skills/ship/reference.md" \
+  --version "<ship_version_bump.vNew or empty>" \
+  > /dev/null 2>&1 &
+```
+
+On Windows (PowerShell), use `Start-Process` with `-WindowStyle Hidden` instead of `nohup`:
+```powershell
+Start-Process -WindowStyle Hidden -FilePath "node" -ArgumentList @("$env:CLAUDE_PLUGIN_ROOT/scripts/post-merge-watcher.js", "--cwd", "<cwd>", "--base", "main", "--merge-sha", "<sha>", "--pr", "<n>", "--max-wait", "1800", "--verify-config", "<cwd>/.claude/skills/ship/reference.md", "--version", "<vNew>")
+```
+
+The watcher writes status to `<cwd>/.claude/.ship-watcher/<merge-sha>.json` and the
+`ss.ship.verify` hook surfaces unack'd results at the next SessionStart. On failure,
+a best-effort Windows toast fires immediately.
+
+**Skip the watcher entirely** when:
+- `intermediate: true` (no CI on intermediate merges typically)
+- The repo has no `.github/workflows/` directory (check with `Glob`)
+- User passed `--no-watch` to the ship trigger (interpret intent from the user's message)
+
+Pass `state.watcher = { spawned: true, sha: "<sha>" }` (or `spawned: false`) into the
+completion card in Step 6 so it can render "Deploy-Verify läuft im Hintergrund".
 
 ## Step 5a — Continue-Intent Check (auto-detect keep-mode)
 

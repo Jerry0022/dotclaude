@@ -17,6 +17,19 @@ Create a pull request via the GitHub API:
 - Base branch: `main`
 - Include a `## Summary` and `## Test plan` section in the body
 
+## Pre-Merge CI Checks Gate
+
+Between PR creation and merge, `ship_release` waits for `gh pr checks --watch`
+to finish (default 10-min timeout). See `quality-gates.md → Pre-Merge CI Checks Gate`.
+
+- **green** → continue to merge
+- **failed / timeout** → return success: false, do NOT merge, render `ship-blocked` card
+- **no checks configured** → silent skip
+- **bypass**: `skipChecks: true` or `DEVOPS_SHIP_SKIP_CHECKS=1` (hot-fix only)
+
+This prevents the historical failure mode where lokal grün + merge → CI rot auf
+`main` without anyone noticing.
+
 ## Merge PR
 
 Merge the PR via the GitHub API:
