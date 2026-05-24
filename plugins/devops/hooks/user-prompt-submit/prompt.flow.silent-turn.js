@@ -26,17 +26,22 @@ require('../lib/plugin-guard');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
 
 const SILENT_PATTERNS = [
-  // Matches any prompt that opens with the silence marker, e.g.
-  //   "Silently run via Bash …"       (git-sync cron)
-  //   "Silently service the concept bridge …" (canonical concept cron)
-  //   "Silently POST /heartbeat …"    (older/alt concept cron variants)
-  //   "Silent: POST …"                (live in some active sessions)
-  //   "Silent — keep alive …"
-  // The trailing [\s:,—-] requires a separator after the marker, so prose
-  // like "silentmode is off" does not match.
-  /^\s*silent(?:ly)?\b[\s:,—-]/i,
-  /^\s*run\s+silently\b/i,           // alt phrasing used by some skills
-  /<<autonomous-loop(-dynamic)?>>/i, // /loop autonomous sentinel
+  // Colon-form: 'Silent: POST /heartbeat …' (seen in active concept-bridge
+  // crons). The colon is the disambiguator — ordinary prose does not open
+  // with 'Silent:' followed by a command.
+  /^\s*silent\s*:/i,
+  // Verb-form: 'Silently <operational-verb> …' covers:
+  //   'Silently run via Bash …'              (git-sync cron)
+  //   'Silently run both steps …'            (older concept cron)
+  //   'Silently service the concept bridge …' (canonical concept cron)
+  //   plus the verbs used inside such cron prompts. The whitelist avoids
+  //   classifying real prompts like 'Silently explain what this does' as
+  //   silent — only operational/cron-like verbs trigger the flag.
+  /^\s*silently\s+(?:run|service|post|get|curl|fetch|heartbeat|keep|check|trigger|update|sync|reset|tick|reload|shutdown|execute|poll|invoke|call)\b/i,
+  // 'Run silently …' — alt phrasing used by some skills
+  /^\s*run\s+silently\b/i,
+  // /loop autonomous sentinel
+  /<<autonomous-loop(-dynamic)?>>/i,
 ];
 
 function isSilent(prompt) {

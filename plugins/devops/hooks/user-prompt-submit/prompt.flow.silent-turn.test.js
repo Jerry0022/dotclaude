@@ -30,8 +30,17 @@ describe("isSilent — silent-turn prompt detector", () => {
     ).toBe(true);
   });
 
-  test("dash-separator form ('Silent — keep alive') is detected", () => {
-    expect(isSilent("Silent — keep alive POST http://localhost:8742/heartbeat")).toBe(true);
+  test("real prose starting with 'Silent' is NOT silent (false-positive guard)", () => {
+    // Codex-flagged regression risk: a too-broad regex would match prose.
+    expect(isSilent("Silent mode is enabled")).toBe(false);
+    expect(isSilent("Silent failures in production")).toBe(false);
+    expect(isSilent("Silent partner update")).toBe(false);
+  });
+
+  test("real prose starting with 'Silently <non-verb>' is NOT silent", () => {
+    expect(isSilent("Silently explain what this hook does")).toBe(false);
+    expect(isSilent("Silently, please run tests")).toBe(false);
+    expect(isSilent("Silently watch the network for errors")).toBe(false);
   });
 
   test("alt phrasing 'Run silently' is detected", () => {
