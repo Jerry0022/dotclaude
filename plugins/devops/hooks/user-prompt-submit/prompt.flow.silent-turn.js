@@ -26,8 +26,16 @@ require('../lib/plugin-guard');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
 
 const SILENT_PATTERNS = [
-  /^\s*silently\s+run\b/i,          // cron git-sync, concept bridge cron
-  /^\s*run\s+silently\b/i,          // alt phrasing used by some skills
+  // Matches any prompt that opens with the silence marker, e.g.
+  //   "Silently run via Bash …"       (git-sync cron)
+  //   "Silently service the concept bridge …" (canonical concept cron)
+  //   "Silently POST /heartbeat …"    (older/alt concept cron variants)
+  //   "Silent: POST …"                (live in some active sessions)
+  //   "Silent — keep alive …"
+  // The trailing [\s:,—-] requires a separator after the marker, so prose
+  // like "silentmode is off" does not match.
+  /^\s*silent(?:ly)?\b[\s:,—-]/i,
+  /^\s*run\s+silently\b/i,           // alt phrasing used by some skills
   /<<autonomous-loop(-dynamic)?>>/i, // /loop autonomous sentinel
 ];
 
