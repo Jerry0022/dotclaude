@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.85.1] — 2026-05-24
+
+### Fixed
+
+- **plugins/devops/hooks/user-prompt-submit/prompt.flow.silent-turn.js** — the silent-turn detector only matched `Silently run` / `Run silently` / `<<autonomous-loop>>`. The canonical concept-bridge cron template uses `Silently service the concept bridge …`, and live sessions also emit `Silent: POST /heartbeat …` — both bypassed the detector. Result: every concept-bridge heartbeat tick set off the Stop hook's card enforcement, so users saw `## 📋 DONE — LIES dir durch` repeat once per minute with no prompt in between. The detector now uses three explicit shapes: colon-form (`/^\s*silent\s*:/i`), verb-form with an operational-verb whitelist (`/^\s*silently\s+(run|service|post|get|curl|fetch|heartbeat|keep|check|trigger|update|sync|reset|tick|reload|shutdown|execute|poll|invoke|call)\b/i`), and the existing alt phrasing / autonomous-loop sentinel. The verb whitelist (rather than a wide separator class) prevents prose like `Silent mode is enabled` or `Silently explain what this does` from being misclassified as silent.
+
 ## [0.85.0] — 2026-05-24
 
 ### Added

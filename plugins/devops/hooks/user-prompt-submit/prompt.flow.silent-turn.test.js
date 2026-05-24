@@ -16,6 +16,33 @@ describe("isSilent — silent-turn prompt detector", () => {
     ).toBe(true);
   });
 
+  test("canonical concept bridge cron prompt (starts with 'Silently service')", () => {
+    expect(
+      isSilent("Silently service the concept bridge on port 8742.\n(0) Self-cleanup gate (FIRST step every tick)…"),
+    ).toBe(true);
+  });
+
+  test("live alt concept cron prompt (starts with 'Silent:' — colon form)", () => {
+    expect(
+      isSilent(
+        "Silent: POST http://localhost:8883/heartbeat to keep concept page alive, then GET http://localhost:8883/decisions …",
+      ),
+    ).toBe(true);
+  });
+
+  test("real prose starting with 'Silent' is NOT silent (false-positive guard)", () => {
+    // Codex-flagged regression risk: a too-broad regex would match prose.
+    expect(isSilent("Silent mode is enabled")).toBe(false);
+    expect(isSilent("Silent failures in production")).toBe(false);
+    expect(isSilent("Silent partner update")).toBe(false);
+  });
+
+  test("real prose starting with 'Silently <non-verb>' is NOT silent", () => {
+    expect(isSilent("Silently explain what this hook does")).toBe(false);
+    expect(isSilent("Silently, please run tests")).toBe(false);
+    expect(isSilent("Silently watch the network for errors")).toBe(false);
+  });
+
   test("alt phrasing 'Run silently' is detected", () => {
     expect(isSilent("Run silently: curl -s -X POST http://localhost:8734/heartbeat > /dev/null")).toBe(true);
   });
@@ -47,6 +74,12 @@ describe("isSilent — silent-turn prompt detector", () => {
     // Anchor is at line start — we must not match user prose that happens to
     // contain the word elsewhere.
     expect(isSilent("I noticed the script runs silently in the background")).toBe(false);
+  });
+
+  test("words that merely START with 'silent' are NOT silent (word-boundary guard)", () => {
+    // The \b in /silent(?:ly)?\b/ must stop "silentmode", "silentish" etc.
+    expect(isSilent("silentmode is enabled")).toBe(false);
+    expect(isSilent("Silentish behaviour observed")).toBe(false);
   });
 
   test("empty / non-string input → false", () => {
