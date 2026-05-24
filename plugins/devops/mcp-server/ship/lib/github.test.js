@@ -6,7 +6,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { execSync, execFileSync } from "node:child_process";
-import { createPR, mergePR, findExistingPR } from "./github.js";
+import { createPR, mergePR, findExistingPR, watchPRChecks } from "./github.js";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -154,5 +154,110 @@ describe("findExistingPR", () => {
   test("swallows network errors and returns null", () => {
     execFileSync.mockImplementation(() => { throw new Error("net"); });
     expect(findExistingPR({ base: "main", head: "feat/x" })).toBeNull();
+  });
+});
+
+describe("watchPRChecks", () => {
+  test("returns no-checks when gh reports no checks configured", () => {
+    execFileSync.mockImplementation(() => {
+      const err = new Error("no checks");
+      err.stderr = Buffer.from("no checks reported on the 'feat/x' branch");
+      throw err;
+    });
+    const result = watchPRChecks(42);
+    expect(result.status).toBe("no-checks");
+    expect(result.checks).toEqual([]);
+  });
+
+  test("returns no-checks when initial probe returns empty array", () => {
+    execFileSync.mockReturnValueOnce("[]");
+    const result = watchPRChecks(42);
+    expect(result.status).toBe("no-checks");
+  });
+
+  test("returns passed when watch exits cleanly and all checks are pass", () => {
+    const checks = JSON.stringify([
+      { bucket: "pass", state: "SUCCESS", name: "build", workflow: "CI" },
+      { bucket: "pass", state: "SUCCESS", name: "test", workflow: "CI" },
+    ]);
+    execFileSync
+      .mockReturnValueOnce(checks)  // initial probe
+      .mockReturnValueOnce("")       // watch blocks then exits 0
+      .mockReturnValueOnce(checks);  // final snapshot
+    const result = watchPRChecks(42);
+    expect(result.status).toBe("passed");
+    expect(result.checks).toHaveLength(2);
+  });
+
+  test("returns failed with details when watch exits non-zero and a check failed", () => {
+    const initial = JSON.stringify([
+      { bucket: "pending", state: "IN_PROGRESS", name: "build", workflow: "CI" },
+    ]);
+    const finalChecks = JSON.stringify([
+      { bucket: "fail", state: "FAILURE", name: "build", workflow: "CI", link: "https://x/run/1" },
+    ]);
+    execFileSync
+      .mockReturnValueOnce(initial)
+      .mockImplementationOnce(() => { const e = new Error("watch failed"); e.status = 1; throw e; })
+      .mockReturnValueOnce(finalChecks);
+    const result = watchPRChecks(42);
+    expect(result.status).toBe("failed");
+    expect(result.failed).toHaveLength(1);
+    expect(result.failed[0].name).toBe("build");
+    expect(result.error).toMatch(/1 check\(s\) failed/);
+  });
+
+  test("returns timeout when watch is killed by ETIMEDOUT", () => {
+    const initial = JSON.stringify([
+      { bucket: "pending", state: "QUEUED", name: "build", workflow: "CI" },
+    ]);
+    execFileSync
+      .mockReturnValueOnce(initial)
+      .mockImplementationOnce(() => { const e = new Error("timeout"); e.code = "ETIMEDOUT"; throw e; })
+      .mockReturnValueOnce(initial);
+    const result = watchPRChecks(42, undefined, { timeoutSec: 60 });
+    expect(result.status).toBe("timeout");
+    expect(result.pending).toHaveLength(1);
+    expect(result.error).toMatch(/60s/);
+  });
+
+  test("treats watch exit-1 without failures as passed (transient noise) ONLY when nothing pending", () => {
+    const initial = JSON.stringify([
+      { bucket: "pass", state: "SUCCESS", name: "build", workflow: "CI" },
+    ]);
+    execFileSync
+      .mockReturnValueOnce(initial)
+      .mockImplementationOnce(() => { const e = new Error("flaky"); e.status = 1; e.stderr = Buffer.from("network blip"); throw e; })
+      .mockReturnValueOnce(initial);
+    const result = watchPRChecks(42);
+    expect(result.status).toBe("passed");
+    expect(result.watchWarning).toMatch(/network blip/);
+  });
+
+  test("returns timeout when watch dies early with checks still pending (fail-closed)", () => {
+    const initial = JSON.stringify([
+      { bucket: "pending", state: "IN_PROGRESS", name: "build", workflow: "CI" },
+      { bucket: "pending", state: "QUEUED", name: "test", workflow: "CI" },
+    ]);
+    execFileSync
+      .mockReturnValueOnce(initial)
+      .mockImplementationOnce(() => { const e = new Error("flake"); e.status = 1; e.stderr = Buffer.from("ws closed"); throw e; })
+      .mockReturnValueOnce(initial);
+    const result = watchPRChecks(42);
+    expect(result.status).toBe("timeout");
+    expect(result.pending).toHaveLength(2);
+    expect(result.error).toMatch(/exited early/);
+  });
+
+  test("returns probe-error when initial gh call fails for non-pending non-no-checks reason (fail-closed)", () => {
+    execFileSync.mockImplementationOnce(() => {
+      const e = new Error("auth lost");
+      e.status = 4;
+      e.stderr = Buffer.from("could not refresh token");
+      throw e;
+    });
+    const result = watchPRChecks(42);
+    expect(result.status).toBe("probe-error");
+    expect(result.error).toMatch(/could not refresh token/);
   });
 });

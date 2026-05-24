@@ -163,6 +163,28 @@ after upload. Canonical use case: shipping HA YAML configs managed in git.
 For projects that only edit files in-place with no delivery step. `deliver: none` makes
 `/devops-ship` skip Step 4a entirely.
 
+## Post-merge deploy verification
+
+Independent of `deliver:`, projects can opt into a background watcher that probes
+production after CI goes green. Add a `verify:` block to the same
+`{project}/.claude/skills/ship/reference.md`:
+
+```yaml
+verify:
+  mode: http
+  url: https://my-app.example.com
+  expected_status: 200
+  selector: '<meta name="version" content="([^"]+)"'
+  expected: "$VERSION"
+  timeout_seconds: 600
+```
+
+Full field reference: see [`skills/devops-ship/deep-knowledge/post-merge-verify.md`](../skills/devops-ship/deep-knowledge/post-merge-verify.md).
+
+Failures (CI red or verify probe failing) land in `<repo>/.claude/.ship-watcher/<sha>.json`
+and surface at the next SessionStart via the `ss.ship.verify` hook, plus a
+best-effort Windows toast at the moment of failure.
+
 ## Agent extensions
 
 Same pattern applies to agents:

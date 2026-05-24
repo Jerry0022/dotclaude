@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.85.0] — 2026-05-24
+
+### Added
+
+- **plugins/devops/mcp-server/ship/lib/github.js** — new `watchPRChecks(prNumber, opts, {timeoutSec, intervalSec})` wraps `gh pr checks --watch --fail-fast` with a hard timeout. Four-outcome contract (`passed` / `no-checks` / `failed` / `timeout`) plus a graceful "transient noise" branch that treats an exit-non-zero with no recorded failures as `passed`. Strips ANSI from any surfaced stderr. 6 new unit tests (21/21 in `github.test.js`).
+- **plugins/devops/mcp-server/ship/tools/release.js** — Pre-Merge CI Checks Gate. After PR create/reuse and before merge, `ship_release` now blocks on `watchPRChecks`. On `failed` / `timeout` returns `success: false`, `checksBlocked: true`, `failedChecks: [{name, link}]` and leaves the PR open. New schema fields: `skipChecks` (default `false`) and `checksTimeoutSec` (default 600, range 30–3600). Env `DEVOPS_SHIP_SKIP_CHECKS=1` provides an alternative bypass for hot-fixes. Result carries `checks: { status, passed, failed, pending }` for the completion card.
+- **plugins/devops/scripts/post-merge-watcher.js** — new background CLI script spawned after a successful merge to `main`. Polls `gh run list` for the workflow triggered by the merge SHA (5 s → 30 s exponential backoff, 5 min initial-detect window), then `gh run watch --exit-status` until the workflow finishes or the configured `--max-wait` (default 1800 s) elapses. Writes incremental state to `<repo>/.claude/.ship-watcher/<merge-sha>.json` (`watching → complete`, plus `ci`, `verify`, `overall` fields). Fires a best-effort Windows `NotifyIcon` toast on CI fail / timeout / deploy-verify fail.
+- **plugins/devops/scripts/post-merge-watcher.js** — Phase-2 deploy verify. When `--verify-config` points at a project `reference.md` containing a `verify:` block, the watcher (after CI passes) polls the configured target. `mode: http` probes a URL with optional `expected_status`, `selector` (regex on body), and `expected` (with `$VERSION` placeholder expanded to the shipped tag). `mode: command` runs an arbitrary shell command (exit 0 = success). Configurable `poll_interval_seconds` (default 15) and `timeout_seconds` (default 600). Hand-rolled YAML parser accepts the `verify:` block either inline or inside a fenced ```yaml block.
+- **plugins/devops/hooks/session-start/ss.ship.verify.js** — new SessionStart hook that surfaces unack'd post-merge watcher results from `<cwd>/.claude/.ship-watcher/*.json`. Reports completed runs with their CI + deploy-verify status, lists in-flight watchers with elapsed minutes, auto-acknowledges entries older than 24 h. Marks surfaced reports as `acknowledged: true` in-place so they don't repeat on the next session start. Silent when the watcher dir is absent or empty.
+- **plugins/devops/skills/devops-ship/deep-knowledge/post-merge-verify.md** — new reference doc for the `verify:` opt-in format. Field reference table for both `http` and `command` modes, failure-handling matrix (CI fails, CI passes verify fails, no CI configured, watcher killed mid-run), worked examples for SPA-on-Vercel, NPM registry publish probe, and static site with version meta tag.
+- **plugins/devops/hooks/hooks.json** — registers `ss.ship.verify` in the SessionStart hook chain after `ss.git.sync`.
+
+### Changed
+
+- **plugins/devops/skills/devops-ship/SKILL.md** — Step 4 documents the new pre-merge CI gate, the `skipChecks` / `checksTimeoutSec` parameters, and the bypass env var. New Step 4b describes how to spawn the post-merge watcher (bash + PowerShell variants) and when to skip it (intermediate merges, repos without `.github/workflows/`, explicit `--no-watch`). Result schema in Step 4 gains the `checks` field.
+- **plugins/devops/skills/devops-ship/deep-knowledge/quality-gates.md** — new "Pre-Merge CI Checks Gate" section documents the four outcomes, the 10-min default timeout, and the two bypass paths (parameter vs env var).
+- **plugins/devops/skills/devops-ship/deep-knowledge/release-flow.md** — new "Pre-Merge CI Checks Gate" subsection between PR create and merge explains the gate, its outcomes, and the hot-fix bypass — closes the historical failure mode where lokal grün + merge resulted in main being red without anyone noticing.
+- **plugins/devops/skills/devops-ship/reference.md** — quick example for the `verify:` block plus a link to the full reference doc.
+- **plugins/devops/deep-knowledge/skill-extension-guide.md** — new "Post-merge deploy verification" section anchors the cross-skill `verify:` extension format next to the existing `deliver:` field.
+- **plugins/devops/.claude-plugin/plugin.json** — version `0.84.0 → 0.85.0`
+
 ## [0.84.0] — 2026-05-24
 
 ### Added

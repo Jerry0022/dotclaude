@@ -33,6 +33,28 @@ Run the full test suite only if:
 If the full suite already passed on the **same build-ID** earlier in the
 session → skip. Log: `Tests skipped — already passed on build <hash>`.
 
+## Pre-Merge CI Checks Gate
+
+After the PR is created (or reused) and before the merge, `ship_release`
+calls `gh pr checks --watch --fail-fast` on the PR number. Default timeout:
+**600s** (10 min), configurable via `checksTimeoutSec`.
+
+Outcomes:
+- **all green** → merge proceeds. Result includes `checks: { status: "passed", passed: N }`.
+- **no checks configured** → silent skip (e.g. new repos without CI). `checks: { status: "no-checks" }`.
+- **at least one failure** → `success: false`, `checksBlocked: true`, `failedChecks: [...]`. PR stays open, branch not deleted. Skill → ship-blocked card.
+- **timeout** → `success: false`, `checksBlocked: true`. PR stays open. Skill → ship-blocked card with retry hint.
+
+### Bypass (hot-fix only)
+
+Two ways to skip the gate when CI itself is broken and a hot-fix must land:
+
+1. Pass `skipChecks: true` to `ship_release`.
+2. Set `DEVOPS_SHIP_SKIP_CHECKS=1` in the environment.
+
+Either path records `checks: { status: "skipped", reason: "..." }` in the result
+so the completion card can flag the bypass.
+
 ## Build-ID
 
 After a successful build, generate the build-ID:
