@@ -213,15 +213,32 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    self-pulse keeps `server_ts` fresh even when the request-handling
    thread is wedged.
 
-6. Open in Edge (reuses the running instance, adds a tab):
+6. **Open the page in the user's real Edge browser** (reuses the running
+   instance, adds a tab). This step is non-negotiable:
+
    ```bash
-   # Windows
+   # Windows (primary target)
    start "" msedge "http://localhost:{port}/{filename}"
    ```
    On macOS: `open -a "Microsoft Edge" "http://…"`, on Linux: `microsoft-edge "http://…"`.
 
    The empty `""` is required on Windows — without it, `cmd.exe` interprets
    the first quoted argument as a window title.
+
+   **NEVER substitute one of these instead of the shell command above:**
+   - `mcp__Claude_Preview__preview_start` / `preview_*` — sandboxed iframe,
+     no heartbeat, user cannot use it as the concept page.
+   - `mcp__plugin_playwright_playwright__browser_navigate` — opens a
+     separate Playwright-controlled browser the user does not see.
+   - Just printing the `http://localhost:{port}/…` URL to the user — the
+     user expects the page to open automatically, not to copy-paste a URL.
+
+   If `start "" msedge …` exits non-zero (Edge missing / not in PATH),
+   surface the exact error to the user and ask them how to proceed
+   (Edge protocol handler `start microsoft-edge:"http://…"`, manually
+   pasting the URL, or another installed browser). Do NOT silently fall
+   back to the preview MCP — the concept flow needs a real visible
+   browser window with an active tab.
 
 7. After monitoring ends (user says "fertig"/"done", aborts, clicks
    "Concept beenden" on the final-report panel, or Step 6 of SKILL.md

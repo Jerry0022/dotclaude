@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.86.1] — 2026-05-27
+
+### Fixed
+
+- **plugins/devops/skills/devops-concept/SKILL.md** — Step 3 now hard-enforces that the concept page MUST be opened in the user's real Edge browser via `start "" msedge "http://localhost:<port>/<file>"` (Windows) / `open -a "Microsoft Edge"` (macOS) / `microsoft-edge` (Linux). New "MANDATORY — Real Edge browser only" block names `mcp__Claude_Preview__preview_start` / `preview_*`, `mcp__plugin_playwright_playwright__browser_navigate`, and silent `file://` print-and-stop as forbidden substitutes, with an explicit note that `mcp__Claude_Preview__*` stays in `allowed-tools` only for `preview_eval` during Step 5 page updates. The previous text said "open in Edge" but buried the exact shell invocation in `deep-knowledge/bridge-server.md`, so sessions frequently fell back to the in-IDE preview pane — which has no heartbeat connection and breaks the whole concept flow. If the shell command errors, the skill now requires Claude to surface the exact error and ask the user how to proceed (Edge protocol handler, manual paste, or another browser) instead of silently degrading to preview.
+- **plugins/devops/skills/devops-concept/deep-knowledge/bridge-server.md** — Step 6 mirrors the same prohibition and fallback rule so the deep-knowledge path defends independently of the SKILL.md path.
+- **plugins/devops/skills/devops-concept/deep-knowledge/monitoring.md** — Scope warning added to the `preview_eval` entry: it is allowed only for JS eval inside the already-open Edge tab, never for opening the concept page.
+
 ## [0.86.0] — 2026-05-27
 
 ### Added
