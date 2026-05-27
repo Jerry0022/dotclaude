@@ -170,6 +170,13 @@ browser eval tools are still useful:
 - playwright: `browser_evaluate("...")`
 - preview: `preview_eval("...")`
 
+**Scope warning:** `preview_eval` is allowed here for evaluating JS inside
+the **already-open** Edge tab. It is NEVER allowed for *opening* the
+concept page — see SKILL.md § Step 3 (MANDATORY — Real Edge browser only)
+and bridge-server.md § Step 6. Opening via the preview MCP would replace
+the user's real Edge tab with a sandboxed in-IDE iframe that has no
+heartbeat connection and breaks the whole concept flow.
+
 If no eval tool works, inform the user via chat what was processed instead
 of updating the page live. The page can be manually refreshed.
 

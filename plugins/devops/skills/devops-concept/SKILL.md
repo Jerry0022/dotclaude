@@ -388,8 +388,51 @@ pattern list and common failure modes.
 
 ## Step 3 — Open in Browser
 
-Open the generated HTML file **inside the user's existing Edge window** — never
-open a separate browser window.
+Open the generated HTML file **inside the user's existing Edge window** as
+a new tab — NEVER open a separate browser window.
+
+### MANDATORY — Real Edge browser only
+
+The concept page MUST be opened in the user's **real Edge browser** via the
+OS shell. **Forbidden alternatives** that will produce a broken session:
+
+- ❌ **Never** use `mcp__Claude_Preview__preview_start` / `preview_*` to
+  display the page. The preview pane is a sandboxed in-IDE iframe — it
+  has no heartbeat connection, no cron polling, and the user cannot
+  interact with it the way the concept flow needs. `mcp__Claude_Preview__*`
+  is in `allowed-tools` ONLY for `preview_eval` during Step 5 page
+  updates, never for opening the page.
+- ❌ **Never** use `mcp__plugin_playwright_playwright__browser_navigate`
+  to open the page. Playwright spawns its own browser instance — the user
+  will not see it.
+- ❌ **Never** print "Concept opened at file:///… open it in your browser"
+  and stop. The bridge server requires the page to be loaded via
+  `http://localhost:{port}/…`, not `file://`.
+
+The **only** correct invocation is the OS `start`/`open` shell command
+that hands the URL to the user's default Edge window, which then opens
+a new tab. The exact command per platform:
+
+```bash
+# Windows (this project's primary target)
+start "" msedge "http://localhost:$PORT/$(basename $HTML_PATH)"
+
+# macOS
+open -a "Microsoft Edge" "http://localhost:$PORT/$(basename $HTML_PATH)"
+
+# Linux
+microsoft-edge "http://localhost:$PORT/$(basename $HTML_PATH)" &
+```
+
+The empty `""` on Windows is required — without it, `cmd.exe` interprets
+the first quoted argument as a window title.
+
+**If the `start "" msedge …` command errors** (Edge not installed, not in
+PATH), do NOT silently fall back to the preview MCP. Tell the user the
+exact error and ask whether to try the Edge protocol handler
+(`start microsoft-edge:"http://localhost:$PORT/…"`) or another browser
+they prefer. The whole concept flow assumes a real, user-visible browser
+window — there is no usable degraded mode.
 
 ### Concept Bridge Server + Edge
 
@@ -401,7 +444,7 @@ concept, **send the first heartbeat AND verify it round-trips with a
 non-zero `claude_ts`** (see `deep-knowledge/bridge-server.md` § Step 5 —
 the read-back is mandatory; a naked POST leaves a dead-bridge failure
 mode invisible until the user submits and gets no response), then open
-the page in the user's existing Edge window.
+the page in the user's existing Edge window using the exact command above.
 
 The state file (`port`, `html_path`, `slug`, `server_pid`, `cron_id`,
 `started_at`) is what makes the concept survivable across Claude restarts:
