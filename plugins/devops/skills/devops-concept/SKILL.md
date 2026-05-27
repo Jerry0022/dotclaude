@@ -378,7 +378,7 @@ and `deep-knowledge/templates.md` § Iteration Tabs for the reference HTML.
 
 ### Post-Generation Validation (mandatory gate)
 
-After writing the HTML file, grep it for the 30 mandatory interactive
+After writing the HTML file, grep it for the 35 mandatory interactive
 patterns (heartbeat, panel states, iteration tabs, section TOC, reload
 polling, generic form-collection catch-all scoped to the active
 iteration, post-submit content dimmer, etc.).
@@ -664,6 +664,19 @@ preservation) stays identical.
    from `<body>`. The submit-button reset is irrelevant because the
    final-report panel doesn't surface iterate/implement at all.
 6. /reload → /reset as steps 5–6 above.
+
+**Verbatim copy directive (mandatory):**
+The final-report JS block — `updateCreateIssuesPanel`, `submitCreateIssues`,
+`collectDisposition`, `submitDisposeConcept`, plus the `change` listener on
+`section[data-open-questions] input[type="checkbox"]` and the
+`DOMContentLoaded` wiring — MUST be copied verbatim from
+`deep-knowledge/templates.md` § Final-report append (the block starting at
+the comment `// --- Final-report "Issues erstellen" action ---`). Do NOT
+inline a simplified `updateCreateIssuesPanel` or omit the event-listener
+wiring; either omission is the regression that issue #165 reports.
+After writing, the post-generation validation gate
+(`deep-knowledge/validation-gate.md` Phase 1) MUST find patterns 28–35
+in the generated file.
 
 **Open questions / TODOs section — when to include:**
 
