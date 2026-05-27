@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.86.0] — 2026-05-27
+
+### Added
+
+- **plugins/devops/deep-knowledge/claude-desktop-app-setup.md** — new reference doc for the Windows-only Claude Desktop App `bypassPermissionsModeEnabled` master switch. Explains the three independent bypass flags (`bypassPermissionsOptInByAccount`, `bypassPermissionsGateByAccount`, `bypassPermissionsModeEnabled`), why the master switch silently invalidates every CLI session when off (smoking-gun log line `[CCD] Downgrading session … bypassPermissionsModeEnabled pref is off`), diagnostic PowerShell snippets, the UI-preferred fix path, JSON-patch fallback with race-safe procedure for both the `%APPDATA%` and `%LOCALAPPDATA%\Packages\…` mirror locations, and a CLI-launcher robustness pattern (version-stable `current\` junction + Logon scheduled task) for users who bypass the Desktop App entirely. Closes #169.
+- **plugins/devops/skills/devops-project-setup/SKILL.md** — new Step 2c "Platform-specific permissions audit (Windows only)" between Step 2b and Step 3. Skipped on non-Windows. When the Claude Desktop App is detected (via `%APPDATA%\Claude\claude_desktop_config.json` presence), greps `%APPDATA%\Claude\logs\main.log` for the downgrade line and emits a WARNING when the master switch is off. `--fix` prints instructions to flip the UI toggle — never auto-patches JSON. New `### Platform Audit` section added to the Step 8 output report template.
+
+### Changed
+
+- **plugins/devops/skills/devops-concept/deep-knowledge/validation-gate.md** — Phase 1 shared-patterns table extended from 33 to 35 patterns. New patterns 34 (`submitCreateIssues`) and 35 (`collectDisposition`) catch the silent-failure mode where the final-report JS block is generated without the create-issues / dispose handlers — leaving the "Issues erstellen" and "Concept beenden" buttons visible but inert. New "Common failures this gate catches" entry documents the silent click-but-no-network-request symptom.
+- **plugins/devops/skills/devops-concept/SKILL.md** — Step 5c "Final-report append" gains a mandatory "Verbatim copy directive" requiring the final-report JS block (`updateCreateIssuesPanel`, `submitCreateIssues`, `collectDisposition`, `submitDisposeConcept`, the `change` listener for open-questions checkboxes, and the `DOMContentLoaded` wiring) to be copied verbatim from `deep-knowledge/templates.md` rather than reimplemented. Stale post-generation validation count `30 mandatory patterns` updated to `35`. Closes #165.
+
 ## [0.85.1] — 2026-05-24
 
 ### Fixed
