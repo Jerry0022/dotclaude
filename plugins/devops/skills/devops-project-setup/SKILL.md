@@ -133,6 +133,26 @@ splitting the volatile value into a separate gitignored file.
 Run `/devops-claude-md-lint` to check CLAUDE.md size and structure.
 Report the result in the final output under a `### CLAUDE.md` section.
 
+## Step 2c — Platform-specific permissions audit (Windows only)
+
+Skip entirely on non-Windows (`process.platform !== 'win32'`; or check `$env:OS` in PowerShell).
+
+1. **Detect Desktop App launcher**: probe `%APPDATA%\Claude\claude_desktop_config.json` existence.
+   - Not found → report `[INFO] Desktop App not detected — skip.` and continue to Step 3.
+2. **Grep for downgrade evidence** (last 200 lines of `%APPDATA%\Claude\logs\main.log`):
+   ```powershell
+   Get-Content "$env:APPDATA\Claude\logs\main.log" -Tail 200 |
+     Select-String "bypassPermissionsModeEnabled pref is off"
+   ```
+3. **Report**:
+   - Match found → `[WARNING] Desktop App master switch off — every session runs as acceptEdits.`
+   - No match → `[OK] No recent permission downgrade detected.`
+4. **`--fix` action**: print instructions to enable **Settings → Bypass permissions mode** in the
+   Desktop App UI. Do NOT auto-patch the JSON. Reference:
+   `deep-knowledge/claude-desktop-app-setup.md`
+
+Add the result to the Step 8 report under `### Platform Audit`.
+
 ## Step 3 — LICENSE
 
 If missing: ask user via AskUserQuestion (MIT, Apache 2.0, GPL 3.0, ISC, Proprietary).
@@ -188,6 +208,9 @@ extensions for any plugin skill:
 
 ### Additional files
 - [INFO] ...
+
+### Platform Audit
+- [WARNING/OK/INFO] ...
 
 ### Plugin Extensions
 - [INFO] Run /devops-extend-skill to scaffold extensions for plugin skills
