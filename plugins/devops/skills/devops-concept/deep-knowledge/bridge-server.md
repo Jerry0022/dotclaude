@@ -89,11 +89,29 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
        If the output is exactly "true" → fetch the full payload and process:
          Bash: curl -s http://localhost:{port}/decisions
          • Parse the JSON. Note `_version`. Strip `_version` and `_processed_at`
-           before treating the rest as decision data.
-         • Process per Step 5 (Live Feedback Loop) — act on the user's choices
+           before treating the rest as decision data. Read `action` — it is
+           one of FOUR values, each with its own SKILL.md Step 5b branch:
+             - "iterate"        → next iteration on the concept page only
+             - "implement"      → apply real code changes + final-report
+             - "create-issues"  → autonomously run `gh issue create` for each
+                                  payload item; NO AskUserQuestion, the user
+                                  already committed by clicking the button
+             - "dispose-concept"→ record disposition, advance to Step 6
+           Process per Step 5 (Live Feedback Loop) — act on the user's choices
            (approve/tweak/reject, included options, comment-driven tweaks).
            Step 5c writes the new iteration to the HTML file and POSTs
            `/reload` BEFORE the reset below. Reset is the LAST action.
+
+         • **Zero-prompt invariant for create-issues + dispose-concept.**
+           These two branches MUST complete end-to-end without asking the
+           user anything. The payload (items[] for create-issues,
+           disposition{} for dispose-concept) is self-sufficient by design;
+           any missing optional field falls back to a sane default. If you
+           catch yourself reaching for AskUserQuestion in either branch,
+           stop — the answer is in the payload, the concept HTML, or the
+           project's new-issue extension. The user signed off by clicking
+           the button.
+
          • After the file rewrite AND the `/reload` POST have completed,
            reset conditionally — pass the noted version:
            Bash: curl -s -o /dev/null -w "%{http_code}" -X POST \
