@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.86.3] — 2026-05-28
+
+### Fixed
+
+- **plugins/devops/skills/devops-concept/SKILL.md** + **deep-knowledge/bridge-server.md** — bridge-server is `SimpleHTTPRequestHandler`-based and `os.chdir()`s into the project root, so URLs must include the full relative path. Docs incorrectly used basename routing (`{filename}` / `$(basename $HTML_PATH)`) which returns 404. Replaced with `{html_path}` / `$HTML_PATH` across all three platform invocations (Windows `start "" msedge`, macOS `open -a`, Linux `microsoft-edge`). Closes #173.
+
+### Changed
+
+- **plugins/devops/scripts/concept-server.py** — `--heartbeat-timeout-ms` default bumped from `300000` (5 min) to `1800000` (30 min). The original 5-minute window was calibrated for active coding sessions; concept-review flows have long user-idle phases (reading variants, comparing options) that exceeded the threshold and triggered spurious `[watchdog] claude_ts stale` shutdowns. **deep-knowledge/bridge-server.md** documents the new default and the rationale for the higher value, plus how to override for active coding sessions. Closes #174.
+
 ## [0.86.2] — 2026-05-28
 
 ### Fixed
