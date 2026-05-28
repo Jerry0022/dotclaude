@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.86.2] — 2026-05-28
+
+### Fixed
+
+- **plugins/devops/skills/devops-concept** — close the "you have to paste the JSON" gap when the concept final-report's "Issues erstellen" button fires. Previously the `submitCreateIssues` payload only carried `{ id, title, type, selected }`, and SKILL.md Step 5b told Claude to invoke the `devops-new-issue` skill — whose Step 1 runs an interactive `AskUserQuestion` for the body / labels. In a session driven by the concept-bridge cron, that prompt turned into a request for the user to copy decisions JSON from the console, exactly the regression that the iterate / implement branches had already eliminated. Three coordinated changes:
+  - **deep-knowledge/templates.md `submitCreateIssues`** — payload extended with `description` (from `data-issue-body` or the visible `.oq-label` text) plus optional project-context hints `role` / `module` / `milestone` (from `data-issue-*` attributes). Open-questions HTML template + attribute-reference table updated with worked examples, required/recommended/optional markers, and explicit "the auto-issue pipeline depends on these — generate them when you author the final report" guidance.
+  - **SKILL.md Step 5b · create-issues** — rewritten with a hard "Zero-prompt invariant" block. Claude now calls `gh issue create` directly with title/body/labels/milestone from the payload, never invokes `devops-new-issue` (which prompts), and resolves project-specific `role:*` / `module:*` labels by checking the payload first, then the project's `new-issue` extension via concept-context inference, and finally silently omitting the label rather than asking. Issue body always ends with a `_Created from concept: docs/concepts/{date}-{slug}.html_` backlink for future context recovery. Per-item `gh` failures surface to the user but don't block the remaining items — partial success beats silent loss.
+  - **deep-knowledge/bridge-server.md cron-prompt** — enumerates all four `action` values (`iterate`, `implement`, `create-issues`, `dispose-concept`) so the auto-poll cron does not implicitly assume `iterate`. New explicit "Zero-prompt invariant for create-issues + dispose-concept" callout in the cron body — the payload is self-sufficient by design, AskUserQuestion in either branch is the regression we are designing against.
+
 ## [0.86.1] — 2026-05-27
 
 ### Fixed

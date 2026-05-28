@@ -2749,11 +2749,23 @@ async function submitCreateIssues() {
     .filter(el => el.checked)
     .map(el => {
       const labelEl = el.closest('label')?.querySelector('.oq-label');
+      const labelText = labelEl ? labelEl.textContent.trim() : '';
+      // description = explicit data-issue-body wins; otherwise the visible
+      // .oq-label text. Either is enough for Claude to skip the
+      // devops-new-issue AskUserQuestion path — the user has already
+      // committed by clicking "Issues erstellen", we MUST NOT ask again.
+      const body = el.dataset.issueBody || labelText;
       return {
         id: el.name || el.id || '',
-        title: el.dataset.issueTitle
-            || (labelEl ? labelEl.textContent.trim() : ''),
+        title: el.dataset.issueTitle || labelText,
         type: el.dataset.issueType || 'chore',
+        description: body,
+        // Optional project-specific label hints — picked up by Claude when
+        // present, silently ignored when absent. Concept HTML is generated
+        // by Claude, so these are populated from concept context.
+        role: el.dataset.issueRole || null,
+        module: el.dataset.issueModule || null,
+        milestone: el.dataset.issueMilestone || null,
         selected: true
       };
     });
@@ -3400,8 +3412,15 @@ section TOC automatically. Open questions / TODOs use a dedicated
   </section>
 
   <!-- Optional — render only when there are real follow-ups to track.
-       Each <li> is one item; data-issue-title + data-issue-type drive
-       the "Issues erstellen" payload. Checkboxes default to `checked`. -->
+       Each <li> is one item; data-issue-* attributes feed the
+       "Issues erstellen" payload directly so Claude can call
+       `gh issue create` end-to-end without ever asking the user a
+       follow-up question. Mandatory attrs: data-issue-title,
+       data-issue-type. Recommended: data-issue-body (richer description
+       than the visible label; falls back to the .oq-label text).
+       Optional project-context hints (only when Claude can infer them
+       from the concept): data-issue-role, data-issue-module,
+       data-issue-milestone. Checkboxes default to `checked`. -->
   <section id="open-questions"
            data-nav-label="{{final.open_questions}}"
            data-open-questions>
@@ -3413,6 +3432,9 @@ section TOC automatically. Open questions / TODOs use a dedicated
                  name="oq-saml-edge"
                  data-issue-title="[BUG] Auth fails for SAML users"
                  data-issue-type="bug"
+                 data-issue-body="During smoke test of the new middleware, SAML logins failed with 'invalid assertion'. Out of scope for the auth-middleware-redesign concept (concept covered OIDC only). Reproduce: log in via SAML IdP in staging."
+                 data-issue-role="backend"
+                 data-issue-module="auth"
                  checked>
           <span class="oq-label">Auth fails for SAML users — observed during smoke test, out of scope here</span>
         </label>
@@ -3423,6 +3445,8 @@ section TOC automatically. Open questions / TODOs use a dedicated
                  name="oq-docs-refresh"
                  data-issue-title="[DOCS] Update auth README"
                  data-issue-type="docs"
+                 data-issue-body="auth/README.md still describes the old middleware contract (session-token cookie). Update to reflect the new bearer-token flow shipped under the auth-middleware-redesign concept."
+                 data-issue-module="auth"
                  checked>
           <span class="oq-label">Update auth README to reflect new middleware contract</span>
         </label>
@@ -3441,13 +3465,23 @@ section TOC automatically. Open questions / TODOs use a dedicated
 
 ### Open-questions item attributes
 
-| Attribute | Purpose |
-|---|---|
-| `name` (or `id`) | Stable identifier reused in the `create-issues` payload's `item.id` |
-| `data-issue-title` | Verbatim title used by `devops-new-issue` (`[TYPE] Imperative title`). REQUIRED for the button to produce a valid GitHub issue |
-| `data-issue-type` | Maps to the issue label (`bug`, `feature`, `refactor`, `chore`, `docs`, `design`). Defaults to `chore` if omitted |
-| `checked` | Default `true` — user opts out, not in |
-| `disabled` | Set by Claude after the item has been routed (becomes `[Issue #NNN]`) so the gating logic in `updateCreateIssuesPanel()` ignores it |
+The first three attributes are MANDATORY for the auto-issue pipeline.
+Without them Claude has no way to land a complete `gh issue create` call
+and would have to fall back to interactive prompting — which is exactly
+the regression we are designing against. Generate them when you author
+the final-report block; do not leave the user to fill them in.
+
+| Attribute | Required? | Purpose |
+|---|---|---|
+| `name` (or `id`) | yes | Stable identifier reused in the `create-issues` payload's `item.id` |
+| `data-issue-title` | yes | Verbatim title used by `gh issue create` (`[TYPE] Imperative title`). Without this the payload's `title` falls back to the visible `.oq-label` text, which usually breaks the title-format gate |
+| `data-issue-type` | yes | Maps to the issue label (`bug`, `feature`, `refactor`, `chore`, `docs`, `design`). Defaults to `chore` if omitted — set it explicitly |
+| `data-issue-body` | recommended | Multi-sentence description used as the GitHub issue body. Falls back to the `.oq-label` text when missing — that is usually too terse for a tracked issue. Always populate this with the concept-context the user would need to act on the issue cold (repro steps for bugs, motivation for refactors, etc.) |
+| `data-issue-role` | optional | Project-specific role label hint (`backend`, `frontend`, `infra`, …). Picked up when the project's `devops-new-issue` extension defines `role:*` labels; silently ignored otherwise |
+| `data-issue-module` | optional | Project-specific module label hint (`auth`, `ingest`, `ui-core`, …). Same gating as `role` |
+| `data-issue-milestone` | optional | Milestone name to attach. Claude will only honor this if the milestone already exists; never auto-creates one from this attribute |
+| `checked` | default `true` | User opts out, not in |
+| `disabled` | set by Claude | Added after the item has been routed (becomes `[Issue #NNN]`) so the gating logic in `updateCreateIssuesPanel()` ignores it on the next reload |
 
 ### After issues are created — HTML rewrite pattern
 

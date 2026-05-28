@@ -574,23 +574,70 @@ Branch on it:
    "Final-report append (implement only)" for the structure.
 
 **`action: "create-issues"` ("Issues erstellen" button — only on final report):**
-1. Read the `items` array from the payload — each entry is a selected open
-   question / TODO `{ id, title, type, selected: true }`.
+
+**Zero-prompt invariant.** The user already committed when they clicked
+"Issues erstellen". Asking a follow-up question — for issue body, labels,
+milestone, anything — is a UX regression equivalent to the old
+"paste the JSON from the console" anti-pattern. Every field needed to
+land a complete `gh issue create` call is in the payload OR derivable
+from the concept HTML in `docs/concepts/{date}-{slug}.html`. If a field
+is genuinely missing AND the project requires it, fall back to a sane
+default (silent) — never an `AskUserQuestion`. The only justified
+interruption is a hard `gh` failure that needs the user's eyes.
+
+1. Read the `items` array from the payload — each entry now carries
+   `{ id, title, type, description, role?, module?, milestone?, selected: true }`.
+   `description` falls back to the visible `.oq-label` text when the
+   author of the final-report did not set `data-issue-body`; either is
+   enough to skip prompting.
 2. Read the `disposition` sub-object from the same payload — even if the
    user never touches "Concept beenden", `submitCreateIssues` always
    bundles the current disposition state for Step 6 cleanup. Store it
    for use in Step 6a; do NOT apply it now — issue routing and cleanup
    are decoupled so the user can still review the page before closing.
-3. For each selected item, invoke the **devops-new-issue** skill with the
-   item's title and type. Capture the resulting issue number + URL.
-4. Update the final-report HTML: in the open-questions section, replace
+3. For each selected item, create the GitHub issue **directly via
+   `gh issue create`** — do NOT invoke the `devops-new-issue` skill,
+   which runs an interactive `AskUserQuestion` Step 1. Build the
+   command from the payload + concept-extension labels (see § Project
+   label enrichment below):
+
+   ```bash
+   gh issue create \
+     --title "<item.title>" \
+     --body  "<item.description>\n\n_Created from concept: docs/concepts/{date}-{slug}.html_" \
+     --label "type:<item.type><,role:R><,module:M>" \
+     [--milestone "<item.milestone>"]
+   ```
+
+   Capture the resulting issue number + URL from stdout. On `gh` error,
+   abort this item, surface the error to the user, and continue with
+   the remaining items — partial success beats silent loss.
+
+4. **Project label enrichment (role / module).** Before calling `gh`,
+   resolve project-specific labels in this order:
+   - If `item.role` / `item.module` is set in the payload → use directly.
+   - Else, check the project's `devops-new-issue` extension
+     (`{project}/.claude/skills/new-issue/reference.md` / `SKILL.md`)
+     for the declared label sets. If the concept's slug, file paths, or
+     final-report content unambiguously maps to exactly one role / module
+     value → apply it.
+   - Else → omit the label silently. NEVER ask. A minimal `type:*`-only
+     issue is preferable to interrupting the user.
+
+5. **Issue body composition.** Always end the body with a backlink:
+   `_Created from concept: docs/concepts/{date}-{slug}.html_`. This is
+   how the human reader (and future Claude session) recovers the
+   originating context months later. Prepend whatever richer body the
+   payload's `item.description` carries.
+
+6. Update the final-report HTML: in the open-questions section, replace
    each created item's label with `[Issue #NNN] {title}` (linked to the
    issue URL), disable the checkbox, and add a small ✓ badge.
-5. POST `/reload` so the browser shows the updated state. If every item
+7. POST `/reload` so the browser shows the updated state. If every item
    was processed, the "Issues erstellen" button auto-hides on reload
    (panel JS gates it on the presence of un-created checkable items).
-6. Then POST `/reset` with the captured `_version` as usual.
-7. The concept session stays open — the user may still review previous
+8. Then POST `/reset` with the captured `_version` as usual.
+9. The concept session stays open — the user may still review previous
    iteration tabs but cannot trigger further iterate/implement actions
    from the final report.
 
