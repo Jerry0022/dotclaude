@@ -3354,6 +3354,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 ### Reload Polling
 
+A Claude-driven reload (next iteration / final-report append) MUST land the
+user at the top of the page. Without this, the browser restores the previous
+scroll position — the user submitted from the bottom of the decision panel,
+sees the page "do nothing" visually, and only notices the change because the
+iteration tab moved. The sessionStorage flag scopes the jump to reloads we
+triggered, so manual F5 while reading still preserves scroll position.
+
 ```javascript
 let _bootReloadCounter = null;
 async function pollReload() {
@@ -3363,12 +3370,29 @@ async function pollReload() {
     const { counter } = await res.json();
     if (_bootReloadCounter === null) { _bootReloadCounter = counter; return; }
     if (counter > _bootReloadCounter) {
+      // Tag the reload as Claude-driven so the fresh load jumps to top.
+      try { sessionStorage.setItem('_concept_jumpTop', '1'); } catch (_) {}
       location.reload();
     }
   } catch (e) { /* bridge offline */ }
 }
 setInterval(pollReload, 3000);
 document.addEventListener('DOMContentLoaded', pollReload);
+
+// Disable the browser's scroll restoration for Claude-driven reloads and
+// force scroll to top. Runs before any layout-affecting init, and again on
+// `load` to win against late restorations on slower browsers.
+(function () {
+  let pending = false;
+  try { pending = sessionStorage.getItem('_concept_jumpTop') === '1'; } catch (_) {}
+  if (!pending) return;
+  try { sessionStorage.removeItem('_concept_jumpTop'); } catch (_) {}
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  const jump = () => window.scrollTo(0, 0);
+  jump();
+  document.addEventListener('DOMContentLoaded', jump);
+  window.addEventListener('load', jump);
+})();
 ```
 
 ## Final Report Panel
