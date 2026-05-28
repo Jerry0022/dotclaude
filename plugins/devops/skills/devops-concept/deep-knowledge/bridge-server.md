@@ -45,10 +45,16 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    if the concept HTML file disappears for > 10 s, the watchdog terminates
    the bridge automatically — no orphan server can survive a manual
    `rm docs/concepts/…`, a failed disposition step, or a worktree wipe.
-   The watchdog ALSO terminates if Claude's heartbeat goes stale for > 5
-   min (`--heartbeat-timeout-ms` default `300000`), catching the dead-cron
+   The watchdog ALSO terminates if Claude's heartbeat goes stale for > 30
+   min (`--heartbeat-timeout-ms` default `1800000`), catching the dead-cron
    case (session closed without /shutdown, cron prompt loop dropped). Both
    conditions independently guarantee the server cannot become a ghost.
+
+   The 30 min default is calibrated for concept-review flows where the user
+   may read, think, and annotate for an extended period before submitting —
+   short idle pauses are expected and should not kill the server. Active
+   coding sessions with a tighter watchdog requirement can pass a lower value
+   (e.g. `--heartbeat-timeout-ms 300000` for 5 min) explicitly.
 
 3. Set up the **combined heartbeat + auto-poll cron**. This single cron keeps
    the connection indicator green AND automatically picks up user submissions
@@ -236,7 +242,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 
    ```bash
    # Windows (primary target)
-   start "" msedge "http://localhost:{port}/{filename}"
+   start "" msedge "http://localhost:{port}/{html_path}"
    ```
    On macOS: `open -a "Microsoft Edge" "http://…"`, on Linux: `microsoft-edge "http://…"`.
 

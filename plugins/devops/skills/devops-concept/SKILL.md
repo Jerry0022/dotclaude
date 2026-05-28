@@ -415,13 +415,13 @@ a new tab. The exact command per platform:
 
 ```bash
 # Windows (this project's primary target)
-start "" msedge "http://localhost:$PORT/$(basename $HTML_PATH)"
+start "" msedge "http://localhost:$PORT/$HTML_PATH"
 
 # macOS
-open -a "Microsoft Edge" "http://localhost:$PORT/$(basename $HTML_PATH)"
+open -a "Microsoft Edge" "http://localhost:$PORT/$HTML_PATH"
 
 # Linux
-microsoft-edge "http://localhost:$PORT/$(basename $HTML_PATH)" &
+microsoft-edge "http://localhost:$PORT/$HTML_PATH" &
 ```
 
 The empty `""` on Windows is required — without it, `cmd.exe` interprets
