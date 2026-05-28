@@ -42,7 +42,7 @@ A background **watchdog daemon** terminates the process when:
   (10 s grace covers the brief window during which Claude rewrites the
   file in-place for the next iteration). This catches "concept HTML was
   manually deleted / moved / never persisted" without needing the cron.
-- `_claude_ts` is older than `--heartbeat-timeout-ms` (default 5 min)
+- `_claude_ts` is older than `--heartbeat-timeout-ms` (default 30 min)
   AND non-zero. A claude_ts of 0 means Claude has never pinged — that
   is the bootstrap window before the first cron tick lands, NOT a dead
   cron, so the watchdog tolerates it indefinitely until the first POST.
@@ -464,9 +464,11 @@ if __name__ == '__main__':
                         help='Relative path to the concept HTML inside <directory>. '
                              'When set, the watchdog terminates the server if this '
                              'file disappears for more than 10 s.')
-    parser.add_argument('--heartbeat-timeout-ms', type=int, default=5 * 60 * 1000,
+    parser.add_argument('--heartbeat-timeout-ms', type=int, default=30 * 60 * 1000,
                         help='Max age of _claude_ts before the watchdog terminates. '
-                             'Default 300000 (5 min).')
+                             'Default 1800000 (30 min). Calibrated for concept-review '
+                             'flows with long user-idle phases. Pass a lower value '
+                             '(e.g. 300000) for active coding sessions.')
     args = parser.parse_args()
 
     port = int(args.port)
