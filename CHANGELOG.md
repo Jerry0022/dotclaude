@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.86.4] — 2026-05-28
+
+### Fixed
+
+- **plugins/devops/skills/devops-concept/deep-knowledge/templates.md** — concept pages now scroll to the top when Claude triggers a reload for the next iteration or final-report append. The browser previously restored the previous scroll position, so the user submitted from the bottom of the decision panel, saw the page visually unchanged, and only noticed the new iteration because the active iteration tab moved. `pollReload` now stamps a `sessionStorage` flag (`_concept_jumpTop`) immediately before `location.reload()`, and a fresh IIFE on the next load consumes the flag, disables `history.scrollRestoration`, and forces `window.scrollTo(0, 0)` three times (sync at script eval, on `DOMContentLoaded`, on `load`) to win the race against late browser restorations. Manual F5 while reading does not set the flag and keeps the previous scroll position unchanged.
+
 ## [0.86.3] — 2026-05-28
 
 ### Fixed
