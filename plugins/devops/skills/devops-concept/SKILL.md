@@ -414,14 +414,30 @@ that hands the URL to the user's default Edge window, which then opens
 a new tab. The exact command per platform:
 
 ```bash
+# Build the URL ONCE. $PORT and $HTML_PATH must be set in THIS SAME Bash
+# call — shell state does NOT survive across separate tool calls, so if you
+# launched the server in an earlier call these are empty here and the URL
+# collapses to "http://localhost:/" (the "concept url not found" symptom).
+# Either re-set them in this call or inline the concrete port + path. The
+# path is project-root-relative (the server's cwd), e.g.
+# docs/concepts/{date}-{slug}.html — it MUST equal the --html value exactly.
+URL="http://localhost:$PORT/$HTML_PATH"
+
+# Gate the open on a real 200 — NEVER open a tab on a 404. This single check
+# catches every cause of "concept url not found": wrong path (bare filename
+# vs full relative path), a server cwd that does not contain the file
+# (worktree/main-root mismatch), and empty $PORT/$HTML_PATH.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "$URL")
+[ "$CODE" = "200" ] || { echo "Concept URL $URL -> HTTP $CODE (expected 200) - aborting open. Check the server cwd contains $HTML_PATH and that \$PORT/\$HTML_PATH are set in this shell."; exit 1; }
+
 # Windows (this project's primary target)
-start "" msedge "http://localhost:$PORT/$HTML_PATH"
+start "" msedge "$URL"
 
 # macOS
-open -a "Microsoft Edge" "http://localhost:$PORT/$HTML_PATH"
+open -a "Microsoft Edge" "$URL"
 
 # Linux
-microsoft-edge "http://localhost:$PORT/$HTML_PATH" &
+microsoft-edge "$URL" &
 ```
 
 The empty `""` on Windows is required — without it, `cmd.exe` interprets
