@@ -237,14 +237,40 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    self-pulse keeps `server_ts` fresh even when the request-handling
    thread is wedged.
 
-6. **Open the page in the user's real Edge browser** (reuses the running
-   instance, adds a tab). This step is non-negotiable:
+6. **Verify the concept URL serves 200, THEN open it in the user's real
+   Edge browser** (reuses the running instance, adds a tab). Both halves are
+   non-negotiable. The 200-gate exists because opening a tab on a 404 IS the
+   "concept url not found" the user sees, and that 404 has three independent
+   causes the bare open command cannot tell apart:
+   - wrong URL path — a bare filename instead of the full project-relative
+     `{html_path}` (`SimpleHTTPRequestHandler` serves from the server's cwd,
+     so `/foo.html` 404s when the file is at `docs/concepts/foo.html`);
+   - the server's cwd does not contain `{html_path}` — e.g. the bridge was
+     started in the worktree root while the HTML was written to the main
+     project tree, or vice-versa;
+   - empty `{port}`/`{html_path}` — the values were left as shell vars that
+     did not survive into this command, collapsing the URL to
+     `http://localhost:/`.
+
+   Gate the open on a real 200 so any of these aborts loudly with the
+   offending URL instead of opening a silent broken tab:
 
    ```bash
+   # Substitute {port} and {html_path} with CONCRETE literal values — do NOT
+   # rely on $PORT/$HTML_PATH surviving from an earlier command; each Bash
+   # tool call is a fresh shell with no inherited state.
+   URL="http://localhost:{port}/{html_path}"
+   CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "$URL")
+   if [ "$CODE" != "200" ]; then
+     echo "Concept URL $URL -> HTTP $CODE (expected 200) - NOT opening a tab."
+     echo "Fix: ensure the bridge server's cwd is the project root holding {html_path}, and that {port}/{html_path} are concrete values."
+     exit 1
+   fi
+
    # Windows (primary target)
-   start "" msedge "http://localhost:{port}/{html_path}"
+   start "" msedge "$URL"
    ```
-   On macOS: `open -a "Microsoft Edge" "http://…"`, on Linux: `microsoft-edge "http://…"`.
+   On macOS: `open -a "Microsoft Edge" "$URL"`, on Linux: `microsoft-edge "$URL" &`.
 
    The empty `""` is required on Windows — without it, `cmd.exe` interprets
    the first quoted argument as a window title.

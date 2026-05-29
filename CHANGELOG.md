@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.86.5] — 2026-05-29
+
+### Fixed
+
+- **plugins/devops/skills/devops-concept/SKILL.md** + **deep-knowledge/bridge-server.md** — hardened the concept browser-open against a second, independent cause of the "concept url not found" symptom that the #173 basename fix did not cover. The open command used `$PORT`/`$HTML_PATH` shell variables, but each Bash tool call is a fresh shell with no inherited state — if the server was launched in an earlier call, the variables were empty here and the URL collapsed to `http://localhost:/`. The open step now builds the URL once and **gates on a real HTTP 200 check** before opening a tab: any 404 cause (wrong path, empty variables, or a worktree/main-root cwd mismatch) now aborts loudly with the offending URL instead of silently opening a broken tab. Both docs also state explicitly that the variables must be set in the same shell or substituted with concrete literals. Closes #177 follow-up.
+
 ## [0.86.4] — 2026-05-28
 
 ### Fixed
