@@ -254,7 +254,17 @@ function getBuildId(overrideCwd) {
 }
 
 function renderTitle(summary) {
-  return '## \u2728\u2728\u2728 ' + summary + ' \u2728\u2728\u2728';
+  // H1 + bold so the headline stands out instead of rendering in the muted
+  // heading-grey. Stays OUTSIDE any blockquote \u2014 it must pop, not dim.
+  return '# **\u2728\u2728\u2728 ' + summary + ' \u2728\u2728\u2728**';
+}
+
+// Dim a text block to the muted blockquote color. Only the plain-text baseline
+// is affected \u2014 emojis (font-rendered), `code`, links, and **bold** keep their
+// own color inside the quote, so icons and merge/PR/commit links still pop.
+function blockquote(block) {
+  if (!block) return block;
+  return block.split('\n').map(l => (l.length ? '> ' + l : '>')).join('\n');
 }
 
 function renderFooter(buildId, cta, variant) {
@@ -431,6 +441,13 @@ function renderCard(input, meterText, buildId) {
 
   const parts = [];
 
+  // Spacer above the card — one forced blank line (&nbsp; survives the
+  // renderer's blank-line collapsing) detaches the card from the preceding
+  // response text. The trailing '' keeps the opening --- a thematic break
+  // rather than turning &nbsp; into a setext heading.
+  parts.push('&nbsp;');
+  parts.push('');
+
   // Block A — Title + Content (no build ID in title)
   parts.push('---');
   parts.push('');
@@ -441,7 +458,7 @@ function renderCard(input, meterText, buildId) {
   if (config.changes) {
     const changesBlock = renderChanges(input.changes);
     if (changesBlock) {
-      parts.push(changesBlock);
+      parts.push(blockquote(changesBlock));
       parts.push('');
     }
   }
@@ -449,7 +466,7 @@ function renderCard(input, meterText, buildId) {
   if (config.tests) {
     const testsBlock = renderTests(input.tests);
     if (testsBlock) {
-      parts.push(testsBlock);
+      parts.push(blockquote(testsBlock));
       parts.push('');
     }
   }
@@ -488,7 +505,8 @@ function renderCard(input, meterText, buildId) {
   }
 
   // Footer: 📌 version bump + build ID (build ID in backticks for visibility)
-  parts.push(renderFooter(buildId, input.cta, variant));
+  // Greyed as meta/subinfo — the 📌 icon and `build-id` code stay colored.
+  parts.push(blockquote(renderFooter(buildId, input.cta, variant)));
   parts.push('');
 
   // End state — placed between build ID and CTA, since the CTA often
@@ -503,7 +521,9 @@ function renderCard(input, meterText, buildId) {
     }
     const stateLine = renderState(input.state, variant, repoUrl);
     if (stateLine) {
-      parts.push(stateLine);
+      // Greyed text baseline; the merge/PR/commit links inside keep their
+      // link color, so the merge target still pops as the user wanted.
+      parts.push(blockquote(stateLine));
       parts.push('');
     }
   }
