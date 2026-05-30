@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.88.1] — 2026-05-30
+
+### Changed
+
+- **Completion card git-state line** — reworked so the lead segment states **sync status** (`up-to-date` / `updated` / `not updated` against `origin/<branch>`) instead of merge status. The merge fact now rides on the PR segment as an adjective — `merged PR #N` / `open PR #N` — and is shown only when a PR actually exists, so there is no more `no PR` noise. The commit segment renders `nothing to commit` when the tree is clean and synced, reserving `uncommitted` for genuinely pending work. This kills the contradictory `merged → origin/main · no PR · uncommitted`, which now reads `up-to-date origin/main · nothing to commit`. `render_completion_card` in `plugins/devops/mcp-server/index.js`.
+
 ## [0.88.0] — 2026-05-30
 
 ### Added
