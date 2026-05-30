@@ -5,7 +5,8 @@
 
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { git, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, detectDefaultBranch, branchExists, fileOverlap, getConfig } from "../lib/git.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
@@ -40,6 +41,62 @@ function latestMtime(dir, depth) {
 function pseudoCommit(mtimeMs) {
   const ts = Math.floor(mtimeMs / 1000)
   return createHash("sha1").update("mtime-" + ts).digest("hex").slice(0, 7)
+}
+
+// Doc-sync check (plugin source repo only). Two guarantees:
+//   1. Auto-marker counts/roster in README.md + architecture.html are current.
+//   2. Every skill/agent on disk has a (manually curated) row in the README
+//      tables — the one thing the generator deliberately does NOT auto-write.
+// Returns check objects (with `.warning` so they flow into the warnings list).
+// Never produces errors — doc drift warns, it does not block a ship.
+function docSyncChecks(cwd) {
+  const pluginDir = join(cwd, "plugins", "devops");
+  if (!existsSync(pluginDir)) return []; // consumer repo — nothing to verify
+  const out = [];
+
+  // 1. Marker staleness via the generator's --check mode
+  const genScript = join(pluginDir, "scripts", "gen-readme-sections.js");
+  if (existsSync(genScript)) {
+    try {
+      execFileSync(process.execPath, [genScript, "--check", cwd], { stdio: "pipe" });
+      out.push({ name: "doc-markers", ok: true });
+    } catch {
+      out.push({
+        name: "doc-markers",
+        ok: false,
+        warning: "README/architecture.html auto-markers are stale — ship_build regenerates them automatically",
+      });
+    }
+  }
+
+  // 2. Skill/agent table completeness (curated rows, not auto-generated)
+  try {
+    const readme = readFileSync(join(cwd, "README.md"), "utf8");
+    const skills = readdirSync(join(pluginDir, "skills"), { withFileTypes: true })
+      .filter((d) => d.isDirectory() && existsSync(join(pluginDir, "skills", d.name, "SKILL.md")))
+      .map((d) => d.name);
+    const agents = readdirSync(join(pluginDir, "agents"))
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => f.replace(/\.md$/, ""));
+
+    const missingSkills = skills.filter((s) => !readme.includes(`/${s}`));
+    const missingAgents = agents.filter((a) => !readme.includes(`**${a}**`));
+
+    if (missingSkills.length || missingAgents.length) {
+      const parts = [];
+      if (missingSkills.length) parts.push(`skills: ${missingSkills.join(", ")}`);
+      if (missingAgents.length) parts.push(`agents: ${missingAgents.join(", ")}`);
+      out.push({
+        name: "doc-tables",
+        ok: false,
+        warning: `README tables missing rows for ${parts.join(" · ")} — add a curated description`,
+      });
+    } else {
+      out.push({ name: "doc-tables", ok: true });
+    }
+  } catch { /* README or dirs unreadable — skip silently */ }
+
+  return out;
 }
 
 export async function handler(params) {
@@ -221,6 +278,9 @@ export async function handler(params) {
   // Worktree detection
   const inWorktree = isWorktree(opts);
   checks.push({ name: "worktree", value: inWorktree });
+
+  // Doc-sync (plugin source repo only — no-op elsewhere). Non-blocking.
+  checks.push(...docSyncChecks(cwd));
 
   // Collect warnings from checks (non-blocking issues resolved autonomously)
   const warnings = checks.filter(c => c.warning).map(c => c.warning);

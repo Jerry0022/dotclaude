@@ -57,7 +57,7 @@ Based on ~0.7M tokens/week plugin overhead:
 | Debugging the same error 4 times | /devops-flow kicks in after the second failure |
 | Writing commit messages by hand | Conventional commits, auto-staged, one command |
 
-**Token guard payoff:** The token guard blocks any single operation above 2% of your session window (~20K tokens). In a typical session, Claude attempts 5–15 broad searches or large-file reads that would each burn 20–80K tokens — that's 100–400K tokens/session evaporating into context you never asked for. Across ~10 sessions/week, the guard saves roughly **1–4M tokens/week** in prevented waste. The plugin's own overhead (~0.7M tokens/week for hooks, startup checks, and skill prompts) pays for itself 1.5–6x over just by keeping Claude from reading files it doesn't need.
+**Token guard payoff:** The token guard blocks any single operation above your plan's per-operation share of the ~200K context window — **5% (~10K tokens) on Pro, 8% (~16K) on Max 5×, 10% (~20K) on Max 20×**. In a typical session, Claude attempts 5–15 broad searches or large-file reads that would each burn 20–80K tokens — that's 100–400K tokens/session evaporating into context you never asked for. Across ~10 sessions/week, the guard saves roughly **1–4M tokens/week** in prevented waste. The plugin's own overhead (~0.7M tokens/week for hooks, startup checks, and skill prompts) pays for itself 1.5–6x over just by keeping Claude from reading files it doesn't need.
 
 Your mileage may vary. Your sanity will not.
 
@@ -167,9 +167,9 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ## Features
 
-- **13 Hooks** — automated guards and triggers across the full session lifecycle
-- **16 Skills** — devops-ship, devops-commit, devops-flow, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-plugin-update, devops-autonomous, devops-burn, devops-learn
-- **10 Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Research, Windows
+- **<!--devops:count:hooks-->27<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:skills-->19<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-flow, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-plugin-update, devops-autonomous, devops-burn, devops-learn, devops-harden, devops-polish, devops-test-plan
+- **<!--devops:count:agents-->11<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
@@ -178,42 +178,58 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ### Hooks (automatic, no user action needed)
 
-13 hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->27<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
 
 ```
-SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubmit  ──>  Stop
+SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolUse  ──>  Stop
 ```
 
+<!--devops:block:hook-lifecycle-->
 #### SessionStart — runs once when a session begins
 
-- `ss.plugin.update` — Check for plugin updates
-- `ss.mcp.deps` — Auto-install MCP server dependencies
-- `ss.tokens.scan` — Scan project for expensive files
-- `ss.git.check` — Check for uncommitted/unpushed changes
-
-#### PreToolUse — runs before each tool call
-
-- `pre.tokens.guard` — Block operations exceeding token budget
-
-#### PostToolUse — runs after each tool call
-
-- `post.flow.completion` — Track code edits for completion flow
-- `post.flow.debug` — Recommend /devops-flow after repeated failures
+- `ss.plugin.update` — Auto-update plugin marketplace clones, rebuild cache, and update registry.
+- `ss.permissions.ensure` — Ensure required plugin permissions exist so devops skills that write ephemeral review…
+- `ss.knowledge.index` — Inject deep-knowledge INDEX.md into context at session start.
+- `ss.mcp.deps` — Auto-install MCP server dependencies into CLAUDE_PLUGIN_DATA.
+- `ss.mcp.envcheck` — Detect enabled plugins whose .mcp.json references env vars that are not set.
+- `ss.tokens.scan` — Scan project for expensive files and update config for the pre.tokens.guard hook.
+- `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
+- `ss.git.sync` — Registers a recurring git sync cron job (every 10 minutes).
+- `ss.ship.verify` — Surface results from the post-merge watcher (post-ship CI + optional deploy verify).
+- `ss.concept.resume` — Recover an open concept session after a Claude restart.
+- `ss.team.changelog` — Show a summary of changes made by other contributors on remote main since the last ti…
 
 #### UserPromptSubmit — runs when the user sends a message
 
-- `prompt.git.sync` — Periodic pull/merge main (every 15 min)
-- `prompt.issue.detect` — Track GitHub issues automatically
-- `prompt.ship.detect` — Detect ship intent, enforce /devops-ship skill
-- `prompt.flow.selfcalibration` — Register self-calibration cron (once per session)
-- `prompt.flow.appstart` — Detect app start intent, enforce completion card
+- `prompt.flow.silent-turn` — Detects background/cron-injected prompts and marks the turn as "silent" so post.flow.…
+- `prompt.knowledge.dispatch` — On-demand deep-knowledge injection based on prompt keywords.
+- `prompt.git.sync` — Throttled git sync on user prompt — delegates to scripts/git-sync.js.
+- `prompt.issue.detect` — Detect issue references in user messages.
+- `prompt.ship.detect` — Detect ship intent in user prompts and inject Skill('devops-ship') instruction.
+- `prompt.flow.appstart` — Detect app start intent in user prompts.
+- `prompt.worktree.branch-guard` — Prevents working on main/master inside a linked worktree.
+
+#### PreToolUse — runs before each tool call
+
+- `pre.tokens.guard` — Block Read/Bash/Glob/Grep operations that would consume a significant percentage of t…
+- `pre.ship.guard` — Block manual PR creation/merging via Bash.
+- `pre.main.guard` — Prevent accidental writes on local main/master.
+- `pre.edit.branch` — Prevent Edit/Write tool calls while HEAD is on local main/master.
+- `pre.mcp.health` — Detects dead or stale MCP servers before tool calls fail cryptically.
+
+#### PostToolUse — runs after each tool call
+
+- `post.flow.completion` — After EVERY tool call: inject the completion-card reminder so Claude always has the i…
+- `post.flow.debug` — After 2+ consecutive Bash failures: recommend the flow skill.
 
 #### Stop — runs when Claude finishes responding
 
-- `stop.flow.guard` — Enforce completion flow before response ends
+- `stop.flow.guard` — Per-turn completion card enforcement.
+- `stop.flow.selfcalibration` — Run self-calibration when Claude finishes a response turn.
+<!--/devops:block:hook-lifecycle-->
 
 </details>
 
@@ -228,31 +244,48 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 #### git — keep the working tree in sync
 
 - `ss.git.check` — Check for uncommitted/unpushed changes *(SessionStart)*
-- `prompt.git.sync` — Periodic pull/merge main, every 15 min *(UserPromptSubmit)*
+- `ss.git.sync` — Register recurring git-sync cron, every 10 min *(SessionStart)*
+- `prompt.git.sync` — Throttled pull/merge main, every 15 min *(UserPromptSubmit)*
 
 #### ship — enforce the shipping pipeline
 
+- `pre.ship.guard` — Block manual PR/merge via Bash *(PreToolUse)*
 - `prompt.ship.detect` — Detect ship intent, enforce /devops-ship skill *(UserPromptSubmit)*
+- `ss.ship.verify` — Surface post-merge watcher results *(SessionStart)*
 
 #### flow — track progress toward completion
 
-- `post.flow.completion` — Track code edits for completion flow *(PostToolUse)*
+- `post.flow.completion` — Track code edits, inject completion reminder *(PostToolUse)*
 - `post.flow.debug` — Recommend /devops-flow after repeated failures *(PostToolUse)*
 - `prompt.flow.appstart` — Detect app start intent, enforce completion card *(UserPromptSubmit)*
+- `prompt.flow.silent-turn` — Mark background/cron-injected turns *(UserPromptSubmit)*
+- `stop.flow.guard` — Enforce completion card before response ends *(Stop)*
+- `stop.flow.selfcalibration` — Run self-calibration at end of turn *(Stop)*
 
-#### flow — self-calibration
+#### branch — protect main and worktrees
 
-- `prompt.flow.selfcalibration` — Register self-calibration cron, once per session *(UserPromptSubmit)*
-- `stop.flow.guard` — Enforce completion flow before response ends *(Stop)*
+- `pre.main.guard` — Prevent accidental writes on local main *(PreToolUse)*
+- `pre.edit.branch` — Block Edit/Write while HEAD is on main *(PreToolUse)*
+- `prompt.worktree.branch-guard` — Prevent working on main inside a worktree *(UserPromptSubmit)*
 
-#### plugin — updates and dependencies
+#### plugin — updates, dependencies, and health
 
 - `ss.plugin.update` — Check for plugin updates *(SessionStart)*
+- `ss.permissions.ensure` — Ensure required plugin permissions *(SessionStart)*
 - `ss.mcp.deps` — Auto-install MCP server dependencies *(SessionStart)*
+- `ss.mcp.envcheck` — Warn on MCP servers missing env vars *(SessionStart)*
+- `pre.mcp.health` — Detect dead/stale MCP servers before calls *(PreToolUse)*
 
-#### issues — automatic issue tracking
+#### knowledge — deep-knowledge injection
+
+- `ss.knowledge.index` — Inject deep-knowledge index into context *(SessionStart)*
+- `prompt.knowledge.dispatch` — Inject deep-knowledge by prompt keywords *(UserPromptSubmit)*
+
+#### issues & team — tracking and collaboration
 
 - `prompt.issue.detect` — Track GitHub issues automatically *(UserPromptSubmit)*
+- `ss.concept.resume` — Recover an open concept session after restart *(SessionStart)*
+- `ss.team.changelog` — Summarize teammates' changes on remote main *(SessionStart)*
 
 </details>
 
@@ -276,6 +309,9 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 | `/devops-autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |
 | `/devops-burn` | Explicit | High-throughput autonomous task runner with aggressive parallelization |
 | `/devops-learn` | Explicit | Capture long-term learnings and route to project-specific instructions |
+| `/devops-harden` | Explicit | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
+| `/devops-polish` | Explicit | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
+| `/devops-test-plan` | Explicit + Hook | Detect test profile, deterministic tool-chain recommendations per test request |
 
 ### Agents (spawned for parallel work)
 
@@ -289,6 +325,7 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 | **gamer** | Player perspective and UX |
 | **po** | Requirements and validation |
 | **qa** | Test, verify, screenshot |
+| **redteam** | Adversarial review: failure modes, blind spots, hidden risks |
 | **research** | Deep-dive investigations |
 | **windows** | Platform-specific features |
 
@@ -602,9 +639,9 @@ Wk  ━━──╏─────────   15% +1%   · 4d 22h left
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← 13 hook scripts (JS)
-├── skills/                        ← 16 skill definitions (SKILL.md)
-├── agents/                        ← 10 agent definitions
+├── hooks/                         ← <!--devops:count:hooks-->27<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── skills/                        ← <!--devops:count:skills-->19<!--/devops:count:skills--> skill definitions (SKILL.md)
+├── agents/                        ← <!--devops:count:agents-->11<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
 └── scripts/                       ← Utility scripts (build-id, usage)

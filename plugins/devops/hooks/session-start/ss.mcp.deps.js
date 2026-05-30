@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 /**
- * SessionStart hook: install MCP server dependencies into CLAUDE_PLUGIN_DATA.
+ * @hook ss.mcp.deps
+ * @version 0.1.0
+ * @event SessionStart
+ * @plugin devops
+ * @description Auto-install MCP server dependencies into CLAUDE_PLUGIN_DATA.
  *
- * Follows the official Claude Code plugin pattern:
- *   1. Compare mcp-server/package.json against the cached copy in PLUGIN_DATA
- *   2. If they differ (first run or dependency update), run `npm install`
- *   3. Symlink PLUGIN_DATA/node_modules into mcp-server/ dirs for ESM resolution
- *   4. On failure, remove the cached package.json so next session retries
+ *   Follows the official Claude Code plugin pattern:
+ *     1. Compare mcp-server/package.json against the cached copy in PLUGIN_DATA
+ *     2. If they differ (first run or dependency update), run `npm install`
+ *     3. Symlink PLUGIN_DATA/node_modules into mcp-server/ dirs for ESM resolution
+ *     4. On failure, remove the cached package.json so next session retries
  *
- * Why symlink instead of NODE_PATH?
- *   Node.js ESM resolver ignores NODE_PATH for package imports (import ... from "pkg").
- *   A symlink in the mcp-server directory lets the standard ESM resolver find packages.
+ *   Why symlink instead of NODE_PATH?
+ *     Node.js ESM resolver ignores NODE_PATH for package imports (import ... from "pkg").
+ *     A symlink in the mcp-server directory lets the standard ESM resolver find packages.
  */
 
 import { execSync } from "node:child_process";
