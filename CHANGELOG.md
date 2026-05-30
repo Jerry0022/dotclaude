@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.87.2] — 2026-05-30
+
+### Changed
+
+- **Completion card emphasis** — the card now builds a clearer visual hierarchy via Markdown constructs (the renderer only picks constructs; the terminal theme colors them). The headline renders as `# ` H1 **bold** so it stands out instead of muted heading-grey; a forced `&nbsp;` spacer line above the opening `---` detaches the card from the preceding response text; and the subinfo blocks (Changes, Tests, git-state, build-ID footer) are wrapped in blockquotes to grey their text baseline. Icons, `code`, links (merge target / PR / commit) and bold keep their own color, so the merge target and the CTA still pop. The `✨✨✨` card-detection marker stays intact. `render_completion_card` in `plugins/devops/mcp-server/index.js`.
+
 ## [0.87.1] — 2026-05-30
 
 ### Changed
