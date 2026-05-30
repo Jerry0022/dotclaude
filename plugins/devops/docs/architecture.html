@@ -138,7 +138,6 @@
   <a href="#skill-commit">/devops-commit</a>
   <a href="#skill-flow">/devops-flow</a>
   <a href="#skill-new-issue">/devops-new-issue</a>
-  <a href="#skill-deep-research">/devops-deep-research</a>
   <a href="#skill-explain">/devops-explain</a>
   <a href="#skill-project-setup">/devops-project-setup</a>
   <a href="#skill-readme">/devops-readme</a>
@@ -190,7 +189,7 @@
   </div>
   <div class="card">
     <h4>10 Skills</h4>
-    <p style="color:var(--text2);font-size:.85rem">Slash commands: ship, commit, flow, new-issue, deep-research, explain, project-setup, readme, refresh-usage, extend-skill</p>
+    <p style="color:var(--text2);font-size:.85rem">Slash commands: ship, commit, flow, new-issue, explain, project-setup, readme, refresh-usage, extend-skill</p>
   </div>
   <div class="card">
     <h4>10 Agents</h4>
@@ -236,7 +235,7 @@
 │   ├── build-id.js            <span style="color:var(--text2)"># Deterministic content hash</span>
 │   └── lib/usage-meter.js     <span style="color:var(--text2)"># Usage bar renderer</span>
 ├── skills/                    <span style="color:var(--accent)"># 10 skill definitions (SKILL.md + deep-knowledge/)</span>
-│   ├── ship/  commit/  flow/  new-issue/  deep-research/
+│   ├── ship/  commit/  flow/  new-issue/
 │   ├── explain/  project-setup/  readme/  refresh-usage/
 │   └── extend-skill/
 ├── templates/                 <span style="color:var(--warn)"># Output format templates</span>
@@ -483,7 +482,6 @@
   <tr><td><code>/devops-commit</code></td><td>Conventional commits</td><td>"commit", "save changes"</td><td>Normal</td></tr>
   <tr><td><code>/devops-flow</code></td><td>Root-cause analysis</td><td>"debug", "doesn't work"</td><td>Normal</td></tr>
   <tr><td><code>/devops-new-issue</code></td><td>GitHub issue creation</td><td>"new issue", "mach ein Issue"</td><td>Normal</td></tr>
-  <tr><td><code>/devops-deep-research</code></td><td>Multi-angle research</td><td>"research X", "compare X vs Y"</td><td><code>fork</code></td></tr>
   <tr><td><code>/devops-explain</code></td><td>Code explanation</td><td>"explain", "how does X work"</td><td>Normal</td></tr>
   <tr><td><code>/devops-project-setup</code></td><td>Repo hygiene audit</td><td>"set up project", "audit gitignore"</td><td>Normal</td></tr>
   <tr><td><code>/devops-readme</code></td><td>README generation</td><td>"create a readme"</td><td>Normal</td></tr>
@@ -600,26 +598,6 @@
       <li><strong>Create Issue</strong> &mdash; <code>gh issue create --title "[TYPE]..." --body "..." --label "type:X"</code></li>
       <li><strong>Add to Board</strong> &mdash; If configured: add to project board, set custom fields via GraphQL</li>
     </ol>
-  </div>
-</details>
-</section>
-
-<section id="skill-deep-research">
-<h3>/devops-deep-research &mdash; Multi-Angle Research</h3>
-<p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">context: fork</span></p>
-<details>
-  <summary>7-Step Research Flow</summary>
-  <div class="detail-body">
-    <ol class="step-list">
-      <li><strong>Load Extensions</strong> &mdash; Custom research paths/sources</li>
-      <li><strong>Depth Check</strong> &mdash; Simple fact &rarr; skip. Multi-faceted &rarr; proceed. Ambiguous &rarr; full research (3 angles).</li>
-      <li><strong>Budget Awareness</strong> &mdash; If burn-rate &gt; 1.3, warn user (~50K tokens)</li>
-      <li><strong>Break Down Topic</strong> &mdash; Identify 3-5 research angles</li>
-      <li><strong>Search &amp; Fetch</strong> &mdash; Per angle: WebSearch, 2-3 results, prefer primary sources</li>
-      <li><strong>Cross-Reference</strong> &mdash; Note agreements and conflicts</li>
-      <li><strong>Adaptive Output</strong> &mdash; TL;DR, findings by angle, recommendations</li>
-    </ol>
-    <p><strong>Context: fork</strong> &mdash; spawns an isolated research agent to keep main context clean.</p>
   </div>
 </details>
 </section>
@@ -1016,7 +994,7 @@
    │
    ├─ User says "debug this" → <span class="hl">/devops-flow</span> skill (root-cause analysis)
    ├─ User says "explain X"  → <span class="hl">/devops-explain</span> skill
-   ├─ User says "research Y" → <span class="hl">/devops-deep-research</span> skill (forked context)
+   ├─ User says "research Y" → <span class="hl">research</span> agent (isolated context)
    │
 <span class="hl">3. TASK COMPLETE — COMPLETION CARD</span>
    │
@@ -1091,7 +1069,7 @@
       <tr><td><code>claude-directory-structure.md</code></td><td>.claude/ canonical layout</td><td>/devops-project-setup</td></tr>
       <tr><td><code>code-defaults.md</code></td><td>Coding style conventions</td><td>All code-writing skills</td></tr>
       <tr><td><code>decision-format.md</code></td><td>Decision presentation</td><td>All skills with AskUserQuestion</td></tr>
-      <tr><td><code>fact-verification.md</code></td><td>Research integrity</td><td>/devops-deep-research</td></tr>
+      <tr><td><code>fact-verification.md</code></td><td>Research integrity</td><td>research agent</td></tr>
       <tr><td><code>git-hygiene.md</code></td><td>Git best practices</td><td>/devops-commit, /devops-ship</td></tr>
       <tr><td><code>plugin-behavior.md</code></td><td>Plugin integration</td><td>Self-calibration</td></tr>
       <tr><td><code>test-strategy.md</code></td><td>When/how to test</td><td>/devops-ship (quality gates)</td></tr>

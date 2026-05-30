@@ -104,7 +104,7 @@ Hooks reference plugin-level deep-knowledge in their stdout instructions to Clau
 
 ### Naming
 
-Skill directory names use kebab-case: `ship`, `new-issue`, `deep-research`.
+Skill directory names use kebab-case: `ship`, `new-issue`, `repo-health`.
 Skills are invoked as: `/devops:{skill-name}` (plugin-prefixed).
 
 ### Directory Structure

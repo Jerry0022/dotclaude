@@ -1,8 +1,7 @@
 # Fact Verification
 
 Cross-cutting rule for all web research, claims, and statistics.
-Referenced by: research agent, /devops-deep-research skill, and any task
-involving external information.
+Referenced by: the research agent and any task involving external information.
 
 ## Core Rule
 

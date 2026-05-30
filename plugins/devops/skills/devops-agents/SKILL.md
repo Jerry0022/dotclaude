@@ -8,7 +8,7 @@ description: >-
   multi-agent collaboration. Triggers on: "agents", "orchestrate",
   "use agents", "parallel agents", "multi-agent", "delegate to agents",
   "agent workflow". Do NOT trigger for: simple single-file edits, quick fixes,
-  explanations, or research-only tasks (use /devops-deep-research).
+  explanations, or research-only tasks (use the deep-research skill).
 argument-hint: "[task description or goal]"
 allowed-tools: Agent, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_list
 ---

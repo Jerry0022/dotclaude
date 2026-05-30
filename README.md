@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.86.5**
+**Version: 0.87.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -126,7 +126,7 @@ this plugin for AI-powered code review and task delegation via OpenAI Codex.
 Both plugins coexist as independent skill providers — no configuration needed.
 
 Combined workflows: `/codex:rescue` for pre-ship code review, parallel investigation
-as alternative to `/devops-deep-research`, and QA-integrated review for complex changes.
+for research tasks, and QA-integrated review for complex changes.
 
 See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
 
@@ -168,7 +168,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 ## Features
 
 - **13 Hooks** — automated guards and triggers across the full session lifecycle
-- **17 Skills** — devops-ship, devops-commit, devops-flow, devops-deep-research, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-plugin-update, devops-autonomous, devops-burn, devops-learn
+- **16 Skills** — devops-ship, devops-commit, devops-flow, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-plugin-update, devops-autonomous, devops-burn, devops-learn
 - **10 Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
@@ -263,7 +263,6 @@ SessionStart  ──>  PreToolUse  ──>  PostToolUse  ──>  UserPromptSubm
 | `/devops-ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
 | `/devops-commit` | Explicit | Conventional commits with smart staging |
 | `/devops-flow` (alias: `/debug`) | Explicit + Hook | Root-cause analysis, diagnostics, and fix cycle |
-| `/devops-deep-research` | Explicit | Multi-angle research with structured output |
 | `/devops-new-issue` | Explicit | GitHub issue creation with labels and milestones |
 | `/devops-project-setup` | Explicit | Repo hygiene audit and initialization |
 | `/devops-readme` | Explicit | Modern README generation |

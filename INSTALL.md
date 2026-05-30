@@ -88,7 +88,7 @@ No extra configuration needed — install both and all skills are available.
 Typical combined workflows:
 
 - **Ship with review:** `/codex:rescue` for pre-ship code review → `/devops-ship`
-- **Delegate investigation:** `/codex:rescue` as alternative to `/devops-deep-research`
+- **Delegate investigation:** `/codex:rescue` for parallel research and investigation
 
 ### Troubleshooting
 
