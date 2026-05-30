@@ -1,13 +1,19 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.2.0
+ * @version 0.3.0
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
  *   significant percentage of the ~200K context window. Threshold scales
  *   with the user's Claude plan (pro/max_5/max_20). Uses a flag-file
  *   mechanism: first call blocks with warning, retry allows through.
+ *
+ *   Project-map injection: on the FIRST broad Grep/Glob (no `path`) of a
+ *   session, attaches `.claude/project-map.md` as additionalContext and
+ *   ALLOWS the search, so Claude can scope subsequent calls with a `path`
+ *   instead of only being nagged after a block. Injected at most once per
+ *   session (temp flag); later broad searches still hit the normal block.
  */
 
 require('../lib/plugin-guard');
@@ -175,6 +181,40 @@ process.stdin.on('end', () => {
 
   else {
     process.exit(0);
+  }
+
+  // ── Proactive project-map injection (once per session) ──────────────
+  // Audit finding: the map was never read proactively (0/30 sessions) — only
+  // reactively, after this guard blocked a broad search. Fix: on the FIRST
+  // broad Grep/Glob of a session, attach the project structure as
+  // additionalContext and ALLOW the search, so Claude can scope the next
+  // calls with a `path`. Falls through to the normal block on later broad
+  // searches (map already in context by then).
+  if ((toolName === 'Grep' || toolName === 'Glob') && !toolInput.path) {
+    const projectMap = path.join(cwd, '.claude', 'project-map.md');
+    const sid = hook.session_id || hook.sessionId || 'nosid';
+    const mapKey = crypto.createHash('md5').update(`${sid}:${cwd}`).digest('hex').slice(0, 12);
+    const mapFlag = path.join(os.tmpdir(), `devops_mapinject_${mapKey}.flag`);
+    if (fs.existsSync(projectMap) && !fs.existsSync(mapFlag)) {
+      try {
+        const mapBody = fs.readFileSync(projectMap, 'utf8').trim();
+        fs.writeFileSync(mapFlag, Date.now().toString());
+        const ctx = [
+          `[project-map] Before this broad ${toolName} (no \`path\` set), here is the project's file structure.`,
+          'Use it to re-scope: pick the directory that contains your target and pass it as the `path`',
+          'parameter on this and future Grep/Glob calls instead of scanning the whole repo.',
+          '',
+          mapBody,
+        ].join('\n');
+        process.stdout.write(JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            additionalContext: ctx,
+          },
+        }));
+        process.exit(0); // allow the search; map is now in context for the next one
+      } catch {}
+    }
   }
 
   // Check threshold
