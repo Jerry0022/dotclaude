@@ -322,40 +322,75 @@ function renderState(state, variant, repoUrl) {
     ? '[`' + branchLabel + '`](' + repoUrl + '/tree/' + branch + ')'
     : '`' + branchLabel + '`';
 
-  const commitStr = state.commit
-    ? (repoUrl
+  // No commit hash + synced/landed → clean working tree → "nothing to commit".
+  // No commit hash + unsynced work → real pending changes → "uncommitted".
+  let commitStr;
+  if (state.commit) {
+    commitStr = repoUrl
       ? '[' + state.commit + '](' + repoUrl + '/commit/' + state.commit + ')'
-      : state.commit)
-    : 'uncommitted';
+      : state.commit;
+  } else if (state.pushed || state.merged) {
+    commitStr = 'nothing to commit';
+  } else {
+    commitStr = 'uncommitted';
+  }
 
-  const pushStr = state.pushed ? 'pushed' : 'not pushed';
-
-  let prStr = 'no PR';
+  // PR segment carries the merge status as an adjective ("merged"/"open").
+  // Rendered only when a PR exists — no PR means no "no PR" noise.
+  let prStr = '';
   if (state.pr) {
-    const prLabel = 'PR #' + state.pr.number + ' "' + state.pr.title + '"';
+    const mergeWord = state.merged ? 'merged ' : 'open ';
+    const prLabel = mergeWord + 'PR #' + state.pr.number + ' "' + state.pr.title + '"';
     prStr = repoUrl
       ? '[' + prLabel + '](' + repoUrl + '/pull/' + state.pr.number + ')'
       : prLabel;
   }
 
-  let mergeStr = 'not merged';
-  if (state.merged) {
-    const target = 'origin/' + state.merged;
-    mergeStr = repoUrl
-      ? 'merged \u2192 [' + target + '](' + repoUrl + '/tree/' + state.merged + ')'
-      : 'merged \u2192 ' + target;
+  // Helper: clickable origin/<name> ref, or plain text without a repo URL.
+  const originRef = (name) => {
+    const target = 'origin/' + name;
+    return repoUrl ? '[' + target + '](' + repoUrl + '/tree/' + name + ')' : target;
+  };
+
+  // Lead segment = sync status (NOT merge status). The merge fact moved onto the
+  // PR segment above. The lead states whether origin reflects the work:
+  //   PR merged \u2192 "updated origin/<base>";  PR open \u2192 "not updated";
+  //   no PR     \u2192 branch sync vs origin/<branch> (merged-without-PR = clean/landed).
+  let syncStr;
+  let syncRefBranch = null; // branch the ref points at, for trailing-branch dedupe
+  if (state.pr) {
+    if (state.merged) {
+      syncStr = 'updated ' + originRef(state.merged);
+      syncRefBranch = state.merged;
+    } else {
+      syncStr = 'not updated';
+    }
+  } else {
+    const b = state.merged || branch || 'main';
+    if (state.merged) {
+      syncStr = 'up-to-date ' + originRef(b);
+      syncRefBranch = b;
+    } else if (state.pushed) {
+      syncStr = (state.commit ? 'updated ' : 'up-to-date ') + originRef(b);
+      syncRefBranch = b;
+    } else if (state.commit) {
+      syncStr = 'not updated'; // committed locally, origin not updated yet
+    } else {
+      syncStr = 'up-to-date ' + originRef(b);
+      syncRefBranch = b;
+    }
   }
 
-  // Order: most important first — merge · PR · push · commit · branch
-  // When merged, "pushed" is redundant (you can't merge without pushing)
-  // When branch equals the merge target, the trailing branch is also redundant
-  // (use raw state.branch — do NOT use the 'main' fallback, or a card with
-  // unknown branch would silently drop the segment when merged === 'main')
+  // Order: sync · PR(+merge status) · commit · branch
+  // Drop the trailing branch when the sync segment already references origin/<branch>
+  // (use raw state.branch — do NOT use the 'main' fallback, or a card with an
+  // unknown branch would silently drop the segment).
   const rawBranch = state.branch;
-  const segments = [mergeStr, prStr];
-  if (!state.merged) segments.push(pushStr);
+  const branchRedundant = syncRefBranch && rawBranch && syncRefBranch === rawBranch;
+  const segments = [syncStr];
+  if (prStr) segments.push(prStr);
   segments.push(commitStr);
-  if (branch && !(state.merged && rawBranch && state.merged === rawBranch)) segments.push(branchStr);
+  if (branch && !branchRedundant) segments.push(branchStr);
   let line = icon + ' ' + segments.join(' \u00b7 ');
 
   if (state.appStatus === 'running')     line += ' \u00b7 app running';
