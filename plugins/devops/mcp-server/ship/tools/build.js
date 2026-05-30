@@ -57,6 +57,7 @@ function scriptPath(name) { return join(pluginRoot(), "scripts", name); }
 const BUILD_ID_SCRIPT = () => scriptPath("build-id.js");
 const DK_INDEX_SCRIPT = () => scriptPath("gen-dk-index.js");
 const PROJECT_MAP_SCRIPT = () => scriptPath("gen-project-map.js");
+const README_SECTIONS_SCRIPT = () => scriptPath("gen-readme-sections.js");
 
 export const schema = z.object({
   buildCmd: z.string().nullable().default(null).describe("Build command (null = auto-detect from package.json)"),
@@ -139,6 +140,9 @@ export async function handler(params) {
   }
   // 3. Project map (full codebase index)
   run(`"${process.execPath}" "${PROJECT_MAP_SCRIPT()}" "${cwd}"`, cwd);
+  // 4. README + architecture.html auto-marker sections (no-ops outside the
+  //    plugin source repo, i.e. when cwd/plugins/devops is absent)
+  run(`"${process.execPath}" "${README_SECTIONS_SCRIPT()}" "${cwd}"`, cwd);
 
   // Build (skip if no build script detected/provided)
   if (buildCmd) {

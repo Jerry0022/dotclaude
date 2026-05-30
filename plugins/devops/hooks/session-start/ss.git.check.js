@@ -24,6 +24,7 @@
 
 require('../lib/plugin-guard');
 const { isActive: sentinelActive } = require('../lib/ship-sentinel');
+const { runOnce } = require('../lib/run-once');
 
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -65,6 +66,25 @@ function isLinkedWorktree(dir) {
   const commonDir = run('git rev-parse --git-common-dir', dir);
   if (!gitDir || !commonDir) return false;
   return path.resolve(dir, gitDir) !== path.resolve(dir, commonDir);
+}
+
+/**
+ * Plugin-source-repo only: warn (at most once per cooldown) when README.md is
+ * older than the skill/hook/agent roster it documents — a sign the docs were
+ * not refreshed after roster changes. Returns a note string or null.
+ */
+function readmeStaleness(dir) {
+  if (!fs.existsSync(path.join(dir, 'plugins', 'devops', 'skills'))) return null;
+  const lastCommit = (paths) => {
+    const ts = run(`git log -1 --format=%ct -- ${paths}`, dir);
+    return ts ? parseInt(ts, 10) : 0;
+  };
+  const readmeTime = lastCommit('README.md');
+  const rosterTime = lastCommit('plugins/devops/skills plugins/devops/hooks plugins/devops/agents');
+  if (!readmeTime || !rosterTime || rosterTime <= readmeTime) return null;
+  // Throttle to once per 8h so it nudges during active dev without nagging.
+  if (!runOnce('ss-git-readme-stale', null, { cooldownMs: 8 * 60 * 60 * 1000 })) return null;
+  return '📝 README.md is older than the skills/hooks/agents roster — run `/devops-readme` or `node plugins/devops/scripts/gen-readme-sections.js` to refresh counts & lists.';
 }
 
 function checkRepo(dir) {
@@ -217,8 +237,9 @@ for (const repo of repos) {
 }
 
 const workspace = checkWorkspace(cwd);
+const staleNote = readmeStaleness(cwd);
 
-if (dirty.length === 0 && !workspace) {
+if (dirty.length === 0 && !workspace && !staleNote) {
   process.exit(0);
 }
 
@@ -307,6 +328,11 @@ for (const r of dirty) {
     out.push(...lines);
     out.push('');
   }
+}
+
+if (staleNote) {
+  if (out.length > 0) out.push('');
+  out.push(staleNote);
 }
 
 if (out.length === 0) process.exit(0);

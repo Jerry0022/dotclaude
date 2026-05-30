@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.88.0] — 2026-05-30
+
+### Added
+
+- **plugins/devops/scripts/gen-readme-sections.js** — new generator that keeps the roster facts in `README.md` and `docs/architecture.html` permanently in sync with reality. It reads the canonical source (`hooks/hooks.json`, `skills/*/SKILL.md`, `agents/*.md`, `deep-knowledge/*.md`) and rewrites every value inside `<!--devops:count:*-->` inline markers and the `<!--devops:block:hook-lifecycle-->` block — so counts and the full hook lifecycle list can never drift again. Wired into `ship_build` alongside `gen-dk-index` / `gen-project-map`; no-ops outside the plugin source repo. Supports `--check` (exit 1 if any marker is stale), used as both a vitest regression guard (`gen-readme-sections.test.js`) and a ship gate.
+- **plugins/devops/mcp-server/ship/tools/preflight.js** — `ship_preflight` now runs a non-blocking doc-sync check (plugin source repo only): warns when the auto-markers are stale **and** when any skill/agent on disk is missing its curated row in the README tables — the one thing the generator deliberately does not auto-write.
+- **plugins/devops/hooks/session-start/ss.git.check.js** — emits a gentle once-per-8h nudge when `README.md` is older than the `skills/`/`hooks/`/`agents/` roster it documents, reusing the already-running SessionStart hook (no new per-session token overhead).
+- **plugins/devops/CONVENTIONS.md** — new "Auto-Maintained Documentation" section describing the marker system and the three-layer drift defense (generate → preflight verify → session nudge).
+
+### Fixed
+
+- **README.md + docs/architecture.html** — corrected stale roster facts that had drifted across several releases: hook/skill/agent counts (`13/16/10` → real `27/19/11`), the missing `harden`/`polish`/`test-plan` skills and `redteam` agent, the incomplete hook lifecycle list, the `architecture.html` version header (`v0.76.0` → current), and a factual error in the token-guard threshold prose (claimed a flat `2%` of a "session window"; the real gate is a plan-scaled share of the ~200K context window — 5%/8%/10% on Pro/Max5×/Max20×).
+- **plugins/devops/hooks/session-start/ss.permissions.ensure.js**, **ss.mcp.deps.js** — given the standard `@hook`/`@version`/`@event`/`@plugin`/`@description` JSDoc header used by every other hook, so the generator extracts clean descriptions and the roster is uniform.
+
 ## [0.87.3] — 2026-05-30
 
 ### Fixed

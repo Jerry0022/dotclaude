@@ -216,6 +216,35 @@ templates/
 └── github-release.md
 ```
 
+## Auto-Maintained Documentation
+
+`README.md` and `docs/architecture.html` carry roster facts (hook/skill/agent
+counts, the full hook lifecycle list) that drift the moment someone adds a hook
+or skill. These live inside HTML-comment markers and are regenerated from the
+canonical source — **never hand-edit the text between markers:**
+
+```
+<!--devops:count:hooks-->27<!--/devops:count:hooks-->        ← inline count
+<!--devops:block:hook-lifecycle--> … <!--/devops:block:hook-lifecycle-->   ← block
+```
+
+- **Generator:** `scripts/gen-readme-sections.js` reads `hooks/hooks.json`,
+  `skills/*/SKILL.md`, `agents/*.md`, `deep-knowledge/*.md` and rewrites every
+  marker. Counts and the lifecycle roster can therefore never go stale.
+  No-ops outside the plugin source repo. Run standalone, or with `--check`
+  (exit 1 if any marker is stale — used as a regression test + ship gate).
+- **When it runs:** `ship_build` regenerates automatically (alongside
+  `gen-dk-index` / `gen-project-map`); `ship_preflight` warns on stale markers
+  **and** on any skill/agent missing its curated README table row;
+  `ss.git.check` nudges (once per 8h) when README is older than the roster.
+- **What stays manual:** curated prose — token math, and the per-skill /
+  per-agent **table descriptions**. The generator never touches those; preflight
+  only enforces that every skill/agent *has* a row, not what it says.
+
+Three layers, three failure windows covered: generate (can't drift) →
+preflight verify (catches the un-generated tables) → session nudge (catches
+"forgot to refresh entirely").
+
 ## General Rules
 
 - All code is JavaScript (Node.js), no Bash scripts

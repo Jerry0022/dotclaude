@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 /**
- * SessionStart hook: ensure user-global permission rules exist so devops
- * skills that write ephemeral review artifacts don't trigger permission
- * prompts on every run.
+ * @hook ss.permissions.ensure
+ * @version 0.1.0
+ * @event SessionStart
+ * @plugin devops
+ * @description Ensure required plugin permissions exist so devops skills that
+ *   write ephemeral review artifacts don't trigger permission prompts.
  *
- * Idempotent: only adds rules that are missing. Never removes anything.
- * Scope: user-global settings at ~/.claude/settings.json — the rules apply
- * to all projects for this user.
- *
- * Also ensures the target directory exists so skills can Write without
- * first running mkdir.
+ *   Idempotent: only adds rules that are missing. Never removes anything.
+ *   Scope: user-global settings at ~/.claude/settings.json — the rules apply
+ *   to all projects for this user. Also ensures the target directory exists
+ *   so skills can Write without first running mkdir.
  */
 
 const { readFileSync, writeFileSync, mkdirSync, existsSync } = require("node:fs");
