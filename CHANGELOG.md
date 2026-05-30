@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.87.0] — 2026-05-30
+
+### Removed
+
+- **plugins/devops/skills/devops-deep-research** — removed the plugin-local deep-research skill. It duplicated Claude Code's built-in `deep-research` harness, which is more rigorous (parallel subagent fan-out + adversarial claim verification) than the single forked-agent flow this skill provided. The `/devops-deep-research` slash command is gone; use the built-in `deep-research` skill for multi-source research. The `research` agent stays and is now self-contained: it carries its own output-format template inline instead of preloading the deleted skill via `skills:` frontmatter.
+
+### Changed
+
+- **References rewired** — README (skill count 17 → 16, command table), INSTALL, `CONVENTIONS.md`, `docs/architecture.html`, `deep-knowledge/fact-verification.md`, `deep-knowledge/content-conventions.md`, `skills/devops-agents`, and `skills/devops-autonomous` evals now point at the built-in `deep-research` skill or the `research` agent instead of the removed skill. `CHANGELOG` and dated concept snapshots left as historical record. `project-map.md` regenerated.
+
 ## [0.86.5] — 2026-05-29
 
 ### Fixed
