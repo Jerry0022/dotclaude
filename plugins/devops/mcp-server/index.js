@@ -454,22 +454,6 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
-  // Block B — End state (with extra blank line above for visual separation)
-  if (config.state) {
-    const repoUrl = getRepoUrl(input.cwd);
-    if (!repoUrl && input.state && (input.state.pr || input.state.merged || input.state.commit || input.state.branch)) {
-      console.warn(
-        '[dotclaude-completion-mcp] repoUrl empty — card will render without clickable links. ' +
-        'Pass cwd set to the target repo to fix.'
-      );
-    }
-    const stateLine = renderState(input.state, variant, repoUrl);
-    if (stateLine) {
-      parts.push(stateLine);
-      parts.push('');
-    }
-  }
-
   // User test steps (test variant)
   if (config.userTest) {
     const testBlock = renderUserTest(input.userTest);
@@ -506,6 +490,23 @@ function renderCard(input, meterText, buildId) {
   // Footer: 📌 version bump + build ID (build ID in backticks for visibility)
   parts.push(renderFooter(buildId, input.cta, variant));
   parts.push('');
+
+  // End state — placed between build ID and CTA, since the CTA often
+  // references this state (merge target / branch). Clusters status near the foot.
+  if (config.state) {
+    const repoUrl = getRepoUrl(input.cwd);
+    if (!repoUrl && input.state && (input.state.pr || input.state.merged || input.state.commit || input.state.branch)) {
+      console.warn(
+        '[dotclaude-completion-mcp] repoUrl empty — card will render without clickable links. ' +
+        'Pass cwd set to the target repo to fix.'
+      );
+    }
+    const stateLine = renderState(input.state, variant, repoUrl);
+    if (stateLine) {
+      parts.push(stateLine);
+      parts.push('');
+    }
+  }
 
   parts.push(renderCTA(variant, input.cta, lang, input.state));
   parts.push('');
