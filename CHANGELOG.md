@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.87.1] — 2026-05-30
+
+### Changed
+
+- **Completion card layout** — the git-state line (merge target / PR / commit / branch) now renders in the footer block, between the build-ID line (`📌 …`) and the final CTA, instead of at the top of the content block under Changes/Tests. Status info now clusters at the foot of the card next to the CTA, which already references the merge target / branch. Affects every card variant that shows state (`render_completion_card` in `plugins/devops/mcp-server/index.js`).
+
 ## [0.87.0] — 2026-05-30
 
 ### Removed
