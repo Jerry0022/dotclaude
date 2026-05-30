@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.87.3] — 2026-05-30
+
+### Fixed
+
+- **plugins/devops/skills/devops-ship/SKILL.md** — Step 5b now handles the case where `ExitWorktree` returns a No-op because the worktree was created externally (by the harness or `git worktree add`) rather than via `EnterWorktree` in the session. Previously this fell through to `ship_cleanup keep:true`, which set `state.kept:true` on the completion card and rendered the keep-mode CTA `WEITER in <branch>` — falsely signalling expected follow-up work. The skill now distinguishes **forced-keep** (cleanup blocked by an active worktree) from **deliberate keep-mode** (Step 5c, expected follow-up): forced-keep clears the sentinel but renders the normal DONE CTA plus a manual-cleanup note, and never passes `state.kept`.
+
 ## [0.87.2] — 2026-05-30
 
 ### Changed

@@ -361,6 +361,20 @@ what was decided and can override (`"nein, doch räum auf"` for a follow-up clea
 If `ExitWorktree` **fails** (e.g. directory locked by another process): **STOP**. Do not proceed to cleanup.
 Report the error to the user. The merge already landed on GitHub — cleanup can be retried later.
 
+**If `ExitWorktree` returns a No-op** (the worktree was created externally — by the harness or
+`git worktree add` — not via `EnterWorktree` in this session): the tool cannot release the CWD
+lock and `ship_cleanup` will refuse (`"attached to an active worktree"`). Do **NOT** force-remove
+the directory the session lives in — that would break the session. This is **forced-keep**, NOT
+deliberate keep-mode:
+- Clear the sentinel with `ship_cleanup({ ..., keep: true })` (same call as Step 5c) so Edit/branch
+  guards reset — but treat it purely as sentinel cleanup.
+- In Step 6, render the **normal** DONE CTA — do **NOT** pass `state.kept: true`. Keep-mode's
+  `WEITER in <branch>` CTA is reserved for *deliberate* keep (expected follow-up work); a worktree
+  kept only because cleanup was blocked must not signal "keep coding here".
+- Instead, add a short manual-cleanup note **above** the card (close the session, then from the main
+  repo: `git worktree remove <path>` + `git branch -d <branch>`).
+- Skip the rest of Step 5b/5c.
+
 Then call `ship_cleanup` MCP tool with the `base` from Step 1 (always pass `cwd`):
 ```
 ship_cleanup({ branch: "claude/feature-branch", base: "main", cwd: "<cwd>" })
