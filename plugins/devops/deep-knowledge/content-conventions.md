@@ -43,8 +43,8 @@ duplicate.** Examples:
   re-list the pipeline steps
 - "open issues with the right labels" → reference `/devops-new-issue`, do NOT
   duplicate the label rules
-- "use deep-research for compare X vs Y questions" → reference
-  `/devops-deep-research`
+- "check branch hygiene before shipping" → reference `/devops-repo-health`,
+  do NOT re-document the cleanup steps
 - Generic conventions (browser tools, MCP deferred tools, code defaults,
   merge safety, …) → reference the existing `deep-knowledge/*.md` file by
   name; do not paraphrase

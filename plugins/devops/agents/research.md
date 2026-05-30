@@ -9,7 +9,6 @@ model: opus
 effort: high
 color: cyan
 tools: ["WebSearch", "WebFetch", "Read", "Grep", "Glob"]
-skills: ["devops-deep-research"]
 ---
 
 # Research Agent
@@ -30,7 +29,26 @@ Before starting, read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` §5 (R
 
 ## Output format
 
-Follow the methodology and output format from the preloaded devops-deep-research skill.
+```markdown
+## Research: <topic>
+
+### TL;DR
+<2–3 sentence executive summary>
+
+### Findings
+#### <Angle 1>
+...
+
+### Recommendations
+- ...
+
+### Sources
+- [title](url) — <date, relevance note>
+```
+
+For focused comparisons, use a criteria table (X vs Y) plus a recommendation.
+Mark any load-bearing claim that survived a refutation attempt vs. one that
+remained contested.
 
 ## Rules
 

@@ -60,7 +60,7 @@
     {
       "query": "Research the state of edge computing in 2026",
       "should_trigger": false,
-      "reason": "Research-only task — use /devops-deep-research."
+      "reason": "Research-only task — use the deep-research skill."
     },
     {
       "query": "Lass die Agents das parallel machen",
