@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.89.0] — 2026-05-30
+
+### Changed
+
+- **plugins/devops/hooks/pre-tool-use/pre.tokens.guard.js** (`0.2.0` → `0.3.0`) — proactive project-map injection. On the **first** broad `Grep`/`Glob` (no `path`) of a session, the hook now attaches `.claude/project-map.md` as `additionalContext` and **allows** the search, instead of only nagging after a block. Closes the gap found in a 30-session audit across all local projects: the map was read proactively in **0/30** sessions — only reactively, after the token-guard blocked a broad search. Injected at most once per session (md5 session+cwd flag in tmp); later broad searches still hit the normal token-cost block. Measured effect of the map being in context: blind full-repo greps drop from 11% → 4%.
+- **plugins/devops/deep-knowledge/tool-selection.md** — documents that the guard now supplies the project map automatically on the first broad search.
+
 ## [0.88.1] — 2026-05-30
 
 ### Changed

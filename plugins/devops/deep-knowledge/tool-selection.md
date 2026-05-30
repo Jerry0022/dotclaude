@@ -22,6 +22,10 @@ Before running a full-repo Grep or Glob (no `path` parameter), **always** read
 codebase structure — it tells you which directories and files exist and what they
 contain.
 
+> **Note:** The `pre.tokens.guard` hook also injects the project map automatically
+> on the *first* broad Grep/Glob of a session (no `path`), so you usually receive
+> the structure without an explicit read. Use it to scope every following search.
+
 Use it to derive the correct `path` parameter:
 
 1. Read `.claude/project-map.md` (cheap — small file)
