@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.89.1] — 2026-05-31
+
+### Changed
+
+- **Completion card usage meter** — now rendered as a dimmed blockquote (matching the **Changes** block above) instead of a white code fence, so the battery line reads as subinfo. Column alignment is held by non-breaking spaces (a blockquote folds runs of regular spaces, a code fence did not), and the pace warning stays white via bold `**Pace!**` plus the font-rendered `⚠` icon. `renderUsageMeterForCard` in `plugins/devops/mcp-server/index.js`; template + Rule 10 in `plugins/devops/templates/completion-card.md` updated to match.
+
 ## [0.89.0] — 2026-05-30
 
 ### Changed
