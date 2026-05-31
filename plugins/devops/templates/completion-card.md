@@ -64,13 +64,10 @@ All variables in `{{...}}`. Sections wrapped in `{{#if}}` are conditional per va
 {{/if}}
 
 {{#if usage}}
-{{context-health-line}}
-
-```
-5h  {{bar-5h}}  {{pct-5h}}{{delta-5h}}  · {{reset-5h}} left{{pace-warn-5h}}
-
-Wk  {{bar-wk}}  {{pct-wk}}{{delta-wk}}  · {{reset-wk}} left{{pace-warn-wk}}
-```
+> {{context-health-line}}
+>
+> 5h  {{bar-5h}}  {{pct-5h}}{{delta-5h}}  · {{reset-5h}} left{{pace-warn-5h}}
+> Wk  {{bar-wk}}  {{pct-wk}}{{delta-wk}}  · {{reset-wk}} left{{pace-warn-wk}}
 {{/if}}
 
 ---
@@ -101,7 +98,10 @@ Wk  {{bar-wk}}  {{pct-wk}}{{delta-wk}}  · {{reset-wk}} left{{pace-warn-wk}}
 
 ### Usage meter
 
-Directly under the title. Two usage bars with inline elapsed-time marker, in a code block.
+Directly under the title. Two usage bars with inline elapsed-time marker, greyed
+as subinfo (blockquote) to match the Changes block. Column alignment is held by
+non-breaking spaces (a blockquote folds runs of regular spaces); only `⚠` and
+**Pace!** keep their white color.
 If `usage-live.json` is missing: show error message instead of bars.
 
 **Example rendering:**
@@ -501,7 +501,7 @@ else                                             → fallback (8)
 7. Content in user's language. Status words (SHIPPED, READY, etc.) stay English.
 8. Factual — no commentary, praise, or filler.
 9. Omit sections that don't apply (don't render empty).
-10. Usage meter always in code block, never as plain text.
+10. Usage meter is greyed as subinfo (blockquote), matching the Changes block — column alignment held by non-breaking spaces; only `⚠` and **Pace!** stay white.
 11. If `usage-live.json` is missing: show `⚠ Usage data unavailable — monitoring issue`.
 12. Build-ID always included — even for pure docs/config changes.
 13. State line always with all fields (merge, pr, push, commit, branch) — most important first.

@@ -125,21 +125,33 @@ function renderUsageMeter(usageData, delta5h, deltaWk) {
 // Usage-meter variant for completion card (with deltas + code fences)
 // ---------------------------------------------------------------------------
 
+// Dim a meter line to the muted blockquote grey while preserving column
+// alignment. Markdown folds runs of regular spaces, so the padding columns
+// would collapse inside a blockquote \u2014 non-breaking spaces hold the
+// layout the way a code fence used to. The pace icon is font-rendered (keeps
+// its color), and **Pace!** is bolded so it pops white instead of dimming with
+// the rest of the text.
+function dimMeterLine(line) {
+  return line
+    .replace(/ /g, '\u00a0')
+    .replace('Pace!', '**Pace!**');
+}
+
 function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
   if (!usageData || !usageData.session) {
-    return '```\n\u26a0 Usage data unavailable\n```';
+    return blockquote('\u26a0 Usage data unavailable');
   }
 
   const s = usageData.session;
   const w = usageData.weekly;
-  const lines = ['```'];
+  const lines = [];
 
   const elapsed5hPct = s.resetInMinutes != null ? ((WINDOW_5H_MIN - s.resetInMinutes) / WINDOW_5H_MIN) * 100 : 0;
-  lines.push(renderUsageLine('5h', s.pct, elapsed5hPct, delta5h, s.resetInMinutes));
+  lines.push(dimMeterLine(renderUsageLine('5h', s.pct, elapsed5hPct, delta5h, s.resetInMinutes)));
 
   if (w) {
     const elapsedWkPct = ((WINDOW_WK_MIN - w.resetInMinutes) / WINDOW_WK_MIN) * 100;
-    lines.push(renderUsageLine('Wk', w.pct, elapsedWkPct, deltaWk, w.resetInMinutes));
+    lines.push(dimMeterLine(renderUsageLine('Wk', w.pct, elapsedWkPct, deltaWk, w.resetInMinutes)));
   }
 
   // Failure indicator — login required is always shown prominently regardless
@@ -156,16 +168,14 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
     lines.push(`cached \u00b7 ${ageLabel}${suffix}`);
   }
 
-  lines.push('```');
-
-  // Health line is the first line inside the code fence, above bars
-  // Add blank line after health line to visually separate it from the bars
+  // Health line sits above the bars, separated by a blank line.
   if (healthLine) {
-    const idx = 1; // after opening ```
-    lines.splice(idx, 0, healthLine, '');
+    lines.unshift(healthLine, '');
   }
 
-  return lines.join('\n');
+  // Whole block is greyed as subinfo (matching the Changes block above); the
+  // pace icon and **Pace!** keep their own color inside the quote.
+  return blockquote(lines.join('\n'));
 }
 
 // ---------------------------------------------------------------------------
