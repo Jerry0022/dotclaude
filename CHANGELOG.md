@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.89.4] — 2026-05-31
+
+### Fixed
+
+- **Completion card** — the `test` variant no longer renders two stacked test sections. It was the only variant with both `userTest` and `userFinalTest` enabled, so a card could show *Please test* **and** *TESTE bitte noch:* back-to-back. `userFinalTest` is now disabled for the `test` variant — all manual steps route through `userTest` — establishing the invariant that no card ever shows two test sections. `VARIANTS.test` + schema/comment in `plugins/devops/mcp-server/index.js`; template + variant tables in `plugins/devops/templates/completion-card.md`.
+
+### Changed
+
+- **Completion card** — the manual-test icon changed from 🧑 (reads as a male person) to a neutral 🔬 across all variants, and `userTest` now renders under a `🔬 **Bitte testen:**` / `🔬 **Please test:**` header instead of a plain `**Please test**`. Icon updated in `qa.md`, `agent-orchestration.md`, `test-strategy.md`, `devops-autonomous/SKILL.md` to match.
+- **deep-knowledge/merge-safety.md** — new *Worktree Path Discipline* section: in a worktree session, always edit files under the worktree root, never the main-repo root, since a parallel ship/reset in the main checkout silently wipes uncommitted edits there.
+
 ## [0.89.3] — 2026-05-31
 
 ### Fixed
