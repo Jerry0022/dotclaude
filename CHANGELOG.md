@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.89.2] — 2026-05-31
+
+### Fixed
+
+- **plugins/devops/skills/devops-ship/SKILL.md** — Step 6 now states explicitly
+  that the completion-card variant reflects what the pipeline *did*, not what is
+  verified downstream. After `ship_release` reports merged (+ tag/release),
+  render `ship-successful`; an unverified downstream auto-deploy (Vercel on
+  main-push, a tag-triggered build, the Step 4b watcher still running) is
+  surfaced as a `userFinalTest` item, never a downgrade to the pre-ship `ready`
+  variant (whose "SHIP or CHANGE?" CTA falsely reads as "nothing shipped" after
+  a merge). The gap let a consumer ship-extension encode the wrong "downgrade to
+  ready" instruction; the base now owns the rule so extensions only carry
+  project-specific downstream surfaces.
+
 ## [0.89.1] — 2026-05-31
 
 ### Changed

@@ -484,6 +484,21 @@ render_completion_card({
 })
 ```
 
+**Variant reflects what the pipeline DID, not what's verified downstream.**
+Once `ship_release` reports `merged` + (where applicable) `tag` + `release`,
+the ship **has happened** → render `ship-successful`. Do NOT downgrade to
+`ready` just because a downstream auto-deploy isn't confirmed yet (Vercel on
+main-push, a tag-triggered build, the Step 4b watcher still running). `ready`
+is the PRE-ship variant — its CTA is "SHIP or CHANGE?" — so using it after a
+merge is self-contradictory and reads as "nothing shipped". Surface any
+pending/unverified downstream as an explicit `userFinalTest` item instead
+(e.g. "Vercel-Deploy live verifizieren", "Build run #N läuft — `gh run view N`").
+The MCP variant guard already auto-corrects `ship-successful`→`ready` when
+`state.merged`/`state.pushed` are falsy, so the only judgement call left to you
+is: merged ⇒ `ship-successful`, downstream-still-pending ⇒ `userFinalTest`,
+never a variant downgrade. (Project ship-extensions: keep project-specific
+downstream surfaces, but don't re-encode this variant rule.)
+
 **Keep-mode variant** (Step 5a chose keep, Step 5c ran):
 ```
 render_completion_card({
