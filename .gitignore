@@ -14,6 +14,7 @@ node_modules/
 .claude/scheduled_tasks.lock
 .claude/usage-live.json
 .claude/.ship-in-progress
+.claude/.ship-watcher/
 .claude/concept-active.json
 .claude/session-opened-files.json
 # Plugin-managed runtime dirs

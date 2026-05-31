@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.89.3] — 2026-05-31
+
+### Fixed
+
+- **.gitignore** — ignore `.claude/.ship-watcher/`. The ship pipeline's post-merge watcher (Step 4b) writes status JSON to `.claude/.ship-watcher/<sha>.json`; that runtime output is not source and was surfacing as an untracked `.claude/` entry after every ship.
+
 ## [0.89.2] — 2026-05-31
 
 ### Fixed
