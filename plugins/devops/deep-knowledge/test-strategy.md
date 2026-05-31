@@ -59,7 +59,7 @@ browser instance, not inside the app's own webview. Testing therefore splits:
   when the user explicitly chose "Desktop übernehmen" (see
   `desktop-testing.md`).
 - If desktop-takeover was not chosen → flag in completion card:
-  `🧑 TESTE bitte noch:` with concrete steps (what to open, what to verify).
+  `🔬 TESTE bitte noch:` with concrete steps (what to open, what to verify).
 
 Never claim an Electron/Tauri change is "verified" based on dev-browser mocks alone
 — the mocked renderer is not the production runtime.
@@ -77,7 +77,7 @@ protocol:
 - Never send real requests to production 3rd-party endpoints during automated tests.
 
 **Step 2 — Real integration test (cannot be automated):**
-- Flag in completion card: `🧑 TESTE bitte noch:` + bullet with `— nach Deployment` suffix
+- Flag in completion card: `🔬 TESTE bitte noch:` + bullet with `— nach Deployment` suffix
   with the concrete action (e.g. "Login mit Google in Prod-Umgebung testen",
   "Test-Zahlung mit Stripe Live-Key durchführen").
 - Never declare the integration "verified" based on the mock step alone — credentials,
@@ -106,7 +106,7 @@ userFinalTest: [
 ]
 ```
 
-The card renders a unified `🧑 TESTE bitte noch:` (DE) / `🧑 Please TEST:` (EN)
+The card renders a unified `🔬 TESTE bitte noch:` (DE) / `🔬 Please TEST:` (EN)
 block with the bullets. Never summarize away — this is the only signal the user
 sees about work automation could not cover.
 

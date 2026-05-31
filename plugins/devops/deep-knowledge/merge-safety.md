@@ -10,6 +10,20 @@ and agent collaboration flows.
 changed the same area. Both changes may be valid. Strategies that blindly pick one
 side (`--ours`, `--theirs`) destroy information and must never be used.
 
+## Worktree Path Discipline
+
+When the session runs in a git worktree (cwd is `…/.claude/worktrees/<name>/`),
+resolve **every** file edit against the worktree root — never the bare main-repo
+root (`…/<repo>/plugins/…`). They are separate working directories on separate
+branches.
+
+**Why:** the main checkout may run a parallel `/devops-ship` or `git-sync` that
+does `git reset --hard` / `git checkout`. Uncommitted edits made to the main
+checkout's files are silently wiped by that reset — the Edit tool reports
+success, you see confusing "file modified since read" races, and the change is
+gone. Edits in your own worktree are isolated and survive. If a path during a
+worktree session lacks the `worktrees/<name>/` segment, it is wrong.
+
 ## Why Squash Merges Cause Data Loss
 
 Squash merges sever Git's ancestry chain. When Dev B squash-merges to main, the new

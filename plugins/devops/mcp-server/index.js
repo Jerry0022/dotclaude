@@ -187,7 +187,7 @@ const VARIANTS = {
   ready:             { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
   'ready-files':     { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
   'ship-blocked':    { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
-  test:              { usage: true,  changes: true,  tests: true,  state: true,  userTest: true,  userFinalTest: true  },
+  test:              { usage: true,  changes: true,  tests: true,  state: true,  userTest: true,  userFinalTest: false },
   'test-minimal':    { usage: false, changes: false, tests: false, state: false, userTest: false, userFinalTest: false },
   analysis:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true  },
   aborted:           { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true  },
@@ -409,15 +409,21 @@ function renderState(state, variant, repoUrl) {
   return line;
 }
 
-function renderUserTest(steps) {
+const USER_TEST_LABEL = {
+  de: '\uD83D\uDD2C **Bitte testen:**',
+  en: '\uD83D\uDD2C **Please test:**',
+};
+
+function renderUserTest(steps, lang) {
   if (!steps || steps.length === 0) return '';
+  const header = USER_TEST_LABEL[lang] || USER_TEST_LABEL.de;
   const items = steps.map((s, i) => (i + 1) + '. ' + s);
-  return '**Please test**\n' + items.join('\n');
+  return header + '\n' + items.join('\n');
 }
 
 const USER_FINAL_TEST_LABEL = {
-  de: { header: '\uD83E\uDDD1 **TESTE bitte noch:**', suffix: ' \u2014 nach Deployment' },
-  en: { header: '\uD83E\uDDD1 **Please TEST:**',      suffix: ' \u2014 after deployment' },
+  de: { header: '\uD83D\uDD2C **TESTE bitte noch:**', suffix: ' \u2014 nach Deployment' },
+  en: { header: '\uD83D\uDD2C **Please TEST:**',      suffix: ' \u2014 after deployment' },
 };
 
 function renderUserFinalTest(items, lang) {
@@ -518,7 +524,7 @@ function renderCard(input, meterText, buildId) {
 
   // User test steps (test variant)
   if (config.userTest) {
-    const testBlock = renderUserTest(input.userTest);
+    const testBlock = renderUserTest(input.userTest, lang);
     if (testBlock) {
       parts.push(testBlock);
       parts.push('');
@@ -526,8 +532,10 @@ function renderCard(input, meterText, buildId) {
   }
 
   // User-final-test flag (Electron without takeover, 3rd-party integrations)
-  // Available in all variants except test-minimal — so e.g. a ship-successful
-  // card can still flag "test the real Stripe integration in prod".
+  // Available in all variants except test-minimal and test — so e.g. a
+  // ship-successful card can still flag "test the real Stripe integration in
+  // prod". The test variant routes all manual steps through userTest instead,
+  // so a card never shows two stacked test sections.
   if (config.userFinalTest) {
     const finalBlock = renderUserFinalTest(input.userFinalTest, lang);
     if (finalBlock) {
@@ -802,7 +810,7 @@ server.registerTool(
             afterDeployment: z.boolean().optional(),
           }),
         ])).optional(),
-      ).describe("User-final-test items — for changes where automation cannot cover the last step (packaged Electron/Tauri without desktop takeover, 3rd-party integrations). Pass strings for local final tests; pass { action, afterDeployment: true } for 3rd-party items that require deployment first. Available in all variants except test-minimal."),
+      ).describe("User-final-test items — for changes where automation cannot cover the last step (packaged Electron/Tauri without desktop takeover, 3rd-party integrations). Pass strings for local final tests; pass { action, afterDeployment: true } for 3rd-party items that require deployment first. Available in all variants except test-minimal and test — in the test variant all manual steps go into userTest (single test section, no duplicate)."),
     }),
   },
   async (params) => {

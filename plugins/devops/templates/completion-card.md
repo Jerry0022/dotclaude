@@ -54,12 +54,12 @@ All variables in `{{...}}`. Sections wrapped in `{{#if}}` are conditional per va
 {{state-icon}} {{state-text}}
 
 {{#if user-test}}
-**Please test**
+🔬 **Bitte testen:**
 1. {{each: test-step}}
 {{/if}}
 
 {{#if user-final-test}}
-🧑 **TESTE bitte noch:**
+🔬 **TESTE bitte noch:**
 * {{each: action}}{{#if afterDeployment}} — nach Deployment{{/if}}
 {{/if}}
 
@@ -321,7 +321,10 @@ Falls back to plain text when no GitHub remote is detected.
 
 ### User test
 
-Numbered steps the user must perform manually.
+Numbered steps the user must perform manually, under the header `🔬 **Bitte
+testen:**` / `🔬 **Please test:**`. In the `test` variant this is the **single**
+test section — all manual steps (including anything that would otherwise land in
+user-final-test) go here, so a card never shows two stacked test sections.
 
 | Variants | Behavior |
 |----------|----------|
@@ -343,13 +346,13 @@ Wording is identical across both cases — only the `— nach Deployment` / `—
 deployment` suffix distinguishes the 3rd-party case:
 
 ```
-🧑 **TESTE bitte noch:**
+🔬 **TESTE bitte noch:**
 * Electron-App öffnen → Settings-Dialog testen
 * Login mit Google in Prod-Umgebung testen — nach Deployment
 ```
 
 ```
-🧑 **Please TEST:**
+🔬 **Please TEST:**
 * Open Electron app → test Settings dialog
 * Test Google login in prod environment — after deployment
 ```
@@ -360,7 +363,8 @@ The header is always rendered once; the suffix is attached per bullet.
 
 | Variants | Behavior |
 |----------|----------|
-| ship-successful, ready, ship-blocked, test, analysis, aborted, fallback | **If QA flagged one** — otherwise omit |
+| ship-successful, ready, ship-blocked, analysis, aborted, fallback | **If QA flagged one** — otherwise omit |
+| test | **Omit** — manual steps go into user-test instead (single test section) |
 | test-minimal | **Omit** (session greeting, no QA context) |
 
 Rendered between state/user-test and the usage meter so it sits in Block A's
@@ -429,7 +433,7 @@ The footer line sits between the separator and the CTA. It contains:
 | 1 | ship-successful | 🚀 | yes | yes | — | if flagged | final | yes |
 | 2 | ready | 📦 | yes | if ran | — | if flagged | branch | yes |
 | 3 | ship-blocked | ⛔ | yes | if ran | — | if flagged | branch | yes |
-| 4 | test | 🧪 | yes | if ran | yes | if flagged | app-status | yes |
+| 4 | test | 🧪 | yes | if ran | yes | — | app-status | yes |
 | 5 | test-minimal | ▶️ | — | — | — | — | — | — |
 | 6 | analysis | 📋 | yes | — | — | if flagged | none | yes |
 | 7 | aborted | 🚫 | opt. | — | — | if flagged | dep. | yes |

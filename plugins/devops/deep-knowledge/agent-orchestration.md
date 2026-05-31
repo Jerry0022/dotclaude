@@ -206,7 +206,7 @@ See `deep-knowledge/test-strategy.md` § Electron / Native UI.
 Renderer-level verification happens via rule 3 (mount renderer HTML in Edge, mock
 main-process calls). Final integration test on the packaged app requires
 `computer-use` — **only** if the user chose "Desktop übernehmen", otherwise QA
-flags the completion card with `🧑 TESTE bitte noch:` plus concrete
+flags the completion card with `🔬 TESTE bitte noch:` plus concrete
 steps. Never claim an Electron/Tauri change "verified" based on dev-browser mocks
 alone.
 
@@ -217,7 +217,7 @@ Any code calling external services (OAuth, payments, social APIs, webhooks,
 analytics, LLM APIs) follows two mandatory steps:
 1. Automated mock test (MSW/nock/fixtures) — verifies integration shape.
 2. Real test — flagged in completion card as
-   `🧑 TESTE bitte noch:` + bullet with `— nach Deployment` suffix.
+   `🔬 TESTE bitte noch:` + bullet with `— nach Deployment` suffix.
 
 The mock step is **not** a substitute for step 2. Both are required.
 
@@ -251,7 +251,7 @@ Test the changes (follow deep-knowledge/test-strategy.md):
 
 **Orchestrator handoff:** When the QA agent returns `userFinalTest` items, pass
 them through to `render_completion_card` as the `userFinalTest` input so the
-completion card displays the unified `🧑 TESTE bitte noch:` block.
+completion card displays the unified `🔬 TESTE bitte noch:` block.
 Never drop this field — it's the only signal the user sees about work that
 automation couldn't cover.
 

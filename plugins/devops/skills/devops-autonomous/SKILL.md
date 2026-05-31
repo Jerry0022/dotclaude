@@ -378,10 +378,10 @@ Use `$BROWSER_TOOL` (from Step 3b) for all browser-based visual verification.
 - **Packaged Electron/Tauri**: renderer tested via `$BROWSER_TOOL` with mocks
   (rule 4). If user chose "Desktop übernehmen", run the packaged-app final test
   via computer-use. Otherwise add a `userFinalTest` item (string form) for the
-  completion card — renders as `🧑 TESTE bitte noch:`.
+  completion card — renders as `🔬 TESTE bitte noch:`.
 - **3rd-party integrations**: mock automated tests (rule 5). Always add a
   `userFinalTest` item with `afterDeployment: true` — renders under the same
-  `🧑 TESTE bitte noch:` block with `— nach Deployment` suffix. Never mark the
+  `🔬 TESTE bitte noch:` block with `— nach Deployment` suffix. Never mark the
   integration "verified" on mocks alone.
 - Track progress via TodoWrite.
 
@@ -421,7 +421,7 @@ Call `render_completion_card` (variant per status: "ship-successful" for COMPLET
 
 **Always forward `userFinalTest` items** collected during Step 5 Live Testing
 (packaged Electron/Tauri without takeover, 3rd-party integrations). The card
-renders a unified `🧑 TESTE bitte noch:` block — this is the only signal the
+renders a unified `🔬 TESTE bitte noch:` block — this is the only signal the
 user sees about work that automation couldn't cover, so never drop or summarize
 these items away.
 
