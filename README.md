@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.89.4**
+**Version: 0.90.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -193,7 +193,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.plugin.update` — Auto-update plugin marketplace clones, rebuild cache, and update registry.
 - `ss.permissions.ensure` — Ensure required plugin permissions exist so devops skills that write ephemeral review…
 - `ss.knowledge.index` — Inject deep-knowledge INDEX.md into context at session start.
-- `ss.mcp.deps` — Auto-install MCP server dependencies into CLAUDE_PLUGIN_DATA.
+- `ss.mcp.deps` — Auto-install MCP server dependencies into CLAUDE_PLUGIN_DATA, and self-heal partial i…
 - `ss.mcp.envcheck` — Detect enabled plugins whose .mcp.json references env vars that are not set.
 - `ss.tokens.scan` — Scan project for expensive files and update config for the pre.tokens.guard hook.
 - `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
