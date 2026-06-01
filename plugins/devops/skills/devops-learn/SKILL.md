@@ -87,21 +87,56 @@ rules, business logic conventions, file layout for that project, etc.).
 
 Store as `{topic}` ∈ {`plugin`, `project`}.
 
+## Step 4b — Plugin topic in a consumer project: upstream fix or local override?
+
+When `{topic} == plugin` AND the current project is a **consumer** (not the
+plugin source repo), the root cause of the learning lives in the plugin source,
+not here. Decide `{plugin_disposition}`:
+
+- `upstream` (**DEFAULT**) — the learning is a plugin defect, gap, or
+  improvement that would benefit any consumer of devops dotclaude. The fix
+  belongs in the plugin source repo. A local extension here would only paper
+  over the real cause and drift from upstream.
+- `local-override` — the learning is a deliberate, project-specific deviation
+  from the plugin default that would be wrong or meaningless to push upstream
+  (e.g. *this* project's ship pipeline must skip a step every other project
+  needs). Only this disposition justifies a local skill-extension.
+
+Bias hard toward `upstream`. Choose `local-override` ONLY when you can name why
+the rule must NOT become the plugin's default behavior. If unsure, treat it as
+`upstream` and create the issue. This is not set for plugin-repo or
+project-topic learnings.
+
+**Hard boundary in a consumer project:** this skill must NOT apply a plugin fix
+directly — not into the consumer's own tree, and **never** into the installed
+plugin copy under `~/.claude/plugins/cache/**` or
+`~/.claude/plugins/marketplaces/**`. Those are managed install artifacts; a
+hand-edit masks the real defect and is overwritten on the next sync. A plugin
+defect always leaves this skill as an **upstream issue** (5b). The only writes
+allowed here are a deliberate `local-override` extension (5b′). **Exception —
+plugin source repo:** when the current project IS the plugin's own repo, direct
+fixes are expected (5a) and touching the local cache is *optional* (e.g.
+repairing or testing the installed copy).
+
 ## Step 5 — Route by target × topic
 
-Use this decision table. **In every branch: prefer deep-knowledge over skill
-over CLAUDE.md** — see the Conventions section below for soft caps, re-route
-triggers, and the self-reference rule. Single source:
-`deep-knowledge/content-conventions.md` (CLAUDE.md target ~20 lines, re-route
-above ~25).
+Use this decision table. **Root cause first: fix the learning where it lives.**
+A plugin defect/gap found in a consumer project belongs upstream (an issue in
+the plugin source repo), NOT in a local extension — localize only for a
+deliberate project-specific override (see Step 4b). Within whatever container
+you land in: **prefer deep-knowledge over skill over CLAUDE.md** — see the
+Conventions section below for soft caps, re-route triggers, and the
+self-reference rule. Single source: `deep-knowledge/content-conventions.md`
+(CLAUDE.md target ~20 lines, re-route above ~25).
 
-| `{target_project}`     | `{topic}`  | Action                                           |
-|------------------------|------------|--------------------------------------------------|
-| current = plugin repo  | plugin     | **5a.** Edit plugin files directly               |
-| current (consumer)     | plugin     | **5b.** Skill-extension if it fits; else 5c      |
-| current (consumer)     | project    | **5c.** Project-specific skill or deep-knowledge |
-| other project (any)    | any        | **5d.** Cross-project — issue or prompt          |
-| global / ambiguous     | any        | **5e.** ASK FIRST — do not auto-write            |
+| `{target_project}`     | `{topic}`                | Action                                           |
+|------------------------|--------------------------|--------------------------------------------------|
+| current = plugin repo  | plugin                   | **5a.** Edit plugin files directly               |
+| current (consumer)     | plugin → upstream        | **5b.** Issue in plugin source repo (root-cause) |
+| current (consumer)     | plugin → local-override  | **5b′.** Skill-extension if it fits; else 5c     |
+| current (consumer)     | project                  | **5c.** Project-specific skill or deep-knowledge |
+| other project (any)    | any                      | **5d.** Cross-project — issue or prompt          |
+| global / ambiguous     | any                      | **5e.** ASK FIRST — do not auto-write            |
 
 ### 5a — Plugin repo, plugin topic
 
@@ -122,7 +157,33 @@ deep-knowledge fits and the rule is a one-liner. Bias: keep CLAUDE.md at
 ~20 lines (target). After any CLAUDE.md edit, invoke `/devops-claude-md-lint`
 via the **Skill** tool to verify size and structure — do not eyeball line counts.
 
-### 5b — Consumer project, plugin topic, fits a skill
+### 5b — Consumer project, plugin topic, upstream fix (DEFAULT)
+
+Fires when Step 4b resolved `{plugin_disposition} == upstream`. The root cause
+lives in the plugin source repo, not in this project — create an issue there
+instead of localizing a workaround.
+
+1. Resolve the plugin source repo. Its canonical GitHub slug is
+   `Jerry0022/dotclaude` (derivable from the installed plugin's
+   `marketplace.json`: `{owner.name}/{name}`). Do NOT assume a local checkout
+   of it exists — pass the slug straight to the issue skill.
+2. Delegate to `/devops-new-issue` via the **Skill** tool — never call
+   `gh issue create` directly. Hand off a self-contained prompt containing:
+   - `title`: `[BUG] <short>` for a defect, `[FEAT] <short>` for a gap or
+     improvement (imperative, sentence case, no trailing period)
+   - `body`: full learning text + "Captured from a session in
+     {current-project}." + which plugin part it concerns (skill / hook / agent
+     / MCP / convention)
+   - target repo: `Jerry0022/dotclaude` (so the issue lands upstream, not in
+     the consumer repo)
+   - issue type: `bug` or `feature` accordingly
+3. This branch persists NOTHING locally — skip Step 6, go to Step 7.
+
+### 5b′ — Consumer project, plugin topic, local override
+
+Fires only when Step 4b resolved `{plugin_disposition} == local-override`: the
+project deliberately customizes plugin behavior and the rule must NOT become
+the plugin default.
 
 Determine which plugin skill the learning belongs to (use the topic keywords
 to match against the skill list — `ship`, `commit`, `flow`, `concept`, etc.).
@@ -214,8 +275,9 @@ The canonical rule now lives in its proper file. Any pre-existing entry in
 — auto-memory is for personal style/tone preferences, not project rules, so
 the duplicate should be removed once the sorted Claude instructions own it.
 
-Skip this step entirely for 5d (cross-project): the feedback memory belongs
-to *this* session, not the target project — leave it alone.
+Skip this step entirely for 5b and 5d (issue created upstream / cross-project):
+nothing was persisted locally, so there is no canonical file to supersede a
+feedback entry — leave auto-memory alone.
 
 1. **Resolve the project memory dir.** The path is
    `~/.claude/projects/<encoded-cwd>/memory/` where `<encoded-cwd>` replaces
@@ -271,7 +333,7 @@ After persisting, show the user:
   (don't re-count lines manually — relay the lint output)
 - If Step 6 deleted any feedback memories: list the removed file names
 
-For 5d issue creation: show the issue URL.
+For 5b / 5d issue creation: show the issue URL.
 For 5d prompt: show the copy-pastable block.
 
 ## Step 8 — Completion Card
@@ -281,7 +343,7 @@ Call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
 | Situation                                | Variant     |
 |------------------------------------------|-------------|
 | Files written in current/plugin repo     | `ready`     |
-| GitHub issue created in other repo       | `fallback`  |
+| GitHub issue created upstream/other repo  | `fallback`  |
 | Copy-pastable prompt generated only      | `fallback`  |
 | User aborted at 5e                       | `analysis`  |
 
@@ -302,6 +364,18 @@ write this skill performs.
   — auto-memory owns that channel. The **only** permitted writes are Step 6
   duplicate-cleanup: deleting matched `feedback_*.md` files and removing
   their bullets from `MEMORY.md`, both requiring user confirmation per match.
+- **Default to the root cause's home.** A plugin defect/gap found in a consumer
+  project becomes an issue in the plugin source repo (5b), NOT a local
+  extension. Localize (5b′ / local dotclaude change) only for a deliberate
+  project-specific override you can justify keeping off upstream — and only when
+  it makes sense to implement in the current project at all.
+- **Never hand-edit installed plugin copies.** In a consumer project this skill
+  must not fix a plugin defect directly — not in the consumer's tree, and never
+  under `~/.claude/plugins/cache/**` or `~/.claude/plugins/marketplaces/**`
+  (managed artifacts, overwritten on the next sync). Route it upstream (5b);
+  the only local write allowed is a deliberate `local-override` extension (5b′).
+  **Exception:** when the current project IS the plugin source repo, direct
+  fixes are expected and touching the local cache is optional.
 - **Always** prefer deep-knowledge > skill/extension > CLAUDE.md.
 - **Respect the soft caps** above; re-route to the next-larger container
   before busting CLAUDE.md or SKILL.md targets.
