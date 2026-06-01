@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.6.0
+ * @version 0.7.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -49,6 +49,33 @@ const marketplacesDir = path.join(home, '.claude', 'plugins', 'marketplaces');
 const cacheDir = path.join(home, '.claude', 'plugins', 'cache');
 const registryFile = path.join(home, '.claude', 'plugins', 'installed_plugins.json');
 const sentinelFile = path.join(home, '.claude', 'plugins', '.mcp-stale.json');
+
+// Files whose absence means a cache is functionally broken even when its
+// version/sha look correct (issue #190 — sync dropped mcp-server files and
+// .mcp.json, so the MCP servers never registered). Checked both to flag an
+// existing cache for rebuild and to verify a freshly-built one. Paths are
+// relative to a plugin root; only assert files that exist in every plugin
+// that ships an .mcp.json — guarded by hasMcpServer() below.
+const MCP_CRITICAL_FILES = [
+  '.mcp.json',
+  path.join('mcp-server', 'index.js'),
+  path.join('mcp-server', 'lib', 'heartbeat.js'),
+  path.join('mcp-server', 'ship', 'index.js'),
+  path.join('mcp-server', 'issues', 'index.js'),
+];
+
+function hasMcpServer(root) {
+  return fs.existsSync(path.join(root, '.mcp.json'));
+}
+
+// Returns the MCP-critical files missing from `targetRoot`. `expectMcp` must be
+// derived from the SOURCE plugin dir, not the target — otherwise a target whose
+// own .mcp.json was dropped would report "nothing to assert" and mask the very
+// breakage we are checking for (issue #190).
+function missingMcpFiles(targetRoot, expectMcp) {
+  if (!expectMcp) return [];
+  return MCP_CRITICAL_FILES.filter((rel) => !fs.existsSync(path.join(targetRoot, rel)));
+}
 
 function run(cmd, cwd) {
   try {
@@ -154,6 +181,15 @@ function rebuildCache(marketplace, pluginName, pluginDir, version, sha) {
     if (!fs.existsSync(check)) {
       return { ok: false, missing: check };
     }
+  }
+
+  // If the source ships an MCP server, the copy must include the full
+  // mcp-server tree + .mcp.json — otherwise the servers never register
+  // (issue #190). Fail the rebuild so the registry is not pointed at a
+  // broken cache; the next session retries from the (complete) marketplace.
+  const mcpMissing = missingMcpFiles(newCache, hasMcpServer(pluginDir));
+  if (mcpMissing.length) {
+    return { ok: false, missing: `mcp-server files: ${mcpMissing.join(', ')}` };
   }
 
   // Verify version alignment
@@ -276,6 +312,12 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
             // SHA mismatch: same version string but different commit (files may have changed)
             const cachedSha = entry.gitCommitSha || '';
             if (cachedSha && cachedSha !== newHead && cachedSha !== newSha) {
+              cacheStale = true;
+            }
+            // Completeness guard: version/sha can match while the MCP server
+            // files were dropped by an incomplete sync (issue #190). Rebuild
+            // from the marketplace clone to heal the cache in place.
+            if (!cacheStale && missingMcpFiles(entry.installPath, hasMcpServer(dir)).length) {
               cacheStale = true;
             }
           }

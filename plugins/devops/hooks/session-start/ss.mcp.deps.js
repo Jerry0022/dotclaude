@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * @hook ss.mcp.deps
- * @version 0.1.0
+ * @version 0.2.0
  * @event SessionStart
  * @plugin devops
- * @description Auto-install MCP server dependencies into CLAUDE_PLUGIN_DATA.
+ * @description Auto-install MCP server dependencies into CLAUDE_PLUGIN_DATA,
+ *   and self-heal partial installs left by an incomplete cache sync (#190).
  *
  *   Follows the official Claude Code plugin pattern:
  *     1. Compare mcp-server/package.json against the cached copy in PLUGIN_DATA
@@ -18,7 +19,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, symlinkSync, mkdirSync, existsSync, unlinkSync, lstatSync } from "node:fs";
+import { readFileSync, writeFileSync, symlinkSync, mkdirSync, existsSync, unlinkSync, lstatSync, rmSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -35,8 +36,21 @@ const SOURCE_PKG = join(PLUGIN_ROOT, "mcp-server", "package.json");
 const CACHED_PKG = join(PLUGIN_DATA, "package.json");
 const DATA_MODULES = join(PLUGIN_DATA, "node_modules");
 
+// Top-level runtime deps every MCP server needs (from mcp-server/package.json).
+// Their presence is the completeness signal: a partial node_modules (the
+// failure mode in issue #190) lacks these even when the directory exists.
+const REQUIRED_PKGS = ["@modelcontextprotocol/sdk", "zod"];
+
+function hasAllDeps(modulesDir) {
+  if (!existsSync(modulesDir)) return false;
+  return REQUIRED_PKGS.every((pkg) => existsSync(join(modulesDir, ...pkg.split("/"))));
+}
+
 function needsInstall() {
   if (!existsSync(CACHED_PKG) || !existsSync(DATA_MODULES)) return true;
+  // Heal partial installs: a node_modules missing the required packages
+  // (interrupted/incomplete cache sync) must be reinstalled, not trusted.
+  if (!hasAllDeps(DATA_MODULES)) return true;
   try {
     const source = readFileSync(SOURCE_PKG, "utf8");
     const cached = readFileSync(CACHED_PKG, "utf8");
@@ -76,12 +90,17 @@ const symlinkTargets = [
 
 for (const target of symlinkTargets) {
   try {
-    // Skip if already correctly linked
     if (existsSync(target)) {
       const stat = lstatSync(target);
       if (stat.isSymbolicLink()) continue;
-      // Real directory from dev environment — skip, don't overwrite
-      if (stat.isDirectory()) continue;
+      if (stat.isDirectory()) {
+        // Real directory: keep it only if it is a complete install (a dev
+        // checkout or a healthy cache). A partial real dir (issue #190 — the
+        // cache sync dropped deps) shadows the shared node_modules and makes
+        // the server crash; replace it with a junction to the healed copy.
+        if (hasAllDeps(target)) continue;
+        rmSync(target, { recursive: true, force: true });
+      }
     }
     symlinkSync(DATA_MODULES, target, "junction");
   } catch {
