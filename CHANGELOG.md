@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.90.0] — 2026-06-01
+
+### Fixed
+
+- **Plugin cache self-healing** — an incomplete marketplace→cache sync (issue #190) left the devops plugin's MCP servers unregistered, so `/devops-ship` could not find its `ship_*` tools and the failure recurred every session. `ss.plugin.update` now verifies the full `mcp-server/` tree + `.mcp.json` after a rebuild and treats an existing cache as stale when those files are missing despite a matching version/sha — healing it from the (complete) marketplace clone. `ss.mcp.deps` now reinstalls when the shared `node_modules` is partial and replaces a partial real `node_modules` with a junction to the healed copy, instead of trusting any pre-existing directory.
+
+### Changed
+
+- **devops-learn routing** — a plugin-topic learning found in a consumer project now defaults to an upstream issue in the plugin source repo (route 5b) instead of a local skill-extension; a local override (5b′) requires a deliberate, justifiable reason to keep the rule off upstream. Adds a hard boundary: in a consumer project the learn skill must never fix a plugin defect directly and never hand-edit installed copies under `~/.claude/plugins/cache/**` or `~/.claude/plugins/marketplaces/**`. The plugin source repo is the explicit exception — direct fixes expected, cache edits optional.
+
 ## [0.89.4] — 2026-05-31
 
 ### Fixed
