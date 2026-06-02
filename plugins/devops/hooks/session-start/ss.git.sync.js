@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.git.sync
- * @version 0.1.0
+ * @version 0.2.0
  * @event SessionStart
  * @plugin devops
  * @description Registers a recurring git sync cron job (every 10 minutes).
@@ -40,10 +40,26 @@ if (!branch || branch === 'main') process.exit(0);
 // Resolve absolute path to the shared sync script (forward slashes for bash)
 const scriptPath = path.resolve(__dirname, '../../scripts/git-sync.js').replace(/\\/g, '/');
 
+// The cron prompt must NOT bake in a version-specific path. An in-session ship
+// rebuilds the plugin cache under a fresh version dir and removes the old one
+// (ss.plugin.update.rebuildCache), so an embedded `.../devops/<version>/...`
+// path dangles and the cron then fails MODULE_NOT_FOUND every interval.
+// In the versioned cache layout (.../devops/<version>/hooks/session-start),
+// emit a command that resolves the script from the current version dir at
+// cron-run time — the rebuild leaves exactly one version dir, so a glob +
+// head -1 is unambiguous; fall back to the literal path if the glob is empty.
+// In a dev/marketplace checkout there is no version dir → use the literal path.
+const versionDir = path.resolve(__dirname, '../..');
+const isCacheLayout = /^\d+\.\d+\.\d+/.test(path.basename(versionDir));
+const versionsParent = path.dirname(versionDir).replace(/\\/g, '/');
+const runScript = isCacheLayout
+  ? `f="$(ls -d "${versionsParent}"/*/scripts/git-sync.js 2>/dev/null | head -1)"; [ -z "$f" ] && f="${scriptPath}"; node "$f"`
+  : `node "${scriptPath}"`;
+
 process.stdout.write(
   `Register a recurring git-sync cron job for this session. ` +
   `Call CronCreate with cron "*/10 * * * *" (recurring: true) ` +
-  `and prompt: 'Silently run via Bash: node "${scriptPath}". ` +
+  `and prompt: 'Silently run via Bash: ${runScript}. ` +
   `If output contains ⚠ (merge conflicts detected), YOU MUST resolve the conflicts — do not just report them. ` +
   `Follow this procedure: ` +
   `(1) Extract the source branch from the ⚠ line (format: "⚠ <source> → <target>: ..."). ` +

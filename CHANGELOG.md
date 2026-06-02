@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.90.1] — 2026-06-01
+
+### Fixed
+
+- **git-sync cron path** — `ss.git.sync` baked the versioned cache path (`.../devops/<version>/scripts/git-sync.js`) as a literal into the cron prompt. An in-session ship rebuilds the cache under a fresh version dir and removes the old one, so the already-registered cron then failed `MODULE_NOT_FOUND` every 10 minutes. In the versioned cache layout the emitted command now resolves the script from the current version dir at cron-run time (glob + `head -1`), falling back to the literal path; a dev/marketplace checkout keeps the literal path.
+
 ## [0.90.0] — 2026-06-01
 
 ### Fixed
