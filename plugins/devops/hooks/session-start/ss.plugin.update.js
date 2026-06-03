@@ -136,18 +136,21 @@ function getVersion(dir) {
 }
 
 function copyDir(src, dst) {
-  // Try cp -a (archive) to get dotfiles + new directories.
-  run(`cp -a "${src}/." "${dst}/"`, path.dirname(src));
-
-  // Verify copy worked by checking a known file — don't trust return value
-  // (cp returns empty string on both success and failure via run()).
-  if (!fs.existsSync(path.join(dst, '.claude-plugin', 'plugin.json'))) {
-    // Fallback: explicit copy for Windows where cp -a may not work
-    run(`cp -r "${src}/"* "${dst}/"`, path.dirname(src));
+  // Cross-platform recursive copy (Node 16.7+). The previous implementation
+  // shelled out to `cp -a` / `cp -r`, which silently fails on Windows: `cp` is
+  // not a cmd.exe builtin and Git's coreutils are usually not on the PATH that
+  // Node's execSync sees. A failed copy left a partial cache (missing
+  // mcp-server/*.js, .mcp.json, hooks) that crashed every MCP server — the
+  // exact breakage the #190 completeness guard was meant to prevent.
+  try {
+    fs.cpSync(src, dst, { recursive: true, force: true });
+  } catch {
+    // Last-resort fallback for environments where fs.cpSync is unavailable.
+    run(`cp -a "${src}/." "${dst}/"`, path.dirname(src));
     run(`cp -r "${src}/.claude-plugin" "${dst}/"`, path.dirname(src));
     const mcpSrc = path.join(src, '.mcp.json');
     if (fs.existsSync(mcpSrc)) {
-      fs.copyFileSync(mcpSrc, path.join(dst, '.mcp.json'));
+      try { fs.copyFileSync(mcpSrc, path.join(dst, '.mcp.json')); } catch { /* ignore */ }
     }
   }
 
