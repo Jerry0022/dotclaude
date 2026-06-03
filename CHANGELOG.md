@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.92.0] — 2026-06-04
+
+### Added
+
+- **Prompt-injection hardening for autonomous & web-reading skills** — a new cross-cutting `deep-knowledge/injection-hardening.md` codifies the lethal-trifecta defense (private data + untrusted content + outbound channel): treat file/web/tool content as data, not instructions, and constrain `WebFetch`/`WebSearch` egress so a fetch target never originates from untrusted content and never carries file/secret/env data. `devops-autonomous` keeps web research enabled under the Post-Confirmation Lockout, so that single open channel needed an explicit guardrail; `autonomous-execution.md` now bans content-sourced fetch destinations and references the rule.
+- **Inter-wave verification gate (cascading-error guard)** — `agent-orchestration.md` gains an explicit rule to verify each wave's handoff *before* the next wave consumes it, scaled to risk (lightweight self-check → concrete contract validation for Core→Frontend/Windows/AI → `redteam` agent as a gate for high-risk waves). Treats a handoff claim as data to verify, not fact to trust, closing the gap where a wrong contract or a hallucinated "fact" propagated unchecked until the too-late final QA wave.
+- **Per-agent effort budgets, stopping criteria & distinct scope** — the agent prompt template now mandates a tool-call/scope budget scaled to the complexity tier, an explicit "you are done when…" stop signal, and an owns/does-not-touch boundary for parallel agents — countering over-investment on simple work, endless grinding (token burn + wedge risk), and duplicate work across a wave.
+- **Always-on autonomous watchdog with notify mode** — the external watchdog is now armed for *both* shutdown choices. With `shutdown=no` it runs in `notify` mode: if a report-only run wedges (Anthropic API hang, stuck subagent) it writes a visible `AUTONOMOUS-STALLED.txt` next to the flag instead of powering off — closing the gap where a hung report-only run would otherwise freeze forever with zero external signal. `autonomous-watchdog.js register` takes a new `shutdown|notify` action argument.
+- **Autonomous decision journal & soft budget** — an append-only `AUTONOMOUS-LOG.md` records the reasoning behind each unsupervised judgment call (agent spawn, ambiguous-decision resolution, blocked action, skipped fetch, API backoff) as the audit trail the HTML report's outcome view doesn't capture; a soft token/effort budget scales effort to value alongside the 8h hard watchdog (the ~15× multi-agent token cost is now noted).
+- **devops-agents eval suite** — first trigger-eval set for `/devops-agents` (13 cases), pinning the critical boundary between interactive orchestration (this skill), AFK/autonomous runs (`/devops-autonomous`), and plain inline work.
+
+### Changed
+
+- **devops-autonomous SKILL.md slimmed 565→480 lines** — the full Step 4d / Step 8 shutdown + watchdog mechanics (wait-loop, PowerShell shutdown, flag decision matrix) moved into a new `skills/devops-autonomous/deep-knowledge/shutdown-watchdog.md`, restoring progressive disclosure (the Bash is only needed at run time) and bringing the trigger-time body back under the 500-line guideline. Skill versions: `devops-autonomous` 0.1.0→0.2.0, `devops-agents` 0.4.0→0.5.0.
+
 ## [0.91.0] — 2026-06-03
 
 ### Fixed
