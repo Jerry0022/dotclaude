@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.91.0] — 2026-06-03
+
+### Fixed
+
+- **MCP servers crashed on Windows (issue #190, root cause)** — `ss.plugin.update`'s `copyDir` shelled out to `cp -a` / `cp -r` to rebuild the plugin cache. `cp` is not a cmd.exe builtin and Git's coreutils are usually off the PATH that Node's `execSync` sees, so on a fresh Windows install the copy silently failed and left a partial cache (missing `mcp-server/*.js`, `.mcp.json`, hooks) — every MCP server then crashed with `ERR_MODULE_NOT_FOUND`. The 0.90.0 completeness guard detected the breakage but the copy itself kept failing; `copyDir` now uses cross-platform `fs.cpSync` (Node 16.7+), keeping the `cp` shellout only as a last-resort fallback.
+
+### Added
+
+- **Session-worktree "tracked-or-gitignored" invariant (issue #193)** — the ship pipeline could report success while leaving the session's worktree in a dirty "limbo" state (work driven from the main repo while a sibling `.claude/worktrees/*` worktree was left untouched), triggering a scary "archive N uncommitted changes" prompt even though the work shipped. Now: `ship_preflight` hard-blocks when the dirty session worktree is on the shipped branch or base (this ship's own worktree) and warns for unrelated concurrent sessions; `ship_cleanup` warns post-merge if a session worktree is still dirty; a new warn-only `pre.worktree.split-guard` hook nudges when a git-mutating command runs from the main repo while a session worktree is active. New `ship/lib/worktree.js` helper.
+
+### Changed
+
+- **Agent orchestration sub-branch naming** — the collaboration protocol prescribed `<parent>/<role>` sub-branches, but git stores refs as files and refuses `refs/heads/foo/bar` while branch `foo` exists, so a slash-nested child always collided with the checked-out integration branch. Switched to the flat `<parent>-<role>` form (with the git reason documented), fixed the self-inconsistent diagram, and clarified that the orchestrator merges sub-branches back and ships the integration branch once (slash-based hierarchical ship stays documented as a separate opt-in with its on-origin-only precondition).
+
 ## [0.90.1] — 2026-06-01
 
 ### Fixed
