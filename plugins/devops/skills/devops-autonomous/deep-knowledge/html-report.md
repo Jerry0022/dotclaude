@@ -29,6 +29,9 @@ external deps). Use a clean, modern dark-theme design.
 
 **Both modes — footer:**
 - Open questions (if any)
+- **Decision journal** — embed `AUTONOMOUS-LOG.md` in a collapsible, monospace
+  `<details>` block (the timestamped reasoning trail for the unsupervised window).
+  The sections above show *outcomes*; this shows *why* each autonomous call was made.
 - Timestamp, branch info, git status summary
 
 ## Design Guidelines

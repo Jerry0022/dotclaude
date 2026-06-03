@@ -1,6 +1,6 @@
 ---
 name: devops-agents
-version: 0.4.0
+version: 0.5.0
 description: >-
   Evaluate which agents are useful for a task and orchestrate their parallel or
   sequential execution. Use when the user explicitly wants orchestrated agent
@@ -154,7 +154,10 @@ Store the result as `$EXEC_MODE` (`background` or `interactive`).
 ## Step 5 — Execution
 
 Follow `deep-knowledge/agent-orchestration.md` § Wave Execution for spawning mechanics,
-agent prompt template, branch strategy, and single-agent shortcut.
+agent prompt template (now incl. per-agent effort budget, stopping criteria, and
+distinct scope boundary), branch strategy, and single-agent shortcut. Between waves,
+apply § Inter-Wave Verification Gate — verify each wave's handoff before the next
+wave builds on it (the cascading-error guard).
 
 Collaboration protocol (handoffs, merge order, shipping): `deep-knowledge/agent-collaboration.md`.
 

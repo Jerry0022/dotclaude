@@ -1,19 +1,28 @@
 #!/usr/bin/env node
 /**
- * autonomous-watchdog.js — External shutdown safety net for devops-autonomous.
+ * autonomous-watchdog.js — External safety net for devops-autonomous.
  *
  * Registers a Windows Scheduled Task that fires after N hours. The task checks
- * for a "done-flag" file; if it's missing, the task force-shuts the PC down.
+ * for a "done-flag" file; if it's missing, the task takes a recovery action
+ * depending on the mode it was registered with:
+ *   - "shutdown" (shutdown=yes runs): force-shut the PC down.
+ *   - "notify"   (shutdown=no runs):  write a visible AUTONOMOUS-STALLED.txt
+ *                next to the flag path so a silent hang becomes a visible signal
+ *                the user sees on return. Never powers the machine off.
  *
  * Why this is needed: when Claude is AFK and hits an Anthropic API rate-limit,
- * a crashed subagent, or a wakelock-style hang, the in-session Step 8 shutdown
- * is never reached. The scheduled task fires *independently* of Claude, so the
- * shutdown still happens.
+ * a crashed subagent, or a wakelock-style hang, the in-session Step 8 is never
+ * reached. The scheduled task fires *independently* of Claude — so a shutdown
+ * still happens (shutdown mode), or a stalled run stops being invisible
+ * (notify mode). Without this, a "report-only" run that wedges would hang
+ * forever with zero external signal.
  *
  * Subcommands (stdout: JSON):
- *   register <flag-path> <hours>   Create one-shot task firing in N hours.
+ *   register <flag-path> <hours> [action]
+ *                                  Create one-shot task firing in N hours.
+ *                                  action = "shutdown" (default) | "notify".
  *                                  Stores sentinel under TEMP for later cleanup.
- *                                  → { ok, taskName, flagPath, fireAt }
+ *                                  → { ok, taskName, flagPath, fireAt, action }
  *
  *   flag [flag-path]               Write the completion flag (signals success).
  *                                  If omitted, reads flagPath from the sentinel
@@ -102,13 +111,21 @@ function isValidWatchdogScriptPath(scriptPath) {
 }
 
 if (subcmd === 'register') {
-  const [flagPathRaw, hoursRaw] = args;
-  if (!flagPathRaw || !hoursRaw) fail('Usage: register <flag-path> <hours>');
+  const [flagPathRaw, hoursRaw, actionRaw] = args;
+  if (!flagPathRaw || !hoursRaw) {
+    fail('Usage: register <flag-path> <hours> [shutdown|notify]');
+  }
   const hours = Number(hoursRaw);
   if (!Number.isFinite(hours) || hours < 0.1 || hours > 24) {
     fail('hours must be 0.1..24');
   }
+  const action = actionRaw || 'shutdown';
+  if (action !== 'shutdown' && action !== 'notify') {
+    fail("action must be 'shutdown' or 'notify'");
+  }
   const flagPath = path.resolve(flagPathRaw);
+  // notify mode drops a visible marker next to the flag; same dir, fixed name.
+  const stalledPath = path.join(path.dirname(flagPath), 'AUTONOMOUS-STALLED.txt');
 
   // Clean up any previous watchdog first — only one active at a time.
   // Sentinel is untrusted (same-user TEMP); validate before destructive ops.
@@ -128,16 +145,31 @@ if (subcmd === 'register') {
   // Write a separate PowerShell script — robust escaping, self-deletes after run.
   const scriptPath = path.join(os.tmpdir(),
     `claude-autonomous-watchdog-${Date.now()}.ps1`);
+  const flagPs = flagPath.replace(/'/g, "''");
+  const stalledPs = stalledPath.replace(/'/g, "''");
+  // Recovery action when the flag is missing — differs by mode.
+  const recoveryPs = action === 'shutdown'
+    ? `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — forcing shutdown"
+  & "$env:SystemRoot\\System32\\shutdown.exe" /s /t 0 /c "Claude autonomous watchdog: session unresponsive after ${hours}h, forcing shutdown"`
+    : `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — writing stalled marker (notify mode)"
+  $msg = @(
+    "Claude autonomous session was unresponsive after ${hours}h and never reached completion.",
+    "",
+    "The run wedged (likely an Anthropic API hang or a stuck subagent). Nothing was shut down.",
+    "Check AUTONOMOUS-RESUME.json for saved state, then resume or restart the session.",
+    "",
+    "Stalled at: $ts"
+  )
+  Set-Content -Path '${stalledPs}' -Value $msg -Encoding UTF8`;
   const psScript =
 `$ErrorActionPreference = 'Continue'
-$flag = '${flagPath.replace(/'/g, "''")}'
+$flag = '${flagPs}'
 $logPath = Join-Path $env:TEMP 'claude-autonomous-watchdog.log'
 $ts = (Get-Date -Format 'o')
 if (Test-Path $flag) {
   Add-Content -Path $logPath -Value "[$ts] flag present at $flag — no action"
 } else {
-  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — forcing shutdown"
-  & "$env:SystemRoot\\System32\\shutdown.exe" /s /t 0 /c "Claude autonomous watchdog: session unresponsive after ${hours}h, forcing shutdown"
+${recoveryPs}
 }
 # Self-delete this script after run
 try { Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue } catch {}
@@ -171,9 +203,10 @@ try { Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction Silentl
     scriptPath,
     fireAt: fireAt.toISOString(),
     hours,
+    action,
   });
 
-  ok({ taskName, flagPath, fireAt: fireAt.toISOString(), scriptPath });
+  ok({ taskName, flagPath, fireAt: fireAt.toISOString(), scriptPath, action });
 }
 
 if (subcmd === 'flag') {
