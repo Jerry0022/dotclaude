@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { git, gitStrict, isWorktree, getWorktreeBranches } from "../lib/git.js";
+import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { clearSentinel } from "../lib/sentinel.js";
 
 export const schema = z.object({
@@ -110,6 +111,18 @@ export async function handler(params) {
   // For intermediate merges: note that the base (feature branch) stays alive
   if (intermediate) {
     warnings.push(`Intermediate merge: base branch '${base}' preserved for further sub-branch merges or final ship to main`);
+  }
+
+  // Final-gate invariant: every file in a session worktree must be
+  // tracked→committed→pushed→merged OR gitignored — never in limbo. The hard
+  // block lives in preflight; cleanup runs AFTER the merge, so we only warn
+  // loudly here (failing cleanup post-merge would strand the user). A dirty
+  // sibling session worktree means work was driven from the main repo while
+  // the worktree was left untouched — its changes are NOT on main.
+  for (const wt of dirtySessionWorktrees(opts)) {
+    warnings.push(
+      `WARNING: session worktree '${wt.path}' (branch '${wt.branch || "detached"}') still has ${wt.changes} uncommitted change(s) AFTER ship. These changes were NOT included in this ship — inspect the worktree and commit-or-discard before archiving the session.`
+    );
   }
 
   // Restore the original branch if we switched away from a non-base branch
