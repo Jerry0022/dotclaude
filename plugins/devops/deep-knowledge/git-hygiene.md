@@ -92,8 +92,10 @@ Enforced by the parallel-agent guard introduced in #193. See also
 
 ### Enforcement points
 
-- **`ship_preflight`** — blocks shipping if the session worktree is dirty and
-  the working directory is detected as the main repo root.
+- **`ship_preflight`** — when the working directory is the main repo root,
+  hard-blocks if a dirty session worktree is on the shipped branch (or base) —
+  i.e. this ship's own worktree. Other dirty session worktrees (unrelated
+  concurrent sessions) are surfaced as non-blocking warnings, never a block.
 - **`ship_cleanup`** — warns when the session worktree still has uncommitted
   changes after merge.
 - **Pre-tool-use guard** — warns when a git-mutating command is issued from the
