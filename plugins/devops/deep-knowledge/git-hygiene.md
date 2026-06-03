@@ -55,3 +55,46 @@ See [merge-safety.md](merge-safety.md) for full details on preventing silent ove
 - **Rebase before merge** — mandatory when base has diverged (enforced by `ship_release`)
 - **diff3 conflict style** — required for all developers (`git config merge.conflictstyle diff3`)
 - **No auto-resolve** — `git-sync.js` never uses `--ours`; conflicts abort and warn
+
+## Session-worktree hygiene
+
+Enforced by the parallel-agent guard introduced in #193. See also
+[merge-safety.md § Worktree Path Discipline](merge-safety.md#worktree-path-discipline).
+
+### Work and commit inside the session worktree
+
+- **Always work inside the session worktree** — cwd is `.claude/worktrees/<name>/`,
+  branch is `claude/<name>`.
+- **Never run git-mutating commands from the main repo root** while a session
+  worktree is active. Mutating commands: `commit`, `checkout -b`, `merge`,
+  `rebase`, `cherry-pick`, `reset --hard`, `apply`, `am`.
+- **Why:** commits issued from the main repo root land on the main repo's
+  current branch, not on the session branch. The session worktree is left dirty
+  (untracked / modified files not staged to any branch). That split state is
+  silent — no error is raised.
+
+### Ship-end invariant: tracked-or-gitignored
+
+- At ship completion, every file created during the session must be either:
+  - **(a) tracked → committed → pushed → merged**, or
+  - **(b) explicitly gitignored**.
+- **Never leave a session worktree in a "limbo" state** — partially committed,
+  untracked, or staged but not pushed — when a ship reports success.
+- A ship pipeline must **not** declare success while the session worktree is
+  dirty. Dirty = any `git status` output other than "nothing to commit."
+
+### Why it matters
+
+- A success path that strands uncommitted work in the session worktree triggers
+  an "archive N uncommitted changes?" prompt on the next session start.
+- This undermines trust in the ship pipeline as a no-data-loss guarantee and
+  forces the user to manually rescue or discard work.
+
+### Enforcement points
+
+- **`ship_preflight`** — blocks shipping if the session worktree is dirty and
+  the working directory is detected as the main repo root.
+- **`ship_cleanup`** — warns when the session worktree still has uncommitted
+  changes after merge.
+- **Pre-tool-use guard** — warns when a git-mutating command is issued from the
+  main repo root while a worktree for the current session is active.
