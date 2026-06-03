@@ -69,9 +69,11 @@ describe("ship_preflight — session-worktree-clean gate", () => {
     expect(result.ready).toBe(true);
   });
 
-  test("split-state: main-repo ship + dirty session worktree → blocked", async () => {
+  test("split-state: ship's OWN worktree dirty (branch === shipped branch) → blocked", async () => {
+    // currentBranch mock = "feat/topic" — a dirty worktree on that same branch
+    // is unambiguously this ship's own worktree, so it hard-blocks.
     dirtySessionWorktrees.mockReturnValue([
-      { path: "/fake/consumer-repo/.claude/worktrees/awesome-haslett", branch: "claude/awesome-haslett", dirty: true, changes: 3 },
+      { path: "/fake/consumer-repo/.claude/worktrees/topic-wt", branch: "feat/topic", dirty: true, changes: 3 },
     ]);
     const result = await handler({ cwd: CWD });
 
@@ -79,16 +81,39 @@ describe("ship_preflight — session-worktree-clean gate", () => {
     expect(check).toMatchObject({
       name: "session-worktree-clean",
       ok: false,
-      worktree: "/fake/consumer-repo/.claude/worktrees/awesome-haslett",
-      branch: "claude/awesome-haslett",
+      worktree: "/fake/consumer-repo/.claude/worktrees/topic-wt",
+      branch: "feat/topic",
       changes: 3,
     });
-    // Blocking: an error was pushed and the pipeline is not ready.
     expect(result.errors.some((e) => /session worktree/i.test(e) && /uncommitted/i.test(e))).toBe(true);
     expect(result.ready).toBe(false);
   });
 
-  test("multiple dirty session worktrees → one error + check each", async () => {
+  test("dirty worktree on the BASE branch → blocked (related to ship target)", async () => {
+    dirtySessionWorktrees.mockReturnValue([
+      { path: "/fake/consumer-repo/.claude/worktrees/main-wt", branch: "main", dirty: true, changes: 1 },
+    ]);
+    const result = await handler({ cwd: CWD });
+    expect(checkByName(result, "session-worktree-clean")).toMatchObject({ ok: false, branch: "main" });
+    expect(result.ready).toBe(false);
+  });
+
+  test("UNRELATED dirty session worktree → warns, does NOT block (no false positive)", async () => {
+    dirtySessionWorktrees.mockReturnValue([
+      { path: "/fake/consumer-repo/.claude/worktrees/other-session", branch: "claude/other-session", dirty: true, changes: 5 },
+    ]);
+    const result = await handler({ cwd: CWD });
+
+    const check = checkByName(result, "session-worktree-clean");
+    expect(check).toMatchObject({ name: "session-worktree-clean", ok: true, branch: "claude/other-session", changes: 5 });
+    expect(check.warning).toMatch(/unrelated to this ship/i);
+    // Surfaced as a warning, but the ship is NOT blocked.
+    expect(result.errors.some((e) => /session worktree/i.test(e))).toBe(false);
+    expect(result.warnings.some((w) => /session worktree/i.test(w))).toBe(true);
+    expect(result.ready).toBe(true);
+  });
+
+  test("multiple UNRELATED dirty worktrees → all warn, ship still ready (no false-positive block)", async () => {
     dirtySessionWorktrees.mockReturnValue([
       { path: "/r/.claude/worktrees/a", branch: "claude/a", dirty: true, changes: 1 },
       { path: "/r/.claude/worktrees/b", branch: "claude/b", dirty: true, changes: 2 },
@@ -96,8 +121,8 @@ describe("ship_preflight — session-worktree-clean gate", () => {
     const result = await handler({ cwd: CWD });
     const checks = result.checks.filter((c) => c.name === "session-worktree-clean");
     expect(checks).toHaveLength(2);
-    expect(checks.every((c) => c.ok === false)).toBe(true);
-    expect(result.ready).toBe(false);
+    expect(checks.every((c) => c.ok === true && c.warning)).toBe(true);
+    expect(result.ready).toBe(true);
   });
 
   test("in-worktree ship (normal case): gate self-excludes → ok, helper not consulted", async () => {

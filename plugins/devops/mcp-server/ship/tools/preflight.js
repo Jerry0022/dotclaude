@@ -291,15 +291,24 @@ export async function handler(params) {
   // normal case) self-exclude — clean-tree already covers the cwd.
   if (!inWorktree) {
     const dirtyWts = dirtySessionWorktrees(opts);
-    if (dirtyWts.length > 0) {
-      for (const wt of dirtyWts) {
-        errors.push(
-          `Session worktree '${wt.path}' (branch '${wt.branch || "detached"}') has ${wt.changes} uncommitted change(s) — you shipped from the main repo while a session worktree was left dirty. Commit or discard those changes inside the worktree before shipping.`
-        );
-        checks.push({ name: "session-worktree-clean", ok: false, worktree: wt.path, branch: wt.branch, changes: wt.changes });
-      }
-    } else {
+    if (dirtyWts.length === 0) {
       checks.push({ name: "session-worktree-clean", ok: true });
+    } else {
+      for (const wt of dirtyWts) {
+        const desc = `Session worktree '${wt.path}' (branch '${wt.branch || "detached"}') has ${wt.changes} uncommitted change(s)`;
+        // Hard-block ONLY the worktree that belongs to THIS ship — its branch is
+        // the branch (or base) being shipped. An unrelated session worktree (a
+        // different concurrent session — common when several agents run in
+        // parallel) must NOT block this ship; surface it as a loud, non-blocking
+        // warning instead. Keeps the #193 guarantee for the ship's own worktree
+        // without over-reaching across unrelated sessions.
+        if (wt.branch && (wt.branch === branch || wt.branch === base)) {
+          errors.push(`${desc} — you shipped from the main repo while this ship's own worktree was left dirty. Commit or discard those changes inside the worktree before shipping.`);
+          checks.push({ name: "session-worktree-clean", ok: false, worktree: wt.path, branch: wt.branch, changes: wt.changes });
+        } else {
+          checks.push({ name: "session-worktree-clean", ok: true, worktree: wt.path, branch: wt.branch, changes: wt.changes, warning: `${desc} — unrelated to this ship; if that work isn't already on its target branch, commit it inside that worktree (not the main repo).` });
+        }
+      }
     }
   } else {
     checks.push({ name: "session-worktree-clean", ok: true });
