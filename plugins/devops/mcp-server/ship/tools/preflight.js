@@ -9,6 +9,7 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { git, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, detectDefaultBranch, branchExists, fileOverlap, getConfig } from "../lib/git.js";
+import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
 import { writeSentinel } from "../lib/sentinel.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
@@ -278,6 +279,31 @@ export async function handler(params) {
   // Worktree detection
   const inWorktree = isWorktree(opts);
   checks.push({ name: "worktree", value: inWorktree });
+
+  // Session-worktree split-state gate. When shipping from the MAIN repo
+  // (inWorktree === false), a sibling agent session worktree under
+  // `.claude/worktrees/` may have been left dirty because the git-mutating
+  // work + ship were driven from the main repo instead of inside the worktree.
+  // The branch/commits land on main fine, but the session worktree is in a
+  // "limbo" state (uncommitted/partial changes) — and the harness later warns
+  // "Archive session with N uncommitted changes". Block the ship so the user
+  // commits-or-discards inside the worktree first. In-worktree ships (the
+  // normal case) self-exclude — clean-tree already covers the cwd.
+  if (!inWorktree) {
+    const dirtyWts = dirtySessionWorktrees(opts);
+    if (dirtyWts.length > 0) {
+      for (const wt of dirtyWts) {
+        errors.push(
+          `Session worktree '${wt.path}' (branch '${wt.branch || "detached"}') has ${wt.changes} uncommitted change(s) — you shipped from the main repo while a session worktree was left dirty. Commit or discard those changes inside the worktree before shipping.`
+        );
+        checks.push({ name: "session-worktree-clean", ok: false, worktree: wt.path, branch: wt.branch, changes: wt.changes });
+      }
+    } else {
+      checks.push({ name: "session-worktree-clean", ok: true });
+    }
+  } else {
+    checks.push({ name: "session-worktree-clean", ok: true });
+  }
 
   // Doc-sync (plugin source repo only — no-op elsewhere). Non-blocking.
   checks.push(...docSyncChecks(cwd));
