@@ -60,6 +60,21 @@ The orchestrator can override `model` at invocation time but **not** `effort`.
 | **Medium** | 2 independent domains, no cross-deps | 2-3 parallel agents for independent domains |
 | **Complex** | 3+ domains, cross-cutting, or high risk | Full agent roster with wave model |
 
+**Effort budget per agent** (Step 4 of the prompt template — embed it, scaled to
+tier). Anthropic's multi-agent work found over-investment on simple queries to be
+a primary failure mode; coding has *fewer* parallelizable parts than research, so
+budget tightly:
+
+- **Simple** → no sub-agent; handled inline.
+- **Medium** → ~5–15 tool calls per agent, one focused domain, no exploratory sprawl.
+- **Complex** → ~15–30 tool calls per agent; beyond that, report a scope-cut or
+  sub-split rather than grinding on.
+
+These are guide rails, not hard limits — the point is that an agent which blows
+past its budget **pauses and reports** instead of disappearing into a long,
+unsupervised tail. Reserve large fan-out (many agents) for genuinely
+breadth-parallel work; most coding tasks do not need it (15× token overhead).
+
 ## Wave Execution
 
 Follow the wave model from `agent-collaboration.md`. The execution mechanics below
@@ -74,6 +89,17 @@ Every spawned agent MUST receive:
 3. **Context from previous waves** — handoff data (contracts, findings, decisions)
 4. **Commit instruction** — follow commit conventions from `/devops-commit`
 5. **Interaction directive** — set by the calling skill (see below)
+6. **Effort budget** — a tool-call / scope ceiling scaled to the complexity tier
+   (see § Complexity Tiers). Counters the "over-investment on simple work" failure
+   mode. An agent that hits its budget **pauses and reports** a scope-cut or
+   sub-split — it does not silently grind past it.
+7. **Stopping criteria** — an explicit "you are done when …" so the agent stops at
+   sufficiency instead of polishing endlessly. Endless work is token burn and, in
+   autonomous mode, a wedge risk. State the concrete done-signal (tests green +
+   contract exported, finding answered, etc.).
+8. **Distinct scope boundary** — for parallel agents in the same wave, state what
+   each one **owns and does NOT touch**. Vague sub-tasks are the #1 cause of
+   duplicate work; two agents must never independently solve the same thing.
 
 ### Interaction Directives
 
@@ -168,6 +194,35 @@ If only 1 agent is selected (e.g., just research or just qa):
 - Launch the agent directly with full context
 - Autonomous/background: `run_in_background: true`
 - Interactive: foreground with inline questions
+
+## Inter-Wave Verification Gate
+
+Cascading errors are the dominant multi-agent failure mode: a wrong contract or a
+hallucinated "fact" from one wave propagates unchecked into every wave that builds
+on it, and surfaces only at the end — or never. QA at Wave 3 is **too late**; by
+then two or three agents have already reasoned from the bad output. Independent
+verification before the next consumer is the single most underused reliability
+mechanism in multi-agent systems.
+
+**Rule: verify each wave's handoff before the next wave consumes it.** Scale the
+check to risk:
+
+- **Low risk** (additive, disjoint files): a lightweight self-check — the
+  orchestrator reads the handoff (contracts, signatures, findings) and confirms it
+  is internally consistent and matches what the next wave was told to expect.
+- **Contract-defining waves** (Core → Frontend/Windows/AI): before spawning the
+  dependent wave, validate the contract concretely — types compile, exported
+  signatures match the handoff, no TODO stubs where the next wave expects real
+  APIs. A mismatch here is exactly what cascades.
+- **High risk** (security, migration, breaking change, 3+ dependents): spawn the
+  `redteam` agent as an explicit inter-wave gate. It returns concrete file/line
+  risks the next wave must fold in **before** that wave starts — not after.
+
+Treat a handoff claim as **data to verify, not fact to trust**: a finding like
+"the API already returns X" gets a 10-second check against the code, not blind
+reuse (this is how memory pollution turns one agent's hallucination into the
+team's shared assumption). This is the cheapest place to stop an error — the cost
+rises with every wave it survives.
 
 ## QA Wave — Testing Protocol
 
