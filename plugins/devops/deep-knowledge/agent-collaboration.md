@@ -88,19 +88,21 @@ Workaround: <temporary solution if any>
 
 ## Sub-Branch Strategy
 
-When the Feature agent delegates to domain agents:
+When the Feature agent delegates to domain agents, each sub-agent works on its own
+branch off the integration branch:
 
 ```
-feat/42-video-filters          ← Feature agent (integration branch)
-├── feat/42/core               ← Core agent worktree
-├── feat/42/frontend           ← Frontend agent worktree
-├── feat/42/windows            ← Windows agent worktree
-└── feat/42/ai                 ← AI agent worktree
+feat/42-video-filters               ← Feature agent (integration branch)
+├── feat/42-video-filters-core      ← Core agent worktree
+├── feat/42-video-filters-frontend  ← Frontend agent worktree
+├── feat/42-video-filters-windows   ← Windows agent worktree
+└── feat/42-video-filters-ai        ← AI agent worktree
 ```
 
-Merge order follows wave order: Core → Frontend/Windows/AI → integration branch.
-
-Each sub-agent ships via `/devops-ship` — the pipeline auto-detects the parent branch from naming convention. See `skills/devops-ship/SKILL.md` → "Hierarchical Merge Workflow".
+The orchestrator merges each sub-branch back into the integration branch (merge order
+follows wave order: Core → Frontend/Windows/AI → integration). The integration branch is
+shipped to `main` **once**, at the end, via `/devops-ship` — sub-branches are NOT shipped
+individually.
 
 ## Branch Inheritance Protocol
 
@@ -111,56 +113,53 @@ To ensure agents work on the correct branch, every isolated agent MUST follow th
 
 1. **Push the integration branch to origin before spawning any sub-agent:**
    `git push -u origin <integration-branch>`
-   This is mandatory — sub-agents need the branch on origin to auto-detect it as their parent.
+   Mandatory — sub-agents reset to `origin/<integration-branch>` so they start from the
+   integration tip rather than from main.
 2. Before spawning any sub-agent, capture the current branch:
    `PARENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)`
-3. Include in EVERY agent prompt:
-   `Parent branch: <branch-name>`
-4. After each sub-agent completes, merge their branch back:
+3. Include in EVERY agent prompt: `Parent branch: <branch-name>` plus the exact
+   sub-branch name to use (see § Branch naming).
+4. After each sub-agent completes, merge its branch back:
    `git merge --no-ff <sub-agent-branch>`
 
 ### For every isolated Sub-Agent (first action after spawn)
 
-1. Fetch and reset to parent branch:
+1. Fetch and start your branch from the parent tip. Use `checkout -B` (not `-b`) so it
+   works whether or not the fresh worktree already sits on a branch of that name:
    ```bash
    git fetch origin
-   git reset --hard origin/<parent-branch>  # or local ref if not pushed
+   git checkout -B <sub-branch-name> origin/<parent-branch>
    ```
-2. Create your working branch from there:
-   ```bash
-   git checkout -b <sub-branch-name>
-   ```
-3. Work, commit, push
-4. Report branch name in handoff
+2. Work, commit, push: `git push -u origin <sub-branch-name>`
+3. Report the exact branch name in the handoff.
 
 ### Branch naming
 
-Sub-branches follow: `<parent-branch>/<role>`
-Example: If parent is `feat/42-video-filters`, core agent works on `feat/42-video-filters/core`
+Sub-branches use a **flat, dash-joined** name: `<parent-branch>-<role>`
+Example: parent `feat/42-video-filters` → core agent works on `feat/42-video-filters-core`.
+
+**Never use a slash (`<parent-branch>/<role>`).** Git stores branches as files under
+`.git/refs/heads`, so it refuses to create `foo/bar` while a branch `foo` exists
+(`cannot lock ref 'refs/heads/foo/bar': 'refs/heads/foo' exists`). The orchestrator keeps
+the integration branch checked out locally, so a slash-nested child ALWAYS collides. The
+dash form never collides — every sub-agent must use it.
 
 ### Merge order
 
-Same as wave order. Feature agent merges each wave's branches before spawning the next wave.
+Same as wave order. The Feature agent merges each wave's sub-branches into the integration
+branch before spawning the next wave. Disjoint-file sub-branches merge cleanly; resolve any
+conflicts per `deep-knowledge/merge-safety.md`.
 
-### Shipping sub-branches
+### Hierarchical ship (separate, optional)
 
-Sub-agents call `/devops-ship` from their branch. The ship pipeline auto-detects the parent:
-- `feat/42-video-filters/core` → detects base `feat/42-video-filters` → intermediate merge
-- `feat/42-video-filters` → no parent detected → ships to `main` with full release
-
-Intermediate merges skip version bump, tag, and GitHub release. These only happen on the final ship to main.
-
-### Shipping order within a wave
-
-**Sub-agents within the same wave must ship sequentially, not in parallel.**
-The Feature agent orchestrates shipping one sub-branch at a time:
-
-1. Sub-agent A completes → Feature agent calls `/devops-ship` for A's branch → waits for merge
-2. Sub-agent B completes → Feature agent calls `/devops-ship` for B's branch → waits for merge
-3. Continue until all sub-branches in the wave are merged
-
-This prevents merge conflicts from concurrent PRs targeting the same feature branch.
-Parallel **work** within a wave is fine — only the **shipping** must be sequential.
+The ship pipeline can also auto-detect a parent from a **slash-nested** branch name
+(`detectParentBranch`: `feat/42/core` → base `feat/42` → intermediate merge; full release
+only on the final ship to main). This is a distinct capability for genuine multi-stage
+feature branches, with a hard precondition: the parent must exist **on origin only** and
+NOT be checked out as a local branch — otherwise the slash-nested child cannot be created
+(see § Branch naming). The agent-orchestration default does NOT use this; it uses dash
+sub-branches + orchestrator merge-back (above), which always works regardless of what is
+checked out locally.
 
 ### Conflict resolution during integration
 
@@ -201,8 +200,9 @@ All happens within the single `/devops-new-issue` execution.
 - **Handoff data is mandatory.** No agent starts without knowing what came before.
 - **Conflicts resolve at integration.** The Feature agent handles merge conflicts per `deep-knowledge/merge-safety.md`. Never use `--ours`/`--theirs`. Auto-resolve complementary changes; escalate design decisions to user.
 - **Parallel agents don't cross-depend.** Frontend and Windows never import from each other.
-- **Push integration branch before spawning sub-agents.** Sub-agents rely on the branch existing on origin for auto-detection.
-- **Ship sub-branches sequentially.** Parallel work is fine, but shipping must be one at a time to avoid merge conflicts.
+- **Push integration branch before spawning sub-agents.** Sub-agents reset to `origin/<integration-branch>` to start from the integration tip.
+- **Sub-branches use dash names, never slashes.** `<parent>-<role>` — a slash-nested child collides with the checked-out integration branch ref (see § Branch naming).
+- **Merge sub-branches back in wave order; ship the integration branch once.** Sub-branches are not shipped individually.
 
 ## Extension
 

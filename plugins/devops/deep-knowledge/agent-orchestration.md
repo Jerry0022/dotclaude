@@ -263,4 +263,4 @@ The orchestrator (calling skill) is responsible for:
 1. Creating the integration branch if not already on a feature branch
 2. Pushing it to origin before spawning sub-agents
 3. Merging each wave's branches back before spawning the next wave
-4. Sequential shipping within a wave (parallel work, sequential ship)
+4. Shipping the integration branch ONCE at the end — sub-branches are merged back (step 3), not shipped individually. Sub-branch names are dash-joined `<parent>-<role>`, never slash-nested (a slash collides with the checked-out integration branch's ref).
