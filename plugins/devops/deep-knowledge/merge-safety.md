@@ -24,6 +24,10 @@ success, you see confusing "file modified since read" races, and the change is
 gone. Edits in your own worktree are isolated and survive. If a path during a
 worktree session lacks the `worktrees/<name>/` segment, it is wrong.
 
+This discipline extends to git-mutating commands (commit, checkout -b, merge,
+rebase). See [git-hygiene.md § Session-worktree hygiene](git-hygiene.md#session-worktree-hygiene)
+for the full tracked-or-gitignored invariant and enforcement points.
+
 ## Why Squash Merges Cause Data Loss
 
 Squash merges sever Git's ancestry chain. When Dev B squash-merges to main, the new
