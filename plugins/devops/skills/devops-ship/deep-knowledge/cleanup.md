@@ -29,15 +29,45 @@ If `ExitWorktree` reports uncommitted changes and refuses to remove, use
 
 If `ExitWorktree` is not applicable (no worktree session active), skip to step 2.
 
-### 2. Sync local main
+### 2. Sync local main — hard invariant
+
+**A ship to `main` is not complete until local `main` == `origin/main` == the
+shipped commits.** Side branches and worktrees are working vehicles — the
+*terminal* state of every ship to `main` is `main` updated **both remote and
+local**. The PR merge runs remote-side, so `origin/main` advances on its own;
+**the local `main` ref does not move.** A ship that leaves local `main` behind
+has NOT finished, even though the GitHub merge succeeded.
+
+Do **not** rely on a bare `git checkout main && git pull`. It fails outright
+when `main` is already checked out in another worktree (the normal case during
+a worktree ship — Git forbids a second checkout), and it does nothing for the
+main repo when that repo sits on an unrelated branch. In both cases the merge
+reports success while local `main` silently stays stale.
+
+Robust sequence (works regardless of worktree layout):
 
 ```bash
-git checkout main
-git pull origin main
+git fetch origin main                  # advance the remote-tracking ref
+git worktree list --porcelain          # find any tree with "branch refs/heads/main"
 ```
 
-If a worktree was active, the main repo may already be on the correct branch
-after ExitWorktree — verify with `git branch --show-current` before checkout.
+- **No working tree holds `main`** → move the ref directly, no checkout needed:
+  ```bash
+  git update-ref refs/heads/main origin/main
+  ```
+- **A working tree holds `main`** → fast-forward that one in place:
+  ```bash
+  git -C <that-worktree> merge --ff-only origin/main
+  ```
+
+Then assert the post-condition (not optional):
+
+```bash
+[ "$(git rev-parse main)" = "$(git rev-parse origin/main)" ] || echo "✗ local main stale — ship NOT done"
+```
+
+If the refs differ, resolve before reporting success. See
+[git-hygiene.md § Session-worktree hygiene](../../../deep-knowledge/git-hygiene.md#session-worktree-hygiene).
 
 ### 3. Verify remote branch is gone
 

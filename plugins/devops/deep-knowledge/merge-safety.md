@@ -24,6 +24,15 @@ success, you see confusing "file modified since read" races, and the change is
 gone. Edits in your own worktree are isolated and survive. If a path during a
 worktree session lacks the `worktrees/<name>/` segment, it is wrong.
 
+The same discipline applies to **reads during verification** (version checks,
+cache-integrity diffs, file-presence audits). The main-repo working directory
+may sit on a stale or unrelated branch — reading `plugin.json` (or any file)
+from the bare main-repo root then reports *that* branch's state, not the
+session's, and surfaces as a false version conflict. Source of truth for the
+current version is the worktree, `main`, or the relevant tag — never the
+main-repo cwd. Resolve version/source comparisons against `git show main:<path>`
+or `git show <tag>:<path>`, not an absolute main-repo path.
+
 This discipline extends to git-mutating commands (commit, checkout -b, merge,
 rebase). See [git-hygiene.md § Session-worktree hygiene](git-hygiene.md#session-worktree-hygiene)
 for the full tracked-or-gitignored invariant and enforcement points.
