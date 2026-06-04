@@ -68,6 +68,18 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    ```
    After launch, assert a **single** listener (`netstat -ano | grep
    "0.0.0.0:{port}"` → exactly one LISTENING row) before opening the browser.
+
+   **The server must be threaded.** `concept-server.py` uses
+   `http.server.ThreadingHTTPServer` (not the single-threaded `HTTPServer`).
+   A single-threaded server serves one request at a time, so the browser's
+   own poll loops (it hits `/heartbeat`, `/decisions`, `/reload` every few
+   seconds) plus the background watcher plus any manual `curl` collide: one
+   slow or held connection blocks the serve loop and **every** subsequent
+   request times out — the socket still accepts (LISTENING) but returns
+   nothing, so `curl` reports HTTP 000 for 15 s+ and the page reads
+   "Claude nicht verbunden" even though the process is alive. This is a
+   distinct cause of HTTP 000 from the duplicate-instance case above; both
+   present identically. If you ever fork the script, keep it threaded.
    `$PORT` is written to `.claude/concept-active.json` in step 6 so the
    SessionStart resume hook can find this server again after a Claude restart.
 

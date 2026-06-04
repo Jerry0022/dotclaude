@@ -494,7 +494,7 @@ if __name__ == '__main__':
         daemon=True,
     ).start()
 
-    with http.server.HTTPServer(('', port), ConceptBridgeHandler) as httpd:
+    with http.server.ThreadingHTTPServer(('', port), ConceptBridgeHandler) as httpd:
         print(f"Concept bridge server on http://localhost:{port}/")
         print(f"Serving: {os.getcwd()}")
         if html_path:
