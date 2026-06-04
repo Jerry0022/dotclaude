@@ -9,7 +9,11 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 > `Date.now()`. The browser compares them directly, with no conversion:
 > ```js
 > Date.now() - _lastHeartbeatTs < HEARTBEAT_STALE_MS   // both in ms
+> Date.now() - _lastServerTs    < SERVER_STALE_MS       // same unit contract
 > ```
+> `_lastServerTs` (cached from `server_ts`) is compared against `SERVER_STALE_MS`
+> to distinguish the bootstrap window from a dead bridge — same ms-since-epoch
+> unit, same staleness-comparison pattern as `_lastHeartbeatTs`.
 > **Never divide either side by 1000.** A snippet copied from elsewhere that
 > assumes seconds-since-epoch (`claude_ts / 1000`, `Date.now() / 1000`) flips
 > the staleness math negative and silently renders "Claude verbunden" forever

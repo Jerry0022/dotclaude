@@ -14,10 +14,10 @@ Every concept page must contain these 35 patterns, regardless of template:
 | 1 | `concept-decisions` | Decision data JSON container |
 | 2 | `concept-submitted` | CSS class for monitoring detection signal |
 | 3 | `connection-warning` | Disconnection warning element (overlay on #panel-ready) |
-| 3b | `connection-connecting` | Grace-period "Claude is connecting" overlay (shown by default) |
+| 3b | `connection-connecting` | Bootstrap "Claude is connecting" overlay (shown by default; stays until first heartbeat) |
 | 4 | `checkClaudeConnection` | Heartbeat checker function |
 | 5 | `HEARTBEAT_STALE_MS` | Heartbeat staleness threshold |
-| 6 | `HEARTBEAT_GRACE_MS` | Grace period — suppresses warning during startup |
+| 6 | `SERVER_STALE_MS` | Bridge-process staleness threshold (distinguishes bootstrap from dead bridge) |
 | 7 | `pollHeartbeat` | HTTP heartbeat polling function |
 | 8 | `panel-ready` | Ready-state panel element |
 | 9 | `panel-submitted` | Submitted-state panel element |

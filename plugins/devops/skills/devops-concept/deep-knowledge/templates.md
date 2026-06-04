@@ -192,10 +192,11 @@ the `[ui-locale: ...]` hint produced.
         </div>
 
         <!-- Connection overlays. Three possible states:
-             1. Page just loaded, heartbeat not yet confirmed → #connection-connecting
-                visible (default), warning hidden.
+             1. claude_ts==0 && server alive (bootstrap) → #connection-connecting
+                visible (no fixed grace timer; stays until first heartbeat),
+                warning hidden.
              2. Heartbeat confirmed fresh → both hidden.
-             3. Past grace period AND heartbeat stale → #connection-warning
+             3. claude_ts>0 but stale, OR server_ts stale → #connection-warning
                 visible, connecting hidden.
              Both are absolute overlays on top of #panel-ready. The "Got it"
              button is the ONLY clickable element while the overlay is visible
@@ -3026,9 +3027,11 @@ The server response splits the heartbeat into TWO timestamps:
 - `claude_ts` — last `POST /heartbeat` from Claude (the polling cron is alive
   and Claude will pick up submissions). This is the field the indicator must
   gate on.
-- `server_ts` — daemon-thread self-pulse (the bridge process is alive). Used
-  only to distinguish "server crashed" from "Claude not polling" in error
-  messaging — never to decide whether the indicator goes green.
+- `server_ts` — daemon-thread self-pulse (the bridge process is alive). The
+  GREEN/connected state still gates exclusively on `claude_ts` — `server_ts`
+  is never sufficient to show "connected". It is used to distinguish the
+  bootstrap window (`claude_ts==0`, server alive → "connecting" indefinitely)
+  from a genuinely dead bridge (`server_ts` stale → disconnected warning).
 - `ts` — legacy alias of `claude_ts` for back-compat with older pages that
   pre-date the split. Always equal to `claude_ts` on a current server.
 
@@ -3040,10 +3043,13 @@ self-pulse refreshed every 30s, so the page showed "Claude verbunden"
 indefinitely no matter what Claude was actually doing.
 
 ```javascript
-const HEARTBEAT_STALE_MS = 90000;
-const HEARTBEAT_GRACE_MS = 30000;
-const _pageLoadedAt = Date.now();
+const HEARTBEAT_STALE_MS = 90000;  // claude_ts older than this → dead cron
+const SERVER_STALE_MS    = 90000;  // server_ts older than this → bridge process down
+// HEARTBEAT_GRACE_MS / _pageLoadedAt removed — the bootstrap window is now
+// keyed on claude_ts==0 && fresh server_ts (mirrors the concept-server
+// watchdog, which tolerates claude_ts==0 indefinitely), not a fixed timer.
 let _lastHeartbeatTs = 0;
+let _lastServerTs    = 0;
 
 async function pollHeartbeat() {
   try {
@@ -3054,6 +3060,12 @@ async function pollHeartbeat() {
     // NEVER use `server_ts` here — the daemon self-pulse would falsely
     // light up the indicator while Claude's polling cron is dead.
     _lastHeartbeatTs = data.claude_ts || data.ts || 0;
+    // Consumed by checkClaudeConnection to tell the bootstrap window
+    // (claude_ts==0, server alive → "connecting") apart from a dead bridge.
+    // NEVER drives the green/connected state — that still gates on claude_ts.
+    // Legacy servers without server_ts leave this 0 → serverAlive=false → the
+    // bootstrap path is inert and behavior falls back to the old timing.
+    _lastServerTs = data.server_ts || 0;
   } catch (e) { /* server unreachable */ }
 }
 
@@ -3134,18 +3146,31 @@ function _setCacheHints(visible) {
 }
 
 function checkClaudeConnection() {
-  const isConnected = _lastHeartbeatTs && (Date.now() - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
-  const inGrace = Date.now() - _pageLoadedAt < HEARTBEAT_GRACE_MS;
+  const now = Date.now();
+
+  // Connected: Claude has pinged AND that ping is recent. (gate unchanged)
+  const isConnected = _lastHeartbeatTs && (now - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
+
+  // Server liveness via the daemon self-pulse. Mirrors the concept-server
+  // watchdog: claude_ts==0 is the legitimate bootstrap window, tolerated
+  // indefinitely while server_ts proves the bridge is alive.
+  const serverAlive = _lastServerTs && (now - _lastServerTs) < SERVER_STALE_MS;
+
+  // Bootstrap: Claude has NEVER pinged (claude_ts==0) but the server is
+  // alive. The first cron tick (<=60s) or the setup-time POST flips us to
+  // connected. Show "connecting" INDEFINITELY — never escalate to the
+  // disconnected warning here. This is the fix for the "opens → immediately
+  // nicht verbunden" bug.
+  const bootstrapping = (_lastHeartbeatTs === 0) && serverAlive;
+
   const connecting = document.getElementById('connection-connecting');
   const warning = document.getElementById('connection-warning');
   const btns = ['submit-iterate-btn', 'submit-implement-btn']
     .map(id => document.getElementById(id)).filter(Boolean);
   const panelSubmitted = document.getElementById('panel-submitted');
 
-  // Always clear ack state on reconnect — even while the submitted-state
-  // early-return below is active. Otherwise: user acks `warning`, reconnects
-  // while `panel-submitted` is showing, drops again before reload → the
-  // next outage would silently inherit the prior ack and skip the warning.
+  // Clear ack state on reconnect — even under the submitted-state early
+  // return below (otherwise a re-drop while submitted would inherit a stale ack).
   if (isConnected) {
     _overlayAck.connecting = false;
     _overlayAck.warning = false;
@@ -3154,26 +3179,23 @@ function checkClaudeConnection() {
   if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
 
   if (isConnected) {
-    // Ack state already cleared above so a future drop re-shows the overlay
-    // rather than silently leaving the user in offline-cache mode.
     if (connecting) connecting.style.display = 'none';
     if (warning) warning.style.display = 'none';
     _setCacheHints(false);
     btns.forEach(b => b.disabled = false);
     retryPendingSubmission();
-  } else if (inGrace) {
-    // Grace period: heartbeat not yet confirmed. Show "connecting" overlay
-    // with a "Got it" button. Submit buttons are disabled until the user
-    // acknowledges, then they unlock with a small cache-hint label so the
-    // user knows the submission will be queued.
+  } else if (bootstrapping) {
+    // claude_ts==0, server alive → "connecting" overlay, no grace timer.
     if (connecting) connecting.style.display = _overlayAck.connecting ? 'none' : 'flex';
     if (warning) warning.style.display = 'none';
     _setCacheHints(_overlayAck.connecting);
     btns.forEach(b => b.disabled = !_overlayAck.connecting);
   } else {
-    // Past grace AND heartbeat stale → disconnected warning. Same ack flow:
-    // overlay until "Got it", then buttons unlock and offline submissions
-    // are cached + auto-retried by retryPendingSubmission().
+    // Disconnected warning. Reached when EITHER:
+    //   (a) claude_ts>0 but stale → dead cron (session restart / cron
+    //       stopped). THIS PATH MUST SURVIVE — the load-bearing reason the
+    //       heartbeat was split into claude_ts/server_ts.
+    //   (b) server_ts itself stale / fetch failing → bridge process down.
     if (connecting) connecting.style.display = 'none';
     if (warning) warning.style.display = _overlayAck.warning ? 'none' : 'flex';
     _setCacheHints(_overlayAck.warning);

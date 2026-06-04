@@ -7,10 +7,11 @@ Replaces `python -m http.server` with a custom server that adds:
     * `server_ts` — daemon-thread self-pulse (server alive, Claude state unknown).
     * `claude_ts` — last POST /heartbeat from Claude (Claude is actively polling).
     * `ts` — legacy alias = `claude_ts` for backwards compat with older page JS.
-  The browser MUST gate the connection indicator on `claude_ts`, not `server_ts`.
-  Otherwise the server's own self-pulse falsely shows "Claude connected" even
-  when Claude's polling cron is dead (e.g. after a session restart) and
-  submissions silently rot in the bridge until the user notices manually.
+  The browser MUST gate the GREEN/connected state on `claude_ts`, not `server_ts`
+  (otherwise the server's own self-pulse falsely shows "Claude connected" while
+  the polling cron is dead). `server_ts` is used to distinguish the bootstrap
+  window (`claude_ts==0`, server alive → "connecting") from a dead bridge
+  (`server_ts` stale → disconnected warning).
 - GET/POST /decisions — Page submits decisions via POST, Claude reads via GET.
   GET response includes `_version` (for optimistic /reset concurrency),
   `_processed_at` (ISO timestamp of the last successful /reset — the browser
