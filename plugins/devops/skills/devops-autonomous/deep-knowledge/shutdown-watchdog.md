@@ -1,9 +1,26 @@
 # Watchdog Arming & Shutdown — Full Mechanics
 
-Low-level mechanics for `devops-autonomous` Step 4d (arm watchdog) and Step 8
-(finalization / shutdown). Read this when you reach Step 4d. It is split out of
-SKILL.md so the trigger-time body stays lean (progressive disclosure) — the Bash
-below is only needed at run time.
+Low-level mechanics for `devops-autonomous` Step 4d (arm watchdog), Step 5.0 (arm
+fail-safe shutdown timer) and Step 8 (finalization / shutdown). Read this when you
+reach Step 4d. It is split out of SKILL.md so the trigger-time body stays lean
+(progressive disclosure) — the Bash below is only needed at run time.
+
+## Three Shutdown Layers (shutdown mode)
+
+When the user chose "Ja, herunterfahren", three independent layers guarantee the PC
+powers off — each covers a failure the others can't:
+
+| Layer | Armed at | Fires | Covers |
+|-------|----------|-------|--------|
+| **Fail-safe timer** (`autonomous-shutdown-timer.js`) | Step 5.0, run start | `shutdown /s /t` after 90 min–5 h | Session wedges before Step 8 (token exhaustion, API hang) — early & OS-level |
+| **In-session shutdown** (Step 8b) | Step 8, after work | `shutdown /s /t 60`, 60 s after completion | The normal happy path; cancels the fail-safe first |
+| **External watchdog** (`autonomous-watchdog.js`) | Step 4d | Scheduled Task after 8 h | Even the fail-safe `shutdown.exe` call could not be placed |
+
+The fail-safe timer is the answer to "tokens ran out mid-run, the session froze, and
+the PC stayed on all night". It is armed **unconditionally** and **early**, so it does
+not depend on Claude reaching any later step. Step 8 cancels it the instant it runs,
+because by then the session has proven it is alive and the deliberate Step 8 decision
+(graceful 60 s shutdown, or *no* shutdown for BLOCKED) supersedes the blind timer.
 
 ## External Watchdog — Always Armed
 
@@ -58,15 +75,90 @@ without crowding the firing window. Override only if the user declared an
 explicitly long task during intake ("12h migration", "run overnight benchmark")
 — bump to `12` or `24` (script enforces ≤ 24h).
 
+## Fail-Safe Shutdown Timer (Step 5.0)
+
+Armed as the **first action** of Step 5 when shutdown=yes, before any task work.
+It is the inner, early net (the watchdog above is the outer one): a hard OS-level
+`shutdown.exe /s /t <seconds>` placed immediately, so the PC powers off even if the
+session later wedges and never reaches Step 8.
+
+### Arming
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-shutdown-timer.js" arm
+```
+
+Parse the JSON:
+- `ok:true` → log `armed {minutes} min (source={source})` to `AUTONOMOUS-LOG.md`.
+  `source` is `reset-window` | `reset-window-floored` | `reset-window-capped` |
+  `fallback-5h` — useful when the user asks on return why the timer was that length.
+- `ok:false` → log `⚠ Fail-safe-Timer konnte nicht gesetzt werden — 8h-Watchdog ist
+  alleinige Absicherung` and continue. Never abort the run over it.
+- `skipped:true` (non-Windows) → silent, continue.
+
+### Timer length — "remaining 5h-period + floor"
+
+The script reads `~/.claude/usage-live.json` (last usage scrape) and resolves the
+delay purely (`computeShutdownDelaySeconds`, unit-tested):
+
+1. Take `session.resetInMinutes`, **age-correct** it by the snapshot `timestamp`
+   (`effective = resetInMinutes − minutesSinceSnapshot`).
+2. **Clamp to [90 min, 5 h].** The 90-min FLOOR stops a near-empty token window from
+   cutting off still-running work; the 5 h CAP is one full token period.
+3. **Fall back to 5 h** when usage data is missing, unparsable, stale (>5 h old),
+   future-dated (clock skew), or the period already elapsed — *"5h passt im
+   Zweifelsfall immer"*.
+
+Why a live scrape is **not** triggered here: it would cost ~60 s and spin up the Edge
+scraper at run start. The cached snapshot is precise enough for a coarse fail-safe,
+and the 5 h fallback is safe when it is absent.
+
+### Robustness
+
+`shutdown.exe` is invoked directly (not through cmd/PowerShell) with an absolute path
+(`%SystemRoot%\System32\shutdown.exe`) and a guaranteed-local CWD — a UNC working
+directory (session on `\\nas\share\...`) cannot break it. `arm` runs `/a` first, so a
+re-arm is idempotent.
+
+### Cancellation (Step 8.0)
+
+Because the timer is unconditional, **Step 8 cancels it before deciding anything**:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-shutdown-timer.js" cancel
+```
+
+`cancel` runs `shutdown /a`; a "nothing scheduled" result (error 1116) is treated as
+success. This is what lets a **BLOCKED** run stay powered on (the fail-safe would
+otherwise force it off) and lets the graceful 60 s shutdown replace the longer
+fail-safe window on the happy path.
+
 ## Step 8 — Finalization & Shutdown
 
 Runs after Step 7 (Report). Behavior depends on `$WATCHDOG_ACTION`:
 
-- **notify mode** (shutdown=no): the PC stays on. Skip 8a and 8b entirely — go
-  straight to 8c and write the done-flag so the health-watchdog stands down. The
-  flag here simply means "the session reached completion and is not wedged".
-- **shutdown mode** (shutdown=yes): run 8a → 8b → 8c, but only when status is
-  COMPLETED or INTERRUPTED. BLOCKED skips 8b (see below).
+- **notify mode** (shutdown=no): the PC stays on. No fail-safe timer was armed, so
+  skip 8.0/8a/8b entirely — go straight to 8c and write the done-flag so the
+  health-watchdog stands down. The flag here simply means "the session reached
+  completion and is not wedged".
+- **shutdown mode** (shutdown=yes): run 8.0 → 8a → 8b → 8c, but 8a/8b only when
+  status is COMPLETED or INTERRUPTED. BLOCKED still runs 8.0, then skips to 8c.
+
+### 8.0 — Cancel the Fail-Safe Timer (shutdown mode only)
+
+Always the first finalization step in shutdown mode — for **every** status,
+including BLOCKED. Reaching Step 8 proves the session is alive, so the Step 5.0
+fail-safe must hand control back to the deliberate decision here:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-shutdown-timer.js" cancel
+```
+
+Skipping this for BLOCKED would force the very power-off that BLOCKED forbids;
+skipping it for COMPLETED/INTERRUPTED would leave the long fail-safe countdown
+racing the graceful 60 s shutdown (whichever Windows scheduled first wins, and a
+second `shutdown /s` errors with "a shutdown is already scheduled"). A
+"nothing scheduled" result is benign — the script reports `noPending:true`.
 
 ### 8a — Wait for Other Active Claude Sessions (shutdown mode only)
 
