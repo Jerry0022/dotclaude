@@ -35,15 +35,41 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 2. Start the bridge server in the **project root** (NOT the worktree root —
    the watchdog resolves `--html` against the cwd, and concept HTML lives in
    the main project tree):
+   **Launch it via the Bash tool's `run_in_background: true`** — NOT
+   `nohup … &` (or any `&`-backgrounded child) inside a single foreground
+   Bash call. A child backgrounded inside one tool call is reaped when that
+   call's shell is torn down, so the server dies a few calls later, mid-
+   session, with no error — the page then silently loses its bridge. Only a
+   detached background task survives across turns:
    ```bash
+   # Bash tool, run_in_background: true  (no trailing &, no nohup)
    python "$PLUGIN_ROOT" {random-port} "{project-root}" \
-       --html "docs/concepts/{date}-{slug}.html" &
+       --html "docs/concepts/{date}-{slug}.html"
    ```
-   Use a random port (8700-8999) to avoid conflicts. Store the port as `$PORT`
-   and the spawned background PID as `$SERVER_PID` (`echo $!` immediately
-   after the `&`-launch). Both are written to `.claude/concept-active.json`
-   in step 6 so the SessionStart resume hook can find this server again
-   after a Claude restart.
+   Use a random port (8700-8999). Record the port as `$PORT`; an exact OS PID
+   is not reliably knowable from a detached task, so `server_pid` in the state
+   file is best-effort (resolve it later via `Get-NetTCPConnection -LocalPort
+   {port}` if you need it) — cleanup targets the server by **port** via
+   `/shutdown`, never by PID, so the precise PID is not required.
+
+   **Sweep the port BEFORE launching — exactly one instance must own it.**
+   A prior instance that did not fully die (its listening socket lingers in
+   TIME_WAIT/CLOSE_WAIT) plus a fresh launch leaves **two** servers bound to
+   the same port (Windows permits this via `SO_REUSEADDR`). `curl` then hits
+   whichever accepts the connection — sometimes the healthy one (200),
+   sometimes the wedged one (HTTP 000 / timeout). The symptom is a connection
+   indicator that flickers between connected and "Claude nicht verbunden" for
+   no apparent reason, plus a watcher (step 3) that trips on the wedged
+   replies. Kill every listener on the port first, then start exactly one:
+   ```bash
+   # PowerShell tool
+   Get-NetTCPConnection -LocalPort {port} -State Listen -EA SilentlyContinue |
+     ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -EA SilentlyContinue }
+   ```
+   After launch, assert a **single** listener (`netstat -ano | grep
+   "0.0.0.0:{port}"` → exactly one LISTENING row) before opening the browser.
+   `$PORT` is written to `.claude/concept-active.json` in step 6 so the
+   SessionStart resume hook can find this server again after a Claude restart.
 
    **The `--html` flag is mandatory.** It arms the server-side watchdog:
    if the concept HTML file disappears for > 10 s, the watchdog terminates
@@ -156,6 +182,47 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    **Why combined, not two crons?** One cron minimizes race conditions and makes
    the contract explicit: every tick does both. Minimum cron resolution is 1 min,
    so the max submit-to-process lag is ~60 s — acceptable for interactive flows.
+
+   **The cron alone does NOT keep the indicator green — add a background
+   watcher.** The page flips to "Claude nicht verbunden" as soon as Claude's
+   last `/heartbeat` POST is older than `HEARTBEAT_STALE_MS` (90 s). The
+   once-a-minute cron is the documented keepalive, but session-only crons
+   fire ONLY while the REPL is idle and have multi-minute gaps in practice
+   (observed: a 638 s gap with the cron registered and the session idle) — so
+   during normal reading/thinking the indicator goes red, and because the SAME
+   cron is the only pickup path, submissions are also picked up late.
+
+   Alongside the cron, launch a **detached background watcher** (Bash tool,
+   `run_in_background: true`) that both keeps the heartbeat warm AND wakes
+   Claude the instant a submission lands — its `exit 0` re-invokes the model
+   immediately, instead of waiting up to 60 s for the next cron tick:
+   ```bash
+   fails=0
+   while true; do
+     [ -f .claude/concept-active.json ] || { echo "WATCHER_EXIT reason=STATE_GONE"; exit 0; }
+     grep -q '"port": {port}' .claude/concept-active.json 2>/dev/null || { echo "WATCHER_EXIT reason=PORT_CHANGED"; exit 0; }
+     if curl -s -X POST --max-time 8 http://localhost:{port}/heartbeat >/dev/null 2>&1; then
+       fails=0
+       p=$(curl -s --max-time 8 http://localhost:{port}/pending | python -c "import sys,json;print('yes' if json.load(sys.stdin).get('pending') else 'no')" 2>/dev/null)
+       [ "$p" = "yes" ] && { echo "WATCHER_EXIT reason=PENDING_SUBMISSION"; exit 0; }
+     else
+       fails=$((fails+1))
+       [ "$fails" -ge 4 ] && { echo "WATCHER_EXIT reason=SERVER_DEAD"; exit 0; }
+     fi
+     sleep 20
+   done
+   ```
+   Pulse every ~20 s (well under the 90 s threshold). **Tolerate transient
+   blips:** declare `SERVER_DEAD` only after ≥4 consecutive failed POSTs — a
+   single failed `curl` (server busy, a competing request, a duplicate-instance
+   wedge per step 2) must NOT tear the watcher down, or the page goes stale
+   again on every hiccup. The loop self-terminates when the state file is gone,
+   its port changed, or the server is truly unreachable, so it cannot become a
+   ghost (the `--html` watchdog still backs it up). On `PENDING_SUBMISSION`
+   Claude processes the payload, then **re-launches the watcher** for the next
+   round. Keep the cron too: it is the backup pickup path during the brief
+   window when the watcher has exited for processing and not yet been
+   re-launched.
 
 4. **Persist active-concept state.** Write `.claude/concept-active.json` in
    the project root with the metadata the SessionStart resume hook
