@@ -1,6 +1,6 @@
 ---
 name: devops-autonomous
-version: 0.2.0
+version: 0.3.0
 description: >-
   Fully autonomous agent orchestration for when the user is away from the PC.
   Runs agents without supervision (implementation, desktop interaction, live
@@ -317,6 +317,33 @@ after confirmation is the next session (via Resume Detection in Step 0.5).
 
 ## Step 5 — Autonomous Execution
 
+### 5.0 — Arm Fail-Safe Shutdown Timer (shutdown mode only)
+
+**FIRST action, before any other work — only if shutdown=yes.** The 8h external
+watchdog (Step 4d) is the *outer* net; this is the *inner, early* one. It places a
+hard OS-level shutdown timer the instant the run begins, so the PC powers off even
+if this session later wedges (token exhaustion, Anthropic API hang, stuck subagent)
+and never reaches Step 8 — the exact "tokens ran out, PC stayed on all night" case.
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-shutdown-timer.js" arm
+```
+
+The script reads `~/.claude/usage-live.json`, sets the timer to the remaining
+5h-period (`session.resetInMinutes`, age-corrected) **clamped to [90 min, 5 h]**,
+and falls back to **5 h** if usage data is missing/stale. It calls
+`shutdown.exe /s /t <seconds>` directly with an absolute path and a guaranteed-local
+CWD (UNC-safe). Parse the JSON: on `ok:true` log the armed window
+(`{minutes} min, source={source}`) to `AUTONOMOUS-LOG.md`; on `ok:false` or
+`skipped:true` (non-Windows) log a one-line warning and continue — the 8h watchdog
+still covers the gap.
+
+Because this timer is **unconditional**, Step 8 cancels it the moment it runs (the
+deliberate Step 8 decision supersedes the blind timer). Full rationale and the
+Step 8 interaction: `deep-knowledge/shutdown-watchdog.md` § Fail-Safe Shutdown Timer.
+
+### Execution Gate
+
 Behavior depends on `$EXEC_MODE` from Step 2. The full execution gate, safety
 guardrails, and late-permission protocol live in
 `deep-knowledge/autonomous-execution.md` — read that file at the start of Step 5.
@@ -457,11 +484,23 @@ the CLI card is the quick confirmation.
 
 ## Step 8 — Shutdown / Finalization
 
-Full mechanics (8a wait-loop, 8b PowerShell shutdown, 8c flag decision matrix)
-live in `deep-knowledge/shutdown-watchdog.md` § Step 8. Behavior by
-`$WATCHDOG_ACTION`:
+Full mechanics (8.0 fail-safe cancel, 8a wait-loop, 8b PowerShell shutdown, 8c
+flag decision matrix) live in `deep-knowledge/shutdown-watchdog.md` § Step 8.
 
-- **notify mode** (shutdown=no): the PC stays on. Skip 8a/8b; run only **8c** —
+**8.0 — Cancel the fail-safe timer FIRST (shutdown mode only).** If Step 5.0 armed
+the early timer, cancel it now — reaching Step 8 proves the session is alive, so the
+deliberate decision below supersedes the blind timer. Without this, a BLOCKED run
+would still power off, or the long fail-safe window would override the graceful 60s
+shutdown:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-shutdown-timer.js" cancel
+```
+
+Harmless no-op if nothing was scheduled. Then proceed by `$WATCHDOG_ACTION`:
+
+- **notify mode** (shutdown=no): the PC stays on. No fail-safe was armed; skip
+  8.0/8a/8b; run only **8c** —
   write `AUTONOMOUS-DONE.flag` for every terminal status (COMPLETED / INTERRUPTED
   / BLOCKED). Reaching Step 8 proves the run is not wedged, so the health-watchdog
   finds the flag and stands down (no `AUTONOMOUS-STALLED.txt`).
