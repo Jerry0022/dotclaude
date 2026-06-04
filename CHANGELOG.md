@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.93.5] — 2026-06-04
+
+### Fixed
+
+- **`prompt.worktree.branch-guard` left detached HEAD unguarded** — the worktree branch-guard only blocked work when the linked worktree sat on `main`/`master`, so a worktree checked out on a bare commit or tag (detached HEAD) slipped through. Any commits made there become unreachable once `HEAD` moves, silently losing work. The guard now also treats a detached HEAD (`git rev-parse --abbrev-ref HEAD` == `"HEAD"`) as an unsafe state and emits a BLOCKING instruction to create a dedicated branch first, with a message tailored to the detached case. Hook `prompt.worktree.branch-guard` 0.1.0→0.2.0.
+
 ## [0.93.4] — 2026-06-04
 
 ### Fixed
