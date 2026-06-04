@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.93.2] — 2026-06-04
+
+### Fixed
+
+- **MCP ship-server can be silently absent → `/devops-ship` deadlock (issue #198)** — when an incomplete plugin-cache sync dropped `mcp-server/ship/index.js` (sibling to the #190 failure mode), the `dotclaude-ship` server never registered while `dotclaude-completion` worked fine, so the ship pipeline was unavailable with **no signal** that the server was missing. A new `ss.mcp.verify` SessionStart hook now verifies every server declared in `.mcp.json` has its entry file present under the active install root and surfaces a per-server diagnostic (with restart/rebuild recovery steps) when one is missing — silent when all are intact, plus a machine-readable last-run status in tmp for post-hoc debugging. New shared `hooks/lib/mcp-status.js` (entry-file + heartbeat-liveness helpers).
+- **`pre.ship.guard` misleading "likely DEFERRED" guidance** — the block message asserted unconditionally that absent ship tools were merely deferred, dead-ending the user when the server was genuinely unregistered. The guard now probes the ship server's heartbeat PID: **alive** → confident "deferred, ToolSearch them"; **not alive** → dual guidance (try ToolSearch, and if it returns nothing, recover via restart / `/devops-plugin-update`). An opt-in `DOTCLAUDE_ALLOW_MANUAL_SHIP=1` escape allows a one-off manual ship — honored **only** when the server is confirmed absent, never when it is up — so a missing pipeline server can no longer hard-deadlock a session.
+- **`pre.ship.guard` false-positive on quoted text** — the matcher tested its `gh pr create` / `gh pr merge` / `gh api …/merge` patterns against the entire command string, so it blocked commands that merely *mentioned* those words inside an issue body, commit message, or here-string. Matching is now delegated to a unit-tested `hooks/lib/ship-guard-match.js` that strips quoted spans (single/double quotes, PowerShell here-strings, bash heredocs) and anchors patterns to a command position, so only real invocations match.
+
 ## [0.93.1] — 2026-06-04
 
 ### Fixed
