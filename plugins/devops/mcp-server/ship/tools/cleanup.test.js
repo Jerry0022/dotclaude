@@ -24,7 +24,7 @@ vi.mock("../lib/sentinel.js", () => ({
 }));
 
 import { handler } from "./cleanup.js";
-import { git, isWorktree, getWorktreeBranches } from "../lib/git.js";
+import { git, gitStrict, isWorktree, getWorktreeBranches } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 
 const CWD = "/fake/consumer-repo";
@@ -68,5 +68,24 @@ describe("ship_cleanup — session-worktree final-gate invariant", () => {
     const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: true });
     expect(result.kept).toBe(true);
     expect(dirtySessionWorktrees).not.toHaveBeenCalled();
+  });
+
+  test("local main sync: fast-forwards local base even when already on base", async () => {
+    // current === base ("main"), so the legacy checkout path is skipped — the
+    // unconditional sync must still fast-forward local main to origin/main.
+    await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
+    expect(gitStrict).toHaveBeenCalledWith("pull --ff-only origin main", expect.objectContaining({ cwd: CWD }));
+  });
+
+  test("local main sync: warns when local base stays behind origin after sync", async () => {
+    git.mockImplementation((cmd) => {
+      if (cmd.includes("rev-parse --abbrev-ref HEAD")) return "main";
+      if (cmd.includes("rev-parse origin/main")) return "bbbbbbbbbbbb";
+      if (cmd.includes("rev-parse main")) return "aaaaaaaaaaaa";
+      if (cmd.includes("ls-remote")) return "";
+      return "";
+    });
+    const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
+    expect(result.warnings.some((w) => /not fully landed locally/i.test(w))).toBe(true);
   });
 });

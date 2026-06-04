@@ -69,7 +69,6 @@ export async function handler(params) {
   if (current !== base) {
     try {
       gitStrict(`checkout ${base}`, opts);
-      gitStrict(`pull origin ${base}`, opts);
       cleaned.push(`checkout:${base}`);
     } catch (e) {
       clearSentinel(cwd);
@@ -80,6 +79,30 @@ export async function handler(params) {
         warnings,
       };
     }
+  }
+
+  // Sync local base to origin/base. The PR merged remote-side, so origin/${base}
+  // advanced but the local ref does NOT move on its own. This MUST run even when
+  // we are already on ${base} — otherwise a ship that ends on main leaves local
+  // main stale ("ship succeeded but main not updated locally").
+  // See skills/devops-ship/deep-knowledge/cleanup.md §2.
+  try {
+    gitStrict(`pull --ff-only origin ${base}`, opts);
+    cleaned.push(`sync:${base}`);
+  } catch (e) {
+    warnings.push(
+      `Could not fast-forward local '${base}' to origin/${base}: ${e.message}. ` +
+        `Local '${base}' may be stale — run: git pull --ff-only origin ${base}`
+    );
+  }
+  // Hard post-condition: local base must equal origin/base after a ship.
+  const localBase = git(`rev-parse ${base}`, opts);
+  const remoteBase = git(`rev-parse origin/${base}`, opts);
+  if (localBase && remoteBase && localBase !== remoteBase) {
+    warnings.push(
+      `Local '${base}' (${localBase.slice(0, 7)}) != origin/${base} (${remoteBase.slice(0, 7)}) ` +
+        `after ship — main not fully landed locally.`
+    );
   }
 
   // Verify remote branch is gone (merge step should have deleted it)
