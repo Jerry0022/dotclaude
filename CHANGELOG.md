@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.93.0] — 2026-06-04
+
+### Added
+
+- **Fail-safe shutdown timer for autonomous runs** — when the user chooses "Ja, herunterfahren", `devops-autonomous` now arms a hard OS-level `shutdown.exe /s /t` timer as the *first* action of Step 5, before any task work. This closes the gap the user hit in practice: an autonomous run that exhausts its token budget (or hits an Anthropic API hang) wedges before reaching Step 8's in-session shutdown and leaves the PC powered on indefinitely — the frozen session can no longer fire the shutdown itself. The new `scripts/autonomous-shutdown-timer.js` sizes the timer to the remaining 5h token period (`session.resetInMinutes` from `usage-live.json`, age-corrected) clamped to [90 min, 5 h], falling back to 5 h when usage data is missing or stale. It invokes `shutdown.exe` directly with an absolute path and a guaranteed-local CWD (UNC-safe). Because the timer is unconditional, the new Step 8.0 cancels it the moment finalization runs — so a BLOCKED run stays powered on (the data-integrity rule is preserved) and the graceful 60 s shutdown replaces the longer fail-safe window on the happy path. The existing 8 h scheduled-task watchdog remains the outermost net. Skill `devops-autonomous` 0.2.0→0.3.0.
+
 ## [0.92.0] — 2026-06-04
 
 ### Added
