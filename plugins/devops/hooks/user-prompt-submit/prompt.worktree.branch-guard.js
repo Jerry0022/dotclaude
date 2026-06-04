@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.worktree.branch-guard
- * @version 0.1.0
+ * @version 0.2.0
  * @event UserPromptSubmit
  * @plugin devops
- * @description Prevents working on main/master inside a linked worktree.
- *   Only fires when the session is inside a git worktree (.git is a file,
- *   not a directory). If the current branch is main or master, outputs a
- *   BLOCKING instruction telling Claude to create a new branch first.
+ * @description Prevents working without a dedicated branch inside a linked
+ *   worktree. Only fires when the session is inside a git worktree (.git is a
+ *   file, not a directory). Outputs a BLOCKING instruction telling Claude to
+ *   create a new branch first when the worktree sits on:
+ *     - main or master (shared mainline), OR
+ *     - a detached HEAD (no branch at all — `--abbrev-ref HEAD` returns "HEAD").
  *   Does nothing if not in a worktree — the user intentionally works on main.
  */
 
@@ -54,10 +56,18 @@ if (!isLinkedWorktree) {
 const branch = git('rev-parse --abbrev-ref HEAD');
 if (!branch) process.exit(0);
 
-if (branch === 'main' || branch === 'master') {
+// "HEAD" from --abbrev-ref means a detached HEAD: the worktree is on a
+// commit/tag, not a branch — so commits would be unreachable once HEAD moves.
+const isDetached = branch === 'HEAD';
+const isMainline = branch === 'main' || branch === 'master';
+
+if (isMainline || isDetached) {
   const worktreeName = path.basename(cwd);
+  const where = isDetached
+    ? 'in a detached HEAD (no branch)'
+    : `on branch "${branch}"`;
   process.stdout.write(
-    `BLOCKING — You are in a worktree but on branch "${branch}". ` +
+    `BLOCKING — You are in a worktree but ${where}. ` +
     `Create a new branch BEFORE doing any work: ` +
     `git checkout -b claude/${worktreeName}`
   );

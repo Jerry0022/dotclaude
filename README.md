@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.93.4**
+**Version: 0.93.5**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -211,7 +211,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.issue.detect` — Detect issue references in user messages.
 - `prompt.ship.detect` — Detect ship intent in user prompts and inject Skill('devops-ship') instruction.
 - `prompt.flow.appstart` — Detect app start intent in user prompts.
-- `prompt.worktree.branch-guard` — Prevents working on main/master inside a linked worktree.
+- `prompt.worktree.branch-guard` — Prevents working without a dedicated branch inside a linked worktree.
 
 #### PreToolUse — runs before each tool call
 
