@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.93.3] — 2026-06-04
+
+### Fixed
+
+- **`ship_release` silently dropped new untracked files (caused a half-merged 0.93.2)** — when committing via `commitMessage`, the release tool staged tracked modifications (`git add -u`) plus only `CHANGELOG.md`, and recorded every other untracked file in a `skippedFiles` field that nothing acted on. The #198 ship therefore merged its *modified* files (`pre.ship.guard.js`, `hooks.json`) while silently omitting the **new** module files they require (`hooks/lib/ship-guard-match.js`, `hooks/lib/mcp-status.js`, `hooks/session-start/ss.mcp.verify.js`) — leaving `main` referencing modules that were never committed. `ship_release` now stages all untracked files (`git status --porcelain` already excludes gitignored paths, so the list is intentional repo content) and reports them as `includedUntracked` instead of dropping them.
+- **Completes #198** — re-adds the three module files dropped by the 0.93.2 ship so `pre.ship.guard` and `ss.mcp.verify` actually resolve their dependencies on `main`.
+
 ## [0.93.2] — 2026-06-04
 
 ### Fixed

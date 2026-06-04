@@ -54,17 +54,18 @@ export async function handler(params) {
         git(`add -u :/`, opts);
       }
       if (state.untracked.length > 0) {
-        const safePatterns = ["CHANGELOG.md", "changelog.md"];
+        // Stage NEW files too, not just CHANGELOG. `git status --porcelain`
+        // already excludes gitignored paths, so everything listed here is
+        // intentional repo content. The previous behaviour silently skipped
+        // every untracked file except CHANGELOG (recorded in `skippedFiles`),
+        // which dropped new source files from the ship — a feature that added
+        // files (e.g. a new hook + its lib module) landed half-merged on main,
+        // leaving callers referencing modules that never got committed.
         for (const file of state.untracked) {
-          if (safePatterns.some(p => file.endsWith(p))) {
-            // `:/${file}` resolves against repo root regardless of cwd.
-            git(`add -- :/${file}`, opts);
-          }
+          // `:/${file}` resolves against repo root regardless of cwd.
+          git(`add -- :/${file}`, opts);
         }
-        const skipped = state.untracked.filter(f => !safePatterns.some(p => f.endsWith(p)));
-        if (skipped.length > 0) {
-          result.skippedFiles = skipped;
-        }
+        result.includedUntracked = [...state.untracked];
       }
       execFileSync("git", ["commit", "-m", commitMessage], {
         cwd,
