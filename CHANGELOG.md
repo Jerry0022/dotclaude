@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.93.1] — 2026-06-04
+
+### Fixed
+
+- **devops-concept: false "Claude nicht verbunden" on page open** — the concept page's connection indicator escalated from the gentle "connecting" overlay to the alarming "Claude ist nicht verbunden" warning after a fixed 30 s grace window whenever `claude_ts` was still `0` — i.e. during the normal bootstrap gap before the first heartbeat cron tick (which fires at most every 60 s). The user had to re-prompt Claude (forcing a manual heartbeat POST) to clear the false alarm. `checkClaudeConnection` now mirrors the concept-server watchdog's asymmetry: it consumes `server_ts` (the daemon self-pulse) and treats `claude_ts==0` with a fresh `server_ts` as the bootstrap window — showing "connecting" indefinitely until the first heartbeat lands, never escalating. The dead-cron path (`claude_ts>0` but stale → "disconnected") is preserved unchanged, keeping the whole point of the `claude_ts`/`server_ts` split intact. Removed the obsolete `HEARTBEAT_GRACE_MS`/`_pageLoadedAt` timer; added `SERVER_STALE_MS`. Verified via a Node state-machine harness across 8 connection timelines (16/16 assertions, incl. dead-cron regression guard). Touches `templates.md`, `concept-server.py` docstring, `bridge-server.md`, `validation-gate.md`.
+
 ## [0.93.0] — 2026-06-04
 
 ### Added
