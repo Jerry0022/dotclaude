@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.93.4] — 2026-06-04
+
+### Fixed
+
+- **`/devops-ship` left local `main` stale ("ship succeeded but main not updated locally")** — the PR merge runs remote-side, so `origin/main` advances but the local `main` ref does not move on its own. `ship_cleanup` only synced local base as a *side effect* of `checkout base`; when the repo was already on base (the normal post-`ExitWorktree` case, `current === base`), the pull was skipped entirely. Cleanup now unconditionally runs `pull --ff-only origin <base>` and asserts the hard post-condition `local base == origin/base`, warning loudly otherwise. Side branches stay a working vehicle — the terminal state of every ship to `main` is `main` updated **remote AND local**. Documented in `deep-knowledge/cleanup.md §2` with a worktree-robust recipe (`update-ref` / `-C <wt> merge --ff-only`).
+- **devops-concept: single-threaded bridge server could wedge** — `concept-server.py` used `http.server.HTTPServer`, which serves one request at a time; a slow or hung client could block heartbeat/decision polling. Switched to `ThreadingHTTPServer` and hardened the bridge keepalive documentation against drop-outs.
+
+### Changed
+
+- **Worktree read-path discipline for version verification** — `deep-knowledge/merge-safety.md` now codifies that verification reads (version/cache/file-presence) must resolve against the worktree, `main`, or a tag — never the bare main-repo cwd, which may sit on a stale branch and report a false version conflict.
+
 ## [0.93.3] — 2026-06-04
 
 ### Fixed
