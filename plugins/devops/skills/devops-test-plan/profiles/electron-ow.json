@@ -1,6 +1,6 @@
 {
   "profile": "electron-ow",
-  "description": "Electron app (OverwolfElectron or standard). Renderer tested via Chrome-MCP (no computer-use). Packaged-app final test requires Must-Ask trigger 'packaged_electron_final_test' — only then is computer-use authorized for that specific final step.",
+  "description": "Electron app (OverwolfElectron or standard). Renderer tested via Chrome-MCP in Edge (no computer-use). Packaged-app final test requires Must-Ask trigger 'packaged_electron_final_test' — only then is computer-use authorized for that specific final step.",
   "detection": {
     "files_required": [],
     "files_optional": ["electron-builder.json", "electron-builder.yml", "package.json"],
@@ -10,20 +10,30 @@
     {
       "step": 1,
       "tool": "Bash(npm run dev)",
-      "purpose": "Start Electron in dev mode so renderer is reachable via Chrome-MCP"
+      "purpose": "Start Electron in dev mode so the renderer is reachable via the browser tool"
     },
     {
       "step": 2,
-      "tool": "preview_snapshot",
-      "purpose": "Verify renderer DOM content and element presence"
+      "tool": "$BROWSER_TOOL probe — Chrome-MCP (Claude extension in Edge) → Playwright → Preview",
+      "purpose": "Resolve the active browser tool. Chrome-MCP in Edge is PRIMARY — do NOT default to Preview when the Edge extension is connected (see deep-knowledge/browser-tool-strategy.md). Never computer-use for the renderer."
     },
     {
       "step": 3,
-      "tool": "preview_screenshot",
-      "purpose": "Capture rendered visual layout of the renderer window"
+      "tool": "$BROWSER_TOOL snapshot (read_page / browser_snapshot / preview_snapshot)",
+      "purpose": "Verify renderer DOM content and element presence"
     },
     {
       "step": 4,
+      "tool": "$BROWSER_TOOL console + network read (read_console_messages + read_network_requests / browser_console_messages + browser_network_requests / preview_console_logs)",
+      "purpose": "Catch renderer runtime JS errors and failed requests"
+    },
+    {
+      "step": 5,
+      "tool": "$BROWSER_TOOL screenshot",
+      "purpose": "Capture rendered visual layout of the renderer window"
+    },
+    {
+      "step": 6,
       "tool": "NOTE — packaged app test",
       "purpose": "Testing the packaged (built) binary requires computer-use. Only proceed after must-ask trigger 'packaged_electron_final_test' is confirmed by user."
     }
