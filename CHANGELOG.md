@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.94.0] — 2026-06-05
+
+### Added
+
+- **Browser-test enforcement gate (`stop.flow.browsertest`)** — closes the gap where a web-renderable change could ship unverified: previously the only Stop-time gate enforced the completion card, never the *test itself*, so Claude could finish a UI change without ever opening a browser. The new Stop hook blocks the turn when a browser-renderable file changed this session but no browser tool ran and no verification subagent was delegated, instructing verification via the Claude-in-Chrome extension in Edge (incl. mandatory console + network reads). Decision logic lives in unit-tested `hooks/lib/browsertest-guard.js` (26 tests); flags (`web-change-pending` / `browser-verified`) are written by `post.flow.completion` and read+reset by the gate. The gate yields after one block (`stop_hook_active`) so it can never loop, and `docs/concepts/*.html` (devops-concept artifacts) are carved out — they never trigger it. New hook `stop.flow.browsertest` 0.1.0; `post.flow.completion` 0.15.0→0.16.0.
+
+### Changed
+
+- **Test tool-chain now prefers the Edge extension over Preview** — the Edge Credo names the Claude-in-Chrome extension in Edge as the primary browser tool, but the deterministic `devops-test-plan` profile tool-chains (`web-vite`, `web-angular`, `electron-ow`) hardcoded the Preview MCP (waterfall priority 3) and the QA agent lacked the extension tools entirely — so the machine-readable instruction contradicted the doctrine. Profiles now resolve `$BROWSER_TOOL` via the waterfall (Chrome-MCP in Edge primary → Playwright → Preview) and add a mandatory console + network error read step (a clean snapshot does not prove the absence of runtime errors). The `qa` agent gains the Claude-in-Chrome read/verify tools and Edge-first guidance; the `post.flow.completion` first-edit reminder now names the Edge extension + console reads explicitly.
+
 ## [0.93.5] — 2026-06-04
 
 ### Fixed
