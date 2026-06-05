@@ -8,7 +8,7 @@ description: >-
 model: sonnet
 effort: medium
 color: green
-tools: ["Bash", "Read", "Glob", "Grep", "preview_screenshot", "preview_snapshot", "preview_console_logs"]
+tools: ["Bash", "Read", "Glob", "Grep", "navigate", "read_page", "get_page_text", "read_console_messages", "read_network_requests", "javascript_tool", "tabs_context_mcp", "tabs_create_mcp", "preview_screenshot", "preview_snapshot", "preview_console_logs"]
 ---
 
 # QA Agent
@@ -26,8 +26,15 @@ Before starting, read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` §4 (Q
 - **Browser-verify web tech changes** (see `{PLUGIN_ROOT}/deep-knowledge/test-strategy.md`
   § Web Tech → Always Browser-Test). Mandatory when HTML/CSS/JS framework files
   changed — mocks for missing backends are expected. No "browser not needed" exit.
+  Use the **Claude-in-Chrome extension in Edge as the primary tool** (`navigate`,
+  `read_page`, `javascript_tool`); fall back to Preview (`preview_snapshot`,
+  `preview_screenshot`) only when the extension is not connected. Never plain
+  Chrome, never computer-use for browser work
+  (see `{PLUGIN_ROOT}/deep-knowledge/browser-tool-strategy.md`).
 - Take screenshots of UI changes
-- Check console logs for errors
+- **Read console + network errors** alongside the snapshot — `read_console_messages`
+  + `read_network_requests` (Chrome-MCP) or `preview_console_logs` (Preview). A
+  clean snapshot does not prove the absence of runtime JS errors or failed requests.
 - Generate build-ID after successful build
 - **Flag User-Final-Tests** in output when automation cannot cover the final step:
   - Packaged Electron/Tauri without desktop takeover → `🔬 TESTE bitte noch:`

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.15.0
+ * @version 0.16.0
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -9,7 +9,9 @@
  *   of whether the last tool was Edit, Read, Bash, Grep, or anything else.
  *   Edit/Write calls additionally increment the session edit counter.
  *   At 5+ edits, injects desktop-testing prompt for UI projects.
- *   Writes a per-turn "work-happened" flag consumed by stop.flow.guard.
+ *   Writes a per-turn "work-happened" flag consumed by stop.flow.guard, plus
+ *   the browser-test gate flags (web-change-pending / browser-verified)
+ *   consumed by stop.flow.browsertest.
  */
 
 require('../lib/plugin-guard');
@@ -17,6 +19,11 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { getLocale, t } = require('../lib/locale');
+const {
+  isWebRenderableChange,
+  isBrowserTool,
+  isVerificationDelegation,
+} = require('../lib/browsertest-guard');
 
 // Bilingual strings for the desktop-test AskUserQuestion prompt.
 // Keys correspond to fields the user sees in Claude Code's question UI.
@@ -98,6 +105,31 @@ process.stdin.on('end', () => {
     writeSessionFile(activityFile, Date.now().toString());
   } catch {}
 
+  // --- 1e. Browser-test gate flags (consumed by stop.flow.browsertest) ---
+  //   web-change-pending → a browser-renderable file changed and still needs
+  //     verification (devops-concept pages under docs/concepts/*.html are
+  //     excluded by isWebRenderableChange).
+  //   browser-verified → a browser tool ran, or a verification subagent was
+  //     delegated, somewhere this session.
+  try {
+    if (isCodeEdit) {
+      const editedPath = hook.tool_input && hook.tool_input.file_path;
+      if (isWebRenderableChange(editedPath)) {
+        writeSessionFile(
+          sessionFile('dotclaude-devops-web-change-pending', hook.session_id),
+          String(editedPath),
+        );
+      }
+    }
+    const subagentType = hook.tool_input && hook.tool_input.subagent_type;
+    if (isBrowserTool(toolName) || isVerificationDelegation(toolName, subagentType)) {
+      writeSessionFile(
+        sessionFile('dotclaude-devops-browser-verified', hook.session_id),
+        toolName,
+      );
+    }
+  } catch {}
+
   // --- 2. Emit completion-card instruction (MCP tool call) ---
 
   const lines = [];
@@ -133,6 +165,12 @@ process.stdin.on('end', () => {
       '[test-autonomy] First code edit this session.',
       'Before any test action: invoke /devops-test-plan to pin $TEST_PROFILE.',
       'Then follow the profile tool_chain — do NOT default to computer-use.',
+      'For web/renderer changes the PRIMARY browser tool is the Claude-in-Chrome',
+      'extension running in Edge (Chrome-MCP); Preview is only the fallback when the',
+      'extension is not connected (see deep-knowledge/browser-tool-strategy.md).',
+      'Always read console + network errors (read_console_messages +',
+      'read_network_requests, or preview_console_logs) alongside the snapshot — a',
+      'clean DOM does not prove the absence of runtime errors.',
       'Ask user ONLY at the must-ask triggers listed in $TEST_PROFILE.must_ask_triggers',
       '(see deep-knowledge/test-autonomy.md for the canonical list — 3 triggers total).',
     );

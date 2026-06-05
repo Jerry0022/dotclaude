@@ -168,16 +168,25 @@ $TEST_PROFILE = web-vite
 Detection: marker: vite.config.ts
 
 Tool chain (in order):
-  1. preview_snapshot → element and text verification
-  2. javascript_tool → set viewport iPhone SE (375×667), preview_screenshot
-  3. javascript_tool → set viewport iPad (768×1024), preview_screenshot
-  4. javascript_tool → set viewport Desktop (1280×800), preview_screenshot
+  1. Bash(npm run dev -- --port 5173) → start dev server
+  2. $BROWSER_TOOL probe → Chrome-MCP (Claude extension in Edge) PRIMARY → Playwright → Preview
+  3. $BROWSER_TOOL snapshot → element and text verification
+  4. $BROWSER_TOOL console + network read → runtime JS errors + failed requests
+  5. $BROWSER_TOOL set viewport iPhone SE (375×667) + screenshot
+  6. $BROWSER_TOOL set viewport iPad (768×1024) + screenshot
+  7. $BROWSER_TOOL set viewport Desktop (1280×800) + screenshot
 
 Viewports: mobile, tablet, desktop
 Allowed: read, write_via_dom
 Blocked: computer-use
 Must-ask triggers: none
 ```
+
+`$BROWSER_TOOL` resolves via the waterfall in
+`deep-knowledge/browser-tool-strategy.md` — the Claude-in-Chrome extension
+running in Edge is the primary tool; Preview is the last fallback, never the
+default. The console + network read step is mandatory: a clean snapshot does
+not prove the absence of runtime errors.
 
 ## Step 6 — Cache Result
 

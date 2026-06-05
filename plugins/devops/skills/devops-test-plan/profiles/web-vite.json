@@ -14,33 +14,43 @@
     },
     {
       "step": 2,
-      "tool": "preview_snapshot",
-      "purpose": "Verify DOM content, element presence, and ARIA state"
+      "tool": "$BROWSER_TOOL probe — Chrome-MCP (Claude extension in Edge) → Playwright → Preview",
+      "purpose": "Resolve the active browser tool. Chrome-MCP in Edge is PRIMARY — do NOT default to Preview when the Edge extension is connected (see deep-knowledge/browser-tool-strategy.md). Never computer-use, never plain Chrome."
     },
     {
       "step": 3,
-      "tool": "javascript_tool + preview_screenshot",
-      "purpose": "Set viewport to iPhone SE (375x667) and capture visual layout"
+      "tool": "$BROWSER_TOOL snapshot (read_page / browser_snapshot / preview_snapshot)",
+      "purpose": "Verify DOM content, element presence, and ARIA state"
     },
     {
       "step": 4,
-      "tool": "javascript_tool + preview_screenshot",
-      "purpose": "Set viewport to Pixel 7 / Android phone (393x851) and capture visual layout"
+      "tool": "$BROWSER_TOOL console + network read (read_console_messages + read_network_requests / browser_console_messages + browser_network_requests / preview_console_logs)",
+      "purpose": "Catch runtime JS errors and failed/4xx/5xx requests the snapshot cannot reveal"
     },
     {
       "step": 5,
-      "tool": "javascript_tool + preview_screenshot",
-      "purpose": "Set viewport to iPad (768x1024) and capture visual layout"
+      "tool": "$BROWSER_TOOL set viewport + screenshot (javascript_tool / browser_evaluate / preview_eval, then screenshot)",
+      "purpose": "iPhone SE (375x667) — visual layout, mobile iOS"
     },
     {
       "step": 6,
-      "tool": "javascript_tool + preview_screenshot",
-      "purpose": "Set viewport to Galaxy Tab S9 / Android tablet (800x1280) and capture visual layout"
+      "tool": "$BROWSER_TOOL set viewport + screenshot",
+      "purpose": "Pixel 7 / Android phone (393x851) — visual layout"
     },
     {
       "step": 7,
-      "tool": "javascript_tool + preview_screenshot",
-      "purpose": "Set viewport to Desktop (1280x800) and capture visual layout"
+      "tool": "$BROWSER_TOOL set viewport + screenshot",
+      "purpose": "iPad (768x1024) — visual layout, tablet iOS"
+    },
+    {
+      "step": 8,
+      "tool": "$BROWSER_TOOL set viewport + screenshot",
+      "purpose": "Galaxy Tab S9 / Android tablet (800x1280) — visual layout"
+    },
+    {
+      "step": 9,
+      "tool": "$BROWSER_TOOL set viewport + screenshot",
+      "purpose": "Desktop (1280x800) — visual layout"
     }
   ],
   "viewports": ["mobile-ios", "mobile-android", "tablet-ios", "tablet-android", "desktop"],
