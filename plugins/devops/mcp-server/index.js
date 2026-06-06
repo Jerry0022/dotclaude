@@ -37,6 +37,11 @@ function tryParse(v) {
 
 const SCRAPER_SCRIPT = join(PLUGIN_ROOT, 'scripts', 'refresh-usage-headless.js');
 const USAGE_JSON_PATH = join(homedir(), '.claude', 'usage-live.json');
+const USAGE_BASELINE_PATH = join(homedir(), '.claude', 'usage-baseline.json');
+// The native statusLine writer (scripts/statusline-usage.js) keeps
+// usage-live.json minute-fresh from the host's rate_limits JSON. If the file is
+// at most this old, serve it directly and skip the Edge scrape entirely.
+const WARM_MAX_AGE_MS = 60_000;
 
 // ---------------------------------------------------------------------------
 // Usage-meter renderer (canonical source — authoritative implementation)
@@ -608,22 +613,51 @@ function readUsageJson() {
   }
 }
 
-function refreshUsage() {
-  let previous = readUsageJson();
+// Delta baseline — the snapshot from the previous card/get_usage call. Kept
+// SEPARATE from usage-live.json because the native statusLine writer now updates
+// that file continuously, so it can no longer double as the "since last card"
+// delta reference.
+function readBaseline() {
+  try { return JSON.parse(readFileSync(USAGE_BASELINE_PATH, 'utf8')); } catch { return null; }
+}
+function writeBaseline(data) {
+  try {
+    writeFileSync(USAGE_BASELINE_PATH, JSON.stringify({
+      session: data.session, weekly: data.weekly, timestamp: data.timestamp,
+    }));
+  } catch { /* non-fatal — delta just resets on the next call */ }
+}
+function usageAgeMs(d) {
+  return d?.timestamp ? Date.now() - new Date(d.timestamp).getTime() : Infinity;
+}
 
-  // Discard stale snapshot for delta computation only — keep file on disk
-  // as last-resort fallback if the live scrape fails entirely.
-  if (previous?.timestamp && previous?.session) {
-    const ageMs = Date.now() - new Date(previous.timestamp).getTime();
-    const windowMs = (previous.session.resetInMinutes ?? WINDOW_5H_MIN) * 60_000;
-    if (ageMs > windowMs) {
-      previous = null; // no delta, but file stays for fallback
+function refreshUsage() {
+  const baseline = readBaseline();
+
+  // Resolve fresh data + advance the delta baseline to it.
+  const finish = (data) => {
+    let delta5h = null;
+    let deltaWk = null;
+    if (data?.session && baseline?.session) {
+      delta5h = computeDelta(data.session?.pct, baseline.session?.pct);
+      deltaWk = computeDelta(data.weekly?.pct, baseline.weekly?.pct);
     }
+    if (data?.session) writeBaseline(data);
+    return { success: true, data, delta5h, deltaWk };
+  };
+
+  // 1. Warm fast path — the native statusLine writer keeps usage-live.json
+  //    minute-fresh with no scrape and no extra Claude turn. If it is fresh,
+  //    serve it instantly and skip Edge entirely (the common case).
+  const warm = readUsageJson();
+  if (warm?.session && usageAgeMs(warm) <= WARM_MAX_AGE_MS) {
+    return finish(warm);
   }
 
-  // Single invocation — the script manages the dedicated scraper instance
-  // lifecycle internally (launch, scrape, kill). Worst case: 20s launch +
-  // 24s page-poll = 44s; keep timeout above that.
+  // 2. Fallback — Edge scrape. Covers pre-first-API-response, unsupported
+  //    logins, weeklySonnet/plan, and hosts without the statusLine writer. The
+  //    script manages the dedicated scraper lifecycle internally (launch,
+  //    scrape, kill). Worst case ~44s; keep the timeout above that.
   let lastExitCode = null;
   try {
     execSync(`node "${SCRAPER_SCRIPT}" --quiet`, {
@@ -631,15 +665,7 @@ function refreshUsage() {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     const freshData = readUsageJson();
-    if (freshData?.session) {
-      let delta5h = null;
-      let deltaWk = null;
-      if (previous?.session) {
-        delta5h = computeDelta(freshData.session?.pct, previous.session?.pct);
-        deltaWk = computeDelta(freshData.weekly?.pct, previous.weekly?.pct);
-      }
-      return { success: true, data: freshData, delta5h, deltaWk };
-    }
+    if (freshData?.session) return finish(freshData);
   } catch (err) {
     lastExitCode = err.status;
     console.error('[dotclaude-completion-mcp] Scrape failed (exit', lastExitCode, '):', err.message);
@@ -653,16 +679,22 @@ function refreshUsage() {
   };
   const reason = reasons[lastExitCode] || (lastExitCode ? `scrape exit code ${lastExitCode}` : null);
 
-  // Last resort: use any existing data (even stale) with age indicator
+  // 3. Last resort — any existing (stale) data with an age indicator. Delta vs
+  //    the baseline is still meaningful; the baseline is NOT advanced on stale
+  //    data, so the next good read still shows real movement.
   const cached = readUsageJson();
   if (cached?.session) {
     cached._cached = true;
-    cached._ageMinutes = Math.round(
-      (Date.now() - new Date(cached.timestamp).getTime()) / 60_000
-    );
+    cached._ageMinutes = Math.round(usageAgeMs(cached) / 60_000);
     if (reason) cached._failureReason = reason;
     if (lastExitCode === 2) cached._loginRequired = true;
-    return { success: true, data: cached, delta5h: null, deltaWk: null };
+    let delta5h = null;
+    let deltaWk = null;
+    if (baseline?.session) {
+      delta5h = computeDelta(cached.session?.pct, baseline.session?.pct);
+      deltaWk = computeDelta(cached.weekly?.pct, baseline.weekly?.pct);
+    }
+    return { success: true, data: cached, delta5h, deltaWk };
   }
 
   return { success: false, data: null, reason: reason || 'no usage data available' };
