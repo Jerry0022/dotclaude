@@ -2,8 +2,9 @@
 name: devops-refresh-usage
 version: 0.1.0
 description: >-
-  Fetch live token usage for completion card battery line. Supports CLI-native,
-  Edge CDP, or graceful fallback. Run silently pre-card, or manually:
+  Fetch live token usage for completion card battery line. Reads the native
+  statusLine-written usage file first (no scrape), falls back to the Edge CDP
+  scraper or cached data. Run silently pre-card, or manually:
   "refresh usage", "wie viel hab ich verbraucht", "token budget".
 allowed-tools: Bash(node *), Read
 ---
@@ -22,6 +23,21 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Fetch data
+
+### 1·0. Native source first (no scrape)
+
+`~/.claude/usage-live.json` is kept **minute-fresh by the native statusLine
+writer** ([statusline-usage.js](../../scripts/statusline-usage.js), registered by
+`ss.statusline.ensure`) — it maps Claude Code's `rate_limits` JSON onto the
+usage schema with **no browser and no extra Claude turn**. If the file's
+`timestamp` is recent (≤ a couple of minutes), just **read it — you are done**;
+skip the Edge scrape entirely. Only when it is stale/absent (pre-first-API
+response, an unsupported login, `weeklySonnet`/`plan` needed, or a host without
+the statusLine writer) fall through to the Edge scraper below. The
+`dotclaude-completion` MCP server applies this same warm-read-first logic
+automatically in `get_usage` / `render_completion_card`.
+
+### 1·1. Edge CDP scraper (fallback)
 
 The script spawns a **dedicated, isolated Edge instance** with its own
 `user-data-dir` under `~/.claude/edge-usage-profile`. It is completely
