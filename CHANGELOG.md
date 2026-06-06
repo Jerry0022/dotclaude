@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.95.0] — 2026-06-06
+
+### Added
+
+- **Native statusLine usage source — token usage is now minute-fresh without a scrape or an extra Claude turn.** The completion-card battery line (and ~10 other consumers) previously depended on a synchronous, on-demand Microsoft Edge CDP scrape of `claude.ai/settings/usage`, run only at card-render time — so on any scrape hiccup (login-cookie expiry, page-markup change, CDP/launch failure, 60s timeout) it silently fell back to stale cache labelled `cached · ~Xm old` (observed in the wild at ~133h old). New `scripts/statusline-usage.js` maps Claude Code's host-provided `rate_limits.{five_hour,seven_day}` (`used_percentage` + `resets_at`) onto the existing `~/.claude/usage-live.json` schema and is executed by the host on every status-line render — zero browser, zero tokens, no extra Claude turn — keeping the warm cache minute-fresh. It guards the known epoch-leak bug (rejects `used_percentage > 100`, anthropics/claude-code#52326), never overwrites a window that is absent/invalid (anthropics/claude-code#40094 / pre-first-API-response), writes atomically (tmp+rename), and throttles churn while still advancing the timestamp so the warm-read fast path stays valid. It doubles as a real one-line status line. New `ss.statusline.ensure` SessionStart hook (0.1.0) installs a stable launcher (`~/.claude/devops-statusline.cjs`) that resolves the newest versioned script at run time (cache-rebuild safe, same dangle-proofing the git-sync cron uses) and registers the `statusLine` only when none exists — a custom status line is never clobbered. 26 new unit tests.
+
+### Changed
+
+- **`dotclaude-completion` MCP serves the warm cache directly; the Edge scrape is now a lazy fallback.** `get_usage` / `render_completion_card` read `~/.claude/usage-live.json` first and return it instantly when it is ≤60s old — skipping the Edge scrape entirely on the common path — falling through to the scraper only when the native data is stale/absent (pre-first-API-response, an unsupported Max OAuth login, or `weeklySonnet`/`plan` which the native source does not expose). Per-card deltas are now computed against a separate `~/.claude/usage-baseline.json`, since the live file can no longer double as the "since last card" reference now that the statusLine writer updates it continuously. The Edge scraper is kept intact as the fallback engine, not removed.
+- **`devops-refresh-usage` skill is native-first.** Step 1 reads the host-written usage file before invoking the Edge scraper, and the skill's long-dead "Supports CLI-native" claim — which never had a code path — is finally true.
+
 ## [0.94.0] — 2026-06-05
 
 ### Added
