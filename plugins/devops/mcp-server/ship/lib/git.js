@@ -160,6 +160,94 @@ export function getWorktreeBranches(opts) {
 }
 
 /**
+ * Return the absolute path of the worktree that currently has `branch` checked
+ * out, or null if no worktree has it. Used to fast-forward a branch in-place
+ * (you cannot update the ref of a checked-out branch from elsewhere).
+ */
+export function worktreePathForBranch(branch, opts) {
+  const output = git("worktree list --porcelain", opts);
+  if (!output) return null;
+  let currentPath = null;
+  for (const line of output.split("\n")) {
+    if (line.startsWith("worktree ")) {
+      currentPath = line.slice("worktree ".length);
+    } else if (line === `branch refs/heads/${branch}`) {
+      return currentPath;
+    }
+  }
+  return null;
+}
+
+/**
+ * Fast-forward the LOCAL `branch` ref to its `origin/branch` counterpart,
+ * worktree-safe. After a PR merges remote-side, `origin/branch` advances but the
+ * local ref does NOT move on its own — leaving the local branch (and any
+ * checkout used for local testing) stale across ships.
+ *
+ * Strategy depends on whether the branch is checked out:
+ *   - checked out in some worktree W → `git -C W merge --ff-only origin/branch`
+ *     (git refuses `fetch origin branch:branch` into a checked-out branch).
+ *   - not checked out anywhere        → `git fetch origin branch:branch`
+ *     (direct ref update; no working tree to touch).
+ *
+ * Only ever fast-forwards — never force-moves a diverged local branch and never
+ * touches a dirty working tree's conflicting files (merge --ff-only aborts
+ * rather than overwrite). On a non-ff divergence it returns a warning instead.
+ *
+ * Returns { updated, method, path?, warning? } where method is one of
+ * "merge-ff" | "fetch-refspec" | "already-current" | "none".
+ */
+export function syncLocalBranch(branch, opts = {}) {
+  // Refresh origin/branch first (best-effort; failure surfaces below as "none").
+  git(`fetch origin ${branch}`, opts);
+
+  const remoteRef = git(`rev-parse --verify refs/remotes/origin/${branch}`, opts);
+  if (!remoteRef) {
+    return {
+      updated: false,
+      method: "none",
+      warning: `origin/${branch} not found — cannot sync local '${branch}'.`,
+    };
+  }
+
+  const localRef = git(`rev-parse --verify refs/heads/${branch}`, opts);
+  if (localRef === remoteRef) {
+    return { updated: false, method: "already-current" };
+  }
+
+  const wtPath = worktreePathForBranch(branch, opts);
+  if (wtPath) {
+    try {
+      gitStrict(`merge --ff-only origin/${branch}`, { ...opts, cwd: wtPath });
+      return { updated: true, method: "merge-ff", path: wtPath };
+    } catch (e) {
+      return {
+        updated: false,
+        method: "merge-ff",
+        path: wtPath,
+        warning:
+          `Local '${branch}' (checked out at ${wtPath}) is not fast-forwardable to ` +
+          `origin/${branch} — diverged or its working tree blocks the merge. ` +
+          `Reconcile manually: cd "${wtPath}" && git merge origin/${branch}. ` +
+          `(${(e.message || "").slice(0, 160)})`,
+      };
+    }
+  }
+
+  // Not checked out anywhere → update the ref directly (ff-only by git default).
+  try {
+    gitStrict(`fetch origin ${branch}:${branch}`, opts);
+    return { updated: true, method: "fetch-refspec" };
+  } catch (e) {
+    return {
+      updated: false,
+      method: "fetch-refspec",
+      warning: `Could not fast-forward local '${branch}' to origin/${branch}: ${(e.message || "").slice(0, 200)}`,
+    };
+  }
+}
+
+/**
  * Detect the repository's default branch (the branch `origin/HEAD` points to,
  * typically "main" or "master"). Returns null if origin/HEAD is not set.
  *
