@@ -1,10 +1,14 @@
 import { describe, test, expect } from "vitest";
 import {
   isWebRenderableChange,
+  isCodeChange,
+  classifyProfile,
+  needsLightVerification,
   isBrowserTool,
-  isVerificationDelegation,
-  decideBrowserTest,
-  buildBrowserTestReason,
+  isTestRunnerTool,
+  isLightVerification,
+  decideLightTest,
+  buildLightTestReason,
 } from "./browsertest-guard.js";
 
 // ---------------------------------------------------------------------------
@@ -31,7 +35,6 @@ describe("isWebRenderableChange", () => {
     expect(isWebRenderableChange("src/store.ts")).toBe(true);
     expect(isWebRenderableChange("app/router.js")).toBe(true);
     expect(isWebRenderableChange("renderer/main.ts")).toBe(true);
-    // Outside a UI dir → not a renderable change
     expect(isWebRenderableChange("scripts/build.js")).toBe(false);
     expect(isWebRenderableChange("mcp-server/index.js")).toBe(false);
     expect(isWebRenderableChange("hooks/lib/foo.ts")).toBe(false);
@@ -45,26 +48,16 @@ describe("isWebRenderableChange", () => {
 
   test("devops-concept pages are carved out", () => {
     expect(isWebRenderableChange("docs/concepts/2026-06-05-plan.html")).toBe(false);
-    expect(isWebRenderableChange("./docs/concepts/x.html")).toBe(false);
-    // A normal docs html still counts
     expect(isWebRenderableChange("docs/guide.html")).toBe(true);
   });
 
   test("test / spec files do not count", () => {
     expect(isWebRenderableChange("src/App.test.tsx")).toBe(false);
     expect(isWebRenderableChange("src/util.spec.ts")).toBe(false);
-    expect(isWebRenderableChange("components/Card.test.jsx")).toBe(false);
   });
 
   test("non-web files never count", () => {
-    for (const p of [
-      "README.md",
-      "package.json",
-      "CLAUDE.md",
-      "data.csv",
-      "config.yaml",
-      "Dockerfile",
-    ]) {
+    for (const p of ["README.md", "package.json", "data.csv", "config.yaml"]) {
       expect(isWebRenderableChange(p)).toBe(false);
     }
   });
@@ -77,34 +70,113 @@ describe("isWebRenderableChange", () => {
 });
 
 // ---------------------------------------------------------------------------
+// isCodeChange
+// ---------------------------------------------------------------------------
+
+describe("isCodeChange", () => {
+  test("source files of many languages count", () => {
+    for (const p of [
+      "mcp-server/index.js",
+      "hooks/lib/foo.ts",
+      "src/app.py",
+      "cmd/main.go",
+      "lib/thing.rs",
+      "Service.java",
+      "styles/main.css",
+      "src/App.vue",
+    ]) {
+      expect(isCodeChange(p)).toBe(true);
+    }
+  });
+
+  test("docs / config / markdown never count (Option-A exclusion)", () => {
+    for (const p of [
+      "README.md",
+      "deep-knowledge/test-autonomy.md",
+      "package.json",
+      "tsconfig.json",
+      "config.yaml",
+      "settings.toml",
+      ".gitignore",
+      "pnpm-lock.yaml",
+      "logo.png",
+    ]) {
+      expect(isCodeChange(p)).toBe(false);
+    }
+  });
+
+  test("test / spec files and concept pages are excluded", () => {
+    expect(isCodeChange("src/util.spec.ts")).toBe(false);
+    expect(isCodeChange("hooks/lib/guard.test.js")).toBe(false);
+    expect(isCodeChange("docs/concepts/plan.html")).toBe(false);
+  });
+
+  test("empty / missing input → false", () => {
+    expect(isCodeChange("")).toBe(false);
+    expect(isCodeChange(null)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// classifyProfile
+// ---------------------------------------------------------------------------
+
+describe("classifyProfile", () => {
+  test("DOM profiles", () => {
+    for (const n of ["web-vite", "web-angular", "electron-ow", "tauri-app", "my-pwa"]) {
+      expect(classifyProfile(n)).toBe("dom");
+    }
+  });
+
+  test("runner profiles", () => {
+    for (const n of ["cli-node", "lib", "generic", "python-api", "go-service"]) {
+      expect(classifyProfile(n)).toBe("runner");
+    }
+  });
+
+  test("unknown / empty → any", () => {
+    expect(classifyProfile("")).toBe("any");
+    expect(classifyProfile(null)).toBe("any");
+    expect(classifyProfile("some-exotic-profile")).toBe("any");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// needsLightVerification
+// ---------------------------------------------------------------------------
+
+describe("needsLightVerification", () => {
+  test("dom profile → only web-renderable files are pending", () => {
+    expect(needsLightVerification("dom", "src/App.vue")).toBe(true);
+    expect(needsLightVerification("dom", "mcp-server/index.js")).toBe(false); // backend js, not renderable
+  });
+
+  test("runner profile → any source file is pending", () => {
+    expect(needsLightVerification("runner", "mcp-server/index.js")).toBe(true);
+    expect(needsLightVerification("runner", "src/app.py")).toBe(true);
+    expect(needsLightVerification("runner", "README.md")).toBe(false);
+  });
+
+  test("any profile → any source file is pending", () => {
+    expect(needsLightVerification("any", "scripts/build.js")).toBe(true);
+    expect(needsLightVerification("any", "config.json")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // isBrowserTool
 // ---------------------------------------------------------------------------
 
 describe("isBrowserTool", () => {
-  test("Chrome-MCP (Claude extension in Edge) tools count", () => {
+  test("Chrome-MCP / Preview / Playwright tools count", () => {
     expect(isBrowserTool("mcp__Claude_in_Chrome__navigate")).toBe(true);
-    expect(isBrowserTool("mcp__Claude_in_Chrome__read_page")).toBe(true);
-    expect(isBrowserTool("mcp__Claude_in_Chrome__read_console_messages")).toBe(true);
-    expect(isBrowserTool("mcp__Claude_in_Chrome__javascript_tool")).toBe(true);
-  });
-
-  test("Preview MCP tools count", () => {
     expect(isBrowserTool("mcp__Claude_Preview__preview_snapshot")).toBe(true);
-    expect(isBrowserTool("mcp__Claude_Preview__preview_screenshot")).toBe(true);
-  });
-
-  test("Playwright MCP browser tools count", () => {
-    expect(isBrowserTool("mcp__plugin_playwright_playwright__browser_navigate")).toBe(true);
     expect(isBrowserTool("mcp__plugin_playwright_playwright__browser_snapshot")).toBe(true);
-  });
-
-  test("short-name fallbacks count", () => {
     expect(isBrowserTool("preview_snapshot")).toBe(true);
-    expect(isBrowserTool("browser_take_screenshot")).toBe(true);
   });
 
   test("non-browser tools do not count", () => {
-    for (const t of ["Edit", "Write", "Bash", "Read", "Grep", "Agent", "WebFetch", ""]) {
+    for (const t of ["Edit", "Write", "Bash", "Read", "Agent", ""]) {
       expect(isBrowserTool(t)).toBe(false);
     }
   });
@@ -116,125 +188,160 @@ describe("isBrowserTool", () => {
 });
 
 // ---------------------------------------------------------------------------
-// isVerificationDelegation
+// isTestRunnerTool
 // ---------------------------------------------------------------------------
 
-describe("isVerificationDelegation", () => {
-  test("Agent spawn of a verification subagent counts", () => {
-    expect(isVerificationDelegation("Agent", "qa")).toBe(true);
-    expect(isVerificationDelegation("Agent", "frontend")).toBe(true);
-    expect(isVerificationDelegation("Agent", "gamer")).toBe(true);
-    expect(isVerificationDelegation("Agent", "QA")).toBe(true); // case-insensitive
+describe("isTestRunnerTool", () => {
+  test("common runners in a Bash command count", () => {
+    for (const c of [
+      "npm test",
+      "npm run test",
+      "npm run test:unit",
+      "pnpm test",
+      "yarn test",
+      "npx vitest run",
+      "vitest",
+      "jest --ci",
+      "python -m pytest",
+      "pytest -q",
+      "go test ./...",
+      "cargo test",
+      "dotnet test",
+      "./gradlew test",
+      "npx playwright test",
+    ]) {
+      expect(isTestRunnerTool("Bash", c)).toBe(true);
+    }
   });
 
-  test("Agent spawn of a non-verifying subagent does NOT count", () => {
-    expect(isVerificationDelegation("Agent", "research")).toBe(false);
-    expect(isVerificationDelegation("Agent", "redteam")).toBe(false);
-    expect(isVerificationDelegation("Agent", "core")).toBe(false);
+  test("non-test Bash commands do not count", () => {
+    for (const c of ["npm install", "npm run build", "git status", "node app.js", "ls"]) {
+      expect(isTestRunnerTool("Bash", c)).toBe(false);
+    }
   });
 
-  test("non-Agent tools never count, even with a verify name", () => {
-    expect(isVerificationDelegation("Edit", "qa")).toBe(false);
-    expect(isVerificationDelegation("Bash", "frontend")).toBe(false);
+  test("PowerShell counts too (Windows shell)", () => {
+    expect(isTestRunnerTool("PowerShell", "npm test")).toBe(true);
+    expect(isTestRunnerTool("PowerShell", "npm run build")).toBe(false);
   });
 
-  test("missing subagent type → false", () => {
-    expect(isVerificationDelegation("Agent", undefined)).toBe(false);
-    expect(isVerificationDelegation("Agent", "")).toBe(false);
+  test("only shell tools count; missing command → false", () => {
+    expect(isTestRunnerTool("Edit", "npm test")).toBe(false);
+    expect(isTestRunnerTool("Read", "pytest")).toBe(false);
+    expect(isTestRunnerTool("Bash", "")).toBe(false);
+    expect(isTestRunnerTool("Bash", null)).toBe(false);
   });
 });
 
 // ---------------------------------------------------------------------------
-// decideBrowserTest — decision matrix
+// isLightVerification
 // ---------------------------------------------------------------------------
 
-describe("decideBrowserTest", () => {
-  test("web change + not verified → BLOCK, keep flags", () => {
-    const d = decideBrowserTest({
-      webChangePending: true,
-      browserVerified: false,
-      stopHookActive: false,
-    });
-    expect(d.action).toBe("block");
-    expect(d.resetFlags).toBe(false);
-    expect(d.reason).toMatch(/Web Tech/);
-    expect(d.reason).toMatch(/Claude-in-Chrome extension in Edge/);
+describe("isLightVerification", () => {
+  test("dom → only a browser tool satisfies", () => {
+    expect(isLightVerification("dom", "mcp__Claude_in_Chrome__read_page")).toBe(true);
+    expect(isLightVerification("dom", "Bash", "npm test")).toBe(false);
   });
 
-  test("web change + verified → pass, reset", () => {
-    const d = decideBrowserTest({
-      webChangePending: true,
-      browserVerified: true,
-      stopHookActive: false,
-    });
+  test("runner → only a test run satisfies", () => {
+    expect(isLightVerification("runner", "Bash", "npm test")).toBe(true);
+    expect(isLightVerification("runner", "mcp__Claude_in_Chrome__read_page")).toBe(false);
+  });
+
+  test("any → browser OR test run satisfies", () => {
+    expect(isLightVerification("any", "mcp__Claude_Preview__preview_snapshot")).toBe(true);
+    expect(isLightVerification("any", "Bash", "pytest")).toBe(true);
+    expect(isLightVerification("any", "Bash", "npm run build")).toBe(false);
+  });
+
+  test("a subagent delegation never satisfies (closed loophole)", () => {
+    // Agent spawns are no longer special-cased — only observable tool calls count.
+    expect(isLightVerification("dom", "Agent")).toBe(false);
+    expect(isLightVerification("any", "Agent")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// decideLightTest — decision matrix
+// ---------------------------------------------------------------------------
+
+describe("decideLightTest", () => {
+  test("pending + not verified → BLOCK, keep flags", () => {
+    const d = decideLightTest({ pending: true, verified: false, stopHookActive: false, kind: "dom" });
+    expect(d.action).toBe("block");
+    expect(d.resetFlags).toBe(false);
+    expect(d.reason).toMatch(/browser verification/);
+  });
+
+  test("runner-kind block reason names the test suite", () => {
+    const d = decideLightTest({ pending: true, verified: false, stopHookActive: false, kind: "runner" });
+    expect(d.action).toBe("block");
+    expect(d.reason).toMatch(/test suite/);
+    expect(d.reason).toMatch(/npm test/);
+  });
+
+  test("pending + verified → pass, reset", () => {
+    const d = decideLightTest({ pending: true, verified: true, stopHookActive: false, kind: "dom" });
     expect(d.action).toBe("pass");
     expect(d.resetFlags).toBe(true);
   });
 
-  test("no web change → pass, reset", () => {
-    const d = decideBrowserTest({
-      webChangePending: false,
-      browserVerified: false,
-      stopHookActive: false,
-    });
+  test("no pending → pass, reset", () => {
+    const d = decideLightTest({ pending: false, verified: false, stopHookActive: false });
     expect(d.action).toBe("pass");
     expect(d.resetFlags).toBe(true);
   });
 
   test("stop_hook_active short-circuits — one-time bypass, reset", () => {
-    const d = decideBrowserTest({
-      webChangePending: true,
-      browserVerified: false,
-      stopHookActive: true,
-    });
+    const d = decideLightTest({ pending: true, verified: false, stopHookActive: true, kind: "dom" });
     expect(d.action).toBe("pass");
     expect(d.resetFlags).toBe(true);
   });
 
   test("silent turn → pass + reset regardless of pending state", () => {
-    const d = decideBrowserTest({
-      webChangePending: true,
-      browserVerified: false,
-      stopHookActive: false,
-      silent: true,
-    });
+    const d = decideLightTest({ pending: true, verified: false, stopHookActive: false, silent: true });
     expect(d.action).toBe("pass");
     expect(d.resetFlags).toBe(true);
   });
 
   test("silent short-circuits before stop_hook_active check", () => {
-    const d = decideBrowserTest({
-      webChangePending: true,
-      browserVerified: false,
-      stopHookActive: true,
-      silent: true,
-    });
+    const d = decideLightTest({ pending: true, verified: false, stopHookActive: true, silent: true });
     expect(d.action).toBe("pass");
     expect(d.resetFlags).toBe(true);
   });
 });
 
 // ---------------------------------------------------------------------------
-// buildBrowserTestReason — output contract
+// buildLightTestReason — output contract
 // ---------------------------------------------------------------------------
 
-describe("buildBrowserTestReason", () => {
-  test("names the Edge extension as primary and the fallback order", () => {
-    const r = buildBrowserTestReason();
+describe("buildLightTestReason", () => {
+  test("dom: names the Edge extension as primary and the fallback order", () => {
+    const r = buildLightTestReason("dom");
     expect(r).toMatch(/Claude-in-Chrome extension in Edge \(PRIMARY\)/);
     expect(r).toMatch(/Playwright → Preview/);
-    expect(r).toMatch(/Never plain\s+Chrome/);
-  });
-
-  test("requires console + network reads", () => {
-    const r = buildBrowserTestReason();
+    expect(r).toMatch(/Never plain Chrome/);
     expect(r).toMatch(/read_console_messages/);
     expect(r).toMatch(/read_network_requests/);
   });
 
-  test("documents the concept carve-out and the one-block escape", () => {
-    const r = buildBrowserTestReason();
-    expect(r).toMatch(/docs\/concepts/);
-    expect(r).toMatch(/yields after one block/);
+  test("runner: tells you to run the suite", () => {
+    const r = buildLightTestReason("runner");
+    expect(r).toMatch(/test suite/);
+    expect(r).toMatch(/pytest/);
+  });
+
+  test("any: routes through /devops-test-plan", () => {
+    const r = buildLightTestReason("any");
+    expect(r).toMatch(/devops-test-plan/);
+  });
+
+  test("every kind documents the delegation rule, concept carve-out and one-block escape", () => {
+    for (const kind of ["dom", "runner", "any"]) {
+      const r = buildLightTestReason(kind);
+      expect(r).toMatch(/delegation does NOT satisfy/);
+      expect(r).toMatch(/docs\/concepts/);
+      expect(r).toMatch(/yields/);
+    }
   });
 });

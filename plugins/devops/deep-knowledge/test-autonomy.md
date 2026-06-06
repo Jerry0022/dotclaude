@@ -8,38 +8,106 @@ defer to this file for autonomy and tool-selection decisions.
 
 ## Hard Rule
 
-Autonomy is the default. Do not ask the user which test tool to use. Follow the
-tier order Snapshot → Screenshot → Computer-use strictly — use the lowest tier
-that can verify the change. Ask the user only when a Must-Ask Trigger fires (see
-below). The `$TEST_PROFILE` variable (set by `/devops-test-plan`) pins the
-tool-chain for the session; if it is not set, invoke `/devops-test-plan` first.
+Autonomy is the default. Do not ask the user which test tool to use.
+
+- **Light verification ALWAYS runs** after a code change — automatically, at the
+  lowest surface tier that can verify it. It is not optional and not user-gated.
+- **Full verification** (launching the real app-as-shipped, computer-use,
+  desktop/device takeover) runs **only** on explicit user request OR when a
+  project skill extension demands it. Never autonomously.
+
+Ask the user only when a Must-Ask Trigger fires (see below). The `$TEST_PROFILE`
+variable (set by `/devops-test-plan`) pins the tool-chain for the session; if it
+is not set, invoke `/devops-test-plan` first.
+
+---
+
+## The Model — Two Orthogonal Axes
+
+Tool selection is the intersection of two independent questions, not one ladder.
+
+### Axis 1 — Surface: what can you read?
+
+Pick the cheapest readable surface that exists. Drop to pixels only when nothing
+structured is reachable.
+
+| Surface | Read via | Example targets |
+|---------|----------|-----------------|
+| **DOM** | Preview / Chrome-MCP (Edge) / Playwright — snapshot, then screenshot | web apps, Electron/Tauri/WebView renderers, PWAs |
+| **Text** | terminal / PTY capture (Bash) | CLI tools, TUIs (ncurses) |
+| **a11y / UIA tree** | *(no reader tool ships in this plugin today → falls through to pixels)* | native GUI: WPF, Qt, WinForms, Cocoa |
+| **Pixels** | computer-use (screenshot + click) | games, canvas/GPU UIs, native GUI without a reader |
+
+"No DOM" is **not** "no structured surface": a TUI's surface is its text output —
+read it via the terminal, not computer-use. Computer-use is the **floor**,
+reached only when no structured surface is available.
+
+Decision gate: **is any debug/structured surface reachable?** If yes → stay in
+structured tools. A *packaged* Electron app still has a DOM — attach via
+`--remote-debugging-port` and stay on the DOM surface. Drop to pixels only when
+there is genuinely no attach point or the frontend speaks no browser language.
+
+### Axis 2 — Depth: Light vs Full
+
+Orthogonal to surface. Applies wherever the frontend is separable from its shell.
+
+| Depth | Verifies | When | Driver |
+|-------|----------|------|--------|
+| **Light** | frontend correctness via the structured surface | **always, autonomous** | the surface tool (Axis 1), at the shell's real constraints |
+| **Full** | the app *as shipped*: shell, window chrome, installer, OS integration, tray, auto-update, multi-monitor | **opt-in only** — explicit user request OR project-extension flag | the shell's own driver (desktop binary → computer-use; mobile → emulator/device automation) |
+
+Light and Full test **different things**, not two quality levels. Light cannot
+see the native shell; Full exists precisely to test what the DOM never exposes.
+That is why Full is opt-in.
+
+---
+
+## Application Categories
+
+| Cat. | Frontend | Light (default, always) | Full (opt-in) |
+|------|----------|-------------------------|---------------|
+| **A — Pure web** | DOM, dev-server or deployed | snapshot + screenshot across the responsive viewports | n/a — the browser *is* the shell |
+| **B — DOM in a non-web shell** | DOM wrapped in a desktop / mobile / kiosk / embedded shell (Electron, Tauri, Capacitor, Cordova, RN-WebView…) | DOM tools at the **shell's** constraints (min window size + supported DPI/scaling, or device viewport) | launch the packaged app: desktop → computer-use · mobile → emulator window (computer-use) / real device (Appium, scrcpy) |
+| **C — No DOM** | native-UI / text / canvas | **none for native/canvas** — no readable structured surface, so computer-use is the *primary* path, not a fallback. **TUI exception:** read the text surface via the terminal | already the primary path |
+
+Category-B Light uses the **shell's** real constraints — `minWidth`/`minHeight`
+of the window plus the DPI/zoom steps the app permits (100/125/150 %) — **not**
+the web responsive breakpoints. An Electron window is never 375 px wide.
+
+---
+
+## Surface Tier Order (within Light)
+
+Always escalate from the cheapest read upward; never skip a tier without a
+documented reason. The capability matters, not the specific tool — these tier
+names are tool-agnostic so the same order holds for Preview, Chrome-MCP, and
+Playwright alike.
+
+| Tier | Capability | DOM tools (examples) | Text tools |
+|------|-----------|----------------------|------------|
+| 1 — Structured read | DOM/text + ARIA + console + network | `preview_snapshot` / `read_page` / `browser_snapshot` **+** console + network read | terminal stdout capture |
+| 2 — Rendered read | rendered pixels (layout, colour, icons) | `preview_screenshot` / `take_screenshot` — only when pixels matter | — |
+| 3 — Interaction | click / fill / eval | DOM click/fill/eval | scripted input |
+| 4 — Pixel control | full pixel drive | computer-use — **Full / no-DOM only**, never autonomous on a DOM surface | computer-use |
+
+Use Tier 1 for all content and logic checks. Escalate to Tier 2 only when
+pixel-level layout matters. A clean structured read does **not** prove the
+absence of runtime errors — always read console + network alongside a snapshot.
 
 ---
 
 ## Default Behavior
 
-1. Check whether `$TEST_PROFILE` is already set for this session
-   (read `~/.claude/cache/devops/test-profile-<session_id>.json`).
-2. If not set → invoke `/devops-test-plan` to detect the project profile and
-   populate the session cache.
-3. Default tool-chain: Chrome-MCP (running in Microsoft Edge — never Chrome).
-4. Use `preview_snapshot` before `preview_screenshot` before `javascript_tool`
-   viewport changes before computer-use.
-5. Never skip a tier without a documented reason.
-
----
-
-## Tier Order
-
-| Tier | Tool(s) | When to use | Why this tier first |
-|------|---------|-------------|---------------------|
-| 1 — Snapshot | `preview_snapshot`, `read_page` | DOM/text content verification, element presence, ARIA state | Zero visual overhead; fast; deterministic |
-| 2 — Screenshot | `preview_screenshot`, `take_screenshot` | Visual layout, colour, icon rendering, responsive breakpoints | Captures rendered output without browser control |
-| 3 — Computer-use | `mcp__computer-use__*` | Only when explicitly triggered by user or a packaged-app Must-Ask | Full desktop control; disruptive; slow |
-
-Use **Tier 1** for all content and logic checks. Escalate to **Tier 2** only
-when pixel-level layout matters (UI change in a web or Electron renderer). Use
-**Tier 3** only at Must-Ask triggers — never autonomously.
+1. Check whether `$TEST_PROFILE` is set
+   (`~/.claude/cache/devops/test-profile-<session_id>.json`).
+2. If not → invoke `/devops-test-plan` to detect the profile and populate cache.
+3. Run the **Light** verification for the profile's surface — automatically,
+   for every code change (enforced by the browser/light gate, not advisory).
+4. For a DOM surface, resolve the concrete browser tool via the waterfall in
+   [browser-tool-strategy.md](browser-tool-strategy.md). Computer-use is never a
+   DOM-surface tool.
+5. Escalate Light tiers Structured → Rendered → Interaction only as needed.
+6. **Full** verification only at an opt-in (user request or extension flag).
 
 ---
 
@@ -47,43 +115,54 @@ when pixel-level layout matters (UI change in a web or Electron renderer). Use
 
 Ask the user before proceeding in exactly these situations:
 
-1. **Native packaged desktop app** — packaged Electron, Tauri, or Win32
-   executable (not running in a dev-server renderer). Reason: the renderer is
-   not reachable via Chrome-MCP; computer-use may be the only option.
+1. **Full verification of a native packaged app** — launching a packaged
+   Electron/Tauri/Win32 binary (Category-B Full or Category-C). Reason: the real
+   shell needs computer-use/device control, which is disruptive. A project skill
+   extension MAY pre-authorize this as a **standing opt-in** (see below) so the
+   per-run question is skipped.
 2. **Real 3rd-party live call that changes state** — Stripe charge, OAuth login
    with a real user account, outbound webhook to a production system. Reason:
    irreversible side-effect outside the project boundary.
 3. **Explicit user instruction for desktop takeover** — user says "take the
    desktop", "desktop übernehmen", or "computer use". Reason: opt-in only.
 
-Everything else — including service calls in dev/test environments,
-form fills, and responsive-layout checks — is autonomous.
+Everything else — Light verification, service calls in dev/test environments,
+form fills, responsive-layout checks — is autonomous.
+
+**Standing opt-in (extension flag).** A project extension may set
+`full_app_test: true` (in its `devops-test-plan` profile) to declare that
+Full verification is always wanted for that project. This converts trigger #1
+from a per-run question into a pre-authorized autonomous Full run. Without the
+flag, Full stays user-gated.
 
 ---
 
 ## Decision Matrix
 
 Use the intersection of project profile and change scope to determine the
-tool-chain. "Chrome-MCP" means Chrome-MCP extension running in Edge.
+tool-chain. "DOM tools" resolves to the browser waterfall (Preview / Chrome-MCP
+in Edge / Playwright) per [browser-tool-strategy.md](browser-tool-strategy.md).
 
 | Profile \ Change scope | `style-only` | `component-logic` | `data-model` | `config` | `build/infra` |
 |------------------------|-------------|-------------------|--------------|----------|---------------|
-| `web-vite` | Snapshot + Screenshot × 5 viewports | Snapshot + Screenshot × 5 viewports | Snapshot | Snapshot | npm test only |
-| `web-angular` | Snapshot + Screenshot × 5 viewports | Snapshot + Screenshot × 5 viewports | Snapshot | Snapshot | npm test only |
-| `electron-ow` | Snapshot + Screenshot (renderer) | Snapshot + Screenshot (renderer) | Snapshot | Snapshot | Must-Ask (packaged) |
+| `web-vite` | Light: Snapshot + Screenshot × 5 viewports | Light: Snapshot + Screenshot × 5 viewports | Snapshot | Snapshot | npm test only |
+| `web-angular` | Light: Snapshot + Screenshot × 5 viewports | Light: Snapshot + Screenshot × 5 viewports | Snapshot | Snapshot | npm test only |
+| `electron-ow` | **Light**: Snapshot + Screenshot (renderer at app min-res/scaling, autonomous) | **Light**: Snapshot + Screenshot (renderer) | Snapshot | Snapshot | **Full**: packaged app via computer-use — opt-in (user or `full_app_test`) |
 | `cli-node` | — | npm test + CLI run | npm test | npm test | npm test |
 | `lib` | — | npm test | npm test | — | npm run build |
 | `generic` | Manual review | npm test or pytest | npm test or pytest | Manual review | Manual review |
 
-Viewports for web profiles (5 total): iPhone SE 375×667, Pixel 7 393×851
+Viewports for **web** profiles (5 total): iPhone SE 375×667, Pixel 7 393×851
 (Android phone), iPad 768×1024, Galaxy Tab S9 800×1280 (Android tablet),
 Desktop 1280×800 (see [responsive-testing.md](responsive-testing.md)).
+**Category-B** profiles (electron-ow and any mobile/kiosk shell) replace these
+with the shell's own constraints — never the web breakpoints.
 
 Project skill extensions can register additional profiles via
 `{project}/.claude/skills/devops-test-plan/` (see the
 [skill SKILL.md, Step 2a](../skills/devops-test-plan/SKILL.md)). The same tier
 order and must-ask rules apply — extension profiles inherit autonomy defaults
-unless their JSON sets `must_ask_triggers` explicitly.
+unless their JSON sets `must_ask_triggers` (or `full_app_test`) explicitly.
 
 ---
 
