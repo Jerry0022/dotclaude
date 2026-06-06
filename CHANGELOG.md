@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.96.0] — 2026-06-06
+
+### Changed
+
+- **Test-tool selection is now a two-axis model, and the Stop-time test gate enforces it profile-wide.** `deep-knowledge/test-autonomy.md` replaces the single Snapshot→Screenshot→Computer-use ladder with two orthogonal axes — *surface* (DOM → text → a11y/UIA → pixels; pick the cheapest readable one) and *depth* (Light always-on/autonomous vs Full opt-in) — plus three application categories (pure web · DOM-in-a-non-web-shell incl. Electron/Tauri/Capacitor/Cordova · no-DOM native/canvas/TUI). Computer-use is reframed as the *no-DOM floor*, not a "no-browser" tool: it is the primary path for native/canvas frontends and only the last resort for an unreachable DOM (e.g. a packaged Electron build without a debug port). Category-B Light tests at the shell's real constraints (min window size + DPI scaling), not the web responsive breakpoints. Full verification (launching the packaged app, computer-use, desktop/device takeover) stays user- or extension-gated via a new standing `full_app_test` opt-in. `browser-tool-strategy.md` updates the computer-use section to match.
+- **`stop.flow.browsertest` generalized from web-only to `$TEST_PROFILE`-aware Light enforcement.** The gate previously fired only on browser-renderable file changes and was satisfied by *any* browser tool — or merely by delegating to a verification subagent. It now blocks whenever a **code** file changed and the matching Light check never ran: DOM profiles require a browser tool, runner profiles (cli/lib/generic/backend) require an observable test run (`npm test` / `vitest` / `jest` / `pytest` / `go test` / …), unknown/unpinned profiles accept either. Two correctness fixes fall out: (a) a **subagent delegation no longer satisfies the gate** — only an observable tool call in the main thread counts (closed loophole), and (b) test runs via the **PowerShell** tool are now recognised, not just `Bash` — without which the gate would have blocked every code edit on Windows. Pure docs/markdown/config edits, `*.test`/`*.spec` files, and `docs/concepts/*.html` never trigger it; the gate still yields after one block so it can never loop. New session flags `light-pending` / `light-kind` / `light-verified` replace `web-change-pending` / `browser-verified`. `browsertest-guard` 0.1.0→0.2.0, `stop.flow.browsertest` 0.1.0→0.2.0, `post.flow.completion` 0.16.0→0.17.0; 39 unit tests (was 26).
+
 ## [0.95.0] — 2026-06-06
 
 ### Added

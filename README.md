@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.95.0**
+**Version: 0.96.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -230,7 +230,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 #### Stop — runs when Claude finishes responding
 
-- `stop.flow.browsertest` — Browser-test enforcement gate.
+- `stop.flow.browsertest` — Light-verification enforcement gate.
 - `stop.flow.guard` — Per-turn completion card enforcement.
 - `stop.flow.selfcalibration` — Run self-calibration when Claude finishes a response turn.
 <!--/devops:block:hook-lifecycle-->

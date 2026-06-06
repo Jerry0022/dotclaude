@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.16.0
+ * @version 0.17.0
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -10,20 +10,40 @@
  *   Edit/Write calls additionally increment the session edit counter.
  *   At 5+ edits, injects desktop-testing prompt for UI projects.
  *   Writes a per-turn "work-happened" flag consumed by stop.flow.guard, plus
- *   the browser-test gate flags (web-change-pending / browser-verified)
- *   consumed by stop.flow.browsertest.
+ *   the Light-verification gate flags (light-pending / light-kind /
+ *   light-verified) consumed by stop.flow.browsertest. Pending/verified are
+ *   scoped to the active $TEST_PROFILE class (DOM → browser; runner → test
+ *   suite). Subagent delegation no longer satisfies the gate.
  */
 
 require('../lib/plugin-guard');
 
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { getLocale, t } = require('../lib/locale');
 const {
-  isWebRenderableChange,
-  isBrowserTool,
-  isVerificationDelegation,
+  classifyProfile,
+  needsLightVerification,
+  isLightVerification,
 } = require('../lib/browsertest-guard');
+
+/**
+ * Read the pinned $TEST_PROFILE for this session and classify it. The profile
+ * cache is written by /devops-test-plan. Missing / unreadable → 'any'.
+ * @param {string} sessionId
+ * @returns {'dom'|'runner'|'any'}
+ */
+function readProfileClass(sessionId) {
+  try {
+    const p = path.join(os.homedir(), '.claude', 'cache', 'devops', `test-profile-${sessionId}.json`);
+    const json = JSON.parse(fs.readFileSync(p, 'utf8'));
+    return classifyProfile(json.profile);
+  } catch {
+    return classifyProfile('');
+  }
+}
 
 // Bilingual strings for the desktop-test AskUserQuestion prompt.
 // Keys correspond to fields the user sees in Claude Code's question UI.
@@ -105,26 +125,35 @@ process.stdin.on('end', () => {
     writeSessionFile(activityFile, Date.now().toString());
   } catch {}
 
-  // --- 1e. Browser-test gate flags (consumed by stop.flow.browsertest) ---
-  //   web-change-pending → a browser-renderable file changed and still needs
-  //     verification (devops-concept pages under docs/concepts/*.html are
-  //     excluded by isWebRenderableChange).
-  //   browser-verified → a browser tool ran, or a verification subagent was
-  //     delegated, somewhere this session.
+  // --- 1e. Light-verification gate flags (consumed by stop.flow.browsertest) ---
+  //   light-pending → a code file changed and still needs a Light check, scoped
+  //     to the active $TEST_PROFILE (DOM profiles → web-renderable files only;
+  //     runner/unknown profiles → any source file). Docs/markdown/config edits,
+  //     *.test/*.spec files, and devops-concept pages never set this.
+  //   light-kind   → which Light check is required ('dom' | 'runner' | 'any'),
+  //     so the Stop hook can render the right instruction.
+  //   light-verified → an OBSERVABLE matching verification ran (browser tool for
+  //     DOM, test runner for runner). A subagent delegation does NOT count —
+  //     the main thread cannot see inside it (closed loophole, intentional).
   try {
+    const profileClass = readProfileClass(hook.session_id);
     if (isCodeEdit) {
       const editedPath = hook.tool_input && hook.tool_input.file_path;
-      if (isWebRenderableChange(editedPath)) {
+      if (needsLightVerification(profileClass, editedPath)) {
         writeSessionFile(
-          sessionFile('dotclaude-devops-web-change-pending', hook.session_id),
+          sessionFile('dotclaude-devops-light-pending', hook.session_id),
           String(editedPath),
+        );
+        writeSessionFile(
+          sessionFile('dotclaude-devops-light-kind', hook.session_id),
+          profileClass,
         );
       }
     }
-    const subagentType = hook.tool_input && hook.tool_input.subagent_type;
-    if (isBrowserTool(toolName) || isVerificationDelegation(toolName, subagentType)) {
+    const command = hook.tool_input && hook.tool_input.command;
+    if (isLightVerification(profileClass, toolName, command)) {
       writeSessionFile(
-        sessionFile('dotclaude-devops-browser-verified', hook.session_id),
+        sessionFile('dotclaude-devops-light-verified', hook.session_id),
         toolName,
       );
     }

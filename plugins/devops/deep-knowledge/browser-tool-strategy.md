@@ -280,17 +280,26 @@ already succeeded), follow this recovery sequence:
 
 **NEVER silently stop monitoring** — always inform the user why monitoring ended.
 
-## Computer-Use: Native Apps Only
+## Computer-Use: No-DOM Floor, Not "No Browser"
 
-`computer-use` is **exclusively** for native desktop applications (file explorer,
-system settings, desktop apps). Never use it for:
+The precise rule is in [test-autonomy.md](test-autonomy.md) (Surface axis):
+computer-use is the **pixel floor**, reached only when no structured surface is
+readable. That makes it the *primary* tool for genuinely no-DOM frontends
+(native GUI, games, canvas) — and the *last resort* for a DOM frontend whose
+renderer is unreachable (e.g. a packaged Electron build with no debug port).
+
+For any reachable DOM surface it is **never** used:
 - Browser navigation or clicking
 - Web page interaction
 - Form filling in web apps
 - Reading web page content
 
-Browsers have read-only tier in computer-use — visible in screenshots but all
-interaction (clicks, typing) is blocked by the MCP server.
+A packaged desktop app still has a DOM — prefer attaching via
+`--remote-debugging-port` (then Chrome-MCP/Playwright/Preview) over driving it
+with pixels. Browsers have read-only tier in computer-use — visible in
+screenshots but all interaction (clicks, typing) is blocked by the MCP server.
+"No DOM" is not "no structured surface": a TUI's text output is readable via the
+terminal (Bash), which is cheaper than pixel control.
 
 ## Tool Mapping Reference
 

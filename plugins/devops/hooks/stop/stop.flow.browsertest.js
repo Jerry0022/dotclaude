@@ -1,26 +1,30 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.browsertest
- * @version 0.1.0
+ * @version 0.2.0
  * @event Stop
  * @plugin devops
- * @description Browser-test enforcement gate. Blocks the turn when a
- *   browser-renderable file changed this session but no browser tool ran
- *   (Claude-in-Chrome in Edge / Playwright / Preview) and no verification
- *   subagent was delegated. Flags are written by post.flow.completion;
- *   devops-concept pages (docs/concepts/*.html) are excluded there. Decision
- *   logic lives in lib/browsertest-guard.js (pure, unit-tested).
+ * @description Light-verification enforcement gate. Blocks the turn when a CODE
+ *   file changed this session but the matching Light check never ran:
+ *   DOM-surface profiles need a browser tool (Claude-in-Chrome in Edge /
+ *   Playwright / Preview); runner profiles need a test run (npm test / pytest /
+ *   …). Per test-autonomy.md the Light check is mandatory; Full (computer-use /
+ *   packaged app) stays opt-in and is NOT enforced here. A subagent delegation
+ *   does NOT satisfy the gate — verification must be observable in the main
+ *   thread. Flags are written by post.flow.completion; docs/markdown/config and
+ *   devops-concept pages are excluded there. Decision logic lives in
+ *   lib/browsertest-guard.js (pure, unit-tested).
  *
- *   Runs BEFORE stop.flow.guard so the "verify in the browser" instruction is
- *   delivered before the completion-card gate. Yields after one block
- *   (stop_hook_active) so it can never loop.
+ *   Runs BEFORE stop.flow.guard so the "verify first" instruction is delivered
+ *   before the completion-card gate. Yields after one block (stop_hook_active)
+ *   so it can never loop.
  */
 
 require('../lib/plugin-guard');
 
 const fs = require('fs');
 const { readSessionFile } = require('../lib/session-id');
-const { decideBrowserTest } = require('../lib/browsertest-guard');
+const { decideLightTest } = require('../lib/browsertest-guard');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -32,15 +36,17 @@ process.stdin.on('end', () => {
 
   const sessionId = hook.session_id;
 
-  const pendingResult = readSessionFile('dotclaude-devops-web-change-pending', sessionId);
-  const verifiedResult = readSessionFile('dotclaude-devops-browser-verified', sessionId);
+  const pendingResult = readSessionFile('dotclaude-devops-light-pending', sessionId);
+  const verifiedResult = readSessionFile('dotclaude-devops-light-verified', sessionId);
+  const kindResult = readSessionFile('dotclaude-devops-light-kind', sessionId);
   const silentResult = readSessionFile('dotclaude-devops-silent-turn', sessionId);
 
-  const decision = decideBrowserTest({
-    webChangePending: pendingResult !== null,
-    browserVerified: verifiedResult !== null,
+  const decision = decideLightTest({
+    pending: pendingResult !== null,
+    verified: verifiedResult !== null,
     stopHookActive: hook.stop_hook_active === true,
     silent: silentResult !== null,
+    kind: (kindResult && kindResult.content) || 'any',
   });
 
   if (decision.resetFlags) {
@@ -49,6 +55,7 @@ process.stdin.on('end', () => {
     // background tick as a real turn.
     if (pendingResult) try { fs.unlinkSync(pendingResult.filePath); } catch {}
     if (verifiedResult) try { fs.unlinkSync(verifiedResult.filePath); } catch {}
+    if (kindResult) try { fs.unlinkSync(kindResult.filePath); } catch {}
   }
 
   if (decision.action === 'block') {
