@@ -51,9 +51,12 @@ git fetch origin main                  # advance the remote-tracking ref
 git worktree list --porcelain          # find any tree with "branch refs/heads/main"
 ```
 
-- **No working tree holds `main`** → move the ref directly, no checkout needed:
+- **No working tree holds `main`** → move the ref directly, no checkout needed.
+  Use a fetch refspec (fast-forward-only — it refuses a non-ff update rather
+  than force-moving the ref, unlike `git update-ref`, so a diverged local `main`
+  is never silently rewound):
   ```bash
-  git update-ref refs/heads/main origin/main
+  git fetch origin main:main
   ```
 - **A working tree holds `main`** → fast-forward that one in place:
   ```bash

@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
-import { git, gitStrict, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap } from "../lib/git.js";
+import { git, gitStrict, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch } from "../lib/git.js";
 import { createPR, mergePR, createRelease, findExistingPR, watchPRChecks } from "../lib/github.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
 
@@ -160,13 +160,16 @@ export async function handler(params) {
     result.merged = base;
     result.mergeSha = mergeSha;
 
-    // Sync local base branch (worktree-safe: can't checkout base if another worktree owns it)
-    if (isWorktree(opts)) {
-      gitStrict(`fetch origin ${base}`, opts);
-    } else {
-      gitStrict(`checkout ${base}`, opts);
-      gitStrict(`pull origin ${base}`, opts);
-    }
+    // Sync the LOCAL base ref to the just-merged origin/base. After a remote-side
+    // merge, origin/base advanced but the local base ref does NOT move on its own.
+    // A bare `git fetch origin base` (the previous worktree-path behaviour) only
+    // moves origin/base, leaving local base — and the main checkout used for local
+    // testing — stale across ships (drifting further behind every release). This
+    // worktree-safe sync fast-forwards local base wherever it is checked out, or
+    // updates the bare ref directly when no worktree owns it. (#206)
+    const baseSync = syncLocalBranch(base, opts);
+    result.baseSync = baseSync.method;
+    if (baseSync.warning) result.baseSyncWarning = baseSync.warning;
 
     // Tag + Release (only for final merges to main, skip for intermediate)
     if (!intermediate && tag) {

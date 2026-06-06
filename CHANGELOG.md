@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.96.1] — 2026-06-06
+
+### Fixed
+
+- **Ship from a worktree no longer leaves the local base branch stale (#206).** After a remote-side PR merge `origin/<base>` advances, but the local `<base>` ref does not move on its own — and `ship_release`'s worktree path only ran `git fetch origin <base>` (which updates `origin/<base>`, never the local ref). Across successive ships the local `main` drifted further behind origin, so testing from the main checkout showed weeks-old code and gave the false impression that merged work had not landed. `ship_release` now calls a new worktree-safe `syncLocalBranch(base)` helper that fast-forwards the local ref **wherever it is checked out** (`git -C <worktree> merge --ff-only origin/<base>`) or, when no worktree owns it, updates the bare ref directly (`git fetch origin <base>:<base>`). It only ever fast-forwards — a diverged local branch or a dirty working tree is reported as a warning, never force-moved or clobbered. `devops-ship/deep-knowledge/cleanup.md` now recommends the ff-only refspec over the force-moving `git update-ref`. 10 new `git.test.js` cases cover every sync path.
+
+### Changed
+
+- **Multi-wave orchestration now hardens handoff *durability*, not just handoff content (#202).** A between-wave working-tree reset (e.g. a background-agent-triggered worktree re-sync running `git reset --hard`) could silently drop a prior wave's committed-but-unpushed work, so the next wave ran on a tree missing those files. `deep-knowledge/agent-orchestration.md` now requires push-per-wave and a HEAD re-assertion before a wave consumes the prior handoff, and recommends inline (foreground) handoffs where between-wave resets are likely.
+
 ## [0.96.0] — 2026-06-06
 
 ### Changed

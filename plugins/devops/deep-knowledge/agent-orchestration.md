@@ -224,6 +224,33 @@ reuse (this is how memory pollution turns one agent's hallucination into the
 team's shared assumption). This is the cheapest place to stop an error — the cost
 rises with every wave it survives.
 
+**Verify handoff *durability*, not just handoff content.** The content checks
+above assume the prior wave's commits are still in the working tree. That is not
+guaranteed: a between-wave working-tree reset can silently erase them — observed
+when a background-agent spawn triggers a worktree re-sync that does
+`git reset --hard origin/<base>`, but equally possible from a CI reset, an
+accidental `git reset`, or a junction/worktree refresh. The next wave then runs
+on a tree **missing the prior wave's files** and re-invents (or stubs with
+`as any`) work that was already committed. Two cheap guards, both mandatory
+before a wave consumes the prior wave's handoff:
+
+1. **Push, don't just commit.** A local-only commit is not durable against a
+   reset. After each wave, `git push -u origin <integration-branch>` so the work
+   survives in `origin` and is recoverable.
+2. **Re-assert HEAD.** Confirm the expected commit is still reachable:
+   ```bash
+   git log --oneline -1            # is this the wave-N commit you expect?
+   git merge-base --is-ancestor <expected-sha> HEAD || echo "✗ HEAD diverged"
+   ```
+   If HEAD diverged, restore before proceeding — `git reset --hard origin/<integration-branch>`
+   (work was pushed in guard 1), or recover dropped commits from `git reflog` +
+   `git checkout <sha> -- <paths>`. Never let a wave start on a tree that lost a
+   prior wave's output.
+
+If the environment is prone to between-wave resets, prefer **inline (foreground)
+wave handoffs** over background-agent spawns — a foreground handoff has no
+spawn-triggered refresh window.
+
 ## QA Wave — Testing Protocol
 
 The QA agent (Wave 3) MUST follow these testing rules. Include ALL applicable
@@ -317,5 +344,9 @@ The orchestrator (calling skill) is responsible for:
 
 1. Creating the integration branch if not already on a feature branch
 2. Pushing it to origin before spawning sub-agents
-3. Merging each wave's branches back before spawning the next wave
+3. Merging each wave's branches back before spawning the next wave — then
+   **pushing the integration branch again** (`git push origin <integration-branch>`)
+   so the merged-back work is durable before the next wave spawns. A reset
+   between waves can only lose what was never pushed (see Inter-Wave Verification
+   Gate § handoff durability).
 4. Shipping the integration branch ONCE at the end — sub-branches are merged back (step 3), not shipped individually. Sub-branch names are dash-joined `<parent>-<role>`, never slash-nested (a slash collides with the checked-out integration branch's ref).

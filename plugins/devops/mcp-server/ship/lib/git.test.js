@@ -16,6 +16,8 @@ import {
   isWorktree,
   getWorktreeBranches,
   branchExists,
+  worktreePathForBranch,
+  syncLocalBranch,
 } from "./git.js";
 
 beforeEach(() => {
@@ -271,5 +273,154 @@ describe("branchExists", () => {
       throw new Error("fatal");
     });
     expect(branchExists("nonexistent")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// worktreePathForBranch
+// ---------------------------------------------------------------------------
+
+describe("worktreePathForBranch", () => {
+  const wtList = [
+    "worktree /repo",
+    "HEAD abc1234",
+    "branch refs/heads/main",
+    "",
+    "worktree /repo/.claude/worktrees/topic",
+    "HEAD def5678",
+    "branch refs/heads/claude/topic",
+    "",
+  ].join("\n");
+
+  test("returns the path of the worktree holding the branch", () => {
+    execSync.mockReturnValue(wtList);
+    expect(worktreePathForBranch("claude/topic")).toBe("/repo/.claude/worktrees/topic");
+  });
+
+  test("returns the main worktree path for the base branch", () => {
+    execSync.mockReturnValue(wtList);
+    expect(worktreePathForBranch("main")).toBe("/repo");
+  });
+
+  test("returns null when no worktree has the branch", () => {
+    execSync.mockReturnValue(wtList);
+    expect(worktreePathForBranch("feat/unrelated")).toBeNull();
+  });
+
+  test("returns null on git failure", () => {
+    execSync.mockImplementation(() => {
+      throw new Error("fatal");
+    });
+    expect(worktreePathForBranch("main")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// syncLocalBranch — worktree-safe local-ref fast-forward (#206)
+// ---------------------------------------------------------------------------
+
+describe("syncLocalBranch", () => {
+  const wtListMainHere = [
+    "worktree /repo",
+    "HEAD aaaaaaa",
+    "branch refs/heads/main",
+    "",
+  ].join("\n");
+  const wtListMainElsewhere = [
+    "worktree /repo",
+    "HEAD aaaaaaa",
+    "branch refs/heads/feat/topic",
+    "",
+    "worktree /repo/main-wt",
+    "HEAD bbbbbbb",
+    "branch refs/heads/main",
+    "",
+  ].join("\n");
+  const wtListMainAbsent = [
+    "worktree /repo",
+    "HEAD aaaaaaa",
+    "branch refs/heads/feat/topic",
+    "",
+  ].join("\n");
+
+  test("no-op when local base already equals origin/base", () => {
+    execSync.mockImplementation((cmd) => {
+      if (cmd.includes("rev-parse --verify refs/remotes/origin/main")) return "aaa\n";
+      if (cmd.includes("rev-parse --verify refs/heads/main")) return "aaa\n";
+      return "";
+    });
+    expect(syncLocalBranch("main")).toEqual({ updated: false, method: "already-current" });
+  });
+
+  test("warns (no force) when origin/base is missing", () => {
+    execSync.mockImplementation((cmd) => {
+      if (cmd.includes("rev-parse --verify refs/remotes/origin/main")) throw new Error("bad rev");
+      return "";
+    });
+    const r = syncLocalBranch("main");
+    expect(r.updated).toBe(false);
+    expect(r.method).toBe("none");
+    expect(r.warning).toMatch(/origin\/main not found/);
+  });
+
+  test("fast-forwards via merge --ff-only in the worktree that owns the branch", () => {
+    const calls = [];
+    execSync.mockImplementation((cmd, optsArg) => {
+      calls.push({ cmd, cwd: optsArg?.cwd });
+      if (cmd.includes("rev-parse --verify refs/remotes/origin/main")) return "bbb\n";
+      if (cmd.includes("rev-parse --verify refs/heads/main")) return "aaa\n";
+      if (cmd.includes("worktree list --porcelain")) return wtListMainHere;
+      return "";
+    });
+    const r = syncLocalBranch("main");
+    expect(r).toEqual({ updated: true, method: "merge-ff", path: "/repo" });
+    // The merge runs in the worktree that holds main, never with --force/--hard.
+    const merge = calls.find((c) => c.cmd.includes("merge --ff-only origin/main"));
+    expect(merge).toBeTruthy();
+    expect(merge.cwd).toBe("/repo");
+    expect(calls.some((c) => /--force|--hard/.test(c.cmd))).toBe(false);
+  });
+
+  test("targets the OTHER worktree when base is checked out away from cwd", () => {
+    const calls = [];
+    execSync.mockImplementation((cmd, optsArg) => {
+      calls.push({ cmd, cwd: optsArg?.cwd });
+      if (cmd.includes("rev-parse --verify refs/remotes/origin/main")) return "bbb\n";
+      if (cmd.includes("rev-parse --verify refs/heads/main")) return "aaa\n";
+      if (cmd.includes("worktree list --porcelain")) return wtListMainElsewhere;
+      return "";
+    });
+    const r = syncLocalBranch("main", { cwd: "/repo" });
+    expect(r).toEqual({ updated: true, method: "merge-ff", path: "/repo/main-wt" });
+    const merge = calls.find((c) => c.cmd.includes("merge --ff-only origin/main"));
+    expect(merge.cwd).toBe("/repo/main-wt");
+  });
+
+  test("warns instead of forcing when the checked-out branch cannot fast-forward", () => {
+    execSync.mockImplementation((cmd) => {
+      if (cmd.includes("rev-parse --verify refs/remotes/origin/main")) return "bbb\n";
+      if (cmd.includes("rev-parse --verify refs/heads/main")) return "aaa\n";
+      if (cmd.includes("worktree list --porcelain")) return wtListMainHere;
+      if (cmd.includes("merge --ff-only origin/main")) throw new Error("Not possible to fast-forward, aborting.");
+      return "";
+    });
+    const r = syncLocalBranch("main");
+    expect(r.updated).toBe(false);
+    expect(r.method).toBe("merge-ff");
+    expect(r.warning).toMatch(/not fast-forwardable/i);
+  });
+
+  test("updates the bare ref directly when no worktree owns the branch", () => {
+    const calls = [];
+    execSync.mockImplementation((cmd) => {
+      calls.push(cmd);
+      if (cmd.includes("rev-parse --verify refs/remotes/origin/main")) return "bbb\n";
+      if (cmd.includes("rev-parse --verify refs/heads/main")) return "aaa\n";
+      if (cmd.includes("worktree list --porcelain")) return wtListMainAbsent;
+      return "";
+    });
+    const r = syncLocalBranch("main");
+    expect(r).toEqual({ updated: true, method: "fetch-refspec" });
+    expect(calls.some((c) => c.includes("fetch origin main:main"))).toBe(true);
   });
 });
