@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.97.0] — 2026-06-07
+
+### Added
+
+- **`post.concept.gate` hook — the live decision panel + bridge submit is now deterministically enforced, not just documented.** `devops-concept` pages must collect decisions via the live bridge server (persistent decision panel → POST `/decisions` → heartbeat/cron pickup), but the only safeguard was a text-only 35-pattern validation gate that Claude could skip when "half-using" the skill — shipping a page that instead bakes in a "copy the decisions JSON and paste it into chat" clipboard fallback, or omits the decision panel entirely. A new PostToolUse hook validates every concept HTML on write (path under `docs/concepts/` or a concept content signature) and **blocks** (exit 2) when the live panel / bridge-submit markers are missing or a clipboard / paste-into-chat handoff is present — so the regression survives only until the next regenerate, never until the user has to copy JSON by hand. Decision logic lives in unit-tested `hooks/lib/concept-gate.js` (16 tests). The skill text is hardened to match: a new Phase 0 forbidden-pattern section in `validation-gate.md` and an explicit Step 3 prohibition in `SKILL.md`. New hook `post.concept.gate` 0.1.0.
+
 ## [0.96.1] — 2026-06-06
 
 ### Fixed
