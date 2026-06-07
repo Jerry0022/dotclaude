@@ -408,6 +408,13 @@ OS shell. **Forbidden alternatives** that will produce a broken session:
 - ❌ **Never** print "Concept opened at file:///… open it in your browser"
   and stop. The bridge server requires the page to be loaded via
   `http://localhost:{port}/…`, not `file://`.
+- ❌ **Never** bake a "copy the decisions JSON and paste it into the chat"
+  block (clipboard button, `navigator.clipboard`, "In Zwischenablage
+  kopieren", "füg es mir in den Chat ein") into the page. That manual
+  handoff is the failure this whole flow exists to avoid — the live bridge
+  already delivers decisions. The decision panel's two submit buttons +
+  bridge are the **only** sanctioned mechanism, and the panel may never be
+  omitted. The `post.concept.gate` hook blocks any page that violates this.
 
 The **only** correct invocation is the OS `start`/`open` shell command
 that hands the URL to the user's default Edge window, which then opens

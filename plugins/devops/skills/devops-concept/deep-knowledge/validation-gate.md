@@ -2,8 +2,34 @@
 
 After writing the HTML file, validate that all mandatory interactive patterns
 are present. **Grep the generated file** for each required pattern. The check
-runs in two phases: first the shared patterns (all templates), then the
-template-specific extras selected by `<html data-template="...">`.
+runs in three phases: first the forbidden patterns (hard fail), then the
+shared patterns (all templates), then the template-specific extras selected
+by `<html data-template="...">`.
+
+> **Deterministic backstop:** the `post.concept.gate` PostToolUse hook
+> re-checks a critical subset of this gate (the live decision panel + bridge
+> submit markers + the forbidden clipboard list below) on every write to a
+> concept HTML and **blocks** if the page is invalid. The hook is the safety
+> net for the "skill only half-used" regression — but it is not a license to
+> skip this manual gate. Run the full sweep BEFORE opening the page.
+
+## Phase 0 — Forbidden patterns (hard fail)
+
+A concept page is driven **exclusively** by the live bridge: the decision
+panel's submit buttons POST to the bridge server and Claude picks the
+decisions up via heartbeat + cron. The page MUST therefore contain **none**
+of the following manual-handoff anti-patterns. Any match = reject the page
+and regenerate with the live submit, exactly like a missing required pattern.
+
+| Forbidden grep (case-insensitive) | Why it's banned |
+|---|---|
+| `clipboard` (`navigator.clipboard`, "copy to clipboard") | A "copy the decisions JSON" button is the regression this gate exists to kill — the live bridge already delivers decisions. |
+| `zwischenablage` | German variant of the same clipboard-copy fallback. |
+| `in den chat ein` / "paste … into chat" | Instructing the user to paste anything into chat means the live submit was never wired. |
+
+A valid live-bridge page never copies anything to the clipboard, so there are
+no legitimate matches — do not "keep it as a convenience". The decision panel
++ live submit is the only sanctioned mechanism, and it may never be omitted.
 
 ## Phase 1 — Shared patterns (ALL templates)
 
@@ -165,11 +191,16 @@ decision template with no changes.
 
 ## Failure handling
 
-**If ANY shared pattern is missing, or any template-specific mandatory pattern
-is missing → DO NOT open the page.** Fix the HTML first, then re-validate.
-This is a **blocking gate** — no exceptions, no "this page doesn't need it".
+**If ANY forbidden pattern (Phase 0) is present, OR any shared pattern is
+missing, OR any template-specific mandatory pattern is missing → DO NOT open
+the page.** Fix the HTML first, then re-validate. This is a **blocking gate**
+— no exceptions, no "this page doesn't need it". The `post.concept.gate` hook
+enforces the same on write.
 
 **Common failures this gate catches:**
+- Clipboard / paste-into-chat submit baked in instead of the live bridge →
+  the user is told to copy a JSON by hand, defeating the whole monitoring loop
+- Decision panel omitted entirely → no submit buttons, nothing to monitor
 - Heartbeat system omitted → submit button stays clickable without monitoring
 - Connection warning missing → user gets no feedback when Claude disconnects
 - Panel states missing → no visual transition on submit/reset cycle
