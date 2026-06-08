@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.99.0] — 2026-06-08
+
+### Changed
+
+- **Claude Preview is now a first-class primary for localhost app testing — used by default whenever the Claude-in-Chrome (Edge) extension is not connected.** The browser-tool waterfall in `browser-tool-strategy.md` previously pinned Chrome-MCP-in-Edge as the sole primary and ranked Preview dead last ("the last fallback, never the default"). The waterfall is reordered to **Chrome-MCP (Edge) → Preview → Playwright**: Chrome-MCP stays primary when its extension is connected (most capable — multi-tab, file upload, external origins, real login context), but when the extension is off, **Preview becomes the primary** tool for the project's own localhost dev server instead of Playwright — it needs no extension setup, persists login per-baseRepo across worktrees and chats, and ships native viewport presets (`preview_resize` mobile/tablet/desktop + dark mode), CSS `preview_inspect`, and `preview_console_logs`/`preview_network`. The Preview waterfall probe changes from `preview_screenshot` to `preview_list` so the tool is detected as available before a dev server is started. A new SCOPE boundary is documented: Preview is **origin-locked to localhost** and is **N/A** for external/third-party sites (e.g. the claude.ai usage scraper), native desktop apps, multi-tab flows, file uploads to third parties, and external-provider auth — those stay on Chrome-MCP (Edge) / computer-use. New `deep-knowledge/preview-testing.md` concentrates Preview's capabilities + hard limits + N/A list in one canonical reference. `test-autonomy.md`, `test-strategy.md`, `responsive-testing.md`, `edge-profiles.md`, `agent-orchestration.md`, the `devops-test-plan` SKILL + web-vite/web-angular/electron-ow profiles, `agents/qa.md`, `devops-autonomous`, and the `browsertest-guard` V&V-gate reason text all align to the new order; guardrails (refresh-usage scraper, devops-concept bridge pages, native/desktop flows, production-URL checks) are explicitly preserved as non-Preview. INDEX + architecture docs regenerated.
+
 ## [0.98.0] — 2026-06-07
 
 ### Changed
