@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import {
+  BLOCK_CAP,
   isWebRenderableChange,
   isCodeChange,
   classifyProfile,
@@ -7,6 +8,9 @@ import {
   isBrowserTool,
   isTestRunnerTool,
   isLightVerification,
+  normalizeToolResponse,
+  testRunOutcome,
+  hasSkipJustification,
   decideLightTest,
   buildLightTestReason,
 } from "./browsertest-guard.js";
@@ -344,5 +348,183 @@ describe("buildLightTestReason", () => {
       expect(r).toMatch(/docs\/concepts/);
       expect(r).toMatch(/yields/);
     }
+  });
+
+  test("every kind documents the explicit skip token", () => {
+    for (const kind of ["dom", "runner", "any"]) {
+      expect(buildLightTestReason(kind)).toMatch(/SKIP-VERIFICATION:/);
+    }
+  });
+
+  test("escalated reason is louder; runner red reason names the failure", () => {
+    expect(buildLightTestReason("runner", { escalated: true })).toMatch(/ESCALATED/);
+    expect(buildLightTestReason("runner", { escalated: false })).not.toMatch(/ESCALATED/);
+    const red = buildLightTestReason("runner", { red: true });
+    expect(red).toMatch(/FAILED|red run/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeToolResponse — defensive field extraction
+// ---------------------------------------------------------------------------
+
+describe("normalizeToolResponse", () => {
+  test("string response → text only", () => {
+    const r = normalizeToolResponse("raw output");
+    expect(r.text).toBe("raw output");
+    expect(r.exitCode).toBe(null);
+    expect(r.interrupted).toBe(false);
+  });
+
+  test("object with stdout/stderr → concatenated text", () => {
+    const r = normalizeToolResponse({ stdout: "out", stderr: "err" });
+    expect(r.text).toMatch(/out/);
+    expect(r.text).toMatch(/err/);
+  });
+
+  test("content array of text blocks is flattened", () => {
+    const r = normalizeToolResponse({ content: [{ type: "text", text: "hello" }] });
+    expect(r.text).toMatch(/hello/);
+  });
+
+  test("numeric exit code is picked up from several field names", () => {
+    expect(normalizeToolResponse({ exit_code: 0 }).exitCode).toBe(0);
+    expect(normalizeToolResponse({ exitCode: 2 }).exitCode).toBe(2);
+    expect(normalizeToolResponse({ code: 127 }).exitCode).toBe(127);
+  });
+
+  test("interrupted flag is surfaced", () => {
+    expect(normalizeToolResponse({ interrupted: true }).interrupted).toBe(true);
+  });
+
+  test("null / undefined → empty, neutral", () => {
+    for (const v of [null, undefined]) {
+      const r = normalizeToolResponse(v);
+      expect(r.text).toBe("");
+      expect(r.exitCode).toBe(null);
+      expect(r.interrupted).toBe(false);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// testRunOutcome — green-not-just-ran (Kern ②)
+// ---------------------------------------------------------------------------
+
+describe("testRunOutcome", () => {
+  test("zero exit code is authoritative pass, non-zero is fail", () => {
+    expect(testRunOutcome({ exit_code: 0 })).toBe("pass");
+    expect(testRunOutcome({ exit_code: 1 })).toBe("fail");
+    expect(testRunOutcome({ exitCode: 2 })).toBe("fail");
+  });
+
+  test("interrupted run is a fail", () => {
+    expect(testRunOutcome({ interrupted: true })).toBe("fail");
+  });
+
+  test("failure summaries in text are detected", () => {
+    expect(testRunOutcome("Tests  2 failed | 5 passed")).toBe("fail");
+    expect(testRunOutcome("=== 1 failed, 3 passed ===")).toBe("fail");
+    expect(testRunOutcome("FAIL src/foo.test.ts")).toBe("fail");
+    expect(testRunOutcome({ stdout: "  3 passing\n  1 failing" })).toBe("fail");
+    expect(testRunOutcome("Tests: 1 failed, 2 total")).toBe("fail");
+  });
+
+  test("'0 failed' / all-passing output is a pass (no false fail)", () => {
+    expect(testRunOutcome("Tests  0 failed | 7 passed")).toBe("pass");
+    expect(testRunOutcome("Test Suites: 3 passed, 3 total\nTests: 12 passed")).toBe("pass");
+    expect(testRunOutcome("ok 5 - everything works")).toBe("pass");
+    expect(testRunOutcome("failures=0")).toBe("pass");
+  });
+
+  test("unparseable / empty output defaults to pass (never false-block)", () => {
+    expect(testRunOutcome(null)).toBe("pass");
+    expect(testRunOutcome("")).toBe("pass");
+    expect(testRunOutcome({ stdout: "build done" })).toBe("pass");
+  });
+
+  test("zero exit code wins even if text mentions a failure", () => {
+    expect(testRunOutcome({ exit_code: 0, stdout: "note: a flaky thing FAILED earlier" })).toBe("pass");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// hasSkipJustification — explicit skip token
+// ---------------------------------------------------------------------------
+
+describe("hasSkipJustification", () => {
+  test("token with a reason is honored", () => {
+    expect(hasSkipJustification("SKIP-VERIFICATION: no startable surface here")).toBe(true);
+    expect(hasSkipJustification("...\nskip verification: pure docs change\n...")).toBe(true);
+  });
+
+  test("token without a reason does NOT count", () => {
+    expect(hasSkipJustification("SKIP-VERIFICATION:")).toBe(false);
+  });
+
+  test("incidental mention does NOT count", () => {
+    expect(hasSkipJustification("I will not skip-verification this time")).toBe(false);
+    expect(hasSkipJustification("let me run the tests")).toBe(false);
+  });
+
+  test("empty / missing → false", () => {
+    expect(hasSkipJustification("")).toBe(false);
+    expect(hasSkipJustification(null)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// decideLightTest — escalation & explicit skip
+// ---------------------------------------------------------------------------
+
+describe("decideLightTest — escalation", () => {
+  test("BLOCK_CAP is 2", () => {
+    expect(BLOCK_CAP).toBe(2);
+  });
+
+  test("first owed stop → block + incrementBlock", () => {
+    const d = decideLightTest({ pending: true, verified: false, stopHookActive: false, kind: "runner", blockCount: 0 });
+    expect(d.action).toBe("block");
+    expect(d.incrementBlock).toBe(true);
+    expect(d.resetFlags).toBe(false);
+  });
+
+  test("second owed stop (blockCount 1) → block again, escalated reason", () => {
+    const d = decideLightTest({ pending: true, verified: false, stopHookActive: true, kind: "runner", blockCount: 1 });
+    expect(d.action).toBe("block");
+    expect(d.incrementBlock).toBe(true);
+    expect(d.reason).toMatch(/ESCALATED/);
+  });
+
+  test("cap reached (blockCount >= CAP) → yield, mark skipped, never wedge", () => {
+    const d = decideLightTest({ pending: true, verified: false, stopHookActive: true, kind: "runner", blockCount: 2 });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+    expect(d.markSkipped).toBe(true);
+  });
+
+  test("explicit skip token yields early + marks skipped", () => {
+    const d = decideLightTest({ pending: true, verified: false, stopHookActive: false, kind: "runner", blockCount: 0, skipJustified: true });
+    expect(d.action).toBe("pass");
+    expect(d.markSkipped).toBe(true);
+  });
+
+  test("safety net: stop active but counter never advanced → yield (legacy one-block)", () => {
+    const d = decideLightTest({ pending: true, verified: false, stopHookActive: true, kind: "runner", blockCount: 0 });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+    expect(d.markSkipped).toBe(true);
+  });
+
+  test("red run still owes verification (red is not verified)", () => {
+    const d = decideLightTest({ pending: true, verified: false, red: true, stopHookActive: false, kind: "runner", blockCount: 0 });
+    expect(d.action).toBe("block");
+    expect(d.reason).toMatch(/FAILED|red run/);
+  });
+
+  test("verified green → pass even with a stale red flag absent", () => {
+    const d = decideLightTest({ pending: true, verified: true, stopHookActive: false, kind: "runner", blockCount: 1 });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
   });
 });

@@ -1,16 +1,16 @@
 /**
  * @module browsertest-guard
- * @version 0.2.0
- * @description Pure decision logic for the Light-verification enforcement gate.
- *   Split out of stop.flow.browsertest.js so the rules can be unit-tested
- *   without mocking stdin or temp files.
+ * @version 0.3.0
+ * @description Pure decision logic for the Light-verification enforcement gate
+ *   (the "V" in the V&V gate). Split out of stop.flow.browsertest.js so the
+ *   rules can be unit-tested without mocking stdin or temp files.
  *
  *   The gate forces a Light verification whenever a CODE file changed in a
- *   session but the matching Light check never ran:
+ *   session but the matching Light check never ran (or ran RED):
  *     - DOM-surface profiles (web-*, electron-ow, …) → a browser tool must run
  *       (Claude-in-Chrome in Edge / Playwright / Preview).
  *     - Runner profiles (cli-node, lib, generic, …) → a test runner must run
- *       (npm test / vitest / jest / pytest / go test / …).
+ *       AND pass (a red run does NOT satisfy — Kern ②).
  *     - Unknown / unpinned profile → either satisfies.
  *
  *   Per deep-knowledge/test-autonomy.md the Light check is mandatory and
@@ -18,9 +18,20 @@
  *   NOT enforced here. Delegating to a subagent does NOT satisfy the gate —
  *   verification must be observable in the main thread (closed loophole).
  *
- *   Inputs: flag state (light-pending / light-verified / kind) + stop_hook_active
- *           + silent.
- *   Output: { action: 'block' | 'pass', reason?, resetFlags }.
+ *   Hardening (V&V concept):
+ *     ② green-not-just-ran — a test run only verifies when it passed; the
+ *        outcome is read best-effort from the PostToolUse tool_response.
+ *     ③ order — a new qualifying edit invalidates a prior verification (the
+ *        verified flag is cleared by post.flow.completion on the next edit), so
+ *        verification must come AFTER the last code change.
+ *     Escalation — the gate blocks up to CAP times instead of once. An early
+ *        skip requires an explicit `SKIP-VERIFICATION: <reason>` token in the
+ *        response; otherwise the gate keeps blocking until the cap, then yields
+ *        (never wedges) and records a visible skip.
+ *
+ *   Inputs: flag state (light-pending / light-verified / red / kind) +
+ *           stop_hook_active + silent + blockCount + skipJustified.
+ *   Output: { action, reason?, resetFlags, incrementBlock?, markSkipped? }.
  */
 
 // ---------------------------------------------------------------------------
@@ -39,6 +50,9 @@ const CODE_EXT_RE =
 const TEST_FILE_RE = /\.(test|spec)\.[a-z]+$/i;
 // devops-concept artifacts — generated analysis pages, NOT product UI.
 const CONCEPT_RE = /(^|\/)docs\/concepts\//i;
+
+/** Max times the gate blocks for the same owed verification before yielding. */
+const BLOCK_CAP = 2;
 
 /**
  * Does a changed file require BROWSER verification (DOM surface)?
@@ -147,6 +161,10 @@ function isTestRunnerTool(toolName, command) {
 
 /**
  * Did an appropriate Light verification run for this profile class?
+ * NOTE: this only answers "did the right KIND of tool run". Whether a test run
+ * actually PASSED is a separate question — see testRunOutcome / Kern ②. The
+ * writer (post.flow.completion) combines both: it only sets the verified flag
+ * for a runner check when the run also passed.
  * @param {'dom'|'runner'|'any'} profileClass
  * @param {string} toolName
  * @param {string} [command]
@@ -161,6 +179,85 @@ function isLightVerification(profileClass, toolName, command) {
 }
 
 // ---------------------------------------------------------------------------
+// Run outcome — best-effort pass/fail of a test run (Kern ②)
+// ---------------------------------------------------------------------------
+
+// Strong, unambiguous failure signals in test-runner output. Conservative on
+// purpose: anything not matching stays a pass, so a green run we cannot parse is
+// never falsely blocked. Only obvious red runs are caught.
+const FAIL_TEXT_RE =
+  /\b\d+\s+fail(?:ed|ing|ures?)\b|\bFAIL\b|✗|✖|\bfailures=[1-9]\b|\bAssertionError\b|\bFAILURES!\b|\bFAILED\s*\(/i;
+// Counter-signal: "0 failed" / "0 failures" / "failures=0" must NOT count.
+const ZERO_FAIL_RE = /\b0\s+fail(?:ed|ures?)\b|\bfailures=0\b/i;
+
+/**
+ * Pull a usable text blob + numeric exit hint out of a PostToolUse tool_response,
+ * whose exact shape varies by Claude Code version. Defensive on every field.
+ * @param {*} toolResponse
+ * @returns {{ text: string, exitCode: (number|null), interrupted: boolean }}
+ */
+function normalizeToolResponse(toolResponse) {
+  let text = '';
+  let exitCode = null;
+  let interrupted = false;
+  if (toolResponse == null) return { text, exitCode, interrupted };
+  if (typeof toolResponse === 'string') return { text: toolResponse, exitCode, interrupted };
+  if (typeof toolResponse === 'object') {
+    const r = toolResponse;
+    for (const k of ['exit_code', 'exitCode', 'code', 'returnCode', 'status']) {
+      if (typeof r[k] === 'number') { exitCode = r[k]; break; }
+    }
+    if (r.interrupted === true) interrupted = true;
+    for (const k of ['stdout', 'stderr', 'output', 'text', 'result']) {
+      if (typeof r[k] === 'string') text += '\n' + r[k];
+    }
+    // content may be a plain string or an array of { type, text } blocks.
+    if (typeof r.content === 'string') text += '\n' + r.content;
+    if (Array.isArray(r.content)) {
+      for (const b of r.content) {
+        if (b && typeof b.text === 'string') text += '\n' + b.text;
+      }
+    }
+    if (!text) { try { text = JSON.stringify(r); } catch { /* ignore */ } }
+  }
+  return { text, exitCode, interrupted };
+}
+
+/**
+ * Best-effort outcome of a test run from its PostToolUse response.
+ * 'fail' only on strong signals (numeric non-zero exit, interrupted, or an
+ * unambiguous failure summary). Everything else → 'pass', so a green run we
+ * cannot parse is never falsely blocked. A zero exit code is authoritative.
+ * @param {*} toolResponse
+ * @returns {'pass'|'fail'}
+ */
+function testRunOutcome(toolResponse) {
+  const { text, exitCode, interrupted } = normalizeToolResponse(toolResponse);
+  if (typeof exitCode === 'number') return exitCode === 0 ? 'pass' : 'fail';
+  if (interrupted) return 'fail';
+  if (text && FAIL_TEXT_RE.test(text) && !ZERO_FAIL_RE.test(text)) return 'fail';
+  return 'pass';
+}
+
+// ---------------------------------------------------------------------------
+// Explicit skip token (Escalation)
+// ---------------------------------------------------------------------------
+
+// Claude must write this token (with a reason) to consciously skip verification
+// before the block cap is reached — e.g. genuinely no startable surface here.
+const SKIP_TOKEN_RE = /\bSKIP[- ]?VERIFICATION\b\s*[-:]\s*\S/i;
+
+/**
+ * Did the response contain an explicit, reasoned skip token?
+ * @param {string} text — last assistant message text
+ * @returns {boolean}
+ */
+function hasSkipJustification(text) {
+  if (!text) return false;
+  return SKIP_TOKEN_RE.test(String(text));
+}
+
+// ---------------------------------------------------------------------------
 // Decision
 // ---------------------------------------------------------------------------
 
@@ -169,47 +266,87 @@ function isLightVerification(profileClass, toolName, command) {
  *
  * @param {object} s
  * @param {boolean} s.pending        — a code file changed, Light check still owed
- * @param {boolean} s.verified       — a matching Light verification ran
+ * @param {boolean} s.verified       — a matching Light verification ran AND passed
+ * @param {boolean} [s.red]          — a test ran this turn but FAILED (enriches reason)
  * @param {boolean} s.stopHookActive — prior Stop hook already blocked this cycle
  * @param {boolean} [s.silent]       — background tick (cron / autonomous loop)
  * @param {'dom'|'runner'|'any'} [s.kind] — required verification kind (for reason)
- * @returns {{ action: 'block' | 'pass', resetFlags: boolean, reason?: string }}
+ * @param {number}  [s.blockCount]   — how many times this gate already blocked
+ * @param {boolean} [s.skipJustified]— response carries an explicit SKIP-VERIFICATION token
+ * @returns {{ action:'block'|'pass', resetFlags:boolean, reason?:string,
+ *            incrementBlock?:boolean, markSkipped?:boolean }}
  */
-function decideLightTest({ pending, verified, stopHookActive, silent, kind }) {
+function decideLightTest({
+  pending, verified, red, stopHookActive, silent, kind,
+  blockCount = 0, skipJustified = false,
+}) {
   if (silent) {
     // Background tick — never enforce. Clear our own flags so the next real
     // turn starts clean. (The silent flag itself is owned by stop.flow.guard.)
     return { action: 'pass', resetFlags: true };
   }
 
-  if (stopHookActive) {
-    // One-time bypass: if Claude stops again after being blocked, yield and
-    // clear the pending flag so we never loop.
+  const owed = pending && !verified;
+  if (!owed) {
+    // Verification satisfied (or nothing owed) — pass and clear gate flags.
     return { action: 'pass', resetFlags: true };
   }
 
-  if (pending && !verified) {
-    return { action: 'block', resetFlags: false, reason: buildLightTestReason(kind) };
+  // --- verification is still owed ---
+
+  if (skipJustified) {
+    // Conscious, reasoned skip — yield and record it so the card stays honest.
+    return { action: 'pass', resetFlags: true, markSkipped: true };
   }
 
-  return { action: 'pass', resetFlags: true };
+  if (blockCount >= BLOCK_CAP) {
+    // Hard cap reached — never wedge the session. Yield, but record the skip.
+    return { action: 'pass', resetFlags: true, markSkipped: true };
+  }
+
+  if (stopHookActive && blockCount === 0) {
+    // Safety net: a Stop is already active but our counter never advanced
+    // (flag write failed). Degrade to the legacy one-block behaviour rather
+    // than risk a loop — yield and record the skip.
+    return { action: 'pass', resetFlags: true, markSkipped: true };
+  }
+
+  return {
+    action: 'block',
+    resetFlags: false,
+    incrementBlock: true,
+    reason: buildLightTestReason(kind, { escalated: blockCount >= 1, red: red === true }),
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Reason text
 // ---------------------------------------------------------------------------
 
-const FOOTER = [
-  '',
-  'A subagent delegation does NOT satisfy this gate — verification must be',
-  'observable in THIS thread (a browser or test-runner tool call). If a subagent',
-  'did the testing, re-run a quick observable check or surface its evidence.',
-  '',
-  'Auto-excluded: docs/markdown/config edits, *.test/*.spec files, and',
-  'devops-concept pages under docs/concepts/*.html. To intentionally skip',
-  '(non-runtime change, no startable surface): stop again — this gate yields',
-  'after one block.',
-];
+function escFooter(escalated) {
+  const lead = escalated
+    ? [
+        '',
+        'ESCALATED — this gate already asked once. It blocks up to ' + BLOCK_CAP +
+          ' times, then yields.',
+      ]
+    : [];
+  return lead.concat([
+    '',
+    'A subagent delegation does NOT satisfy this gate — verification must be',
+    'observable in THIS thread (a browser or test-runner tool call). If a subagent',
+    'did the testing, re-run a quick observable check or surface its evidence.',
+    '',
+    'Auto-excluded: docs/markdown/config edits, *.test/*.spec files, and',
+    'devops-concept pages under docs/concepts/*.html.',
+    '',
+    'To CONSCIOUSLY skip (genuinely no startable surface / non-runtime change):',
+    'put a line `SKIP-VERIFICATION: <one-line reason>` in your response. The skip',
+    'is then recorded and shown on the completion card as ⚠ UNVERIFIED — it is not',
+    'silent. Without that token the gate keeps blocking until it yields after ' +
+      BLOCK_CAP + ' blocks.',
+  ]);
+}
 
 function domReason() {
   return [
@@ -229,17 +366,25 @@ function domReason() {
   ];
 }
 
-function runnerReason() {
-  return [
-    '[stop.flow.browsertest] Code changed but no test run was observed this session.',
-    '',
-    'Per deep-knowledge/test-autonomy.md (non-DOM surface → Light = run the test',
-    'suite) this is mandatory. Do this FIRST, before the completion card:',
+function runnerReason(red) {
+  const head = red
+    ? [
+        '[stop.flow.browsertest] A test ran this session but FAILED — a red run does not verify.',
+        '',
+        'Fix the failure, then re-run the suite green. Do this FIRST, before the completion card:',
+      ]
+    : [
+        '[stop.flow.browsertest] Code changed but no passing test run was observed this session.',
+        '',
+        'Per deep-knowledge/test-autonomy.md (non-DOM surface → Light = run the test',
+        'suite) this is mandatory. Do this FIRST, before the completion card:',
+      ];
+  return head.concat([
     '',
     '1. Run the project test suite: npm test (or vitest / jest / pytest / go test / …).',
-    '2. For a CLI, also exercise the changed command path once and read its output.',
-    '3. Fix failures before finishing.',
-  ];
+    '2. The run must PASS — a failing run does not satisfy this gate.',
+    '3. For a CLI, also exercise the changed command path once and read its output.',
+  ]);
 }
 
 function anyReason() {
@@ -251,24 +396,28 @@ function anyReason() {
     '',
     '1. Invoke /devops-test-plan to pin the profile.',
     '2. Then run the matching Light check: a browser snapshot for a web/DOM surface,',
-    '   or the test suite (npm test / pytest / …) otherwise.',
+    '   or the test suite (npm test / pytest / …) otherwise — and it must pass.',
   ];
 }
 
 /**
  * Build the block reason for a given verification kind.
  * @param {'dom'|'runner'|'any'} [kind]
+ * @param {{ escalated?: boolean, red?: boolean }} [opts]
  * @returns {string}
  */
-function buildLightTestReason(kind) {
+function buildLightTestReason(kind, opts = {}) {
   let body;
   if (kind === 'dom') body = domReason();
-  else if (kind === 'runner') body = runnerReason();
+  else if (kind === 'runner') body = runnerReason(opts.red === true);
   else body = anyReason();
-  return body.concat(['', 'Then render the completion card as the LAST action.'], FOOTER).join('\n');
+  return body
+    .concat(['', 'Then render the completion card as the LAST action.'], escFooter(opts.escalated === true))
+    .join('\n');
 }
 
 module.exports = {
+  BLOCK_CAP,
   isWebRenderableChange,
   isCodeChange,
   classifyProfile,
@@ -276,6 +425,9 @@ module.exports = {
   isBrowserTool,
   isTestRunnerTool,
   isLightVerification,
+  normalizeToolResponse,
+  testRunOutcome,
+  hasSkipJustification,
   decideLightTest,
   buildLightTestReason,
 };
