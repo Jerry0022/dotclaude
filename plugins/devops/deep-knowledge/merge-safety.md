@@ -194,15 +194,67 @@ As of v0.3.0, `git-sync.js` resolves conflicts in two tiers:
 
 ## How ship_release Prevents Overwrites
 
-The release tool verifies the branch is rebased before allowing merge:
+`ship_release` enforces a **two-phase rebase gate** plus a **post-merge tree
+guard**. Together these make a parallel change on `base` impossible to drop or
+overwrite — regardless of merge strategy.
+
+### Phase 1 — entry gate (before push/PR)
 
 1. `git fetch origin <base>` — get latest base
 2. `isRebasedOnto(origin/<base>)` — verify HEAD includes all base commits
 3. If not rebased → return `rebaseRequired: true` with overlap analysis
 4. The ship skill (Step 1 loop) handles rebase + AI conflict resolution + test
 
-Additionally, when file overlap is detected in preflight, the skill switches from
-`squash` to `merge` strategy to preserve the ancestry chain for future merges.
+### Phase 2 — pre-merge re-check (the critical one)
+
+The entry gate alone is **not enough**: the pre-merge CI-checks gate blocks for
+up to `checksTimeoutSec` (default 600s), and a parallel ship can land on `base`
+during that wait. Crucially, the merge runs `gh pr merge --admin` — needed for
+the bot to self-merge past required-review protection — which **bypasses
+GitHub's own "require branches to be up to date before merging" rule**. So the
+tool re-asserts `isRebasedOnto(origin/<base>)` immediately before the merge:
+
+- still up to date → proceed to merge
+- base advanced → return `rebaseRequired: true` + `baseAdvancedDuringChecks:
+  true`, PR left **open** (not merged). The skill rebases and retries.
+
+This restores, in our own code, the up-to-date guarantee that `--admin`
+discards. It is the fix for the silent-overwrite vector in #207.
+
+### Phase 3 — post-merge tree guard
+
+After the merge, `treeOf(HEAD)` is compared to `treeOf(origin/<base>)`. Because
+Phase 2 guarantees `HEAD ⊇ origin/base` at merge time, the merge is
+**fast-forward-equivalent for every strategy** (squash/merge/rebase all yield
+`base`'s tree == HEAD's tree). So:
+
+- **`postMergeTreeMatch: true`** → `base` captured exactly the tree that was
+  rebased + built + tested. The pre-merge build/test **is** the post-merge
+  validation — no separate post-merge build needed.
+- **`postMergeTreeMatch: false`** → a concurrent ship squeezed into the ~1s
+  window between the re-check and gh's merge and was three-way merged in (its
+  changes are **preserved**, not lost), or an unexpected divergence. Non-fatal
+  (the merge already landed) but surfaced as `postMergeWarning` so the skill
+  flags "verify main is consistent".
+
+### Why squash is safe here
+
+The classic squash data-loss (see "Why Squash Merges Cause Data Loss" above)
+requires merging **without** a rebase. Phase 2 forbids that: every merge —
+intermediate *and* final — is ff-equivalent, so the squash commit's tree equals
+HEAD's tree and a later branch sharing history is itself forced to rebase before
+it can merge. `squash` therefore cannot sever ancestry in a data-losing way. The
+skill still upgrades `squash` → `merge` when preflight reports file overlap, as a
+belt-and-suspenders for history readability.
+
+### Force-push scoping
+
+The `git push --force-with-lease` only ever targets the **feature branch**,
+never `base` — so it cannot clobber base commits. It uses an **explicit lease**
+pinned to the last-known remote sha (`--force-with-lease=<branch>:<sha>`) rather
+than the bare form, so an implicit background fetch (the git-sync cron) cannot
+widen the lease and let a concurrent push to the same branch slip through
+unseen. Brand-new branches (no remote-tracking ref) push without a lease.
 
 ## Timestamp Caveat
 

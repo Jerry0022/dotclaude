@@ -3,10 +3,24 @@
 Optional per-project extension. Opt-in by adding a `verify:` block to your
 project's `{project}/.claude/skills/ship/reference.md`.
 
-The post-merge watcher (`scripts/post-merge-watcher.js`) reads this block
-**after** GitHub Actions on the merge commit have gone green, and probes the
-configured target. Result lands in
-`<repo>/.claude/.ship-watcher/<merge-sha>.json` and is surfaced by the
+There are **two complementary verifiers**, both driven from the same
+`reference.md`:
+
+| Verifier | Source key | When | Fidelity |
+|---|---|---|---|
+| **Headless watcher** (`scripts/post-merge-watcher.js`, ship Step 4b) | flat `verify:` block | post-session, after CI goes green | raw HTTP response / shell command |
+| **Live browser check** (ship Step 4c) | `surfaces:` list (or `verify:` url) | in the ship flow, before the completion card | **rendered DOM** via Claude-in-Chrome (Edge) |
+
+Use the headless watcher for unattended/AFK coverage (CI can take 30 min); use
+the browser check for the high-fidelity "is the version users see actually the
+new one" assertion before declaring done. A client-rendered SPA version, a
+`prerelease`-flagged release that leaves the prior version as `/releases/latest`,
+or a download page gated behind a DB row are all invisible to a raw HTTP probe
+but caught by the browser check. See `SKILL.md → Step 4c`.
+
+The post-merge watcher reads the flat `verify:` block **after** GitHub Actions on
+the merge commit have gone green, and probes the configured target. Result lands
+in `<repo>/.claude/.ship-watcher/<merge-sha>.json` and is surfaced by the
 `ss.ship.verify` SessionStart hook in the next session.
 
 ## Format
@@ -45,6 +59,46 @@ verify:
 | `command` | command | Shell command. Exit 0 = success, anything else = retry |
 | `poll_interval_seconds` | both | Pause between retries |
 | `timeout_seconds` | both | Hard deadline. `failed` once exceeded |
+
+## Declarative surfaces (live browser verification)
+
+For the **live browser check** (ship Step 4c), declare one or more user-facing
+surfaces as a top-level `surfaces:` list (sibling to `verify:`). Each surface is
+opened in Edge via Claude-in-Chrome and its **rendered** version marker is
+asserted against the just-shipped version.
+
+```yaml
+surfaces:
+  - name: "Web app"
+    url: https://app.example.com
+    selector: '[data-app-version]'        # CSS selector; its textContent / matching attribute is read via Eval JS
+    expected: "$VERSION"                   # $VERSION = just-shipped vX.Y.Z (tag) or vNew
+  - name: "Download page"
+    url: https://example.com/download
+    selector: '.latest-version'
+    expected: "$VERSION"
+  - name: "Edge function health"
+    url: https://app.example.com/api/version
+    selector: 'body'                       # JSON/text endpoint — match the version anywhere in the body
+    expected: "$VERSION"
+```
+
+| Field | Purpose |
+|---|---|
+| `name` | Human label shown in the completion card if the surface lags |
+| `url` | Page the browser opens (the real user-facing surface) |
+| `selector` | CSS selector whose rendered text/attribute holds the version. Read with **Eval JS**, never "read page" |
+| `expected` | String the rendered value must contain. `$VERSION` expands to the shipped tag / `vNew` |
+
+Notes:
+- A single surface can be declared in the flat `verify:` block instead — Step 4c
+  falls back to `verify:`'s `url`/`selector`/`expected` when no `surfaces:` list
+  exists, so simple projects need only one block.
+- The `surfaces:` list drives the **interactive** browser check only. The
+  headless watcher (Step 4b) still probes the single flat `verify:` target;
+  multi-surface **headless** probing is not yet wired — list every surface under
+  `surfaces:` so the supervised Step 4c covers them, and put the most critical
+  one in `verify:` for unattended coverage.
 
 ## Failure handling
 
