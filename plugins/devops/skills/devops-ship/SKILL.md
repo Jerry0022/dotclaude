@@ -1,6 +1,6 @@
 ---
 name: devops-ship
-version: 0.4.0
+version: 0.5.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, render_completion_card,
@@ -209,9 +209,9 @@ See `deep-knowledge/call-examples.md` for the three reference payloads
 For intermediate merges: no tag, no release notes, no version commit —
 the tool automatically skips tag/release creation when `base` is not `main`.
 
-The tool handles: commit (optional), rebase verification, push (force-with-lease after rebase), PR create (or reuse with mergeability check), **pre-merge CI checks gate (waits for green)**, merge (squash or merge commit), tag (main only), GitHub release (main only).
+The tool handles: commit (optional), rebase verification, push (explicit force-with-lease after rebase), PR create (or reuse with mergeability check), **pre-merge CI checks gate (waits for green)**, **pre-merge rebase re-check (closes the checks-window race)**, merge (squash or merge commit), **post-merge tree guard**, tag (main only), GitHub release (main only).
 
-Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeStrategy, intermediate, tag, tagVerified, release }`.
+Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeStrategy, intermediate, tag, tagVerified, release, postMergeTreeMatch, postMergeWarning }`.
 
 **Pre-merge CI gate** (default ON): after PR create, `ship_release` runs `gh pr checks --watch` (default 600s timeout). If checks fail or timeout → `success: false`, `checksBlocked: true`, PR stays open, branch not deleted. Render `ship-blocked` card with the failing check names + run URLs.
 
@@ -219,7 +219,9 @@ Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status,
 - Tune timeout per call: `checksTimeoutSec: <30..3600>`.
 - See `deep-knowledge/quality-gates.md → Pre-Merge CI Checks Gate` for the full state matrix.
 
-**If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1b and rebase before retrying.
+**If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1b and rebase before retrying. This also fires as `baseAdvancedDuringChecks: true` when a **parallel ship landed on base while we waited for CI** — the PR is left open and unmerged (no silent overwrite). Same action: rebase + retry. See `deep-knowledge/merge-safety.md → How ship_release Prevents Overwrites`.
+
+**If `postMergeTreeMatch: false`** (merge succeeded but `postMergeWarning` is set): a concurrent ship was three-way merged into base during the merge — its changes are preserved, but surface `postMergeWarning` as a `userFinalTest` item ("Verify main is consistent — a parallel ship merged in concurrently") so the user double-checks. Do NOT treat it as a ship failure — the merge landed.
 
 If `success: false` → do NOT proceed to cleanup. Report error and render completion card with variant `ship-blocked`.
 
@@ -293,6 +295,72 @@ a best-effort Windows toast fires immediately.
 
 Pass `state.watcher = { spawned: true, sha: "<sha>" }` (or `spawned: false`) into the
 completion card in Step 6 so it can render "Deploy-Verify läuft im Hintergrund".
+
+## Step 4c — Live Surface Verification (final ship only)
+
+**A green pipeline ≠ a release users can see.** CI can pass, the merge can land,
+the Step 4b watcher's HTTP probe can return 200 — and the version users actually
+get can still be the **old** one. This step opens the real user-facing surface(s)
+in a browser and asserts the **shipped version is live and visible** before the
+completion card declares done. It complements (does NOT replace) the
+`stop.flow.browsertest` gate (which verifies code changes *pre*-merge) and the
+Step 4b watcher (headless, post-session). (#210)
+
+**Skip this step entirely when ANY of:**
+- `intermediate: true` (intermediate merges have no live surface).
+- The project declares **no surfaces** — see config below. This is the default
+  (libraries, CLIs, internal tooling have no user-facing deploy). Skip silently.
+- User passed `--no-verify` / `--no-watch` intent in the ship trigger.
+
+### Config — declare surfaces
+
+Read `{project}/.claude/skills/ship/reference.md` for a `surfaces:` list (or, for
+a single surface, the existing `verify:` block's `url`/`selector`/`expected`).
+Each surface: `{ name, url, selector, expected }` where `expected` may use the
+`$VERSION` placeholder (expands to the just-shipped `vNew` / tag). Full format:
+`deep-knowledge/post-merge-verify.md → Declarative surfaces`.
+
+### Verify each surface
+
+For every declared surface:
+
+1. Pick the browser tool via the waterfall in
+   `deep-knowledge/browser-tool-strategy.md` (Claude-in-Chrome in Edge first).
+   This is a live post-deploy read — see `deep-knowledge/test-autonomy.md`.
+   Works in foreground, background, and autonomous mode.
+2. Open `url` in the **separate Edge testing window** (per the Edge Credo).
+3. Read the **rendered** version marker. Use **Eval JS** (`javascript_tool` /
+   `browser_evaluate` / `preview_eval`) to read structured data
+   (`document.querySelector(selector)?.textContent` or the documented attribute)
+   — NOT "read page", which strips scripts and misses client-rendered values.
+4. Assert the rendered value contains the shipped version (`vNew` / tag).
+
+**Why a browser, not just the watcher's HTTP probe:** the headless probe fetches
+raw response bytes — it misses **client-rendered** version strings (SPA where JS
+injects the version) and cannot see a download page whose served artifact is
+gated behind a DB row or an API. A real browser renders the DOM and follows the
+same path a user does. Gaps this catches that pass CI:
+- a GitHub release marked `prerelease` leaves the prior version as
+  `/releases/latest` → the "latest" download link still serves the old version;
+- a download page driven by a DB row / API (not GitHub directly) keeps serving
+  the old version until that row is registered;
+- multi-surface releases (web + desktop binary + edge functions) where one
+  surface silently lags.
+
+### Feed the result into Step 6
+
+- **All surfaces serve the shipped version** → clean `ship-successful`.
+- **Any surface lags / still shows the old version / unreachable** → STILL
+  `ship-successful` (the merge happened — per the Step 6 variant rule, never
+  downgrade after a merge), but add one **prominent `userFinalTest` item per
+  lagging surface**, e.g.
+  `{ action: "Download-Seite zeigt noch <alt> statt <neu> — prerelease-Flag / DB-Row prüfen", afterDeployment: true }`.
+  When a surface definitively serves the **old** version (a real regression
+  risk), make that item the first and loudest.
+- **No browser tool available** (waterfall fails): do NOT block the ship. Record
+  a `userFinalTest` item "Live-Surface manuell verifizieren: <url> sollte <vNew> zeigen".
+
+Pass `state.surfaceVerify = { checked: N, live: M, lagging: [...] }` into the card.
 
 ## Step 5a — Continue-Intent Check (auto-detect keep-mode)
 

@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
-import { git, gitStrict, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch } from "../lib/git.js";
+import { git, gitStrict, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf } from "../lib/git.js";
 import { createPR, mergePR, createRelease, findExistingPR, watchPRChecks } from "../lib/github.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
 
@@ -104,8 +104,19 @@ export async function handler(params) {
     }
     result.rebased = true;
 
-    // Push (use longer timeout for large repos / slow networks)
-    gitStrict(`push -u origin ${branch} --force-with-lease`, { cwd, timeout: 60_000 });
+    // Push. The force-with-lease only ever targets the feature `branch` —
+    // NEVER `base` — so it structurally cannot clobber base commits. Use an
+    // EXPLICIT lease pinned to the last-known remote sha (not the bare
+    // `--force-with-lease`): a bare lease trusts the remote-tracking ref, which
+    // an implicit background fetch (the git-sync cron) can silently advance,
+    // widening the lease so a concurrent push to the SAME branch would be
+    // overwritten unseen. A brand-new branch has no remote-tracking ref → push
+    // without a lease (nothing to overwrite). (#207)
+    const remoteBranchSha = git(`rev-parse --verify --quiet refs/remotes/origin/${branch}`, opts);
+    const leaseArg = remoteBranchSha
+      ? `--force-with-lease=${branch}:${remoteBranchSha}`
+      : `--force-with-lease`;
+    gitStrict(`push -u origin ${branch} ${leaseArg}`, { cwd, timeout: 60_000 });
     result.pushed = true;
 
     // Check for existing open PR before creating a new one
@@ -153,12 +164,67 @@ export async function handler(params) {
       result.checks = { status: "skipped", reason: skipChecks ? "skipChecks param" : "DEVOPS_SHIP_SKIP_CHECKS env" };
     }
 
+    // Re-assert up-to-date against base IMMEDIATELY before merging — close the
+    // time-of-check/time-of-use window. The rebase gate above can be minutes
+    // stale: the pre-merge CI checks gate blocks for up to checksTimeoutSec
+    // (default 600s), and a parallel ship / worktree can land on `base` during
+    // that wait. Because mergePR uses `gh pr merge --admin` (needed for the bot
+    // to self-merge past required-review protection), GitHub's own "require
+    // branches to be up to date before merging" rule is BYPASSED — so without
+    // this re-check, a stale branch would be force-merged over an advanced base
+    // with --admin, the exact silent-overwrite vector #207 describes. Re-checking
+    // here restores that guarantee at merge time. The skill's Step 1 loop rebases
+    // and retries on rebaseRequired. (#207)
+    gitStrict(`fetch origin ${base}`, { cwd, timeout: 30_000 });
+    if (!isRebasedOnto(`origin/${base}`, opts)) {
+      const overlap = fileOverlap(`origin/${base}`, opts);
+      result.success = false;
+      result.rebaseRequired = true;
+      result.baseAdvancedDuringChecks = true;
+      result.overlapFiles = overlap.overlap;
+      result.error =
+        `origin/${base} advanced while the ship was in progress (likely a parallel ship) — ` +
+        `branch is no longer up to date. PR #${pr.number} left OPEN, NOT merged. ` +
+        `Rebase onto origin/${base} and retry ship_release. ` +
+        (overlap.overlap.length > 0
+          ? `${overlap.overlap.length} overlapping file(s): ${overlap.overlap.slice(0, 10).join(", ")}`
+          : "No file overlap detected — rebase should be clean.");
+      return result;
+    }
+
+    // Snapshot the validated tree BEFORE the merge. Because we just re-asserted
+    // HEAD ⊇ origin/base, merging HEAD into base is fast-forward-equivalent for
+    // every strategy (squash/merge/rebase all yield base == HEAD's tree). The
+    // post-merge guard below compares against this to prove the merge captured
+    // exactly the tree that was rebased + built + tested. (#207)
+    const shippedTree = treeOf("HEAD", opts);
+
     // Merge PR (delete branch; skip --delete-branch in worktrees
     // where gh tries to switch to base locally — cleanup handles branch deletion)
     const worktree = isWorktree(opts);
     const mergeSha = mergePR(pr.number, base, opts, { skipDeleteBranch: worktree, strategy: mergeStrategy });
     result.merged = base;
     result.mergeSha = mergeSha;
+
+    // Post-merge tree verification. mergePR already fetched origin/base, so its
+    // tree is current. With the pre-merge re-check holding, origin/base's tree
+    // MUST equal the shipped HEAD tree — squash/merge/rebase are all ff-equivalent
+    // here, so the merge result is byte-identical to the built+tested branch.
+    //   match  → the pre-merge build/test IS the post-merge validation; nothing
+    //            was dropped or overwritten.
+    //   differ → either a parallel non-overlapping ship squeezed into the ~1s
+    //            window between the re-check and gh's merge (GitHub 3-way merged
+    //            it in — those changes are PRESERVED, not lost) OR an unexpected
+    //            divergence. Non-fatal (the merge already landed) but surfaced so
+    //            the skill flags "verify main is consistent". (#207)
+    const baseTree = treeOf(`origin/${base}`, opts);
+    result.postMergeTreeMatch = shippedTree !== null && baseTree !== null && shippedTree === baseTree;
+    if (!result.postMergeTreeMatch) {
+      result.postMergeWarning =
+        `origin/${base} after merge does not match the shipped tree byte-for-byte. ` +
+        `Most likely a concurrent ship landed in parallel and was three-way merged in ` +
+        `(its changes are preserved). Verify main is logically consistent before relying on it.`;
+    }
 
     // Sync the LOCAL base ref to the just-merged origin/base. After a remote-side
     // merge, origin/base advanced but the local base ref does NOT move on its own.

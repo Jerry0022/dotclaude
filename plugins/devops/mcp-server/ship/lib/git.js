@@ -302,6 +302,20 @@ export function isRebasedOnto(base, opts) {
 }
 
 /**
+ * Return the tree object id of a ref (e.g. "HEAD", "origin/main"), or null.
+ *
+ * The tree id is content-addressed: two refs with byte-identical working
+ * trees share the same tree id even when their commit ids differ — e.g. a
+ * squash-merged base and the branch it was built from. ship_release uses this
+ * to assert, AFTER the merge, that origin/base captured exactly the tree that
+ * was rebased + built + tested — proving no parallel change was dropped or
+ * overwritten. See merge-safety.md "How ship_release Prevents Overwrites". (#207)
+ */
+export function treeOf(ref, opts) {
+  return git(`rev-parse ${ref}^{tree}`, opts);
+}
+
+/**
  * Check git config value. Returns the value or null.
  */
 export function getConfig(key, opts) {
