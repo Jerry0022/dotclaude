@@ -29,7 +29,8 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [merge-safety.md](merge-safety.md) | Merge Safety — Parallel Development | Cross-cutting reference for preventing silent overwrites when multiple develo... |
 | [plugin-behavior.md](plugin-behavior.md) | Plugin Behavior Rules | Core behavioral rules enforced by the devops plugin. |
 | [pre-mortem.md](pre-mortem.md) | Pre-Mortem / Red-Team Self-Critique | Cross-cutting rule for reducing blind spots before non-trivial changes. |
-| [responsive-testing.md](responsive-testing.md) | Responsive Testing — Multi-Viewport Verification via Edge DevTools | Multi-device web apps require verification at phone, tablet, and desktop |
+| [preview-testing.md](preview-testing.md) | Claude Preview — Capabilities & Hard Limits | Canonical reference for **Claude Preview** (`preview_*`), the primary localhost |
+| [responsive-testing.md](responsive-testing.md) | Responsive Testing — Multi-Viewport Verification | Multi-device web apps require verification at phone, tablet, and desktop |
 | [skill-extension-guide.md](skill-extension-guide.md) | Skill Extension Guide — For Plugin Integrators | How to customize devops skills and agents for your project. |
 | [test-autonomy.md](test-autonomy.md) | Test Autonomy — Cross-Cutting Rules for Test Tool Selection | Cross-cutting rule for every skill, hook, and agent that performs or triggers |
 | [test-strategy.md](test-strategy.md) | Test Execution Strategy | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |

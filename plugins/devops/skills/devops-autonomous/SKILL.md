@@ -197,7 +197,7 @@ mocks, even though the packaged app itself cannot be driven via Chrome-MCP. Neve
 skip browser probing with "Electron app, no preview server" — the renderer still
 needs browser-based component verification.
 
-Run the waterfall probe (Chrome MCP → Playwright → Preview), set `$BROWSER_TOOL`
+Run the waterfall probe (Chrome MCP → Preview → Playwright), set `$BROWSER_TOOL`
 to the first responder. If none respond → show the error block from the strategy
 doc and abort browser-dependent work. Never use computer-use for browser tasks.
 

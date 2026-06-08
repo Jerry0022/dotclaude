@@ -81,7 +81,9 @@ the web responsive breakpoints. An Electron window is never 375 px wide.
 Always escalate from the cheapest read upward; never skip a tier without a
 documented reason. The capability matters, not the specific tool — these tier
 names are tool-agnostic so the same order holds for Preview, Chrome-MCP, and
-Playwright alike.
+Playwright alike. Tool **precedence** for a localhost DOM surface is set in
+[browser-tool-strategy.md](browser-tool-strategy.md): Chrome-MCP when the Edge
+extension is connected, otherwise Preview, then Playwright.
 
 | Tier | Capability | DOM tools (examples) | Text tools |
 |------|-----------|----------------------|------------|
@@ -225,5 +227,5 @@ equivalent suffices.
 |-------|------|
 | Edge profile details (main vs scraper) | [edge-profiles.md](edge-profiles.md) |
 | Responsive viewport testing via DevTools | [responsive-testing.md](responsive-testing.md) |
-| Browser tool waterfall (Chrome-MCP → Playwright → Preview) | [browser-tool-strategy.md](browser-tool-strategy.md) |
+| Browser tool waterfall (Chrome-MCP → Preview → Playwright) | [browser-tool-strategy.md](browser-tool-strategy.md) |
 | Computer-use desktop takeover flow | [desktop-testing.md](desktop-testing.md) |

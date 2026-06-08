@@ -169,7 +169,7 @@ Detection: marker: vite.config.ts
 
 Tool chain (in order):
   1. Bash(npm run dev -- --port 5173) → start dev server
-  2. $BROWSER_TOOL probe → Chrome-MCP (Claude extension in Edge) PRIMARY → Playwright → Preview
+  2. $BROWSER_TOOL probe → Chrome-MCP (Edge, if connected) → Preview → Playwright
   3. $BROWSER_TOOL snapshot → element and text verification
   4. $BROWSER_TOOL console + network read → runtime JS errors + failed requests
   5. $BROWSER_TOOL set viewport iPhone SE (375×667) + screenshot
@@ -183,10 +183,12 @@ Must-ask triggers: none
 ```
 
 `$BROWSER_TOOL` resolves via the waterfall in
-`deep-knowledge/browser-tool-strategy.md` — the Claude-in-Chrome extension
-running in Edge is the primary tool; Preview is the last fallback, never the
-default. The console + network read step is mandatory: a clean snapshot does
-not prove the absence of runtime errors.
+`deep-knowledge/browser-tool-strategy.md` — Chrome-MCP (Claude extension in
+Edge) stays primary **when the extension is connected**; otherwise **Preview is
+the primary** for the project's own localhost app (Playwright is the next
+fallback). For external sites, native apps, and the usage scraper the waterfall
+returns no result — Preview is N/A there. The console + network read step is
+mandatory: a clean snapshot does not prove the absence of runtime errors.
 
 ## Step 6 — Cache Result
 
