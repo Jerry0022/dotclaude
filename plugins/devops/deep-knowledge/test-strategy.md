@@ -42,6 +42,30 @@ changed view in a real browser engine, not to hit production services.
 preview server configured" or "Electron app, no web server".** If the project is
 pure web tech, configure a dev preview or mount the HTML directly.
 
+## Local Test User — full-permission, dev-only
+
+Authenticated flows must be testable locally without real production accounts. A
+project with auth SHOULD provide a **local test user** for development testing:
+
+- **Full application permissions.** The test user holds every role/permission the
+  app defines (admin / superuser), so any feature — including gated and admin-only
+  views — can be exercised in a Light browser check without hitting a permission
+  wall. This is what lets autonomous Light verification reach the whole UI.
+- **Local-only — NEVER deployed to prod/live.** The test user exists **only on the
+  developer's machine** (local DB / dev seed / fixtures). It MUST be gated behind a
+  dev-only guard (`NODE_ENV !== 'production'`, a `seed:dev`-style script, or a
+  fixture the local stack loads exclusively) and MUST NOT appear in production
+  migrations, seeds, or deployed data. **A full-permission account reaching prod is
+  a critical vulnerability — its prod-exclusion is a hard rule, not a preference.**
+- **Pairs with Preview persistence.** Log in once as the local test user in the
+  active browser tool; the session persists per-baseRepo across worktrees and chats
+  (see [preview-testing.md](preview-testing.md)), so authenticated Light checks run
+  without re-login.
+- **Not a substitute for the real-integration step.** Real OAuth / SSO / 3rd-party
+  identity against production still follows the Mock-First + User-Final-Test
+  protocol below — the local test user covers **in-app authorization**, not
+  external identity providers.
+
 ## Electron / Native UI — Dev-Browser + User-Final-Test
 
 Packaged Electron, Tauri, native-UI hybrid apps cannot be reached by Chrome-MCP /
