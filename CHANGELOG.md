@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.99.1] — 2026-06-08
+
+### Added
+
+- **Local test user convention for local testing.** `test-strategy.md` documents a dev-only **local test user** that holds all application permissions, so authenticated and admin-gated flows can be exercised in an autonomous Light browser check without permission walls — while existing **only on the developer's machine** (local DB / dev seed / fixtures, gated behind a dev-only guard like `NODE_ENV !== 'production'`) and **never** in production migrations, seeds, or deployed data (a full-permission account reaching prod is treated as a critical vulnerability, not a preference). It pairs with Preview's per-baseRepo login persistence and is not a substitute for the Mock-First + User-Final-Test protocol covering real external identity providers. `preview-testing.md` cross-links it from the persistence note.
+
 ## [0.99.0] — 2026-06-08
 
 ### Changed
