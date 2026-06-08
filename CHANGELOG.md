@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.98.0] — 2026-06-07
+
+### Changed
+
+- **The post-implementation test gate now enforces *passing* tests + validation (V&V), and a skip can no longer be silent.** The Light-verification gate previously had loopholes that let the test be skipped: it blocked only once then yielded (the reason text even described the escape), a *failed* `npm test` still satisfied it, a test run *before* later edits counted, and a skip left no trace. This release closes them and adds the missing validation half. **Verification (`stop.flow.browsertest` / `browsertest-guard`):** a test run only verifies when it actually **passed** — the outcome is read best-effort from the PostToolUse `tool_response` (conservative: an unparseable-but-likely-green run is never false-blocked; a non-zero exit / interrupted / unambiguous failure summary is); a new qualifying edit **invalidates** a prior verification, so the check must run *after* the last change. The gate now **escalates** — it blocks up to `BLOCK_CAP` (2) times instead of once, and an early skip requires an explicit `SKIP-VERIFICATION: <reason>` token in the response; otherwise it blocks to the cap then yields (hard cap → never wedges). Any unverified / red finish is **stamped ⚠ UNVERIFIED on the completion card** (derived from the live `light-pending`/`light-verified` flags at render time, so it cannot be omitted). **Validation (`stop.flow.guard` / `card-guard`):** any source change now owes a validation attestation — the completion card must carry a `validation` field mapping each requirement to how the change meets it and how it was confirmed; a code-change card without it is blocked once and re-requested. `render_completion_card` gains the `validation` param + render block + the `validation-attested` flag. New session flags `light-red` / `light-blockcount` / `validation-pending` / `validation-attested`. `browsertest-guard` 0.2.0→0.3.0, `card-guard` 0.1.0→0.2.0, `stop.flow.browsertest` 0.2.0→0.3.0, `stop.flow.guard` 0.2.0→0.3.0, `post.flow.completion` 0.17.0→0.18.0, completion MCP 0.3.0→0.4.0; 102 new/changed gate tests.
+
 ## [0.97.0] — 2026-06-07
 
 ### Added
