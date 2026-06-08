@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.100.0] — 2026-06-08
+
+### Fixed
+
+- **Ship/merge can no longer silently drop parallel `main` changes (#207).** `ship_release` verified the branch was rebased onto `base` only at the *start* of the pipeline — but the pre-merge CI-checks gate then blocks for up to `checksTimeoutSec` (default 600s), and the merge runs `gh pr merge --admin`, which **bypasses GitHub's own "require branches to be up to date before merging" rule**. A parallel ship landing on `base` during that wait was therefore force-merged over a stale branch with `--admin` — the silent-overwrite vector. The tool now **re-asserts `isRebasedOnto(origin/base)` immediately before the merge**: if `base` advanced, it returns `rebaseRequired: true` + `baseAdvancedDuringChecks: true`, leaves the PR open and unmerged, and the ship skill rebases + retries. A **post-merge tree guard** (`treeOf(HEAD)` vs `treeOf(origin/base)`) then proves the merge captured exactly the rebased + built + tested tree; a mismatch (a concurrent non-overlapping ship three-way-merged in) surfaces a non-fatal `postMergeWarning` rather than passing silently. The force-push now uses an **explicit `--force-with-lease=<branch>:<sha>`** pinned to the last-known remote sha (only ever on the feature branch, never `base`), so an implicit background fetch can't widen the lease. `merge-safety.md` documents the two-phase gate invariant and why `squash` stays safe (every merge is fast-forward-equivalent post-rebase). New `treeOf` helper in `git.js`; `release.test.js` adds an 11-case regression suite pinning both gates, the skipChecks bypass, the fail-closed checks gate, and the tree guard. `devops-ship` SKILL 0.4.0→0.5.0.
+
+### Added
+
+- **`/devops-ship` verifies the live deploy result in a browser before declaring done (#210).** A green pipeline ≠ a release users can see: a `prerelease`-flagged GitHub release leaves the prior version as `/releases/latest`, a download page driven by a DB row / API keeps serving the old version until that row is registered, and multi-surface releases (web + desktop binary + edge functions) can have one surface silently lag. New **Step 4c — Live Surface Verification** opens each declared user-facing surface in Edge (Claude-in-Chrome), reads the **rendered** version marker via Eval JS, and asserts it matches the just-shipped version before the completion card — complementing (not replacing) the pre-merge `stop.flow.browsertest` gate and the headless post-merge watcher (Step 4b). Surfaces are declared opt-in via a `surfaces:` list in `{project}/.claude/skills/ship/reference.md` (`deep-knowledge/post-merge-verify.md` documents the format); a lagging or old-version surface becomes a prominent `userFinalTest` item on the card rather than a silent success. Skips cleanly when no surfaces are declared (libraries, CLIs, internal tooling).
+
 ## [0.99.1] — 2026-06-08
 
 ### Added
