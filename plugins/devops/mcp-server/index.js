@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.3.0
+ * @version 0.4.0
  * @plugin devops
  * @description MCP server with two tools:
  *   - `get_usage`              — scrapes live usage data from claude.ai via CDP
- *   - `render_completion_card` — fetches usage, computes build-ID, renders card
+ *   - `render_completion_card` — fetches usage, computes build-ID, renders card.
+ *       V&V gate: stamps ⚠ UNVERIFIED/RED when the Light-verification flags show
+ *       the turn is finishing without a passing check, renders the `validation`
+ *       block, and writes the validation-attested flag consumed by
+ *       stop.flow.guard.
  *
  *   Registered in plugin.json → started automatically by Claude Code.
  *   Stdout is the JSON-RPC wire — all logging goes to stderr.
@@ -490,6 +494,80 @@ function renderContextHealth(toolCallCount) {
   return toolCallCount + ' calls \u00b7 consider /clear';
 }
 
+// ---------------------------------------------------------------------------
+// V&V gate \u2014 read the Light-verification flags written by post.flow.completion
+// so the card can stamp \u26a0 UNVERIFIED when the turn is finishing without a
+// passing check. Same tmp-file convention as the hooks (session-id.js); exact
+// match first, then a newest-wins glob fallback for the session_id-mismatch bug.
+// ---------------------------------------------------------------------------
+
+const FLAG_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2h \u2014 matches session-id.js
+
+function readSessionFlagRaw(prefix, sessionId) {
+  const key = sessionId || 'unknown';
+  try { return readFileSync(join(tmpdir(), `${prefix}-${key}`), 'utf8'); } catch { /* fall through */ }
+  try {
+    const p = `${prefix}-`;
+    const tmp = tmpdir();
+    const now = Date.now();
+    const files = readdirSync(tmp)
+      .filter(f => f.startsWith(p))
+      .map(f => ({ full: join(tmp, f), mtime: statSync(join(tmp, f)).mtimeMs }))
+      .filter(f => (now - f.mtime) < FLAG_MAX_AGE_MS)
+      .sort((a, b) => b.mtime - a.mtime);
+    if (files.length > 0) return readFileSync(files[0].full, 'utf8');
+  } catch { /* ignore */ }
+  return null;
+}
+
+function sessionFlagExists(prefix, sessionId) {
+  return readSessionFlagRaw(prefix, sessionId) !== null;
+}
+
+/**
+ * Derive the verification state at card-render time. `unverified` is true when a
+ * code change still owes a passing Light check (pending && !verified) \u2014 i.e. the
+ * turn is finishing without verification (a silent skip, an order violation, or
+ * a red run). `red` distinguishes "a test ran but failed" for the stamp wording.
+ */
+function readVVState(sessionId) {
+  const pending = sessionFlagExists('dotclaude-devops-light-pending', sessionId);
+  const verified = sessionFlagExists('dotclaude-devops-light-verified', sessionId);
+  const red = sessionFlagExists('dotclaude-devops-light-red', sessionId);
+  return { unverified: pending && !verified, red };
+}
+
+const UNVERIFIED_STAMP = {
+  de: {
+    plain: '\u26a0\ufe0f **UNVERIFIZIERT** \u2014 Code ge\u00e4ndert, aber kein bestandener Test/Check in diesem Turn.',
+    red:   '\u26a0\ufe0f **TESTS ROT** \u2014 ein Test lief, schlug aber fehl. Nicht verifiziert.',
+  },
+  en: {
+    plain: '\u26a0\ufe0f **UNVERIFIED** \u2014 code changed but no passing test/check ran this turn.',
+    red:   '\u26a0\ufe0f **TESTS RED** \u2014 a test ran but failed. Not verified.',
+  },
+};
+
+function renderUnverifiedStamp(lang, red) {
+  const d = UNVERIFIED_STAMP[lang] || UNVERIFIED_STAMP.de;
+  return red ? d.red : d.plain;
+}
+
+const VALIDATION_LABEL = { de: '\u2705 **Validierung**', en: '\u2705 **Validation**' };
+const VALIDATION_STATUS_ICON = { met: '\u2705', partial: '\u26a0\ufe0f', unmet: '\u274c' };
+
+function renderValidation(items, lang) {
+  if (!items || items.length === 0) return '';
+  const header = VALIDATION_LABEL[lang] || VALIDATION_LABEL.de;
+  const bullets = items.slice(0, 4).map(it => {
+    const icon = VALIDATION_STATUS_ICON[it && it.status] || '\u2022';
+    const req = (it && it.requirement) || '';
+    const ev = it && it.evidence ? ' \u2014 ' + it.evidence : '';
+    return '* ' + icon + ' ' + req + ev;
+  });
+  return header + '\n' + bullets.join('\n');
+}
+
 function renderCard(input, meterText, buildId) {
   const variant = input.variant || 'fallback';
   const config = VARIANTS[variant] || VARIANTS.fallback;
@@ -511,6 +589,14 @@ function renderCard(input, meterText, buildId) {
   parts.push(renderTitle(input.summary || 'Task completed'));
   parts.push('');
 
+  // V&V stamp — flagged directly under the title so an unverified / red finish
+  // is impossible to miss. Driven by the Light-verification flags (read at the
+  // call site and passed in as input.vv), not a self-reported param.
+  if (input.vv && input.vv.unverified) {
+    parts.push(blockquote(renderUnverifiedStamp(lang, input.vv.red)));
+    parts.push('');
+  }
+
   if (config.changes) {
     const changesBlock = renderChanges(input.changes);
     if (changesBlock) {
@@ -523,6 +609,18 @@ function renderCard(input, meterText, buildId) {
     const testsBlock = renderTests(input.tests);
     if (testsBlock) {
       parts.push(blockquote(testsBlock));
+      parts.push('');
+    }
+  }
+
+  // Validation block (V&V gate) — "did we build the RIGHT thing": maps the
+  // change to its requirements. Rendered whenever provided (variant-agnostic,
+  // mirroring the gate, which keys off validation-pending not the variant);
+  // stop.flow.guard blocks a code-change card that omits it.
+  {
+    const validationBlock = renderValidation(input.validation, lang);
+    if (validationBlock) {
+      parts.push(blockquote(validationBlock));
       parts.push('');
     }
   }
@@ -843,6 +941,14 @@ server.registerTool(
           }),
         ])).optional(),
       ).describe("User-final-test items — for changes where automation cannot cover the last step (packaged Electron/Tauri without desktop takeover, 3rd-party integrations). Pass strings for local final tests; pass { action, afterDeployment: true } for 3rd-party items that require deployment first. Available in all variants except test-minimal and test — in the test variant all manual steps go into userTest (single test section, no duplicate)."),
+      validation: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.array(z.object({
+          requirement: z.string().describe("A requirement / acceptance criterion the change had to satisfy — in user-domain language."),
+          status: z.enum(["met", "partial", "unmet"]).optional().describe("Whether this change satisfies the requirement."),
+          evidence: z.string().optional().describe("How you CONFIRMED it (the test that proves it, the behaviour observed) — not a restatement of the requirement."),
+        })).max(4).optional(),
+      ).describe("V&V gate — validation attestation (“did we build the RIGHT thing”). REQUIRED for any turn that changed source code: map each requirement / acceptance criterion to how this change meets it and how you confirmed it. A code-change card without `validation` is blocked once by stop.flow.guard and re-requested. For a pure refactor/chore with no explicit requirement, pass one item stating the intent and how behaviour was kept equivalent. Each item: { requirement, status: met|partial|unmet, evidence }."),
     }),
   },
   async (params) => {
@@ -875,16 +981,26 @@ server.registerTool(
     // 3. Use pre-computed build-ID if provided, otherwise compute from cwd
     const buildId = params.buildId || getBuildId(params.cwd);
 
+    // 3b. V&V gate — derive the verification state from the Light flags so the
+    //     card can stamp ⚠ UNVERIFIED on an unverified / red finish.
+    params.vv = readVVState(params.session_id);
+
     // 4. Render the full card
     const cardMarkdown = renderCard(params, meterText, buildId);
 
-    // 5. Write card-rendered flag for stop.flow.guard
+    // 5. Write completion flags for stop.flow.guard:
+    //    - card-rendered satisfies the card gate.
+    //    - validation-attested satisfies the validation gate, but ONLY when the
+    //      `validation` field was actually populated (an empty array does not
+    //      attest anything).
     try {
       const key = params.session_id || 'unknown';
-      const flagPath = join(tmpdir(), 'dotclaude-devops-card-rendered-' + key);
-      writeFileSync(flagPath, new Date().toISOString());
+      writeFileSync(join(tmpdir(), 'dotclaude-devops-card-rendered-' + key), new Date().toISOString());
+      if (Array.isArray(params.validation) && params.validation.length > 0) {
+        writeFileSync(join(tmpdir(), 'dotclaude-devops-validation-attested-' + key), new Date().toISOString());
+      }
     } catch (e) {
-      console.error('[dotclaude-completion-mcp] Failed to write card flag:', e.message);
+      console.error('[dotclaude-completion-mcp] Failed to write completion flag:', e.message);
     }
 
     return {

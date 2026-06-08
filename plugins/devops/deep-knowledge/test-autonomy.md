@@ -182,6 +182,43 @@ when `$TEST_PROFILE` is absent. Do not duplicate profile-detection logic.
 
 ---
 
+## V&V Enforcement Gate (hooks — non-bypassable by accident)
+
+The Light check above is not advisory: a pair of Stop hooks enforce it. This is
+the **V&V gate** — Verification (*did we build it right*) and Validation (*did we
+build the right thing*). Decision logic is pure and unit-tested
+(`hooks/lib/browsertest-guard.js`, `hooks/lib/card-guard.js`).
+
+**Verification — `stop.flow.browsertest`.** When a qualifying code file changed
+but no matching Light check passed this turn, the turn is blocked.
+
+- **Green, not just ran.** A test run only counts when it *passed*. A red run
+  (non-zero exit, interrupted, or an unambiguous failure summary) does **not**
+  satisfy the gate — it must be fixed and re-run green. Outcome is read
+  best-effort from the tool response; an unparseable-but-likely-green run is
+  never falsely blocked.
+- **Order.** A new qualifying edit invalidates a prior verification, so the
+  check must run *after* the last code change — testing early then editing does
+  not count.
+- **Escalation.** The gate blocks up to **2×**, then yields (it never wedges the
+  session). To consciously skip — genuinely no startable surface, or a
+  non-runtime change the carve-outs missed — put a line
+  `SKIP-VERIFICATION: <one-line reason>` in the response. That yields early
+  **and** the completion card stamps **⚠ UNVERIFIED**, so a skip is never silent.
+
+**Validation — `stop.flow.guard`.** Any source change owes a validation
+attestation on the completion card: pass a `validation` field mapping each
+requirement / acceptance criterion to how the change meets it and how it was
+confirmed (`{ requirement, status: met|partial|unmet, evidence }`). A
+code-change card without `validation` is blocked once and re-requested. For a
+pure refactor/chore, one item stating the intent and how behaviour was kept
+equivalent suffices.
+
+**Carve-outs** (never trigger either gate): docs/markdown/config edits,
+`*.test`/`*.spec` files, and devops-concept pages under `docs/concepts/*.html`.
+
+---
+
 ## Cross-References
 
 | Topic | File |

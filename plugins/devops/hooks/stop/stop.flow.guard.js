@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.guard
- * @version 0.2.0
+ * @version 0.3.0
  * @event Stop
  * @plugin devops
- * @description Per-turn completion card enforcement.
- *   Fires when Claude finishes a response turn.
+ * @description Per-turn completion card + validation enforcement (the validation
+ *   half of the V&V gate). Fires when Claude finishes a response turn.
  *   Logic lives in lib/card-guard.js (pure functions, unit-tested).
  *
- *   Block (JSON `{decision:"block"}` on stdout) when:
- *     - no card rendered AND
- *     - (tool calls happened OR last assistant text is substantial prose)
- *     - AND this is not already a blocked stop cycle (stop_hook_active=false)
+ *   Block (JSON `{decision:"block"}` on stdout) when, and this is not already a
+ *   blocked stop cycle (stop_hook_active=false):
+ *     1. no card rendered AND (tool calls happened OR substantial prose), OR
+ *     2. a card exists but a code change owes validation
+ *        (validation-pending set, validation-attested not).
  *
  *   Pass (silent exit 0) otherwise — flags are reset so the next turn is
  *   evaluated independently.
@@ -41,10 +42,14 @@ process.stdin.on('end', () => {
   const workResult = readSessionFile('dotclaude-devops-work-happened', sessionId);
   const cardResult = readSessionFile('dotclaude-devops-card-rendered', sessionId);
   const silentResult = readSessionFile('dotclaude-devops-silent-turn', sessionId);
+  const valPendingResult = readSessionFile('dotclaude-devops-validation-pending', sessionId);
+  const valAttestedResult = readSessionFile('dotclaude-devops-validation-attested', sessionId);
 
   const workHappened = workResult !== null;
   const flagCardRendered = cardResult !== null;
   const silent = silentResult !== null;
+  const validationPending = valPendingResult !== null;
+  const validationAttested = valAttestedResult !== null;
   const stopHookActive = hook.stop_hook_active === true;
 
   // Scan transcript when the flag state alone cannot settle the decision:
@@ -65,12 +70,17 @@ process.stdin.on('end', () => {
     stopHookActive,
     substantial,
     silent,
+    validationPending,
+    validationAttested,
   });
 
   if (decision.resetFlags) {
     if (workResult) try { fs.unlinkSync(workResult.filePath); } catch {}
     if (cardResult) try { fs.unlinkSync(cardResult.filePath); } catch {}
     if (silentResult) try { fs.unlinkSync(silentResult.filePath); } catch {}
+    // Validation flags are owned by this gate — clear them at a clean turn end.
+    if (valPendingResult) try { fs.unlinkSync(valPendingResult.filePath); } catch {}
+    if (valAttestedResult) try { fs.unlinkSync(valAttestedResult.filePath); } catch {}
   }
 
   if (decision.action === 'block') {

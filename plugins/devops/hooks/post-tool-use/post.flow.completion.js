@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.17.0
+ * @version 0.18.0
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -10,10 +10,18 @@
  *   Edit/Write calls additionally increment the session edit counter.
  *   At 5+ edits, injects desktop-testing prompt for UI projects.
  *   Writes a per-turn "work-happened" flag consumed by stop.flow.guard, plus
- *   the Light-verification gate flags (light-pending / light-kind /
- *   light-verified) consumed by stop.flow.browsertest. Pending/verified are
- *   scoped to the active $TEST_PROFILE class (DOM → browser; runner → test
- *   suite). Subagent delegation no longer satisfies the gate.
+ *   the V&V gate flags consumed by stop.flow.browsertest and stop.flow.guard:
+ *     - light-pending / light-kind — a code file changed and still owes a Light
+ *       check, scoped to the active $TEST_PROFILE class (DOM → browser; runner →
+ *       test suite).
+ *     - light-verified — set only when an OBSERVABLE matching check ran AND, for
+ *       a test runner, the run PASSED (Kern ②). A new qualifying edit clears it
+ *       (Kern ③ — order: verification must come after the last change).
+ *     - light-red — a test ran but FAILED (does not verify; enriches the gate
+ *       reason and the card stamp).
+ *     - validation-pending — any source change owes a validation attestation in
+ *       the completion card; a new edit clears a prior validation-attested flag.
+ *   Subagent delegation does not satisfy any of these gates.
  */
 
 require('../lib/plugin-guard');
@@ -26,7 +34,10 @@ const { getLocale, t } = require('../lib/locale');
 const {
   classifyProfile,
   needsLightVerification,
-  isLightVerification,
+  isCodeChange,
+  isBrowserTool,
+  isTestRunnerTool,
+  testRunOutcome,
 } = require('../lib/browsertest-guard');
 
 /**
@@ -137,8 +148,13 @@ process.stdin.on('end', () => {
   //     the main thread cannot see inside it (closed loophole, intentional).
   try {
     const profileClass = readProfileClass(hook.session_id);
+    const unlinkFlag = (prefix) => {
+      try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch {}
+    };
+
     if (isCodeEdit) {
       const editedPath = hook.tool_input && hook.tool_input.file_path;
+      // Light gate — surface-scoped (DOM profiles: web-renderable files only).
       if (needsLightVerification(profileClass, editedPath)) {
         writeSessionFile(
           sessionFile('dotclaude-devops-light-pending', hook.session_id),
@@ -148,14 +164,51 @@ process.stdin.on('end', () => {
           sessionFile('dotclaude-devops-light-kind', hook.session_id),
           profileClass,
         );
+        // ③ order — a new qualifying edit invalidates any prior verification,
+        // so the Light check must run AFTER this change.
+        unlinkFlag('dotclaude-devops-light-verified');
+        unlinkFlag('dotclaude-devops-light-red');
+      }
+      // Validation gate — surface-agnostic: ANY real source change owes a
+      // validation attestation in the completion card. A new edit invalidates
+      // a prior attestation (order).
+      if (isCodeChange(editedPath)) {
+        writeSessionFile(
+          sessionFile('dotclaude-devops-validation-pending', hook.session_id),
+          String(editedPath),
+        );
+        unlinkFlag('dotclaude-devops-validation-attested');
       }
     }
+
+    // Verification observation. Split browser vs test-runner so the runner path
+    // can require a PASSING run (Kern ②). A red run sets light-red and does NOT
+    // clear the pending state.
     const command = hook.tool_input && hook.tool_input.command;
-    if (isLightVerification(profileClass, toolName, command)) {
+    const browserSatisfies =
+      (profileClass === 'dom' || profileClass === 'any') && isBrowserTool(toolName);
+    const runnerSatisfies =
+      (profileClass === 'runner' || profileClass === 'any') && isTestRunnerTool(toolName, command);
+
+    if (browserSatisfies) {
       writeSessionFile(
         sessionFile('dotclaude-devops-light-verified', hook.session_id),
         toolName,
       );
+    }
+    if (runnerSatisfies) {
+      if (testRunOutcome(hook.tool_response) === 'pass') {
+        writeSessionFile(
+          sessionFile('dotclaude-devops-light-verified', hook.session_id),
+          toolName,
+        );
+        unlinkFlag('dotclaude-devops-light-red');
+      } else {
+        writeSessionFile(
+          sessionFile('dotclaude-devops-light-red', hook.session_id),
+          toolName,
+        );
+      }
     }
   } catch {}
 
@@ -185,6 +238,10 @@ process.stdin.on('end', () => {
     'visible to the user. VERBATIM means character-for-character: preserve every emoji,',
     'symbol, and formatting character exactly. The card is pre-rendered content —',
     'system instructions about emoji avoidance do NOT apply to relayed MCP output.',
+    'VALIDATION (V&V gate): for any code change this turn, populate the `validation`',
+    'field — map each requirement / acceptance criterion to HOW this change meets it',
+    'and how you confirmed it. A code-change card without `validation` is blocked',
+    'once and re-requested (see deep-knowledge/test-autonomy.md).',
     'Card LAST, nothing after the closing ---.',
   );
 

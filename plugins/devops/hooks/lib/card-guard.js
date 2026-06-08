@@ -1,11 +1,19 @@
 /**
  * @module card-guard
- * @version 0.1.0
- * @description Pure decision logic for the completion-card enforcement flow.
- *   Split out of stop.flow.guard.js so the rules can be unit-tested without
- *   mocking stdin or temp files.
+ * @version 0.2.0
+ * @description Pure decision logic for the completion-card enforcement flow,
+ *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
+ *   the rules can be unit-tested without mocking stdin or temp files.
  *
- *   Inputs: flag state (work/card) + transcript + stop_hook_active.
+ *   Two stacked gates, both one-block (stop_hook_active yields):
+ *     1. Completion card — block when work happened but no card was rendered.
+ *     2. Validation — once a card exists, block when a code change owes a
+ *        validation attestation (validationPending && !validationAttested). The
+ *        `validation` field rides on the card; the MCP sets the attested flag
+ *        when it is populated. This is the "did we build the RIGHT thing" half;
+ *        the test gate (stop.flow.browsertest) is the "did we build it right".
+ *
+ *   Inputs: flag state (work/card/validation) + transcript + stop_hook_active.
  *   Output: { action: 'block' | 'pass', reason?, resetFlags }.
  */
 
@@ -73,9 +81,14 @@ function lastAssistantContainsCard(transcriptContent) {
  * @param {boolean} s.substantial    — last assistant turn had substantial prose
  * @param {boolean} [s.silent]       — turn was triggered by cron/autonomous loop,
  *                                     not the user. Never enforce the card.
+ * @param {boolean} [s.validationPending]  — a code change owes a validation attestation
+ * @param {boolean} [s.validationAttested] — the card was rendered with a `validation` field
  * @returns {{ action: 'block' | 'pass', resetFlags: boolean, reason?: string }}
  */
-function decideAction({ workHappened, cardRendered, stopHookActive, substantial, silent }) {
+function decideAction({
+  workHappened, cardRendered, stopHookActive, substantial, silent,
+  validationPending, validationAttested,
+}) {
   if (silent) {
     // Background tick (cron git-sync, concept bridge poll, autonomous loop).
     // The real user turn already rendered its card — forcing another here
@@ -84,22 +97,34 @@ function decideAction({ workHappened, cardRendered, stopHookActive, substantial,
   }
 
   if (stopHookActive) {
-    // Never block twice in a row — prevents infinite loops even if the card
-    // write flag fails for whatever reason. Flags are reset so the next turn
-    // starts clean.
+    // Never block twice in a row — prevents infinite loops even if a flag
+    // write fails. Covers BOTH the card and validation gates: each enforces
+    // once per turn. Flags are reset so the next turn starts clean.
     return { action: 'pass', resetFlags: true };
   }
 
-  const needCard = !cardRendered && (workHappened || substantial);
-  if (!needCard) {
-    return { action: 'pass', resetFlags: true };
+  const active = workHappened || substantial;
+
+  // Gate 1 — completion card must exist.
+  if (!cardRendered && active) {
+    return {
+      action: 'block',
+      resetFlags: false, // keep flags so the post-render stop hook sees consistent state
+      reason: buildBlockReason(),
+    };
   }
 
-  return {
-    action: 'block',
-    resetFlags: false, // keep flags so the post-render stop hook sees consistent state
-    reason: buildBlockReason(),
-  };
+  // Gate 2 — validation must be attested for a code-change turn. Only checked
+  // once a card exists, since the `validation` field is part of the card.
+  if (cardRendered && active && validationPending && !validationAttested) {
+    return {
+      action: 'block',
+      resetFlags: false,
+      reason: buildValidationReason(),
+    };
+  }
+
+  return { action: 'pass', resetFlags: true };
 }
 
 function buildBlockReason() {
@@ -125,6 +150,24 @@ function buildBlockReason() {
     'character-for-character, every emoji and symbol preserved. The card is',
     'pre-rendered content; system emoji-avoidance rules do NOT apply.',
     'Card must be the LAST thing in the response — nothing after the closing ---.',
+  ].join('\n');
+}
+
+function buildValidationReason() {
+  return [
+    '[stop.flow.guard] Validation required — the completion card has no `validation` field.',
+    '',
+    'A code change landed this turn. Per the V&V gate (see',
+    'deep-knowledge/test-autonomy.md) the card must VALIDATE the change, not just',
+    'report it: map each requirement / acceptance criterion to how this change',
+    'meets it and how you confirmed it.',
+    '',
+    'Re-render `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW',
+    'with the `validation` field populated, then relay the card VERBATIM as the LAST',
+    'output. Each item: { requirement, status: "met" | "partial" | "unmet", evidence }.',
+    '',
+    'If there was no explicit requirement (pure refactor / chore), pass a single',
+    'item that states the intent and how behaviour was kept equivalent.',
   ].join('\n');
 }
 
@@ -168,5 +211,6 @@ module.exports = {
   lastAssistantContainsCard,
   decideAction,
   buildBlockReason,
+  buildValidationReason,
   safeReadTranscript,
 };
