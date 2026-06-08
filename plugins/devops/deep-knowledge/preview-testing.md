@@ -38,7 +38,9 @@ Preview persists cookies + localStorage in an Electron partition keyed by the
 Consequences (empirically verified):
 
 - A login done once in a repo's Preview **persists across worktrees and chats** of
-  that repo — no per-window Edge profile juggling, no re-login per chat.
+  that repo — no per-window Edge profile juggling, no re-login per chat. The account
+  you log in as is normally the **local test user** (full app permissions, dev-only,
+  never deployed to prod — see [test-strategy.md](test-strategy.md) § Local Test User).
 - It survives `preview_stop` → `preview_start` (the partition is held by the Claude
   Desktop App main process).
 - Scope is **per baseRepo**: a different repo has its own jar (one login per repo).
