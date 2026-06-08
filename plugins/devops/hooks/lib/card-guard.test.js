@@ -6,6 +6,7 @@ import {
   lastAssistantContainsCard,
   decideAction,
   buildBlockReason,
+  buildValidationReason,
   SUBSTANTIAL_CHARS,
   CARD_MARKER,
 } from "./card-guard.js";
@@ -243,6 +244,99 @@ describe("decideAction", () => {
     });
     expect(d.action).toBe("pass");
     expect(d.resetFlags).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// decideAction — validation gate (V&V)
+// ---------------------------------------------------------------------------
+
+describe("decideAction — validation gate", () => {
+  test("card rendered + validation pending + not attested → BLOCK (validation)", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      validationPending: true,
+      validationAttested: false,
+    });
+    expect(d.action).toBe("block");
+    expect(d.resetFlags).toBe(false);
+    expect(d.reason).toMatch(/Validation required/);
+    expect(d.reason).toMatch(/validation/);
+  });
+
+  test("card rendered + validation pending + attested → pass", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      validationPending: true,
+      validationAttested: true,
+    });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+  });
+
+  test("no card yet → card gate wins over validation gate", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: false,
+      validationPending: true,
+      validationAttested: false,
+    });
+    expect(d.action).toBe("block");
+    expect(d.reason).toMatch(/render_completion_card/);
+    expect(d.reason).not.toMatch(/Validation required/);
+  });
+
+  test("validation pending but no active work/prose → pass (no spurious block)", () => {
+    const d = decideAction({
+      workHappened: false,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      validationPending: true,
+      validationAttested: false,
+    });
+    expect(d.action).toBe("pass");
+  });
+
+  test("stop_hook_active yields the validation gate too (one-block, never wedge)", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: true,
+      substantial: false,
+      validationPending: true,
+      validationAttested: false,
+    });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+  });
+
+  test("no validation pending → card-rendered turn passes (back-compat)", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+    });
+    expect(d.action).toBe("pass");
+  });
+});
+
+describe("buildValidationReason", () => {
+  test("names the validation field and the re-render instruction", () => {
+    const r = buildValidationReason();
+    expect(r).toMatch(/validation/);
+    expect(r).toMatch(/render_completion_card/);
+    expect(r).toMatch(/met.*partial.*unmet|requirement/);
+    expect(r).toMatch(/VERBATIM|LAST/);
   });
 });
 

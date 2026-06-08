@@ -231,8 +231,8 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 #### Stop — runs when Claude finishes responding
 
-- `stop.flow.browsertest` — Light-verification enforcement gate.
-- `stop.flow.guard` — Per-turn completion card enforcement.
+- `stop.flow.browsertest` — Light-verification enforcement gate (the "V" of the V&V gate).
+- `stop.flow.guard` — Per-turn completion card + validation enforcement (the validation half of the V&V gate).
 - `stop.flow.selfcalibration` — Run self-calibration when Claude finishes a response turn.
 <!--/devops:block:hook-lifecycle-->
 
