@@ -217,7 +217,7 @@ process.stdin.on('end', () => {
       '[desktop-testing] 5+ code edits reached.',
       'BEFORE asking user for desktop takeover, check $TEST_PROFILE.must_ask_triggers:',
       '  - If "packaged_electron_final_test" is listed AND the change touched main-process code → ask',
-      '  - Otherwise → skip the question entirely, use snapshot/screenshot via Chrome-MCP instead',
+      '  - Otherwise → skip the question entirely, use snapshot/screenshot via the browser tool ($BROWSER_TOOL) instead',
       'If asking, use the existing AskUserQuestion template below:',
       `  Header: "${t('header', lang, DESKTOP_TEST_DICT)}"`,
       `  Question: "${t('question', lang, DESKTOP_TEST_DICT)}"`,

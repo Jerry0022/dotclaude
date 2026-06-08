@@ -1,6 +1,6 @@
 {
   "profile": "electron-ow",
-  "description": "Electron app (OverwolfElectron or standard). Renderer tested via Chrome-MCP in Edge (no computer-use). Packaged-app final test requires Must-Ask trigger 'packaged_electron_final_test' — only then is computer-use authorized for that specific final step.",
+  "description": "Electron app (OverwolfElectron or standard). Renderer tested via the browser tool ($BROWSER_TOOL: Chrome-MCP in Edge when connected, else Preview — no computer-use). Packaged-app final test requires Must-Ask trigger 'packaged_electron_final_test' — only then is computer-use authorized for that specific final step.",
   "detection": {
     "files_required": [],
     "files_optional": ["electron-builder.json", "electron-builder.yml", "package.json"],
@@ -14,8 +14,8 @@
     },
     {
       "step": 2,
-      "tool": "$BROWSER_TOOL probe — Chrome-MCP (Claude extension in Edge) → Playwright → Preview",
-      "purpose": "Resolve the active browser tool. Chrome-MCP in Edge is PRIMARY — do NOT default to Preview when the Edge extension is connected (see deep-knowledge/browser-tool-strategy.md). Never computer-use for the renderer."
+      "tool": "$BROWSER_TOOL probe — Chrome-MCP (Edge, if connected) → Preview → Playwright",
+      "purpose": "Resolve the active browser tool for the localhost renderer. Chrome-MCP (Edge) stays primary when the extension is connected; otherwise Preview is primary (the renderer dev server is a localhost origin Preview can attach to). Playwright is the next fallback. Never computer-use for the renderer (see deep-knowledge/browser-tool-strategy.md)."
     },
     {
       "step": 3,

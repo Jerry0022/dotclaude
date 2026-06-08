@@ -14,8 +14,8 @@
     },
     {
       "step": 2,
-      "tool": "$BROWSER_TOOL probe — Chrome-MCP (Claude extension in Edge) → Playwright → Preview",
-      "purpose": "Resolve the active browser tool. Chrome-MCP in Edge is PRIMARY — do NOT default to Preview when the Edge extension is connected (see deep-knowledge/browser-tool-strategy.md). Never computer-use, never plain Chrome."
+      "tool": "$BROWSER_TOOL probe — Chrome-MCP (Edge, if connected) → Preview → Playwright",
+      "purpose": "Resolve the active browser tool. Chrome-MCP (Edge) stays primary when the extension is connected; otherwise Preview is primary for this localhost app (persists login per-baseRepo). Playwright is the next fallback. Never computer-use, never plain Chrome (see deep-knowledge/browser-tool-strategy.md)."
     },
     {
       "step": 3,

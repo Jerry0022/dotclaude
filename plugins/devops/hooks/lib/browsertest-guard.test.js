@@ -316,10 +316,11 @@ describe("decideLightTest", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildLightTestReason", () => {
-  test("dom: names the Edge extension as primary and the fallback order", () => {
+  test("dom: names the browser tool order and never-plain-Chrome", () => {
     const r = buildLightTestReason("dom");
-    expect(r).toMatch(/Claude-in-Chrome extension in Edge \(PRIMARY\)/);
-    expect(r).toMatch(/Playwright → Preview/);
+    expect(r).toMatch(/Chrome-MCP \(Edge\) when the extension is connected/);
+    expect(r).toMatch(/Claude Preview \(PRIMARY for the localhost app\)/);
+    expect(r).toMatch(/then Playwright/);
     expect(r).toMatch(/Never plain Chrome/);
     expect(r).toMatch(/read_console_messages/);
     expect(r).toMatch(/read_network_requests/);

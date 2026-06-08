@@ -29,7 +29,7 @@ no "browser not needed" exit for web tech.
 - Static `index.html` or equivalent entry exists
 
 **Testing path (first that applies):**
-1. Dev server already running → navigate + snapshot
+1. Dev server already running → navigate + snapshot via `$BROWSER_TOOL` (Preview is primary when the Edge extension is off — see browser-tool-strategy.md)
 2. Dev server startable via `npm run dev` / `preview_start` → start, then snapshot
 3. Static HTML → open via `file:///` in Edge (Claude-in-Chrome extension)
 4. Packaged Electron/Tauri renderer → see "Electron/Native UI" rule below

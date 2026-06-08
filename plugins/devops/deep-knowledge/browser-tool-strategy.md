@@ -1,7 +1,7 @@
 # Browser Tool Strategy
 
 > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.md](test-autonomy.md).
-> This file retains Edge Credo + tool waterfall (Chrome-MCP → Playwright → Preview).
+> This file retains Edge Credo + tool waterfall (Chrome-MCP → Preview → Playwright).
 
 Cross-cutting rules for browser interaction across all skills. Every skill that
 needs to read, navigate, click, or evaluate JavaScript in a browser MUST follow
@@ -24,7 +24,7 @@ with Chrome, Firefox, or any other browser. The Chrome MCP extension
 ### 2. Claude Extension First — Computer-Use for Browser Only on Explicit Request
 
 **Default:** All browser interaction goes through the **Claude-in-Chrome
-extension** running in Edge (or the Playwright/Preview fallback chain).
+extension** running in Edge (or the Preview/Playwright fallback chain).
 
 **Exception:** Computer-use (`mcp__computer-use__*`) MAY be used for browser
 interaction **only** when the user explicitly requests desktop takeover:
@@ -37,7 +37,7 @@ background testing, silent operations — **never** use computer-use for browser
 interaction. Use the Claude extension or the waterfall fallback chain instead.
 
 **If the Claude extension is not connected and desktop takeover was NOT
-requested:** follow the waterfall fallback (Playwright → Preview). Do NOT
+requested:** follow the waterfall fallback (Preview → Playwright). Do NOT
 silently fall back to computer-use mouse clicks on the Edge window.
 
 ### 3. User's Installed Edge — Always With User Context
@@ -105,32 +105,49 @@ not mouse/keyboard, so it doesn't interfere with the user's work.
 
 ---
 
-## Primary Tool: Claude-in-Chrome Extension in Edge
+## Primary Tool (localhost app): Chrome-MCP when connected, else Preview
 
-The **Claude-in-Chrome MCP** (`mcp__Claude_in_Chrome__*`) is the primary and
-preferred browser tool. It runs as a browser extension in **Microsoft Edge**
-(Chromium-based, fully compatible). It provides full DOM-based read+write access:
-navigation, clicking, typing, JavaScript evaluation, form filling, tab management.
+For testing **the project's own running app on a local dev server**, the tool
+order is set by the waterfall below. There are two first-class primaries:
 
-**Key properties:**
-- No desktop takeover — runs in the browser process, not via mouse/keyboard
-- Works in both foreground and background/autonomous mode
-- User can continue working while Claude interacts with browser tabs
-- Full read+write: navigate, click, type, evaluate JS, read DOM, fill forms
+- **Claude-in-Chrome MCP** (`mcp__Claude_in_Chrome__*`) runs as an extension in
+  **Microsoft Edge** (Chromium, fully compatible). Full DOM read+write: navigate,
+  click, type, evaluate JS, read DOM, fill forms, manage tabs. No desktop
+  takeover; works foreground + background; uses the user's real Edge context.
+  **When the extension is connected it stays primary** — it is the most capable
+  tool (multi-tab, file upload, external origins, real login context).
+- **Claude Preview** (`preview_*`) attaches to the local dev server. **When the
+  Chrome extension is not connected, Preview is the primary tool** for the
+  localhost app (no longer a last resort): it needs no extension setup, persists
+  login **per-baseRepo** across worktrees/chats, and ships native viewport presets
+  (`preview_resize` mobile/tablet/desktop + `colorScheme` dark/light), CSS
+  `preview_inspect`, `preview_console_logs`, and `preview_network`. See
+  [preview-testing.md](preview-testing.md).
+
+> **Scope — Preview is localhost-only.** Preview is origin-locked to the local
+> dev server and **refuses external navigation**. It is **N/A** for external /
+> third-party sites (e.g. the claude.ai usage scraper), native desktop apps,
+> multi-tab flows, file uploads to third parties, and external-provider auth —
+> those stay on Chrome-MCP (Edge) / computer-use regardless of this waterfall.
+> **When Preview is insufficient for a localhost app** (multi-tab, upload,
+> complex cross-origin), fall to Chrome-MCP (Edge) → Playwright.
 
 ## Waterfall: Silent Fallback
 
-If the primary tool is not connected, fall through silently. No warnings, no
-"extension not connected" messages. Use the **first tool that responds**:
+If a tool is not connected, fall through silently. No warnings, no "extension
+not connected" messages. Use the **first tool that responds**:
 
 | Priority | Tool | Probe call | Variable value |
 |----------|------|-----------|----------------|
-| 1 | Claude-in-Chrome | `tabs_context_mcp` | `chrome-mcp` |
-| 2 | Playwright | `browser_snapshot` | `playwright` |
-| 3 | Preview | `preview_screenshot` | `preview` |
+| 1 | Claude-in-Chrome (Edge) | `tabs_context_mcp` | `chrome-mcp` |
+| 2 | Preview | `preview_list` | `preview` |
+| 3 | Playwright | `browser_snapshot` | `playwright` |
 
-Set `$BROWSER_TOOL` to the value from the first successful probe. Skills
-reference `$BROWSER_TOOL` to pick the right calls.
+This order keeps **Chrome-MCP primary when the extension is connected** (probe 1
+succeeds) and makes **Preview the primary** for the localhost app whenever the
+extension is off (probe 1 fails, probe 2 succeeds). Set `$BROWSER_TOOL` to the
+value from the first successful probe. Skills reference `$BROWSER_TOOL` to pick
+the right calls.
 
 If **none** respond → this is a hard error. Do not fall back to computer-use
 for browser tasks. Display:
@@ -144,8 +161,8 @@ Kein Browser-Tool konnte verbunden werden.
 
 Geprüft:
   ✗ Claude-in-Chrome Extension (Edge) — nicht erreichbar
-  ✗ Playwright MCP — nicht erreichbar
   ✗ Preview MCP — nicht erreichbar
+  ✗ Playwright MCP — nicht erreichbar
 
 Fix:
   1. Edge öffnen → Extension-Icon klicken → prüfen ob "Connected"

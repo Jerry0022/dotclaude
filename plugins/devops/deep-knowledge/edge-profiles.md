@@ -40,6 +40,15 @@ require the user's persisted cookies (project sessions, GitHub login, SSO,
 etc.). The scraper profile handles only the Claude-usage page, which needs its
 own isolated session to avoid token conflicts.
 
+**Preview vs Edge for localhost-app testing.** Claude Preview is the primary
+tool for testing the project's own localhost app **when the Chrome extension is
+not connected** (see [browser-tool-strategy.md](browser-tool-strategy.md)); the
+main Edge / Chrome-MCP profile stays primary when the extension *is* connected
+and for all external sites. Preview is **origin-locked to localhost and cannot
+reach claude.ai** — the usage scraper (`refresh-usage-headless.js`,
+`~/.claude/edge-usage-profile`) therefore stays on dedicated Edge CDP and must
+never be routed to Preview.
+
 ---
 
 ## Computer-Use Interaction with Main Edge

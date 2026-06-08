@@ -1,8 +1,8 @@
-# Responsive Testing — Multi-Viewport Verification via Edge DevTools
+# Responsive Testing — Multi-Viewport Verification
 
 Multi-device web apps require verification at phone, tablet, and desktop
-breakpoints. This file defines how to perform responsive testing via Chrome-MCP
-in Edge without needing separate physical devices.
+breakpoints. This file defines how to perform responsive testing via the active
+browser tool (`$BROWSER_TOOL`) without needing separate physical devices.
 
 ---
 
@@ -22,11 +22,18 @@ than iPads — both can trigger layout regressions that iOS-only testing misses.
 
 ---
 
-## How to Activate via Chrome-MCP
+## How to Activate — by `$BROWSER_TOOL`
 
-Use `javascript_tool` to resize the viewport before taking a screenshot or
-snapshot. The snippet below resizes both the window and the document root so
-that CSS media queries fire correctly for visual tests.
+**Preview (`$BROWSER_TOOL = preview`) — preferred for localhost apps.** Use the
+native `preview_resize` tool: it sets the viewport directly. Use a preset
+(`mobile` / `tablet` / `desktop`) or pass exact `width`/`height` for the five
+viewports below, plus `colorScheme` (`light`/`dark`) for dark-mode checks. No JS
+hack needed.
+
+**Chrome-MCP / Playwright.** Use `javascript_tool` / `browser_evaluate` to resize
+the viewport before taking a screenshot or snapshot. The snippet below resizes
+both the window and the document root so that CSS media queries fire correctly
+for visual tests.
 
 ```js
 // Viewport resize snippet — run via javascript_tool
@@ -67,7 +74,8 @@ To restore default desktop size after a viewport test, call the snippet with
 1. Navigate to the page (`navigate` or `preview_start` depending on profile).
 2. For each viewport in order (mobile-ios → mobile-android → tablet-ios →
    tablet-android → desktop):
-   a. Run the resize snippet via `javascript_tool`.
+   a. Resize: `preview_resize` (Preview) or the resize snippet via
+      `javascript_tool` / `browser_evaluate` (Chrome-MCP / Playwright).
    b. Call `preview_snapshot` to verify content and DOM structure.
    c. Call `preview_screenshot` to capture visual layout.
 3. Compare states — flag regressions where content overflows, is hidden, or

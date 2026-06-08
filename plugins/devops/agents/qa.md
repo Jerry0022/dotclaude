@@ -26,10 +26,11 @@ Before starting, read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` §4 (Q
 - **Browser-verify web tech changes** (see `{PLUGIN_ROOT}/deep-knowledge/test-strategy.md`
   § Web Tech → Always Browser-Test). Mandatory when HTML/CSS/JS framework files
   changed — mocks for missing backends are expected. No "browser not needed" exit.
-  Use the **Claude-in-Chrome extension in Edge as the primary tool** (`navigate`,
-  `read_page`, `javascript_tool`); fall back to Preview (`preview_snapshot`,
-  `preview_screenshot`) only when the extension is not connected. Never plain
-  Chrome, never computer-use for browser work
+  Use the **Claude-in-Chrome extension in Edge** (`navigate`, `read_page`,
+  `javascript_tool`) when it is connected; otherwise use **Claude Preview as the
+  primary tool** for the project's own localhost app (`preview_snapshot`,
+  `preview_screenshot`, `preview_console_logs`). Playwright is the next fallback.
+  Never plain Chrome, never computer-use for browser work
   (see `{PLUGIN_ROOT}/deep-knowledge/browser-tool-strategy.md`).
 - Take screenshots of UI changes
 - **Read console + network errors** alongside the snapshot — `read_console_messages`

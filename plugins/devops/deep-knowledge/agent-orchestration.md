@@ -271,7 +271,7 @@ in `package.json`, static `index.html` present) → browser verification is
 **required**, mocks are expected. No "browser not needed" exit for web tech.
 
 - **Orchestrator** (before spawning QA): probe the browser tool waterfall from
-  `deep-knowledge/browser-tool-strategy.md` (Chrome MCP → Playwright → Preview).
+  `deep-knowledge/browser-tool-strategy.md` (Chrome MCP → Preview → Playwright).
   Set `$BROWSER_TOOL` to the first responder. If Preview is selected, start a
   server via `preview_start` and capture `$SERVER_ID`. If no dev server exists,
   fall back to opening static HTML via `file:///`.
