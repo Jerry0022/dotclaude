@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.100.1] — 2026-06-13
+
+### Fixed
+
+- **The 8h autonomous watchdog can now arm on non-US Windows locales.** `autonomous-watchdog.js register` created the Scheduled Task via `schtasks /Create /SD <MM/DD/YYYY> /ST <HH:mm>`, hard-coding an en-US date string. A non-US `schtasks` validates `/SD` against the active culture — a de-DE install answers `06/13/2026` with `FEHLER: Ungültiges Startdatum`, so `/devops-autonomous` Step 4d failed and the entire AFK run proceeded with **no external safety net** (the deadman that force-shuts the PC, or writes a visible `AUTONOMOUS-STALLED.txt`, when the in-session Step 8 is never reached). Registration now goes through the PowerShell ScheduledTasks module: the fire time is passed to `Get-Date` as integer `-Year/-Month/-Day/-Hour/-Minute` components plus `New-ScheduledTaskTrigger -Once -At <DateTime>`, so no date string is ever parsed against the culture — verified by a real register/status/unregister roundtrip on de-DE (query/delete stay on `schtasks.exe`, which is locale-independent and resolves PS-created tasks). The trigger also sets `-AllowStartIfOnBatteries`/`-DontStopIfGoingOnBatteries` so the deadman still fires on a laptop running AFK on battery — the `schtasks` default (`DisallowStartIfOnBatteries`) would have skipped it. `buildRegisterPsCommand`/`buildRecoveryScript` are extracted as pure exports behind a `require.main` guard; new `autonomous-watchdog.test.js` (10 tests) pins that the register path emits integer date components and no locale-dependent date string.
+
 ## [0.100.0] — 2026-06-08
 
 ### Fixed
