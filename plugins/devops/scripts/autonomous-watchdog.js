@@ -37,7 +37,8 @@
  *   status [task-name]             Check if the task still exists.
  *                                  → { ok, taskName, active }
  *
- * Platform: Windows-only (uses schtasks.exe). No-op on other platforms.
+ * Platform: Windows-only. Registration uses the PowerShell ScheduledTasks module
+ * (Register-ScheduledTask); query/delete use schtasks.exe. No-op on other platforms.
  */
 
 const { spawnSync } = require('child_process');
@@ -57,12 +58,6 @@ function ok(extra) {
   process.stdout.write(JSON.stringify({ ok: true, ...extra }) + '\n');
   process.exit(0);
 }
-
-if (process.platform !== 'win32') {
-  ok({ skipped: true, reason: 'non-windows platform' });
-}
-
-const [, , subcmd, ...args] = process.argv;
 
 function readSentinel() {
   if (!fs.existsSync(SENTINEL_FILE)) return null;
@@ -110,7 +105,87 @@ function isValidWatchdogScriptPath(scriptPath) {
   return true;
 }
 
-if (subcmd === 'register') {
+/**
+ * Build the recovery PowerShell script that the scheduled task executes on fire.
+ * It checks the done-flag and, if missing, runs the mode-specific recovery.
+ * @param {{action:string, hours:number, flagPath:string, stalledPath:string}} o
+ * @returns {string} PowerShell script body, written to a self-deleting .ps1.
+ */
+function buildRecoveryScript({ action, hours, flagPath, stalledPath }) {
+  const flagPs = flagPath.replace(/'/g, "''");
+  const stalledPs = stalledPath.replace(/'/g, "''");
+  // Recovery action when the flag is missing — differs by mode.
+  const recoveryPs = action === 'shutdown'
+    ? `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — forcing shutdown"
+  & "$env:SystemRoot\\System32\\shutdown.exe" /s /t 0 /c "Claude autonomous watchdog: session unresponsive after ${hours}h, forcing shutdown"`
+    : `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — writing stalled marker (notify mode)"
+  $msg = @(
+    "Claude autonomous session was unresponsive after ${hours}h and never reached completion.",
+    "",
+    "The run wedged (likely an Anthropic API hang or a stuck subagent). Nothing was shut down.",
+    "Check AUTONOMOUS-RESUME.json for saved state, then resume or restart the session.",
+    "",
+    "Stalled at: $ts"
+  )
+  Set-Content -Path '${stalledPs}' -Value $msg -Encoding UTF8`;
+  return `$ErrorActionPreference = 'Continue'
+$flag = '${flagPs}'
+$logPath = Join-Path $env:TEMP 'claude-autonomous-watchdog.log'
+$ts = (Get-Date -Format 'o')
+if (Test-Path $flag) {
+  Add-Content -Path $logPath -Value "[$ts] flag present at $flag — no action"
+} else {
+${recoveryPs}
+}
+# Self-delete this script after run
+try { Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue } catch {}
+`;
+}
+
+/**
+ * Build the PowerShell command that registers the one-shot watchdog task.
+ *
+ * Culture-agnostic by construction: the fire time is passed to `Get-Date` as
+ * separate integer components (-Year/-Month/-Day/-Hour/-Minute), never as a
+ * locale-formatted date string. This sidesteps the `schtasks /SD /ST` trap where
+ * a hard-coded en-US `MM/DD/YYYY` is rejected by a non-US `schtasks` — e.g. a
+ * de-DE install expects `TT.MM.JJJJ` and answers a US string with
+ * "FEHLER: Ungültiges Startdatum", which left the 8h deadman unarmed.
+ * `Register-ScheduledTask` with `New-ScheduledTaskTrigger -At <DateTime>` takes a
+ * real DateTime object, so no date string is ever parsed against the active culture.
+ *
+ * The wall-clock components come from the local-time getters of `fireAt`, matching
+ * the previous `/ST` semantics (the Task Scheduler interprets `-At` as local time).
+ * Battery flags are set so the deadman still fires on a laptop running AFK on
+ * battery — the schtasks default (DisallowStartIfOnBatteries) would have skipped it.
+ *
+ * @param {{taskName:string, scriptPath:string, fireAt:Date}} opts
+ * @returns {string} PowerShell script to run via `powershell.exe -Command`.
+ */
+function buildRegisterPsCommand({ taskName, scriptPath, fireAt }) {
+  const tnPs = String(taskName).replace(/'/g, "''");
+  const spPs = String(scriptPath).replace(/'/g, "''");
+  const year = fireAt.getFullYear();
+  const month = fireAt.getMonth() + 1; // getMonth() is 0-based
+  const day = fireAt.getDate();
+  const hour = fireAt.getHours();
+  const minute = fireAt.getMinutes();
+  return [
+    `$ErrorActionPreference = 'Stop'`,
+    `try {`,
+    `  $at = Get-Date -Year ${year} -Month ${month} -Day ${day} -Hour ${hour} -Minute ${minute} -Second 0`,
+    `  $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "${spPs}"'`,
+    `  $trigger = New-ScheduledTaskTrigger -Once -At $at`,
+    `  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries`,
+    `  Register-ScheduledTask -TaskName '${tnPs}' -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null`,
+    `} catch {`,
+    `  Write-Error $_.Exception.Message`,
+    `  exit 1`,
+    `}`,
+  ].join('\n');
+}
+
+function runRegister(args) {
   const [flagPathRaw, hoursRaw, actionRaw] = args;
   if (!flagPathRaw || !hoursRaw) {
     fail('Usage: register <flag-path> <hours> [shutdown|notify]');
@@ -145,56 +220,19 @@ if (subcmd === 'register') {
   // Write a separate PowerShell script — robust escaping, self-deletes after run.
   const scriptPath = path.join(os.tmpdir(),
     `claude-autonomous-watchdog-${Date.now()}.ps1`);
-  const flagPs = flagPath.replace(/'/g, "''");
-  const stalledPs = stalledPath.replace(/'/g, "''");
-  // Recovery action when the flag is missing — differs by mode.
-  const recoveryPs = action === 'shutdown'
-    ? `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — forcing shutdown"
-  & "$env:SystemRoot\\System32\\shutdown.exe" /s /t 0 /c "Claude autonomous watchdog: session unresponsive after ${hours}h, forcing shutdown"`
-    : `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — writing stalled marker (notify mode)"
-  $msg = @(
-    "Claude autonomous session was unresponsive after ${hours}h and never reached completion.",
-    "",
-    "The run wedged (likely an Anthropic API hang or a stuck subagent). Nothing was shut down.",
-    "Check AUTONOMOUS-RESUME.json for saved state, then resume or restart the session.",
-    "",
-    "Stalled at: $ts"
-  )
-  Set-Content -Path '${stalledPs}' -Value $msg -Encoding UTF8`;
-  const psScript =
-`$ErrorActionPreference = 'Continue'
-$flag = '${flagPs}'
-$logPath = Join-Path $env:TEMP 'claude-autonomous-watchdog.log'
-$ts = (Get-Date -Format 'o')
-if (Test-Path $flag) {
-  Add-Content -Path $logPath -Value "[$ts] flag present at $flag — no action"
-} else {
-${recoveryPs}
-}
-# Self-delete this script after run
-try { Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue } catch {}
-`;
-  fs.writeFileSync(scriptPath, psScript, 'utf8');
+  fs.writeFileSync(scriptPath,
+    buildRecoveryScript({ action, hours, flagPath, stalledPath }), 'utf8');
 
-  const sd = `${String(fireAt.getMonth() + 1).padStart(2, '0')}/` +
-             `${String(fireAt.getDate()).padStart(2, '0')}/` +
-             `${fireAt.getFullYear()}`;
-  const st = `${String(fireAt.getHours()).padStart(2, '0')}:` +
-             `${String(fireAt.getMinutes()).padStart(2, '0')}`;
-  const tr = `powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "${scriptPath}"`;
-
-  const result = spawnSync('schtasks.exe', [
-    '/Create',
-    '/TN', taskName,
-    '/SC', 'ONCE',
-    '/SD', sd,
-    '/ST', st,
-    '/TR', tr,
-    '/F',
-  ], { encoding: 'utf8' });
+  // Register via the PowerShell ScheduledTasks module rather than `schtasks /SD /ST`:
+  // the trigger time is passed as a real DateTime, so it is culture-agnostic and
+  // does not break on non-US locales (see buildRegisterPsCommand).
+  const psCommand = buildRegisterPsCommand({ taskName, scriptPath, fireAt });
+  const result = spawnSync('powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psCommand],
+    { encoding: 'utf8' });
 
   if (result.status !== 0) {
-    fail(`schtasks /Create failed: ${(result.stderr || result.stdout || '').trim()}`);
+    fail(`watchdog task registration failed: ${(result.stderr || result.stdout || '').trim()}`);
   }
 
   writeSentinel({
@@ -209,7 +247,7 @@ try { Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction Silentl
   ok({ taskName, flagPath, fireAt: fireAt.toISOString(), scriptPath, action });
 }
 
-if (subcmd === 'flag') {
+function runFlag(args) {
   const [flagPathRaw] = args;
   let flagPath;
   if (flagPathRaw) {
@@ -233,7 +271,7 @@ if (subcmd === 'flag') {
   ok({ flagPath });
 }
 
-if (subcmd === 'unregister') {
+function runUnregister(args) {
   let taskName = args[0];
   const sentinel = readSentinel();
   if (!taskName) {
@@ -269,7 +307,7 @@ if (subcmd === 'unregister') {
   ok({ taskName, deleted: !notFound });
 }
 
-if (subcmd === 'status') {
+function runStatus(args) {
   let taskName = args[0];
   const sentinel = readSentinel();
   if (!taskName) {
@@ -286,5 +324,25 @@ if (subcmd === 'status') {
   });
 }
 
-fail(`Unknown subcommand: ${subcmd || '(empty)'}. ` +
-  `Use: register | flag | unregister | status`);
+// --- CLI entry (skipped when require()'d by tests) ---
+if (require.main === module) {
+  if (process.platform !== 'win32') {
+    ok({ skipped: true, reason: 'non-windows platform' });
+  }
+  const [, , subcmd, ...args] = process.argv;
+  if (subcmd === 'register') runRegister(args);
+  else if (subcmd === 'flag') runFlag(args);
+  else if (subcmd === 'unregister') runUnregister(args);
+  else if (subcmd === 'status') runStatus(args);
+  else {
+    fail(`Unknown subcommand: ${subcmd || '(empty)'}. ` +
+      `Use: register | flag | unregister | status`);
+  }
+}
+
+module.exports = {
+  buildRegisterPsCommand,
+  buildRecoveryScript,
+  isValidWatchdogTaskName,
+  isValidWatchdogScriptPath,
+};
