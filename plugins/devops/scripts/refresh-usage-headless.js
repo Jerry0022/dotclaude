@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script refresh-usage-headless
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  *
  * Headless Usage Scraper for claude.ai
@@ -40,6 +40,11 @@ const USAGE_LIVE_PATH = path.join(SCRIPTS_DIR, 'usage-live.json');
 const SCRAPER_PROFILE_DIR = path.join(SCRIPTS_DIR, 'edge-usage-profile');
 const SCRAPER_PID_FILE = path.join(SCRIPTS_DIR, 'edge-usage-scraper.pid');
 const LOGIN_PID_FILE = path.join(SCRIPTS_DIR, 'edge-usage-login.pid');
+// Machine-wide locks so parallel sessions don't each spawn an Edge window.
+const LAUNCH_LOCK_FILE = path.join(SCRIPTS_DIR, 'edge-usage-launch.lock');
+const LOGIN_LOCK_FILE = path.join(SCRIPTS_DIR, 'edge-usage-login.lock');
+const LAUNCH_LOCK_STALE_MS = 60 * 1000;     // a cold launch finishes well under a minute
+const LOGIN_LOCK_STALE_MS = 5 * 60 * 1000;  // leave time for the user to finish logging in
 // If the cached usage-live.json is fresher than this, skip the Edge launch
 // entirely and just print the cached summary. Prevents window-spam when the
 // card is rendered in rapid succession.
@@ -198,6 +203,34 @@ function killScraperInstance() {
   try { fs.unlinkSync(SCRAPER_PID_FILE); } catch {}
 }
 
+/** Age of a lock file in ms, or Infinity if absent/unreadable. */
+function lockAgeMs(lockFile) {
+  try { return Date.now() - fs.statSync(lockFile).mtimeMs; } catch { return Infinity; }
+}
+
+/**
+ * Atomically acquire a machine-wide lock so only ONE parallel session performs
+ * a guarded action (cold launch / opening the login window). Uses exclusive
+ * create ('wx'), which is atomic at the OS level — no check-then-act race.
+ *
+ * @param {string} lockFile
+ * @param {() => boolean} isStale  reclaim predicate for an abandoned lock
+ * @returns {boolean} true if this process won the lock
+ */
+function acquireLock(lockFile, isStale) {
+  try { if (isStale()) fs.unlinkSync(lockFile); } catch {}
+  try {
+    const fd = fs.openSync(lockFile, 'wx');
+    fs.writeSync(fd, String(process.pid));
+    fs.closeSync(fd);
+    return true;
+  } catch { return false; }
+}
+
+function releaseLock(lockFile) {
+  try { fs.unlinkSync(lockFile); } catch {}
+}
+
 /**
  * Launch a dedicated Edge instance with its own user-data-dir and CDP port.
  * Runs fully isolated from the user's main Edge — separate cookies, separate
@@ -228,6 +261,18 @@ async function launchScraperInstance({ visible = false, url = USAGE_URL } = {}) 
       '--window-size=1,1',
       '--disable-gpu',
       '--silent-launch'
+    );
+  } else {
+    // Visible login window. The headless branch above persists off-screen
+    // (-32000,-32000) 1x1 bounds into the SHARED scraper profile. Without
+    // explicit bounds here, Edge restores those persisted bounds and the login
+    // window opens off-screen + 1px — "displaced/hidden" — so the user can
+    // never log in and every session keeps spawning more. Force an on-screen,
+    // maximized window that overrides the persisted bounds.
+    args.push(
+      '--start-maximized',
+      '--window-position=0,0',
+      '--window-size=1280,900'
     );
   }
   args.push(url);
@@ -524,8 +569,23 @@ function loginWindowAlive() {
   // dedicated instance (main Edge is never touched either way).
   const cdpAlreadyUp = await isCDPAvailable();
   if (!cdpAlreadyUp) {
+    // Machine-wide launch lock: with many parallel sessions, only one process
+    // cold-launches the dedicated instance. Losers fall back to cache this turn;
+    // once the shared instance is up on the CDP port, every later turn reuses it.
+    // This stops the launch/kill churn that spawned extra Edge processes across
+    // parallel sessions.
+    const wonLaunch = acquireLock(
+      LAUNCH_LOCK_FILE,
+      () => lockAgeMs(LAUNCH_LOCK_FILE) > LAUNCH_LOCK_STALE_MS
+    );
+    if (!wonLaunch) {
+      log('Another session is launching the scraper — using cache this turn');
+      useCacheOrExit(5);
+      return;
+    }
     killScraperInstance(); // clear any stale PID file
     const pid = await launchScraperInstance({ visible: false, url: USAGE_URL });
+    releaseLock(LAUNCH_LOCK_FILE);
     if (!pid) {
       log('Could not launch scraper instance');
       useCacheOrExit(5);
@@ -536,9 +596,10 @@ function loginWindowAlive() {
   const code = await scrapeViaCDP();
 
   if (code === 0) {
-    // Successful scrape means we're logged in — clear any stale login-PID
-    // marker so future failures can spawn a fresh login window if needed.
+    // Successful scrape means we're logged in — clear any stale login markers
+    // so future failures can spawn a fresh login window if needed.
     try { fs.unlinkSync(LOGIN_PID_FILE); } catch {}
+    releaseLock(LOGIN_LOCK_FILE);
     // Leave the hidden scraper alive for fast reuse on the next invocation.
     // It's a single off-screen msedge.exe with its own isolated profile —
     // no visible window, no interference with the user's main Edge.
@@ -551,6 +612,19 @@ function loginWindowAlive() {
     // another one — user is presumably still working on it.
     if (loginWindowAlive()) {
       log('LOGIN_REQUIRED: visible login window from previous run still open — not spawning another');
+      useCacheOrExit(2);
+      return;
+    }
+    // Machine-wide login lock: across many parallel sessions, exactly one opens
+    // the visible login window. The lock is reclaimed only once it is stale AND
+    // no login window is alive — so it survives the minutes a user needs to log
+    // in, instead of every session spawning its own window.
+    const wonLogin = acquireLock(
+      LOGIN_LOCK_FILE,
+      () => lockAgeMs(LOGIN_LOCK_FILE) > LOGIN_LOCK_STALE_MS && !loginWindowAlive()
+    );
+    if (!wonLogin) {
+      log('LOGIN_REQUIRED: another session is already opening a login window — skipping');
       useCacheOrExit(2);
       return;
     }
