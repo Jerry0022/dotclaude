@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.100.2] — 2026-06-14
+
+### Fixed
+
+- **The usage-refresh Edge scraper no longer opens hidden/off-screen login windows or spawns one per parallel session.** Two root causes in `refresh-usage-headless.js`: (1) The headless scrape launches Edge with `--window-position=-32000,-32000 --window-size=1,1`, and Edge **persists** those bounds into the shared scraper profile. The subsequent *visible* login launch carried no position flags, so Edge restored the off-screen 1px bounds — the login window opened invisible/displaced, the user could never complete the one-time login, and every session kept re-hitting "not logged in" and spawning yet another hidden window. The visible branch now forces `--start-maximized --window-position=0,0 --window-size=1280,900`, overriding the persisted bounds so the login window opens normally maximized. (2) There was no machine-wide guard: the PID-file liveness check was check-then-act, so concurrent parallel sessions each spawned a login window and overwrote/killed each other's instances (the "20x windows" report). Two atomic locks via `fs.openSync(..., 'wx')` (OS-atomic, no race) now serialize this — a **launch lock** so only one session cold-launches the headless instance (losers use cache that turn; the shared instance is reused once its CDP port is up) and a **login lock** so exactly one session opens the visible login window, released on successful login (exit 0) or reclaimed only when stale (>5 min) **and** no login window is alive. Script `@version` 0.2.0→0.3.0.
+- **The README/architecture marker-sync test no longer flakes on Windows.** `gen-readme-sections.test.js` spawns a cold `node` subprocess that reparses the ESM generator (the CommonJS-typeless `package.json` forces an ESM reparse), which on Windows runs right at vitest's default 5s test timeout and fails intermittently — blocking the ship build gate even though the markers were in sync. The test now passes an explicit 30s timeout; the work is a fixed marker diff (not load-dependent), so the headroom removes the flake without masking real staleness.
+
 ## [0.100.1] — 2026-06-13
 
 ### Fixed
