@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.101.0] — 2026-06-14
+
+### Changed
+
+- **`/devops-repo-health`'s report page is redesigned around a single branch model (skill 0.4.0→0.5.0).** The old report mixed a total with its own sub-categories and a second axis — four side-by-side KPI tiles (`Branches`, `Sicher löschbar`, `Untersuchen`, `Worktrees`) where the worktrees were double-counted (they *are* branches) and `4 + 2 ≠ Total` visually. The new model treats **every entry as one git branch**; a worktree is not a separate thing but a branch *with* a checked-out directory, surfaced as an **„Aktive Session"** (vs a plain **„Git-Session"**). The KPI is now **one total, partitioned into the two derived actions that sum to it** — 🟢 Löschbar + 🟡 Untersuchen — each with **sub-labels** breaking it down by type (Git-Session / Aktive Session) and location (lokal / nur-remote). A **Typ × Zustand matrix** documents how the status is derived. Per-row controls collapse from a three-way `Löschen / Untersuchen / Behalten` radio to a **single delete checkbox** (safe-delete pre-checked, conscious-keep by unchecking); **„Untersuchen" becomes an inline „?" detail** that expands commit-log + diff + recommendation on first render — which **removes the entire multi-iteration investigate loop** (the iteration counter, Convergence digest, Tombstone cards, the 5-round cap, and the Step 9b deep-dive-as-iteration are all deleted). The decision sidebar becomes a full **Apply-Manifest** with a **Dry-Run-Confirm** before execution; bulk select shows a **Gmail-style "visible vs. all-filtered" banner**; rows are **decision-first with progressive disclosure**; Aktive Sessions stay in a **co-located block**; and the run opens with a **scope question that defaults to the current repo** (all-repos is an explicit opt-in = safety default). Safety is preserved end-to-end: worktree-attached branches are never auto-deleted, has-changes Aktive Sessions expose no destructive control, and clean Aktive Sessions appear under Löschbar but are **not** pre-checked. Specs rewritten: `SKILL.md`, `page-structure.md`, `decision-schema.md`, `investigation.md`.
+
 ## [0.100.2] — 2026-06-14
 
 ### Fixed
