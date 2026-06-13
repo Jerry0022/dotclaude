@@ -1,13 +1,12 @@
-# Repo-Health Deep Investigation
+# Repo-Health Inline Detail Investigation
 
-When the user marks a branch or worktree with `action: "investigate"` on
-the iteration 1 page, Claude does NOT delete or modify it. Instead it
-runs a per-item deep-dive, attaches the enriched data to the regenerated
-concept page (iteration 2), and recommends a concrete reclassification.
+Data gathered **up-front** (SKILL.md Step 7) for every entry in the concept page.
+All data is embedded in the HTML at first render, hidden behind a `<details>` „?"
+toggle per card. There is no separate iteration loop, no round-trip to Claude.
 
-## Branch Deep-Dive
+## Git-Session Branch — Data Gathering
 
-For each branch with `action: "investigate"`, gather:
+For each Git-Session branch (both Löschbar and Untersuchen), gather:
 
 1. **Full commit log** against `origin/main`:
    ```bash
@@ -34,9 +33,9 @@ For each branch with `action: "investigate"`, gather:
      --json number,title,state,mergedAt,createdAt,url
    ```
 
-5. **Squash-merge cross-check** — only do this if the branch is classified
-   `investigate` AND has no detected PR. For each commit on the branch,
-   check whether its diff content already exists in `origin/main`:
+5. **Squash-merge cross-check** — only for Untersuchen branches with no detected PR.
+   For each commit on the branch, check whether its diff content already exists in
+   `origin/main`:
    ```bash
    git log --format='%H' origin/main..<branch> | while read c; do
      patch_id=$(git show "$c" | git patch-id --stable | awk '{print $1}')
@@ -57,21 +56,21 @@ For each branch with `action: "investigate"`, gather:
 
 Apply rules in order, first match wins:
 
-| Recommendation | When | Default action in iteration 2 |
-|----------------|------|-------------------------------|
-| `safe-delete` | Squash-merge cross-check ≥ 80% match, OR all commits empty (`git diff` clean against main) | "Loeschen" |
-| `pr-open` | An open PR points to this branch | "Behalten" |
-| `ship-needed` | Has substantive diff (≥ 5 lines changed outside CHANGELOG), no open PR, last commit ≤ 30 days old | "Behalten" |
-| `rebase-needed` | Last commit > 90 days old, AND ≥ 30 commits between branch base and current `origin/main` | "Behalten" |
-| `wip-keep` | WIP heuristic > 50%, last commit ≤ 14 days old | "Behalten" |
-| `stale-investigate` | Fallback when nothing else matches | "Behalten" |
+| Recommendation | When | Label shown in inline detail |
+|----------------|------|------------------------------|
+| `safe-delete` | Squash-merge cross-check ≥ 80% match, OR all commits empty (`git diff` clean against main) | "Bereits in main — sicher löschbar" |
+| `pr-open` | An open PR points to this branch | "Offener PR — nicht löschen" |
+| `ship-needed` | Has substantive diff (≥ 5 lines changed outside CHANGELOG), no open PR, last commit ≤ 30 days old | "N ungeschippte Commits — ship empfohlen" |
+| `rebase-needed` | Last commit > 90 days old, AND ≥ 30 commits between branch base and current `origin/main` | "Veraltet — rebase empfohlen" |
+| `wip-keep` | WIP heuristic > 50%, last commit ≤ 14 days old | "WIP — Arbeit laeuft noch" |
+| `stale-investigate` | Fallback when nothing else matches | "Unklar — bitte pruefen" |
 
 Always attach a 1-2 sentence rationale referencing the concrete evidence
 (commit count, file count, dates, PR number).
 
-## Worktree Deep-Dive
+## Aktive Session (Worktree) — Data Gathering
 
-For each worktree with `action: "investigate"`, gather:
+For each Aktive Session, gather:
 
 1. **Modified file list with line counts:**
    ```bash
@@ -100,31 +99,32 @@ For each worktree with `action: "investigate"`, gather:
 
 ### Recommendation Logic
 
-| Recommendation | When | Default action in iteration 2 |
-|----------------|------|-------------------------------|
-| `commit-and-ship` | Substantive changes (≥ 20 lines or ≥ 3 files), last activity ≤ 7 days, no open PR yet | "Behalten" (user should commit + ship manually) |
-| `wip-continue` | Last activity ≤ 3 days, has any uncommitted changes | "Behalten" |
-| `discard` | Only mechanical changes (whitespace, generated files, lock files), OR < 5 lines across < 2 files | "Behalten" (recommendation in rationale, but actual discard requires explicit user action — never auto-discard) |
-| `commit-only` | Branch already has commits ahead of main but no open PR, no recent uncommitted activity | "Behalten" |
-| `stale-investigate` | Fallback | "Behalten" |
+| Recommendation | When | Label shown in inline detail |
+|----------------|------|------------------------------|
+| `commit-and-ship` | Substantive changes (≥ 20 lines or ≥ 3 files), last activity ≤ 7 days, no open PR yet | "N Dateien — commit + ship empfohlen" |
+| `wip-continue` | Last activity ≤ 3 days, has any uncommitted changes | "Aktiv — Arbeit laeuft noch" |
+| `discard` | Only mechanical changes (whitespace, generated files, lock files), OR < 5 lines across < 2 files | "Nur Kleinaenderungen — verwerfen moeglich" |
+| `commit-only` | Branch already has commits ahead of main but no open PR, no recent uncommitted activity | "Commits vorhanden — PR erstellen empfohlen" |
+| `stale-investigate` | Fallback | "Unklar — bitte pruefen" |
 
-**Hard rule:** Even `discard` recommendation MUST NOT trigger automatic
-discard. The user must commit or `git checkout` manually. The page only
-surfaces the recommendation; the action radio for has-changes worktrees
-remains "Untersuchen / Behalten" only — no destructive option.
+**Hard rule:** Even `discard` recommendation MUST NOT trigger automatic discard.
+The user must commit or `git checkout` manually. The inline detail panel is
+read-only — no button in it triggers any git action for has-changes Aktive Sessions.
 
 ## Output Shape
 
-Per investigated item, attach a `deepDive` block to the iteration 2
-concept page payload. Branch example:
+Data is embedded in the concept page HTML at first render time as a `<details>`
+block per card. Example branch inline detail data structure (rendered as HTML, not
+sent back as JSON):
 
 ```json
 {
   "id": "branch-old-experiment",
   "branch": "old-experiment",
-  "category": "investigate",
-  "deepDive": {
+  "kategorie": "untersuchen",
+  "inlineDetail": {
     "recommendation": "ship-needed",
+    "label": "12 ungeschippte Commits — ship empfohlen",
     "rationale": "12 commits, 8 files (~340 lines) changed outside CHANGELOG. Last commit 4 days ago, no PR. Looks shippable.",
     "commits": [
       { "hash": "a1b2c3d", "subject": "feat: add foo", "relativeDate": "vor 4 Tagen", "author": "Jerry" }
@@ -141,13 +141,16 @@ concept page payload. Branch example:
 }
 ```
 
-Worktree example:
+Aktive Session inline detail data structure:
 
 ```json
 {
   "branch": "claude/old-session",
-  "deepDive": {
+  "typ": "Aktive Session",
+  "status": "clean",
+  "inlineDetail": {
     "recommendation": "commit-and-ship",
+    "label": "3 Dateien (~85 Zeilen) — commit + ship empfohlen",
     "rationale": "3 modified files (~85 lines), letzte Aktivitaet vor 2 Tagen. Sieht nach abgeschlossener Feature-Arbeit aus — commit + ship empfohlen.",
     "modifiedFiles": [
       { "path": "src/bar.ts", "added": 45, "deleted": 10 }
@@ -161,63 +164,5 @@ Worktree example:
 }
 ```
 
-The iteration 2 page renders `deepDive` inline inside the corresponding
-card (see `page-structure.md` § Iteration ≥ 2 — Deep-Dive Panel).
-
-## Tombstone Shape (item disappeared between iterations)
-
-When SKILL.md Step 9b revalidation finds an investigate target no longer
-present in the fresh git state (branch deleted in another terminal,
-worktree path removed, etc.), the item is rendered as a tombstone instead
-of a deepDive panel:
-
-```json
-{
-  "id": "branch-old-experiment",
-  "branch": "old-experiment",
-  "category": "investigate",
-  "tombstone": {
-    "reason": "branch-missing",
-    "detectedAt": "2026-05-11T13:35:00+02:00",
-    "lastKnownStatus": "investigate"
-  }
-}
-```
-
-`reason` values: `"branch-missing"`, `"worktree-path-missing"`,
-`"branch-attached-to-worktree"` (race: moved to worktree section instead).
-Tombstone cards show a single "Bestaetigen" button that drops the item
-from the next submit payload — no further action is available.
-
-## Convergence Digest
-
-Step 9b's convergence check (terminate vs. allow another deep-dive round)
-hashes a stable subset of the `deepDive` payload. The digest is recomputed
-each iteration; if it matches the previous iteration's digest verbatim,
-the "Untersuchen" radio is suppressed for that item — no new evidence
-exists, so another round would be pure noise.
-
-**Branch digest input** (in order, JSON-stringify with sorted keys, then SHA-1):
-```
-{
-  "recommendation": "<value>",
-  "commits": [<sorted by hash ascending, hash field only>],
-  "files": [<sorted by path ascending, {path, added, deleted}>]
-}
-```
-
-**Worktree digest input:**
-```
-{
-  "recommendation": "<value>",
-  "modifiedFiles": [<sorted by path, {path, added, deleted}>],
-  "commitsAhead": [<sorted by hash ascending, hash field only>]
-}
-```
-
-Excluded from the digest on purpose: relative-date strings ("vor 4 Tagen"
-changes every render but does not represent new information), the
-free-form `rationale` text, and PR metadata (PR state can flip while
-nothing about the branch content has changed — track that via a separate
-"PR-Status changed" badge if needed in future iterations, not by gating
-convergence on it).
+The page renders `inlineDetail` inside a `<details><summary>[?] Details</summary>...</details>`
+element inside the corresponding card (see `page-structure.md` § Inline Detail Panel).
