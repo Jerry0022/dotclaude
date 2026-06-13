@@ -14,5 +14,9 @@ describe("gen-readme-sections", () => {
     expect(() =>
       execFileSync(process.execPath, [SCRIPT, "--check", REPO_ROOT], { stdio: "pipe" }),
     ).not.toThrow();
-  });
+    // 30s timeout, not the default 5s: this spawns a cold `node` subprocess that
+    // reparses the ESM generator (the CommonJS-typeless package.json forces a
+    // reparse), which on Windows runs right at the 5s edge and flakes. The work
+    // is a fixed marker diff, not load-dependent — generous headroom, no flake.
+  }, 30000);
 });
