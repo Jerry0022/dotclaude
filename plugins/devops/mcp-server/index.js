@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.4.0
+ * @version 0.5.0
  * @plugin devops
  * @description MCP server with two tools:
  *   - `get_usage`              — scrapes live usage data from claude.ai via CDP
@@ -23,6 +23,7 @@ import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, '..');
@@ -597,6 +598,14 @@ function renderCard(input, meterText, buildId) {
     parts.push('');
   }
 
+  // Self-documenting note when the ship-successful → ready guard fired (see
+  // lib/variant-guard.js) — so a genuinely-shipped run that forgot to pass
+  // state isn't silently presented as "READY — SHIP?".
+  if (input._downgraded) {
+    parts.push(blockquote(renderDowngradeNote(lang)));
+    parts.push('');
+  }
+
   if (config.changes) {
     const changesBlock = renderChanges(input.changes);
     if (changesBlock) {
@@ -952,19 +961,20 @@ server.registerTool(
     }),
   },
   async (params) => {
-    // 0. Variant guard — auto-correct "ship-successful" when state proves it wasn't
-    //    ship-successful: ONLY valid after ship_release ran (pushed + merged).
-    //    A commit, push, or PR alone is NEVER "ship-successful".
-    if (params.variant === 'ship-successful') {
-      const s = params.state || {};
-      if (!s.pushed || !s.merged) {
-        const corrected = 'ready';
-        console.error(
-          `[dotclaude-completion-mcp] Variant guard: "ship-successful" rejected ` +
-          `(pushed=${!!s.pushed}, merged=${!!s.merged}) → corrected to "${corrected}"`
-        );
-        params.variant = corrected;
-      }
+    // 0. Variant guard — "ship-successful" is ONLY valid after ship_release ran
+    //    (pushed + merged). A commit, push, or PR alone is NEVER ship-successful.
+    //    Logic lives in lib/variant-guard.js so it is unit-testable without
+    //    booting the server. On downgrade we flag params._downgraded so renderCard
+    //    surfaces a self-documenting note — a genuinely-shipped run that forgot to
+    //    pass state must not be silently mis-shown as "READY — SHIP?".
+    const shipGuard = correctShipVariant(params.variant, params.state);
+    if (shipGuard.downgraded) {
+      console.error(
+        `[dotclaude-completion-mcp] Variant guard: "ship-successful" rejected ` +
+        `(${shipGuard.reason}) → corrected to "${shipGuard.variant}"`
+      );
+      params.variant = shipGuard.variant;
+      params._downgraded = true;
     }
 
     // 1. Fetch fresh usage data
