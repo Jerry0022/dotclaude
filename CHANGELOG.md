@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.101.1] — 2026-06-14
+
+### Fixed
+
+- **The ship-successful completion card no longer silently renders as `📦 READY — SHIP oder ÄNDERN?` after a real ship.** The `render_completion_card` variant guard downgrades `ship-successful` → `ready` when the call doesn't prove the merge (`state.pushed` + `state.merged`) — correct, but the correction was invisible (a `console.error` only), so a genuinely-shipped run that forgot to pass `state` (e.g. a manual render while the `devops-ship` skill was unregistered after a resume — see #219) presented a misleading "ready to ship" card right after merge + tag + release. The guard logic is extracted to `mcp-server/lib/variant-guard.js` (pure, unit-testable without booting the MCP server) and now flags the downgrade so the card surfaces a **self-documenting note** explaining why it fell back to `ready` and how to fix the call (`state:{ pushed:true, merged:"<base>" }`). New `variant-guard.test.js` (8 tests) pins the proof rules + the localized note. MCP server `@version` 0.4.0→0.5.0.
+
 ## [0.101.0] — 2026-06-14
 
 ### Changed
