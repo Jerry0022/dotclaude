@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.102.0] — 2026-06-14
+
+### Added
+
+- **`/devops-autonomous` can now schedule an automatic worktree-resume after the 5h token-window resets.** When the user declines shutdown (PC stays on), a new conditional **Step 2 Q4** offers to arm a one-shot session cron that — once the rolling 5-hour token window has reset — nudges every hard-capped Claude worktree to continue with »weiter« (new **Step 0.2** handler enumerates `claude/` worktrees, skips finished ones via `AUTONOMOUS-DONE.flag` / COMPLETED-report, and resumes the rest through `ccd_session_mgmt` `list_sessions` + `send_message`). The question is skipped entirely when shutdown=yes — a powered-off PC has nothing to resume. The fire time is **not** a blind `now + 5h`: new **Step 4e** calls `autonomous-resume-schedule.js`, which derives the moment from the live `session.resetInMinutes` (age-corrected against the snapshot timestamp, +10 min buffer past the reset boundary so budget is truly back) and falls back to a flat 5h only when usage data is missing, stale (>5h), future-dated, or already reset — emitting a ready-to-use 5-field cron expression so no LLM date math is involved. The cron is deliberately **in-memory / session-bound** (fires only while Claude stays open — closing it, e.g. to game, is an accepted, even desired, trade-off) and **one-shot with no retry** (a single nudge; if the account is still capped at fire time — a fresh window already drained, or the weekly limit, which does not reset in 5h — the attempt simply errors, an accepted limitation). New `autonomous-resume-schedule.js` (+18 tests) pins the resetInMinutes→delay mapping, the no-floor imminent-reset case, the 5h cap, age-correction, and every flat-5h fallback branch. Skill `devops-autonomous` 0.3.0→0.4.0.
+
 ## [0.101.1] — 2026-06-14
 
 ### Fixed

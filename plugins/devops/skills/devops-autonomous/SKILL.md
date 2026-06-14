@@ -1,6 +1,6 @@
 ---
 name: devops-autonomous
-version: 0.3.0
+version: 0.4.0
 description: >-
   Fully autonomous agent orchestration for when the user is away from the PC.
   Runs agents without supervision (implementation, desktop interaction, live
@@ -18,7 +18,9 @@ allowed-tools: >-
   mcp__plugin_playwright_playwright__*,
   mcp__plugin_devops_dotclaude-completion__*,
   mcp__plugin_devops_dotclaude-ship__*,
-  mcp__plugin_devops_dotclaude-issues__*
+  mcp__plugin_devops_dotclaude-issues__*,
+  mcp__ccd_session_mgmt__list_sessions,
+  mcp__ccd_session_mgmt__send_message
 ---
 
 # Devops Autonomous
@@ -43,11 +45,34 @@ If the incoming user message starts with `AUTONOMOUS_AUTOSTART:`, this is the
    `AUTONOMOUS_AUTOSTART:` prompt and context, log "Autostart verschoben —
    offene Frage aktiv", continue waiting.
 2. If no question is pending: parse `task`, `mode`, `desktop`, `shutdown`,
-   `branch` from the prompt.
+   `autoResume`, `branch` from the prompt.
 3. Output once: **"3-Minuten-Timeout — starte jetzt autonom."**
 4. Skip Steps 1-4 entirely. Permissions were already primed in the parent session.
-5. Jump directly to Step 5 with the parsed context. The Post-Confirmation Lockout
+5. If `autoResume=yes`, arm the resume cron now (Step 4e) — Step 4c never ran on
+   this path.
+6. Jump directly to Step 5 with the parsed context. The Post-Confirmation Lockout
    is active from this moment.
+
+## Step 0.2 — Auto-Resume Handler
+
+If the incoming user message starts with `AUTONOMOUS_RESUME:`, the Step 4e one-shot
+cron has fired: the 5h token window has reset and any Claude worktrees that were
+hard-capped mid-run should be nudged to continue. The user is AFK — do this without
+questions, then stop. Steps 1-8 do NOT apply.
+
+1. `git worktree list --porcelain` → collect every worktree whose branch starts
+   with `claude/` (each is an active Claude session; same detection as
+   `devops-repo-health`).
+2. Classify each. A worktree is **done** if its root holds `AUTONOMOUS-DONE.flag`,
+   or an `AUTONOMOUS-REPORT.html` with COMPLETED status and **no**
+   `AUTONOMOUS-RESUME.json`. Skip done worktrees — never re-trigger finished work.
+3. For each remaining (mid-task / hard-capped) worktree, resume it with a single
+   `weiter`: use `mcp__ccd_session_mgmt__list_sessions` to find the live session
+   bound to that worktree path, then `mcp__ccd_session_mgmt__send_message` with the
+   one word `weiter`. If the session-mgmt tools are unavailable, list the worktree
+   paths that need a manual `weiter` instead of nudging.
+4. Output a short summary: nudged / skipped-done / manual-needed. Do not start new
+   work — only continue what was interrupted.
 
 ## Step 0.5 — Resume Detection
 
@@ -130,9 +155,10 @@ If ambiguous, ask ONE clarifying question — time is limited.
 
 ## Step 2 — Mode & Preference Questions
 
-Ask via `AskUserQuestion` — three sequential questions. **Option order is fixed** as
-listed below (option 1 first, option 2 second). Never shuffle. Mark the recommended
-option with "(empfohlen)" in its label.
+Ask via `AskUserQuestion` — three sequential questions (a fourth, Q4 Auto-Resume,
+follows conditionally when shutdown is declined). **Option order is fixed** as listed
+below (option 1 first, option 2 second). Never shuffle. Mark the recommended option
+with "(empfohlen)" in its label.
 
 **Question 1 — Execution Mode:**
 > header: "Modus"
@@ -167,6 +193,24 @@ In `analyze` mode, desktop is only used for visual inspection (screenshots), nev
 > Options (fixed order):
 > 1. label: "Nein, nur Bericht (empfohlen)" — description: "Ergebnisse als Report, PC bleibt an."
 > 2. label: "Ja, herunterfahren" — description: "PC fährt 60s nach Abschluss herunter. Wartet vorher, falls andere Claude-Sessions (egal welches Projekt) noch arbeiten."
+
+Save the choice as `$SHUTDOWN` (`yes` if option 2, `no` if option 1).
+
+**Question 4 — Auto-Resume (ONLY ask when Q3 = "Nein, nur Bericht"):**
+
+A shutdown PC has nothing to resume, so this question is **skipped entirely when
+`$SHUTDOWN=yes`** — set `$AUTO_RESUME=no` and move on. Ask it only when the PC stays
+on:
+
+> header: "Auto-Resume"
+> question: "Falls das 5h-Token-Limit zwischendurch hart greift, bleiben Worktrees mitten in der Arbeit stehen. Soll ich nach 5h (Reset des Token-Fensters) automatisch alle aktiven Claude-Worktrees mit »weiter« anstoßen?"
+> multiSelect: false
+> Options (fixed order):
+> 1. label: "Ja, Resume nach 5h planen (empfohlen)" — description: "Einmaliger Anstoß: nach 5h werden alle aktiven Claude-Worktrees, die noch mitten in der Arbeit hängen, mit »weiter« fortgesetzt. Fertige Worktrees werden übersprungen."
+> 2. label: "Nein" — description: "Kein automatischer Resume. Hängengebliebene Worktrees setzt du später selbst fort."
+
+Save the choice as `$AUTO_RESUME` (`yes` if option 1, `no` if option 2). It is armed
+at "Ja, los!" (Step 4c) — or on auto-start (Step 0.1) — via Step 4e.
 
 ## Step 3 — Permission Priming (ALL permissions BEFORE confirmation)
 
@@ -244,7 +288,7 @@ execution context (the user will not be there to re-enter it):
 CronCreate({
   cron: "<M> <H> <D> <Mo> *",
   recurring: false,
-  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume devops-autonomous Step 5 with: task=<goal>, mode=<EXEC_MODE>, desktop=<yes|no>, shutdown=<yes|no>, branch=<current-branch>."
+  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume devops-autonomous Step 5 with: task=<goal>, mode=<EXEC_MODE>, desktop=<yes|no>, shutdown=<yes|no>, autoResume=<yes|no>, branch=<current-branch>."
 })
 ```
 
@@ -261,7 +305,8 @@ Ask via `AskUserQuestion`:
 
 ### 4c — Resolve
 
-- **"Ja, los!"** → `CronDelete($TIMEOUT_JOB_ID)`, proceed to Step 5.
+- **"Ja, los!"** → `CronDelete($TIMEOUT_JOB_ID)`. If `$AUTO_RESUME=yes`, arm the
+  resume cron now (Step 4e). Then proceed to Step 5.
 - **"Noch nicht"** → `CronDelete($TIMEOUT_JOB_ID)`, then re-arm fresh: `CronCreate`
   one-shot at `now + 3min` with the same `AUTONOMOUS_AUTOSTART:` prompt, save
   new `$TIMEOUT_JOB_ID`. The user may now ask clarifying questions or reconsider.
@@ -299,6 +344,60 @@ Full mechanics (Bash, JSON parsing, budget tuning) live in
 call with `"$ACTION"`, then save `taskName`, `action` (`$WATCHDOG_ACTION`), and
 `$WATCHDOG_REGISTERED` for Step 8c. On `ok:false`/non-Windows → log the one-line
 warning and continue.
+
+### 4e — Auto-Resume Scheduling (only if `$AUTO_RESUME=yes`)
+
+Armed at "Ja, los!" (Step 4c) or on auto-start (Step 0.1) — the instant execution
+begins. A one-shot session cron that, 5h from now (after the rolling token window
+has reset), nudges every still-stalled Claude worktree to continue with `weiter`.
+
+**Rationale:** if the 5h token limit hits mid-run, the autonomous session (and any
+sibling worktrees) hard-cap and freeze. Once the window resets nothing restarts them
+on its own — this cron is the global "budget is back, keep going" nudge. It only
+applies in `notify` mode (shutdown=no): a shutdown PC has nothing to resume, which is
+why Step 2 Q4 is never asked when shutdown=yes.
+
+**Fire timing — compute it, don't guess.** Run the helper; it derives the fire moment
+from the live token-window reset (with a buffer past the reset boundary) and falls
+back to a flat 5h when usage data is missing or stale:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-resume-schedule.js"
+```
+
+Parse the JSON: `{ delayMinutes, cron, fireAtLocal, source }`. `cron` is a ready-to-use
+5-field one-shot expression in local time — use it verbatim, no manual date math. Then:
+
+```
+CronCreate({
+  cron: "<cron from helper>",
+  recurring: false,
+  prompt: "AUTONOMOUS_RESUME: token-window reset reached. Execute devops-autonomous Step 0.2 — resume hard-capped Claude worktrees with »weiter« (skip finished ones)."
+})
+```
+
+Save the returned `jobId` as `$RESUME_JOB_ID` and log `fireAtLocal` + `source` to
+`AUTONOMOUS-LOG.md` (so the audit trail shows whether the precise reset window or the
+5h fallback was used).
+
+**Notes:**
+- **Timing source:** `source=reset-window` means the fire time was derived from the
+  live `resetInMinutes` (fires shortly after the actual reset — no needless waiting);
+  `source=fallback-5h` means usage data was missing/stale, so a safe flat 5h was used.
+  5h is always past the current window's reset (it started ≤ now), so the fallback
+  never fires too early.
+- One-shot — it never re-arms, so there is no resume loop. A single nudge per run. If
+  it fires while the account is *still* capped (a fresh window already exhausted, or
+  the **weekly** limit — which does not reset in 5h), that single attempt simply
+  errors with no retry. This is an accepted limitation.
+- Session-only (in-memory), like the Step 4 autostart cron: it fires only if this
+  Claude session is still open and idle at the fire moment. In notify mode the PC
+  stays on, so this normally holds — but if the user closes Claude (intentionally,
+  e.g. to game), the cron is gone and no resume happens. This is the accepted, even
+  desired, trade-off. Tell the user verbally: the session must remain open to resume.
+- NOT cancelled on this run's completion — its purpose is global (sibling worktrees
+  may still be capped). It self-expires after firing once. Step 0.2 skips any
+  worktree that already finished, so a completed run is never re-triggered.
 
 ### Post-Confirmation Lockout
 
