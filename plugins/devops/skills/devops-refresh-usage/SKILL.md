@@ -106,9 +106,10 @@ ratio > 1.3  → 🪫 + "Hoher Verbrauch — neue Session oder Haiku empfohlen"
 
 ## Rules
 
-- **Never touch the user's main Edge.** The scraper always spawns a dedicated, isolated Edge instance with its own user-data-dir (`~/.claude/edge-usage-profile`) and kills only that instance by PID tree when done.
-- **One-time login is expected.** On first run (or after a profile wipe) the scraper profile has no cookies. The script opens a visible login window and exits with code `2`. Tell the user inline — do NOT retry silently.
-- **Silent after first login.** Once the user has logged in once, the scraper profile's cookies persist and all subsequent runs are invisible.
+- **Never touch the user's main Edge.** The scraper always spawns a dedicated, isolated Edge instance with its own user-data-dir (`~/.claude/edge-usage-profile`). It reaps **only that profile's** instances — matched by the `--user-data-dir` on the live command line, not by a stored PID (which dies on Windows when Edge re-execs into its singleton, the bug that let orphan instances pile up). The user's main Edge is never matched.
+- **One-time login is expected, opened at most once.** On first run (or after a profile wipe) the scraper profile has no cookies. The script opens a visible login window, writes a sticky `edge-usage-login-pending.json` marker, and exits code `2`. While that marker is fresh (≤ 30 min) **no** session opens another window — so parallel sessions can't stack login windows. Tell the user inline — do NOT retry silently.
+- **Silent after first login.** A successful scrape clears the marker immediately; once the profile has cookies, all subsequent runs are invisible and reuse the one hidden instance.
+- **Transient render failures never open a window.** A slow/unrendered page returns a scrape error (cache fallback), not code `2`. Only an explicit `/login` redirect or login UI counts as logged-out.
 - **Playwright fallback is acceptable** — if the scraper fails, opening a browser tab via Playwright to scrape is fine.
 - **Delta computation**: Read `usage-live.json` before and after refresh. Delta = new_pct - old_pct.
 - **Script path**: Always use `${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js`, never a relative path.

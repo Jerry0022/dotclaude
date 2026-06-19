@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script refresh-usage-headless
- * @version 0.3.0
+ * @version 0.4.0
  * @plugin devops
  *
  * Headless Usage Scraper for claude.ai
@@ -39,7 +39,13 @@ const SCRIPTS_DIR = path.join(os.homedir(), '.claude');
 const USAGE_LIVE_PATH = path.join(SCRIPTS_DIR, 'usage-live.json');
 const SCRAPER_PROFILE_DIR = path.join(SCRIPTS_DIR, 'edge-usage-profile');
 const SCRAPER_PID_FILE = path.join(SCRIPTS_DIR, 'edge-usage-scraper.pid');
-const LOGIN_PID_FILE = path.join(SCRIPTS_DIR, 'edge-usage-login.pid');
+// Sticky "a visible login window was opened — don't open another" marker. A PID
+// is unreliable on Windows (Edge re-execs into a singleton and the launched PID
+// dies within seconds), so we guard on an age-bounded marker instead: at most
+// ONE visible login window per LOGIN_RETRY_AFTER_MS, cleared the instant a
+// scrape succeeds.
+const LOGIN_MARKER_FILE = path.join(SCRIPTS_DIR, 'edge-usage-login-pending.json');
+const LOGIN_RETRY_AFTER_MS = 30 * 60 * 1000;
 // Machine-wide locks so parallel sessions don't each spawn an Edge window.
 const LAUNCH_LOCK_FILE = path.join(SCRIPTS_DIR, 'edge-usage-launch.lock');
 const LOGIN_LOCK_FILE = path.join(SCRIPTS_DIR, 'edge-usage-login.lock');
@@ -81,8 +87,10 @@ function findEdgeExecutable() {
   return 'msedge.exe';
 }
 
-// Platform guard — Edge CDP scraper is Windows-only
-if (process.platform !== 'win32') {
+// Platform guard — Edge CDP scraper is Windows-only. Only EXIT when run as the
+// main script; when required (e.g. by the unit tests on a Linux CI runner) the
+// platform-agnostic exports must stay importable without killing the process.
+if (process.platform !== 'win32' && require.main === module) {
   if (!process.argv.includes('--quiet')) {
     console.log('refresh-usage-headless: Edge CDP scraper is Windows-only. Skipping.');
   }
@@ -192,15 +200,50 @@ async function isCDPAvailable() {
   } catch { return false; }
 }
 
-/** Kill the previously-spawned scraper instance (PID tree). Never touches the user's main Edge. */
+/**
+ * Kill every Edge process that belongs to the dedicated scraper profile.
+ *
+ * Robust against Edge's bootstrap re-exec on Windows: the PID returned by
+ * spawn() is a short-lived launcher that exits seconds after handing off to the
+ * real singleton, so `taskkill /PID <stored>` silently no-ops while the real
+ * browser lingers — this is what let orphans pile up across parallel sessions
+ * (observed: 14 stray CDP instances ≈ 4 GB). Matching the unique
+ * --user-data-dir on the LIVE command line kills the ACTUAL instances.
+ *
+ * Self-skips while a login window is pending so it can never kill the visible
+ * window the user is logging in with. Windows-only (the scraper is Windows-only)
+ * and never touches the user's main Edge — only this isolated profile.
+ */
+function reapScraperInstances() {
+  if (process.platform !== 'win32') return;
+  if (loginPending()) return; // never reap the visible login window mid-login
+  const needle = path.basename(SCRAPER_PROFILE_DIR); // 'edge-usage-profile'
+  const ps =
+    "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | " +
+    "Where-Object { $_.CommandLine -like '*" + needle + "*' } | " +
+    "ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {} }";
+  try {
+    execSync(`powershell -NoProfile -NonInteractive -Command "${ps}"`, {
+      timeout: 8000, stdio: 'ignore',
+    });
+  } catch { /* best-effort reap */ }
+}
+
+/**
+ * Kill the scraper instance. Fast PID-file path first (bounded by a timeout so a
+ * wedged taskkill can't hang the whole refresh under the MCP's 60s budget), then
+ * the reliable command-line reap that catches the real browser the stale PID
+ * missed. Never touches the user's main Edge.
+ */
 function killScraperInstance() {
   try {
     const pid = parseInt(fs.readFileSync(SCRAPER_PID_FILE, 'utf8').trim(), 10);
     if (pid > 0) {
-      try { execSync(`taskkill /F /PID ${pid} /T`, { stdio: 'ignore' }); } catch {}
+      try { execSync(`taskkill /F /PID ${pid} /T`, { stdio: 'ignore', timeout: 5000 }); } catch {}
     }
   } catch {}
   try { fs.unlinkSync(SCRAPER_PID_FILE); } catch {}
+  reapScraperInstances();
 }
 
 /** Age of a lock file in ms, or Infinity if absent/unreadable. */
@@ -402,13 +445,15 @@ async function scrapeViaCDP() {
       log(`Page not ready yet (attempt ${attempt + 1}/12)...`);
     }
 
-    // If we never got usage text AND never found a login signal, the page
-    // probably failed to render. Assume logged-out (most common cause) so
-    // the caller opens a visible login window instead of serving silently
-    // stale cached data forever.
+    // If we never got usage text AND never saw an explicit login signal, the
+    // page just failed to render (transient: slow network, busy CPU, DOM still
+    // settling). Do NOT assume logged-out here — that misfire is exactly what
+    // spawned visible login windows on a perfectly logged-in profile. Let it
+    // fall through to a transient scrape failure (code 3): the caller serves
+    // cache and retries next turn WITHOUT opening a window. A real logout still
+    // surfaces via the explicit url / login-UI checks above (notLoggedIn).
     if (evalData && !evalData.text && !evalData.notLoggedIn) {
-      log('Page did not render usage content — treating as not-logged-in');
-      evalData = { notLoggedIn: true };
+      log('Page did not render usage content — treating as transient failure (no login window)');
     }
 
     // Close the background target
@@ -534,20 +579,42 @@ function useCacheOrExit(code) {
   process.exit(code);
 }
 
-/** Is the visible login window (from a previous run) still alive? */
-function loginWindowAlive() {
+/**
+ * A visible login window was opened recently and login hasn't succeeded yet.
+ *
+ * Age-bounded on purpose: a PID check is unreliable (Edge's launched PID dies
+ * within seconds of re-exec, so a tasklist lookup falsely reports "gone" and the
+ * old code reopened a window every few minutes). The marker instead guarantees
+ * AT MOST one visible window per LOGIN_RETRY_AFTER_MS — and it's cleared the
+ * moment any session scrapes successfully, so a real login stops the prompts
+ * immediately. A window the user closed without logging in simply allows one
+ * retry after the window elapses.
+ */
+/** Pure: is `marker` still inside the no-reopen retry window relative to nowMs? */
+function isMarkerPending(marker, nowMs) {
+  if (!marker || !marker.openedAt) return false;
+  const opened = Date.parse(marker.openedAt);
+  if (Number.isNaN(opened)) return false;
+  return (nowMs - opened) < LOGIN_RETRY_AFTER_MS;
+}
+
+function loginPending() {
   try {
-    const pid = parseInt(fs.readFileSync(LOGIN_PID_FILE, 'utf8').trim(), 10);
-    if (!(pid > 0)) return false;
-    // tasklist exits 0 if process exists
-    const out = execSync(`tasklist /FI "PID eq ${pid}" /NH`, {
-      encoding: 'utf8', timeout: 3000, stdio: ['pipe', 'pipe', 'ignore']
-    });
-    return /msedge\.exe/i.test(out);
+    return isMarkerPending(JSON.parse(fs.readFileSync(LOGIN_MARKER_FILE, 'utf8')), Date.now());
   } catch { return false; }
 }
 
-(async () => {
+function writeLoginMarker() {
+  try {
+    fs.writeFileSync(LOGIN_MARKER_FILE, JSON.stringify({ openedAt: new Date().toISOString() }));
+  } catch { /* non-fatal — worst case one extra retry */ }
+}
+
+function clearLoginMarker() {
+  try { fs.unlinkSync(LOGIN_MARKER_FILE); } catch {}
+}
+
+async function main() {
   if (checkOnly) {
     process.exit((await isCDPAvailable()) ? 0 : 5);
   }
@@ -568,12 +635,23 @@ function loginWindowAlive() {
   // alive — reuse it silently, no relaunch. Otherwise spawn a fresh
   // dedicated instance (main Edge is never touched either way).
   const cdpAlreadyUp = await isCDPAvailable();
+
+  // A visible login window is pending (opened recently, login not yet
+  // confirmed). NEVER cold-launch a competing headless instance against the
+  // same profile + CDP port while it's open — that's the singleton/port
+  // collision that ghost-spawns processes. If its CDP is up we fall through and
+  // scrape THROUGH it: that's precisely how we detect the user finished logging
+  // in (the scrape then succeeds and clears the marker below).
+  if (loginPending() && !cdpAlreadyUp) {
+    log('Login window pending — not launching a competing instance; serving cache');
+    useCacheOrExit(2);
+    return;
+  }
+
   if (!cdpAlreadyUp) {
     // Machine-wide launch lock: with many parallel sessions, only one process
     // cold-launches the dedicated instance. Losers fall back to cache this turn;
     // once the shared instance is up on the CDP port, every later turn reuses it.
-    // This stops the launch/kill churn that spawned extra Edge processes across
-    // parallel sessions.
     const wonLaunch = acquireLock(
       LAUNCH_LOCK_FILE,
       () => lockAgeMs(LAUNCH_LOCK_FILE) > LAUNCH_LOCK_STALE_MS
@@ -583,7 +661,9 @@ function loginWindowAlive() {
       useCacheOrExit(5);
       return;
     }
-    killScraperInstance(); // clear any stale PID file
+    // Reap stale PID file + any wedged orphan instances, then launch EXACTLY
+    // one. The reap self-skips while a login is pending (guarded above too).
+    killScraperInstance();
     const pid = await launchScraperInstance({ visible: false, url: USAGE_URL });
     releaseLock(LAUNCH_LOCK_FILE);
     if (!pid) {
@@ -596,9 +676,9 @@ function loginWindowAlive() {
   const code = await scrapeViaCDP();
 
   if (code === 0) {
-    // Successful scrape means we're logged in — clear any stale login markers
-    // so future failures can spawn a fresh login window if needed.
-    try { fs.unlinkSync(LOGIN_PID_FILE); } catch {}
+    // Successful scrape means we're logged in — clear the login marker so
+    // nothing reopens a window, and release the login lock for completeness.
+    clearLoginMarker();
     releaseLock(LOGIN_LOCK_FILE);
     // Leave the hidden scraper alive for fast reuse on the next invocation.
     // It's a single off-screen msedge.exe with its own isolated profile —
@@ -608,42 +688,57 @@ function loginWindowAlive() {
   }
 
   if (code === 2) {
-    // Not logged in. If a previous login window is still open, do NOT spawn
-    // another one — user is presumably still working on it.
-    if (loginWindowAlive()) {
-      log('LOGIN_REQUIRED: visible login window from previous run still open — not spawning another');
+    // Genuinely logged out. Open AT MOST one visible window per
+    // LOGIN_RETRY_AFTER_MS — and never while one is already pending — so
+    // parallel sessions can't stack login windows.
+    if (loginPending()) {
+      log('LOGIN_REQUIRED: a login window is already pending — not opening another');
       useCacheOrExit(2);
       return;
     }
-    // Machine-wide login lock: across many parallel sessions, exactly one opens
-    // the visible login window. The lock is reclaimed only once it is stale AND
-    // no login window is alive — so it survives the minutes a user needs to log
-    // in, instead of every session spawning its own window.
+    // Machine-wide login lock guards the brief open critical-section so two
+    // sessions hitting code 2 at the same instant don't both open a window.
     const wonLogin = acquireLock(
       LOGIN_LOCK_FILE,
-      () => lockAgeMs(LOGIN_LOCK_FILE) > LOGIN_LOCK_STALE_MS && !loginWindowAlive()
+      () => lockAgeMs(LOGIN_LOCK_FILE) > LOGIN_LOCK_STALE_MS && !loginPending()
     );
     if (!wonLogin) {
       log('LOGIN_REQUIRED: another session is already opening a login window — skipping');
       useCacheOrExit(2);
       return;
     }
-    // Kill the hidden scraper instance, open a VISIBLE window for one-time
-    // login. Caller (SKILL.md) tells the user inline.
+    // Reap the hidden scraper FIRST (loginPending is still false here, so the
+    // reap runs), then claim the sticky marker BEFORE opening the window — so a
+    // concurrent cold-launching session can't reap the visible window during
+    // its ~20 s startup. The marker suppresses every further window until a
+    // scrape succeeds or LOGIN_RETRY_AFTER_MS passes. Caller (SKILL.md) tells
+    // the user inline.
     killScraperInstance();
-    log('LOGIN_REQUIRED: scraper profile is not logged in to claude.ai');
-    const loginPid = await launchScraperInstance({ visible: true, url: LOGIN_URL });
-    // Move the PID into a separate login-pid file so the next scrape run
-    // (a) can't kill this login window, and (b) can detect it's still open.
     try { fs.unlinkSync(SCRAPER_PID_FILE); } catch {}
-    if (loginPid) {
-      try { fs.writeFileSync(LOGIN_PID_FILE, String(loginPid)); } catch {}
-    }
+    writeLoginMarker();
+    log('LOGIN_REQUIRED: scraper profile is not logged in to claude.ai');
+    await launchScraperInstance({ visible: true, url: LOGIN_URL });
     process.exit(2);
   }
 
-  // Scrape failed (parse/CDP error) — kill so next run relaunches fresh,
-  // then fall back to cached data.
+  // Scrape failed (parse/CDP/transient) — reap so the next run relaunches fresh
+  // (self-skips if a login is pending), then fall back to cached data.
   killScraperInstance();
   useCacheOrExit(code);
-})();
+}
+
+if (require.main === module) {
+  main().catch((err) => {
+    try { log('refresh-usage-headless fatal:', err && err.message); } catch {}
+    useCacheOrExit(5);
+  });
+}
+
+module.exports = {
+  parseUsageText,
+  isMarkerPending,
+  loginPending,
+  reapScraperInstances,
+  LOGIN_RETRY_AFTER_MS,
+  FRESH_CACHE_MAX_AGE_SECONDS,
+};
