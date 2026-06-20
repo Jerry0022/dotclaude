@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.7.0
+ * @version 0.8.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -13,6 +13,12 @@
  *   MCP processes point at the now-deleted old installPath. A sentinel file
  *   (~/.claude/plugins/.mcp-stale.json) is written so pre.mcp.health can
  *   block MCP tool calls until the user restarts Claude Code.
+ *
+ *   A same-version cache REPAIR overwrites the existing version dir in place
+ *   instead of deleting + recreating it. Nuking the dir mid-session changes its
+ *   identity and de-registers the plugin's skills/slash-commands from Claude
+ *   Code's already-loaded registry for the rest of the session (issue #219) —
+ *   an in-place overwrite keeps the dir so /devops-* stays registered.
  */
 
 require('../lib/plugin-guard');
@@ -142,9 +148,26 @@ function copyDir(src, dst) {
   // Node's execSync sees. A failed copy left a partial cache (missing
   // mcp-server/*.js, .mcp.json, hooks) that crashed every MCP server — the
   // exact breakage the #190 completeness guard was meant to prevent.
-  try {
-    fs.cpSync(src, dst, { recursive: true, force: true });
-  } catch {
+  //
+  // Gate the shell fallback on fs.cpSync being genuinely UNAVAILABLE — not on it
+  // throwing. A throw from fs.cpSync is a REAL copy failure (e.g. Windows
+  // EBUSY/EPERM on a file Claude Code holds open mid-session), which must surface
+  // as a failed copy. Since the #219 same-version repair overwrites an EXISTING
+  // version dir IN PLACE, a pre-existing (old) .claude-plugin/plugin.json would
+  // survive a partial copy and mask the failure via the existence check below —
+  // letting rebuildCache return ok:true over a half-updated cache and advance the
+  // registry SHA, which then suppresses the self-healing retry next session.
+  // Returning false on a throw keeps that retry alive (the registry SHA is not
+  // advanced over a broken copy). The `cp` fallback never helped on Windows
+  // anyway (no-op), so reserving it for ancient Node without fs.cpSync loses
+  // nothing.
+  if (typeof fs.cpSync === 'function') {
+    try {
+      fs.cpSync(src, dst, { recursive: true, force: true });
+    } catch {
+      return false;
+    }
+  } else {
     // Last-resort fallback for environments where fs.cpSync is unavailable.
     run(`cp -a "${src}/." "${dst}/"`, path.dirname(src));
     run(`cp -r "${src}/.claude-plugin" "${dst}/"`, path.dirname(src));
@@ -157,19 +180,43 @@ function copyDir(src, dst) {
   return fs.existsSync(path.join(dst, '.claude-plugin', 'plugin.json'));
 }
 
-function rebuildCache(marketplace, pluginName, pluginDir, version, sha) {
+function rebuildCache(marketplace, pluginName, pluginDir, version, sha, { versionChanged = true } = {}) {
   const pluginCache = path.join(cacheDir, marketplace, pluginName);
+  const newCache = path.join(pluginCache, version);
 
-  // Clean ALL old version dirs
-  if (fs.existsSync(pluginCache)) {
+  // Same-version cache REPAIR on an existing dir → overwrite IN PLACE.
+  //
+  // A version UPGRADE gets a brand-new installPath, so deleting the old version
+  // dirs is correct (registry is repointed, a restart is needed anyway). But a
+  // cache REPAIR keeps the same version dir — and that dir is exactly what Claude
+  // Code's already-loaded skill/slash-command registry points at. Deleting and
+  // recreating it mid-session (rm + mkdir) changes the dir's identity and
+  // de-registers every skill/slash-command for the rest of the session, leaving
+  // /devops-* as "Unknown command" (issue #219). MCP tools (live in RAM) and
+  // agent types (separate registry) survive — only skills/commands break.
+  // Overwriting files in place keeps the dir, so the registry stays valid and no
+  // restart is needed. (Stale files removed upstream at the SAME version — rare —
+  // are not pruned this way; that trade-off is far cheaper than nuking the
+  // skill registry.)
+  const inPlace = !versionChanged && fs.existsSync(newCache);
+
+  if (inPlace) {
+    // Keep the current version dir (the registry points at it), but still prune
+    // any OTHER (old) version dirs so the cache holds only `version`.
+    for (const entry of fs.readdirSync(pluginCache)) {
+      if (entry !== version) {
+        fs.rmSync(path.join(pluginCache, entry), { recursive: true, force: true });
+      }
+    }
+  } else if (fs.existsSync(pluginCache)) {
+    // Version change / first build: clean ALL old version dirs.
     fs.rmSync(pluginCache, { recursive: true, force: true });
   }
 
-  // Create new cache dir
-  const newCache = path.join(pluginCache, version);
+  // Create (or keep) the version dir
   fs.mkdirSync(newCache, { recursive: true });
 
-  // Copy all files (archive mode for dotfiles)
+  // Copy all files (force-overwrites in place; fs.cpSync handles dotfiles + nested dirs)
   const copyOk = copyDir(pluginDir, newCache);
   if (!copyOk) {
     return { ok: false, missing: 'copy failed — .claude-plugin/plugin.json not found after copy' };
@@ -329,7 +376,7 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
     } catch { /* registry unreadable — rebuild to be safe */ cacheMissing = true; }
 
     if (versionChanged || cacheMissing || cacheStale) {
-      const result = rebuildCache(marketplace, name, dir, after, newSha);
+      const result = rebuildCache(marketplace, name, dir, after, newSha, { versionChanged });
       updated.push({
         name,
         from: beforeVersions[name] || '?',

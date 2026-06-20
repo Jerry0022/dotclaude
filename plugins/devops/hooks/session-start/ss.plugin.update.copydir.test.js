@@ -134,3 +134,52 @@ describe("ss.plugin.update copyDir primitive (fs.cpSync) — issue #190", () => 
     expect(MCP_CRITICAL_FILES.every((rel) => fs.existsSync(path.join(dst, rel)))).toBe(true);
   });
 });
+
+/**
+ * Regression guard for the #219 in-place repair: a real fs.cpSync THROW must
+ * surface as a failed copy (copyDir → false), NOT be masked by a pre-existing
+ * .claude-plugin/plugin.json the in-place overwrite leaves behind.
+ *
+ * Before the fix, copyDir caught any cpSync error and fell back to a `cp -a`
+ * shell-out that is a no-op on Windows, then returned true because the OLD
+ * plugin.json (from the dir being overwritten in place) still existed. That made
+ * rebuildCache report ok:true over a half-copied cache and advance the registry
+ * SHA — silently suppressing the self-healing retry next session. The fix gates
+ * the shell fallback on fs.cpSync being UNAVAILABLE and returns false on a throw.
+ */
+
+// Mirror of production copyDir() AFTER the #219 hardening (cpSync injected so the
+// throw path is testable; in real Node fs.cpSync is always a function).
+function copyDirMirror(src, dst, cpSync) {
+  if (typeof cpSync === "function") {
+    try {
+      cpSync(src, dst, { recursive: true, force: true });
+    } catch {
+      return false;
+    }
+  }
+  return fs.existsSync(path.join(dst, ".claude-plugin", "plugin.json"));
+}
+
+describe("ss.plugin.update copyDir surfaces real cpSync failures — issue #219", () => {
+  test("a successful copy still returns true", () => {
+    write(src, path.join(".claude-plugin", "plugin.json"), '{"version":"9.9.9"}');
+    expect(copyDirMirror(src, dst, fs.cpSync)).toBe(true);
+    expect(fs.existsSync(path.join(dst, ".claude-plugin", "plugin.json"))).toBe(true);
+  });
+
+  test("a cpSync throw over an in-place dir with an OLD plugin.json returns false (failure not masked)", () => {
+    // The in-place repair overwrites an existing version dir → the OLD sentinel
+    // is already present and would mask a partial copy via the existence check.
+    write(dst, path.join(".claude-plugin", "plugin.json"), '{"version":"0.0.1-old"}');
+    const throwingCpSync = () => { throw new Error("EBUSY: resource busy or locked"); };
+    // Even though the old sentinel exists, the throw must surface as false so the
+    // caller returns ok:false and does NOT advance the registry SHA.
+    expect(copyDirMirror(src, dst, throwingCpSync)).toBe(false);
+  });
+
+  test("a cpSync throw on an empty destination returns false", () => {
+    const throwingCpSync = () => { throw new Error("EPERM: operation not permitted"); };
+    expect(copyDirMirror(src, dst, throwingCpSync)).toBe(false);
+  });
+});
