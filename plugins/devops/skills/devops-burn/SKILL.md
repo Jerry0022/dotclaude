@@ -1,6 +1,6 @@
 ---
 name: devops-burn
-version: 0.1.0
+version: 0.2.0
 description: >-
   High-throughput autonomous task runner with aggressive parallelization.
   EXPLICIT INVOCATION ONLY — the user must type /devops-burn to activate.

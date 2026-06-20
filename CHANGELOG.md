@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.103.0] — 2026-06-20
+
+### Added
+
+- **The agent-orchestration overviews now show which model each agent runs on.** The chat-facing plans listed which agents run per wave/phase but never which model — so the user couldn't tell that `po`/`research`/`redteam` run on `opus` while the code agents run on `sonnet`. A **Model** column/field is added to every overview: the `/devops-agents` Step 3 plan table (plus a `plan.model` locale key — en "Model" / de "Modell"), the `/devops-burn` Step 6 execution strategy ("Agents per wave (+ model)"), and the `agent-collaboration` Execution Waves table. The orchestrator fills it from `agent-orchestration.md` § Model & Effort Defaults, which is now the **source of truth** and was synced with the actual agent frontmatter — the missing **`redteam`** row (opus/high) was added and the stale `"(default)"` effort placeholders corrected (medium for the code agents, low for `gamer`). When a model is overridden at invocation it renders as `default → override` so the change stays visible. Skills `devops-agents` 0.5.0→0.6.0, `devops-burn` 0.1.0→0.2.0.
+
+### Fixed
+
+- **`/devops-*` skills and slash-commands stay registered after a session resume that triggers a plugin cache-repair (#219).** The `ss.plugin.update` SessionStart hook (`@version` 0.7.0→0.8.0) repaired a same-version cache (the common case: a marketplace pull advances HEAD without bumping the plugin version, so the SHA drifts) by **deleting the entire plugin cache dir and recreating it**. That dir is exactly what Claude Code's already-loaded skill/slash-command registry points at, so nuking it mid-session **de-registered every `/devops-*` command for the rest of the session** — MCP tools (live in RAM) and agent types (separate registry) survived, only skills/commands broke, leaving the guided flows reachable only via raw MCP calls. `rebuildCache` now overwrites a same-version repair **in place** (it prunes only *other* version dirs and keeps the current one), preserving the dir identity so the registry stays valid and no restart is needed; a real version upgrade still wipes old dirs as before. A second guard hardens `copyDir`: a throwing `fs.cpSync` (Windows EBUSY/EPERM on a file Claude Code holds open) now surfaces as a **failed copy** instead of falling through to the Windows-no-op `cp` shell fallback and returning `true` on the leftover old `plugin.json` — without it, an in-place repair could report `ok:true` over a half-copied cache and advance the registry SHA, silently suppressing the self-healing retry next session. New `ss.plugin.update.inplace.test.js` (4 tests) pins the in-place-vs-wipe cleanup decision; `ss.plugin.update.copydir.test.js` gains 3 tests pinning that a throwing copy is not masked by a pre-existing sentinel.
+
 ## [0.102.1] — 2026-06-19
 
 ### Fixed

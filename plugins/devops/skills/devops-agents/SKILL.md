@@ -1,6 +1,6 @@
 ---
 name: devops-agents
-version: 0.5.0
+version: 0.6.0
 description: >-
   Evaluate which agents are useful for a task and orchestrate their parallel or
   sequential execution. Use when the user explicitly wants orchestrated agent
