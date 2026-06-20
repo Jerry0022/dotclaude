@@ -35,14 +35,16 @@ Ship (if approved)
 
 When multiple agents work on a feature, they execute in waves:
 
-| Wave | Agents | Why |
-|------|--------|-----|
-| 1 | **Core** | Defines contracts and interfaces first |
-| 2 | **Frontend**, **Windows**, **AI** (parallel) | Consume Core contracts |
-| 3 | **QA** | Verifies all changes together |
-| 4 | **PO** | Validates against requirements |
+| Wave | Agents | Model | Why |
+|------|--------|-------|-----|
+| 1 | **Core** | sonnet | Defines contracts and interfaces first |
+| 2 | **Frontend**, **Windows**, **AI** (parallel) | sonnet | Consume Core contracts |
+| 3 | **QA** | sonnet | Verifies all changes together |
+| 4 | **PO** | opus | Validates against requirements |
 
-Agents in the same wave can run in parallel (`||` suffix in naming).
+Agents in the same wave can run in parallel (`||` suffix in naming). The `Model`
+column is each agent's frontmatter default — see `agent-orchestration.md`
+§ Model & Effort Defaults for the full roster and override rules.
 
 ## Handoff Protocol
 

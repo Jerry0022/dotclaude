@@ -33,18 +33,22 @@ Select agents based on domains touched, complexity, and risk:
 
 Each agent defines `model` and optionally `effort` in its frontmatter.
 The orchestrator can override `model` at invocation time but **not** `effort`.
+This table is the **source of truth for the `Model` column** the plan tables show
+(`/devops-agents` Step 3, `/devops-burn` plan) — keep it in sync with the agent
+frontmatter. When you override a model at invocation, show it as `default → override`.
 
 | Agent | model | effort | Notes |
 |-------|-------|--------|-------|
 | **po** | opus | high | Strategic decisions — needs deep reasoning |
 | **research** | opus | high | Cross-referencing, fact verification |
-| **core** | sonnet | *(default)* | Standard code generation |
-| **frontend** | sonnet | *(default)* | Standard code generation |
-| **ai** | sonnet | *(default)* | Standard code generation |
-| **windows** | sonnet | *(default)* | Standard code generation |
-| **designer** | sonnet | *(default)* | Design specs |
-| **qa** | sonnet | *(default)* | Test execution + evaluation |
-| **gamer** | sonnet | *(default)* | Quick UX feedback |
+| **redteam** | opus | high | Adversarial review — inter-wave risk gate |
+| **core** | sonnet | medium | Standard code generation |
+| **frontend** | sonnet | medium | Standard code generation |
+| **ai** | sonnet | medium | Standard code generation |
+| **windows** | sonnet | medium | Standard code generation |
+| **designer** | sonnet | medium | Design specs |
+| **qa** | sonnet | medium | Test execution + evaluation |
+| **gamer** | sonnet | low | Quick UX feedback |
 | **feature** | inherit | *(inherit)* | Inherits from parent session |
 
 **Model override rules:**
