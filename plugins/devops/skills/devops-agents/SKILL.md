@@ -91,6 +91,7 @@ active `[ui-locale: ...]` (defaults to `en`):
 | Key             | en               | de                  |
 |-----------------|------------------|---------------------|
 | `plan.heading`  | Orchestration plan | Orchestrierungsplan |
+| `plan.model`    | Model            | Modell              |
 | `plan.task_col` | Task             | Aufgabe             |
 | `plan.deps`     | Dependencies     | Abhängigkeiten      |
 | `plan.estimate` | Estimated agents | Geschätzte Agents   |
@@ -102,12 +103,12 @@ Template (`{key}` → resolved per locale):
 
 ### Agents (N selected)
 
-| Wave | Agent(s) | {plan.task_col} |
-|------|----------|-----------------|
-| 0 | research | <what they investigate> |
-| 1 | core | <what contracts/APIs they define> |
-| 2 | frontend, windows | <what they build, in parallel> |
-| 3 | qa | <what they verify> |
+| Wave | Agent(s) | {plan.model} | {plan.task_col} |
+|------|----------|--------------|-----------------|
+| 0 | research | opus | <what they investigate> |
+| 1 | core | sonnet | <what contracts/APIs they define> |
+| 2 | frontend, windows | sonnet | <what they build, in parallel> |
+| 3 | qa | sonnet | <what they verify> |
 
 ### {plan.deps}
 - Wave 2 waits on Wave 1 (core contracts)   [de: Wave 2 wartet auf Wave 1 (Core-Contracts)]
@@ -115,6 +116,14 @@ Template (`{key}` → resolved per locale):
 
 ### {plan.estimate}: N
 ```
+
+**`{plan.model}` column** — the effective model each agent runs on. Take the
+default from `deep-knowledge/agent-orchestration.md` § Model & Effort Defaults
+(`opus` for po/research/redteam, `sonnet` for the rest, `inherit` for feature).
+If a wave has multiple agents on different models, list them aligned to the
+`Agent(s)` order (e.g. `opus, sonnet`); collapse to a single value when they
+match. If you override a model at invocation (§ Model override rules), show it as
+`default → override` (e.g. `opus → sonnet`) so the change is visible.
 
 Wait for user confirmation before proceeding. Accept:
 - en: "yes" / "go" / "do it" → proceed as planned
