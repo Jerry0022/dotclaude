@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script refresh-usage-headless
- * @version 0.4.0
+ * @version 0.5.0
  * @plugin devops
  *
  * Headless Usage Scraper for claude.ai
@@ -18,7 +18,7 @@
  *
  * Exit codes:
  *   0 = success
- *   2 = not logged in (visible login window was opened)
+ *   2 = not logged in (a visible login window is opened only WITHOUT --no-login)
  *   3 = parse error
  *   4 = scrape failed
  *   5 = scraper instance could not be launched
@@ -27,6 +27,12 @@
  *   --quiet           suppress debug logs (--summary still prints)
  *   --summary         after success, print formatted usage box
  *   --check-only      report whether the scraper CDP is currently alive (0/5)
+ *   --no-login        never open a visible login window — on a logged-out
+ *                     profile just return code 2 and serve cache. Used by the
+ *                     automatic completion-card path so it stays zero-interaction
+ *                     (the card needs only the 5h/weekly numbers, which the native
+ *                     statusLine source already provides token-free). A one-time
+ *                     login is offered only on an explicit manual run (no flag).
  */
 
 const { execSync, spawn } = require('child_process');
@@ -100,6 +106,9 @@ if (process.platform !== 'win32' && require.main === module) {
 const isQuiet = process.argv.includes('--quiet');
 const printSummary = process.argv.includes('--summary');
 const checkOnly = process.argv.includes('--check-only');
+// Automatic card path passes this — it must never steal focus with a login
+// window. Only an explicit manual run (without the flag) may open one.
+const noLogin = process.argv.includes('--no-login');
 
 function log(...args) {
   if (!isQuiet) console.log(...args);
@@ -598,6 +607,17 @@ function isMarkerPending(marker, nowMs) {
   return (nowMs - opened) < LOGIN_RETRY_AFTER_MS;
 }
 
+/**
+ * Pure policy: may main() open a visible login window after a logged-out scrape?
+ * Never in --no-login mode (the automatic completion-card path, which must stay
+ * zero-interaction) and never while a window is already pending (so parallel
+ * sessions can't stack windows). A login window is only ever offered on an
+ * explicit manual run.
+ */
+function shouldOpenLoginWindow({ noLogin, loginPending }) {
+  return !noLogin && !loginPending;
+}
+
 function loginPending() {
   try {
     return isMarkerPending(JSON.parse(fs.readFileSync(LOGIN_MARKER_FILE, 'utf8')), Date.now());
@@ -688,11 +708,15 @@ async function main() {
   }
 
   if (code === 2) {
-    // Genuinely logged out. Open AT MOST one visible window per
-    // LOGIN_RETRY_AFTER_MS — and never while one is already pending — so
-    // parallel sessions can't stack login windows.
-    if (loginPending()) {
-      log('LOGIN_REQUIRED: a login window is already pending — not opening another');
+    // Genuinely logged out. The automatic card path passes --no-login, so it
+    // NEVER opens a window — it just serves cache (the card's 5h/weekly numbers
+    // come from the native statusLine source anyway). A window is offered only on
+    // an explicit manual run, at most once per LOGIN_RETRY_AFTER_MS, and never
+    // while one is already pending — so parallel sessions can't stack windows.
+    if (!shouldOpenLoginWindow({ noLogin, loginPending: loginPending() })) {
+      log(noLogin
+        ? 'LOGIN_REQUIRED: --no-login (automatic path) — serving cache, no window'
+        : 'LOGIN_REQUIRED: a login window is already pending — not opening another');
       useCacheOrExit(2);
       return;
     }
@@ -737,6 +761,7 @@ if (require.main === module) {
 module.exports = {
   parseUsageText,
   isMarkerPending,
+  shouldOpenLoginWindow,
   loginPending,
   reapScraperInstances,
   LOGIN_RETRY_AFTER_MS,

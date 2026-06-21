@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import {
   parseUsageText,
   isMarkerPending,
+  shouldOpenLoginWindow,
   LOGIN_RETRY_AFTER_MS,
 } from "./refresh-usage-headless.js";
 
@@ -38,6 +39,21 @@ describe("isMarkerPending — login-once retry window", () => {
     ["unparseable openedAt", { openedAt: "not-a-date" }],
   ])("%s → not pending (fail open, allow a fresh window)", (_label, marker) => {
     expect(isMarkerPending(marker, NOW)).toBe(false);
+  });
+});
+
+describe("shouldOpenLoginWindow — login-window policy", () => {
+  test("--no-login mode never opens a window (automatic card path)", () => {
+    expect(shouldOpenLoginWindow({ noLogin: true, loginPending: false })).toBe(false);
+    expect(shouldOpenLoginWindow({ noLogin: true, loginPending: true })).toBe(false);
+  });
+
+  test("manual run with no pending window may open one", () => {
+    expect(shouldOpenLoginWindow({ noLogin: false, loginPending: false })).toBe(true);
+  });
+
+  test("manual run never stacks onto an already-pending window", () => {
+    expect(shouldOpenLoginWindow({ noLogin: false, loginPending: true })).toBe(false);
   });
 });
 

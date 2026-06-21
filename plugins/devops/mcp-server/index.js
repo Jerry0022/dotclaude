@@ -164,11 +164,13 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
     lines.push(dimMeterLine(renderUsageLine('Wk', w.pct, elapsedWkPct, deltaWk, w.resetInMinutes)));
   }
 
-  // Failure indicator — login required is always shown prominently regardless
-  // of cache age (the scraper can't refresh until the user logs in once).
+  // Failure indicator — the automatic path never opens a login window, so this
+  // is a SOFT, non-actionable note: the numbers shown come from statusLine/cache,
+  // and the optional Edge scrape (its only extra is the manual weekly-Sonnet box)
+  // is offline until a one-time manual login. Never nags, never blocks.
   if (usageData._loginRequired) {
     lines.push('');
-    lines.push('\u26a0 Scraper not logged in \u2014 Edge login window opened, log in once (then fresh data on every card)');
+    lines.push('\u26a0 Edge scrape offline (not logged in) \u2014 showing statusLine/cached; /devops-refresh-usage to reconnect');
   } else if (usageData._cached && usageData._ageMinutes > 30) {
     const ageLabel = usageData._ageMinutes >= 60
       ? `~${Math.round(usageData._ageMinutes / 60)}h old`
@@ -761,13 +763,17 @@ function refreshUsage() {
     return finish(warm);
   }
 
-  // 2. Fallback — Edge scrape. Covers pre-first-API-response, unsupported
-  //    logins, weeklySonnet/plan, and hosts without the statusLine writer. The
-  //    script manages the dedicated scraper lifecycle internally (launch,
-  //    scrape, kill). Worst case ~44s; keep the timeout above that.
+  // 2. Fallback — Edge scrape, ALWAYS non-interactive (--no-login). Covers
+  //    pre-first-API-response and hosts without the statusLine writer. The card
+  //    only renders 5h + weekly, which this still provides when the profile is
+  //    logged in; if it is logged out the scraper just returns code 2 WITHOUT
+  //    opening a window (the automatic path must stay zero-interaction). A
+  //    one-time login is offered only via an explicit `/devops-refresh-usage`
+  //    run. The script manages the dedicated scraper lifecycle internally
+  //    (launch, scrape, kill). Worst case ~44s; keep the timeout above that.
   let lastExitCode = null;
   try {
-    execSync(`node "${SCRAPER_SCRIPT}" --quiet`, {
+    execSync(`node "${SCRAPER_SCRIPT}" --quiet --no-login`, {
       timeout: 60000,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -779,7 +785,7 @@ function refreshUsage() {
   }
 
   const reasons = {
-    2: 'scraper profile not logged in — visible login window was opened, log in once and retry',
+    2: 'scraper profile not logged in — no window opened (automatic path); run /devops-refresh-usage once to log in for the manual weekly-Sonnet summary',
     3: 'usage page parse error',
     4: 'CDP WebSocket failed',
     5: 'scraper instance could not launch (Edge not installed?)',
@@ -813,20 +819,22 @@ function refreshUsage() {
 
 const server = new McpServer({
   name: "dotclaude-completion",
-  version: "0.3.0",
+  version: "0.4.0",
 });
 
-// --- Tool 1: get_usage (unchanged) ---
+// --- Tool 1: get_usage ---
 
 server.registerTool(
   "get_usage",
   {
     title: "Get Usage",
     description:
-      "Fetch live token usage data from claude.ai. Always scrapes fresh data. " +
+      "Fetch live token usage. Reads the native statusLine-written cache first " +
+      "(no scrape, no extra turn); only falls back to a non-interactive, isolated " +
+      "Edge scrape when that is stale, and NEVER opens a login window. " +
       "Returns structured usage percentages, reset times, deltas against " +
-      "the previous scrape, and a pre-rendered ASCII usage meter. " +
-      "Uses a dedicated, isolated Edge scraper profile — user's main Edge is untouched.",
+      "the previous reading, and a pre-rendered ASCII usage meter. " +
+      "The user's main Edge is untouched.",
     inputSchema: z.object({}),
   },
   async () => {
