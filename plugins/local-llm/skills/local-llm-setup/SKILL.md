@@ -1,6 +1,7 @@
 ---
 name: local-llm-setup
-description: Interactive setup for the local-llm plugin — ask the user for their AnythingLLM API key, save it user-globally, and verify the connection. Use when the SessionStart hook reports `phase: needs_api_key`, `auth_failed`, or when the user explicitly asks to configure or reconfigure the local LLM. Triggers on "local llm setup", "anythingllm key", "local-llm configure".
+description: >-
+  Interactive setup for the local-llm plugin — ask the user for their AnythingLLM API key, save it user-globally, and verify the connection. Use when the SessionStart hook reports `phase: needs_api_key`, `auth_failed`, or when the user explicitly asks to configure or reconfigure the local LLM. Triggers on "local llm setup", "anythingllm key", "local-llm configure".
 ---
 
 # local-llm-setup
