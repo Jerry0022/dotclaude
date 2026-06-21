@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.104.1] — 2026-06-21
+
+### Fixed
+
+- **The `local-llm-setup` skill triggers again — its YAML frontmatter was silently unparseable.** The `description` was an unquoted plain scalar containing `` `phase: needs_api_key` `` (a colon + space inside backticks); YAML reads that inner colon as a mapping separator, so the whole frontmatter failed to parse and the Claude Code harness loaded the skill with **empty metadata and no error** — it never triggered and never appeared in the skill list. Switched to a folded block scalar (`description: >-`), matching every devops skill. Also repaired the local plugin caches (devops + local-llm had been left pointing at an empty / orphaned cache dir after an interrupted update) and re-synced README's stale version line.
+
+### Added
+
+- **A dependency-free `frontmatter-yaml.test.js` guard now parses every skill `SKILL.md` and agent `.md` frontmatter** for the same colon hazard and asserts skills declare `name` + `description`. Nothing in the release pipeline previously caught unparseable frontmatter (CI runs only on release tags, with no test gate), so this regression shipped undetected. The rule is documented in `CONVENTIONS.md` next to the frontmatter template (490 tests pass).
+
 ## [0.104.0] — 2026-06-21
 
 ### Changed
