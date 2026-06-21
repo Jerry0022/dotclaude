@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.0] — 2026-06-21
+
+### Changed
+
+- **The completion card's usage line is now strictly zero-interaction — the automatic refresh never opens a browser login window.** The native statusLine `rate_limits` source already keeps `usage-live.json` minute-fresh token-free, so the Edge scraper was only ever a fallback; its one remaining cost was popping a visible claude.ai login window when the dedicated scraper profile was logged out — the only place the usage subsystem still demanded user interaction. `refresh-usage-headless.js` (`@version` 0.4.0→0.5.0) gains a `--no-login` flag backed by a pure, unit-tested policy `shouldOpenLoginWindow({ noLogin, loginPending })`: in `--no-login` mode a logged-out profile returns code 2 and serves cache instead of opening a window. The `dotclaude-completion` MCP (server 0.3.0→0.4.0) always invokes the fallback scrape with `--no-login`, so the card path can never steal focus; its `_loginRequired` indicator is downgraded to a soft, non-actionable note (the numbers shown come from statusLine/cache, and a one-time login is offered only via an explicit `/devops-refresh-usage` run), and the misleading "Always scrapes fresh data" `get_usage` description is corrected to warm-read-first. SKILL `devops-refresh-usage` (0.1.0→0.2.0) documents the manual-vs-automatic login split. `refresh-usage-headless.test.js` gains 3 `shouldOpenLoginWindow` cases (435 tests pass).
+- Rationale (investigated, recorded): the undocumented `GET /api/oauth/usage` endpoint was evaluated as an always-on alternative source and rejected — on Claude Code 2.1.175 the OAuth token is host-managed in-memory, the on-disk `.credentials.json` token is expired with an empty refresh token, and the Windows keychain entry holds only a 16-byte key (the real token is in an encrypted vault), so no script can obtain or renew a usable token without reverse-engineering the credential store. The card renders only the 5h and weekly numbers, both already provided token-free by the statusLine source, so dropping the scraper from the card path loses nothing the card displays (`weeklySonnet` and plan tier appear only in the manual summary, the latter also readable token-free via `claude auth status --json`).
+
 ## [0.103.0] — 2026-06-20
 
 ### Added
