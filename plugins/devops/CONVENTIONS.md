@@ -133,6 +133,14 @@ triggers:
 ---
 ```
 
+**YAML safety:** any frontmatter value with `: ` (colon + space) or a trailing
+`:` — usually `description` — MUST be a folded block scalar (`description: >-`,
+content indented on the next line) or be quoted. A plain scalar with an inner
+`: ` makes YAML parse the block as a broken mapping, so the harness loads the
+doc with **empty metadata and no error** — the skill never triggers / the agent
+never appears. Applies equally to `agents/*.md`. Guarded by
+`scripts/frontmatter-yaml.test.js`.
+
 ### Extension Mechanism (applies to ALL skills)
 
 Every plugin skill supports a **three-layer extension model**. Before executing
