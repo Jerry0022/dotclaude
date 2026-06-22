@@ -20,7 +20,10 @@ node_modules/
 # Plugin-managed runtime dirs
 .claude/.plugin-version
 .claude/hooks/
-.claude/skills/
+# .claude/skills is a runtime dir, EXCEPT this repo's own tracked ship extension
+# (it is the plugin-source repo — it dogfoods its own skill-extension mechanism).
+.claude/skills/*
+!.claude/skills/ship/
 .claude/agents/
 .claude/deep-knowledge/
 .claude/templates/
