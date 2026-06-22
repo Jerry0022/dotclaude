@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.8.0
+ * @version 0.9.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -12,7 +12,12 @@
  *   When a plugin with an MCP server is upgraded mid-session, the running
  *   MCP processes point at the now-deleted old installPath. A sentinel file
  *   (~/.claude/plugins/.mcp-stale.json) is written so pre.mcp.health can
- *   block MCP tool calls until the user restarts Claude Code.
+ *   block MCP tool calls until the user restarts Claude Code. The sentinel is
+ *   written whenever a rebuild MOVES the installPath to a different version dir
+ *   — not only on a git-HEAD version bump. A cacheStale rebuild can repoint the
+ *   installPath with headChanged=false (marketplace pulled in an earlier
+ *   session, cache still on the old version), which equally invalidates the
+ *   running MCP processes.
  *
  *   A same-version cache REPAIR overwrites the existing version dir in place
  *   instead of deleting + recreating it. Nuking the dir mid-session changes its
@@ -276,7 +281,7 @@ function rebuildCache(marketplace, pluginName, pluginDir, version, sha, { versio
     // Registry update failed — non-fatal, plugin still works from marketplace dir
   }
 
-  return { ok: true };
+  return { ok: true, installPath: newCache };
 }
 
 // If the marketplaces directory is missing, there are no updates to run.
@@ -346,11 +351,16 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
     let cacheMissing = false;
     // Cache-staleness guard: rebuild if cached plugin.json version doesn't match marketplace
     let cacheStale = false;
+    // The installPath the running MCP servers were spawned from this session.
+    // Captured BEFORE rebuildCache rewrites the registry, so we can detect an
+    // installPath MOVE and flag MCP staleness even when git HEAD didn't move.
+    let previousInstallPath = null;
     try {
       const registry = JSON.parse(fs.readFileSync(registryFile, 'utf8'));
       const key = `${name}@${marketplace}`;
       const entry = registry.plugins[key]?.[0];
       if (entry) {
+        previousInstallPath = entry.installPath || null;
         if (!fs.existsSync(entry.installPath)) {
           cacheMissing = true;
         } else {
@@ -386,11 +396,23 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
         error: result.ok ? null : (result.missing || result.mismatch),
       });
 
-      // Real version upgrades of MCP-bearing plugins invalidate running MCP
-      // processes — they were spawned from the now-deleted installPath.
-      // Cache repairs at the same version overwrite files in place, so the
-      // running Node process (code already in RAM) keeps working.
-      if (versionChanged && result.ok && fs.existsSync(path.join(dir, '.mcp.json'))) {
+      // MCP-bearing plugins: the running MCP processes were spawned from
+      // previousInstallPath. Flag them stale whenever the rebuild MOVED the
+      // install to a different version dir — NOT only on a git-HEAD version bump.
+      // A cacheStale rebuild can repoint the installPath with headChanged=false
+      // (e.g. the marketplace was pulled to the new version in an earlier session
+      // but the cache still pointed at the old version dir); rebuildCache then
+      // deletes the old dir and registers the new one, leaving the running MCP
+      // servers pointing at deleted files with no sentinel to block them. A
+      // same-version in-place repair keeps installPath === previousInstallPath
+      // (files overwritten; the RAM-resident Node process keeps working) → no
+      // sentinel, preserving #219 behavior.
+      const installMoved =
+        result.ok &&
+        previousInstallPath != null &&
+        result.installPath != null &&
+        path.resolve(previousInstallPath) !== path.resolve(result.installPath);
+      if (installMoved && fs.existsSync(path.join(dir, '.mcp.json'))) {
         mcpAffected.push({
           name,
           marketplace,
