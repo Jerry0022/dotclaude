@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.9.0
+ * @version 0.9.1
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -61,12 +61,14 @@ const cacheDir = path.join(home, '.claude', 'plugins', 'cache');
 const registryFile = path.join(home, '.claude', 'plugins', 'installed_plugins.json');
 const sentinelFile = path.join(home, '.claude', 'plugins', '.mcp-stale.json');
 
-// Files whose absence means a cache is functionally broken even when its
-// version/sha look correct (issue #190 — sync dropped mcp-server files and
-// .mcp.json, so the MCP servers never registered). Checked both to flag an
-// existing cache for rebuild and to verify a freshly-built one. Paths are
-// relative to a plugin root; only assert files that exist in every plugin
-// that ships an .mcp.json — guarded by hasMcpServer() below.
+// Candidate set of files whose absence means a cache is functionally broken
+// even when its version/sha look correct (issue #190 — sync dropped mcp-server
+// files and .mcp.json, so the MCP servers never registered). This is a SUPERSET
+// across plugins, NOT a list every plugin ships: missingMcpFiles() asserts only
+// the entries a given plugin's SOURCE actually has. A plugin with a smaller
+// mcp-server layout (e.g. local-llm ships just mcp-server/index.js — no
+// ship/issues/heartbeat) is therefore not falsely flagged for files it never
+// had, which previously caused a never-satisfiable rebuild loop every session.
 const MCP_CRITICAL_FILES = [
   '.mcp.json',
   path.join('mcp-server', 'index.js'),
@@ -79,13 +81,18 @@ function hasMcpServer(root) {
   return fs.existsSync(path.join(root, '.mcp.json'));
 }
 
-// Returns the MCP-critical files missing from `targetRoot`. `expectMcp` must be
-// derived from the SOURCE plugin dir, not the target — otherwise a target whose
-// own .mcp.json was dropped would report "nothing to assert" and mask the very
-// breakage we are checking for (issue #190).
-function missingMcpFiles(targetRoot, expectMcp) {
-  if (!expectMcp) return [];
-  return MCP_CRITICAL_FILES.filter((rel) => !fs.existsSync(path.join(targetRoot, rel)));
+// Returns the MCP-critical files missing from `targetRoot`, asserted PER-PLUGIN
+// against what the SOURCE actually ships. `sourceRoot` is the marketplace plugin
+// dir (NOT the target): the gate is the source's .mcp.json — otherwise a target
+// whose own .mcp.json was dropped would report "nothing to assert" and mask the
+// very breakage we check for (issue #190). Only candidate files present in the
+// source are required in the target, so plugins with different mcp-server
+// layouts are each held to their own real file set.
+function missingMcpFiles(targetRoot, sourceRoot) {
+  if (!hasMcpServer(sourceRoot)) return [];
+  return MCP_CRITICAL_FILES.filter(
+    (rel) => fs.existsSync(path.join(sourceRoot, rel)) && !fs.existsSync(path.join(targetRoot, rel)),
+  );
 }
 
 function run(cmd, cwd) {
@@ -242,7 +249,7 @@ function rebuildCache(marketplace, pluginName, pluginDir, version, sha, { versio
   // mcp-server tree + .mcp.json — otherwise the servers never register
   // (issue #190). Fail the rebuild so the registry is not pointed at a
   // broken cache; the next session retries from the (complete) marketplace.
-  const mcpMissing = missingMcpFiles(newCache, hasMcpServer(pluginDir));
+  const mcpMissing = missingMcpFiles(newCache, pluginDir);
   if (mcpMissing.length) {
     return { ok: false, missing: `mcp-server files: ${mcpMissing.join(', ')}` };
   }
@@ -377,7 +384,7 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
             // Completeness guard: version/sha can match while the MCP server
             // files were dropped by an incomplete sync (issue #190). Rebuild
             // from the marketplace clone to heal the cache in place.
-            if (!cacheStale && missingMcpFiles(entry.installPath, hasMcpServer(dir)).length) {
+            if (!cacheStale && missingMcpFiles(entry.installPath, dir).length) {
               cacheStale = true;
             }
           }
