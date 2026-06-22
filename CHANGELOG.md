@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.104.2] — 2026-06-22
+
+### Fixed
+
+- **The devops MCP servers (`ship`, `completion`, `issues`) no longer silently go missing after a plugin update that moves the install dir without changing the version string — the recurring "devops nicht verfügbar" after a ship.** The `ss.plugin.update` SessionStart hook (`@version` 0.8.0→0.9.1) only wrote the MCP-stale sentinel (`~/.claude/plugins/.mcp-stale.json`) when the marketplace git HEAD moved *this run* (`versionChanged = headChanged && version differs`). But a `cacheStale` rebuild can repoint the registry `installPath` to a different version dir with `headChanged=false` — e.g. the marketplace was pulled to the new version in an earlier session while the cache/registry still pointed at the old version dir. `rebuildCache` then deletes the old dir and registers the new one, leaving the running MCP processes spawned from the now-deleted `installPath` with **no sentinel** — `pre.mcp.health` never blocked them, and the ship/completion/issues tools ended up dead or unregistered (observed live: registry pinned at a deleted `…/devops/0.104.0` while the complete cache sat at `0.104.1`). The hook now captures the registry `installPath` **before** the rebuild and flags staleness whenever the rebuild **moves** it (`previousInstallPath !== newCache`), regardless of `headChanged`; a same-version in-place repair keeps the path equal and writes no sentinel (preserving #219). `rebuildCache` now returns its `installPath`. New `ss.plugin.update.sentinel.test.js` (6 tests) pins the move-vs-in-place decision.
+
+- **A plugin whose `mcp-server/` layout differs from devops (e.g. `local-llm`) is no longer falsely flagged as an incomplete cache and rebuilt in a loop every session.** `missingMcpFiles()` asserted the devops-shaped `MCP_CRITICAL_FILES` list (`mcp-server/ship/index.js`, `mcp-server/issues/index.js`, `mcp-server/lib/heartbeat.js`, …) against **every** plugin that merely ships an `.mcp.json`. `local-llm` ships only `mcp-server/index.js`, so it was permanently reported as missing three files → `cacheStale` every session → a rebuild that could never satisfy the check → the registry SHA never advanced → perpetual churn. The check now asserts only the candidate files the **source** plugin actually ships; the gate stays the source's `.mcp.json` (not the target's), so a dropped target `.mcp.json` is still caught (#190 protection preserved). New `ss.plugin.update.completeness.test.js` (6 tests). Verified end-to-end: `local-llm` reports ✓ and the rebuild loop settles on the next run (502 tests pass).
+
+### Added
+
+- **A project ship extension (`.claude/skills/ship/`) self-updates the locally-installed devops after a ship to main.** This is the plugin-source repo, so a ship here changes the plugin running the ship — leaving the sync to the next `SessionStart` caused stale installs and a two-restart upgrade window. Step 6.5 announces the pending sync as a completion-card item; Step 8 runs the canonical `ss.plugin.update` hook **last** (after the card, since the sync marks MCP stale) to pull the marketplace clone, rebuild the cache to the just-shipped version, and repoint the registry — collapsing the two restarts into one. Guarded to a final ship to main with normal cleanup (skipped for intermediate merges, keep-mode, and when no devops install is present). Because this repo ignores all of `.claude/`, a narrow `.gitignore` carve-out tracks just `.claude/skills/ship/`.
+
 ## [0.104.1] — 2026-06-21
 
 ### Fixed
