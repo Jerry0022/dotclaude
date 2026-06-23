@@ -1,33 +1,37 @@
 ---
 name: devops-graph
-version: 0.2.0
+version: 0.3.0
 description: >-
-  On-demand codebase knowledge graph via the external graphify CLI. Detects
-  graphify, offers to install it (with confirmation — never silent), builds or
-  refreshes the graph, then answers codebase questions with `graphify query`.
-  Best for large codebases where querying a graph beats grepping/reading files.
-  Deliberately does NOT install graphify's own PreToolUse hook (would collide
-  with the devops project-map and token-guard hooks). Triggers: "knowledge
-  graph", "graphify", "code graph", "/devops-graph". Do NOT trigger for simple
-  single-file lookups — plain grep/Read is cheaper there.
-allowed-tools: Bash(node *), Bash(graphify *), Bash(uv *), Bash(pipx *), Read, Glob
+  Codebase knowledge graph via the external graphify CLI, with opt-in
+  enforcement. Detects graphify, offers to install it (confirmation — never
+  silent), builds/refreshes the graph, and answers codebase questions with
+  `graphify query`. Once the user opts in per project, the graph is kept fresh
+  automatically (git hooks + SessionStart) and broad raw-file searches are
+  hard-gated toward the graph. Deliberately does NOT install graphify's own
+  PreToolUse hook (would collide with the devops token-guard); the enforcement
+  is devops-owned. Triggers: "knowledge graph", "graphify", "code graph",
+  "/devops-graph". Do NOT trigger for simple single-file lookups.
+allowed-tools: Bash(node *), Bash(graphify *), Bash(uv *), Bash(pipx *), Read, Glob, Write
 ---
 
-# devops-graph — On-Demand Codebase Knowledge Graph
+# devops-graph — Codebase Knowledge Graph (opt-in enforced)
 
 Thin orchestration over the real [`graphify`](https://github.com/safishamsi/graphify)
 CLI. graphify stays the single source of truth — this skill reimplements
-nothing. It only **detects**, **offers to install**, **freshens the graph**, and
-**queries** it. Everything is on-demand; nothing runs in the background.
+nothing. It **detects**, **offers to install**, **freshens the graph**, and
+**queries** it. After a per-project opt-in (recorded in `.claude/graphify.json`)
+the graph is kept fresh automatically and broad searches are hard-gated toward
+it — see [Enforcement](#enforcement-after-opt-in).
 
 ## Hard rules
 
 - **Never install silently.** If graphify is missing, *offer* and wait for an
-  explicit OK before running any install command.
+  explicit OK before running any install command. The consent record
+  (`.claude/graphify.json`) is written only after the user decides.
 - **Never run `graphify claude install`.** That command writes graphify's own
   PreToolUse hook + CLAUDE.md skill, which collides with the devops plugin's
   PreToolUse hooks (the project-map re-scoping hint and `pre.tokens.guard.js`).
-  This skill invokes graphify on-demand instead.
+  Our enforcement is devops-owned instead (single, ordered hook chain).
 - **Do not touch `project-map`.** It is a different layer (cheap always-on
   orientation, not on-demand deep retrieval).
 
@@ -84,27 +88,46 @@ graphify query "<the user's question>"
 Relay the result. For follow-up questions in the same session, reuse the
 existing graph — only re-run Step 3 if the code changed meaningfully.
 
-## Ambient nudge (automatic, once per session)
+## Enforcement (after opt-in)
 
-Once a graph exists, you do not have to remember this skill. The devops
-`pre.tokens.guard` PreToolUse hook injects a one-line hint on the **first broad
-search of a session** (alongside the project-map) that steers Claude toward
-`graphify query` for semantic questions instead of grepping raw files. This is
-the token-saving payoff — the graph gets *used*, not just built. The hint is:
+The user can opt a project in (the `ss.graphify` SessionStart hook offers this
+once). Opt-in is recorded in `.claude/graphify.json`:
 
-- **Silent until a graph exists** — no graph.json, no nudge (no nagging about an
-  unbuilt tool).
-- **Once per session** — Claude is told the graph exists a single time, then
-  decides per question; it does not spam every search.
-- **devops-owned** — it lives in our hook chain, so it never collides with other
-  PreToolUse hooks. We still never run `graphify claude install`.
+- `{"consent":true,"autoBuild":true}` → **enabled**
+- `{"consent":false}` → **declined** (never nagged again)
+- absent → **undecided** (offer shown, throttled weekly)
 
-Logic lives in `hooks/lib/graph-nudge.js` (unit-tested).
+When **enabled**, two things become automatic — no need to invoke this skill:
+
+**1. Auto-build / freshness (D2).** `ss.graphify` ensures graphify is installed,
+installs graphify's git hooks once (`graphify hook install` — post-commit/
+post-checkout AST rebuild, free), and kicks off a background
+`graphify extract . --update` whenever the graph is missing or stale. So the
+graph follows the code via both git hooks *and* SessionStart.
+
+**2. Hard gate (D3).** `pre.tokens.guard` **blocks** a broad raw-file Grep/Glob
+(exit 2) and tells Claude to run `graphify query` instead. Two preconditions
+keep this safe — both enforced in code, never optional:
+
+- **Staleness guard** — the gate only fires when the graph is *fresh*
+  (`graphIsStale` compares graph.json mtime vs the newest source file). A stale
+  graph is never forced onto Claude.
+- **Escape hatch** — the gate blocks a given search at most once per session;
+  *retrying the same search falls through*, so a question the graph cannot
+  answer (exact string, a new/uncommitted file, a non-code asset) is never
+  wedged. Once any `graphify query` runs (tracked by `post.graphify.query`), the
+  gate relents for the rest of the session.
+
+This is stronger than graphify's own registration — graphify's `claude install`
+hook only emits `permissionDecision:"allow"` (a soft nudge), never a block. The
+trade-off: a real gate adds friction the bare nudge does not. Logic lives in
+`hooks/lib/graph-nudge.js` + `hooks/lib/graphify-state.js` (unit + integration
+tested).
 
 ## Out of scope (v1)
 
 - No graphify MCP server (`python -m graphify.serve`) — shell-out per query.
-- No post-commit auto-rebuild hook — graph refresh is on-demand (Step 3) only.
-  A background auto-rebuild could be added later as an explicit opt-in.
-- The nudge piggybacks on the first *broad* search; a session that never runs
-  one won't see it (acceptable for v1 — most sessions do).
+- Auto-build is **code-only** (`--update`, AST). Doc/PDF/image semantic
+  extraction (which costs API tokens) is never enabled automatically.
+- The gate only covers *broad* searches (Grep/Glob with no `path`); targeted,
+  path-scoped reads are intentionally left free.

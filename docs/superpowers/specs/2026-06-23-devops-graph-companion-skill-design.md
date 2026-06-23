@@ -68,17 +68,39 @@ offer, and command invocation.
 Detect → offer → confirm. The SKILL.md documents the collision rationale inline
 so a future maintainer does not "helpfully" re-add `graphify claude install`.
 
-## Ambient nudge (added — option B)
+## Enforcement (option B → hardened to a real gate)
 
-The "Build + Query on-demand" core is supplemented by a **devops-owned** ambient
-nudge so the graph is actually *used* during normal coding (the token-saving
-payoff). Rather than installing graphify's colliding hook, the existing
-`pre.tokens.guard` PreToolUse hook is extended: on the first broad search of a
-session it injects a one-line hint (alongside the project-map) steering Claude
-toward `graphify query` — **only when `graphify-out/graph.json` exists**, at most
-once per session. The collision was never "a hook is bad"; it was graphify's
-*uncoordinated* hook beside ours. Logic lives in `hooks/lib/graph-nudge.js`,
-unit-tested independently of the hook's stdin plumbing.
+The "Build + Query on-demand" core was first supplemented by a soft, once-per-
+session **nudge** (devops-owned, via `pre.tokens.guard`). A multi-agent
+verification (research + audit + adversarial red-team) then established two
+load-bearing facts:
+
+1. **graphify's own registration does not force usage.** `graphify claude install`
+   writes a PreToolUse hook that emits `permissionDecision:"allow"` (guarded with
+   `|| true`) plus an advisory CLAUDE.md — a nudge, never a block (graphify issues
+   #249, #83). So "equivalent to registered graphify" (D4) and "forced usage"
+   (D3) are mutually inconsistent; a real gate is *stronger* than graphify.
+2. **A hard block is only safe with two preconditions** — otherwise it forces
+   Claude onto stale data or wedges searches the graph cannot answer.
+
+On the user's explicit choice (hard block + auto-build via git hooks **and**
+SessionStart), the nudge was upgraded to enforcement:
+
+- **Consent** — `.claude/graphify.json` (`consent:true|false`), written only after
+  an explicit opt-in offered by the `ss.graphify` SessionStart hook. Never silent.
+- **Auto-build (D2)** — `ss.graphify` ensures install, runs `graphify hook install`
+  once (git AST rebuild, free), and background-rebuilds when the graph is
+  missing/stale. (`hooks/lib/graphify-state.js`, `graph-nudge.graphIsStale`.)
+- **Hard gate (D3)** — `pre.tokens.guard` blocks (exit 2) a broad raw-file
+  Grep/Glob toward `graphify query`, **only when** the user consented AND the
+  graph is fresh AND no `graphify query` ran yet this session. Precondition 1:
+  staleness guard (`graphIsStale`, mtime vs newest source). Precondition 2:
+  escape hatch — blocks a given search once, a retry falls through;
+  `post.graphify.query` relents the gate for the session once a query runs.
+
+Verified by `graphify-state.test.js`, `graph-nudge.test.js` (staleness), and a
+spawn-based integration test `pre.tokens.guard.graphgate.test.js` (block / retry-
+relent / no-consent / declined / stale / queried).
 
 ## Architecture rationale — the hook collision
 

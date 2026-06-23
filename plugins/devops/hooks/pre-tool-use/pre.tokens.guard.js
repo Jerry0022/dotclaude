@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.4.0
+ * @version 0.5.0
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
@@ -185,6 +185,42 @@ process.stdin.on('end', () => {
 
   else {
     process.exit(0);
+  }
+
+  // ── graphify hard-gate (consented + FRESH graph) ────────────────────
+  // When the user has opted graphify in for this project AND a fresh graph
+  // exists, force a broad raw-file search through the graph first. Two hard
+  // preconditions keep this from being harmful:
+  //   1. Staleness — never block onto an out-of-date graph (graphIsStale).
+  //   2. Escape hatch — block at most once per (session, search); a retry of
+  //      the same search falls through, so a question the graph cannot answer
+  //      (exact string, new/uncommitted file, non-code asset) is never wedged.
+  // Relents entirely once `graphify query` has run this session (queryDone).
+  // Fail-open: any error here must never block a search.
+  if ((toolName === 'Grep' || toolName === 'Glob') && !toolInput.path) {
+    try {
+      const graphNudge = require('../lib/graph-nudge');
+      const gstate = require('../lib/graphify-state');
+      const sid = hook.session_id || hook.sessionId || 'nosid';
+      if (gstate.hasConsent(cwd) && !gstate.queryDone(sid, cwd)
+          && graphNudge.hasGraph(cwd) && !graphNudge.graphIsStale(cwd)) {
+        const gflag = flagPath(`graphgate:${sid}:${cwd}:${toolName}:${JSON.stringify(toolInput)}`);
+        if (!fs.existsSync(gflag)) {
+          try { fs.writeFileSync(gflag, Date.now().toString()); } catch {}
+          console.error('\n⛔  GRAPHIFY GATE — broad search blocked (fresh graph available)');
+          console.error('─'.repeat(54));
+          console.error('Query the knowledge graph instead of grepping raw files:');
+          console.error('  graphify query "<your question>"');
+          console.error('');
+          console.error('If the graph cannot answer THIS search (exact string, a');
+          console.error('new/uncommitted file, or a non-code asset), retry the same');
+          console.error('search to proceed.');
+          console.error('─'.repeat(54));
+          process.exit(2);
+        }
+        // flag present → already gated this search; fall through (escape hatch)
+      }
+    } catch { /* fail open — never block on gate errors */ }
   }
 
   // ── Proactive project-map injection (once per session) ──────────────
