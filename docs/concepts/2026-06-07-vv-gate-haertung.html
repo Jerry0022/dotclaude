@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark" data-page-version="2026-06-07T23:10:00" data-template="free">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept — V&amp;V-Gate-Härtung</title>
+<style>
+:root {
+  --bg: #0d1117; --bg-color: #0d1117; --text: #c9d1d9; --text-color: #c9d1d9; --text-secondary: #8b949e; --text-muted: #8b949e;
+  --panel-bg: #161b22; --border-color: #30363d; --input-bg: #0d1117;
+  --accent-color: #58a6ff; --success-color: #3fb950; --warning-color: #d29922; --danger-color: #f85149;
+}
+html[data-theme="light"] {
+  --bg: #ffffff; --bg-color: #ffffff; --text: #24292f; --text-color: #24292f; --text-secondary: #57606a; --text-muted: #57606a;
+  --panel-bg: #f6f8fa; --border-color: #d0d7de; --input-bg: #ffffff;
+  --accent-color: #0969da;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
+button { font-family: inherit; }
+code { background: color-mix(in srgb, var(--accent-color) 12%, transparent); padding: 0.1rem 0.35rem;
+  border-radius: 5px; font-size: 0.88em; }
+
+.concept-layout { display: flex; min-height: 100vh; }
+.concept-content { flex: 1; padding: 2rem; overflow-y: auto; }
+.concept-decision-panel {
+  width: 20%; min-width: 260px; max-width: 360px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  padding: 1.5rem; border-left: 1px solid var(--border-color); background: var(--panel-bg);
+  z-index: 100; }
+@media (max-width: 768px) {
+  .concept-layout { flex-direction: column; }
+  .concept-decision-panel { width: 100%; max-width: none; height: auto;
+    position: sticky; bottom: 0; border-left: none; border-top: 1px solid var(--border-color); }
+}
+
+header.page-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+header.page-header h1 { margin: 0; font-size: 1.7rem; }
+header.page-header .subtitle { color: var(--text-secondary); margin: 0; flex: 1; }
+#theme-toggle { background: none; border: 1px solid var(--border-color); color: var(--text);
+  padding: 0.5rem 0.75rem; border-radius: 8px; cursor: pointer; }
+
+.iteration-intro { border-left: 3px solid var(--accent-color); padding: 0.75rem 1rem;
+  margin-bottom: 2rem; background: color-mix(in srgb, var(--accent-color) 8%, transparent); border-radius: 0 8px 8px 0; }
+.iteration-intro h2 { margin: 0 0 0.25rem 0; font-size: 1.1rem; }
+.iteration-intro p { margin: 0; color: var(--text-secondary); }
+
+section[id][data-nav-label] { margin-bottom: 2.5rem; padding: 1.5rem;
+  border: 1px solid var(--border-color); border-radius: 10px;
+  background: color-mix(in srgb, var(--panel-bg) 40%, transparent); }
+section[id][data-nav-label] h3 { margin-top: 0; }
+section[id][data-nav-label] p { margin: 0.6rem 0; }
+.lead { color: var(--text-secondary); }
+
+.metric-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin: 1rem 0; }
+.metric-card { padding: 1rem; border-radius: 8px; background: var(--panel-bg); border: 1px solid var(--border-color); }
+.metric-card .label { font-size: 0.78rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+.metric-card .value { font-size: 1.4rem; font-weight: 700; margin-top: 0.25rem; }
+.metric-card.good .value { color: var(--success-color); }
+.metric-card.warn .value { color: var(--warning-color); }
+.metric-card.bad .value { color: var(--danger-color); }
+
+table.matrix { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
+table.matrix th, table.matrix td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+table.matrix th { color: var(--text-secondary); font-weight: 600; }
+table.matrix code { white-space: nowrap; }
+.tag { display: inline-block; font-size: 0.72rem; padding: 0.12rem 0.5rem; border-radius: 999px; font-weight: 600; }
+.tag.before { background: color-mix(in srgb, var(--danger-color) 18%, transparent); color: var(--danger-color); }
+.tag.after { background: color-mix(in srgb, var(--success-color) 18%, transparent); color: var(--success-color); }
+
+ul.tight { margin: 0.5rem 0; padding-left: 1.2rem; }
+ul.tight li { margin-bottom: 0.35rem; }
+.flow { font-family: ui-monospace, monospace; font-size: 0.85rem; color: var(--text-secondary);
+  background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem 1rem; margin: 1rem 0; }
+
+.eval-hint { display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.55rem; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-color) 20%, transparent); color: var(--accent-color); margin-left: 0.5rem; vertical-align: middle; }
+
+.eval-group, .tri-state-group { display: flex; gap: 0; border: 1px solid var(--border-color);
+  border-radius: 8px; overflow: hidden; margin-top: 1rem; }
+.eval-option, .tri-state-option { flex: 1; display: flex; flex-direction: column; align-items: center;
+  padding: 0.7rem 1rem; cursor: pointer; text-align: center; position: relative;
+  border-right: 1px solid var(--border-color); transition: background 0.2s, box-shadow 0.2s; }
+.eval-option:last-child, .tri-state-option:last-child { border-right: none; }
+.eval-option:hover, .tri-state-option:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.eval-option input, .tri-state-option input { display: none; }
+.eval-option:has(input:checked) .eval-label, .tri-state-option:has(input:checked) .tri-state-label { font-weight: 700; }
+.eval-label, .tri-state-label { font-size: 0.9rem; transition: font-weight 0.15s; }
+.eval-option:has(input:checked)::after, .tri-state-option:has(input:checked)::after {
+  content: '✓'; position: absolute; top: 4px; right: 6px; font-size: 0.7rem; font-weight: 700;
+  width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; pointer-events: none; }
+.eval-option:has(input[value="include"]:checked), .tri-state-option:has(input[value="include"]:checked) {
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent); box-shadow: inset 0 0 0 2px var(--accent-color); }
+.eval-option:has(input[value="include"]:checked)::after, .tri-state-option:has(input[value="include"]:checked)::after {
+  background: var(--accent-color); color: white; }
+.eval-option:has(input[value="discard"]:checked), .tri-state-option:has(input[value="discard"]:checked) {
+  background: color-mix(in srgb, var(--danger-color) 12%, transparent); box-shadow: inset 0 0 0 2px var(--danger-color); }
+.eval-option:has(input[value="discard"]:checked)::after, .tri-state-option:has(input[value="discard"]:checked)::after {
+  background: var(--danger-color); color: white; }
+.eval-option:has(input[value="discard"]:checked) .eval-label, .tri-state-option:has(input[value="discard"]:checked) .tri-state-label {
+  color: var(--danger-color); }
+.eval-option:has(input:not(:checked)), .tri-state-option:has(input:not(:checked)) { opacity: 0.7; }
+.eval-option:has(input:not(:checked)):hover, .tri-state-option:has(input:not(:checked)):hover { opacity: 1; }
+
+.comment-field, .decision-comment-row { margin-top: 0.9rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.decision-comment-row label { font-size: 0.78rem; color: var(--text-muted); font-weight: 500; }
+.comment-field textarea, .decision-comment-row textarea { width: 100%; min-height: 56px; padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border-color); border-radius: 8px; background: var(--input-bg);
+  color: var(--text); font-family: inherit; font-size: 0.88rem; line-height: 1.5; resize: vertical; }
+.comment-field textarea:focus, .decision-comment-row textarea:focus { outline: none; border-color: var(--accent-color); }
+
+.iteration-tabs { display: flex; flex-direction: column; gap: 4px; margin-bottom: 1rem;
+  padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); }
+.iteration-tab { flex: 0 0 auto; text-align: left; padding: 6px 10px; border: 1px solid var(--border-color);
+  border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 0.85rem; cursor: pointer; }
+.iteration-tab:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); color: var(--text); }
+.iteration-tab[aria-selected="true"] { background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  color: var(--text); border-color: var(--accent-color); font-weight: 600; }
+.iteration-tab[aria-selected="true"]::before { content: "● "; color: var(--accent-color); }
+.iteration-tab[data-final-report] { border-color: var(--success-color); color: var(--success-color); }
+.iteration-tab[data-final-report][aria-selected="true"] { background: color-mix(in srgb, var(--success-color) 15%, transparent);
+  border-color: var(--success-color); color: var(--text); }
+.iteration-tab[data-final-report][aria-selected="true"]::before { content: "✓ "; color: var(--success-color); }
+.iteration-tab[data-final-report]:not([aria-selected="true"])::before { content: ""; }
+
+.section-nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+.section-nav-item { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.45rem 0.7rem; border-radius: 6px; text-decoration: none; color: var(--text);
+  font-size: 0.88rem; transition: background 0.15s; cursor: pointer; }
+.section-nav-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.section-nav-state { font-size: 0.78rem; color: var(--accent-color); white-space: nowrap; }
+.section-nav-state.state-discard { color: var(--danger-color); }
+
+#panel-ready { position: relative; }
+.panel-warning { position: absolute; inset: 0; z-index: 5; pointer-events: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.6rem; text-align: center; padding: 1.5rem; border-radius: 10px; border: 1px solid var(--warning-color);
+  background: color-mix(in srgb, var(--panel-bg) 88%, transparent); backdrop-filter: blur(2px); color: var(--text); }
+.panel-warning .warning-icon { font-size: 2.1rem; color: var(--warning-color); line-height: 1; }
+.panel-warning strong { color: var(--warning-color); font-size: 1rem; }
+.panel-warning .warning-message { font-size: 0.86rem; color: var(--text-secondary); line-height: 1.5; max-width: 280px; margin: 0; }
+.panel-warning__ack-btn { margin-top: 0.4rem; padding: 0.45rem 1.1rem; border-radius: 8px;
+  border: 1px solid var(--warning-color); background: color-mix(in srgb, var(--warning-color) 15%, transparent);
+  color: var(--warning-color); font-weight: 600; font-size: 0.86rem; cursor: pointer; }
+.panel-warning__ack-btn:hover { background: var(--warning-color); color: var(--panel-bg); }
+.panel-warning--connecting { border-color: var(--accent-color); }
+.panel-warning--connecting .warning-icon { color: var(--accent-color); animation: pulse-connect 1.4s ease-in-out infinite; }
+.panel-warning--connecting strong { color: var(--accent-color); }
+.panel-warning--connecting .panel-warning__ack-btn { border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent); color: var(--accent-color); }
+.panel-warning--connecting .panel-warning__ack-btn:hover { background: var(--accent-color); color: var(--panel-bg); }
+@keyframes pulse-connect { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+.hint-cache { font-size: 0.78rem; line-height: 1.35; margin: 0.25rem 0 0; color: var(--warning-color);
+  display: flex; align-items: center; gap: 0.35rem; }
+.hint-cache[hidden] { display: none; }
+
+.content-dimmer { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(1.5px); cursor: pointer; opacity: 0; transition: opacity 0.25s ease; pointer-events: none; }
+body.content-dimmed .content-dimmer:not([hidden]) { opacity: 1; pointer-events: auto; }
+.content-dimmer[hidden] { display: none; }
+
+.submitted-indicator, .final-report-indicator { display: flex; align-items: center; gap: 0.5rem; padding: 1rem;
+  margin-bottom: 0.75rem; border-radius: 8px; background: color-mix(in srgb, var(--success-color) 15%, transparent);
+  border: 1px solid var(--success-color); }
+.submitted-indicator .check-icon, .final-report-indicator .check-icon { font-size: 1.3rem; color: var(--success-color); }
+.submitted-hint, .final-report-hint { font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.5; }
+
+.status-steps { list-style: none; padding: 0; margin: 0 0 1rem 0; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; }
+.status-steps li { display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); transition: color 0.2s ease; }
+.status-steps li[data-state="active"] { color: var(--text); font-weight: 500; }
+.status-steps li[data-state="done"] { color: var(--success-color); }
+.status-steps .step-icon { display: inline-block; width: 1rem; text-align: center; flex-shrink: 0; }
+.status-steps li[data-state="active"] .step-icon { animation: step-pulse 1.4s ease-in-out infinite; }
+@keyframes step-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+.status-steps li .step-label[data-state-label] { display: none; }
+.status-steps li[data-state="pending"] .step-label[data-state-label="pending"],
+.status-steps li[data-state="active"] .step-label[data-state-label="active"],
+.status-steps li[data-state="done"] .step-label[data-state-label="done"] { display: inline; }
+
+.waiting-animation { display: flex; gap: 6px; justify-content: center; padding: 0.5rem 0; }
+.waiting-animation .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-color); animation: pulse 1.4s ease-in-out infinite; }
+.waiting-animation .dot:nth-child(2) { animation-delay: 0.2s; }
+.waiting-animation .dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes pulse { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+
+.submit-btn, .implement-btn { width: 100%; padding: 0.8rem 1rem; border-radius: 10px; font-weight: 600;
+  font-size: 0.95rem; cursor: pointer; margin-top: 0.5rem; font-family: inherit; }
+.submit-btn { border: none; background: var(--accent-color); color: white; }
+.submit-btn:disabled, .implement-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.submit-gap { height: 2rem; }
+.implement-btn { background: transparent; color: var(--warning-color); border: 1px solid var(--warning-color);
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+.implement-btn:hover { background: color-mix(in srgb, var(--warning-color) 15%, transparent); }
+.implement-btn .warn-icon { font-size: 1rem; }
+.hint { font-size: 0.8rem; color: var(--text-secondary); margin: 0.5rem 0 0 0; }
+.hint-warn { color: var(--warning-color); }
+
+#panel-create-issues #create-issues-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+#panel-create-issues .hint[data-issues-state="running"] { color: var(--accent-color); }
+#panel-create-issues .hint[data-issues-state="done"] { color: var(--success-color); }
+#panel-create-issues .hint[data-issues-state="none"] { color: var(--warning-color); }
+.dispose-fieldset { margin-top: 1.25rem; padding: 0.85rem 0.95rem 1rem; border: 1px solid var(--border-color);
+  border-radius: 10px; background: color-mix(in srgb, var(--bg-color) 70%, transparent); }
+.dispose-fieldset legend { padding: 0 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.dispose-fieldset .dispose-hint { margin: 0 0 0.75rem 0; color: var(--text-secondary); font-size: 0.78rem; line-height: 1.4; }
+.dispose-fieldset .dispose-option { display: flex; align-items: flex-start; gap: 0.55rem; padding: 0.45rem 0.5rem; border-radius: 8px; cursor: pointer; transition: background 0.15s; }
+.dispose-fieldset .dispose-option:hover { background: color-mix(in srgb, var(--accent-color) 8%, transparent); }
+.dispose-fieldset .dispose-option input[type="radio"] { margin-top: 0.25rem; accent-color: var(--accent-color); }
+.dispose-fieldset .dispose-label { display: flex; flex-direction: column; gap: 0.15rem; }
+.dispose-fieldset .dispose-label strong { font-size: 0.85rem; font-weight: 600; }
+.dispose-fieldset .dispose-sub { font-size: 0.74rem; color: var(--text-secondary); line-height: 1.4; }
+.dispose-fieldset .dispose-move-row { margin-top: 0.65rem; padding-top: 0.65rem; border-top: 1px dashed var(--border-color); display: flex; flex-direction: column; gap: 0.3rem; }
+.dispose-fieldset .dispose-move-row label { font-size: 0.78rem; color: var(--text-secondary); font-weight: 500; }
+.dispose-fieldset .dispose-move-row input { width: 100%; padding: 0.45rem 0.6rem; border-radius: 6px; border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-color) 80%, transparent); color: var(--text); font: inherit; font-size: 0.82rem; }
+.dispose-fieldset .dispose-btn { margin-top: 0; }
+.dispose-fieldset .hint[data-dispose-state="running"] { color: var(--accent-color); }
+.dispose-fieldset .hint[data-dispose-state="done"] { color: var(--success-color); }
+section[data-open-questions] .open-questions-list { list-style: none; padding: 0; margin: 1rem 0; display: flex; flex-direction: column; gap: 0.5rem; }
+section[data-open-questions] .open-questions-list li { padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; }
+section[data-open-questions] .open-questions-list label { display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; }
+section[data-open-questions] .oq-issue-link { display: inline-block; margin-left: 0.5rem; padding: 1px 6px; font-size: 0.75rem; font-weight: 600;
+  color: var(--success-color); border: 1px solid var(--success-color); border-radius: 4px; text-decoration: none; }
+
+section[data-iteration]:not([data-active]) input,
+section[data-iteration]:not([data-active]) textarea,
+section[data-iteration]:not([data-active]) select { pointer-events: none; filter: grayscale(0.4); }
+</style>
+</head>
+<body>
+<div class="concept-layout">
+  <div class="concept-content">
+    <header class="page-header">
+      <h1>V&amp;V-Gate-Härtung</h1>
+      <p class="subtitle">Verifikations- &amp; Validierungskonzept — als Hook nach der Implementierung, der den Test wirklich erzwingt</p>
+      <button id="theme-toggle">🌙/☀️</button>
+    </header>
+    <main>
+      <section id="iter-1" data-iteration="1" hidden>
+        <header class="iteration-intro">
+          <h2>Iteration 1 · Umgesetztes Konzept</h2>
+          <p>Bestehendes Gate, die 5 Löcher warum Claude den Test überspringt, und die 3-Schichten-Härtung — bereits implementiert (348 Tests grün). Die 3 Schicht-Sektionen tragen eine <span class="eval-hint">Bewertung</span>: <strong>Verwerfen</strong> = überdenken/zurückbauen. Der Rest ist nur-lesen.</p>
+        </header>
+
+        <section id="ueberblick" data-nav-label="Überblick">
+          <h3>Überblick — was ist das V&amp;V-Gate?</h3>
+          <p class="lead">Zwei Hälften, beide als Stop-Hooks nach der Implementierung erzwungen:</p>
+          <div class="metric-row">
+            <div class="metric-card"><div class="label">Verifikation (V)</div><div class="value">Test grün?</div></div>
+            <div class="metric-card"><div class="label">Validierung (V)</div><div class="value">Das Richtige?</div></div>
+            <div class="metric-card good"><div class="label">Tests</div><div class="value">348 ✓</div></div>
+            <div class="metric-card good"><div class="label">Wedge-Risiko</div><div class="value">0</div></div>
+          </div>
+          <p><strong>Verifikation</strong> = „haben wir es richtig gebaut" (ein Test lief <em>und war grün</em>). <strong>Validierung</strong> = „haben wir das Richtige gebaut" (die Änderung erfüllt die Anforderung). Vorher gab es nur ein Verifikations-Gate, das obendrein leicht zu umgehen war.</p>
+        </section>
+
+        <section id="bestand" data-nav-label="Bestehendes Gate">
+          <h3>Bestehendes Gate (vorher)</h3>
+          <p>Eine 3-teilige Schleife existierte bereits — sauber, aber mit stillen Schlupflöchern:</p>
+          <div class="flow">post.flow.completion  →  setzt light-pending / light-verified<br>stop.flow.browsertest →  blockt wenn pending &amp;&amp; !verified<br>stop.flow.guard       →  erzwingt die Completion-Card</div>
+          <p class="lead">Das Gate war da — das Problem war <em>wie</em> es nachgab.</p>
+        </section>
+
+        <section id="luecken" data-nav-label="Die 5 Löcher">
+          <h3>Warum Claude trotzdem überspringt — 5 Löcher</h3>
+          <table class="matrix">
+            <tr><th>#</th><th>Loch</th><th>Mechanik</th></tr>
+            <tr><td>①</td><td>Ein-Block-Bypass</td><td>Gate blockt nur 1×, gibt bei <code>stop_hook_active</code> still nach — der Reason-Text erklärte den Trick sogar.</td></tr>
+            <tr><td>②</td><td>Gelaufen ≠ grün</td><td>Ein fehlgeschlagenes <code>npm test</code> setzte trotzdem <code>verified</code>.</td></tr>
+            <tr><td>③</td><td>Reihenfolge</td><td>Test vor späteren Edits befriedigte alles danach.</td></tr>
+            <tr><td>④</td><td>Stiller Skip</td><td>Übersprungen → kein Signal in der Card. Der User erfuhr es nie.</td></tr>
+            <tr><td>⑤</td><td>Keine Validierung</td><td>„Das Richtige?" existierte nur als unverbindlicher Text für getrackte Issues.</td></tr>
+          </table>
+          <p class="lead"><strong>Ehrliche Grenze:</strong> „niemals überspringbar" ist am Hook-Layer nicht erreichbar — <code>stop_hook_active</code> bricht Endlosschleifen. Ziel: Skip von <em>still</em> zu <em>teuer, begründet, sichtbar</em>.</p>
+        </section>
+
+        <section id="schicht-kern" data-nav-label="Schicht 1: Kern">
+          <h3>Schicht 1 · Kern <span class="eval-hint">Bewertung</span></h3>
+          <p>Schließt ②③④ ohne jedes Loop-Risiko (reine Logik, unit-getestet):</p>
+          <ul class="tight">
+            <li><span class="tag after">②</span> <strong>Grün statt gelaufen</strong> — <code>verified</code> nur bei bestandenem Lauf (<code>testRunOutcome</code> aus <code>tool_response</code>, konservativ: unparsbar = grün, nie False-Block).</li>
+            <li><span class="tag after">③</span> <strong>Reihenfolge</strong> — jeder neue Edit löscht <code>verified</code>; die Prüfung muss <em>nach</em> der letzten Änderung kommen.</li>
+            <li><span class="tag after">④</span> <strong>Sichtbarer Skip</strong> — die Card stempelt <code>⚠ UNVERIFIZIERT</code>, abgeleitet aus <code>pending &amp;&amp; !verified</code> beim Rendern (kein Timing-Problem).</li>
+          </ul>
+          <div class="eval-group">
+            <label class="eval-option"><input type="radio" name="eval-schicht-kern" value="discard"><span class="eval-label">Verwerfen</span></label>
+            <label class="eval-option"><input type="radio" name="eval-schicht-kern" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+          </div>
+          <div class="decision-comment-row"><label for="schicht-kern-note">Notiz / Override (optional)</label><textarea id="schicht-kern-note" data-comment="schicht-kern-note" placeholder="z.B. „grün-Detection zu aggressiv", „Reihenfolge ok"…" rows="2"></textarea></div>
+        </section>
+
+        <section id="schicht-eskalation" data-nav-label="Schicht 2: Eskalation">
+          <h3>Schicht 2 · Eskalation <span class="eval-hint">Bewertung</span></h3>
+          <p>Macht den Skip teuer statt frei — adressiert ①:</p>
+          <ul class="tight">
+            <li><strong>Block bis 2×</strong> statt 1× (<code>light-blockcount</code>, harter Cap → nie Wedge).</li>
+            <li><strong>Früher Skip nur mit Begründung</strong>: ein <code>SKIP-VERIFICATION: &lt;Grund&gt;</code>-Token in der Antwort gibt früh nach <em>und</em> stempelt ⚠ in der Card.</li>
+            <li><strong>Safety-Net</strong>: bricht der Zähler-Write, degradiert es sauber auf das alte Ein-Block-Verhalten.</li>
+          </ul>
+          <div class="eval-group">
+            <label class="eval-option"><input type="radio" name="eval-schicht-eskalation" value="discard"><span class="eval-label">Verwerfen</span></label>
+            <label class="eval-option"><input type="radio" name="eval-schicht-eskalation" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+          </div>
+          <div class="decision-comment-row"><label for="schicht-eskalation-note">Notiz / Override (optional)</label><textarea id="schicht-eskalation-note" data-comment="schicht-eskalation-note" placeholder="z.B. „Cap auf 3 erhöhen", „Token-Syntax ändern"…" rows="2"></textarea></div>
+        </section>
+
+        <section id="schicht-validierung" data-nav-label="Schicht 3: Validierung">
+          <h3>Schicht 3 · Validierung <span class="eval-hint">Bewertung</span></h3>
+          <p>Die zweite V — adressiert ⑤. Reuse des bestehenden Card-Gates (kein neuer Hook):</p>
+          <ul class="tight">
+            <li>Jede Quelltext-Änderung setzt <code>validation-pending</code>; ein neuer Edit invalidiert ein vorheriges <code>attested</code>.</li>
+            <li>Die Completion-Card muss ein <code>validation</code>-Feld tragen (Requirement → Status → Nachweis); der MCP setzt dann <code>validation-attested</code>.</li>
+            <li>Fehlt es bei einer Code-Änderung → <code>stop.flow.guard</code> blockt 1× und fordert Re-Render.</li>
+          </ul>
+          <div class="eval-group">
+            <label class="eval-option"><input type="radio" name="eval-schicht-validierung" value="discard"><span class="eval-label">Verwerfen</span></label>
+            <label class="eval-option"><input type="radio" name="eval-schicht-validierung" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+          </div>
+          <div class="decision-comment-row"><label for="schicht-validierung-note">Notiz / Override (optional)</label><textarea id="schicht-validierung-note" data-comment="schicht-validierung-note" placeholder="z.B. „Trigger auf needsLightVerification einengen", „Schema anpassen"…" rows="2"></textarea></div>
+        </section>
+
+        <section id="status" data-nav-label="Status">
+          <h3>Umsetzungs-Status</h3>
+          <p>Geändert: <code>browsertest-guard.js</code>, <code>card-guard.js</code>, <code>post.flow.completion.js</code>, <code>stop.flow.browsertest.js</code>, <code>stop.flow.guard.js</code>, <code>mcp-server/index.js</code> + Tests + <code>deep-knowledge/test-autonomy.md</code>.</p>
+          <ul class="tight">
+            <li>✅ 348 Tests grün (inkl. 102 neue/angepasste Gate-Tests), eslint clean, <code>node --check</code> ok.</li>
+            <li>⚠ Wirkt im Source-Repo — installierte Kopie der Consumer wird erst per <code>/devops-plugin-update</code> aktiv.</li>
+            <li>⏳ Noch nicht committet / geshippt (kein Auftrag dazu).</li>
+          </ul>
+        </section>
+
+        <section id="general-comments" data-nav-label="Allgemeine Anmerkungen">
+          <h3>Allgemeine Anmerkungen</h3>
+          <div class="comment-field"><textarea data-comment="general" placeholder="Weitere Gedanken zum V&amp;V-Konzept?"></textarea></div>
+        </section>
+      </section>
+
+      <section id="iter-final" data-iteration="2" data-final-report data-active>
+        <header class="iteration-intro">
+          <h2>Abschlussbericht · V&amp;V-Gate-Härtung</h2>
+          <p>Alle drei Schichten mit „Miteinbeziehen" bestätigt, keine Overrides. Die Implementierung stand bereits — nichts war zurückzubauen oder zu ändern. Bericht unten; offene Punkte kannst du rechts als Issues anlegen.</p>
+        </header>
+
+        <section id="zusammenfassung" data-nav-label="Zusammenfassung">
+          <h3>Zusammenfassung</h3>
+          <p>Das V&amp;V-Gate wurde in drei Schichten gehärtet — alle vom dir bestätigt (Miteinbeziehen, keine Notizen): <strong>Kern</strong> (grün-statt-gelaufen, Reihenfolge, sichtbarer ⚠-Skip), <strong>Eskalation</strong> (Block bis 2×, Pflicht-Token <code>SKIP-VERIFICATION:</code>) und <strong>Validierung</strong> (Pflicht-<code>validation</code>-Feld in der Card, gated). Verifikation für die Änderung selbst: <strong>348 Tests grün</strong>, eslint clean, <code>node --check</code> ok.</p>
+          <p class="lead">Noch nicht committet/geshippt — kein Auftrag dazu. Wirkt bei Consumern erst nach <code>/devops-ship</code> + <code>/devops-plugin-update</code>.</p>
+        </section>
+
+        <section id="dateien" data-nav-label="Geänderte Dateien">
+          <h3>Geänderte Dateien</h3>
+          <ul class="tight">
+            <li><code>hooks/lib/browsertest-guard.js</code> — grün-Detection (<code>testRunOutcome</code>), Eskalations-Logik (<code>decideLightTest</code>, Cap, Skip-Token), Reason-Texte.</li>
+            <li><code>hooks/lib/card-guard.js</code> — Validierungs-Gate in <code>decideAction</code> + <code>buildValidationReason</code>.</li>
+            <li><code>hooks/post-tool-use/post.flow.completion.js</code> — grün-Gate, Reihenfolge-Invalidierung, <code>validation-pending</code>.</li>
+            <li><code>hooks/stop/stop.flow.browsertest.js</code> · <code>stop.flow.guard.js</code> — Verdrahtung beider Gates.</li>
+            <li><code>mcp-server/index.js</code> — <code>validation</code>-Param, ⚠-Stempel, <code>validation-attested</code>.</li>
+            <li>Tests (102 neu/angepasst) + <code>deep-knowledge/test-autonomy.md</code> + README-Sync.</li>
+          </ul>
+        </section>
+
+        <section id="verifikation" data-nav-label="Tests / Verifikation">
+          <h3>Tests / Verifikation</h3>
+          <ul class="tight">
+            <li>✅ <code>npm test</code> — 348/348 grün (21 Dateien), inkl. 102 neue/angepasste Gate-Tests.</li>
+            <li>✅ <code>npm run lint</code> — clean (1 Regex-Escape gefixt).</li>
+            <li>✅ <code>node --check</code> auf allen 4 editierten Hooks + MCP.</li>
+          </ul>
+        </section>
+
+        <section id="offene-fragen" data-nav-label="Offene Fragen &amp; TODOs" data-open-questions>
+          <h3>Offene Fragen &amp; TODOs</h3>
+          <p class="lead">Standardmäßig angehakt = wird als Issue angelegt. Hak ab, was du NICHT willst.</p>
+          <ul class="open-questions-list">
+            <li><label><input type="checkbox" name="oq-debug-exitcode" checked
+                  data-issue-title="post.flow.debug liest nicht vorhandenes hook.exit_code (toter Failure-Zähler)"
+                  data-issue-type="bug"
+                  data-issue-body="post.flow.debug.js liest hook.exit_code direkt; das PostToolUse-Payload enthält dieses Top-Level-Feld nicht (Outcome steckt in tool_response). Dadurch greift der 2x-Bash-Failure-Detektor nie. Fix: tool_response defensiv parsen (analog testRunOutcome in browsertest-guard.js).">
+              <span class="oq-label">Bug: <code>post.flow.debug.js</code> liest nicht-vorhandenes <code>hook.exit_code</code> → Failure-Zähler greift nie</span></label></li>
+            <li><label><input type="checkbox" name="oq-validation-scope" checked
+                  data-issue-title="Validierungs-Trigger-Scope überprüfen (isCodeChange vs needsLightVerification)"
+                  data-issue-type="chore"
+                  data-issue-body="validation-pending wird aktuell surface-agnostisch via isCodeChange gesetzt (jede Quelländerung). Prüfen, ob das bei DOM-Profilen (Backend-Edits in Web-Projekt) zu breit ist und ggf. an needsLightVerification koppeln.">
+              <span class="oq-label">Review: Validierungs-Trigger an <code>isCodeChange</code> gekoppelt — ggf. einengen</span></label></li>
+            <li><label><input type="checkbox" name="oq-ship" checked
+                  data-issue-title="V&V-Gate-Härtung shippen (Release + Plugin-Update)"
+                  data-issue-type="chore"
+                  data-issue-body="Die V&V-Gate-Härtung ist implementiert + getestet, aber nicht committet/geshippt. Per /devops-ship releasen, danach in Consumer-Projekten /devops-plugin-update.">
+              <span class="oq-label">Task: Härtung per <code>/devops-ship</code> releasen + Consumer-Update</span></label></li>
+          </ul>
+        </section>
+
+        <section id="naechste-schritte" data-nav-label="Nächste Schritte">
+          <h3>Nächste Schritte</h3>
+          <ul class="tight">
+            <li>Commit der Änderungen auf dem Feature-Branch.</li>
+            <li><code>/devops-ship</code> für Release + CHANGELOG.</li>
+            <li>In Consumer-Projekt mit <code>/devops-plugin-update</code> verifizieren, dass das gehärtete Gate greift.</li>
+          </ul>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <aside class="concept-decision-panel">
+    <nav class="iteration-tabs" role="tablist" aria-label="Iterationen">
+      <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="false" aria-controls="iter-1">Iteration 1</button>
+      <button class="iteration-tab" role="tab" data-final-report data-iteration="2" aria-selected="true" aria-controls="iter-final">Abschlussbericht</button>
+    </nav>
+    <h3>Entscheidungen</h3>
+    <nav class="section-nav" id="section-nav" aria-label="Abschnitte"></nav>
+    <div id="panel-ready">
+      <div id="decision-summary"></div>
+      <div id="connection-connecting" class="panel-warning panel-warning--connecting" style="display: flex;">
+        <span class="warning-icon" aria-hidden="true">⋯</span>
+        <strong>Claude verbindet sich</strong>
+        <p class="warning-message">Einen Moment — die Verbindung wird aufgebaut.</p>
+        <button type="button" class="panel-warning__ack-btn" data-ack="connecting">Verstanden</button>
+      </div>
+      <div id="connection-warning" class="panel-warning" style="display: none;">
+        <span class="warning-icon" aria-hidden="true">⚠</span>
+        <strong>Claude ist nicht verbunden</strong>
+        <p class="warning-message">Du kannst trotzdem absenden — der Klick wird gespeichert und gesendet, sobald Claude wieder da ist.</p>
+        <button type="button" class="panel-warning__ack-btn" data-ack="warning">Verstanden</button>
+      </div>
+      <button id="submit-iterate-btn" class="primary submit-btn">Zur nächsten Iteration</button>
+      <p class="hint">Deine Auswahl geht an Claude für die nächste Iteration. Es wird kein Code geschrieben.</p>
+      <p class="hint hint-cache" data-cache-hint="iterate" hidden><span aria-hidden="true">⚠</span> gecached — wird beim Verbinden gesendet</p>
+      <div class="submit-gap" aria-hidden="true"></div>
+      <button id="submit-implement-btn" class="implement-btn"><span class="warn-icon" aria-hidden="true">⚠</span>Mit Feedback implementieren</button>
+      <p class="hint hint-warn">Claude setzt die Auswahl jetzt in echte Änderungen um.</p>
+      <p class="hint hint-cache" data-cache-hint="implement" hidden><span aria-hidden="true">⚠</span> gecached — wird beim Verbinden gesendet</p>
+    </div>
+    <div id="panel-submitted" style="display: none;">
+      <div class="submitted-indicator"><span class="check-icon">✓</span><strong>Entscheidungen übermittelt</strong></div>
+      <ol class="status-steps" id="status-steps" aria-live="polite">
+        <li data-step="submitted" data-state="done"><span class="step-icon" aria-hidden="true">✓</span><span class="step-label">Übermittelt</span></li>
+        <li data-step="received" data-state="active"><span class="step-icon" aria-hidden="true">⏳</span><span class="step-label">Claude verarbeitet</span></li>
+        <li data-step="implemented" data-state="pending" hidden>
+          <span class="step-icon" aria-hidden="true">○</span>
+          <span class="step-label" data-state-label="pending">Warten…</span>
+          <span class="step-label" data-state-label="active">Implementierung läuft</span>
+          <span class="step-label" data-state-label="done">Implementierung abgeschlossen</span>
+        </li>
+      </ol>
+      <p class="submitted-hint">Claude verarbeitet deine Auswahl. Wechsle zum <strong>Claude Chat</strong> um den Fortschritt zu sehen.</p>
+      <div class="waiting-animation"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+    </div>
+    <div id="panel-final-report" style="display: none;">
+      <div class="final-report-indicator"><span class="check-icon">✓</span><strong>Implementierung abgeschlossen</strong></div>
+      <p class="final-report-hint">Die Implementierung ist abgeschlossen. Sieh dir den Bericht links an.</p>
+      <div id="panel-create-issues" hidden>
+        <button id="create-issues-btn" class="primary submit-btn" disabled>Issues erstellen</button>
+        <p class="hint">Erstellt GitHub-Issues für die ausgewählten Punkte.</p>
+        <p class="hint hint-none" data-issues-state="none" hidden><span aria-hidden="true">⚠</span> Keine Punkte ausgewählt.</p>
+        <p class="hint hint-running" data-issues-state="running" hidden><span aria-hidden="true">⏳</span> Issues werden erstellt …</p>
+        <p class="hint hint-done" data-issues-state="done" hidden><span aria-hidden="true">✓</span> Issues erstellt</p>
+      </div>
+      <fieldset id="panel-dispose-concept" class="dispose-fieldset">
+        <legend>Concept-Files behalten?</legend>
+        <p class="hint dispose-hint">Default = verwerfen. Entscheidungen sind bereits in Commits/Issues — die HTML-Datei muss selten in git bleiben.</p>
+        <label class="dispose-option"><input type="radio" name="dispose-mode" value="discard" checked><span class="dispose-label"><strong>Verwerfen (Standard)</strong><span class="dispose-sub">HTML + Decisions-JSON löschen, kein git-Eintrag.</span></span></label>
+        <label class="dispose-option"><input type="radio" name="dispose-mode" value="keep"><span class="dispose-label"><strong>Im Projekt behalten</strong><span class="dispose-sub">Files bleiben in docs/concepts/ und sind git-getrackte Artefakte.</span></span></label>
+        <label class="dispose-option"><input type="radio" name="dispose-mode" value="gitignore"><span class="dispose-label"><strong>Nur lokal / .gitignore</strong><span class="dispose-sub">Files bleiben lokal, ein Eintrag wird zur .gitignore hinzugefügt.</span></span></label>
+        <div class="dispose-move-row"><label for="dispose-move-to">Verschieben nach (optional):</label><input id="dispose-move-to" name="dispose-move-to" type="text" autocomplete="off" spellcheck="false" placeholder="z.B. docs/architecture/"></div>
+        <div class="submit-gap" aria-hidden="true"></div>
+        <button id="dispose-concept-btn" class="implement-btn dispose-btn"><span aria-hidden="true">⤓</span>Concept beenden</button>
+        <p class="hint hint-warn">Schliesst die Concept-Session und wendet die Datei-Disposition oben an.</p>
+        <p class="hint hint-running" data-dispose-state="running" hidden><span aria-hidden="true">⏳</span> Räume auf …</p>
+        <p class="hint hint-done" data-dispose-state="done" hidden><span aria-hidden="true">✓</span> Concept beendet.</p>
+      </fieldset>
+    </div>
+  </aside>
+</div>
+
+<div class="content-dimmer" id="content-dimmer" role="button" tabindex="-1" aria-label="Schimmer entfernen" title="Schimmer entfernen" hidden></div>
+
+<script type="application/json" id="concept-decisions">
+{"submitted": false, "decisions": [], "comments": []}
+</script>
+<script>
+// --- State persistence (localStorage + TTL) ---
+const STORAGE_KEY = 'concept-state-' + location.pathname.split('/').pop().replace('.html', '');
+const STATE_TTL_MS = 24 * 60 * 60 * 1000;
+let _userInteracted = false;
+function _markUserInteracted(e) { if (e && e.isTrusted) _userInteracted = true; }
+document.addEventListener('change', _markUserInteracted, true);
+document.addEventListener('input', _markUserInteracted, true);
+document.addEventListener('iteration:changed', () => { _userInteracted = false; });
+
+function saveState() {
+  const state = { _savedAt: Date.now(), _pageVersion: document.documentElement.dataset.pageVersion || '' };
+  document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
+    if (el.name || el.id) state['input:' + (el.name || el.id) + ':' + el.value] = el.checked; });
+  document.querySelectorAll('textarea, input[type="text"]').forEach(el => {
+    if (el.id || el.dataset.comment) state['text:' + (el.id || el.dataset.comment)] = el.value; });
+  state['theme'] = document.documentElement.getAttribute('data-theme');
+  if (_userInteracted) state['_userInteracted'] = true;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+function restoreState() {
+  const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return;
+  try { const state = JSON.parse(raw);
+    if (state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) { localStorage.removeItem(STORAGE_KEY); return; }
+    if (state._pageVersion && state._pageVersion !== (document.documentElement.dataset.pageVersion || '')) { localStorage.removeItem(STORAGE_KEY); return; }
+    if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+    if (state._userInteracted) _userInteracted = true;
+    Object.entries(state).forEach(([key, value]) => {
+      if (key.startsWith('_')) return;
+      const [type, ...rest] = key.split(':');
+      if (type === 'input') {
+        const [name, val] = [rest.slice(0, -1).join(':'), rest[rest.length - 1]];
+        const el = document.querySelector(`input[name="${name}"][value="${val}"]`); if (el) el.checked = value;
+      } else if (type === 'text') {
+        const id = rest.join(':');
+        const el = document.querySelector(`[data-comment="${id}"]`) || document.getElementById(id); if (el) el.value = value;
+      }
+    });
+  } catch (e) {}
+}
+
+// --- Comment Slot Injection (safety net) ---
+function ensureCommentSlots() {
+  document.querySelectorAll('[data-decision]').forEach(group => {
+    const card = group.closest('.variant-evaluation, section[id]') || group.parentElement;
+    if (!card) return;
+    if (card.querySelector('textarea[data-comment]')) return;
+    const id = (group.dataset.decision || group.id || '').trim(); if (!id) return;
+    const commentKey = id + '-note';
+    const row = document.createElement('div'); row.className = 'decision-comment-row';
+    const label = document.createElement('label'); label.setAttribute('for', commentKey); label.textContent = 'Notiz / Override (optional)';
+    const ta = document.createElement('textarea'); ta.id = commentKey; ta.dataset.comment = commentKey; ta.placeholder = 'z.B. „nur für X", „mit Variante Y"…'; ta.rows = 2;
+    row.appendChild(label); row.appendChild(ta);
+    if (group.nextSibling && group.parentNode === card) group.parentNode.insertBefore(row, group.nextSibling); else card.appendChild(row);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => { ensureCommentSlots(); restoreState(); });
+document.addEventListener('change', saveState);
+document.addEventListener('input', saveState);
+
+// --- Section nav (free template — detects opt-in bi-state) ---
+function buildSectionNav() {
+  const nav = document.getElementById('section-nav'); if (!nav) return;
+  const visible = document.querySelector('section[data-iteration]:not([hidden])'); if (!visible) return;
+  const sections = visible.querySelectorAll('section[id][data-nav-label]');
+  nav.innerHTML = '';
+  sections.forEach(sec => {
+    const id = sec.id, label = sec.dataset.navLabel;
+    const hasEval = !!sec.querySelector(`input[name="eval-${CSS.escape(id)}"]`);
+    const link = document.createElement('a');
+    link.href = '#' + id; link.className = 'section-nav-item'; link.dataset.sectionId = id;
+    if (hasEval) link.setAttribute('data-variant', '');
+    const labelEl = document.createElement('span'); labelEl.className = 'section-nav-label'; labelEl.textContent = label;
+    link.appendChild(labelEl);
+    if (hasEval) { const s = document.createElement('span'); s.className = 'section-nav-state'; link.appendChild(s); }
+    nav.appendChild(link);
+  });
+  updateSectionNavState();
+}
+function updateSectionNavState() {
+  const labels = { include: 'Miteinbeziehen', discard: 'Verwerfen' };
+  document.querySelectorAll('.section-nav-item[data-variant]').forEach(link => {
+    const id = link.dataset.sectionId;
+    const checked = document.querySelector(`input[name="eval-${CSS.escape(id)}"]:checked`);
+    const currentState = checked ? checked.value : 'include';
+    const stateEl = link.querySelector('.section-nav-state');
+    if (stateEl) { stateEl.textContent = labels[currentState] || currentState; stateEl.className = 'section-nav-state state-' + currentState; }
+  });
+}
+document.addEventListener('click', e => {
+  const link = e.target.closest('.section-nav-item'); if (!link) return;
+  e.preventDefault();
+  const target = document.querySelector(link.getAttribute('href'));
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+document.addEventListener('change', updateSectionNavState);
+
+// --- Iteration tabs (final-report aware) ---
+function showIteration(n) {
+  document.querySelectorAll('section[data-iteration]').forEach(sec => { sec.hidden = String(sec.dataset.iteration) !== String(n); });
+  document.querySelectorAll('.iteration-tab').forEach(tab => {
+    tab.setAttribute('aria-selected', String(tab.dataset.iteration) === String(n) ? 'true' : 'false'); });
+  const activeSec = document.querySelector('section[data-iteration][data-active]');
+  const isLive = activeSec && String(activeSec.dataset.iteration) === String(n);
+  const visibleSec = document.querySelector('section[data-iteration]:not([hidden])');
+  const isFinal = !!(visibleSec && visibleSec.hasAttribute('data-final-report'));
+  const submitted = document.body.classList.contains('concept-submitted');
+  const panelReady = document.getElementById('panel-ready');
+  const panelSubmitted = document.getElementById('panel-submitted');
+  const panelFinal = document.getElementById('panel-final-report');
+  if (panelFinal) panelFinal.style.display = (isFinal && isLive) ? 'block' : 'none';
+  if (panelReady) panelReady.style.display = (isLive && !isFinal && !submitted) ? 'block' : 'none';
+  if (panelSubmitted) panelSubmitted.style.display = (isLive && !isFinal && submitted) ? 'block' : 'none';
+  buildSectionNav();
+  if (typeof updateCreateIssuesPanel === 'function') updateCreateIssuesPanel();
+  document.dispatchEvent(new CustomEvent('iteration:changed'));
+}
+document.querySelectorAll('.iteration-tab').forEach(tab => tab.addEventListener('click', () => showIteration(tab.dataset.iteration)));
+document.addEventListener('DOMContentLoaded', () => {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (active) showIteration(active.dataset.iteration);
+});
+
+// --- Theme ---
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const html = document.documentElement;
+  html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+
+// --- collectDecisions (dispatcher + generic catch-all) ---
+function collectAllFormFields(scope) {
+  const fields = {};
+  scope.querySelectorAll('input, select, textarea').forEach(el => {
+    const key = el.dataset.field || el.dataset.comment || el.name || el.id;
+    if (!key) return;
+    if (el.type === 'checkbox') fields[key] = el.checked;
+    else if (el.type === 'radio') { if (el.checked) fields[el.name] = el.value; }
+    else fields[key] = el.value;
+  });
+  return fields;
+}
+function collectFreeDecisions() {
+  const decisions = [];
+  document.querySelectorAll('section[id][data-nav-label]').forEach(sec => {
+    const radio = sec.querySelector(`input[name="eval-${CSS.escape(sec.id)}"]:checked`);
+    if (!radio) return;
+    decisions.push({ id: sec.id, label: sec.dataset.navLabel || sec.id, evaluation: radio.value });
+  });
+  const comments = [];
+  document.querySelectorAll('[data-comment]').forEach(el => {
+    if (el.value.trim()) comments.push({ id: el.dataset.comment, text: el.value.trim() });
+  });
+  return { submitted: true, template: 'free', decisions, comments };
+}
+function collectDecisions(action = 'iterate') {
+  const active = document.querySelector('section[data-iteration][data-active]') || document.body;
+  const allFields = collectAllFormFields(active);
+  const payload = collectFreeDecisions();
+  payload.action = action;
+  payload.allFields = allFields;
+  return payload;
+}
+
+// --- Reload poller ---
+let _bootReloadCounter = null;
+async function pollReload() {
+  try { const res = await fetch('/reload', { cache: 'no-store' }); if (!res.ok) return;
+    const { counter } = await res.json();
+    if (_bootReloadCounter === null) { _bootReloadCounter = counter; return; }
+    if (counter > _bootReloadCounter) location.reload();
+  } catch (e) {}
+}
+setInterval(pollReload, 3000);
+document.addEventListener('DOMContentLoaded', pollReload);
+
+// --- Status progress steps ---
+function _stepEl(name) { return document.querySelector('#status-steps li[data-step="' + name + '"]'); }
+function _setStep(name, state, icon) {
+  const li = _stepEl(name); if (!li) return;
+  li.dataset.state = state;
+  const iconEl = li.querySelector('.step-icon'); if (iconEl && icon) iconEl.textContent = icon;
+}
+function resetStatusSteps(action) {
+  _setStep('submitted', 'done', '✓');
+  _setStep('received', 'active', '⏳');
+  const impl = _stepEl('implemented');
+  if (impl) { impl.hidden = (action !== 'implement'); impl.dataset.state = 'pending';
+    const iconEl = impl.querySelector('.step-icon'); if (iconEl) iconEl.textContent = '○'; }
+}
+function updateStatusSteps(data) {
+  if (!_submittedAt) return;
+  if (data && data._picked_up_at) {
+    const recv = _stepEl('received');
+    if (recv && recv.dataset.state !== 'done') {
+      _setStep('received', 'done', '✓');
+      if (_submittedAction === 'implement') {
+        const impl = _stepEl('implemented');
+        if (impl && !impl.hidden && impl.dataset.state === 'pending') _setStep('implemented', 'active', '⏳');
+      }
+    }
+  }
+  if (data && data._phase === 'implemented' && _submittedAction === 'implement') {
+    const recv = _stepEl('received'); if (recv && recv.dataset.state !== 'done') _setStep('received', 'done', '✓');
+    const impl = _stepEl('implemented'); if (impl && !impl.hidden && impl.dataset.state !== 'done') _setStep('implemented', 'done', '✓');
+  }
+}
+
+// --- Submit (two-button) + content dimmer ---
+let _submittedAt = 0, _submittedReloadCounter = null, _submitInFlight = false, _submittedAction = null;
+function showContentDimmer() { const dim = document.getElementById('content-dimmer'); if (dim) dim.hidden = false; }
+function hideContentDimmer() { const dim = document.getElementById('content-dimmer'); if (dim) dim.hidden = true; document.body.classList.remove('content-dimmed'); }
+document.getElementById('content-dimmer')?.addEventListener('click', hideContentDimmer);
+document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; const dim = document.getElementById('content-dimmer'); if (dim && !dim.hidden) hideContentDimmer(); });
+
+async function submitWithAction(action) {
+  if (_submitInFlight || _submittedAt) return;
+  if (!_userInteracted) {
+    const msg = (action === 'implement')
+      ? 'Du hast nichts geändert. Trotzdem mit Feedback implementieren? Claude schreibt dann Code.'
+      : 'Du hast nichts geändert. Trotzdem "Zur nächsten Iteration" absenden?';
+    if (!window.confirm(msg)) return;
+  }
+  _submitInFlight = true;
+  const data = collectDecisions(action);
+  document.getElementById('concept-decisions').textContent = JSON.stringify(data);
+  document.body.classList.add('concept-submitted', 'content-dimmed');
+  showContentDimmer();
+  _submittedAt = Date.now(); _submittedReloadCounter = _bootReloadCounter; _submittedAction = action;
+  resetStatusSteps(action);
+  document.getElementById('panel-ready').style.display = 'none';
+  document.getElementById('panel-submitted').style.display = 'block';
+  try { await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); }
+  catch (e) { localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data)); }
+  saveState();
+  _submitInFlight = false;
+}
+function wireSubmit(btnId, action) { const btn = document.getElementById(btnId); if (btn) btn.addEventListener('click', () => submitWithAction(action)); }
+wireSubmit('submit-iterate-btn', 'iterate');
+wireSubmit('submit-implement-btn', 'implement');
+
+// --- Final-report: create-issues + dispose ---
+function updateCreateIssuesPanel() {
+  const wrap = document.getElementById('panel-create-issues');
+  const btn = document.getElementById('create-issues-btn');
+  if (!wrap || !btn) return;
+  const active = document.querySelector('section[data-iteration][data-active]');
+  const isFinal = !!(active && active.hasAttribute('data-final-report'));
+  const oqBlock = isFinal ? active.querySelector('[data-open-questions]') : null;
+  const pendingBoxes = oqBlock ? oqBlock.querySelectorAll('input[type="checkbox"]:not(:disabled)') : [];
+  const visible = isFinal && pendingBoxes.length > 0;
+  wrap.hidden = !visible;
+  if (!visible) return;
+  const checked = Array.from(pendingBoxes).some(el => el.checked);
+  btn.disabled = !checked;
+  wrap.querySelectorAll('.hint[data-issues-state]').forEach(el => { el.hidden = el.dataset.issuesState !== 'none' || checked; });
+}
+async function submitCreateIssues() {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (!active || !active.hasAttribute('data-final-report')) return;
+  const oqBlock = active.querySelector('[data-open-questions]'); if (!oqBlock) return;
+  const items = Array.from(oqBlock.querySelectorAll('input[type="checkbox"]:not(:disabled)')).filter(el => el.checked).map(el => {
+    const labelEl = el.closest('label')?.querySelector('.oq-label');
+    const labelText = labelEl ? labelEl.textContent.trim() : '';
+    return { id: el.name || el.id || '', title: el.dataset.issueTitle || labelText, type: el.dataset.issueType || 'chore',
+      description: el.dataset.issueBody || labelText, role: el.dataset.issueRole || null, module: el.dataset.issueModule || null,
+      milestone: el.dataset.issueMilestone || null, selected: true };
+  });
+  const wrap = document.getElementById('panel-create-issues');
+  const btn = document.getElementById('create-issues-btn');
+  if (!items.length) { wrap?.querySelector('.hint[data-issues-state="none"]')?.removeAttribute('hidden'); return; }
+  btn.disabled = true;
+  wrap.querySelectorAll('.hint[data-issues-state]').forEach(el => { el.hidden = el.dataset.issuesState !== 'running'; });
+  const payload = { submitted: true, action: 'create-issues', items, disposition: collectDisposition() };
+  document.getElementById('concept-decisions').textContent = JSON.stringify(payload);
+  document.body.classList.add('concept-submitted', 'content-dimmed'); showContentDimmer();
+  try { await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
+  catch (e) { localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(payload)); }
+}
+document.getElementById('create-issues-btn')?.addEventListener('click', submitCreateIssues);
+
+function collectDisposition() {
+  const radio = document.querySelector('input[name="dispose-mode"]:checked');
+  const moveEl = document.getElementById('dispose-move-to');
+  const mode = radio ? radio.value : 'discard';
+  const moveTo = (moveEl && moveEl.value.trim()) ? moveEl.value.trim() : null;
+  return { mode, moveTo };
+}
+async function submitDisposeConcept() {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (!active || !active.hasAttribute('data-final-report')) return;
+  const fs = document.getElementById('panel-dispose-concept');
+  const btn = document.getElementById('dispose-concept-btn');
+  if (!fs || !btn) return;
+  btn.disabled = true;
+  fs.querySelectorAll('.hint[data-dispose-state]').forEach(el => { el.hidden = el.dataset.disposeState !== 'running'; });
+  const payload = { submitted: true, action: 'dispose-concept', disposition: collectDisposition() };
+  document.getElementById('concept-decisions').textContent = JSON.stringify(payload);
+  document.body.classList.add('concept-submitted', 'content-dimmed'); showContentDimmer();
+  try { await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
+  catch (e) { localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(payload)); }
+}
+document.getElementById('dispose-concept-btn')?.addEventListener('click', submitDisposeConcept);
+document.addEventListener('change', e => { if (e.target && e.target.matches('section[data-open-questions] input[type="checkbox"]')) updateCreateIssuesPanel(); });
+document.addEventListener('DOMContentLoaded', updateCreateIssuesPanel);
+
+// --- Offline submit queue ---
+async function retryPendingSubmission() {
+  const pendingKey = STORAGE_KEY + '-pending';
+  const pending = localStorage.getItem(pendingKey); if (!pending) return;
+  try { const res = await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: pending });
+    if (res.ok) localStorage.removeItem(pendingKey); } catch (e) {}
+}
+function restorePanelToReady() {
+  document.getElementById('panel-submitted').style.display = 'none';
+  document.getElementById('panel-ready').style.display = 'block';
+  ['submit-iterate-btn', 'submit-implement-btn'].forEach(id => { const btn = document.getElementById(id); if (btn) btn.disabled = false; });
+  document.body.classList.remove('concept-submitted', 'content-dimmed'); hideContentDimmer();
+  _submittedAt = 0; _submittedReloadCounter = null; _submitInFlight = false; _submittedAction = null;
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+// --- Heartbeat (claude_ts / server_ts split) ---
+const HEARTBEAT_STALE_MS = 90000, SERVER_STALE_MS = 90000;
+const PROCESSED_SAFETY_MS = 5 * 60 * 1000;
+let _lastHeartbeatTs = 0, _lastServerTs = 0;
+async function pollHeartbeat() {
+  try { const res = await fetch('/heartbeat', { cache: 'no-store' }); const data = await res.json();
+    _lastHeartbeatTs = data.claude_ts || data.ts || 0;
+    _lastServerTs = data.server_ts || 0;
+  } catch (e) {}
+}
+async function pollProcessedState() {
+  if (!_submittedAt) return;
+  try { const res = await fetch('/decisions', { cache: 'no-store' }); const data = await res.json();
+    updateStatusSteps(data);
+    const processedIso = data && data._processed_at; if (!processedIso) return;
+    const processedMs = Date.parse(processedIso);
+    if (!Number.isFinite(processedMs) || processedMs <= _submittedAt) return;
+    let reloadAdvanced = false;
+    try { const r2 = await fetch('/reload', { cache: 'no-store' });
+      if (r2.ok) { const { counter } = await r2.json(); reloadAdvanced = (_submittedReloadCounter !== null) && (counter > _submittedReloadCounter); }
+    } catch (_) {}
+    const longStale = (Date.now() - _submittedAt) > PROCESSED_SAFETY_MS;
+    if (reloadAdvanced || longStale) restorePanelToReady();
+  } catch (e) {}
+}
+const _overlayAck = { connecting: false, warning: false };
+document.addEventListener('click', (e) => {
+  const btn = e.target && e.target.closest && e.target.closest('.panel-warning__ack-btn'); if (!btn) return;
+  const which = btn.dataset.ack;
+  if (which === 'connecting' || which === 'warning') { _overlayAck[which] = true; checkClaudeConnection(); }
+});
+function _setCacheHints(visible) { document.querySelectorAll('[data-cache-hint]').forEach(el => { el.hidden = !visible; }); }
+function checkClaudeConnection() {
+  const now = Date.now();
+  const isConnected = _lastHeartbeatTs && (Date.now() - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
+  const serverAlive = _lastServerTs && (now - _lastServerTs) < SERVER_STALE_MS;
+  const bootstrapping = (_lastHeartbeatTs === 0) && serverAlive;
+  const connecting = document.getElementById('connection-connecting');
+  const warning = document.getElementById('connection-warning');
+  const btns = ['submit-iterate-btn', 'submit-implement-btn'].map(id => document.getElementById(id)).filter(Boolean);
+  const panelSubmitted = document.getElementById('panel-submitted');
+  if (isConnected) { _overlayAck.connecting = false; _overlayAck.warning = false; }
+  if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
+  if (isConnected) {
+    if (connecting) connecting.style.display = 'none';
+    if (warning) warning.style.display = 'none';
+    _setCacheHints(false); btns.forEach(b => b.disabled = false); retryPendingSubmission();
+  } else if (bootstrapping) {
+    if (connecting) connecting.style.display = _overlayAck.connecting ? 'none' : 'flex';
+    if (warning) warning.style.display = 'none';
+    _setCacheHints(_overlayAck.connecting); btns.forEach(b => b.disabled = !_overlayAck.connecting);
+  } else {
+    if (connecting) connecting.style.display = 'none';
+    if (warning) warning.style.display = _overlayAck.warning ? 'none' : 'flex';
+    _setCacheHints(_overlayAck.warning); btns.forEach(b => b.disabled = !_overlayAck.warning);
+  }
+}
+setInterval(async () => { await pollHeartbeat(); checkClaudeConnection(); await pollProcessedState(); }, 5000);
+</script>
+</body>
+</html>
