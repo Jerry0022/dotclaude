@@ -319,6 +319,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/devops-harden` | Explicit | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
 | `/devops-polish` | Explicit | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
 | `/devops-test-plan` | Explicit + Hook | Detect test profile, deterministic tool-chain recommendations per test request |
+| `/devops-graph` | Explicit + Hook | On-demand code knowledge graph via graphify, with opt-in auto-build + hard-gate enforcement |
 
 ### Agents (spawned for parallel work)
 
