@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark" data-page-version="2026-06-13T12:00:00" data-template="free">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept — repo-health UX</title>
+<style>
+:root {
+  --bg: #0d1117; --bg-color: #0d1117; --text: #c9d1d9; --text-color: #c9d1d9; --text-secondary: #8b949e; --text-muted: #8b949e;
+  --panel-bg: #161b22; --border-color: #30363d; --input-bg: #0d1117;
+  --accent-color: #58a6ff; --success-color: #3fb950; --warning-color: #d29922; --danger-color: #f85149;
+}
+html[data-theme="light"] {
+  --bg: #ffffff; --bg-color: #ffffff; --text: #24292f; --text-color: #24292f; --text-secondary: #57606a; --text-muted: #57606a;
+  --panel-bg: #f6f8fa; --border-color: #d0d7de; --input-bg: #ffffff;
+  --accent-color: #0969da;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
+button { font-family: inherit; }
+code { background: color-mix(in srgb, var(--accent-color) 12%, transparent); padding: 0.1rem 0.35rem;
+  border-radius: 5px; font-size: 0.88em; }
+
+.concept-layout { display: flex; min-height: 100vh; }
+.concept-content { flex: 1; padding: 2rem; overflow-y: auto; }
+.concept-decision-panel {
+  width: 20%; min-width: 260px; max-width: 360px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  padding: 1.5rem; border-left: 1px solid var(--border-color); background: var(--panel-bg);
+  z-index: 100; }
+@media (max-width: 768px) {
+  .concept-layout { flex-direction: column; }
+  .concept-decision-panel { width: 100%; max-width: none; height: auto;
+    position: sticky; bottom: 0; border-left: none; border-top: 1px solid var(--border-color); }
+}
+
+header.page-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+header.page-header h1 { margin: 0; font-size: 1.7rem; }
+header.page-header .subtitle { color: var(--text-secondary); margin: 0; flex: 1; }
+#theme-toggle { background: none; border: 1px solid var(--border-color); color: var(--text);
+  padding: 0.5rem 0.75rem; border-radius: 8px; cursor: pointer; }
+
+.iteration-intro { border-left: 3px solid var(--accent-color); padding: 0.75rem 1rem;
+  margin-bottom: 2rem; background: color-mix(in srgb, var(--accent-color) 8%, transparent); border-radius: 0 8px 8px 0; }
+.iteration-intro h2 { margin: 0 0 0.25rem 0; font-size: 1.1rem; }
+.iteration-intro p { margin: 0; color: var(--text-secondary); }
+
+section[id][data-nav-label] { margin-bottom: 2.5rem; padding: 1.5rem;
+  border: 1px solid var(--border-color); border-radius: 10px;
+  background: color-mix(in srgb, var(--panel-bg) 40%, transparent); }
+section[id][data-nav-label] h3 { margin-top: 0; }
+section[id][data-nav-label] p { margin: 0.6rem 0; }
+.lead { color: var(--text-secondary); }
+
+.metric-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin: 1rem 0; }
+.metric-card { padding: 1rem; border-radius: 8px; background: var(--panel-bg); border: 1px solid var(--border-color); }
+.metric-card .label { font-size: 0.78rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+.metric-card .value { font-size: 1.4rem; font-weight: 700; margin-top: 0.25rem; }
+.metric-card.good .value { color: var(--success-color); }
+.metric-card.warn .value { color: var(--warning-color); }
+.metric-card.bad .value { color: var(--danger-color); }
+
+table.matrix { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
+table.matrix th, table.matrix td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+table.matrix th { color: var(--text-secondary); font-weight: 600; }
+table.matrix code { white-space: nowrap; }
+.tag { display: inline-block; font-size: 0.72rem; padding: 0.12rem 0.5rem; border-radius: 999px; font-weight: 600; }
+.tag.before { background: color-mix(in srgb, var(--danger-color) 18%, transparent); color: var(--danger-color); }
+.tag.after { background: color-mix(in srgb, var(--success-color) 18%, transparent); color: var(--success-color); }
+
+ul.tight { margin: 0.5rem 0; padding-left: 1.2rem; }
+ul.tight li { margin-bottom: 0.35rem; }
+.flow { font-family: ui-monospace, monospace; font-size: 0.85rem; color: var(--text-secondary);
+  background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem 1rem; margin: 1rem 0; }
+
+.eval-hint { display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.55rem; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-color) 20%, transparent); color: var(--accent-color); margin-left: 0.5rem; vertical-align: middle; }
+
+.eval-group, .tri-state-group { display: flex; gap: 0; border: 1px solid var(--border-color);
+  border-radius: 8px; overflow: hidden; margin-top: 1rem; }
+.eval-option, .tri-state-option { flex: 1; display: flex; flex-direction: column; align-items: center;
+  padding: 0.7rem 1rem; cursor: pointer; text-align: center; position: relative;
+  border-right: 1px solid var(--border-color); transition: background 0.2s, box-shadow 0.2s; }
+.eval-option:last-child, .tri-state-option:last-child { border-right: none; }
+.eval-option:hover, .tri-state-option:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.eval-option input, .tri-state-option input { display: none; }
+.eval-option:has(input:checked) .eval-label, .tri-state-option:has(input:checked) .tri-state-label { font-weight: 700; }
+.eval-label, .tri-state-label { font-size: 0.9rem; transition: font-weight 0.15s; }
+.eval-option:has(input:checked)::after, .tri-state-option:has(input:checked)::after {
+  content: '✓'; position: absolute; top: 4px; right: 6px; font-size: 0.7rem; font-weight: 700;
+  width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; pointer-events: none; }
+.eval-option:has(input[value="include"]:checked), .tri-state-option:has(input[value="include"]:checked) {
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent); box-shadow: inset 0 0 0 2px var(--accent-color); }
+.eval-option:has(input[value="include"]:checked)::after, .tri-state-option:has(input[value="include"]:checked)::after {
+  background: var(--accent-color); color: white; }
+.eval-option:has(input[value="discard"]:checked), .tri-state-option:has(input[value="discard"]:checked) {
+  background: color-mix(in srgb, var(--danger-color) 12%, transparent); box-shadow: inset 0 0 0 2px var(--danger-color); }
+.eval-option:has(input[value="discard"]:checked)::after, .tri-state-option:has(input[value="discard"]:checked)::after {
+  background: var(--danger-color); color: white; }
+.eval-option:has(input[value="discard"]:checked) .eval-label, .tri-state-option:has(input[value="discard"]:checked) .tri-state-label {
+  color: var(--danger-color); }
+.eval-option:has(input:not(:checked)), .tri-state-option:has(input:not(:checked)) { opacity: 0.7; }
+.eval-option:has(input:not(:checked)):hover, .tri-state-option:has(input:not(:checked)):hover { opacity: 1; }
+
+.comment-field, .decision-comment-row { margin-top: 0.9rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.decision-comment-row label { font-size: 0.78rem; color: var(--text-muted); font-weight: 500; }
+.comment-field textarea, .decision-comment-row textarea { width: 100%; min-height: 56px; padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border-color); border-radius: 8px; background: var(--input-bg);
+  color: var(--text); font-family: inherit; font-size: 0.88rem; line-height: 1.5; resize: vertical; }
+.comment-field textarea:focus, .decision-comment-row textarea:focus { outline: none; border-color: var(--accent-color); }
+
+.iteration-tabs { display: flex; flex-direction: column; gap: 4px; margin-bottom: 1rem;
+  padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); }
+.iteration-tab { flex: 0 0 auto; text-align: left; padding: 6px 10px; border: 1px solid var(--border-color);
+  border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 0.85rem; cursor: pointer; }
+.iteration-tab:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); color: var(--text); }
+.iteration-tab[aria-selected="true"] { background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  color: var(--text); border-color: var(--accent-color); font-weight: 600; }
+.iteration-tab[aria-selected="true"]::before { content: "● "; color: var(--accent-color); }
+.iteration-tab[data-final-report] { border-color: var(--success-color); color: var(--success-color); }
+.iteration-tab[data-final-report][aria-selected="true"] { background: color-mix(in srgb, var(--success-color) 15%, transparent);
+  border-color: var(--success-color); color: var(--text); }
+.iteration-tab[data-final-report][aria-selected="true"]::before { content: "✓ "; color: var(--success-color); }
+.iteration-tab[data-final-report]:not([aria-selected="true"])::before { content: ""; }
+
+.section-nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+.section-nav-item { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.45rem 0.7rem; border-radius: 6px; text-decoration: none; color: var(--text);
+  font-size: 0.88rem; transition: background 0.15s; cursor: pointer; }
+.section-nav-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.section-nav-state { font-size: 0.78rem; color: var(--accent-color); white-space: nowrap; }
+.section-nav-state.state-discard { color: var(--danger-color); }
+
+#panel-ready { position: relative; }
+.panel-warning { position: absolute; inset: 0; z-index: 5; pointer-events: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.6rem; text-align: center; padding: 1.5rem; border-radius: 10px; border: 1px solid var(--warning-color);
+  background: color-mix(in srgb, var(--panel-bg) 88%, transparent); backdrop-filter: blur(2px); color: var(--text); }
+.panel-warning .warning-icon { font-size: 2.1rem; color: var(--warning-color); line-height: 1; }
+.panel-warning strong { color: var(--warning-color); font-size: 1rem; }
+.panel-warning .warning-message { font-size: 0.86rem; color: var(--text-secondary); line-height: 1.5; max-width: 280px; margin: 0; }
+.panel-warning__ack-btn { margin-top: 0.4rem; padding: 0.45rem 1.1rem; border-radius: 8px;
+  border: 1px solid var(--warning-color); background: color-mix(in srgb, var(--warning-color) 15%, transparent);
+  color: var(--warning-color); font-weight: 600; font-size: 0.86rem; cursor: pointer; }
+.panel-warning__ack-btn:hover { background: var(--warning-color); color: var(--panel-bg); }
+.panel-warning--connecting { border-color: var(--accent-color); }
+.panel-warning--connecting .warning-icon { color: var(--accent-color); animation: pulse-connect 1.4s ease-in-out infinite; }
+.panel-warning--connecting strong { color: var(--accent-color); }
+.panel-warning--connecting .panel-warning__ack-btn { border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent); color: var(--accent-color); }
+.panel-warning--connecting .panel-warning__ack-btn:hover { background: var(--accent-color); color: var(--panel-bg); }
+@keyframes pulse-connect { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+.hint-cache { font-size: 0.78rem; line-height: 1.35; margin: 0.25rem 0 0; color: var(--warning-color);
+  display: flex; align-items: center; gap: 0.35rem; }
+.hint-cache[hidden] { display: none; }
+
+.content-dimmer { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(1.5px); cursor: pointer; opacity: 0; transition: opacity 0.25s ease; pointer-events: none; }
+body.content-dimmed .content-dimmer:not([hidden]) { opacity: 1; pointer-events: auto; }
+.content-dimmer[hidden] { display: none; }
+
+.submitted-indicator, .final-report-indicator { display: flex; align-items: center; gap: 0.5rem; padding: 1rem;
+  margin-bottom: 0.75rem; border-radius: 8px; background: color-mix(in srgb, var(--success-color) 15%, transparent);
+  border: 1px solid var(--success-color); }
+.submitted-indicator .check-icon, .final-report-indicator .check-icon { font-size: 1.3rem; color: var(--success-color); }
+.submitted-hint, .final-report-hint { font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.5; }
+
+.status-steps { list-style: none; padding: 0; margin: 0 0 1rem 0; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; }
+.status-steps li { display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); transition: color 0.2s ease; }
+.status-steps li[data-state="active"] { color: var(--text); font-weight: 500; }
+.status-steps li[data-state="done"] { color: var(--success-color); }
+.status-steps .step-icon { display: inline-block; width: 1rem; text-align: center; flex-shrink: 0; }
+.status-steps li[data-state="active"] .step-icon { animation: step-pulse 1.4s ease-in-out infinite; }
+@keyframes step-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+.status-steps li .step-label[data-state-label] { display: none; }
+.status-steps li[data-state="pending"] .step-label[data-state-label="pending"],
+.status-steps li[data-state="active"] .step-label[data-state-label="active"],
+.status-steps li[data-state="done"] .step-label[data-state-label="done"] { display: inline; }
+
+.waiting-animation { display: flex; gap: 6px; justify-content: center; padding: 0.5rem 0; }
+.waiting-animation .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-color); animation: pulse 1.4s ease-in-out infinite; }
+.waiting-animation .dot:nth-child(2) { animation-delay: 0.2s; }
+.waiting-animation .dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes pulse { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+
+.submit-btn, .implement-btn { width: 100%; padding: 0.8rem 1rem; border-radius: 10px; font-weight: 600;
+  font-size: 0.95rem; cursor: pointer; margin-top: 0.5rem; font-family: inherit; }
+.submit-btn { border: none; background: var(--accent-color); color: white; }
+.submit-btn:disabled, .implement-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.submit-gap { height: 2rem; }
+.implement-btn { background: transparent; color: var(--warning-color); border: 1px solid var(--warning-color);
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+.implement-btn:hover { background: color-mix(in srgb, var(--warning-color) 15%, transparent); }
+.implement-btn .warn-icon { font-size: 1rem; }
+.hint { font-size: 0.8rem; color: var(--text-secondary); margin: 0.5rem 0 0 0; }
+.hint-warn { color: var(--warning-color); }
+
+#panel-create-issues #create-issues-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+#panel-create-issues .hint[data-issues-state="running"] { color: var(--accent-color); }
+#panel-create-issues .hint[data-issues-state="done"] { color: var(--success-color); }
+#panel-create-issues .hint[data-issues-state="none"] { color: var(--warning-color); }
+.dispose-fieldset { margin-top: 1.25rem; padding: 0.85rem 0.95rem 1rem; border: 1px solid var(--border-color);
+  border-radius: 10px; background: color-mix(in srgb, var(--bg-color) 70%, transparent); }
+.dispose-fieldset legend { padding: 0 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.dispose-fieldset .dispose-hint { margin: 0 0 0.75rem 0; color: var(--text-secondary); font-size: 0.78rem; line-height: 1.4; }
+.dispose-fieldset .dispose-option { display: flex; align-items: flex-start; gap: 0.55rem; padding: 0.45rem 0.5rem; border-radius: 8px; cursor: pointer; transition: background 0.15s; }
+.dispose-fieldset .dispose-option:hover { background: color-mix(in srgb, var(--accent-color) 8%, transparent); }
+.dispose-fieldset .dispose-option input[type="radio"] { margin-top: 0.25rem; accent-color: var(--accent-color); }
+.dispose-fieldset .dispose-label { display: flex; flex-direction: column; gap: 0.15rem; }
+.dispose-fieldset .dispose-label strong { font-size: 0.85rem; font-weight: 600; }
+.dispose-fieldset .dispose-sub { font-size: 0.74rem; color: var(--text-secondary); line-height: 1.4; }
+.dispose-fieldset .dispose-move-row { margin-top: 0.65rem; padding-top: 0.65rem; border-top: 1px dashed var(--border-color); display: flex; flex-direction: column; gap: 0.3rem; }
+.dispose-fieldset .dispose-move-row label { font-size: 0.78rem; color: var(--text-secondary); font-weight: 500; }
+.dispose-fieldset .dispose-move-row input { width: 100%; padding: 0.45rem 0.6rem; border-radius: 6px; border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-color) 80%, transparent); color: var(--text); font: inherit; font-size: 0.82rem; }
+.dispose-fieldset .dispose-btn { margin-top: 0; }
+.dispose-fieldset .hint[data-dispose-state="running"] { color: var(--accent-color); }
+.dispose-fieldset .hint[data-dispose-state="done"] { color: var(--success-color); }
+section[data-open-questions] .open-questions-list { list-style: none; padding: 0; margin: 1rem 0; display: flex; flex-direction: column; gap: 0.5rem; }
+section[data-open-questions] .open-questions-list li { padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; }
+section[data-open-questions] .open-questions-list label { display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; }
+section[data-open-questions] .oq-issue-link { display: inline-block; margin-left: 0.5rem; padding: 1px 6px; font-size: 0.75rem; font-weight: 600;
+  color: var(--success-color); border: 1px solid var(--success-color); border-radius: 4px; text-decoration: none; }
+
+section[data-iteration]:not([data-active]) input,
+section[data-iteration]:not([data-active]) textarea,
+section[data-iteration]:not([data-active]) select { pointer-events: none; filter: grayscale(0.4); }
+
+.opt-group { display: flex; flex-direction: column; gap: 0.55rem; margin: 1.1rem 0 0.3rem; }
+.opt-option { display: block; position: relative; padding: 0.65rem 0.9rem 0.7rem 2.1rem; border: 1px solid var(--border-color); border-radius: 9px; cursor: pointer; transition: background 0.15s, border-color 0.15s, box-shadow 0.15s; }
+.opt-option input { position: absolute; left: 0.75rem; top: 0.85rem; accent-color: var(--accent-color); }
+.opt-option:hover { background: color-mix(in srgb, var(--accent-color) 7%, transparent); }
+.opt-option:has(input:checked) { border-color: var(--accent-color); box-shadow: inset 0 0 0 1px var(--accent-color); background: color-mix(in srgb, var(--accent-color) 12%, transparent); }
+.opt-head { display: block; font-weight: 600; font-size: 0.94rem; }
+.opt-key { display: inline-block; min-width: 1.25rem; color: var(--accent-color); font-weight: 700; }
+.opt-desc { display: block; margin-top: 0.25rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; }
+.opt-badge { display: inline-block; margin-left: 0.4rem; font-size: 0.67rem; font-weight: 700; padding: 0.06rem 0.5rem; border-radius: 999px; background: color-mix(in srgb, var(--success-color) 20%, transparent); color: var(--success-color); vertical-align: middle; }
+.opt-badge.po { background: color-mix(in srgb, var(--accent-color) 20%, transparent); color: var(--accent-color); }
+.src { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.6rem; }
+.src b { color: var(--text-secondary); font-weight: 600; }
+.agent-chip { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.05rem 0.45rem; border-radius: 999px; border: 1px solid var(--border-color); color: var(--text-secondary); margin-right: 0.25rem; }
+
+.rh-mock{border:1px solid var(--border-color);border-radius:12px;padding:1rem 1.1rem;background:var(--bg);margin:1rem 0}
+.rh-scope{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-bottom:.8rem;padding-bottom:.7rem;border-bottom:1px dashed var(--border-color)}
+.rh-scope-lbl{color:var(--text-secondary);font-size:.85rem}
+.rh-pill{font-size:.82rem;padding:.2rem .7rem;border:1px solid var(--border-color);border-radius:999px;color:var(--text-secondary)}
+.rh-pill-on{border-color:var(--accent-color);color:var(--accent-color);background:color-mix(in srgb,var(--accent-color) 12%,transparent)}
+.rh-mut{color:var(--text-secondary)}
+.rh-head{font-size:.95rem;margin:.2rem 0 .8rem}
+.rh-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:.6rem;margin-bottom:.8rem}
+.rh-kpi{background:var(--panel-bg);border:1px solid var(--border-color);border-radius:8px;padding:.5rem .7rem}
+.rh-kpi-l{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-secondary)}
+.rh-kpi-v{font-size:1.3rem;font-weight:700;margin-top:.1rem}
+.rh-kpi.good .rh-kpi-v{color:var(--success-color)}.rh-kpi.warn .rh-kpi-v{color:var(--warning-color)}
+.rh-banner{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;font-size:.84rem;padding:.5rem .7rem;border-radius:8px;background:color-mix(in srgb,var(--accent-color) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent-color) 35%,transparent)}
+.rh-banner-link{color:var(--accent-color);font-weight:600;cursor:pointer;text-decoration:underline}
+.rh-anno{font-size:.7rem;color:var(--accent-color);background:color-mix(in srgb,var(--accent-color) 12%,transparent);border-radius:999px;padding:.08rem .5rem;margin-left:auto;white-space:nowrap}
+.rh-group{border:1px solid var(--border-color);border-radius:10px;margin:.7rem 0;overflow:hidden;background:var(--panel-bg)}
+.rh-group-head{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.6rem .8rem;cursor:pointer;list-style:none;font-size:.92rem}
+.rh-group-head::-webkit-details-marker{display:none}
+.rh-chev{color:var(--text-secondary);width:1rem}
+.rh-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.rh-dot.good{background:var(--success-color)}.rh-dot.warn{background:var(--warning-color)}.rh-dot.info{background:var(--accent-color)}
+.rh-count{font-size:.8rem;color:var(--text-secondary)}
+.rh-count .good{color:var(--success-color)}.rh-count .bad{color:var(--danger-color)}
+.rh-entry{display:flex;align-items:flex-start;gap:.6rem;padding:.55rem .8rem;border-top:1px solid var(--border-color)}
+.rh-entry.wt{background:color-mix(in srgb,var(--accent-color) 5%,transparent)}
+.rh-cb{margin-top:.25rem;accent-color:var(--danger-color)}
+.rh-wt-icon{color:var(--warning-color);margin-top:.1rem}.rh-wt-icon.ok{color:var(--text-secondary)}
+.rh-entry-main{flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:.4rem}
+.rh-branch{font-size:.9rem;font-weight:600}
+.rh-path{flex-basis:100%;font-size:.74rem;color:var(--text-secondary);font-family:ui-monospace,monospace}
+.rh-badge{font-size:.7rem;padding:.08rem .5rem;border-radius:5px;border:1px solid var(--border-color);color:var(--text-secondary)}
+.rh-badge.merged{color:var(--success-color);border-color:color-mix(in srgb,var(--success-color) 45%,transparent)}
+.rh-badge.unmerged,.rh-badge.changes{color:var(--warning-color);border-color:color-mix(in srgb,var(--warning-color) 45%,transparent)}
+.rh-badge.clean{color:var(--text-secondary)}
+.rh-badge.br-remote{color:var(--accent-color);border-color:color-mix(in srgb,var(--accent-color) 45%,transparent)}
+.rh-detail{display:inline}
+.rh-detail>summary{display:inline-flex;align-items:center;justify-content:center;width:1.2rem;height:1.2rem;border:1px solid var(--border-color);border-radius:50%;font-size:.72rem;cursor:pointer;color:var(--accent-color);list-style:none}
+.rh-detail>summary::-webkit-details-marker{display:none}
+.rh-detail-body{flex-basis:100%;font-size:.78rem;color:var(--text);background:var(--bg);border:1px solid var(--border-color);border-radius:6px;padding:.45rem .6rem;margin-top:.35rem;line-height:1.5}
+.rh-act{font-size:.74rem;font-weight:600;white-space:nowrap;margin-top:.15rem}
+.rh-act.good{color:var(--danger-color)}.rh-act.mut{color:var(--text-secondary)}
+.rh-manifest{border:1px solid var(--border-color);border-radius:10px;padding:.8rem 1rem;background:var(--panel-bg)}
+.rh-manifest-h{font-weight:600;margin-bottom:.4rem;font-size:.9rem}
+.rh-manifest-l{list-style:none;padding:0;margin:0 0 .7rem;font-size:.86rem;display:flex;flex-direction:column;gap:.3rem}
+.rh-dryrun{background:var(--danger-color);color:#fff;border:none;border-radius:8px;padding:.5rem .9rem;font-weight:600;cursor:pointer;font-family:inherit}
+.rh-dry-note{font-size:.78rem;color:var(--text-secondary);margin-top:.4rem;font-style:italic}
+
+.rh-attr{display:flex;flex-direction:column;gap:.5rem}
+.rh-attr-row{display:flex;gap:.7rem;align-items:baseline;flex-wrap:wrap}
+.rh-attr-k{min-width:5.5rem;font-weight:600;font-size:.85rem;color:var(--text-secondary)}
+.rh-attr-v{flex:1;display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
+.rh-mx{width:100%;border-collapse:collapse;font-size:.86rem}
+.rh-mx th,.rh-mx td{border:1px solid var(--border-color);padding:.55rem .7rem;text-align:left;vertical-align:top}
+.rh-mx th{color:var(--text-secondary);font-weight:600;background:var(--panel-bg)}
+.rh-mx td.good{background:color-mix(in srgb,var(--success-color) 10%,transparent)}
+.rh-mx td.warn{background:color-mix(in srgb,var(--warning-color) 10%,transparent)}
+.rh-mx td.info{background:color-mix(in srgb,var(--accent-color) 10%,transparent)}
+.rh-seg-total-top{font-size:1.05rem;font-weight:700;margin-bottom:.5rem}
+.rh-seg{display:flex;gap:3px;border-radius:8px;overflow:hidden}
+.rh-seg-part{padding:.6rem .7rem;color:#fff;font-size:.82rem;display:flex;align-items:center;gap:.35rem;white-space:nowrap}
+.rh-seg-part b{font-size:1.05rem}
+.rh-seg-part.good{background:var(--success-color)}
+.rh-seg-part.warn{background:var(--warning-color)}
+.rh-seg-part.info{background:var(--accent-color)}
+
+.rh-subgrid{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-top:.7rem}
+@media(max-width:600px){.rh-subgrid{grid-template-columns:1fr}}
+.rh-subcol{border:1px solid var(--border-color);border-radius:8px;padding:.6rem .7rem;background:var(--panel-bg)}
+.rh-sub-h{font-weight:600;font-size:.9rem;margin-bottom:.3rem}
+.rh-sub-h.good{color:var(--success-color)}.rh-sub-h.warn{color:var(--warning-color)}
+.rh-sub{display:flex;flex-direction:column;gap:.25rem;font-size:.8rem;color:var(--text-secondary)}
+.rh-sub-row .rh-k{color:var(--text);font-weight:600}
+.rh-term{display:flex;flex-direction:column;gap:.6rem}
+.rh-term-item{padding:.5rem .7rem;border:1px solid var(--border-color);border-radius:8px;background:var(--panel-bg);font-size:.88rem}
+.rh-term-item b{color:var(--accent-color)}
+.rh-open-q{border-left:3px solid var(--warning-color);background:color-mix(in srgb,var(--warning-color) 8%,transparent);padding:.6rem .9rem;border-radius:0 8px 8px 0;margin:1rem 0;font-size:.86rem}
+.rh-open-q b{color:var(--warning-color)}
+</style>
+</head>
+<body>
+<div class="concept-layout">
+  <div class="concept-content">
+    <header class="page-header">
+      <h1>repo-health · UX-Überarbeitung</h1>
+      <p class="subtitle">Berichtsseite verständlicher machen — 7 Entscheidungen aus 3 Agent-Lenses + deiner Scope-Idee. KPIs bleiben.</p>
+      <button id="theme-toggle">🌙/☀️</button>
+    </header>
+        <main>
+      <section id="iter-1" data-iteration="1" hidden>
+        <header class="iteration-intro">
+          <h2>Iteration 1 · UX-Überarbeitung der Berichtsseite</h2>
+          <p>Drei Agents (<span class="agent-chip">Designer</span><span class="agent-chip">Research</span><span class="agent-chip">PO</span>) plus deine Scope-Idee, verdichtet zu 7 Entscheidungen. Jeder Block hat eine <strong>vorausgewählte Empfehlung</strong> und Alternativen — wähle pro Block und kommentiere bei Bedarf. Die <strong>KPI-Karten bleiben unangetastet</strong> (die findest du gut). Unten <strong>„Zur nächsten Iteration"</strong> verfeinert nur diese Seite; <strong>„Mit Feedback implementieren"</strong> schreibt die Änderungen in den repo-health Skill.</p>
+        </header>
+
+        <section id="ausgangslage" data-nav-label="Ausgangslage">
+          <h3>Das eigentliche Problem</h3>
+          <p class="lead">Die KPI-Karten geben die <em>Antwort</em> („4 sicher löschbar"). Die Liste darunter zwingt dich, dieselbe Antwort Zeile für Zeile mit drei Radios <em>neu herzuleiten</em>. Genau dieser Kontrast — Karten gut, Rest verwirrend — ist die Diagnose.</p>
+          <div class="metric-row">
+            <div class="metric-card bad"><div class="label">Bedien-Sprachen</div><div class="value">3</div></div>
+            <div class="metric-card bad"><div class="label">Entscheidungs-Zonen</div><div class="value">4</div></div>
+            <div class="metric-card warn"><div class="label">Iterations-Runden</div><div class="value">bis 5</div></div>
+            <div class="metric-card warn"><div class="label">Datenpunkte / Karte</div><div class="value">7+</div></div>
+          </div>
+          <p>Worüber die drei Lenses <strong>übereinstimmen</strong>:</p>
+          <table class="matrix">
+            <tr><th>Befund</th><th>Designer</th><th>Research</th><th>PO</th></tr>
+            <tr><td>Eine Bedien-Sprache statt drei</td><td>#1 Radio/Checkbox-Mix</td><td>Renovate: ein Vokabular/Zeile</td><td>„3 Antworten wo 2 reichen"</td></tr>
+            <tr><td>Detail inline statt Iterations-Loop</td><td>#4/#6 morphende Seite</td><td>Inline-Detail / Dry-Run</td><td><strong>The One Thing</strong></td></tr>
+            <tr><td>„Was passiert beim Apply" an EINEM Ort</td><td>#2 über 4 Zonen verstreut</td><td>Renovate-Dashboard + GitKraken</td><td>—</td></tr>
+            <tr><td>Select-all-Falle entschärfen</td><td>#3 sichtbar vs. Counter</td><td>Gmail-Banner</td><td>—</td></tr>
+            <tr><td>Decision-first, Evidence-on-demand</td><td>Direction A</td><td>Data-Table Chevron</td><td>KPI = Antwort, Liste matchen</td></tr>
+          </table>
+          <p class="src"><b>Quellen Research (verifiziert):</b> GitHub Branches (Stale/Active-Tabs), Renovate Dependency Dashboard, Gmail Select-all-Banner, GitKraken Batch-Confirm, git-trim/git-delete-merged-branches Dry-Run.</p>
+        </section>
+
+        <section id="c1-control" data-nav-label="1 · Control-Modell">
+          <h3>1 · Control-Modell <span class="eval-hint">Kern-Dissens</span></h3>
+          <p>Drei verschiedene Controls für <em>dieselbe</em> Frage „was tun damit": Branch = Radio <code>Löschen/Untersuchen/Behalten</code>, saubere Worktree = Radio <code>Entfernen/Untersuchen/Behalten</code>, Worktree-mit-Änderungen = einzelne <code>Untersuchen</code>-Checkbox. Andere Verben, andere Control-Typen.</p>
+          <p class="src"><b>Evidenz:</b> Designer #1 · Research (Renovate: ein Checkbox-Vokabular pro Zeile) · PO (Radio erzwingt 3 Antworten, obwohl die Daten die Antwort schon kollabiert haben).</p>
+          <div class="opt-group" role="radiogroup" aria-label="Control-Modell">
+            <label class="opt-option"><input type="radio" name="opt-c1" value="c1-b" checked>
+              <span class="opt-head"><span class="opt-key">B</span> 2-State: Löschen-Checkbox + „?"-Detail <span class="opt-badge po">PO-Empfehlung</span></span>
+              <span class="opt-desc">Pro Zeile eine Löschen-Checkbox; <code>safe-delete</code>-Branches passend zur KPI <strong>vorausgehakt</strong>, unmerged unchecked. „Untersuchen" wird zum sekundären „?" (Block 2). Zwei Zustände statt drei — du scannst und hakst ab, was du behalten willst.</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c1" value="c1-a">
+              <span class="opt-head"><span class="opt-key">A</span> Uniformes 3-State-Radio überall</span>
+              <span class="opt-desc">Gleiche Optik für Branch + Worktree (has-changes = 2-Option-Radio). Behebt den Control-Typ-Mix, bleibt aber bei drei Antworten pro Zeile.</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c1" value="c1-c">
+              <span class="opt-head"><span class="opt-key">C</span> Renovate-Style Single-Checkbox-to-act</span>
+              <span class="opt-desc">Eine Checkbox „Aktion ausführen" pro Zeile, Default = empfohlene Aktion. Minimalste Geste, aber „Behalten" wird implizit (uncheck).</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c1" value="c1-none">
+              <span class="opt-head"><span class="opt-key">—</span> Keine Änderung</span>
+              <span class="opt-desc">Status quo: drei Control-Sprachen bleiben.</span></label>
+          </div>
+          <div class="decision-comment-row"><label for="c1-note">Notiz / Override (optional)</label><textarea id="c1-note" data-comment="c1-note" rows="2" placeholder="z.B. „B, aber Untersuchen als Button statt ?", „lieber A"…"></textarea></div>
+        </section>
+
+        <section id="c2-loop" data-nav-label="2 · Untersuchen-Loop">
+          <h3>2 · Der „Untersuchen"-Loop <span class="eval-hint">The One Thing</span></h3>
+          <p>„Untersuchen" ist heute eine <strong>deferred zweite Iteration</strong>: markieren → Submit → Re-Render → erneut entscheiden. Drumherum hängt eine Maschinerie aus Convergence-Digests, Tombstones, 5-Runden-Cap und Iteration-5-Suppression. PO: das ist der größte Komplexitätstreiber und der Grund, warum die Seite „über Runden verhandelt" wirkt statt „Liste, auf die ich reagiere".</p>
+          <p class="src"><b>Evidenz:</b> PO (The One Thing — killt ~60% der Spec-Komplexität, Quelle vieler Bugfix-Commits) · Designer #4 morphende Seite + #6 drei Kartentypen ohne Legende · Research (Inline-Detail / Dry-Run statt Round-Trip).</p>
+          <div class="opt-group" role="radiogroup" aria-label="Untersuchen-Loop">
+            <label class="opt-option"><input type="radio" name="opt-c2" value="c2-inline" checked>
+              <span class="opt-head"><span class="opt-key">A</span> Inline-Detail im selben Pass <span class="opt-badge po">PO-Empfehlung</span></span>
+              <span class="opt-desc">„?" klappt Commit-Log, Diff &amp; Empfehlung direkt in der Karte auf — kein Round-Trip, keine zweite Iteration. Entfernt Convergence/Tombstone/Cap komplett. Empfehlung („3 ungeshippte Commits") erscheint inline beim ersten Render.</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c2" value="c2-hybrid">
+              <span class="opt-head"><span class="opt-key">C</span> Hybrid</span>
+              <span class="opt-desc">Inline-Detail als Standard, plus optionaler „tiefer untersuchen"-Re-Run nur on demand (1 Runde, kein 5er-Cap, keine Tombstone-Reconciliation).</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c2" value="c2-keep">
+              <span class="opt-head"><span class="opt-key">B</span> Deferred Multi-Iteration behalten</span>
+              <span class="opt-desc">Status quo mit 5-Runden-Loop, Convergence-Digest, Tombstones. Mächtig, aber teuer in Wartung &amp; mentalem Modell.</span></label>
+          </div>
+          <div class="decision-comment-row"><label for="c2-note">Notiz / Override (optional)</label><textarea id="c2-note" data-comment="c2-note" rows="2" placeholder="z.B. „Hybrid, aber max 2 Runden", „Loop behalten für Worktrees"…"></textarea></div>
+        </section>
+
+        <section id="c3-manifest" data-nav-label="3 · Apply-Manifest">
+          <h3>3 · „Was passiert beim Apply" an einem Ort</h3>
+          <p>Heute steht die Submit-Wirkung an <strong>4 Stellen</strong>: Per-Card-Radios, Worktree-Section, separate Main-Sync-Checkbox, Sidebar-Toggles (Remote löschen / Prunen). Die Sidebar zählt nur Branches — Worktree- und Main-Sync-State sind bis zum Submit unsichtbar.</p>
+          <p class="src"><b>Evidenz:</b> Designer #2 (Sidebar-Manifest) · Research (Renovate One-Place-Dashboard, GitKraken Batch-Confirm + Irreversibilität, git-trim <code>--dry-run</code> Default-to-no).</p>
+          <div class="opt-group" role="radiogroup" aria-label="Apply-Manifest">
+            <label class="opt-option"><input type="radio" name="opt-c3" value="c3-manifest-confirm" checked>
+              <span class="opt-head"><span class="opt-key">A</span> Manifest + Dry-Run-Confirm <span class="opt-badge">Empfohlen</span></span>
+              <span class="opt-desc">Sidebar = vollständiges Apply-Manifest (alle Branches/Worktrees/Main-Sync/Remote in einer Liste). Submit zeigt erst einen Dry-Run-Confirm: „löscht 48 lokal, 30 remote — fortfahren?" mit Count + Irreversibilität.</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c3" value="c3-manifest-only">
+              <span class="opt-head"><span class="opt-key">B</span> Nur Manifest, kein zweiter Klick</span>
+              <span class="opt-desc">Vollständige Apply-Liste in der Sidebar, aber Submit ohne separaten Confirm-Schritt (weniger Friktion für Power-User).</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c3" value="c3-none">
+              <span class="opt-head"><span class="opt-key">—</span> Keine Änderung</span>
+              <span class="opt-desc">Status quo: Counter zählt nur Branches.</span></label>
+          </div>
+          <div class="decision-comment-row"><label for="c3-note">Notiz / Override (optional)</label><textarea id="c3-note" data-comment="c3-note" rows="2" placeholder="z.B. „Confirm nur bei >10 Löschungen"…"></textarea></div>
+        </section>
+
+        <section id="c4-selectall" data-nav-label="4 · Select-all">
+          <h3>4 · Die Select-all-Falle</h3>
+          <p>„Select all" wirkt laut Spec nur auf <strong>sichtbare</strong> Karten — der Counter zählt aber über <strong>alle</strong> Kategorien. „Deselect all = sicherer Reset" stimmt damit nicht: versteckte, manuell auf Löschen gesetzte Branches bleiben gesetzt.</p>
+          <p class="src"><b>Evidenz:</b> Designer #3 (Predictability-Failure) · Research (Gmail Two-Tier-Selection mit explizitem Banner).</p>
+          <div class="opt-group" role="radiogroup" aria-label="Select-all">
+            <label class="opt-option"><input type="radio" name="opt-c4" value="c4-banner" checked>
+              <span class="opt-head"><span class="opt-key">A</span> Gmail-Banner <span class="opt-badge">Empfohlen</span></span>
+              <span class="opt-desc">Bei aktivem Filter + Select-all ein explizites Banner: „Alle N gefilterten markieren (vs. M sichtbar)". Bulk wirkt nie still nur auf gerenderte Zeilen.</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c4" value="c4-samescope">
+              <span class="opt-head"><span class="opt-key">B</span> Select-all + Counter immer gleicher Scope</span>
+              <span class="opt-desc">Beide nur auf sichtbare Zeilen — simpel &amp; vorhersehbar, aber Bulk über Kategorien hinweg entfällt.</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c4" value="c4-none">
+              <span class="opt-head"><span class="opt-key">—</span> Keine Änderung</span>
+              <span class="opt-desc">Status quo.</span></label>
+          </div>
+          <div class="decision-comment-row"><label for="c4-note">Notiz / Override (optional)</label><textarea id="c4-note" data-comment="c4-note" rows="2" placeholder=""></textarea></div>
+        </section>
+
+        <section id="c5-card" data-nav-label="5 · Karten-Layout">
+          <h3>5 · Decision-first Card</h3>
+          <p>Die Entscheidungs-Controls sitzen <strong>unten</strong> nach ~120px Diagnostik; in Iteration 2 schiebt sich obendrein ein Deep-Dive-Panel zwischen Kopf und Controls. Die Hierarchie ist invertiert — dein Job ist entscheiden, das Commit-Log ist nur Beleg.</p>
+          <p class="src"><b>Evidenz:</b> Designer #5 + Direction A · Research (Data-Table: Entscheidungs-Fakten inline, Rest hinter Chevron).</p>
+          <div class="opt-group" role="radiogroup" aria-label="Karten-Layout">
+            <label class="opt-option"><input type="radio" name="opt-c5" value="c5-decisionfirst" checked>
+              <span class="opt-head"><span class="opt-key">A</span> Decision-first + Progressive Disclosure <span class="opt-badge">Empfohlen</span></span>
+              <span class="opt-desc">Control + Name + Kategorie ganz oben; Commit-Log/Diff hinter einem <code>&lt;details&gt;</code>-Expand. „Alles aufklappen" pro Sektion. Vertraut aus jedem PR-Diff.</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c5" value="c5-hybrid">
+              <span class="opt-head"><span class="opt-key">B</span> Controls oben, Kern-Fakten inline</span>
+              <span class="opt-desc">Control oben, aber Alter/Merge-Status/ahead-behind bleiben inline sichtbar; nur Diff/History hinter Expand.</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c5" value="c5-none">
+              <span class="opt-head"><span class="opt-key">—</span> Keine Änderung</span>
+              <span class="opt-desc">Status quo (Controls unten, alles flach sichtbar).</span></label>
+          </div>
+          <div class="decision-comment-row"><label for="c5-note">Notiz / Override (optional)</label><textarea id="c5-note" data-comment="c5-note" rows="2" placeholder=""></textarea></div>
+        </section>
+
+        <section id="c6-worktrees" data-nav-label="6 · Worktrees">
+          <h3>6 · Worktrees: gleiche Seite oder eigene?</h3>
+          <p>Worktrees teilen heute die Seite mit Branches, folgen aber komplett anderen Regeln: read-mostly, eigene Status-Taxonomie (has-changes/clean), eigenes Vokabular (<code>Entfernen</code> ≠ <code>Löschen</code>), Checkbox statt Radio. Zwei Regelwelten auf einer Seite.</p>
+          <p class="src"><b>Evidenz:</b> PO (auf einer Seite lassen — vorerst; Splitten kostet Navigation, sekundäres Ärgernis) · Designer (dedizierte Section ist richtig, <em>gegeben</em> sie bleiben).</p>
+          <div class="opt-group" role="radiogroup" aria-label="Worktrees">
+            <label class="opt-option"><input type="radio" name="opt-c6" value="c6-colocated" checked>
+              <span class="opt-head"><span class="opt-key">A</span> Co-located, klarere Trennung <span class="opt-badge po">PO-Empfehlung</span></span>
+              <span class="opt-desc">Eigener Block mit vereinheitlichtem Control aus Block 1, ohne destruktive Optionen bei has-changes. Erst nach dem Loop-Umbau (Block 2) neu bewerten, ob ein Split sich lohnt.</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c6" value="c6-split">
+              <span class="opt-head"><span class="opt-key">B</span> Eigener Tab / eigene Seite</span>
+              <span class="opt-desc">Volle Trennung der zwei Regelwelten. Klarer pro Objekt, aber Navigationskosten + die KPI-Übersicht zerfällt.</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c6" value="c6-none">
+              <span class="opt-head"><span class="opt-key">—</span> Keine Änderung</span>
+              <span class="opt-desc">Status quo.</span></label>
+          </div>
+          <div class="decision-comment-row"><label for="c6-note">Notiz / Override (optional)</label><textarea id="c6-note" data-comment="c6-note" rows="2" placeholder=""></textarea></div>
+        </section>
+
+        <section id="c7-scope" data-nav-label="7 · Scope (neu)">
+          <h3>7 · Scope-Auswahl: dieses Projekt vs. alle <span class="eval-hint">deine Anforderung</span></h3>
+          <p>Deine Idee: direkt nach Skill-Aufruf im Chat fragen „nur dieses Projekt / alle Projekte". Gut — aber <strong>kein flacher Toggle</strong>, und in Spannung zu PO's „Kernjob klein halten". Drei Haken: <strong>Discovery</strong> (die Registry <code>~/.claude/projects/</code> hat 171 Einträge, großteils Worktree-Unterordner/tote Pfade → dedupe auf ~reale Repos), <strong>Perf</strong> (alle Repos = N× <code>fetch</code>+<code>gh</code> → Minuten + Ratelimit), <strong>Safety</strong> (Cross-Repo-Batch-Delete = das riskanteste im Tool).</p>
+          <p><strong>Dein Zusatz:</strong> Die Scope-Auswahl <strong>defaultet auf das aktuelle Projekt</strong> — das Repo, in dem repo-health gestartet wurde — und ist im Picker vorausgewählt. Weitere Repos bzw. „alle“ sind explizites Opt-in. Das ist zugleich die Safety-Default: ohne aktives Hinzuwählen passiert nichts außerhalb deines aktuellen Repos.</p>
+          <div class="opt-group" role="radiogroup" aria-label="Scope">
+            <label class="opt-option"><input type="radio" name="opt-c7" value="c7-overview" checked>
+              <span class="opt-head"><span class="opt-key">A</span> Scope-Frage → Übersicht → Drill-down <span class="opt-badge">Empfohlen</span></span>
+              <span class="opt-desc">AskUserQuestion beim Start. Bei „alle": erst eine <strong>Repo-Übersicht</strong> (welches Repo hat wie viel Müll), dann Drill-down in <em>denselben</em> Einzel-Repo-Flow. Discovery aus der Registry (dedupe), Fetch parallel/lazy, kein globales „select all über Repos". Breite gewinnen, ohne gefährliche Mega-Seite.</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c7" value="c7-flat">
+              <span class="opt-head"><span class="opt-key">B</span> Scope-Frage → flache „alle Repos"-Liste</span>
+              <span class="opt-desc">Eine große Liste über alle Repos auf einer Seite. Mehr Power in einem Rutsch — aber genau die Safety/Perf-Risiken oben.</span></label>
+            <label class="opt-option"><input type="radio" name="opt-c7" value="c7-single">
+              <span class="opt-head"><span class="opt-key">C</span> Nur dieses Projekt (PO-strikt)</span>
+              <span class="opt-desc">Scope-Frage nicht einbauen, Kernjob strikt auf das aktuelle Repo. Deine Anforderung wird verworfen.</span></label>
+          </div>
+          <div class="decision-comment-row"><label for="c7-note">Notiz / Override (optional)</label><textarea id="c7-note" data-comment="c7-note" rows="2" placeholder="z.B. „Übersicht ja, aber Discovery aus ~/IdeaProjects scannen statt Registry"…"></textarea></div>
+        </section>
+
+        <section id="gesamt" data-nav-label="Gesamt-Empfehlung">
+          <h3>Gesamt-Empfehlung (empfohlene Reihenfolge)</h3>
+          <p class="lead">Eine kohärente Sequenz — jeder Schritt entriegelt den nächsten:</p>
+          <ul class="tight">
+            <li><strong>① Loop killen (2A)</strong> — entriegelt alles, entfernt die meiste Spec-Komplexität.</li>
+            <li><strong>② Control → 2-State (1B)</strong> + Safe-Deletes passend zur KPI vorausgehakt.</li>
+            <li><strong>③ Decision-first Card (5A)</strong> mit Inline-Detail aus ①.</li>
+            <li><strong>④ Sidebar-Manifest + Dry-Run (3A)</strong> — Vertrauen vor dem destruktiven Submit.</li>
+            <li><strong>⑤ Select-all-Banner (4A)</strong> — kleiner Fix, schließt die letzte Vorhersagbarkeits-Lücke.</li>
+            <li><strong>⑥ Worktrees co-located lassen (6A)</strong> — erst nach ①–③ neu bewerten.</li>
+            <li><strong>⑦ Scope: Übersicht→Drill-down (7A)</strong> — als <em>eigener Folgeschritt/PR</em>, nicht im selben Aufwasch. Achtung: erweitert bewusst den Kernjob (PO-Spannung) — bewusste Produktentscheidung von dir.</li>
+          </ul>
+          <div class="flow">„Implementieren" editiert die Skill-Spec (SKILL.md + page-structure.md von devops-repo-health), keine Live-App. Realistisch zuerst 1–2 Iterationen hier, dann gezielt implementieren.</div>
+          <div class="comment-field"><textarea data-comment="gesamt-note" placeholder="Gesamt-Anmerkung, abweichende Reihenfolge, Scope-Schnitt…"></textarea></div>
+        </section>
+      </section>
+      <section id="iter-2" data-iteration="2" hidden>
+        <header class="iteration-intro">
+          <h2>Iteration 2 · Design-Konzept (Mockup mit Beispieldaten)</h2>
+          <p>So sähe die neue Berichtsseite konkret aus — deine 7 Entscheidungen + dein Layout-Wunsch (Gruppen, expand/collapse, Branch-/Merge-Status mit Anzahl) an Beispiel-Branches/Worktrees. Alles unten ist <strong>Mockup</strong>, keine echten Aktionen. Gib Feedback per Kommentar pro Block, dann <strong>„Zur nächsten Iteration"</strong> (verfeinern) oder <strong>„Mit Feedback implementieren"</strong> (in den Skill schreiben).</p>
+        </header>
+
+        <section id="m-overview" data-nav-label="Mockup · Kopf & Scope">
+          <h3>Kopf, KPIs &amp; Scope</h3>
+          <div class="rh-mock">
+            <div class="rh-scope">
+              <span class="rh-scope-lbl">Scope:</span>
+              <span class="rh-pill rh-pill-on">● Nur dieses Projekt</span>
+              <span class="rh-pill">Alle Projekte … <span class="rh-mut">(Übersicht → Drill-down)</span></span>
+              <span class="rh-anno">c7 · Default = aktuelles Repo, „alle" als Opt-in</span>
+            </div>
+            <div class="rh-head">
+              <strong>dotclaude</strong> <span class="rh-mut">· claude/nifty-hypatia-17c738 · origin: github.com/Jerry0022/dotclaude</span>
+            </div>
+            <div class="rh-kpis">
+              <div class="rh-kpi"><div class="rh-kpi-l">Branches</div><div class="rh-kpi-v">9</div></div>
+              <div class="rh-kpi good"><div class="rh-kpi-l">Sicher löschbar</div><div class="rh-kpi-v">4</div></div>
+              <div class="rh-kpi warn"><div class="rh-kpi-l">Untersuchen</div><div class="rh-kpi-v">2</div></div>
+              <div class="rh-kpi"><div class="rh-kpi-l">Worktrees</div><div class="rh-kpi-v">3 <span class="rh-mut">(1 ●)</span></div></div>
+            </div>
+            <div class="rh-banner">
+              <span>Filter „Sicher löschbar" aktiv · alle 4 markiert.</span>
+              <a class="rh-banner-link">Alle 6 gefilterten stattdessen markieren →</a>
+              <span class="rh-anno">c4 · Gmail-Banner: sichtbar vs. alle</span>
+            </div>
+          </div>
+          <div class="comment-field"><textarea data-comment="m-overview-note" placeholder="Feedback zu Kopf/KPIs/Scope/Banner…"></textarea></div>
+        </section>
+
+        <section id="m-groups" data-nav-label="Mockup · Gruppen & Einträge">
+          <h3>Gruppierte Einträge — decision-first, mit Branch-/Merge-Status</h3>
+          <div class="rh-mock">
+
+            <details class="rh-group" open>
+              <summary class="rh-group-head">
+                <span class="rh-chev">▾</span>
+                <span class="rh-dot good"></span> <strong>Sicher löschbar</strong>
+                <span class="rh-count">4 Einträge · <b class="good">4 merged</b> · 0 offen</span>
+                <span class="rh-anno">c1 · löschbar = aufgeklappt, vorausgewählt</span>
+              </summary>
+
+              <div class="rh-entry">
+                <input type="checkbox" class="rh-cb" checked>
+                <div class="rh-entry-main">
+                  <code class="rh-branch">feat/concept-bridge</code>
+                  <span class="rh-badge br">Branch: lokal + remote</span>
+                  <span class="rh-badge merged">merged · PR #211</span>
+                  <details class="rh-detail"><summary>?</summary><div class="rh-detail-body">3 Commits · zuletzt vor 6 Tagen · Diff: 4 Dateien (+210/-12). Patch-ID 100% in main.<br><span class="rh-mut">c2 · Detail inline, kein Iterations-Loop · c5 · Control oben, Evidenz on-demand</span></div></details>
+                </div>
+                <span class="rh-act good">Löschen</span>
+              </div>
+
+              <div class="rh-entry">
+                <input type="checkbox" class="rh-cb" checked>
+                <div class="rh-entry-main">
+                  <code class="rh-branch">fix/ship-parallel</code>
+                  <span class="rh-badge br">Branch: lokal + remote</span>
+                  <span class="rh-badge merged">merged · 2 PRs (#215, #209)</span>
+                  <details class="rh-detail"><summary>?</summary><div class="rh-detail-body">Mehrfach-Merge in einer Session — letzter Zustand: vollständig in main.<br><span class="rh-mut">dein c1-Wunsch: „manchmal mehrere PRs/main-Merges" wird abgebildet</span></div></details>
+                </div>
+                <span class="rh-act good">Löschen</span>
+              </div>
+
+              <div class="rh-entry">
+                <input type="checkbox" class="rh-cb" checked>
+                <div class="rh-entry-main">
+                  <code class="rh-branch">docs/test-user</code>
+                  <span class="rh-badge br">Branch: lokal + remote</span>
+                  <span class="rh-badge merged">merged · PR #214</span>
+                  <details class="rh-detail"><summary>?</summary><div class="rh-detail-body">1 Commit · merged &amp; remote gelöscht (gone).</div></details>
+                </div>
+                <span class="rh-act good">Löschen</span>
+              </div>
+
+              <div class="rh-entry">
+                <input type="checkbox" class="rh-cb" checked>
+                <div class="rh-entry-main">
+                  <code class="rh-branch">origin/feat-preview-primary</code>
+                  <span class="rh-badge br-remote">Branch: nur remote</span>
+                  <span class="rh-badge merged">merged · PR #213</span>
+                  <details class="rh-detail"><summary>?</summary><div class="rh-detail-body">Kein lokaler Branch mehr — nur Remote-Ref. Squash-merged.<br><span class="rh-mut">dein c1-Wunsch: „ob Branch vorhanden oder nicht" sichtbar</span></div></details>
+                </div>
+                <span class="rh-act good">Löschen</span>
+              </div>
+            </details>
+
+            <details class="rh-group">
+              <summary class="rh-group-head">
+                <span class="rh-chev">▸</span>
+                <span class="rh-dot warn"></span> <strong>Untersuchen</strong>
+                <span class="rh-count">2 Einträge · <b class="bad">0 merged</b> · 2 offen</span>
+                <span class="rh-anno">c1 · untersuchbar = eingeklappt</span>
+              </summary>
+
+              <div class="rh-entry">
+                <input type="checkbox" class="rh-cb">
+                <div class="rh-entry-main">
+                  <code class="rh-branch">experiment/foo</code>
+                  <span class="rh-badge br">Branch: lokal</span>
+                  <span class="rh-badge unmerged">unmerged · 3 Commits ahead</span>
+                  <details class="rh-detail"><summary>?</summary><div class="rh-detail-body">~340 Zeilen über 8 Dateien · letzter Commit vor 4 Tagen · kein PR. Empfehlung inline: <b>shippen vor löschen</b>.<br><span class="rh-mut">c2 · Empfehlung im selben Pass, ohne 2. Iterationsrunde</span></div></details>
+                </div>
+                <span class="rh-act mut">offen lassen</span>
+              </div>
+
+              <div class="rh-entry">
+                <input type="checkbox" class="rh-cb">
+                <div class="rh-entry-main">
+                  <code class="rh-branch">wip/bar</code>
+                  <span class="rh-badge br">Branch: lokal</span>
+                  <span class="rh-badge unmerged">unmerged · 1 Commit, vor 20 Tagen</span>
+                  <details class="rh-detail"><summary>?</summary><div class="rh-detail-body">WIP-Heuristik: 1 Commit „wip: …" · stale. Empfehlung: behalten/aufräumen.</div></details>
+                </div>
+                <span class="rh-act mut">offen lassen</span>
+              </div>
+            </details>
+
+            <details class="rh-group" open>
+              <summary class="rh-group-head">
+                <span class="rh-chev">▾</span>
+                <span class="rh-dot info"></span> <strong>Worktrees</strong>
+                <span class="rh-count">3 · 1 mit Änderungen · 2 sauber</span>
+                <span class="rh-anno">c6 · co-located, mit Namen</span>
+              </summary>
+
+              <div class="rh-entry wt">
+                <span class="rh-wt-icon">●</span>
+                <div class="rh-entry-main">
+                  <code class="rh-branch">claude/nifty-hypatia-17c738</code> <span class="rh-mut">(dieser)</span>
+                  <div class="rh-path">…/.claude/worktrees/nifty-hypatia-17c738</div>
+                  <span class="rh-badge br">Branch: lokal</span>
+                  <span class="rh-badge changes">mit Änderungen · 3 geändert</span>
+                  <details class="rh-detail"><summary>?</summary><div class="rh-detail-body">Nur „Untersuchen" — keine destruktive Aktion bei Worktrees mit Änderungen (Safety).</div></details>
+                </div>
+                <span class="rh-act mut">geschützt</span>
+              </div>
+
+              <div class="rh-entry wt">
+                <span class="rh-wt-icon ok">○</span>
+                <div class="rh-entry-main">
+                  <code class="rh-branch">claude/brave-pike</code>
+                  <div class="rh-path">…/.claude/worktrees/brave-pike</div>
+                  <span class="rh-badge br">Branch: lokal</span>
+                  <span class="rh-badge clean">sauber</span>
+                </div>
+                <span class="rh-act good">Entfernen</span>
+              </div>
+
+              <div class="rh-entry wt">
+                <span class="rh-wt-icon ok">○</span>
+                <div class="rh-entry-main">
+                  <code class="rh-branch">claude/old-session</code>
+                  <div class="rh-path">…/.claude/worktrees/old-session</div>
+                  <span class="rh-badge br">Branch: lokal</span>
+                  <span class="rh-badge clean">sauber</span>
+                </div>
+                <span class="rh-act good">Entfernen</span>
+              </div>
+            </details>
+
+          </div>
+          <div class="comment-field"><textarea data-comment="m-groups-note" placeholder="Feedback zu Gruppen, Badges, Branch-/Merge-Anzeige, Expand/Collapse…"></textarea></div>
+        </section>
+
+        <section id="m-apply" data-nav-label="Mockup · Apply-Manifest">
+          <h3>Apply-Manifest &amp; Dry-Run</h3>
+          <div class="rh-mock">
+            <div class="rh-manifest">
+              <div class="rh-manifest-h">Beim Submit passiert:</div>
+              <ul class="rh-manifest-l">
+                <li>🗑 <b>4 Branches</b> löschen — 3 lokal+remote, 1 nur remote</li>
+                <li>🧹 <b>2 Worktrees</b> entfernen (sauber) + Branches</li>
+                <li>🔄 main synchronisieren <span class="rh-mut">(1 Commit behind)</span></li>
+                <li>🔎 0 markiert zum Untersuchen</li>
+              </ul>
+              <button class="rh-dryrun">Aufräumen starten → Bestätigen</button>
+              <div class="rh-dry-note">„Löscht 4 Branches (3 remote) + 2 Worktrees. Unwiderruflich. Fortfahren?"</div>
+              <span class="rh-anno">c3 · alles an einem Ort + Dry-Run-Confirm mit Count &amp; Irreversibilität</span>
+            </div>
+          </div>
+          <div class="comment-field"><textarea data-comment="m-apply-note" placeholder="Feedback zum Manifest / Confirm…"></textarea></div>
+        </section>
+
+        <section id="m-summary" data-nav-label="Abbildung der 7 Entscheidungen">
+          <h3>Wie die 7 Entscheidungen im Mockup landen</h3>
+          <ul class="tight">
+            <li><b>c1-b</b> 2-State — pro Eintrag eine Löschen-Checkbox, Safe-Deletes vorgehakt; „?" = Detail.</li>
+            <li><b>c2-inline</b> — „?" klappt Commit/Diff/Empfehlung inline auf, keine Iterationsrunde.</li>
+            <li><b>c3</b> — Apply-Manifest + Dry-Run-Confirm (oben).</li>
+            <li><b>c4</b> — Select-all-Banner „sichtbar vs. alle gefilterten".</li>
+            <li><b>c5</b> — Control + Name + Status oben, Evidenz hinter „?".</li>
+            <li><b>c6</b> — Worktrees als eigene Gruppe, co-located, mit Namen + Pfad.</li>
+            <li><b>c7</b> — Scope-Leiste, Default aktuelles Repo, „alle" → Übersicht/Drill-down.</li>
+            <li><b>dein c1-Layout</b> — Gruppen mit Anzahl + merged/offen, expand (löschbar) / collapse (untersuchen), Branch-ja/nein + Merge-Status je Eintrag.</li>
+          </ul>
+          <div class="comment-field"><textarea data-comment="m-overall-note" placeholder="Gesamt-Feedback / fehlt was / nächster Schritt…"></textarea></div>
+        </section>
+      </section>
+      <section id="iter-3" data-iteration="3" hidden>
+        <header class="iteration-intro">
+          <h2>Iteration 3 · Klares Datenmodell (KPIs korrigiert)</h2>
+          <p>Du hast recht: die KPIs haben Total, Unterkategorien und zwei verschiedene Achsen vermischt. Hier das aufgeräumte Modell — eine Basis-Entität, zwei Attribute, ein abgeleiteter Status der sauber zur Summe partitioniert.</p>
+        </header>
+
+        <section id="m3-problem" data-nav-label="Das Problem">
+          <h3>Was an den alten KPIs falsch war</h3>
+          <ul class="tight">
+            <li><code>Branches 9</code> ist ein <b>Total</b> — <code>Löschbar 4</code> und <code>Untersuchen 2</code> sind <b>Teilmengen</b> davon, keine Geschwister.</li>
+            <li><code>Worktrees 3</code> ist <b>keine eigene Menge</b> — Worktrees sind 3 <i>von</i> den 9 Branches (doppelt gezählt).</li>
+            <li>Vier nebeneinander stehende Kacheln suggerieren Vergleichbarkeit, dabei gilt <b>4 + 2 + 3 = 9</b>.</li>
+          </ul>
+        </section>
+
+        <section id="m3-model" data-nav-label="Klares Modell">
+          <h3>Eine Basis-Entität: der Branch</h3>
+          <p class="lead">Alles ist ein <b>Git-Branch</b> (ein Ref). Ein Worktree ist <b>kein zweites Ding</b> — nur ein Branch, der zusätzlich ein ausgechecktes Verzeichnis hat (und deshalb geschützt ist). Zwei unabhängige Attribute beschreiben jeden Eintrag:</p>
+          <div class="rh-mock">
+            <div class="rh-attr">
+              <div class="rh-attr-row"><span class="rh-attr-k">Ort</span><span class="rh-attr-v"><span class="rh-badge br">lokal</span> <span class="rh-badge br-remote">nur-remote</span> <span class="rh-mut">(manche existieren nur auf origin)</span></span></div>
+              <div class="rh-attr-row"><span class="rh-attr-k">Worktree</span><span class="rh-attr-v"><span class="rh-badge changes">mit Verzeichnis → geschützt</span> <span class="rh-badge clean">ohne</span></span></div>
+              <div class="rh-attr-row"><span class="rh-attr-k">Status</span><span class="rh-attr-v"><span class="rh-mut">abgeleitet aus Merge-Zustand + Worktree (siehe Matrix)</span></span></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="m3-matrix" data-nav-label="Die Kombinationen">
+          <h3>Die Kombinationen — Worktree × Merge</h3>
+          <p class="lead">Genau deine „Kombinationen der zwei": der Status ist kein Extra-Feld, er <b>folgt</b> aus zwei Achsen.</p>
+          <div class="rh-mock">
+            <table class="rh-mx">
+              <tr><th></th><th>merged</th><th>unmerged</th></tr>
+              <tr><th>ohne Worktree</th>
+                <td class="good">🟢 sicher löschbar <b>(4)</b></td>
+                <td class="warn">🟡 untersuchen <b>(2)</b></td></tr>
+              <tr><th>mit Worktree</th>
+                <td colspan="2" class="info">🔵 geschützt — Worktree zuerst entfernen <b>(3)</b> <span class="rh-mut">(Merge-Zustand egal, nie automatisch löschen)</span></td></tr>
+            </table>
+            <p class="rh-mut" style="margin:.6rem 0 0">Sonderfall „nur-remote": existiert nur auf origin, kann nie einen Worktree haben → fällt je nach Merge in 🟢/🟡 (oben mitgezählt).</p>
+          </div>
+        </section>
+
+        <section id="m3-kpi" data-nav-label="Neue KPI-Leiste">
+          <h3>Neue KPI-Leiste — eine Summe, sauber partitioniert</h3>
+          <div class="rh-mock">
+            <div class="rh-seg-total-top">9 Branches gesamt <span class="rh-mut">· davon 1 nur-remote</span></div>
+            <div class="rh-seg">
+              <div class="rh-seg-part good" style="flex:4"><b>4</b> löschbar</div>
+              <div class="rh-seg-part warn" style="flex:2"><b>2</b> untersuchen</div>
+              <div class="rh-seg-part info" style="flex:3"><b>3</b> Worktree</div>
+            </div>
+            <p class="rh-mut" style="margin:.6rem 0 0">Eine Leiste statt vier Kacheln: man sieht sofort die Aufteilung <b>und</b> dass sie aufgeht (4+2+3=9). Klick auf ein Segment filtert die Liste auf die Gruppe.</p>
+            <div class="rh-anno" style="margin:.5rem 0 0">ersetzt die 4 verwirrenden Tiles aus Iteration 2</div>
+          </div>
+        </section>
+
+        <section id="m3-groups" data-nav-label="Folge für die Gruppen">
+          <h3>Was das für die Gruppen heißt</h3>
+          <p>Die 3 Gruppen aus Iteration 2 sind jetzt <b>exakt die 3 Status-Partitionen</b> der KPI-Leiste — kein Widerspruch mehr zwischen „Übersicht" und „Liste":</p>
+          <ul class="tight">
+            <li>🟢 <b>Sicher löschbar (4)</b> — ohne Worktree, merged · aufgeklappt, vorgehakt</li>
+            <li>🟡 <b>Untersuchen (2)</b> — ohne Worktree, unmerged · eingeklappt</li>
+            <li>🔵 <b>Worktree-geschützt (3)</b> — mit Verzeichnis · mit Namen, keine Löschaktion</li>
+          </ul>
+          <p class="rh-mut">Pro Eintrag bleiben die Attribut-Badges (Ort: lokal/nur-remote · Merge-Status · ggf. „mit Änderungen") sichtbar — wie in deinem c1-Wunsch.</p>
+          <div class="comment-field"><textarea data-comment="m3-note" placeholder="Passt das Modell? Andere Achsen/Benennung? KPI-Leiste klar?"></textarea></div>
+        </section>
+      </section>
+      <section id="iter-4" data-iteration="4" data-active>
+        <header class="iteration-intro">
+          <h2>Iteration 4 · „Aktive Sessions" + Sub-Labels</h2>
+          <p>Löschbar/Untersuchen bleiben die zwei Top-Kategorien. „Worktree" heißt jetzt <b>Aktive Session</b>, und ist kein eigener Topf mehr, sondern ein <b>Sub-Typ</b> innerhalb von Löschbar/Untersuchen — mit Anzahl je Typ und Ort (lokal/remote).</p>
+        </header>
+
+        <section id="m4-term" data-nav-label="Terminologie">
+          <h3>Zwei Typen pro Eintrag</h3>
+          <div class="rh-mock">
+            <div class="rh-term">
+              <div class="rh-term-item"><b>Git-Session</b> — ein Branch <i>ohne</i> ausgechecktes Verzeichnis. Die Arbeit einer früheren Session, jetzt nur noch ein Ref (lokal und/oder nur-remote).</div>
+              <div class="rh-term-item"><b>Aktive Session</b> — ein Branch <i>mit</i> Worktree (ausgechecktes Verzeichnis): eine laufende/pausierte Claude-Session. Branch wird <b>nie</b> automatisch gelöscht — bei „sauber" nur der Worktree entfernt, bei „mit Änderungen" geschützt.</div>
+            </div>
+          </div>
+        </section>
+
+        <section id="m4-kpi" data-nav-label="KPI-Leiste + Sub-Labels">
+          <h3>KPI-Leiste mit Sub-Labels</h3>
+          <div class="rh-mock">
+            <div class="rh-seg-total-top">9 Branches gesamt</div>
+            <div class="rh-seg">
+              <div class="rh-seg-part good" style="flex:6"><b>6</b> Löschbar</div>
+              <div class="rh-seg-part warn" style="flex:3"><b>3</b> Untersuchen</div>
+            </div>
+            <div class="rh-subgrid">
+              <div class="rh-subcol">
+                <div class="rh-sub-h good">🟢 Löschbar (6)</div>
+                <div class="rh-sub">
+                  <div class="rh-sub-row">↳ <span class="rh-k">4 Git-Sessions</span> · 3 lokal · 1 nur-remote</div>
+                  <div class="rh-sub-row">↳ <span class="rh-k">2 Aktive Sessions</span> · 2 lokal (sauber → Worktree entfernbar)</div>
+                </div>
+              </div>
+              <div class="rh-subcol">
+                <div class="rh-sub-h warn">🟡 Untersuchen (3)</div>
+                <div class="rh-sub">
+                  <div class="rh-sub-row">↳ <span class="rh-k">2 Git-Sessions</span> · 2 lokal (unmerged)</div>
+                  <div class="rh-sub-row">↳ <span class="rh-k">1 Aktive Session</span> · 1 lokal (mit Änderungen → geschützt)</div>
+                </div>
+              </div>
+            </div>
+            <p class="rh-mut" style="margin:.6rem 0 0">6 + 3 = 9. Klick auf ein Segment filtert; Klick auf ein Sub-Label filtert feiner (z.B. „nur Aktive Sessions in Löschbar").</p>
+          </div>
+        </section>
+
+        <section id="m4-matrix" data-nav-label="Matrix (aktualisiert)">
+          <h3>Matrix — Typ × Zustand → Aktion</h3>
+          <div class="rh-mock">
+            <table class="rh-mx">
+              <tr><th></th><th>merged / sauber</th><th>unmerged / mit Änderungen</th></tr>
+              <tr><th>Git-Session<br><span class="rh-mut">(Branch ohne Worktree)</span></th>
+                <td class="good">🟢 Löschbar <b>(4)</b><br><span class="rh-mut">Branch löschen</span></td>
+                <td class="warn">🟡 Untersuchen <b>(2)</b></td></tr>
+              <tr><th>Aktive Session<br><span class="rh-mut">(Branch mit Worktree)</span></th>
+                <td class="good">🟢 Löschbar <b>(2)</b><br><span class="rh-mut">nur Worktree entfernen, Branch bleibt</span></td>
+                <td class="warn">🟡 Untersuchen <b>(1)</b><br><span class="rh-mut">geschützt, nie destruktiv</span></td></tr>
+            </table>
+          </div>
+        </section>
+
+        <section id="m4-open" data-nav-label="Offene Frage">
+          <h3>Eine Design-Entscheidung für dich</h3>
+          <div class="rh-open-q">
+            <b>Sauberer Aktive Session (Worktree) unter „Löschbar" — Default vorgehakt oder nicht?</b><br>
+            Einen sauberen Worktree zu entfernen ist harmloser als einen merged Branch zu löschen, aber es ist trotzdem ein „lebendes" Verzeichnis. Optionen: (a) vorgehakt wie Git-Sessions, (b) sichtbar in Löschbar aber <i>nicht</i> vorgehakt (bewusste Entscheidung), (c) eigener Unter-Block „entfernbare Sessions". <span class="rh-mut">Sag mir deine Präferenz im Kommentar.</span>
+          </div>
+          <div class="comment-field"><textarea data-comment="m4-note" placeholder="Default für saubere Aktive Sessions? Begriffe ok? Sub-Label-Granularität?"></textarea></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <aside class="concept-decision-panel">
+    <nav class="iteration-tabs" role="tablist" aria-label="Iterationen">
+      <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="false" aria-controls="iter-1">Iteration 1</button>
+      <button class="iteration-tab" role="tab" data-iteration="2" aria-selected="false" aria-controls="iter-2">Iteration 2 · Design</button>
+      <button class="iteration-tab" role="tab" data-iteration="3" aria-selected="false" aria-controls="iter-3">Iteration 3 · Modell</button>
+      <button class="iteration-tab" role="tab" data-iteration="4" aria-selected="true" aria-controls="iter-4">Iteration 4 · Sessions</button>
+    </nav>
+    <h3>Entscheidungen</h3>
+    <nav class="section-nav" id="section-nav" aria-label="Abschnitte"></nav>
+    <div id="panel-ready">
+      <div id="decision-summary"></div>
+      <div id="connection-connecting" class="panel-warning panel-warning--connecting" style="display: flex;">
+        <span class="warning-icon" aria-hidden="true">⋯</span>
+        <strong>Claude verbindet sich</strong>
+        <p class="warning-message">Einen Moment — die Verbindung wird aufgebaut.</p>
+        <button type="button" class="panel-warning__ack-btn" data-ack="connecting">Verstanden</button>
+      </div>
+      <div id="connection-warning" class="panel-warning" style="display: none;">
+        <span class="warning-icon" aria-hidden="true">⚠</span>
+        <strong>Claude ist nicht verbunden</strong>
+        <p class="warning-message">Du kannst trotzdem absenden — der Klick wird gespeichert und gesendet, sobald Claude wieder da ist.</p>
+        <button type="button" class="panel-warning__ack-btn" data-ack="warning">Verstanden</button>
+      </div>
+      <button id="submit-iterate-btn" class="primary submit-btn">Zur nächsten Iteration</button>
+      <p class="hint">Deine Auswahl geht an Claude für die nächste Iteration. Es wird kein Code geschrieben.</p>
+      <p class="hint hint-cache" data-cache-hint="iterate" hidden><span aria-hidden="true">⚠</span> gecached — wird beim Verbinden gesendet</p>
+      <div class="submit-gap" aria-hidden="true"></div>
+      <button id="submit-implement-btn" class="implement-btn"><span class="warn-icon" aria-hidden="true">⚠</span>Mit Feedback implementieren</button>
+      <p class="hint hint-warn">Claude setzt die Auswahl jetzt in echte Änderungen um.</p>
+      <p class="hint hint-cache" data-cache-hint="implement" hidden><span aria-hidden="true">⚠</span> gecached — wird beim Verbinden gesendet</p>
+    </div>
+    <div id="panel-submitted" style="display: none;">
+      <div class="submitted-indicator"><span class="check-icon">✓</span><strong>Entscheidungen übermittelt</strong></div>
+      <ol class="status-steps" id="status-steps" aria-live="polite">
+        <li data-step="submitted" data-state="done"><span class="step-icon" aria-hidden="true">✓</span><span class="step-label">Übermittelt</span></li>
+        <li data-step="received" data-state="active"><span class="step-icon" aria-hidden="true">⏳</span><span class="step-label">Claude verarbeitet</span></li>
+        <li data-step="implemented" data-state="pending" hidden>
+          <span class="step-icon" aria-hidden="true">○</span>
+          <span class="step-label" data-state-label="pending">Warten…</span>
+          <span class="step-label" data-state-label="active">Implementierung läuft</span>
+          <span class="step-label" data-state-label="done">Implementierung abgeschlossen</span>
+        </li>
+      </ol>
+      <p class="submitted-hint">Claude verarbeitet deine Auswahl. Wechsle zum <strong>Claude Chat</strong> um den Fortschritt zu sehen.</p>
+      <div class="waiting-animation"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+    </div>
+    <div id="panel-final-report" style="display: none;">
+      <div class="final-report-indicator"><span class="check-icon">✓</span><strong>Implementierung abgeschlossen</strong></div>
+      <p class="final-report-hint">Die Implementierung ist abgeschlossen. Sieh dir den Bericht links an.</p>
+      <div id="panel-create-issues" hidden>
+        <button id="create-issues-btn" class="primary submit-btn" disabled>Issues erstellen</button>
+        <p class="hint">Erstellt GitHub-Issues für die ausgewählten Punkte.</p>
+        <p class="hint hint-none" data-issues-state="none" hidden><span aria-hidden="true">⚠</span> Keine Punkte ausgewählt.</p>
+        <p class="hint hint-running" data-issues-state="running" hidden><span aria-hidden="true">⏳</span> Issues werden erstellt …</p>
+        <p class="hint hint-done" data-issues-state="done" hidden><span aria-hidden="true">✓</span> Issues erstellt</p>
+      </div>
+      <fieldset id="panel-dispose-concept" class="dispose-fieldset">
+        <legend>Concept-Files behalten?</legend>
+        <p class="hint dispose-hint">Default = verwerfen. Entscheidungen sind bereits in Commits/Issues — die HTML-Datei muss selten in git bleiben.</p>
+        <label class="dispose-option"><input type="radio" name="dispose-mode" value="discard" checked><span class="dispose-label"><strong>Verwerfen (Standard)</strong><span class="dispose-sub">HTML + Decisions-JSON löschen, kein git-Eintrag.</span></span></label>
+        <label class="dispose-option"><input type="radio" name="dispose-mode" value="keep"><span class="dispose-label"><strong>Im Projekt behalten</strong><span class="dispose-sub">Files bleiben in docs/concepts/ und sind git-getrackte Artefakte.</span></span></label>
+        <label class="dispose-option"><input type="radio" name="dispose-mode" value="gitignore"><span class="dispose-label"><strong>Nur lokal / .gitignore</strong><span class="dispose-sub">Files bleiben lokal, ein Eintrag wird zur .gitignore hinzugefügt.</span></span></label>
+        <div class="dispose-move-row"><label for="dispose-move-to">Verschieben nach (optional):</label><input id="dispose-move-to" name="dispose-move-to" type="text" autocomplete="off" spellcheck="false" placeholder="z.B. docs/architecture/"></div>
+        <div class="submit-gap" aria-hidden="true"></div>
+        <button id="dispose-concept-btn" class="implement-btn dispose-btn"><span aria-hidden="true">⤓</span>Concept beenden</button>
+        <p class="hint hint-warn">Schliesst die Concept-Session und wendet die Datei-Disposition oben an.</p>
+        <p class="hint hint-running" data-dispose-state="running" hidden><span aria-hidden="true">⏳</span> Räume auf …</p>
+        <p class="hint hint-done" data-dispose-state="done" hidden><span aria-hidden="true">✓</span> Concept beendet.</p>
+      </fieldset>
+    </div>
+  </aside>
+</div>
+
+<div class="content-dimmer" id="content-dimmer" role="button" tabindex="-1" aria-label="Schimmer entfernen" title="Schimmer entfernen" hidden></div>
+
+<script type="application/json" id="concept-decisions">
+{"submitted": false, "decisions": [], "comments": []}
+</script>
+<script>
+// --- State persistence (localStorage + TTL) ---
+const STORAGE_KEY = 'concept-state-' + location.pathname.split('/').pop().replace('.html', '');
+const STATE_TTL_MS = 24 * 60 * 60 * 1000;
+let _userInteracted = false;
+function _markUserInteracted(e) { if (e && e.isTrusted) _userInteracted = true; }
+document.addEventListener('change', _markUserInteracted, true);
+document.addEventListener('input', _markUserInteracted, true);
+document.addEventListener('iteration:changed', () => { _userInteracted = false; });
+
+function saveState() {
+  const state = { _savedAt: Date.now(), _pageVersion: document.documentElement.dataset.pageVersion || '' };
+  document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
+    if (el.name || el.id) state['input:' + (el.name || el.id) + ':' + el.value] = el.checked; });
+  document.querySelectorAll('textarea, input[type="text"]').forEach(el => {
+    if (el.id || el.dataset.comment) state['text:' + (el.id || el.dataset.comment)] = el.value; });
+  state['theme'] = document.documentElement.getAttribute('data-theme');
+  if (_userInteracted) state['_userInteracted'] = true;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+function restoreState() {
+  const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return;
+  try { const state = JSON.parse(raw);
+    if (state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) { localStorage.removeItem(STORAGE_KEY); return; }
+    if (state._pageVersion && state._pageVersion !== (document.documentElement.dataset.pageVersion || '')) { localStorage.removeItem(STORAGE_KEY); return; }
+    if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+    if (state._userInteracted) _userInteracted = true;
+    Object.entries(state).forEach(([key, value]) => {
+      if (key.startsWith('_')) return;
+      const [type, ...rest] = key.split(':');
+      if (type === 'input') {
+        const [name, val] = [rest.slice(0, -1).join(':'), rest[rest.length - 1]];
+        const el = document.querySelector(`input[name="${name}"][value="${val}"]`); if (el) el.checked = value;
+      } else if (type === 'text') {
+        const id = rest.join(':');
+        const el = document.querySelector(`[data-comment="${id}"]`) || document.getElementById(id); if (el) el.value = value;
+      }
+    });
+  } catch (e) {}
+}
+
+// --- Comment Slot Injection (safety net) ---
+function ensureCommentSlots() {
+  document.querySelectorAll('[data-decision]').forEach(group => {
+    const card = group.closest('.variant-evaluation, section[id]') || group.parentElement;
+    if (!card) return;
+    if (card.querySelector('textarea[data-comment]')) return;
+    const id = (group.dataset.decision || group.id || '').trim(); if (!id) return;
+    const commentKey = id + '-note';
+    const row = document.createElement('div'); row.className = 'decision-comment-row';
+    const label = document.createElement('label'); label.setAttribute('for', commentKey); label.textContent = 'Notiz / Override (optional)';
+    const ta = document.createElement('textarea'); ta.id = commentKey; ta.dataset.comment = commentKey; ta.placeholder = 'z.B. „nur für X", „mit Variante Y"…'; ta.rows = 2;
+    row.appendChild(label); row.appendChild(ta);
+    if (group.nextSibling && group.parentNode === card) group.parentNode.insertBefore(row, group.nextSibling); else card.appendChild(row);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => { ensureCommentSlots(); restoreState(); });
+document.addEventListener('change', saveState);
+document.addEventListener('input', saveState);
+
+// --- Section nav (free template — detects opt-in bi-state) ---
+function buildSectionNav() {
+  const nav = document.getElementById('section-nav'); if (!nav) return;
+  const visible = document.querySelector('section[data-iteration]:not([hidden])'); if (!visible) return;
+  const sections = visible.querySelectorAll('section[id][data-nav-label]');
+  nav.innerHTML = '';
+  sections.forEach(sec => {
+    const id = sec.id, label = sec.dataset.navLabel;
+    const hasEval = !!sec.querySelector(`input[name="eval-${CSS.escape(id)}"]`);
+    const link = document.createElement('a');
+    link.href = '#' + id; link.className = 'section-nav-item'; link.dataset.sectionId = id;
+    if (hasEval) link.setAttribute('data-variant', '');
+    const labelEl = document.createElement('span'); labelEl.className = 'section-nav-label'; labelEl.textContent = label;
+    link.appendChild(labelEl);
+    if (hasEval) { const s = document.createElement('span'); s.className = 'section-nav-state'; link.appendChild(s); }
+    nav.appendChild(link);
+  });
+  updateSectionNavState();
+}
+function updateSectionNavState() {
+  const labels = { include: 'Miteinbeziehen', discard: 'Verwerfen' };
+  document.querySelectorAll('.section-nav-item[data-variant]').forEach(link => {
+    const id = link.dataset.sectionId;
+    const checked = document.querySelector(`input[name="eval-${CSS.escape(id)}"]:checked`);
+    const currentState = checked ? checked.value : 'include';
+    const stateEl = link.querySelector('.section-nav-state');
+    if (stateEl) { stateEl.textContent = labels[currentState] || currentState; stateEl.className = 'section-nav-state state-' + currentState; }
+  });
+}
+document.addEventListener('click', e => {
+  const link = e.target.closest('.section-nav-item'); if (!link) return;
+  e.preventDefault();
+  const target = document.querySelector(link.getAttribute('href'));
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+document.addEventListener('change', updateSectionNavState);
+
+// --- Iteration tabs (final-report aware) ---
+function showIteration(n) {
+  document.querySelectorAll('section[data-iteration]').forEach(sec => { sec.hidden = String(sec.dataset.iteration) !== String(n); });
+  document.querySelectorAll('.iteration-tab').forEach(tab => {
+    tab.setAttribute('aria-selected', String(tab.dataset.iteration) === String(n) ? 'true' : 'false'); });
+  const activeSec = document.querySelector('section[data-iteration][data-active]');
+  const isLive = activeSec && String(activeSec.dataset.iteration) === String(n);
+  const visibleSec = document.querySelector('section[data-iteration]:not([hidden])');
+  const isFinal = !!(visibleSec && visibleSec.hasAttribute('data-final-report'));
+  const submitted = document.body.classList.contains('concept-submitted');
+  const panelReady = document.getElementById('panel-ready');
+  const panelSubmitted = document.getElementById('panel-submitted');
+  const panelFinal = document.getElementById('panel-final-report');
+  if (panelFinal) panelFinal.style.display = (isFinal && isLive) ? 'block' : 'none';
+  if (panelReady) panelReady.style.display = (isLive && !isFinal && !submitted) ? 'block' : 'none';
+  if (panelSubmitted) panelSubmitted.style.display = (isLive && !isFinal && submitted) ? 'block' : 'none';
+  buildSectionNav();
+  if (typeof updateCreateIssuesPanel === 'function') updateCreateIssuesPanel();
+  document.dispatchEvent(new CustomEvent('iteration:changed'));
+}
+document.querySelectorAll('.iteration-tab').forEach(tab => tab.addEventListener('click', () => showIteration(tab.dataset.iteration)));
+document.addEventListener('DOMContentLoaded', () => {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (active) showIteration(active.dataset.iteration);
+});
+
+// --- Theme ---
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const html = document.documentElement;
+  html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+
+// --- collectDecisions (dispatcher + generic catch-all) ---
+function collectAllFormFields(scope) {
+  const fields = {};
+  scope.querySelectorAll('input, select, textarea').forEach(el => {
+    const key = el.dataset.field || el.dataset.comment || el.name || el.id;
+    if (!key) return;
+    if (el.type === 'checkbox') fields[key] = el.checked;
+    else if (el.type === 'radio') { if (el.checked) fields[el.name] = el.value; }
+    else fields[key] = el.value;
+  });
+  return fields;
+}
+function collectFreeDecisions() {
+  const decisions = [];
+  document.querySelectorAll('section[id][data-nav-label]').forEach(sec => {
+    const radio = sec.querySelector(`input[name="eval-${CSS.escape(sec.id)}"]:checked`);
+    if (!radio) return;
+    decisions.push({ id: sec.id, label: sec.dataset.navLabel || sec.id, evaluation: radio.value });
+  });
+  const comments = [];
+  document.querySelectorAll('[data-comment]').forEach(el => {
+    if (el.value.trim()) comments.push({ id: el.dataset.comment, text: el.value.trim() });
+  });
+  return { submitted: true, template: 'free', decisions, comments };
+}
+function collectDecisions(action = 'iterate') {
+  const active = document.querySelector('section[data-iteration][data-active]') || document.body;
+  const allFields = collectAllFormFields(active);
+  const payload = collectFreeDecisions();
+  payload.action = action;
+  payload.allFields = allFields;
+  return payload;
+}
+
+// --- Reload poller ---
+let _bootReloadCounter = null;
+async function pollReload() {
+  try { const res = await fetch('/reload', { cache: 'no-store' }); if (!res.ok) return;
+    const { counter } = await res.json();
+    if (_bootReloadCounter === null) { _bootReloadCounter = counter; return; }
+    if (counter > _bootReloadCounter) location.reload();
+  } catch (e) {}
+}
+setInterval(pollReload, 3000);
+document.addEventListener('DOMContentLoaded', pollReload);
+
+// --- Status progress steps ---
+function _stepEl(name) { return document.querySelector('#status-steps li[data-step="' + name + '"]'); }
+function _setStep(name, state, icon) {
+  const li = _stepEl(name); if (!li) return;
+  li.dataset.state = state;
+  const iconEl = li.querySelector('.step-icon'); if (iconEl && icon) iconEl.textContent = icon;
+}
+function resetStatusSteps(action) {
+  _setStep('submitted', 'done', '✓');
+  _setStep('received', 'active', '⏳');
+  const impl = _stepEl('implemented');
+  if (impl) { impl.hidden = (action !== 'implement'); impl.dataset.state = 'pending';
+    const iconEl = impl.querySelector('.step-icon'); if (iconEl) iconEl.textContent = '○'; }
+}
+function updateStatusSteps(data) {
+  if (!_submittedAt) return;
+  if (data && data._picked_up_at) {
+    const recv = _stepEl('received');
+    if (recv && recv.dataset.state !== 'done') {
+      _setStep('received', 'done', '✓');
+      if (_submittedAction === 'implement') {
+        const impl = _stepEl('implemented');
+        if (impl && !impl.hidden && impl.dataset.state === 'pending') _setStep('implemented', 'active', '⏳');
+      }
+    }
+  }
+  if (data && data._phase === 'implemented' && _submittedAction === 'implement') {
+    const recv = _stepEl('received'); if (recv && recv.dataset.state !== 'done') _setStep('received', 'done', '✓');
+    const impl = _stepEl('implemented'); if (impl && !impl.hidden && impl.dataset.state !== 'done') _setStep('implemented', 'done', '✓');
+  }
+}
+
+// --- Submit (two-button) + content dimmer ---
+let _submittedAt = 0, _submittedReloadCounter = null, _submitInFlight = false, _submittedAction = null;
+function showContentDimmer() { const dim = document.getElementById('content-dimmer'); if (dim) dim.hidden = false; }
+function hideContentDimmer() { const dim = document.getElementById('content-dimmer'); if (dim) dim.hidden = true; document.body.classList.remove('content-dimmed'); }
+document.getElementById('content-dimmer')?.addEventListener('click', hideContentDimmer);
+document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; const dim = document.getElementById('content-dimmer'); if (dim && !dim.hidden) hideContentDimmer(); });
+
+async function submitWithAction(action) {
+  if (_submitInFlight || _submittedAt) return;
+  if (!_userInteracted) {
+    const msg = (action === 'implement')
+      ? 'Du hast nichts geändert. Trotzdem mit Feedback implementieren? Claude schreibt dann Code.'
+      : 'Du hast nichts geändert. Trotzdem "Zur nächsten Iteration" absenden?';
+    if (!window.confirm(msg)) return;
+  }
+  _submitInFlight = true;
+  const data = collectDecisions(action);
+  document.getElementById('concept-decisions').textContent = JSON.stringify(data);
+  document.body.classList.add('concept-submitted', 'content-dimmed');
+  showContentDimmer();
+  _submittedAt = Date.now(); _submittedReloadCounter = _bootReloadCounter; _submittedAction = action;
+  resetStatusSteps(action);
+  document.getElementById('panel-ready').style.display = 'none';
+  document.getElementById('panel-submitted').style.display = 'block';
+  try { await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); }
+  catch (e) { localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data)); }
+  saveState();
+  _submitInFlight = false;
+}
+function wireSubmit(btnId, action) { const btn = document.getElementById(btnId); if (btn) btn.addEventListener('click', () => submitWithAction(action)); }
+wireSubmit('submit-iterate-btn', 'iterate');
+wireSubmit('submit-implement-btn', 'implement');
+
+// --- Final-report: create-issues + dispose ---
+function updateCreateIssuesPanel() {
+  const wrap = document.getElementById('panel-create-issues');
+  const btn = document.getElementById('create-issues-btn');
+  if (!wrap || !btn) return;
+  const active = document.querySelector('section[data-iteration][data-active]');
+  const isFinal = !!(active && active.hasAttribute('data-final-report'));
+  const oqBlock = isFinal ? active.querySelector('[data-open-questions]') : null;
+  const pendingBoxes = oqBlock ? oqBlock.querySelectorAll('input[type="checkbox"]:not(:disabled)') : [];
+  const visible = isFinal && pendingBoxes.length > 0;
+  wrap.hidden = !visible;
+  if (!visible) return;
+  const checked = Array.from(pendingBoxes).some(el => el.checked);
+  btn.disabled = !checked;
+  wrap.querySelectorAll('.hint[data-issues-state]').forEach(el => { el.hidden = el.dataset.issuesState !== 'none' || checked; });
+}
+async function submitCreateIssues() {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (!active || !active.hasAttribute('data-final-report')) return;
+  const oqBlock = active.querySelector('[data-open-questions]'); if (!oqBlock) return;
+  const items = Array.from(oqBlock.querySelectorAll('input[type="checkbox"]:not(:disabled)')).filter(el => el.checked).map(el => {
+    const labelEl = el.closest('label')?.querySelector('.oq-label');
+    const labelText = labelEl ? labelEl.textContent.trim() : '';
+    return { id: el.name || el.id || '', title: el.dataset.issueTitle || labelText, type: el.dataset.issueType || 'chore',
+      description: el.dataset.issueBody || labelText, role: el.dataset.issueRole || null, module: el.dataset.issueModule || null,
+      milestone: el.dataset.issueMilestone || null, selected: true };
+  });
+  const wrap = document.getElementById('panel-create-issues');
+  const btn = document.getElementById('create-issues-btn');
+  if (!items.length) { wrap?.querySelector('.hint[data-issues-state="none"]')?.removeAttribute('hidden'); return; }
+  btn.disabled = true;
+  wrap.querySelectorAll('.hint[data-issues-state]').forEach(el => { el.hidden = el.dataset.issuesState !== 'running'; });
+  const payload = { submitted: true, action: 'create-issues', items, disposition: collectDisposition() };
+  document.getElementById('concept-decisions').textContent = JSON.stringify(payload);
+  document.body.classList.add('concept-submitted', 'content-dimmed'); showContentDimmer();
+  try { await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
+  catch (e) { localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(payload)); }
+}
+document.getElementById('create-issues-btn')?.addEventListener('click', submitCreateIssues);
+
+function collectDisposition() {
+  const radio = document.querySelector('input[name="dispose-mode"]:checked');
+  const moveEl = document.getElementById('dispose-move-to');
+  const mode = radio ? radio.value : 'discard';
+  const moveTo = (moveEl && moveEl.value.trim()) ? moveEl.value.trim() : null;
+  return { mode, moveTo };
+}
+async function submitDisposeConcept() {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (!active || !active.hasAttribute('data-final-report')) return;
+  const fs = document.getElementById('panel-dispose-concept');
+  const btn = document.getElementById('dispose-concept-btn');
+  if (!fs || !btn) return;
+  btn.disabled = true;
+  fs.querySelectorAll('.hint[data-dispose-state]').forEach(el => { el.hidden = el.dataset.disposeState !== 'running'; });
+  const payload = { submitted: true, action: 'dispose-concept', disposition: collectDisposition() };
+  document.getElementById('concept-decisions').textContent = JSON.stringify(payload);
+  document.body.classList.add('concept-submitted', 'content-dimmed'); showContentDimmer();
+  try { await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
+  catch (e) { localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(payload)); }
+}
+document.getElementById('dispose-concept-btn')?.addEventListener('click', submitDisposeConcept);
+document.addEventListener('change', e => { if (e.target && e.target.matches('section[data-open-questions] input[type="checkbox"]')) updateCreateIssuesPanel(); });
+document.addEventListener('DOMContentLoaded', updateCreateIssuesPanel);
+
+// --- Offline submit queue ---
+async function retryPendingSubmission() {
+  const pendingKey = STORAGE_KEY + '-pending';
+  const pending = localStorage.getItem(pendingKey); if (!pending) return;
+  try { const res = await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: pending });
+    if (res.ok) localStorage.removeItem(pendingKey); } catch (e) {}
+}
+function restorePanelToReady() {
+  document.getElementById('panel-submitted').style.display = 'none';
+  document.getElementById('panel-ready').style.display = 'block';
+  ['submit-iterate-btn', 'submit-implement-btn'].forEach(id => { const btn = document.getElementById(id); if (btn) btn.disabled = false; });
+  document.body.classList.remove('concept-submitted', 'content-dimmed'); hideContentDimmer();
+  _submittedAt = 0; _submittedReloadCounter = null; _submitInFlight = false; _submittedAction = null;
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+// --- Heartbeat (claude_ts / server_ts split) ---
+const HEARTBEAT_STALE_MS = 90000, SERVER_STALE_MS = 90000;
+const PROCESSED_SAFETY_MS = 5 * 60 * 1000;
+let _lastHeartbeatTs = 0, _lastServerTs = 0;
+async function pollHeartbeat() {
+  try { const res = await fetch('/heartbeat', { cache: 'no-store' }); const data = await res.json();
+    _lastHeartbeatTs = data.claude_ts || data.ts || 0;
+    _lastServerTs = data.server_ts || 0;
+  } catch (e) {}
+}
+async function pollProcessedState() {
+  if (!_submittedAt) return;
+  try { const res = await fetch('/decisions', { cache: 'no-store' }); const data = await res.json();
+    updateStatusSteps(data);
+    const processedIso = data && data._processed_at; if (!processedIso) return;
+    const processedMs = Date.parse(processedIso);
+    if (!Number.isFinite(processedMs) || processedMs <= _submittedAt) return;
+    let reloadAdvanced = false;
+    try { const r2 = await fetch('/reload', { cache: 'no-store' });
+      if (r2.ok) { const { counter } = await r2.json(); reloadAdvanced = (_submittedReloadCounter !== null) && (counter > _submittedReloadCounter); }
+    } catch (_) {}
+    const longStale = (Date.now() - _submittedAt) > PROCESSED_SAFETY_MS;
+    if (reloadAdvanced || longStale) restorePanelToReady();
+  } catch (e) {}
+}
+const _overlayAck = { connecting: false, warning: false };
+document.addEventListener('click', (e) => {
+  const btn = e.target && e.target.closest && e.target.closest('.panel-warning__ack-btn'); if (!btn) return;
+  const which = btn.dataset.ack;
+  if (which === 'connecting' || which === 'warning') { _overlayAck[which] = true; checkClaudeConnection(); }
+});
+function _setCacheHints(visible) { document.querySelectorAll('[data-cache-hint]').forEach(el => { el.hidden = !visible; }); }
+function checkClaudeConnection() {
+  const now = Date.now();
+  const isConnected = _lastHeartbeatTs && (Date.now() - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
+  const serverAlive = _lastServerTs && (now - _lastServerTs) < SERVER_STALE_MS;
+  const bootstrapping = (_lastHeartbeatTs === 0) && serverAlive;
+  const connecting = document.getElementById('connection-connecting');
+  const warning = document.getElementById('connection-warning');
+  const btns = ['submit-iterate-btn', 'submit-implement-btn'].map(id => document.getElementById(id)).filter(Boolean);
+  const panelSubmitted = document.getElementById('panel-submitted');
+  if (isConnected) { _overlayAck.connecting = false; _overlayAck.warning = false; }
+  if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
+  if (isConnected) {
+    if (connecting) connecting.style.display = 'none';
+    if (warning) warning.style.display = 'none';
+    _setCacheHints(false); btns.forEach(b => b.disabled = false); retryPendingSubmission();
+  } else if (bootstrapping) {
+    if (connecting) connecting.style.display = _overlayAck.connecting ? 'none' : 'flex';
+    if (warning) warning.style.display = 'none';
+    _setCacheHints(_overlayAck.connecting); btns.forEach(b => b.disabled = !_overlayAck.connecting);
+  } else {
+    if (connecting) connecting.style.display = 'none';
+    if (warning) warning.style.display = _overlayAck.warning ? 'none' : 'flex';
+    _setCacheHints(_overlayAck.warning); btns.forEach(b => b.disabled = !_overlayAck.warning);
+  }
+}
+setInterval(async () => { await pollHeartbeat(); checkClaudeConnection(); await pollProcessedState(); }, 5000);
+</script>
+</body>
+</html>
