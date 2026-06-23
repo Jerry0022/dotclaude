@@ -14,6 +14,7 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.tokens.scan.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.git.check.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.git.sync.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.graphify.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.ship.verify.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.concept.resume.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.team.changelog.js" },
@@ -57,7 +58,8 @@
       },
       {
         "hooks": [
-          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.debug.js" }
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.debug.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.graphify.query.js" }
         ],
         "matcher": "Bash"
       },

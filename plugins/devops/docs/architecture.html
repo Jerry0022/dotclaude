@@ -169,7 +169,7 @@
 <section id="overview">
 <h1>Architecture Documentation <small>devops v0.87.0</small></h1>
 <p class="lead">
-  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->32<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->19<!--/devops:count:skills--> skills, <!--devops:count:agents-->11<!--/devops:count:agents--> agents,
+  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->34<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->20<!--/devops:count:skills--> skills, <!--devops:count:agents-->11<!--/devops:count:agents--> agents,
   2 MCP servers, a deterministic completion card engine, and a 3-layer extension system.
 </p>
 <div role="note" style="margin:.4rem 0 1.4rem;padding:.6rem .9rem;background:var(--bg2);border-left:3px solid var(--warn);border-radius:4px;color:var(--text2);font-size:.85rem;">
@@ -180,16 +180,16 @@
 
 <div class="card-grid">
   <div class="card">
-    <h4><!--devops:count:hooks-->32<!--/devops:count:hooks--> Hooks</h4>
+    <h4><!--devops:count:hooks-->34<!--/devops:count:hooks--> Hooks</h4>
     <p style="color:var(--text2);font-size:.85rem">Lifecycle guards across SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop</p>
-    <span class="badge b-hook">SessionStart &times;<!--devops:count:hooks:ss-->13<!--/devops:count:hooks:ss--></span>
+    <span class="badge b-hook">SessionStart &times;<!--devops:count:hooks:ss-->14<!--/devops:count:hooks:ss--></span>
     <span class="badge b-hook">Prompt &times;<!--devops:count:hooks:prompt-->7<!--/devops:count:hooks:prompt--></span>
     <span class="badge b-hook">Pre &times;<!--devops:count:hooks:pre-->6<!--/devops:count:hooks:pre--></span>
-    <span class="badge b-hook">Post &times;<!--devops:count:hooks:post-->3<!--/devops:count:hooks:post--></span>
+    <span class="badge b-hook">Post &times;<!--devops:count:hooks:post-->4<!--/devops:count:hooks:post--></span>
     <span class="badge b-hook">Stop &times;<!--devops:count:hooks:stop-->3<!--/devops:count:hooks:stop--></span>
   </div>
   <div class="card">
-    <h4><!--devops:count:skills-->19<!--/devops:count:skills--> Skills</h4>
+    <h4><!--devops:count:skills-->20<!--/devops:count:skills--> Skills</h4>
     <p style="color:var(--text2);font-size:.85rem">Slash commands: ship, commit, flow, new-issue, project-setup, readme, refresh-usage, extend-skill, repo-health, claude-md-lint, concept, agents, plugin-update, autonomous, burn, learn, harden, polish, test-plan</p>
   </div>
   <div class="card">
@@ -217,10 +217,10 @@
 ├── hooks/
 │   ├── hooks.json             <span style="color:var(--purple)"># Hook registry (event &rarr; command mapping)</span>
 │   ├── lib/                   <span style="color:var(--text2)"># plugin-guard, run-once, session-id</span>
-│   ├── session-start/         <span style="color:var(--purple)"># <!--devops:count:hooks:ss-->13<!--/devops:count:hooks:ss--> hooks (ss.*)</span>
+│   ├── session-start/         <span style="color:var(--purple)"># <!--devops:count:hooks:ss-->14<!--/devops:count:hooks:ss--> hooks (ss.*)</span>
 │   ├── user-prompt-submit/    <span style="color:var(--purple)"># <!--devops:count:hooks:prompt-->7<!--/devops:count:hooks:prompt--> hooks (prompt.*)</span>
 │   ├── pre-tool-use/          <span style="color:var(--purple)"># <!--devops:count:hooks:pre-->6<!--/devops:count:hooks:pre--> hooks (pre.*)</span>
-│   ├── post-tool-use/         <span style="color:var(--purple)"># <!--devops:count:hooks:post-->3<!--/devops:count:hooks:post--> hooks (post.*)</span>
+│   ├── post-tool-use/         <span style="color:var(--purple)"># <!--devops:count:hooks:post-->4<!--/devops:count:hooks:post--> hooks (post.*)</span>
 │   └── stop/                  <span style="color:var(--purple)"># <!--devops:count:hooks:stop-->3<!--/devops:count:hooks:stop--> hooks (stop.*)</span>
 ├── mcp-server/
 │   ├── index.js               <span style="color:var(--orange)"># dotclaude-completion MCP</span>
@@ -235,7 +235,7 @@
 │   ├── render-card.js         <span style="color:var(--warn)"># Completion card template engine</span>
 │   ├── build-id.js            <span style="color:var(--text2)"># Deterministic content hash</span>
 │   └── lib/usage-meter.js     <span style="color:var(--text2)"># Usage bar renderer</span>
-├── skills/                    <span style="color:var(--accent)"># <!--devops:count:skills-->19<!--/devops:count:skills--> skill definitions (SKILL.md + deep-knowledge/)</span>
+├── skills/                    <span style="color:var(--accent)"># <!--devops:count:skills-->20<!--/devops:count:skills--> skill definitions (SKILL.md + deep-knowledge/)</span>
 │   ├── ship/  commit/  flow/  new-issue/  project-setup/  readme/
 │   ├── refresh-usage/  extend-skill/  repo-health/  claude-md-lint/
 │   ├── concept/  agents/  plugin-update/  autonomous/  burn/  learn/

@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.104.2**
+**Version: 0.105.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -167,8 +167,8 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ## Features
 
-- **<!--devops:count:hooks-->32<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->19<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-flow, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-plugin-update, devops-autonomous, devops-burn, devops-learn, devops-harden, devops-polish, devops-test-plan
+- **<!--devops:count:hooks-->34<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:skills-->20<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-flow, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-plugin-update, devops-autonomous, devops-burn, devops-learn, devops-harden, devops-polish, devops-test-plan
 - **<!--devops:count:agents-->11<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
@@ -178,7 +178,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->32<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->34<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -200,6 +200,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.tokens.scan` — Scan project for expensive files and update config for the pre.tokens.guard hook.
 - `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
 - `ss.git.sync` — Registers a recurring git sync cron job (every 10 minutes).
+- `ss.graphify` — graphify enforcement — install-check + auto-build wiring for the devops-graph feature.
 - `ss.ship.verify` — Surface results from the post-merge watcher (post-ship CI + optional deploy verify).
 - `ss.concept.resume` — Recover an open concept session after a Claude restart.
 - `ss.team.changelog` — Show a summary of changes made by other contributors on remote main since the last ti…
@@ -227,6 +228,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 - `post.flow.completion` — After EVERY tool call: inject the completion-card reminder so Claude always has the i…
 - `post.flow.debug` — After 2+ consecutive Bash failures: recommend the flow skill.
+- `post.graphify.query` — When Claude runs `graphify query ...`, record a per-session flag so the PreToolUse gr…
 - `post.concept.gate` — Deterministic backstop for devops-concept pages.
 
 #### Stop — runs when Claude finishes responding
@@ -317,6 +319,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/devops-harden` | Explicit | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
 | `/devops-polish` | Explicit | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
 | `/devops-test-plan` | Explicit + Hook | Detect test profile, deterministic tool-chain recommendations per test request |
+| `/devops-graph` | Explicit + Hook | On-demand code knowledge graph via graphify, with opt-in auto-build + hard-gate enforcement |
 
 ### Agents (spawned for parallel work)
 
@@ -644,8 +647,8 @@ Wk  ━━──╏─────────   15% +1%   · 4d 22h left
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->32<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
-├── skills/                        ← <!--devops:count:skills-->19<!--/devops:count:skills--> skill definitions (SKILL.md)
+├── hooks/                         ← <!--devops:count:hooks-->34<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── skills/                        ← <!--devops:count:skills-->20<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->11<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
