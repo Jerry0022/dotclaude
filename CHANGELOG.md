@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.105.0] — 2026-06-23
+
+### Added
+
+- **A new `/devops-graph` skill integrates the external [graphify](https://github.com/safishamsi/graphify) knowledge-graph CLI, with opt-in enforcement so the graph is actually *used*, not just built.** graphify turns a codebase into a queryable graph (`graphify-out/graph.json`) so broad questions hit the graph instead of grepping raw files (token saver). The skill stays a thin orchestration layer — it never reimplements graphify and deliberately never runs `graphify claude install` (whose PreToolUse hook would collide with the devops token-guard). A multi-agent verification first established that graphify's own registration only *nudges* (its hook emits `permissionDecision:"allow"` guarded with `|| true`, never a block), so real enforcement is **stronger** than registered-graphify, not equivalent to it. On a per-project opt-in recorded in `.claude/graphify.json` (written only after explicit consent — never silent): **(1) auto-build** — the new `ss.graphify` SessionStart hook checks install, runs `graphify hook install` once (git post-commit AST rebuild, free) and background-rebuilds when the graph is missing/stale; **(2) a hard gate** — `pre.tokens.guard` (`@version` 0.3.0→0.5.0) blocks (exit 2) a broad raw-file Grep/Glob toward `graphify query`, but only when consented **and** the graph is fresh **and** no query ran yet this session. Two safety preconditions are enforced in code: a fail-safe staleness guard (`graph-nudge.graphIsStale` — a truncated, empty, or unreadable scan counts as stale, symlinks are followed, so the gate never forces Claude onto an out-of-date graph) and a retry escape hatch (a blocked search falls through on retry; `post.graphify.query` relents the gate for the session once a real query runs). New: `hooks/lib/graphify-state.js` (consent + session state), `hooks/lib/graph-nudge.js` (ambient hint + staleness), and the generic, reusable `scripts/check-tool.js` cross-platform PATH probe. The implementation was adversarially red-teamed and reworked to close a false-fresh bug class (maxFiles truncation, empty/unreadable repos, symlinked sources, Windows `.cmd` shim spawns). Covered by unit + a spawn-based integration test of the gate (549 tests pass).
+
 ## [0.104.2] — 2026-06-22
 
 ### Fixed
