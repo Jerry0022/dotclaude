@@ -25,7 +25,6 @@ offer, and command invocation.
 
 ## Non-Goals
 
-- No always-on grep→graph nudge (i.e. no PreToolUse hook).
 - No replacement of `project-map` — different layer: always-on orientation
   (cheap, inlined every session) vs on-demand deep retrieval (heavy, queried).
 - No graphify MCP server in v1 (shell-out per call; MCP is a later option).
@@ -68,6 +67,18 @@ offer, and command invocation.
 
 Detect → offer → confirm. The SKILL.md documents the collision rationale inline
 so a future maintainer does not "helpfully" re-add `graphify claude install`.
+
+## Ambient nudge (added — option B)
+
+The "Build + Query on-demand" core is supplemented by a **devops-owned** ambient
+nudge so the graph is actually *used* during normal coding (the token-saving
+payoff). Rather than installing graphify's colliding hook, the existing
+`pre.tokens.guard` PreToolUse hook is extended: on the first broad search of a
+session it injects a one-line hint (alongside the project-map) steering Claude
+toward `graphify query` — **only when `graphify-out/graph.json` exists**, at most
+once per session. The collision was never "a hook is bad"; it was graphify's
+*uncoordinated* hook beside ours. Logic lives in `hooks/lib/graph-nudge.js`,
+unit-tested independently of the hook's stdin plumbing.
 
 ## Architecture rationale — the hook collision
 

@@ -1,6 +1,6 @@
 ---
 name: devops-graph
-version: 0.1.0
+version: 0.2.0
 description: >-
   On-demand codebase knowledge graph via the external graphify CLI. Detects
   graphify, offers to install it (with confirmation — never silent), builds or
@@ -84,8 +84,27 @@ graphify query "<the user's question>"
 Relay the result. For follow-up questions in the same session, reuse the
 existing graph — only re-run Step 3 if the code changed meaningfully.
 
+## Ambient nudge (automatic, once per session)
+
+Once a graph exists, you do not have to remember this skill. The devops
+`pre.tokens.guard` PreToolUse hook injects a one-line hint on the **first broad
+search of a session** (alongside the project-map) that steers Claude toward
+`graphify query` for semantic questions instead of grepping raw files. This is
+the token-saving payoff — the graph gets *used*, not just built. The hint is:
+
+- **Silent until a graph exists** — no graph.json, no nudge (no nagging about an
+  unbuilt tool).
+- **Once per session** — Claude is told the graph exists a single time, then
+  decides per question; it does not spam every search.
+- **devops-owned** — it lives in our hook chain, so it never collides with other
+  PreToolUse hooks. We still never run `graphify claude install`.
+
+Logic lives in `hooks/lib/graph-nudge.js` (unit-tested).
+
 ## Out of scope (v1)
 
 - No graphify MCP server (`python -m graphify.serve`) — shell-out per query.
 - No post-commit auto-rebuild hook — graph refresh is on-demand (Step 3) only.
   A background auto-rebuild could be added later as an explicit opt-in.
+- The nudge piggybacks on the first *broad* search; a session that never runs
+  one won't see it (acceptable for v1 — most sessions do).

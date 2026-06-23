@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.3.0
+ * @version 0.4.0
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
@@ -9,11 +9,15 @@
  *   with the user's Claude plan (pro/max_5/max_20). Uses a flag-file
  *   mechanism: first call blocks with warning, retry allows through.
  *
- *   Project-map injection: on the FIRST broad Grep/Glob (no `path`) of a
- *   session, attaches `.claude/project-map.md` as additionalContext and
- *   ALLOWS the search, so Claude can scope subsequent calls with a `path`
- *   instead of only being nagged after a block. Injected at most once per
- *   session (temp flag); later broad searches still hit the normal block.
+ *   Session-start injection: on the FIRST broad Grep/Glob (no `path`) of a
+ *   session, attaches orientation as additionalContext and ALLOWS the search,
+ *   so Claude can scope subsequent calls with a `path` instead of only being
+ *   nagged after a block. Injected at most once per session (temp flag); later
+ *   broad searches still hit the normal block. The injection combines:
+ *     - `.claude/project-map.md` (file-structure re-scoping hint), and
+ *     - an ambient graphify nudge when `graphify-out/graph.json` exists
+ *       (steer toward `graphify query` over grepping — see hooks/lib/graph-nudge).
+ *   Fires if EITHER source is present.
  */
 
 require('../lib/plugin-guard');
@@ -195,24 +199,34 @@ process.stdin.on('end', () => {
     const sid = hook.session_id || hook.sessionId || 'nosid';
     const mapKey = crypto.createHash('md5').update(`${sid}:${cwd}`).digest('hex').slice(0, 12);
     const mapFlag = path.join(os.tmpdir(), `devops_mapinject_${mapKey}.flag`);
-    if (fs.existsSync(projectMap) && !fs.existsSync(mapFlag)) {
+    const graphNudge = require('../lib/graph-nudge');
+    const hasMap = fs.existsSync(projectMap);
+    const hasGraph = graphNudge.hasGraph(cwd);
+    // Fire once per session if EITHER the project-map or a graphify graph exists.
+    if ((hasMap || hasGraph) && !fs.existsSync(mapFlag)) {
       try {
-        const mapBody = fs.readFileSync(projectMap, 'utf8').trim();
+        const sections = [];
+        if (hasMap) {
+          const mapBody = fs.readFileSync(projectMap, 'utf8').trim();
+          sections.push([
+            `[project-map] Before this broad ${toolName} (no \`path\` set), here is the project's file structure.`,
+            'Use it to re-scope: pick the directory that contains your target and pass it as the `path`',
+            'parameter on this and future Grep/Glob calls instead of scanning the whole repo.',
+            '',
+            mapBody,
+          ].join('\n'));
+        }
+        if (hasGraph) {
+          sections.push(graphNudge.buildGraphNudge());
+        }
         fs.writeFileSync(mapFlag, Date.now().toString());
-        const ctx = [
-          `[project-map] Before this broad ${toolName} (no \`path\` set), here is the project's file structure.`,
-          'Use it to re-scope: pick the directory that contains your target and pass it as the `path`',
-          'parameter on this and future Grep/Glob calls instead of scanning the whole repo.',
-          '',
-          mapBody,
-        ].join('\n');
         process.stdout.write(JSON.stringify({
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
-            additionalContext: ctx,
+            additionalContext: sections.join('\n\n'),
           },
         }));
-        process.exit(0); // allow the search; map is now in context for the next one
+        process.exit(0); // allow the search; map/graph hint now in context for the next one
       } catch {}
     }
   }
