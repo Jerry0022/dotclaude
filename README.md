@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.105.0**
+**Version: 0.106.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -168,8 +168,8 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 ## Features
 
 - **<!--devops:count:hooks-->34<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->20<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-flow, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-plugin-update, devops-autonomous, devops-burn, devops-learn, devops-harden, devops-polish, devops-test-plan
-- **<!--devops:count:agents-->11<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
+- **<!--devops:count:skills-->21<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-flow, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-plugin-update, devops-autonomous, devops-burn, devops-learn, devops-harden, devops-polish, devops-test-plan
+- **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
@@ -320,6 +320,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/devops-polish` | Explicit | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
 | `/devops-test-plan` | Explicit + Hook | Detect test profile, deterministic tool-chain recommendations per test request |
 | `/devops-graph` | Explicit + Hook | On-demand code knowledge graph via graphify, with opt-in auto-build + hard-gate enforcement |
+| `/devops-rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, concept decision, autonomous implementation |
 
 ### Agents (spawned for parallel work)
 
@@ -335,6 +336,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | **qa** | Test, verify, screenshot |
 | **redteam** | Adversarial review: failure modes, blind spots, hidden risks |
 | **research** | Deep-dive investigations |
+| **rethinker** | Code-blind fresh-approach ideation through one lens |
 | **windows** | Platform-specific features |
 
 ## Completion Cards
@@ -648,8 +650,8 @@ devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
 ├── hooks/                         ← <!--devops:count:hooks-->34<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
-├── skills/                        ← <!--devops:count:skills-->20<!--/devops:count:skills--> skill definitions (SKILL.md)
-├── agents/                        ← <!--devops:count:agents-->11<!--/devops:count:agents--> agent definitions
+├── skills/                        ← <!--devops:count:skills-->21<!--/devops:count:skills--> skill definitions (SKILL.md)
+├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
 └── scripts/                       ← Utility scripts (build-id, usage)
