@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.106.0] — 2026-07-02
+
+### Added
+
+- **New `/devops-rethink` skill — a strategic reset for stuck development, closing the gap above `/devops-flow` (tactical debugging) and `/devops-harden`/`/devops-polish` (incremental passes).** When iterations circle without reaching the goal, or a named section of the app is functionally/visually not where it should be, the skill first re-derives the original goals itself (repo evidence: git log, issues, concept pages, docs — plus a live look at the running app per `test-autonomy.md`/`preview-testing.md`), presents a hypothesis dossier, and validates it in a short question round that also **jointly calibrates a demolition corridor** (how much may be torn down: nothing / section / everything). Fresh ideation is **structurally un-anchored**: three parallel instances of the new code-blind `devops:rethinker` agent (tools: WebSearch/WebFetch only — no Read/Grep/Glob, so the current implementation cannot leak in) each receive ONLY a code-free Rethink Brief plus one lens — product-value, ux-design, enduser-feel (architecture swap for backend-only targets); prompt blocks live in the skill's `deep-knowledge/lenses.md` with a fixed `RETHINK_APPROACH` output contract. A reconciliation step then re-introduces reality: migration path, effort, risks, and blast-radius labels relative to the corridor (over-corridor ideas stay visible as flagged outliers but are never implemented without explicit corridor widening). The decision happens on a `devops-concept` decision page — **Iterate** loops back, only an explicit **Implement** starts work — and the handoff goes to `devops-autonomous` with a `devops-test-plan` test mandate. Artifacts persist under `.claude/rethink/<date>-<slug>/` for later resume. Design spec: `docs/superpowers/specs/2026-07-02-devops-rethink-design.md` (PR #230). (552 tests pass.)
+
 ## [0.105.0] — 2026-06-23
 
 ### Added
