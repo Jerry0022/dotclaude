@@ -169,7 +169,7 @@
 <section id="overview">
 <h1>Architecture Documentation <small>devops v0.87.0</small></h1>
 <p class="lead">
-  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->34<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->20<!--/devops:count:skills--> skills, <!--devops:count:agents-->11<!--/devops:count:agents--> agents,
+  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->34<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->21<!--/devops:count:skills--> skills, <!--devops:count:agents-->12<!--/devops:count:agents--> agents,
   2 MCP servers, a deterministic completion card engine, and a 3-layer extension system.
 </p>
 <div role="note" style="margin:.4rem 0 1.4rem;padding:.6rem .9rem;background:var(--bg2);border-left:3px solid var(--warn);border-radius:4px;color:var(--text2);font-size:.85rem;">
@@ -189,11 +189,11 @@
     <span class="badge b-hook">Stop &times;<!--devops:count:hooks:stop-->3<!--/devops:count:hooks:stop--></span>
   </div>
   <div class="card">
-    <h4><!--devops:count:skills-->20<!--/devops:count:skills--> Skills</h4>
+    <h4><!--devops:count:skills-->21<!--/devops:count:skills--> Skills</h4>
     <p style="color:var(--text2);font-size:.85rem">Slash commands: ship, commit, flow, new-issue, project-setup, readme, refresh-usage, extend-skill, repo-health, claude-md-lint, concept, agents, plugin-update, autonomous, burn, learn, harden, polish, test-plan</p>
   </div>
   <div class="card">
-    <h4><!--devops:count:agents-->11<!--/devops:count:agents--> Agents</h4>
+    <h4><!--devops:count:agents-->12<!--/devops:count:agents--> Agents</h4>
     <p style="color:var(--text2);font-size:.85rem">Specialized subagents: ai, core, designer, feature, frontend, gamer, po, qa, redteam, research, windows</p>
   </div>
   <div class="card">
@@ -212,7 +212,7 @@
 ├── .claude-plugin/
 │   ├── plugin.json            <span style="color:var(--text2)"># Plugin manifest (name, version, mcpServers, hooks)</span>
 │   └── marketplace.json       <span style="color:var(--text2)"># Marketplace registration</span>
-├── agents/                    <span style="color:var(--accent2)"># <!--devops:count:agents-->11<!--/devops:count:agents--> agent definitions (*.md with YAML frontmatter)</span>
+├── agents/                    <span style="color:var(--accent2)"># <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions (*.md with YAML frontmatter)</span>
 ├── deep-knowledge/            <span style="color:var(--warn)"># <!--devops:count:dk-->31<!--/devops:count:dk--> cross-cutting reference docs</span>
 ├── hooks/
 │   ├── hooks.json             <span style="color:var(--purple)"># Hook registry (event &rarr; command mapping)</span>
@@ -235,7 +235,7 @@
 │   ├── render-card.js         <span style="color:var(--warn)"># Completion card template engine</span>
 │   ├── build-id.js            <span style="color:var(--text2)"># Deterministic content hash</span>
 │   └── lib/usage-meter.js     <span style="color:var(--text2)"># Usage bar renderer</span>
-├── skills/                    <span style="color:var(--accent)"># <!--devops:count:skills-->20<!--/devops:count:skills--> skill definitions (SKILL.md + deep-knowledge/)</span>
+├── skills/                    <span style="color:var(--accent)"># <!--devops:count:skills-->21<!--/devops:count:skills--> skill definitions (SKILL.md + deep-knowledge/)</span>
 │   ├── ship/  commit/  flow/  new-issue/  project-setup/  readme/
 │   ├── refresh-usage/  extend-skill/  repo-health/  claude-md-lint/
 │   ├── concept/  agents/  plugin-update/  autonomous/  burn/  learn/
