@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.107.1] — 2026-07-03
+
+### Fixed
+
+- **`ship_release`'s post-merge tree guard no longer fires a false `postMergeWarning` on every Windows ship.** Root cause: `treeOf()` shelled out `git rev-parse <ref>^{tree}` through Node `execSync`, which runs via **cmd.exe** on Windows — where `^` is the escape character. Git received `HEAD{tree}` (fatal), the error was swallowed to `null`, and the guard reported `postMergeTreeMatch: false` on **every** ship (observed live on the v0.107.0 release; trees were verified byte-identical, `3bcc2a77…`). `treeOf` now uses the caret-free `git show -s --format=%T <ref>` (same content-addressed tree id); 3 new tests pin the no-caret spelling. The cmd.exe caret trap is documented in `deep-knowledge/tool-selection.md` (prefer caret-free spellings or `execFileSync` argument arrays for any JS that shells out to git). Additionally, `/devops-ship` Step 4 (skill 0.6.1) now **verifies before warning**: on `postMergeTreeMatch: false` it compares the branch-HEAD tree against `origin/<base>` itself — equal trees are logged as a false alarm instead of producing a `userFinalTest` item.
+- **The plugin-source repo's ship self-update finalizer (Step 8) no longer dies with `MODULE_NOT_FOUND` after a version-bumping ship.** The extension invoked the update hook via `${CLAUDE_PLUGIN_ROOT}`, which pins the version directory the session started with (e.g. `…/devops/0.106.0`) — a mid-session cache rebuild (parallel session's SessionStart or a prior finalizer) deletes that directory, leaving the pinned path dangling (observed right after shipping 0.107.0). Step 8 now resolves the hook path fresh at run time (cache glob → marketplace-clone fallback) and documents the sync-already-done signature (registry + marketplace + cache on the shipped version, no `.mcp-stale.json`) so a raced-ahead sync is recognized as a no-op instead of a failure.
+
 ## [0.107.0] — 2026-07-03
 
 ### Added
