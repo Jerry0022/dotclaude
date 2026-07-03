@@ -53,6 +53,20 @@ For the detailed verify/report contract, see `skills/devops-plugin-update/SKILL.
 | Registry | `~/.claude/plugins/installed_plugins.json` (`devops@dotclaude`) |
 | Stale sentinel | `~/.claude/plugins/.mcp-stale.json` |
 
+## Path resolution — why Step 8 must not trust `${CLAUDE_PLUGIN_ROOT}`
+
+`${CLAUDE_PLUGIN_ROOT}` resolves to the **version-pinned** cache dir of the plugin
+the session was *started* with. A ship bumps the version, and any cache rebuild in
+between (parallel session's `ss.plugin.update`, or this repo's own finalizer) deletes
+the old version dir — the pinned path then points into the void (`MODULE_NOT_FOUND`,
+observed 2026-07-03 after shipping 0.107.0, where the cache had already moved
+0.106.0 → 0.107.0 mid-session). Step 8 therefore globs
+`~/.claude/plugins/cache/dotclaude/devops/*/…` fresh and falls back to the
+marketplace clone. Sync-already-done signature (another session raced ahead —
+nothing left to do): registry `installed_plugins.json`, marketplace
+`plugin.json`, and the cache dir all report the shipped version AND no
+`.mcp-stale.json` sentinel exists.
+
 ## "falls vorhanden" — only when devops is actually installed
 
 If `~/.claude/plugins/marketplaces/dotclaude` does not exist, there is no installed

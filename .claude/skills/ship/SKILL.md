@@ -59,11 +59,25 @@ card item (the Step 8 sync will be a silent no-op / in-place cache repair).
 ### Action
 
 Run the canonical updater (same hook `/devops-plugin-update` delegates to — single
-source of truth, no duplicated logic):
+source of truth, no duplicated logic).
+
+**Resolve the hook path fresh — do NOT use `${CLAUDE_PLUGIN_ROOT}`.** That variable
+pins the version dir the session started with (e.g. `…/devops/0.106.0`), which a
+cache rebuild (a parallel session's SessionStart, or a prior finalizer run) may have
+**deleted** by the time Step 8 runs — observed as `MODULE_NOT_FOUND` right after the
+0.107.0 ship. Glob the cache first, fall back to the marketplace clone (always
+present, survives every rebuild):
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js"
+f="$(ls -d "$HOME/.claude/plugins/cache/dotclaude/devops"/*/hooks/session-start/ss.plugin.update.js 2>/dev/null | head -1)"
+[ -z "$f" ] && f="$HOME/.claude/plugins/marketplaces/dotclaude/plugins/devops/hooks/session-start/ss.plugin.update.js"
+node "$f"
 ```
+
+If the cache/registry/marketplace already report the just-shipped version and no
+`~/.claude/plugins/.mcp-stale.json` exists, another session raced ahead and the sync
+already happened — the hook run is then a silent no-op; verify the three paths (see
+reference.md) instead of treating the earlier `MODULE_NOT_FOUND`-style failure as fatal.
 
 The hook handles `git pull --ff-only` on the marketplace clone, cache rebuild to the
 shipped version, `installed_plugins.json` update, and the MCP-stale sentinel on a real

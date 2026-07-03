@@ -18,6 +18,7 @@ import {
   branchExists,
   worktreePathForBranch,
   syncLocalBranch,
+  treeOf,
 } from "./git.js";
 
 beforeEach(() => {
@@ -53,6 +54,32 @@ describe("gitStrict", () => {
       throw new Error("fatal");
     });
     expect(() => gitStrict("bad-command")).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// treeOf — post-merge tree guard lookup
+// ---------------------------------------------------------------------------
+
+describe("treeOf", () => {
+  test("returns the tree id of a ref", () => {
+    execSync.mockReturnValue("3bcc2a7727a1ef4c53626a7b61f413985a27b0ca\n");
+    expect(treeOf("origin/main")).toBe("3bcc2a7727a1ef4c53626a7b61f413985a27b0ca");
+  });
+
+  test("REGRESSION: command contains no caret (cmd.exe eats ^ on Windows → guard fired null/false on every ship)", () => {
+    execSync.mockReturnValue("tree123\n");
+    treeOf("HEAD");
+    const cmd = execSync.mock.calls[0][0];
+    expect(cmd).not.toContain("^");
+    expect(cmd).toContain("--format=%T");
+  });
+
+  test("returns null for unknown ref", () => {
+    execSync.mockImplementation(() => {
+      throw new Error("fatal: bad revision");
+    });
+    expect(treeOf("nope")).toBeNull();
   });
 });
 
