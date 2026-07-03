@@ -170,6 +170,16 @@ After all textual conflicts are resolved (or after a clean merge):
    - Import added on one side + the module was moved/renamed on the other
 3. **If the project has build/lint/typecheck** → run it to catch compilation errors
 4. If semantic issues found → fix them as part of the merge resolution
+5. **Purpose-level verification (ship flow only):** code-semantic checks catch
+   broken wiring, not broken *intent*. During `/devops-ship`, the Purpose
+   Alignment Gate additionally verifies that the merged result honors the
+   goals and cross-cutting conventions of recently merged branches — in both
+   directions (e.g. "all elements get hotkeys" must cover an element the
+   other branch added, and a convention introduced on the shipping branch is
+   retro-applied to existing artifacts).
+   See `skills/devops-ship/deep-knowledge/purpose-alignment.md`. The git-sync
+   cron resolves code-level conflicts only — purpose alignment runs at ship
+   time.
 
 ### Step 6 — Complete the merge
 

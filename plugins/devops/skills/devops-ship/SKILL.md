@@ -1,6 +1,6 @@
 ---
 name: devops-ship
-version: 0.5.0
+version: 0.6.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, render_completion_card,
@@ -142,6 +142,36 @@ After rebase + push + tests pass, **re-run `ship_preflight`** with the same para
 
 This loop naturally terminates — each iteration brings the branch closer to base.
 
+### 1d. Purpose Alignment Gate
+
+After the preflight loop stabilizes (`ready: true`), verify the ship against
+the **purposes** of recently merged work — not just its code. Full protocol:
+`deep-knowledge/purpose-alignment.md`.
+
+- **Light check (every ship, direct + intermediate):** gather the purposes of
+  the last 3–5 merged PRs into `<base>` (Claude-authored bodies preferred;
+  fallback: merge commits / CHANGELOG), extract cross-cutting conventions, and
+  audit **in both directions**: (a) the current diff honors prior conventions —
+  e.g. a prior branch's "all elements get hotkeys" must also cover an element
+  added on THIS branch, even though the hotkey task never belonged to it; and
+  (b) a convention THIS branch introduces is retro-applied to the existing
+  artifacts on `<base>` as part of this ship (reverse propagation).
+- **Full check (a rebase/merge happened in 1b, or re-entry after
+  `baseAdvancedDuringChecks`):** additionally verify the merged content still
+  delivers its purposes in **both directions** — their features intact under
+  our changes, our features intact under theirs.
+
+Findings: fix autonomously when the fix is mechanical and clearly implied by
+the convention (it ships with this PR). Ask via AskUserQuestion ONLY for
+high-impact conflicts (contradicting purposes, design decisions, substantial
+rework) — all batched into ONE question.
+
+Skip silently when: `mode: "file-only"`, no purpose sources found, or the diff
+is clearly out of scope for every gathered purpose.
+
+Feed results into Step 6: fixed violations → `changes`; open/unverifiable
+items → `userFinalTest`. Silent when clean.
+
 ### Merge strategy decision
 
 Based on the `file-overlap` check from the **final** preflight run:
@@ -219,7 +249,7 @@ Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status,
 - Tune timeout per call: `checksTimeoutSec: <30..3600>`.
 - See `deep-knowledge/quality-gates.md → Pre-Merge CI Checks Gate` for the full state matrix.
 
-**If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1b and rebase before retrying. This also fires as `baseAdvancedDuringChecks: true` when a **parallel ship landed on base while we waited for CI** — the PR is left open and unmerged (no silent overwrite). Same action: rebase + retry. See `deep-knowledge/merge-safety.md → How ship_release Prevents Overwrites`.
+**If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1b and rebase before retrying. This also fires as `baseAdvancedDuringChecks: true` when a **parallel ship landed on base while we waited for CI** — the PR is left open and unmerged (no silent overwrite). Same action: rebase + retry, then re-run the **Step 1d full check** before the retry: a parallel ship just landed, and its purpose may impose obligations on this branch (see `deep-knowledge/purpose-alignment.md`). See `deep-knowledge/merge-safety.md → How ship_release Prevents Overwrites`.
 
 **If `postMergeTreeMatch: false`** (merge succeeded but `postMergeWarning` is set): a concurrent ship was three-way merged into base during the merge — its changes are preserved, but surface `postMergeWarning` as a `userFinalTest` item ("Verify main is consistent — a parallel ship merged in concurrently") so the user double-checks. Do NOT treat it as a ship failure — the merge landed.
 

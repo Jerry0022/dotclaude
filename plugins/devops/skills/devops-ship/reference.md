@@ -53,4 +53,19 @@ Without a `verify:` block the watcher only confirms the GitHub Actions
 run on the merge commit. Failures (CI or verify) surface at the next
 SessionStart and via Windows toast.
 
+## Purpose alignment tuning (opt-out / standing conventions)
+
+The Purpose Alignment Gate (ship Step 1d) checks every ship against the
+purposes of recently merged branches. Tune it via a `purpose_alignment:`
+block in **this** `reference.md` — see
+[`deep-knowledge/purpose-alignment.md`](deep-knowledge/purpose-alignment.md):
+
+```yaml
+purpose_alignment:
+  depth: 5          # merged branches to gather (min 3 is enforced)
+  disable: false    # true = skip the gate entirely
+  conventions:      # standing conventions checked on EVERY ship,
+    - "All interactive elements have hotkeys"    # independent of history depth
+```
+
 This pattern applies to ALL plugin skills, not just ship.

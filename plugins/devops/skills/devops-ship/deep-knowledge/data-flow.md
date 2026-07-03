@@ -9,6 +9,8 @@ deterministic data flow.
 ```
 ship_preflight → { ready, branch, base: "main", intermediate: false }
       ↓
+[purpose alignment gate — Claude-side, no MCP tool; see purpose-alignment.md]
+      ↓
 ship_build → { success, buildId, steps }
       ↓
 ship_version_bump → { vOld, vNew, filesUpdated, verified }
@@ -28,6 +30,8 @@ render_completion_card → card markdown (VERBATIM)
 
 ```
 ship_preflight → { ready, branch, base: "feat/42", intermediate: true, autoDetectedBase: "feat/42" }
+      ↓
+[purpose alignment gate — sources: sibling sub-branch PRs merged into feat/42]
       ↓
 ship_build → { success, buildId, steps }
       ↓
