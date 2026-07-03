@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.107.0] — 2026-07-03
+
+### Added
+
+- **`/devops-ship` now verifies every ship against the *purposes* of recently merged branches, not just their code — the new Purpose Alignment Gate (Step 1d).** Code-level merge safety (rebase gates, conflict classification, tests) cannot catch a purpose-level defect: branch A ships "hotkeys on ALL interactive elements", branch B — developed in parallel — ships a new element with a conflict-free rebase and green tests, yet the merged result violates A's convention (no hotkey on B's element) and may silently break A's feature. The gate gathers the purposes of the last 3–5 merged PRs into the base (≥3 when available, discretionary up to ~8; Claude-authored PR bodies preferred, fallback merge commits/CHANGELOG; reverts and mechanical bumps excluded), distills **cross-cutting conventions** from **local purposes**, and audits **bidirectionally**: forward — conventions from merged branches must cover artifacts this branch introduces; reverse — a convention THIS branch introduces is retro-applied to the existing artifacts on base as part of the same ship (never silently demoted to a "follow-up"). When a rebase/merge actually happened (incl. `baseAdvancedDuringChecks` re-entry), a **regression audit** additionally verifies the merged content still delivers its purposes in both directions. Resolution is autonomous-first: mechanical fixes ship with the PR; only high-impact conflicts (contradicting purposes, per-site design decisions, a retro-migration dwarfing the branch's own diff) go into ONE batched AskUserQuestion — low-confidence findings (title-only sources) never block and surface as `userFinalTest` items at most. Intermediate ships audit sibling sub-branch PRs (parallel role agents propagate conventions to each other). Full P1–P6 protocol in the skill's `deep-knowledge/purpose-alignment.md`; referenced from `merge-safety.md` Step 5 and the ship data-flow diagrams; project-tunable via a `purpose_alignment:` block (depth / disable / standing conventions) in the ship extension's `reference.md`. Skill version 0.5.0 → 0.6.0. Design spec: `docs/superpowers/specs/2026-07-03-ship-purpose-alignment-design.md`. (552 tests pass.)
+
 ## [0.106.0] — 2026-07-02
 
 ### Added
