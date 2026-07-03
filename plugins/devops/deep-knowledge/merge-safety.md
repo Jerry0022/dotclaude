@@ -173,8 +173,10 @@ After all textual conflicts are resolved (or after a clean merge):
 5. **Purpose-level verification (ship flow only):** code-semantic checks catch
    broken wiring, not broken *intent*. During `/devops-ship`, the Purpose
    Alignment Gate additionally verifies that the merged result honors the
-   goals and cross-cutting conventions of recently merged branches (e.g. "all
-   elements get hotkeys" must also cover an element the other branch added).
+   goals and cross-cutting conventions of recently merged branches — in both
+   directions (e.g. "all elements get hotkeys" must cover an element the
+   other branch added, and a convention introduced on the shipping branch is
+   retro-applied to existing artifacts).
    See `skills/devops-ship/deep-knowledge/purpose-alignment.md`. The git-sync
    cron resolves code-level conflicts only — purpose alignment runs at ship
    time.

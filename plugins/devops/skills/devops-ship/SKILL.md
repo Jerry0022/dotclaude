@@ -151,9 +151,11 @@ the **purposes** of recently merged work — not just its code. Full protocol:
 - **Light check (every ship, direct + intermediate):** gather the purposes of
   the last 3–5 merged PRs into `<base>` (Claude-authored bodies preferred;
   fallback: merge commits / CHANGELOG), extract cross-cutting conventions, and
-  audit the current diff for violations — e.g. a prior branch's convention
-  "all elements get hotkeys" must also cover an element added on THIS branch,
-  even though the hotkey task never belonged to this branch.
+  audit **in both directions**: (a) the current diff honors prior conventions —
+  e.g. a prior branch's "all elements get hotkeys" must also cover an element
+  added on THIS branch, even though the hotkey task never belonged to it; and
+  (b) a convention THIS branch introduces is retro-applied to the existing
+  artifacts on `<base>` as part of this ship (reverse propagation).
 - **Full check (a rebase/merge happened in 1b, or re-entry after
   `baseAdvancedDuringChecks`):** additionally verify the merged content still
   delivers its purposes in **both directions** — their features intact under

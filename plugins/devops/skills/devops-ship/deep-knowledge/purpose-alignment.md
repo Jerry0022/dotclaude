@@ -103,9 +103,11 @@ lint-rule or guard additions, template changes.
 
 ## Step P3 — Propagation audit
 
-*Does OUR diff honor THEIR conventions?*
+*Does OUR diff honor THEIR conventions — and does the existing repo honor OURS?*
 
-For each convention:
+### Forward propagation
+
+For each convention from a merged branch:
 
 1. Determine whether the current diff (`git diff origin/<base>...HEAD`)
    introduces anything inside the convention's scope (a new element, a new
@@ -115,10 +117,23 @@ For each convention:
    branch's surface to see what compliance looks like.
 3. Violation found → record `{ convention, artifact, fixSize }`.
 
-This audit is **directional**: conventions flow from already-merged branches
-into the current one. The current branch's own new conventions are NOT
-retro-applied to the rest of the repo here — flag them as follow-up work
-instead of widening this ship's scope.
+### Reverse propagation (retro-application)
+
+The audit runs in **both directions**. When the CURRENT branch establishes a
+new cross-cutting convention (distill it from the branch's own diff + task
+context, same P2 markers), the artifacts that already exist on `<base>` fall
+inside its scope too — a convention "all elements get hotkeys" introduced on
+THIS branch obligates the elements the repo already has, not only future ones.
+
+1. Enumerate existing in-scope artifacts on `origin/<base>` — targeted
+   Grep/Glob over the convention's surface, not a full-repo read.
+2. Apply the convention to each site **as part of this ship** when the fix is
+   mechanical (same escalation rules as P5). The retro-fixes commit on the
+   current branch and ship with the PR.
+3. When the retro-migration would dwarf the branch's own diff, or individual
+   sites need per-site design decisions → include it in the ONE batched
+   AskUserQuestion with a recommendation (apply now vs. explicit user call).
+   Never drop it silently and never demote it to an unasked "follow-up".
 
 ## Step P4 — Regression audit (full check only)
 
@@ -150,6 +165,7 @@ For each purpose record (local purposes included):
 |---|---|
 | Violation with a mechanical, clearly-implied fix (add the missing hotkey, wrap the call, register the handler) | Fix autonomously, commit on the current branch, re-run affected tests |
 | Regression caused by the merge/rebase | Fix autonomously (merge defect) |
+| Retro-application of a convention THIS branch introduces (existing sites on `<base>`, see P3 reverse propagation) | Apply autonomously when mechanical — ships with this PR. If it dwarfs the branch's own diff or needs per-site design decisions → **AskUserQuestion** (batched, with recommendation) |
 | Two gathered purposes contradict each other as applied to this diff | **AskUserQuestion** |
 | Compliance needs a design decision (where the hotkey goes, which UX pattern) and no reference implementation exists to copy | **AskUserQuestion** |
 | Fix would require substantial rework of this branch's approach, or changes user-visible behavior beyond this branch's own scope (high impact) | **AskUserQuestion** |
@@ -195,8 +211,9 @@ window.
 
 - **Reading full PR diffs during gathering.** Purposes come from
   titles/bodies; code is consulted per-finding in P3/P4 only.
-- **Retro-applying the current branch's new convention to the whole repo.**
-  Follow-up work — flag it, don't ship it here.
+- **Demoting retro-application to a silent "follow-up".** A convention this
+  branch introduces obligates existing artifacts NOW — apply it mechanically
+  or put it in the batched question; never defer it unasked.
 - **Blocking the ship on low-confidence violations.** Title-only purposes
   produce `userFinalTest` items, not gates.
 - **"Tests pass, so purposes hold."** Tests cover what was written; a missing

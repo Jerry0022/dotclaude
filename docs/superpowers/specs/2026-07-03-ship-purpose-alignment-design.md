@@ -27,8 +27,10 @@ whose purposes established standing conventions.
 - On every ship, gather the purposes of the last N merged branches
   (N = 5 default, ≥ 3 when available, discretionary) from Claude-authored
   PR bodies, merge commits, or CHANGELOG.
-- **Propagation audit:** verify the current diff honors cross-cutting
-  conventions established by those branches (hotkey example).
+- **Propagation audit (bidirectional):** verify the current diff honors
+  cross-cutting conventions established by those branches (hotkey example),
+  AND retro-apply a convention the current branch introduces to the existing
+  artifacts on base — as part of the same ship.
 - **Regression audit** (only when a merge/rebase actually happened during
   this ship): verify the merged content still delivers its purposes, in
   both directions (theirs intact under ours, ours intact under theirs).
@@ -42,8 +44,11 @@ whose purposes established standing conventions.
 
 - No new MCP tool — the gate is judgment work (reading purposes, assessing
   compliance) and lives in the skill layer, not in `ship/tools/`.
-- No retro-application of the *current* branch's new conventions to the rest
-  of the repo (flagged as follow-up instead — keeps ship scope bounded).
+- ~~No retro-application of the current branch's new conventions~~ — revised
+  2026-07-03 per user decision: retro-application IS in scope (P3 reverse
+  propagation). Scope stays bounded via escalation: a retro-migration that
+  dwarfs the branch's own diff goes into the batched AskUserQuestion instead
+  of landing silently.
 - No blocking on low-confidence purposes (title-only sources → the finding
   becomes a `userFinalTest` item, not a gate).
 - git-sync cron merges are out of scope (pointer added in merge-safety.md;
@@ -79,8 +84,10 @@ other).
 - **P2 Distill** — per source one purpose record; separate **local
   purposes** (regression-relevant only) from **cross-cutting conventions**
   (propagation-relevant); confidence tier by source quality.
-- **P3 Propagation audit** — does the current diff introduce artifacts
-  inside a convention's scope? Violations recorded with fix size.
+- **P3 Propagation audit (bidirectional)** — forward: does the current diff
+  introduce artifacts inside a merged convention's scope? Reverse: does a
+  convention introduced on this branch obligate existing artifacts on base
+  (retro-application, ships with the PR)? Violations recorded with fix size.
 - **P4 Regression audit** (full only) — intersect diff with each record's
   surfaces; no overlap → intact, done; overlap → tests or targeted semantic
   read (merge-safety Step 5 patterns), both directions.
