@@ -312,7 +312,12 @@ export function isRebasedOnto(base, opts) {
  * overwritten. See merge-safety.md "How ship_release Prevents Overwrites". (#207)
  */
 export function treeOf(ref, opts) {
-  return git(`rev-parse ${ref}^{tree}`, opts);
+  // NOT `rev-parse <ref>^{tree}`: git()/execSync runs through cmd.exe on
+  // Windows, where `^` is the escape character — the caret was eaten
+  // ("HEAD{tree}" → fatal) and treeOf returned null on EVERY Windows call,
+  // firing ship_release's post-merge tree guard as a permanent false alarm.
+  // `show -s --format=%T` yields the same tree id with shell-safe syntax.
+  return git(`show -s --format=%T ${ref}`, opts);
 }
 
 /**

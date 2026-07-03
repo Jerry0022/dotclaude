@@ -15,6 +15,25 @@ Always prefer Claude Code's dedicated tools over Bash equivalents:
 - Batch Bash calls with `&&` when multiple sequential commands are needed.
 - Use Unix shell syntax (forward slashes, /dev/null) even on Windows.
 
+## cmd.exe Caret Trap (Node `execSync`/`exec`)
+
+Node's `execSync("git …")` runs through **cmd.exe** on Windows, where `^` is the
+escape character — it is silently eaten before git sees the argument. Git
+revision syntax breaks invisibly: `HEAD^{tree}` becomes `HEAD{tree}` (fatal),
+`HEAD^` becomes `HEAD`, `<a>^..<b>` corrupts ranges. Because wrappers like
+`git()` swallow errors into `null`, this surfaces as a *permanent* silent
+failure, not a crash (real case: `treeOf()` returned null on every Windows call,
+so `ship_release`'s post-merge tree guard fired a false `postMergeWarning` on
+every ship — fixed in v0.107.1).
+
+Rules for any JS that shells out to git:
+- Prefer caret-free spellings: `git show -s --format=%T <ref>` instead of
+  `rev-parse <ref>^{tree}`; `<ref>~1` instead of `<ref>^`.
+- If caret syntax is unavoidable, use `execFileSync("git", [args…])` (no shell,
+  no escaping) — never a shell string.
+- The Bash *tool* is unaffected (Git Bash / POSIX sh); this trap is specific to
+  Node child_process with a shell string on Windows.
+
 ## Project Map as Search Index
 
 Before running a full-repo Grep or Glob (no `path` parameter), **always** read

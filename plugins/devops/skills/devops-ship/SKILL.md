@@ -1,6 +1,6 @@
 ---
 name: devops-ship
-version: 0.6.0
+version: 0.6.1
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, render_completion_card,
@@ -251,7 +251,17 @@ Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status,
 
 **If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1b and rebase before retrying. This also fires as `baseAdvancedDuringChecks: true` when a **parallel ship landed on base while we waited for CI** — the PR is left open and unmerged (no silent overwrite). Same action: rebase + retry, then re-run the **Step 1d full check** before the retry: a parallel ship just landed, and its purpose may impose obligations on this branch (see `deep-knowledge/purpose-alignment.md`). See `deep-knowledge/merge-safety.md → How ship_release Prevents Overwrites`.
 
-**If `postMergeTreeMatch: false`** (merge succeeded but `postMergeWarning` is set): a concurrent ship was three-way merged into base during the merge — its changes are preserved, but surface `postMergeWarning` as a `userFinalTest` item ("Verify main is consistent — a parallel ship merged in concurrently") so the user double-checks. Do NOT treat it as a ship failure — the merge landed.
+**If `postMergeTreeMatch: false`** (merge succeeded but `postMergeWarning` is set): **verify before surfacing** — the guard can fire as a false alarm (a tooling error in the tree lookup or a stale `origin/<base>` ref right after the merge; observed as a permanent Windows false positive before v0.107.1). Run:
+
+```bash
+git fetch origin <base>
+git show -s --format=%T <branch-HEAD-sha>   # tree of what was built+tested
+git show -s --format=%T origin/<base>        # tree of what landed
+```
+
+- **Trees equal** → false alarm. Log one line ("post-merge tree guard false alarm — trees verified identical"), NO `userFinalTest` item.
+- **Trees differ** → a concurrent ship was three-way merged into base during the merge — its changes are preserved. Surface `postMergeWarning` as a `userFinalTest` item ("Verify main is consistent — a parallel ship merged in concurrently"). Do NOT treat it as a ship failure — the merge landed.
+- Comparing `origin/<base>` to the `mergeSha` alone proves nothing (same commit after propagation) — always compare against the **branch HEAD** that was built and tested.
 
 If `success: false` → do NOT proceed to cleanup. Report error and render completion card with variant `ship-blocked`.
 
