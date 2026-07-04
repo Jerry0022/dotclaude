@@ -4,8 +4,12 @@ Cross-cutting rule for when to involve specialized agents without explicit user 
 
 ## Core Rule
 
-**Proactively evaluate whether specialized agents add value for the current task.**
-Do not wait for the user to say "use agents" — assess this yourself based on task signals.
+**Orchestrating specialized agents is the default mode of work — not the exception.**
+Involve the relevant devops agents automatically, in the background, without waiting for
+the user to say "use agents". For any task that isn't an explicit carve-out below, spin up
+the fitting agents by default; the decision is never "should I use agents?" but "which
+agents fit?". The only tasks that stay fully inline are the exceptions in
+[When NOT to Orchestrate](#when-not-to-orchestrate).
 
 ## When to Orchestrate Agents
 
@@ -71,7 +75,9 @@ integrations) is canonical there. For higher-stakes work, escalate to the
 
 ## Rules
 
-- This is a **judgment call**, not a mechanical trigger — use context and common sense
+- **Orchestrate by default.** The judgment call is not *whether* to use agents but
+  *which* ones fit — and whether a carve-out applies. Skipping agents is the decision
+  that needs justification, not using them.
 - When in doubt about complexity: orchestrate. The cost of an unnecessary agent is low;
   the cost of a missed perspective is high.
 - Never orchestrate silently — always tell the user which agents you're spinning up
