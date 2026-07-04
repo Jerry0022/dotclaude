@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 /**
  * @script refresh-usage-headless
- * @version 0.5.0
+ * @version 0.6.0
  * @plugin devops
  *
- * Headless Usage Scraper for claude.ai
+ * Headless Usage Fetcher for claude.ai
  *
  * Spawns a dedicated, isolated Edge instance with its own user-data-dir under
  * ~/.claude/edge-usage-profile — completely independent of the user's main
- * Edge windows/tabs. Scrapes usage via raw CDP WebSocket, then kills only
- * that dedicated instance (by PID tree). The user's main Edge is never
- * touched.
+ * Edge windows/tabs. Fetches usage via a cookie-authed in-page call to the
+ * internal API (GET /api/organizations/{id}/usage — the settings page became
+ * an SPA overlay in 2026-05 that never renders headless, so DOM scraping is
+ * only a last-resort fallback), then leaves the hidden instance for reuse.
+ * The user's main Edge is never touched.
  *
  * Login: the scraper profile starts empty. On first run it needs a one-time
  * visible login to claude.ai; cookies then persist in the scraper profile
@@ -202,6 +204,61 @@ function parseUsageText(text) {
   };
 }
 
+/**
+ * Map the claude.ai internal usage API payload onto the usage-live.json schema.
+ * Primary data source since the settings page became an SPA overlay that never
+ * renders headless (DOM scrape dead since 2026-05-31) — the in-page,
+ * cookie-authed `GET /api/organizations/{id}/usage` is richer and immune to UI
+ * redesigns.
+ *
+ * @param {object|null} usage       parsed /usage response (five_hour, seven_day, …)
+ * @param {object|null} rateLimits  parsed /rate_limits response (rate_limit_tier)
+ * @param {number} nowMs
+ * @returns {object|null} snapshot in the existing usage-live.json schema, or
+ *   null when the payload carries no trustworthy five_hour utilization.
+ */
+function mapApiUsage(usage, rateLimits, nowMs) {
+  // Clamped to [0,100]: an over-quota reading (>100%) must not overflow the
+  // 14-char bar, and the statusline writer's validPct would reject it anyway.
+  const pctOf = (v) => (typeof v === 'number' && Number.isFinite(v)
+    ? Math.min(100, Math.max(0, Math.round(v)))
+    : null);
+  const resetMin = (iso) => {
+    const t = typeof iso === 'string' ? Date.parse(iso) : NaN;
+    return Number.isFinite(t) ? Math.max(0, Math.round((t - nowMs) / 60_000)) : null;
+  };
+
+  const sessionPct = pctOf(usage && usage.five_hour && usage.five_hour.utilization);
+  if (sessionPct === null) return null; // no usable session window → don't write garbage
+
+  const weeklyPct = pctOf(usage.seven_day && usage.seven_day.utilization);
+  const snapshot = {
+    timestamp: new Date(nowMs).toISOString(),
+    session: { pct: sessionPct, resetInMinutes: resetMin(usage.five_hour.resets_at) },
+    weekly: weeklyPct === null ? null : {
+      pct: weeklyPct,
+      resetDay: null,  // API carries durations only — no day/time strings
+      resetTime: null,
+      resetInMinutes: resetMin(usage.seven_day.resets_at),
+    },
+    plan: tierLabel(rateLimits && rateLimits.rate_limit_tier),
+  };
+  const sonnetPct = pctOf(usage.seven_day_sonnet && usage.seven_day_sonnet.utilization);
+  if (sonnetPct !== null) snapshot.weeklySonnet = { pct: sonnetPct };
+  return snapshot;
+}
+
+/** 'default_claude_max_5x' → 'Max 5x'; unknown/absent tiers → generic label. */
+function tierLabel(tier) {
+  if (typeof tier === 'string') {
+    const max = tier.match(/max_(\d+)x/i);
+    if (max) return `Max ${max[1]}x`;
+    if (/pro/i.test(tier)) return 'Pro';
+    if (/free/i.test(tier)) return 'Free';
+  }
+  return 'Max Plan';
+}
+
 async function isCDPAvailable() {
   try {
     const res = await fetch(CDP_URL + '/json/version', { signal: AbortSignal.timeout(2000) });
@@ -331,6 +388,10 @@ async function launchScraperInstance({ visible = false, url = USAGE_URL } = {}) 
 
   log(`Launching dedicated scraper instance (${visible ? 'visible' : 'headless'})...`);
   const child = spawn(EDGE_EXE, args, { detached: true, stdio: 'ignore' });
+  // Without a listener, an async spawn error (missing/blocked Edge exe) after
+  // unref() becomes an uncaught exception → node exits 1, bypassing every
+  // cache fallback. Swallow it — the CDP-ready poll below fails cleanly instead.
+  child.on('error', (err) => { log('Scraper spawn error:', err && err.message); });
   child.unref();
   try { fs.writeFileSync(SCRAPER_PID_FILE, String(child.pid)); } catch {}
 
@@ -357,7 +418,12 @@ function createCDPConnection(wsUrl) {
   const pending = new Map();
 
   ws.addEventListener('message', (event) => {
-    const data = JSON.parse(typeof event.data === 'string' ? event.data : event.data.toString());
+    // Guarded parse — a malformed frame in this sync event callback would
+    // otherwise become an uncaught exception (node exit 1, no cache fallback).
+    let data;
+    try {
+      data = JSON.parse(typeof event.data === 'string' ? event.data : event.data.toString());
+    } catch { return; }
     if (data.id && pending.has(data.id)) {
       const { resolve, reject } = pending.get(data.id);
       pending.delete(data.id);
@@ -423,46 +489,79 @@ async function scrapeViaCDP() {
     });
     log('Attached to target, sessionId:', sessionId);
 
-    // Wait for page to load — poll until content appears or timeout
-    // Detect logged-out state via URL redirect, OR by the presence of a
-    // login button / email input (claude.ai sometimes renders the login UI
-    // at /settings/usage without changing the URL).
+    // Primary source: cookie-authed in-page fetch against the internal usage
+    // API. Since ~2026-05-31 claude.ai redirects /settings/usage to
+    // /new#settings/usage (settings became an SPA overlay that never renders in
+    // a headless background target), so DOM scraping is dead — but any
+    // same-origin page context can fetch /api/organizations/{id}/usage with the
+    // profile's session cookies. Poll a few times: right after navigation the
+    // document may still be about:blank, where the relative fetch fails.
     let evalData = null;
-    for (let attempt = 0; attempt < 12; attempt++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
       await new Promise(r => setTimeout(r, 2000));
       const evalResult = await cdp.send('Runtime.evaluate', {
-        expression: `(() => {
-          const url = window.location.href;
-          if (url.includes('/login') || url.includes('/logout')) return JSON.stringify({ notLoggedIn: true });
-          // Login UI heuristics — these appear on the public login page
-          if (document.querySelector('input[type="email"], input[name="email"]')) return JSON.stringify({ notLoggedIn: true });
-          const bodyText = (document.body && document.body.innerText) || '';
-          if (/Continue with Google|Mit Google fortfahren|Log in to Claude|Bei Claude anmelden/i.test(bodyText)) {
-            return JSON.stringify({ notLoggedIn: true });
+        expression: `(async () => {
+          try {
+            const orgsRes = await fetch('/api/organizations', { credentials: 'include' });
+            if (orgsRes.status === 401 || orgsRes.status === 403) return JSON.stringify({ notLoggedIn: true });
+            // Anchor to the PATHNAME — a substring test would misread query
+            // params like ?returnTo=/login on a logged-in redirect as logout.
+            try {
+              const p = new URL(orgsRes.url).pathname;
+              if (p === '/login' || p === '/logout' || p.startsWith('/login/') || p.startsWith('/logout/')) {
+                return JSON.stringify({ notLoggedIn: true });
+              }
+            } catch { /* unparseable final URL — fall through to content checks */ }
+            if (!orgsRes.ok) return JSON.stringify({ retry: 'orgs http ' + orgsRes.status });
+            const orgs = await orgsRes.json();
+            const orgId = Array.isArray(orgs) && orgs[0] && (orgs[0].uuid || orgs[0].id);
+            if (!orgId) return JSON.stringify({ retry: 'no org in response' });
+            const usageRes = await fetch('/api/organizations/' + orgId + '/usage', { credentials: 'include' });
+            if (usageRes.status === 401 || usageRes.status === 403) return JSON.stringify({ notLoggedIn: true });
+            if (!usageRes.ok) return JSON.stringify({ retry: 'usage http ' + usageRes.status });
+            const usage = await usageRes.json();
+            let rateLimits = null;
+            try {
+              const rlRes = await fetch('/api/organizations/' + orgId + '/rate_limits', { credentials: 'include' });
+              if (rlRes.ok) rateLimits = await rlRes.json();
+            } catch { /* tier label is optional */ }
+            return JSON.stringify({ usage, rateLimits });
+          } catch (e) {
+            return JSON.stringify({ retry: String(e) });
           }
-          const main = document.querySelector('main');
-          if (!main) return JSON.stringify({ noMain: true });
-          const text = main.innerText;
-          // Check if usage data has actually loaded (contains percentage text)
-          if (!/\\d+\\s*%\\s*(?:verwendet|used)/i.test(text)) return JSON.stringify({ notReady: true });
-          return JSON.stringify({ text });
         })()`,
+        awaitPromise: true,
         returnByValue: true
       }, sessionId);
-      evalData = JSON.parse(evalResult.result?.value || '{}');
-      if (evalData.notLoggedIn || evalData.text) break;
-      log(`Page not ready yet (attempt ${attempt + 1}/12)...`);
+      try { evalData = JSON.parse(evalResult.result?.value || '{}'); } catch { evalData = {}; }
+      if (evalData.notLoggedIn || evalData.usage) break;
+      log(`Usage API not reachable yet (attempt ${attempt + 1}/8): ${evalData.retry || 'empty result'}`);
+    }
+    if (!evalData) evalData = {};
+
+    if (evalData.notLoggedIn) {
+      await cdp.send('Target.closeTarget', { targetId }).catch(() => {});
+      targetId = null;
+      cdp.close();
+      log('Not logged in to claude.ai');
+      return 2;
     }
 
-    // If we never got usage text AND never saw an explicit login signal, the
-    // page just failed to render (transient: slow network, busy CPU, DOM still
-    // settling). Do NOT assume logged-out here — that misfire is exactly what
-    // spawned visible login windows on a perfectly logged-in profile. Let it
-    // fall through to a transient scrape failure (code 3): the caller serves
-    // cache and retries next turn WITHOUT opening a window. A real logout still
-    // surfaces via the explicit url / login-UI checks above (notLoggedIn).
-    if (evalData && !evalData.text && !evalData.notLoggedIn) {
-      log('Page did not render usage content — treating as transient failure (no login window)');
+    let parsed = evalData.usage ? mapApiUsage(evalData.usage, evalData.rateLimits, Date.now()) : null;
+
+    // Last resort: one single DOM text grab (no polling — the old 24s poll is
+    // pointless against the overlay). Only useful if claude.ai ever serves the
+    // legacy usage page again while the API is unavailable.
+    if (!parsed) {
+      const domResult = await cdp.send('Runtime.evaluate', {
+        expression: `(() => {
+          const main = document.querySelector('main');
+          return (main && main.innerText) || '';
+        })()`,
+        returnByValue: true
+      }, sessionId).catch(() => null);
+      const text = domResult?.result?.value || '';
+      if (text) parsed = parseUsageText(text);
     }
 
     // Close the background target
@@ -470,25 +569,12 @@ async function scrapeViaCDP() {
     targetId = null;
     cdp.close();
 
-    if (!evalData) evalData = {};
-
-    if (evalData.notLoggedIn) {
-      log('Not logged in to claude.ai');
-      return 2;
-    }
-
-    if (evalData.noMain || !evalData.text) {
-      log('Could not find main element on page');
-      return 3;
-    }
-
-    const parsed = parseUsageText(evalData.text);
     if (!parsed) {
-      log('Could not parse usage data from page.');
+      log('Usage API unreachable and no parsable DOM fallback — transient failure');
       return 3;
     }
 
-    fs.writeFileSync(USAGE_LIVE_PATH, JSON.stringify(parsed, null, 2));
+    writeJsonAtomic(USAGE_LIVE_PATH, parsed);
     log('Usage data refreshed:', JSON.stringify(parsed));
 
     return 0;
@@ -567,13 +653,51 @@ function getCacheAge() {
   } catch { return -1; }
 }
 
-/** Mark cached data with age info so the caller knows it's stale. */
-function markCached(ageMin) {
+/** Atomic write (tmp + rename) — a concurrent reader (MCP, statusLine writer)
+ *  never sees a partial file, and we never clobber mid-write. On Windows/NTFS
+ *  renameSync over a target held open by a reader throws EPERM/EACCES — retry
+ *  once, then fall back to a direct write (non-atomic, but losing atomicity
+ *  beats silently losing a successful live fetch). */
+function writeJsonAtomic(filePath, data) {
+  const json = JSON.stringify(data, null, 2) + '\n';
+  const tmp = `${filePath}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, json);
+  try {
+    fs.renameSync(tmp, filePath);
+    return;
+  } catch {}
+  try {
+    fs.renameSync(tmp, filePath); // one immediate retry — reader windows are short
+    return;
+  } catch {}
+  try { fs.writeFileSync(filePath, json); } finally {
+    try { fs.unlinkSync(tmp); } catch {}
+  }
+}
+
+/** Human-readable label for a scraper failure code — persisted into the cache
+ *  marker so the MCP can surface the REAL reason instead of guessing from an
+ *  exit code it never sees (cache fallback exits 0). */
+function failureLabel(code) {
+  return {
+    2: 'not logged in',
+    3: 'usage API/page yielded no data',
+    4: 'CDP scrape failed',
+    5: 'scraper instance could not launch',
+  }[code] || `failure code ${code}`;
+}
+
+/** Mark cached data with age + failure info so the caller knows it's stale AND why. */
+function markCached(ageMin, reason) {
   try {
     const data = JSON.parse(fs.readFileSync(USAGE_LIVE_PATH, 'utf8'));
     data._cached = true;
     data._ageMinutes = ageMin;
-    fs.writeFileSync(USAGE_LIVE_PATH, JSON.stringify(data, null, 2));
+    if (reason) {
+      data._failureReason = reason;
+      data._failedAt = new Date().toISOString();
+    }
+    writeJsonAtomic(USAGE_LIVE_PATH, data);
   } catch {}
 }
 
@@ -581,7 +705,7 @@ function useCacheOrExit(code) {
   const cacheAge = getCacheAge();
   if (cacheAge >= 0) {
     log(`Falling back to cached data (${cacheAge}m old)`);
-    markCached(cacheAge);
+    markCached(cacheAge, failureLabel(code));
     if (printSummary) printUsageSummary();
     process.exit(0);
   }
@@ -760,6 +884,8 @@ if (require.main === module) {
 
 module.exports = {
   parseUsageText,
+  mapApiUsage,
+  writeJsonAtomic,
   isMarkerPending,
   shouldOpenLoginWindow,
   loginPending,

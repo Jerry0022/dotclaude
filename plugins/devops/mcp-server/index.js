@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.5.0
+ * @version 0.6.0
  * @plugin devops
  * @description MCP server with two tools:
- *   - `get_usage`              — scrapes live usage data from claude.ai via CDP
+ *   - `get_usage`              — live usage via the claude.ai internal API
+ *                                (cookie-authed in-page fetch, headless Edge)
  *   - `render_completion_card` — fetches usage, computes build-ID, renders card.
  *       V&V gate: stamps ⚠ UNVERIFIED/RED when the Light-verification flags show
  *       the turn is finishing without a passing check, renders the `validation`
@@ -24,6 +25,12 @@ import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
+import {
+  assessFreshness,
+  isLiveSnapshot,
+  describeScrapeFailure,
+  pickNewestVersionScript,
+} from "./lib/usage-freshness.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, '..');
@@ -40,7 +47,19 @@ function tryParse(v) {
   try { return JSON.parse(v); } catch { return v; }
 }
 
-const SCRAPER_SCRIPT = join(PLUGIN_ROOT, 'scripts', 'refresh-usage-headless.js');
+// Resolved at CALL time, not module load: a mid-session plugin-cache rebuild
+// (ss.plugin.update) deletes the version dir this server was started from, and
+// a baked path then dies with MODULE_NOT_FOUND → node exit 1 (the observed
+// "scrape exit code 1" incident). Prefer this server's own checkout when it
+// still exists, else the newest cache version that ships the script.
+function resolveScraperScript() {
+  const baked = join(PLUGIN_ROOT, 'scripts', 'refresh-usage-headless.js');
+  try { if (statSync(baked).isFile()) return baked; } catch {}
+  return pickNewestVersionScript(
+    join(homedir(), '.claude', 'plugins', 'cache', 'dotclaude', 'devops'),
+    ['scripts', 'refresh-usage-headless.js'],
+  );
+}
 const USAGE_JSON_PATH = join(homedir(), '.claude', 'usage-live.json');
 const USAGE_BASELINE_PATH = join(homedir(), '.claude', 'usage-baseline.json');
 // The native statusLine writer (scripts/statusline-usage.js) keeps
@@ -111,9 +130,34 @@ function renderUsageLine(label, pct, elapsedPct, delta, resetMinutes) {
   return label + '  ' + bar + '  ' + pctStr + deltaPart + '  \u00b7 ' + resetStr + warn;
 }
 
+/** Age label for stale notes: '~47h old' / '~33d old'. */
+function formatAgeLabel(ageMinutes) {
+  if (!Number.isFinite(ageMinutes)) return '';
+  if (ageMinutes >= 2880) return `~${Math.round(ageMinutes / 1440)}d old`;
+  if (ageMinutes >= 60) return `~${Math.round(ageMinutes / 60)}h old`;
+  return `~${ageMinutes}m old`;
+}
+
+/** Expired snapshots render as an explicit warning instead of percent bars \u2014
+ *  a 33-day-old "93%" bar reads as current and is worse than no bar. */
+function renderExpiredNote(usageData, freshness) {
+  const ts = usageData?.timestamp ? Date.parse(usageData.timestamp) : NaN;
+  const lastStr = Number.isFinite(ts)
+    ? new Date(ts).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
+    : 'unknown';
+  const age = formatAgeLabel(freshness.ageMinutes);
+  const reason = usageData?._failureReason ? ` (${usageData._failureReason})` : '';
+  return `\u26a0 No current usage data \u2014 last reading ${lastStr}${age ? ', ' + age : ''}${reason}`;
+}
+
 function renderUsageMeter(usageData, delta5h, deltaWk) {
   if (!usageData || !usageData.session) {
     return '\u26a0 Usage data unavailable';
+  }
+
+  const freshness = assessFreshness(usageData, Date.now());
+  if (freshness.expired) {
+    return renderExpiredNote(usageData, freshness);
   }
 
   const s = usageData.session;
@@ -126,6 +170,15 @@ function renderUsageMeter(usageData, delta5h, deltaWk) {
   if (w) {
     const elapsedWkPct = ((WINDOW_WK_MIN - w.resetInMinutes) / WINDOW_WK_MIN) * 100;
     lines.push(renderUsageLine('Wk', w.pct, elapsedWkPct, deltaWk, w.resetInMinutes));
+  }
+
+  // Staleness is surfaced here too \u2014 get_usage consumers previously saw stale
+  // numbers with no hint in either the JSON or this meter string.
+  if (usageData._loginRequired) {
+    lines.push('\u26a0 Edge fetch offline (not logged in) \u2014 showing cached data; /devops-refresh-usage to reconnect');
+  } else if (freshness.cached && freshness.ageMinutes > 30) {
+    const suffix = usageData._failureReason ? ` (${usageData._failureReason})` : '';
+    lines.push(`cached \u00b7 ${formatAgeLabel(freshness.ageMinutes)}${suffix}`);
   }
 
   return lines.join('\n');
@@ -152,6 +205,15 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
     return blockquote('\u26a0 Usage data unavailable');
   }
 
+  // Expired snapshots must not render as percent bars \u2014 show the explicit
+  // "no current data" note instead (same policy as the get_usage meter).
+  const cardFreshness = assessFreshness(usageData, Date.now());
+  if (cardFreshness.expired) {
+    const noteLines = [renderExpiredNote(usageData, cardFreshness)];
+    if (healthLine) noteLines.unshift(healthLine, '');
+    return blockquote(noteLines.join('\n'));
+  }
+
   const s = usageData.session;
   const w = usageData.weekly;
   const lines = [];
@@ -170,14 +232,11 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
   // is offline until a one-time manual login. Never nags, never blocks.
   if (usageData._loginRequired) {
     lines.push('');
-    lines.push('\u26a0 Edge scrape offline (not logged in) \u2014 showing statusLine/cached; /devops-refresh-usage to reconnect');
-  } else if (usageData._cached && usageData._ageMinutes > 30) {
-    const ageLabel = usageData._ageMinutes >= 60
-      ? `~${Math.round(usageData._ageMinutes / 60)}h old`
-      : `~${usageData._ageMinutes}m old`;
+    lines.push('\u26a0 Edge fetch offline (not logged in) \u2014 showing statusLine/cached; /devops-refresh-usage to reconnect');
+  } else if (cardFreshness.cached && cardFreshness.ageMinutes > 30) {
     const suffix = usageData._failureReason ? ` (${usageData._failureReason})` : '';
     lines.push('');
-    lines.push(`cached \u00b7 ${ageLabel}${suffix}`);
+    lines.push(`cached \u00b7 ${formatAgeLabel(cardFreshness.ageMinutes)}${suffix}`);
   }
 
   // Health line sits above the bars, separated by a blank line.
@@ -743,74 +802,84 @@ function usageAgeMs(d) {
 function refreshUsage() {
   const baseline = readBaseline();
 
-  // Resolve fresh data + advance the delta baseline to it.
+  // Resolve data + deltas. ONLY a live snapshot (fresh, not cache-served) may
+  // produce deltas or advance the baseline — advancing onto cached data is
+  // what froze the card at "93% +0%" against a 33-day-old reading.
   const finish = (data) => {
     let delta5h = null;
     let deltaWk = null;
-    if (data?.session && baseline?.session) {
-      delta5h = computeDelta(data.session?.pct, baseline.session?.pct);
-      deltaWk = computeDelta(data.weekly?.pct, baseline.weekly?.pct);
+    if (isLiveSnapshot(data)) {
+      if (baseline?.session) {
+        delta5h = computeDelta(data.session?.pct, baseline.session?.pct);
+        deltaWk = computeDelta(data.weekly?.pct, baseline.weekly?.pct);
+      }
+      writeBaseline(data);
     }
-    if (data?.session) writeBaseline(data);
     return { success: true, data, delta5h, deltaWk };
   };
 
-  // 1. Warm fast path — the native statusLine writer keeps usage-live.json
-  //    minute-fresh with no scrape and no extra Claude turn. If it is fresh,
-  //    serve it instantly and skip Edge entirely (the common case).
+  // 1. Warm fast path — a fresh usage-live.json (native statusLine writer in
+  //    terminal sessions, or a just-finished API fetch) is served instantly.
   const warm = readUsageJson();
-  if (warm?.session && usageAgeMs(warm) <= WARM_MAX_AGE_MS) {
+  if (isLiveSnapshot(warm) && usageAgeMs(warm) <= WARM_MAX_AGE_MS) {
     return finish(warm);
   }
 
-  // 2. Fallback — Edge scrape, ALWAYS non-interactive (--no-login). Covers
-  //    pre-first-API-response and hosts without the statusLine writer. The card
-  //    only renders 5h + weekly, which this still provides when the profile is
-  //    logged in; if it is logged out the scraper just returns code 2 WITHOUT
-  //    opening a window (the automatic path must stay zero-interaction). A
-  //    one-time login is offered only via an explicit `/devops-refresh-usage`
-  //    run. The script manages the dedicated scraper lifecycle internally
-  //    (launch, scrape, kill). Worst case ~44s; keep the timeout above that.
-  let lastExitCode = null;
-  try {
-    execSync(`node "${SCRAPER_SCRIPT}" --quiet --no-login`, {
-      timeout: 60000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    const freshData = readUsageJson();
-    if (freshData?.session) return finish(freshData);
-  } catch (err) {
-    lastExitCode = err.status;
-    console.error('[dotclaude-completion-mcp] Scrape failed (exit', lastExitCode, '):', err.message);
-  }
-
-  const reasons = {
-    2: 'scraper profile not logged in — no window opened (automatic path); run /devops-refresh-usage once to log in for the manual weekly-Sonnet summary',
-    3: 'usage page parse error',
-    4: 'CDP WebSocket failed',
-    5: 'scraper instance could not launch (Edge not installed?)',
-  };
-  const reason = reasons[lastExitCode] || (lastExitCode ? `scrape exit code ${lastExitCode}` : null);
-
-  // 3. Last resort — any existing (stale) data with an age indicator. Delta vs
-  //    the baseline is still meaningful; the baseline is NOT advanced on stale
-  //    data, so the next good read still shows real movement.
-  const cached = readUsageJson();
-  if (cached?.session) {
-    cached._cached = true;
-    cached._ageMinutes = Math.round(usageAgeMs(cached) / 60_000);
-    if (reason) cached._failureReason = reason;
-    if (lastExitCode === 2) cached._loginRequired = true;
-    let delta5h = null;
-    let deltaWk = null;
-    if (baseline?.session) {
-      delta5h = computeDelta(cached.session?.pct, baseline.session?.pct);
-      deltaWk = computeDelta(cached.weekly?.pct, baseline.weekly?.pct);
+  // 2. Fallback — headless in-page API fetch via the dedicated Edge profile,
+  //    ALWAYS non-interactive (--no-login): a logged-out profile serves cache
+  //    without opening a window; login is offered only via an explicit
+  //    /devops-refresh-usage run. NOTE: the script exits 0 even on its internal
+  //    cache fallback (it stamps _cached/_failureReason into the file instead),
+  //    so a zero exit code is NOT proof of a live fetch — the freshness of the
+  //    re-read file is.
+  const scraperScript = resolveScraperScript();
+  let scrapeErr = null;
+  if (scraperScript) {
+    try {
+      execSync(`node "${scraperScript}" --quiet --no-login`, {
+        timeout: 60000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } catch (err) {
+      scrapeErr = err;
+      console.error(
+        '[dotclaude-completion-mcp] Usage fetch failed:',
+        describeScrapeFailure(err), '—', err.message,
+      );
     }
-    return { success: true, data: cached, delta5h, deltaWk };
+  } else {
+    scrapeErr = { status: 1, message: 'refresh-usage-headless.js not found in any plugin version' };
+    console.error('[dotclaude-completion-mcp] No scraper script resolvable — plugin cache incomplete?');
   }
 
-  return { success: false, data: null, reason: reason || 'no usage data available' };
+  // The 60s bound is safe even for a slow cold-launch fetch: the scraper
+  // stamps `timestamp` at fetch COMPLETION (mapApiUsage) and exits right
+  // after the write, so the age at this re-read is ~0-2s. An old-but-unmarked
+  // file only appears here when a failed run couldn't write its _cached
+  // marker — exactly the case the bound is meant to exclude.
+  const fresh = readUsageJson();
+  if (isLiveSnapshot(fresh) && usageAgeMs(fresh) <= WARM_MAX_AGE_MS) {
+    return finish(fresh); // genuinely live fetch — deltas + baseline advance
+  }
+
+  // 3. Last resort — stale data, honestly labelled. Deltas stay null and the
+  //    baseline is untouched, so the next live read shows real movement.
+  if (fresh?.session) {
+    fresh._cached = true;
+    fresh._ageMinutes = Math.round(usageAgeMs(fresh) / 60_000);
+    const reason = scrapeErr
+      ? describeScrapeFailure(scrapeErr)
+      : (fresh._failureReason || 'scraper served cached data');
+    fresh._failureReason = reason;
+    if (scrapeErr?.status === 2 || /not logged in/i.test(reason)) fresh._loginRequired = true;
+    return finish(fresh);
+  }
+
+  return {
+    success: false,
+    data: null,
+    reason: scrapeErr ? describeScrapeFailure(scrapeErr) : 'no usage data available',
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -829,12 +898,14 @@ server.registerTool(
   {
     title: "Get Usage",
     description:
-      "Fetch live token usage. Reads the native statusLine-written cache first " +
-      "(no scrape, no extra turn); only falls back to a non-interactive, isolated " +
-      "Edge scrape when that is stale, and NEVER opens a login window. " +
-      "Returns structured usage percentages, reset times, deltas against " +
-      "the previous reading, and a pre-rendered ASCII usage meter. " +
-      "The user's main Edge is untouched.",
+      "Fetch live token usage. Reads the fresh usage-live.json first (native " +
+      "statusLine writer in terminal sessions \u2014 no fetch, no extra turn); " +
+      "otherwise fetches via the internal claude.ai usage API through an " +
+      "isolated headless Edge profile (cookie-authed in-page fetch, no DOM " +
+      "scraping) and NEVER opens a login window. Returns structured usage " +
+      "percentages, reset times, deltas against the previous LIVE reading, " +
+      "staleness metadata (cached/ageMinutes/stale), and a pre-rendered ASCII " +
+      "usage meter. The user's main Edge is untouched.",
     inputSchema: z.object({}),
   },
   async () => {
@@ -856,6 +927,10 @@ server.registerTool(
     }
 
     const meter = renderUsageMeter(result.data, result.delta5h, result.deltaWk);
+    // Staleness is part of the structured contract now \u2014 programmatic
+    // consumers must be able to tell a live reading from served cache without
+    // parsing the meter string.
+    const freshness = assessFreshness(result.data, Date.now());
 
     return {
       content: [{
@@ -868,6 +943,10 @@ server.registerTool(
           timestamp: result.data.timestamp,
           delta5h: result.delta5h ?? null,
           deltaWk: result.deltaWk ?? null,
+          cached: freshness.cached,
+          ageMinutes: Number.isFinite(freshness.ageMinutes) ? freshness.ageMinutes : null,
+          stale: freshness.expired,
+          failureReason: result.data._failureReason || null,
           renderedMeter: meter,
         }),
       }],
