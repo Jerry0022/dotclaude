@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.107.3] — 2026-07-04
+
+### Changed
+
+- **Proactive agent orchestration is now the default mode of work, not a per-task judgment about *whether* to involve agents.** `deep-knowledge/agent-proactivity.md` reframes the Core Rule: the devops agents are spun up automatically in the background for any task that isn't an explicit carve-out — the decision left to Claude is only *which* agents fit, and skipping them is what now needs justification. The `When NOT to Orchestrate` carve-outs (single-file/single-domain edits, pure Q&A, explicit "just fix it") are preserved unchanged, so trivial tasks stay inline without agent overhead.
+
 ## [0.107.2] — 2026-07-04
 
 ### Fixed
