@@ -45,13 +45,16 @@ offered **only** when you run this skill manually (the command in 1a omits
 native statusLine source already provides token-free; `weeklySonnet` is a
 manual-summary extra, not a card field.
 
-### 1·1. Edge CDP scraper (fallback)
+### 1·1. Edge CDP fetcher (fallback)
 
 The script spawns a **dedicated, isolated Edge instance** with its own
 `user-data-dir` under `~/.claude/edge-usage-profile`. It is completely
 independent from the user's main Edge — separate cookies, separate
-processes, no tabs touched. Scrapes headless, then kills only that
-instance by PID tree.
+processes, no tabs touched. It fetches usage via a cookie-authed in-page
+call to the internal API (`GET /api/organizations/{id}/usage` +
+`/rate_limits`) — the settings page became an SPA overlay (2026-05) that
+never renders headless, so DOM parsing is only a single-grab last resort.
+Runs headless; the hidden instance is reused across runs.
 
 The script path is `${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js` (use the plugin root, NOT a relative path).
 
