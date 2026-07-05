@@ -126,6 +126,14 @@ If the override sets a different `profile` field, switch to that profile name
 for Step 4 (load it from the project extension if available, else from the
 plugin).
 
+**`no_runtime_static_paths`** (optional, string array): path prefixes / globs
+(e.g. `["ideas/", "mockups/**"]`) of hand-written static HTML deliverables that
+have NO runtime and can never be meaningfully browser-verified. The V&V gate
+(`stop.flow.browsertest` via `post.flow.completion`) carves these paths out of
+Light-verification enforcement — same effect as the built-in `docs/concepts/`
+carve-out. The completion hook reads this field directly from the project
+override file on every turn, so it works even before /devops-test-plan ran.
+
 Store final profile name as `{active_profile}`.
 
 ## Step 4 — Load Profile JSON

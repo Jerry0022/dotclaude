@@ -4,6 +4,8 @@ import {
   isWebRenderableChange,
   isCodeChange,
   classifyProfile,
+  compileCarveOuts,
+  carveOutsFromProfile,
   needsLightVerification,
   isBrowserTool,
   isTestRunnerTool,
@@ -118,6 +120,93 @@ describe("isCodeChange", () => {
   test("empty / missing input → false", () => {
     expect(isCodeChange("")).toBe(false);
     expect(isCodeChange(null)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// compileCarveOuts / configurable no-runtime static carve-outs (#237)
+// ---------------------------------------------------------------------------
+
+describe("compileCarveOuts", () => {
+  test("bare directory name matches the directory anywhere in the path", () => {
+    const res = compileCarveOuts(["ideas"]);
+    expect(res.some(re => re.test("ideas/pitch.html"))).toBe(true);
+    expect(res.some(re => re.test("C:/proj/ideas/pitch.html"))).toBe(true);
+    expect(res.some(re => re.test("myideas/pitch.html"))).toBe(false);
+    expect(res.some(re => re.test("src/App.tsx"))).toBe(false);
+  });
+
+  test("trailing slash is equivalent to bare directory", () => {
+    const res = compileCarveOuts(["ideas/"]);
+    expect(res.some(re => re.test("ideas/pitch.html"))).toBe(true);
+    expect(res.some(re => re.test("ideas/sub/page.html"))).toBe(true);
+    expect(res.some(re => re.test("myideas/pitch.html"))).toBe(false);
+  });
+
+  test("** glob matches nested paths", () => {
+    const res = compileCarveOuts(["ideas/**"]);
+    expect(res.some(re => re.test("ideas/sub/deep/page.html"))).toBe(true);
+    expect(res.some(re => re.test("ideas/page.html"))).toBe(true);
+    expect(res.some(re => re.test("other/page.html"))).toBe(false);
+  });
+
+  test("single * stays within one path segment", () => {
+    const res = compileCarveOuts(["drafts/*.html"]);
+    expect(res.some(re => re.test("drafts/a.html"))).toBe(true);
+    expect(res.some(re => re.test("drafts/sub/a.html"))).toBe(false);
+    expect(res.some(re => re.test("drafts/a.css"))).toBe(false);
+  });
+
+  test("regex special chars in patterns are escaped", () => {
+    const res = compileCarveOuts(["docs+notes"]);
+    expect(res.some(re => re.test("docs+notes/x.html"))).toBe(true);
+    expect(res.some(re => re.test("docsXnotes/x.html"))).toBe(false);
+  });
+
+  test("invalid input → empty list", () => {
+    expect(compileCarveOuts(undefined)).toEqual([]);
+    expect(compileCarveOuts(null)).toEqual([]);
+    expect(compileCarveOuts("ideas")).toEqual([]);
+    expect(compileCarveOuts([42, "", null])).toEqual([]);
+  });
+});
+
+describe("carveOutsFromProfile", () => {
+  test("reads no_runtime_static_paths from a parsed profile object", () => {
+    const res = carveOutsFromProfile({ no_runtime_static_paths: ["ideas/"] });
+    expect(res.some(re => re.test("ideas/pitch.html"))).toBe(true);
+  });
+
+  test("missing / malformed field → empty list", () => {
+    expect(carveOutsFromProfile({})).toEqual([]);
+    expect(carveOutsFromProfile(null)).toEqual([]);
+    expect(carveOutsFromProfile({ no_runtime_static_paths: "ideas" })).toEqual([]);
+  });
+});
+
+describe("configured carve-outs in change detection", () => {
+  const carve = compileCarveOuts(["ideas/"]);
+
+  test("isWebRenderableChange respects configured carve-outs", () => {
+    expect(isWebRenderableChange("ideas/pitch.html", carve)).toBe(false);
+    expect(isWebRenderableChange("C:\\proj\\ideas\\pitch.html", carve)).toBe(false);
+    expect(isWebRenderableChange("docs/guide.html", carve)).toBe(true);
+  });
+
+  test("isCodeChange respects configured carve-outs", () => {
+    expect(isCodeChange("ideas/inline.js", carve)).toBe(false);
+    expect(isCodeChange("src/store.ts", carve)).toBe(true);
+  });
+
+  test("needsLightVerification threads carve-outs through", () => {
+    expect(needsLightVerification("dom", "ideas/pitch.html", carve)).toBe(false);
+    expect(needsLightVerification("runner", "ideas/inline.js", carve)).toBe(false);
+    expect(needsLightVerification("dom", "src/App.vue", carve)).toBe(true);
+  });
+
+  test("default behavior unchanged without carve-outs", () => {
+    expect(isWebRenderableChange("ideas/pitch.html")).toBe(true);
+    expect(isCodeChange("ideas/inline.js")).toBe(true);
   });
 });
 

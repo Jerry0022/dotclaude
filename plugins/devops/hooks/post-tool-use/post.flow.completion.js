@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.18.0
+ * @version 0.19.0
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -33,6 +33,7 @@ const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/sessi
 const { getLocale, t } = require('../lib/locale');
 const {
   classifyProfile,
+  carveOutsFromProfile,
   needsLightVerification,
   isCodeChange,
   isBrowserTool,
@@ -41,19 +42,30 @@ const {
 } = require('../lib/browsertest-guard');
 
 /**
- * Read the pinned $TEST_PROFILE for this session and classify it. The profile
- * cache is written by /devops-test-plan. Missing / unreadable → 'any'.
+ * Read the pinned $TEST_PROFILE for this session (cache written by
+ * /devops-test-plan) plus the project's no-runtime static carve-outs
+ * (`no_runtime_static_paths` — see #237). Carve-outs merge from BOTH the
+ * session profile cache and the project override file, so a consumer project
+ * is protected from turn one even before /devops-test-plan ran.
+ * Missing / unreadable → 'any' with no carve-outs.
  * @param {string} sessionId
- * @returns {'dom'|'runner'|'any'}
+ * @param {string} cwd — project root (hook.cwd)
+ * @returns {{ profileClass: 'dom'|'runner'|'any', carveOuts: RegExp[] }}
  */
-function readProfileClass(sessionId) {
+function readProfileConfig(sessionId, cwd) {
+  let profileClass = classifyProfile('');
+  let carveOuts = [];
   try {
     const p = path.join(os.homedir(), '.claude', 'cache', 'devops', `test-profile-${sessionId}.json`);
     const json = JSON.parse(fs.readFileSync(p, 'utf8'));
-    return classifyProfile(json.profile);
-  } catch {
-    return classifyProfile('');
-  }
+    profileClass = classifyProfile(json.profile);
+    carveOuts = carveOutsFromProfile(json);
+  } catch {}
+  try {
+    const p = path.join(cwd, '.claude', 'skills', 'devops-test-plan', 'profile.json');
+    carveOuts = carveOuts.concat(carveOutsFromProfile(JSON.parse(fs.readFileSync(p, 'utf8'))));
+  } catch {}
+  return { profileClass, carveOuts };
 }
 
 // Bilingual strings for the desktop-test AskUserQuestion prompt.
@@ -147,7 +159,10 @@ process.stdin.on('end', () => {
   //     DOM, test runner for runner). A subagent delegation does NOT count —
   //     the main thread cannot see inside it (closed loophole, intentional).
   try {
-    const profileClass = readProfileClass(hook.session_id);
+    const { profileClass, carveOuts } = readProfileConfig(
+      hook.session_id,
+      hook.cwd || process.cwd(),
+    );
     const unlinkFlag = (prefix) => {
       try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch {}
     };
@@ -155,7 +170,7 @@ process.stdin.on('end', () => {
     if (isCodeEdit) {
       const editedPath = hook.tool_input && hook.tool_input.file_path;
       // Light gate — surface-scoped (DOM profiles: web-renderable files only).
-      if (needsLightVerification(profileClass, editedPath)) {
+      if (needsLightVerification(profileClass, editedPath, carveOuts)) {
         writeSessionFile(
           sessionFile('dotclaude-devops-light-pending', hook.session_id),
           String(editedPath),
@@ -172,7 +187,7 @@ process.stdin.on('end', () => {
       // Validation gate — surface-agnostic: ANY real source change owes a
       // validation attestation in the completion card. A new edit invalidates
       // a prior attestation (order).
-      if (isCodeChange(editedPath)) {
+      if (isCodeChange(editedPath, carveOuts)) {
         writeSessionFile(
           sessionFile('dotclaude-devops-validation-pending', hook.session_id),
           String(editedPath),
