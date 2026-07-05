@@ -21,17 +21,23 @@
  *   register <flag-path> <hours> [action]
  *                                  Create one-shot task firing in N hours.
  *                                  action = "shutdown" (default) | "notify".
- *                                  Stores sentinel under TEMP for later cleanup.
+ *                                  Stores a PER-REGISTRATION sentinel under TEMP
+ *                                  (parallel autonomous sessions coexist; only a
+ *                                  previous registration for the SAME flag path
+ *                                  is replaced).
  *                                  → { ok, taskName, flagPath, fireAt, action }
  *
  *   flag [flag-path]               Write the completion flag (signals success).
- *                                  If omitted, reads flagPath from the sentinel
- *                                  written at register time — recommended path,
- *                                  avoids cwd drift between arm and flag-write.
+ *                                  If omitted, resolves the session's own
+ *                                  sentinel: single sentinel → that one;
+ *                                  multiple (parallel sessions) → the one whose
+ *                                  flagPath directory contains the current cwd.
+ *                                  Ambiguous → hard fail (never writes into
+ *                                  another session's project).
  *                                  → { ok, flagPath }
  *
  *   unregister [task-name]         Delete the scheduled task + helper script.
- *                                  Uses sentinel if task-name omitted.
+ *                                  Resolves sentinel like `flag` if omitted.
  *                                  → { ok, taskName, deleted }
  *
  *   status [task-name]             Check if the task still exists.
@@ -47,7 +53,15 @@ const path = require('path');
 const os = require('os');
 
 const TASK_PREFIX = 'ClaudeAutonomousWatchdog';
-const SENTINEL_FILE = path.join(os.tmpdir(), 'claude-autonomous-watchdog.json');
+// Legacy single-file sentinel (pre parallel-session fix). Still read so a run
+// armed by an older plugin version can complete its flag/unregister.
+const LEGACY_SENTINEL_FILE = path.join(os.tmpdir(), 'claude-autonomous-watchdog.json');
+const SENTINEL_PREFIX = 'claude-autonomous-watchdog-';
+const SENTINEL_SUFFIX = '.json';
+// A sentinel whose fire time is this long past is dead weight — the one-shot
+// task fired and its recovery script self-deleted. Prune it so it can never
+// shadow a live registration in the pick logic.
+const SENTINEL_EXPIRY_MS = 48 * 3600_000;
 
 function fail(msg) {
   process.stdout.write(JSON.stringify({ ok: false, error: msg }) + '\n');
@@ -59,23 +73,86 @@ function ok(extra) {
   process.exit(0);
 }
 
-function readSentinel() {
-  if (!fs.existsSync(SENTINEL_FILE)) return null;
+function sentinelFileFor(taskName) {
+  return path.join(os.tmpdir(), `${SENTINEL_PREFIX}${taskName}${SENTINEL_SUFFIX}`);
+}
+
+function readSentinelFile(file) {
+  if (!fs.existsSync(file)) return null;
   try {
-    return JSON.parse(fs.readFileSync(SENTINEL_FILE, 'utf8'));
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
     return null;
   }
 }
 
-function writeSentinel(data) {
-  fs.writeFileSync(SENTINEL_FILE, JSON.stringify(data, null, 2));
+/**
+ * All live sentinels: one per registration (`claude-autonomous-watchdog-
+ * ClaudeAutonomousWatchdog-<ts>.json`) plus the legacy single file. Entries
+ * whose fireAt is >48h past are pruned on sight — their task has long fired.
+ * @returns {Array<{file:string, data:object}>}
+ */
+function listSentinels() {
+  const out = [];
+  const tmp = os.tmpdir();
+  let entries = [];
+  try { entries = fs.readdirSync(tmp); } catch { return out; }
+  for (const name of entries) {
+    if (!name.startsWith(SENTINEL_PREFIX) || !name.endsWith(SENTINEL_SUFFIX)) continue;
+    const file = path.join(tmp, name);
+    const data = readSentinelFile(file);
+    if (data) out.push({ file, data });
+  }
+  const legacy = readSentinelFile(LEGACY_SENTINEL_FILE);
+  if (legacy) out.push({ file: LEGACY_SENTINEL_FILE, data: legacy });
+  const now = Date.now();
+  return out.filter((s) => {
+    const fireAt = Date.parse(s.data?.fireAt || '');
+    if (Number.isFinite(fireAt) && now - fireAt > SENTINEL_EXPIRY_MS) {
+      try { fs.unlinkSync(s.file); } catch { /* ignore */ }
+      return false;
+    }
+    return true;
+  });
 }
 
-function deleteSentinel() {
-  if (fs.existsSync(SENTINEL_FILE)) {
-    try { fs.unlinkSync(SENTINEL_FILE); } catch { /* ignore */ }
+/**
+ * Resolve which sentinel belongs to the calling session. There is no global
+ * "the one sentinel" — parallel autonomous sessions each register their own,
+ * and picking the wrong one writes the done-flag into a foreign project and
+ * mutes that session's watchdog (2026-07-05 incident: TIjedea run flagged the
+ * hll-overlay run as done).
+ *
+ * Pure function (no fs) so it is unit-testable:
+ *   1. Single sentinel → that one (single-session fast path, cwd-drift safe).
+ *   2. Multiple → candidates whose flagPath directory equals the cwd or is an
+ *      ancestor of it (Step 8 runs from the project/worktree root the flag
+ *      belongs to); the deepest such directory wins.
+ *   3. Tie on equally deep directories with identical flagPath → first one
+ *      (harmless duplicate); different flagPaths or no candidate → no match,
+ *      caller must fail loudly and demand an explicit path.
+ *
+ * @param {Array<{file:string, data:object}>} sentinels
+ * @param {string} cwd
+ * @returns {{match: {file:string, data:object}|null, candidates: Array}}
+ */
+function pickSentinel(sentinels, cwd) {
+  if (!sentinels.length) return { match: null, candidates: [] };
+  if (sentinels.length === 1) return { match: sentinels[0], candidates: sentinels };
+  const norm = (p) => path.resolve(p).toLowerCase().replace(/[\\/]+$/, '');
+  const cwdN = norm(cwd);
+  const scored = sentinels
+    .filter((s) => typeof s.data?.flagPath === 'string' && s.data.flagPath)
+    .map((s) => ({ s, dir: norm(path.dirname(s.data.flagPath)) }))
+    .filter(({ dir }) => cwdN === dir || cwdN.startsWith(dir + path.sep));
+  if (!scored.length) return { match: null, candidates: sentinels };
+  scored.sort((a, b) => b.dir.length - a.dir.length);
+  const tied = scored.filter((c) => c.dir.length === scored[0].dir.length);
+  if (tied.length > 1) {
+    const flags = new Set(tied.map((c) => norm(c.s.data.flagPath)));
+    if (flags.size > 1) return { match: null, candidates: sentinels };
   }
+  return { match: scored[0].s, candidates: sentinels };
 }
 
 // --- Validation guards for sentinel-derived destructive operations ---
@@ -202,16 +279,25 @@ function runRegister(args) {
   // notify mode drops a visible marker next to the flag; same dir, fixed name.
   const stalledPath = path.join(path.dirname(flagPath), 'AUTONOMOUS-STALLED.txt');
 
-  // Clean up any previous watchdog first — only one active at a time.
-  // Sentinel is untrusted (same-user TEMP); validate before destructive ops.
-  const prev = readSentinel();
-  if (prev?.taskName && isValidWatchdogTaskName(prev.taskName)) {
-    spawnSync('schtasks.exe', ['/Delete', '/TN', prev.taskName, '/F'],
-      { encoding: 'utf8' });
-  }
-  if (prev?.scriptPath && isValidWatchdogScriptPath(prev.scriptPath) &&
-      fs.existsSync(prev.scriptPath)) {
-    try { fs.unlinkSync(prev.scriptPath); } catch { /* ignore */ }
+  // Clean up a previous watchdog FOR THIS PROJECT ONLY (same flagPath).
+  // Parallel autonomous sessions in other projects keep their watchdogs —
+  // the old global "only one active at a time" takeover deleted the sibling
+  // session's task and let its sentinel shadow ours (2026-07-05 incident).
+  // Sentinels are untrusted (same-user TEMP); validate before destructive ops.
+  const flagN = path.resolve(flagPath).toLowerCase();
+  for (const prev of listSentinels()) {
+    const prevFlag = typeof prev.data?.flagPath === 'string'
+      ? path.resolve(prev.data.flagPath).toLowerCase() : null;
+    if (prevFlag !== flagN) continue;
+    if (prev.data.taskName && isValidWatchdogTaskName(prev.data.taskName)) {
+      spawnSync('schtasks.exe', ['/Delete', '/TN', prev.data.taskName, '/F'],
+        { encoding: 'utf8' });
+    }
+    if (prev.data.scriptPath && isValidWatchdogScriptPath(prev.data.scriptPath) &&
+        fs.existsSync(prev.data.scriptPath)) {
+      try { fs.unlinkSync(prev.data.scriptPath); } catch { /* ignore */ }
+    }
+    try { fs.unlinkSync(prev.file); } catch { /* ignore */ }
   }
 
   const taskName = `${TASK_PREFIX}-${Date.now()}`;
@@ -235,14 +321,14 @@ function runRegister(args) {
     fail(`watchdog task registration failed: ${(result.stderr || result.stdout || '').trim()}`);
   }
 
-  writeSentinel({
+  fs.writeFileSync(sentinelFileFor(taskName), JSON.stringify({
     taskName,
     flagPath,
     scriptPath,
     fireAt: fireAt.toISOString(),
     hours,
     action,
-  });
+  }, null, 2));
 
   ok({ taskName, flagPath, fireAt: fireAt.toISOString(), scriptPath, action });
 }
@@ -253,15 +339,22 @@ function runFlag(args) {
   if (flagPathRaw) {
     flagPath = path.resolve(flagPathRaw);
   } else {
-    // No path supplied → use the one persisted at registration time.
-    // This is the recommended path because it avoids cwd-drift between
-    // arm-time and flag-write-time (Codex finding #2).
-    const sentinel = readSentinel();
-    if (!sentinel?.flagPath) {
-      fail('No flag-path supplied and no sentinel found ' +
-        '(call register first, or pass an explicit path).');
+    // No path supplied → resolve THIS session's sentinel. With parallel
+    // autonomous sessions there are several sentinels; writing the flag into
+    // a foreign project would mute that session's watchdog, so ambiguity is
+    // a hard failure, never a guess.
+    const { match, candidates } = pickSentinel(listSentinels(), process.cwd());
+    if (!match) {
+      if (!candidates.length) {
+        fail('No flag-path supplied and no sentinel found ' +
+          '(call register first, or pass an explicit path).');
+      }
+      fail('Multiple watchdog sentinels exist (parallel autonomous sessions) ' +
+        'and none matches the current directory unambiguously — pass the flag ' +
+        'path explicitly. Candidates: ' +
+        candidates.map((c) => c.data.flagPath).join(' | '));
     }
-    flagPath = sentinel.flagPath;
+    flagPath = match.data.flagPath;
   }
   fs.mkdirSync(path.dirname(flagPath), { recursive: true });
   fs.writeFileSync(flagPath, JSON.stringify({
@@ -271,12 +364,26 @@ function runFlag(args) {
   ok({ flagPath });
 }
 
+function resolveSentinelOrFail(sentinels, what) {
+  const { match, candidates } = pickSentinel(sentinels, process.cwd());
+  if (match) return match;
+  if (!candidates.length) return null;
+  fail(`Multiple watchdog sentinels exist (parallel autonomous sessions) and ` +
+    `none matches the current directory unambiguously — pass the ${what} ` +
+    `explicitly. Candidates: ` +
+    candidates.map((c) => `${c.data.taskName} → ${c.data.flagPath}`).join(' | '));
+}
+
 function runUnregister(args) {
   let taskName = args[0];
-  const sentinel = readSentinel();
-  if (!taskName) {
+  const sentinels = listSentinels();
+  let sentinel = null;
+  if (taskName) {
+    sentinel = sentinels.find((s) => s.data.taskName === taskName) || null;
+  } else {
+    sentinel = resolveSentinelOrFail(sentinels, 'task name');
     if (!sentinel) ok({ skipped: true, reason: 'no sentinel' });
-    taskName = sentinel.taskName;
+    taskName = sentinel.data.taskName;
   }
 
   // Reject task names that don't match our prefix — protects against a
@@ -296,31 +403,37 @@ function runUnregister(args) {
     fail(`schtasks /Delete failed: ${(result.stderr || result.stdout || '').trim()}`);
   }
 
-  // Best-effort cleanup of helper script (only if path matches expected layout)
-  if (sentinel?.scriptPath &&
-      isValidWatchdogScriptPath(sentinel.scriptPath) &&
-      fs.existsSync(sentinel.scriptPath)) {
-    try { fs.unlinkSync(sentinel.scriptPath); } catch { /* ignore */ }
+  // Best-effort cleanup of helper script + sentinel (only this registration's)
+  if (sentinel?.data.scriptPath &&
+      isValidWatchdogScriptPath(sentinel.data.scriptPath) &&
+      fs.existsSync(sentinel.data.scriptPath)) {
+    try { fs.unlinkSync(sentinel.data.scriptPath); } catch { /* ignore */ }
   }
-  deleteSentinel();
+  if (sentinel) {
+    try { fs.unlinkSync(sentinel.file); } catch { /* ignore */ }
+  }
 
   ok({ taskName, deleted: !notFound });
 }
 
 function runStatus(args) {
   let taskName = args[0];
-  const sentinel = readSentinel();
-  if (!taskName) {
+  const sentinels = listSentinels();
+  let sentinel = null;
+  if (taskName) {
+    sentinel = sentinels.find((s) => s.data.taskName === taskName) || null;
+  } else {
+    sentinel = resolveSentinelOrFail(sentinels, 'task name');
     if (!sentinel) ok({ active: false, reason: 'no sentinel' });
-    taskName = sentinel.taskName;
+    taskName = sentinel.data.taskName;
   }
   const result = spawnSync('schtasks.exe',
     ['/Query', '/TN', taskName], { encoding: 'utf8' });
   ok({
     taskName,
     active: result.status === 0,
-    fireAt: sentinel?.fireAt,
-    flagPath: sentinel?.flagPath,
+    fireAt: sentinel?.data.fireAt,
+    flagPath: sentinel?.data.flagPath,
   });
 }
 
@@ -345,4 +458,6 @@ module.exports = {
   buildRecoveryScript,
   isValidWatchdogTaskName,
   isValidWatchdogScriptPath,
+  pickSentinel,
+  sentinelFileFor,
 };

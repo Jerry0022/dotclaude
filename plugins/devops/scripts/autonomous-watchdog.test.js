@@ -1,7 +1,9 @@
 import { describe, test, expect } from "vitest";
+import path from "node:path";
 import {
   buildRegisterPsCommand,
   buildRecoveryScript,
+  pickSentinel,
 } from "./autonomous-watchdog.js";
 
 // A fire time with day-of-month > 12 so an accidental MM/DD vs DD/MM swap is
@@ -107,5 +109,80 @@ describe("buildRecoveryScript — mode-specific recovery", () => {
       flagPath: "C:\\users\\o'brien\\AUTONOMOUS-DONE.flag",
     });
     expect(s).toContain("o''brien");
+  });
+});
+
+describe("pickSentinel — parallel-session resolution (2026-07-05 incident)", () => {
+  // Platform-neutral fake project roots.
+  const ROOT = path.resolve("/", "proj");
+  const mk = (name, dir) => ({
+    file: path.join("/tmp", `claude-autonomous-watchdog-${name}.json`),
+    data: {
+      taskName: `ClaudeAutonomousWatchdog-${name}`,
+      flagPath: path.join(dir, "AUTONOMOUS-DONE.flag"),
+    },
+  });
+  const tijedeaWt = path.join(ROOT, "TIjedea", ".claude", "worktrees", "peaceful-visvesvaraya");
+  const hllOverlay = path.join(ROOT, "hll-overlay");
+  const A = mk("1", tijedeaWt);   // session A (TIjedea worktree)
+  const B = mk("2", hllOverlay);  // session B (hll-overlay)
+
+  test("no sentinels → no match, no candidates", () => {
+    expect(pickSentinel([], tijedeaWt)).toEqual({ match: null, candidates: [] });
+  });
+
+  test("single sentinel → picked regardless of cwd (cwd-drift safe path)", () => {
+    const r = pickSentinel([A], path.join(ROOT, "somewhere-else"));
+    expect(r.match).toBe(A);
+  });
+
+  test("INCIDENT: two parallel sessions — each cwd resolves ONLY its own sentinel", () => {
+    // Session A flags from its worktree root → must get A, never B.
+    expect(pickSentinel([A, B], tijedeaWt).match).toBe(A);
+    expect(pickSentinel([B, A], tijedeaWt).match).toBe(A); // order-independent
+    // Session B flags from its project root → must get B.
+    expect(pickSentinel([A, B], hllOverlay).match).toBe(B);
+  });
+
+  test("cwd in a SUBDIRECTORY of the project still resolves that project", () => {
+    const r = pickSentinel([A, B], path.join(hllOverlay, "src", "deep"));
+    expect(r.match).toBe(B);
+  });
+
+  test("nested roots: deepest matching flag directory wins", () => {
+    const outer = mk("3", path.join(ROOT, "TIjedea"));
+    const r = pickSentinel([outer, A, B], tijedeaWt);
+    expect(r.match).toBe(A); // worktree sentinel, not the main-repo one
+  });
+
+  test("multiple sentinels + unrelated cwd → hard no-match (never guesses)", () => {
+    const r = pickSentinel([A, B], path.join(ROOT, "unrelated"));
+    expect(r.match).toBeNull();
+    expect(r.candidates).toHaveLength(2);
+  });
+
+  test("prefix trap: sibling dir sharing a name prefix does NOT match", () => {
+    // cwd /proj/hll-overlay-2 must not match flag dir /proj/hll-overlay
+    const r = pickSentinel([A, B], path.join(ROOT, "hll-overlay-2"));
+    expect(r.match).toBeNull();
+  });
+
+  test("tie with IDENTICAL flagPath → harmless duplicate, first wins", () => {
+    const dup = { ...A, file: A.file.replace("-1.json", "-dup.json") };
+    const r = pickSentinel([A, dup], tijedeaWt);
+    expect(r.match).toBe(A);
+  });
+
+  test("tie with DIFFERENT flagPaths in same dir → ambiguous, no match", () => {
+    const other = mk("4", tijedeaWt);
+    other.data.flagPath = path.join(tijedeaWt, "OTHER.flag");
+    const r = pickSentinel([A, other], tijedeaWt);
+    expect(r.match).toBeNull();
+  });
+
+  test("sentinels without flagPath are ignored as candidates for matching", () => {
+    const broken = { file: "/tmp/claude-autonomous-watchdog-x.json", data: { taskName: "ClaudeAutonomousWatchdog-9" } };
+    const r = pickSentinel([broken, B], hllOverlay);
+    expect(r.match).toBe(B);
   });
 });

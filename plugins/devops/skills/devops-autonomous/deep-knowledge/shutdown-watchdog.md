@@ -54,10 +54,15 @@ WATCHDOG_OUT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-watchdog.js" registe
 echo "$WATCHDOG_OUT"  # → {"ok":true,"taskName":"ClaudeAutonomousWatchdog-...","action":"...",...}
 ```
 
-The absolute `$FLAG_PATH` is **persisted in the watchdog sentinel** (TEMP file)
-at registration time. Step 8c reads it back from the sentinel rather than
-recomputing it from `$PWD` — that way a later `cd` in some tool step can't make
-Step 8c write a flag the watchdog doesn't check.
+The absolute `$FLAG_PATH` is **persisted in a per-registration watchdog
+sentinel** (TEMP file, one per registration). Parallel autonomous sessions in
+other projects keep their own sentinels and scheduled tasks — registering never
+deletes or shadows a sibling session's watchdog (the pre-fix single global
+sentinel caused the 2026-07-05 incident: one session's pathless `flag` wrote
+the done-flag into the other session's project). Step 8c reads the flag path
+back from the sentinel rather than recomputing it from `$PWD` — that way a
+later `cd` in some tool step can't make Step 8c write a flag the watchdog
+doesn't check.
 
 Parse the JSON output:
 - `ok: true` → save `taskName` as `$WATCHDOG_TASK`, save `action` as
@@ -255,12 +260,20 @@ not wedge, so the flag is always written and the health-watchdog finds it and
 stands down. The watchdog only writes `AUTONOMOUS-STALLED.txt` when Step 7/8 was
 **never reached** — i.e. a genuine hang.
 
-Command (only when writing the flag) — **omit the path** so the script reads the
-persisted `flagPath` from the sentinel rather than re-deriving it from `$PWD`:
+Command (only when writing the flag) — **run it from the project root and omit
+the path** so the script resolves this session's own sentinel (single sentinel →
+used directly; multiple parallel sessions → the one whose flag directory
+contains the cwd):
 
 ```bash
 node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-watchdog.js" flag
 ```
+
+If it fails with "Multiple watchdog sentinels exist … none matches the current
+directory unambiguously", do NOT guess — pass this run's flag path explicitly
+(`flag "$FLAG_PATH"` from Step 4d). The hard failure is intentional: writing the
+flag into a sibling session's project would silently mute that session's
+watchdog.
 
 We deliberately do NOT call `unregister` on the scheduled task — leaving it armed
 but flag-satisfied is simpler and self-cleans (the task fires once, sees the flag,

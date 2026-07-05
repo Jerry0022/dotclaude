@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.107.4] — 2026-07-05
+
+### Fixed
+
+- **The autonomous watchdog no longer writes its done-flag into a foreign project when two `devops-autonomous` sessions run in parallel (#238).** The watchdog used a single global sentinel file in `%TEMP%`, so the later `register` overwrote the earlier session's sentinel AND deleted its scheduled task ("only one active at a time"), and a pathless `flag` call then resolved the *foreign* sentinel — writing `AUTONOMOUS-DONE.flag` into the other session's project, muting that session's watchdog and making the auto-resume cron skip it as "done" (observed live 2026-07-05: a TIjedea run flagged the hll-overlay run). `autonomous-watchdog.js` now keeps **one sentinel per registration** (`claude-autonomous-watchdog-<taskName>.json`; the legacy single file is still read so in-flight old-version runs complete), `register` replaces only a previous registration for the **same flagPath**, and pathless `flag`/`unregister`/`status` resolve the session's own sentinel via `pickSentinel()`: a single sentinel is used directly; with multiple, the sentinel whose flag directory contains the cwd wins (deepest match); ambiguity is a **hard fail** — never a guess into a foreign project. Sentinels whose fire time is >48h past are pruned. `shutdown-watchdog.md` § Arming + § 8c now say to run `flag` from the project root and pass the flag path explicitly on ambiguity. 11 new regression tests incl. the exact two-session incident (594 tests pass; E2E-verified with two live sentinels).
+
 ## [0.107.3] — 2026-07-04
 
 ### Changed
