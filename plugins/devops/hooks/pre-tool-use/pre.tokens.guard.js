@@ -26,10 +26,32 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const { spawn, execSync } = require('child_process');
 
 const cwd = process.cwd();
 const CONFIG_DIR = path.join(cwd, '.claude');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'token-config.json');
+
+// Detached, fail-open background spawn (mirrors ss.graphify). `shell` on Windows
+// so a `graphify.cmd` shim from `uv tool install` actually runs. A missing
+// toolchain throws → no-op; never affects the guard's block/allow decision.
+function bg(cmd, args) {
+  try {
+    spawn(cmd, args, {
+      cwd, detached: true, stdio: 'ignore', shell: process.platform === 'win32',
+    }).unref();
+  } catch { /* toolchain absent */ }
+}
+
+function isGitRepo() {
+  try {
+    return execSync('git rev-parse --is-inside-work-tree', {
+      cwd, encoding: 'utf8', timeout: 4000, stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim() === 'true';
+  } catch {
+    return false;
+  }
+}
 
 const PLAN_DEFAULTS = require('../lib/plan-defaults');
 
@@ -202,23 +224,32 @@ process.stdin.on('end', () => {
       const graphNudge = require('../lib/graph-nudge');
       const gstate = require('../lib/graphify-state');
       const sid = hook.session_id || hook.sessionId || 'nosid';
-      if (gstate.hasConsent(cwd) && !gstate.queryDone(sid, cwd)
-          && graphNudge.hasGraph(cwd) && !graphNudge.graphIsStale(cwd)) {
-        const gflag = flagPath(`graphgate:${sid}:${cwd}:${toolName}:${JSON.stringify(toolInput)}`);
-        if (!fs.existsSync(gflag)) {
-          try { fs.writeFileSync(gflag, Date.now().toString()); } catch {}
-          console.error('\n⛔  GRAPHIFY GATE — broad search blocked (fresh graph available)');
-          console.error('─'.repeat(54));
-          console.error('Query the knowledge graph instead of grepping raw files:');
-          console.error('  graphify query "<your question>"');
-          console.error('');
-          console.error('If the graph cannot answer THIS search (exact string, a');
-          console.error('new/uncommitted file, or a non-code asset), retry the same');
-          console.error('search to proceed.');
-          console.error('─'.repeat(54));
-          process.exit(2);
+      if (gstate.hasConsent(cwd) && graphNudge.hasGraph(cwd)) {
+        if (graphNudge.graphIsStale(cwd)) {
+          // Demand-driven self-heal: a broad search arrived but the graph is
+          // stale (the common case mid-development — any edit outdates it), so
+          // the gate below cannot fire and the graph would just rot until the
+          // next SessionStart. Kick a throttled background AST refresh (free) so
+          // the graph converges to fresh and the gate can enforce on LATER
+          // searches this session. Never blocks; falls through to allow.
+          if (gstate.markRefresh(cwd, 2 * 60 * 1000)) bg('graphify', ['extract', '.', '--update']);
+        } else if (!gstate.queryDone(sid, cwd)) {
+          const gflag = flagPath(`graphgate:${sid}:${cwd}:${toolName}:${JSON.stringify(toolInput)}`);
+          if (!fs.existsSync(gflag)) {
+            try { fs.writeFileSync(gflag, Date.now().toString()); } catch {}
+            console.error('\n⛔  GRAPHIFY GATE — broad search blocked (fresh graph available)');
+            console.error('─'.repeat(54));
+            console.error('Query the knowledge graph instead of grepping raw files:');
+            console.error('  graphify query "<your question>"');
+            console.error('');
+            console.error('If the graph cannot answer THIS search (exact string, a');
+            console.error('new/uncommitted file, or a non-code asset), retry the same');
+            console.error('search to proceed.');
+            console.error('─'.repeat(54));
+            process.exit(2);
+          }
+          // flag present → already gated this search; fall through (escape hatch)
         }
-        // flag present → already gated this search; fall through (escape hatch)
       }
     } catch { /* fail open — never block on gate errors */ }
   }
@@ -318,6 +349,24 @@ process.stdin.on('end', () => {
     if (fs.existsSync(projectMap)) {
       console.error(`\nHint: Read .claude/project-map.md to find the right path first.`);
     }
+
+    // Value-moment graphify offer: a broad search just got blocked in a git
+    // project that has no graphify decision yet and no graph. This is where the
+    // token cost is concrete, so conversion is far higher than the passive
+    // SessionStart offer. Throttled once per week per project (shares nothing
+    // with the SessionStart offer key, so at most two low-cost offers/week).
+    try {
+      const gstate = require('../lib/graphify-state');
+      const graphNudge = require('../lib/graph-nudge');
+      if (gstate.isUndecided(cwd) && !graphNudge.hasGraph(cwd) && isGitRepo()) {
+        const { runOnce } = require('../lib/run-once');
+        const cwdKey = crypto.createHash('md5').update(cwd).digest('hex').slice(0, 12);
+        if (runOnce('graphify-block-offer', cwdKey, { cooldownMs: 7 * 24 * 60 * 60 * 1000 })) {
+          console.error('');
+          console.error(graphNudge.buildGraphifyOffer());
+        }
+      }
+    } catch { /* never let the offer break the block */ }
   }
 
   console.error(line);

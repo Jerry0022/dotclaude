@@ -6,6 +6,9 @@ import {
   readState,
   hasConsent,
   isDeclined,
+  isUndecided,
+  markRefresh,
+  refreshFlagPath,
   markQueryDone,
   queryDone,
   consentPath,
@@ -49,6 +52,53 @@ describe("consent record", () => {
     expect(readState(dir)).toBeNull();
     expect(hasConsent(dir)).toBe(false);
     expect(isDeclined(dir)).toBe(false);
+  });
+});
+
+describe("isUndecided — offer eligibility", () => {
+  let dir;
+  beforeEach(() => {
+    dir = tmp();
+    fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
+  });
+  afterEach(() => {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("no record → undecided", () => {
+    expect(isUndecided(dir)).toBe(true);
+  });
+  test("consent:true → decided (not undecided)", () => {
+    fs.writeFileSync(consentPath(dir), JSON.stringify({ consent: true }));
+    expect(isUndecided(dir)).toBe(false);
+  });
+  test("consent:false → decided (not undecided)", () => {
+    fs.writeFileSync(consentPath(dir), JSON.stringify({ consent: false }));
+    expect(isUndecided(dir)).toBe(false);
+  });
+});
+
+describe("markRefresh — stale-graph refresh throttle", () => {
+  test("first call true then throttled; independent per project", () => {
+    const d = tmp();
+    expect(markRefresh(d, 60_000)).toBe(true);   // first → allowed, stamps flag
+    expect(markRefresh(d, 60_000)).toBe(false);  // within cooldown → throttled
+    expect(fs.existsSync(refreshFlagPath(d))).toBe(true);
+    const d2 = tmp();
+    expect(markRefresh(d2, 60_000)).toBe(true);  // different project → independent
+    try { fs.rmSync(d, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(d2, { recursive: true, force: true }); } catch {}
+  });
+
+  test("allowed again once the cooldown has elapsed", () => {
+    const d = tmp();
+    expect(markRefresh(d, 60_000)).toBe(true);
+    expect(markRefresh(d, 60_000)).toBe(false); // throttled
+    // Backdate the flag past the cooldown → next call allowed again.
+    const past = new Date(Date.now() - 120_000);
+    fs.utimesSync(refreshFlagPath(d), past, past);
+    expect(markRefresh(d, 60_000)).toBe(true);
+    try { fs.rmSync(d, { recursive: true, force: true }); } catch {}
   });
 });
 

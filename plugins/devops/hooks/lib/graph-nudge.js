@@ -42,6 +42,23 @@ function buildGraphNudge() {
   ].join('\n');
 }
 
+/**
+ * One-line offer surfaced at the moment a broad search is blocked in a project
+ * that has no graphify decision yet — the point where the token cost is concrete
+ * and the value proposition lands hardest (much higher conversion than the
+ * passive SessionStart offer). Steers Claude to offer enabling graphify via
+ * AskUserQuestion. Kept short so it rides an existing block message.
+ */
+function buildGraphifyOffer() {
+  return [
+    '💡 [graphify] Broad searches like this are exactly what a code knowledge graph makes cheap.',
+    'This project has no graphify decision yet — offer the user (AskUserQuestion) to enable it.',
+    'On YES: `uv tool install graphifyy && graphify install && graphify hook install && graphify extract .`,',
+    'then write .claude/graphify.json {"consent":true,"autoBuild":true}. On NO: write {"consent":false}.',
+    'Never install without confirmation.',
+  ].join('\n');
+}
+
 // Directories whose contents never count toward "newest source file": VCS,
 // dependencies, build output, and graphify's own output. Dot-dirs are skipped
 // too (handled in the walk), so .git/.claude/.venv are covered by both.
@@ -115,6 +132,7 @@ module.exports = {
   graphJsonPath,
   hasGraph,
   buildGraphNudge,
+  buildGraphifyOffer,
   scanSources,
   graphIsStale,
 };
