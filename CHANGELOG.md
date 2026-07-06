@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.107.5] — 2026-07-06
+
+### Fixed
+
+- **Autonomous-run artifacts no longer pollute `git status` — session archiving stops warning about "uncommitted changes that will be permanently discarded" over them.** The `AUTONOMOUS-*` artifact family (`DONE.flag`, `LOG.md`, `REPORT.html`, `RESUME.json`, `STALLED.txt`, `INTERRUPTED.txt`) is deliberately written to the project root: the external watchdog polls `$PWD` for the done-flag, Step 0.2 resume classification scans worktree roots, and the HTML report opens from there — so the files can neither be relocated nor deleted at run end (observed live 2026-07-06: archiving an autonomous-run worktree warned over 3 untracked artifacts as discardable "changes"). `devops-autonomous` Step 3c (skill 0.4.0 → 0.4.1) now registers `/AUTONOMOUS-*` in the repo-local `$(git rev-parse --git-common-dir)/info/exclude` during permission priming, before anything writes them: never committed (no `.gitignore` noise in consumer projects), one entry covers every worktree of the repo, idempotent, and non-fatal on exotic git layouts. This also removes the risk of a blanket `git add -A` sweeping run artifacts into a commit. New `deep-knowledge/autonomous-execution.md` § Artifact Hygiene documents the artifact table (writer/reader per file) and the two hard rules: never relocate/delete mid-run, always git-invisible.
+
 ## [0.107.4] — 2026-07-05
 
 ### Fixed
