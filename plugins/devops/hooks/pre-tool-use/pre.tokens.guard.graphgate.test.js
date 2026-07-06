@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { markQueryDone } from "../lib/graphify-state.js";
+import { markQueryDone, refreshFlagPath } from "../lib/graphify-state.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "pre.tokens.guard.js");
@@ -101,6 +101,48 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     markQueryDone("s-queried", dir);
     const r = runGrep(dir, "s-queried", "zeta");
     expect(r.stderr).not.toContain("GRAPHIFY GATE");
+    cleanup(dir);
+  });
+
+  test("stale graph + consent → self-heal refresh requested, still not gated", () => {
+    const dir = project({ consent: true, graph: "stale" });
+    const r = runGrep(dir, "s-heal", "omega");
+    expect(r.stderr).not.toContain("GRAPHIFY GATE"); // never block onto stale
+    expect(fs.existsSync(refreshFlagPath(dir))).toBe(true); // background refresh kicked
+    cleanup(dir);
+  });
+});
+
+describe("pre.tokens.guard — value-moment graphify offer (undecided projects)", () => {
+  function gitProject() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "graphoffer-"));
+    fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, ".claude", "settings.json"),
+      JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } })
+    );
+    fs.writeFileSync(path.join(dir, "a.js"), "const x = 1;");
+    spawnSync("git", ["init", "-q"], { cwd: dir });
+    return dir;
+  }
+
+  test("undecided + no graph + git → broad search block carries the offer, throttled", () => {
+    const dir = gitProject();
+    const first = runGrep(dir, "s-offer", "needle");
+    expect(first.status).toBe(2); // still blocked by the token guard
+    expect(first.stderr).toContain("[graphify]");
+    expect(first.stderr).toContain("AskUserQuestion");
+    // Weekly throttle: a second broad search this week does NOT re-offer.
+    const second = runGrep(dir, "s-offer", "haystack");
+    expect(second.stderr).not.toContain("[graphify]");
+    cleanup(dir);
+  });
+
+  test("declined project → no offer", () => {
+    const dir = gitProject();
+    fs.writeFileSync(path.join(dir, ".claude", "graphify.json"), JSON.stringify({ consent: false }));
+    const r = runGrep(dir, "s-declined-offer", "needle");
+    expect(r.stderr).not.toContain("[graphify]");
     cleanup(dir);
   });
 });

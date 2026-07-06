@@ -56,3 +56,6 @@ memory/
 package-lock.json
 .claude/devops-concept/
 __pycache__/
+
+# graphify knowledge-graph output (generated, per-project, not distributable)
+graphify-out/

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.109.0] — 2026-07-07
+
+### Fixed
+
+- **The graphify token-saver gate now actually fires during development instead of sitting silently disarmed.** A 3-day / 108-session audit found zero real `graphify query` retrievals and only one project ever opted in — the enforcement was running in the void. Root cause: the PreToolUse graphify-gate only fires against a **fresh** graph (a deliberate fail-safe — never force Claude onto stale data), but any source-file edit outdates the graph, so mid-development the graph is almost always stale and the gate is off; the background rebuild only ran at SessionStart (throttled 10 min) or on commit. Now a broad `Grep`/`Glob` on a consented project with a **stale** graph kicks a throttled (2 min) background `graphify extract . --update` (AST-only, free), so the graph self-heals mid-session and the gate can enforce on later searches — while still never blocking onto stale data. (`pre.tokens.guard` 0.5.0 → 0.6.0, `graphify-state` `isUndecided`/`markRefresh`.)
+
+### Added
+
+- **Undecided projects now get the graphify opt-in offer at the moment it pays off — a blocked broad search — not just as passive session-start context.** The SessionStart auto-offer converted ~0% (1 of 12 audited projects reacted) because it competes with the user's first prompt and loses. The SessionStart proposal is unchanged; additionally, when a broad search is blocked by the token guard in a git project that has no graphify decision yet, the block message now carries a throttled (weekly) enable offer where the token cost is concrete. Two independent weekly throttles → at most two low-cost offers per project per week. (`graph-nudge` `buildGraphifyOffer`; 6 new tests, 626 total.)
+
 ## [0.108.0] — 2026-07-06
 
 ### Added

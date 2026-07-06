@@ -44,6 +44,41 @@ function isDeclined(cwd) {
   return !!(s && s.consent === false);
 }
 
+/**
+ * True iff there is NO consent record yet — the project is undecided, so a
+ * one-time offer to enable graphify is appropriate. (consent:true / consent:false
+ * both return false — the user has already chosen.)
+ */
+function isUndecided(cwd) {
+  return readState(cwd) === null;
+}
+
+function refreshFlagPath(cwd) {
+  const key = crypto.createHash('md5').update(`refresh:${cwd}`).digest('hex').slice(0, 12);
+  return path.join(os.tmpdir(), `dotclaude-graphrefresh-${key}.flag`);
+}
+
+/**
+ * Throttle gate for the demand-driven stale-graph refresh triggered from the
+ * PreToolUse graphify-gate. Returns true (and stamps the flag) at most once per
+ * `cooldownMs` per project, so a burst of broad searches cannot stack concurrent
+ * `graphify extract` runs. Keyed on cwd (not session) so parallel agents/
+ * worktrees on the same project share one throttle. Never throws.
+ */
+function markRefresh(cwd, cooldownMs) {
+  const file = refreshFlagPath(cwd);
+  try {
+    const age = Date.now() - fs.statSync(file).mtimeMs;
+    if (age < cooldownMs) return false;
+  } catch { /* absent → first run */ }
+  try {
+    fs.writeFileSync(file, String(Date.now()));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function queryFlagPath(sessionId, cwd) {
   const key = crypto.createHash('md5').update(`${sessionId || 'nosid'}:${cwd}`).digest('hex').slice(0, 12);
   return path.join(os.tmpdir(), `dotclaude-graphq-${key}.flag`);
@@ -87,6 +122,9 @@ module.exports = {
   readState,
   hasConsent,
   isDeclined,
+  isUndecided,
+  refreshFlagPath,
+  markRefresh,
   queryFlagPath,
   markQueryDone,
   queryDone,

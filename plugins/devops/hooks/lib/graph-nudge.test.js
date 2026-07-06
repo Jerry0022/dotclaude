@@ -2,7 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hasGraph, buildGraphNudge, graphJsonPath, graphIsStale } from "./graph-nudge.js";
+import { hasGraph, buildGraphNudge, buildGraphifyOffer, graphJsonPath, graphIsStale } from "./graph-nudge.js";
 
 describe("hasGraph — graph.json detection", () => {
   let dir;
@@ -42,6 +42,15 @@ describe("buildGraphNudge — ambient hint text", () => {
     expect(t).toContain("graphify query");
     expect(t).toContain("graphify-out/graph.json");
     expect(t).toContain("/devops-graph");
+  });
+});
+
+describe("buildGraphifyOffer — value-moment offer text", () => {
+  test("names graphify, AskUserQuestion, and the consent file", () => {
+    const t = buildGraphifyOffer();
+    expect(t).toContain("graphify");
+    expect(t).toContain("AskUserQuestion");
+    expect(t).toContain("graphify.json");
   });
 });
 
