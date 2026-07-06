@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.108.0] — 2026-07-06
+
+### Added
+
+- **Static no-runtime HTML pages no longer fight the V&V gate — consumer projects can now carve them out via config (#237).** The `stop.flow.browsertest` gate treated every `.html` file as a browser-verifiable product view; the only carve-out was the hard-coded `docs/concepts/` path, so hand-written static deliverables (e.g. an idea workspace's `ideas/*.html`) demanded a browser Light check that cannot meaningfully run — recurring on every content edit until a `SKIP-VERIFICATION` stamped the card ⚠ UNVERIFIED. A new optional `no_runtime_static_paths` array (path prefixes / globs, e.g. `["ideas/", "mockups/**"]`) in the project's `.claude/skills/devops-test-plan/profile.json` now carves those paths out of Light-verification enforcement — same effect as the built-in `docs/concepts/` carve-out. The completion hook reads the field from both the session profile cache and the project override file on every turn, so protection starts on turn one even before `/devops-test-plan` ran. (`browsertest-guard` 0.3.0 → 0.4.0, `post.flow.completion` 0.18.0 → 0.19.0, 13 new tests.)
+- **A `/devops-*` command mentioned inline in a longer message now forces the skill to actually load instead of being improvised from memory (#235).** When a user wrote e.g. `/devops-concept lass uns das machen…` inside a prose message, the harness did not expand it as a slash command — no skill loaded, and Claude predictably hand-rolled the workflow, violating skill contracts (bridge server, decision panel, gates; output-side hooks like `post.concept.gate` only catch some of the damage after the fact). The new `prompt.skill.enforce` UserPromptSubmit hook detects inline `/devops-*` references and injects a mandatory instruction to invoke the Skill tool for each one BEFORE responding. Real slash-command invocations (`<command-name>` tag), path-like strings (`docs/devops-guide.md`), and unknown skill names are ignored. (10 new tests.)
+
+### Fixed
+
+- **An open concept page no longer misses new iterations after the bridge server restarts (#225).** The reload counter lived only in memory and reset to 0 on every `concept-server.py` restart; an already-open tab (which reloads only when `counter > lastSeen`) then never saw an advance again and kept showing stale content even though the new iteration was on disk and `/reload` returned HTTP 200 (observed live in a consumer-project concept flow after several bridge restarts). The counter is now seeded from epoch milliseconds, making it monotonic across restarts — an open tab detects a restart as a normal advance and force-reloads once, re-syncing with disk without any client-side change. Regression-tested by spawning the bridge twice on one port (the test caught the same-second-restart edge that epoch-seconds seeding would have missed; skips gracefully where python is unavailable).
+
 ## [0.107.5] — 2026-07-06
 
 ### Fixed
