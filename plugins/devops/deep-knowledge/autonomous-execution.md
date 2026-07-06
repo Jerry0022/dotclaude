@@ -75,6 +75,34 @@ Append one timestamped line per autonomous judgment call:
 Format: `[ISO-8601] <category>: <one-line decision + rationale>`. Keep it terse —
 one line each, never prose. This is observability, not a second report.
 
+## Artifact Hygiene
+
+The run drops its artifacts in the **project root** on purpose — every consumer
+polls or scans exactly that path:
+
+| Artifact | Written by | Read by |
+|----------|------------|---------|
+| `AUTONOMOUS-LOG.md` | Steps 4e/5 (decision journal) | user on return; embedded in report |
+| `AUTONOMOUS-REPORT.html` | Step 7b | browser; re-opened post-ship |
+| `AUTONOMOUS-DONE.flag` | Step 8c | external watchdog (`$PWD` poll); Step 0.2 resume scan |
+| `AUTONOMOUS-RESUME.json` | late-permission / bail protocol | Step 0.5 resume detection |
+| `AUTONOMOUS-STALLED.txt` | notify-mode watchdog | user (visible stall signal) |
+| `AUTONOMOUS-INTERRUPTED.txt` | bail protocol (report throttled) | user |
+
+Two hard rules follow:
+
+1. **Never relocate or delete them mid-run or at run end.** The DONE flag is the
+   watchdog handshake, the report is the primary deliverable the user opens after
+   returning, the resume file is the continuation state. They disappear naturally
+   when the worktree is removed (ship cleanup / session archive).
+2. **They must be invisible to git.** Untracked `AUTONOMOUS-*` files make session
+   archiving warn about "uncommitted changes that will be permanently discarded",
+   pollute `git status` in preflight checks, and get swept into commits by
+   `git add -A`. Step 3c therefore registers `/AUTONOMOUS-*` in
+   `$(git rev-parse --git-common-dir)/info/exclude` before execution starts —
+   repo-local, never committed (no `.gitignore` noise in consumer projects), and
+   the common git dir means one entry covers every worktree of the repo.
+
 ## Effort & Token Budget (Soft Cap)
 
 The 8h watchdog (Step 4d) is the hard *outer* limit — it only catches a dead
