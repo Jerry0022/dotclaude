@@ -1,6 +1,6 @@
 ---
 name: devops-autonomous
-version: 0.4.0
+version: 0.4.1
 description: >-
   Fully autonomous agent orchestration for when the user is away from the PC.
   Runs agents without supervision (implementation, desktop interaction, live
@@ -253,6 +253,23 @@ signal applies, `$BROWSER_TOOL` must be active before proceeding.
 Run a harmless `Bash` command (e.g., `echo "permission primed"`), `Read` a file,
 and (if `$EXEC_MODE` = `implement`) `Write` a temp file + delete it. This ensures
 file and shell permissions are pre-approved.
+
+**Artifact hygiene (same Bash priming call):** register the run artifacts in the
+repo-local git exclude BEFORE anything writes them, so `AUTONOMOUS-*` files never
+show up as untracked changes — otherwise session archiving warns about
+"uncommitted changes that will be permanently discarded" and a blanket
+`git add -A` would sweep them into a commit:
+
+```bash
+x="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+mkdir -p "${x%/*}"
+grep -qxF '/AUTONOMOUS-*' "$x" 2>/dev/null || echo '/AUTONOMOUS-*' >> "$x"
+```
+
+Idempotent; `.git/info/exclude` is never committed and one entry covers every
+worktree of the repo. On failure (exotic git layout): log one journal line and
+continue — never block the run. Rationale + full artifact family:
+`deep-knowledge/autonomous-execution.md` § Artifact Hygiene.
 
 ### 3d — MCP Tool Permissions
 If the task uses any MCP tools (completion card, ship preflight, issues, etc.),
