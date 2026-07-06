@@ -3383,6 +3383,13 @@ sees the page "do nothing" visually, and only notices the change because the
 iteration tab moved. The sessionStorage flag scopes the jump to reloads we
 triggered, so manual F5 while reading still preserves scroll position.
 
+The `counter > _bootReloadCounter` comparison is restart-safe without any
+client logic: the server seeds its in-memory counter from epoch milliseconds
+(#225), so a restarted bridge always reports a counter ahead of anything the
+previous run handed out. An open tab sees the restart as a normal advance and
+force-reloads once — the desired re-sync after Claude re-launched the bridge
+mid-session.
+
 ```javascript
 let _bootReloadCounter = null;
 async function pollReload() {

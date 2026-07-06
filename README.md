@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.107.5**
+**Version: 0.108.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -167,7 +167,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ## Features
 
-- **<!--devops:count:hooks-->34<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:hooks-->35<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->21<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-flow, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-plugin-update, devops-autonomous, devops-burn, devops-learn, devops-harden, devops-polish, devops-test-plan
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
@@ -178,7 +178,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->34<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->35<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -211,6 +211,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.knowledge.dispatch` — On-demand deep-knowledge injection based on prompt keywords.
 - `prompt.git.sync` — Throttled git sync on user prompt — delegates to scripts/git-sync.js.
 - `prompt.issue.detect` — Detect issue references in user messages.
+- `prompt.skill.enforce` — Detects /devops-* skill commands mentioned INLINE in a user prompt (typed as text, no…
 - `prompt.ship.detect` — Detect ship intent in user prompts and inject Skill('devops-ship') instruction.
 - `prompt.flow.appstart` — Detect app start intent in user prompts.
 - `prompt.worktree.branch-guard` — Prevents working without a dedicated branch inside a linked worktree.
@@ -649,7 +650,7 @@ Wk  ━━──╏─────────   15% +1%   · 4d 22h left
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->34<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── hooks/                         ← <!--devops:count:hooks-->35<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 ├── skills/                        ← <!--devops:count:skills-->21<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs

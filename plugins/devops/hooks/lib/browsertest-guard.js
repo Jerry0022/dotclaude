@@ -1,6 +1,6 @@
 /**
  * @module browsertest-guard
- * @version 0.3.0
+ * @version 0.4.0
  * @description Pure decision logic for the Light-verification enforcement gate
  *   (the "V" in the V&V gate). Split out of stop.flow.browsertest.js so the
  *   rules can be unit-tested without mocking stdin or temp files.
@@ -51,18 +51,80 @@ const TEST_FILE_RE = /\.(test|spec)\.[a-z]+$/i;
 // devops-concept artifacts — generated analysis pages, NOT product UI.
 const CONCEPT_RE = /(^|\/)docs\/concepts\//i;
 
+/**
+ * Compile project-configured carve-out patterns (no-runtime static paths that
+ * must never trip the V&V gate — same effect as the built-in docs/concepts/
+ * carve-out) into regexes. Supported pattern forms, matched at any path-segment
+ * boundary of the (slash-normalized) file path:
+ *   "ideas"        → the directory and everything below it
+ *   "ideas/"       → same
+ *   "ideas/**"     → same (explicit glob)
+ *   "drafts/*.html"→ direct children of drafts/ with .html extension
+ * `*` stays within one segment, `**` crosses segments. Anything that is not a
+ * non-empty string is skipped; a non-array input yields no carve-outs.
+ *
+ * @param {string[]} patterns
+ * @returns {RegExp[]}
+ */
+function compileCarveOuts(patterns) {
+  if (!Array.isArray(patterns)) return [];
+  const out = [];
+  for (const raw of patterns) {
+    if (typeof raw !== 'string' || !raw.trim()) continue;
+    let p = raw.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+    // Bare dir / trailing slash → whole subtree.
+    if (p.endsWith('/')) p += '**';
+    else if (!/[*.]/.test(p.split('/').pop())) p += '/**';
+    // Split on '**' first so single-star handling cannot touch it: each
+    // segment gets regex-escaped and '*' becomes one-path-segment, then the
+    // segments are joined with the cross-segment '.*'.
+    const rx = p
+      .split('**')
+      .map(seg => seg.replace(/[.+^${}()|[\]]/g, '\\$&').replace(/\*/g, '[^/]*'))
+      .join('.*');
+    try {
+      out.push(new RegExp('(^|/)' + rx + '$', 'i'));
+    } catch { /* skip unparsable pattern */ }
+  }
+  return out;
+}
+
+/**
+ * Extract + compile carve-outs from a parsed /devops-test-plan profile object
+ * (field `no_runtime_static_paths`). Malformed input → [].
+ * @param {*} profileJson
+ * @returns {RegExp[]}
+ */
+function carveOutsFromProfile(profileJson) {
+  if (!profileJson || typeof profileJson !== 'object') return [];
+  return compileCarveOuts(profileJson.no_runtime_static_paths);
+}
+
+/**
+ * Is the path inside any configured carve-out?
+ * @param {string} normalizedPath — forward-slash path
+ * @param {RegExp[]} [carveOuts]
+ * @returns {boolean}
+ */
+function isCarvedOut(normalizedPath, carveOuts) {
+  if (!Array.isArray(carveOuts) || carveOuts.length === 0) return false;
+  return carveOuts.some(re => re.test(normalizedPath));
+}
+
 /** Max times the gate blocks for the same owed verification before yielding. */
 const BLOCK_CAP = 2;
 
 /**
  * Does a changed file require BROWSER verification (DOM surface)?
  * @param {string} filePath
+ * @param {RegExp[]} [carveOuts] — compiled project carve-outs (compileCarveOuts)
  * @returns {boolean}
  */
-function isWebRenderableChange(filePath) {
+function isWebRenderableChange(filePath, carveOuts) {
   if (!filePath) return false;
   const p = String(filePath).replace(/\\/g, '/');
   if (CONCEPT_RE.test(p)) return false;     // devops-concept carve-out
+  if (isCarvedOut(p, carveOuts)) return false; // project no-runtime carve-out
   if (TEST_FILE_RE.test(p)) return false;   // *.test / *.spec — not a view
   if (ALWAYS_WEB_RE.test(p)) return true;   // html/css/vue/svelte/astro/tsx/jsx
   if (SCRIPT_RE.test(p) && UI_DIR_RE.test(p)) return true; // src/-scoped ts/js
@@ -76,12 +138,14 @@ function isWebRenderableChange(filePath) {
  * doc/markdown/config edits never trigger the gate.
  *
  * @param {string} filePath
+ * @param {RegExp[]} [carveOuts] — compiled project carve-outs (compileCarveOuts)
  * @returns {boolean}
  */
-function isCodeChange(filePath) {
+function isCodeChange(filePath, carveOuts) {
   if (!filePath) return false;
   const p = String(filePath).replace(/\\/g, '/');
   if (CONCEPT_RE.test(p)) return false;
+  if (isCarvedOut(p, carveOuts)) return false;
   if (TEST_FILE_RE.test(p)) return false;
   return CODE_EXT_RE.test(p);
 }
@@ -114,11 +178,12 @@ function classifyProfile(name) {
  * Does this file change make a Light verification pending, given the profile?
  * @param {'dom'|'runner'|'any'} profileClass
  * @param {string} filePath
+ * @param {RegExp[]} [carveOuts] — compiled project carve-outs (compileCarveOuts)
  * @returns {boolean}
  */
-function needsLightVerification(profileClass, filePath) {
-  if (profileClass === 'dom') return isWebRenderableChange(filePath);
-  return isCodeChange(filePath); // 'runner' and 'any' → any source file
+function needsLightVerification(profileClass, filePath, carveOuts) {
+  if (profileClass === 'dom') return isWebRenderableChange(filePath, carveOuts);
+  return isCodeChange(filePath, carveOuts); // 'runner' and 'any' → any source file
 }
 
 // ---------------------------------------------------------------------------
@@ -337,8 +402,9 @@ function escFooter(escalated) {
     'observable in THIS thread (a browser or test-runner tool call). If a subagent',
     'did the testing, re-run a quick observable check or surface its evidence.',
     '',
-    'Auto-excluded: docs/markdown/config edits, *.test/*.spec files, and',
-    'devops-concept pages under docs/concepts/*.html.',
+    'Auto-excluded: docs/markdown/config edits, *.test/*.spec files,',
+    'devops-concept pages under docs/concepts/*.html, and any path listed in',
+    'no_runtime_static_paths of .claude/skills/devops-test-plan/profile.json.',
     '',
     'To CONSCIOUSLY skip (genuinely no startable surface / non-runtime change):',
     'put a line `SKIP-VERIFICATION: <one-line reason>` in your response. The skip',
@@ -421,6 +487,8 @@ module.exports = {
   isWebRenderableChange,
   isCodeChange,
   classifyProfile,
+  compileCarveOuts,
+  carveOutsFromProfile,
   needsLightVerification,
   isBrowserTool,
   isTestRunnerTool,

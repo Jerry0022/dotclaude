@@ -113,7 +113,17 @@ _phase = ''
 # polls GET /reload and issues location.reload() when the counter advances.
 # This closes the gap where Claude mutates the file on disk but the existing
 # tab keeps showing stale content.
-_reload_counter = 0
+#
+# Seeded from epoch MILLISECONDS, not 0 (#225): the counter lives in memory,
+# so a server restart used to reset it to 0 — an already-open tab holding
+# `lastSeen = N` then never saw an advance again and silently missed every
+# further iteration. Epoch seeding makes the counter monotonic ACROSS
+# restarts (a new run seeds ahead of any `seed + few increments` a previous
+# run could have handed out — bumps are one per iteration, i.e. minutes
+# apart, while even an instant restart advances the ms clock by more), so an
+# open tab detects a restart as a counter advance and force-reloads once —
+# re-syncing without any client change.
+_reload_counter = int(time.time() * 1000)
 _lock = threading.Lock()
 
 
