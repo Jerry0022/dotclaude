@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.110.0] — 2026-07-08
+
+### Added
+
+- **Ship now detects out-of-band deploy artifacts and refuses to report "all done" while they are undeployed (#243).** A `/devops-ship` run merges code and rendered a `ship-successful` "Alles ERLEDIGT" card the moment the PR merged + tagged — but a plain merge does **not** apply DB migrations or deploy edge/serverless functions. When a diff touched those paths, the merged code referenced infra that was never applied, so the change was silently NOT live while the card claimed done. `ship_preflight` now scans the branch diff against stack-agnostic globs (`**/migrations/**`, `supabase/migrations/**`, `supabase/functions/**`, overridable per project via the ship-extension `reference.md` `outOfBandDeploy:` field) and returns `outOfBandDeploys: { detected, files, kinds }` (non-blocking — never gates the merge). New ship Step 4d turns that into either an actual deploy (when the extension registers a `deploy:` handler) or a mandatory, loud completion-card gate: the card gains a `deployGate` block naming each undeployed artifact + its required deploy action, and `state.deployPending` flips the ship-successful CTA from "Alles ERLEDIGT" to "🚨 DEPLOY erforderlich (noch nicht live)". Concrete deploy automation stays project-specific; the plugin ships only the generic detection + gate. (`ship_preflight` + new `ship/lib/infra-deploy.js`, completion MCP `0.6.0 → 0.7.0`, `devops-ship` skill `0.6.1 → 0.7.0`; 19 new tests, 644 total.)
+
 ## [0.109.0] — 2026-07-07
 
 ### Fixed

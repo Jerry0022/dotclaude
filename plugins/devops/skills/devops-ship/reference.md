@@ -69,3 +69,37 @@ purpose_alignment:
 ```
 
 This pattern applies to ALL plugin skills, not just ship.
+
+## Out-of-band deploy gate (#243)
+
+A code merge does **not** apply DB migrations or deploy edge/serverless
+functions. When a ship's diff touches such artifacts, the merged code references
+infra that was never applied — the change is silently NOT live. Ship detects
+this (Step 1a) and, for a final ship to main, either deploys it (if a handler is
+configured) or raises a loud completion-card gate (Step 4d) so the card never
+reads "all done" over undeployed infra.
+
+### Override the detection globs
+
+Detection uses stack-agnostic defaults (`**/migrations/**`,
+`supabase/migrations/**`, `supabase/functions/**`). Override them per project:
+
+```yaml
+outOfBandDeploy:
+  - "**/migrations/**"
+  - "supabase/functions/**"
+  - "infra/terraform/**"       # add your own out-of-band paths
+```
+
+### Register a deploy handler (optional)
+
+Without a handler, Step 4d raises the gate and the user deploys manually. To make
+ship actually apply the artifacts post-merge, register a `deploy:` handler:
+
+```yaml
+deploy: supabase        # e.g. apply_migration + deploy_edge_function via the Supabase MCP
+```
+
+Concrete deploy automation is **project-specific** and lives here in the
+extension — the plugin ships only the generic detection + gate, never a
+stack-specific deployer.
