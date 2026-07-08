@@ -6,7 +6,7 @@ import { describe, test, expect, vi, beforeEach } from "vitest";
 // does — so a minimal chainable stub is enough to load the module.
 vi.mock("zod", () => {
   const node = new Proxy(() => node, { get: () => () => node });
-  return { z: { object: () => node, string: () => node, boolean: () => node } };
+  return { z: { object: () => node, string: () => node, boolean: () => node, array: () => node } };
 });
 
 // Mock every lib the handler touches so we can drive a deterministic "ready"
@@ -44,7 +44,7 @@ vi.mock("../lib/worktree.js", () => ({
 }));
 
 import { handler } from "./preflight.js";
-import { isWorktree } from "../lib/git.js";
+import { isWorktree, fileOverlap } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 
 const CWD = "/fake/consumer-repo";
@@ -54,6 +54,9 @@ beforeEach(() => {
   // Re-apply defaults cleared by clearAllMocks.
   isWorktree.mockReturnValue(false);
   dirtySessionWorktrees.mockReturnValue([]);
+  // Default: empty diff (no overlap, no out-of-band artifacts). Tests that need
+  // a populated diff override this — resetting here keeps them isolated.
+  fileOverlap.mockReturnValue({ mergeBase: "abc", branchFiles: [], baseFiles: [], overlap: [] });
 });
 
 function checkByName(result, name) {
@@ -133,5 +136,44 @@ describe("ship_preflight — session-worktree-clean gate", () => {
     // When in-worktree we must NOT scan siblings (clean-tree already covers cwd).
     expect(dirtySessionWorktrees).not.toHaveBeenCalled();
     expect(result.ready).toBe(true);
+  });
+});
+
+describe("ship_preflight — out-of-band deploy detection (#243)", () => {
+  test("plain code diff → not detected, non-blocking ok check, ready", async () => {
+    fileOverlap.mockReturnValue({ mergeBase: "abc", branchFiles: ["src/app.ts", "README.md"], baseFiles: [], overlap: [] });
+    const result = await handler({ cwd: CWD });
+    expect(result.outOfBandDeploys.detected).toBe(false);
+    expect(checkByName(result, "out-of-band-deploys")).toEqual({ name: "out-of-band-deploys", ok: true, deploy: false });
+    expect(result.ready).toBe(true);
+  });
+
+  test("migration + edge function in diff → detected, warned, still ready (non-blocking)", async () => {
+    fileOverlap.mockReturnValue({
+      mergeBase: "abc",
+      branchFiles: ["src/app.ts", "supabase/migrations/1.sql", "supabase/functions/f/index.ts"],
+      baseFiles: [],
+      overlap: [],
+    });
+    const result = await handler({ cwd: CWD });
+    expect(result.outOfBandDeploys.detected).toBe(true);
+    expect(result.outOfBandDeploys.kinds.sort()).toEqual(["function", "migration"]);
+    const check = checkByName(result, "out-of-band-deploys");
+    expect(check).toMatchObject({ ok: true, deploy: true, count: 2 });
+    expect(result.warnings.some((w) => /out-of-band deploy/i.test(w))).toBe(true);
+    // Detection must NOT block the ship — the gate is post-merge.
+    expect(result.ready).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  test("custom override globs replace the defaults", async () => {
+    fileOverlap.mockReturnValue({
+      mergeBase: "abc",
+      branchFiles: ["infra/terraform/main.tf", "supabase/migrations/1.sql"],
+      baseFiles: [],
+      overlap: [],
+    });
+    const result = await handler({ cwd: CWD, outOfBandGlobs: ["infra/**"] });
+    expect(result.outOfBandDeploys.files).toEqual(["infra/terraform/main.tf"]);
   });
 });

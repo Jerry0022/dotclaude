@@ -13,9 +13,11 @@ import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
 import { writeSentinel } from "../lib/sentinel.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
+import { detectOutOfBandDeploys, DEFAULT_OUT_OF_BAND_GLOBS } from "../lib/infra-deploy.js";
 
 export const schema = z.object({
   base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
+  outOfBandGlobs: z.array(z.string()).nullable().default(null).describe("Override globs for out-of-band deploy detection (#243). Paths that a code merge does NOT deploy — DB migrations, edge/serverless functions. Omit/null to use the stack-agnostic defaults (**/migrations/**, supabase/migrations/**, supabase/functions/**). The ship skill passes these from the project ship-extension reference.md `outOfBandDeploy:` field."),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
@@ -127,6 +129,7 @@ export async function handler(params) {
       needsRebase: false,
       version: null,
       projectType: null,
+      outOfBandDeploys: { detected: false, globs: [], files: [], matched: [], kinds: [] },
       checks: [{ name: "repo-mode", value: "none", ok: true }],
       warnings: [],
       errors: [],
@@ -229,8 +232,11 @@ export async function handler(params) {
   }
 
   // 9. File overlap detection (skip when no remote — no origin ref to compare)
+  // Captured for reuse by 9b so the branch diff is computed once, not twice.
+  let step9Overlap = null;
   if (!noRemote) {
     const overlap = fileOverlap(originBase, opts);
+    step9Overlap = overlap;
     if (overlap.overlap.length > 0) {
       checks.push({
         name: "file-overlap",
@@ -247,6 +253,36 @@ export async function handler(params) {
     }
   } else {
     checks.push({ name: "file-overlap", ok: true, count: 0, skipped: true, reason: "no-remote" });
+  }
+
+  // 9b. Out-of-band deploy detection (#243). A code merge does NOT apply DB
+  //     migrations or deploy edge/serverless functions — so when the diff
+  //     touches those paths, the shipped code references infra that was never
+  //     applied and the change is silently NOT live. Detect it here (non-blocking)
+  //     so Step 4d/Step 6 can raise a mandatory post-merge deploy gate instead of
+  //     a clean "all done" card. Uses the same merge-base diff as file-overlap.
+  const infraBase = !noRemote && (baseExists === "remote" || baseExists === "local") ? originBase : base;
+  // Reuse the Step 9 diff when it already targeted the same ref; else compute it.
+  const branchFilesForInfra = (step9Overlap && infraBase === originBase)
+    ? step9Overlap.branchFiles
+    : fileOverlap(infraBase, opts).branchFiles;
+  const oobGlobs = Array.isArray(params.outOfBandGlobs) && params.outOfBandGlobs.length
+    ? params.outOfBandGlobs
+    : DEFAULT_OUT_OF_BAND_GLOBS;
+  const outOfBandDeploys = detectOutOfBandDeploys(branchFilesForInfra, oobGlobs);
+  if (outOfBandDeploys.detected) {
+    checks.push({
+      name: "out-of-band-deploys",
+      ok: true, // non-blocking: the merge still proceeds; the gate is post-merge
+      deploy: true,
+      count: outOfBandDeploys.files.length,
+      kinds: outOfBandDeploys.kinds,
+      files: outOfBandDeploys.files.slice(0, 20),
+      globs: oobGlobs,
+      warning: `${outOfBandDeploys.files.length} out-of-band deploy artifact(s) touched (${outOfBandDeploys.kinds.join(", ")}) — a code merge does NOT deploy these. A post-merge deploy gate is required; the completion card must not report "all done".`,
+    });
+  } else {
+    checks.push({ name: "out-of-band-deploys", ok: true, deploy: false });
   }
 
   // 10. Git config check (warning — auto-fixed by ship skill)
@@ -346,6 +382,7 @@ export async function handler(params) {
     needsRebase,
     version: versionInfo.version,
     projectType: versionInfo.type,
+    outOfBandDeploys,
     checks,
     warnings,
     errors,

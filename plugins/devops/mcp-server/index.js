@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.6.0
+ * @version 0.7.0
  * @plugin devops
  * @description MCP server with two tools:
  *   - `get_usage`              — live usage via the claude.ai internal API
@@ -254,15 +254,15 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
 // ---------------------------------------------------------------------------
 
 const VARIANTS = {
-  'ship-successful': { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
-  ready:             { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
-  'ready-files':     { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
-  'ship-blocked':    { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true  },
-  test:              { usage: true,  changes: true,  tests: true,  state: true,  userTest: true,  userFinalTest: false },
-  'test-minimal':    { usage: false, changes: false, tests: false, state: false, userTest: false, userFinalTest: false },
-  analysis:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true  },
-  aborted:           { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true  },
-  fallback:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true  },
+  'ship-successful': { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
+  ready:             { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
+  'ready-files':     { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
+  'ship-blocked':    { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
+  test:              { usage: true,  changes: true,  tests: true,  state: true,  userTest: true,  userFinalTest: false, deployGate: false },
+  'test-minimal':    { usage: false, changes: false, tests: false, state: false, userTest: false, userFinalTest: false, deployGate: false },
+  analysis:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
+  aborted:           { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
+  fallback:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
 };
 
 const CTA = {
@@ -271,6 +271,8 @@ const CTA = {
     'ship-successful-merged-kept': '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 KEEP CODING in `{branch}`',
     'ship-successful-plain':       '## \ud83d\ude80 SHIPPED \u2014 All DONE',
     'ship-successful-plain-kept':  '## \ud83d\ude80 SHIPPED \u2014 KEEP CODING in `{branch}`',
+    'ship-successful-deploy-merged': '## \ud83d\ude80 MERGED \u2192 origin/{merged} \u2014 \ud83d\udea8 DEPLOY REQUIRED (not live yet)',
+    'ship-successful-deploy-plain':  '## \ud83d\ude80 SHIPPED \u2014 \ud83d\udea8 DEPLOY REQUIRED (not live yet)',
     ready:                    '## \ud83d\udce6 READY \u2014 SHIP or CHANGE?',
     'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
     test:                     '## \ud83e\uddea DONE \u2014 SHIP after your TEST?',
@@ -284,6 +286,8 @@ const CTA = {
     'ship-successful-merged-kept': '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 WEITER in `{branch}`',
     'ship-successful-plain':       '## \ud83d\ude80 SHIPPED \u2014 Alles ERLEDIGT',
     'ship-successful-plain-kept':  '## \ud83d\ude80 SHIPPED \u2014 WEITER in `{branch}`',
+    'ship-successful-deploy-merged': '## \ud83d\ude80 GEMERGED \u2192 origin/{merged} \u2014 \ud83d\udea8 DEPLOY erforderlich (noch nicht live)',
+    'ship-successful-deploy-plain':  '## \ud83d\ude80 SHIPPED \u2014 \ud83d\udea8 DEPLOY erforderlich (noch nicht live)',
     ready:                    '## \ud83d\udce6 READY \u2014 SHIP oder ÄNDERN?',
     'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
     test:                     '## \ud83e\uddea DONE \u2014 SHIP nach deinem TEST?',
@@ -508,16 +512,49 @@ function renderUserFinalTest(items, lang) {
   return labels.header + '\n' + bullets.join('\n');
 }
 
+// Out-of-band deploy gate (#243). A code merge does NOT apply DB migrations or
+// deploy edge/serverless functions — so a card for such a ship must NOT read as
+// "all done". This block is deliberately loud: it names each artifact that is
+// still NOT live and what deploy action it needs, so the user cannot mistake a
+// merged-but-undeployed ship for a finished one.
+const DEPLOY_GATE_LABEL = {
+  de: { header: '🚨 **DEPLOY erforderlich — noch NICHT live:**', hint: 'Ein Merge deployt diese Artefakte nicht. Ohne diesen Schritt bleibt die Änderung in Produktion unwirksam.' },
+  en: { header: '🚨 **DEPLOY required — NOT live yet:**',        hint: 'A merge does not deploy these artifacts. Until you deploy them, the change stays inactive in production.' },
+};
+
+function renderDeployGate(items, lang) {
+  if (!items || items.length === 0) return '';
+  const labels = DEPLOY_GATE_LABEL[lang] || DEPLOY_GATE_LABEL.de;
+  const bullets = items.map(it => {
+    if (typeof it === 'string') return '* ' + it;
+    const artifact = (it && it.artifact) || '';
+    const kind = it && it.kind;
+    const action = it && it.action;
+    // "migration · supabase/migrations/1.sql — apply_migration"
+    const head = [kind, artifact].filter(Boolean).join(' · ');
+    return '* ' + head + (action ? ' — ' + action : '');
+  });
+  return labels.header + '\n' + bullets.join('\n') + '\n\n_' + labels.hint + '_';
+}
+
 function renderCTA(variant, cta, lang, state) {
   const templates = CTA[lang] || CTA.de;
   cta = cta || {};
 
   let key;
   if (variant === 'ship-successful') {
-    // Show merge target in CTA if actually merged; "-kept" suffix when keep-mode
-    // kept the worktree/branch alive for follow-up work.
-    const base = (state && state.merged) ? 'ship-successful-merged' : 'ship-successful-plain';
-    key = (state && state.kept) ? `${base}-kept` : base;
+    // Out-of-band deploy pending (#243): the code merged but infra (migrations /
+    // functions) is NOT deployed. The CTA must NOT say "All DONE" — flip it to a
+    // deploy-required call to action so a merged-but-undeployed ship is never
+    // mistaken for finished. Takes precedence over merged/kept wording.
+    if (state && state.deployPending) {
+      key = (state && state.merged) ? 'ship-successful-deploy-merged' : 'ship-successful-deploy-plain';
+    } else {
+      // Show merge target in CTA if actually merged; "-kept" suffix when keep-mode
+      // kept the worktree/branch alive for follow-up work.
+      const base = (state && state.merged) ? 'ship-successful-merged' : 'ship-successful-plain';
+      key = (state && state.kept) ? `${base}-kept` : base;
+    }
   } else {
     key = variant;
   }
@@ -704,6 +741,18 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
+  // Out-of-band deploy gate (#243) — rendered BEFORE userFinalTest so the
+  // "not live yet" warning is the first thing after the change/test blocks. A
+  // merged-but-undeployed ship (DB migration, edge function) must never read as
+  // done. Same variant availability as userFinalTest (skipped in test/-minimal).
+  if (config.deployGate) {
+    const deployBlock = renderDeployGate(input.deployGate, lang);
+    if (deployBlock) {
+      parts.push(deployBlock);
+      parts.push('');
+    }
+  }
+
   // User-final-test flag (Electron without takeover, 3rd-party integrations)
   // Available in all variants except test-minimal and test — so e.g. a
   // ship-successful card can still flag "test the real Stripe integration in
@@ -832,6 +881,13 @@ function refreshUsage() {
   //    cache fallback (it stamps _cached/_failureReason into the file instead),
   //    so a zero exit code is NOT proof of a live fetch — the freshness of the
   //    re-read file is.
+  // Escape hatch — skip the external headless fetch entirely. Set in tests (so
+  // the card renderer never spawns Edge) and usable offline/CI. The card still
+  // renders; it just omits the usage meter (data === null).
+  if (process.env.DEVOPS_COMPLETION_NO_USAGE === "1") {
+    return { success: false, data: null, delta5h: null, deltaWk: null };
+  }
+
   const scraperScript = resolveScraperScript();
   let scrapeErr = null;
   if (scraperScript) {
@@ -1009,6 +1065,7 @@ server.registerTool(
           merged: z.string().nullable().optional(),
           appStatus: z.enum(["running", "not-started"]).nullable().optional(),
           kept: z.boolean().optional().describe("Ship cleanup was skipped — branch + worktree preserved for follow-up work. Switches the ship-successful CTA from 'All DONE' to 'KEEP CODING in {branch}'."),
+          deployPending: z.boolean().optional().describe("Out-of-band deploy artifacts (DB migrations / edge functions) were merged but NOT deployed (#243). Flips the ship-successful CTA from 'All DONE' to '🚨 DEPLOY erforderlich (noch nicht live)'. Pair with the top-level `deployGate` list naming each artifact."),
         }).optional(),
       ).describe("Repository state"),
       cta: z.preprocess(
@@ -1037,6 +1094,17 @@ server.registerTool(
           }),
         ])).optional(),
       ).describe("User-final-test items — for changes where automation cannot cover the last step (packaged Electron/Tauri without desktop takeover, 3rd-party integrations). Pass strings for local final tests; pass { action, afterDeployment: true } for 3rd-party items that require deployment first. Available in all variants except test-minimal and test — in the test variant all manual steps go into userTest (single test section, no duplicate)."),
+      deployGate: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.array(z.union([
+          z.string(),
+          z.object({
+            artifact: z.string().describe("The out-of-band deploy artifact path, e.g. 'supabase/migrations/1.sql'."),
+            kind: z.string().optional().describe("Deploy kind — 'migration', 'function', or 'infra'."),
+            action: z.string().optional().describe("The concrete deploy action still required, e.g. 'apply_migration' or 'deploy_edge_function desktop-latest'."),
+          }),
+        ])).optional(),
+      ).describe("Out-of-band deploy gate (#243) — artifacts a code merge did NOT deploy (DB migrations, edge/serverless functions) and that are therefore NOT live yet. Renders a loud '🚨 DEPLOY erforderlich — noch NICHT live' block naming each artifact + its deploy action, so a merged-but-undeployed ship never reads as done. Pair with state.deployPending to also flip the CTA. Available in all variants except test-minimal and test. Populate from ship_preflight.outOfBandDeploys when the project has no deploy handler that already applied them."),
       validation: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.object({

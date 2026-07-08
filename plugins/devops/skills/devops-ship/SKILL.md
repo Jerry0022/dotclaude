@@ -1,6 +1,6 @@
 ---
 name: devops-ship
-version: 0.6.1
+version: 0.7.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, render_completion_card,
@@ -52,6 +52,14 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 
 Project extensions define: quality gate commands, deploy targets, version files, CI specifics.
 
+Also capture, if present in the merged `reference.md`, for use later in this run:
+- `outOfBandDeploy:` — a list of path globs for artifacts a code merge does NOT
+  deploy (DB migrations, edge/serverless functions). Pass them to `ship_preflight`
+  in Step 1a. Omit when absent — the tool applies stack-agnostic defaults.
+- `deploy:` — a deploy handler (e.g. `supabase`) that can actually APPLY those
+  artifacts post-merge. Used by Step 4d. When absent, Step 4d raises the deploy
+  gate instead of deploying.
+
 4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill has a **mandatory** Codex review gate (§1 in that doc), which MUST be called via `{PLUGIN_ROOT}/scripts/codex-safe.sh` (5-min hard timeout, see "Hard Timeout & Failure-Tolerance" section), NEVER via the `/codex:rescue` Agent tool. Detect Codex availability now so Step 2 can act on it.
 
 ## Step 0.5 — Load Deferred MCP Schemas
@@ -85,6 +93,14 @@ Omit `base` to let the tool auto-detect it.
 ```
 ship_preflight({ cwd: "<current working directory>" })
 ```
+
+If Step 0 captured an `outOfBandDeploy:` glob list from the extension, pass it:
+`ship_preflight({ cwd: "<cwd>", outOfBandGlobs: ["**/migrations/**", ...] })`.
+Otherwise omit it — the tool uses stack-agnostic defaults.
+
+The result carries `outOfBandDeploys: { detected, files, kinds, globs }` — artifacts
+this diff touches that a code merge will NOT deploy (#243). **Carry this value
+forward to Step 4d.** It is informational, never a hard gate (`ready` is unaffected).
 
 The tool **auto-detects** the correct base branch:
 - If on a sub-branch like `feat/42-video-filters/core`, it detects `feat/42-video-filters` as the parent and uses it as base.
@@ -402,6 +418,48 @@ same path a user does. Gaps this catches that pass CI:
 
 Pass `state.surfaceVerify = { checked: N, live: M, lagging: [...] }` into the card.
 
+## Step 4d — Out-of-Band Deploy Gate (final ship only)
+
+**A code merge does NOT apply DB migrations or deploy edge/serverless functions.**
+When the shipped diff touches such artifacts, merging the PR leaves the code
+referencing infra that was never applied — the change is silently NOT live even
+though every prior step went green. This step turns `ship_preflight`'s detection
+into either an actual deploy (when a handler is configured) or a mandatory,
+loud completion-card gate. (#243)
+
+**Skip this step entirely when:**
+- `intermediate: true` (no deploy target for intermediate merges), or
+- `ship_preflight.outOfBandDeploys.detected` is `false` (the common case — skip
+  silently, nothing changed).
+
+**When `outOfBandDeploys.detected` is `true`:**
+
+1. **If Step 0 captured a `deploy:` handler** that can apply these artifacts
+   (e.g. `supabase` → `apply_migration` + `deploy_edge_function` via the Supabase
+   MCP): run it now, after the merge landed. Deploy each detected artifact.
+   - **All deployed successfully** → the change is live. Do NOT set the gate;
+     instead add a `userFinalTest` item to **verify** the deployed infra behaves
+     (e.g. "Verify the migration applied: query the new column in prod").
+   - **Any deploy failed / handler errored** → fall through to step 2 for the
+     artifacts that did not deploy, naming the failure.
+
+   Keep concrete deploy automation in the **project** extension — the plugin
+   ships detection + the gate, never a stack-specific deployer.
+
+2. **Otherwise (no handler, or a deploy failed)** — raise the deploy gate. This
+   is mandatory: the completion card MUST NOT read as "all done" while merged
+   infra is undeployed. Carry into Step 6:
+   - `state.deployPending: true` — flips the ship-successful CTA from
+     "Alles ERLEDIGT" to "🚨 DEPLOY erforderlich (noch nicht live)".
+   - `deployGate: [...]` — one item per detected artifact, each
+     `{ artifact: "<path>", kind: "<migration|function|infra>", action: "<the concrete deploy step still required>" }`.
+     Derive `artifact`/`kind` from `outOfBandDeploys.matched`; write `action` as
+     the smallest true next step (e.g. "apply_migration", "deploy edge function
+     desktop-latest", or "run your migration + function deploy").
+
+Never downgrade the variant — the merge DID happen (per the Step 6 variant rule).
+The gate lives in `deployGate` + `state.deployPending`, not in the variant.
+
 ## Step 5a — Continue-Intent Check (auto-detect keep-mode)
 
 Before cleanup, decide whether **follow-up work** is expected in this same branch/worktree.
@@ -606,6 +664,21 @@ The MCP variant guard already auto-corrects `ship-successful`→`ready` when
 is: merged ⇒ `ship-successful`, downstream-still-pending ⇒ `userFinalTest`,
 never a variant downgrade. (Project ship-extensions: keep project-specific
 downstream surfaces, but don't re-encode this variant rule.)
+
+**Out-of-band deploy gate (from Step 4d).** When Step 4d raised the gate, pass
+`state.deployPending: true` and the `deployGate` array to `render_completion_card`.
+This is stronger than a `userFinalTest` item: the CTA itself flips to
+"🚨 DEPLOY erforderlich (noch nicht live)" and a loud gate block names each
+undeployed artifact — so a merged-but-undeployed ship is never mistaken for done.
+Undeployed infra is the ONE thing that must not hide behind a green card.
+Example:
+```
+deployGate: [
+  { artifact: "supabase/migrations/20260708_token_revoked.sql", kind: "migration", action: "apply_migration" },
+  { artifact: "supabase/functions/desktop-latest/index.ts",     kind: "function",  action: "deploy edge function desktop-latest" }
+],
+state: { branch: "main", pushed: true, merged: "main", commit: "<sha>", deployPending: true }
+```
 
 **Keep-mode variant** (Step 5a chose keep, Step 5c ran):
 ```
