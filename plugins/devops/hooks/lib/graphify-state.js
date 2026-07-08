@@ -8,13 +8,18 @@
  *   in the consumer project and is written ONLY after the user explicitly opts
  *   in (consent:true) or out (consent:false) — hooks never write it silently.
  *   Also tracks a per-session "graphify query already ran" flag so the
- *   PreToolUse hard-gate can relent once Claude has consulted the graph.
+ *   PreToolUse hard-gate can relent once Claude has consulted the graph, and
+ *   provides `bgWithSentinel`/`readSentinel` — a shared detached-spawn wrapper
+ *   that records background `graphify extract`/`hook install` outcomes to a
+ *   per-project sentinel file so a silent failure (stdio:'ignore') can be
+ *   surfaced at the next SessionStart instead of vanishing.
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
+const { spawn } = require('node:child_process');
 
 const CONSENT_REL = path.join('.claude', 'graphify.json');
 
@@ -116,6 +121,64 @@ function isGraphifyQueryCommand(cmd) {
     .some((seg) => /^\s*graphify\s+query\b/.test(seg));
 }
 
+function sentinelPath(cwd) {
+  const key = crypto.createHash('md5').update(`sentinel:${cwd}`).digest('hex').slice(0, 12);
+  return path.join(os.tmpdir(), `dotclaude-graphbuild-${key}.sentinel`);
+}
+
+/**
+ * Detached background spawn with a completion sentinel (Gap #5). Plain bg()
+ * spawns (detached + stdio:'ignore') make a failing `graphify extract`
+ * completely invisible — this wraps the command in a platform shell that
+ * writes `ok` or `fail:<code>` to a per-project sentinel file once the
+ * command exits, so a LATER SessionStart can detect and surface the failure
+ * (see readSentinel + ss.graphify.js). git-invisible (os.tmpdir(), not the
+ * project). Fail-open: any spawn error is swallowed, matching the shape of
+ * the plain bg() helpers in ss.graphify.js / pre.tokens.guard.js.
+ * @returns {boolean} true iff the spawn was issued (not whether it succeeds)
+ */
+function bgWithSentinel(cmd, args, cwd) {
+  const sentinel = sentinelPath(cwd);
+  try { fs.unlinkSync(sentinel); } catch { /* no previous sentinel */ }
+  const quoted = args.map((a) => `"${String(a).replace(/"/g, '""')}"`).join(' ');
+  try {
+    if (process.platform === 'win32') {
+      const inner = `${cmd} ${quoted} && (echo ok>"${sentinel}") || (echo fail:%errorlevel%>"${sentinel}")`;
+      spawn('cmd.exe', ['/d', '/s', '/c', inner], {
+        cwd, detached: true, stdio: 'ignore', windowsHide: true,
+      }).unref();
+    } else {
+      const inner = `${cmd} ${quoted} && echo ok > "${sentinel}" || echo "fail:$?" > "${sentinel}"`;
+      spawn('/bin/sh', ['-c', inner], { cwd, detached: true, stdio: 'ignore' }).unref();
+    }
+    return true;
+  } catch {
+    return false; // toolchain / shell absent
+  }
+}
+
+/**
+ * Read the last background-build sentinel for `cwd`. Returns null when no
+ * sentinel exists yet (never ran, or still running). Never throws.
+ * @returns {null|{status:'ok'}|{status:'fail', code:number}|{status:'unknown'}}
+ */
+function readSentinel(cwd) {
+  try {
+    const content = fs.readFileSync(sentinelPath(cwd), 'utf8').trim();
+    if (content === 'ok') return { status: 'ok' };
+    const m = /^fail:(-?\d+)$/.exec(content);
+    if (m) return { status: 'fail', code: Number(m[1]) };
+    return { status: 'unknown' };
+  } catch {
+    return null;
+  }
+}
+
+/** Clear the sentinel so a stale result is not re-reported next SessionStart. */
+function clearSentinel(cwd) {
+  try { fs.unlinkSync(sentinelPath(cwd)); } catch { /* absent already */ }
+}
+
 module.exports = {
   CONSENT_REL,
   consentPath,
@@ -129,4 +192,8 @@ module.exports = {
   markQueryDone,
   queryDone,
   isGraphifyQueryCommand,
+  sentinelPath,
+  bgWithSentinel,
+  readSentinel,
+  clearSentinel,
 };

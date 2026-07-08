@@ -2,7 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hasGraph, buildGraphNudge, buildGraphifyOffer, graphJsonPath, graphIsStale } from "./graph-nudge.js";
+import { hasGraph, buildGraphNudge, buildGraphifyOffer, graphJsonPath, graphIsStale, stalenessInfo, suggestQuery } from "./graph-nudge.js";
 
 describe("hasGraph — graph.json detection", () => {
   let dir;
@@ -17,10 +17,17 @@ describe("hasGraph — graph.json detection", () => {
     expect(hasGraph(dir)).toBe(false);
   });
 
-  test("true once graphify-out/graph.json exists", () => {
+  test("false when graph.json exists but is under the size floor", () => {
     const gp = graphJsonPath(dir);
     fs.mkdirSync(path.dirname(gp), { recursive: true });
     fs.writeFileSync(gp, "{}");
+    expect(hasGraph(dir)).toBe(false);
+  });
+
+  test("true once graphify-out/graph.json exists and clears the size floor", () => {
+    const gp = graphJsonPath(dir);
+    fs.mkdirSync(path.dirname(gp), { recursive: true });
+    fs.writeFileSync(gp, JSON.stringify({ nodes: Array(50).fill({ id: "x" }) }));
     expect(hasGraph(dir)).toBe(true);
   });
 
@@ -145,5 +152,102 @@ describe("graphIsStale — gate precondition", () => {
     if (linked) expect(graphIsStale(d)).toBe(true);
     fs.rmSync(d, { recursive: true, force: true });
     fs.rmSync(realDir, { recursive: true, force: true });
+  });
+});
+
+describe("stalenessInfo — bounded-tolerance gate precondition", () => {
+  const OLD = new Date(Date.now() - 60_000);
+  const NOW = new Date();
+
+  function freshTmp() {
+    return fs.mkdtempSync(path.join(os.tmpdir(), "graph-stalenessinfo-"));
+  }
+  function writeGraph(dir) {
+    const gp = graphJsonPath(dir);
+    fs.mkdirSync(path.dirname(gp), { recursive: true });
+    fs.writeFileSync(gp, "{}");
+    return gp;
+  }
+  function newSourceFile(dir, name) {
+    const p = path.join(dir, name);
+    fs.writeFileSync(p, "x");
+    fs.utimesSync(p, NOW, NOW);
+    return p;
+  }
+
+  test("missing graph.json → newerCount Infinity, not truncated", () => {
+    const d = freshTmp();
+    const info = stalenessInfo(d);
+    expect(info.newerCount).toBe(Infinity);
+    expect(info.truncated).toBe(false);
+    fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  test("newerCount 0 when graph is newer than every source", () => {
+    const d = freshTmp();
+    fs.writeFileSync(path.join(d, "a.js"), "x");
+    fs.utimesSync(path.join(d, "a.js"), OLD, OLD);
+    const gp = writeGraph(d);
+    fs.utimesSync(gp, NOW, NOW);
+    expect(stalenessInfo(d).newerCount).toBe(0);
+    fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  test("newerCount reflects exactly how many files are newer (boundary: 1)", () => {
+    const d = freshTmp();
+    const gp = writeGraph(d);
+    fs.utimesSync(gp, OLD, OLD);
+    newSourceFile(d, "a.js");
+    expect(stalenessInfo(d).newerCount).toBe(1);
+    fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  test("newerCount at the tolerance boundary (25) and one past it (26)", () => {
+    const TOLERANCE = 25;
+    const d = freshTmp();
+    const gp = writeGraph(d);
+    fs.utimesSync(gp, OLD, OLD);
+    for (let i = 0; i < TOLERANCE; i++) newSourceFile(d, `f${i}.js`);
+    expect(stalenessInfo(d).newerCount).toBe(TOLERANCE);
+    newSourceFile(d, "one-more.js");
+    expect(stalenessInfo(d).newerCount).toBe(TOLERANCE + 1);
+    fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  test("truncated scan → newerCount Infinity, truncated true", () => {
+    const d = freshTmp();
+    const gp = writeGraph(d);
+    fs.utimesSync(gp, NOW, NOW);
+    fs.writeFileSync(path.join(d, "a.js"), "x");
+    fs.mkdirSync(path.join(d, "sub"));
+    fs.writeFileSync(path.join(d, "sub", "b.js"), "x");
+    const info = stalenessInfo(d, { maxFiles: 1 });
+    expect(info.newerCount).toBe(Infinity);
+    expect(info.truncated).toBe(true);
+    fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  test("no comparable source files → newerCount Infinity", () => {
+    const d = freshTmp();
+    const gp = writeGraph(d);
+    fs.utimesSync(gp, NOW, NOW);
+    expect(stalenessInfo(d).newerCount).toBe(Infinity);
+    fs.rmSync(d, { recursive: true, force: true });
+  });
+});
+
+describe("suggestQuery — Gap #3 concrete gate suggestion", () => {
+  test("strips regex metachars and collapses into a plain-English question", () => {
+    expect(suggestQuery("foo.*bar")).toBe('graphify query "What defines or uses foo bar?"');
+  });
+
+  test("collapses snake/kebab separators into words", () => {
+    expect(suggestQuery("foo_bar-baz")).toBe('graphify query "What defines or uses foo bar baz?"');
+  });
+
+  test("falls back to the generic placeholder for empty/non-string patterns", () => {
+    expect(suggestQuery("")).toBe('graphify query "<your question>"');
+    expect(suggestQuery(undefined)).toBe('graphify query "<your question>"');
+    expect(suggestQuery("...")).toBe('graphify query "<your question>"');
   });
 });
