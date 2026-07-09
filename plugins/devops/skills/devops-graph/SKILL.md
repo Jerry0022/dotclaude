@@ -28,6 +28,15 @@ it — see [Enforcement](#enforcement-after-opt-in).
 - **Never install silently.** If graphify is missing, *offer* and wait for an
   explicit OK before running any install command. The consent record
   (`.claude/graphify.json`) is written only after the user decides.
+- **After writing the consent record, log the decision.** Immediately after
+  writing `.claude/graphify.json` (either `{"consent":true,...}` or
+  `{"consent":false}`), append one telemetry line so offer→conversion is
+  measurable end to end:
+  ```bash
+  node -e "require('${CLAUDE_PLUGIN_ROOT}/hooks/lib/graphify-metrics').record('consent_written', {consent: <true|false>}, {cwd: process.cwd()})"
+  ```
+  This never blocks anything and is best-effort — if it errors, ignore it and
+  continue.
 - **Never run `graphify claude install`.** That command writes graphify's own
   PreToolUse hook + CLAUDE.md skill, which collides with the devops plugin's
   PreToolUse hooks (the project-map re-scoping hint and `pre.tokens.guard.js`).
@@ -109,9 +118,13 @@ graph follows the code via both git hooks *and* SessionStart.
 (exit 2) and tells Claude to run `graphify query` instead. Two preconditions
 keep this safe — both enforced in code, never optional:
 
-- **Staleness guard** — the gate only fires when the graph is *fresh*
-  (`graphIsStale` compares graph.json mtime vs the newest source file). A stale
-  graph is never forced onto Claude.
+- **Bounded staleness tolerance** — the gate does not require perfect
+  freshness. `stalenessInfo` counts how many source files are newer than
+  graph.json; the gate still fires (with a "graph lags N file(s) behind —
+  background refresh started" disclosure) up to a small tolerance, and only
+  falls back to self-heal (no block) when the lag is large or cannot be
+  bounded at all (missing graph, truncated scan, nothing comparable). A graph
+  whose staleness cannot be proven is never forced onto Claude.
 - **Escape hatch** — the gate blocks a given search at most once per session;
   *retrying the same search falls through*, so a question the graph cannot
   answer (exact string, a new/uncommitted file, a non-code asset) is never

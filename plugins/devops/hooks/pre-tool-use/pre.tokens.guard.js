@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.5.0
+ * @version 0.7.0
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
@@ -26,22 +26,17 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { spawn, execSync } = require('child_process');
+const { execSync } = require('child_process');
 
 const cwd = process.cwd();
 const CONFIG_DIR = path.join(cwd, '.claude');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'token-config.json');
 
-// Detached, fail-open background spawn (mirrors ss.graphify). `shell` on Windows
-// so a `graphify.cmd` shim from `uv tool install` actually runs. A missing
-// toolchain throws → no-op; never affects the guard's block/allow decision.
-function bg(cmd, args) {
-  try {
-    spawn(cmd, args, {
-      cwd, detached: true, stdio: 'ignore', shell: process.platform === 'win32',
-    }).unref();
-  } catch { /* toolchain absent */ }
-}
+// Note: background graphify spawns (self-heal refresh) go through
+// `gstate.bgWithSentinel` (hooks/lib/graphify-state.js) rather than a local
+// bg() helper — it wraps the same detached/stdio:'ignore' spawn shape but
+// also records ok/fail to a sentinel file so a silent failure (Gap #5) can
+// be surfaced at the next SessionStart instead of vanishing.
 
 function isGitRepo() {
   try {
@@ -209,46 +204,78 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
-  // ── graphify hard-gate (consented + FRESH graph) ────────────────────
-  // When the user has opted graphify in for this project AND a fresh graph
-  // exists, force a broad raw-file search through the graph first. Two hard
-  // preconditions keep this from being harmful:
-  //   1. Staleness — never block onto an out-of-date graph (graphIsStale).
-  //   2. Escape hatch — block at most once per (session, search); a retry of
+  // ── graphify hard-gate (consented + graph within staleness tolerance) ────
+  // When the user has opted graphify in for this project AND a usable graph
+  // exists, force a broad raw-file search through the graph first. This is a
+  // BOUNDED-tolerance gate, not a strict fresh/stale one: a graph that lags a
+  // small number of files behind the working tree is still useful, so the
+  // gate still enforces on it (with a disclosure line + a kicked background
+  // refresh) — see GRAPHIFY_STALE_TOLERANCE below. It must NEVER force Claude
+  // onto a graph whose staleness cannot be bounded at all (missing, truncated
+  // scan, nothing comparable — stalenessInfo reports newerCount:Infinity for
+  // all of these); that self-heals silently instead. Two more safety
+  // properties are preserved:
+  //   1. Escape hatch — block at most once per (session, search); a retry of
   //      the same search falls through, so a question the graph cannot answer
   //      (exact string, new/uncommitted file, non-code asset) is never wedged.
-  // Relents entirely once `graphify query` has run this session (queryDone).
+  //   2. Relents entirely once `graphify query` has run this session (queryDone).
   // Fail-open: any error here must never block a search.
+  //
+  // Tolerance is a file COUNT, not a time window, because scanSources already
+  // walks the tree per-search — comparing counts costs nothing extra and is
+  // robust to editors touching files without changing them meaningfully.
+  const GRAPHIFY_STALE_TOLERANCE = 25;
   if ((toolName === 'Grep' || toolName === 'Glob') && !toolInput.path) {
     try {
       const graphNudge = require('../lib/graph-nudge');
       const gstate = require('../lib/graphify-state');
+      const metrics = require('../lib/graphify-metrics');
       const sid = hook.session_id || hook.sessionId || 'nosid';
       if (gstate.hasConsent(cwd) && graphNudge.hasGraph(cwd)) {
-        if (graphNudge.graphIsStale(cwd)) {
-          // Demand-driven self-heal: a broad search arrived but the graph is
-          // stale (the common case mid-development — any edit outdates it), so
-          // the gate below cannot fire and the graph would just rot until the
-          // next SessionStart. Kick a throttled background AST refresh (free) so
-          // the graph converges to fresh and the gate can enforce on LATER
-          // searches this session. Never blocks; falls through to allow.
-          if (gstate.markRefresh(cwd, 2 * 60 * 1000)) bg('graphify', ['extract', '.', '--update']);
+        const info = graphNudge.stalenessInfo(cwd);
+        const withinTolerance = !info.truncated && info.newerCount <= GRAPHIFY_STALE_TOLERANCE;
+        if (!withinTolerance) {
+          // Demand-driven self-heal: a broad search arrived but the graph lags
+          // too far behind (or its staleness cannot be bounded at all), so the
+          // gate below must not fire and the graph would just rot until the
+          // next SessionStart. Kick a throttled background AST refresh (free,
+          // sentinel-tracked — see Gap #5) so the graph converges and the gate
+          // can enforce on LATER searches this session. Never blocks.
+          if (gstate.markRefresh(cwd, 2 * 60 * 1000)) {
+            gstate.bgWithSentinel('graphify', ['extract', '.', '--update'], cwd);
+            // Infinity is JSON-null; -1 keeps "unbounded" distinguishable in the log.
+            const newerCount = Number.isFinite(info.newerCount) ? info.newerCount : -1;
+            metrics.record('self_heal_kicked', { newerCount, truncated: info.truncated }, { cwd, sid });
+          }
         } else if (!gstate.queryDone(sid, cwd)) {
           const gflag = flagPath(`graphgate:${sid}:${cwd}:${toolName}:${JSON.stringify(toolInput)}`);
           if (!fs.existsSync(gflag)) {
             try { fs.writeFileSync(gflag, Date.now().toString()); } catch {}
-            console.error('\n⛔  GRAPHIFY GATE — broad search blocked (fresh graph available)');
+            // Within tolerance but still lagging by >0 files — enforce AND kick
+            // a refresh in parallel so it converges toward newerCount 0.
+            if (info.newerCount > 0 && gstate.markRefresh(cwd, 2 * 60 * 1000)) {
+              gstate.bgWithSentinel('graphify', ['extract', '.', '--update'], cwd);
+              metrics.record('self_heal_kicked', { newerCount: info.newerCount, truncated: false }, { cwd, sid });
+            }
+            const suggestion = graphNudge.suggestQuery(toolInput.pattern);
+            console.error('\n⛔  GRAPHIFY GATE — broad search blocked (graph available)');
             console.error('─'.repeat(54));
             console.error('Query the knowledge graph instead of grepping raw files:');
-            console.error('  graphify query "<your question>"');
+            console.error(`  ${suggestion}`);
+            if (info.newerCount > 0) {
+              console.error('');
+              console.error(`note: graph lags ${info.newerCount} file(s) behind — background refresh started`);
+            }
             console.error('');
             console.error('If the graph cannot answer THIS search (exact string, a');
             console.error('new/uncommitted file, or a non-code asset), retry the same');
             console.error('search to proceed.');
             console.error('─'.repeat(54));
+            metrics.record('gate_fired', { newerCount: info.newerCount }, { cwd, sid });
             process.exit(2);
           }
           // flag present → already gated this search; fall through (escape hatch)
+          metrics.record('gate_bypassed', {}, { cwd, sid });
         }
       }
     } catch { /* fail open — never block on gate errors */ }
@@ -285,6 +312,7 @@ process.stdin.on('end', () => {
         }
         if (hasGraph) {
           sections.push(graphNudge.buildGraphNudge());
+          try { require('../lib/graphify-metrics').record('nudge_injected', {}, { cwd, sid }); } catch {}
         }
         fs.writeFileSync(mapFlag, Date.now().toString());
         process.stdout.write(JSON.stringify({
@@ -364,6 +392,7 @@ process.stdin.on('end', () => {
         if (runOnce('graphify-block-offer', cwdKey, { cooldownMs: 7 * 24 * 60 * 60 * 1000 })) {
           console.error('');
           console.error(graphNudge.buildGraphifyOffer());
+          try { require('../lib/graphify-metrics').record('offer_shown', { source: 'value_moment' }, { cwd }); } catch {}
         }
       }
     } catch { /* never let the offer break the block */ }

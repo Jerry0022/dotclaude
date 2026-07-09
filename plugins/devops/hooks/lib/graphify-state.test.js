@@ -13,6 +13,10 @@ import {
   queryDone,
   consentPath,
   isGraphifyQueryCommand,
+  sentinelPath,
+  bgWithSentinel,
+  readSentinel,
+  clearSentinel,
 } from "./graphify-state.js";
 
 function tmp() {
@@ -139,4 +143,75 @@ describe("isGraphifyQueryCommand — only real query runs relent the gate", () =
     expect(isGraphifyQueryCommand(undefined)).toBe(false);
     expect(isGraphifyQueryCommand(null)).toBe(false);
   });
+});
+
+describe("background-build sentinel — read/clear", () => {
+  let dir;
+  beforeEach(() => { dir = tmp(); });
+  afterEach(() => {
+    clearSentinel(dir);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("no sentinel → null", () => {
+    expect(readSentinel(dir)).toBeNull();
+  });
+
+  test.each([
+    ["ok\r\n", { status: "ok" }],
+    ["fail\r\n", { status: "fail", code: null }], // win32 shape — no exit code available
+    ["fail:9\n", { status: "fail", code: 9 }],    // POSIX shape
+    ["fail:\r\n", { status: "unknown" }],          // garbage stays distinguishable
+  ])("parses %j", (content, expected) => {
+    fs.writeFileSync(sentinelPath(dir), content);
+    expect(readSentinel(dir)).toEqual(expected);
+  });
+
+  test("clearSentinel removes and is a no-op when absent", () => {
+    fs.writeFileSync(sentinelPath(dir), "ok");
+    clearSentinel(dir);
+    expect(readSentinel(dir)).toBeNull();
+    expect(() => clearSentinel(dir)).not.toThrow();
+  });
+
+  test("sentinelPath is stable per cwd and distinct across cwds", () => {
+    expect(sentinelPath(dir)).toBe(sentinelPath(dir));
+    expect(sentinelPath(dir)).not.toBe(sentinelPath(tmp()));
+  });
+});
+
+// End-to-end through the REAL platform shell — exactly the path that silently
+// broke on cmd.exe (%errorlevel% parse-time expansion + trailing-digit handle
+// redirection made the fail-sentinel unparseable). Detached spawn → poll.
+describe("background-build sentinel — bgWithSentinel end-to-end", () => {
+  const waitForSentinel = async (cwd, timeoutMs = 5000) => {
+    const start = Date.now();
+    for (;;) {
+      const s = readSentinel(cwd);
+      if (s !== null) return s;
+      if (Date.now() - start > timeoutMs) return null;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  };
+
+  test("successful command → 'ok' sentinel", async () => {
+    const dir = tmp();
+    const okCmd = process.platform === "win32" ? "ver" : "true";
+    expect(bgWithSentinel(okCmd, [], dir)).toBe(true);
+    expect(await waitForSentinel(dir)).toEqual({ status: "ok" });
+    clearSentinel(dir);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  }, 10000);
+
+  test("failing command → parseable 'fail' sentinel (not 'unknown')", async () => {
+    const dir = tmp();
+    const failCmd = process.platform === "win32" ? "findstr" : "false";
+    const failArgs = process.platform === "win32" ? ["/x", "nomatch", "nul"] : [];
+    expect(bgWithSentinel(failCmd, failArgs, dir)).toBe(true);
+    const s = await waitForSentinel(dir);
+    expect(s).not.toBeNull();
+    expect(s.status).toBe("fail"); // the regression this guards against
+    clearSentinel(dir);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  }, 10000);
 });

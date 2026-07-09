@@ -32,7 +32,8 @@ function project({ consent, graph }) {
   if (graph !== "none") {
     const gp = path.join(dir, "graphify-out", "graph.json");
     fs.mkdirSync(path.dirname(gp), { recursive: true });
-    fs.writeFileSync(gp, "{}");
+    // Must clear hasGraph()'s size floor (MIN_GRAPH_BYTES) to count as present.
+    fs.writeFileSync(gp, JSON.stringify({ nodes: Array(50).fill({ id: "x" }) }));
     if (graph === "fresh") {
       fs.utimesSync(src, OLD, OLD);
       fs.utimesSync(gp, NOW, NOW);
@@ -89,10 +90,13 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     cleanup(dir);
   });
 
-  test("stale graph → NOT blocked (never force onto out-of-date data)", () => {
+  test("stale graph within tolerance (1 newer file) → STILL blocked, with a lag disclosure", () => {
     const dir = project({ consent: true, graph: "stale" });
     const r = runGrep(dir, "s-stale", "epsilon");
-    expect(r.stderr).not.toContain("GRAPHIFY GATE");
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("GRAPHIFY GATE");
+    expect(r.stderr).toContain("graph lags");
+    expect(fs.existsSync(refreshFlagPath(dir))).toBe(true); // refresh kicked alongside the block
     cleanup(dir);
   });
 
@@ -104,10 +108,16 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     cleanup(dir);
   });
 
-  test("stale graph + consent → self-heal refresh requested, still not gated", () => {
+  test("stale graph BEYOND tolerance → self-heal refresh requested, not gated", () => {
     const dir = project({ consent: true, graph: "stale" });
+    // Push well past GRAPHIFY_STALE_TOLERANCE (25) with more newer files.
+    for (let i = 0; i < 30; i++) {
+      const p = path.join(dir, `extra${i}.js`);
+      fs.writeFileSync(p, "x");
+      fs.utimesSync(p, NOW, NOW);
+    }
     const r = runGrep(dir, "s-heal", "omega");
-    expect(r.stderr).not.toContain("GRAPHIFY GATE"); // never block onto stale
+    expect(r.stderr).not.toContain("GRAPHIFY GATE"); // never block beyond tolerance
     expect(fs.existsSync(refreshFlagPath(dir))).toBe(true); // background refresh kicked
     cleanup(dir);
   });

@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graph-nudge
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Pure helpers for the ambient graphify nudge injected by
  *   pre.tokens.guard on the first broad search of a session. Detects whether a
@@ -22,10 +22,18 @@ function graphJsonPath(cwd) {
   return path.join(cwd, GRAPH_JSON_REL);
 }
 
-/** True iff a graphify graph.json exists for this project. Never throws. */
+// Cheap validity floor for the PreToolUse hot path: a 0-byte or near-empty
+// graph.json (partial write, truncated extract) must not count as present.
+// Deliberately NOT a JSON.parse here — this runs on every broad search, so it
+// stays a statSync-only check. A deeper (JSON-parsing) validity check belongs
+// to the SessionStart hook, which runs once per session (see ss.graphify.js).
+const MIN_GRAPH_BYTES = 512;
+
+/** True iff a graphify graph.json exists AND clears the size floor. Never throws. */
 function hasGraph(cwd) {
   try {
-    return fs.statSync(graphJsonPath(cwd)).isFile();
+    const st = fs.statSync(graphJsonPath(cwd));
+    return st.isFile() && st.size > MIN_GRAPH_BYTES;
   } catch {
     return false;
   }
@@ -54,9 +62,33 @@ function buildGraphifyOffer() {
     '💡 [graphify] Broad searches like this are exactly what a code knowledge graph makes cheap.',
     'This project has no graphify decision yet — offer the user (AskUserQuestion) to enable it.',
     'On YES: `uv tool install graphifyy && graphify install && graphify hook install && graphify extract .`,',
-    'then write .claude/graphify.json {"consent":true,"autoBuild":true}. On NO: write {"consent":false}.',
+    'then write .claude/graphify.json {"consent":true,"autoBuild":true}. After extract completes, verify',
+    'graphify-out/graph.json exists and report its node count to the user; if it is missing, report the',
+    'failure instead of claiming success. On NO: write {"consent":false}.',
     'Never install without confirmation.',
   ].join('\n');
+}
+
+/**
+ * Derive a concrete `graphify query` suggestion from the actual blocked
+ * search (Gap #3) so the gate message is actionable instead of the generic
+ * `<your question>` placeholder. Deliberately dumb and predictable: strip
+ * regex metacharacters/escapes, collapse separators to spaces, and wrap the
+ * remaining words in a fixed "What defines or uses X?" template. Never
+ * throws; falls back to the generic placeholder when nothing usable remains.
+ */
+function suggestQuery(pattern) {
+  if (typeof pattern !== 'string' || !pattern.trim()) {
+    return 'graphify query "<your question>"';
+  }
+  const words = pattern
+    .replace(/\\[a-zA-Z]/g, ' ')          // \d \w \s \b etc.
+    .replace(/[.*+?^${}()|[\]\\]/g, ' ')  // regex metacharacters
+    .replace(/[_-]/g, ' ')                // snake/kebab separators → words
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!words.length) return 'graphify query "<your question>"';
+  return `graphify query "What defines or uses ${words.join(' ')}?"`;
 }
 
 // Directories whose contents never count toward "newest source file": VCS,
@@ -68,23 +100,29 @@ const SKIP_DIRS = new Set([
 ]);
 
 /**
- * Scan project source files for the newest mtime, ignoring SKIP_DIRS and
- * dot-dirs. Symlinked dirs/files ARE followed (resolved via stat) so a newer
- * file behind a symlink is not invisible. Bounded by `opts.maxFiles` (default
- * 8000); if the bound is hit the scan is `truncated`. Never throws.
- * @returns {{newest:number, count:number, truncated:boolean}}
+ * Scan project source files for the newest mtime (and, when `opts.newerThan`
+ * is given, how many files are newer than that reference mtime), ignoring
+ * SKIP_DIRS and dot-dirs. Symlinked dirs/files ARE followed (resolved via
+ * stat) so a newer file behind a symlink is not invisible. Bounded by
+ * `opts.maxFiles` (default 8000); if the bound is hit the scan is
+ * `truncated`. Single walk — both `graphIsStale` and `stalenessInfo` reuse it,
+ * so bounded-tolerance staleness never costs a second filesystem pass. Never
+ * throws.
+ * @returns {{newest:number, count:number, truncated:boolean, newerCount:number}}
  */
 function scanSources(cwd, opts = {}) {
   const maxFiles = opts.maxFiles || 8000;
+  const newerThan = opts.newerThan || 0;
   let newest = 0;
   let count = 0;
+  let newerCount = 0;
   const stack = [cwd];
   while (stack.length) {
     const dir = stack.pop();
     let entries;
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
     for (const e of entries) {
-      if (count >= maxFiles) return { newest, count, truncated: true };
+      if (count >= maxFiles) return { newest, count, truncated: true, newerCount };
       const full = path.join(dir, e.name);
       let isDir = e.isDirectory();
       let isFile = e.isFile();
@@ -102,37 +140,57 @@ function scanSources(cwd, opts = {}) {
         try {
           const m = fs.statSync(full).mtimeMs;
           if (m > newest) newest = m;
+          if (m > newerThan) newerCount++;
         } catch { /* unreadable — skip */ }
       }
     }
   }
-  return { newest, count, truncated: false };
+  return { newest, count, truncated: false, newerCount };
 }
 
 /**
- * Is the graph stale relative to the working tree? This is the hard
- * precondition for the PreToolUse graphify-gate — a hard block must NEVER force
- * Claude onto an out-of-date graph, so it is deliberately fail-safe: when
- * freshness cannot be PROVEN, return stale (the gate then simply does not fire).
- * Stale when: graph.json is missing; the scan was truncated (could not see all
- * files); no source files were found; or any source file is newer than the
- * graph. Fresh only when the full scan saw ≥1 file and none is newer.
+ * Bounded-staleness read for the PreToolUse graphify-gate. Rather than a
+ * binary fresh/stale verdict, reports HOW MANY source files are newer than
+ * the graph (`newerCount`) so the gate can apply a tolerance band: a graph
+ * that lags a handful of files behind is still useful and worth enforcing
+ * (with a disclosure + a kicked background refresh), while a graph that
+ * cannot be trusted at all (missing, or the scan was truncated / found
+ * nothing comparable) must never be enforced. `newerCount` is reported as
+ * `Infinity` in the "cannot be trusted at all" cases so any tolerance
+ * threshold naturally treats them as fully stale. Reuses the single
+ * `scanSources` walk. Never throws.
+ * @returns {{newerCount:number, truncated:boolean, graphMtime:number}}
+ */
+function stalenessInfo(cwd, opts = {}) {
+  let graphMtime;
+  try { graphMtime = fs.statSync(graphJsonPath(cwd)).mtimeMs; } catch { return { newerCount: Infinity, truncated: false, graphMtime: 0 }; }
+  const { count, truncated, newerCount } = scanSources(cwd, { ...opts, newerThan: graphMtime });
+  if (truncated) return { newerCount: Infinity, truncated: true, graphMtime };
+  if (count === 0) return { newerCount: Infinity, truncated: false, graphMtime }; // nothing comparable
+  return { newerCount, truncated: false, graphMtime };
+}
+
+/**
+ * Is the graph stale relative to the working tree? Binary convenience wrapper
+ * over `stalenessInfo` (newerCount > 0), kept for callers that only need a
+ * yes/no answer. The PreToolUse gate itself uses `stalenessInfo` directly so
+ * it can apply a bounded-tolerance policy instead of this strict boundary —
+ * see the `GRAPHIFY_STALE_TOLERANCE` policy in pre.tokens.guard.js.
  */
 function graphIsStale(cwd, opts = {}) {
-  let graphMtime;
-  try { graphMtime = fs.statSync(graphJsonPath(cwd)).mtimeMs; } catch { return true; }
-  const { newest, count, truncated } = scanSources(cwd, opts);
-  if (truncated) return true;   // partial scan → cannot prove freshness
-  if (count === 0) return true; // nothing comparable → do not enforce
-  return newest > graphMtime;
+  const info = stalenessInfo(cwd, opts);
+  return info.truncated || info.newerCount > 0;
 }
 
 module.exports = {
   GRAPH_JSON_REL,
+  MIN_GRAPH_BYTES,
   graphJsonPath,
   hasGraph,
   buildGraphNudge,
   buildGraphifyOffer,
+  suggestQuery,
   scanSources,
+  stalenessInfo,
   graphIsStale,
 };
