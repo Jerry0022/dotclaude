@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graph-nudge
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Pure helpers for the ambient graphify nudge injected by
  *   pre.tokens.guard on the first broad search of a session. Detects whether a

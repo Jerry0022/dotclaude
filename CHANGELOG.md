@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.111.0] — 2026-07-09
+
+### Fixed
+
+- **The graphify gate now fires during real development — bounded staleness tolerance replaces the binary fresh/stale check that kept it disarmed.** A transcript audit (744 sessions) found 634 graphify mentions but only ~5 real `graphify query` executions (~0.8% conversion, all of them verification probes): the 0.109.0 self-heal kept the graph *converging*, but the gate itself still required a *provably fresh* graph, and in an actively-edited repo any file save re-disarmed it — the enforcement chain was well-built and practically inert. The gate now enforces while the graph lags ≤25 files behind the working tree (`GRAPHIFY_STALE_TOLERANCE`, single `scanSources` walk — no extra filesystem pass), disclosing the lag in the block message and kicking the throttled background refresh in parallel; only unbounded staleness (>25 files, truncated scan, missing graph) falls through to silent self-heal. All safety properties preserved: fail-open on errors, one-shot escape hatch per search, session relent after a query. (`pre.tokens.guard` → 0.7.0, `graph-nudge` → 0.2.0.)
+- **Background graphify builds can no longer fail invisibly — and the failure sentinel actually works on Windows.** All `graphify extract` spawns were detached with `stdio:'ignore'` and try/catch-swallowed: a consented project whose build kept failing showed no graph AND no error, indistinguishable from "never built". Builds now run through a sentinel-tracked spawn (`bgWithSentinel`) and the next SessionStart reports a failed build as one line. Two Windows traps were fixed on the way, both caught by new real-shell end-to-end tests: node's manual `cmd.exe` arg quoting escaped the inner quotes as `\"` (cmd cannot parse that — no sentinel was ever written), and `%errorlevel%` expands at cmd parse time while leaving a digit before `>` that cmd eats as a file-handle redirection — win32 now writes a bare `fail` marker instead. (`graphify-state` → 0.2.0, `ss.graphify` → 0.2.0.)
+
+### Added
+
+- **Query-adoption telemetry — the graphify funnel is now measurable instead of requiring transcript archaeology.** New fail-silent JSONL event sink at `~/.claude/graphify-metrics.jsonl` (2 MB cap, keeps newest half): `gate_fired`, `gate_bypassed`, `self_heal_kicked`, `query_ran`, `offer_shown` (session-start vs. value-moment), `nudge_injected`, plus a `consent_written` event the devops-graph skill records on opt-in/out — so offer→consent→query conversion is measurable end to end. A metrics failure can never break a hook. (new `graphify-metrics` lib, `post.graphify.query` → 0.2.0.)
+- **The gate block message now proposes a ready-to-run query derived from the blocked search** (e.g. Grep `foo.*bar` → `graphify query "What defines or uses foo bar?"`) instead of a generic placeholder, and the opt-in offers instruct verifying `graphify-out/graph.json` exists (node count reported) after install instead of claiming success blind. `hasGraph()` gained a 512-byte validity floor and SessionStart a once-daily deep JSON validity check, so a truncated/corrupt graph triggers a rebuild instead of enforcement against garbage. (25 new tests, 669 total.)
+
 ## [0.110.0] — 2026-07-08
 
 ### Added
