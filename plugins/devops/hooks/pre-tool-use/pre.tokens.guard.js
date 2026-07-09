@@ -243,7 +243,9 @@ process.stdin.on('end', () => {
           // can enforce on LATER searches this session. Never blocks.
           if (gstate.markRefresh(cwd, 2 * 60 * 1000)) {
             gstate.bgWithSentinel('graphify', ['extract', '.', '--update'], cwd);
-            metrics.record('self_heal_kicked', { newerCount: info.newerCount, truncated: info.truncated }, { cwd, sid });
+            // Infinity is JSON-null; -1 keeps "unbounded" distinguishable in the log.
+            const newerCount = Number.isFinite(info.newerCount) ? info.newerCount : -1;
+            metrics.record('self_heal_kicked', { newerCount, truncated: info.truncated }, { cwd, sid });
           }
         } else if (!gstate.queryDone(sid, cwd)) {
           const gflag = flagPath(`graphgate:${sid}:${cwd}:${toolName}:${JSON.stringify(toolInput)}`);

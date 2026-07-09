@@ -46,8 +46,9 @@ const cwdKey = crypto.createHash('md5').update(cwd).digest('hex').slice(0, 12);
 function reportBgFailureIfAny() {
   const sentinel = gstate.readSentinel(cwd);
   if (sentinel && sentinel.status === 'fail') {
+    const codeInfo = sentinel.code == null ? '' : ` (exit ${sentinel.code})`;
     process.stdout.write(
-      `⚠ graphify background build failed (exit ${sentinel.code}) — run \`graphify extract . --update\` manually or /devops-graph\n`
+      `⚠ graphify background build failed${codeInfo} — run \`graphify extract . --update\` manually or /devops-graph\n`
     );
     gstate.clearSentinel(cwd); // one report per failure, not every session
   }

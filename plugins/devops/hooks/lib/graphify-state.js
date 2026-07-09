@@ -141,16 +141,23 @@ function bgWithSentinel(cmd, args, cwd) {
   const sentinel = sentinelPath(cwd);
   try { fs.unlinkSync(sentinel); } catch { /* no previous sentinel */ }
   const quoted = args.map((a) => `"${String(a).replace(/"/g, '""')}"`).join(' ');
+  // Two Windows traps shape this implementation:
+  //   1. No exit code on win32: %errorlevel% expands at cmd PARSE time (before
+  //      the command runs → always 0), and once expanded the token ends in a
+  //      digit directly before `>` (`echo fail:0>"…"`), which cmd parses as a
+  //      file-handle redirection — the sentinel then contains neither `ok` nor
+  //      `fail`. A bare `fail` (ends in a letter) has neither problem.
+  //   2. Quoting: a manual spawn('cmd.exe', ['/c', inner]) makes node escape
+  //      the inner quotes as \" — cmd.exe does not understand backslash
+  //      escapes, the redirect path breaks, and NO sentinel is ever written.
+  //      `shell: true` lets node compose the platform shell line verbatim.
+  const inner = process.platform === 'win32'
+    ? `${cmd} ${quoted} && (echo ok>"${sentinel}") || (echo fail>"${sentinel}")`
+    : `${cmd} ${quoted} && echo ok > "${sentinel}" || echo "fail:$?" > "${sentinel}"`;
   try {
-    if (process.platform === 'win32') {
-      const inner = `${cmd} ${quoted} && (echo ok>"${sentinel}") || (echo fail:%errorlevel%>"${sentinel}")`;
-      spawn('cmd.exe', ['/d', '/s', '/c', inner], {
-        cwd, detached: true, stdio: 'ignore', windowsHide: true,
-      }).unref();
-    } else {
-      const inner = `${cmd} ${quoted} && echo ok > "${sentinel}" || echo "fail:$?" > "${sentinel}"`;
-      spawn('/bin/sh', ['-c', inner], { cwd, detached: true, stdio: 'ignore' }).unref();
-    }
+    spawn(inner, [], {
+      cwd, detached: true, stdio: 'ignore', windowsHide: true, shell: true,
+    }).unref();
     return true;
   } catch {
     return false; // toolchain / shell absent
@@ -159,13 +166,16 @@ function bgWithSentinel(cmd, args, cwd) {
 
 /**
  * Read the last background-build sentinel for `cwd`. Returns null when no
- * sentinel exists yet (never ran, or still running). Never throws.
- * @returns {null|{status:'ok'}|{status:'fail', code:number}|{status:'unknown'}}
+ * sentinel exists yet (never ran, or still running). `code` is null when the
+ * platform shell could not report one (win32 — see bgWithSentinel).
+ * Never throws.
+ * @returns {null|{status:'ok'}|{status:'fail', code:number|null}|{status:'unknown'}}
  */
 function readSentinel(cwd) {
   try {
     const content = fs.readFileSync(sentinelPath(cwd), 'utf8').trim();
     if (content === 'ok') return { status: 'ok' };
+    if (content === 'fail') return { status: 'fail', code: null };
     const m = /^fail:(-?\d+)$/.exec(content);
     if (m) return { status: 'fail', code: Number(m[1]) };
     return { status: 'unknown' };
