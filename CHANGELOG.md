@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.112.0] — 2026-07-10
+
+### Added
+
+- **Issue creation now enforces a user-value gate — no more swarms of technical tasks that only pay off in combination.** A recent planning run created ~30 file-level tasks that each described a code change but no user-perceivable outcome, flooding the tracker. Every issue must now pass a standalone test before creation: implementing ONLY this issue must already produce a direct (feature, visual, bug fixed, fewer crashes) or indirect (performance, stability, security) user effect. Technical sub-tasks serving one use case are merged into ONE issue scoped by the user value they jointly deliver (sub-tasks as a checklist in the body), and every issue body carries a `**User value:** <effect>` line that the verify step checks. Creating several issues at once stays fine when each passes in isolation; milestones may still aggregate issues into a larger goal but never justify members that fail alone. The gate covers all three creation surfaces: the interactive `/devops-new-issue` flow (new Step 1a + verify check), milestone planning (per-issue gate rule), and the zero-prompt `create-issues` path in `/devops-concept`, which merges combination-only items silently — no `AskUserQuestion`, the zero-prompt invariant holds. (`devops-new-issue` skill 0.1.0 → 0.2.0, `devops-concept` create-issues flow + bridge-server docs.)
+
 ## [0.111.0] — 2026-07-09
 
 ### Fixed
