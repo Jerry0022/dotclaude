@@ -1,6 +1,6 @@
 ---
 name: devops-new-issue
-version: 0.1.0
+version: 0.2.0
 description: >-
   Create GitHub issues with enforced title format, labels, and optional milestone
   and project board integration. Also handles milestone creation and naming. Use
@@ -40,11 +40,30 @@ Determine from user input or ask via AskUserQuestion:
 
 If project extension defines additional required fields (roles, modules), ask for those too.
 
+## Step 1a — User-value gate (mandatory)
+
+Apply the gate from deep-knowledge/issue-rules.md to EVERY issue before
+creating it: implementing this one issue alone must already produce a
+positive user effect — direct (feature, visual, bug fixed, fewer crashes)
+or indirect (performance, stability, security).
+
+- Fails the gate ("only valuable together with other issues") → do NOT
+  create it. Bundle the technical sub-tasks into ONE issue scoped by the
+  user value they jointly deliver, sub-tasks as a checklist in the body.
+- Multiple issues in one request: gate each one in isolation. If several
+  only pass together, propose the merged issue(s) to the user instead of
+  creating the originals.
+- Milestones may aggregate issues into a larger goal, but never use a
+  milestone to justify member issues that fail the gate individually.
+
 ## Step 2 — Create the issue
 
 ```bash
 gh issue create --title "[TYPE] Title" --body "Description" --label "type:X"
 ```
+
+The body MUST include the user-value line (see deep-knowledge/issue-rules.md):
+`**User value:** <direct or indirect effect>`
 
 Add optional flags based on project extension:
 - `--label "role:Y,module:Z"` — if project defines these label categories
@@ -61,9 +80,10 @@ Set custom fields (e.g., "Agent Role") via GraphQL if field IDs are provided in 
 ## Step 4 — Verify
 
 Confirm all required parameters are set:
-1. Labels: at least `type:*` (plus any project-specific requirements)
-2. Milestone: if configured
-3. Project board item: if configured
+1. User-value gate passed and body contains the `**User value:**` line
+2. Labels: at least `type:*` (plus any project-specific requirements)
+3. Milestone: if configured
+4. Project board item: if configured
 
 Missing required items = hard error. Fix before reporting success.
 
@@ -83,6 +103,8 @@ Output the markdown VERBATIM as the LAST thing in the response.
 
 ## Rules
 
+- Every issue passes the user-value gate on its own (deep-knowledge/issue-rules.md) —
+  never create file-level/layer-level tasks that only deliver value in combination
 - Never use `[FIX]` — bugs are always `[BUG]`
 - Always link PRs to issues via `Closes #NNN` in PR body
 - Re-evaluate milestone level prefix when issues are added/removed
