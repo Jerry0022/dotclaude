@@ -141,8 +141,10 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
            one of FOUR values, each with its own SKILL.md Step 5b branch:
              - "iterate"        → next iteration on the concept page only
              - "implement"      → apply real code changes + final-report
-             - "create-issues"  → autonomously run `gh issue create` for each
-                                  payload item; NO AskUserQuestion, the user
+             - "create-issues"  → apply the user-value gate (SKILL.md Step 5b,
+                                  merges combination-only items silently), then
+                                  autonomously run `gh issue create` for each
+                                  gated item; NO AskUserQuestion, the user
                                   already committed by clicking the button
              - "dispose-concept"→ record disposition, advance to Step 6
            Process per Step 5 (Live Feedback Loop) — act on the user's choices

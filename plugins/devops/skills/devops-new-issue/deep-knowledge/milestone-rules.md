@@ -5,6 +5,10 @@
 - "Plan a milestone" = **planning mode only**: create GitHub milestone + issues, ask questions, set labels. No code.
 - Implementation begins only when the user explicitly says to implement.
 - Milestones are **not time-boxed** — done when all issues are closed.
+- **User-value gate applies per issue** (see issue-rules.md): the milestone
+  aggregates value, but every member issue must still deliver standalone
+  user value. Never decompose a milestone into file-level tasks — cut it
+  into the smallest slices that each produce a user-perceivable effect.
 
 ## Naming convention
 

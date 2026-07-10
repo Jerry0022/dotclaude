@@ -618,7 +618,19 @@ interruption is a hard `gh` failure that needs the user's eyes.
    bundles the current disposition state for Step 6 cleanup. Store it
    for use in Step 6a; do NOT apply it now — issue routing and cleanup
    are decoupled so the user can still review the page before closing.
-3. For each selected item, create the GitHub issue **directly via
+3. **User-value gate (silent, mandatory).** Apply the gate from the
+   `devops-new-issue` skill's deep-knowledge/issue-rules.md to the
+   selected items BEFORE creating anything: each issue must deliver a
+   standalone user effect — direct (feature, visual, bug fixed, fewer
+   crashes) or indirect (performance, stability, security). Items that
+   only produce value in combination (file-level / layer-level tasks
+   serving one use case) are **merged into ONE issue**: title = the user
+   value they jointly deliver, original items as a checklist in the
+   body. Merging is a silent sane default under the zero-prompt
+   invariant — never an `AskUserQuestion`. Every resulting body carries
+   a `**User value:** <effect>` line. Never emit a swarm of code-change
+   tasks that only make sense together.
+4. For each gated item, create the GitHub issue **directly via
    `gh issue create`** — do NOT invoke the `devops-new-issue` skill,
    which runs an interactive `AskUserQuestion` Step 1. Build the
    command from the payload + concept-extension labels (see § Project
@@ -636,7 +648,7 @@ interruption is a hard `gh` failure that needs the user's eyes.
    abort this item, surface the error to the user, and continue with
    the remaining items — partial success beats silent loss.
 
-4. **Project label enrichment (role / module).** Before calling `gh`,
+5. **Project label enrichment (role / module).** Before calling `gh`,
    resolve project-specific labels in this order:
    - If `item.role` / `item.module` is set in the payload → use directly.
    - Else, check the project's `devops-new-issue` extension
@@ -647,20 +659,22 @@ interruption is a hard `gh` failure that needs the user's eyes.
    - Else → omit the label silently. NEVER ask. A minimal `type:*`-only
      issue is preferable to interrupting the user.
 
-5. **Issue body composition.** Always end the body with a backlink:
+6. **Issue body composition.** Always end the body with a backlink:
    `_Created from concept: docs/concepts/{date}-{slug}.html_`. This is
    how the human reader (and future Claude session) recovers the
    originating context months later. Prepend whatever richer body the
    payload's `item.description` carries.
 
-6. Update the final-report HTML: in the open-questions section, replace
+7. Update the final-report HTML: in the open-questions section, replace
    each created item's label with `[Issue #NNN] {title}` (linked to the
-   issue URL), disable the checkbox, and add a small ✓ badge.
-7. POST `/reload` so the browser shows the updated state. If every item
+   issue URL), disable the checkbox, and add a small ✓ badge. For items
+   that were merged by the user-value gate, link ALL source items to the
+   one merged issue.
+8. POST `/reload` so the browser shows the updated state. If every item
    was processed, the "Issues erstellen" button auto-hides on reload
    (panel JS gates it on the presence of un-created checkable items).
-8. Then POST `/reset` with the captured `_version` as usual.
-9. The concept session stays open — the user may still review previous
+9. Then POST `/reset` with the captured `_version` as usual.
+10. The concept session stays open — the user may still review previous
    iteration tabs but cannot trigger further iterate/implement actions
    from the final report.
 
