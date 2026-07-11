@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.114.0] — 2026-07-12
+
+### Fixed
+
+- **The concept bridge no longer loses its connection during implementation — keepalive and pickup are now separate tasks.** The green "Claude verbunden" indicator gates on `claude_ts`, which only a Claude-side `POST /heartbeat` advances (the server self-pulse touches `server_ts`, which deliberately does not count). The single background watcher both pulsed the heartbeat AND `exit 0`-ed to wake Claude the instant a submission landed — so during an `implement` (many minutes of a busy REPL, where the idle-only cron can't fire) nothing pulsed `/heartbeat` and the page flipped to "nicht verbunden" precisely while the user waited for progress. The watcher is now split into a **keepalive pulser** (pulses every ~20 s, never exits on pending, runs the whole session) and a **pickup waker** (watches `/pending`, exits to wake Claude, re-launched per round), so `claude_ts` stays warm across a long implement. A stale, misleading monitoring doc that claimed the server self-pulse keeps the indicator green was corrected. (`bridge-server.md`, `monitoring.md`, `devops-concept` SKILL Step 3.)
+- **The bridge server refuses to double-bind its port — the "connection flickers for no reason" symptom is gone.** On Windows the default `SO_REUSEADDR` let a second `concept-server.py` instance bind the SAME port and hijack a share of the connections; `curl` then hit the healthy instance on one request (200) and the wedged one on the next (HTTP 000), so the indicator flickered between connected and disconnected. The server now binds exclusively (`SO_EXCLUSIVEADDRUSE` on Windows, `allow_reuse_address=False`) and a duplicate launch fails loudly (`cannot bind port … exit 1`) instead of silently double-binding. (`concept-server.py` new `ConceptBridgeServer`, regression test.)
+
+### Added
+
+- **Concept final report leads with a persistent status channel + a 🚀 ship CTA — implementation completion is now visible and actionable.** Previously the final-report panel showed only a disposition fieldset and an optional "Issues erstellen" button: no progress recap, no way to ship, and any completion signal rode on the fragile live connection. The panel now opens with an always-visible status channel (Übermittelt → verarbeitet → implementiert → Bereit) topped by a prominent "🚀 Shippen" button and a non-committal "Iterationen ansehen" nudge. It is DOM-driven (present because the section carries `data-final-report`), so it survives reloads and a stale heartbeat — there is nothing to dismiss and re-open, the ship affordance simply stays put. A new `action: "ship"` branch runs the full ship pipeline from the panel (the explicit button is the authorisation, like "Mit Feedback implementieren"; hard ship-gate failures still stop and report, and a force-push to main still needs confirmation). Validation-gate patterns 36–38 (`status-channel`, `ship-btn`, `submitShip`) keep the scaffold present. (`devops-concept` templates/SKILL/validation-gate, `concept-server` exclusive bind; regression test, 709 total.)
+
 ## [0.113.0] — 2026-07-11
 
 ### Added
