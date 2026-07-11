@@ -33,7 +33,7 @@ no legitimate matches — do not "keep it as a convenience". The decision panel
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 35 patterns, regardless of template:
+Every concept page must contain these 38 patterns, regardless of template:
 
 | # | Pattern to grep | Purpose |
 |---|----------------|---------|
@@ -72,7 +72,10 @@ Every concept page must contain these 35 patterns, regardless of template:
 | 32 | `panel-dispose-concept` | Disposition fieldset on the final-report panel. Always visible while `panel-final-report` is active; carries the discard / keep / gitignore radio group + optional `moveTo` input. See templates.md § Disposition Control. |
 | 33 | `submitDisposeConcept` | JS handler wired to `#dispose-concept-btn`. POSTs `action: "dispose-concept"` with the current disposition payload so Step 6a can run the cleanup branch. |
 | 34 | `submitCreateIssues` | JS handler wired to `#create-issues-btn`. POSTs `action: "create-issues"` with the selected open-question items plus the current disposition payload. Dropping this leaves the button visible but inert — no console error, no network request on click. |
-| 35 | `collectDisposition` | Reads the disposition fieldset (`dispose-mode` radio + optional `dispose-move-to` input) into the `{ mode, moveTo }` shape required by both `submitCreateIssues` and `submitDisposeConcept` payloads. Without this, both buttons throw at submit time. |
+| 35 | `collectDisposition` | Reads the disposition fieldset (`dispose-mode` radio + optional `dispose-move-to` input) into the `{ mode, moveTo }` shape required by `submitCreateIssues`, `submitShip`, and `submitDisposeConcept` payloads. Without this, those buttons throw at submit time. |
+| 36 | `status-channel` | Persistent status channel on the final-report panel — the always-visible pipeline recap (Übermittelt → verarbeitet → implementiert → Bereit) that leads to the ship CTA. DOM-driven so it survives reload + stale heartbeat. See templates.md § Final Report Panel. |
+| 37 | `ship-btn` | The persistent channel's primary "🚀 Shippen" CTA. Fires `action: "ship"` (real release pipeline). |
+| 38 | `submitShip` | JS handler wired to `#ship-btn`. POSTs `action: "ship"` with the current disposition. Dropping it leaves the ship button visible but inert (no console error, no network request on click). |
 
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
 at the post-generation gate. See § Generic Form Collection below for the
