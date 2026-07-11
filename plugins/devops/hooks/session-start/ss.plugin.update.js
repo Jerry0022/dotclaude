@@ -1,13 +1,19 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.9.1
+ * @version 0.10.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
  *   Workaround for anthropics/claude-code#14061 — Desktop never runs git pull
  *   on marketplace clones and never rebuilds the plugin cache.
  *   Shares the same update logic as /devops-plugin-update (see SKILL.md).
+ *
+ *   CHANNEL-AWARE (ring model): once the repo has a stable/* tag, the clone is
+ *   pinned to the highest version visible to the marketplace's channel pin
+ *   (~/.claude/plugins/.channels.json, default stable) via a detached tag
+ *   checkout instead of branch-tip pulling. Until then a bootstrap fallback
+ *   keeps the legacy pull behavior (migration safety — spec §5.2/§5.4).
  *
  *   When a plugin with an MCP server is upgraded mid-session, the running
  *   MCP processes point at the now-deleted old installPath. A sentinel file
@@ -32,6 +38,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { t } = require('../lib/locale');
+const { latestVisible, readChannelPin } = require('../lib/channels');
 
 // Translations for user-facing output. SessionStart fires before any user
 // prompt — there is no detected locale yet and no session_id in hook input
@@ -192,7 +199,7 @@ function copyDir(src, dst) {
   return fs.existsSync(path.join(dst, '.claude-plugin', 'plugin.json'));
 }
 
-function rebuildCache(marketplace, pluginName, pluginDir, version, sha, { versionChanged = true } = {}) {
+function rebuildCache(marketplace, pluginName, pluginDir, version, sha, { versionChanged = true, channel = 'stable' } = {}) {
   const pluginCache = path.join(cacheDir, marketplace, pluginName);
   const newCache = path.join(pluginCache, version);
 
@@ -271,6 +278,9 @@ function rebuildCache(marketplace, pluginName, pluginDir, version, sha, { versio
       entry.version = version;
       entry.lastUpdated = new Date().toISOString();
       entry.gitCommitSha = sha;
+      // Informational only — the authoritative pin is ~/.claude/plugins/
+      // .channels.json (native tooling may strip unknown registry fields).
+      entry.channel = channel;
     } else {
       // New install — create entry
       registry.plugins[key] = [{
@@ -280,6 +290,7 @@ function rebuildCache(marketplace, pluginName, pluginDir, version, sha, { versio
         installedAt: new Date().toISOString(),
         lastUpdated: new Date().toISOString(),
         gitCommitSha: sha,
+        channel,
       }];
     }
 
@@ -331,17 +342,48 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
     beforeVersions[name] = getVersion(dir);
   }
 
-  // Pull latest — reset dirty state first to prevent pull failures
+  // Update strategy (ring model, spec §5.2): resolve the marketplace's channel
+  // pin against channel tags. Bootstrap fallback: until the FIRST stable/* tag
+  // exists, behave exactly like the legacy hook (branch pull) — this is what
+  // makes the migration oscillation-free (R1): old and new hook versions do
+  // the same thing until a stable promotion exists, then every consumer
+  // converges on the resolved tag.
+  const channel = readChannelPin(path.join(home, '.claude', 'plugins'), marketplace);
   const localHead = run('git rev-parse HEAD', mDir);
-  const pullResult = run('git pull --ff-only origin main 2>&1 || git pull --ff-only origin master 2>&1', mDir);
-  let newHead = run('git rev-parse HEAD', mDir);
+  run('git fetch origin --tags 2>&1', mDir);
+  const tagList = run('git tag --list', mDir).split('\n').filter(Boolean);
+  const hasStableTag = tagList.some((tag) => tag.startsWith('stable/'));
+  let newHead = localHead;
 
-  // If pull failed (dirty tree), reset and retry
-  if (localHead === newHead && !pullResult) {
-    run('git checkout -- .', mDir);
-    run('git clean -fd', mDir);
-    run('git pull --ff-only origin main 2>&1 || git pull --ff-only origin master 2>&1', mDir);
+  if (!hasStableTag) {
+    // Legacy path (pre-channel repo state): branch-tip tracking.
+    const pullResult = run('git pull --ff-only origin main 2>&1 || git pull --ff-only origin master 2>&1', mDir);
     newHead = run('git rev-parse HEAD', mDir);
+
+    // If pull failed (dirty tree), reset and retry
+    if (localHead === newHead && !pullResult) {
+      run('git checkout -- .', mDir);
+      run('git clean -fd', mDir);
+      run('git pull --ff-only origin main 2>&1 || git pull --ff-only origin master 2>&1', mDir);
+      newHead = run('git rev-parse HEAD', mDir);
+    }
+  } else {
+    // Channel pin: highest version visible to the pinned channel
+    // (own channel ∪ all more-stable ∪ bare pre-channel tags).
+    const resolved = latestVisible(tagList, channel);
+    const targetSha = resolved ? run(`git rev-list -n 1 "${resolved.tag}"`, mDir) : '';
+    if (targetSha && targetSha !== localHead) {
+      // Repair-then-pin: a dirty or half-merged clone (e.g. a native `git pull`
+      // that failed on the detached HEAD) must never block the pin (R8). NEVER
+      // pull in this path — on a detached HEAD that is an ancestor of main,
+      // --ff-only would silently fast-forward to the alpha tip and defeat the
+      // pin (R2). Re-resolving + re-pinning every SessionStart is the
+      // self-healing property.
+      run('git reset --hard', mDir);
+      run('git clean -fd', mDir);
+      run(`git checkout --detach "${resolved.tag}" 2>&1`, mDir);
+      newHead = run('git rev-parse HEAD', mDir);
+    }
   }
 
   const newSha = newHead.substring(0, 7);
@@ -393,7 +435,7 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
     } catch { /* registry unreadable — rebuild to be safe */ cacheMissing = true; }
 
     if (versionChanged || cacheMissing || cacheStale) {
-      const result = rebuildCache(marketplace, name, dir, after, newSha, { versionChanged });
+      const result = rebuildCache(marketplace, name, dir, after, newSha, { versionChanged, channel });
       updated.push({
         name,
         from: beforeVersions[name] || '?',

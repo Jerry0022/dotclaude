@@ -259,3 +259,23 @@ export function createRelease({ tag, title, notes, prerelease = false }, opts) {
     stdio: ["pipe", "pipe", "pipe"],
   });
 }
+
+/**
+ * Whether a GitHub release exists for a tag. Used by ship_promote to stay
+ * idempotent against release.yml (which creates the stable release when the
+ * bare tag push triggers it — promote only creates one as a fallback).
+ */
+export function releaseExists(tag, opts) {
+  const cwd = opts?.cwd || process.cwd();
+  try {
+    execFileSync("gh", ["release", "view", tag], {
+      cwd,
+      encoding: "utf8",
+      timeout: DEFAULT_TIMEOUT,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}

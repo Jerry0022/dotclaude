@@ -92,9 +92,9 @@ beforeEach(() => {
   // Distinct-but-equal trees keyed by ref → postMergeTreeMatch is true ONLY when
   // the code looks up the two correct refs (HEAD and origin/main), not by accident.
   gitLib.treeOf.mockImplementation((ref) => (ref === "HEAD" ? "T1" : "T1"));
-  // ls-remote --tags returns the tag → tag already exists, skip creation path.
+  // ls-remote --tags returns the alpha channel tag → tag already exists, skip creation path.
   gitLib.git.mockImplementation((cmd) =>
-    cmd.includes("ls-remote --tags") ? "abc\trefs/tags/v1.0.0" : "remoteSha",
+    cmd.includes("ls-remote --tags") ? "abc\trefs/tags/alpha/v1.0.0" : "remoteSha",
   );
   gitLib.gitStrict.mockReturnValue("");
   ghLib.findExistingPR.mockReturnValue(null);
@@ -264,5 +264,52 @@ describe("ship_release — #207 parallel-change data-loss guards", () => {
     const push = pushCall();
     expect(push[0]).toContain("--force-with-lease");
     expect(push[0]).not.toContain("--force-with-lease=");
+  });
+});
+
+describe("ship_release — alpha channel tagging (ring model)", () => {
+  test("creates annotated alpha/<tag> on origin/base, pushes, defers the GitHub Release", async () => {
+    // First ls-remote (existence check) → empty; post-push verify → tag present.
+    let lsCalls = 0;
+    gitLib.git.mockImplementation((cmd) => {
+      if (cmd.includes("ls-remote --tags")) {
+        lsCalls += 1;
+        return lsCalls === 1 ? "" : "abc\trefs/tags/alpha/v1.0.0";
+      }
+      return "remoteSha";
+    });
+
+    const res = await handler(params());
+
+    expect(res.success).toBe(true);
+    expect(res.tag).toBe("alpha/v1.0.0");
+    expect(res.channel).toBe("alpha");
+    expect(res.tagVerified).toBe(true);
+    // Annotated tag with channel payload, created on the merge commit.
+    const { execFileSync } = await import("node:child_process");
+    const tagCall = execFileSync.mock.calls.find((c) => c[0] === "git" && c[1][0] === "tag");
+    expect(tagCall).toBeDefined();
+    expect(tagCall[1]).toEqual([
+      "tag", "-a", "alpha/v1.0.0", "origin/main", "-m",
+      expect.stringContaining('"channel":"alpha"'),
+    ]);
+    // No Release at ship time — promotion owns Releases (spec §3.1).
+    expect(ghLib.createRelease).not.toHaveBeenCalled();
+    expect(res.releaseDeferred).toBe(true);
+  });
+
+  test("existing alpha tag on remote → skip creation, still verified", async () => {
+    const res = await handler(params());
+    expect(res.tagVerified).toBe(true);
+    expect(res.tagWarning).toMatch(/alpha\/v1\.0\.0 already exists/);
+    const { execFileSync } = await import("node:child_process");
+    expect(execFileSync.mock.calls.find((c) => c[0] === "git" && c[1]?.[0] === "tag")).toBeUndefined();
+  });
+
+  test("intermediate merge still skips tagging entirely", async () => {
+    const res = await handler(params({ base: "feat/parent" }));
+    expect(res.tag).toBeNull();
+    expect(res.tagSkipped).toMatch(/intermediate/);
+    expect(ghLib.createRelease).not.toHaveBeenCalled();
   });
 });

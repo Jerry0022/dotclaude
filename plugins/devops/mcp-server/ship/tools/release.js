@@ -6,16 +6,16 @@
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { git, gitStrict, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf } from "../lib/git.js";
-import { createPR, mergePR, createRelease, findExistingPR, watchPRChecks } from "../lib/github.js";
+import { createPR, mergePR, findExistingPR, watchPRChecks } from "../lib/github.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
 
 export const schema = z.object({
   base: z.string().default("main").describe("Base branch for PR (may be a feature branch for intermediate merges)"),
   title: z.string().max(70).describe("PR title (conventional commit format)"),
   body: z.string().describe("PR body (must start with Closes #N if applicable)"),
-  tag: z.string().nullable().default(null).describe("Version tag to create (e.g. v0.18.0), null to skip — ignored for intermediate merges"),
-  releaseNotes: z.string().nullable().default(null).describe("GitHub release notes (CHANGELOG mirror) — ignored for intermediate merges"),
-  prerelease: z.boolean().default(false).describe("Mark as pre-release (for 0.x versions)"),
+  tag: z.string().nullable().default(null).describe("Bare version tag (e.g. v0.18.0) — the tool publishes it as alpha/<tag> (ring model), null to skip. Ignored for intermediate merges"),
+  releaseNotes: z.string().nullable().default(null).describe("CHANGELOG entry — NOT published at ship time (releases happen at promotion via ship_promote); recorded as releaseDeferred"),
+  prerelease: z.boolean().default(false).describe("Deprecated — releases are created at promotion time; kept for caller compatibility"),
   commitMessage: z.string().nullable().default(null).describe("If set, stage all and commit with this message before pushing"),
   mergeStrategy: z.enum(["squash", "merge", "rebase"]).default("squash").describe("PR merge strategy. Use 'merge' for overlapping files to preserve ancestry chain."),
   skipChecks: z.boolean().default(false).describe("Skip the pre-merge CI checks gate. Use only for hot-fixes when CI is broken. Env DEVOPS_SHIP_SKIP_CHECKS=1 also forces skip."),
@@ -24,7 +24,7 @@ export const schema = z.object({
 });
 
 export async function handler(params) {
-  const { base, title, body, tag, releaseNotes, prerelease, commitMessage, mergeStrategy, skipChecks, checksTimeoutSec } = params;
+  const { base, title, body, tag, releaseNotes, commitMessage, mergeStrategy, skipChecks, checksTimeoutSec } = params;
   const cwd = params.cwd;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const opts = { cwd };
@@ -237,35 +237,41 @@ export async function handler(params) {
     result.baseSync = baseSync.method;
     if (baseSync.warning) result.baseSyncWarning = baseSync.warning;
 
-    // Tag + Release (only for final merges to main, skip for intermediate)
+    // Alpha channel tag (only for final merges to main, skip for intermediate).
+    // Every ship publishes to the EARLIEST channel autonomously — beta/stable
+    // tags and GitHub Releases are created by ship_promote at promotion time
+    // (ring model, spec §3.1). The tag is ANNOTATED so channel identity and
+    // ship time live in the tag object (R4).
     if (!intermediate && tag) {
+      const channelTag = `alpha/${tag}`;
       try {
-        const remoteTag = git(`ls-remote --tags origin ${tag}`, opts);
-        if (remoteTag && remoteTag.includes(tag)) {
-          result.tagWarning = `Tag ${tag} already exists on remote — skipping creation.`;
+        const remoteTag = git(`ls-remote --tags origin ${channelTag}`, opts);
+        if (remoteTag && remoteTag.includes(channelTag)) {
+          result.tagWarning = `Tag ${channelTag} already exists on remote — skipping creation.`;
           result.tagVerified = true;
         } else {
           // Create tag on the merge commit (origin/base), not on the current HEAD
-          gitStrict(`tag ${tag} origin/${base}`, opts);
-          gitStrict(`push origin ${tag}`, opts);
-          const tagCheck = git(`ls-remote --tags origin ${tag}`, opts);
-          result.tagVerified = tagCheck !== null && tagCheck.includes(tag);
+          execFileSync("git", [
+            "tag", "-a", channelTag, `origin/${base}`, "-m",
+            JSON.stringify({ channel: "alpha", version: tag.replace(/^v/, "") }),
+          ], { cwd, encoding: "utf8", timeout: 15_000, stdio: ["pipe", "pipe", "pipe"] });
+          gitStrict(`push origin ${channelTag}`, opts);
+          const tagCheck = git(`ls-remote --tags origin ${channelTag}`, opts);
+          result.tagVerified = tagCheck !== null && tagCheck.includes(channelTag);
         }
-        result.tag = tag;
+        result.tag = channelTag;
+        result.channel = "alpha";
       } catch (e) {
-        result.tag = tag;
+        result.tag = channelTag;
+        result.channel = "alpha";
         result.tagVerified = false;
         result.tagError = e.message?.slice(0, 200);
       }
 
+      // No GitHub Release at ship time — promotion owns Releases. The notes
+      // land in the stable Release when ship_promote fast-tracks/promotes.
       if (releaseNotes) {
-        try {
-          createRelease({ tag, title: tag, notes: releaseNotes, prerelease }, opts);
-          result.release = true;
-        } catch (e) {
-          result.release = false;
-          result.releaseError = e.message?.slice(0, 200);
-        }
+        result.releaseDeferred = true;
       }
     } else if (intermediate && tag) {
       result.tag = null;

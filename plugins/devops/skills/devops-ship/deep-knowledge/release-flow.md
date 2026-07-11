@@ -39,47 +39,40 @@ Merge the PR via the GitHub API:
 - Verify remote branch is gone: `git ls-remote --heads origin <branch>`
 - If branch persists (API hiccup), cleanup step 3 handles it as a fallback
 
-## Tag
+## Tag — alpha channel (ring model)
 
-After merge, create version tag on main:
+After merge, `ship_release` creates the ANNOTATED alpha tag on main:
 
 ```bash
-git checkout main
-git pull origin main
-git tag v<X.Y.Z>
-git push origin v<X.Y.Z>
+git tag -a alpha/v<X.Y.Z> origin/main -m '{"channel":"alpha","version":"<X.Y.Z>"}'
+git push origin alpha/v<X.Y.Z>
 ```
 
 - Tag on the **squash-merge commit on main** — not on the feature branch
-- Format: `vX.Y.Z`
+- Format: `alpha/vX.Y.Z` — every ship publishes to the earliest channel;
+  `beta/vX.Y.Z`, `stable/vX.Y.Z` and the bare `vX.Y.Z` alias are created by
+  `/devops-release` (promotion, same SHA)
+- Annotated, never lightweight — promotion time/actor must be derivable from
+  the tag object (all channel tags share one commit)
 - Skip if version bump was "none"
-- Verify tag exists: `git ls-remote --tags origin | grep "v<X.Y.Z>"`
+- Verify tag exists: `git ls-remote --tags origin | grep "alpha/v<X.Y.Z>"`
+- Published tags are immutable — never move or delete them
 
-## GitHub Release (MANDATORY for every tag)
+## GitHub Release — at PROMOTION, not at ship
 
-After tag push, create a GitHub Release. Format per `templates/github-release.md`.
+Ship creates NO GitHub Release (alpha ships on every merge — a Release per
+alpha is noise). Releases are owned by the promotion flow:
 
-```bash
-# Generate commit list since last tag for release notes
-PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
-if [ -n "$PREV_TAG" ]; then
-  COMMITS=$(git log ${PREV_TAG}..HEAD --oneline)
-else
-  COMMITS=$(git log --oneline -20)
-fi
-```
+- **beta**: tags-only at launch (no Release; deferred until an external beta
+  audience exists — spec §11)
+- **stable**: the bare `v<X.Y.Z>` tag push triggers `.github/workflows/release.yml`
+  (notes from CHANGELOG); `ship_promote` polls for the Release and creates it
+  via `gh` as an idempotent fallback. Range computation must exclude channel
+  tags: `git describe --tags --match 'v[0-9]*' --abbrev=0 HEAD~1`.
 
-Create a GitHub Release via the API with the following content:
-
-- **Title**: `v<X.Y.Z>`
-- **Tag**: `v<X.Y.Z>` (must already exist)
-- **Body**: Mirror the CHANGELOG entry for this version (What's New sections: Added/Changed/Fixed + Contributors)
-- **Scope**: Only changes since previous release tag — not cumulative
-- **Content**: Mirror CHANGELOG entry for this version (same sections/bullets)
-- **Assets**: Attach build artifacts if CI produces them
-- **Pre-release**: Mark as pre-release for `0.x` versions
-- **Verification**: Confirm release exists via GitHub API — must show correct version + notes
-- If CI auto-creates releases from tag push, verify the release exists instead of creating one
+Format per `templates/github-release.md`: title/tag `v<X.Y.Z>`, body mirrors
+the CHANGELOG entry (Added/Changed/Fixed + Contributors), scope = changes
+since the previous STABLE release only, verification via GitHub API.
 
 ## CI tag filter
 

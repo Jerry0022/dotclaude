@@ -255,9 +255,15 @@ See `deep-knowledge/call-examples.md` for the three reference payloads
 For intermediate merges: no tag, no release notes, no version commit —
 the tool automatically skips tag/release creation when `base` is not `main`.
 
-The tool handles: commit (optional), rebase verification, push (explicit force-with-lease after rebase), PR create (or reuse with mergeability check), **pre-merge CI checks gate (waits for green)**, **pre-merge rebase re-check (closes the checks-window race)**, merge (squash or merge commit), **post-merge tree guard**, tag (main only), GitHub release (main only).
+The tool handles: commit (optional), rebase verification, push (explicit force-with-lease after rebase), PR create (or reuse with mergeability check), **pre-merge CI checks gate (waits for green)**, **pre-merge rebase re-check (closes the checks-window race)**, merge (squash or merge commit), **post-merge tree guard**, **alpha channel tag** (main only), GitHub release deferred to promotion.
 
-Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeStrategy, intermediate, tag, tagVerified, release, postMergeTreeMatch, postMergeWarning }`.
+Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeStrategy, intermediate, tag, channel, tagVerified, releaseDeferred, postMergeTreeMatch, postMergeWarning }`.
+
+**Ring model (channels):** the tag is `alpha/vX.Y.Z` — every ship publishes to
+the EARLIEST channel autonomously. beta/stable tags and GitHub Releases are
+created later by `/devops-release` (deliberate promotion, same SHA, no rebuild).
+Pass the bare `tag: "vX.Y.Z"` as before; the tool prefixes the channel. See
+`docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`.
 
 **Pre-merge CI gate** (default ON): after PR create, `ship_release` runs `gh pr checks --watch` (default 600s timeout). If checks fail or timeout → `success: false`, `checksBlocked: true`, PR stays open, branch not deleted. Render `ship-blocked` card with the failing check names + run URLs.
 
@@ -625,6 +631,28 @@ instead of `All DONE` / `Alles ERLEDIGT`.
 Call `render_completion_card` MCP tool (dotclaude-completion server) with data from previous steps.
 
 **CRITICAL — `cwd` is required for clickable links.** Without `cwd`, `getRepoUrl` falls back to the MCP server's own working directory (plugin dir, not your target repo) and the card renders PR/commit/branch as plain text. Always pass the same `cwd` you used for the ship tools.
+
+### Promotion-gap nudge (final ship to main only — MANDATORY)
+
+Deliberate promotion has no heartbeat without a forcing function — invisible
+channel lag is how stable rots. Before rendering the card, compute the drift:
+
+```bash
+git ls-remote --tags origin
+```
+
+- Latest alpha version = highest `alpha/vX.Y.Z` (numeric compare, never lexicographic).
+- Latest stable version = highest of `stable/vX.Y.Z` ∪ bare `vX.Y.Z`.
+- No channel tags at all (pre-migration repo) → skip silently.
+
+When alpha > stable, append ONE `userFinalTest` item:
+- Gap < 3 versions AND last stable tag younger than 7 days (annotated
+  taggerdate via `git for-each-ref --format='%(taggerdate:iso)' 'refs/tags/stable/*'`):
+  `{ action: "alpha ist N Version(en) vor stable — /devops-release zum Promoten" }`
+- Gap ≥ 3 versions OR ≥ 7 days: escalate the wording:
+  `{ action: "⚠ stable ist N Versionen / D Tage hinter alpha — /devops-release ausführen" }`
+
+Visible lag is the ring model working; the nudge just keeps it visible.
 
 ```
 render_completion_card({

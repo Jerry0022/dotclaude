@@ -19,6 +19,11 @@ ship_release({
 })
 ```
 
+Pass the BARE tag (`v0.18.0`) — the tool publishes it as the annotated
+channel tag `alpha/v0.18.0` (ring model) and defers the GitHub Release to
+promotion (`releaseDeferred: true` in the result; `/devops-release` owns
+beta/stable tags + Releases).
+
 ## Intermediate ship (sub-branch → feature branch)
 
 ```

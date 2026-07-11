@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.113.0] — 2026-07-11
+
+### Added
+
+- **Release channels (alpha/beta/stable) — ship stays autonomous, promotion becomes a deliberate step.** Every `/devops-ship` to main now publishes to the earliest channel automatically: `ship_release` creates the ANNOTATED tag `alpha/vX.Y.Z` on the merge commit and no longer creates a GitHub Release at ship time. The new `/devops-release` skill + `ship_promote` MCP tool move an already-shipped version up the ring (alpha→beta→stable, or fast-track alpha→stable as two sequential promotions) by re-tagging the SAME commit — bit-identical by construction, no rebuild, no version bump. Guards: monotonicity (never tag a version older than the target channel's latest; equal-version re-runs are idempotent success for partial-failure recovery), ancestry (only commits reachable from origin/main), immutability (published tags are never moved or deleted — rollback = roll forward). Stable promotion additionally creates the bare `vX.Y.Z` tag (backward-compat alias) which triggers the Release workflow; the tool polls for the Release and creates it via `gh` as an idempotent fallback. Beta stays tags-only until an external beta audience exists. The ship completion card now carries a promotion-gap nudge ("alpha is N versions ahead of stable — /devops-release") with escalation past 3 versions / 7 days, so deliberate promotion has a heartbeat. Design spec with redteam findings + PO review: `docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`. (`ship_release` alpha tagging, new `ship_promote` + `ship/lib/channels.js`, new `devops-release` skill, 25 new tests.)
+- **Consumers pin a channel — the update hook resolves tags instead of tracking main.** `ss.plugin.update` (and `/devops-plugin-update`, incl. new `--channel <alpha|beta|stable>` flag) now reads a per-marketplace channel pin from `~/.claude/plugins/.channels.json` (default: stable; one channel per marketplace — a single clone cannot serve two plugins on different channels) and pins the marketplace clone to the highest version visible to that channel (own channel ∪ all more-stable ∪ bare pre-channel tags, numeric version comparison) via a detached tag checkout with a reset/clean repair guard. Bootstrap fallback keeps the legacy `git pull --ff-only` behavior until the repo's FIRST `stable/*` tag exists, making the migration oscillation-free: nothing changes for any consumer until a version is deliberately promoted to stable. The registry entry gains an informational `channel` field. (`ss.plugin.update` 0.9.1 → 0.10.0, new CJS `hooks/lib/channels.js`.)
+
+### Fixed
+
+- **`release.yml` release notes were silently broken — `actions/checkout` fetched no history and no tags.** `git describe --tags HEAD~1` failed on the fetch-depth:1 checkout ever since the workflow existed (swallowed by `2>/dev/null`, notes degraded to `git log -20` on a single-commit checkout). Checkout now uses `fetch-depth: 0` + `fetch-tags: true`, and the previous-tag lookup filters to stable tags (`--match 'v[0-9]*'`) so same-commit channel tags never corrupt the release-notes range.
+
 ## [0.112.0] — 2026-07-10
 
 ### Added
