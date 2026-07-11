@@ -302,6 +302,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | Skill | Invocation | Purpose |
 |---|---|---|
 | `/devops-ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
+| `/devops-release` | Explicit | Channel promotion (alpha→beta→stable): re-tag the same SHA, no rebuild |
 | `/devops-commit` | Explicit | Conventional commits with smart staging |
 | `/devops-flow` (alias: `/debug`) | Explicit + Hook | Root-cause analysis, diagnostics, and fix cycle |
 | `/devops-new-issue` | Explicit | GitHub issue creation with labels and milestones |
