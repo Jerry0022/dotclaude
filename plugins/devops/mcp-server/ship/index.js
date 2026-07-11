@@ -22,6 +22,7 @@ import { schema as preflightSchema, handler as preflightHandler } from "./tools/
 import { schema as buildSchema, handler as buildHandler } from "./tools/build.js";
 import { schema as versionBumpSchema, handler as versionBumpHandler } from "./tools/version-bump.js";
 import { schema as releaseSchema, handler as releaseHandler } from "./tools/release.js";
+import { schema as promoteSchema, handler as promoteHandler } from "./tools/promote.js";
 import { schema as cleanupSchema, handler as cleanupHandler } from "./tools/cleanup.js";
 
 const server = new McpServer({
@@ -84,6 +85,16 @@ registerTool(
   "Handles the full git + GitHub flow deterministically. Returns PR number, merge sha, tag status.",
   releaseSchema,
   releaseHandler,
+);
+
+registerTool(
+  "ship_promote",
+  "Ship Promote",
+  "Promote a shipped version to a higher channel (alpha→beta→stable) by re-tagging the SAME commit SHA. " +
+  "Never rebuilds, never bumps versions — bit-identical ring promotion via annotated tags. " +
+  "Idempotent: re-run after partial failure completes the missing steps. Used by /devops-release, never by /devops-ship.",
+  promoteSchema,
+  promoteHandler,
 );
 
 registerTool(
