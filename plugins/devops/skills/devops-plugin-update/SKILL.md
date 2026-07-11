@@ -34,11 +34,22 @@ PLUGIN_SUBDIR = plugins/devops
 HOOK_SCRIPT = ${PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js
 ```
 
-## Step 0 — Capture current state
+## Step 0 — Capture current state + channel
 
 1. Read current version from `MARKETPLACE_DIR/PLUGIN_SUBDIR/.claude-plugin/plugin.json`
 2. Read current git SHA: `git -C MARKETPLACE_DIR rev-parse --short HEAD`
-3. Report: `Currently installed: v{version} ({sha})`
+3. Read the channel pin from `~/.claude/plugins/.channels.json` (key = marketplace
+   name, missing/invalid → `stable`). One channel per MARKETPLACE — a single
+   clone cannot serve two plugins on different channels.
+4. **`--channel <alpha|beta|stable>` flag:** re-pin by writing the sidecar
+   (`{"dotclaude": "beta"}` merged into the existing JSON), then continue with
+   the update so the new pin takes effect immediately.
+5. Compute drift: latest version visible to the pin vs. latest alpha
+   (`git -C MARKETPLACE_DIR ls-remote --tags origin`, numeric compare on
+   `alpha/vX.Y.Z` / `beta/vX.Y.Z` / `stable/vX.Y.Z` / bare `vX.Y.Z`).
+6. Report: `Currently installed: v{version} ({sha}) — Channel: {channel},
+   latest visible: v{N}` and, when alpha is ahead:
+   `(alpha has v{M} available)`.
 
 ## Step 1 — Run update hook
 
@@ -49,9 +60,12 @@ node HOOK_SCRIPT
 ```
 
 The hook handles:
-- `git pull --ff-only` on all marketplace clones
-- Cache rebuild with `cp -a` (archive mode for dotfiles)
-- `installed_plugins.json` registry update
+- Channel-aware update on all marketplace clones (ring model): once a
+  `stable/*` tag exists, the clone is pinned to the highest version visible
+  to the channel pin via a detached tag checkout; before that, a bootstrap
+  fallback keeps the legacy `git pull --ff-only` behavior
+- Cache rebuild (recursive copy incl. dotfiles)
+- `installed_plugins.json` registry update (incl. informational `channel`)
 - Silent verification (version alignment, cache completeness)
 
 Capture and display the hook's stdout (update status lines).

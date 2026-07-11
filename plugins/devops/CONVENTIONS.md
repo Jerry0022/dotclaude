@@ -13,7 +13,14 @@ PATCH  → Bug fixes, doc updates, internal improvements
 ```
 
 Current version is tracked in `.claude-plugin/plugin.json` → `"version"`.
-Each release gets a git tag: `v0.1.0`, `v0.2.0`, etc.
+
+**Release channels (ring model):** every ship to main creates the annotated
+tag `alpha/vX.Y.Z` automatically. Promotion (`/devops-release`) re-tags the
+SAME commit as `beta/vX.Y.Z`, then `stable/vX.Y.Z` + bare `vX.Y.Z` (stable
+alias, triggers the Release workflow). Version files never carry a channel;
+published tags are never moved or deleted. Consumers pin a channel per
+marketplace in `~/.claude/plugins/.channels.json` (default `stable`).
+Spec: `docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`.
 
 ## Hook Conventions
 

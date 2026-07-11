@@ -91,24 +91,31 @@ head -5 CHANGELOG.md
 
 All must show the new version. If not → amend the commit.
 
-## Git tag (MANDATORY for all version bumps)
+## Git tag (MANDATORY for all version bumps) — alpha channel
 
-After PR merge to main:
+Every ship publishes to the EARLIEST channel (ring model). After PR merge to
+main, `ship_release` creates the ANNOTATED channel tag automatically:
 
 ```bash
-git tag v<X.Y.Z>
-git push origin v<X.Y.Z>
+git tag -a alpha/v<X.Y.Z> origin/main -m '{"channel":"alpha","version":"<X.Y.Z>"}'
+git push origin alpha/v<X.Y.Z>
 ```
 
 **Verify tag exists on remote:**
 ```bash
-git ls-remote --tags origin | grep "v<X.Y.Z>"
+git ls-remote --tags origin | grep "alpha/v<X.Y.Z>"
 ```
 
 If tag is missing → create it. This is the most commonly forgotten step.
 The `pre-flight.md` Post-Ship Verification catches this automatically.
 
 Skip tag only if bump type is "none" (internal-only change).
+
+**beta/stable tags and the bare `v<X.Y.Z>` alias are NEVER created at ship
+time** — they are produced by `/devops-release` (`ship_promote`) when a
+version is deliberately promoted. GitHub Releases equally live at promotion
+time (stable). Published tags are immutable — never move or delete them;
+rollback = roll forward via a new version.
 
 ## Build-ID
 

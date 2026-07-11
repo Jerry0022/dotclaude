@@ -78,17 +78,18 @@ knows what needs updating. But they MUST be reported before proceeding.
 After Step 4 (Commit/Push/PR/Merge), before Step 5 (Cleanup), verify:
 
 ```bash
-# 6a. Git tag exists on remote
-git ls-remote --tags origin | grep "v$NEW_VERSION"
+# 6a. Alpha channel tag exists on remote (ring model — ship publishes to alpha)
+git ls-remote --tags origin | grep "alpha/v$NEW_VERSION"
 ```
-If no tag → CREATE it now. This is the most commonly missed step.
+If no tag → CREATE it now (annotated: `git tag -a alpha/v$NEW_VERSION origin/main -m '{"channel":"alpha"}'`).
+This is the most commonly missed step.
 
 ```
-# 6b. GitHub release exists (if CI creates one)
-Check via GitHub API whether a release for v$NEW_VERSION exists.
+# 6b. NO GitHub release is expected at ship time
+Releases are created at promotion (/devops-release): stable promotion pushes
+the bare v$NEW_VERSION tag which triggers release.yml. Do NOT create a
+release here, and do NOT treat a missing release as a ship failure.
 ```
-If no release but tag exists → OK (CI may create it async).
-If no release and no tag → ABORT cleanup, tag first.
 
 ```bash
 # 6c. Merged commit on main has correct version
