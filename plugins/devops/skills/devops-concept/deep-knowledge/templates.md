@@ -58,6 +58,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.step_implemented`       | Implementation complete        | Implementierung abgeschlossen |
 | `panel.step_implemented_active`| Implementation in progress     | Implementierung läuft |
 | `panel.step_waiting`           | Waiting…                       | Warten… |
+| `panel.step_ready`             | Ready to ship                  | Bereit zum Shippen |
 | `panel.disconnected_title`     | Claude is not connected        | Claude ist nicht verbunden |
 | `panel.disconnected_hint`      | You can still submit — your click is queued and delivered as soon as Claude is back. | Du kannst trotzdem absenden — der Klick wird gespeichert und gesendet, sobald Claude wieder da ist. |
 | `panel.connecting_title`       | Claude is connecting           | Claude verbindet sich |
@@ -101,6 +102,12 @@ must see their own language. The locale hint is authoritative.
 | `final.dispose_btn_hint`       | Closes the concept session and applies the file disposition above. | Schliesst die Concept-Session und wendet die Datei-Disposition oben an. |
 | `final.dispose_running`        | Cleaning up …                  | Räume auf … |
 | `final.dispose_done`           | Concept ended.                 | Concept beendet. |
+| `final.ship_heading`           | Ready to ship                  | Bereit zum Shippen |
+| `final.ship_btn`               | Ship it                        | Shippen |
+| `final.ship_hint`              | Runs the full ship pipeline (build, version bump, release, merge). | Startet die komplette Ship-Pipeline (Build, Version-Bump, Release, Merge). |
+| `final.ship_running`           | Shipping …                     | Wird geshippt … |
+| `final.ship_done`              | Shipped                        | Geshippt |
+| `final.view_iterations`        | Review iterations              | Iterationen ansehen |
 | `proto.feedback_title`         | Feedback                       | Feedback |
 | `proto.feedback_toggle`        | Open feedback                  | Feedback öffnen |
 | `proto.feedback_general`       | General notes on this prototype | Allgemeine Anmerkungen zum Prototyp |
@@ -271,6 +278,46 @@ the `[ui-locale: ...]` hint produced.
            [data-open-questions] content) and the always-visible
            disposition fieldset that drives Step 6 cleanup. -->
       <div id="panel-final-report" style="display: none;">
+        <!-- Persistent status channel. Renders the concept's whole pipeline
+             at a glance and culminates in the ship CTA. It is DOM-driven —
+             present because the active section carries data-final-report — so
+             it survives page reloads AND stays fully visible even when the
+             Claude heartbeat is stale (the ship affordance never depends on a
+             live connection, which is the whole point of the persistent
+             channel over a transient completion overlay). -->
+        <div class="status-channel" id="status-channel">
+          <div class="status-channel__heading">{{final.ship_heading}}</div>
+          <ol class="status-steps" aria-live="polite">
+            <li data-step="submitted" data-state="done">
+              <span class="step-icon" aria-hidden="true">✓</span>
+              <span class="step-label">{{panel.step_submitted}}</span>
+            </li>
+            <li data-step="received" data-state="done">
+              <span class="step-icon" aria-hidden="true">✓</span>
+              <span class="step-label">{{panel.step_received}}</span>
+            </li>
+            <li data-step="implemented" data-state="done">
+              <span class="step-icon" aria-hidden="true">✓</span>
+              <span class="step-label">{{panel.step_implemented}}</span>
+            </li>
+            <li data-step="ready" data-state="active">
+              <span class="step-icon" aria-hidden="true">●</span>
+              <span class="step-label">{{panel.step_ready}}</span>
+            </li>
+          </ol>
+          <button id="ship-btn" class="primary submit-btn ship-btn">
+            <span aria-hidden="true">🚀</span> {{final.ship_btn}}
+          </button>
+          <p class="hint">{{final.ship_hint}}</p>
+          <p class="hint hint-running" data-ship-state="running" hidden>
+            <span aria-hidden="true">⏳</span> {{final.ship_running}}
+          </p>
+          <p class="hint hint-done" data-ship-state="done" hidden>
+            <span aria-hidden="true">✓</span> {{final.ship_done}}
+          </p>
+          <button type="button" id="view-iterations-btn" class="link-btn">{{final.view_iterations}}</button>
+        </div>
+
         <div class="final-report-indicator">
           <span class="check-icon">✓</span>
           <strong>{{final.status}}</strong>
@@ -2085,6 +2132,56 @@ body.content-dimmed .content-dimmer:not([hidden]) {
   font-size: 0.85rem;
   line-height: 1.5;
 }
+
+/* Persistent status channel — the always-visible pipeline recap that ends in
+   the ship CTA. Boxed so it reads as a distinct "status" surface. Pure DOM /
+   connection-independent by design: the ship affordance must never disappear
+   just because the heartbeat went stale. */
+.status-channel {
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 8px;
+  padding: 0.85rem 0.95rem 1rem;
+  margin-bottom: 1rem;
+  background: color-mix(in srgb, var(--success-color, #3fb950) 6%, transparent);
+}
+.status-channel__heading {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #8b949e);
+  margin-bottom: 0.6rem;
+}
+.status-channel .status-steps { margin-bottom: 0.85rem; }
+.ship-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+#ship-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.status-channel .hint[data-ship-state="running"] { color: var(--accent-color, #58a6ff); }
+.status-channel .hint[data-ship-state="done"] { color: var(--success-color, #3fb950); }
+.link-btn {
+  display: inline-block;
+  margin-top: 0.6rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-color, #58a6ff);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.link-btn:hover { opacity: 0.8; }
+/* Transient highlight when "Review iterations" nudges the tab bar into view. */
+.iteration-tabs.tabs-nudge { animation: tabs-nudge 1.2s ease; }
+@keyframes tabs-nudge {
+  0%, 100% { box-shadow: none; }
+  30% { box-shadow: 0 0 0 2px var(--accent-color, #58a6ff); }
+}
+
 #panel-create-issues #create-issues-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -2866,6 +2963,62 @@ async function submitDisposeConcept() {
 document.getElementById('dispose-concept-btn')
   ?.addEventListener('click', submitDisposeConcept);
 
+// --- Final-report "Shippen" action ---
+// Primary CTA of the persistent status channel. Available whenever the
+// final-report section is live (implementation done). Clicking it is an
+// EXPLICIT user commit — like "Mit Feedback implementieren" it authorises a
+// real, outward-facing action — so Claude runs the full ship pipeline on
+// pickup (SKILL.md Step 5b · ship branch). Ships the current disposition too
+// so Step 6 cleanup still runs after the release lands.
+async function submitShip() {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (!active || !active.hasAttribute('data-final-report')) return;
+
+  const btn = document.getElementById('ship-btn');
+  const wrap = document.getElementById('status-channel');
+  if (!btn || !wrap) return;
+
+  btn.disabled = true;
+  wrap.querySelectorAll('.hint[data-ship-state]').forEach(el => {
+    el.hidden = el.dataset.shipState !== 'running';
+  });
+
+  const payload = {
+    submitted: true,
+    action: 'ship',
+    disposition: collectDisposition()
+  };
+  const container = document.getElementById('concept-decisions');
+  if (container) container.textContent = JSON.stringify(payload);
+  document.body.classList.add('concept-submitted', 'content-dimmed');
+  showContentDimmer();
+
+  try {
+    await fetch('/decisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {
+    localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(payload));
+  }
+}
+
+document.getElementById('ship-btn')?.addEventListener('click', submitShip);
+
+// "Iterationen ansehen" — non-committal, client-only. Scrolls the iteration
+// tab bar into view and flashes it so the user can revisit earlier iterations
+// / the agenda without leaving the final report. The ship CTA stays put — the
+// whole point of the persistent channel is that there is nothing to re-open.
+document.getElementById('view-iterations-btn')?.addEventListener('click', () => {
+  const tabs = document.querySelector('.iteration-tabs');
+  if (!tabs) return;
+  tabs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  tabs.classList.remove('tabs-nudge');
+  void tabs.offsetWidth;  // force reflow so the animation restarts
+  tabs.classList.add('tabs-nudge');
+});
+
 // Recompute gating whenever the user toggles a checkbox inside the
 // open-questions section. The generic change listener (for saveState)
 // fires the same event, so we just hook into the same channel.
@@ -2895,7 +3048,11 @@ async function retryPendingSubmission() {
 Claude-side: on receiving the payload, branch on `action`:
 - `iterate` → Step 5b iterate branch: summarize + append next iteration only
 - `implement` → Step 5b implement branch: actually write code/files, then
-  still append a new iteration as a frozen "implementiert" record
+  append the final-report section (frozen "implementiert" record)
+- `create-issues` → Step 5b create-issues branch: user-value gate + `gh issue create`
+- `ship` → Step 5b ship branch: run the full ship pipeline (`/devops-ship`),
+  then mark the final report shipped and run Step 6 cleanup
+- `dispose-concept` → Step 5b dispose branch: record disposition, run Step 6
 
 ## Panel State Reset
 
@@ -3430,8 +3587,20 @@ The final-report section closes a concept session. It is appended via the
 implement-action branch of Step 5b (see `SKILL.md` § Final-report append).
 The right-side panel automatically switches to `panel-final-report` mode
 when `showIteration()` detects `data-final-report` on the active section
-— no iterate / implement buttons, only an optional "Issues erstellen"
-button gated on the presence of open questions / TODOs.
+— no iterate / implement buttons. Instead it leads with the **persistent
+status channel** (`#status-channel`): the full pipeline recap (Übermittelt →
+verarbeitet → implementiert → Bereit) topped by the primary **🚀 Shippen**
+CTA and a non-committal "Iterationen ansehen" link. Below that sit the
+optional "Issues erstellen" button (gated on open questions / TODOs) and the
+always-visible disposition fieldset.
+
+The status channel is deliberately **DOM-driven, not connection-driven**: it
+is present because the section carries `data-final-report`, so it survives
+reloads and stays fully visible even when the Claude heartbeat is stale. This
+is the design reason it replaces a transient completion overlay — the ship
+affordance must never vanish just because the connection flickered. Reviewing
+earlier iterations (via the ever-present tab bar or the "Iterationen ansehen"
+nudge) never hides the ship CTA, so there is nothing to "re-open".
 
 ### Final-report section HTML
 

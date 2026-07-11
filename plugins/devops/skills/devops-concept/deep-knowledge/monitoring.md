@@ -124,10 +124,20 @@ curl -s -X POST http://localhost:$PORT/heartbeat
 ```
 Sent by the cron job every ~60s, and additionally on each manual poll cycle.
 
-The bridge server also self-pulses `_heartbeat_ts` every 30s from a daemon
-thread — so the indicator stays green even while Claude's REPL is busy and
-session-scoped crons can't fire. The Claude-side POSTs above are redundant
-with that self-pulse (kept as a fallback in case the thread stalls).
+The bridge server self-pulses `_server_ts` (NOT the heartbeat) every 30s
+from a daemon thread. That proves the *server process* is alive — it does
+**not** keep the indicator green, because the connection indicator gates
+exclusively on `claude_ts`, which ONLY a Claude-side `POST /heartbeat`
+advances. This split is deliberate: a server-only pulse used to render as
+"Claude verbunden" and hid the case where Claude's polling cron had died.
+
+Consequently the green indicator requires something Claude-side to POST
+`/heartbeat` at least every `HEARTBEAT_STALE_MS` (90s). The cron alone is
+NOT enough (idle-only, multi-minute gaps), so the **keepalive pulser**
+background task (see `bridge-server.md` § step 3, task 1) is the primary
+keepalive — it pulses every ~20s for the whole session and, crucially, does
+NOT exit when a submission is pending, so `claude_ts` stays warm even during
+a long `implement`.
 
 **Check submission** (poll for user decisions):
 ```bash

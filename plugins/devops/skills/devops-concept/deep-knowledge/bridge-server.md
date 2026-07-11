@@ -54,13 +54,20 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 
    **Sweep the port BEFORE launching — exactly one instance must own it.**
    A prior instance that did not fully die (its listening socket lingers in
-   TIME_WAIT/CLOSE_WAIT) plus a fresh launch leaves **two** servers bound to
-   the same port (Windows permits this via `SO_REUSEADDR`). `curl` then hits
-   whichever accepts the connection — sometimes the healthy one (200),
-   sometimes the wedged one (HTTP 000 / timeout). The symptom is a connection
-   indicator that flickers between connected and "Claude nicht verbunden" for
-   no apparent reason, plus a watcher (step 3) that trips on the wedged
-   replies. Kill every listener on the port first, then start exactly one:
+   TIME_WAIT/CLOSE_WAIT) plus a fresh launch used to leave **two** servers
+   bound to the same port (Windows permitted this via `SO_REUSEADDR`). `curl`
+   then hit whichever accepted the connection — sometimes the healthy one
+   (200), sometimes the wedged one (HTTP 000 / timeout) — surfacing as a
+   connection indicator that flickers between connected and "Claude nicht
+   verbunden" for no apparent reason.
+
+   **The server now binds the port EXCLUSIVELY** (`SO_EXCLUSIVEADDRUSE` on
+   Windows, `allow_reuse_address=False`; see `concept-server.py` §
+   `ConceptBridgeServer`), so a silent double-bind can no longer happen — a
+   duplicate launch instead **fails loudly** (`cannot bind port … exit 1`).
+   That turns the old silent flicker into a clear error, but you still MUST
+   sweep first: a lingering prior instance would make the fresh launch fail.
+   Kill every listener on the port first, then start exactly one:
    ```bash
    # PowerShell tool
    Get-NetTCPConnection -LocalPort {port} -State Listen -EA SilentlyContinue |
@@ -138,7 +145,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
          Bash: curl -s http://localhost:{port}/decisions
          • Parse the JSON. Note `_version`. Strip `_version` and `_processed_at`
            before treating the rest as decision data. Read `action` — it is
-           one of FOUR values, each with its own SKILL.md Step 5b branch:
+           one of FIVE values, each with its own SKILL.md Step 5b branch:
              - "iterate"        → next iteration on the concept page only
              - "implement"      → apply real code changes + final-report
              - "create-issues"  → apply the user-value gate (SKILL.md Step 5b,
@@ -146,21 +153,27 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
                                   autonomously run `gh issue create` for each
                                   gated item; NO AskUserQuestion, the user
                                   already committed by clicking the button
+             - "ship"           → run the full ship pipeline (/devops-ship),
+                                  mark the final report shipped, advance to
+                                  Step 6; NO AskUserQuestion, the button click
+                                  authorised the release. Stop + report on a
+                                  hard gate failure — never force past a gate
              - "dispose-concept"→ record disposition, advance to Step 6
            Process per Step 5 (Live Feedback Loop) — act on the user's choices
            (approve/tweak/reject, included options, comment-driven tweaks).
            Step 5c writes the new iteration to the HTML file and POSTs
            `/reload` BEFORE the reset below. Reset is the LAST action.
 
-         • **Zero-prompt invariant for create-issues + dispose-concept.**
-           These two branches MUST complete end-to-end without asking the
-           user anything. The payload (items[] for create-issues,
-           disposition{} for dispose-concept) is self-sufficient by design;
-           any missing optional field falls back to a sane default. If you
-           catch yourself reaching for AskUserQuestion in either branch,
-           stop — the answer is in the payload, the concept HTML, or the
-           project's new-issue extension. The user signed off by clicking
-           the button.
+         • **Zero-prompt invariant for create-issues + ship + dispose-concept.**
+           These branches MUST complete end-to-end without asking the user
+           anything. The payload (items[] for create-issues, disposition{} for
+           ship + dispose-concept) is self-sufficient by design; any missing
+           optional field falls back to a sane default. If you catch yourself
+           reaching for AskUserQuestion in any of them, stop — the answer is in
+           the payload, the concept HTML, or the project's new-issue extension.
+           The user signed off by clicking the button. (Exception: `ship` MUST
+           still stop and surface a hard ship-pipeline gate failure, and a
+           force-push to main/master still needs explicit confirmation.)
 
          • After the file rewrite AND the `/reload` POST have completed,
            reset conditionally — pass the noted version:
@@ -197,46 +210,80 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    the contract explicit: every tick does both. Minimum cron resolution is 1 min,
    so the max submit-to-process lag is ~60 s — acceptable for interactive flows.
 
-   **The cron alone does NOT keep the indicator green — add a background
-   watcher.** The page flips to "Claude nicht verbunden" as soon as Claude's
-   last `/heartbeat` POST is older than `HEARTBEAT_STALE_MS` (90 s). The
-   once-a-minute cron is the documented keepalive, but session-only crons
+   **The cron alone does NOT keep the indicator green — add TWO decoupled
+   background tasks.** The page flips to "Claude nicht verbunden" as soon as
+   Claude's last `/heartbeat` POST is older than `HEARTBEAT_STALE_MS` (90 s).
+   The once-a-minute cron is the documented keepalive, but session-only crons
    fire ONLY while the REPL is idle and have multi-minute gaps in practice
    (observed: a 638 s gap with the cron registered and the session idle) — so
-   during normal reading/thinking the indicator goes red, and because the SAME
-   cron is the only pickup path, submissions are also picked up late.
+   during normal reading/thinking the indicator goes red.
 
-   Alongside the cron, launch a **detached background watcher** (Bash tool,
-   `run_in_background: true`) that both keeps the heartbeat warm AND wakes
-   Claude the instant a submission lands — its `exit 0` re-invokes the model
-   immediately, instead of waiting up to 60 s for the next cron tick:
+   **Keepalive and pickup MUST be separate tasks.** The naive single watcher
+   (pulse + `exit 0` on pending) has a load-bearing flaw: `exit 0` is how it
+   wakes Claude, so the instant a submission lands the watcher is *gone* — and
+   for an `implement` submission Claude then processes for many minutes with
+   NOTHING pulsing `/heartbeat` (the idle-only cron can't fire during a busy
+   `implement` turn). The indicator goes red *precisely during implementation*
+   — exactly when the user is watching for progress. Splitting the two roles
+   removes that coupling.
+
+   Launch both as **detached background tasks** (Bash tool,
+   `run_in_background: true`, no trailing `&`, no `nohup`):
+
+   **(1) Keepalive pulser — pulses only, NEVER exits on pending.** Launched
+   once at concept open; runs for the whole session so `claude_ts` stays warm
+   even across a long `implement`. Exits only when the concept is truly gone:
    ```bash
    fails=0
    while true; do
-     [ -f .claude/concept-active.json ] || { echo "WATCHER_EXIT reason=STATE_GONE"; exit 0; }
-     grep -q '"port": {port}' .claude/concept-active.json 2>/dev/null || { echo "WATCHER_EXIT reason=PORT_CHANGED"; exit 0; }
+     [ -f .claude/concept-active.json ] || { echo "PULSER_EXIT reason=STATE_GONE"; exit 0; }
+     grep -q '"port": {port}' .claude/concept-active.json 2>/dev/null || { echo "PULSER_EXIT reason=PORT_CHANGED"; exit 0; }
      if curl -s -X POST --max-time 8 http://localhost:{port}/heartbeat >/dev/null 2>&1; then
        fails=0
-       p=$(curl -s --max-time 8 http://localhost:{port}/pending | python -c "import sys,json;print('yes' if json.load(sys.stdin).get('pending') else 'no')" 2>/dev/null)
-       [ "$p" = "yes" ] && { echo "WATCHER_EXIT reason=PENDING_SUBMISSION"; exit 0; }
      else
        fails=$((fails+1))
-       [ "$fails" -ge 4 ] && { echo "WATCHER_EXIT reason=SERVER_DEAD"; exit 0; }
+       [ "$fails" -ge 4 ] && { echo "PULSER_EXIT reason=SERVER_DEAD"; exit 0; }
      fi
      sleep 20
    done
    ```
-   Pulse every ~20 s (well under the 90 s threshold). **Tolerate transient
-   blips:** declare `SERVER_DEAD` only after ≥4 consecutive failed POSTs — a
-   single failed `curl` (server busy, a competing request, a duplicate-instance
-   wedge per step 2) must NOT tear the watcher down, or the page goes stale
-   again on every hiccup. The loop self-terminates when the state file is gone,
-   its port changed, or the server is truly unreachable, so it cannot become a
-   ghost (the `--html` watchdog still backs it up). On `PENDING_SUBMISSION`
-   Claude processes the payload, then **re-launches the watcher** for the next
-   round. Keep the cron too: it is the backup pickup path during the brief
-   window when the watcher has exited for processing and not yet been
-   re-launched.
+
+   **(2) Pickup waker — wakes Claude the instant a submission lands.** Its
+   `exit 0` re-invokes the model immediately instead of waiting up to 60 s for
+   the next cron tick. Re-launched after each processing round. It does NOT
+   pulse the heartbeat (that is the pulser's job) — it only watches `/pending`:
+   ```bash
+   fails=0
+   while true; do
+     [ -f .claude/concept-active.json ] || { echo "WAKER_EXIT reason=STATE_GONE"; exit 0; }
+     grep -q '"port": {port}' .claude/concept-active.json 2>/dev/null || { echo "WAKER_EXIT reason=PORT_CHANGED"; exit 0; }
+     if p=$(curl -s --max-time 8 http://localhost:{port}/pending | python -c "import sys,json;print('yes' if json.load(sys.stdin).get('pending') else 'no')" 2>/dev/null); then
+       fails=0
+       [ "$p" = "yes" ] && { echo "WAKER_EXIT reason=PENDING_SUBMISSION"; exit 0; }
+     else
+       fails=$((fails+1))
+       [ "$fails" -ge 4 ] && { echo "WAKER_EXIT reason=SERVER_DEAD"; exit 0; }
+     fi
+     sleep 20
+   done
+   ```
+
+   Both pulse/poll every ~20 s (well under the 90 s threshold). **Tolerate
+   transient blips:** declare `SERVER_DEAD` only after ≥4 consecutive failures
+   — a single failed `curl` (server busy, a competing request, a
+   duplicate-instance wedge per step 2) must NOT tear a task down, or the page
+   goes stale again on every hiccup. Both self-terminate when the state file
+   is gone, its port changed, or the server is truly unreachable, so neither
+   can become a ghost (the `--html` watchdog still backs them up).
+
+   **Lifecycle:** launch BOTH at concept open. On `PENDING_SUBMISSION` the
+   waker exits and wakes Claude; Claude processes the payload, then
+   **re-launches only the waker** for the next round — the pulser is still
+   running and must not be duplicated (a second pulser on the same port is
+   harmless but wasteful; if unsure, the pulser's `STATE_GONE`/`PORT_CHANGED`
+   guards make a stale one exit on its own). Keep the cron too: it is the
+   backup pickup path during the brief window between the waker exiting and
+   being re-launched.
 
 4. **Persist active-concept state.** Write `.claude/concept-active.json` in
    the project root with the metadata the SessionStart resume hook

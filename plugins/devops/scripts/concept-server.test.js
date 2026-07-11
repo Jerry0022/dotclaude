@@ -51,6 +51,46 @@ function stopServer(proc) {
   });
 }
 
+describe.skipIf(!PY)("concept-server refuses to double-bind its port (A3)", () => {
+  // Regression for the "connection flickers for no reason" bug: on Windows the
+  // default SO_REUSEADDR let a SECOND process bind the SAME port and hijack a
+  // share of the connections. The server now binds exclusively, so a duplicate
+  // launch must FAIL loudly (non-zero exit) instead of silently double-binding.
+  test("a second instance on the same port exits non-zero instead of sharing it", async () => {
+    const BIND_PORT = PORT + 1;
+    const proc1 = spawn(PY, [SERVER, String(BIND_PORT)], { stdio: ["ignore", "pipe", "pipe"] });
+    try {
+      // Wait until instance 1 actually owns the port.
+      const deadline = Date.now() + 10000;
+      let up = false;
+      while (Date.now() < deadline) {
+        try {
+          const r = await fetch(`http://127.0.0.1:${BIND_PORT}/reload`);
+          if (r.ok) { up = true; break; }
+        } catch { /* not up yet */ }
+        await new Promise(r => setTimeout(r, 150));
+      }
+      expect(up).toBe(true);
+
+      // Instance 2 must fail to bind rather than silently double-bind.
+      const proc2 = spawn(PY, [SERVER, String(BIND_PORT)], { stdio: ["ignore", "pipe", "pipe"] });
+      let stderr = "";
+      proc2.stderr.on("data", d => { stderr += d.toString(); });
+      const exitCode = await new Promise((resolve, reject) => {
+        const t = setTimeout(() => {
+          try { proc2.kill("SIGKILL"); } catch { /* gone */ }
+          reject(new Error("second instance did not exit — it may have silently double-bound"));
+        }, 8000);
+        proc2.once("exit", code => { clearTimeout(t); resolve(code); });
+      });
+      expect(exitCode).not.toBe(0);
+      expect(stderr).toMatch(/cannot bind port/i);
+    } finally {
+      await stopServer(proc1);
+    }
+  }, 30000);
+});
+
 describe.skipIf(!PY)("concept-server reload counter across restarts (#225)", () => {
   test("counter after restart is higher than any counter from the previous run", async () => {
     // Run 1: boot, bump the counter once (Claude wrote an iteration).

@@ -51,6 +51,13 @@ The watchdog runs every 30 s. Both branches call `os._exit(0)` so the
 listening socket is released immediately — no graceful drain — because
 the only client at that point is a cron that should also be dying.
 
+The listening socket requests **exclusive** port ownership (see
+`ConceptBridgeServer`): a duplicate launch on the same port fails loudly at
+bind time instead of silently double-binding. On Windows the default
+`SO_REUSEADDR` would otherwise let a second instance hijack a share of the
+connections, which surfaces as a connection indicator that flickers between
+connected and disconnected for no apparent reason.
+
 This bypasses Chrome MCP JS injection limitations entirely. The page
 communicates with Claude through HTTP endpoints instead of requiring
 JavaScript eval injection into the browser tab.
@@ -76,6 +83,7 @@ import argparse
 import http.server
 import json
 import os
+import socket
 import sys
 import time
 import threading
@@ -467,6 +475,43 @@ def _watchdog(html_path, heartbeat_timeout_ms, interval_s=30, html_grace_s=10):
             os._exit(0)
 
 
+class ConceptBridgeServer(http.server.ThreadingHTTPServer):
+    """Threaded HTTP server that refuses to share its port.
+
+    On Windows, the socketserver default `allow_reuse_address = True` maps to
+    `SO_REUSEADDR`, which lets a SECOND process bind the SAME port and
+    silently hijack a share of the incoming connections. `curl` then hits the
+    healthy instance on one request (200) and the wedged one on the next
+    (HTTP 000 / timeout) — the "connection indicator flickers for no apparent
+    reason" bug. We defend against it two ways:
+
+    - `allow_reuse_address = False` on Windows so WE never advertise the
+      hijackable `SO_REUSEADDR` flag.
+    - `SO_EXCLUSIVEADDRUSE` on the listening socket so no OTHER process can
+      bind the port while we hold it. A duplicate launch now fails loudly at
+      bind time instead of silently double-binding.
+
+    On POSIX, `allow_reuse_address` stays `True` — there `SO_REUSEADDR` only
+    permits rebinding a socket stuck in `TIME_WAIT` after a quick restart,
+    which is the behaviour we want and does NOT enable hijacking.
+    """
+
+    allow_reuse_address = (os.name != 'nt')
+    daemon_threads = True
+
+    def server_bind(self):
+        if os.name == 'nt':
+            try:
+                self.socket.setsockopt(
+                    socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1
+                )
+            except (AttributeError, OSError):
+                # Option unavailable on this build — fall through; the
+                # documented pre-launch port sweep is the backstop.
+                pass
+        super().server_bind()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('port', nargs='?', default='8700')
@@ -504,7 +549,21 @@ if __name__ == '__main__':
         daemon=True,
     ).start()
 
-    with http.server.ThreadingHTTPServer(('', port), ConceptBridgeHandler) as httpd:
+    try:
+        httpd = ConceptBridgeServer(('', port), ConceptBridgeHandler)
+    except OSError as exc:
+        # Exclusive bind (Windows) or TIME_WAIT (POSIX) — either way the port
+        # is already taken. Fail loudly so the launcher's single-listener
+        # assertion / 200-gate catches it, instead of silently double-binding
+        # and producing the flickering-connection symptom.
+        sys.stderr.write(
+            f"[concept-server] cannot bind port {port}: {exc}\n"
+            f"[concept-server] another instance already owns it — sweep the "
+            f"port first (see bridge-server.md § port sweep), then relaunch.\n"
+        )
+        sys.exit(1)
+
+    with httpd:
         print(f"Concept bridge server on http://localhost:{port}/")
         print(f"Serving: {os.getcwd()}")
         if html_path:

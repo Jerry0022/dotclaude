@@ -378,10 +378,11 @@ and `deep-knowledge/templates.md` § Iteration Tabs for the reference HTML.
 
 ### Post-Generation Validation (mandatory gate)
 
-After writing the HTML file, grep it for the 35 mandatory interactive
+After writing the HTML file, grep it for the 38 mandatory interactive
 patterns (heartbeat, panel states, iteration tabs, section TOC, reload
 polling, generic form-collection catch-all scoped to the active
-iteration, post-submit content dimmer, etc.).
+iteration, post-submit content dimmer, persistent status channel + ship
+CTA, etc.).
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. See `deep-knowledge/validation-gate.md` for the full
 pattern list and common failure modes.
@@ -690,13 +691,48 @@ interruption is a hard `gh` failure that needs the user's eyes.
 4. Proceed to Step 6 — Completion Card. The disposition recorded here
    drives the cleanup branch in Step 6a.
 
+**`action: "ship"` ("🚀 Shippen" button — only on final report):**
+
+**Zero-prompt invariant.** The user committed by clicking Shippen — an
+explicit authorisation for a real, outward-facing release, exactly like the
+"Mit Feedback implementieren" button authorises real code changes. Do NOT ask
+a follow-up question; the payload plus the final-report context are
+sufficient. The ONLY justified interruption is a hard ship-pipeline failure
+that needs the user's eyes (merge conflict, failing build/preflight gate) —
+surface that verbatim and stop.
+
+1. Read the `disposition` sub-object from the payload (same shape as
+   dispose-concept) and store it for Step 6a. Do NOT apply cleanup yet.
+2. Run the full ship pipeline via the `devops-ship` skill (ship_preflight →
+   ship_build → ship_version_bump → ship_release → ship_cleanup). The button
+   click authorises the ship; it does NOT waive the gates `devops-ship`
+   already enforces. If a gate blocks, report the blocker to the user and
+   STOP — never fake a completion or force past a failing gate. (A force-push
+   to main/master still requires explicit user confirmation per the user's
+   own rules — the Shippen click does not stand in for that.)
+3. On a successful release, rewrite the live final-report section in place:
+   - Reveal the `[data-ship-state="done"]` hint and set the channel to the
+     shipped state, including the version (e.g. "Geshippt · v0.113.0").
+   - Add a one-line "Shipped" note (version + tag) to the Zusammenfassung.
+   Then POST `/reload`, and only AFTER that POST `/reset` with the captured
+   `_version` (reload-before-reset, same order as every other branch).
+4. Run Step 6a cleanup only (bridge shutdown + disposition from step 1). Do
+   **NOT** render a second concept completion card — `devops-ship` already
+   rendered its own ship card, which is the authoritative closing artefact
+   (rendering another here would be a duplicate summary). If the ship was
+   blocked at a gate in step 2, skip cleanup, leave the concept session open
+   so the user can retry, and report the blocker instead.
+
 **Critical invariant:** a submit with `action: "iterate"` MUST NEVER cause
 code or file changes outside of the concept HTML file itself. The user
 relies on that guarantee to explore ideas safely. `action: "create-issues"`
 only writes GitHub issues + the final-report HTML — no code/file changes
 in the project tree. `action: "dispose-concept"` only triggers Step 6
 cleanup — no code/file changes either, just disposition of the concept's
-own HTML / decisions JSON artefacts.
+own HTML / decisions JSON artefacts. `action: "ship"` is the one action that
+DOES reach outward — it runs the real release pipeline — and that is exactly
+why it is gated behind its own explicit final-report button, never behind
+iterate/implement.
 ### 5c. Update the Page
 After processing, **append a new tab** to the same HTML file and signal
 the browser to reload. This is the ONLY update path — there is no
@@ -794,15 +830,17 @@ preservation) stays identical.
 
 **Verbatim copy directive (mandatory):**
 The final-report JS block — `updateCreateIssuesPanel`, `submitCreateIssues`,
-`collectDisposition`, `submitDisposeConcept`, plus the `change` listener on
+`collectDisposition`, `submitShip`, `submitDisposeConcept`, plus the
+`ship-btn` / `view-iterations-btn` wiring, the `change` listener on
 `section[data-open-questions] input[type="checkbox"]` and the
 `DOMContentLoaded` wiring — MUST be copied verbatim from
-`deep-knowledge/templates.md` § Final-report append (the block starting at
-the comment `// --- Final-report "Issues erstellen" action ---`). Do NOT
-inline a simplified `updateCreateIssuesPanel` or omit the event-listener
-wiring; either omission is the regression that issue #165 reports.
+`deep-knowledge/templates.md` (the block starting at the comment
+`// --- Final-report "Issues erstellen" action ---` through the
+`// --- Final-report "Shippen" action ---` block). Do NOT
+inline a simplified `updateCreateIssuesPanel`, drop `submitShip`, or omit the
+event-listener wiring; any omission leaves a visible-but-inert button.
 After writing, the post-generation validation gate
-(`deep-knowledge/validation-gate.md` Phase 1) MUST find patterns 28–35
+(`deep-knowledge/validation-gate.md` Phase 1) MUST find patterns 28–38
 in the generated file.
 
 **Open questions / TODOs section — when to include:**
@@ -829,6 +867,9 @@ Return to Step 4 (monitor for next submission). The loop continues until:
 
 If the active section is the final report, the submissions Claude expects
 are:
+- `action: "ship"` — fired by the persistent status channel's primary
+  "🚀 Shippen" button. Runs the real release pipeline (Step 5b · ship).
+  Carries the current disposition for Step 6a cleanup.
 - `action: "create-issues"` — fired by the "Issues erstellen" button when
   open questions / TODOs are present and at least one is selected.
 - `action: "dispose-concept"` — fired by the always-visible "Concept
