@@ -42,6 +42,7 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 ## Rules
 
 - Read `{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` before non-trivial implementation.
+- Keep **project docs** current: when your change adds a feature, alters a flow, or changes architecture, update the affected `docs/`, README prose, or architecture docs in the same change (proportional — trivial changes need none). See `{PLUGIN_ROOT}/deep-knowledge/documentation-maintenance.md`. Project docs only, not code comments (code-defaults.md still applies).
 - For mechanical integration boilerplate (client DTOs, schema → type conversion, repeated wrappers, >20 lines): read `{PLUGIN_ROOT}/deep-knowledge/local-llm-delegation.md` and delegate to `local_generate` when the gate is green.
 - Always handle API rate limits and timeouts
 - Implement fallbacks for model unavailability

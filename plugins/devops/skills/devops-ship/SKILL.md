@@ -222,6 +222,29 @@ If `success: false` → call `render_completion_card` with variant `ship-blocked
    - **other non-zero** → surface first line of stderr, continue to Step 3
 3. If codex-plugin-cc not installed → skip silently
 
+## Step 2.6 — Docs-Sync
+
+Reconcile living documentation against the **frozen shipped diff** before the
+version bump — so doc edits land in the same version-bump commit. This is the
+ship-time counterpart to the docs upkeep implementation agents already do.
+
+1. Determine what this ship actually changes — new feature, changed flow, new
+   subsystem, architecture/contract change, or removal. Use the diff since the
+   merge-base, not intentions.
+2. Apply the **proportional** doc action per
+   `${CLAUDE_PLUGIN_ROOT}/deep-knowledge/documentation-maintenance.md` § Trigger Matrix:
+   - trivial (typo / refactor / dep or version bump / pure bugfix) → no
+     living-doc change; note "no living-docs impact" and continue.
+   - new or changed behavior, flow, or architecture → update the affected living
+     docs (`docs/`, README prose, architecture/flow docs) in place; restructure
+     `docs/` only when the layout no longer fits (additive-first, never delete
+     dated specs/concepts).
+3. Commit any doc edits on the current branch so they ship with this version.
+
+**Non-blocking:** never abort a ship over docs. Unavoidable doc debt proceeds —
+record the gap in the CHANGELOG entry (Step 3). The mechanical roster markers
+(counts, rosters) are handled separately by `ship_build` in Step 2.
+
 ## Step 3 — Version Bump
 
 **If `intermediate: true` (from Step 1)**: skip this step entirely. Version bumps only happen on final ship to main.

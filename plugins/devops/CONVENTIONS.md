@@ -260,6 +260,16 @@ Three layers, three failure windows covered: generate (can't drift) →
 preflight verify (catches the un-generated tables) → session nudge (catches
 "forgot to refresh entirely").
 
+### Living documentation (prose, flows, structure)
+
+The markers above cover **machine facts only**. The **content** layer — prose,
+flows, folder structure, curated descriptions — is kept current by people and
+agents, not generators: implementation agents update affected docs as part of
+their change, and `/devops-ship` Step 2.6 (Docs-Sync) reconciles living docs
+against the shipped diff before the version bump. Proportional (trivial changes
+need none), non-blocking, and it never rewrites dated specs/concepts. Rules and
+the trigger matrix: `deep-knowledge/documentation-maintenance.md`.
+
 ## General Rules
 
 - All code is JavaScript (Node.js), no Bash scripts

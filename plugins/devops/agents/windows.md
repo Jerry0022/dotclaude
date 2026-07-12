@@ -42,6 +42,7 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 
 ## Rules
 
+- Keep **project docs** current: when your change adds a feature, alters a flow, or changes architecture, update the affected `docs/`, README prose, or architecture docs in the same change (proportional — trivial changes need none). See `{PLUGIN_ROOT}/deep-knowledge/documentation-maintenance.md`. Project docs only, not code comments (code-defaults.md still applies).
 - Always handle Windows-specific paths (backslashes, %APPDATA%, etc.)
 - Test with both admin and non-admin privileges in mind
 - Installer changes need manual testing (can't be automated in CI)
