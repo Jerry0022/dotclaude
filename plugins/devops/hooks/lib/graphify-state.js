@@ -76,23 +76,57 @@ function readGlobalState() {
 }
 
 /**
+ * Read a consent record file distinguishing TRULY ABSENT (no such file) from
+ * PRESENT-but-unparseable/invalid (file exists but JSON.parse fails, or the
+ * parsed value is not an object). This distinction matters for `isEnabled`:
+ * a corrupted opt-out record must not silently re-enable the feature (R5) —
+ * corruption is the one failure mode that must fail CLOSED (declined), while
+ * a genuinely absent record is the normal default-on case and must fail OPEN
+ * (enabled). Never throws.
+ * @returns {{present: boolean, obj: object|null}}
+ */
+function readRecordDistinguishingAbsence(filePath) {
+  let raw;
+  try {
+    raw = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return { present: false, obj: null }; // truly absent (or unreadable — treat as absent)
+  }
+  try {
+    const obj = JSON.parse(raw);
+    return { present: true, obj: obj && typeof obj === 'object' ? obj : null };
+  } catch {
+    return { present: true, obj: null }; // present but unparseable
+  }
+}
+
+/**
  * True iff graphify enforcement is enabled for `cwd` — the DEFAULT-ON gate.
  * Enabled UNLESS an explicit opt-out (`consent:false`) exists in either the
  * per-project record (.claude/graphify.json) or the global, machine-wide
  * record (~/.claude/graphify.json) — either one being `consent:false` disables
  * it. "No record at all" (project AND global) counts as ENABLED — graphify is
  * key-less, opt-out, and auto-installing by default (see ss.graphify.js).
- * Never throws.
+ * A record that IS PRESENT but unparseable/corrupt (e.g. caught mid atomic
+ * rewrite, or disk corruption) is treated as DECLINED, not enabled — the safe,
+ * sticky direction for the one signal that must never silently flip back on
+ * (R5). Never throws.
  */
 function isEnabled(cwd) {
   try {
-    const project = readState(cwd);
-    if (project && project.consent === false) return false;
-    const global = readGlobalState();
-    if (global && global.consent === false) return false;
+    const project = readRecordDistinguishingAbsence(consentPath(cwd));
+    if (project.present) {
+      if (project.obj === null) return false; // present but corrupt → treat as opted-out
+      if (project.obj.consent === false) return false;
+    }
+    const global = readRecordDistinguishingAbsence(globalConsentPath());
+    if (global.present) {
+      if (global.obj === null) return false; // present but corrupt → treat as opted-out
+      if (global.obj.consent === false) return false;
+    }
     return true;
   } catch {
-    return true; // fail-open — never let a read error disable the feature
+    return true; // fail-open — never let an unexpected read error disable the feature
   }
 }
 

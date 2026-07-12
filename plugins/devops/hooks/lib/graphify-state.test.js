@@ -151,15 +151,27 @@ describe("isEnabled / isDeclinedAnywhere — default-on opt-out gate", () => {
     expect(isEnabled(dir)).toBe(true);
   });
 
-  test("fail-open: malformed project JSON → still enabled", () => {
+  test("R5: present-but-unparseable PROJECT record → treated as declined (fails CLOSED, not open)", () => {
     fs.writeFileSync(consentPath(dir), "{ not json");
-    expect(isEnabled(dir)).toBe(true);
+    // readState/readGlobalState stay null on corruption (low-level, unchanged) —
+    // it is isEnabled's job to distinguish absent from corrupt-but-present.
+    expect(readState(dir)).toBeNull();
+    expect(isEnabled(dir)).toBe(false);
+    expect(isDeclinedAnywhere(dir)).toBe(true);
   });
 
-  test("fail-open: malformed global JSON → readGlobalState null, isEnabled still true", () => {
+  test("R5: present-but-unparseable GLOBAL record → treated as declined (fails CLOSED, not open)", () => {
     fs.writeFileSync(globalConsentPath(), "{ not json");
     expect(readGlobalState()).toBeNull();
+    expect(isEnabled(dir)).toBe(false);
+    expect(isDeclinedAnywhere(dir)).toBe(true);
+  });
+
+  test("R5: truly-absent project AND global records → still enabled (default-on unaffected)", () => {
+    expect(fs.existsSync(consentPath(dir))).toBe(false);
+    expect(fs.existsSync(globalConsentPath())).toBe(false);
     expect(isEnabled(dir)).toBe(true);
+    expect(isDeclinedAnywhere(dir)).toBe(false);
   });
 });
 

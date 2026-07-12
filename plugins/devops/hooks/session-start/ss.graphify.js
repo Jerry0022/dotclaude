@@ -23,10 +23,14 @@
  *         - if graphify is not installed: kick a best-effort background
  *           `uv tool install graphifyy` (windowless, fail-open) and exit —
  *           the graph builds next session once the CLI lands.
- *         - if graphify IS installed: once/24h remove graphify's own git
- *           hooks (`graphify hook uninstall` — those pop a console window on
+ *         - if graphify IS installed: ONE-TIME (per project, persistent —
+ *           never re-run) legacy cleanup of graphify's own git hooks
+ *           (`graphify hook uninstall` — those pop a console window on
  *           Windows on every commit; devops owns freshness instead via this
  *           SessionStart refresh + the PreToolUse self-heal, both windowless).
+ *           This is NOT a recurring fight: new projects never get graphify's
+ *           git hooks installed by devops in the first place, so the removal
+ *           only ever needs to happen once per project.
  *           Then, if the graph is missing/stale/invalid (once/day JSON.parse
  *           validity check), kick off a background `graphify update .`
  *           (AST-only, free, key-less) via a sentinel-tracked spawn. Keeps the
@@ -115,8 +119,8 @@ function bg(cmd, args) {
   } catch { /* toolchain absent */ }
 }
 
-if (gstate.isDeclined(cwd)) {
-  process.exit(0); // explicit opt-out (project or global) — never nag
+if (gstate.isDeclinedAnywhere(cwd)) {
+  process.exit(0); // explicit opt-out (project OR global) — never nag
 }
 
 // Enabled — including the common case of NO record at all (default-on).
@@ -135,6 +139,9 @@ if (gstate.isUndecided(cwd) && runOnce('ss-graphify-auto-enabled', cwdKey, { coo
 if (!graphifyInstalled()) {
   // Best-effort, windowless background install — fail-open if `uv` is absent.
   // Never blocks: the graph builds next session once the CLI lands on PATH.
+  // NOTE: `graphifyy` is intentionally unpinned (no version pin) — it is a
+  // first-party CLI under active development; disclosure of this tradeoff is
+  // handled separately (out of scope for this fix pass).
   if (runOnce('ss-graphify-install', cwdKey, { cooldownMs: 24 * 60 * 60 * 1000 })) {
     bg('uv', ['tool', 'install', 'graphifyy']);
     process.stdout.write(
@@ -145,12 +152,20 @@ if (!graphifyInstalled()) {
   process.exit(0);
 }
 
-// Installed. Once/24h remove graphify's OWN git hooks — those fire a Python
-// rebuild on every commit/checkout and pop a console window on Windows.
-// devops owns freshness instead via this SessionStart refresh (below) and the
-// PreToolUse self-heal (pre.tokens.guard.js), both windowless. Idempotent and
-// guarded/fail-open: a missing toolchain here never degrades session start.
-if (isGitRepo() && runOnce('ss-graphify-hookuninstall', cwdKey, { cooldownMs: 24 * 60 * 60 * 1000 })) {
+// Installed. ONE-TIME (per project, not per-day) legacy cleanup of graphify's
+// OWN git hooks — those fire a Python rebuild on every commit/checkout and pop
+// a console window on Windows. devops owns freshness instead via this
+// SessionStart refresh (below) and the PreToolUse self-heal
+// (pre.tokens.guard.js), both windowless. This is a ONE-TIME sweep, not a
+// perpetual fight: new projects are never given graphify's git hooks in the
+// first place (devops never installs them), so once removed here there is
+// nothing left to reintroduce them short of the user deliberately running
+// `graphify hook install` again — which we must not then immediately undo.
+// runOnce with no cooldownMs is checked FIRST (persistent per-project marker,
+// no re-entry ever) so the ~4s `isGitRepo()` git spawn only runs the one time
+// the uninstall is actually due — it must never gate every session (R7).
+// Guarded/fail-open: a missing toolchain here never degrades session start.
+if (runOnce('ss-graphify-hookuninstall', cwdKey) && isGitRepo()) {
   bg('graphify', ['hook', 'uninstall']);
 }
 
