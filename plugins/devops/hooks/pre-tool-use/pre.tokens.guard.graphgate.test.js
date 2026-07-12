@@ -76,10 +76,11 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     cleanup(dir);
   });
 
-  test("no consent → graph gate never fires", () => {
+  test("no consent record (default-on, opt-out model) → graph gate STILL fires", () => {
     const dir = project({ consent: null, graph: "fresh" });
     const r = runGrep(dir, "s-noconsent", "gamma");
-    expect(r.stderr).not.toContain("GRAPHIFY GATE");
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("GRAPHIFY GATE");
     cleanup(dir);
   });
 
@@ -119,40 +120,6 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     const r = runGrep(dir, "s-heal", "omega");
     expect(r.stderr).not.toContain("GRAPHIFY GATE"); // never block beyond tolerance
     expect(fs.existsSync(refreshFlagPath(dir))).toBe(true); // background refresh kicked
-    cleanup(dir);
-  });
-});
-
-describe("pre.tokens.guard — value-moment graphify offer (undecided projects)", () => {
-  function gitProject() {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "graphoffer-"));
-    fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
-    fs.writeFileSync(
-      path.join(dir, ".claude", "settings.json"),
-      JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } })
-    );
-    fs.writeFileSync(path.join(dir, "a.js"), "const x = 1;");
-    spawnSync("git", ["init", "-q"], { cwd: dir });
-    return dir;
-  }
-
-  test("undecided + no graph + git → broad search block carries the offer, throttled", () => {
-    const dir = gitProject();
-    const first = runGrep(dir, "s-offer", "needle");
-    expect(first.status).toBe(2); // still blocked by the token guard
-    expect(first.stderr).toContain("[graphify]");
-    expect(first.stderr).toContain("AskUserQuestion");
-    // Weekly throttle: a second broad search this week does NOT re-offer.
-    const second = runGrep(dir, "s-offer", "haystack");
-    expect(second.stderr).not.toContain("[graphify]");
-    cleanup(dir);
-  });
-
-  test("declined project → no offer", () => {
-    const dir = gitProject();
-    fs.writeFileSync(path.join(dir, ".claude", "graphify.json"), JSON.stringify({ consent: false }));
-    const r = runGrep(dir, "s-declined-offer", "needle");
-    expect(r.stderr).not.toContain("[graphify]");
     cleanup(dir);
   });
 });

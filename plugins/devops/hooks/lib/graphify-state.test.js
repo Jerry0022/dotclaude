@@ -17,6 +17,10 @@ import {
   bgWithSentinel,
   readSentinel,
   clearSentinel,
+  isEnabled,
+  isDeclinedAnywhere,
+  globalConsentPath,
+  readGlobalState,
 } from "./graphify-state.js";
 
 function tmp() {
@@ -79,6 +83,83 @@ describe("isUndecided — offer eligibility", () => {
   test("consent:false → decided (not undecided)", () => {
     fs.writeFileSync(consentPath(dir), JSON.stringify({ consent: false }));
     expect(isUndecided(dir)).toBe(false);
+  });
+});
+
+describe("isEnabled / isDeclinedAnywhere — default-on opt-out gate", () => {
+  let dir; // project dir
+  let homeDir; // faked global home (~/.claude/graphify.json)
+  let origHome;
+  let origUserProfile;
+
+  beforeEach(() => {
+    dir = tmp();
+    fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
+    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-home-"));
+    fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
+    origHome = process.env.HOME;
+    origUserProfile = process.env.USERPROFILE;
+    // os.homedir() honors HOME (POSIX) / USERPROFILE (win32) — override both so
+    // globalConsentPath() resolves under our disposable temp dir on either OS.
+    process.env.HOME = homeDir;
+    process.env.USERPROFILE = homeDir;
+  });
+
+  afterEach(() => {
+    if (origHome === undefined) delete process.env.HOME; else process.env.HOME = origHome;
+    if (origUserProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = origUserProfile;
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(homeDir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("globalConsentPath resolves under the (faked) home dir", () => {
+    expect(globalConsentPath()).toBe(path.join(homeDir, ".claude", "graphify.json"));
+  });
+
+  test("no project record, no global record → enabled by default (opt-out model)", () => {
+    expect(readGlobalState()).toBeNull();
+    expect(isEnabled(dir)).toBe(true);
+    expect(isDeclinedAnywhere(dir)).toBe(false);
+  });
+
+  test("record present but no consent key → still enabled (no explicit opt-out)", () => {
+    fs.writeFileSync(consentPath(dir), JSON.stringify({ autoBuild: true }));
+    expect(isEnabled(dir)).toBe(true);
+  });
+
+  test("project consent:false → disabled", () => {
+    fs.writeFileSync(consentPath(dir), JSON.stringify({ consent: false }));
+    expect(isEnabled(dir)).toBe(false);
+    expect(isDeclinedAnywhere(dir)).toBe(true);
+  });
+
+  test("global consent:false (no project record) → disabled machine-wide", () => {
+    fs.writeFileSync(globalConsentPath(), JSON.stringify({ consent: false }));
+    expect(readGlobalState()).toEqual({ consent: false });
+    expect(isEnabled(dir)).toBe(false);
+    expect(isDeclinedAnywhere(dir)).toBe(true);
+  });
+
+  test("project consent:true + global consent:false → still disabled (either opt-out wins)", () => {
+    fs.writeFileSync(consentPath(dir), JSON.stringify({ consent: true }));
+    fs.writeFileSync(globalConsentPath(), JSON.stringify({ consent: false }));
+    expect(isEnabled(dir)).toBe(false);
+  });
+
+  test("project consent:true, no global opt-out → enabled", () => {
+    fs.writeFileSync(consentPath(dir), JSON.stringify({ consent: true }));
+    expect(isEnabled(dir)).toBe(true);
+  });
+
+  test("fail-open: malformed project JSON → still enabled", () => {
+    fs.writeFileSync(consentPath(dir), "{ not json");
+    expect(isEnabled(dir)).toBe(true);
+  });
+
+  test("fail-open: malformed global JSON → readGlobalState null, isEnabled still true", () => {
+    fs.writeFileSync(globalConsentPath(), "{ not json");
+    expect(readGlobalState()).toBeNull();
+    expect(isEnabled(dir)).toBe(true);
   });
 });
 
