@@ -1,6 +1,6 @@
 ---
 name: devops-autonomous
-version: 0.4.1
+version: 0.4.2
 description: >-
   Fully autonomous agent orchestration for when the user is away from the PC.
   Runs agents without supervision (implementation, desktop interaction, live
@@ -156,7 +156,8 @@ If ambiguous, ask ONE clarifying question — time is limited.
 ## Step 2 — Mode & Preference Questions
 
 Ask via `AskUserQuestion` — three sequential questions (a fourth, Q4 Auto-Resume,
-follows conditionally when shutdown is declined). **Option order is fixed** as listed
+follows **only when shutdown is declined in Q3** — never after a shutdown choice; see
+the HARD GATE after Q3). **Option order is fixed** as listed
 below (option 1 first, option 2 second). Never shuffle. Mark the recommended option
 with "(empfohlen)" in its label.
 
@@ -196,11 +197,15 @@ In `analyze` mode, desktop is only used for visual inspection (screenshots), nev
 
 Save the choice as `$SHUTDOWN` (`yes` if option 2, `no` if option 1).
 
-**Question 4 — Auto-Resume (ONLY ask when Q3 = "Nein, nur Bericht"):**
+> **HARD GATE — evaluate `$SHUTDOWN` before touching Q4.**
+> If `$SHUTDOWN=yes`: set `$AUTO_RESUME=no`, do **NOT** render Question 4, and go
+> straight to Step 3. A shutdown PC has nothing to resume, so asking is nonsensical.
+> Only if `$SHUTDOWN=no` do you continue to Q4 below. There is no path on which the
+> resume question follows a shutdown choice.
 
-A shutdown PC has nothing to resume, so this question is **skipped entirely when
-`$SHUTDOWN=yes`** — set `$AUTO_RESUME=no` and move on. Ask it only when the PC stays
-on:
+**Question 4 — Auto-Resume (ONLY reached when `$SHUTDOWN=no`; see HARD GATE above):**
+
+Ask it only when the PC stays on:
 
 > header: "Auto-Resume"
 > question: "Falls das 5h-Token-Limit zwischendurch hart greift, bleiben Worktrees mitten in der Arbeit stehen. Soll ich nach 5h (Reset des Token-Fensters) automatisch alle aktiven Claude-Worktrees mit »weiter« anstoßen?"
