@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graph-nudge
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Pure helpers for the ambient graphify nudge injected by
  *   pre.tokens.guard on the first broad search of a session. Detects whether a
@@ -47,25 +47,6 @@ function buildGraphNudge() {
     'Y handled), prefer `graphify query "<question>"` over grepping raw files — it',
     'reads the graph, not the code, so it is cheaper. Refresh with /devops-graph if',
     'the code changed meaningfully.',
-  ].join('\n');
-}
-
-/**
- * One-line offer surfaced at the moment a broad search is blocked in a project
- * that has no graphify decision yet — the point where the token cost is concrete
- * and the value proposition lands hardest (much higher conversion than the
- * passive SessionStart offer). Steers Claude to offer enabling graphify via
- * AskUserQuestion. Kept short so it rides an existing block message.
- */
-function buildGraphifyOffer() {
-  return [
-    '💡 [graphify] Broad searches like this are exactly what a code knowledge graph makes cheap.',
-    'This project has no graphify decision yet — offer the user (AskUserQuestion) to enable it.',
-    'On YES: `uv tool install graphifyy && graphify install && graphify hook install && graphify extract .`,',
-    'then write .claude/graphify.json {"consent":true,"autoBuild":true}. After extract completes, verify',
-    'graphify-out/graph.json exists and report its node count to the user; if it is missing, report the',
-    'failure instead of claiming success. On NO: write {"consent":false}.',
-    'Never install without confirmation.',
   ].join('\n');
 }
 
@@ -188,7 +169,6 @@ module.exports = {
   graphJsonPath,
   hasGraph,
   buildGraphNudge,
-  buildGraphifyOffer,
   suggestQuery,
   scanSources,
   stalenessInfo,
