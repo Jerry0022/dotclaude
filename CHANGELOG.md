@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.115.0] — 2026-07-12
+
+### Changed
+
+- **graphify's knowledge graph is now default-on and opt-out in every devops project — it just works, needs no consent prompt, and stops popping console windows.** graphify was previously opt-in behind a per-project consent offer that in practice was almost never accepted (telemetry: hundreds of mentions, ~0 real `graphify query` runs), so the token-saving graph sat unused; meanwhile its git-hook-driven rebuild spawned a Python process on every commit and — amplified by the 10-minute git-sync cron — kept flashing a cmd window on Windows. Enforcement is now enabled unless a project **or** the machine-wide `~/.claude/graphify.json` carries `{"consent":false}` (`isEnabled`, default-on; a corrupt opt-out record now fails **closed** rather than silently re-enabling). If the `graphify` CLI is missing it installs best-effort in the background (`uv tool install graphifyy`, fail-open, one-time non-blocking disclosure — no interaction). The graph is built and kept fresh **key-lessly** via `graphify update .` (AST-only, no LLM key — the old `graphify extract . --update` demanded a key on doc-heavy repos and failed every session). devops no longer installs graphify's own git hooks: it removes them once (`graphify hook uninstall`, a one-time legacy cleanup, no more daily fight) and owns freshness itself windowlessly via SessionStart + the PreToolUse self-heal, with `windowsHide` on every spawn — killing the recurring console-window popups at the source. The global off-switch is now honored at SessionStart too, so a machine-wide opt-out truly suppresses install, hook-removal, and builds. Both consent offers (SessionStart + value-moment) are gone. (`ss.graphify` → 0.3.0, `graphify-state` → 0.3.0, `pre.tokens.guard` → 0.8.0, `graph-nudge` → 0.3.0; devops-graph skill rewritten; +8 new tests, 717 total.)
+
 ## [0.114.0] — 2026-07-12
 
 ### Fixed

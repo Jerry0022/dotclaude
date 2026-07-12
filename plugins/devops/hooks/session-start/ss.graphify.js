@@ -1,28 +1,44 @@
 #!/usr/bin/env node
 /**
  * @hook ss.graphify
- * @version 0.2.0
+ * @version 0.3.0
  * @event SessionStart
  * @plugin devops
  * @description graphify enforcement — install-check + auto-build wiring for the
- *   devops-graph feature. Behavior depends on the per-project consent record at
- *   .claude/graphify.json (written ONLY after the user opts in/out via the
- *   offer below — never silently):
- *     - consent:true  → ensure graphify is installed; (once/day) install its git
- *       hooks; if the graph is missing/stale/invalid (once/day JSON.parse
- *       validity check), kick off a background `graphify extract . --update`
- *       (AST-only, free) via a sentinel-tracked spawn. Keeps the graph fresh so
- *       the PreToolUse graphify-gate enforces against current data. If the
- *       PREVIOUS background build failed, surface it as one line before doing
- *       anything else (see reportBgFailureIfAny / hooks/lib/graphify-state's
- *       readSentinel — bg spawns are stdio:'ignore', so without this a failing
- *       build is otherwise invisible).
- *     - consent:false → stay silent (user declined).
- *     - no record     → (throttled, weekly) emit a one-time instruction for
- *       Claude to OFFER enabling graphify via AskUserQuestion, and record an
- *       `offer_shown` metrics event (see hooks/lib/graphify-metrics).
- *   Fail-open and non-blocking: every graphify invocation is detached/guarded so
- *   a missing Python toolchain never degrades session start.
+ *   devops-graph feature. DEFAULT-ON, opt-out, key-less, windowless: no
+ *   AskUserQuestion, no interaction, no per-project setup. Behavior depends on
+ *   gstate.isEnabled/isDeclined, which read (never write) the per-project
+ *   record at .claude/graphify.json and the global, machine-wide record at
+ *   ~/.claude/graphify.json:
+ *     - declined (either record has consent:false) → stay silent, exit 0.
+ *     - enabled (INCLUDING no record at all — the default) →
+ *         - surface any PREVIOUS background build failure as one line before
+ *           doing anything else (see reportBgFailureIfAny / hooks/lib/
+ *           graphify-state's readSentinel — bg spawns are stdio:'ignore', so
+ *           without this a failing build is otherwise invisible).
+ *         - if this is the first time graphify auto-enables for a project with
+ *           NO record (nothing to do with consent:true — that value is no
+ *           longer written by anyone), print a ONE-TIME (weekly-throttled)
+ *           transparency line so the user knows it's on and how to opt out.
+ *         - if graphify is not installed: kick a best-effort background
+ *           `uv tool install graphifyy` (windowless, fail-open) and exit —
+ *           the graph builds next session once the CLI lands.
+ *         - if graphify IS installed: ONE-TIME (per project, persistent —
+ *           never re-run) legacy cleanup of graphify's own git hooks
+ *           (`graphify hook uninstall` — those pop a console window on
+ *           Windows on every commit; devops owns freshness instead via this
+ *           SessionStart refresh + the PreToolUse self-heal, both windowless).
+ *           This is NOT a recurring fight: new projects never get graphify's
+ *           git hooks installed by devops in the first place, so the removal
+ *           only ever needs to happen once per project.
+ *           Then, if the graph is missing/stale/invalid (once/day JSON.parse
+ *           validity check), kick off a background `graphify update .`
+ *           (AST-only, free, key-less) via a sentinel-tracked spawn. Keeps the
+ *           graph fresh so the PreToolUse graphify-gate enforces against
+ *           current data.
+ *   Fail-open and non-blocking: every graphify invocation is detached/guarded
+ *   (windowless on Windows too) so a missing Python toolchain never degrades
+ *   session start.
  */
 
 require('../lib/plugin-guard');
@@ -33,7 +49,6 @@ const { spawn, execSync } = require('child_process');
 const { runOnce } = require('../lib/run-once');
 const gstate = require('../lib/graphify-state');
 const graphNudge = require('../lib/graph-nudge');
-const metrics = require('../lib/graphify-metrics');
 
 const cwd = process.cwd();
 const cwdKey = crypto.createHash('md5').update(cwd).digest('hex').slice(0, 12);
@@ -48,7 +63,7 @@ function reportBgFailureIfAny() {
   if (sentinel && sentinel.status === 'fail') {
     const codeInfo = sentinel.code == null ? '' : ` (exit ${sentinel.code})`;
     process.stdout.write(
-      `⚠ graphify background build failed${codeInfo} — run \`graphify extract . --update\` manually or /devops-graph\n`
+      `⚠ graphify background build failed${codeInfo} — run \`graphify update .\` manually or /devops-graph\n`
     );
     gstate.clearSentinel(cwd); // one report per failure, not every session
   }
@@ -93,60 +108,75 @@ function bg(cmd, args) {
   // Detached + unref so a 5-10s graphify build never blocks session start.
   // `shell` on Windows so a `graphify.cmd`/`.bat` shim (what `uv tool install`
   // produces) actually runs — a bare spawn cannot exec a .cmd and would
-  // silently no-op, leaving the graph un-refreshed. Guarded: a missing
-  // toolchain throws → no-op.
+  // silently no-op, leaving the graph un-refreshed. `windowsHide` suppresses
+  // the console window that `shell:true` would otherwise pop on Windows for
+  // every invocation (matches bgWithSentinel in hooks/lib/graphify-state.js).
+  // Guarded: a missing toolchain throws → no-op.
   try {
     spawn(cmd, args, {
-      cwd, detached: true, stdio: 'ignore', shell: process.platform === 'win32',
+      cwd, detached: true, stdio: 'ignore', shell: process.platform === 'win32', windowsHide: true,
     }).unref();
   } catch { /* toolchain absent */ }
 }
 
-const state = gstate.readState(cwd);
+if (gstate.isDeclinedAnywhere(cwd)) {
+  process.exit(0); // explicit opt-out (project OR global) — never nag
+}
 
-if (state && state.consent === true) {
-  reportBgFailureIfAny();
-  // Opted in. Keep the graph fresh so the gate enforces against current code.
-  if (!graphifyInstalled()) {
-    if (runOnce('ss-graphify-reinstall', cwdKey, { cooldownMs: 24 * 60 * 60 * 1000 })) {
-      process.stdout.write(
-        '[graphify] Enabled for this project but the `graphify` CLI is not on PATH. ' +
-        'Offer the user to reinstall (`uv tool install graphifyy && graphify install`), ' +
-        'or to disable graphify here (set .claude/graphify.json {"consent":false}).\n'
-      );
-    }
-    process.exit(0);
-  }
-  if (isGitRepo() && runOnce('ss-graphify-hookinstall', cwdKey, { cooldownMs: 24 * 60 * 60 * 1000 })) {
-    bg('graphify', ['hook', 'install']); // idempotent git post-commit/checkout AST rebuild
-  }
-  // Once/24h deeper validity check (JSON.parse) beyond hasGraph()'s cheap size
-  // floor — a present-but-empty/corrupt graph.json must trigger a rebuild too.
-  const needsRebuild = !graphNudge.hasGraph(cwd)
-    || graphNudge.graphIsStale(cwd)
-    || (runOnce('ss-graphify-validate', cwdKey, { cooldownMs: 24 * 60 * 60 * 1000 }) && !graphLooksValid());
-  // Throttle the rebuild so repeated SessionStart re-entries (multiple agents /
-  // worktrees on the same cwd) cannot stack concurrent `graphify extract`.
-  if (needsRebuild && runOnce('ss-graphify-extract', cwdKey, { cooldownMs: 10 * 60 * 1000 })) {
-    gstate.bgWithSentinel('graphify', ['extract', '.', '--update'], cwd); // background, AST-only, free
+// Enabled — including the common case of NO record at all (default-on).
+reportBgFailureIfAny();
+
+// First time graphify auto-enables for a project with no record at all: a
+// one-time (weekly-throttled), non-blocking transparency line. Not an offer —
+// no interaction, nothing to confirm, just disclosure + the opt-out path.
+if (gstate.isUndecided(cwd) && runOnce('ss-graphify-auto-enabled', cwdKey, { cooldownMs: 7 * 24 * 60 * 60 * 1000 })) {
+  process.stdout.write(
+    '[graphify] Auto-enabled for this project (knowledge-graph, token-saver). ' +
+    'Disable: .claude/graphify.json {"consent":false}.\n'
+  );
+}
+
+if (!graphifyInstalled()) {
+  // Best-effort, windowless background install — fail-open if `uv` is absent.
+  // Never blocks: the graph builds next session once the CLI lands on PATH.
+  // NOTE: `graphifyy` is intentionally unpinned (no version pin) — it is a
+  // first-party CLI under active development; disclosure of this tradeoff is
+  // handled separately (out of scope for this fix pass).
+  if (runOnce('ss-graphify-install', cwdKey, { cooldownMs: 24 * 60 * 60 * 1000 })) {
+    bg('uv', ['tool', 'install', 'graphifyy']);
+    process.stdout.write(
+      '[graphify] Not installed yet — installing in the background (`uv tool install graphifyy`). ' +
+      'The knowledge graph will build automatically once installed. Disable: .claude/graphify.json {"consent":false}.\n'
+    );
   }
   process.exit(0);
 }
 
-if (state && state.consent === false) {
-  process.exit(0); // declined — never nag
+// Installed. ONE-TIME (per project, not per-day) legacy cleanup of graphify's
+// OWN git hooks — those fire a Python rebuild on every commit/checkout and pop
+// a console window on Windows. devops owns freshness instead via this
+// SessionStart refresh (below) and the PreToolUse self-heal
+// (pre.tokens.guard.js), both windowless. This is a ONE-TIME sweep, not a
+// perpetual fight: new projects are never given graphify's git hooks in the
+// first place (devops never installs them), so once removed here there is
+// nothing left to reintroduce them short of the user deliberately running
+// `graphify hook install` again — which we must not then immediately undo.
+// runOnce with no cooldownMs is checked FIRST (persistent per-project marker,
+// no re-entry ever) so the ~4s `isGitRepo()` git spawn only runs the one time
+// the uninstall is actually due — it must never gate every session (R7).
+// Guarded/fail-open: a missing toolchain here never degrades session start.
+if (runOnce('ss-graphify-hookuninstall', cwdKey) && isGitRepo()) {
+  bg('graphify', ['hook', 'uninstall']);
 }
 
-// No decision yet → offer ONCE (re-offer at most weekly if ignored).
-// Only in real git projects — never nag in scratch/throwaway folders.
-if (isGitRepo() && runOnce('ss-graphify-offer', cwdKey, { cooldownMs: 7 * 24 * 60 * 60 * 1000 })) {
-  metrics.record('offer_shown', { source: 'session_start' }, { cwd });
-  process.stdout.write(
-    '[graphify] No knowledge-graph config for this project. Offer the user (AskUserQuestion) to enable graphify — ' +
-    'it builds a queryable code graph so broad searches use the graph instead of grepping (token saver), kept fresh via git hooks. ' +
-    'On YES: run `uv tool install graphifyy && graphify install && graphify hook install && graphify extract .`, then write .claude/graphify.json {"consent":true,"autoBuild":true}. ' +
-    'After extract completes, verify graphify-out/graph.json exists and report its node count to the user; if missing, report the failure instead of claiming success. ' +
-    'On NO: write .claude/graphify.json {"consent":false}. Always confirm before installing — never silently.\n'
-  );
+// Once/24h deeper validity check (JSON.parse) beyond hasGraph()'s cheap size
+// floor — a present-but-empty/corrupt graph.json must trigger a rebuild too.
+const needsRebuild = !graphNudge.hasGraph(cwd)
+  || graphNudge.graphIsStale(cwd)
+  || (runOnce('ss-graphify-validate', cwdKey, { cooldownMs: 24 * 60 * 60 * 1000 }) && !graphLooksValid());
+// Throttle the rebuild so repeated SessionStart re-entries (multiple agents /
+// worktrees on the same cwd) cannot stack concurrent `graphify update` runs.
+if (needsRebuild && runOnce('ss-graphify-update', cwdKey, { cooldownMs: 10 * 60 * 1000 })) {
+  gstate.bgWithSentinel('graphify', ['update', '.'], cwd); // background, key-less, AST-only, free
 }
 process.exit(0);

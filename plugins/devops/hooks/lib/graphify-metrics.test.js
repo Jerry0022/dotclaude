@@ -44,7 +44,10 @@ describe("graphify-metrics — event telemetry", () => {
 
   test("creates parent directories on demand", () => {
     expect(fs.existsSync(path.dirname(file))).toBe(false);
-    record("offer_shown", { source: "session_start" }, { path: file });
+    // Generic lib-level event name — the hooks themselves no longer emit
+    // `offer_shown` (the value-moment offer was removed), but record() is a
+    // generic sink that accepts any event name.
+    record("self_heal_kicked", { source: "session_start" }, { path: file });
     expect(fs.existsSync(file)).toBe(true);
   });
 

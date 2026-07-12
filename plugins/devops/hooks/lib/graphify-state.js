@@ -1,16 +1,19 @@
 'use strict';
 /**
  * @lib graphify-state
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
- *   layer (devops-graph). The consent record lives at `.claude/graphify.json`
- *   in the consumer project and is written ONLY after the user explicitly opts
- *   in (consent:true) or out (consent:false) — hooks never write it silently.
- *   Also tracks a per-session "graphify query already ran" flag so the
- *   PreToolUse hard-gate can relent once Claude has consulted the graph, and
- *   provides `bgWithSentinel`/`readSentinel` — a shared detached-spawn wrapper
- *   that records background `graphify extract`/`hook install` outcomes to a
+ *   layer (devops-graph). Default-on / opt-out model: graphify enforcement is
+ *   ENABLED unless an explicit `consent:false` record exists, checked at
+ *   `.claude/graphify.json` in the consumer project (`readState`/`isDeclined`)
+ *   OR the global, machine-wide `~/.claude/graphify.json` (`readGlobalState`)
+ *   — either one being `consent:false` disables it (`isEnabled`). Hooks never
+ *   WRITE either record — the user opts out manually. Also tracks a
+ *   per-session "graphify query already ran" flag so the PreToolUse hard-gate
+ *   can relent once Claude has consulted the graph, and provides
+ *   `bgWithSentinel`/`readSentinel` — a shared detached-spawn wrapper that
+ *   records background `graphify update`/`hook uninstall` outcomes to a
  *   per-project sentinel file so a silent failure (stdio:'ignore') can be
  *   surfaced at the next SessionStart instead of vanishing.
  */
@@ -56,6 +59,84 @@ function isDeclined(cwd) {
  */
 function isUndecided(cwd) {
   return readState(cwd) === null;
+}
+
+function globalConsentPath() {
+  return path.join(os.homedir(), '.claude', 'graphify.json');
+}
+
+/** Parsed GLOBAL (machine-wide) consent record, or null if absent/unreadable. Never throws. */
+function readGlobalState() {
+  try {
+    const obj = JSON.parse(fs.readFileSync(globalConsentPath(), 'utf8'));
+    return obj && typeof obj === 'object' ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read a consent record file distinguishing TRULY ABSENT (no such file) from
+ * PRESENT-but-unparseable/invalid (file exists but JSON.parse fails, or the
+ * parsed value is not an object). This distinction matters for `isEnabled`:
+ * a corrupted opt-out record must not silently re-enable the feature (R5) —
+ * corruption is the one failure mode that must fail CLOSED (declined), while
+ * a genuinely absent record is the normal default-on case and must fail OPEN
+ * (enabled). Never throws.
+ * @returns {{present: boolean, obj: object|null}}
+ */
+function readRecordDistinguishingAbsence(filePath) {
+  let raw;
+  try {
+    raw = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return { present: false, obj: null }; // truly absent (or unreadable — treat as absent)
+  }
+  try {
+    const obj = JSON.parse(raw);
+    return { present: true, obj: obj && typeof obj === 'object' ? obj : null };
+  } catch {
+    return { present: true, obj: null }; // present but unparseable
+  }
+}
+
+/**
+ * True iff graphify enforcement is enabled for `cwd` — the DEFAULT-ON gate.
+ * Enabled UNLESS an explicit opt-out (`consent:false`) exists in either the
+ * per-project record (.claude/graphify.json) or the global, machine-wide
+ * record (~/.claude/graphify.json) — either one being `consent:false` disables
+ * it. "No record at all" (project AND global) counts as ENABLED — graphify is
+ * key-less, opt-out, and auto-installing by default (see ss.graphify.js).
+ * A record that IS PRESENT but unparseable/corrupt (e.g. caught mid atomic
+ * rewrite, or disk corruption) is treated as DECLINED, not enabled — the safe,
+ * sticky direction for the one signal that must never silently flip back on
+ * (R5). Never throws.
+ */
+function isEnabled(cwd) {
+  try {
+    const project = readRecordDistinguishingAbsence(consentPath(cwd));
+    if (project.present) {
+      if (project.obj === null) return false; // present but corrupt → treat as opted-out
+      if (project.obj.consent === false) return false;
+    }
+    const global = readRecordDistinguishingAbsence(globalConsentPath());
+    if (global.present) {
+      if (global.obj === null) return false; // present but corrupt → treat as opted-out
+      if (global.obj.consent === false) return false;
+    }
+    return true;
+  } catch {
+    return true; // fail-open — never let an unexpected read error disable the feature
+  }
+}
+
+/**
+ * True iff the user has explicitly opted OUT for this project OR machine-wide
+ * (either record has `consent:false`). Distinct from `isDeclined(cwd)`, which
+ * only checks the per-project record.
+ */
+function isDeclinedAnywhere(cwd) {
+  return !isEnabled(cwd);
 }
 
 function refreshFlagPath(cwd) {
@@ -196,6 +277,10 @@ module.exports = {
   hasConsent,
   isDeclined,
   isUndecided,
+  globalConsentPath,
+  readGlobalState,
+  isEnabled,
+  isDeclinedAnywhere,
   refreshFlagPath,
   markRefresh,
   queryFlagPath,

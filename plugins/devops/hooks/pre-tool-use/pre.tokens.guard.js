@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.7.0
+ * @version 0.8.0
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
@@ -26,7 +26,6 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { execSync } = require('child_process');
 
 const cwd = process.cwd();
 const CONFIG_DIR = path.join(cwd, '.claude');
@@ -37,16 +36,6 @@ const CONFIG_PATH = path.join(CONFIG_DIR, 'token-config.json');
 // bg() helper — it wraps the same detached/stdio:'ignore' spawn shape but
 // also records ok/fail to a sentinel file so a silent failure (Gap #5) can
 // be surfaced at the next SessionStart instead of vanishing.
-
-function isGitRepo() {
-  try {
-    return execSync('git rev-parse --is-inside-work-tree', {
-      cwd, encoding: 'utf8', timeout: 4000, stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim() === 'true';
-  } catch {
-    return false;
-  }
-}
 
 const PLAN_DEFAULTS = require('../lib/plan-defaults');
 
@@ -204,9 +193,11 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
-  // ── graphify hard-gate (consented + graph within staleness tolerance) ────
-  // When the user has opted graphify in for this project AND a usable graph
-  // exists, force a broad raw-file search through the graph first. This is a
+  // ── graphify hard-gate (enabled + graph within staleness tolerance) ──────
+  // Graphify is default-ON (opt-out — see gstate.isEnabled): unless the user
+  // has explicitly disabled it (.claude/graphify.json or ~/.claude/graphify.json
+  // {"consent":false}), when a usable graph exists, force a broad raw-file
+  // search through the graph first. This is a
   // BOUNDED-tolerance gate, not a strict fresh/stale one: a graph that lags a
   // small number of files behind the working tree is still useful, so the
   // gate still enforces on it (with a disclosure line + a kicked background
@@ -231,7 +222,7 @@ process.stdin.on('end', () => {
       const gstate = require('../lib/graphify-state');
       const metrics = require('../lib/graphify-metrics');
       const sid = hook.session_id || hook.sessionId || 'nosid';
-      if (gstate.hasConsent(cwd) && graphNudge.hasGraph(cwd)) {
+      if (gstate.isEnabled(cwd) && graphNudge.hasGraph(cwd)) {
         const info = graphNudge.stalenessInfo(cwd);
         const withinTolerance = !info.truncated && info.newerCount <= GRAPHIFY_STALE_TOLERANCE;
         if (!withinTolerance) {
@@ -242,7 +233,7 @@ process.stdin.on('end', () => {
           // sentinel-tracked — see Gap #5) so the graph converges and the gate
           // can enforce on LATER searches this session. Never blocks.
           if (gstate.markRefresh(cwd, 2 * 60 * 1000)) {
-            gstate.bgWithSentinel('graphify', ['extract', '.', '--update'], cwd);
+            gstate.bgWithSentinel('graphify', ['update', '.'], cwd);
             // Infinity is JSON-null; -1 keeps "unbounded" distinguishable in the log.
             const newerCount = Number.isFinite(info.newerCount) ? info.newerCount : -1;
             metrics.record('self_heal_kicked', { newerCount, truncated: info.truncated }, { cwd, sid });
@@ -254,7 +245,7 @@ process.stdin.on('end', () => {
             // Within tolerance but still lagging by >0 files — enforce AND kick
             // a refresh in parallel so it converges toward newerCount 0.
             if (info.newerCount > 0 && gstate.markRefresh(cwd, 2 * 60 * 1000)) {
-              gstate.bgWithSentinel('graphify', ['extract', '.', '--update'], cwd);
+              gstate.bgWithSentinel('graphify', ['update', '.'], cwd);
               metrics.record('self_heal_kicked', { newerCount: info.newerCount, truncated: false }, { cwd, sid });
             }
             const suggestion = graphNudge.suggestQuery(toolInput.pattern);
@@ -377,25 +368,6 @@ process.stdin.on('end', () => {
     if (fs.existsSync(projectMap)) {
       console.error(`\nHint: Read .claude/project-map.md to find the right path first.`);
     }
-
-    // Value-moment graphify offer: a broad search just got blocked in a git
-    // project that has no graphify decision yet and no graph. This is where the
-    // token cost is concrete, so conversion is far higher than the passive
-    // SessionStart offer. Throttled once per week per project (shares nothing
-    // with the SessionStart offer key, so at most two low-cost offers/week).
-    try {
-      const gstate = require('../lib/graphify-state');
-      const graphNudge = require('../lib/graph-nudge');
-      if (gstate.isUndecided(cwd) && !graphNudge.hasGraph(cwd) && isGitRepo()) {
-        const { runOnce } = require('../lib/run-once');
-        const cwdKey = crypto.createHash('md5').update(cwd).digest('hex').slice(0, 12);
-        if (runOnce('graphify-block-offer', cwdKey, { cooldownMs: 7 * 24 * 60 * 60 * 1000 })) {
-          console.error('');
-          console.error(graphNudge.buildGraphifyOffer());
-          try { require('../lib/graphify-metrics').record('offer_shown', { source: 'value_moment' }, { cwd }); } catch {}
-        }
-      }
-    } catch { /* never let the offer break the block */ }
   }
 
   console.error(line);

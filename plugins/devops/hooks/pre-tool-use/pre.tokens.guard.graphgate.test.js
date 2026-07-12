@@ -12,6 +12,15 @@ const HOOK = path.join(__dirname, "pre.tokens.guard.js");
 const OLD = new Date(Date.now() - 60_000);
 const NOW = new Date();
 
+// Isolate the GLOBAL (~/.claude/graphify.json) consent record from whatever
+// happens to exist on the machine running this test — without this, isEnabled()
+// reads the real $HOME/graphify.json and a globally-opted-out dev machine makes
+// every "gate fires" assertion below flake. Same HOME/USERPROFILE-override
+// idiom as graphify-state.test.js. No graphify.json is written here, so the
+// global record resolves to "absent" (enabled) for all tests below by default.
+const HOME_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "graphgate-home-"));
+fs.mkdirSync(path.join(HOME_DIR, ".claude"), { recursive: true });
+
 // Build a temp project. graph:"fresh"|"stale"|"none", consent:true|false|null.
 function project({ consent, graph }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "graphgate-"));
@@ -45,11 +54,12 @@ function project({ consent, graph }) {
   return dir;
 }
 
-function runGrep(dir, sid, pattern) {
+function runGrep(dir, sid, pattern, homeDir = HOME_DIR) {
   const res = spawnSync(process.execPath, [HOOK], {
     cwd: dir,
     input: JSON.stringify({ tool_name: "Grep", tool_input: { pattern }, session_id: sid }),
     encoding: "utf8",
+    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
   });
   return { status: res.status, stderr: res.stderr || "" };
 }
@@ -76,10 +86,11 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     cleanup(dir);
   });
 
-  test("no consent → graph gate never fires", () => {
+  test("no consent record (default-on, opt-out model) → graph gate STILL fires", () => {
     const dir = project({ consent: null, graph: "fresh" });
     const r = runGrep(dir, "s-noconsent", "gamma");
-    expect(r.stderr).not.toContain("GRAPHIFY GATE");
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("GRAPHIFY GATE");
     cleanup(dir);
   });
 
@@ -108,6 +119,20 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     cleanup(dir);
   });
 
+  test("globally declined (~/.claude/graphify.json consent:false) → gate never fires, even with no project record", () => {
+    const dir = project({ consent: null, graph: "fresh" });
+    const declinedHome = fs.mkdtempSync(path.join(os.tmpdir(), "graphgate-home-declined-"));
+    fs.mkdirSync(path.join(declinedHome, ".claude"), { recursive: true });
+    fs.writeFileSync(
+      path.join(declinedHome, ".claude", "graphify.json"),
+      JSON.stringify({ consent: false })
+    );
+    const r = runGrep(dir, "s-global-declined", "eta", declinedHome);
+    expect(r.stderr).not.toContain("GRAPHIFY GATE");
+    cleanup(dir);
+    cleanup(declinedHome);
+  });
+
   test("stale graph BEYOND tolerance → self-heal refresh requested, not gated", () => {
     const dir = project({ consent: true, graph: "stale" });
     // Push well past GRAPHIFY_STALE_TOLERANCE (25) with more newer files.
@@ -119,40 +144,6 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     const r = runGrep(dir, "s-heal", "omega");
     expect(r.stderr).not.toContain("GRAPHIFY GATE"); // never block beyond tolerance
     expect(fs.existsSync(refreshFlagPath(dir))).toBe(true); // background refresh kicked
-    cleanup(dir);
-  });
-});
-
-describe("pre.tokens.guard — value-moment graphify offer (undecided projects)", () => {
-  function gitProject() {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "graphoffer-"));
-    fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
-    fs.writeFileSync(
-      path.join(dir, ".claude", "settings.json"),
-      JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } })
-    );
-    fs.writeFileSync(path.join(dir, "a.js"), "const x = 1;");
-    spawnSync("git", ["init", "-q"], { cwd: dir });
-    return dir;
-  }
-
-  test("undecided + no graph + git → broad search block carries the offer, throttled", () => {
-    const dir = gitProject();
-    const first = runGrep(dir, "s-offer", "needle");
-    expect(first.status).toBe(2); // still blocked by the token guard
-    expect(first.stderr).toContain("[graphify]");
-    expect(first.stderr).toContain("AskUserQuestion");
-    // Weekly throttle: a second broad search this week does NOT re-offer.
-    const second = runGrep(dir, "s-offer", "haystack");
-    expect(second.stderr).not.toContain("[graphify]");
-    cleanup(dir);
-  });
-
-  test("declined project → no offer", () => {
-    const dir = gitProject();
-    fs.writeFileSync(path.join(dir, ".claude", "graphify.json"), JSON.stringify({ consent: false }));
-    const r = runGrep(dir, "s-declined-offer", "needle");
-    expect(r.stderr).not.toContain("[graphify]");
     cleanup(dir);
   });
 });
