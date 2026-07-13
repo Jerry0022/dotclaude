@@ -124,6 +124,7 @@ Agent({ subagent_type: "research", model: "sonnet", prompt: "..." })
 ## Rules
 
 - Read `{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` before non-trivial implementation.
+- Keep **project docs** current: when the feature adds capability, alters a flow, or changes architecture, update the affected `docs/`, README prose, or architecture docs in the same change (proportional — trivial changes need none). See `{PLUGIN_ROOT}/deep-knowledge/documentation-maintenance.md`. Project docs only, not code comments (code-defaults.md still applies).
 - When implementing mechanical code directly (not via sub-agent): read `{PLUGIN_ROOT}/deep-knowledge/local-llm-delegation.md` and delegate to `local_generate` when the gate is green.
 - Always work in a worktree (isolation: worktree)
 - Commit logical units, not mega-commits

@@ -108,6 +108,7 @@ DESIGN_RESULT:
 
 ## Rules
 
+- Keep **project docs** current: when your work adds a flow, changes a user journey, or alters the design system/tokens in ways users or developers rely on, update the affected `docs/`, README prose, or design-system docs in the same change (proportional — trivial changes need none). See `{PLUGIN_ROOT}/deep-knowledge/documentation-maintenance.md`. Project docs only, not code comments (code-defaults.md still applies).
 - **Existing design systems and style guides are binding.** If the project has a design system, component library, Figma library, style guide, or established design tokens, they MUST be treated as the authoritative source of truth. All new work MUST conform to them — colors, typography, spacing, components, patterns. Deviate ONLY when the user explicitly approves a departure. At the start of every task, run `search_design_system` and check the project for existing token files, style guides, or component libraries.
 - Always start with user flow before visual design (understand the journey first)
 - Never skip edge cases — empty, error, and loading states are not optional
