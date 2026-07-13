@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.116.0] — 2026-07-13
+
+### Added
+
+- **Documentation is now maintained as part of implementation and shipping — not just the auto-generated roster counts.** Until now the plugin only kept *machine facts* fresh (hook/skill/agent counts, the lifecycle roster, table rows via `gen-*.js`); the *content* layer — prose, flows, folder structure — drifted the moment behavior or architecture changed, no implementation agent was told to touch docs (`code-defaults.md` even says "don't comment untouched code"), and no ship step reconciled docs against what actually shipped. A new **proportional** content-docs layer closes that gap on top of the roster layer: a single-source `deep-knowledge/documentation-maintenance.md` (the docs' target-state definition, living-vs-point-in-time classification, a change→doc-action trigger matrix, and bounded folder-restructure rules that never delete dated specs); a `## Rules` directive in all six implementation agents (core/frontend/feature/ai/designer/windows) to update affected `docs/`/README/architecture in the same change — explicitly scoped to project docs, **not** code comments, so `code-defaults.md` is untouched; and a new `/devops-ship` **Step 2.6 (Docs-Sync)** that reconciles living docs against the frozen shipped diff before the version bump. Proportional throughout (trivial changes need none) and non-blocking (a ship never aborts over docs — unavoidable debt is recorded in the CHANGELOG instead). Design spec: `docs/superpowers/specs/2026-07-13-documentation-maintenance-design.md`. (`deep-knowledge/documentation-maintenance.md` new, 6 agent Rules bullets, `devops-ship` SKILL Step 2.6, `CONVENTIONS.md` living-docs section.)
+
 ## [0.115.1] — 2026-07-13
 
 ### Fixed
