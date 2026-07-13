@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.115.1] — 2026-07-13
+
+### Fixed
+
+- **The autonomous skill can no longer ask "resume after 5h?" when you already chose to shut the PC down.** The Auto-Resume question (Step 2 Q4) was only meant to appear when the PC stays on — a shutdown machine has nothing to resume — but the skip was a soft note buried under the question heading and easy to overlook mid-flow. It is now an explicit **HARD GATE** evaluated the instant Q3 saves `$SHUTDOWN`: on `shutdown=yes` the skill sets `$AUTO_RESUME=no` and jumps straight to permission priming, so the resume prompt is provably unreachable on the shutdown path. Step 4e (which arms the 5h resume cron) was already correctly gated on `$AUTO_RESUME=yes` and is unaffected. (`devops-autonomous` SKILL 0.4.1 → 0.4.2.)
+
 ## [0.115.0] — 2026-07-12
 
 ### Changed
