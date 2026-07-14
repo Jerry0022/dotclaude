@@ -14,6 +14,7 @@ import {
   consentPath,
   isGraphifyQueryCommand,
   sentinelPath,
+  bgWindowless,
   bgWithSentinel,
   readSentinel,
   clearSentinel,
@@ -238,6 +239,34 @@ describe("isGraphifyQueryCommand — only real query runs relent the gate", () =
   });
 });
 
+describe("bgWindowless — sentinel-less background runner", () => {
+  const waitFor = async (p, timeoutMs = 8000) => {
+    const start = Date.now();
+    while (!fs.existsSync(p)) {
+      if (Date.now() - start > timeoutMs) return false;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return true;
+  };
+
+  test("runs the command through the detached runner but writes NO sentinel", async () => {
+    const dir = tmp();
+    const marker = path.join(dir, "marker.txt");
+    // A tiny writer script the runner will execute — proves the runner actually
+    // ran the command, without stressing shell quoting (mkdtemp paths have no spaces).
+    const writer = path.join(dir, "writer.cjs");
+    fs.writeFileSync(writer, `require("fs").writeFileSync(process.argv[2], "ran");`);
+    // Bare `node` (not process.execPath) — the real callers pass bare command
+    // names too, and the win32 runner-shell mangles an absolute exe path that
+    // contains spaces (e.g. "C:\\Program Files\\nodejs\\node.exe").
+    expect(bgWindowless("node", [writer, marker], dir)).toBe(true);
+    expect(await waitFor(marker)).toBe(true);        // command executed + survived
+    expect(fs.existsSync(sentinelPath(dir))).toBe(false); // NO sentinel written
+    clearSentinel(dir);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  }, 12000);
+});
+
 describe("background-build sentinel — read/clear", () => {
   let dir;
   beforeEach(() => { dir = tmp(); });
@@ -273,9 +302,10 @@ describe("background-build sentinel — read/clear", () => {
   });
 });
 
-// End-to-end through the REAL platform shell — exactly the path that silently
-// broke on cmd.exe (%errorlevel% parse-time expansion + trailing-digit handle
-// redirection made the fail-sentinel unparseable). Detached spawn → poll.
+// End-to-end through the REAL detached Node runner (spawnBgRunner) — the runner
+// executes the command as a windowless, non-detached child and writes the
+// sentinel from Node's `exit` event, so both ok and non-zero exits are reported
+// on every platform. Detached spawn → poll.
 describe("background-build sentinel — bgWithSentinel end-to-end", () => {
   const waitForSentinel = async (cwd, timeoutMs = 5000) => {
     const start = Date.now();
