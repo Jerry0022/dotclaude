@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-state
- * @version 0.3.0
+ * @version 0.4.0
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
  *   layer (devops-graph). Default-on / opt-out model: graphify enforcement is
@@ -207,49 +207,87 @@ function sentinelPath(cwd) {
   return path.join(os.tmpdir(), `dotclaude-graphbuild-${key}.sentinel`);
 }
 
+// Sentinel argv sentinel value meaning "run windowless, but write no sentinel".
+const NO_SENTINEL = '-';
+// argv flag that turns a plain `node graphify-state.js` invocation into the
+// background runner (see the require.main block at the bottom of this file).
+const BG_RUN_FLAG = '--bg-run';
+
 /**
- * Detached background spawn with a completion sentinel (Gap #5). Plain bg()
- * spawns (detached + stdio:'ignore') make a failing `graphify extract`
- * completely invisible — this wraps the command in a platform shell that
- * writes `ok` or `fail:<code>` to a per-project sentinel file once the
+ * Launch a fire-and-forget background process that must (a) never block session
+ * start, (b) outlive the short-lived hook that spawns it, and (c) NOT pop a
+ * console window on Windows. Achieving all three at once is the whole trick.
+ *
+ * The naive `spawn(cmd, { detached:true, shell:true, windowsHide:true })` fails
+ * (c): a DETACHED shell has no console of its own (DETACHED_PROCESS), so the
+ * grandchild it launches (`graphify` / `uv`, a console app) inherits none and
+ * Windows hands it a fresh, VISIBLE console — `windowsHide` on the shell cannot
+ * reach the grandchild. That is the cmd/graphify window users saw flash on
+ * every SessionStart refresh and every PreToolUse self-heal. Dropping `detached`
+ * kills (b) instead: without it the build is reaped when the hook `process.exit`s.
+ *
+ * The fix is one level of indirection. We spawn THIS file as a DETACHED,
+ * windowless Node runner (`node graphify-state.js --bg-run …`). node.exe is a
+ * console app, so detaching it gives it no console and `windowsHide`
+ * (CREATE_NO_WINDOW) means no window — and being detached, it outlives the hook.
+ * The runner then launches the real command as a NON-detached child WITH
+ * `windowsHide`, so that child is created with CREATE_NO_WINDOW directly (a flag
+ * that DOES reach a first-generation child) → a hidden console, no window. The
+ * runner waits for it and writes the ok/fail sentinel itself, so there is no
+ * fragile cmd `%errorlevel%`/redirection quoting anymore and win32 now reports a
+ * real exit code too. Fail-open: any spawn error is swallowed.
+ *
+ * @param {string} cmd    bare command (e.g. "graphify")
+ * @param {string[]} args argument vector
+ * @param {string} cwd    working directory for the build
+ * @param {string|null} sentinel absolute sentinel path, or null for none
+ * @returns {boolean} true iff the runner spawn was issued (not whether it succeeds)
+ */
+function spawnBgRunner(cmd, args, cwd, sentinel) {
+  try {
+    spawn(
+      process.execPath,
+      [__filename, BG_RUN_FLAG, sentinel || NO_SENTINEL, cwd, cmd, ...args],
+      { cwd, detached: true, stdio: 'ignore', windowsHide: true },
+    ).unref();
+    return true;
+  } catch {
+    return false; // node/toolchain absent — never let this degrade session start
+  }
+}
+
+/**
+ * Fire-and-forget background command, windowless on Windows and surviving the
+ * hook that launches it, with NO completion sentinel. Used for graphify
+ * side-tasks whose outcome we do not surface (`uv tool install`, `graphify hook
+ * uninstall`). See spawnBgRunner for the windowless mechanism.
+ * @returns {boolean} true iff the spawn was issued
+ */
+function bgWindowless(cmd, args, cwd) {
+  return spawnBgRunner(cmd, args, cwd, null);
+}
+
+/**
+ * Background spawn WITH a completion sentinel (Gap #5). A plain detached spawn
+ * with stdio:'ignore' makes a failing `graphify update` completely invisible —
+ * the runner writes `ok` / `fail:<code>` to a per-project sentinel file once the
  * command exits, so a LATER SessionStart can detect and surface the failure
  * (see readSentinel + ss.graphify.js). git-invisible (os.tmpdir(), not the
- * project). Fail-open: any spawn error is swallowed, matching the shape of
- * the plain bg() helpers in ss.graphify.js / pre.tokens.guard.js.
+ * project) and windowless on Windows (see spawnBgRunner). Fail-open.
  * @returns {boolean} true iff the spawn was issued (not whether it succeeds)
  */
 function bgWithSentinel(cmd, args, cwd) {
   const sentinel = sentinelPath(cwd);
   try { fs.unlinkSync(sentinel); } catch { /* no previous sentinel */ }
-  const quoted = args.map((a) => `"${String(a).replace(/"/g, '""')}"`).join(' ');
-  // Two Windows traps shape this implementation:
-  //   1. No exit code on win32: %errorlevel% expands at cmd PARSE time (before
-  //      the command runs → always 0), and once expanded the token ends in a
-  //      digit directly before `>` (`echo fail:0>"…"`), which cmd parses as a
-  //      file-handle redirection — the sentinel then contains neither `ok` nor
-  //      `fail`. A bare `fail` (ends in a letter) has neither problem.
-  //   2. Quoting: a manual spawn('cmd.exe', ['/c', inner]) makes node escape
-  //      the inner quotes as \" — cmd.exe does not understand backslash
-  //      escapes, the redirect path breaks, and NO sentinel is ever written.
-  //      `shell: true` lets node compose the platform shell line verbatim.
-  const inner = process.platform === 'win32'
-    ? `${cmd} ${quoted} && (echo ok>"${sentinel}") || (echo fail>"${sentinel}")`
-    : `${cmd} ${quoted} && echo ok > "${sentinel}" || echo "fail:$?" > "${sentinel}"`;
-  try {
-    spawn(inner, [], {
-      cwd, detached: true, stdio: 'ignore', windowsHide: true, shell: true,
-    }).unref();
-    return true;
-  } catch {
-    return false; // toolchain / shell absent
-  }
+  return spawnBgRunner(cmd, args, cwd, sentinel);
 }
 
 /**
  * Read the last background-build sentinel for `cwd`. Returns null when no
- * sentinel exists yet (never ran, or still running). `code` is null when the
- * platform shell could not report one (win32 — see bgWithSentinel).
- * Never throws.
+ * sentinel exists yet (never ran, or still running). `code` is null only when
+ * the child was terminated by a signal (no numeric exit code); a normal
+ * non-zero exit reports its code on every platform now (the runner reads it from
+ * Node's `exit` event — see spawnBgRunner). Never throws.
  * @returns {null|{status:'ok'}|{status:'fail', code:number|null}|{status:'unknown'}}
  */
 function readSentinel(cwd) {
@@ -288,7 +326,46 @@ module.exports = {
   queryDone,
   isGraphifyQueryCommand,
   sentinelPath,
+  bgWindowless,
   bgWithSentinel,
   readSentinel,
   clearSentinel,
 };
+
+// ── Background runner entrypoint ─────────────────────────────────────────────
+// When this file is executed directly as `node graphify-state.js --bg-run
+// <sentinel|'-'> <cwd> <cmd> [args...]` it acts as the detached, windowless
+// wrapper spawned by spawnBgRunner: it runs the real command as a NON-detached,
+// windowsHide child (created with CREATE_NO_WINDOW → hidden console, no window),
+// waits for it, and writes the ok/fail sentinel. Guarded by require.main so a
+// normal `require()` of this module never triggers it.
+if (require.main === module && process.argv[2] === BG_RUN_FLAG) {
+  const sentinelArg = process.argv[3];
+  const runCwd = process.argv[4];
+  const runCmd = process.argv[5];
+  const runArgs = process.argv.slice(6);
+  const writeSentinel = (text) => {
+    if (sentinelArg === NO_SENTINEL) return;
+    try { fs.writeFileSync(sentinelArg, text); } catch { /* tmp unwritable — nothing to surface to */ }
+  };
+  let child;
+  try {
+    child = spawn(runCmd, runArgs, {
+      cwd: runCwd,
+      stdio: 'ignore',
+      windowsHide: true,
+      // shell on win32 so a `.cmd`/`.bat` shim (e.g. some `uv`/`graphify`
+      // installs) resolves; the shell is NOT detached here and carries
+      // windowsHide, so its (and the grandchild's) console stays hidden.
+      shell: process.platform === 'win32',
+    });
+  } catch {
+    writeSentinel('fail');
+    process.exit(0);
+  }
+  child.on('error', () => { writeSentinel('fail'); process.exit(0); });
+  child.on('exit', (code) => {
+    writeSentinel(code === 0 ? 'ok' : (code == null ? 'fail' : `fail:${code}`));
+    process.exit(0);
+  });
+}

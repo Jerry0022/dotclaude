@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.graphify
- * @version 0.3.0
+ * @version 0.3.1
  * @event SessionStart
  * @plugin devops
  * @description graphify enforcement — install-check + auto-build wiring for the
@@ -45,7 +45,7 @@ require('../lib/plugin-guard');
 
 const fs = require('fs');
 const crypto = require('crypto');
-const { spawn, execSync } = require('child_process');
+const { execSync } = require('child_process');
 const { runOnce } = require('../lib/run-once');
 const gstate = require('../lib/graphify-state');
 const graphNudge = require('../lib/graph-nudge');
@@ -105,18 +105,13 @@ function isGitRepo() {
 }
 
 function bg(cmd, args) {
-  // Detached + unref so a 5-10s graphify build never blocks session start.
-  // `shell` on Windows so a `graphify.cmd`/`.bat` shim (what `uv tool install`
-  // produces) actually runs — a bare spawn cannot exec a .cmd and would
-  // silently no-op, leaving the graph un-refreshed. `windowsHide` suppresses
-  // the console window that `shell:true` would otherwise pop on Windows for
-  // every invocation (matches bgWithSentinel in hooks/lib/graphify-state.js).
-  // Guarded: a missing toolchain throws → no-op.
-  try {
-    spawn(cmd, args, {
-      cwd, detached: true, stdio: 'ignore', shell: process.platform === 'win32', windowsHide: true,
-    }).unref();
-  } catch { /* toolchain absent */ }
+  // Fire-and-forget background task (uv install / graphify hook uninstall) with
+  // NO sentinel. Delegates to gstate.bgWindowless, which runs it through a
+  // detached, windowless Node runner: survives this hook's exit AND never pops a
+  // console window on Windows (a naive detached shell spawn does — the grandchild
+  // graphify/uv process inherits no console and Windows gives it a visible one).
+  // Fail-open inside the helper: a missing toolchain never degrades session start.
+  gstate.bgWindowless(cmd, args, cwd);
 }
 
 if (gstate.isDeclinedAnywhere(cwd)) {

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.116.1] — 2026-07-15
+
+### Fixed
+
+- **Background graphify builds no longer flash a console window on Windows — the "windowless" promise from 0.115.0 is now actually kept.** Despite `windowsHide: true` on every spawn, users still got a cmd/graphify window popping up on each SessionStart refresh and every PreToolUse self-heal (multiple accumulating per session). Root cause, verified with a user32 `EnumWindows` detector: the window belongs to the **graphify** process itself, not cmd — a `detached` shell has no console of its own (`DETACHED_PROCESS`), so the `graphify` grandchild it launches inherits none and Windows hands it a fresh, VISIBLE console; `windowsHide` only reaches the direct child (the shell), never the grandchild. Dropping `detached` instead kills the build the instant the hook `process.exit()`s (proven: no sentinel written). The fix routes background spawns through a detached, windowless **Node runner** (`spawnBgRunner`): the runner outlives the hook (detached node.exe gets no console, `windowsHide` ⇒ `CREATE_NO_WINDOW`, no window) and launches the real command as a NON-detached `windowsHide` child that inherits a hidden console — so nothing is ever visible — then waits for it and writes the ok/fail sentinel itself. This also drops the fragile cmd `%errorlevel%`/redirection quoting, so win32 now records real exit codes in the sentinel too. New `bgWindowless` helper (sentinel-less, for `uv install` / `graphify hook uninstall`); `bgWithSentinel` rewritten to delegate. Verified on the real production path: NO_WINDOW + sentinel `ok` after the parent exits. (`graphify-state` 0.3.0 → 0.4.0, `ss.graphify` 0.3.0 → 0.3.1; +1 test, 718 total.)
+
 ## [0.116.0] — 2026-07-13
 
 ### Added
