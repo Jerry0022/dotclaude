@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-state
- * @version 0.4.0
+ * @version 0.5.0
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
  *   layer (devops-graph). Default-on / opt-out model: graphify enforcement is
@@ -230,12 +230,34 @@ const BG_RUN_FLAG = '--bg-run';
  * windowless Node runner (`node graphify-state.js --bg-run …`). node.exe is a
  * console app, so detaching it gives it no console and `windowsHide`
  * (CREATE_NO_WINDOW) means no window — and being detached, it outlives the hook.
- * The runner then launches the real command as a NON-detached child WITH
- * `windowsHide`, so that child is created with CREATE_NO_WINDOW directly (a flag
- * that DOES reach a first-generation child) → a hidden console, no window. The
- * runner waits for it and writes the ok/fail sentinel itself, so there is no
- * fragile cmd `%errorlevel%`/redirection quoting anymore and win32 now reports a
- * real exit code too. Fail-open: any spawn error is swallowed.
+ *
+ * That much was 0.116.0's fix and it is correct under plain `conhost.exe` (the
+ * classic per-process console host): a first-generation child created with
+ * CREATE_NO_WINDOW gets a real but invisible console, full stop. It measurably
+ * FAILS, however, on a machine where **Windows Terminal is the registered
+ * "Default Terminal Application"** (the Win11 default, no registry override
+ * needed) — empirically verified on this machine (Windows 11 build 26200).
+ * Under WT delegation, any console-session creation gets handed off to Windows
+ * Terminal itself rather than a plain hidden conhost, and WT opens a new,
+ * VISIBLE, focus-stealing tab — even though the child was created with
+ * CREATE_NO_WINDOW. The specific trigger measured here is the *extra shell
+ * layer*: `spawn(cmd, args, { shell:true })` on win32 runs the target through
+ * `cmd.exe /d /s /c "<cmd> <args>"`, i.e. a SECOND cmd.exe wrapping the already
+ * argv-based command; that double indirection is what WT's delegation picks up
+ * and surfaces as a tab. Spawning the target directly — no shell layer at all —
+ * does not trigger it: measured with a real `graphify update .` run and with a
+ * forced-failure `cmd.exe` child (title-probe + poll of visible window titles
+ * showed no new window in either case, while the shell:true path reliably
+ * produced one). All call sites here pass a plain argv vector (no `&&`/`|`
+ * shell syntax), so shell:false is safe by construction; the one shell:true
+ * fallback below exists solely for the (currently theoretical) case of a
+ * `.cmd`/`.bat` shim binary, which Node's non-shell spawn cannot exec on
+ * Windows — see the retry in `runBgEntrypointChild` below.
+ *
+ * The runner launches the real command as a NON-detached, windowsHide child,
+ * waits for it, and writes the ok/fail sentinel itself, so there is no fragile
+ * cmd `%errorlevel%`/redirection quoting and win32 now reports a real exit code
+ * too. Fail-open: any spawn error is swallowed.
  *
  * @param {string} cmd    bare command (e.g. "graphify")
  * @param {string[]} args argument vector
@@ -330,7 +352,75 @@ module.exports = {
   bgWithSentinel,
   readSentinel,
   clearSentinel,
+  runBgEntrypointChild,
 };
+
+/**
+ * Spawn the real background command as a NON-detached, windowsHide child of the
+ * (already detached, windowless) `--bg-run` runner, write the ok/fail sentinel
+ * once it exits, and `process.exit(0)` the runner. Tries a shell-less spawn
+ * first (the fix for the Windows-Terminal-delegation window flash — see
+ * spawnBgRunner's doc comment); if that spawn itself throws or emits `error`
+ * with `ENOENT` (typically a `.cmd`/`.bat` shim spawn() cannot exec directly),
+ * it retries exactly once through `shell:true` on win32 so a shim install still
+ * runs — same behavior as before this fix, just no longer the default path.
+ * Exported for unit testing the fallback/command-construction logic; the actual
+ * window-visibility behavior is not unit-testable (see qa_hints in the
+ * accompanying commit/PR).
+ * @param {string} runCmd
+ * @param {string[]} runArgs
+ * @param {string} runCwd
+ * @param {(text: string) => void} writeSentinel
+ * @param {(code: number) => void} [exitFn] injectable for tests; defaults to process.exit
+ */
+function runBgEntrypointChild(runCmd, runArgs, runCwd, writeSentinel, exitFn) {
+  const doExit = exitFn || ((code) => process.exit(code));
+  const spawnChild = (useShell) => spawn(runCmd, runArgs, {
+    cwd: runCwd,
+    stdio: 'ignore',
+    windowsHide: true,
+    shell: useShell,
+  });
+  const attach = (child, allowShellRetry) => {
+    let settled = false;
+    child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      if (allowShellRetry && process.platform === 'win32' && err && err.code === 'ENOENT') {
+        // Likely a .cmd/.bat shim that shell-less spawn() cannot exec — retry
+        // once through cmd.exe, matching pre-fix behavior for that edge case.
+        try {
+          attach(spawnChild(true), false);
+          return;
+        } catch { /* fall through to fail below */ }
+      }
+      writeSentinel('fail');
+      doExit(0);
+    });
+    child.on('exit', (code) => {
+      if (settled) return;
+      settled = true;
+      writeSentinel(code === 0 ? 'ok' : (code == null ? 'fail' : `fail:${code}`));
+      doExit(0);
+    });
+  };
+  let child;
+  try {
+    child = spawnChild(false);
+  } catch {
+    // Synchronous throw (rare — spawn() normally reports async via 'error').
+    // Retry through the shell once before giving up, same as the async path.
+    try {
+      attach(spawnChild(true), false);
+      return;
+    } catch {
+      writeSentinel('fail');
+      doExit(0);
+      return;
+    }
+  }
+  attach(child, true);
+}
 
 // ── Background runner entrypoint ─────────────────────────────────────────────
 // When this file is executed directly as `node graphify-state.js --bg-run
@@ -348,24 +438,5 @@ if (require.main === module && process.argv[2] === BG_RUN_FLAG) {
     if (sentinelArg === NO_SENTINEL) return;
     try { fs.writeFileSync(sentinelArg, text); } catch { /* tmp unwritable — nothing to surface to */ }
   };
-  let child;
-  try {
-    child = spawn(runCmd, runArgs, {
-      cwd: runCwd,
-      stdio: 'ignore',
-      windowsHide: true,
-      // shell on win32 so a `.cmd`/`.bat` shim (e.g. some `uv`/`graphify`
-      // installs) resolves; the shell is NOT detached here and carries
-      // windowsHide, so its (and the grandchild's) console stays hidden.
-      shell: process.platform === 'win32',
-    });
-  } catch {
-    writeSentinel('fail');
-    process.exit(0);
-  }
-  child.on('error', () => { writeSentinel('fail'); process.exit(0); });
-  child.on('exit', (code) => {
-    writeSentinel(code === 0 ? 'ok' : (code == null ? 'fail' : `fail:${code}`));
-    process.exit(0);
-  });
+  runBgEntrypointChild(runCmd, runArgs, runCwd, writeSentinel);
 }
