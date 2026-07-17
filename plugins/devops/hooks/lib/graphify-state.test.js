@@ -22,6 +22,7 @@ import {
   isDeclinedAnywhere,
   globalConsentPath,
   readGlobalState,
+  runBgEntrypointChild,
 } from "./graphify-state.js";
 
 function tmp() {
@@ -336,5 +337,50 @@ describe("background-build sentinel — bgWithSentinel end-to-end", () => {
     expect(s.status).toBe("fail"); // the regression this guards against
     clearSentinel(dir);
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  }, 10000);
+});
+
+// Direct-call tests for the runner's child-spawn logic — the shell-less default
+// (the Windows-Terminal-delegation window fix) plus the one-shot shell retry
+// for `.cmd`/`.bat` shims. Window visibility itself is not unit-testable; these
+// pin the command-construction/fallback semantics the fix must not break.
+describe("runBgEntrypointChild — shell-less default + shim fallback", () => {
+  const testWin = process.platform === "win32" ? test : test.skip;
+  const runChild = (cmd, args, cwd) =>
+    new Promise((resolve) => {
+      let sentinel;
+      runBgEntrypointChild(cmd, args, cwd, (text) => { sentinel = text; }, () => resolve(sentinel));
+    });
+
+  let dir;
+  beforeEach(() => { dir = tmp(); });
+  afterEach(() => {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("exit 0 through the shell-less path → 'ok'", async () => {
+    expect(await runChild("node", ["-e", "process.exit(0)"], dir)).toBe("ok");
+  }, 10000);
+
+  test("non-zero exit → 'fail:<code>' (exit code preserved)", async () => {
+    expect(await runChild("node", ["-e", "process.exit(3)"], dir)).toBe("fail:3");
+  }, 10000);
+
+  test("nonexistent command → settles as 'fail' (never hangs, never throws)", async () => {
+    expect(await runChild("definitely-not-a-real-cmd-x9z", [], dir)).toMatch(/^fail/);
+  }, 10000);
+
+  testWin(".cmd shim → falls back to the shell exactly once and still reports 'ok'", async () => {
+    // spawn() without shell cannot exec a .cmd (sync EINVAL since the
+    // CVE-2024-27980 hardening) — the runner must retry through cmd.exe.
+    const shim = path.join(dir, "shim.cmd");
+    fs.writeFileSync(shim, "@exit /b 0\r\n");
+    expect(await runChild(shim, [], dir)).toBe("ok");
+  }, 10000);
+
+  testWin(".cmd shim with non-zero exit → shell retry preserves the code", async () => {
+    const shim = path.join(dir, "shimfail.cmd");
+    fs.writeFileSync(shim, "@exit /b 7\r\n");
+    expect(await runChild(shim, [], dir)).toBe("fail:7");
   }, 10000);
 });

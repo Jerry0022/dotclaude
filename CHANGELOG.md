@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.116.2] — 2026-07-17
+
+### Fixed
+
+- **Background graphify builds are now truly windowless on stock Windows 11 — the 0.116.1 runner fix was still popping visible Windows Terminal tabs.** Users kept getting a `graphify "update" "."` tab on every SessionStart refresh despite the detached-runner fix, because that fix only holds under classic `conhost.exe`: on machines where **Windows Terminal is the registered Default Terminal Application** (the Windows 11 default — no registry override needed), console-session creation is delegated to WT, which surfaces a visible, focus-stealing tab even for children created with `CREATE_NO_WINDOW`. Measured trigger (visible-window-title polling on a live Win11 26200 machine): the *extra cmd.exe layer* from `shell: true` — the runner wrapped every argv-based command in a second `cmd.exe /d /s /c`, and that indirection is what WT's delegation picks up. The runner's child spawn now defaults to **shell-less direct spawn** (windowsHide, non-detached, under the detached runner) on every platform and retries exactly once through `cmd.exe` only when the target is a `.cmd`/`.bat` shim (sync `EINVAL` per the CVE-2024-27980 hardening, or async `ENOENT`) — pre-fix behavior preserved for that edge case, sentinel `ok`/`fail:<code>` semantics unchanged. End-to-end verified on the real path: a full `graphify update .` ran with **zero** new visible windows, sentinel `ok`, graph.json freshly rebuilt. Delivery note: the machine that reported this was still on 0.116.0 because 0.116.1 never left the alpha channel — promote to stable so consumers actually receive windowless builds. (`graphify-state` 0.4.0 → 0.5.0, child-spawn logic extracted as `runBgEntrypointChild`; +5 tests, 723 total.)
+
 ## [0.116.1] — 2026-07-15
 
 ### Fixed
