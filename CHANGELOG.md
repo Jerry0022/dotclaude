@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.116.3] — 2026-07-18
+
+### Fixed
+
+- **Channel promotions no longer fail with phantom errors — `ship_promote` now compares the commits tags point at, not the tag objects themselves.** On the 0.116.2 promotion every push landed correctly on the remote, yet the tool reported "tag not verifiable on remote after push", and the documented idempotent re-run then aborted on a false "published tags are immutable" guard — leaving the bare stable alias and the GitHub Release uncreated. Root cause (three stacked `git ls-remote` traps, each verified against the live remote): the code took the FIRST output field, which for an annotated tag is the tag-OBJECT sha — distinct by construction from the commit even when two tags point at the same one; a single-pattern `ls-remote` query never returns the peeled `^{}` line at all (tail-component matching filters it), so "prefer peeled" alone would still silently regress; and pattern tail-matching returns sibling channel tags (`v0.116.2` also matches `alpha/v0.116.2`), so first-line parsing could return a foreign tag's sha. `lsRemoteTag` now queries BOTH patterns (`"<tag>" "<tag>^{}"`, quoted — unquoted `^` is cmd.exe's escape char), parses exact refs only, prefers the peeled commit sha with a lightweight-tag fallback, and `listRemoteChannelTags` dedupes an annotated tag's two refs so the monotonicity/immutability guards compare commits. Promotions also now tag the commit instead of the source tag object (no more nested tags). The test mock was rewritten to mirror real git (two refs per annotated tag, peeled lines only for `^{}` patterns, remote visibility only after push, recursive peeling) — the old single-line mock structurally could not catch this bug class. An adversarial 3-lens refute pass overturned the first fix attempt and empirically pinned the both-pattern behavior. (`ship_promote` promote.js, +7 tests incl. the exact 0.116.2 re-run regression, 730 total.)
+
 ## [0.116.2] — 2026-07-17
 
 ### Fixed
