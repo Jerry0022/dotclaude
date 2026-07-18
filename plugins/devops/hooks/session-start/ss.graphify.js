@@ -169,8 +169,14 @@ if (runOnce('ss-graphify-hookuninstall', cwdKey) && isGitRepo()) {
 const needsRebuild = !graphNudge.hasGraph(cwd)
   || graphNudge.graphIsStale(cwd)
   || (runOnce('ss-graphify-validate', cwdKey, { cooldownMs: 24 * 60 * 60 * 1000 }) && !graphLooksValid());
-// Throttle the rebuild so repeated SessionStart re-entries (multiple agents /
-// worktrees on the same cwd) cannot stack concurrent `graphify update` runs.
+// Debounce bursts of SessionStart re-entries (multiple agents / worktrees on the
+// same cwd) so they do not each kick a rebuild within 10 min. This is only a
+// DEBOUNCE, not a mutex: on a large repo a single `graphify update` can run
+// longer than the cooldown while a trigger recurs at least as often (e.g. the
+// */10 git-sync cron opens a fresh session every 10 min), which previously let
+// runs stack without bound. The hard concurrency guard lives in
+// gstate.bgWithSentinel (a per-project PID lock) — it is what actually caps
+// concurrency at one build per project across all spawn triggers.
 if (needsRebuild && runOnce('ss-graphify-update', cwdKey, { cooldownMs: 10 * 60 * 1000 })) {
   gstate.bgWithSentinel('graphify', ['update', '.'], cwd); // background, key-less, AST-only, free
 }

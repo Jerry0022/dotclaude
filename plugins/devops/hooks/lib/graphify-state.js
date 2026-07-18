@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-state
- * @version 0.5.0
+ * @version 0.6.0
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
  *   layer (devops-graph). Default-on / opt-out model: graphify enforcement is
@@ -16,6 +16,16 @@
  *   records background `graphify update`/`hook uninstall` outcomes to a
  *   per-project sentinel file so a silent failure (stdio:'ignore') can be
  *   surfaced at the next SessionStart instead of vanishing.
+ *
+ *   `bgWithSentinel` additionally holds a per-project PID lock
+ *   (`updateInFlight`/`updateLockPath`) so at most ONE `graphify update` runs
+ *   per project at a time. The SessionStart (10-min) and PreToolUse (2-min)
+ *   spawn throttles only DEBOUNCE bursts; on a large repo a single build can
+ *   outlast its throttle window while a trigger recurs (e.g. the git-sync cron
+ *   opens a fresh session every 10 min), so time-based throttling alone let
+ *   builds stack without bound — measured in the field at 12 concurrent runs /
+ *   ~29 GB commit, exhausting RAM. The lock bounds concurrency across ALL spawn
+ *   triggers (they all funnel through `bgWithSentinel`).
  */
 
 const fs = require('node:fs');
@@ -213,6 +223,73 @@ const NO_SENTINEL = '-';
 // background runner (see the require.main block at the bottom of this file).
 const BG_RUN_FLAG = '--bg-run';
 
+// ── graphify-update concurrency lock ─────────────────────────────────────────
+// A single `graphify update .` on a large repo can outlast the SessionStart
+// (10-min) and PreToolUse (2-min) spawn throttles, which only DEBOUNCE bursts.
+// When a trigger recurs at least as often as the build takes (e.g. the */10
+// git-sync cron opens a fresh session — hence a fresh throttle window — every
+// 10 min), purely time-based throttling let builds stack without bound (measured
+// in the field: 12 concurrent runs, ~29 GB commit, RAM exhausted). This PID lock
+// bounds concurrency to ONE build per project across every trigger.
+const UPDATE_LOCK_STALE_MS = 45 * 60 * 1000;
+
+/** Per-project lock file recording the live background-update runner's PID. */
+function updateLockPath(cwd) {
+  const key = crypto.createHash('md5').update(`updatelock:${cwd}`).digest('hex').slice(0, 12);
+  return path.join(os.tmpdir(), `dotclaude-graphupdate-${key}.lock`);
+}
+
+/**
+ * True iff `pid` names a live process. `process.kill(pid, 0)` sends no signal —
+ * it only probes existence: it throws ESRCH when the process is gone and EPERM
+ * when it exists but is owned by another user (still "alive" for our purposes).
+ * A non-integer / non-positive pid is never alive. Never throws.
+ */
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return !!(e && e.code === 'EPERM');
+  }
+}
+
+/**
+ * True iff a `graphify update` background runner is still active for `cwd`. The
+ * lock records the detached runner's PID and spawn time; the runner outlives its
+ * graphify child (it awaits the child's exit — see runBgEntrypointChild), so a
+ * live runner PID means a live build. A lock whose PID is dead, or older than
+ * UPDATE_LOCK_STALE_MS (a runner that crashed without clearing it, or a rare
+ * PID reuse), is treated as NOT in flight so a refresh can never wedge forever.
+ * Never throws — any read/parse error fails OPEN (returns false → allow a spawn).
+ */
+function updateInFlight(cwd) {
+  try {
+    const { pid, ts } = JSON.parse(fs.readFileSync(updateLockPath(cwd), 'utf8'));
+    if (typeof ts === 'number' && Date.now() - ts > UPDATE_LOCK_STALE_MS) return false;
+    return pidAlive(pid);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Record the live update runner's PID so a concurrent trigger skips
+ * (see updateInFlight). Written by bgWithSentinel right after the spawn issues.
+ * Never throws — a tmp write failure degrades to "no guard", never a crash.
+ */
+function writeUpdateLock(cwd, pid) {
+  try {
+    fs.writeFileSync(updateLockPath(cwd), JSON.stringify({ pid, ts: Date.now() }));
+  } catch { /* tmp unwritable — degrade to no guard, never throw */ }
+}
+
+/** Remove the update lock (the runner clears it once its build exits). No-op when absent. Never throws. */
+function clearUpdateLock(cwd) {
+  try { fs.unlinkSync(updateLockPath(cwd)); } catch { /* absent already */ }
+}
+
 /**
  * Launch a fire-and-forget background process that must (a) never block session
  * start, (b) outlive the short-lived hook that spawns it, and (c) NOT pop a
@@ -263,18 +340,23 @@ const BG_RUN_FLAG = '--bg-run';
  * @param {string[]} args argument vector
  * @param {string} cwd    working directory for the build
  * @param {string|null} sentinel absolute sentinel path, or null for none
- * @returns {boolean} true iff the runner spawn was issued (not whether it succeeds)
+ * @param {string|null} lock absolute update-lock path (cleared by the runner on
+ *   exit), or null for none — only the `graphify update` path passes one.
+ * @returns {number|null} the runner's PID if the spawn was issued, else null
+ *   (spawn error — node/toolchain absent). PID, not boolean, so the caller can
+ *   record it in the concurrency lock.
  */
-function spawnBgRunner(cmd, args, cwd, sentinel) {
+function spawnBgRunner(cmd, args, cwd, sentinel, lock) {
   try {
-    spawn(
+    const child = spawn(
       process.execPath,
-      [__filename, BG_RUN_FLAG, sentinel || NO_SENTINEL, cwd, cmd, ...args],
+      [__filename, BG_RUN_FLAG, sentinel || NO_SENTINEL, lock || NO_SENTINEL, cwd, cmd, ...args],
       { cwd, detached: true, stdio: 'ignore', windowsHide: true },
-    ).unref();
-    return true;
+    );
+    child.unref();
+    return child.pid || null;
   } catch {
-    return false; // node/toolchain absent — never let this degrade session start
+    return null; // node/toolchain absent — never let this degrade session start
   }
 }
 
@@ -282,11 +364,12 @@ function spawnBgRunner(cmd, args, cwd, sentinel) {
  * Fire-and-forget background command, windowless on Windows and surviving the
  * hook that launches it, with NO completion sentinel. Used for graphify
  * side-tasks whose outcome we do not surface (`uv tool install`, `graphify hook
- * uninstall`). See spawnBgRunner for the windowless mechanism.
+ * uninstall`). See spawnBgRunner for the windowless mechanism. No concurrency
+ * lock — these side-tasks are one-shot/idempotent, not the stackable build.
  * @returns {boolean} true iff the spawn was issued
  */
 function bgWindowless(cmd, args, cwd) {
-  return spawnBgRunner(cmd, args, cwd, null);
+  return spawnBgRunner(cmd, args, cwd, null, null) != null;
 }
 
 /**
@@ -296,12 +379,25 @@ function bgWindowless(cmd, args, cwd) {
  * command exits, so a LATER SessionStart can detect and surface the failure
  * (see readSentinel + ss.graphify.js). git-invisible (os.tmpdir(), not the
  * project) and windowless on Windows (see spawnBgRunner). Fail-open.
- * @returns {boolean} true iff the spawn was issued (not whether it succeeds)
+ *
+ * Concurrency guard: this is the single chokepoint for EVERY `graphify update`
+ * spawn (the SessionStart refresh + both PreToolUse self-heal paths), so the PID
+ * lock taken here bounds concurrency to one build per project for all triggers.
+ * When a build is already in flight the call is a no-op (returns false) — the
+ * time-based throttles at the call sites only debounce bursts and cannot see a
+ * run that outlived its window (the RAM-exhaustion bug). The runner clears the
+ * lock when its build exits (see the --bg-run entrypoint → runBgEntrypointChild).
+ * @returns {boolean} true iff a spawn was issued; false when skipped (already
+ *   in flight) or the spawn errored.
  */
 function bgWithSentinel(cmd, args, cwd) {
+  if (updateInFlight(cwd)) return false; // a build is already running — never stack
   const sentinel = sentinelPath(cwd);
+  const lock = updateLockPath(cwd);
   try { fs.unlinkSync(sentinel); } catch { /* no previous sentinel */ }
-  return spawnBgRunner(cmd, args, cwd, sentinel);
+  const pid = spawnBgRunner(cmd, args, cwd, sentinel, lock);
+  if (pid != null) writeUpdateLock(cwd, pid);
+  return pid != null;
 }
 
 /**
@@ -348,6 +444,10 @@ module.exports = {
   queryDone,
   isGraphifyQueryCommand,
   sentinelPath,
+  updateLockPath,
+  updateInFlight,
+  writeUpdateLock,
+  clearUpdateLock,
   bgWindowless,
   bgWithSentinel,
   readSentinel,
@@ -372,9 +472,21 @@ module.exports = {
  * @param {string} runCwd
  * @param {(text: string) => void} writeSentinel
  * @param {(code: number) => void} [exitFn] injectable for tests; defaults to process.exit
+ * @param {() => void} [clearLock] release the concurrency lock once the build
+ *   settles (ok OR fail); defaults to a no-op. NOT called on the shell-retry
+ *   path — the retried child is still running, so the lock must persist.
  */
-function runBgEntrypointChild(runCmd, runArgs, runCwd, writeSentinel, exitFn) {
+function runBgEntrypointChild(runCmd, runArgs, runCwd, writeSentinel, exitFn, clearLock) {
   const doExit = exitFn || ((code) => process.exit(code));
+  const releaseLock = clearLock || (() => {});
+  // Terminal path: record the outcome, release the lock, exit the runner. Order
+  // matters — the sentinel is written before the lock clears so a watcher that
+  // sees the lock gone can already read the result.
+  const finish = (sentinelText) => {
+    writeSentinel(sentinelText);
+    releaseLock();
+    doExit(0);
+  };
   const spawnChild = (useShell) => spawn(runCmd, runArgs, {
     cwd: runCwd,
     stdio: 'ignore',
@@ -389,19 +501,18 @@ function runBgEntrypointChild(runCmd, runArgs, runCwd, writeSentinel, exitFn) {
       if (allowShellRetry && process.platform === 'win32' && err && err.code === 'ENOENT') {
         // Likely a .cmd/.bat shim that shell-less spawn() cannot exec — retry
         // once through cmd.exe, matching pre-fix behavior for that edge case.
+        // Lock stays held: the retried child is the same logical build.
         try {
           attach(spawnChild(true), false);
           return;
         } catch { /* fall through to fail below */ }
       }
-      writeSentinel('fail');
-      doExit(0);
+      finish('fail');
     });
     child.on('exit', (code) => {
       if (settled) return;
       settled = true;
-      writeSentinel(code === 0 ? 'ok' : (code == null ? 'fail' : `fail:${code}`));
-      doExit(0);
+      finish(code === 0 ? 'ok' : (code == null ? 'fail' : `fail:${code}`));
     });
   };
   let child;
@@ -414,8 +525,7 @@ function runBgEntrypointChild(runCmd, runArgs, runCwd, writeSentinel, exitFn) {
       attach(spawnChild(true), false);
       return;
     } catch {
-      writeSentinel('fail');
-      doExit(0);
+      finish('fail');
       return;
     }
   }
@@ -424,19 +534,25 @@ function runBgEntrypointChild(runCmd, runArgs, runCwd, writeSentinel, exitFn) {
 
 // ── Background runner entrypoint ─────────────────────────────────────────────
 // When this file is executed directly as `node graphify-state.js --bg-run
-// <sentinel|'-'> <cwd> <cmd> [args...]` it acts as the detached, windowless
-// wrapper spawned by spawnBgRunner: it runs the real command as a NON-detached,
-// windowsHide child (created with CREATE_NO_WINDOW → hidden console, no window),
-// waits for it, and writes the ok/fail sentinel. Guarded by require.main so a
-// normal `require()` of this module never triggers it.
+// <sentinel|'-'> <lock|'-'> <cwd> <cmd> [args...]` it acts as the detached,
+// windowless wrapper spawned by spawnBgRunner: it runs the real command as a
+// NON-detached, windowsHide child (created with CREATE_NO_WINDOW → hidden
+// console, no window), waits for it, writes the ok/fail sentinel, and clears the
+// concurrency lock. Guarded by require.main so a normal `require()` of this
+// module never triggers it.
 if (require.main === module && process.argv[2] === BG_RUN_FLAG) {
   const sentinelArg = process.argv[3];
-  const runCwd = process.argv[4];
-  const runCmd = process.argv[5];
-  const runArgs = process.argv.slice(6);
+  const lockArg = process.argv[4];
+  const runCwd = process.argv[5];
+  const runCmd = process.argv[6];
+  const runArgs = process.argv.slice(7);
   const writeSentinel = (text) => {
     if (sentinelArg === NO_SENTINEL) return;
     try { fs.writeFileSync(sentinelArg, text); } catch { /* tmp unwritable — nothing to surface to */ }
   };
-  runBgEntrypointChild(runCmd, runArgs, runCwd, writeSentinel);
+  const clearLock = () => {
+    if (lockArg === NO_SENTINEL) return;
+    try { fs.unlinkSync(lockArg); } catch { /* absent already — nothing to clear */ }
+  };
+  runBgEntrypointChild(runCmd, runArgs, runCwd, writeSentinel, undefined, clearLock);
 }
