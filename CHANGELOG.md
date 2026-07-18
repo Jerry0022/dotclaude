@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.118.1] — 2026-07-19
+
+### Fixed
+
+- **Background `graphify update` builds no longer stack until they exhaust RAM — `bgWithSentinel` now holds a per-project PID lock.** On an affected machine the working set filled to 99% (31.6 / 31.9 GB, ~0.3 GB free) and the system was thrashing on a 55 GB commit charge; the cause was **12 concurrent `graphify update .` runs** (~29.5 GB commit combined, several 3–6 GB each) spawned by the devops-graph refresh and never reaped. Root cause: the SessionStart (10-min `runOnce`) and PreToolUse (2-min `markRefresh`) throttles only **debounce** — they gate how *often* a build may be kicked, not whether one is already running. On a large repo a single AST build runs longer than its throttle window while a trigger recurs at least as often (the `*/10` git-sync cron opens a fresh session — hence a fresh throttle window — every 10 min), so a new build launched roughly every 10 min on top of the still-running previous ones and they piled up unbounded over ~3.5 h. The comment in `ss.graphify.js` even claimed the throttle "cannot stack concurrent runs" — false whenever a run outlives the cooldown. The fix adds a real mutex at the single spawn chokepoint (`bgWithSentinel`, through which all three spawn sites funnel — the SessionStart refresh and both PreToolUse self-heal paths): before spawning it checks a per-project lock file recording the detached runner's PID + spawn time and **skips** when that PID is still alive; the runner clears the lock when its build exits. PID-liveness plus a 45-min stale timeout mean a crashed runner never wedges refresh forever, and every read fails open so the guard can never block a legitimate build. Runaway processes on the affected machine were killed as immediate triage (commit charge 55 → 26 GB). (`graphify-state` 0.5.0 → 0.6.0: new `updateInFlight`/`updateLockPath`/`writeUpdateLock`/`clearUpdateLock`, `spawnBgRunner` now returns the runner PID and carries a lock argv, `runBgEntrypointChild` releases the lock on exit; `ss.graphify` throttle comment corrected; +9 tests, 757 total. Codex review gate was unavailable this ship — external usage limit — covered instead by the +9 unit/e2e tests and full-suite verification.)
+
 ## [0.118.0] — 2026-07-18
 
 ### Changed

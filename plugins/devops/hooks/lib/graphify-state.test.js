@@ -23,6 +23,10 @@ import {
   globalConsentPath,
   readGlobalState,
   runBgEntrypointChild,
+  updateInFlight,
+  updateLockPath,
+  writeUpdateLock,
+  clearUpdateLock,
 } from "./graphify-state.js";
 
 function tmp() {
@@ -382,5 +386,108 @@ describe("runBgEntrypointChild — shell-less default + shim fallback", () => {
     const shim = path.join(dir, "shimfail.cmd");
     fs.writeFileSync(shim, "@exit /b 7\r\n");
     expect(await runChild(shim, [], dir)).toBe("fail:7");
+  }, 10000);
+});
+
+// ── graphify-update concurrency mutex ────────────────────────────────────────
+// Regression guard for the RAM-exhaustion bug: the SessionStart (10-min) and
+// PreToolUse (2-min) spawn throttles only DEBOUNCE — when a single
+// `graphify update .` runs longer than the throttle window (large repo) and a
+// trigger (e.g. the */10 git-sync cron creating a fresh session) fires at least
+// as often, runs stacked without bound (measured: 12 concurrent, ~29 GB commit).
+// bgWithSentinel now takes a PID lock so at most ONE build runs per project.
+describe("updateInFlight / updateLockPath — graphify-update concurrency mutex", () => {
+  let dir;
+  beforeEach(() => { dir = tmp(); });
+  afterEach(() => {
+    clearUpdateLock(dir);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("no lock file → not in flight", () => {
+    expect(updateInFlight(dir)).toBe(false);
+  });
+
+  test("lock with a LIVE pid → in flight (blocks a second spawn)", () => {
+    writeUpdateLock(dir, process.pid); // this test process is alive by definition
+    expect(updateInFlight(dir)).toBe(true);
+  });
+
+  test("lock with a DEAD pid → not in flight (never wedges on a crashed runner)", () => {
+    // 2147483647 names no live process → process.kill(pid, 0) throws ESRCH.
+    fs.writeFileSync(updateLockPath(dir), JSON.stringify({ pid: 2147483647, ts: Date.now() }));
+    expect(updateInFlight(dir)).toBe(false);
+  });
+
+  test("lock older than the stale window → not in flight even if the pid is live", () => {
+    fs.writeFileSync(updateLockPath(dir), JSON.stringify({ pid: process.pid, ts: Date.now() - 46 * 60 * 1000 }));
+    expect(updateInFlight(dir)).toBe(false);
+  });
+
+  test("corrupt lock → not in flight (fail-open: allow a fresh spawn)", () => {
+    fs.writeFileSync(updateLockPath(dir), "{ not json");
+    expect(updateInFlight(dir)).toBe(false);
+  });
+
+  test("updateLockPath stable per cwd, distinct across cwds, distinct from sentinelPath", () => {
+    expect(updateLockPath(dir)).toBe(updateLockPath(dir));
+    expect(updateLockPath(dir)).not.toBe(updateLockPath(tmp()));
+    expect(updateLockPath(dir)).not.toBe(sentinelPath(dir));
+  });
+
+  test("clearUpdateLock removes the lock and is a no-op when absent", () => {
+    writeUpdateLock(dir, process.pid);
+    expect(updateInFlight(dir)).toBe(true);
+    clearUpdateLock(dir);
+    expect(updateInFlight(dir)).toBe(false);
+    expect(() => clearUpdateLock(dir)).not.toThrow();
+  });
+});
+
+describe("bgWithSentinel — concurrency guard (never stack graphify update)", () => {
+  const waitForSentinel = async (cwd, timeoutMs = 5000) => {
+    const start = Date.now();
+    for (;;) {
+      const s = readSentinel(cwd);
+      if (s !== null) return s;
+      if (Date.now() - start > timeoutMs) return null;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  };
+  const waitForGone = async (p, timeoutMs = 5000) => {
+    const start = Date.now();
+    while (fs.existsSync(p)) {
+      if (Date.now() - start > timeoutMs) return false;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return true;
+  };
+
+  test("skips (returns false, writes NO sentinel) when a build is already in flight", () => {
+    const dir = tmp();
+    writeUpdateLock(dir, process.pid); // simulate a live in-flight runner
+    // Pre-seed a sentinel: a real spawn unlinks it first, so if it survives the
+    // call, bgWithSentinel skipped without spawning.
+    fs.writeFileSync(sentinelPath(dir), "ok");
+    expect(bgWithSentinel("node", ["-e", "process.exit(0)"], dir)).toBe(false);
+    expect(fs.existsSync(sentinelPath(dir))).toBe(true); // untouched → no spawn
+    clearUpdateLock(dir);
+    clearSentinel(dir);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("spawns and writes a lock when none is in flight; runner clears the lock on exit", async () => {
+    const dir = tmp();
+    const okCmd = process.platform === "win32" ? "ver" : "true";
+    expect(updateInFlight(dir)).toBe(false);
+    expect(bgWithSentinel(okCmd, [], dir)).toBe(true);
+    // Lock is written synchronously right after the spawn issues (the detached
+    // runner has not booted node yet, so it cannot have cleared it).
+    expect(fs.existsSync(updateLockPath(dir))).toBe(true);
+    // Build finishes → sentinel appears AND the runner cleared its lock.
+    expect(await waitForSentinel(dir)).toEqual({ status: "ok" });
+    expect(await waitForGone(updateLockPath(dir))).toBe(true);
+    clearSentinel(dir);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
   }, 10000);
 });
