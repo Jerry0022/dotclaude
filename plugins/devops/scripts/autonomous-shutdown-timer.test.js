@@ -1,8 +1,10 @@
 import { describe, test, expect } from "vitest";
 import {
   computeShutdownDelaySeconds,
+  isCacheFresh,
   FIVE_HOURS_SEC,
   FLOOR_SEC,
+  REFRESH_MAX_AGE_MIN,
 } from "./autonomous-shutdown-timer.js";
 
 // Fixed "now" so age-correction is deterministic.
@@ -96,5 +98,31 @@ describe("computeShutdownDelaySeconds — fallback to 5h", () => {
     const r = computeShutdownDelaySeconds(atNow(180, -30), NOW);
     expect(r.seconds).toBe(FIVE_HOURS_SEC);
     expect(r.source).toBe("fallback-5h");
+  });
+});
+
+describe("isCacheFresh — gate for the pre-arm usage refresh", () => {
+  test("fresh snapshot (0 min old) → no scrape needed", () => {
+    expect(isCacheFresh(atNow(180, 0), NOW)).toBe(true);
+  });
+
+  test("exactly at the age boundary → still fresh", () => {
+    expect(isCacheFresh(atNow(180, REFRESH_MAX_AGE_MIN), NOW)).toBe(true);
+  });
+
+  test("just past the age boundary → stale, must refresh", () => {
+    expect(isCacheFresh(atNow(180, REFRESH_MAX_AGE_MIN + 1), NOW)).toBe(false);
+  });
+
+  test.each([
+    ["null usage", null],
+    ["empty object", {}],
+    ["missing timestamp", { session: { resetInMinutes: 120 } }],
+  ])("%s → not fresh (must refresh)", (_label, usage) => {
+    expect(isCacheFresh(usage, NOW)).toBe(false);
+  });
+
+  test("future-dated snapshot (clock skew) → not fresh", () => {
+    expect(isCacheFresh(atNow(180, -5), NOW)).toBe(false);
   });
 });

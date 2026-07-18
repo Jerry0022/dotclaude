@@ -103,20 +103,29 @@ Parse the JSON:
 
 ### Timer length — "remaining 5h-period + floor"
 
-The script reads `~/.claude/usage-live.json` (last usage scrape) and resolves the
-delay purely (`computeShutdownDelaySeconds`, unit-tested):
+Before reading usage, `arm` (no override) **freshens** `~/.claude/usage-live.json`
+when the cached snapshot is stale (older than `REFRESH_MAX_AGE_MIN`, or absent): it
+best-effort runs the headless `refresh-usage` scraper (`--no-login`, 90 s-bounded,
+all failures swallowed). This is what makes the timer track the **real** remaining
+window instead of silently defaulting to the flat-5h fallback in desktop sessions,
+where the native statusLine writer never keeps the file warm. A warm cache (terminal
+session) is younger than `REFRESH_MAX_AGE_MIN`, so the scrape is skipped entirely.
+
+The script then resolves the delay purely (`computeShutdownDelaySeconds`, unit-tested):
 
 1. Take `session.resetInMinutes`, **age-correct** it by the snapshot `timestamp`
-   (`effective = resetInMinutes − minutesSinceSnapshot`).
+   (`effective = resetInMinutes − minutesSinceSnapshot`). `now` is read *after* the
+   scrape, so a fresh snapshot is never misread as future-dated.
 2. **Clamp to [90 min, 5 h].** The 90-min FLOOR stops a near-empty token window from
    cutting off still-running work; the 5 h CAP is one full token period.
 3. **Fall back to 5 h** when usage data is missing, unparsable, stale (>5 h old),
    future-dated (clock skew), or the period already elapsed — *"5h passt im
    Zweifelsfall immer"*.
 
-Why a live scrape is **not** triggered here: it would cost ~60 s and spin up the Edge
-scraper at run start. The cached snapshot is precise enough for a coarse fail-safe,
-and the 5 h fallback is safe when it is absent.
+Why the refresh is **bounded and skippable**: a scrape costs up to ~60 s and spins up
+the Edge scraper. Capping it at 90 s and gating it on cache staleness keeps arming
+prompt in the common (warm-cache) case, and the 5 h fallback stays safe whenever the
+refresh yields nothing — so accuracy is gained without weakening the fail-safe.
 
 ### Robustness
 

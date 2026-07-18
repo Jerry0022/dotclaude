@@ -1,9 +1,11 @@
 import { describe, test, expect } from "vitest";
 import {
   computeResumeDelayMinutes,
+  isCacheFresh,
   toCronExpression,
   WINDOW_MAX_MIN,
   RESET_BUFFER_MIN,
+  REFRESH_MAX_AGE_MIN,
 } from "./autonomous-resume-schedule.js";
 
 // Fixed "now" so age-correction is deterministic.
@@ -23,7 +25,7 @@ describe("computeResumeDelayMinutes — reset-window mapping", () => {
 
   test("imminent reset (3 min remaining) → fires soon, NO floor", () => {
     const r = computeResumeDelayMinutes(atNow(3), NOW);
-    expect(r.delayMinutes).toBe(3 + RESET_BUFFER_MIN); // 13 — not floored to 90+
+    expect(r.delayMinutes).toBe(3 + RESET_BUFFER_MIN); // 18 — not floored to 90+
     expect(r.source).toBe("reset-window");
   });
 
@@ -86,6 +88,44 @@ describe("computeResumeDelayMinutes — fallback to flat 5h (no buffer)", () => 
   test("fallback delay carries NO buffer (flat 5h == 300)", () => {
     const r = computeResumeDelayMinutes(null, NOW);
     expect(r.delayMinutes).toBe(300);
+  });
+});
+
+describe("RESET_BUFFER_MIN — resume lands past the reset boundary", () => {
+  test("buffer is 15 min (real remaining window + 15 for resume)", () => {
+    expect(RESET_BUFFER_MIN).toBe(15);
+  });
+
+  test("delay = real remaining + 15, not a flat 5h", () => {
+    const r = computeResumeDelayMinutes(atNow(120), NOW);
+    expect(r.delayMinutes).toBe(135); // 120 remaining + 15 buffer
+    expect(r.source).toBe("reset-window");
+  });
+});
+
+describe("isCacheFresh — gate for the pre-schedule usage refresh", () => {
+  test("fresh snapshot (0 min old) → no scrape needed", () => {
+    expect(isCacheFresh(atNow(180, 0), NOW)).toBe(true);
+  });
+
+  test("exactly at the age boundary → still fresh", () => {
+    expect(isCacheFresh(atNow(180, REFRESH_MAX_AGE_MIN), NOW)).toBe(true);
+  });
+
+  test("just past the age boundary → stale, must refresh", () => {
+    expect(isCacheFresh(atNow(180, REFRESH_MAX_AGE_MIN + 1), NOW)).toBe(false);
+  });
+
+  test.each([
+    ["null usage", null],
+    ["empty object", {}],
+    ["missing timestamp", { session: { resetInMinutes: 120 } }],
+  ])("%s → not fresh (must refresh)", (_label, usage) => {
+    expect(isCacheFresh(usage, NOW)).toBe(false);
+  });
+
+  test("future-dated snapshot (clock skew) → not fresh", () => {
+    expect(isCacheFresh(atNow(180, -5), NOW)).toBe(false);
   });
 });
 
