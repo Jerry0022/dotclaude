@@ -11,8 +11,13 @@
  * this `shutdown.exe` call could not be placed.
  *
  * Timer length — "remaining 5h-period + floor" (user choice):
- *   - Read `session.resetInMinutes` from ~/.claude/usage-live.json (last scrape),
- *     age-correct it against the snapshot `timestamp`.
+ *   - FRESHEN first (arm, no override): when ~/.claude/usage-live.json is stale
+ *     (older than REFRESH_MAX_AGE_MIN, or absent), best-effort run the headless
+ *     refresh-usage scraper (`--no-login`, bounded) so the timer tracks the REAL
+ *     remaining window instead of silently defaulting to the flat-5h fallback. A
+ *     warm cache (native statusLine writer) skips the scrape entirely.
+ *   - Read `session.resetInMinutes` from the (now-fresh) snapshot and age-correct
+ *     it against the snapshot `timestamp`.
  *   - Clamp to [90 min, 5 h]. The 90-min FLOOR stops a near-empty token window
  *     from cutting off still-running work; the 5 h CAP is one full token period.
  *   - Fall back to 5 h if usage data is missing, stale (>5 h old), or the period
@@ -26,8 +31,9 @@
  *
  * Subcommands (stdout: JSON):
  *   arm [resetMinutesOverride]   Place `shutdown /s /t <seconds>`. Optional numeric
- *                                override skips the usage-file read (testing / when
- *                                the caller already knows resetInMinutes).
+ *                                override skips BOTH the usage refresh and the
+ *                                usage-file read (testing / when the caller already
+ *                                knows resetInMinutes).
  *                                → { ok, armed, seconds, minutes, source }
  *   cancel                       Run `shutdown /a`. A "nothing scheduled" result is
  *                                treated as success (idempotent).
@@ -46,6 +52,7 @@ const USAGE_JSON_PATH = path.join(os.homedir(), '.claude', 'usage-live.json');
 const FIVE_HOURS_SEC = 5 * 60 * 60; // 18000 — fallback & hard cap (one token period)
 const FLOOR_SEC = 90 * 60;          // 5400  — min, guards against cutting off live work
 const MAX_STALE_MIN = 300;          // usage older than a full window → unreliable → fallback
+const REFRESH_MAX_AGE_MIN = 3;      // cache younger than this is fresh enough → skip the scrape
 
 function fail(msg) {
   process.stdout.write(JSON.stringify({ ok: false, error: msg }) + '\n');
@@ -107,6 +114,40 @@ function readUsageJson() {
   }
 }
 
+/**
+ * Is the cached usage snapshot recent enough to trust without a re-scrape?
+ * Pure — exported for tests.
+ * @param {object|null} usageData  Parsed usage-live.json (or null/garbage).
+ * @param {number} nowMs           Current epoch ms.
+ * @returns {boolean}
+ */
+function isCacheFresh(usageData, nowMs) {
+  const ts = usageData && usageData.timestamp;
+  if (!ts) return false;
+  const ageMin = (nowMs - new Date(ts).getTime()) / 60000;
+  return Number.isFinite(ageMin) && ageMin >= 0 && ageMin <= REFRESH_MAX_AGE_MIN;
+}
+
+/**
+ * Best-effort freshen usage-live.json via the headless scraper so the fail-safe
+ * timer tracks the REAL remaining window instead of the flat-5h fallback. Bounded
+ * and fully swallowed: a slow/broken/logged-out scrape must never delay arming past
+ * its 90s cap or throw — we fall through to whatever the cache (or 5h) holds. The
+ * 5h fallback keeps this net safe even if the refresh yields nothing.
+ */
+function refreshUsageBestEffort() {
+  try {
+    const scraper = path.join(__dirname, 'refresh-usage-headless.js');
+    spawnSync(process.execPath, [scraper, '--no-login', '--quiet'], {
+      cwd: safeCwd(), // always-local CWD — a UNC session dir can't break the spawn
+      timeout: 90_000,
+      stdio: 'ignore',
+    });
+  } catch {
+    // ignore — arming proceeds on the existing snapshot
+  }
+}
+
 function shutdownExe() {
   const root = process.env.SystemRoot || process.env.windir || 'C:\\Windows';
   return path.join(root, 'System32', 'shutdown.exe');
@@ -130,6 +171,11 @@ function runArm(argv) {
       0, // age 0 → use override verbatim (clamped)
     );
   } else {
+    // Freshen first so a stale desktop-session cache doesn't force the flat-5h
+    // fallback; scrape only when the cache is actually stale (bounded, best-effort).
+    // Read `now` AFTER the scrape so a fresh timestamp isn't seen as future-dated
+    // (which would bounce it to the 5h fallback).
+    if (!isCacheFresh(readUsageJson(), Date.now())) refreshUsageBestEffort();
     plan = computeShutdownDelaySeconds(readUsageJson(), Date.now());
   }
 
@@ -177,7 +223,9 @@ if (require.main === module) {
 
 module.exports = {
   computeShutdownDelaySeconds,
+  isCacheFresh,
   FIVE_HOURS_SEC,
   FLOOR_SEC,
   MAX_STALE_MIN,
+  REFRESH_MAX_AGE_MIN,
 };

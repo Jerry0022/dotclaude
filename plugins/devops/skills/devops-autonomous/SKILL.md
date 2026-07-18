@@ -1,6 +1,6 @@
 ---
 name: devops-autonomous
-version: 0.4.2
+version: 0.5.0
 description: >-
   Fully autonomous agent orchestration for when the user is away from the PC.
   Runs agents without supervision (implementation, desktop interaction, live
@@ -379,13 +379,17 @@ on its own — this cron is the global "budget is back, keep going" nudge. It on
 applies in `notify` mode (shutdown=no): a shutdown PC has nothing to resume, which is
 why Step 2 Q4 is never asked when shutdown=yes.
 
-**Fire timing — compute it, don't guess.** Run the helper; it derives the fire moment
-from the live token-window reset (with a buffer past the reset boundary) and falls
-back to a flat 5h when usage data is missing or stale:
+**Fire timing — compute it, don't guess.** Run the helper; it first **freshens usage**
+(best-effort headless `--no-login` scrape, only when the cached snapshot is stale) so
+the fire moment tracks the **real** remaining token window instead of silently
+defaulting to a flat 5h. It then fires at `remaining window + 15-min buffer` past the
+reset boundary, and falls back to a flat 5h only when usage data stays missing/stale:
 
 ```bash
 node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-resume-schedule.js"
 ```
+
+The helper self-refreshes — do **not** run `/devops-refresh-usage` separately first.
 
 Parse the JSON: `{ delayMinutes, cron, fireAtLocal, source }`. `cron` is a ready-to-use
 5-field one-shot expression in local time — use it verbatim, no manual date math. Then:
@@ -450,9 +454,11 @@ and never reaches Step 8 — the exact "tokens ran out, PC stayed on all night" 
 node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-shutdown-timer.js" arm
 ```
 
-The script reads `~/.claude/usage-live.json`, sets the timer to the remaining
-5h-period (`session.resetInMinutes`, age-corrected) **clamped to [90 min, 5 h]**,
-and falls back to **5 h** if usage data is missing/stale. It calls
+The script first **freshens usage** (best-effort headless `--no-login` scrape, only
+when the cached snapshot is stale) so the timer tracks the **real** remaining window
+instead of defaulting to a flat 5h. It then sets the timer to the remaining 5h-period
+(`session.resetInMinutes`, age-corrected) **clamped to [90 min, 5 h]**, and falls back
+to **5 h** if usage data stays missing/stale. It calls
 `shutdown.exe /s /t <seconds>` directly with an absolute path and a guaranteed-local
 CWD (UNC-safe). Parse the JSON: on `ok:true` log the armed window
 (`{minutes} min, source={source}`) to `AUTONOMOUS-LOG.md`; on `ok:false` or

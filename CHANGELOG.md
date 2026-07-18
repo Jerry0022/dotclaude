@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.118.0] — 2026-07-18
+
+### Changed
+
+- **Autonomous resume and fail-safe shutdown timers now fire on the *real* remaining token window instead of almost always defaulting to a flat 5h.** Both the auto-resume cron (`devops-autonomous` Step 4e) and the fail-safe OS shutdown timer (Step 5.0) derive their delay from `session.resetInMinutes` in `~/.claude/usage-live.json` — but that file is only kept minute-fresh by the native statusLine writer, which never runs in the Desktop app. In those (common) unattended sessions the snapshot was stale, so age-correction bounced to the safe-but-blunt flat-5h fallback: a resume that could fire minutes after the window resets waited the full 5h, and the shutdown timer powered off a whole period late. Both CLIs now **freshen usage first** — when the cached snapshot is stale (older than 3 min) or absent they best-effort run the headless `refresh-usage` scraper (`--no-login`, so it never opens a window) before computing; a warm cache (terminal session) is detected via `isCacheFresh` and skips the scrape entirely. The scrape is 90s-bounded and fully swallowed: a slow, broken, or logged-out scraper never delays arming past its cap nor throws, and the 5h fallback stays the safety net when it yields nothing. `now` is read *after* the scrape so a freshly written snapshot is not misread as future-dated — which would have re-triggered the very fallback the refresh exists to avoid. The resume buffer past the reset boundary is raised **10 → 15 min** so the cron lands further clear of the reset before nudging capped worktrees; the shutdown timer keeps its `[90 min, 5 h]` clamp and adds no buffer (a powered-off PC resumes nothing). Codex review gate was unavailable this ship (external usage limit) — covered instead by +13 unit tests (isCacheFresh boundaries for both scripts, the 15-min buffer lock) and full-suite verification. (`autonomous-resume-schedule.js` buffer 10→15 + refresh, `autonomous-shutdown-timer.js` refresh, `devops-autonomous` SKILL 0.4.2 → 0.5.0 Step 4e/5.0, `shutdown-watchdog.md` rationale; 748 tests.)
+
 ## [0.117.0] — 2026-07-18
 
 ### Added

@@ -8,12 +8,17 @@
  * worktrees to continue with »weiter« (Step 0.2).
  *
  * Timing — "just after the current window resets, else a flat 5h":
- *   - Read `session.resetInMinutes` from ~/.claude/usage-live.json (last scrape),
- *     age-correct it against the snapshot `timestamp`.
- *   - Fire at `now + effectiveMin + BUFFER`. The BUFFER pushes the fire moment
- *     PAST the reset boundary (clock skew, scrape lag) — the cron must wake up
- *     when budget is back, not a hair before. effectiveMin is clamped to one full
- *     window (≤ 5h) defensively.
+ *   - The CLI first FRESHENS usage: when ~/.claude/usage-live.json is stale (older
+ *     than REFRESH_MAX_AGE_MIN, or absent), it best-effort runs the headless
+ *     refresh-usage scraper (`--no-login`, bounded) so the REAL remaining window is
+ *     used instead of silently defaulting to the flat-5h fallback. A warm cache
+ *     (native statusLine writer, terminal sessions) skips the scrape entirely.
+ *   - Read `session.resetInMinutes` from the (now-fresh) snapshot and age-correct
+ *     it against the snapshot `timestamp`.
+ *   - Fire at `now + effectiveMin + BUFFER`. The BUFFER (15 min) pushes the fire
+ *     moment PAST the reset boundary (clock skew, scrape lag) — the cron must wake
+ *     up when budget is truly back, not a hair before. effectiveMin is clamped to
+ *     one full window (≤ 5h) defensively.
  *   - Fall back to a flat 5h whenever usage data is missing, stale (>5h old),
  *     future-dated, or already reset. 5h is always safe: the active window started
  *     at or before "now", so its reset is at or before now+5h ("im Zweifel 5h").
@@ -27,9 +32,11 @@
  *                       `cron` is a ready-to-use 5-field expression in LOCAL time
  *                       for a one-shot CronCreate — no LLM date math needed.
  *
- * Cross-platform: pure file-read + date math, no native calls.
+ * The pure resolver (computeResumeDelayMinutes) does only file-read + date math and
+ * is fully cross-platform; the CLI additionally best-effort refreshes usage first.
  */
 
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -37,8 +44,9 @@ const os = require('os');
 const USAGE_JSON_PATH = path.join(os.homedir(), '.claude', 'usage-live.json');
 
 const WINDOW_MAX_MIN = 5 * 60; // 300 — one full token period (cap & flat fallback)
-const RESET_BUFFER_MIN = 10;   // pad past the reset boundary so budget is truly back
+const RESET_BUFFER_MIN = 15;   // pad past the reset boundary so budget is truly back
 const MAX_STALE_MIN = 300;     // usage older than a full window → unreliable → fallback
+const REFRESH_MAX_AGE_MIN = 3; // cache younger than this is fresh enough → skip the scrape
 
 /**
  * Pure delay resolver — no I/O, exported for tests.
@@ -92,12 +100,49 @@ function readUsageJson() {
   }
 }
 
+/**
+ * Is the cached usage snapshot recent enough to trust without a re-scrape?
+ * Pure — exported for tests.
+ * @param {object|null} usageData  Parsed usage-live.json (or null/garbage).
+ * @param {number} nowMs           Current epoch ms.
+ * @returns {boolean}
+ */
+function isCacheFresh(usageData, nowMs) {
+  const ts = usageData && usageData.timestamp;
+  if (!ts) return false;
+  const ageMin = (nowMs - new Date(ts).getTime()) / 60000;
+  return Number.isFinite(ageMin) && ageMin >= 0 && ageMin <= REFRESH_MAX_AGE_MIN;
+}
+
+/**
+ * Best-effort freshen usage-live.json via the headless scraper so the resume cron
+ * fires on the REAL remaining window instead of the flat-5h fallback. Bounded and
+ * fully swallowed: a slow/broken/logged-out scrape must never delay or break
+ * scheduling — we simply fall through to whatever the cache (or 5h fallback) holds.
+ */
+function refreshUsageBestEffort() {
+  try {
+    const scraper = path.join(__dirname, 'refresh-usage-headless.js');
+    spawnSync(process.execPath, [scraper, '--no-login', '--quiet'], {
+      cwd: os.tmpdir(), // always-local CWD — a UNC session dir can't break the spawn
+      timeout: 90_000,
+      stdio: 'ignore',
+    });
+  } catch {
+    // ignore — scheduling proceeds on the existing snapshot
+  }
+}
+
 function pad2(n) {
   return String(n).padStart(2, '0');
 }
 
 // --- CLI entry (skipped when require()'d by tests) ---
 if (require.main === module) {
+  // Freshen first so a stale desktop-session cache doesn't silently force flat 5h.
+  if (!isCacheFresh(readUsageJson(), Date.now())) refreshUsageBestEffort();
+  // Capture `now` AFTER the (possibly ~60s) scrape: a fresh snapshot's timestamp
+  // must be ≤ now, else age-correction reads it as future-dated → flat-5h fallback.
   const now = Date.now();
   const plan = computeResumeDelayMinutes(readUsageJson(), now);
   const fireAtMs = now + plan.delayMinutes * 60000;
@@ -118,8 +163,10 @@ if (require.main === module) {
 
 module.exports = {
   computeResumeDelayMinutes,
+  isCacheFresh,
   toCronExpression,
   WINDOW_MAX_MIN,
   RESET_BUFFER_MIN,
   MAX_STALE_MIN,
+  REFRESH_MAX_AGE_MIN,
 };
