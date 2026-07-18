@@ -1,6 +1,6 @@
 ---
 name: devops-autonomous
-version: 0.4.2
+version: 0.5.0
 description: >-
   Fully autonomous agent orchestration for when the user is away from the PC.
   Runs agents without supervision (implementation, desktop interaction, live
