@@ -25,23 +25,70 @@ export const schema = z.object({
 
 const ORDER = { alpha: 0, beta: 1, stable: 2 };
 
-function lsRemoteTag(tag, opts) {
-  const out = git(`ls-remote --tags origin ${tag}`, opts);
-  if (!out || !out.includes(`refs/tags/${tag}`)) return null;
-  return out.trim().split(/\s+/)[0] || null;
+/**
+ * Parse `git ls-remote --tags` output for ONE tag and return the COMMIT sha it
+ * points at, or null when the tag is absent. Pure — exported for unit tests.
+ *
+ * Three ls-remote traps this must handle (all bit us on the 0.116.2 promotion):
+ * - An annotated tag has TWO refs: the tag OBJECT sha on `refs/tags/<tag>` and
+ *   the peeled COMMIT sha on `refs/tags/<tag>^{}`. Tag objects differ by
+ *   construction even when they point at the same commit (tagger/date/message),
+ *   so every promotion comparison MUST use the peeled commit sha. Prefer the
+ *   `^{}` line; fall back to the plain line (lightweight tags have no peeled
+ *   entry — their plain sha IS the commit).
+ * - A single-pattern query NEVER returns the `^{}` line: ls-remote tail-matches
+ *   each pattern per path component, and `refs/tags/<tag>^{}` does not end in
+ *   `/<tag>`. The CALLER must therefore query BOTH patterns
+ *   (`<tag>` AND `<tag>^{}`) — see lsRemoteTag. Verified against a live
+ *   GitHub remote; a mock that returns peeled lines for plain-pattern queries
+ *   is lying about git.
+ * - Tail-component matching also means querying `v0.116.2` returns
+ *   `alpha/v0.116.2` &c. — only an exact-ref match may count, never "first
+ *   line of the output".
+ */
+export function parseLsRemoteTagOutput(out, tag) {
+  let plain = null;
+  let peeled = null;
+  for (const line of (out || "").split("\n")) {
+    const [sha, ref] = line.trim().split(/\s+/);
+    if (!sha || !ref) continue;
+    if (ref === `refs/tags/${tag}`) plain = sha;
+    else if (ref === `refs/tags/${tag}^{}`) peeled = sha;
+  }
+  return peeled || plain;
 }
 
-function listRemoteChannelTags(opts) {
-  const out = git(`ls-remote --tags origin`, opts) || "";
-  const tags = [];
-  for (const line of out.split("\n")) {
+function lsRemoteTag(tag, opts) {
+  // Both patterns, both double-quoted: the second is required to surface the
+  // peeled ^{} line at all (see parseLsRemoteTagOutput), and unquoted `^` is
+  // cmd.exe's escape character (execSync runs through a shell on win32).
+  return parseLsRemoteTagOutput(git(`ls-remote --tags origin "${tag}" "${tag}^{}"`, opts), tag);
+}
+
+/**
+ * Parse full `git ls-remote --tags origin` output into one entry per channel
+ * tag, carrying the COMMIT sha (peeled `^{}` line wins over the tag-object
+ * line — see parseLsRemoteTagOutput). Pure — exported for unit tests.
+ * Without the dedupe an annotated tag produced TWO entries under the same tag
+ * name, and the monotonicity/immutability guards compared whichever sha they
+ * happened to find first.
+ */
+export function parseLsRemoteChannelTags(out) {
+  const byTag = new Map();
+  for (const line of (out || "").split("\n")) {
     const [sha, ref] = line.trim().split(/\s+/);
     if (!sha || !ref) continue;
     const parsed = parseChannelTag(ref);
     if (!parsed) continue;
-    tags.push({ sha, tag: ref.replace(/^refs\/tags\//, "").replace(/\^\{\}$/, ""), ...parsed });
+    const peeled = ref.endsWith("^{}");
+    const tag = ref.replace(/^refs\/tags\//, "").replace(/\^\{\}$/, "");
+    if (peeled || !byTag.has(tag)) byTag.set(tag, { sha, tag, ...parsed });
   }
-  return tags;
+  return [...byTag.values()];
+}
+
+function listRemoteChannelTags(opts) {
+  return parseLsRemoteChannelTags(git(`ls-remote --tags origin`, opts));
 }
 
 /**
