@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.117.0] — 2026-07-18
+
+### Added
+
+- **New `/devops-burn-backlog` skill — pick milestones and have the backlog worked off end-to-end, unsupervised, until it ships.** The autonomous surface had a gap: `devops-autonomous` runs a single ad-hoc task and, by a load-bearing guarantee, never ships unsupervised; `devops-burn` is budget-driven, pulls flat issues, and has no milestone concept or per-item ship lifecycle. Neither covers "burn down the planned backlog". The new skill is a **milestone-centric backlog runner**: it fetches open GitHub milestones (falling back to loose issues when there are none), lets the user checkbox-select what to burn down (milestones-first — issues within a chosen milestone are taken wholesale; a second step only appears for issues without any milestone), then for each selected item refines it into a spec, implements, tests/QAs, and **ships** it (branch → PR → ship pipeline → merge → close), auto-closing a milestone once all its issues are done. Architecture is **standalone / compose-not-copy** (Approach C): the skill owns its own control flow and is itself the ship instance — it never modifies `devops-autonomous` or routes a ship through it, so that skill's no-ship guarantee stays fully intact. It reuses the autonomous *frame* by calling the same plugin scripts (permission audit, shutdown timer, resume schedule, watchdog, completion card) and composes `/devops-concept` (decision pages), `/devops-ship`, and the role agents as building blocks. A **hybrid concept-gate** resolves design decisions live during a presence-phase pre-triage and parks oversized items discovered mid-run; blocked items surface as non-blocking `⏸ Rückfrage` chat-thread messages so one failure never halts the queue. A distinct `BURN_BACKLOG_AUTOSTART` re-entry marker prevents the 3-minute autostart cron from being caught by `devops-autonomous`'s own Step 0.1 handler. Built dogfood-style via `/devops-autonomous` with a 4-lens adversarial review pass. Design spec: `docs/superpowers/specs/2026-07-18-devops-burn-backlog-design.md`. (New `devops-burn-backlog` skill 0.1.0 + reference.md, README/architecture roster updates. Codex review gate was unavailable this ship — external usage limit — the adversarial 4-lens review covered the skill instead.)
+
 ## [0.116.3] — 2026-07-18
 
 ### Fixed
