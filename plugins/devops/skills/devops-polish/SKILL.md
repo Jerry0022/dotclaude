@@ -344,7 +344,10 @@ Output the returned markdown VERBATIM as the LAST thing.
 
 ### Concept Page (when needed)
 
-Build a concept page following `/devops-concept` patterns when:
+Build a concept page following the concept scaffold in
+`skills/devops-concept/deep-knowledge/templates.md` (with the submit/monitor
+bridge from `skills/devops-concept/deep-knowledge/bridge-server.md` — reference
+both by name, not by concept's step numbers) when:
 - More than 3 structural proposals (Step 10), OR
 - More than 5 items flagged across all "deferred" categories
 

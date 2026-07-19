@@ -319,7 +319,10 @@ nothing after the closing `---`.
 ### Optional Concept Page (>5 outstanding)
 
 If outstanding items > 5 AND interactive mode: generate a concept page
-following `/devops-concept` patterns with three filter sections:
+following the concept scaffold in
+`skills/devops-concept/deep-knowledge/templates.md` (design system, panel,
+cards — the authoritative source, referenced by name not by concept's step
+numbers), with three filter sections:
 - **"Polish-candidates"** — flagged in Step 8
 - **"Manual review (architecture)"** — Step 7 high-risk skips
 - **"Coverage gaps without test framework"** — Step 6 skips
