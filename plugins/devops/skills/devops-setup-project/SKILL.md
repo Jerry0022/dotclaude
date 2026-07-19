@@ -130,7 +130,7 @@ splitting the volatile value into a separate gitignored file.
 
 ## Step 2b — CLAUDE.md audit
 
-Run `/devops-claude-md-lint` to check CLAUDE.md size and structure.
+Run `/devops-claude-lint` to check CLAUDE.md size and structure.
 Report the result in the final output under a `### CLAUDE.md` section.
 
 ## Step 2c — Platform-specific permissions audit (Windows only)
@@ -185,11 +185,11 @@ Do NOT auto-create — only report status and recommend.
 Check if `.claude/skills/` exists in the project. If any extensions are already
 present, list them in the report.
 
-Point the user to `/devops-extend-skill` for interactively scaffolding or adapting
+Point the user to `/devops-claude-extend-skill` for interactively scaffolding or adapting
 extensions for any plugin skill:
 
 > "Du kannst jedes Plugin-Skill für dieses Projekt anpassen.
-> Nutze `/devops-extend-skill`, um interaktiv eine Extension anzulegen oder
+> Nutze `/devops-claude-extend-skill`, um interaktiv eine Extension anzulegen oder
 > eine bestehende zu bearbeiten. Mehr dazu: siehe Plugin README."
 
 ## Step 8 — Output report
@@ -213,7 +213,7 @@ extensions for any plugin skill:
 - [WARNING/OK/INFO] ...
 
 ### Plugin Extensions
-- [INFO] Run /devops-extend-skill to scaffold extensions for plugin skills
+- [INFO] Run /devops-claude-extend-skill to scaffold extensions for plugin skills
 ```
 
 ## Step 9 — Completion Card

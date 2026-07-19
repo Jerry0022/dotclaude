@@ -1,7 +1,7 @@
 # Content Conventions — Sizing & Self-Reference
 
 How to size and structure project-persistent content (CLAUDE.md, skills,
-deep-knowledge). Referenced by `/devops-learn`, `/devops-claude-md-lint`, and
+deep-knowledge). Referenced by `/devops-learn`, `/devops-claude-lint`, and
 all skill authoring.
 
 These are **soft caps** — they bias routing decisions, they don't hard-fail.
@@ -29,7 +29,7 @@ When adding new content would push a file past its budget:
 
 The cap is stylistic. If the rule itself is short and the file is already over
 budget for unrelated reasons, just append — size-rebalancing is a separate
-concern handled by `/devops-claude-md-lint` and ordinary refactor passes.
+concern handled by `/devops-claude-lint` and ordinary refactor passes.
 
 ## Self- and plugin-references over command redundancy
 

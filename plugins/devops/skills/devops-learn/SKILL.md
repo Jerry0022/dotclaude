@@ -154,7 +154,7 @@ The user is editing the plugin source. Choose target file:
 
 Only touch `plugins/devops/CLAUDE.md` or root `CLAUDE.md` if neither skill nor
 deep-knowledge fits and the rule is a one-liner. Bias: keep CLAUDE.md at
-~20 lines (target). After any CLAUDE.md edit, invoke `/devops-claude-md-lint`
+~20 lines (target). After any CLAUDE.md edit, invoke `/devops-claude-lint`
 via the **Skill** tool to verify size and structure — do not eyeball line counts.
 
 ### 5b — Consumer project, plugin topic, upstream fix (DEFAULT)
@@ -192,7 +192,7 @@ If a clear skill match exists:
 
 1. Check `{project}/.claude/skills/<skill>/SKILL.md` — create directory if missing
 2. If `SKILL.md` doesn't exist, scaffold via the same template as
-   `devops-extend-skill` Step 4.2
+   `devops-claude-extend-skill` Step 4.2
 3. Append the rule under a `## Project rules` section. Each rule = 1–3 lines.
 4. If the rule needs more than 3 lines of context, instead put the bulk into
    `{project}/.claude/skills/<skill>/reference.md` and leave a one-line pointer
@@ -217,7 +217,7 @@ Decide between project-skill and project-deep-knowledge:
 
 Only as last resort append a one-line pointer to `{project}/CLAUDE.md` so the
 new file gets discovered. Bias: keep CLAUDE.md at ~20 lines (target). After
-any CLAUDE.md edit, invoke `/devops-claude-md-lint` via the **Skill** tool —
+any CLAUDE.md edit, invoke `/devops-claude-lint` via the **Skill** tool —
 single source of truth for size/structure checks.
 
 ### 5d — Different project (cross-project)
@@ -329,7 +329,7 @@ After persisting, show the user:
 
 - Which file(s) changed (path + line count delta)
 - The verbatim rule that was added
-- If a CLAUDE.md was touched: the `/devops-claude-md-lint` result for that file
+- If a CLAUDE.md was touched: the `/devops-claude-lint` result for that file
   (don't re-count lines manually — relay the lint output)
 - If Step 6 deleted any feedback memories: list the removed file names
 

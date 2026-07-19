@@ -240,7 +240,7 @@ already invalid the moment the bridge server is killed.
 
 ## Scaffolding
 
-Run `/devops-extend-skill` to interactively scaffold an extension for any plugin skill.
+Run `/devops-claude-extend-skill` to interactively scaffold an extension for any plugin skill.
 It lists all available skills, checks whether an extension already exists in your
 project, and either scaffolds new files or opens the existing ones for editing.
 

@@ -1,6 +1,6 @@
 ---
-name: devops-claude-md-lint
-version: 0.1.0
+name: devops-claude-lint
+version: 0.2.0
 description: >-
   Audit CLAUDE.md files for size, structure, and token efficiency. Checks both
   project-level and global CLAUDE.md. Warns when files exceed 25 lines (the
@@ -14,7 +14,7 @@ argument-hint: "[--fix]"
 allowed-tools: Read, Glob, Bash, Write, Edit, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
-# CLAUDE.md Lint
+# Claude Lint — CLAUDE.md Audit
 
 Audit CLAUDE.md files for token efficiency.
 
@@ -23,8 +23,8 @@ Audit CLAUDE.md files for token efficiency.
 Check for optional overrides. Use **Glob** to verify each path exists before reading.
 Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global: `~/.claude/skills/claude-md-lint/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/claude-md-lint/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/claude-lint/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/claude-lint/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Locate CLAUDE.md files

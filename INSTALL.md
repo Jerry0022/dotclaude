@@ -44,7 +44,7 @@ your-project/.claude/skills/{skill-name}/
 └── reference.md    ← project-specific context
 ```
 
-Run `/devops-setup-project` in any project to auto-scaffold extensions based on the project's build system, CI config, and conventions. Run `/devops-extend-skill` to interactively scaffold an extension for a specific skill.
+Run `/devops-setup-project` in any project to auto-scaffold extensions based on the project's build system, CI config, and conventions. Run `/devops-claude-extend-skill` to interactively scaffold an extension for a specific skill.
 
 ## Optional: Codex Integration
 

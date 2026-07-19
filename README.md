@@ -160,7 +160,7 @@ your-project/.claude/skills/devops-ship/
 └── reference.md    ← "Deploy via SSH to 192.168.178.32"
 ```
 
-Run `/devops-extend-skill` to interactively scaffold an extension for any plugin skill.
+Run `/devops-claude-extend-skill` to interactively scaffold an extension for any plugin skill.
 It detects existing extensions and lets you adapt them.
 
 For the full extension guide with examples per skill, see `deep-knowledge/skill-extension-guide.md`.
@@ -168,7 +168,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 ## Features
 
 - **<!--devops:count:hooks-->35<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-fix, devops-setup-issue, devops-setup-project, devops-setup-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-run-agents, devops-plugin-update, devops-run-autonomous, devops-run-burn, devops-run-backlog, devops-learn, devops-tune-harden, devops-tune-polish, devops-test-plan
+- **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-fix, devops-setup-issue, devops-setup-project, devops-setup-readme, devops-refresh-usage, devops-claude-extend-skill, devops-repo-health, devops-claude-lint, devops-concept, devops-run-agents, devops-plugin-update, devops-run-autonomous, devops-run-burn, devops-run-backlog, devops-learn, devops-tune-harden, devops-tune-polish, devops-test-plan
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
@@ -309,10 +309,10 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/devops-setup-project` | Explicit | Repo hygiene audit and initialization |
 | `/devops-setup-readme` | Explicit | Modern README generation |
 | `/devops-refresh-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
-| `/devops-extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
+| `/devops-claude-extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
 | `/devops-repo-health` | Explicit | Repository branch hygiene analysis and cleanup |
 | `/devops-plugin-update` | Explicit | Update the plugin to the latest version from GitHub |
-| `/devops-claude-md-lint` | Explicit | Audit CLAUDE.md files for size, structure, and token efficiency |
+| `/devops-claude-lint` | Explicit | Audit CLAUDE.md files for size, structure, and token efficiency |
 | `/devops-concept` | Explicit | Interactive HTML page for analysis, plans, concepts, and prototypes |
 | `/devops-run-agents` | Explicit | Evaluate agents and orchestrate parallel execution |
 | `/devops-run-autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |

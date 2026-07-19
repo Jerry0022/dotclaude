@@ -142,7 +142,7 @@
   <a href="#skill-project-setup">/devops-setup-project</a>
   <a href="#skill-readme">/devops-setup-readme</a>
   <a href="#skill-refresh-usage">/devops-refresh-usage</a>
-  <a href="#skill-extend-skill">/devops-extend-skill</a>
+  <a href="#skill-extend-skill">/devops-claude-extend-skill</a>
 
   <h2>MCP Servers</h2>
   <a href="#mcp">MCP Servers (2)</a>
@@ -488,7 +488,7 @@
   <tr><td><code>/devops-setup-project</code></td><td>Repo hygiene audit</td><td>"set up project", "audit gitignore"</td><td>Normal</td></tr>
   <tr><td><code>/devops-setup-readme</code></td><td>README generation</td><td>"create a readme"</td><td>Normal</td></tr>
   <tr><td><code>/devops-refresh-usage</code></td><td>Token usage scraping</td><td>"refresh usage", silently pre-card</td><td>Normal</td></tr>
-  <tr><td><code>/devops-extend-skill</code></td><td>Skill extension scaffolding</td><td>"extend skill", "customize skill"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-claude-extend-skill</code></td><td>Skill extension scaffolding</td><td>"extend skill", "customize skill"</td><td>Normal</td></tr>
 </table>
 </section>
 
@@ -676,7 +676,7 @@
 </section>
 
 <section id="skill-extend-skill">
-<h3>/devops-extend-skill &mdash; Extension Scaffolding</h3>
+<h3>/devops-claude-extend-skill &mdash; Extension Scaffolding</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span></p>
 <details>
   <summary>Interactive Scaffolding Flow</summary>
@@ -1047,7 +1047,7 @@
 <div class="interaction-matrix">
   <span class="from">/devops-fix</span> <span class="to">&rarr; suggests /devops-ship &mdash; after fix is applied and changes are ready</span>
   <span class="from">/devops-setup-project</span> <span class="to">&rarr; informs user to run /devops-setup-readme &mdash; for README generation</span>
-  <span class="from">/devops-extend-skill</span> <span class="to">&rarr; reads all skills &mdash; to list available extension targets</span>
+  <span class="from">/devops-claude-extend-skill</span> <span class="to">&rarr; reads all skills &mdash; to list available extension targets</span>
   <span class="from">/devops-ship</span> <span class="to">&rarr; optional /codex:rescue &mdash; pre-ship code review (if codex-plugin-cc installed)</span>
 </div>
 
@@ -1065,7 +1065,7 @@
     <table>
       <tr><th>Document</th><th>Topic</th><th>Used By</th></tr>
       <tr><td><code>agent-collaboration.md</code></td><td>Multi-agent wave orchestration</td><td>All agents, /feature</td></tr>
-      <tr><td><code>skill-extension-guide.md</code></td><td>3-layer extension model</td><td>/devops-extend-skill, all skills</td></tr>
+      <tr><td><code>skill-extension-guide.md</code></td><td>3-layer extension model</td><td>/devops-claude-extend-skill, all skills</td></tr>
       <tr><td><code>codex-integration.md</code></td><td>Optional Codex plugin</td><td>/devops-ship</td></tr>
       <tr><td><code>agent-conventions.md</code></td><td>Agent naming, branching</td><td>All agents</td></tr>
       <tr><td><code>claude-directory-structure.md</code></td><td>.claude/ canonical layout</td><td>/devops-setup-project</td></tr>

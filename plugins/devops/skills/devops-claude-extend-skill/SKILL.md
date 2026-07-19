@@ -1,6 +1,6 @@
 ---
-name: devops-extend-skill
-version: 0.1.0
+name: devops-claude-extend-skill
+version: 0.2.0
 description: >-
   Interactively scaffold or adapt a project-level extension for any plugin skill.
   Lists available skills, checks for existing extensions, and creates or opens
@@ -9,7 +9,7 @@ argument-hint: "[skill-name]"
 allowed-tools: Read, Glob, Grep, Bash, AskUserQuestion, Write, Edit
 ---
 
-# Extend Skill — Interactive Extension Scaffolding
+# Claude Extend Skill — Interactive Extension Scaffolding
 
 Scaffold or adapt a project-level extension for any devops skill.
 
@@ -18,8 +18,8 @@ Scaffold or adapt a project-level extension for any devops skill.
 Check for optional overrides. Use **Glob** to verify each path exists before reading.
 Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global: `~/.claude/skills/extend-skill/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/extend-skill/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/claude-extend-skill/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/claude-extend-skill/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Detect project root
