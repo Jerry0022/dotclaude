@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 /**
  * @script mcp-reap
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Thin CLI wrapper around hooks/lib/mcp-reaper.js. Scans for
- *   orphaned Claude Desktop MCP server child processes (dead-parent +
- *   MCP-signature match) and reports them. SAFE DEFAULT: dry-run — nothing
- *   is ever terminated unless --apply (or --kill) is passed explicitly.
- *   Intended callers: the SessionStart hook and a scheduled task.
+ *   orphaned Claude Desktop MCP server child processes — MCP-signature
+ *   match, dead parent, AND outside the live-Claude census/self-subtree/
+ *   own-process guards (see mcp-reaper.js header) — and reports them.
+ *   Windows only; a documented no-op elsewhere. SAFE DEFAULT: dry-run —
+ *   nothing is ever terminated unless --apply (or --kill) is passed
+ *   explicitly. Intended callers: the SessionStart hook and a scheduled
+ *   task.
  *
  *   Usage:
  *     node scripts/mcp-reap.js               # dry-run, human summary
@@ -47,6 +50,12 @@ function printHuman(result, apply) {
   }
   if (apply) {
     process.stdout.write(`  killed:     ${result.killed.length}\n`);
+    if (result.skipped.length) {
+      process.stdout.write(`  skipped (TOCTOU re-check failed): ${result.skipped.length}\n`);
+      for (const s of result.skipped) {
+        process.stdout.write(`    pid ${s.pid} [${s.stage}]: ${s.reason}\n`);
+      }
+    }
     if (result.errors.length) {
       process.stdout.write(`  errors:     ${result.errors.length}\n`);
       for (const e of result.errors) {
