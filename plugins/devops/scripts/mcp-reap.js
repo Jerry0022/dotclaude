@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script mcp-reap
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Thin CLI wrapper around hooks/lib/mcp-reaper.js. Scans for
  *   orphaned Claude Desktop MCP server child processes — MCP-signature
@@ -9,8 +9,15 @@
  *   own-process guards (see mcp-reaper.js header) — and reports them.
  *   Windows only; a documented no-op elsewhere. SAFE DEFAULT: dry-run —
  *   nothing is ever terminated unless --apply (or --kill) is passed
- *   explicitly. Intended callers: the SessionStart hook and a scheduled
- *   task.
+ *   explicitly. Intended callers: ss.mcp.reap.js (SessionStart) and
+ *   stop.mcp.reap.js (Stop, cooldown-gated) — both spawn this CLI detached
+ *   with stdio:'ignore', so stdout/--json output never reaches anyone.
+ *
+ *   Every run also persists its result to a temp status file
+ *   (dotclaude-mcp-reap-status.json in os.tmpdir()) regardless of --json,
+ *   so a detached/backgrounded invocation still leaves an inspectable
+ *   trail for a later "what did it reap?" — same pattern as
+ *   hooks/session-start/ss.mcp.verify.js's status file.
  *
  *   Usage:
  *     node scripts/mcp-reap.js               # dry-run, human summary
@@ -21,8 +28,30 @@
 
 'use strict';
 
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { reap } = require(path.join(__dirname, '..', 'hooks', 'lib', 'mcp-reaper.js'));
+
+const STATUS_FILE = path.join(os.tmpdir(), 'dotclaude-mcp-reap-status.json');
+
+/**
+ * Best-effort persistence of the last run's result, so a detached invocation
+ * (stdio:'ignore' from the SessionStart/Stop hooks) still leaves a trail.
+ * Never throws — diagnostics only, must not affect the CLI's exit behavior.
+ * @param {object} result
+ * @param {boolean} dryRun
+ */
+function writeStatusFile(result, dryRun) {
+  try {
+    fs.writeFileSync(
+      STATUS_FILE,
+      JSON.stringify({ ...result, dryRun, ranAt: new Date().toISOString() }, null, 2)
+    );
+  } catch {
+    // Non-fatal — diagnostics only.
+  }
+}
 
 /**
  * @param {string[]} argv  process.argv.slice(2)
@@ -69,6 +98,8 @@ function printHuman(result, apply) {
 async function main() {
   const { apply, json } = parseArgs(process.argv.slice(2));
   const result = await reap({ dryRun: !apply });
+
+  writeStatusFile(result, !apply);
 
   if (json) {
     process.stdout.write(JSON.stringify({ ...result, dryRun: !apply }) + '\n');

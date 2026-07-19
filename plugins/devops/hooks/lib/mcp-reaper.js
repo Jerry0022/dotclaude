@@ -1,6 +1,6 @@
 /**
  * @module mcp-reaper
- * @version 0.2.0
+ * @version 0.2.1
  * @description Reclaims orphaned Claude Desktop MCP server child processes.
  *
  *   Claude Desktop spawns per-session MCP servers (bun for the discord
@@ -184,7 +184,7 @@ function listProcessesWindowsWmic() {
     const out = execFileSync(
       'wmic',
       ['process', 'get', 'ProcessId,ParentProcessId,Name,CommandLine,WorkingSetSize', '/format:csv'],
-      { encoding: 'utf8', timeout: 15000, maxBuffer: 20 * 1024 * 1024 }
+      { encoding: 'utf8', timeout: 15000, maxBuffer: 20 * 1024 * 1024, windowsHide: true }
     );
     return parseWmicCsv(out);
   } catch {
@@ -206,7 +206,7 @@ function listProcessesWindows() {
     const out = execFileSync(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-Command', psCommand],
-      { encoding: 'utf8', timeout: 15000, maxBuffer: 20 * 1024 * 1024 }
+      { encoding: 'utf8', timeout: 15000, maxBuffer: 20 * 1024 * 1024, windowsHide: true }
     );
     return parseWin32ProcessJson(out);
   } catch {
