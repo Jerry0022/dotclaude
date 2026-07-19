@@ -27,6 +27,8 @@ import {
   updateLockPath,
   writeUpdateLock,
   clearUpdateLock,
+  globalUpdatesInFlight,
+  updateGlobalCap,
 } from "./graphify-state.js";
 
 function tmp() {
@@ -463,6 +465,20 @@ describe("bgWithSentinel — concurrency guard (never stack graphify update)", (
     return true;
   };
 
+  // Isolate the lock dir so bgWithSentinel's global-cap check counts only THIS
+  // test's locks — not real graphify builds on the machine running the suite,
+  // which could otherwise trip the cap and flip an expected spawn into a skip.
+  let origLockDir;
+  beforeEach(() => {
+    origLockDir = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    process.env.DOTCLAUDE_GRAPHLOCK_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-lockiso-"));
+  });
+  afterEach(() => {
+    try { fs.rmSync(process.env.DOTCLAUDE_GRAPHLOCK_DIR, { recursive: true, force: true }); } catch {}
+    if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
+  });
+
   test("skips (returns false, writes NO sentinel) when a build is already in flight", () => {
     const dir = tmp();
     writeUpdateLock(dir, process.pid); // simulate a live in-flight runner
@@ -489,5 +505,78 @@ describe("bgWithSentinel — concurrency guard (never stack graphify update)", (
     expect(await waitForGone(updateLockPath(dir))).toBe(true);
     clearSentinel(dir);
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  }, 10000);
+});
+
+// ── machine-wide concurrency cap ─────────────────────────────────────────────
+// The per-project lock does nothing ACROSS projects — N worktrees each get their
+// own build, so a multi-worktree machine ran several heavy builds at once (RAM +
+// disk saturation). bgWithSentinel now also caps the TOTAL live builds across all
+// cwds at updateGlobalCap() (default 2). Lock dir is isolated per test so the
+// count reflects only what the test wrote.
+describe("globalUpdatesInFlight / machine-wide cap", () => {
+  let origLockDir, origCap, isoDir;
+  beforeEach(() => {
+    origLockDir = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    origCap = process.env.DOTCLAUDE_GRAPH_MAX_BUILDS;
+    isoDir = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-cap-"));
+    process.env.DOTCLAUDE_GRAPHLOCK_DIR = isoDir;
+  });
+  afterEach(() => {
+    try { fs.rmSync(isoDir, { recursive: true, force: true }); } catch {}
+    if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
+    if (origCap === undefined) delete process.env.DOTCLAUDE_GRAPH_MAX_BUILDS;
+    else process.env.DOTCLAUDE_GRAPH_MAX_BUILDS = origCap;
+  });
+
+  test("default cap is 2; positive env override respected; invalid → default", () => {
+    delete process.env.DOTCLAUDE_GRAPH_MAX_BUILDS;
+    expect(updateGlobalCap()).toBe(2);
+    process.env.DOTCLAUDE_GRAPH_MAX_BUILDS = "5";
+    expect(updateGlobalCap()).toBe(5);
+    process.env.DOTCLAUDE_GRAPH_MAX_BUILDS = "0";
+    expect(updateGlobalCap()).toBe(2);
+    process.env.DOTCLAUDE_GRAPH_MAX_BUILDS = "abc";
+    expect(updateGlobalCap()).toBe(2);
+  });
+
+  test("counts only live, non-stale locks across cwds", () => {
+    expect(globalUpdatesInFlight()).toBe(0);
+    writeUpdateLock("/proj/a", process.pid);
+    writeUpdateLock("/proj/b", process.pid);
+    expect(globalUpdatesInFlight()).toBe(2);
+    // dead pid + stale stamp are ignored, exactly like updateInFlight
+    fs.writeFileSync(updateLockPath("/proj/c"), JSON.stringify({ pid: 2147483647, ts: Date.now() }));
+    fs.writeFileSync(updateLockPath("/proj/d"), JSON.stringify({ pid: process.pid, ts: Date.now() - 46 * 60 * 1000 }));
+    expect(globalUpdatesInFlight()).toBe(2);
+  });
+
+  test("bgWithSentinel skips (no spawn) when the global cap is reached, even for a fresh cwd", () => {
+    process.env.DOTCLAUDE_GRAPH_MAX_BUILDS = "2";
+    writeUpdateLock("/proj/a", process.pid);
+    writeUpdateLock("/proj/b", process.pid); // 2 live across other cwds → cap reached
+    const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-fresh-"));
+    expect(updateInFlight(fresh)).toBe(false);        // this cwd itself is free…
+    fs.writeFileSync(sentinelPath(fresh), "ok");       // pre-seed to prove no spawn
+    expect(bgWithSentinel("node", ["-e", "process.exit(0)"], fresh)).toBe(false); // …but cap blocks
+    expect(fs.existsSync(sentinelPath(fresh))).toBe(true); // untouched → no spawn
+    clearSentinel(fresh);
+    try { fs.rmSync(fresh, { recursive: true, force: true }); } catch {}
+  });
+
+  test("bgWithSentinel spawns when still below the cap", async () => {
+    process.env.DOTCLAUDE_GRAPH_MAX_BUILDS = "2";
+    writeUpdateLock("/proj/a", process.pid); // 1 live < cap 2
+    const okCmd = process.platform === "win32" ? "ver" : "true";
+    const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-fresh-"));
+    expect(bgWithSentinel(okCmd, [], fresh)).toBe(true);
+    // let it settle so the detached runner clears its own lock before teardown
+    const start = Date.now();
+    while (readSentinel(fresh) === null && Date.now() - start < 5000) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    clearSentinel(fresh);
+    try { fs.rmSync(fresh, { recursive: true, force: true }); } catch {}
   }, 10000);
 });
