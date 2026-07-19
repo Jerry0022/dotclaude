@@ -36,6 +36,14 @@ describe("bumpVersion", () => {
     expect(bumpVersion("0.22.0", "minor")).toBe("0.23.0");
     expect(bumpVersion("0.22.0", "major")).toBe("1.0.0");
   });
+
+  test("throws on non-semver input instead of producing a NaN tag", () => {
+    expect(() => bumpVersion("1.2", "patch")).toThrow(/invalid version/);
+    expect(() => bumpVersion("1.2.3-rc1", "minor")).toThrow(/invalid version/);
+    expect(() => bumpVersion(undefined, "patch")).toThrow(/invalid version/);
+    // "none" short-circuits before validation — must NOT throw
+    expect(bumpVersion("1.2", "none")).toBe("1.2");
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -19,7 +19,9 @@ auto-detects the parent:
    - Same: intermediate merge into feature branch
 3. **All sub-branches merged** → `/devops-ship` on `feat/42-video-filters`
    - No parent detected → ships to `main`
-   - Full release: version bump, tag, GitHub release
+   - Full ship: version bump + `alpha/vX.Y.Z` tag. Under the ring model NO
+     GitHub Release is created at ship time — promotion to beta/stable and the
+     published GitHub Release are owned by `/devops-release`.
 
 This requires no manual `base` parameter — detection is automatic based
 on branch naming convention (`<parent>/<role>`).
