@@ -1,7 +1,7 @@
 # Burn — Composite Prompt Template
 
 Build the autonomous task prompt as follows, then pass it as `$ARGUMENTS`
-to `/devops-autonomous`. The autonomous skill handles Steps 2–8 of its
+to `/devops-run-autonomous`. The autonomous skill handles Steps 2–8 of its
 own flow (desktop questions, permission priming, execution, reporting,
 optional shutdown).
 

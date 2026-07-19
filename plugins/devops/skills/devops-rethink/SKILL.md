@@ -9,7 +9,7 @@ description: >-
   in a short question round (incl. jointly calibrating how much may be torn
   down), generates genuinely fresh approaches via code-blind lens agents,
   reconciles them against the codebase, lets the user decide on a
-  devops-concept page, then hands the chosen approach to devops-autonomous
+  devops-concept page, then hands the chosen approach to devops-run-autonomous
   for implementation with devops-test-plan verification.
   Triggers on: "festgefahren", "stuck", "unstuck", "wir drehen uns im Kreis",
   "neu denken", "rethink", "frischer Ansatz", "fresh approach",
@@ -157,7 +157,7 @@ Only after an explicit **Implement** decision. Assemble the task briefing:
   recommendation,
 - pointer to the `.claude/rethink/<date>-<slug>/` artifacts.
 
-Then invoke `devops-autonomous` with this briefing as the task. Autonomous
+Then invoke `devops-run-autonomous` with this briefing as the task. Autonomous
 owns permission priming, confirmation, worktree, implementation, testing,
 and the report — do not re-implement any of that here.
 
@@ -166,7 +166,7 @@ corridor-widening question before the handoff.
 
 ## Completion
 
-- Handoff happened (Step 7) → `devops-autonomous` owns the completion card.
+- Handoff happened (Step 7) → `devops-run-autonomous` owns the completion card.
 - Run ends earlier (no decision yet, or user stops at the concept page) →
   render a completion card yourself (`analysis` if nothing was written,
   `ready` if brief/approaches were persisted). Artifacts remain on disk for

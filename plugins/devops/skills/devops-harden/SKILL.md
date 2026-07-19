@@ -26,11 +26,11 @@ This skill can be invoked in three ways:
 
 1. **Direct** — user types `/devops-harden` or trigger phrase. Full skill
    runs as documented below. Asks questions when `$AUTONOMOUS=0`.
-2. **From `/devops-agents`** — orchestrator detected a harden-style request.
+2. **From `/devops-run-agents`** — orchestrator detected a harden-style request.
    Per `deep-knowledge/agent-orchestration.md` § Single-Agent Shortcut,
    the orchestrator delegates directly to this skill (no wave model, no
    sub-branching). Pass `--invoked-by=agents`.
-3. **From `/devops-autonomous`** — autonomous skill primed permissions,
+3. **From `/devops-run-autonomous`** — autonomous skill primed permissions,
    confirmed the user, and now delegates a harden task. Pass
    `--invoked-by=autonomous` (which implies `--autonomous`).
 

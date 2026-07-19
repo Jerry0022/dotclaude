@@ -1,12 +1,12 @@
 ---
-name: devops-burn
-version: 0.2.0
+name: devops-run-burn
+version: 0.3.0
 description: >-
   High-throughput autonomous task runner with aggressive parallelization.
-  EXPLICIT INVOCATION ONLY — the user must type /devops-burn to activate.
+  EXPLICIT INVOCATION ONLY — the user must type /devops-run-burn to activate.
   Do NOT trigger on any phrasing, keyword, or intent — not on "burn",
   "budget", "limit", "aufbrauchen", "maximize", "alles verbrauchen",
-  "token", or ANY other wording. Only the literal /devops-burn command.
+  "token", or ANY other wording. Only the literal /devops-run-burn command.
 argument-hint: "[task description or goal — additional tasks are discovered automatically]"
 allowed-tools: >-
   Bash(*), Read, Write, Edit, Glob, Grep, Agent,
@@ -20,20 +20,20 @@ allowed-tools: >-
   mcp__plugin_devops_dotclaude-issues__*
 ---
 
-# Burn
+# Run Burn
 
 Maximize the remaining weekly token budget. Collect tasks from all sources, then
 launch autonomous mode with aggressive parallelization to get maximum value out
 of the remaining time window.
 
-**This skill MUST only run when explicitly invoked via `/devops-burn`.**
+**This skill MUST only run when explicitly invoked via `/devops-run-burn`.**
 Never trigger from hooks, prompt phrasing, or heuristic matching.
 
 ## Step 0 — Load Extensions
 
 Silently check (do not surface "not found"):
-1. `~/.claude/skills/burn/SKILL.md` + `reference.md`
-2. `{project}/.claude/skills/burn/SKILL.md` + `reference.md`
+1. `~/.claude/skills/run-burn/SKILL.md` + `reference.md`
+2. `{project}/.claude/skills/run-burn/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Burn Confirmation Gate
@@ -200,7 +200,7 @@ Wait for user confirmation:
 
 ## Step 7 — Launch Autonomous with Burn Guidance
 
-Invoke `/devops-autonomous` with the following composite prompt. The autonomous
+Invoke `/devops-run-autonomous` with the following composite prompt. The autonomous
 skill handles everything from here (desktop questions, permission priming,
 execution, reporting, shutdown).
 
@@ -218,11 +218,11 @@ shutdown).
 
 ## Rules
 
-- **NEVER auto-trigger** — this skill runs ONLY on explicit `/devops-burn` invocation
+- **NEVER auto-trigger** — this skill runs ONLY on explicit `/devops-run-burn` invocation
 - **NEVER skip the plan step** — always present the consolidated plan and wait for confirmation
 - **NEVER skip budget assessment** — the user needs to know remaining capacity
 - **Respect autonomous guardrails** — burn mode amplifies throughput, not permissions.
-  All safety rules from devops-autonomous still apply (no push, no ship, no external comms)
+  All safety rules from devops-run-autonomous still apply (no push, no ship, no external comms)
 - **Deduplication is mandatory** — never let two agents modify the same file simultaneously
 - **Primary task always wins** — if budget is tight, drop P3+ tasks, never the user's prompt
 - **NEVER skip the confirmation gate** — Step 1 is mandatory, even if the user says "just do it"

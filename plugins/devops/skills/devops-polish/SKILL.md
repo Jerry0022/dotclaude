@@ -27,12 +27,12 @@ functionality — with user approval for structural changes. Scope: `$ARGUMENTS`
 Same three invocation paths as `/devops-harden`:
 
 1. **Direct** — user types `/devops-polish`.
-2. **From `/devops-agents`** — pass `--invoked-by=agents` plus
+2. **From `/devops-run-agents`** — pass `--invoked-by=agents` plus
    `--parent-mode=background|interactive`. Skip self-spawned qa/redteam if
    parent owns those waves. Structural changes (Step 10) STILL require
    approval — when `--parent-mode=background`, structural items are
    skipped + flagged for parent's report.
-3. **From `/devops-autonomous`** — pass `--invoked-by=autonomous` (implies
+3. **From `/devops-run-autonomous`** — pass `--invoked-by=autonomous` (implies
    `--autonomous`). No permission priming, no user prompts. Structural
    changes always flagged for the autonomous report (never auto-applied).
 

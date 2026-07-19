@@ -1,6 +1,6 @@
 # Autonomous Execution — Gate, Guardrails, Late-Permission Protocol
 
-Detailed execution rules for `devops-autonomous` Step 5. Read this at the start of
+Detailed execution rules for `devops-run-autonomous` Step 5. Read this at the start of
 autonomous execution.
 
 ## Execution Mode Gate

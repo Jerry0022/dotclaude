@@ -28,7 +28,7 @@ extension** running in Edge (or the Preview/Playwright fallback chain).
 
 **Exception:** Computer-use (`mcp__computer-use__*`) MAY be used for browser
 interaction **only** when the user explicitly requests desktop takeover:
-- User chooses "Desktop übernehmen" in `/devops-autonomous` Step 2
+- User chooses "Desktop übernehmen" in `/devops-run-autonomous` Step 2
 - User explicitly asks for computer-use / desktop control
 - User explicitly invokes a flow that requires mouse/keyboard on the browser
 
@@ -85,7 +85,7 @@ logins continue to work without per-service re-authentication.
 These rules apply identically regardless of execution context:
 - **Foreground** (user is present, interactive)
 - **Background** (concept monitoring, autonomous testing, burn mode)
-- **Autonomous** (user is AFK, `/devops-autonomous`)
+- **Autonomous** (user is AFK, `/devops-run-autonomous`)
 - **Headless/silent** (refresh-usage CDP scraping, health checks)
 
 Background mode does NOT mean "use a different browser" or "use computer-use
@@ -222,7 +222,7 @@ duplicate tab groups in Edge.
   Instead, ignore the duplicate group and let the user clean it up
 
 **Concurrent agents (known limitation):** When multiple agents (e.g., from
-`/devops-burn` or `/devops-autonomous`) open browser tabs simultaneously, a
+`/devops-run-burn` or `/devops-run-autonomous`) open browser tabs simultaneously, a
 race condition can occur: both agents probe, find no group, and each creates
 one. Mitigation: in multi-agent sessions, designate one agent as the tab
 manager, or add a short jitter (1-2 seconds) and re-probe before creating.

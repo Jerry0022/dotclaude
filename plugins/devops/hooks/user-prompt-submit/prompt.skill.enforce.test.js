@@ -2,7 +2,7 @@ import { describe, test, expect } from "vitest";
 import { detectInlineSkillMentions } from "./prompt.skill.enforce.js";
 
 const KNOWN = [
-  "devops-agents",
+  "devops-run-agents",
   "devops-commit",
   "devops-concept",
   "devops-flow",

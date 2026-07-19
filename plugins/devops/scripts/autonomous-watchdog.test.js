@@ -116,7 +116,7 @@ describe("buildRecoveryScript — mode-specific recovery", () => {
     action: "resume",
     recoveryFlagPath: "C:\\proj\\AUTONOMOUS-RECOVERY.flag",
     workingDir: "C:\\proj",
-    resumePrompt: "BACKLOG_RUNNER_AUTOSTART: resume",
+    resumePrompt: "RUN_BACKLOG_AUTOSTART: resume",
   };
 
   test("resume mode notifies AND arms a guarded one-shot claude relaunch", () => {
@@ -132,7 +132,7 @@ describe("buildRecoveryScript — mode-specific recovery", () => {
     // Relaunches claude with the resume prompt in the project working dir.
     expect(s).toContain("Get-Command claude");
     expect(s).toContain("Start-Process -FilePath $claude.Source");
-    expect(s).toContain("'-p','BACKLOG_RUNNER_AUTOSTART: resume'");
+    expect(s).toContain("'-p','RUN_BACKLOG_AUTOSTART: resume'");
     expect(s).toContain("-WorkingDirectory 'C:\\proj'");
   });
 

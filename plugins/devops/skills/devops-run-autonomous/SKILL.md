@@ -1,12 +1,12 @@
 ---
-name: devops-autonomous
-version: 0.5.0
+name: devops-run-autonomous
+version: 0.6.0
 description: >-
   Fully autonomous agent orchestration for when the user is away from the PC.
   Runs agents without supervision (implementation, desktop interaction, live
   browser/app tests) and can OPTIONALLY SHUT DOWN THE PC after completion.
-  Triggers: "autonomous", "run this while I'm away", "afk mode", "autopilot".
-  Do NOT trigger when the user stays present — use /devops-agents instead.
+  Triggers: "autonomous", "run autonomous", "run this while I'm away", "afk mode", "autopilot".
+  Do NOT trigger when the user stays present — use /devops-run-agents instead.
 argument-hint: "[task, e.g. 'refactor auth module and run tests']"
 allowed-tools: >-
   Bash(*), Read, Write, Edit, Glob, Grep, Agent,
@@ -23,15 +23,15 @@ allowed-tools: >-
   mcp__ccd_session_mgmt__send_message
 ---
 
-# Devops Autonomous
+# Run Autonomous
 
 User is leaving the PC. Collect the task, prime permissions, confirm, then work independently.
 
 ## Step 0 — Load Extensions
 
 Silently check (do not surface "not found"):
-1. `~/.claude/skills/autonomous/SKILL.md` + `reference.md`
-2. `{project}/.claude/skills/autonomous/SKILL.md` + `reference.md`
+1. `~/.claude/skills/run-autonomous/SKILL.md` + `reference.md`
+2. `{project}/.claude/skills/run-autonomous/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 0.1 — Auto-Start Prompt Detection
@@ -310,7 +310,7 @@ execution context (the user will not be there to re-enter it):
 CronCreate({
   cron: "<M> <H> <D> <Mo> *",
   recurring: false,
-  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume devops-autonomous Step 5 with: task=<goal>, mode=<EXEC_MODE>, desktop=<yes|no>, shutdown=<yes|no>, autoResume=<yes|no>, branch=<current-branch>."
+  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume devops-run-autonomous Step 5 with: task=<goal>, mode=<EXEC_MODE>, desktop=<yes|no>, shutdown=<yes|no>, autoResume=<yes|no>, branch=<current-branch>."
 })
 ```
 
@@ -398,7 +398,7 @@ Parse the JSON: `{ delayMinutes, cron, fireAtLocal, source }`. `cron` is a ready
 CronCreate({
   cron: "<cron from helper>",
   recurring: false,
-  prompt: "AUTONOMOUS_RESUME: token-window reset reached. Execute devops-autonomous Step 0.2 — resume hard-capped Claude worktrees with »weiter« (skip finished ones)."
+  prompt: "AUTONOMOUS_RESUME: token-window reset reached. Execute devops-run-autonomous Step 0.2 — resume hard-capped Claude worktrees with »weiter« (skip finished ones)."
 })
 ```
 

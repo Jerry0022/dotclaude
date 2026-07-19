@@ -5,7 +5,7 @@
 Create project-specific backlog rules in your project:
 
 ```
-{project}/.claude/skills/backlog-runner/
+{project}/.claude/skills/run-backlog/
 ├── SKILL.md        ← Override or add steps
 └── reference.md    ← Project-specific context
 ```
@@ -42,7 +42,7 @@ Merge priority: **project > global > plugin defaults** (most specific wins).
 ## Notes
 
 - This skill is the **ship instance** — it does not modify or route ships
-  through `devops-autonomous`. Extensions must keep the ship safeguards intact:
+  through `devops-run-autonomous`. Extensions must keep the ship safeguards intact:
   MCP ship tools only, own repo only, no force-push.
 - GitHub writes (refine, sub-issue creation) run only in the presence phase
   (Step 2). Do not add extension steps that write to GitHub after the

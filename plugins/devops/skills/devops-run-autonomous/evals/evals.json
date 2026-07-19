@@ -1,6 +1,6 @@
 {
-  "skill": "devops-autonomous",
-  "description": "Trigger evaluation for devops-autonomous. High-stakes skill (can shut down PC) — triggers must be precise.",
+  "skill": "devops-run-autonomous",
+  "description": "Trigger evaluation for devops-run-autonomous. High-stakes skill (can shut down PC) — triggers must be precise.",
   "evals": [
     {
       "query": "Ich geh kurz weg, kannst du das alleine fertig machen?",
@@ -35,12 +35,12 @@
     {
       "query": "Kannst du bitte die Auth-Module refactoren?",
       "should_trigger": false,
-      "reason": "Normal task request — user is present. Should use /devops-agents or inline work."
+      "reason": "Normal task request — user is present. Should use /devops-run-agents or inline work."
     },
     {
       "query": "Use agents to refactor the auth module in parallel",
       "should_trigger": false,
-      "reason": "Explicit agent orchestration but user is present — /devops-agents."
+      "reason": "Explicit agent orchestration but user is present — /devops-run-agents."
     },
     {
       "query": "Fix this bug",
@@ -65,7 +65,7 @@
     {
       "query": "Lass die Agents das parallel machen",
       "should_trigger": false,
-      "reason": "Agent orchestration without AFK signal — /devops-agents."
+      "reason": "Agent orchestration without AFK signal — /devops-run-agents."
     },
     {
       "query": "Unattended mode: build the release, run full test suite, shutdown when done",

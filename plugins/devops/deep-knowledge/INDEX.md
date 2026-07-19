@@ -9,7 +9,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [agent-conventions.md](agent-conventions.md) | Agent Naming & Collaboration Conventions | [role:X · Type] Task description |
 | [agent-orchestration.md](agent-orchestration.md) | Agent Orchestration | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [agent-proactivity.md](agent-proactivity.md) | Proactive Agent Orchestration | Cross-cutting rule for when to involve specialized agents without explicit us... |
-| [autonomous-execution.md](autonomous-execution.md) | Autonomous Execution — Gate, Guardrails, Late-Permission Protocol | Detailed execution rules for `devops-autonomous` Step 5. Read this at the sta... |
+| [autonomous-execution.md](autonomous-execution.md) | Autonomous Execution — Gate, Guardrails, Late-Permission Protocol | Detailed execution rules for `devops-run-autonomous` Step 5. Read this at the... |
 | [browser-file-urls.md](browser-file-urls.md) | Browser File URLs (Windows + Git-Bash) | Cross-cutting rule: whenever a skill opens a local HTML file in a browser |
 | [browser-tool-strategy.md](browser-tool-strategy.md) | Browser Tool Strategy | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [claude-desktop-app-setup.md](claude-desktop-app-setup.md) | Claude Desktop App Setup (Windows) | Windows-specific reference for Claude Desktop App launcher configuration and ... |

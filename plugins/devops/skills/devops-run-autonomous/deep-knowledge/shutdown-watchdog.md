@@ -1,6 +1,6 @@
 # Watchdog Arming & Shutdown — Full Mechanics
 
-Low-level mechanics for `devops-autonomous` Step 4d (arm watchdog), Step 5.0 (arm
+Low-level mechanics for `devops-run-autonomous` Step 4d (arm watchdog), Step 5.0 (arm
 fail-safe shutdown timer) and Step 8 (finalization / shutdown). Read this when you
 reach Step 4d. It is split out of SKILL.md so the trigger-time body stays lean
 (progressive disclosure) — the Bash below is only needed at run time.

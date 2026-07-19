@@ -168,7 +168,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 ## Features
 
 - **<!--devops:count:hooks-->35<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-flow, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-plugin-update, devops-autonomous, devops-burn, devops-backlog-runner, devops-learn, devops-harden, devops-polish, devops-test-plan
+- **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-flow, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-run-agents, devops-plugin-update, devops-run-autonomous, devops-run-burn, devops-run-backlog, devops-learn, devops-harden, devops-polish, devops-test-plan
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
@@ -314,16 +314,36 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/devops-plugin-update` | Explicit | Update the plugin to the latest version from GitHub |
 | `/devops-claude-md-lint` | Explicit | Audit CLAUDE.md files for size, structure, and token efficiency |
 | `/devops-concept` | Explicit | Interactive HTML page for analysis, plans, concepts, and prototypes |
-| `/devops-agents` | Explicit | Evaluate agents and orchestrate parallel execution |
-| `/devops-autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |
-| `/devops-burn` | Explicit | High-throughput autonomous task runner with aggressive parallelization |
-| `/devops-backlog-runner` | Explicit | Milestone-centric backlog runner: refine, implement, test/QA, and ship selected milestones/issues unsupervised |
+| `/devops-run-agents` | Explicit | Evaluate agents and orchestrate parallel execution |
+| `/devops-run-autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |
+| `/devops-run-burn` | Explicit | High-throughput autonomous task runner with aggressive parallelization |
+| `/devops-run-backlog` | Explicit | Milestone-centric backlog runner: refine, implement, test/QA, and ship selected milestones/issues unsupervised |
 | `/devops-learn` | Explicit | Capture long-term learnings and route to project-specific instructions |
 | `/devops-harden` | Explicit | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
 | `/devops-polish` | Explicit | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
 | `/devops-test-plan` | Explicit + Hook | Detect test profile, deterministic tool-chain recommendations per test request |
 | `/devops-graph` | Explicit + Hook | On-demand code knowledge graph via graphify, with opt-in auto-build + hard-gate enforcement |
 | `/devops-rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, concept decision, autonomous implementation |
+
+#### The `run-*` family — let Claude execute autonomously
+
+When you want Claude to **run autonomously or semi-autonomously to implement
+something**, reach for a `run-*` skill. There are two ways in:
+
+- **`/devops-run-backlog` — Claude picks the topics itself.** It pulls the planned
+  backlog (open milestones, else loose issues), then refines → implements → tests →
+  **ships** each item unsupervised. An optional **budget mode** (asked at the gate,
+  default *no*) runs it in `run-burn` style. Under the hood it composes the other
+  runs, so you don't invoke them separately.
+- **You pick the topic** with the other three:
+  - **`/devops-run-autonomous`** — one ad-hoc task, fully AFK (never ships).
+  - **`/devops-run-agents`** — multi-agent orchestration while you stay present.
+  - **`/devops-run-burn`** — budget-driven: maximize the remaining weekly token
+    window (explicit `/devops-run-burn` only).
+
+`run-backlog` uses `run-autonomous` (implementation) and the same role-agent
+orchestration as `run-agents` in the background — plus `run-burn` when budget mode
+is on — so those are listed once here, not repeated per run.
 
 ### Agents (spawned for parallel work)
 

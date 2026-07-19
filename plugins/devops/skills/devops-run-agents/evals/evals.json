@@ -1,6 +1,6 @@
 {
-  "skill": "devops-agents",
-  "description": "Trigger evaluation for devops-agents. The critical boundary is orchestration-while-present (this skill) vs. AFK/autonomous (devops-autonomous) vs. inline single-domain work (no skill).",
+  "skill": "devops-run-agents",
+  "description": "Trigger evaluation for devops-run-agents. The critical boundary is orchestration-while-present (this skill) vs. AFK/autonomous (devops-run-autonomous) vs. inline single-domain work (no skill).",
   "evals": [
     {
       "query": "Use agents to refactor the auth module in parallel",
@@ -40,12 +40,12 @@
     {
       "query": "Mach das alleine, ich bin gleich weg",
       "should_trigger": false,
-      "reason": "AFK signal — belongs to /devops-autonomous, not interactive orchestration."
+      "reason": "AFK signal — belongs to /devops-run-autonomous, not interactive orchestration."
     },
     {
       "query": "afk mode — refactor and test while I'm gone",
       "should_trigger": false,
-      "reason": "Explicit AFK/'while I'm gone' — /devops-autonomous owns unsupervised runs."
+      "reason": "Explicit AFK/'while I'm gone' — /devops-run-autonomous owns unsupervised runs."
     },
     {
       "query": "Research the state of edge computing in 2026",
