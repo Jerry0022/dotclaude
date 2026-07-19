@@ -16,7 +16,7 @@
  *     --pr <number> \
  *     [--max-wait <seconds>]        # default 1800 (30 min)
  *     [--verify-config <path>]      # optional reference.md with verify: block
- *     [--state-dir <path>]          # default <cwd>/.claude/.ship-watcher
+ *     [--state-dir <path>]          # default <main-repo>/.claude/.ship-watcher
  *     [--version <vX.Y.Z>]          # expands $VERSION placeholder in selectors
  *
  * State file: <state-dir>/<merge-sha>.json
@@ -283,7 +283,7 @@ async function main() {
 
   const pr = args.pr ? Number(args.pr) : null;
   const maxWaitSec = args["max-wait"] ? Number(args["max-wait"]) : DEFAULT_MAX_WAIT_SEC;
-  const stateDir = args["state-dir"] || join(cwd, ".claude", ".ship-watcher");
+  const stateDir = resolveStateDir({ stateDir: args["state-dir"], cwd });
   const verifyConfigPath = args["verify-config"] || null;
   const version = args.version || null;
 
