@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-state
- * @version 0.6.0
+ * @version 0.7.0
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
  *   layer (devops-graph). Default-on / opt-out model: graphify enforcement is
@@ -17,15 +17,17 @@
  *   per-project sentinel file so a silent failure (stdio:'ignore') can be
  *   surfaced at the next SessionStart instead of vanishing.
  *
- *   `bgWithSentinel` additionally holds a per-project PID lock
- *   (`updateInFlight`/`updateLockPath`) so at most ONE `graphify update` runs
- *   per project at a time. The SessionStart (10-min) and PreToolUse (2-min)
- *   spawn throttles only DEBOUNCE bursts; on a large repo a single build can
- *   outlast its throttle window while a trigger recurs (e.g. the git-sync cron
- *   opens a fresh session every 10 min), so time-based throttling alone let
- *   builds stack without bound — measured in the field at 12 concurrent runs /
- *   ~29 GB commit, exhausting RAM. The lock bounds concurrency across ALL spawn
- *   triggers (they all funnel through `bgWithSentinel`).
+ *   `bgWithSentinel` additionally enforces TWO concurrency bounds on
+ *   `graphify update` (all spawn triggers funnel through it): a per-project PID
+ *   lock (`updateInFlight`/`updateLockPath`) so at most ONE build runs per
+ *   project, AND a machine-wide cap (`globalUpdatesInFlight`/`updateGlobalCap`,
+ *   default 2) so the TOTAL live builds across all cwds is bounded. The
+ *   SessionStart (10-min) and PreToolUse (2-min) throttles only DEBOUNCE bursts;
+ *   on a large repo a single build outlasts its throttle window while a trigger
+ *   recurs (e.g. a 10-min git-sync cron), so time-based throttling alone let
+ *   builds stack without bound — measured at 12 concurrent runs / ~29 GB commit,
+ *   exhausting RAM. The per-project lock alone still let N worktrees each run a
+ *   heavy build (RAM + disk saturation), which the global cap prevents.
  */
 
 const fs = require('node:fs');
@@ -223,20 +225,40 @@ const NO_SENTINEL = '-';
 // background runner (see the require.main block at the bottom of this file).
 const BG_RUN_FLAG = '--bg-run';
 
-// ── graphify-update concurrency lock ─────────────────────────────────────────
-// A single `graphify update .` on a large repo can outlast the SessionStart
-// (10-min) and PreToolUse (2-min) spawn throttles, which only DEBOUNCE bursts.
-// When a trigger recurs at least as often as the build takes (e.g. the */10
-// git-sync cron opens a fresh session — hence a fresh throttle window — every
-// 10 min), purely time-based throttling let builds stack without bound (measured
-// in the field: 12 concurrent runs, ~29 GB commit, RAM exhausted). This PID lock
-// bounds concurrency to ONE build per project across every trigger.
+// ── graphify-update concurrency control ──────────────────────────────────────
+// Two layers bound how much `graphify update` runs at once:
+//   1. PER-PROJECT lock (updateInFlight): a single `graphify update .` on a large
+//      repo can outlast the SessionStart (10-min) and PreToolUse (2-min) spawn
+//      throttles, which only DEBOUNCE bursts. When a trigger recurs at least as
+//      often as the build takes (e.g. a 10-min git-sync cron opening a fresh
+//      session), time-based throttling alone let builds stack without bound
+//      (measured: 12 concurrent runs, ~29 GB commit, RAM exhausted). The PID lock
+//      caps concurrency at ONE build PER PROJECT across every trigger.
+//   2. MACHINE-WIDE cap (globalUpdatesInFlight + updateGlobalCap): the per-project
+//      lock does nothing ACROSS projects — N active worktrees/cwds each get their
+//      own build, so a multi-worktree machine still ran several heavy builds at
+//      once (observed saturating RAM + disk even with the per-project lock). The
+//      global cap bounds the TOTAL live builds across all cwds (default 2, via
+//      DOTCLAUDE_GRAPH_MAX_BUILDS).
+// Both layers read the same lock files; the lock dir is os.tmpdir() in production
+// and overridable via DOTCLAUDE_GRAPHLOCK_DIR for test isolation.
 const UPDATE_LOCK_STALE_MS = 45 * 60 * 1000;
+
+/** Directory holding the per-project update-lock files. Overridable for tests. */
+function lockBaseDir() {
+  return process.env.DOTCLAUDE_GRAPHLOCK_DIR || os.tmpdir();
+}
+
+/** Machine-wide cap on concurrent `graphify update` runners (default 2, min 1). */
+function updateGlobalCap() {
+  const n = parseInt(process.env.DOTCLAUDE_GRAPH_MAX_BUILDS, 10);
+  return Number.isInteger(n) && n > 0 ? n : 2;
+}
 
 /** Per-project lock file recording the live background-update runner's PID. */
 function updateLockPath(cwd) {
   const key = crypto.createHash('md5').update(`updatelock:${cwd}`).digest('hex').slice(0, 12);
-  return path.join(os.tmpdir(), `dotclaude-graphupdate-${key}.lock`);
+  return path.join(lockBaseDir(), `dotclaude-graphupdate-${key}.lock`);
 }
 
 /**
@@ -288,6 +310,30 @@ function writeUpdateLock(cwd, pid) {
 /** Remove the update lock (the runner clears it once its build exits). No-op when absent. Never throws. */
 function clearUpdateLock(cwd) {
   try { fs.unlinkSync(updateLockPath(cwd)); } catch { /* absent already */ }
+}
+
+/**
+ * Count `graphify update` runners live across ALL projects — the machine-wide
+ * concurrency signal the per-project lock cannot provide. Scans every
+ * `dotclaude-graphupdate-*.lock` in the lock dir and counts those whose recorded
+ * PID is still alive and whose stamp is within UPDATE_LOCK_STALE_MS (stale/dead
+ * locks are ignored, exactly like updateInFlight). Never throws — returns what it
+ * counted (0 on a scan error) so a read failure can never wedge refresh shut.
+ */
+function globalUpdatesInFlight() {
+  const dir = lockBaseDir();
+  let n = 0;
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      if (!/^dotclaude-graphupdate-.*\.lock$/.test(f)) continue;
+      try {
+        const { pid, ts } = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+        if (typeof ts === 'number' && Date.now() - ts > UPDATE_LOCK_STALE_MS) continue;
+        if (pidAlive(pid)) n++;
+      } catch { /* unreadable/corrupt lock — skip */ }
+    }
+  } catch { /* lock dir unreadable — treat as none in flight */ }
+  return n;
 }
 
 /**
@@ -380,18 +426,22 @@ function bgWindowless(cmd, args, cwd) {
  * (see readSentinel + ss.graphify.js). git-invisible (os.tmpdir(), not the
  * project) and windowless on Windows (see spawnBgRunner). Fail-open.
  *
- * Concurrency guard: this is the single chokepoint for EVERY `graphify update`
- * spawn (the SessionStart refresh + both PreToolUse self-heal paths), so the PID
- * lock taken here bounds concurrency to one build per project for all triggers.
- * When a build is already in flight the call is a no-op (returns false) — the
- * time-based throttles at the call sites only debounce bursts and cannot see a
- * run that outlived its window (the RAM-exhaustion bug). The runner clears the
- * lock when its build exits (see the --bg-run entrypoint → runBgEntrypointChild).
- * @returns {boolean} true iff a spawn was issued; false when skipped (already
- *   in flight) or the spawn errored.
+ * Concurrency control: this is the single chokepoint for EVERY `graphify update`
+ * spawn (the SessionStart refresh + both PreToolUse self-heal paths), so both
+ * bounds apply to all triggers: (1) the PER-PROJECT PID lock skips when this cwd
+ * already has a live build — the time-based throttles at the call sites only
+ * debounce bursts and cannot see a run that outlived its window (the original
+ * RAM-exhaustion bug); (2) the MACHINE-WIDE cap skips when the total live builds
+ * across all cwds already equals updateGlobalCap() — the per-project lock alone
+ * let N worktrees each run a heavy build and saturate RAM + disk. The runner
+ * clears the lock when its build exits (see the --bg-run entrypoint →
+ * runBgEntrypointChild).
+ * @returns {boolean} true iff a spawn was issued; false when skipped (this cwd
+ *   already building, or global cap reached) or the spawn errored.
  */
 function bgWithSentinel(cmd, args, cwd) {
-  if (updateInFlight(cwd)) return false; // a build is already running — never stack
+  if (updateInFlight(cwd)) return false; // this project already has a live build
+  if (globalUpdatesInFlight() >= updateGlobalCap()) return false; // machine-wide cap reached
   const sentinel = sentinelPath(cwd);
   const lock = updateLockPath(cwd);
   try { fs.unlinkSync(sentinel); } catch { /* no previous sentinel */ }
@@ -444,8 +494,11 @@ module.exports = {
   queryDone,
   isGraphifyQueryCommand,
   sentinelPath,
+  lockBaseDir,
+  updateGlobalCap,
   updateLockPath,
   updateInFlight,
+  globalUpdatesInFlight,
   writeUpdateLock,
   clearUpdateLock,
   bgWindowless,

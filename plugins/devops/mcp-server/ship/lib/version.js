@@ -55,6 +55,14 @@ export function readVersion(cwd = process.cwd()) {
  */
 export function bumpVersion(current, bump) {
   if (bump === "none") return current;
+  // Validate strict MAJOR.MINOR.PATCH before arithmetic. A non-semver input
+  // (e.g. "1.2", "1.2.3-rc1", undefined) would otherwise split into NaN and
+  // silently produce a garbage tag like "NaN.0.0" that ships downstream.
+  if (typeof current !== "string" || !/^\d+\.\d+\.\d+$/.test(current)) {
+    throw new Error(
+      `bumpVersion: refusing to bump invalid version "${current}" — expected strict MAJOR.MINOR.PATCH (all numeric)`
+    );
+  }
   const [major, minor, patch] = current.split(".").map(Number);
   switch (bump) {
     case "major": return `${major + 1}.0.0`;

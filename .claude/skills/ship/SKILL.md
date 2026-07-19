@@ -15,24 +15,30 @@ for the full rationale (double-restart problem, observed cache/registry drift).
 
 This extension is **additive** — every plugin-default step still runs unchanged.
 
-## Step 6.5 — Announce the self-update IN the completion card
+## Step 6.5 — Announce the local channel outcome IN the completion card
 
-Runs only when the **self-update will actually run** (see Step 8 guards). Do this
-**before** calling `render_completion_card` in Step 6, using pure file reads (no MCP):
+Do this **before** calling `render_completion_card` in Step 6, using pure file reads
+(no MCP). **Channel-aware (ring model):** a plain `/devops-ship` publishes vNew to the
+**alpha** channel only. The local install follows its channel pin at
+`~/.claude/plugins/.channels.json` (`{ "dotclaude": "<channel>" }`; absent → `stable`).
+Whether the local install moves to vNew depends on that pin — it does NOT
+automatically sync to every ship.
 
-1. Read marketplace version: `~/.claude/plugins/marketplaces/dotclaude/plugins/devops/.claude-plugin/plugin.json` → `version`.
+1. Read the channel pin: `~/.claude/plugins/.channels.json` → `dotclaude` (absent/unknown → `stable`).
 2. Read installed version: `~/.claude/plugins/installed_plugins.json` → `plugins["devops@dotclaude"][0].version`.
-3. If they differ (or will differ because this ship bumped the version), add one
-   `userFinalTest` item to the Step 6 card payload, in the user's language:
+3. Add exactly one `userFinalTest` item, in the user's language:
+   - **Pin is `alpha`** — the install tracks alpha, so the Step 8 finalizer moves it to vNew:
+     > `{ action: "devops lokal (alpha) auf v<vNew> synchronisiert — Claude einmal neu starten, dann ist die neue Version aktiv.", afterDeployment: true }`
+   - **Pin is `beta`/`stable`** (the default) — an alpha-only ship does NOT reach this
+     install. Do **not** claim any local sync; point to promotion:
+     > `{ action: "v<vNew> ist auf alpha veröffentlicht; dein <pin>-Install bleibt auf v<installed>. /devops-release promoten (alpha→<pin>), danach zieht der Install v<vNew> beim nächsten Start.", afterDeployment: true }`
 
-   > `{ action: "devops lokal auf v<vNew> synchronisiert — Claude einmal neu starten, dann ist die neue Version aktiv.", afterDeployment: true }`
-
-This keeps the completion card the **last visible output** (per plugin Step 6) while
-still telling the user the one thing they must do: restart once. Do **not** print any
-restart notice as separate prose after the card — the card carries it.
-
-If the versions already match and this ship did not bump the plugin version, skip the
-card item (the Step 8 sync will be a silent no-op / in-place cache repair).
+**Never assert "lokal auf vNew synchronisiert" on a beta/stable pin.** The finalizer
+(Step 8) correctly holds the install on its pinned channel tag, so an alpha-only ship
+leaves it unchanged — a false "synced" claim sends the user hunting a non-existent
+sync failure (observed 2026-07-19). This keeps the completion card the **last visible
+output** (per plugin Step 6); do **not** print the notice as separate prose after the
+card — the card carries it.
 
 ## Step 8 — Self-update finalizer (silent, runs LAST)
 
@@ -41,6 +47,15 @@ card item (the Step 8 sync will be a silent no-op / in-place cache repair).
 > and writes `~/.claude/plugins/.mcp-stale.json`; once that sentinel exists,
 > `pre.mcp.health` blocks every further MCP call (including the completion card).
 > Running it before the card would brick the card render.
+
+> **Channel-aware — NOT a guaranteed move to vNew.** The finalizer runs
+> `ss.plugin.update`, which is channel-pinned (ring model): it reconciles the local
+> install to the **highest version visible to the pin** (`.channels.json`, default
+> `stable`) via a detached channel-tag checkout — NOT to `main`/vNew. After a plain
+> (alpha-only) ship on a stable/beta pin the version does NOT move and the finalizer
+> only cache-repairs — that is EXPECTED, not a drift bug. Do NOT force the marketplace
+> clone onto `main`/an alpha tag to "fix" it (the pin resets it every SessionStart by
+> design). The install receives vNew only after `/devops-release` promotes it to the pin.
 
 ### Guards — skip the finalizer entirely when ANY of:
 

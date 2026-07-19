@@ -130,26 +130,41 @@ export async function handler(params) {
 
   const steps = [];
 
+  // Generator failures are non-fatal to the build, but MUST NOT be swallowed
+  // silently — a stale index that never regenerates is exactly the F5 bug.
+  // Capture each run() and surface a warning when a generator fails.
+  const genWarnings = [];
+  const runGenerator = (label, cmd) => {
+    const r = run(cmd, cwd);
+    if (!r.success) {
+      genWarnings.push({ generator: label, error: (r.output || "").slice(-300) });
+    }
+    return r;
+  };
+
   // Regenerate deep-knowledge INDEX.md (idempotent, skips if unchanged)
   // 1. Plugin's own deep-knowledge
-  run(`"${process.execPath}" "${DK_INDEX_SCRIPT()}"`, cwd);
+  runGenerator("dk-index:plugin", `"${process.execPath}" "${DK_INDEX_SCRIPT()}"`);
   // 2. Project's deep-knowledge (if it exists)
   const projectDk = join(cwd, "deep-knowledge");
   if (existsSync(projectDk)) {
-    run(`"${process.execPath}" "${DK_INDEX_SCRIPT}" "${projectDk}"`, cwd);
+    // DK_INDEX_SCRIPT is a lazy accessor — it MUST be CALLED. Interpolating the
+    // bare function stringified its source into the command, so the project
+    // deep-knowledge index never regenerated (F5). Match line above: DK_INDEX_SCRIPT().
+    runGenerator("dk-index:project", `"${process.execPath}" "${DK_INDEX_SCRIPT()}" "${projectDk}"`);
   }
   // 3. Project map (full codebase index)
-  run(`"${process.execPath}" "${PROJECT_MAP_SCRIPT()}" "${cwd}"`, cwd);
+  runGenerator("project-map", `"${process.execPath}" "${PROJECT_MAP_SCRIPT()}" "${cwd}"`);
   // 4. README + architecture.html auto-marker sections (no-ops outside the
   //    plugin source repo, i.e. when cwd/plugins/devops is absent)
-  run(`"${process.execPath}" "${README_SECTIONS_SCRIPT()}" "${cwd}"`, cwd);
+  runGenerator("readme-sections", `"${process.execPath}" "${README_SECTIONS_SCRIPT()}" "${cwd}"`);
 
   // Build (skip if no build script detected/provided)
   if (buildCmd) {
     const buildResult = run(buildCmd, cwd);
     steps.push({ step: "build", cmd: buildCmd, ...buildResult });
     if (!buildResult.success) {
-      return { success: false, buildId: null, steps, failedAt: "build" };
+      return { success: false, buildId: null, steps, failedAt: "build", warnings: genWarnings };
     }
   }
 
@@ -158,7 +173,7 @@ export async function handler(params) {
     const lintResult = run(lintCmd, cwd);
     steps.push({ step: "lint", cmd: lintCmd, ...lintResult });
     if (!lintResult.success) {
-      return { success: false, buildId: null, steps, failedAt: "lint" };
+      return { success: false, buildId: null, steps, failedAt: "lint", warnings: genWarnings };
     }
   }
 
@@ -167,12 +182,18 @@ export async function handler(params) {
     const testResult = run(testCmd, cwd);
     steps.push({ step: "test", cmd: testCmd, ...testResult });
     if (!testResult.success) {
-      return { success: false, buildId: null, steps, failedAt: "test" };
+      return { success: false, buildId: null, steps, failedAt: "test", warnings: genWarnings };
     }
   }
 
   // Build-ID
   const buildId = getBuildId(cwd);
 
-  return { success: true, buildId, steps, detected: { build: !!buildCmd, lint: !!lintCmd, test: !!testCmd } };
+  return {
+    success: true,
+    buildId,
+    steps,
+    detected: { build: !!buildCmd, lint: !!lintCmd, test: !!testCmd },
+    warnings: genWarnings,
+  };
 }

@@ -9,14 +9,28 @@
  *
  *   The file lives at <cwd>/.claude/.ship-in-progress and contains a JSON
  *   payload with a timestamp + pid. It is stale after SENTINEL_MAX_AGE_MS
- *   (15 min) to avoid deadlocks if cleanup never ran.
+ *   to avoid deadlocks if cleanup never ran.
+ *
+ *   The sentinel is authoritatively cleared by ship_cleanup on EVERY exit path
+ *   of the pipeline (success, keep-mode, AND — per the ship skill — every
+ *   ship-blocked/abort return, which calls ship_cleanup({ keep: true }) before
+ *   rendering the card). The TTL is only the deadlock backstop for the rare case
+ *   where cleanup never runs at all (crash / killed session).
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const SENTINEL_REL = path.join('.claude', '.ship-in-progress');
-const SENTINEL_MAX_AGE_MS = 15 * 60 * 1000;
+// Deadlock backstop only — NOT a normal expiry (ship_cleanup clears it on every
+// exit path). 60 min comfortably exceeds a legitimate worst-case pipeline so the
+// sentinel never goes stale WHILE a ship is genuinely running: Codex review (5 min
+// hard timeout) + pre-merge CI gate (default 600 s, tunable higher) + build +
+// rebase loop + version bump + release overhead. The former 15 min was shorter
+// than that worst case, so a slow-but-healthy ship would see its sentinel expire
+// mid-flight and re-arm pre.main.guard / pre.edit.branch against the ship that is
+// legitimately touching main — the exact deadlock this file exists to prevent.
+const SENTINEL_MAX_AGE_MS = 60 * 60 * 1000;
 
 function sentinelPath(cwd) {
   return path.join(cwd || process.cwd(), SENTINEL_REL);

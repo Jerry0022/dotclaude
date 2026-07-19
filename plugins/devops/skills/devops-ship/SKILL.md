@@ -8,7 +8,7 @@ description: >-
   Supports hierarchical merges (sub-branch → feature → main).
   Use when work is ready to land. Triggers on: "ship it", "push and merge".
   Do NOT trigger during coding/debugging or for commits without shipping.
-allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, TaskList, TaskCreate, TaskUpdate, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*
+allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *), Bash(nohup *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, TaskList, TaskCreate, TaskUpdate, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*
 ---
 
 # Ship
@@ -33,10 +33,18 @@ a single issue. Detect that state FIRST, before any other step:
 node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" check
 ```
 
-Parse the JSON. If `active: true`, set `$SHIP_LOCKOUT=true` for this whole run.
-If the command errors or the script is absent (older plugin), treat it as **not
-locked** — a normal interactive ship — and continue. The guard only ever *adds*
-non-interactive safety; it never blocks a normal ship.
+Parse the JSON. If `active: true`, set `$SHIP_LOCKOUT=true` for this whole run
+**and persist it durably**: write a `.claude/.ship-lockout` marker in the repo
+root (`node -e "require('fs').mkdirSync('.claude',{recursive:true});require('fs').writeFileSync('.claude/.ship-lockout','1')"`).
+`$SHIP_LOCKOUT` is consumed at ~5 later gates, across a >5-min CI wait during
+which the conversation may compact and drop the variable from memory. At every
+interactive gate, re-derive `$SHIP_LOCKOUT=true` when the marker file exists
+rather than trusting recall alone — a lost lockout that silently re-enables
+`AskUserQuestion` is exactly the AFK-hang this guard exists to prevent. Clear the
+marker in Step 5 cleanup (delete `.claude/.ship-lockout`). If the command errors
+or the script is absent (older plugin), treat it as **not locked** — a normal
+interactive ship — and continue. The guard only ever *adds* non-interactive
+safety; it never blocks a normal ship.
 
 **The rule when `$SHIP_LOCKOUT` is set: never call `AskUserQuestion`.** Every gate
 that would normally ask takes its documented non-interactive branch instead. The
@@ -85,6 +93,16 @@ still pending, **BLOCK** (`ship-blocked`, "session activity active"); otherwise
 proceed to Step 0.
 
 This guard only applies to the **current chat session**, not external CI or other terminals.
+
+> **Sentinel hygiene (every exit path).** `ship_preflight` writes a
+> ship-in-progress sentinel that makes the main-branch Edit guards
+> (`pre.main.guard` / `pre.edit.branch`) stand down for the ship's duration. It is
+> cleared by `ship_cleanup` on a *successful* ship — but a **ship-blocked / abort**
+> return (any `render_completion_card` variant `ship-blocked` below) skips cleanup
+> and would leave the sentinel stranded, silently disarming main-branch protection
+> until it ages out. **Rule:** before rendering ANY `ship-blocked` card, first call
+> `ship_cleanup({ branch, cwd, keep: true })` — keep-mode deletes no branch/worktree,
+> it only clears the sentinel so main-branch protection resumes immediately.
 
 ## Step 0 — Load Extensions
 
@@ -318,6 +336,14 @@ Determine bump type based on changes:
 **Before calling ship_version_bump**, update CHANGELOG.md with the new version entry.
 The MCP tool updates JSON files and README — CHANGELOG is editorial and must be done by Claude.
 
+> **CHANGELOG is large** — an `Edit` requires a prior `Read`, but the repo's
+> `pre.tokens.guard` blocks the first Read of a big CHANGELOG (tens of thousands of
+> tokens). Read only the head of the file (`Read` with a small `limit`, e.g. 40 —
+> the newest entries are at the top) to satisfy the Edit precondition, or retry the
+> blocked Read once (the guard's sanctioned bypass). Never load the whole file. This
+> matters most in an AFK / `$SHIP_LOCKOUT` run, where a surprise token-guard block
+> would otherwise stall the pipeline with no one to retry it.
+
 Then call `ship_version_bump` MCP tool (always pass `cwd`):
 ```
 ship_version_bump({ bump: "minor", cwd: "<cwd>" })
@@ -411,7 +437,11 @@ watcher in the background. It waits for the GitHub Actions run triggered by the 
 and (if configured) probes the production URL — all without blocking the ship flow.
 
 ```bash
-# Background — fire and forget; result lands in <cwd>/.claude/.ship-watcher/<sha>.json
+# Background — fire and forget. The watcher anchors its state dir to the MAIN
+# repo (resolved via git-common-dir), NOT to <cwd>: a worktree ship deletes <cwd>
+# during ship_cleanup, so the result must land in the main repo where the
+# ss.ship.verify hook (running from the main repo at the next SessionStart) can
+# still read it. No --state-dir flag is needed — the default handles this.
 nohup node "${CLAUDE_PLUGIN_ROOT}/scripts/post-merge-watcher.js" \
   --cwd "<cwd>" \
   --base "main" \
@@ -428,9 +458,10 @@ On Windows (PowerShell), use `Start-Process` with `-WindowStyle Hidden` instead 
 Start-Process -WindowStyle Hidden -FilePath "node" -ArgumentList @("$env:CLAUDE_PLUGIN_ROOT/scripts/post-merge-watcher.js", "--cwd", "<cwd>", "--base", "main", "--merge-sha", "<sha>", "--pr", "<n>", "--max-wait", "1800", "--verify-config", "<cwd>/.claude/skills/ship/reference.md", "--version", "<vNew>")
 ```
 
-The watcher writes status to `<cwd>/.claude/.ship-watcher/<merge-sha>.json` and the
-`ss.ship.verify` hook surfaces unack'd results at the next SessionStart. On failure,
-a best-effort Windows toast fires immediately.
+The watcher writes status to `<main-repo>/.claude/.ship-watcher/<merge-sha>.json`
+(resolved from the git-common-dir, so a removed worktree cannot swallow the result)
+and the `ss.ship.verify` hook surfaces unack'd results at the next SessionStart. On
+failure, a best-effort Windows toast fires immediately.
 
 **Skip the watcher entirely** when:
 - `intermediate: true` (no CI on intermediate merges typically)
