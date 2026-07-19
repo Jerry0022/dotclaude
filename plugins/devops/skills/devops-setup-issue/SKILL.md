@@ -1,5 +1,5 @@
 ---
-name: devops-new-issue
+name: devops-setup-issue
 version: 0.2.0
 description: >-
   Create GitHub issues with enforced title format, labels, and optional milestone
@@ -12,7 +12,7 @@ description: >-
 allowed-tools: Bash(gh *), AskUserQuestion, Read, Grep, mcp__plugin_devops_dotclaude-issues__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
-# New Issue — GitHub Issue & Milestone Management
+# Setup Issue — GitHub Issue & Milestone Management
 
 Create issues and milestones with enforced formatting and optional board integration.
 
@@ -21,8 +21,8 @@ Create issues and milestones with enforced formatting and optional board integra
 Check for optional overrides. Use **Glob** to verify each path exists before reading.
 Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global: `~/.claude/skills/new-issue/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/new-issue/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/setup-issue/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/setup-issue/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 **Project extensions define:**

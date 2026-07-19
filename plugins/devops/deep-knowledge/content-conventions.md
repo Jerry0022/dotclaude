@@ -41,7 +41,7 @@ duplicate.** Examples:
   re-document the commit format
 - "always run pre-flight before shipping" → reference `/devops-ship`, do NOT
   re-list the pipeline steps
-- "open issues with the right labels" → reference `/devops-new-issue`, do NOT
+- "open issues with the right labels" → reference `/devops-setup-issue`, do NOT
   duplicate the label rules
 - "check branch hygiene before shipping" → reference `/devops-repo-health`,
   do NOT re-document the cleanup steps

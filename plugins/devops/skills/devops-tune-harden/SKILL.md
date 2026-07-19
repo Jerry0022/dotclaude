@@ -225,7 +225,7 @@ For every Step 4 (#2) finding + every Score < 50 OR Hard-Floor item from Step 5:
 
 4. For "Defer to issue" answers → call
    `mcp__plugin_devops_dotclaude-issues__match_issues` to check for an
-   existing issue; if none, suggest creating one via `/devops-new-issue`.
+   existing issue; if none, suggest creating one via `/devops-setup-issue`.
 
 ## Step 8 — Consistency Phase
 

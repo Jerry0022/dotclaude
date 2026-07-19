@@ -1,4 +1,4 @@
-# German trigger phrases for devops-project-setup.
+# German trigger phrases for devops-setup-project.
 # One per line. Lines starting with # are ignored.
 # Loaded by hooks/user-prompt-submit/prompt.knowledge.dispatch.js when
 # the session locale is "de" and injected as a skill-alias glossary so

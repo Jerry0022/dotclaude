@@ -104,7 +104,7 @@ Every plugin skill starts with Step 0:
 - Angular dev server: terminal output
 ```
 
-### /devops-new-issue
+### /devops-setup-issue
 ```markdown
 # reference.md
 ## Project board

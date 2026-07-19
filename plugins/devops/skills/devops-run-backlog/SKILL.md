@@ -182,7 +182,7 @@ Everything decision-shaped happens here, while the user is still around.
      from the run**, and note it for the final summary.
 3. **Refine → issue** — expand each `ready` issue into an actionable spec
    (acceptance criteria, a `**User value:** <effect>` line per
-   `devops-new-issue` convention, and an implementation plan) and write it
+   `devops-setup-issue` convention, and an implementation plan) and write it
    **back into the GitHub issue** (body update or comment). This GitHub write is
    allowed **only here**, because the user is present.
 
@@ -376,4 +376,4 @@ git-exclude entries (Step 3). Semantics mirror the `AUTONOMOUS-*` family.
   `/devops-ship` parks/blocks at every gate that would otherwise raise a modal.
   No `AskUserQuestion` inside a sub-skill can wedge the night.
 - **Milestones are done when all their issues are closed** — close the milestone
-  automatically at that point (`skills/devops-new-issue/deep-knowledge/milestone-rules.md`).
+  automatically at that point (`skills/devops-setup-issue/deep-knowledge/milestone-rules.md`).

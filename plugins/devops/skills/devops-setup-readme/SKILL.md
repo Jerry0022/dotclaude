@@ -1,9 +1,9 @@
 ---
-name: devops-readme
-version: 0.1.0
+name: devops-setup-readme
+version: 0.2.0
 description: >-
   Generate a polished, modern README.md for any project. Use when the user
-  explicitly calls /devops-readme, AND when Claude is about to create, rewrite, or
+  explicitly calls /devops-setup-readme, AND when Claude is about to create, rewrite, or
   substantially update a README.md. Triggers on: "create a readme", "update the
   readme", "improve the readme", "README erstellen", "README aktualisieren".
   Do NOT trigger for minor one-line edits like bumping a version number.
@@ -11,7 +11,7 @@ argument-hint: "[--preview] [--update]"
 allowed-tools: Read, Grep, Glob, Bash, AskUserQuestion, Write, Edit, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
-# README Generator
+# Setup Readme — README Generator
 
 Generate a modern, informative README.md for the current project.
 
@@ -20,8 +20,8 @@ Generate a modern, informative README.md for the current project.
 Check for optional overrides. Use **Glob** to verify each path exists before reading.
 Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global: `~/.claude/skills/readme/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/readme/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/setup-readme/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/setup-readme/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Arguments

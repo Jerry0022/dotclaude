@@ -1,18 +1,18 @@
 ---
-name: devops-project-setup
-version: 0.1.0
+name: devops-setup-project
+version: 0.2.0
 description: >-
   Audit or initialize a project's repository hygiene: .gitignore, LICENSE,
   README, .editorconfig, .gitattributes, and AI tooling config. Also scaffolds
   plugin skill extensions for the project. Triggers on: "set up this project",
   "init repo", "audit gitignore", "add license", "fix gitignore", "repo hygiene".
-  Do NOT trigger for README generation (/devops-readme), CLAUDE.md edits,
+  Do NOT trigger for README generation (/devops-setup-readme), CLAUDE.md edits,
   or source code changes.
 argument-hint: "[--audit | --init] [--fix]"
 allowed-tools: Read, Grep, Glob, Bash, AskUserQuestion, Write, Edit, WebFetch, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
-# Project Setup & Repo Hygiene
+# Setup Project — Repo Hygiene
 
 Audit or initialize a project's repository structure.
 
@@ -21,8 +21,8 @@ Audit or initialize a project's repository structure.
 Check for optional overrides. Use **Glob** to verify each path exists before reading.
 Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global: `~/.claude/skills/project-setup/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/project-setup/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/setup-project/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/setup-project/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Arguments
@@ -160,7 +160,7 @@ Generate with current year and user name from git config.
 
 ## Step 4 — README check
 
-Do NOT generate — inform user to run `/devops-readme` if missing.
+Do NOT generate — inform user to run `/devops-setup-readme` if missing.
 
 ## Step 5 — Project Map
 

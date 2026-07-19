@@ -168,7 +168,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 ## Features
 
 - **<!--devops:count:hooks-->35<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-fix, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-run-agents, devops-plugin-update, devops-run-autonomous, devops-run-burn, devops-run-backlog, devops-learn, devops-tune-harden, devops-tune-polish, devops-test-plan
+- **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-fix, devops-setup-issue, devops-setup-project, devops-setup-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-run-agents, devops-plugin-update, devops-run-autonomous, devops-run-burn, devops-run-backlog, devops-learn, devops-tune-harden, devops-tune-polish, devops-test-plan
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
@@ -305,9 +305,9 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/devops-release` | Explicit | Channel promotion (alpha→beta→stable): re-tag the same SHA, no rebuild |
 | `/devops-commit` | Explicit | Conventional commits with smart staging |
 | `/devops-fix` (alias: `/debug`) | Explicit + Hook | Root-cause analysis, diagnostics, and fix cycle |
-| `/devops-new-issue` | Explicit | GitHub issue creation with labels and milestones |
-| `/devops-project-setup` | Explicit | Repo hygiene audit and initialization |
-| `/devops-readme` | Explicit | Modern README generation |
+| `/devops-setup-issue` | Explicit | GitHub issue creation with labels and milestones |
+| `/devops-setup-project` | Explicit | Repo hygiene audit and initialization |
+| `/devops-setup-readme` | Explicit | Modern README generation |
 | `/devops-refresh-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
 | `/devops-extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
 | `/devops-repo-health` | Explicit | Repository branch hygiene analysis and cleanup |

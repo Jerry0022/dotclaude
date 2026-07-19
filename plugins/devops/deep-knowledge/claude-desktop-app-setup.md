@@ -1,7 +1,7 @@
 # Claude Desktop App Setup (Windows)
 
 Windows-specific reference for Claude Desktop App launcher configuration and bypass-permissions mode.
-Referenced by `devops-project-setup` Step 2c and any skill that touches permission mode.
+Referenced by `devops-setup-project` Step 2c and any skill that touches permission mode.
 
 ## Which path applies to you?
 

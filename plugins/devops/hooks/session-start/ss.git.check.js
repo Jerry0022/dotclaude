@@ -84,7 +84,7 @@ function readmeStaleness(dir) {
   if (!readmeTime || !rosterTime || rosterTime <= readmeTime) return null;
   // Throttle to once per 8h so it nudges during active dev without nagging.
   if (!runOnce('ss-git-readme-stale', null, { cooldownMs: 8 * 60 * 60 * 1000 })) return null;
-  return '📝 README.md is older than the skills/hooks/agents roster — run `/devops-readme` or `node plugins/devops/scripts/gen-readme-sections.js` to refresh counts & lists.';
+  return '📝 README.md is older than the skills/hooks/agents roster — run `/devops-setup-readme` or `node plugins/devops/scripts/gen-readme-sections.js` to refresh counts & lists.';
 }
 
 function checkRepo(dir) {

@@ -167,7 +167,7 @@ instead of localizing a workaround.
    `Jerry0022/dotclaude` (derivable from the installed plugin's
    `marketplace.json`: `{owner.name}/{name}`). Do NOT assume a local checkout
    of it exists — pass the slug straight to the issue skill.
-2. Delegate to `/devops-new-issue` via the **Skill** tool — never call
+2. Delegate to `/devops-setup-issue` via the **Skill** tool — never call
    `gh issue create` directly. Hand off a self-contained prompt containing:
    - `title`: `[BUG] <short>` for a defect, `[FEAT] <short>` for a gap or
      improvement (imperative, sentence case, no trailing period)
@@ -228,7 +228,7 @@ This branch fires when `{target_project}` ≠ current project.
    ```bash
    git -C "{target_project}" remote get-url origin
    ```
-2. **If GitHub remote**: delegate to the `/devops-new-issue` skill via the
+2. **If GitHub remote**: delegate to the `/devops-setup-issue` skill via the
    **Skill** tool — never call `gh issue create` directly from here. That skill
    enforces title format, labels, milestone, and project-board rules (including
    any project extension in `{target_project}/.claude/skills/new-issue/`).
@@ -240,7 +240,7 @@ This branch fires when `{target_project}` ≠ current project.
    - `type:chore` as the issue type
 
    General rule for ALL devops skills: whenever an issue needs to be created,
-   invoke `/devops-new-issue` rather than calling `gh issue create` directly.
+   invoke `/devops-setup-issue` rather than calling `gh issue create` directly.
 3. **If no GitHub remote**: ASK the user first (per their rule on cross-project
    changes that are not issues). Two options:
    - (a) Generate a copy-pastable prompt block (default)
