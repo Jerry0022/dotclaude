@@ -33,10 +33,18 @@ a single issue. Detect that state FIRST, before any other step:
 node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" check
 ```
 
-Parse the JSON. If `active: true`, set `$SHIP_LOCKOUT=true` for this whole run.
-If the command errors or the script is absent (older plugin), treat it as **not
-locked** — a normal interactive ship — and continue. The guard only ever *adds*
-non-interactive safety; it never blocks a normal ship.
+Parse the JSON. If `active: true`, set `$SHIP_LOCKOUT=true` for this whole run
+**and persist it durably**: write a `.claude/.ship-lockout` marker in the repo
+root (`node -e "require('fs').mkdirSync('.claude',{recursive:true});require('fs').writeFileSync('.claude/.ship-lockout','1')"`).
+`$SHIP_LOCKOUT` is consumed at ~5 later gates, across a >5-min CI wait during
+which the conversation may compact and drop the variable from memory. At every
+interactive gate, re-derive `$SHIP_LOCKOUT=true` when the marker file exists
+rather than trusting recall alone — a lost lockout that silently re-enables
+`AskUserQuestion` is exactly the AFK-hang this guard exists to prevent. Clear the
+marker in Step 5 cleanup (delete `.claude/.ship-lockout`). If the command errors
+or the script is absent (older plugin), treat it as **not locked** — a normal
+interactive ship — and continue. The guard only ever *adds* non-interactive
+safety; it never blocks a normal ship.
 
 **The rule when `$SHIP_LOCKOUT` is set: never call `AskUserQuestion`.** Every gate
 that would normally ask takes its documented non-interactive branch instead. The
@@ -85,6 +93,16 @@ still pending, **BLOCK** (`ship-blocked`, "session activity active"); otherwise
 proceed to Step 0.
 
 This guard only applies to the **current chat session**, not external CI or other terminals.
+
+> **Sentinel hygiene (every exit path).** `ship_preflight` writes a
+> ship-in-progress sentinel that makes the main-branch Edit guards
+> (`pre.main.guard` / `pre.edit.branch`) stand down for the ship's duration. It is
+> cleared by `ship_cleanup` on a *successful* ship — but a **ship-blocked / abort**
+> return (any `render_completion_card` variant `ship-blocked` below) skips cleanup
+> and would leave the sentinel stranded, silently disarming main-branch protection
+> until it ages out. **Rule:** before rendering ANY `ship-blocked` card, first call
+> `ship_cleanup({ branch, cwd, keep: true })` — keep-mode deletes no branch/worktree,
+> it only clears the sentinel so main-branch protection resumes immediately.
 
 ## Step 0 — Load Extensions
 
