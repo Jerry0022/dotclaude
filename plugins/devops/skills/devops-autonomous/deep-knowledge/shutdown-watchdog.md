@@ -32,7 +32,7 @@ Claude — it cannot be blocked by anything inside the session. It is armed in
 |---------------------|---------|-----------------------------|
 | `shutdown` | shutdown=yes runs | Force-shuts the PC down |
 | `notify`   | shutdown=no runs (autonomous) | Writes a visible `AUTONOMOUS-STALLED.txt` next to the flag — **no** power-off |
-| `resume`   | shutdown=no runs (burn-backlog) | Notify **and** attempt a guarded one-shot relaunch of `claude` to continue — **no** power-off |
+| `resume`   | shutdown=no runs (backlog-runner) | Notify **and** attempt a guarded one-shot relaunch of `claude` to continue — **no** power-off |
 
 The `notify` arm closes the gap where a "report-only" run wedges (Anthropic API
 hang, stuck subagent) and would otherwise hang **forever with zero external
@@ -41,7 +41,7 @@ watchdog, they instead find a dated `AUTONOMOUS-STALLED.txt` pointing at
 `AUTONOMOUS-RESUME.json`.
 
 The `resume` arm goes one step further for a **shutdown=no** run that must keep
-making progress unattended (the burn-backlog night loop): on firing with the flag
+making progress unattended (the backlog-runner night loop): on firing with the flag
 missing it writes the same stalled marker **and** actively revives the work by
 launching a fresh `claude` with a caller-supplied resume prompt. It is the answer
 to "the PC stayed on all night but the wedged session did nothing" — notify alone

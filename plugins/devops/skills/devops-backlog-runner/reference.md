@@ -1,11 +1,11 @@
-# Burn-Backlog Skill — Extension Guide
+# Backlog-Runner Skill — Extension Guide
 
 ## How to extend
 
 Create project-specific backlog rules in your project:
 
 ```
-{project}/.claude/skills/burn-backlog/
+{project}/.claude/skills/backlog-runner/
 ├── SKILL.md        ← Override or add steps
 └── reference.md    ← Project-specific context
 ```

@@ -30,7 +30,7 @@
  *                                  action = "shutdown" (default) | "notify" | "resume".
  *                                  resume-prompt is REQUIRED for action "resume":
  *                                  the initial prompt handed to the relaunched
- *                                  `claude` (e.g. a BURN_BACKLOG_AUTOSTART: line).
+ *                                  `claude` (e.g. a BACKLOG_RUNNER_AUTOSTART: line).
  *                                  Stores a PER-REGISTRATION sentinel under TEMP
  *                                  (parallel autonomous sessions coexist; only a
  *                                  previous registration for the SAME flag path

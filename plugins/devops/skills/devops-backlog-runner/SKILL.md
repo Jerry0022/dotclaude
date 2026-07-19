@@ -1,18 +1,18 @@
 ---
-name: devops-burn-backlog
-version: 0.2.0
+name: devops-backlog-runner
+version: 0.3.0
 description: >-
   Milestone-centric backlog runner. Picks open GitHub milestones (or loose
   issues when there are none), then works the selected items off end-to-end —
   refine, implement, test/QA, and ship each one — unsupervised while the user is
   away or asleep, closing each issue and its milestone as it lands. Use when the
-  user wants to burn down the planned backlog / milestones without babysitting,
+  user wants to work off the planned backlog / milestones without babysitting,
   or "let old ideas and fixes get worked off while I'm gone". Triggers: "backlog
-  abarbeiten", "arbeite den backlog ab", "burn backlog", "milestones abarbeiten",
-  "arbeite die milestones ab", "arbeite den milestone ab", "burndown". Do NOT
-  trigger on the bare word
-  "burn", nor for maximizing token budget (that is /devops-burn, explicit-only),
-  nor for a generic single ad-hoc AFK task (that is /devops-autonomous).
+  abarbeiten", "arbeite den backlog ab", "backlog runner", "run the backlog",
+  "milestones abarbeiten", "arbeite die milestones ab", "arbeite den milestone
+  ab". Do NOT trigger for maximizing token budget (that is /devops-burn,
+  explicit-only), nor for a generic single ad-hoc AFK task (that is
+  /devops-autonomous).
 argument-hint: "[optional filter, e.g. 'only bugs' or a milestone name]"
 allowed-tools: >-
   Bash(*), Read, Write, Edit, Glob, Grep, Agent,
@@ -29,7 +29,7 @@ allowed-tools: >-
   mcp__ccd_session_mgmt__send_message
 ---
 
-# Burn Backlog
+# Backlog Runner
 
 Work off the project's planned backlog. Pick milestones (or loose issues), then
 refine → implement → test/QA → **ship** each selected item, one after another,
@@ -43,19 +43,20 @@ and a task string never overrides that guardrail. Instead this skill reuses the
 autonomous **frame** by calling the same plugin scripts (permission audit,
 shutdown timer, resume schedule, watchdog, completion card) and referencing the
 same deep-knowledge, and composes `/devops-concept`, `/devops-ship`, and the role
-agents as building blocks. Full rationale + reuse table:
+agents as building blocks. Full rationale + reuse table (dated design spec, kept
+under its original name):
 `docs/superpowers/specs/2026-07-18-devops-burn-backlog-design.md`.
 
 ## Step 0 — Load Extensions
 
 Silently check (do not surface "not found"):
-1. `~/.claude/skills/burn-backlog/SKILL.md` + `reference.md`
-2. `{project}/.claude/skills/burn-backlog/SKILL.md` + `reference.md`
+1. `~/.claude/skills/backlog-runner/SKILL.md` + `reference.md`
+2. `{project}/.claude/skills/backlog-runner/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 0.1 — Auto-Start / Resume Re-entry
 
-If the incoming message starts with `BURN_BACKLOG_AUTOSTART:`, a presence-phase
+If the incoming message starts with `BACKLOG_RUNNER_AUTOSTART:`, a presence-phase
 timeout fired and the user is AFK. Step 1a arms this cron **before the first
 question**, and every presence question re-arms it, so the timeout covers the
 whole Präsenz phase — not just the final confirmation. Do NOT re-ask anything.
@@ -69,7 +70,7 @@ one-shot cron at `now + 3min` with the same prompt and keep waiting (log
 Otherwise branch on `phase`:
 
 - **`phase=gate`** — the full gate completed (permissions primed, queue +
-  shutdown/resume chosen). Output once **"Timeout — starte Burn-Backlog
+  shutdown/resume chosen). Output once **"Timeout — starte Backlog-Runner
   autonom."**, skip Steps 1–3, jump to the Step 4 loop.
 - **`phase=presence`** — the user left **before** finishing the gate. Timeout
   defaults apply and are not renegotiable:
@@ -80,7 +81,7 @@ Otherwise branch on `phase`:
     selection if one was already made before the timeout.
   - **Skip Step 2 entirely.** Concept decisions need the user and refine writes to
     GitHub (presence-only). Park every `needs-decision` / `oversized` item as a
-    `⏸ Rückfrage` for the report; burn only the `ready` / plain issues.
+    `⏸ Rückfrage` for the report; run only the `ready` / plain issues.
   - **Run Step 3 non-interactively:** permission audit + artifact hygiene, then arm
     the lockout and the watchdog with `shutdown=yes`. **Skip the permission-audit
     question** — proceed with already-granted permissions; anything not in
@@ -105,12 +106,12 @@ use `gh` directly.
 away anywhere in this Präsenz phase (selection, triage, or the gate), so the
 timeout must cover all of it, not just the final confirmation. Immediately after
 the milestone fetch (step 1 below) and **before** showing the selection question
-(step 2), arm a one-shot cron that starts the burn with safe defaults if no answer
+(step 2), arm a one-shot cron that starts the run with safe defaults if no answer
 comes within 3 minutes:
 
 ```
 CronCreate({ recurring: false, cron: "<now+3min>",
-  prompt: "BURN_BACKLOG_AUTOSTART: presence timeout. phase=presence,
+  prompt: "BACKLOG_RUNNER_AUTOSTART: presence timeout. phase=presence,
   queue=<all open milestone issue numbers; or all open loose issue numbers when
   there are no milestones>, milestones=<all open titles>, shutdown=yes,
   autoResume=no, branch=<current-branch>." })
@@ -176,7 +177,7 @@ Everything decision-shaped happens here, while the user is still around.
    concept `create-issues` path; the new sub-issues enter the queue. Concept
    invoked mid-flow returns control **without** rendering its own completion card.
    - If the user leaves an item undecided, mark it `needs-decision`, **exclude it
-     from the burn**, and note it for the final summary.
+     from the run**, and note it for the final summary.
 3. **Refine → issue** — expand each `ready` issue into an actionable spec
    (acceptance criteria, a `**User value:** <effect>` line per
    `devops-new-issue` convention, and an implementation plan) and write it
@@ -196,7 +197,7 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
    ```bash
    x="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
    mkdir -p "${x%/*}"
-   grep -qxF '/BURN-*' "$x" 2>/dev/null || echo '/BURN-*' >> "$x"
+   grep -qxF '/BACKLOG-*' "$x" 2>/dev/null || echo '/BACKLOG-*' >> "$x"
    # Also the composed autonomous-family artifacts (lockout sentinel, and the
    # watchdog's own AUTONOMOUS-RECOVERY.flag / AUTONOMOUS-STALLED.txt).
    grep -qxF '/AUTONOMOUS-*' "$x" 2>/dev/null || echo '/AUTONOMOUS-*' >> "$x"
@@ -208,7 +209,7 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
    > geschlossen. Nur MCP-Ship-Tools, eigenes Repo, kein Force-Push. Starten?"
    > Options (fixed order): 1. "Ja, mit Ship-Mandat" · 2. "Nein, abbrechen"
 
-   "Nein" → stop, output "Burn-Backlog abgebrochen.", render a `ready` card if
+   "Nein" → stop, output "Backlog-Runner abgebrochen.", render a `ready` card if
    Step 2 wrote refinements, else `analysis`.
 3. **Shutdown / resume** — ask `devops-autonomous` Step 2 **Q3** (shutdown yes/no)
    and, only when shutdown=no, **Q4** (auto-resume) — same fixed option order and
@@ -217,22 +218,22 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
    auto-resume cron (if shutdown=no + resume=yes) per `devops-autonomous` Step 4
    and `skills/devops-autonomous/deep-knowledge/shutdown-watchdog.md`. **Watchdog
    action by shutdown choice:** `shutdown=yes` → `action=shutdown`; `shutdown=no`
-   → `action=resume` with a resume prompt (the same `BURN_BACKLOG_AUTOSTART:
+   → `action=resume` with a resume prompt (the same `BACKLOG_RUNNER_AUTOSTART:
    phase=gate …` line used below), so a wedged night run is actively revived
    instead of only flagged — see § External Watchdog `resume` mode in that
    reference. The auto-resume cron reuses the
    generic `AUTONOMOUS_RESUME:` worktree-nudge (it just sends `weiter` to
-   stalled `claude/` worktrees, which resumes THIS burn in place —
+   stalled `claude/` worktrees, which resumes THIS run in place —
    engine-neutral). For the 3-minute autostart, arm a cron with a
-   **burn-specific** marker — never the verbatim `AUTONOMOUS_AUTOSTART:` prompt,
+   **backlog-runner-specific** marker — never the verbatim `AUTONOMOUS_AUTOSTART:` prompt,
    which `devops-autonomous` Step 0.1 would catch and resume as its own no-ship
    engine, losing the ship mandate and queue. This is the **final re-arm** — it
    carries `phase=gate` and supersedes the presence cron from Step 1a (delete the
    presence cron first, then arm this one):
    ```
    CronCreate({ recurring: false, cron: "<now+3min>",
-     prompt: "BURN_BACKLOG_AUTOSTART: confirmation timeout. phase=gate, resume
-     /devops-burn-backlog Step 4 loop with: queue=<issue numbers>,
+     prompt: "BACKLOG_RUNNER_AUTOSTART: confirmation timeout. phase=gate, resume
+     /devops-backlog-runner Step 4 loop with: queue=<issue numbers>,
      milestones=<titles>, shutdown=<y/n>, autoResume=<y/n>, branch=<branch>." })
    ```
    On re-entry the Step 0.1 `phase=gate` branch resumes the Step 4 loop (skips
@@ -248,7 +249,7 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
 hangs the night on a modal no one can answer:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" arm burn-backlog
+node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" arm backlog-runner
 ```
 
 `/devops-ship` reads this in its Pre-Step A and turns each interactive gate
@@ -259,7 +260,7 @@ the lockout.
 Then, if shutdown=yes, arm the fail-safe shutdown timer
 (`scripts/autonomous-shutdown-timer.js arm`). Read
 `deep-knowledge/autonomous-execution.md` at the start of this step. Maintain an
-append-only `BURN-LOG.md` decision journal (one timestamped line per judgment
+append-only `BACKLOG-LOG.md` decision journal (one timestamped line per judgment
 call). Run the mandatory pre-mortem (`deep-knowledge/pre-mortem.md`) before the
 first state-mutating op.
 
@@ -293,7 +294,7 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
 
 ## Step 5 — Completion & Blocked Handling
 
-1. **Report** — write a self-contained `BURN-REPORT.html` (dark theme, per
+1. **Report** — write a self-contained `BACKLOG-REPORT.html` (dark theme, per
    `skills/devops-autonomous/deep-knowledge/html-report.md`) to the project root: per item
    `shipped` / `parked` / `blocked` (+ reason + branch), milestone progress, and
    the list of shipped PRs. Open it in Edge (convert the path with
@@ -304,7 +305,7 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
    the reason, and the concrete question for the user. This is **not** a modal
    `AskUserQuestion` (that would violate the Lockout / block shutdown) — it is a
    status message the user reacts to next session; their reactions feed a
-   follow-up burn (`BURN-RESUME.json`). These blocks are also listed in the
+   follow-up run (`BACKLOG-RESUME.json`). These blocks are also listed in the
    report.
 3. **Completion card** — call `render_completion_card` with the variant per
    aggregate status: `ship-successful` when ≥1 item shipped and nothing is
@@ -315,16 +316,16 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
    fail-safe timer FIRST, clear the autonomous lockout
    (`node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" clear`), then act by
    shutdown choice. **Never** auto-shutdown while the aggregate run status is
-   BLOCKED. Write `BURN-DONE.flag` for every terminal status so the watchdog
+   BLOCKED. Write `BACKLOG-DONE.flag` for every terminal status so the watchdog
    stands down.
 
 ## Artifacts
 
-`BURN-LOG.md` (decision journal) · `BURN-REPORT.html` (deliverable) ·
-`BURN-DONE.flag` (watchdog handshake) · `BURN-RESUME.json` (late-permission /
+`BACKLOG-LOG.md` (decision journal) · `BACKLOG-REPORT.html` (deliverable) ·
+`BACKLOG-DONE.flag` (watchdog handshake) · `BACKLOG-RESUME.json` (late-permission /
 follow-up state) · `AUTONOMOUS-LOCKOUT.flag` (ship-guard sentinel, armed Step 4 /
 cleared Step 5) · `AUTONOMOUS-RECOVERY.flag` + `AUTONOMOUS-STALLED.txt` (written by
-the watchdog only if it fires). Covered by the `/BURN-*` and `/AUTONOMOUS-*`
+the watchdog only if it fires). Covered by the `/BACKLOG-*` and `/AUTONOMOUS-*`
 git-exclude entries (Step 3). Semantics mirror the `AUTONOMOUS-*` family.
 
 ## Rules
