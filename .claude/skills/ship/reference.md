@@ -5,6 +5,15 @@ so after the merge the locally-installed devops in *this* Claude Code instance m
 be brought in sync with what was just shipped — otherwise the running instance keeps
 the old version and the next session lands in a stale state ("devops nicht verfügbar").
 
+> **Channel caveat (ring model).** "In sync with what was just shipped" only holds
+> when the local install's channel pin (`~/.claude/plugins/.channels.json`, default
+> `stable`) actually receives the shipped version. A plain `/devops-ship` publishes to
+> **alpha** only, so on the default stable pin the local install correctly STAYS on the
+> previous stable version until `/devops-release` promotes it — the Step 8 finalizer is
+> then a cache-repair no-op, not a failure. Do not "fix" the detached-HEAD marketplace
+> clone by forcing it onto `main`; the pin resets it by design. See the memory
+> `project_ring_model_local_stays_stable` for the full symptom/diagnosis note.
+
 ## Why a post-ship self-update is needed here (and nowhere else)
 
 A normal consumer project shipping its app has nothing to do with the devops plugin
