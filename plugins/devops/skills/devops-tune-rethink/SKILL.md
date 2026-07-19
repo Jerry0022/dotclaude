@@ -10,7 +10,7 @@ description: >-
   down), generates genuinely fresh approaches via code-blind lens agents,
   reconciles them against the codebase, lets the user decide on a
   devops-concept page, then hands the chosen approach to devops-run-autonomous
-  for implementation with devops-test-plan verification.
+  for implementation with test-plan verification (deep-knowledge/test-plan.md).
   Triggers on: "festgefahren", "stuck", "unstuck", "wir drehen uns im Kreis",
   "neu denken", "rethink", "frischer Ansatz", "fresh approach",
   "komplett neu denken", "das führt zu nichts".
@@ -153,7 +153,7 @@ Only after an explicit **Implement** decision. Assemble the task briefing:
 
 - the chosen approach (full concept content),
 - scope boundary, success criteria, no-gos, corridor,
-- test mandate: pin the profile via `devops-test-plan` and verify per its
+- test mandate: pin the profile per `deep-knowledge/test-plan.md` and verify per its
   recommendation,
 - pointer to the `.claude/rethink/<date>-<slug>/` artifacts.
 

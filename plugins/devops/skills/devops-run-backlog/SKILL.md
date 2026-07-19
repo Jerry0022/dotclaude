@@ -301,7 +301,7 @@ for each issue in queue:
                  (agent-orchestration.md — Single-Agent Shortcut / waves;
                  Autonomous directive, no AskUserQuestion). May delegate one heavy
                  item to a /devops-run-autonomous implement sub-run (never ships).
-  3. TEST/QA   → pin the profile via devops-test-plan; devops:qa agent; verify
+  3. TEST/QA   → pin the profile per deep-knowledge/test-plan.md; devops:qa agent; verify
                  per test-strategy.md (browser verification MANDATORY for web tech)
   4. SHIP      → /devops-ship (MCP ship tools) — this skill's own authority
   5. CLOSE     → close the issue; when ALL issues of a milestone are done,

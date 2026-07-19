@@ -90,7 +90,7 @@ function compileCarveOuts(patterns) {
 }
 
 /**
- * Extract + compile carve-outs from a parsed /devops-test-plan profile object
+ * Extract + compile carve-outs from a parsed test-plan profile object
  * (field `no_runtime_static_paths`). Malformed input → [].
  * @param {*} profileJson
  * @returns {RegExp[]}
@@ -460,7 +460,7 @@ function anyReason() {
     '',
     'Do this FIRST, before the completion card:',
     '',
-    '1. Invoke /devops-test-plan to pin the profile.',
+    '1. Follow deep-knowledge/test-plan.md to detect + pin the profile.',
     '2. Then run the matching Light check: a browser snapshot for a web/DOM surface,',
     '   or the test suite (npm test / pytest / …) otherwise — and it must pass.',
   ];

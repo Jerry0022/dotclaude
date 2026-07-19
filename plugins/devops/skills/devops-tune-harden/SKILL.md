@@ -103,8 +103,8 @@ and inform the user.
 
 Two things happen in parallel — do NOT block on either:
 
-1. **Invoke `/devops-test-plan`** (via the `Skill` tool) to get the deterministic
-   tool-chain for this project. Store result as `$TEST_PLAN`.
+1. **Determine the test tool-chain per `deep-knowledge/test-plan.md`** (detect +
+   pin the profile) for this project. Store result as `$TEST_PLAN`.
 2. **Spawn `qa` agent** in background — SKIP this when `$PARENT_SKILL=agents`
    AND a qa wave is already planned/running (the orchestrator owns qa).
    When skipped, defer to parent's qa output and request a focused re-test

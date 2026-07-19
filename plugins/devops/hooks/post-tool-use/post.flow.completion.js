@@ -42,11 +42,11 @@ const {
 } = require('../lib/browsertest-guard');
 
 /**
- * Read the pinned $TEST_PROFILE for this session (cache written by
- * /devops-test-plan) plus the project's no-runtime static carve-outs
+ * Read the pinned $TEST_PROFILE for this session (cache written per
+ * deep-knowledge/test-plan.md) plus the project's no-runtime static carve-outs
  * (`no_runtime_static_paths` — see #237). Carve-outs merge from BOTH the
  * session profile cache and the project override file, so a consumer project
- * is protected from turn one even before /devops-test-plan ran.
+ * is protected from turn one even before detection ran.
  * Missing / unreadable → 'any' with no carve-outs.
  * @param {string} sessionId
  * @param {string} cwd — project root (hook.cwd)
@@ -264,7 +264,7 @@ process.stdin.on('end', () => {
     lines.push(
       '',
       '[test-autonomy] First code edit this session.',
-      'Before any test action: invoke /devops-test-plan to pin $TEST_PROFILE.',
+      'Before any test action: follow deep-knowledge/test-plan.md to pin $TEST_PROFILE.',
       'Then follow the profile tool_chain — do NOT default to computer-use.',
       'For web/renderer changes the PRIMARY browser tool is the Claude-in-Chrome',
       'extension running in Edge (Chrome-MCP); Preview is only the fallback when the',

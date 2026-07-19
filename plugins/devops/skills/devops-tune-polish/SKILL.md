@@ -95,7 +95,7 @@ and inform the user.
 
 In parallel — do NOT block:
 
-1. **Invoke `/devops-test-plan`** to determine UI test tools (browser
+1. **Determine UI test tools per `deep-knowledge/test-plan.md`** (browser
    preview, Playwright, snapshot tests, multi-viewport setup). Store as
    `$TEST_PLAN`.
 2. **Spawn `qa` agent** in background — SKIP when `$PARENT_SKILL=agents`

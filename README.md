@@ -168,7 +168,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 ## Features
 
 - **<!--devops:count:hooks-->35<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-fix, devops-setup-issue, devops-setup-project, devops-setup-readme, devops-refresh-usage, devops-claude-extend-skill, devops-repo-health, devops-claude-lint, devops-concept, devops-run-agents, devops-plugin-update, devops-run-autonomous, devops-run-burn, devops-run-backlog, devops-learn, devops-tune-harden, devops-tune-polish, devops-test-plan
+- **<!--devops:count:skills-->22<!--/devops:count:skills--> Skills** — devops-ship, devops-release, devops-commit, devops-fix, devops-setup-issue, devops-setup-project, devops-setup-readme, devops-refresh-usage, devops-claude-extend-skill, devops-repo-health, devops-plugin-update, devops-claude-lint, devops-concept, devops-run-agents, devops-run-autonomous, devops-run-burn, devops-run-backlog, devops-learn, devops-tune-harden, devops-tune-polish, devops-tune-rethink, devops-graph
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
@@ -321,7 +321,6 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/devops-learn` | Explicit | Capture long-term learnings and route to project-specific instructions |
 | `/devops-tune-harden` | Explicit | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
 | `/devops-tune-polish` | Explicit | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
-| `/devops-test-plan` | Explicit + Hook | Detect test profile, deterministic tool-chain recommendations per test request |
 | `/devops-graph` | Explicit + Hook | On-demand code knowledge graph via graphify, with opt-in auto-build + hard-gate enforcement |
 | `/devops-tune-rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, concept decision, autonomous implementation |
 
@@ -688,7 +687,7 @@ devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
 ├── hooks/                         ← <!--devops:count:hooks-->35<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
-├── skills/                        ← <!--devops:count:skills-->23<!--/devops:count:skills--> skill definitions (SKILL.md)
+├── skills/                        ← <!--devops:count:skills-->22<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates

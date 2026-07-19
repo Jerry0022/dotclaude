@@ -17,8 +17,8 @@ Autonomy is the default. Do not ask the user which test tool to use.
   project skill extension demands it. Never autonomously.
 
 Ask the user only when a Must-Ask Trigger fires (see below). The `$TEST_PROFILE`
-variable (set by `/devops-test-plan`) pins the tool-chain for the session; if it
-is not set, invoke `/devops-test-plan` first.
+variable (pinned per [test-plan.md](test-plan.md)) fixes the tool-chain for the
+session; if it is not set, detect + pin it per that reference first.
 
 ---
 
@@ -102,7 +102,7 @@ absence of runtime errors — always read console + network alongside a snapshot
 
 1. Check whether `$TEST_PROFILE` is set
    (`~/.claude/cache/devops/test-profile-<session_id>.json`).
-2. If not → invoke `/devops-test-plan` to detect the profile and populate cache.
+2. If not → detect + pin the profile per [test-plan.md](test-plan.md) (populates the cache).
 3. Run the **Light** verification for the profile's surface — automatically,
    for every code change (enforced by the browser/light gate, not advisory).
 4. For a DOM surface, resolve the concrete browser tool via the waterfall in
@@ -132,7 +132,7 @@ Everything else — Light verification, service calls in dev/test environments,
 form fills, responsive-layout checks — is autonomous.
 
 **Standing opt-in (extension flag).** A project extension may set
-`full_app_test: true` (in its `devops-test-plan` profile) to declare that
+`full_app_test: true` (in its test-plan profile override) to declare that
 Full verification is always wanted for that project. This converts trigger #1
 from a per-run question into a pre-authorized autonomous Full run. Without the
 flag, Full stays user-gated.
@@ -161,26 +161,27 @@ Desktop 1280×800 (see [responsive-testing.md](responsive-testing.md)).
 with the shell's own constraints — never the web breakpoints.
 
 Project skill extensions can register additional profiles via
-`{project}/.claude/skills/devops-test-plan/` (see the
-[skill SKILL.md, Step 2a](../skills/devops-test-plan/SKILL.md)). The same tier
+`{project}/.claude/skills/devops-test-plan/` (see
+[test-plan.md § Custom Profiles](test-plan.md)). The same tier
 order and must-ask rules apply — extension profiles inherit autonomy defaults
 unless their JSON sets `must_ask_triggers` (or `full_app_test`) explicitly.
 
 ---
 
-## How the Skill Is Used
+## How the Test-Plan Reference Is Used
 
-Invoke `/devops-test-plan` explicitly or via another skill:
+Apply [test-plan.md](test-plan.md) — detect + pin, there is no command to invoke:
 
-- `/devops-test-plan` — detects profile, pins `$TEST_PROFILE` for the session,
-  outputs a concrete tool-chain recommendation.
-- `--reset` flag — clears the cached profile and re-detects.
-- `--profile <name>` flag — overrides detection with a named profile.
-- Project override: `.claude/skills/devops-test-plan/profile.json` in the
+- **Detect + pin** — resolve the profile, pin `$TEST_PROFILE` for the session,
+  hold the concrete tool-chain (see the reference).
+- **`--reset`** — clear the cached profile and re-detect.
+- **Named override** — force a profile via the project override.
+- **Project override**: `.claude/skills/devops-test-plan/profile.json` in the
   consumer project (merged over plugin defaults at detection time).
 
-Other skills (QA agent, completion-flow) call `/devops-test-plan` automatically
-when `$TEST_PROFILE` is absent. Do not duplicate profile-detection logic.
+The testing skills (`devops-tune-*`, `devops-run-backlog`, the QA agent) and the
+completion-flow hooks apply this reference automatically when `$TEST_PROFILE` is
+absent. Do not duplicate profile-detection logic.
 
 ---
 

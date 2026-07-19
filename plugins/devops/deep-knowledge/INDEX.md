@@ -34,6 +34,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [responsive-testing.md](responsive-testing.md) | Responsive Testing — Multi-Viewport Verification | Multi-device web apps require verification at phone, tablet, and desktop |
 | [skill-extension-guide.md](skill-extension-guide.md) | Skill Extension Guide — For Plugin Integrators | How to customize devops skills and agents for your project. |
 | [test-autonomy.md](test-autonomy.md) | Test Autonomy — Cross-Cutting Rules for Test Tool Selection | Cross-cutting rule for every skill, hook, and agent that performs or triggers |
+| [test-plan.md](test-plan.md) | Test Plan — Detect Profile, Pin Tool-Chain | Cross-cutting reference for **every** skill, hook, or agent that tests, verif... |
 | [test-strategy.md](test-strategy.md) | Test Execution Strategy | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [tool-selection.md](tool-selection.md) | Tool Selection (Windows) | Preferred tool usage when operating on Windows environments. |
 | [visual-verification.md](visual-verification.md) | Visual Verification Methods | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
