@@ -110,6 +110,42 @@ describe("buildRecoveryScript — mode-specific recovery", () => {
     });
     expect(s).toContain("o''brien");
   });
+
+  const resumeOpts = {
+    ...base,
+    action: "resume",
+    recoveryFlagPath: "C:\\proj\\AUTONOMOUS-RECOVERY.flag",
+    workingDir: "C:\\proj",
+    resumePrompt: "BURN_BACKLOG_AUTOSTART: resume",
+  };
+
+  test("resume mode notifies AND arms a guarded one-shot claude relaunch", () => {
+    const s = buildRecoveryScript(resumeOpts);
+    // Still surfaces the visible stalled marker (a hang is never invisible).
+    expect(s).toContain("Set-Content -Path 'C:\\proj\\AUTONOMOUS-STALLED.txt'");
+    // Never powers the machine off.
+    expect(s).not.toContain("shutdown.exe");
+    // Relaunch is gated by a one-per-run recovery flag — no fork-bomb on
+    // repeated fires of the same task.
+    expect(s).toContain("$recoveryFlag = 'C:\\proj\\AUTONOMOUS-RECOVERY.flag'");
+    expect(s).toContain("if (Test-Path $recoveryFlag)");
+    // Relaunches claude with the resume prompt in the project working dir.
+    expect(s).toContain("Get-Command claude");
+    expect(s).toContain("Start-Process -FilePath $claude.Source");
+    expect(s).toContain("'-p','BURN_BACKLOG_AUTOSTART: resume'");
+    expect(s).toContain("-WorkingDirectory 'C:\\proj'");
+  });
+
+  test("resume mode degrades to notify-only when claude is not on PATH", () => {
+    const s = buildRecoveryScript(resumeOpts);
+    expect(s).toContain("claude not found on PATH — notify-only");
+  });
+
+  test("escapes single-quotes in the resume prompt", () => {
+    const s = buildRecoveryScript({ ...resumeOpts, resumePrompt: "it's a resume" });
+    expect(s).toContain("it''s a resume");
+    expect(s).not.toContain("'-p','it's a resume'");
+  });
 });
 
 describe("pickSentinel — parallel-session resolution (2026-07-05 incident)", () => {

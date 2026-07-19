@@ -28,16 +28,48 @@ The watchdog is a Windows Scheduled Task that fires after N hours **outside**
 Claude — it cannot be blocked by anything inside the session. It is armed in
 **both** shutdown choices, with a different recovery action:
 
-| Step 2 Q3 choice | Watchdog `action` | On firing with flag missing |
-|------------------|-------------------|-----------------------------|
-| "Ja, herunterfahren" | `shutdown` | Force-shuts the PC down |
-| "Nein, nur Bericht"  | `notify`   | Writes a visible `AUTONOMOUS-STALLED.txt` next to the flag — **no** power-off |
+| Registered `action` | Used by | On firing with flag missing |
+|---------------------|---------|-----------------------------|
+| `shutdown` | shutdown=yes runs | Force-shuts the PC down |
+| `notify`   | shutdown=no runs (autonomous) | Writes a visible `AUTONOMOUS-STALLED.txt` next to the flag — **no** power-off |
+| `resume`   | shutdown=no runs (burn-backlog) | Notify **and** attempt a guarded one-shot relaunch of `claude` to continue — **no** power-off |
 
 The `notify` arm closes the gap where a "report-only" run wedges (Anthropic API
 hang, stuck subagent) and would otherwise hang **forever with zero external
 signal** — the user returns to a frozen session and no clue why. With the notify
 watchdog, they instead find a dated `AUTONOMOUS-STALLED.txt` pointing at
 `AUTONOMOUS-RESUME.json`.
+
+The `resume` arm goes one step further for a **shutdown=no** run that must keep
+making progress unattended (the burn-backlog night loop): on firing with the flag
+missing it writes the same stalled marker **and** actively revives the work by
+launching a fresh `claude` with a caller-supplied resume prompt. It is the answer
+to "the PC stayed on all night but the wedged session did nothing" — notify alone
+leaves a note; resume tries to finish the job. Hard safety properties, all
+enforced in `autonomous-watchdog.js` and unit-tested:
+
+- **One-shot, guarded.** The relaunch runs at most once per registration — it drops
+  an `AUTONOMOUS-RECOVERY.flag` next to the done-flag and refuses to relaunch if
+  that flag already exists. A repeatedly-firing task can never fork-bomb `claude`.
+- **Notify-fallback.** If `claude` is not on `PATH` (or `Start-Process` throws), it
+  degrades to notify-only — the stalled marker is still written, nothing else
+  happens. `resume` is therefore never *less* safe than `notify`.
+- **Requires a resume prompt.** `register … resume <resume-prompt>` fails without
+  one, because there is nothing to hand the fresh session otherwise. The relaunch
+  starts headless (`claude -p "<prompt>"`) in the flag's project directory.
+
+Arm it exactly like the others, with the prompt as the 4th argument:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-watchdog.js" register "$FLAG_PATH" 8 resume "$RESUME_PROMPT"
+```
+
+**Known limitation (documented, not a bug).** The relaunched headless session
+inherits only permissions already granted in `~/.claude/settings.json`; anything
+that was only primed interactively in the parent session will not re-prompt (no
+one is there) and that step degrades per the late-permission protocol. `resume` is
+best-effort revival, not a guarantee — but strictly better than a silent all-night
+stall.
 
 It is the last line of defense against:
 - Anthropic API rate-limit hangs (Step 6 retry exhaustion or unhandled cases)

@@ -9,18 +9,28 @@
  *   - "notify"   (shutdown=no runs):  write a visible AUTONOMOUS-STALLED.txt
  *                next to the flag path so a silent hang becomes a visible signal
  *                the user sees on return. Never powers the machine off.
+ *   - "resume"   (shutdown=no runs):  notify (as above) AND attempt a guarded,
+ *                one-shot external relaunch of `claude` with a resume prompt, so
+ *                a wedged run is actively revived instead of merely flagged. The
+ *                relaunch is gated by a one-per-run AUTONOMOUS-RECOVERY.flag and
+ *                degrades cleanly to notify-only when `claude` is not on PATH.
+ *                Never powers the machine off. Requires a resume prompt.
  *
  * Why this is needed: when Claude is AFK and hits an Anthropic API rate-limit,
  * a crashed subagent, or a wakelock-style hang, the in-session Step 8 is never
  * reached. The scheduled task fires *independently* of Claude — so a shutdown
- * still happens (shutdown mode), or a stalled run stops being invisible
- * (notify mode). Without this, a "report-only" run that wedges would hang
- * forever with zero external signal.
+ * still happens (shutdown mode), a stalled run stops being invisible (notify
+ * mode), or a fresh session is spawned to continue the work (resume mode).
+ * Without this, a "report-only" run that wedges would hang forever with zero
+ * external signal, and a shutdown=no run had no active recovery at all.
  *
  * Subcommands (stdout: JSON):
- *   register <flag-path> <hours> [action]
+ *   register <flag-path> <hours> [action] [resume-prompt]
  *                                  Create one-shot task firing in N hours.
- *                                  action = "shutdown" (default) | "notify".
+ *                                  action = "shutdown" (default) | "notify" | "resume".
+ *                                  resume-prompt is REQUIRED for action "resume":
+ *                                  the initial prompt handed to the relaunched
+ *                                  `claude` (e.g. a BURN_BACKLOG_AUTOSTART: line).
  *                                  Stores a PER-REGISTRATION sentinel under TEMP
  *                                  (parallel autonomous sessions coexist; only a
  *                                  previous registration for the SAME flag path
@@ -185,26 +195,66 @@ function isValidWatchdogScriptPath(scriptPath) {
 /**
  * Build the recovery PowerShell script that the scheduled task executes on fire.
  * It checks the done-flag and, if missing, runs the mode-specific recovery.
- * @param {{action:string, hours:number, flagPath:string, stalledPath:string}} o
+ * `recoveryFlagPath`, `workingDir`, `resumePrompt` are only consulted for the
+ * "resume" action — they are computed by the (Windows-only) caller and passed
+ * in, never derived here, so the pure builder stays cross-platform testable.
+ * @param {{action:string, hours:number, flagPath:string, stalledPath:string,
+ *          recoveryFlagPath?:string, workingDir?:string, resumePrompt?:string}} o
  * @returns {string} PowerShell script body, written to a self-deleting .ps1.
  */
-function buildRecoveryScript({ action, hours, flagPath, stalledPath }) {
+function buildRecoveryScript({
+  action, hours, flagPath, stalledPath, recoveryFlagPath, workingDir, resumePrompt,
+}) {
   const flagPs = flagPath.replace(/'/g, "''");
-  const stalledPs = stalledPath.replace(/'/g, "''");
-  // Recovery action when the flag is missing — differs by mode.
-  const recoveryPs = action === 'shutdown'
-    ? `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — forcing shutdown"
-  & "$env:SystemRoot\\System32\\shutdown.exe" /s /t 0 /c "Claude autonomous watchdog: session unresponsive after ${hours}h, forcing shutdown"`
-    : `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — writing stalled marker (notify mode)"
-  $msg = @(
+  const stalledPs = String(stalledPath || '').replace(/'/g, "''");
+
+  // Shared visible stalled marker — notify AND resume both surface it, so a hang
+  // is never invisible even when a relaunch is impossible.
+  const notifyMarker = (context) => `  $msg = @(
     "Claude autonomous session was unresponsive after ${hours}h and never reached completion.",
     "",
-    "The run wedged (likely an Anthropic API hang or a stuck subagent). Nothing was shut down.",
+    "The run wedged (likely an Anthropic API hang or a stuck subagent).${context}",
     "Check AUTONOMOUS-RESUME.json for saved state, then resume or restart the session.",
     "",
     "Stalled at: $ts"
   )
   Set-Content -Path '${stalledPs}' -Value $msg -Encoding UTF8`;
+
+  // Recovery action when the flag is missing — differs by mode.
+  let recoveryPs;
+  if (action === 'shutdown') {
+    recoveryPs = `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — forcing shutdown"
+  & "$env:SystemRoot\\System32\\shutdown.exe" /s /t 0 /c "Claude autonomous watchdog: session unresponsive after ${hours}h, forcing shutdown"`;
+  } else if (action === 'resume') {
+    const recoveryFlagPs = String(recoveryFlagPath || '').replace(/'/g, "''");
+    const dirPs = String(workingDir || '').replace(/'/g, "''");
+    const promptPs = String(resumePrompt || '').replace(/'/g, "''");
+    // notify first (always visible), then a ONE-SHOT relaunch guarded by a
+    // recovery flag so a repeatedly-firing task can never fork-bomb `claude`.
+    // No `claude` on PATH → notify-only, no error.
+    recoveryPs = `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — resume mode"
+${notifyMarker(' A one-shot resume was attempted (see watchdog log).')}
+  $recoveryFlag = '${recoveryFlagPs}'
+  if (Test-Path $recoveryFlag) {
+    Add-Content -Path $logPath -Value "[$ts] recovery already attempted — notify-only, not relaunching"
+  } else {
+    Set-Content -Path $recoveryFlag -Value $ts -Encoding UTF8
+    $claude = Get-Command claude -ErrorAction SilentlyContinue
+    if ($claude) {
+      try {
+        Start-Process -FilePath $claude.Source -ArgumentList @('-p','${promptPs}') -WorkingDirectory '${dirPs}' -WindowStyle Hidden
+        Add-Content -Path $logPath -Value "[$ts] resume launched via $($claude.Source)"
+      } catch {
+        Add-Content -Path $logPath -Value "[$ts] resume launch FAILED: $($_.Exception.Message)"
+      }
+    } else {
+      Add-Content -Path $logPath -Value "[$ts] claude not found on PATH — notify-only"
+    }
+  }`;
+  } else {
+    recoveryPs = `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — writing stalled marker (notify mode)"
+${notifyMarker(' Nothing was shut down.')}`;
+  }
   return `$ErrorActionPreference = 'Continue'
 $flag = '${flagPs}'
 $logPath = Join-Path $env:TEMP 'claude-autonomous-watchdog.log'
@@ -263,21 +313,29 @@ function buildRegisterPsCommand({ taskName, scriptPath, fireAt }) {
 }
 
 function runRegister(args) {
-  const [flagPathRaw, hoursRaw, actionRaw] = args;
+  const [flagPathRaw, hoursRaw, actionRaw, resumePromptRaw] = args;
   if (!flagPathRaw || !hoursRaw) {
-    fail('Usage: register <flag-path> <hours> [shutdown|notify]');
+    fail('Usage: register <flag-path> <hours> [shutdown|notify|resume] [resume-prompt]');
   }
   const hours = Number(hoursRaw);
   if (!Number.isFinite(hours) || hours < 0.1 || hours > 24) {
     fail('hours must be 0.1..24');
   }
   const action = actionRaw || 'shutdown';
-  if (action !== 'shutdown' && action !== 'notify') {
-    fail("action must be 'shutdown' or 'notify'");
+  if (action !== 'shutdown' && action !== 'notify' && action !== 'resume') {
+    fail("action must be 'shutdown', 'notify' or 'resume'");
+  }
+  const resumePrompt = resumePromptRaw || '';
+  if (action === 'resume' && !resumePrompt) {
+    fail("action 'resume' requires a resume-prompt argument");
   }
   const flagPath = path.resolve(flagPathRaw);
-  // notify mode drops a visible marker next to the flag; same dir, fixed name.
+  // notify/resume drop a visible marker next to the flag; same dir, fixed name.
   const stalledPath = path.join(path.dirname(flagPath), 'AUTONOMOUS-STALLED.txt');
+  // resume mode: a one-per-run relaunch guard + the working dir for the fresh
+  // session (both computed here, on Windows, and passed to the pure builder).
+  const recoveryFlagPath = path.join(path.dirname(flagPath), 'AUTONOMOUS-RECOVERY.flag');
+  const workingDir = path.dirname(flagPath);
 
   // Clean up a previous watchdog FOR THIS PROJECT ONLY (same flagPath).
   // Parallel autonomous sessions in other projects keep their watchdogs —
@@ -307,7 +365,9 @@ function runRegister(args) {
   const scriptPath = path.join(os.tmpdir(),
     `claude-autonomous-watchdog-${Date.now()}.ps1`);
   fs.writeFileSync(scriptPath,
-    buildRecoveryScript({ action, hours, flagPath, stalledPath }), 'utf8');
+    buildRecoveryScript({
+      action, hours, flagPath, stalledPath, recoveryFlagPath, workingDir, resumePrompt,
+    }), 'utf8');
 
   // Register via the PowerShell ScheduledTasks module rather than `schtasks /SD /ST`:
   // the trigger time is passed as a real DateTime, so it is culture-agnostic and
@@ -328,6 +388,7 @@ function runRegister(args) {
     fireAt: fireAt.toISOString(),
     hours,
     action,
+    ...(action === 'resume' ? { resumePrompt } : {}),
   }, null, 2));
 
   ok({ taskName, flagPath, fireAt: fireAt.toISOString(), scriptPath, action });

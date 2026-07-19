@@ -1,6 +1,6 @@
 ---
 name: devops-ship
-version: 0.7.0
+version: 0.8.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, render_completion_card,
@@ -21,7 +21,48 @@ Supports two modes: **direct** (branch → main) and **intermediate** (sub-branc
 > Every `ship_*` tool call MUST include `cwd` set to the current working directory of this Claude session.
 > Omitting `cwd` will cause the tool to operate on the wrong repository.
 
-## Pre-Step — Session Activity Guard
+## Pre-Step A — Autonomous Lockout Detection
+
+`/devops-ship` is composed by unsupervised orchestrators (`devops-burn-backlog`
+ships every queued issue this way; future AFK runners may too). Those runs are in
+a **Post-Confirmation Lockout** — the user is AFK and **no `AskUserQuestion` can
+ever be answered**. A modal raised mid-pipeline would hang the entire night run on
+a single issue. Detect that state FIRST, before any other step:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" check
+```
+
+Parse the JSON. If `active: true`, set `$SHIP_LOCKOUT=true` for this whole run.
+If the command errors or the script is absent (older plugin), treat it as **not
+locked** — a normal interactive ship — and continue. The guard only ever *adds*
+non-interactive safety; it never blocks a normal ship.
+
+**The rule when `$SHIP_LOCKOUT` is set: never call `AskUserQuestion`.** Every gate
+that would normally ask takes its documented non-interactive branch instead. The
+two shapes are:
+
+- **BLOCK** → stop the pipeline, call `render_completion_card` with variant
+  `ship-blocked` (reason stated), and return. The orchestrator treats the item as
+  parked and moves on — one blocked issue never halts the queue.
+- **RECORD & CONTINUE** → don't ask, don't block; fold the open point into a
+  `userFinalTest` item for Step 6 and proceed. Only for genuinely non-fatal points.
+
+| Interactive gate | Normal behavior | `$SHIP_LOCKOUT` behavior |
+|---|---|---|
+| Pre-Step B — session activity still in progress | ask Warten/Trotzdem/Abbrechen | in-scope activity pending → **BLOCK** ("session activity active"); otherwise proceed |
+| Step 1b(e) — truly ambiguous rebase conflict | abort + ask which side wins | `git rebase --abort` → **BLOCK** ("unresolvable merge conflict — needs human decision") |
+| Step 1d — high-impact purpose-alignment conflict | ask (batched) | apply mechanical fixes as usual; high-impact items → **RECORD & CONTINUE** |
+| Step 2 — Codex judgment-required finding | ask Fixen/Ignorieren/Abbrechen | auto-fixable → fix inline; design/logic/security → **BLOCK** (finding named) |
+| Step 3 — major version bump | always ask | **BLOCK** ("needs major-version decision — not shipped unattended") |
+
+A BLOCK under lockout is the safe outcome, not a failure: the caller parks the
+issue as a `⏸ Rückfrage` and the queue continues. Shipping an unreviewed
+security finding, an ambiguous merge, or an unattended breaking change would be
+the actual failure. When `$SHIP_LOCKOUT` is false (a normal interactive ship),
+every gate behaves exactly as written elsewhere in this skill — unchanged.
+
+## Pre-Step B — Session Activity Guard
 
 Before anything else, check whether this session still has work in progress.
 
@@ -38,6 +79,10 @@ If ANY of the above are active:
 > - "Warten bis alles fertig ist" — pause and resume /devops-ship automatically when all activity completes
 > - "Trotzdem shippen" — user accepts the risk, continue with Step 0
 > - "Abbrechen" — cancel /devops-ship entirely
+
+**If `$SHIP_LOCKOUT` (Pre-Step A):** do not ask. If genuine in-scope activity is
+still pending, **BLOCK** (`ship-blocked`, "session activity active"); otherwise
+proceed to Step 0.
 
 This guard only applies to the **current chat session**, not external CI or other terminals.
 
@@ -145,6 +190,10 @@ Merge-safety issues (`base-ahead`, `file-overlap`, `config-conflictstyle`) are *
       - Explain what each side intended
       - Ask which intent should win, or whether both need manual reconciliation
 
+      **If `$SHIP_LOCKOUT` (Pre-Step A):** do not ask. After `git rebase --abort`,
+      **BLOCK** (`ship-blocked`, "unresolvable merge conflict — needs human
+      decision"); the caller parks the issue and the queue continues.
+
 5. **Push**: `git push --force-with-lease` to update the remote branch.
 
 6. **Verification test**: Run the full test suite to confirm nothing broke. If tests fail, diagnose and fix before proceeding.
@@ -182,6 +231,10 @@ the convention (it ships with this PR). Ask via AskUserQuestion ONLY for
 high-impact conflicts (contradicting purposes, design decisions, substantial
 rework) — all batched into ONE question.
 
+**If `$SHIP_LOCKOUT` (Pre-Step A):** still apply the mechanical fixes; for the
+high-impact conflicts do not ask — **RECORD & CONTINUE** (fold each into a
+`userFinalTest` item for Step 6). This gate never blocks the ship on its own.
+
 Skip silently when: `mode: "file-only"`, no purpose sources found, or the diff
 is clearly out of scope for every gathered purpose.
 
@@ -216,7 +269,10 @@ If `success: false` → call `render_completion_card` with variant `ship-blocked
    - **rc=0, no findings / clean** → continue to Step 3
    - **rc=0, auto-fixable** (typos, missing imports, style) → fix inline, continue
    - **rc=0, judgment required** (design concerns, logic flaws, security) →
-     AskUserQuestion with findings + options: "Fixen", "Ignorieren", "Abbrechen"
+     AskUserQuestion with findings + options: "Fixen", "Ignorieren", "Abbrechen".
+     **If `$SHIP_LOCKOUT` (Pre-Step A):** do not ask — **BLOCK** (`ship-blocked`,
+     naming the finding). A design/logic/security concern must not merge
+     unreviewed unattended; the caller parks the issue for the user.
    - **rc=124** (timeout, 5 min) → log "Codex review timed out — proceeding without review" in the ship log, continue to Step 3. Do NOT retry, do NOT block the ship.
    - **rc=126** (`DEVOPS_DISABLE_CODEX=1`) or **rc=127** (codex CLI missing) → skip silently
    - **other non-zero** → surface first line of stderr, continue to Step 3
@@ -253,7 +309,10 @@ record the gap in the CHANGELOG entry (Step 3). The mechanical roster markers
 
 Determine bump type based on changes:
 - **patch/minor**: decide autonomously
-- **major**: always ask user via AskUserQuestion
+- **major**: always ask user via AskUserQuestion. **If `$SHIP_LOCKOUT`
+  (Pre-Step A):** do not ask — **BLOCK** (`ship-blocked`, "needs major-version
+  decision — not shipped unattended"). A breaking change is a deliberate call,
+  never an unsupervised one; the caller parks the issue.
 - **none**: internal-only changes (no user-visible impact)
 
 **Before calling ship_version_bump**, update CHANGELOG.md with the new version entry.
