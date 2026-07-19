@@ -48,6 +48,47 @@ function parseArgs(argv) {
   return out;
 }
 
+/**
+ * Resolve the MAIN worktree root for `cwd`.
+ *
+ * For a worktree ship, `cwd` is the ephemeral worktree that ship_cleanup deletes
+ * right after the merge — writing the watcher state there loses it (the next
+ * session, rooted in the main repo, never finds it). `git rev-parse
+ * --git-common-dir` returns the shared `.git` directory (e.g. `<main>/.git`)
+ * from ANY worktree, so its parent is the main worktree root. Falls back to
+ * `cwd` when git can't answer (not a repo, or the parent isn't a `.git` dir).
+ *
+ * @param {string} cwd
+ * @returns {string}
+ */
+function resolveMainRepoRoot(cwd) {
+  try {
+    const commonDir = execFileSync(
+      "git",
+      ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+    // Only trust the parent when the common dir actually ends in `.git` — for an
+    // unusual layout (bare repo, separate git dir) the parent is NOT the worktree
+    // root, so fall back to cwd rather than write somewhere surprising.
+    if (commonDir && /(^|[\\/])\.git$/.test(commonDir)) return dirname(commonDir);
+  } catch { /* not a git repo, or git too old for --path-format */ }
+  return cwd;
+}
+
+/**
+ * Where the watcher writes its state file. An explicit `--state-dir` always
+ * wins; otherwise default to the MAIN repo's `.claude/.ship-watcher` (NOT the
+ * raw `cwd`, which may be a doomed worktree — F3).
+ *
+ * @param {{ stateDir?: string, cwd: string }} opts
+ * @returns {string}
+ */
+function resolveStateDir({ stateDir, cwd }) {
+  if (stateDir && typeof stateDir === "string") return stateDir;
+  return join(resolveMainRepoRoot(cwd), ".claude", ".ship-watcher");
+}
+
 function gh(args, cwd, { timeout = 30_000, allowFail = false } = {}) {
   try {
     return execFileSync("gh", args, {

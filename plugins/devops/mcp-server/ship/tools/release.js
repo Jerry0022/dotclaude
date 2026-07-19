@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
-import { git, gitStrict, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf } from "../lib/git.js";
+import { git, gitStrict, gitArgs, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf } from "../lib/git.js";
 import { createPR, mergePR, findExistingPR, watchPRChecks } from "../lib/github.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
 
@@ -50,8 +50,10 @@ export async function handler(params) {
         // The `:/` pathspec anchors at the repo root, so this works whether
         // cwd is the repo root or a plugin subdirectory (dirtyState returns
         // repo-root-relative paths, which `git add` from cwd would otherwise
-        // misresolve).
-        git(`add -u :/`, opts);
+        // misresolve). gitArgs (no shell, THROWS on failure): a failed stage
+        // must abort the ship — the previous git() swallowed the error as null
+        // and committed anyway, dropping the modification silently. (F1)
+        gitArgs(["add", "-u", ":/"], opts);
       }
       if (state.untracked.length > 0) {
         // Stage NEW files too, not just CHANGELOG. `git status --porcelain`
@@ -61,11 +63,19 @@ export async function handler(params) {
         // which dropped new source files from the ship — a feature that added
         // files (e.g. a new hook + its lib module) landed half-merged on main,
         // leaving callers referencing modules that never got committed.
+        //
+        // Each path is staged via gitArgs (array form, no shell): a path with a
+        // space or a cmd.exe metachar cannot word-split, and a failed `git add`
+        // THROWS (aborting the ship) instead of being swallowed as null while
+        // includedUntracked falsely reported it staged. Record only the files
+        // actually staged — a throw aborts before includedUntracked is set. (F1)
+        const stagedUntracked = [];
         for (const file of state.untracked) {
           // `:/${file}` resolves against repo root regardless of cwd.
-          git(`add -- :/${file}`, opts);
+          gitArgs(["add", "--", `:/${file}`], opts);
+          stagedUntracked.push(file);
         }
-        result.includedUntracked = [...state.untracked];
+        result.includedUntracked = stagedUntracked;
       }
       execFileSync("git", ["commit", "-m", commitMessage], {
         cwd,
@@ -112,11 +122,21 @@ export async function handler(params) {
     // widening the lease so a concurrent push to the SAME branch would be
     // overwritten unseen. A brand-new branch has no remote-tracking ref → push
     // without a lease (nothing to overwrite). (#207)
-    const remoteBranchSha = git(`rev-parse --verify --quiet refs/remotes/origin/${branch}`, opts);
+    // Array form (no shell): a legal branch name containing cmd.exe metachars
+    // (& ( ) | ; ^) or spaces must not break the command. `rev-parse --verify
+    // --quiet` exits non-zero when the remote ref is absent (brand-new branch);
+    // gitArgs surfaces that as a throw, which here means "no remote-tracking
+    // ref yet" → push without a lease. (F2)
+    let remoteBranchSha = null;
+    try {
+      remoteBranchSha = gitArgs(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`], opts) || null;
+    } catch {
+      remoteBranchSha = null;
+    }
     const leaseArg = remoteBranchSha
       ? `--force-with-lease=${branch}:${remoteBranchSha}`
       : `--force-with-lease`;
-    gitStrict(`push -u origin ${branch} ${leaseArg}`, { cwd, timeout: 60_000 });
+    gitArgs(["push", "-u", "origin", branch, leaseArg], { cwd, timeout: 60_000 });
     result.pushed = true;
 
     // Check for existing open PR before creating a new one

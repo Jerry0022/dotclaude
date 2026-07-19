@@ -166,6 +166,49 @@ describe("ship_promote — guards", () => {
   });
 });
 
+// F2 — the remote-truth tag reads must FAIL-CLOSED. git() returns null on a
+// transient network/auth failure; parsing null as an EMPTY tag list previously
+// skipped the monotonicity + immutability guards (fail-open), letting a
+// downgrade re-tag slip through. A null read must now refuse the promotion.
+describe("ship_promote — fail-closed on unreachable remote (F2)", () => {
+  test("remote fully unreachable (source-tag read null) → refuse, no tags created", async () => {
+    // Every ls-remote returns null (git() swallows the failure). The source-tag
+    // resolution must not misread that as "tag absent" and certainly must not
+    // proceed to tag.
+    gitLib.git.mockReturnValue(null);
+    const r = await handler(params());
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/cannot reach remote|refusing to promote/i);
+    expect(tagCreateCalls()).toHaveLength(0);
+  });
+
+  test("monotonicity read fails mid-promotion (source resolves, channel-list null) → refuse", async () => {
+    // The exact fail-open vector: the single-tag source lookup succeeds, but the
+    // full `ls-remote --tags origin` (monotonicity guard input) fails. A null
+    // there used to parse as [] → targetLatest null → guards skipped. Must abort.
+    gitLib.git.mockImplementation((cmd) => {
+      if (/^ls-remote --tags origin$/.test(cmd)) return null; // transient network failure
+      if (cmd.startsWith("ls-remote --tags origin ")) return `${SHA}\trefs/tags/alpha/v0.113.0`;
+      return "";
+    });
+    const r = await handler(params());
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/cannot reach remote|refusing to promote/i);
+    // Critically: NO tag was created despite the source tag resolving.
+    expect(tagCreateCalls()).toHaveLength(0);
+  });
+
+  test("empty-string ls-remote (tag genuinely absent) is NOT treated as unreachable", async () => {
+    // Distinguishes "" (tag absent → source-tag-not-found) from null (unreachable
+    // → cannot reach remote). Guards the fail-closed logic against over-firing.
+    gitLib.git.mockReturnValue("");
+    const r = await handler(params());
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/source-tag-not-found/);
+    expect(r.error).not.toMatch(/cannot reach remote/i);
+  });
+});
+
 describe("ship_promote — tagging", () => {
   test("alpha→beta creates ONE annotated tag on the source SHA, pushes, no release", async () => {
     mockRemote({ "alpha/v0.113.0": SHA });

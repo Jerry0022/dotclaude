@@ -2,12 +2,14 @@ import { describe, test, expect, vi, beforeEach } from "vitest";
 
 vi.mock("node:child_process", () => ({
   execSync: vi.fn(),
+  execFileSync: vi.fn(),
 }));
 
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import {
   git,
   gitStrict,
+  gitArgs,
   currentBranch,
   dirtyState,
   commitsAhead,
@@ -54,6 +56,40 @@ describe("gitStrict", () => {
       throw new Error("fatal");
     });
     expect(() => gitStrict("bad-command")).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// gitArgs — no-shell array form (F1/F2): metachar-safe, throws on failure
+// ---------------------------------------------------------------------------
+
+describe("gitArgs", () => {
+  test("returns trimmed stdout on success", () => {
+    execFileSync.mockReturnValue("abc1234\n");
+    expect(gitArgs(["rev-parse", "--short", "HEAD"])).toBe("abc1234");
+  });
+
+  test("passes args verbatim to git via execFileSync (no shell string)", () => {
+    execFileSync.mockReturnValue("");
+    // A path with a space and a branch with cmd.exe metachars must each stay a
+    // SINGLE argument — never word-split or shell-interpreted.
+    gitArgs(["add", "--", ":/new file (draft).txt"], { cwd: "/repo" });
+    expect(execFileSync).toHaveBeenCalledWith(
+      "git",
+      ["add", "--", ":/new file (draft).txt"],
+      expect.objectContaining({ cwd: "/repo", encoding: "utf8" }),
+    );
+    // The command name is exactly "git" — the arguments are NOT concatenated
+    // into a single shell string (which is what let metachars break out).
+    expect(execFileSync.mock.calls[0][0]).toBe("git");
+    expect(Array.isArray(execFileSync.mock.calls[0][1])).toBe(true);
+  });
+
+  test("throws on failure (fail-closed, not null-swallowed like git())", () => {
+    execFileSync.mockImplementation(() => {
+      throw new Error("fatal: pathspec did not match");
+    });
+    expect(() => gitArgs(["add", "--", ":/missing"])).toThrow();
   });
 });
 

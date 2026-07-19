@@ -24,6 +24,7 @@ vi.mock("../lib/repo-mode.js", () => ({
 vi.mock("../lib/git.js", () => ({
   git: vi.fn(() => ""),
   gitStrict: vi.fn(() => ""),
+  gitArgs: vi.fn(() => ""),
   currentBranch: vi.fn(() => "feature-x"),
   headShort: vi.fn(() => "abc1234"),
   dirtyState: vi.fn(() => ({ dirty: false, modified: [], untracked: [], lines: [] })),
@@ -72,10 +73,21 @@ function fetchBaseCalls() {
     .filter((x) => typeof x.cmd === "string" && /^fetch origin main\b/.test(x.cmd));
 }
 
+// The push now goes through gitArgs (array form, no shell) — F2. Return the
+// arg ARRAY of the `push` invocation (e.g. ["push","-u","origin","feature-x",
+// "--force-with-lease=..."]).
 function pushCall() {
-  return gitLib.gitStrict.mock.calls.find(
-    (c) => typeof c[0] === "string" && c[0].startsWith("push "),
+  const call = gitLib.gitArgs.mock.calls.find(
+    (c) => Array.isArray(c[0]) && c[0][0] === "push",
   );
+  return call ? call[0] : undefined;
+}
+
+// The staging adds also go through gitArgs — return every `add` arg array.
+function addCalls() {
+  return gitLib.gitArgs.mock.calls
+    .map((c) => c[0])
+    .filter((a) => Array.isArray(a) && a[0] === "add");
 }
 
 beforeEach(() => {
@@ -97,6 +109,13 @@ beforeEach(() => {
     cmd.includes("ls-remote --tags") ? "abc\trefs/tags/alpha/v1.0.0" : "remoteSha",
   );
   gitLib.gitStrict.mockReturnValue("");
+  // gitArgs handles staging adds, the remote-ref rev-parse, and the push (F1/F2).
+  // Default: the rev-parse resolves to a remote sha (→ explicit lease); adds and
+  // push return empty. Individual tests override for the brand-new-branch and
+  // staging-failure paths.
+  gitLib.gitArgs.mockImplementation((args) =>
+    Array.isArray(args) && args[0] === "rev-parse" ? "remoteSha" : "",
+  );
   ghLib.findExistingPR.mockReturnValue(null);
   ghLib.createPR.mockReturnValue({ number: 42, url: "https://example.com/pull/42" });
   ghLib.mergePR.mockReturnValue("merge12");
@@ -249,21 +268,27 @@ describe("ship_release — #207 parallel-change data-loss guards", () => {
 
     const push = pushCall();
     expect(push).toBeDefined();
-    expect(push[0]).toContain("--force-with-lease=feature-x:remoteSha");
+    // Array form (no shell): branch and lease are discrete args — F2.
+    expect(push).toEqual(["push", "-u", "origin", "feature-x", "--force-with-lease=feature-x:remoteSha"]);
   });
 
   test("brand-new branch (no remote-tracking ref) falls back to a bare lease", async () => {
-    gitLib.git.mockImplementation((cmd) => {
-      if (cmd.includes("ls-remote --tags")) return "abc\trefs/tags/v1.0.0";
-      if (cmd.includes("rev-parse --verify --quiet")) return null; // no remote branch yet
+    gitLib.git.mockImplementation((cmd) =>
+      cmd.includes("ls-remote --tags") ? "abc\trefs/tags/v1.0.0" : "",
+    );
+    // rev-parse --verify --quiet exits non-zero when the ref is absent → gitArgs
+    // throws → treated as "no remote-tracking ref yet" → bare lease.
+    gitLib.gitArgs.mockImplementation((args) => {
+      if (Array.isArray(args) && args[0] === "rev-parse") throw new Error("ref absent");
       return "";
     });
 
     await handler(params());
 
     const push = pushCall();
-    expect(push[0]).toContain("--force-with-lease");
-    expect(push[0]).not.toContain("--force-with-lease=");
+    expect(push).toBeDefined();
+    expect(push).toContain("--force-with-lease");
+    expect(push.some((a) => a.startsWith("--force-with-lease="))).toBe(false);
   });
 });
 
@@ -311,5 +336,88 @@ describe("ship_release — alpha channel tagging (ring model)", () => {
     expect(res.tag).toBeNull();
     expect(res.tagSkipped).toMatch(/intermediate/);
     expect(ghLib.createRelease).not.toHaveBeenCalled();
+  });
+});
+
+// F1 — the commitMessage staging path (previously untested: every case above
+// passes commitMessage:null). Staging goes through gitArgs (array form, no
+// shell) so a path with a space/metachar cannot word-split, and a failed
+// `git add` THROWS to abort the ship instead of being swallowed as null while
+// includedUntracked falsely reports success.
+describe("ship_release — commitMessage staging (F1: no silent drop)", () => {
+  test("untracked path containing a space is staged as ONE pathspec and recorded", async () => {
+    gitLib.dirtyState.mockReturnValue({
+      dirty: true,
+      modified: [],
+      untracked: ["new file with space.txt"],
+      lines: ["?? new file with space.txt"],
+    });
+
+    const res = await handler(params({ commitMessage: "chore: add file" }));
+
+    expect(res.success).toBe(true);
+    // The space-containing path is a SINGLE argument — never split by a shell.
+    expect(addCalls()).toContainEqual(["add", "--", ":/new file with space.txt"]);
+    // includedUntracked reflects a file that was ACTUALLY staged.
+    expect(res.includedUntracked).toEqual(["new file with space.txt"]);
+    expect(ghLib.mergePR).toHaveBeenCalledTimes(1);
+  });
+
+  test("modified files are staged via `git add -u :/` (array form)", async () => {
+    gitLib.dirtyState.mockReturnValue({
+      dirty: true,
+      modified: ["src/a.js"],
+      untracked: [],
+      lines: [" M src/a.js"],
+    });
+
+    const res = await handler(params({ commitMessage: "chore: edit" }));
+
+    expect(res.success).toBe(true);
+    expect(addCalls()).toContainEqual(["add", "-u", ":/"]);
+  });
+
+  test("a failed untracked `git add` ABORTS the ship — no commit, no merge, no false includedUntracked", async () => {
+    gitLib.dirtyState.mockReturnValue({
+      dirty: true,
+      modified: [],
+      untracked: ["weird&name.txt"],
+      lines: ["?? weird&name.txt"],
+    });
+    // Simulate git add failing (the exact silent-drop vector: an add that fails
+    // must not be swallowed). gitArgs THROWS → handler try/catch aborts.
+    gitLib.gitArgs.mockImplementation((args) => {
+      if (Array.isArray(args) && args[0] === "add") throw new Error("fatal: pathspec did not match");
+      if (Array.isArray(args) && args[0] === "rev-parse") return "remoteSha";
+      return "";
+    });
+
+    const res = await handler(params({ commitMessage: "chore: add weird" }));
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/pathspec|did not match/i);
+    // Aborted BEFORE push/merge — the file is not silently dropped into a commit.
+    expect(res.includedUntracked).toBeUndefined();
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+    expect(pushCall()).toBeUndefined();
+  });
+
+  test("a failed `git add -u` (modified) ABORTS the ship rather than committing a partial tree", async () => {
+    gitLib.dirtyState.mockReturnValue({
+      dirty: true,
+      modified: ["src/a.js"],
+      untracked: [],
+      lines: [" M src/a.js"],
+    });
+    gitLib.gitArgs.mockImplementation((args) => {
+      if (Array.isArray(args) && args[0] === "add") throw new Error("fatal: unable to stage");
+      if (Array.isArray(args) && args[0] === "rev-parse") return "remoteSha";
+      return "";
+    });
+
+    const res = await handler(params({ commitMessage: "chore: edit" }));
+
+    expect(res.success).toBe(false);
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
   });
 });

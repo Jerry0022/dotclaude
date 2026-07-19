@@ -3,7 +3,7 @@
  * @description Thin wrappers around git CLI for deterministic execSync calls.
  */
 
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 
 const DEFAULT_TIMEOUT = 15_000;
 // eslint-disable-next-line no-unused-vars -- reserved for push/fetch operations
@@ -32,6 +32,30 @@ export function git(cmd, opts = {}) {
 export function gitStrict(cmd, opts = {}) {
   const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts;
   return execSync(`git ${cmd}`, {
+    cwd,
+    encoding: "utf8",
+    timeout,
+    stdio: ["pipe", "pipe", "pipe"],
+  }).trim();
+}
+
+/**
+ * Run git with an explicit ARGUMENT ARRAY (no shell) and return trimmed stdout,
+ * THROWING on failure — the array-form counterpart to gitStrict().
+ *
+ * git()/gitStrict() build a single string that execSync runs through a shell
+ * (cmd.exe on Windows). Any interpolated branch name, ref, or path that
+ * contains a shell metacharacter (& ( ) | ; ^ or a space) can then word-split,
+ * escape, or truncate the command — a legal git branch such as `feat/fix-(x)`
+ * silently mangles the command, and with git() the resulting failure is
+ * swallowed as null (fail-open). gitArgs passes each argument verbatim to git,
+ * so no metacharacter is ever interpreted and a failed command throws instead
+ * of vanishing. Use for any call interpolating a value the caller does not
+ * fully control (branch/ref/path). (F1/F2)
+ */
+export function gitArgs(args, opts = {}) {
+  const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts;
+  return execFileSync("git", args, {
     cwd,
     encoding: "utf8",
     timeout,
