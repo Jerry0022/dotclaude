@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.119.1] — 2026-07-19
+
+### Fixed
+
+- **`graphify update` background builds can no longer saturate RAM/disk across worktrees — a machine-wide concurrency cap now backs the per-project lock.** 0.118.1 added a per-project PID lock so one project cannot stack builds, but it does nothing ACROSS projects: each active worktree/cwd triggers its own `graphify update`, so a multi-worktree machine still ran several GB-heavy builds at once (observed live: physical RAM pegged at 100% + disk queue length >100, builds spawning per cwd even while the per-project lock held). `bgWithSentinel` — the single chokepoint all three spawn triggers funnel through (SessionStart refresh + both PreToolUse self-heals) — now also enforces `globalUpdatesInFlight() < updateGlobalCap()` before spawning: it scans every `dotclaude-graphupdate-*.lock` in the lock dir, counts those with a live PID and a non-stale stamp, and skips once the total live builds across ALL cwds reaches the cap (default 2, override `DOTCLAUDE_GRAPH_MAX_BUILDS`). The lock dir is overridable via `DOTCLAUDE_GRAPHLOCK_DIR` for test isolation. Both bounds fail-open (any read error → treated as "not in flight") so the guard can never wedge refresh shut. (`graphify-state` 0.6.0 → 0.7.0: new `lockBaseDir`/`updateGlobalCap`/`globalUpdatesInFlight` + cap check in `bgWithSentinel`; +4 tests, 768 total. Codex review gate unavailable this ship — external usage limit.)
+- **Ship extension no longer falsely claims "devops lokal auf vNew synchronisiert" after an alpha-only ship.** The `/devops-ship` project extension's Step 6.5 card item asserted the local install had synced to the just-shipped version — but a plain ship publishes to the **alpha** channel only, and the default local pin is **stable**, so a stable/beta-pinned install correctly does NOT receive the ship (ring model). The false claim sent a user hunting a non-existent "sync failure" (this session, 2026-07-19). Step 6.5 is now channel-aware: it reads `~/.claude/plugins/.channels.json` and, on a beta/stable pin, points to `/devops-release` instead of claiming a sync. Step 8 and `reference.md` get matching ring-model notes so the finalizer's expected no-op on a stable pin is not mistaken for drift. (`.claude/skills/ship/SKILL.md` Step 6.5/8, `reference.md` channel caveat.)
+
 ## [0.119.0] — 2026-07-19
 
 ### Fixed
