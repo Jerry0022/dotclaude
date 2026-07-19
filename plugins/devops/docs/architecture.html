@@ -136,7 +136,7 @@
   <a href="#skills">Skills Overview (20)</a>
   <a href="#skill-ship">/devops-ship</a>
   <a href="#skill-commit">/devops-commit</a>
-  <a href="#skill-flow">/devops-flow</a>
+  <a href="#skill-flow">/devops-fix</a>
   <a href="#skill-new-issue">/devops-new-issue</a>
   <a href="#skill-explain">/devops-explain</a>
   <a href="#skill-project-setup">/devops-project-setup</a>
@@ -377,7 +377,7 @@
 <details>
   <summary><span class="badge b-hook">POST</span> post.flow.debug.js &mdash; Failure Detector</summary>
   <div class="detail-body">
-    <p>Detects repeated Bash failures (error patterns). After 2+ consecutive failures, recommends the <code>/devops-flow</code> skill for root-cause analysis.</p>
+    <p>Detects repeated Bash failures (error patterns). After 2+ consecutive failures, recommends the <code>/devops-fix</code> skill for root-cause analysis.</p>
     <table>
       <tr><th>Trigger</th><td>After Bash tool use</td></tr>
       <tr><th>Matcher</th><td><code>Bash</code></td></tr>
@@ -461,7 +461,7 @@
   │  ── tool executes ──
   │
   ├─ <span class="ok">POST</span> post.flow.completion.js  Track code edits
-  └─ <span class="ok">POST</span> post.flow.debug.js ───── Detect Bash failures → /devops-flow
+  └─ <span class="ok">POST</span> post.flow.debug.js ───── Detect Bash failures → /devops-fix
          (only Bash)
   │
   ▼
@@ -482,7 +482,7 @@
   <tr><th>Skill</th><th>Purpose</th><th>Trigger Examples</th><th>Context</th></tr>
   <tr><td><code>/devops-ship</code></td><td>Full shipping pipeline</td><td>"ship it", "fertig", "ab damit"</td><td>Normal</td></tr>
   <tr><td><code>/devops-commit</code></td><td>Conventional commits</td><td>"commit", "save changes"</td><td>Normal</td></tr>
-  <tr><td><code>/devops-flow</code></td><td>Root-cause analysis</td><td>"debug", "doesn't work"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-fix</code></td><td>Root-cause analysis</td><td>"debug", "doesn't work"</td><td>Normal</td></tr>
   <tr><td><code>/devops-new-issue</code></td><td>GitHub issue creation</td><td>"new issue", "mach ein Issue"</td><td>Normal</td></tr>
   <tr><td><code>/devops-explain</code></td><td>Code explanation</td><td>"explain", "how does X work"</td><td>Normal</td></tr>
   <tr><td><code>/devops-project-setup</code></td><td>Repo hygiene audit</td><td>"set up project", "audit gitignore"</td><td>Normal</td></tr>
@@ -567,7 +567,7 @@
 </section>
 
 <section id="skill-flow">
-<h3>/devops-flow &mdash; Root-Cause Analysis &amp; Diagnostics</h3>
+<h3>/devops-fix &mdash; Root-Cause Analysis &amp; Diagnostics</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">alias: /debug</span></p>
 
 <details>
@@ -992,9 +992,9 @@
    ├─ Every prompt: <span class="wr">prompt.git.sync</span> (rebase), <span class="wr">prompt.issue.detect</span> (#NNN)
    ├─ Every tool:   <span class="wr">pre.tokens.guard</span> (budget check)
    ├─ After tools:  <span class="ok">post.flow.completion</span> (track edits)
-   ├─ Bash fails:   <span class="er">post.flow.debug</span> → suggests /devops-flow after 2+ failures
+   ├─ Bash fails:   <span class="er">post.flow.debug</span> → suggests /devops-fix after 2+ failures
    │
-   ├─ User says "debug this" → <span class="hl">/devops-flow</span> skill (root-cause analysis)
+   ├─ User says "debug this" → <span class="hl">/devops-fix</span> skill (root-cause analysis)
    ├─ User says "explain X"  → <span class="hl">/devops-explain</span> skill
    ├─ User says "research Y" → <span class="hl">research</span> agent (isolated context)
    │
@@ -1030,7 +1030,7 @@
 <h3>Hook &rarr; Skill Routing</h3>
 <div class="interaction-matrix">
   <span class="from">prompt.ship.detect</span> <span class="to">&rarr; Skill('ship') &mdash; on "ship", "fertig", "ab damit", or affirmation after card</span>
-  <span class="from">post.flow.debug</span> <span class="to">&rarr; recommends /devops-flow &mdash; after 2+ consecutive Bash failures</span>
+  <span class="from">post.flow.debug</span> <span class="to">&rarr; recommends /devops-fix &mdash; after 2+ consecutive Bash failures</span>
   <span class="from">prompt.flow.appstart</span> <span class="to">&rarr; enforces completion card &mdash; before allowing app start</span>
   <span class="from">stop.flow.guard</span> <span class="to">&rarr; carry-over instruction &mdash; render card as first output next turn</span>
 </div>
@@ -1045,7 +1045,7 @@
 
 <h3>Skill &rarr; Skill Transitions</h3>
 <div class="interaction-matrix">
-  <span class="from">/devops-flow</span> <span class="to">&rarr; suggests /devops-ship &mdash; after fix is applied and changes are ready</span>
+  <span class="from">/devops-fix</span> <span class="to">&rarr; suggests /devops-ship &mdash; after fix is applied and changes are ready</span>
   <span class="from">/devops-project-setup</span> <span class="to">&rarr; informs user to run /devops-readme &mdash; for README generation</span>
   <span class="from">/devops-extend-skill</span> <span class="to">&rarr; reads all skills &mdash; to list available extension targets</span>
   <span class="from">/devops-ship</span> <span class="to">&rarr; optional /codex:rescue &mdash; pre-ship code review (if codex-plugin-cc installed)</span>

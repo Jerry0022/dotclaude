@@ -55,7 +55,7 @@
     {
       "query": "Debug this error",
       "should_trigger": false,
-      "reason": "Debugging task — use /devops-flow."
+      "reason": "Debugging task — use /devops-fix."
     },
     {
       "query": "Research the state of edge computing in 2026",

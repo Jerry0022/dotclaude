@@ -1,6 +1,6 @@
 # Rethink Lenses — Fresh-Phase Prompt Blocks
 
-Used by `/devops-rethink` Step 4. Each `devops:rethinker` agent receives the
+Used by `/devops-tune-rethink` Step 4. Each `devops:rethinker` agent receives the
 full Rethink Brief plus exactly ONE lens block below. The lens focuses the
 agent's divergence — three agents with the same prompt produce three similar
 answers; three agents with different lenses produce genuinely different ones.

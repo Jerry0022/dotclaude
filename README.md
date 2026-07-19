@@ -54,7 +54,7 @@ Based on ~0.7M tokens/week plugin overhead:
 | `git push --force` to main at 2 AM | Blocked before it happens |
 | Forgetting to bump the version | /devops-ship handles version, PR, merge, cleanup |
 | "Why is my context window gone?" | Token guard kills expensive reads before they land |
-| Debugging the same error 4 times | /devops-flow kicks in after the second failure |
+| Debugging the same error 4 times | /devops-fix kicks in after the second failure |
 | Writing commit messages by hand | Conventional commits, auto-staged, one command |
 
 **Token guard payoff:** The token guard blocks any single operation above your plan's per-operation share of the ~200K context window — **5% (~10K tokens) on Pro, 8% (~16K) on Max 5×, 10% (~20K) on Max 20×**. In a typical session, Claude attempts 5–15 broad searches or large-file reads that would each burn 20–80K tokens — that's 100–400K tokens/session evaporating into context you never asked for. Across ~10 sessions/week, the guard saves roughly **1–4M tokens/week** in prevented waste. The plugin's own overhead (~0.7M tokens/week for hooks, startup checks, and skill prompts) pays for itself 1.5–6x over just by keeping Claude from reading files it doesn't need.
@@ -168,7 +168,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 ## Features
 
 - **<!--devops:count:hooks-->35<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-flow, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-run-agents, devops-plugin-update, devops-run-autonomous, devops-run-burn, devops-run-backlog, devops-learn, devops-harden, devops-polish, devops-test-plan
+- **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-fix, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-run-agents, devops-plugin-update, devops-run-autonomous, devops-run-burn, devops-run-backlog, devops-learn, devops-tune-harden, devops-tune-polish, devops-test-plan
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
@@ -264,7 +264,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 #### flow — track progress toward completion
 
 - `post.flow.completion` — Track code edits, inject completion reminder *(PostToolUse)*
-- `post.flow.debug` — Recommend /devops-flow after repeated failures *(PostToolUse)*
+- `post.flow.debug` — Recommend /devops-fix after repeated failures *(PostToolUse)*
 - `prompt.flow.appstart` — Detect app start intent, enforce completion card *(UserPromptSubmit)*
 - `prompt.flow.silent-turn` — Mark background/cron-injected turns *(UserPromptSubmit)*
 - `stop.flow.guard` — Enforce completion card before response ends *(Stop)*
@@ -304,7 +304,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/devops-ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
 | `/devops-release` | Explicit | Channel promotion (alpha→beta→stable): re-tag the same SHA, no rebuild |
 | `/devops-commit` | Explicit | Conventional commits with smart staging |
-| `/devops-flow` (alias: `/debug`) | Explicit + Hook | Root-cause analysis, diagnostics, and fix cycle |
+| `/devops-fix` (alias: `/debug`) | Explicit + Hook | Root-cause analysis, diagnostics, and fix cycle |
 | `/devops-new-issue` | Explicit | GitHub issue creation with labels and milestones |
 | `/devops-project-setup` | Explicit | Repo hygiene audit and initialization |
 | `/devops-readme` | Explicit | Modern README generation |
@@ -319,11 +319,11 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/devops-run-burn` | Explicit | High-throughput autonomous task runner with aggressive parallelization |
 | `/devops-run-backlog` | Explicit | Milestone-centric backlog runner: refine, implement, test/QA, and ship selected milestones/issues unsupervised |
 | `/devops-learn` | Explicit | Capture long-term learnings and route to project-specific instructions |
-| `/devops-harden` | Explicit | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
-| `/devops-polish` | Explicit | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
+| `/devops-tune-harden` | Explicit | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
+| `/devops-tune-polish` | Explicit | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
 | `/devops-test-plan` | Explicit + Hook | Detect test profile, deterministic tool-chain recommendations per test request |
 | `/devops-graph` | Explicit + Hook | On-demand code knowledge graph via graphify, with opt-in auto-build + hard-gate enforcement |
-| `/devops-rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, concept decision, autonomous implementation |
+| `/devops-tune-rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, concept decision, autonomous implementation |
 
 #### The `run-*` family — let Claude execute autonomously
 
@@ -344,6 +344,21 @@ something**, reach for a `run-*` skill. There are two ways in:
 `run-backlog` uses `run-autonomous` (implementation) and the same role-agent
 orchestration as `run-agents` in the background — plus `run-burn` when budget mode
 is on — so those are listed once here, not repeated per run.
+
+#### The `tune-*` family — let Claude improve what exists
+
+The counterpart to `run-*`: instead of building new work, these **refine existing
+code and UI** — no new features, no fresh scope.
+
+- **`/devops-tune-harden`** — stabilization: full test suite, autonomous bug fixes,
+  consistency + regression coverage. Never adds new UI structure.
+- **`/devops-tune-polish`** — UI refinement: visual consistency, state-visuals,
+  UI-side functionality checks. Structural UI changes only with approval.
+- **`/devops-tune-rethink`** — strategic reset: code-blind fresh approaches for
+  stuck development, decided on a concept page, then implemented.
+
+Something actually **broken**? That's **`/devops-fix`** (alias `/debug`) —
+standalone root-cause analysis and repair, not a refinement pass.
 
 ### Agents (spawned for parallel work)
 

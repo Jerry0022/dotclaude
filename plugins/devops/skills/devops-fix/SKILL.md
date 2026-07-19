@@ -1,6 +1,6 @@
 ---
-name: devops-flow
-version: 0.1.0
+name: devops-fix
+version: 0.2.0
 description: >-
   Read session logs, runtime errors, and crash output to diagnose and fix the
   current issue — root-cause analysis first. Use when something is broken or
@@ -13,7 +13,7 @@ argument-hint: "[optional: describe the symptom or paste error]"
 allowed-tools: Read, Grep, Glob, Bash(git log *), Bash(git diff *), Bash(git bisect *), Bash(npm *), Bash(node *), AskUserQuestion, mcp__plugin_devops_dotclaude-issues__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
-# Flow
+# Fix
 
 Diagnose and fix the issue: `$ARGUMENTS`
 
@@ -22,8 +22,8 @@ Diagnose and fix the issue: `$ARGUMENTS`
 Check for optional overrides. Use **Glob** to verify each path exists before reading.
 Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global: `~/.claude/skills/flow/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/flow/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/fix/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/fix/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 Project extensions define framework-specific log paths (e.g., Electron logs in

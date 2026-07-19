@@ -1,6 +1,6 @@
 # Harden/Polish — Shared Reference
 
-Cross-cutting reference for `/devops-harden` and `/devops-polish`. Covers
+Cross-cutting reference for `/devops-tune-harden` and `/devops-tune-polish`. Covers
 confidence-score classification, hard-floor destructive ops, drift-detection
 math (ordinal vs. categorical), and coverage-backfill priority.
 
@@ -76,7 +76,7 @@ or skip + flag (autonomous).
 - Routing changes
 - Component library swap (`@mui/*` → `@chakra/*`, etc.)
 
-These never appear in `/devops-polish` even with user approval — they
+These never appear in `/devops-tune-polish` even with user approval — they
 require a dedicated feature task.
 
 ## 3. Drift Detection — Ordinal vs. Categorical
@@ -133,7 +133,7 @@ and flag (autonomous). Polish escalates to `designer` agent first.
 
 ## 4. Coverage-Backfill Priority
 
-For Step 6 of `/devops-harden` (writing tests for untested critical
+For Step 6 of `/devops-tune-harden` (writing tests for untested critical
 paths), prioritize by:
 
 ### Primary: name/role heuristic
@@ -182,6 +182,6 @@ Use these keys consistently:
 | `ui-fn` | UI-functionality fixes (polish only) |
 | `backend-ui-impact` | UI-zuträgliche backend fixes (polish only) |
 | `structural-pending` | Structural proposals awaiting user (polish only) |
-| `polish-candidates` | Items flagged for `/devops-polish` (harden only) |
-| `harden-candidates` | Items flagged for `/devops-harden` (polish only) |
+| `polish-candidates` | Items flagged for `/devops-tune-polish` (harden only) |
+| `harden-candidates` | Items flagged for `/devops-tune-harden` (polish only) |
 | `manual-review` | High-score-but-hard-floor items, or skipped autonomous items |

@@ -1,6 +1,6 @@
 ---
-name: devops-rethink
-version: 0.1.0
+name: devops-tune-rethink
+version: 0.2.0
 description: >-
   Strategic reset for stuck development: iterations circle without reaching
   the goal, or a named part of the app (or the whole app) is functionally and
@@ -14,14 +14,14 @@ description: >-
   Triggers on: "festgefahren", "stuck", "unstuck", "wir drehen uns im Kreis",
   "neu denken", "rethink", "frischer Ansatz", "fresh approach",
   "komplett neu denken", "das führt zu nichts".
-  Do NOT trigger for: debugging/errors (use /devops-flow), incremental
-  consistency or UI passes (/devops-harden, /devops-polish), or normal
+  Do NOT trigger for: debugging/errors (use /devops-fix), incremental
+  consistency or UI passes (/devops-tune-harden, /devops-tune-polish), or normal
   feature work.
 argument-hint: "[app or section that is stuck, e.g. 'the onboarding flow']"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*
 ---
 
-# Rethink — Strategic Reset
+# Tune Rethink — Strategic Reset
 
 Break out of a stuck development loop for `$ARGUMENTS`: rebuild the goal
 picture, think fresh without being anchored by the current implementation,
@@ -38,8 +38,8 @@ only in a second, explicit step.
 Check for optional overrides. Use **Glob** to verify each path exists before
 reading. Skip missing files silently.
 
-1. Global: `~/.claude/skills/rethink/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/rethink/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/tune-rethink/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/tune-rethink/SKILL.md` + `reference.md`
 3. Merge order: project > global > plugin defaults
 
 ## Step 1 — Intake & Scope

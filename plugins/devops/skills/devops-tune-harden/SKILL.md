@@ -1,13 +1,13 @@
 ---
-name: devops-harden
-version: 0.1.0
+name: devops-tune-harden
+version: 0.2.0
 description: >-
   Stabilization pass: run the full test suite, fix bugs autonomously, identify
   architecture smells, write regression + missing-coverage tests, apply
   consistency fixes (spacing, tokens, typography, icons, colors, state-visuals)
   across the codebase. Does NOT introduce new UI elements, new buttons,
   re-arrangements, or substantial position changes — those belong to
-  /devops-polish. Triggers on: "harden", "stabilize", "härten",
+  /devops-tune-polish. Triggers on: "harden", "stabilize", "härten",
   "stabilisieren", "bug pass", "consistency pass", "lint und fix".
   Skips all confirmations when invoked with --autonomous.
   Do NOT trigger for: feature work, new UI structure, theme changes.
@@ -15,7 +15,7 @@ argument-hint: "[--autonomous] [--invoked-by=agents|autonomous] [optional scope:
 allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
-# Harden — Stabilization Pass
+# Tune Harden — Stabilization Pass
 
 Harden the codebase: tests, bugs, architecture, and consistency — without
 restructuring the UI. Scope: `$ARGUMENTS`.
@@ -24,7 +24,7 @@ restructuring the UI. Scope: `$ARGUMENTS`.
 
 This skill can be invoked in three ways:
 
-1. **Direct** — user types `/devops-harden` or trigger phrase. Full skill
+1. **Direct** — user types `/devops-tune-harden` or trigger phrase. Full skill
    runs as documented below. Asks questions when `$AUTONOMOUS=0`.
 2. **From `/devops-run-agents`** — orchestrator detected a harden-style request.
    Per `deep-knowledge/agent-orchestration.md` § Single-Agent Shortcut,
@@ -52,8 +52,8 @@ The parent passes its mode via an additional flag when needed:
 Check for optional overrides. Use **Glob** to verify each path exists before
 reading. Skip missing files silently.
 
-1. Global: `~/.claude/skills/devops-harden/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/devops-harden/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/devops-tune-harden/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/devops-tune-harden/SKILL.md` + `reference.md`
 3. Merge order: project > global > plugin defaults
 
 Project extensions can add framework-specific consistency rules (e.g. design
@@ -328,7 +328,7 @@ numbers), with three filter sections:
 - **"Coverage gaps without test framework"** — Step 6 skips
 
 Each card: file:line, what was found, what's blocked, suggested next
-step (e.g. "Run /devops-polish for this", "Open issue", "Add test setup").
+step (e.g. "Run /devops-tune-polish for this", "Open issue", "Add test setup").
 
 No follow-up loop — this page is read-only output; the user acts on it
 or dismisses it.
@@ -337,7 +337,7 @@ or dismisses it.
 
 - **No new features.** Ever. Even tiny ones. If it isn't a fix, a test,
   a consistency snap, a state-visual addition, or a non-structural refactor
-  → it doesn't belong in `/devops-harden`.
+  → it doesn't belong in `/devops-tune-harden`.
 - **No structural UI changes.** See "Hard never" in Step 8.
 - **Tests first, then refactor** — never restructure code that has zero
   test coverage on its current behavior without writing the missing tests
@@ -345,7 +345,7 @@ or dismisses it.
 - **Pre-mortem inline** for every non-trivial fix (see `deep-knowledge/pre-mortem.md`).
 - **`--autonomous` is mute mode**, not yolo mode. High-risk items are still
   skipped + flagged — autonomous never escalates risk tolerance.
-- **Surface polish-candidates explicitly** so the user can run `/devops-polish`
+- **Surface polish-candidates explicitly** so the user can run `/devops-tune-polish`
   as a natural follow-up.
 - **Never commit automatically** — this skill modifies files; the user
   commits via `/devops-commit` or `/devops-ship`.

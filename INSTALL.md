@@ -16,7 +16,7 @@ claude plugin add devops@Jerry0022
 
 > **Note:** The Desktop App marketplace UI may not list third-party plugins for installation. If the plugin tab appears empty, use the CLI command above or see [Troubleshooting](#troubleshooting) below.
 
-Start a new session for hooks to take effect. Skills (`/devops-ship`, `/devops-commit`, `/devops-flow`, etc.) are available immediately.
+Start a new session for hooks to take effect. Skills (`/devops-ship`, `/devops-commit`, `/devops-fix`, etc.) are available immediately.
 
 ## Update
 

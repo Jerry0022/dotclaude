@@ -1,6 +1,6 @@
 ---
-name: devops-polish
-version: 0.1.0
+name: devops-tune-polish
+version: 0.2.0
 description: >-
   UI refinement pass: visual consistency (spacing, tokens, typography, icons,
   colors), state-visuals (hover/focus/disabled/loading/empty/error), UI-side
@@ -17,16 +17,16 @@ argument-hint: "[--autonomous] [--invoked-by=agents|autonomous] [optional scope:
 allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
-# Polish — UI Refinement Pass
+# Tune Polish — UI Refinement Pass
 
 Refine the UI: consistency, visual polish, state-visuals, and UI-side
 functionality — with user approval for structural changes. Scope: `$ARGUMENTS`.
 
 ## Invocation Context
 
-Same three invocation paths as `/devops-harden`:
+Same three invocation paths as `/devops-tune-harden`:
 
-1. **Direct** — user types `/devops-polish`.
+1. **Direct** — user types `/devops-tune-polish`.
 2. **From `/devops-run-agents`** — pass `--invoked-by=agents` plus
    `--parent-mode=background|interactive`. Skip self-spawned qa/redteam if
    parent owns those waves. Structural changes (Step 10) STILL require
@@ -45,8 +45,8 @@ a wave for polish-tasks (avoids double qa/redteam spawning).
 Check for optional overrides. Use **Glob** to verify each path exists before
 reading. Skip missing files silently.
 
-1. Global: `~/.claude/skills/devops-polish/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/devops-polish/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/devops-tune-polish/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/devops-tune-polish/SKILL.md` + `reference.md`
 3. Merge order: project > global > plugin defaults
 
 Project extensions can declare:
@@ -115,7 +115,7 @@ In parallel — do NOT block:
 
 Spawn parallel Explore agents (single message, multiple Agent calls):
 
-1. **State-visuals gaps** — same as `/devops-harden` Step 4 #3:
+1. **State-visuals gaps** — same as `/devops-tune-harden` Step 4 #3:
    interactive elements missing :hover, :focus, :focus-visible, :disabled,
    :active, aria-label; forms missing loading/error/empty states;
    animations not respecting `prefers-reduced-motion`.
@@ -237,7 +237,7 @@ For Step 4 (#5) findings ONLY (UI-impact backend):
 
 1. **Confirm UI causation** — for each backend finding, verify it
    actually affects a component in `$SCOPE_FILES`. If the UI consumer
-   is outside scope, defer (`/devops-harden` territory).
+   is outside scope, defer (`/devops-tune-harden` territory).
 
 2. Apply the risk-classifier. Same boundaries: low auto, medium auto +
    mention, high plan+confirm or skip+flag.
@@ -373,5 +373,5 @@ applies the chosen items.
 - **Pre-mortem inline** for every change touching shared components
   (see `deep-knowledge/pre-mortem.md`).
 - **Surface harden-candidates explicitly** — backend-only findings get
-  flagged for `/devops-harden`, not silently dropped.
+  flagged for `/devops-tune-harden`, not silently dropped.
 - **Never commit automatically** — user commits via `/devops-commit`.

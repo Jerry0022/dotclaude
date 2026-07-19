@@ -23,7 +23,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [edge-profiles.md](edge-profiles.md) | Edge Profiles | Configuration and usage rules for the two Microsoft Edge profiles used by thi... |
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |
 | [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/devops-commit`, `/devops-ship`, and h... |
-| [harden-polish-shared.md](harden-polish-shared.md) | Harden/Polish — Shared Reference | Cross-cutting reference for `/devops-harden` and `/devops-polish`. Covers |
+| [harden-polish-shared.md](harden-polish-shared.md) | Harden/Polish — Shared Reference | Cross-cutting reference for `/devops-tune-harden` and `/devops-tune-polish`. ... |
 | [injection-hardening.md](injection-hardening.md) | Prompt-Injection Hardening — Untrusted Content & Egress Control | Cross-cutting defense for any skill or agent that reads untrusted content (fi... |
 | [local-llm-delegation.md](local-llm-delegation.md) | Local LLM Delegation | Cross-cutting rule for all implementation agents (core, frontend, feature, ai) |
 | [mcp-deferred-tools.md](mcp-deferred-tools.md) | MCP Deferred Tools | Cross-cutting rule: in sessions with a large tool inventory (Computer Use, Ch... |

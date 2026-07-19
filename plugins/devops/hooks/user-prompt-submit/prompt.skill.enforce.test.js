@@ -5,9 +5,9 @@ const KNOWN = [
   "devops-run-agents",
   "devops-commit",
   "devops-concept",
-  "devops-flow",
-  "devops-harden",
-  "devops-polish",
+  "devops-fix",
+  "devops-tune-harden",
+  "devops-tune-polish",
   "devops-ship",
 ];
 
@@ -23,21 +23,21 @@ describe("detectInlineSkillMentions — inline /devops-* references (#235)", () 
 
   test("mention mid-sentence", () => {
     expect(
-      detectInlineSkillMentions("wir könnten danach /devops-harden laufen lassen", KNOWN),
-    ).toEqual(["devops-harden"]);
+      detectInlineSkillMentions("wir könnten danach /devops-tune-harden laufen lassen", KNOWN),
+    ).toEqual(["devops-tune-harden"]);
   });
 
   test("multiple mentions, deduplicated, in order of first appearance", () => {
     expect(
       detectInlineSkillMentions(
-        "erst /devops-ship, dann nochmal /devops-ship und zum Schluss /devops-polish",
+        "erst /devops-ship, dann nochmal /devops-ship und zum Schluss /devops-tune-polish",
         KNOWN,
       ),
-    ).toEqual(["devops-ship", "devops-polish"]);
+    ).toEqual(["devops-ship", "devops-tune-polish"]);
   });
 
   test("adjacent punctuation does not break detection", () => {
-    expect(detectInlineSkillMentions("(siehe /devops-flow)", KNOWN)).toEqual(["devops-flow"]);
+    expect(detectInlineSkillMentions("(siehe /devops-fix)", KNOWN)).toEqual(["devops-fix"]);
     expect(detectInlineSkillMentions("nutze /devops-commit.", KNOWN)).toEqual(["devops-commit"]);
     expect(detectInlineSkillMentions('"/devops-ship" wäre gut', KNOWN)).toEqual(["devops-ship"]);
   });
@@ -54,7 +54,7 @@ describe("detectInlineSkillMentions — inline /devops-* references (#235)", () 
   test("already-expanded slash command (<command-name> tag) is skipped entirely", () => {
     expect(
       detectInlineSkillMentions(
-        "<command-name>devops-concept</command-name> args… /devops-harden too",
+        "<command-name>devops-concept</command-name> args… /devops-tune-harden too",
         KNOWN,
       ),
     ).toEqual([]);
