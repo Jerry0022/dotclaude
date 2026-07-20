@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.120.0] — 2026-07-20
+
+### Added
+
+- **Leaked MCP-server processes are now reclaimed automatically — a census-guarded reaper ends the RAM creep from closed Claude Desktop sessions.** Claude Desktop spawns per-session MCP servers (discord `bun`, github/playwright via `npx`, plugin stdio `node`); when a session closes they are not reliably terminated and linger as orphans (dead parent PID), accumulating GB of RAM over a day (observed live: ~16 GB across 11 sessions, most from already-closed ones). New `hooks/lib/mcp-reaper.js` reclaims exactly those: a process is reaped only when it matches an MCP-launcher signature (`.claude/plugins/cache/` path, or an npx marker **with** the `mcp` token so bare `npx vite`/`npx tsx` never match) AND its parent is dead AND it lies outside the **live-Claude census** — the union of every live `claude`/`claude-code` process subtree, which protects a running session's own servers (they are cousins of the reaper, not its descendants, so a self-pid-only guard is not enough). Fail-safe throughout: Windows-only (POSIX reparents orphans to a live PID 1, so the signal never fires), an unbuildable census reaps nothing, and a TOCTOU re-validation against a fresh snapshot runs before every SIGTERM/SIGKILL so a reused pid is never hit; the module is dry-run by default (`--apply` required). Wired in via `ss.mcp.reap` (SessionStart, detached/windowless/silent) and `stop.mcp.reap` (Stop, 20-min per-worktree cooldown) so it runs in the background without a restart; `scripts/mcp-reap.js` is the manual entry point (`--json` preview, `--apply` reclaim now). Hardened against an adversarial red-team pass (R1–R8: cousin false-positives, npx over-match, POSIX no-op, TOCTOU, own-process self-match) and proven live — a synthetic orphan was reaped while all 29 real session servers survived. (New `hooks/lib/mcp-reaper.js` + `scripts/mcp-reap.js` + `ss.mcp.reap`/`stop.mcp.reap` hooks + `scheduled-tasks/mcp-reap`; 46 unit tests, 838 total. Codex review gate unavailable this ship — external usage limit — covered by the red-team pass + live synthetic-orphan verification.)
+
 ## [0.119.2] — 2026-07-19
 
 ### Fixed
