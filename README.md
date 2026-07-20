@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.119.2**
+**Version: 0.120.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -167,7 +167,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ## Features
 
-- **<!--devops:count:hooks-->35<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:hooks-->37<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — devops-ship, devops-commit, devops-flow, devops-new-issue, devops-project-setup, devops-readme, devops-refresh-usage, devops-extend-skill, devops-repo-health, devops-claude-md-lint, devops-concept, devops-agents, devops-plugin-update, devops-autonomous, devops-burn, devops-burn-backlog, devops-learn, devops-harden, devops-polish, devops-test-plan
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
@@ -178,7 +178,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->35<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->37<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -197,6 +197,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.mcp.deps` — Auto-install MCP server dependencies into CLAUDE_PLUGIN_DATA, and self-heal partial i…
 - `ss.mcp.envcheck` — Detect enabled plugins whose .mcp.json references env vars that are not set.
 - `ss.mcp.verify` — Verify every MCP server declared in this plugin's .mcp.json has its entry file presen…
+- `ss.mcp.reap` — Reclaim orphaned Claude Desktop MCP server processes leaked by previously-closed sess…
 - `ss.tokens.scan` — Scan project for expensive files and update config for the pre.tokens.guard hook.
 - `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
 - `ss.git.sync` — Registers a recurring git sync cron job (every 10 minutes).
@@ -237,6 +238,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `stop.flow.browsertest` — Light-verification enforcement gate (the "V" of the V&V gate).
 - `stop.flow.guard` — Per-turn completion card + validation enforcement (the validation half of the V&V gate).
 - `stop.flow.selfcalibration` — Run self-calibration when Claude finishes a response turn.
+- `stop.mcp.reap` — Periodic background reclaim of orphaned Claude Desktop MCP server processes — the "ru…
 <!--/devops:block:hook-lifecycle-->
 
 </details>
@@ -652,7 +654,7 @@ Wk  ━━──╏─────────   15% +1%   · 4d 22h left
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->35<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── hooks/                         ← <!--devops:count:hooks-->37<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 ├── skills/                        ← <!--devops:count:skills-->23<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
