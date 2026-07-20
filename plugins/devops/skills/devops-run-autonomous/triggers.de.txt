@@ -1,0 +1,3 @@
+# German trigger phrases for devops-run-autonomous.
+autonomer modus
+mach das alleine

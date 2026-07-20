@@ -23,7 +23,7 @@ Supports two modes: **direct** (branch → main) and **intermediate** (sub-branc
 
 ## Pre-Step A — Autonomous Lockout Detection
 
-`/devops-ship` is composed by unsupervised orchestrators (`devops-burn-backlog`
+`/devops-ship` is composed by unsupervised orchestrators (`devops-run-backlog`
 ships every queued issue this way; future AFK runners may too). Those runs are in
 a **Post-Confirmation Lockout** — the user is AFK and **no `AskUserQuestion` can
 ever be answered**. A modal raised mid-pipeline would hang the entire night run on

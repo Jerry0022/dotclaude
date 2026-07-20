@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * autonomous-shutdown-timer.js — Fail-safe OS shutdown timer for devops-autonomous.
+ * autonomous-shutdown-timer.js — Fail-safe OS shutdown timer for devops-run-autonomous.
  *
  * Armed at the START of an autonomous run (Step 5) whenever the user chose
  * "Ja, herunterfahren". It shells out to Windows `shutdown.exe /s /t <seconds>`

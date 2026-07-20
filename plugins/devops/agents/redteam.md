@@ -52,7 +52,7 @@ the inline pre-mortem: same questions, deeper scan, structured output.
 
 ## Collaboration
 
-- **Receives from**: Feature agent, /devops-agents orchestrator, or user
+- **Receives from**: Feature agent, /devops-run-agents orchestrator, or user
 - **Runs parallel to**: `po` in Wave 0 (strategy) — PO asks *should we*,
   Red-Team asks *how does it fail*
 - **Hands off to**: Core / Feature / Frontend / AI agents (they implement

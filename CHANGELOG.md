@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.121.0] — 2026-07-20
+
+### Changed
+
+- **The skill surface is reorganized into consistent command families, so a skill's name now tells you what it does and who chooses the work — every reference updated across skills, hooks, agents, deep-knowledge, README, and the architecture docs.** The autonomous, refinement, and setup skills had grown ad-hoc: related skills didn't read as related, and the "who picks the topic" distinction was invisible. They are regrouped into five families (invocation-level rename only — see below):
+  - **`devops-run-*` — autonomous runners.** `devops-burn-backlog → devops-run-backlog`, `devops-autonomous → devops-run-autonomous`, `devops-agents → devops-run-agents`, `devops-burn → devops-run-burn`. Division of labor: **run-backlog** is the runner where *Claude* selects the work (milestones / backlog); the other three are where the *user* names the topic — and run-backlog composes them in the background, so they are never invoked twice for the same run. run-backlog additionally gains an opt-in **burn-mode** gate (run it run-burn-style with aggressive parallelization; default **No**).
+  - **`devops-tune-*` — in-place refinement passes.** `devops-harden → devops-tune-harden`, `devops-polish → devops-tune-polish`, `devops-rethink → devops-tune-rethink`.
+  - **`devops-fix`** (was `devops-flow`) — standalone debugging / root-cause skill; the `debug` trigger is retained.
+  - **`devops-setup-*` — repo hygiene & scaffolding.** `devops-project-setup → devops-setup-project`, `devops-readme → devops-setup-readme`, `devops-new-issue → devops-setup-issue`.
+  - **`devops-claude-*` — Claude-Code meta-tooling.** `devops-extend-skill → devops-claude-extend-skill`, `devops-claude-md-lint → devops-claude-lint`.
+
+  The rename is deliberately **invocation-level only**: command names, skill directories, slugs, titles, and every cross-reference move; concept-level internals that other machinery binds to (script names, `AUTONOMOUS-*` artifacts/markers, shared deep-knowledge files, `*.flow.*` hook names) stay stable so nothing silently breaks. Verified with a repo-wide zero-dangling-reference sweep.
+- **`test-plan` is no longer a skill — it is a deep-knowledge reference (`deep-knowledge/test-plan.md`).** Test-profile detection is a cross-cutting rule every testing skill and the completion-flow hooks already consumed automatically, not a user command, so there is no longer a `/devops-test-plan` command. The detection table, custom-profile contract, and profile-override rules live in the reference; the built-in profiles moved to `deep-knowledge/test-plan-profiles/`. The **consumer override path `.claude/skills/devops-test-plan/`** is deliberately preserved as the stable project-extension contract (`profile.json` / `detection.json` / `profiles/`), and the V&V gate (`stop.flow.browsertest` / `post.flow.completion`) is unchanged — it now routes skills to the reference instead of a command.
+
+  (13 skill directories renamed, run-backlog gains the burn-mode gate, test-plan → deep-knowledge reference with profiles relocated, README + architecture rosters + deep-knowledge index regenerated. Shipped on top of the parallel 0.120.0 MCP-reaper release — merged clean, 836 tests green together. Codex review gate unavailable this ship — external usage limit — covered instead by eslint + full-suite verification (836 tests) and the zero-dangling-reference sweep.)
+
 ## [0.120.0] — 2026-07-20
 
 ### Added

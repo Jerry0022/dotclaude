@@ -7,7 +7,7 @@
  *
  * Background
  * ----------
- * Many devops skills (devops-concept, devops-autonomous, …) write a local HTML
+ * Many devops skills (devops-concept, devops-run-autonomous, …) write a local HTML
  * artefact inside the current worktree and open it via `start msedge "file://…"`.
  * When `/devops-ship` later runs `ship_cleanup`, the worktree directory is
  * pruned and the user's browser tab now 404s on a path that no longer exists.

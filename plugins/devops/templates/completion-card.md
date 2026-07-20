@@ -228,7 +228,7 @@ is "default to functional", not "forbid technical".
 
 **`area`** is the functional surface (what the user perceives or what the change
 is *about*), e.g. `Completion card`, `Ship pipeline`, `Branch cleanup`,
-`Skill devops-flow`. Not a file path, not an internal module name.
+`Skill devops-fix`. Not a file path, not an internal module name.
 
 | Variants | Behavior |
 |----------|----------|

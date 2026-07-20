@@ -83,7 +83,7 @@ must see their own language. The locale hint is authoritative.
 | `final.hint`                   | The implementation is done. Review the report on the left. | Die Implementierung ist abgeschlossen. Sieh dir den Bericht links an. |
 | `final.open_questions`         | Open questions & TODOs         | Offene Fragen & TODOs |
 | `final.create_issues_btn`      | Create issues                  | Issues erstellen |
-| `final.create_issues_hint`     | Creates GitHub issues for the selected items via devops-new-issue. | Erstellt GitHub-Issues für die ausgewählten Punkte via devops-new-issue. |
+| `final.create_issues_hint`     | Creates GitHub issues for the selected items via devops-setup-issue. | Erstellt GitHub-Issues für die ausgewählten Punkte via devops-setup-issue. |
 | `final.create_issues_none`     | No items selected.             | Keine Punkte ausgewählt. |
 | `final.create_issues_running`  | Creating issues …              | Issues werden erstellt … |
 | `final.create_issues_done`     | Issues created                 | Issues erstellt |
@@ -2850,7 +2850,7 @@ async function submitCreateIssues() {
       const labelText = labelEl ? labelEl.textContent.trim() : '';
       // description = explicit data-issue-body wins; otherwise the visible
       // .oq-label text. Either is enough for Claude to skip the
-      // devops-new-issue AskUserQuestion path — the user has already
+      // devops-setup-issue AskUserQuestion path — the user has already
       // committed by clicking "Issues erstellen", we MUST NOT ask again.
       const body = el.dataset.issueBody || labelText;
       return {
@@ -3699,7 +3699,7 @@ the final-report block; do not leave the user to fill them in.
 | `data-issue-title` | yes | Verbatim title used by `gh issue create` (`[TYPE] Imperative title`). Without this the payload's `title` falls back to the visible `.oq-label` text, which usually breaks the title-format gate |
 | `data-issue-type` | yes | Maps to the issue label (`bug`, `feature`, `refactor`, `chore`, `docs`, `design`). Defaults to `chore` if omitted — set it explicitly |
 | `data-issue-body` | recommended | Multi-sentence description used as the GitHub issue body. Falls back to the `.oq-label` text when missing — that is usually too terse for a tracked issue. Always populate this with the concept-context the user would need to act on the issue cold (repro steps for bugs, motivation for refactors, etc.) |
-| `data-issue-role` | optional | Project-specific role label hint (`backend`, `frontend`, `infra`, …). Picked up when the project's `devops-new-issue` extension defines `role:*` labels; silently ignored otherwise |
+| `data-issue-role` | optional | Project-specific role label hint (`backend`, `frontend`, `infra`, …). Picked up when the project's `devops-setup-issue` extension defines `role:*` labels; silently ignored otherwise |
 | `data-issue-module` | optional | Project-specific module label hint (`auth`, `ingest`, `ui-core`, …). Same gating as `role` |
 | `data-issue-milestone` | optional | Milestone name to attach. Claude will only honor this if the milestone already exists; never auto-creates one from this attribute |
 | `checked` | default `true` | User opts out, not in |

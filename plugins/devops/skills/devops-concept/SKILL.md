@@ -10,7 +10,7 @@ description: >-
   Also auto-suggest when Claude completes analysis, planning, comparison,
   or concept work that would benefit from interactive decision-making.
   Do NOT trigger for: simple code explanations, debugging
-  (use /devops-flow), or static documentation (use /devops-readme).
+  (use /devops-fix), or static documentation (use /devops-setup-readme).
 argument-hint: "[topic, analysis result, plan, or concept to visualize]"
 allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*
 ---
@@ -620,7 +620,7 @@ interruption is a hard `gh` failure that needs the user's eyes.
    for use in Step 6a; do NOT apply it now — issue routing and cleanup
    are decoupled so the user can still review the page before closing.
 3. **User-value gate (silent, mandatory).** Apply the gate from the
-   `devops-new-issue` skill's deep-knowledge/issue-rules.md to the
+   `devops-setup-issue` skill's deep-knowledge/issue-rules.md to the
    selected items BEFORE creating anything: each issue must deliver a
    standalone user effect — direct (feature, visual, bug fixed, fewer
    crashes) or indirect (performance, stability, security). Items that
@@ -632,7 +632,7 @@ interruption is a hard `gh` failure that needs the user's eyes.
    a `**User value:** <effect>` line. Never emit a swarm of code-change
    tasks that only make sense together.
 4. For each gated item, create the GitHub issue **directly via
-   `gh issue create`** — do NOT invoke the `devops-new-issue` skill,
+   `gh issue create`** — do NOT invoke the `devops-setup-issue` skill,
    which runs an interactive `AskUserQuestion` Step 1. Build the
    command from the payload + concept-extension labels (see § Project
    label enrichment below):
@@ -652,7 +652,7 @@ interruption is a hard `gh` failure that needs the user's eyes.
 5. **Project label enrichment (role / module).** Before calling `gh`,
    resolve project-specific labels in this order:
    - If `item.role` / `item.module` is set in the payload → use directly.
-   - Else, check the project's `devops-new-issue` extension
+   - Else, check the project's `devops-setup-issue` extension
      (`{project}/.claude/skills/new-issue/reference.md` / `SKILL.md`)
      for the declared label sets. If the concept's slug, file paths, or
      final-report content unambiguously maps to exactly one role / module

@@ -5,7 +5,7 @@ description: >-
   from scratch through one lens (product-value, ux-design, enduser-feel, or
   architecture). Receives ONLY a code-free Rethink Brief; has no file tools
   by design, so the current implementation cannot anchor its thinking.
-  Spawned in parallel (one per lens) by /devops-rethink Step 4.
+  Spawned in parallel (one per lens) by /devops-tune-rethink Step 4.
   <example>Rethink the onboarding flow through the ux-design lens</example>
   <example>Fresh product-value approach for the stuck reporting section</example>
 model: opus

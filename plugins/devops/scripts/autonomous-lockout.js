@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * autonomous-lockout.js — AFK lockout sentinel shared by autonomous-class
- * orchestrators (burn-backlog today; any future unsupervised runner).
+ * orchestrators (backlog-runner today; any future unsupervised runner).
  *
  * When an unsupervised run enters its Post-Confirmation Lockout it `arm`s this
  * sentinel. Sub-skills invoked DURING the lockout — above all /devops-ship —
@@ -56,7 +56,7 @@ function readLockout(dir) {
 }
 
 /**
- * Keep the sentinel invisible to git like the AUTONOMOUS-* and BURN-* artifact
+ * Keep the sentinel invisible to git like the AUTONOMOUS-* and BACKLOG-* artifact
  * family. Best-effort — an exotic git layout must never block arming.
  */
 function registerExclude(dir) {

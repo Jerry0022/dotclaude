@@ -59,7 +59,7 @@ If the output shows `file:///c/Users/...` (no colon), the URL is broken.
 
 ## Skills that must follow this rule
 
-- `devops-autonomous` (AUTONOMOUS-REPORT.html)
+- `devops-run-autonomous` (AUTONOMOUS-REPORT.html)
 - `devops-concept` (concept pages)
 - `devops-repo-health` (interactive branch report)
 - any future skill that writes an HTML file and opens it in a browser

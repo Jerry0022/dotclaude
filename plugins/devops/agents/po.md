@@ -136,7 +136,7 @@ PO_REVIEW:
   would_ship_to_customer: yes|no — <reasoning>
   verdict: ship|needs-work|blocker
   blockers: [list or "none"]
-  follow_up: [list of issues for next iteration]   # file via /devops-new-issue — never raw `gh issue create`
+  follow_up: [list of issues for next iteration]   # file via /devops-setup-issue — never raw `gh issue create`
 ```
 
 ## Rules

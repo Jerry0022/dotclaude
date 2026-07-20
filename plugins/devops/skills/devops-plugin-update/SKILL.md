@@ -123,7 +123,7 @@ Verified: ✓ version aligned, ✓ cache complete, ✓ {skill_count} skills
 Restart the session for hooks and MCP tools to take effect.
 Skills are available immediately.
 
-⚠ MCP tools (/devops-ship, /devops-new-issue, completion card) will be
+⚠ MCP tools (/devops-ship, /devops-setup-issue, completion card) will be
 blocked by pre.mcp.health until restart — the running MCP processes
 point at the now-deleted old installPath.
 ```

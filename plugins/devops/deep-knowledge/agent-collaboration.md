@@ -193,7 +193,7 @@ Creating an issue is a refinement session, not a solo task. All relevant roles p
 3. UX/user role (if applicable) — validates user story from the end-user perspective, challenges vague AC
 4. `qa` — defines testability: what does "done" look like?
 
-All happens within the single `/devops-new-issue` execution.
+All happens within the single `/devops-setup-issue` execution.
 
 ## Rules
 

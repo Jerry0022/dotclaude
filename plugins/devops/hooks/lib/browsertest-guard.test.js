@@ -425,9 +425,9 @@ describe("buildLightTestReason", () => {
     expect(r).toMatch(/pytest/);
   });
 
-  test("any: routes through /devops-test-plan", () => {
+  test("any: routes through the test-plan reference", () => {
     const r = buildLightTestReason("any");
-    expect(r).toMatch(/devops-test-plan/);
+    expect(r).toMatch(/deep-knowledge\/test-plan\.md/);
   });
 
   test("every kind documents the delegation rule, concept carve-out and one-block escape", () => {

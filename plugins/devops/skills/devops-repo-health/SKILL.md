@@ -212,8 +212,9 @@ expand. No round-trip to Claude is needed to view it.
 ## Step 8 — Generate Concept Page
 
 Build a **self-contained HTML concept page** using the `dashboard` variant.
-Follow the design system and patterns from `/devops-concept` (see Step 2 of
-the concept skill for full HTML/CSS/JS requirements).
+Follow the design system and full HTML/CSS/JS scaffold in
+`skills/devops-concept/deep-knowledge/templates.md` — the authoritative source,
+referenced by name (not by concept's step numbers, which drift).
 
 ### Page Structure & Tooltips
 
@@ -276,7 +277,9 @@ Create the directory if missing: `mkdir -p ~/.claude/devops-concepts` (Unix) or 
 ## Step 9 — Open & Monitor
 
 Open the page in the browser and monitor for the submit signal.
-Follow `/devops-concept` Step 3 (Open) and Step 4 (Monitor), respecting the
+Follow the open + monitor bridge in
+`skills/devops-concept/deep-knowledge/bridge-server.md` (server launch,
+Edge-open, heartbeat + decision polling), respecting the
 **Edge Credo** (`deep-knowledge/browser-tool-strategy.md` § Edge Credo):
 new tab in running Edge, user's profile context, Claude extension for interaction.
 

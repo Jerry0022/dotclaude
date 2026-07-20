@@ -28,7 +28,7 @@ describe("autonomous-lockout — sentinel resolution", () => {
 
   test("readLockout returns the parsed sentinel when present", () => {
     const d = mkdtemp();
-    const sentinel = { owner: "burn-backlog", since: "2026-07-19T00:00:00.000Z" };
+    const sentinel = { owner: "backlog-runner", since: "2026-07-19T00:00:00.000Z" };
     fs.writeFileSync(lockoutPathFor(d), JSON.stringify(sentinel));
     expect(readLockout(d)).toEqual(sentinel);
   });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * autonomous-watchdog.js — External safety net for devops-autonomous.
+ * autonomous-watchdog.js — External safety net for devops-run-autonomous.
  *
  * Registers a Windows Scheduled Task that fires after N hours. The task checks
  * for a "done-flag" file; if it's missing, the task takes a recovery action
@@ -30,7 +30,7 @@
  *                                  action = "shutdown" (default) | "notify" | "resume".
  *                                  resume-prompt is REQUIRED for action "resume":
  *                                  the initial prompt handed to the relaunched
- *                                  `claude` (e.g. a BURN_BACKLOG_AUTOSTART: line).
+ *                                  `claude` (e.g. a RUN_BACKLOG_AUTOSTART: line).
  *                                  Stores a PER-REGISTRATION sentinel under TEMP
  *                                  (parallel autonomous sessions coexist; only a
  *                                  previous registration for the SAME flag path

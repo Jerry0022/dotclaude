@@ -16,7 +16,7 @@ claude plugin add devops@Jerry0022
 
 > **Note:** The Desktop App marketplace UI may not list third-party plugins for installation. If the plugin tab appears empty, use the CLI command above or see [Troubleshooting](#troubleshooting) below.
 
-Start a new session for hooks to take effect. Skills (`/devops-ship`, `/devops-commit`, `/devops-flow`, etc.) are available immediately.
+Start a new session for hooks to take effect. Skills (`/devops-ship`, `/devops-commit`, `/devops-fix`, etc.) are available immediately.
 
 ## Update
 
@@ -44,7 +44,7 @@ your-project/.claude/skills/{skill-name}/
 └── reference.md    ← project-specific context
 ```
 
-Run `/devops-project-setup` in any project to auto-scaffold extensions based on the project's build system, CI config, and conventions. Run `/devops-extend-skill` to interactively scaffold an extension for a specific skill.
+Run `/devops-setup-project` in any project to auto-scaffold extensions based on the project's build system, CI config, and conventions. Run `/devops-claude-extend-skill` to interactively scaffold an extension for a specific skill.
 
 ## Optional: Codex Integration
 

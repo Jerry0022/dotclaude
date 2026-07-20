@@ -2,7 +2,7 @@
 /**
  * autonomous-resume-schedule.js — Compute WHEN the auto-resume cron should fire.
  *
- * Used by devops-autonomous Step 4e. When the user opted into auto-resume
+ * Used by devops-run-autonomous Step 4e. When the user opted into auto-resume
  * ($AUTO_RESUME=yes, only possible when shutdown=no), a one-shot session cron is
  * armed that — once the 5h token window has reset — nudges hard-capped Claude
  * worktrees to continue with »weiter« (Step 0.2).

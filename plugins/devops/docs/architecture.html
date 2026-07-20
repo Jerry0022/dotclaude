@@ -136,13 +136,13 @@
   <a href="#skills">Skills Overview (20)</a>
   <a href="#skill-ship">/devops-ship</a>
   <a href="#skill-commit">/devops-commit</a>
-  <a href="#skill-flow">/devops-flow</a>
-  <a href="#skill-new-issue">/devops-new-issue</a>
+  <a href="#skill-flow">/devops-fix</a>
+  <a href="#skill-new-issue">/devops-setup-issue</a>
   <a href="#skill-explain">/devops-explain</a>
-  <a href="#skill-project-setup">/devops-project-setup</a>
-  <a href="#skill-readme">/devops-readme</a>
+  <a href="#skill-project-setup">/devops-setup-project</a>
+  <a href="#skill-readme">/devops-setup-readme</a>
   <a href="#skill-refresh-usage">/devops-refresh-usage</a>
-  <a href="#skill-extend-skill">/devops-extend-skill</a>
+  <a href="#skill-extend-skill">/devops-claude-extend-skill</a>
 
   <h2>MCP Servers</h2>
   <a href="#mcp">MCP Servers (2)</a>
@@ -169,7 +169,7 @@
 <section id="overview">
 <h1>Architecture Documentation <small>devops v0.87.0</small></h1>
 <p class="lead">
-  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->37<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->23<!--/devops:count:skills--> skills, <!--devops:count:agents-->12<!--/devops:count:agents--> agents,
+  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->37<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->22<!--/devops:count:skills--> skills, <!--devops:count:agents-->12<!--/devops:count:agents--> agents,
   2 MCP servers, a deterministic completion card engine, and a 3-layer extension system.
 </p>
 <div role="note" style="margin:.4rem 0 1.4rem;padding:.6rem .9rem;background:var(--bg2);border-left:3px solid var(--warn);border-radius:4px;color:var(--text2);font-size:.85rem;">
@@ -189,8 +189,8 @@
     <span class="badge b-hook">Stop &times;<!--devops:count:hooks:stop-->4<!--/devops:count:hooks:stop--></span>
   </div>
   <div class="card">
-    <h4><!--devops:count:skills-->23<!--/devops:count:skills--> Skills</h4>
-    <p style="color:var(--text2);font-size:.85rem">Slash commands: ship, commit, flow, new-issue, project-setup, readme, refresh-usage, extend-skill, repo-health, claude-md-lint, concept, agents, plugin-update, autonomous, burn, learn, harden, polish, test-plan</p>
+    <h4><!--devops:count:skills-->22<!--/devops:count:skills--> Skills</h4>
+    <p style="color:var(--text2);font-size:.85rem">Slash commands: ship, release, commit, fix, setup-issue, setup-project, setup-readme, refresh-usage, claude-extend-skill, repo-health, plugin-update, claude-lint, concept, run-agents, run-autonomous, run-burn, run-backlog, learn, tune-harden, tune-polish, tune-rethink, graph</p>
   </div>
   <div class="card">
     <h4><!--devops:count:agents-->12<!--/devops:count:agents--> Agents</h4>
@@ -213,7 +213,7 @@
 │   ├── plugin.json            <span style="color:var(--text2)"># Plugin manifest (name, version, mcpServers, hooks)</span>
 │   └── marketplace.json       <span style="color:var(--text2)"># Marketplace registration</span>
 ├── agents/                    <span style="color:var(--accent2)"># <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions (*.md with YAML frontmatter)</span>
-├── deep-knowledge/            <span style="color:var(--warn)"># <!--devops:count:dk-->32<!--/devops:count:dk--> cross-cutting reference docs</span>
+├── deep-knowledge/            <span style="color:var(--warn)"># <!--devops:count:dk-->33<!--/devops:count:dk--> cross-cutting reference docs</span>
 ├── hooks/
 │   ├── hooks.json             <span style="color:var(--purple)"># Hook registry (event &rarr; command mapping)</span>
 │   ├── lib/                   <span style="color:var(--text2)"># plugin-guard, run-once, session-id</span>
@@ -235,11 +235,11 @@
 │   ├── render-card.js         <span style="color:var(--warn)"># Completion card template engine</span>
 │   ├── build-id.js            <span style="color:var(--text2)"># Deterministic content hash</span>
 │   └── lib/usage-meter.js     <span style="color:var(--text2)"># Usage bar renderer</span>
-├── skills/                    <span style="color:var(--accent)"># <!--devops:count:skills-->23<!--/devops:count:skills--> skill definitions (SKILL.md + deep-knowledge/)</span>
-│   ├── ship/  commit/  flow/  new-issue/  project-setup/  readme/
-│   ├── refresh-usage/  extend-skill/  repo-health/  claude-md-lint/
-│   ├── concept/  agents/  plugin-update/  autonomous/  burn/  learn/
-│   └── harden/  polish/  test-plan/
+├── skills/                    <span style="color:var(--accent)"># <!--devops:count:skills-->22<!--/devops:count:skills--> skill definitions (SKILL.md + deep-knowledge/)</span>
+│   ├── ship/  release/  commit/  fix/  setup-issue/  setup-project/  setup-readme/
+│   ├── refresh-usage/  claude-extend-skill/  repo-health/  plugin-update/  claude-lint/
+│   ├── concept/  run-agents/  run-autonomous/  run-burn/  run-backlog/  learn/
+│   └── tune-harden/  tune-polish/  tune-rethink/  graph/
 ├── templates/                 <span style="color:var(--warn)"># Output format templates</span>
 │   ├── completion-card.md     changelog-entry.md
 │   ├── buildlog-entry.md      github-release.md
@@ -377,7 +377,7 @@
 <details>
   <summary><span class="badge b-hook">POST</span> post.flow.debug.js &mdash; Failure Detector</summary>
   <div class="detail-body">
-    <p>Detects repeated Bash failures (error patterns). After 2+ consecutive failures, recommends the <code>/devops-flow</code> skill for root-cause analysis.</p>
+    <p>Detects repeated Bash failures (error patterns). After 2+ consecutive failures, recommends the <code>/devops-fix</code> skill for root-cause analysis.</p>
     <table>
       <tr><th>Trigger</th><td>After Bash tool use</td></tr>
       <tr><th>Matcher</th><td><code>Bash</code></td></tr>
@@ -461,7 +461,7 @@
   │  ── tool executes ──
   │
   ├─ <span class="ok">POST</span> post.flow.completion.js  Track code edits
-  └─ <span class="ok">POST</span> post.flow.debug.js ───── Detect Bash failures → /devops-flow
+  └─ <span class="ok">POST</span> post.flow.debug.js ───── Detect Bash failures → /devops-fix
          (only Bash)
   │
   ▼
@@ -482,13 +482,13 @@
   <tr><th>Skill</th><th>Purpose</th><th>Trigger Examples</th><th>Context</th></tr>
   <tr><td><code>/devops-ship</code></td><td>Full shipping pipeline</td><td>"ship it", "fertig", "ab damit"</td><td>Normal</td></tr>
   <tr><td><code>/devops-commit</code></td><td>Conventional commits</td><td>"commit", "save changes"</td><td>Normal</td></tr>
-  <tr><td><code>/devops-flow</code></td><td>Root-cause analysis</td><td>"debug", "doesn't work"</td><td>Normal</td></tr>
-  <tr><td><code>/devops-new-issue</code></td><td>GitHub issue creation</td><td>"new issue", "mach ein Issue"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-fix</code></td><td>Root-cause analysis</td><td>"debug", "doesn't work"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-setup-issue</code></td><td>GitHub issue creation</td><td>"new issue", "mach ein Issue"</td><td>Normal</td></tr>
   <tr><td><code>/devops-explain</code></td><td>Code explanation</td><td>"explain", "how does X work"</td><td>Normal</td></tr>
-  <tr><td><code>/devops-project-setup</code></td><td>Repo hygiene audit</td><td>"set up project", "audit gitignore"</td><td>Normal</td></tr>
-  <tr><td><code>/devops-readme</code></td><td>README generation</td><td>"create a readme"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-setup-project</code></td><td>Repo hygiene audit</td><td>"set up project", "audit gitignore"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-setup-readme</code></td><td>README generation</td><td>"create a readme"</td><td>Normal</td></tr>
   <tr><td><code>/devops-refresh-usage</code></td><td>Token usage scraping</td><td>"refresh usage", silently pre-card</td><td>Normal</td></tr>
-  <tr><td><code>/devops-extend-skill</code></td><td>Skill extension scaffolding</td><td>"extend skill", "customize skill"</td><td>Normal</td></tr>
+  <tr><td><code>/devops-claude-extend-skill</code></td><td>Skill extension scaffolding</td><td>"extend skill", "customize skill"</td><td>Normal</td></tr>
 </table>
 </section>
 
@@ -567,7 +567,7 @@
 </section>
 
 <section id="skill-flow">
-<h3>/devops-flow &mdash; Root-Cause Analysis &amp; Diagnostics</h3>
+<h3>/devops-fix &mdash; Root-Cause Analysis &amp; Diagnostics</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">alias: /debug</span></p>
 
 <details>
@@ -589,7 +589,7 @@
 </section>
 
 <section id="skill-new-issue">
-<h3>/devops-new-issue &mdash; GitHub Issue &amp; Milestone Management</h3>
+<h3>/devops-setup-issue &mdash; GitHub Issue &amp; Milestone Management</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span></p>
 <details>
   <summary>4-Step Flow</summary>
@@ -622,7 +622,7 @@
 </section>
 
 <section id="skill-project-setup">
-<h3>/devops-project-setup &mdash; Repository Hygiene</h3>
+<h3>/devops-setup-project &mdash; Repository Hygiene</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">--audit / --init / --fix</span></p>
 <details>
   <summary>5-Step Audit &amp; Init</summary>
@@ -631,7 +631,7 @@
       <li><strong>Analyze Project</strong> &mdash; Detect tech stack, read .gitignore, check LICENSE/README</li>
       <li><strong>.gitignore</strong> &mdash; Fetch from gitignore.io, merge with Claude tooling rules</li>
       <li><strong>LICENSE</strong> &mdash; Generate if missing (MIT/Apache/GPL/ISC)</li>
-      <li><strong>README</strong> &mdash; Inform user to run <code>/devops-readme</code></li>
+      <li><strong>README</strong> &mdash; Inform user to run <code>/devops-setup-readme</code></li>
       <li><strong>Additional Files</strong> &mdash; .editorconfig, .gitattributes, AI tooling config</li>
     </ol>
     <p><strong>Audit severity:</strong> CRITICAL (secrets) &rarr; auto-fix. WARNING (missing rules) &rarr; auto-fix. INFO (redundancy) &rarr; report only.</p>
@@ -640,7 +640,7 @@
 </section>
 
 <section id="skill-readme">
-<h3>/devops-readme &mdash; README Generation</h3>
+<h3>/devops-setup-readme &mdash; README Generation</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">--preview / --update</span></p>
 <details>
   <summary>Section Selection &amp; Rendering</summary>
@@ -676,7 +676,7 @@
 </section>
 
 <section id="skill-extend-skill">
-<h3>/devops-extend-skill &mdash; Extension Scaffolding</h3>
+<h3>/devops-claude-extend-skill &mdash; Extension Scaffolding</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span></p>
 <details>
   <summary>Interactive Scaffolding Flow</summary>
@@ -992,9 +992,9 @@
    ├─ Every prompt: <span class="wr">prompt.git.sync</span> (rebase), <span class="wr">prompt.issue.detect</span> (#NNN)
    ├─ Every tool:   <span class="wr">pre.tokens.guard</span> (budget check)
    ├─ After tools:  <span class="ok">post.flow.completion</span> (track edits)
-   ├─ Bash fails:   <span class="er">post.flow.debug</span> → suggests /devops-flow after 2+ failures
+   ├─ Bash fails:   <span class="er">post.flow.debug</span> → suggests /devops-fix after 2+ failures
    │
-   ├─ User says "debug this" → <span class="hl">/devops-flow</span> skill (root-cause analysis)
+   ├─ User says "debug this" → <span class="hl">/devops-fix</span> skill (root-cause analysis)
    ├─ User says "explain X"  → <span class="hl">/devops-explain</span> skill
    ├─ User says "research Y" → <span class="hl">research</span> agent (isolated context)
    │
@@ -1030,7 +1030,7 @@
 <h3>Hook &rarr; Skill Routing</h3>
 <div class="interaction-matrix">
   <span class="from">prompt.ship.detect</span> <span class="to">&rarr; Skill('ship') &mdash; on "ship", "fertig", "ab damit", or affirmation after card</span>
-  <span class="from">post.flow.debug</span> <span class="to">&rarr; recommends /devops-flow &mdash; after 2+ consecutive Bash failures</span>
+  <span class="from">post.flow.debug</span> <span class="to">&rarr; recommends /devops-fix &mdash; after 2+ consecutive Bash failures</span>
   <span class="from">prompt.flow.appstart</span> <span class="to">&rarr; enforces completion card &mdash; before allowing app start</span>
   <span class="from">stop.flow.guard</span> <span class="to">&rarr; carry-over instruction &mdash; render card as first output next turn</span>
 </div>
@@ -1045,9 +1045,9 @@
 
 <h3>Skill &rarr; Skill Transitions</h3>
 <div class="interaction-matrix">
-  <span class="from">/devops-flow</span> <span class="to">&rarr; suggests /devops-ship &mdash; after fix is applied and changes are ready</span>
-  <span class="from">/devops-project-setup</span> <span class="to">&rarr; informs user to run /devops-readme &mdash; for README generation</span>
-  <span class="from">/devops-extend-skill</span> <span class="to">&rarr; reads all skills &mdash; to list available extension targets</span>
+  <span class="from">/devops-fix</span> <span class="to">&rarr; suggests /devops-ship &mdash; after fix is applied and changes are ready</span>
+  <span class="from">/devops-setup-project</span> <span class="to">&rarr; informs user to run /devops-setup-readme &mdash; for README generation</span>
+  <span class="from">/devops-claude-extend-skill</span> <span class="to">&rarr; reads all skills &mdash; to list available extension targets</span>
   <span class="from">/devops-ship</span> <span class="to">&rarr; optional /codex:rescue &mdash; pre-ship code review (if codex-plugin-cc installed)</span>
 </div>
 
@@ -1065,10 +1065,10 @@
     <table>
       <tr><th>Document</th><th>Topic</th><th>Used By</th></tr>
       <tr><td><code>agent-collaboration.md</code></td><td>Multi-agent wave orchestration</td><td>All agents, /feature</td></tr>
-      <tr><td><code>skill-extension-guide.md</code></td><td>3-layer extension model</td><td>/devops-extend-skill, all skills</td></tr>
+      <tr><td><code>skill-extension-guide.md</code></td><td>3-layer extension model</td><td>/devops-claude-extend-skill, all skills</td></tr>
       <tr><td><code>codex-integration.md</code></td><td>Optional Codex plugin</td><td>/devops-ship</td></tr>
       <tr><td><code>agent-conventions.md</code></td><td>Agent naming, branching</td><td>All agents</td></tr>
-      <tr><td><code>claude-directory-structure.md</code></td><td>.claude/ canonical layout</td><td>/devops-project-setup</td></tr>
+      <tr><td><code>claude-directory-structure.md</code></td><td>.claude/ canonical layout</td><td>/devops-setup-project</td></tr>
       <tr><td><code>code-defaults.md</code></td><td>Coding style conventions</td><td>All code-writing skills</td></tr>
       <tr><td><code>decision-format.md</code></td><td>Decision presentation</td><td>All skills with AskUserQuestion</td></tr>
       <tr><td><code>fact-verification.md</code></td><td>Research integrity</td><td>research agent</td></tr>
