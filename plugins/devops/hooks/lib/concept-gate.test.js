@@ -17,7 +17,7 @@ const VALID = `<!doctype html><html data-template="decision" data-page-version="
 <div id="panel-ready"><div class="iteration-tabs"></div>
   <button id="submit-iterate-btn">Zur nächsten Iteration</button>
   <button id="submit-implement-btn">Mit Feedback implementieren</button>
-  <div class="connection-warning"></div></div>
+  <div id="connection-status" class="connection-pill" data-state="connecting"></div></div>
 <section data-iteration="1" data-active class="concept-submitted-host"></section>
 <script>function pollHeartbeat(){} async function f(){const r=await fetch('/heartbeat');const d=await r.json();d.claude_ts;}</script>
 </body></html>`;

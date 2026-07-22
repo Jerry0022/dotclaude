@@ -27,7 +27,7 @@ const REQUIRED = [
   { token: 'submit-iterate-btn', why: 'live "Zur nächsten Iteration" submit button' },
   { token: 'submit-implement-btn', why: 'live "Mit Feedback implementieren" submit button' },
   { token: 'pollHeartbeat', why: 'bridge-server heartbeat poll' },
-  { token: 'connection-warning', why: 'Claude-disconnected warning' },
+  { token: 'connection-status', why: 'inline connection status pill (connecting / connected / disconnected)' },
 ];
 
 // Clipboard / paste-into-chat submit anti-patterns. A valid live-bridge
