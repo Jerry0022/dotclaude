@@ -39,8 +39,8 @@ Every concept page must contain these 38 patterns, regardless of template:
 |---|----------------|---------|
 | 1 | `concept-decisions` | Decision data JSON container |
 | 2 | `concept-submitted` | CSS class for monitoring detection signal |
-| 3 | `connection-warning` | Disconnection warning element (overlay on #panel-ready) |
-| 3b | `connection-connecting` | Bootstrap "Claude is connecting" overlay (shown by default; stays until first heartbeat) |
+| 3 | `connection-status` | Inline connection status pill in #panel-ready (animated dot + label; state via `data-state`, driven by `checkClaudeConnection`). NOT an overlay, NO acknowledge button. |
+| 3b | `_everPolled` | Pre-first-poll guard: the connection checker treats the window before the first `/heartbeat` response as "connecting", never "disconnected". Missing → the fresh-page connect→disconnect→connect flash returns. |
 | 4 | `checkClaudeConnection` | Heartbeat checker function |
 | 5 | `HEARTBEAT_STALE_MS` | Heartbeat staleness threshold |
 | 6 | `SERVER_STALE_MS` | Bridge-process staleness threshold (distinguishes bootstrap from dead bridge) |
@@ -63,7 +63,7 @@ Every concept page must contain these 38 patterns, regardless of template:
 | 23 | `status-steps` | Submit-panel progress list (Übermittelt → Verarbeitet → Implementiert) — see templates.md § Submit Progress Steps |
 | 24 | `updateStatusSteps` | Wires `_picked_up_at` / `_phase` from `/decisions` polling into the progress list |
 | 25 | `data.claude_ts` inside `pollHeartbeat` | The poller MUST read JSON and assign `claude_ts` (not `server_ts`, not the raw response object). HTTP-200 alone is not enough — the daemon self-pulse keeps `server_ts` fresh forever, so an HTTP-only check leaves the indicator green while Claude's cron is dead. |
-| 26 | `b.disabled = ` (or `btn.disabled = `) inside `checkClaudeConnection` | The heartbeat checker MUST actually toggle the submit buttons' `disabled` property — a visual-only warning lets the user keep submitting into a black hole during a stale heartbeat. |
+| 26 | `_setCacheHints(` inside `checkClaudeConnection` | The checker MUST wire the per-button cache hint to the disconnected state, so a click made while Claude is offline reads as visibly queued (then auto-delivered by the Offline Submit Queue) rather than lost. Submit buttons stay enabled in every state — the queue, not a disabled button, is what prevents a black hole. |
 | 27 | `Date.now() - _lastHeartbeatTs` (millis vs. millis) | Both sides of the staleness comparison MUST be in milliseconds since the Unix epoch. Server returns `claude_ts` in ms; browser uses `Date.now()`. Never divide either side by 1000 — a millis-vs-seconds mix-up produces a giant negative age that always evaluates as "fresh" and silently hides outages. |
 | 28 | `panel-final-report` | Final-report panel element. Auto-shown by `showIteration()` when the active section carries `data-final-report`; replaces `panel-ready` (no iterate/implement buttons). |
 | 29 | `updateCreateIssuesPanel` | Gating function that toggles the "Issues erstellen" button visibility + enabled state based on the active section's `[data-open-questions]` content. Must be called from `showIteration()` so panel state stays consistent on tab switch. |
@@ -205,13 +205,14 @@ enforces the same on write.
   the user is told to copy a JSON by hand, defeating the whole monitoring loop
 - Decision panel omitted entirely → no submit buttons, nothing to monitor
 - Heartbeat system omitted → submit button stays clickable without monitoring
-- Connection warning missing → user gets no feedback when Claude disconnects
+- Connection status pill missing → user gets no feedback on connecting / connected / disconnected state
 - Panel states missing → no visual transition on submit/reset cycle
 - localStorage missing → user selections lost on reload or tab close
 - `data-template` missing → `collectDecisions` can't pick the right branch
 - Prototype without `data-screen` → feedback dock renders empty
 - Heartbeat poller does an HTTP-only check (no `await r.json()` + `claude_ts` assignment) → indicator stays green forever because the server self-pulse always returns 200, even when Claude's cron is dead
-- Heartbeat checker only toggles a CSS class, never sets `disabled` on the submit buttons → user can keep clicking submit during a stale heartbeat, every click rots in the bridge unnoticed
+- Disconnected classified before the first `/heartbeat` response (no `_everPolled` guard) → a fresh page flashes connecting→disconnected→connected; with the old overlay it also forced two "Got it" clicks
+- Cache hint not wired to the disconnected state (`_setCacheHints` missing from `checkClaudeConnection`) → a click made while Claude is offline looks lost instead of visibly queued (the Offline Submit Queue still delivers it on reconnect, but the user gets no signal)
 - Staleness math mixes seconds and milliseconds (`Date.now() / 1000`, or `_lastHeartbeatTs * 1000`) → comparison flips negative, page renders "Claude verbunden" even when the heartbeat is hours old
 - `submitCreateIssues` / `collectDisposition` missing → final-report panel renders correctly but the "Issues erstellen" button does nothing on click (silent failure — no console error, no network request); same silent failure for "Concept beenden" if `collectDisposition` is missing from `submitDisposeConcept`
 

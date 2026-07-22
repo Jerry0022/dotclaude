@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.121.1] — 2026-07-22
+
+### Fixed
+
+- **A freshly opened concept page no longer flashes "Claude verbindet sich → nicht verbunden → verbunden" (each needing a "Verstanden"-Klick) before it settles, and the connection state is shown as an inline animated pill instead of a second mini-window overlaying the feedback panel.** Two coupled problems: (1) the connecting/disconnected states were an absolute overlay on `#panel-ready` with a "Got it" acknowledge button, so a click landing before the first `/heartbeat` response fell through to the disconnected branch (`_lastServerTs` still `0` → misread as a dead bridge) — the reported connect→disconnect→connect flash; (2) that overlay was the modal-ish mini-window the user disliked. Both are replaced by one inline `.connection-pill` in the decision panel (sidebar + prototype templates), driven by `data-state` (connecting / connected / disconnected) with a pulsing dot + animated ellipsis. A new `_everPolled` guard classifies the pre-first-poll window as "connecting", never "disconnected", and an immediate on-load poll shortens the connecting window to ~1 network RTT. The pill never overlays or disables the submit buttons — a disconnected click stays enabled and is cached + auto-delivered by the offline queue, with a per-button cache hint as the only signal. The `post.concept.gate` hook + validation-gate patterns (3, 3b, 26) now require `connection-status` / `_everPolled` instead of the removed `connection-warning` overlay. (`skills/devops-concept/deep-knowledge/templates.md` + `validation-gate.md`, `hooks/lib/concept-gate.js` + test. eslint + full suite green, 836 tests; connection state-machine verified deterministically across 5 scenarios incl. old-vs-new contrast. Codex review gate unavailable this ship — external usage limit — covered by the deterministic logic check + full-suite verification.)
+
 ## [0.121.0] — 2026-07-20
 
 ### Changed
