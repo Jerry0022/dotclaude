@@ -59,11 +59,9 @@ must see their own language. The locale hint is authoritative.
 | `panel.step_implemented_active`| Implementation in progress     | Implementierung läuft |
 | `panel.step_waiting`           | Waiting…                       | Warten… |
 | `panel.step_ready`             | Ready to ship                  | Bereit zum Shippen |
-| `panel.disconnected_title`     | Claude is not connected        | Claude ist nicht verbunden |
-| `panel.disconnected_hint`      | You can still submit — your click is queued and delivered as soon as Claude is back. | Du kannst trotzdem absenden — der Klick wird gespeichert und gesendet, sobald Claude wieder da ist. |
 | `panel.connecting_title`       | Claude is connecting           | Claude verbindet sich |
-| `panel.connecting_hint`        | One moment — establishing the connection. | Einen Moment — die Verbindung wird aufgebaut. |
-| `panel.acknowledge`            | Got it                         | Verstanden |
+| `panel.connected_title`        | Claude connected               | Claude verbunden |
+| `panel.disconnected_title`     | Claude not connected           | Claude nicht verbunden |
 | `panel.btn_cache_hint`         | cached — sent on reconnect     | gecached — wird beim Verbinden gesendet |
 | `panel.empty_iterate_confirm`  | Nothing was changed. Submit "Next iteration" anyway? | Du hast nichts geändert. Trotzdem "Zur nächsten Iteration" absenden? |
 | `panel.empty_implement_confirm`| Nothing was changed. Implement with feedback anyway? Claude will still write code. | Du hast nichts geändert. Trotzdem mit Feedback implementieren? Claude schreibt dann Code. |
@@ -194,34 +192,28 @@ the `[ui-locale: ...]` hint produced.
            The disconnected warning lives INSIDE #panel-ready and covers
            the submit area as an overlay when Claude is offline. -->
       <div id="panel-ready">
-        <div id="decision-summary">
-          <!-- Auto-populated summary of current selections -->
+        <!-- Connection status pill — inline, animated, non-blocking. Reflects
+             the live bridge heartbeat via [data-state]; checkClaudeConnection
+             sets the state + label. Three states:
+               connecting   — pre-first-poll window (no heartbeat response yet)
+                              OR bootstrap (claude_ts==0 while server_ts fresh).
+                              Pulsing accent dot + animated ellipsis.
+               connected    — claude_ts fresh. Steady green dot.
+               disconnected — claude_ts stale (dead cron) OR server_ts stale /
+                              fetch failing (bridge down). Pulsing amber dot.
+             It NEVER overlays or disables the submit buttons and has NO
+             acknowledge button. A disconnected submit is cached and
+             auto-delivered on reconnect (see Offline Submit Queue), so the
+             pill + per-button cache hint are the only signals needed. Starting
+             in "connecting" (never "disconnected") is the fix for the
+             fresh-page connect→disconnect→connect flash. -->
+        <div id="connection-status" class="connection-pill" data-state="connecting" role="status" aria-live="polite">
+          <span class="conn-dot" aria-hidden="true"></span>
+          <span class="conn-label">{{panel.connecting_title}}</span>
         </div>
 
-        <!-- Connection overlays. Three possible states:
-             1. claude_ts==0 && server alive (bootstrap) → #connection-connecting
-                visible (no fixed grace timer; stays until first heartbeat),
-                warning hidden.
-             2. Heartbeat confirmed fresh → both hidden.
-             3. claude_ts>0 but stale, OR server_ts stale → #connection-warning
-                visible, connecting hidden.
-             Both are absolute overlays on top of #panel-ready. The "Got it"
-             button is the ONLY clickable element while the overlay is visible
-             (panel-warning has pointer-events: auto). The submit buttons stay
-             disabled with a small cache-hint label until the user
-             acknowledges, at which point the overlay slides away and the
-             submit buttons become clickable (still cached if disconnected). -->
-        <div id="connection-connecting" class="panel-warning panel-warning--connecting" style="display: flex;">
-          <span class="warning-icon" aria-hidden="true">⋯</span>
-          <strong>{{panel.connecting_title}}</strong>
-          <p class="warning-message">{{panel.connecting_hint}}</p>
-          <button type="button" class="panel-warning__ack-btn" data-ack="connecting">{{panel.acknowledge}}</button>
-        </div>
-        <div id="connection-warning" class="panel-warning" style="display: none;">
-          <span class="warning-icon" aria-hidden="true">⚠</span>
-          <strong>{{panel.disconnected_title}}</strong>
-          <p class="warning-message">{{panel.disconnected_hint}}</p>
-          <button type="button" class="panel-warning__ack-btn" data-ack="warning">{{panel.acknowledge}}</button>
+        <div id="decision-summary">
+          <!-- Auto-populated summary of current selections -->
         </div>
 
         <button id="submit-iterate-btn" class="primary submit-btn">{{panel.submit_iterate}}</button>
@@ -978,22 +970,14 @@ The wiring is a single delegated click handler installed alongside
              AND closes the panel. -->
       </nav>
       <div id="panel-ready">
-        <!-- Connection overlays — same contract as the sidebar templates.
-             Show "connecting" / "disconnected" with a "Got it" button; the
-             submit buttons stay disabled until the user acknowledges, then
-             unlock with a small cache-hint label (offline submissions are
-             auto-queued by retryPendingSubmission). -->
-        <div id="connection-connecting" class="panel-warning panel-warning--connecting" style="display: flex;">
-          <span class="warning-icon" aria-hidden="true">⋯</span>
-          <strong>{{panel.connecting_title}}</strong>
-          <p class="warning-message">{{panel.connecting_hint}}</p>
-          <button type="button" class="panel-warning__ack-btn" data-ack="connecting">{{panel.acknowledge}}</button>
-        </div>
-        <div id="connection-warning" class="panel-warning" style="display: none;">
-          <span class="warning-icon" aria-hidden="true">⚠</span>
-          <strong>{{panel.disconnected_title}}</strong>
-          <p class="warning-message">{{panel.disconnected_hint}}</p>
-          <button type="button" class="panel-warning__ack-btn" data-ack="warning">{{panel.acknowledge}}</button>
+        <!-- Connection status pill — same inline, non-blocking contract as the
+             sidebar templates (see § Decision Panel State CSS + § Claude
+             Connection Heartbeat). Animated dot + label, no overlay, no
+             acknowledge button; starts in "connecting" and never flashes
+             "disconnected" before the first heartbeat response. -->
+        <div id="connection-status" class="connection-pill" data-state="connecting" role="status" aria-live="polite">
+          <span class="conn-dot" aria-hidden="true"></span>
+          <span class="conn-label">{{panel.connecting_title}}</span>
         </div>
 
         <button id="submit-iterate-btn" class="primary submit-btn">{{panel.submit_iterate}}</button>
@@ -1893,78 +1877,66 @@ document.addEventListener('DOMContentLoaded', () => {
 ## Decision Panel State CSS
 
 ```css
-/* Connection warning — overlays the submit area while Claude is connecting
-   or unreachable. Requires #panel-ready to be position: relative.
-   pointer-events: auto so the only clickable element while the overlay is
-   visible is its "Got it" button — the underlying submit buttons stay
-   blocked. After the user acknowledges, the overlay is hidden via JS, the
-   submit buttons are enabled, and a small cache-hint stays under each
-   button so the user knows offline submissions are queued. */
-#panel-ready { position: relative; }
-.panel-warning {
-  position: absolute; inset: 0; z-index: 5;
-  pointer-events: auto;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  gap: 0.75rem; text-align: center; padding: 1.5rem;
-  border-radius: 10px;
-  border: 1px solid var(--warning-color, #d29922);
-  background: color-mix(in srgb, var(--panel-bg, #161b22) 88%, transparent);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  color: var(--text-color, #c9d1d9);
+/* Connection status pill — inline, animated, non-blocking indicator at the
+   top of #panel-ready. Reflects the live bridge heartbeat via [data-state]
+   (set by checkClaudeConnection) and is purely informational: it NEVER
+   overlays or disables the submit buttons and has no acknowledge button.
+   Replaces the old .panel-warning overlay + "Got it" flow. */
+.connection-pill {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.4rem 0.7rem; margin: 0 0 0.85rem;
+  border-radius: 999px;
+  font-size: 0.8rem; font-weight: 600;
+  border: 1px solid var(--border-color, #30363d);
+  color: var(--text-secondary, #8b949e);
+  transition: color 0.25s, border-color 0.25s, background 0.25s;
 }
-.panel-warning .warning-icon { font-size: 2.25rem; color: var(--warning-color, #d29922); line-height: 1; }
-.panel-warning strong { color: var(--warning-color, #d29922); font-size: 1rem; }
-.panel-warning .warning-message {
-  font-size: 0.88rem; color: var(--text-secondary, #8b949e);
-  line-height: 1.5; max-width: 280px; margin: 0;
+.connection-pill .conn-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  background: currentColor;
 }
-.panel-warning__ack-btn {
-  margin-top: 0.5rem;
-  padding: 0.45rem 1.1rem;
-  border-radius: 8px;
-  border: 1px solid var(--warning-color, #d29922);
-  background: color-mix(in srgb, var(--warning-color, #d29922) 15%, transparent);
+.connection-pill[data-state="connecting"] {
+  color: var(--accent-color, #58a6ff);
+  border-color: color-mix(in srgb, var(--accent-color, #58a6ff) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 7%, transparent);
+}
+.connection-pill[data-state="connected"] {
+  color: var(--success-color, #3fb950);
+  border-color: color-mix(in srgb, var(--success-color, #3fb950) 40%, transparent);
+  background: color-mix(in srgb, var(--success-color, #3fb950) 7%, transparent);
+}
+.connection-pill[data-state="disconnected"] {
   color: var(--warning-color, #d29922);
-  font-weight: 600; font-size: 0.88rem;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  border-color: color-mix(in srgb, var(--warning-color, #d29922) 45%, transparent);
+  background: color-mix(in srgb, var(--warning-color, #d29922) 7%, transparent);
 }
-.panel-warning__ack-btn:hover {
-  background: var(--warning-color, #d29922);
-  color: var(--panel-bg, #161b22);
+/* connecting + disconnected pulse the dot; connected is steady. */
+.connection-pill[data-state="connecting"] .conn-dot,
+.connection-pill[data-state="disconnected"] .conn-dot {
+  animation: conn-pulse 1.2s ease-in-out infinite;
 }
-.panel-warning__ack-btn:focus-visible {
-  outline: 2px solid var(--warning-color, #d29922);
-  outline-offset: 2px;
+/* Animated ellipsis after the label while connecting. */
+.connection-pill[data-state="connecting"] .conn-label::after {
+  content: ""; animation: conn-ellipsis 1.4s steps(4, end) infinite;
 }
-/* Connecting variant — same overlay, accent color + pulsing icon */
-.panel-warning--connecting { border-color: var(--accent-color, #58a6ff); }
-.panel-warning--connecting .warning-icon {
-  color: var(--accent-color, #58a6ff);
-  animation: pulse-connect 1.4s ease-in-out infinite;
+@keyframes conn-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.82); }
+  50%      { opacity: 1;   transform: scale(1); }
 }
-.panel-warning--connecting strong { color: var(--accent-color, #58a6ff); }
-.panel-warning--connecting .panel-warning__ack-btn {
-  border-color: var(--accent-color, #58a6ff);
-  background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent);
-  color: var(--accent-color, #58a6ff);
+@keyframes conn-ellipsis {
+  0%  { content: ""; }   25% { content: "."; }
+  50% { content: ".."; } 75% { content: "..."; }
 }
-.panel-warning--connecting .panel-warning__ack-btn:hover {
-  background: var(--accent-color, #58a6ff);
-  color: var(--panel-bg, #161b22);
-}
-.panel-warning--connecting .panel-warning__ack-btn:focus-visible {
-  outline-color: var(--accent-color, #58a6ff);
-}
-@keyframes pulse-connect {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .connection-pill .conn-dot { animation: none !important; }
+  .connection-pill[data-state="connecting"] .conn-label::after {
+    animation: none !important; content: "";
+  }
 }
 
-/* Per-button cache hint — shown only when overlay was acknowledged but
-   Claude is still connecting / disconnected. Toggled via [hidden]. */
+/* Per-button cache hint — shown under each submit button only while Claude is
+   disconnected, so the user knows the click will be queued and auto-delivered
+   on reconnect. Toggled via [hidden] by _setCacheHints(). */
 .hint-cache {
   font-size: 0.78rem;
   line-height: 1.35;
@@ -3207,6 +3179,12 @@ const SERVER_STALE_MS    = 90000;  // server_ts older than this → bridge proce
 // watchdog, which tolerates claude_ts==0 indefinitely), not a fixed timer.
 let _lastHeartbeatTs = 0;
 let _lastServerTs    = 0;
+// True once /heartbeat has returned a parseable response at least once. Until
+// then the connection state is treated as "connecting" (unknown), NEVER
+// "disconnected" — this is the fix for the fresh-page connect→disconnect→
+// connect flash: before the first poll lands, _lastServerTs is still 0, so the
+// old code mis-classified the unknown window as a dead bridge.
+let _everPolled      = false;
 
 async function pollHeartbeat() {
   try {
@@ -3223,7 +3201,8 @@ async function pollHeartbeat() {
     // Legacy servers without server_ts leave this 0 → serverAlive=false → the
     // bootstrap path is inert and behavior falls back to the old timing.
     _lastServerTs = data.server_ts || 0;
-  } catch (e) { /* server unreachable */ }
+    _everPolled = true;   // we now have real evidence of the bridge state
+  } catch (e) { /* server unreachable — leave _everPolled unchanged */ }
 }
 
 // Safety-net timeout — if Claude /reset stamped _processed_at but no
@@ -3280,22 +3259,6 @@ async function pollProcessedState() {
   } catch (e) { /* retry next tick */ }
 }
 
-// Acknowledged-overlay state. Each overlay (connecting / warning) is
-// independent: acknowledging "connecting" should NOT silently dismiss the
-// stronger "warning" overlay if the connection actually went stale later.
-// Cleared automatically when isConnected becomes true.
-const _overlayAck = { connecting: false, warning: false };
-
-document.addEventListener('click', (e) => {
-  const btn = e.target && e.target.closest && e.target.closest('.panel-warning__ack-btn');
-  if (!btn) return;
-  const which = btn.dataset.ack;
-  if (which === 'connecting' || which === 'warning') {
-    _overlayAck[which] = true;
-    checkClaudeConnection();
-  }
-});
-
 function _setCacheHints(visible) {
   document.querySelectorAll('[data-cache-hint]').forEach(el => {
     el.hidden = !visible;
@@ -3305,7 +3268,8 @@ function _setCacheHints(visible) {
 function checkClaudeConnection() {
   const now = Date.now();
 
-  // Connected: Claude has pinged AND that ping is recent. (gate unchanged)
+  // Connected: Claude has pinged AND that ping is recent. (gate unchanged —
+  // never gates on server_ts, or a dead cron would read green forever.)
   const isConnected = _lastHeartbeatTs && (now - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
 
   // Server liveness via the daemon self-pulse. Mirrors the concept-server
@@ -3313,52 +3277,58 @@ function checkClaudeConnection() {
   // indefinitely while server_ts proves the bridge is alive.
   const serverAlive = _lastServerTs && (now - _lastServerTs) < SERVER_STALE_MS;
 
-  // Bootstrap: Claude has NEVER pinged (claude_ts==0) but the server is
-  // alive. The first cron tick (<=60s) or the setup-time POST flips us to
-  // connected. Show "connecting" INDEFINITELY — never escalate to the
-  // disconnected warning here. This is the fix for the "opens → immediately
-  // nicht verbunden" bug.
-  const bootstrapping = (_lastHeartbeatTs === 0) && serverAlive;
+  // "connecting" covers TWO not-connected-but-not-dead windows — NEITHER may
+  // be classified as disconnected:
+  //   (a) !_everPolled — no /heartbeat response has come back yet (the first
+  //       ~1 network RTT after load). Calling this disconnected IS the
+  //       fresh-page connect→disconnect→connect flash; it is "connecting".
+  //   (b) claude_ts==0 while server_ts is fresh — Claude has never pinged but
+  //       the bridge is alive; the first cron tick (<=60s) or the setup-time
+  //       POST flips us to connected.
+  const bootstrapping = !_everPolled || ((_lastHeartbeatTs === 0) && serverAlive);
 
-  const connecting = document.getElementById('connection-connecting');
-  const warning = document.getElementById('connection-warning');
+  const state = isConnected ? 'connected'
+              : bootstrapping ? 'connecting'
+              : 'disconnected';
+
+  const pill = document.getElementById('connection-status');
   const btns = ['submit-iterate-btn', 'submit-implement-btn']
     .map(id => document.getElementById(id)).filter(Boolean);
   const panelSubmitted = document.getElementById('panel-submitted');
 
-  // Clear ack state on reconnect — even under the submitted-state early
-  // return below (otherwise a re-drop while submitted would inherit a stale ack).
-  if (isConnected) {
-    _overlayAck.connecting = false;
-    _overlayAck.warning = false;
-  }
-
+  // While the submitted panel is up, leave the ready-panel controls frozen
+  // (the pill lives inside #panel-ready, which is hidden then anyway).
   if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
 
-  if (isConnected) {
-    if (connecting) connecting.style.display = 'none';
-    if (warning) warning.style.display = 'none';
-    _setCacheHints(false);
-    btns.forEach(b => b.disabled = false);
-    retryPendingSubmission();
-  } else if (bootstrapping) {
-    // claude_ts==0, server alive → "connecting" overlay, no grace timer.
-    if (connecting) connecting.style.display = _overlayAck.connecting ? 'none' : 'flex';
-    if (warning) warning.style.display = 'none';
-    _setCacheHints(_overlayAck.connecting);
-    btns.forEach(b => b.disabled = !_overlayAck.connecting);
-  } else {
-    // Disconnected warning. Reached when EITHER:
-    //   (a) claude_ts>0 but stale → dead cron (session restart / cron
-    //       stopped). THIS PATH MUST SURVIVE — the load-bearing reason the
-    //       heartbeat was split into claude_ts/server_ts.
-    //   (b) server_ts itself stale / fetch failing → bridge process down.
-    if (connecting) connecting.style.display = 'none';
-    if (warning) warning.style.display = _overlayAck.warning ? 'none' : 'flex';
-    _setCacheHints(_overlayAck.warning);
-    btns.forEach(b => b.disabled = !_overlayAck.warning);
+  // Drive the inline pill: [data-state] toggles colors + the dot/ellipsis
+  // animation, and the label matches. Purely informational — never a blocker.
+  if (pill) {
+    pill.dataset.state = state;
+    const label = pill.querySelector('.conn-label');
+    if (label) {
+      label.textContent = state === 'connected'    ? '{{panel.connected_title}}'
+                        : state === 'disconnected' ? '{{panel.disconnected_title}}'
+                        :                            '{{panel.connecting_title}}';
+    }
   }
+
+  // Submit buttons stay ENABLED in every state. A disconnected click is not a
+  // black hole: the POST either lands on the live bridge (picked up when
+  // Claude's cron next polls) or, if the server is down, throws and is cached
+  // in localStorage, then auto-delivered by retryPendingSubmission on
+  // reconnect. The per-button cache hint shows only while disconnected so the
+  // user knows the click will be queued rather than lost.
+  _setCacheHints(state === 'disconnected');
+  btns.forEach(b => { b.disabled = false; });
+
+  if (isConnected) retryPendingSubmission();
 }
+
+// Kick an immediate heartbeat poll on load so the pill resolves to
+// "connected" within one network RTT instead of sitting on "connecting" for
+// the full 5 s interval. The shorter the connecting window, the less the user
+// notices the bootstrap at all.
+pollHeartbeat().then(checkClaudeConnection);
 
 setInterval(async () => {
   await pollHeartbeat();
