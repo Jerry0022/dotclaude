@@ -141,7 +141,7 @@
   <a href="#skill-explain">/devops-explain</a>
   <a href="#skill-project-setup">/devops-setup-project</a>
   <a href="#skill-readme">/devops-setup-readme</a>
-  <a href="#skill-refresh-usage">/devops-refresh-usage</a>
+  <a href="#skill-refresh-usage">/devops-auto-usage</a>
   <a href="#skill-extend-skill">/devops-claude-extend-skill</a>
 
   <h2>MCP Servers</h2>
@@ -190,7 +190,7 @@
   </div>
   <div class="card">
     <h4><!--devops:count:skills-->22<!--/devops:count:skills--> Skills</h4>
-    <p style="color:var(--text2);font-size:.85rem">Slash commands: ship, release, commit, fix, setup-issue, setup-project, setup-readme, refresh-usage, claude-extend-skill, repo-health, plugin-update, claude-lint, concept, run-agents, run-autonomous, run-burn, run-backlog, learn, tune-harden, tune-polish, tune-rethink, graph</p>
+    <p style="color:var(--text2);font-size:.85rem">Slash commands: ship, release, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, claude-lint, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, auto-graph</p>
   </div>
   <div class="card">
     <h4><!--devops:count:agents-->12<!--/devops:count:agents--> Agents</h4>
@@ -237,9 +237,9 @@
 │   └── lib/usage-meter.js     <span style="color:var(--text2)"># Usage bar renderer</span>
 ├── skills/                    <span style="color:var(--accent)"># <!--devops:count:skills-->22<!--/devops:count:skills--> skill definitions (SKILL.md + deep-knowledge/)</span>
 │   ├── ship/  release/  commit/  fix/  setup-issue/  setup-project/  setup-readme/
-│   ├── refresh-usage/  claude-extend-skill/  repo-health/  plugin-update/  claude-lint/
-│   ├── concept/  run-agents/  run-autonomous/  run-burn/  run-backlog/  learn/
-│   └── tune-harden/  tune-polish/  tune-rethink/  graph/
+│   ├── auto-usage/  claude-extend-skill/  setup-cleanup/  auto-update/  claude-lint/
+│   ├── concept/  run-agents/  run-autonomous/  run-burn/  run-backlog/  claude-learn/
+│   └── tune-harden/  tune-polish/  tune-rethink/  auto-graph/
 ├── templates/                 <span style="color:var(--warn)"># Output format templates</span>
 │   ├── completion-card.md     changelog-entry.md
 │   ├── buildlog-entry.md      github-release.md
@@ -487,7 +487,7 @@
   <tr><td><code>/devops-explain</code></td><td>Code explanation</td><td>"explain", "how does X work"</td><td>Normal</td></tr>
   <tr><td><code>/devops-setup-project</code></td><td>Repo hygiene audit</td><td>"set up project", "audit gitignore"</td><td>Normal</td></tr>
   <tr><td><code>/devops-setup-readme</code></td><td>README generation</td><td>"create a readme"</td><td>Normal</td></tr>
-  <tr><td><code>/devops-refresh-usage</code></td><td>Token usage scraping</td><td>"refresh usage", silently pre-card</td><td>Normal</td></tr>
+  <tr><td><code>/devops-auto-usage</code></td><td>Token usage scraping</td><td>"refresh usage", silently pre-card</td><td>Normal</td></tr>
   <tr><td><code>/devops-claude-extend-skill</code></td><td>Skill extension scaffolding</td><td>"extend skill", "customize skill"</td><td>Normal</td></tr>
 </table>
 </section>
@@ -652,7 +652,7 @@
 </section>
 
 <section id="skill-refresh-usage">
-<h3>/devops-refresh-usage &mdash; Token Usage Tracking</h3>
+<h3>/devops-auto-usage &mdash; Token Usage Tracking</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span></p>
 <details>
   <summary>4-Step Fallback Chain</summary>
@@ -1039,7 +1039,7 @@
 <div class="interaction-matrix">
   <span class="from">/devops-ship</span> <span class="to">&rarr; ship_preflight, ship_build, ship_version_bump, ship_release, ship_cleanup</span>
   <span class="from">/devops-ship</span> <span class="to">&rarr; render_completion_card (variant: shipped)</span>
-  <span class="from">/devops-refresh-usage</span> <span class="to">&rarr; get_usage (CDP scraping)</span>
+  <span class="from">/devops-auto-usage</span> <span class="to">&rarr; get_usage (CDP scraping)</span>
   <span class="from">All skills (post-task)</span> <span class="to">&rarr; render_completion_card (various variants)</span>
 </div>
 

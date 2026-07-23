@@ -1,5 +1,5 @@
 ---
-name: devops-repo-health
+name: devops-setup-cleanup
 version: 0.5.0
 description: >-
   Analyze repository branch hygiene: unmerged branches, stale locals with deleted

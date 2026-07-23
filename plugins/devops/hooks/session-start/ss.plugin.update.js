@@ -7,7 +7,7 @@
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
  *   Workaround for anthropics/claude-code#14061 — Desktop never runs git pull
  *   on marketplace clones and never rebuilds the plugin cache.
- *   Shares the same update logic as /devops-plugin-update (see SKILL.md).
+ *   Shares the same update logic as /devops-auto-update (see SKILL.md).
  *
  *   CHANNEL-AWARE (ring model): once the repo has a stable/* tag, the clone is
  *   pinned to the highest version visible to the marketplace's channel pin

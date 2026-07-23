@@ -73,7 +73,7 @@ card — the card carries it.
 
 ### Action
 
-Run the canonical updater (same hook `/devops-plugin-update` delegates to — single
+Run the canonical updater (same hook `/devops-auto-update` delegates to — single
 source of truth, no duplicated logic).
 
 **Resolve the hook path fresh — do NOT use `${CLAUDE_PLUGIN_ROOT}`.** That variable

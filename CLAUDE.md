@@ -15,7 +15,7 @@ See @.claude/project-map.md for directory structure.
 
 ## Context: This is the plugin SOURCE repo
 - Changes here affect the plugin itself — not a consumer project
-- Test changes by running `/devops-plugin-update` from a consumer project
+- Test changes by running `/devops-auto-update` from a consumer project
 - The `.claude/plugins/cache/` on a consumer machine is the installed copy
 
 ## Release

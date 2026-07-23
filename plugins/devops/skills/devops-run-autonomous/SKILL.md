@@ -62,7 +62,7 @@ questions, then stop. Steps 1-8 do NOT apply.
 
 1. `git worktree list --porcelain` → collect every worktree whose branch starts
    with `claude/` (each is an active Claude session; same detection as
-   `devops-repo-health`).
+   `devops-setup-cleanup`).
 2. Classify each. A worktree is **done** if its root holds `AUTONOMOUS-DONE.flag`,
    or an `AUTONOMOUS-REPORT.html` with COMPLETED status and **no**
    `AUTONOMOUS-RESUME.json`. Skip done worktrees — never re-trigger finished work.
@@ -389,7 +389,7 @@ reset boundary, and falls back to a flat 5h only when usage data stays missing/s
 node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-resume-schedule.js"
 ```
 
-The helper self-refreshes — do **not** run `/devops-refresh-usage` separately first.
+The helper self-refreshes — do **not** run `/devops-auto-usage` separately first.
 
 Parse the JSON: `{ delayMinutes, cron, fireAtLocal, source }`. `cron` is a ready-to-use
 5-field one-shot expression in local time — use it verbatim, no manual date math. Then:

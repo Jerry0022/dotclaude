@@ -175,7 +175,7 @@ function renderUsageMeter(usageData, delta5h, deltaWk) {
   // Staleness is surfaced here too \u2014 get_usage consumers previously saw stale
   // numbers with no hint in either the JSON or this meter string.
   if (usageData._loginRequired) {
-    lines.push('\u26a0 Edge fetch offline (not logged in) \u2014 showing cached data; /devops-refresh-usage to reconnect');
+    lines.push('\u26a0 Edge fetch offline (not logged in) \u2014 showing cached data; /devops-auto-usage to reconnect');
   } else if (freshness.cached && freshness.ageMinutes > 30) {
     const suffix = usageData._failureReason ? ` (${usageData._failureReason})` : '';
     lines.push(`cached \u00b7 ${formatAgeLabel(freshness.ageMinutes)}${suffix}`);
@@ -232,7 +232,7 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
   // is offline until a one-time manual login. Never nags, never blocks.
   if (usageData._loginRequired) {
     lines.push('');
-    lines.push('\u26a0 Edge fetch offline (not logged in) \u2014 showing statusLine/cached; /devops-refresh-usage to reconnect');
+    lines.push('\u26a0 Edge fetch offline (not logged in) \u2014 showing statusLine/cached; /devops-auto-usage to reconnect');
   } else if (cardFreshness.cached && cardFreshness.ageMinutes > 30) {
     const suffix = usageData._failureReason ? ` (${usageData._failureReason})` : '';
     lines.push('');
@@ -877,7 +877,7 @@ function refreshUsage() {
   // 2. Fallback — headless in-page API fetch via the dedicated Edge profile,
   //    ALWAYS non-interactive (--no-login): a logged-out profile serves cache
   //    without opening a window; login is offered only via an explicit
-  //    /devops-refresh-usage run. NOTE: the script exits 0 even on its internal
+  //    /devops-auto-usage run. NOTE: the script exits 0 even on its internal
   //    cache fallback (it stamps _cached/_failureReason into the file instead),
   //    so a zero exit code is NOT proof of a live fetch — the freshness of the
   //    re-read file is.

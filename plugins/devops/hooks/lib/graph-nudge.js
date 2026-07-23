@@ -14,7 +14,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-// graphify's default output location (see the devops-graph skill).
+// graphify's default output location (see the devops-auto-graph skill).
 const GRAPH_JSON_REL = path.join('graphify-out', 'graph.json');
 
 /** Absolute path to the project's graph.json under `cwd`. */
@@ -45,7 +45,7 @@ function buildGraphNudge() {
     '[graphify] A knowledge graph exists at graphify-out/graph.json.',
     'For semantic questions (what defines/calls X, how do A and B relate, where is',
     'Y handled), prefer `graphify query "<question>"` over grepping raw files — it',
-    'reads the graph, not the code, so it is cheaper. Refresh with /devops-graph if',
+    'reads the graph, not the code, so it is cheaper. Refresh with /devops-auto-graph if',
     'the code changed meaningfully.',
   ].join('\n');
 }

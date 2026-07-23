@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.122.0] — 2026-07-23
+
+### Changed
+
+- **The last 5 ungrouped skills are folded into the command families, so every non-standalone skill now carries a family prefix.** After the 0.121.0 taxonomy pass, ten skills still sat outside the families; a `/devops-concept` review round (categories proposed, evaluated, and refined interactively over three iterations) settled the grouping:
+  - **`devops-auto-*` — skills that run automatically in the background.** `devops-plugin-update → devops-auto-update`, `devops-graph → devops-auto-graph`, `devops-refresh-usage → devops-auto-usage`.
+  - **`devops-setup-*` gains `devops-repo-health → devops-setup-cleanup`** — branch/worktree hygiene joins the repo-hygiene family.
+  - **`devops-claude-*` gains `devops-learn → devops-claude-learn`** — project-learning capture joins the Claude-Code meta family.
+  - **Deliberately left standalone:** `devops-fix`, `devops-concept`, and the **Delivery** trio `devops-commit` / `devops-ship` / `devops-release` (the code-out pipeline keeps its canonical names — a prefix would collide with the `ship` member and read weaker than the plain verbs).
+
+  Same **invocation-level boundary** as 0.121.0: command names, skill directories, slugs, and every cross-reference move; concept-level machinery (hook filenames like `ss.graphify.js` / `ss.plugin.update.js`, the `graphify` CLI, scripts) stays stable so nothing silently breaks. Verified with a repo-wide zero-dangling-reference sweep (only dated specs/concepts retain the old names, by design). eslint + full suite green (836 tests). Codex review gate unavailable this ship — external usage limit — covered by the zero-dangling sweep + full-suite verification.
+
 ## [0.121.1] — 2026-07-22
 
 ### Fixed

@@ -1,5 +1,5 @@
 ---
-name: devops-refresh-usage
+name: devops-auto-usage
 version: 0.2.0
 description: >-
   Fetch live token usage for completion card battery line. Reads the native

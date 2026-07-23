@@ -9,7 +9,7 @@ description: >-
   "CLAUDE.md zu lang", "audit claude md", "claude md audit".
   Do NOT auto-trigger from user phrasing for editing CLAUDE.md content or
   for /devops-setup-project. MAY be invoked explicitly via the Skill tool
-  by other skills (devops-learn, devops-setup-project) as a post-edit gate.
+  by other skills (devops-claude-learn, devops-setup-project) as a post-edit gate.
 argument-hint: "[--fix]"
 allowed-tools: Read, Glob, Bash, Write, Edit, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

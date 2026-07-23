@@ -56,7 +56,7 @@ export function describeScrapeFailure(err) {
   }
   const reasons = {
     1: "scraper crashed with exit 1 — node-level failure (e.g. script path dangling after a plugin update, or an uncaught exception)",
-    2: "scraper profile not logged in — no window opened (automatic path); run /devops-refresh-usage once to log in",
+    2: "scraper profile not logged in — no window opened (automatic path); run /devops-auto-usage once to log in",
     3: "usage data parse error",
     4: "CDP connection failed",
     5: "scraper instance could not launch (Edge not installed?)",
