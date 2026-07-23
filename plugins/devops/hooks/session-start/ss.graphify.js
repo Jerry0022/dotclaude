@@ -5,7 +5,7 @@
  * @event SessionStart
  * @plugin devops
  * @description graphify enforcement — install-check + auto-build wiring for the
- *   devops-graph feature. DEFAULT-ON, opt-out, key-less, windowless: no
+ *   devops-auto-graph feature. DEFAULT-ON, opt-out, key-less, windowless: no
  *   AskUserQuestion, no interaction, no per-project setup. Behavior depends on
  *   gstate.isEnabled/isDeclined, which read (never write) the per-project
  *   record at .claude/graphify.json and the global, machine-wide record at
@@ -63,7 +63,7 @@ function reportBgFailureIfAny() {
   if (sentinel && sentinel.status === 'fail') {
     const codeInfo = sentinel.code == null ? '' : ` (exit ${sentinel.code})`;
     process.stdout.write(
-      `⚠ graphify background build failed${codeInfo} — run \`graphify update .\` manually or /devops-graph\n`
+      `⚠ graphify background build failed${codeInfo} — run \`graphify update .\` manually or /devops-auto-graph\n`
     );
     gstate.clearSentinel(cwd); // one report per failure, not every session
   }

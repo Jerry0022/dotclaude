@@ -61,7 +61,7 @@ If the output shows `file:///c/Users/...` (no colon), the URL is broken.
 
 - `devops-run-autonomous` (AUTONOMOUS-REPORT.html)
 - `devops-concept` (concept pages)
-- `devops-repo-health` (interactive branch report)
+- `devops-setup-cleanup` (interactive branch report)
 - any future skill that writes an HTML file and opens it in a browser
 
 ## Pair every `file://` open with a tracker call (issue #160)

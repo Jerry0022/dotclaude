@@ -420,4 +420,4 @@ Each round appends to the same file (array of rounds), preserving full history:
 - Never execute arbitrary JavaScript from the page — only read known elements
 - The HTML file is local-only — no data leaves the machine
 - Decision JSON is never sent to external services
-- Clean up HTML files periodically (suggest during `/devops-repo-health`)
+- Clean up HTML files periodically (suggest during `/devops-setup-cleanup`)

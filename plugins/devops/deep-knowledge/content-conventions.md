@@ -1,7 +1,7 @@
 # Content Conventions — Sizing & Self-Reference
 
 How to size and structure project-persistent content (CLAUDE.md, skills,
-deep-knowledge). Referenced by `/devops-learn`, `/devops-claude-lint`, and
+deep-knowledge). Referenced by `/devops-claude-learn`, `/devops-claude-lint`, and
 all skill authoring.
 
 These are **soft caps** — they bias routing decisions, they don't hard-fail.
@@ -43,7 +43,7 @@ duplicate.** Examples:
   re-list the pipeline steps
 - "open issues with the right labels" → reference `/devops-setup-issue`, do NOT
   duplicate the label rules
-- "check branch hygiene before shipping" → reference `/devops-repo-health`,
+- "check branch hygiene before shipping" → reference `/devops-setup-cleanup`,
   do NOT re-document the cleanup steps
 - Generic conventions (browser tools, MCP deferred tools, code defaults,
   merge safety, …) → reference the existing `deep-knowledge/*.md` file by

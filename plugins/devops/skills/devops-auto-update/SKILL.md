@@ -1,5 +1,5 @@
 ---
-name: devops-plugin-update
+name: devops-auto-update
 version: 0.5.0
 description: >-
   Manually update the devops plugin to latest from GitHub. Delegates to

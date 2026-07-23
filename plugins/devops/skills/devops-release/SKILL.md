@@ -9,7 +9,7 @@ description: >-
   Triggers on: "release", "promote", "promotion", "channel release",
   "auf stable heben", "promote to beta", "promote to stable". Do NOT trigger
   for shipping new work (use /devops-ship) or plugin updates
-  (/devops-plugin-update).
+  (/devops-auto-update).
 allowed-tools: Bash(git *), AskUserQuestion, Read
 ---
 

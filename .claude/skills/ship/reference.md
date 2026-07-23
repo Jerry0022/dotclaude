@@ -40,7 +40,7 @@ directly on a clean, upgraded session. **Two restarts collapse into one.**
 
 ## Single source of truth
 
-The finalizer delegates to the **same hook** as `/devops-plugin-update`:
+The finalizer delegates to the **same hook** as `/devops-auto-update`:
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js"
@@ -49,7 +49,7 @@ node "${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js"
 No update logic is duplicated here. The hook does: `git pull --ff-only` on every
 marketplace clone → cache rebuild (`fs.cpSync`, archive-mode for dotfiles) →
 `installed_plugins.json` registry update → MCP-stale sentinel on a real version move.
-For the detailed verify/report contract, see `skills/devops-plugin-update/SKILL.md`.
+For the detailed verify/report contract, see `skills/devops-auto-update/SKILL.md`.
 
 ## Paths
 

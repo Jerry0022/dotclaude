@@ -168,7 +168,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 ## Features
 
 - **<!--devops:count:hooks-->37<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->22<!--/devops:count:skills--> Skills** — devops-ship, devops-release, devops-commit, devops-fix, devops-setup-issue, devops-setup-project, devops-setup-readme, devops-refresh-usage, devops-claude-extend-skill, devops-repo-health, devops-plugin-update, devops-claude-lint, devops-concept, devops-run-agents, devops-run-autonomous, devops-run-burn, devops-run-backlog, devops-learn, devops-tune-harden, devops-tune-polish, devops-tune-rethink, devops-graph
+- **<!--devops:count:skills-->22<!--/devops:count:skills--> Skills** — devops-ship, devops-release, devops-commit, devops-fix, devops-setup-issue, devops-setup-project, devops-setup-readme, devops-auto-usage, devops-claude-extend-skill, devops-setup-cleanup, devops-auto-update, devops-claude-lint, devops-concept, devops-run-agents, devops-run-autonomous, devops-run-burn, devops-run-backlog, devops-claude-learn, devops-tune-harden, devops-tune-polish, devops-tune-rethink, devops-auto-graph
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /devops-ship skill routing
@@ -201,7 +201,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.tokens.scan` — Scan project for expensive files and update config for the pre.tokens.guard hook.
 - `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
 - `ss.git.sync` — Registers a recurring git sync cron job (every 10 minutes).
-- `ss.graphify` — graphify enforcement — install-check + auto-build wiring for the devops-graph feature.
+- `ss.graphify` — graphify enforcement — install-check + auto-build wiring for the devops-auto-graph fe…
 - `ss.ship.verify` — Surface results from the post-merge watcher (post-ship CI + optional deploy verify).
 - `ss.concept.resume` — Recover an open concept session after a Claude restart.
 - `ss.team.changelog` — Show a summary of changes made by other contributors on remote main since the last ti…
@@ -310,20 +310,20 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/devops-setup-issue` | Explicit | GitHub issue creation with labels and milestones |
 | `/devops-setup-project` | Explicit | Repo hygiene audit and initialization |
 | `/devops-setup-readme` | Explicit | Modern README generation |
-| `/devops-refresh-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
+| `/devops-auto-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
 | `/devops-claude-extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
-| `/devops-repo-health` | Explicit | Repository branch hygiene analysis and cleanup |
-| `/devops-plugin-update` | Explicit | Update the plugin to the latest version from GitHub |
+| `/devops-setup-cleanup` | Explicit | Repository branch hygiene analysis and cleanup |
+| `/devops-auto-update` | Explicit | Update the plugin to the latest version from GitHub |
 | `/devops-claude-lint` | Explicit | Audit CLAUDE.md files for size, structure, and token efficiency |
 | `/devops-concept` | Explicit | Interactive HTML page for analysis, plans, concepts, and prototypes |
 | `/devops-run-agents` | Explicit | Evaluate agents and orchestrate parallel execution |
 | `/devops-run-autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |
 | `/devops-run-burn` | Explicit | High-throughput autonomous task runner with aggressive parallelization |
 | `/devops-run-backlog` | Explicit | Milestone-centric backlog runner: refine, implement, test/QA, and ship selected milestones/issues unsupervised |
-| `/devops-learn` | Explicit | Capture long-term learnings and route to project-specific instructions |
+| `/devops-claude-learn` | Explicit | Capture long-term learnings and route to project-specific instructions |
 | `/devops-tune-harden` | Explicit | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
 | `/devops-tune-polish` | Explicit | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
-| `/devops-graph` | Explicit + Hook | On-demand code knowledge graph via graphify, with opt-in auto-build + hard-gate enforcement |
+| `/devops-auto-graph` | Explicit + Hook | On-demand code knowledge graph via graphify, with opt-in auto-build + hard-gate enforcement |
 | `/devops-tune-rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, concept decision, autonomous implementation |
 
 #### The `run-*` family — let Claude execute autonomously

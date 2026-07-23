@@ -1,12 +1,12 @@
 ---
-name: devops-learn
+name: devops-claude-learn
 version: 0.1.0
 description: >-
   Capture a long-term learning/correction and route it to the correct project-
   specific instructions (skill, skill-extension, deep-knowledge, or as a last
   resort CLAUDE.md) — NOT to personal feedback memory. Also prunes now-duplicate
   `feedback_*.md` entries with confirmation. Routing details live in the skill
-  body (Step 5 table). Triggers ONLY on explicit invocation: "/devops-learn",
+  body (Step 5 table). Triggers ONLY on explicit invocation: "/devops-claude-learn",
   "lerne das", "merk dir das fürs Projekt", "remember this for the project",
   "capture learning". Do NOT trigger for one-off conversational corrections or
   for personal feedback memory.
@@ -32,7 +32,7 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 
 ## Step 1 — Collect the learning text
 
-If the user passed text after `/devops-learn`, that is the learning. Otherwise
+If the user passed text after `/devops-claude-learn`, that is the learning. Otherwise
 ask one short question: "Was soll ich langfristig lernen?"
 
 The learning text MUST be a self-contained rule. If it is vague ("the colors
@@ -249,7 +249,7 @@ This branch fires when `{target_project}` ≠ current project.
    For (a), output a fenced block the user can paste into the other project's
    Claude session:
    ```
-   /devops-learn <learning text including all context>
+   /devops-claude-learn <learning text including all context>
    ```
    Plus a one-line summary of what the rule should achieve.
 

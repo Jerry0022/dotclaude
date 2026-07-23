@@ -1,5 +1,5 @@
 ---
-name: devops-graph
+name: devops-auto-graph
 version: 0.4.0
 description: >-
   Codebase knowledge graph via the external graphify CLI, default-on and
@@ -13,11 +13,11 @@ description: >-
   the graph. Deliberately does NOT install graphify's own PreToolUse hook
   (would collide with the devops token-guard); the enforcement is
   devops-owned. Triggers: "knowledge graph", "graphify", "code graph",
-  "/devops-graph". Do NOT trigger for simple single-file lookups.
+  "/devops-auto-graph". Do NOT trigger for simple single-file lookups.
 allowed-tools: Bash(node *), Bash(graphify *), Bash(uv *), Bash(pipx *), Read, Glob, Write
 ---
 
-# devops-graph — Codebase Knowledge Graph (default-on, opt-out)
+# devops-auto-graph — Codebase Knowledge Graph (default-on, opt-out)
 
 Thin orchestration over the real [`graphify`](https://github.com/safishamsi/graphify)
 CLI. graphify stays the single source of truth — this skill reimplements

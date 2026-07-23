@@ -102,7 +102,7 @@ Content per spec §4.2: frontmatter (name devops-release, triggers "release", "p
 
 **Files:**
 - Modify: `plugins/devops/skills/devops-ship/SKILL.md` (Step 4: tag is `alpha/vX.Y.Z`; Step 6: promotion-gap nudge — compute drift via `git ls-remote --tags origin 'refs/tags/stable/*' 'refs/tags/v*'`, escalate ≥3 versions/≥7 days, add as card `userFinalTest`/summary line)
-- Modify: `plugins/devops/skills/devops-plugin-update/SKILL.md` (`--channel` flag → writes sidecar; drift line "latest visible vN (alpha has vM available)")
+- Modify: `plugins/devops/skills/devops-auto-update/SKILL.md` (`--channel` flag → writes sidecar; drift line "latest visible vN (alpha has vM available)")
 - Modify: `plugins/devops/CONVENTIONS.md` (ring-model tagging convention)
 - Modify: `plugins/devops/skills/devops-ship/deep-knowledge/versioning.md` + `release-flow.md` (channel section)
 - Modify: `.github/workflows/release.yml` (checkout `fetch-depth: 0` + `fetch-tags: true`; `git describe --tags --match 'v[0-9]*' --abbrev=0 HEAD~1`)

@@ -31,7 +31,7 @@ Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**.
 Alternatively, use the built-in plugin-update skill:
 
 ```
-/devops-plugin-update
+/devops-auto-update
 ```
 
 ## Project-specific extensions (optional)

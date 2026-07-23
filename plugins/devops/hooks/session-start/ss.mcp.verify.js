@@ -74,6 +74,6 @@ for (const r of broken) {
 out.push('');
 out.push('Likely cause: an incomplete plugin-cache sync dropped the file (claude-code#14061 / #190).');
 out.push('Fix: **restart Claude Code** — ss.plugin.update self-heals the cache on the next session');
-out.push('start. If it persists after a restart, run `/devops-plugin-update` to rebuild the cache.');
+out.push('start. If it persists after a restart, run `/devops-auto-update` to rebuild the cache.');
 
 process.stdout.write(out.join('\n'));

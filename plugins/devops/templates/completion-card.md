@@ -165,7 +165,7 @@ pace_delta = usage_pct - elapsed_pct
 | > +10pp | `  ⚠ Pace!` at end of affected line |
 
 - Evaluated per window individually (5h, Wk, or both).
-- Data source: `usage-live.json` (via `/devops-refresh-usage` before rendering).
+- Data source: `usage-live.json` (via `/devops-auto-usage` before rendering).
 
 **Column alignment:**
 
