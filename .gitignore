@@ -59,3 +59,4 @@ __pycache__/
 
 # graphify knowledge-graph output (generated, per-project, not distributable)
 graphify-out/
+*.stackdump
