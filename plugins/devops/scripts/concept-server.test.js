@@ -1,7 +1,9 @@
 import { describe, test, expect } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { bridgeFile } from "./concept-port-registry.js";
 
 // Regression test for #225: the reload counter must survive a bridge-server
 // restart in the sense that an already-open tab (which compares
@@ -115,6 +117,49 @@ describe.skipIf(!PY)("concept-server reload counter across restarts (#225)", () 
       expect(c2).toBeGreaterThan(c1);
     } finally {
       await stopServer(proc2);
+    }
+  }, 30000);
+});
+
+describe.skipIf(!PY)("concept-server cross-session port registry (Defect B)", () => {
+  // The bridge advertises {port, pid, worktree, ...} at
+  // ~/.claude/concept-bridges/<port>.json so a concurrent session can see the
+  // port is taken (and pick another) instead of blindly sweeping it. The entry
+  // must appear on bind and be removed on graceful /shutdown.
+  test("writes its registry entry on bind and removes it on /shutdown", async () => {
+    const REG_PORT = PORT + 2;
+    const regFile = bridgeFile(REG_PORT);
+    try { fs.unlinkSync(regFile); } catch { /* not there */ }
+    const proc = spawn(PY, [SERVER, String(REG_PORT), "."], { stdio: ["ignore", "pipe", "pipe"] });
+    try {
+      const deadline = Date.now() + 10000;
+      let up = false;
+      while (Date.now() < deadline) {
+        try {
+          const r = await fetch(`http://127.0.0.1:${REG_PORT}/reload`);
+          if (r.ok) { up = true; break; }
+        } catch { /* not up yet */ }
+        await new Promise(r => setTimeout(r, 150));
+      }
+      expect(up).toBe(true);
+
+      // Entry exists and identifies THIS server (pid + a worktree string).
+      expect(fs.existsSync(regFile)).toBe(true);
+      const entry = JSON.parse(fs.readFileSync(regFile, "utf8"));
+      expect(entry.port).toBe(REG_PORT);
+      expect(entry.pid).toBe(proc.pid);
+      expect(typeof entry.worktree).toBe("string");
+
+      // Graceful /shutdown drops the entry.
+      await fetch(`http://127.0.0.1:${REG_PORT}/shutdown`, { method: "POST" });
+      const goneBy = Date.now() + 5000;
+      while (Date.now() < goneBy && fs.existsSync(regFile)) {
+        await new Promise(r => setTimeout(r, 100));
+      }
+      expect(fs.existsSync(regFile)).toBe(false);
+    } finally {
+      try { proc.kill("SIGKILL"); } catch { /* gone */ }
+      try { fs.unlinkSync(regFile); } catch { /* already cleaned */ }
     }
   }, 30000);
 });

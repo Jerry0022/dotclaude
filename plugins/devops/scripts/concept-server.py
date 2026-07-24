@@ -87,6 +87,7 @@ import socket
 import sys
 import time
 import threading
+import atexit
 from datetime import datetime, timezone
 
 _server_ts = 0
@@ -332,6 +333,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     self.send_error(403, "forbidden origin")
                     return
             self._json_response({"ok": True, "shutting_down": True})
+            _remove_registry()  # drop our port-registry entry (os._exit skips atexit)
             # Flush the response, then exit on a short delay so the wfile
             # has time to drain before the socket closes. os._exit skips
             # atexit handlers; that's intentional — we don't want the
@@ -461,6 +463,7 @@ def _watchdog(html_path, heartbeat_timeout_ms, interval_s=30, html_grace_s=10):
                         f"[watchdog] html_path gone for > {html_grace_s}s: "
                         f"{html_path} — shutting down\n"
                     )
+                    _remove_registry()
                     os._exit(0)
             else:
                 html_missing_since = None
@@ -472,6 +475,7 @@ def _watchdog(html_path, heartbeat_timeout_ms, interval_s=30, html_grace_s=10):
                 f"[watchdog] claude_ts stale by {now_ms - claude_ts}ms "
                 f"(threshold {heartbeat_timeout_ms}ms) — shutting down\n"
             )
+            _remove_registry()
             os._exit(0)
 
 
@@ -510,6 +514,51 @@ class ConceptBridgeServer(http.server.ThreadingHTTPServer):
                 # documented pre-launch port sweep is the backstop.
                 pass
         super().server_bind()
+
+
+# ---------------------------------------------------------------------------
+# Cross-session port-ownership registry (Defect B)
+# ---------------------------------------------------------------------------
+# Every live bridge advertises {port, pid, worktree, html_path, started_at} in a
+# per-user shared location (~/.claude/concept-bridges/<port>.json) so a DIFFERENT
+# session can tell this port is taken and pick another — instead of blindly
+# sweeping (killing) it. Correctness does NOT depend on the file being removed on
+# exit: the reader (concept-port-registry.js) gates on pid liveness, so a stale
+# entry from a hard-killed server is auto-ignored. Removal on the graceful paths
+# below is hygiene, not a correctness requirement.
+_registry_port = None  # set in __main__ after a successful bind
+
+
+def _registry_path(port):
+    return os.path.join(
+        os.path.expanduser('~'), '.claude', 'concept-bridges', f'{port}.json'
+    )
+
+
+def _write_registry(port, html_path):
+    try:
+        p = _registry_path(port)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, 'w', encoding='utf-8') as f:
+            json.dump({
+                'port': port,
+                'pid': os.getpid(),
+                'worktree': os.getcwd(),
+                'html_path': html_path,
+                'started_at': _iso_now(),
+            }, f)
+    except OSError:
+        pass  # best-effort; never block a launch on the registry
+
+
+def _remove_registry(port=None):
+    port = _registry_port if port is None else port
+    if port is None:
+        return
+    try:
+        os.remove(_registry_path(port))
+    except OSError:
+        pass
 
 
 if __name__ == '__main__':
@@ -562,6 +611,13 @@ if __name__ == '__main__':
             f"port first (see bridge-server.md § port sweep), then relaunch.\n"
         )
         sys.exit(1)
+
+    # Bind succeeded — we own this port. Advertise ownership in the shared
+    # registry so a concurrent session picks a different port instead of
+    # sweeping (killing) ours (Defect B: cross-session port collision).
+    _registry_port = port
+    _write_registry(port, args.html)
+    atexit.register(_remove_registry, port)
 
     with httpd:
         print(f"Concept bridge server on http://localhost:{port}/")

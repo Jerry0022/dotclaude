@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.123.1] — 2026-07-24
+
+### Fixed
+
+- **The concept bridge server is no longer killed mid-session by the MCP-server reaper.** The reaper's orphan signature matched any command under `.claude/plugins/cache/`, which swept in `concept-server.py` too — so every Stop / SessionStart reaped the live concept bridge, and the page flapped to "Claude nicht verbunden" / HTTP 404 for no visible reason. `concept-server.py` is now explicitly excluded from the reap signature (it is a long-lived local bridge, not an MCP server); a hard-killed instance is still cleaned up via the pid-liveness check, never by reaping the live one.
+- **Two concurrent concept sessions no longer collide on a bridge port or kill each other's server.** Port selection used a bare random 8700-8999 pick plus a blind `Stop-Process` sweep, so a second session could grab the same port and terminate the first session's live bridge (which then respawned against the wrong worktree — the "server_ts fresh but claude_ts=0 + HTTP 404" flap). A shared cross-session registry (`~/.claude/concept-bridges/<port>.json`) now records each live bridge's `{port, pid, worktree}`; the new `concept-port-registry.js` picker skips any port owned by a live foreign session, and the pre-launch sweep only ever touches a port this session owns.
+
+### Changed
+
+- **The completion card is more compact, so more of it is visible without scrolling.** The headline drops from H1 to H3 and the routine CTAs (READY / DONE / ABORTED / …) from H2 to H3 — the card's two tallest lines shrink while the ✨✨✨ marker and bold keep the headline readable. Milestone CTAs (a SHIP, or a channel RELEASE / PROMOTE) deliberately stay at H2 so those payoff banners remain prominent.
+
 ## [0.123.0] — 2026-07-24
 
 ### Changed

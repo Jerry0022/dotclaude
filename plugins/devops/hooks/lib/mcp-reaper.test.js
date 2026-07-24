@@ -27,6 +27,12 @@ const REAL_CONTEXT7_NPX_CLI =
   'node C:/Program Files/nodejs/node_modules/npm/bin/npx-cli.js -y "@upstash/context7-mcp@latest"';
 const REAL_CONTEXT7_NPX_DIRECT =
   'node C:/Users/jerry/AppData/Local/npm-cache/_npx/d4e5f6/node_modules/@upstash/context7-mcp/dist/index.js';
+// The devops-concept bridge server — lives under the plugin cache (so it hits
+// the CACHE_PATH_FRAGMENT signature) but is NOT an MCP server; it is a
+// long-lived local HTTP bridge that must survive Stop/SessionStart reaps for
+// the whole concept session.
+const REAL_CONCEPT_BRIDGE =
+  'C:\\Users\\jerry\\AppData\\Local\\Programs\\Python\\Python312\\python.exe C:\\Users\\jerry\\.claude\\plugins\\cache\\dotclaude\\devops\\0.121.1\\scripts\\concept-server.py 8791 C:/Users/jerry/proj --html docs/concepts/x.html';
 
 // A live "claude root" process — makes liveClaudeExclusion's census non-empty
 // so findReapable's fail-safe gate doesn't swallow every other test.
@@ -87,6 +93,20 @@ describe("isClaudeMcpServer", () => {
 
   test("does NOT match a random node process outside plugins cache", () => {
     expect(isClaudeMcpServer({ command: "node index.js" })).toBe(false);
+  });
+
+  test("does NOT match the devops-concept bridge server (concept-server.py is a local bridge, not an MCP server)", () => {
+    expect(isClaudeMcpServer({ command: REAL_CONCEPT_BRIDGE })).toBe(false);
+  });
+
+  test("findReapable never flags an orphaned devops-concept bridge (dead parent, outside census)", () => {
+    const procs = [
+      LIVE_CLAUDE_ROOT,
+      { pid: 77, ppid: 999999, name: "python.exe", command: REAL_CONCEPT_BRIDGE },
+    ];
+    const isAlive = (pid) => pid === 1;
+    const candidates = findReapable(procs, { selfPid: 5, isAlive, platform: "win32" });
+    expect(candidates).toHaveLength(0);
   });
 
   test("does NOT match Claude Desktop itself or its renderer processes", () => {

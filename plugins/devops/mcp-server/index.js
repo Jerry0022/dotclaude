@@ -344,9 +344,11 @@ function getBuildId(overrideCwd) {
 }
 
 function renderTitle(summary) {
-  // H1 + bold so the headline stands out instead of rendering in the muted
-  // heading-grey. Stays OUTSIDE any blockquote \u2014 it must pop, not dim.
-  return '# **\u2728\u2728\u2728 ' + summary + ' \u2728\u2728\u2728**';
+  // H3 + bold: a smaller heading than H1 so the whole card fits more on screen
+  // without scrolling, while the \u2728\u2728\u2728 marker + bold keep the headline prominent
+  // (and keep card-guard's marker detection intact). Stays OUTSIDE any
+  // blockquote \u2014 it must pop, not dim.
+  return '### **\u2728\u2728\u2728 ' + summary + ' \u2728\u2728\u2728**';
 }
 
 // Dim a text block to the muted blockquote color. Only the plain-text baseline
@@ -671,7 +673,13 @@ function renderCTA(variant, cta, lang, state, delivery) {
   const vars = Object.assign({}, cta, { chan, version }, state ? { merged: state.merged || '', branch: state.branch || '' } : {});
   tpl = tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] || '');
 
-  return tpl;
+  // Compact the ROUTINE CTAs to H3 so the card's two tallest lines (title + CTA)
+  // take less vertical space — more of the card is visible without scrolling.
+  // Milestone CTAs (a SHIP, or a channel RELEASE / PROMOTE) stay at H2 so those
+  // payoff banners keep reading as a prominent moment. Only the heading marker
+  // changes; the CTA text is intact.
+  const milestoneCta = variant === 'ship-successful' || variant === 'released';
+  return milestoneCta ? tpl : tpl.replace(/^## /, '### ');
 }
 
 function readToolCallCount(sessionId) {
