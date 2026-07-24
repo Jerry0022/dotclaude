@@ -8,9 +8,9 @@
 
 Introduce three release channels — **alpha → beta → stable** — for the devops plugin, following the **ring model**:
 
-- **Ship stays autonomous.** Every `/devops-ship` to `main` publishes to the *earliest* channel (alpha) with zero prompts. The channel question never interrupts the ship pipeline.
+- **Ship stays autonomous.** Every `/ship` to `main` publishes to the *earliest* channel (alpha) with zero prompts. The channel question never interrupts the ship pipeline.
 - **Promotion is bit-identical.** Moving a version alpha→beta→stable re-tags the *same commit SHA*. No rebuild, no new commit, no version-file change. What was tested in alpha is byte-for-byte what stable consumers get.
-- **Promotion is deliberate.** A separate `/devops-release` skill promotes, with an explicit user decision (alpha→beta, beta→stable, or fast-track alpha→stable).
+- **Promotion is deliberate.** A separate `/promote` skill promotes, with an explicit user decision (alpha→beta, beta→stable, or fast-track alpha→stable).
 - **Consumers pin a channel.** Each consumer machine follows one channel **per marketplace**; the update hook resolves "latest version visible to my channel" from git tags.
 
 Industry basis (research-verified): npm dist-tag decoupling (version = immutable identity, channel = pointer), Rust release-train (channel as label, not version), container digest promotion (promote the tested artifact), Obsidian BRAT (GitHub-hosted plugin beta channels).
@@ -53,11 +53,11 @@ Change:
 - Result fields: `tag: "alpha/v0.113.0"`, `channel: "alpha"` added.
 - **Post-merge watcher note** (redteam needs-info): release.yml no longer fires at ship time (it triggers on bare tags only). The watcher spawned in ship Step 4b keys on push-to-main workflow runs — currently none exist, so it reports benign `no-run` (unchanged behavior). The release-verification duty moves into `ship_promote` step 6, which polls the Release inline. No watcher change required now; if a push-to-main CI workflow is ever added, the watcher covers it as designed.
 
-### 3.2 `/devops-ship` skill
+### 3.2 `/ship` skill
 
 - Step 3 (version bump) unchanged — every ship to main still bumps `X.Y.Z` and writes one CHANGELOG entry. CHANGELOG remains **one entry per version** regardless of how many channels the version reaches.
 - Step 4/6 texts + completion card: show `alpha/vX.Y.Z` as the created tag.
-- **Promotion-gap nudge (MUST-HAVE, PO #4):** every `ship-successful` card shows the channel drift — "alpha is N versions ahead of stable — `/devops-release` to promote" (one `ls-remote 'refs/tags/stable/*'` + bare at card time). Escalated wording past a threshold (≥3 versions **or** ≥7 days since last stable promotion): "stable is 5 versions / 9 days behind alpha." Rationale: with multi-ships/week and a solo maintainer, deliberate promotion has no heartbeat without a forcing function — invisible lag is the failure mode that kills the feature; visible lag is the feature working.
+- **Promotion-gap nudge (MUST-HAVE, PO #4):** every `ship-successful` card shows the channel drift — "alpha is N versions ahead of stable — `/promote` to promote" (one `ls-remote 'refs/tags/stable/*'` + bare at card time). Escalated wording past a threshold (≥3 versions **or** ≥7 days since last stable promotion): "stable is 5 versions / 9 days behind alpha." Rationale: with multi-ships/week and a solo maintainer, deliberate promotion has no heartbeat without a forcing function — invisible lag is the failure mode that kills the feature; visible lag is the feature working.
 - deep-knowledge (`versioning.md`, `release-flow.md`) and `CONVENTIONS.md`: document the ring model.
 
 ### 3.3 `.github/workflows/release.yml`
@@ -67,7 +67,7 @@ Change:
 - **Fix 2:** `PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1)` must become `git describe --tags --match 'v[0-9]*' --abbrev=0 HEAD~1` so channel tags on the same commits never pollute the release-notes range.
 - The double-release-producer overlap resolves: ship no longer creates Releases; the workflow fires on stable tags; `ship_promote` polls before creating (idempotent both ways).
 
-## 4. Promotion — `/devops-release` skill + `ship_promote` MCP tool
+## 4. Promotion — `/promote` skill + `ship_promote` MCP tool
 
 ### 4.1 New MCP tool `ship_promote` (deterministic git work)
 
@@ -89,11 +89,11 @@ Steps (all against `origin`, never local state):
 6. GitHub Release:
    - `to === "beta"` → **no GitHub Release at launch** (PO decision on O2: tags are the canonical channel truth; there is no beta audience using the GitHub UI yet — presentation for zero viewers is deferred, re-added as a single idempotent `gh release create --prerelease` call the day an external beta tester exists).
    - `to === "stable"` → the bare tag triggers release.yml; poll for the Release (timeout 60s), create via `gh` as fallback (skip if exists).
-7. Promotion log: **derived, not stored** — annotated tag metadata (taggerdate, taggername, message payload) IS the audit trail. `ship_promote` returns it; `/devops-release` renders it.
+7. Promotion log: **derived, not stored** — annotated tag metadata (taggerdate, taggername, message payload) IS the audit trail. `ship_promote` returns it; `/promote` renders it.
 
 Returns `{ success, version, from, to, sha, tag, bareTag?, alreadyPromoted?, release?, pushed?, missing? }`.
 
-### 4.2 `/devops-release` skill (interactive gate)
+### 4.2 `/promote` skill (interactive gate)
 
 1. Gather state: latest version per channel via per-channel globs (`git for-each-ref --sort=-v:refname --count=1 'refs/tags/{ch}/*'` — safe within ONE prefix; see §5.2 for why cross-prefix sorting must never use this). Render a **one-line channel state** ("alpha v0.117 / beta v0.114 / stable v0.112") — PO trim: no rich table at current scale; the annotated-tag metadata plumbing stays (it is free) but elaborate rendering is deferred.
 2. AskUserQuestion with the **meaningful promotions precomputed**:
@@ -159,10 +159,10 @@ The naive rollout oscillates: old hook pulls main (alpha-quality tip N, contains
 
 **Rollout checklist (ordered — PO additions marked):**
 
-1. Ship the feature version N (`/devops-ship` → `alpha/vN`).
+1. Ship the feature version N (`/ship` → `alpha/vN`).
 2. **Sequencing guard (PO):** verify release.yml on `main` contains `fetch-depth: 0` + `fetch-tags: true` + `--match 'v[0-9]*'` (§3.3) BEFORE any stable promotion — otherwise the first `stable/vN` triggers the still-broken `git describe` and corrupts the launch Release notes.
 3. **Content-identity check (PO):** verify the SHA of `alpha/vN` contains the rewritten `ss.plugin.update.js` (the rollout's correctness depends on the new hook being INSIDE stable/vN; promoting an older SHA strands consumers on the old hook).
-4. Fast-track promote N to stable (`/devops-release`).
+4. Fast-track promote N to stable (`/promote`).
 5. Verify on one consumer machine: next SessionStart pins to `stable/vN`, subsequent SessionStart does NOT flip back (oscillation check).
 
 - Existing bare tags (`v0.112.0` and older) are treated as `stable` — automatic, since bare is in every union.
@@ -176,7 +176,7 @@ The naive rollout oscillates: old hook pulls main (alpha-quality tip N, contains
 
 Published tags are never moved or deleted. A bad promotion is corrected by:
 
-1. **Bad stable:** fix on a branch → `/devops-ship` (new version, alpha) → `/devops-release` fast-track to stable. Consumers resolve the higher version and move on.
+1. **Bad stable:** fix on a branch → `/ship` (new version, alpha) → `/promote` fast-track to stable. Consumers resolve the higher version and move on.
 2. **Bad beta:** same, promote the fixed version to beta.
 3. Optional marker: `gh release edit <tag> --prerelease` demotion or a `[YANKED]` note in CHANGELOG — cosmetic; resolution ignores it (monotone latest-wins).
 
@@ -204,7 +204,7 @@ There is deliberately **no demote operation** — it cannot work under immutable
 
 ## 10. Acceptance Criteria (PO — post-launch gates)
 
-1. **Ship autonomy preserved:** 5 consecutive `/devops-ship` runs create `alpha/vX.Y.Z` tags with zero channel prompts and zero GitHub Releases at ship time.
+1. **Ship autonomy preserved:** 5 consecutive `/ship` runs create `alpha/vX.Y.Z` tags with zero channel prompts and zero GitHub Releases at ship time.
 2. **Bit-identical promotion:** for any promoted version, `git rev-parse alpha/vN == beta/vN == stable/vN == vN` (same SHA), and `plugin.json` version is unchanged between alpha tag and stable tag.
 3. **Idempotent recovery:** a `ship_promote` re-run after a simulated mid-promotion failure completes the missing tag/Release and returns `success: true` with no manual git surgery (gated on §9 partial-failure tests).
 4. **Rollout converges without oscillation:** after the mandatory fast-track of version N, a default-channel consumer pins to `stable/vN` on next SessionStart and does NOT flip back on the subsequent SessionStart.
@@ -218,7 +218,7 @@ Criteria 1–4 are ship-blocking; degraded #5 means the feature will rot even if
 - **Divergent per-plugin channels** — structurally impossible with one shared clone (§5.1); would require per-plugin marketplace clones. Explicitly forbidden, not just deferred.
 - local-llm plugin versioning (lockstep-versioned with devops by `ship_version_bump`; follows the same repo tags).
 - **Beta GitHub prerelease Releases** (former O2 — PO: deferred until a real external beta tester exists; 10-minute follow-up, not architecture).
-- Rich channel-state table in `/devops-release` (PO trim: one-liner suffices at current scale).
+- Rich channel-state table in `/promote` (PO trim: one-liner suffices at current scale).
 - Auto-promotion policies ("alpha→beta after 7 days") — possible later on top of `ship_promote`, deliberately not now.
 - Alpha-tag retention/pruning (accepted growth, §2).
 

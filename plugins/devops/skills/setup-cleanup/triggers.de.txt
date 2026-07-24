@@ -1,0 +1,5 @@
+# German trigger phrases for setup-cleanup.
+# See setup-project/triggers.de.txt header for usage.
+was liegt noch rum
+git aufräumen
+branch hygiene

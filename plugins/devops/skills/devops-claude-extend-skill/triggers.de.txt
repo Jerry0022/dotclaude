@@ -1,3 +1,0 @@
-# German trigger phrases for devops-claude-extend-skill.
-Skill erweitern
-Skill anpassen

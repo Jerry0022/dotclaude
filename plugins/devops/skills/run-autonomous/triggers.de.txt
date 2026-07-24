@@ -1,0 +1,3 @@
+# German trigger phrases for run-autonomous.
+autonomer modus
+mach das alleine

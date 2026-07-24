@@ -5,7 +5,7 @@
  * @event SessionStart
  * @plugin devops
  * @description Recover an open concept session after a Claude restart.
- *   Reads `.claude/concept-active.json` (written by /devops-concept Step 3),
+ *   Reads `.claude/concept-active.json` (written by /concept Step 3),
  *   probes the bridge server to confirm it is still running, and instructs
  *   Claude to re-arm the polling cron — and pick up any unprocessed
  *   submission immediately. Without this hook the polling cron (which is
@@ -189,11 +189,11 @@ function probe(port, pathname, timeoutMs = 1500) {
     `(1) Heartbeat POST: Bash: curl -s -X POST http://localhost:${state.port}/heartbeat > /dev/null. ` +
     `(2) Pending check via /pending: Bash: curl -s http://localhost:${state.port}/pending | python -c "import sys,json; d=json.load(sys.stdin); print(\\'true\\' if d.get(\\'pending\\') else \\'false\\')". ` +
     `If exactly "false" → produce NO output (silent tick). ` +
-    `If exactly "true" → curl -s http://localhost:${state.port}/decisions, parse JSON, note _version, process per devops-concept SKILL.md Step 5 (rewrite HTML, POST /reload, then conditionally POST /reset with the noted version). On 409 retry with the new version. Report the outcome to the user.`;
+    `If exactly "true" → curl -s http://localhost:${state.port}/decisions, parse JSON, note _version, process per concept SKILL.md Step 5 (rewrite HTML, POST /reload, then conditionally POST /reset with the noted version). On 409 retry with the new version. Report the outcome to the user.`;
 
   const lines = [];
   lines.push(
-    `An open /devops-concept session was found in this project ` +
+    `An open /concept session was found in this project ` +
     `(port ${state.port}, html_path ${state.html_path}, slug ${state.slug || '?'}). ` +
     `The bridge server is alive but the polling cron from the previous Claude session is gone (crons are session-only). ` +
     `Re-arm it now: call CronCreate with cron "* * * * *" (recurring: true) and prompt: '${cronBody}'.`
@@ -202,7 +202,7 @@ function probe(port, pathname, timeoutMs = 1500) {
   if (pendingState === 'pending') {
     lines.push(
       `IMMEDIATELY ALSO process the pending submission BEFORE waiting for the first cron tick: ` +
-      `curl -s http://localhost:${state.port}/decisions, parse, then run devops-concept SKILL.md Step 5 ` +
+      `curl -s http://localhost:${state.port}/decisions, parse, then run concept SKILL.md Step 5 ` +
       `(rewrite HTML at ${state.html_path}, POST /reload, conditional /reset with the captured _version). ` +
       `The user already submitted and is waiting — do not delay this on the cron schedule.`
     );

@@ -63,7 +63,7 @@ computer-use:
 - **claude.ai usage scraper** (`refresh-usage-headless.js`, `~/.claude/edge-usage-profile`) —
   external origin + auth. Stays on dedicated Edge CDP. See [edge-profiles.md](edge-profiles.md).
 - **External / deployed-URL checks** (e.g. post-merge production health) — not localhost.
-- **`devops-concept` interactive pages** — served over an http bridge with a cron
+- **`concept` interactive pages** — served over an http bridge with a cron
   heartbeat in the user's real Edge; Preview's sandbox cannot host the bridge.
 - **Native / cross-app flows** — `desktop-testing.md`, `agents/windows`.
 

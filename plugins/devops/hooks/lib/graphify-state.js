@@ -4,7 +4,7 @@
  * @version 0.7.0
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
- *   layer (devops-auto-graph). Default-on / opt-out model: graphify enforcement is
+ *   layer (auto-graph). Default-on / opt-out model: graphify enforcement is
  *   ENABLED unless an explicit `consent:false` record exists, checked at
  *   `.claude/graphify.json` in the consumer project (`readState`/`isDeclined`)
  *   OR the global, machine-wide `~/.claude/graphify.json` (`readGlobalState`)

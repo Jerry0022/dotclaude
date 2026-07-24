@@ -1,4 +1,5 @@
 import { describe, test, expect, vi, beforeAll } from "vitest";
+import { writeFileSync } from "node:fs";
 
 // index.js boots an MCP server over stdio at import time and pulls in the
 // @modelcontextprotocol SDK + zod (neither is a devDependency of this repo).
@@ -92,5 +93,99 @@ describe("render_completion_card — out-of-band deploy gate (#243)", () => {
       deployGate: ["Apply the token_revoked migration to prod"],
     });
     expect(text).toMatch(/Apply the token_revoked migration to prod/);
+  });
+});
+
+describe("render_completion_card — delivery track + released variant", () => {
+  const PREVIEW = "C:/Users/Jerem/AppData/Local/Temp/claude/C--Users-Jerem-IdeaProjects-dotclaude--claude-worktrees-devops-repo-health-074310/756785e3-bfa8-4d61-a6a3-0ff7f81602b2/scratchpad";
+  const dump = (name, text) => { try { writeFileSync(`${PREVIEW}/card-${name}.md`, text); } catch { /* preview only */ } };
+
+  test("ship-successful with delivery: track shows alpha, CTA names the channel", async () => {
+    const text = await cardText({
+      variant: "ship-successful", summary: "Video-Filter geshippt", lang: "de",
+      buildId: "abc1234", session_id: "t-ship",
+      state: { branch: "main", pushed: true, merged: "main", commit: "abc1234" },
+      delivery: {
+        pr: { number: 123, title: "video filter" },
+        ship: { version: "0.117.0", base: "main" },
+        promote: { channels: { alpha: "0.117.0" }, current: "alpha" },
+      },
+    });
+    dump("ship-alpha", text);
+    expect(text).toMatch(/\*\*Delivery\*\*/);
+    expect(text).toMatch(/🟢 alpha/);
+    expect(text).toMatch(/← hier/);
+    expect(text).toMatch(/SHIPPED → alpha/);
+    expect(text).toMatch(/Alles ERLEDIGT/);
+  });
+
+  test("released → beta: PROMOTED cta, beta current, promotion facts, no Changes", async () => {
+    const text = await cardText({
+      variant: "released", summary: "v0.117.0 auf beta promotet", lang: "de",
+      buildId: "abc1234", session_id: "t-beta",
+      delivery: {
+        pr: { number: 123, title: "video filter" },
+        ship: { version: "0.117.0", base: "main" },
+        promote: { channels: { alpha: "0.118.0", beta: "0.117.0" }, current: "beta" },
+      },
+      promotion: { from: "alpha", to: "beta", sha: "abc1234def567", tags: ["beta/v0.117.0"] },
+      userFinalTest: ["Beta-Consumer: nächster SessionStart pinnt auf beta/v0.117.0"],
+    });
+    dump("released-beta", text);
+    expect(text).toMatch(/## 🔼 PROMOTED\. v0\.117\.0 → beta/);
+    expect(text).toMatch(/🟢 beta/);
+    expect(text).toMatch(/← promotet/);
+    expect(text).toMatch(/\*\*Promotion\*\*/);
+    expect(text).toMatch(/beta\/v0\.117\.0/);
+    expect(text).not.toMatch(/\*\*Changes\*\*/);
+  });
+
+  test("released → stable: RELEASED LIVE cta, stable current, github release", async () => {
+    const text = await cardText({
+      variant: "released", summary: "v0.117.0 auf stable released", lang: "de",
+      buildId: "abc1234", session_id: "t-stable",
+      delivery: {
+        pr: { number: 123, title: "video filter" },
+        ship: { version: "0.117.0", base: "main" },
+        promote: { channels: { alpha: "0.118.0", beta: "0.117.0", stable: "0.117.0" }, current: "stable" },
+      },
+      promotion: { from: "beta", to: "stable", sha: "abc1234def567", tags: ["stable/v0.117.0", "v0.117.0"], release: true },
+      userFinalTest: [{ action: "Stable-Consumer: nächster SessionStart pinnt auf stable/v0.117.0", afterDeployment: true }],
+    });
+    dump("released-stable", text);
+    expect(text).toMatch(/## 🎊 RELEASED\. v0\.117\.0 → stable — LIVE/);
+    expect(text).toMatch(/🟢 stable/);
+    expect(text).toMatch(/← LIVE/);
+    expect(text).toMatch(/GitHub Release erstellt/);
+    expect(text).toMatch(/stable\/v0\.117\.0/);
+  });
+
+  test("ready with delivery: PR done, Ship + Promote pending", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Video-Filter implementiert", lang: "de",
+      buildId: "abc1234", session_id: "t-ready",
+      state: { branch: "feat/video-filter", commit: "abc1234", pr: { number: 123, title: "video filter" } },
+      delivery: { pr: { number: 123, title: "video filter" }, ship: null, promote: null },
+    });
+    dump("ready", text);
+    expect(text).toMatch(/✅ PR/);
+    expect(text).toMatch(/⚪ Ship/);
+    expect(text).toMatch(/⚪ Promote/);
+  });
+
+  test("english released → stable localizes CTA + promotion facts", async () => {
+    const text = await cardText({
+      variant: "released", summary: "v0.117.0 promoted to stable", lang: "en",
+      buildId: "abc1234", session_id: "t-en",
+      delivery: {
+        ship: { version: "0.117.0", base: "main" },
+        promote: { channels: { alpha: "0.117.0", beta: "0.117.0", stable: "0.117.0" }, current: "stable" },
+      },
+      promotion: { from: "beta", to: "stable", tags: ["stable/v0.117.0", "v0.117.0"], release: true },
+    });
+    dump("released-stable-en", text);
+    expect(text).toMatch(/## 🎊 RELEASED\. v0\.117\.0 → stable — LIVE/);
+    expect(text).toMatch(/← here|← LIVE/);
+    expect(text).toMatch(/GitHub Release created/);
   });
 });

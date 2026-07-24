@@ -10,7 +10,7 @@
  *
  *   Closes the visibility gap from issue #198: the dotclaude-ship server was
  *   silently absent (an incomplete cache sync dropped mcp-server/ship/index.js)
- *   while its sibling dotclaude-completion was fine, so /devops-ship deadlocked
+ *   while its sibling dotclaude-completion was fine, so /ship deadlocked
  *   with no signal that the server never registered.
  *
  *   Signal choice — file presence, not live PID:
@@ -68,12 +68,12 @@ out.push('Declared in the plugin but the entry file is absent from the active in
 out.push('— these servers will NOT register, so their tools are unavailable:');
 out.push('');
 for (const r of broken) {
-  const note = r.name === 'dotclaude-ship' ? '  (/devops-ship pipeline unavailable)' : '';
+  const note = r.name === 'dotclaude-ship' ? '  (/ship pipeline unavailable)' : '';
   out.push(`- **${r.name}** → missing \`${r.rel}\`${note}`);
 }
 out.push('');
 out.push('Likely cause: an incomplete plugin-cache sync dropped the file (claude-code#14061 / #190).');
 out.push('Fix: **restart Claude Code** — ss.plugin.update self-heals the cache on the next session');
-out.push('start. If it persists after a restart, run `/devops-auto-update` to rebuild the cache.');
+out.push('start. If it persists after a restart, run `/auto-update` to rebuild the cache.');
 
 process.stdout.write(out.join('\n'));

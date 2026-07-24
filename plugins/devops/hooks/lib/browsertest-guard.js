@@ -48,7 +48,7 @@ const CODE_EXT_RE =
   /\.(tsx?|jsx?|mjs|cjs|vue|svelte|astro|html?|css|scss|sass|less|py|go|rs|java|rb|php|cs|cpp|cc|c|h|hpp|swift|kt|kts|dart|ex|exs|scala|clj|lua|sh)$/i;
 // Unit/spec files are logic, not a rendered view — and they ARE the test.
 const TEST_FILE_RE = /\.(test|spec)\.[a-z]+$/i;
-// devops-concept artifacts — generated analysis pages, NOT product UI.
+// concept artifacts — generated analysis pages, NOT product UI.
 const CONCEPT_RE = /(^|\/)docs\/concepts\//i;
 
 /**
@@ -123,7 +123,7 @@ const BLOCK_CAP = 2;
 function isWebRenderableChange(filePath, carveOuts) {
   if (!filePath) return false;
   const p = String(filePath).replace(/\\/g, '/');
-  if (CONCEPT_RE.test(p)) return false;     // devops-concept carve-out
+  if (CONCEPT_RE.test(p)) return false;     // concept carve-out
   if (isCarvedOut(p, carveOuts)) return false; // project no-runtime carve-out
   if (TEST_FILE_RE.test(p)) return false;   // *.test / *.spec — not a view
   if (ALWAYS_WEB_RE.test(p)) return true;   // html/css/vue/svelte/astro/tsx/jsx
@@ -403,7 +403,7 @@ function escFooter(escalated) {
     'did the testing, re-run a quick observable check or surface its evidence.',
     '',
     'Auto-excluded: docs/markdown/config edits, *.test/*.spec files,',
-    'devops-concept pages under docs/concepts/*.html, and any path listed in',
+    'concept pages under docs/concepts/*.html, and any path listed in',
     'no_runtime_static_paths of .claude/skills/devops-test-plan/profile.json.',
     '',
     'To CONSCIOUSLY skip (genuinely no startable surface / non-runtime change):',

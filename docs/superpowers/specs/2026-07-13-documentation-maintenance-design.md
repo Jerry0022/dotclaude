@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-13
 **Status:** Implemented (local, unshipped)
-**Scope:** devops plugin — implementation agents, `/devops-ship`, deep-knowledge
+**Scope:** devops plugin — implementation agents, `/ship`, deep-knowledge
 
 ## Problem
 
@@ -53,7 +53,7 @@ Three touchpoints, one shared source of truth:
    docs as part of the *same* change. Explicitly scoped to project docs, not code
    comments, so it does not contradict `code-defaults.md`.
 
-3. **`/devops-ship` Step 2.6 (Docs-Sync)** — a reconciliation gate inserted between
+3. **`/ship` Step 2.6 (Docs-Sync)** — a reconciliation gate inserted between
    Build (Step 2) and Version Bump (Step 3). It diffs the shipped change against
    living docs, applies proportional updates, and commits them into the
    version-bump commit. Non-blocking by design: a ship never aborts over docs.
@@ -93,6 +93,6 @@ contributors don't confuse them.
 
 - `plugins/devops/deep-knowledge/documentation-maintenance.md` (new)
 - `plugins/devops/agents/{core,frontend,feature,ai,designer,windows}.md` (Rules bullet)
-- `plugins/devops/skills/devops-ship/SKILL.md` (Step 2.6)
+- `plugins/devops/skills/ship/SKILL.md` (Step 2.6)
 - `plugins/devops/CONVENTIONS.md` (Living documentation subsection)
 - regenerated: `deep-knowledge/INDEX.md`, `.claude/project-map.md`, README/architecture markers

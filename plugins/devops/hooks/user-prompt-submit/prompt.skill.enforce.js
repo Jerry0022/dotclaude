@@ -4,12 +4,12 @@
  * @version 0.1.0
  * @event UserPromptSubmit
  * @plugin devops
- * @description Detects /devops-* skill commands mentioned INLINE in a user
+ * @description Detects inline skill commands (e.g. /fix, /ship) mentioned in a user
  *   prompt (typed as text, not invoked as a real slash command) and injects a
  *   mandatory instruction to load the referenced skill via the Skill tool
  *   before answering.
  *
- *   Why (#235): when a user writes "/devops-concept lass uns das machen…"
+ *   Why (#235): when a user writes "/concept lass uns das machen…"
  *   inside a longer message, the harness does not expand it as a slash
  *   command — no skill is loaded, and Claude predictably improvises the
  *   skill's workflow from memory, violating skill contracts (bridge server,
@@ -28,12 +28,14 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const path = require('path');
 
-// A mention is "/devops-<name>" preceded by start-of-string, whitespace, or
-// common opening punctuation — NOT by a path segment ("docs/devops-guide.md").
-const MENTION_RE = /(^|[\s([{"'`>])\/(devops-[a-z][a-z0-9-]*)/gi;
+// A mention is "/<name>" preceded by start-of-string, whitespace, or common
+// opening punctuation — NOT by a path segment ("docs/devops-guide.md"). The
+// captured name is validated against the plugin's skill directories downstream,
+// so generic slashes ("/oder", "/help") that aren't real skills are dropped.
+const MENTION_RE = /(^|[\s([{"'`>])\/([a-z][a-z0-9-]*)/gi;
 
 /**
- * Extract inline /devops-* skill mentions from a user prompt.
+ * Extract inline skill mentions from a user prompt.
  * @param {string} message — raw user prompt
  * @param {string[]} knownSkills — existing skill directory names
  * @returns {string[]} deduped skill names (lowercase) in order of appearance

@@ -4,7 +4,7 @@
 > This file retains Agent wave model + QA testing protocol.
 
 Shared orchestration logic for agent selection, prompting, and wave execution.
-Referenced by `/devops-run-agents` and `/devops-run-autonomous`.
+Referenced by `/run-agents` and `/run-autonomous`.
 
 ## Agent Selection
 
@@ -34,7 +34,7 @@ Select agents based on domains touched, complexity, and risk:
 Each agent defines `model` and optionally `effort` in its frontmatter.
 The orchestrator can override `model` at invocation time but **not** `effort`.
 This table is the **source of truth for the `Model` column** the plan tables show
-(`/devops-run-agents` Step 3, `/devops-run-burn` plan) — keep it in sync with the agent
+(`/run-agents` Step 3, `/run-burn` plan) — keep it in sync with the agent
 frontmatter. When you override a model at invocation, show it as `default → override`.
 
 | Agent | model | effort | Notes |
@@ -91,7 +91,7 @@ Every spawned agent MUST receive:
 1. **Parent branch name** — for branch inheritance protocol
 2. **Task description** — specific to their role, not the full user request
 3. **Context from previous waves** — handoff data (contracts, findings, decisions)
-4. **Commit instruction** — follow commit conventions from `/devops-commit`
+4. **Commit instruction** — follow commit conventions from `/commit`
 5. **Interaction directive** — set by the calling skill (see below)
 6. **Effort budget** — a tool-call / scope ceiling scaled to the complexity tier
    (see § Complexity Tiers). Counters the "over-investment on simple work" failure
@@ -154,7 +154,7 @@ agent.
   work
 - Scope cuts (do X now, defer Y? include Z or skip?)
 
-**Use `/devops-concept` instead when:**
+**Use `/concept` instead when:**
 - 3+ design alternatives need side-by-side comparison with pros/cons
 - A UI/UX layout decision benefits from a visual mockup (prototype template)
 - An architecture or strategy choice has multi-dimensional trade-offs

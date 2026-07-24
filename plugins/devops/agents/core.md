@@ -22,8 +22,8 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 1. Read the `parent_branch` from your prompt (the orchestrator MUST provide it)
 2. Run: `git fetch origin && git reset --hard origin/<parent_branch>`
 3. Create your working branch: `git checkout -b <parent_branch>/core`
-4. Work, then commit via `/devops-commit` (never raw `git commit`) and push your branch
-5. Report your branch name in the handoff — the orchestrator runs `/devops-ship` for landing (never call `gh pr create` directly)
+4. Work, then commit via `/commit` (never raw `git commit`) and push your branch
+5. Report your branch name in the handoff — the orchestrator runs `/ship` for landing (never call `gh pr create` directly)
 
 ## Responsibilities
 

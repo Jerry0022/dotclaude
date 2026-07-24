@@ -6,7 +6,7 @@
 
 ## Problem
 
-`/devops-ship` handles merges safely at the **code level**: rebase gates,
+`/ship` handles merges safely at the **code level**: rebase gates,
 conflict classification, semantic verification, tests
 (`deep-knowledge/merge-safety.md`). What it does not check is the
 **purpose level**. Two branches developed in parallel:
@@ -56,7 +56,7 @@ whose purposes established standing conventions.
 
 ## Design
 
-### Placement: Step 1d in `/devops-ship`
+### Placement: Step 1d in `/ship`
 
 Runs after the preflight/rebase loop stabilizes (`ready: true`), before
 Step 2 (build). Two intensities:
@@ -107,13 +107,13 @@ other).
 
 ## Deliverables
 
-1. `plugins/devops/skills/devops-ship/deep-knowledge/purpose-alignment.md` (new)
-2. `plugins/devops/skills/devops-ship/SKILL.md` — new Step 1d, Step 4
+1. `plugins/devops/skills/ship/deep-knowledge/purpose-alignment.md` (new)
+2. `plugins/devops/skills/ship/SKILL.md` — new Step 1d, Step 4
    bounce-back note, Step 6 reporting note, version 0.5.0 → 0.6.0
 3. `plugins/devops/deep-knowledge/merge-safety.md` — Step 5 pointer
-4. `plugins/devops/skills/devops-ship/deep-knowledge/data-flow.md` — gate in
+4. `plugins/devops/skills/ship/deep-knowledge/data-flow.md` — gate in
    both flow diagrams
-5. `plugins/devops/skills/devops-ship/reference.md` — `purpose_alignment:`
+5. `plugins/devops/skills/ship/reference.md` — `purpose_alignment:`
    extension example
 6. This spec.
 

@@ -4,7 +4,7 @@
  * orchestrators (backlog-runner today; any future unsupervised runner).
  *
  * When an unsupervised run enters its Post-Confirmation Lockout it `arm`s this
- * sentinel. Sub-skills invoked DURING the lockout — above all /devops-ship —
+ * sentinel. Sub-skills invoked DURING the lockout — above all /ship —
  * `check` it and, when active, switch every would-be `AskUserQuestion` to a
  * deterministic non-interactive decision (park/block) instead of hanging on a
  * modal that no one is present to answer. The whole point: a night run must

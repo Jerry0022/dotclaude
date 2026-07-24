@@ -1,5 +1,0 @@
-# German trigger phrases for devops-setup-cleanup.
-# See devops-setup-project/triggers.de.txt header for usage.
-was liegt noch rum
-git aufräumen
-branch hygiene

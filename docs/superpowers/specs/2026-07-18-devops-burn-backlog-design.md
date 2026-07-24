@@ -31,7 +31,7 @@ so the user can lean back or go to bed and wake up to shipped work.
   ship pipeline → merge to `main` → close issue). Close a milestone
   automatically once all its issues are done.
 - Escalate items that are too large or need a product/UX decision to a
-  `devops-concept` decision page — resolved **live while the user is present**
+  `concept` decision page — resolved **live while the user is present**
   during a pre-triage phase, or **parked** with a prepared page when discovered
   mid-run.
 - Run the burn-down phase fully unsupervised (user AFK), with optional PC
@@ -56,8 +56,8 @@ building blocks rather than duplicating them:
 
 | Concern | Reused building block (composed, not copied) |
 |---|---|
-| Decision pages | `/devops-concept` (invoked mid-flow → returns control, no own card) |
-| Shipping | `/devops-ship` (MCP ship tools `ship_preflight/build/version_bump/release/cleanup`) |
+| Decision pages | `/concept` (invoked mid-flow → returns control, no own card) |
+| Shipping | `/ship` (MCP ship tools `ship_preflight/build/version_bump/release/cleanup`) |
 | Implementation | role agents (`devops:core/frontend/qa/…`) per `agent-orchestration.md`; may delegate one heavy item to a `devops-autonomous` implement sub-run |
 | AFK-frame mechanics | the **same plugin scripts** `devops-autonomous` calls: `permission-audit.js`, `autonomous-shutdown-timer.js`, `autonomous-resume-schedule.js`, the external watchdog (`shutdown-watchdog.md`), `session-open-tracker.js`, `render_completion_card` |
 | Guardrails / orchestration | references `deep-knowledge/autonomous-execution.md`, `agent-orchestration.md`, `test-strategy.md`, `injection-hardening.md`, `pre-mortem.md` |
@@ -138,7 +138,7 @@ Extension dir slug: `burn-backlog`.
      question.
    - `oversized` = too large for a single-issue ship; must be decomposed.
 2. **Live concept decisions** — for every `needs-decision` / `oversized` item,
-   **now** (user present) generate a `/devops-concept` decision page and let the
+   **now** (user present) generate a `/concept` decision page and let the
    user decide the path / decomposition. `oversized` items are decomposed into
    sub-issues via the concept `create-issues` path; the resulting sub-issues
    enter the queue. (Concept invoked mid-flow returns control without its own
@@ -184,11 +184,11 @@ for each issue in queue:
                   implement sub-run (implement mode — never ships)
   3. TEST/QA    → pin profile via devops-test-plan; devops:qa agent; verify per
                   test-strategy.md (browser verification mandatory for web tech)
-  4. SHIP       → /devops-ship (MCP ship tools) — burn-backlog's own authority
+  4. SHIP       → /ship (MCP ship tools) — burn-backlog's own authority
   5. CLOSE      → close the issue; when all issues of a milestone are done,
                   close the milestone
   ── special cases ──
-  • oversized discovered only here → refine + prepare a /devops-concept page +
+  • oversized discovered only here → refine + prepare a /concept page +
     PARK the item; the loop continues with the next issue
   • blocked (tests red / preflight blocks / ambiguity found) → clean rollback or
     park-branch; emit a non-blocking "⏸ Rückfrage" status message into the chat

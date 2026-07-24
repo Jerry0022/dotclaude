@@ -52,7 +52,7 @@ describe("isWebRenderableChange", () => {
     expect(isWebRenderableChange("C:\\proj\\docs\\concepts\\plan.html")).toBe(false);
   });
 
-  test("devops-concept pages are carved out", () => {
+  test("concept pages are carved out", () => {
     expect(isWebRenderableChange("docs/concepts/2026-06-05-plan.html")).toBe(false);
     expect(isWebRenderableChange("docs/guide.html")).toBe(true);
   });

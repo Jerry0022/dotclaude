@@ -45,7 +45,7 @@ The result contains a `<functions>` block with one `<function>{...}</function>` 
 
 ## When to do this
 
-- `/devops-ship` skill: mandatory, see `SKILL.md` Step 0.5.
+- `/ship` skill: mandatory, see `SKILL.md` Step 0.5.
 - Any skill that calls MCP tools from a non-completion server: load schemas upfront in the Step 0 / setup phase.
 - Guard-hook recovery: if `pre.ship.guard.js` fires and you cannot see ship tools, ToolSearch first — do NOT retry the blocked Bash command.
 
@@ -59,5 +59,5 @@ The result contains a `<functions>` block with one `<function>{...}</function>` 
 ## Related
 
 - `pre.ship.guard.js` — block message explicitly points here.
-- `skills/devops-ship/SKILL.md` Step 0.5 — enforces this pattern for the ship pipeline.
+- `skills/ship/SKILL.md` Step 0.5 — enforces this pattern for the ship pipeline.
 - `plugin-behavior.md` — general MCP-server expectations.

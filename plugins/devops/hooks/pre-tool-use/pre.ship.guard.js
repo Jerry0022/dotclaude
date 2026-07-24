@@ -5,7 +5,7 @@
  * @event PreToolUse
  * @plugin devops
  * @description Block manual PR creation/merging via Bash.
- *   These operations MUST go through /devops-ship MCP tools.
+ *   These operations MUST go through /ship MCP tools.
  *   Detects: gh pr create, gh pr merge, gh api .../pulls/.../merge
  *   Does NOT block: git push (needed for branch work before shipping).
  *   Does NOT block: MCP tool calls (tool_name !== "Bash").
@@ -57,7 +57,7 @@ process.stdin.on('end', () => {
   }
 
   const lines = [
-    'BLOCKED: Manual PR creation/merging detected. Use /devops-ship for shipping.',
+    'BLOCKED: Manual PR creation/merging detected. Use /ship for shipping.',
     'The ship pipeline ensures build-ID, safety checks, version bumps, and proper completion cards.',
     '',
   ];
@@ -87,7 +87,7 @@ process.stdin.on('end', () => {
       '',
       'If ToolSearch returns NO matches, the ship server genuinely failed to register.',
       'Recovery: restart Claude Code (MCP servers spawn only at session init; ss.plugin.update',
-      'self-heals the cache on the next start). If it persists, run /devops-auto-update.',
+      'self-heals the cache on the next start). If it persists, run /auto-update.',
       'Last resort: set DOTCLAUDE_ALLOW_MANUAL_SHIP=1 to allow a one-off manual ship this session.',
     );
   }
