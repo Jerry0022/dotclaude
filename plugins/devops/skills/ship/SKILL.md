@@ -787,9 +787,23 @@ render_completion_card({
     vOld: <from ship_version_bump.vOld>,
     vNew: <from ship_version_bump.vNew>,
     bump: <bump type>
+  },
+  delivery: {
+    pr: { number: <ship_release.pr.number>, title: <PR title> },
+    ship: { version: <ship_version_bump.vNew>, base: "main" },
+    promote: { channels: { alpha: <ship_version_bump.vNew> }, current: "alpha" }
   }
 })
 ```
+
+**Delivery track (`delivery`).** Populate it so the card shows WHERE in the
+pipeline this ship sits (PR → Ship → Promote). `pr` + `ship` are known
+post-merge. Add `promote: { channels: { alpha: <vNew> }, current: "alpha" }`
+**only for ring-model projects** (plain ship publishes to alpha) — that also
+makes the CTA read "SHIPPED → alpha" and shows the channel ladder with beta/
+stable still pending. Projects without channels omit `promote`; the track then
+just shows PR → Ship, and a later `/promote` renders the `released` card that
+advances the ladder to beta/stable.
 
 **Variant reflects what the pipeline DID, not what's verified downstream.**
 Once `ship_release` reports `merged` + (where applicable) `tag` + `release`,
