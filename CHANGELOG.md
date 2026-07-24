@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.123.0] — 2026-07-24
+
+### Changed
+
+- **The redundant `devops-` prefix is dropped from every skill name, so a plugin skill now reads `devops:fix` instead of `devops:devops-fix`.** The `devops:` plugin namespace already scopes every command; carrying `devops-` in the name too rendered doubled everywhere in the command palette. All 22 skills lose the prefix (`devops-fix → fix`, `devops-ship → ship`, `devops-auto-update → auto-update`; the `run-*` / `tune-*` / `setup-*` / `claude-*` / `auto-*` families keep their family segment). `devops-release → promote` is additionally renamed to its actual purpose (channel promotion, not a fresh release).
+
+  Same **invocation-level boundary** as the prior taxonomy passes: command names, skill directories, slugs, and every cross-reference move (586 references across 128 files); concept-level infra (hook filenames, the `~/.claude/devops-concepts/` output dir, the `devops-statusline` launcher, the `devops-test-plan` consumer-path convention) stays stable so nothing silently breaks. `prompt.skill.enforce` now detects any `/<skill>` inline mention against the live roster (no longer bound to the `/devops-*` shape). Verified with a repo-wide zero-dangling-reference sweep (only dated specs/concepts retain the old names, by design); eslint + full suite green (841 tests). Codex review gate unavailable this ship (external usage limit) — covered by the zero-dangling sweep + full-suite verification.
+
+### Added
+
+- **A dedicated `released` completion-card variant plus a `delivery` track element.** `/promote` now renders a purpose-built card for channel promotions (alpha→beta→stable) instead of reusing the misleading `ready` card (which asked "SHIP or CHANGE?" right after a completed promotion). The delivery track (PR → Ship → Promote, with the alpha/beta/stable ladder) shows at a glance WHERE in the pipeline a turn landed — ✅ done · 🟢 current · ⚪ pending — and the `ship-successful` card now names the published channel in its CTA ("SHIPPED → alpha").
+
 ## [0.122.0] — 2026-07-23
 
 ### Changed
