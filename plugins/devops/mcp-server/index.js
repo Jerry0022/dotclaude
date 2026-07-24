@@ -673,10 +673,13 @@ function renderCTA(variant, cta, lang, state, delivery) {
   const vars = Object.assign({}, cta, { chan, version }, state ? { merged: state.merged || '', branch: state.branch || '' } : {});
   tpl = tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] || '');
 
-  // Downgrade the CTA heading H2 → H3 so the card's two tallest lines (title +
-  // CTA) take less vertical space — more of the card stays visible without
-  // scrolling. Only the leading heading marker changes; the CTA text is intact.
-  return tpl.replace(/^## /, '### ');
+  // Compact the ROUTINE CTAs to H3 so the card's two tallest lines (title + CTA)
+  // take less vertical space — more of the card is visible without scrolling.
+  // Milestone CTAs (a SHIP, or a channel RELEASE / PROMOTE) stay at H2 so those
+  // payoff banners keep reading as a prominent moment. Only the heading marker
+  // changes; the CTA text is intact.
+  const milestoneCta = variant === 'ship-successful' || variant === 'released';
+  return milestoneCta ? tpl : tpl.replace(/^## /, '### ');
 }
 
 function readToolCallCount(sessionId) {
