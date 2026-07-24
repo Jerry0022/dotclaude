@@ -43,14 +43,26 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    detached background task survives across turns:
    ```bash
    # Bash tool, run_in_background: true  (no trailing &, no nohup)
-   python "$PLUGIN_ROOT" {random-port} "{project-root}" \
+   python "$PLUGIN_ROOT" {port} "{project-root}" \
        --html "docs/concepts/{date}-{slug}.html"
    ```
-   Use a random port (8700-8999). Record the port as `$PORT`; an exact OS PID
-   is not reliably knowable from a detached task, so `server_pid` in the state
-   file is best-effort (resolve it later via `Get-NetTCPConnection -LocalPort
-   {port}` if you need it) — cleanup targets the server by **port** via
-   `/shutdown`, never by PID, so the precise PID is not required.
+
+   **Pick the port via the cross-session registry — never a bare random number
+   (Defect B: cross-session collision).** Two concurrent concept sessions in
+   different worktrees that both picked the same random 8700-8999 port used to
+   sweep and kill each other's live bridge. Every live bridge now advertises
+   `{port, pid, worktree, …}` at `~/.claude/concept-bridges/<port>.json`; the
+   picker skips any port owned by a LIVE FOREIGN session (and any bound port):
+   ```bash
+   REG="$(dirname "$PLUGIN_ROOT")/concept-port-registry.js"
+   PORT="$(node "$REG" pick "{project-root}")"   # a free, foreign-safe port
+   ```
+   Record `$PORT`. An exact OS PID is not reliably knowable from a detached
+   task, so `server_pid` in the state file is best-effort — cleanup targets the
+   server by **port** via `/shutdown`, never by PID, so the precise PID is not
+   required. `concept-server.py` writes its own registry entry on bind and
+   removes it on `/shutdown`; a hard-killed server leaves a stale entry that the
+   picker ignores automatically (it gates on pid liveness, not file presence).
 
    **Sweep the port BEFORE launching — exactly one instance must own it.**
    A prior instance that did not fully die (its listening socket lingers in
@@ -66,15 +78,31 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    `ConceptBridgeServer`), so a silent double-bind can no longer happen — a
    duplicate launch instead **fails loudly** (`cannot bind port … exit 1`).
    That turns the old silent flicker into a clear error, but you still MUST
-   sweep first: a lingering prior instance would make the fresh launch fail.
-   Kill every listener on the port first, then start exactly one:
+   sweep a lingering prior instance of YOUR OWN before launching — a socket
+   stuck in TIME_WAIT would make the fresh bind fail.
+
+   **Only ever sweep a port THIS session owns — NEVER a foreign one (Defect
+   B).** The old guidance blindly `Stop-Process`-ed every listener on the port,
+   which is exactly how one session killed another's live bridge. Gate the
+   sweep on the registry: `can-claim` exits 0 when the port is free, ours, or
+   held by a dead owner, and non-zero when a LIVE FOREIGN session owns it. The
+   picker already avoids foreign ports, so this is a belt-and-braces check on
+   the exact port you are about to bind:
    ```bash
-   # PowerShell tool
-   Get-NetTCPConnection -LocalPort {port} -State Listen -EA SilentlyContinue |
+   # Bash: bail out rather than kill another session's bridge
+   node "$REG" can-claim "$PORT" "{project-root}" \
+     || { echo "port $PORT now owned by another session — re-run the picker"; exit 1; }
+   ```
+   ```powershell
+   # PowerShell tool — safe now: the port is provably ours / free
+   Get-NetTCPConnection -LocalPort $PORT -State Listen -EA SilentlyContinue |
      ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -EA SilentlyContinue }
    ```
    After launch, assert a **single** listener (`netstat -ano | grep
    "0.0.0.0:{port}"` → exactly one LISTENING row) before opening the browser.
+   If the bind still fails because a foreign session grabbed the port in the
+   race window, re-run `node "$REG" pick "{project-root}"` for a fresh port and
+   retry — never force the sweep.
 
    **The server must be threaded.** `concept-server.py` uses
    `http.server.ThreadingHTTPServer` (not the single-threaded `HTTPServer`).

@@ -38,6 +38,20 @@ async function cardText(params) {
   return res.content.map((c) => c.text).join("\n");
 }
 
+describe("render_completion_card — compact heading levels (card density)", () => {
+  test("title renders as H3 (not H1) but keeps the ✨✨✨ marker for card-guard", async () => {
+    const text = await cardText({ variant: "ready", summary: "Dichte-Test", lang: "de", session_id: "test-density-1" });
+    expect(text).toMatch(/^### \*\*✨✨✨ Dichte-Test ✨✨✨\*\*/m);
+    expect(text).not.toMatch(/^# \*\*✨✨✨/m);
+  });
+
+  test("CTA heading renders as H3 (not H2)", async () => {
+    const text = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-density-2" });
+    expect(text).toMatch(/^### 📦 READY/m);
+    expect(text).not.toMatch(/^## 📦 READY/m);
+  });
+});
+
 describe("render_completion_card — out-of-band deploy gate (#243)", () => {
   const baseParams = {
     variant: "ship-successful",

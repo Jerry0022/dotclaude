@@ -339,9 +339,11 @@ function getBuildId(overrideCwd) {
 }
 
 function renderTitle(summary) {
-  // H1 + bold so the headline stands out instead of rendering in the muted
-  // heading-grey. Stays OUTSIDE any blockquote \u2014 it must pop, not dim.
-  return '# **\u2728\u2728\u2728 ' + summary + ' \u2728\u2728\u2728**';
+  // H3 + bold: a smaller heading than H1 so the whole card fits more on screen
+  // without scrolling, while the \u2728\u2728\u2728 marker + bold keep the headline prominent
+  // (and keep card-guard's marker detection intact). Stays OUTSIDE any
+  // blockquote \u2014 it must pop, not dim.
+  return '### **\u2728\u2728\u2728 ' + summary + ' \u2728\u2728\u2728**';
 }
 
 // Dim a text block to the muted blockquote color. Only the plain-text baseline
@@ -564,7 +566,10 @@ function renderCTA(variant, cta, lang, state) {
   const vars = Object.assign({}, cta, state ? { merged: state.merged || '', branch: state.branch || '' } : {});
   tpl = tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] || '');
 
-  return tpl;
+  // Downgrade the CTA heading H2 → H3 so the card's two tallest lines (title +
+  // CTA) take less vertical space — more of the card stays visible without
+  // scrolling. Only the leading heading marker changes; the CTA text is intact.
+  return tpl.replace(/^## /, '### ');
 }
 
 function readToolCallCount(sessionId) {

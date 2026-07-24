@@ -78,6 +78,12 @@ const CACHE_PATH_FRAGMENT = '.claude/plugins/cache/';
 // (`npx vite`, `npx tsx`, ...) are never flagged.
 const NPX_FRAGMENTS = ['_npx', 'npx-cli'];
 const MCP_TOKEN = 'mcp';
+// The devops-concept bridge (concept-server.py) lives under the plugin cache
+// but is NOT an MCP server — it is a long-lived local HTTP bridge that must
+// survive Stop/SessionStart reaps for the whole concept session. Matched by
+// its script filename (slashes normalized + lowercased by normalizedCommand)
+// so it is excluded from the signature below, keeping it off the reap list.
+const CONCEPT_BRIDGE_FRAGMENT = 'concept-server.py';
 
 // A currently-live process is considered a "live Claude root" for census
 // purposes when its name is exactly one of these...
@@ -278,6 +284,9 @@ function listProcesses() {
 function isClaudeMcpServer(proc) {
   const cmd = normalizedCommand(proc);
   if (!cmd) return false;
+  // Never classify the devops-concept bridge as a reapable MCP server — it
+  // must outlive Stop/SessionStart reaps for the whole concept session.
+  if (cmd.includes(CONCEPT_BRIDGE_FRAGMENT)) return false;
   if (cmd.includes(CACHE_PATH_FRAGMENT)) return true;
   const hasNpxMarker = NPX_FRAGMENTS.some((frag) => cmd.includes(frag));
   return hasNpxMarker && cmd.includes(MCP_TOKEN);

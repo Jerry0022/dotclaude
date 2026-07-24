@@ -460,8 +460,10 @@ window — there is no usable degraded mode.
 
 ### Concept Bridge Server + Edge
 
-Start the bridge server (`scripts/concept-server.py`) on a random port
-(8700-8999), arm the combined heartbeat + auto-poll cron (fires every
+Start the bridge server (`scripts/concept-server.py`) on a port chosen via the
+cross-session registry (`node scripts/concept-port-registry.js pick "<project-root>"`
+— skips ports owned by another live concept session; see bridge-server.md
+§ port selection), arm the combined heartbeat + auto-poll cron (fires every
 minute, handles heartbeat + decision pickup + conditional reset), write
 `.claude/concept-active.json` so a future SessionStart can rediscover this
 concept, **send the first heartbeat AND verify it round-trips with a
