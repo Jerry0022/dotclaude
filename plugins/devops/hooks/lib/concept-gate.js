@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module concept-gate
- * @description Deterministic validator for devops-concept HTML pages.
+ * @description Deterministic validator for concept HTML pages.
  *
  *   Backstop for two recurring regressions where Claude only "half-uses" the
  *   concept skill:

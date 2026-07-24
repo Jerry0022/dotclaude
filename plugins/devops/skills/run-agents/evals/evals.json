@@ -1,0 +1,71 @@
+{
+  "skill": "run-agents",
+  "description": "Trigger evaluation for run-agents. The critical boundary is orchestration-while-present (this skill) vs. AFK/autonomous (run-autonomous) vs. inline single-domain work (no skill).",
+  "evals": [
+    {
+      "query": "Use agents to refactor the auth module in parallel",
+      "should_trigger": true,
+      "reason": "Explicit 'use agents' + 'parallel' — canonical orchestration request, user present."
+    },
+    {
+      "query": "Orchestrate the video filter feature across frontend and backend",
+      "should_trigger": true,
+      "reason": "'Orchestrate' keyword + multi-domain feature spanning frontend/backend."
+    },
+    {
+      "query": "Lass die Agents das parallel machen",
+      "should_trigger": true,
+      "reason": "German canonical trigger — 'Agents' + 'parallel', no AFK signal."
+    },
+    {
+      "query": "Delegate this migration to multiple agents",
+      "should_trigger": true,
+      "reason": "'Delegate to agents' + multi-agent intent."
+    },
+    {
+      "query": "Multi-agent workflow für das neue Dashboard bitte",
+      "should_trigger": true,
+      "reason": "'Multi-agent workflow' explicit keyword."
+    },
+    {
+      "query": "Kannst du das mit mehreren Agents umsetzen?",
+      "should_trigger": true,
+      "reason": "German 'mehrere Agents' — explicit orchestration request, user present."
+    },
+    {
+      "query": "Refactor the auth module",
+      "should_trigger": false,
+      "reason": "Single-domain task, no orchestration signal — handle inline, do not fan out agents."
+    },
+    {
+      "query": "Mach das alleine, ich bin gleich weg",
+      "should_trigger": false,
+      "reason": "AFK signal — belongs to /run-autonomous, not interactive orchestration."
+    },
+    {
+      "query": "afk mode — refactor and test while I'm gone",
+      "should_trigger": false,
+      "reason": "Explicit AFK/'while I'm gone' — /run-autonomous owns unsupervised runs."
+    },
+    {
+      "query": "Research the state of edge computing in 2026",
+      "should_trigger": false,
+      "reason": "Research-only task — use the deep-research skill."
+    },
+    {
+      "query": "Erklär mir wie der Auth-Flow funktioniert",
+      "should_trigger": false,
+      "reason": "Explanation request, no implementation or orchestration."
+    },
+    {
+      "query": "Fix this typo in the README",
+      "should_trigger": false,
+      "reason": "Trivial single-file edit — orchestration would be pure overhead."
+    },
+    {
+      "query": "Just do it yourself, no need for agents",
+      "should_trigger": false,
+      "reason": "User explicitly opts out of orchestration — respect that, work inline."
+    }
+  ]
+}

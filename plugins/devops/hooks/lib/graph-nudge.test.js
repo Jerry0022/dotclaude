@@ -48,7 +48,7 @@ describe("buildGraphNudge — ambient hint text", () => {
     const t = buildGraphNudge();
     expect(t).toContain("graphify query");
     expect(t).toContain("graphify-out/graph.json");
-    expect(t).toContain("/devops-auto-graph");
+    expect(t).toContain("/auto-graph");
   });
 });
 

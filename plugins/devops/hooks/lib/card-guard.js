@@ -136,7 +136,7 @@ function buildBlockReason() {
     '  select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
     '',
     'Variant decision (pick exactly one):',
-    '  ship pipeline ran + merged → ship-successful  (ONLY after /devops-ship + merge)',
+    '  ship pipeline ran + merged → ship-successful  (ONLY after /ship + merge)',
     '  ship pipeline ran + NOT merged → ship-blocked',
     '  task aborted / infeasible → aborted',
     '  code edits + app/service startable → test',

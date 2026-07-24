@@ -1,0 +1,3 @@
+# German trigger phrases for ship.
+ab damit
+das kann rein

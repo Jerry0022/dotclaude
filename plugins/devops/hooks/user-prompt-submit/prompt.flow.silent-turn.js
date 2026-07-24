@@ -14,8 +14,8 @@
  *   (`<<autonomous-loop>>`). Without this flag, every silent tick is
  *   treated as a user turn — the post-tool-use hook injects the card
  *   reminder, and the stop hook blocks the turn to force a second card.
- *   Result: duplicate cards after every /devops-ship (git-sync cron fires
- *   next tick) and one card per minute during a /devops-concept monitoring
+ *   Result: duplicate cards after every /ship (git-sync cron fires
+ *   next tick) and one card per minute during a /concept monitoring
  *   loop. The user only wants the card from their REAL interaction.
  *
  *   The flag is a one-shot — stop.flow.guard clears it when the turn ends.

@@ -67,9 +67,9 @@ beforeEach(() => {
   pluginCache = path.join(tmpRoot, "devops");
   // Current version dir, with a marker that proves dir identity across a repair.
   write(pluginCache, path.join(VERSION, IDENTITY_MARKER), "loaded-registry");
-  write(pluginCache, path.join(VERSION, "skills", "devops-ship", "SKILL.md"), "# old");
+  write(pluginCache, path.join(VERSION, "skills", "ship", "SKILL.md"), "# old");
   // A leftover OLD version dir that any cleanup should prune.
-  write(pluginCache, path.join("0.100.0", "skills", "devops-ship", "SKILL.md"), "# stale");
+  write(pluginCache, path.join("0.100.0", "skills", "ship", "SKILL.md"), "# stale");
 });
 
 afterEach(() => {

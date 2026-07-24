@@ -8,7 +8,7 @@
  *   its version. Prints one JSON line to stdout when run directly:
  *     {"installed":true,"path":"C:\\...\\node.exe","version":"v22.3.0"}
  *     {"installed":false}
- *   Exported for reuse (e.g. the devops-auto-graph skill detecting `graphify`).
+ *   Exported for reuse (e.g. the auto-graph skill detecting `graphify`).
  *   Detection is a pure PATH scan so it is unit-testable without the target
  *   tool installed. Exit code is always 0 — callers rely on the JSON.
  *

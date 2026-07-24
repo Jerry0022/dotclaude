@@ -1,6 +1,6 @@
 # Git Hygiene
 
-Cross-cutting git rules referenced by `/devops-commit`, `/devops-ship`, and hooks.
+Cross-cutting git rules referenced by `/commit`, `/ship`, and hooks.
 
 ## Main-branch protection (hard rule)
 
@@ -8,9 +8,9 @@ Cross-cutting git rules referenced by `/devops-commit`, `/devops-ship`, and hook
   starts from a branch derived from `origin/main`:
   `git fetch origin && git switch -c <feat/topic> origin/main`.
 - **Never commit, merge, push, rebase, cherry-pick, reset --hard, revert, apply or
-  am on main/master directly.** The only path back to `main` is `/devops-ship`.
+  am on main/master directly.** The only path back to `main` is `/ship`.
 - **Never create PRs manually** (`gh pr create` / `gh pr merge`). Always via
-  `/devops-ship` so build-ID, version bump, tag and completion card stay consistent.
+  `/ship` so build-ID, version bump, tag and completion card stay consistent.
 - Enforcement: `pre.main.guard` (Bash) and `pre.edit.branch` (Edit/Write/NotebookEdit)
   block these actions unless a sentinel file `.claude/.ship-in-progress` is present
   (written by `ship_preflight`, cleared by `ship_cleanup`) or `DEVOPS_ALLOW_MAIN=1`

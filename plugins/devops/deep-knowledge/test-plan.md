@@ -6,8 +6,8 @@ and follow the deterministic tool-chain it prescribes — so every later test
 decision is consistent and autonomous (no ad-hoc "should I take the desktop?").
 
 This is a **reference, not a skill** — there is no `/devops-test-plan` command.
-Testing skills (`devops-tune-harden`, `devops-tune-polish`, `devops-tune-rethink`,
-`devops-run-backlog`, the `qa` agent) and the V&V hooks
+Testing skills (`tune-harden`, `tune-polish`, `tune-rethink`,
+`run-backlog`, the `qa` agent) and the V&V hooks
 (`post.flow.completion` → `stop.flow.browsertest`) read this file and apply it
 inline. It provides data; it never runs tests itself.
 

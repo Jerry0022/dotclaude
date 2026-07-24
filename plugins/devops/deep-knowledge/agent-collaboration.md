@@ -103,7 +103,7 @@ feat/42-video-filters               ← Feature agent (integration branch)
 
 The orchestrator merges each sub-branch back into the integration branch (merge order
 follows wave order: Core → Frontend/Windows/AI → integration). The integration branch is
-shipped to `main` **once**, at the end, via `/devops-ship` — sub-branches are NOT shipped
+shipped to `main` **once**, at the end, via `/ship` — sub-branches are NOT shipped
 individually.
 
 ## Branch Inheritance Protocol
@@ -193,7 +193,7 @@ Creating an issue is a refinement session, not a solo task. All relevant roles p
 3. UX/user role (if applicable) — validates user story from the end-user perspective, challenges vague AC
 4. `qa` — defines testability: what does "done" look like?
 
-All happens within the single `/devops-setup-issue` execution.
+All happens within the single `/setup-issue` execution.
 
 ## Rules
 

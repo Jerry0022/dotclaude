@@ -1,6 +1,6 @@
 # Autonomous Execution — Gate, Guardrails, Late-Permission Protocol
 
-Detailed execution rules for `devops-run-autonomous` Step 5. Read this at the start of
+Detailed execution rules for `run-autonomous` Step 5. Read this at the start of
 autonomous execution.
 
 ## Execution Mode Gate
@@ -26,7 +26,7 @@ Behavior depends on `$EXEC_MODE` from Step 2.
 
 **Forbidden (always):**
 - git push (any branch), force-push
-- /ship or /devops-ship
+- /ship or /ship
 - creating PRs
 - external communications (Discord, email, Slack, GitHub comments/issues)
 - purchases, account creation

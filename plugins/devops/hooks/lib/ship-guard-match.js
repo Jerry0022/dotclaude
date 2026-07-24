@@ -2,7 +2,7 @@
  * @module ship-guard-match
  * @version 0.1.0
  * @description Pure matcher for pre.ship.guard — decides whether a Bash command
- *   is a REAL manual PR create/merge invocation that must go through /devops-ship.
+ *   is a REAL manual PR create/merge invocation that must go through /ship.
  *
  *   Split out of pre.ship.guard.js so the logic is unit-testable, and to fix the
  *   #198 bonus defect: the old guard tested its patterns against the entire

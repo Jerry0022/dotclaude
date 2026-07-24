@@ -50,9 +50,9 @@ process.stdin.on('end', () => {
   if (failures >= 2) {
     process.stdout.write(
       `Repeated Bash failure detected (${failures} consecutive). ` +
-      'Consider running /devops-fix: check recent git changes, ' +
+      'Consider running /fix: check recent git changes, ' +
       'read error logs, and perform root-cause analysis per ' +
-      'skills/devops-fix/SKILL.md before retrying. ' +
+      'skills/fix/SKILL.md before retrying. ' +
       'Alternative: /codex:rescue to delegate investigation to Codex ' +
       '(requires codex-plugin-cc).\n'
     );

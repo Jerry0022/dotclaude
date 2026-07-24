@@ -7,7 +7,7 @@
  * the variant is corrected to `ready`.
  *
  * Because that correction is otherwise invisible, a genuinely-shipped run that
- * simply forgot to pass `state` (e.g. a manual render when the devops-ship
+ * simply forgot to pass `state` (e.g. a manual render when the ship
  * skill isn't registered) would render as "📦 READY — SHIP oder ÄNDERN?" — an
  * actively misleading card right after a successful merge. So the downgrade now
  * also surfaces a self-documenting note (see renderDowngradeNote + index.js

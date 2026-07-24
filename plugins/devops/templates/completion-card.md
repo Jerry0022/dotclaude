@@ -165,7 +165,7 @@ pace_delta = usage_pct - elapsed_pct
 | > +10pp | `  ⚠ Pace!` at end of affected line |
 
 - Evaluated per window individually (5h, Wk, or both).
-- Data source: `usage-live.json` (via `/devops-auto-usage` before rendering).
+- Data source: `usage-live.json` (via `/auto-usage` before rendering).
 
 **Column alignment:**
 
@@ -216,7 +216,7 @@ deliverable, so naming them is the functional description. Implementation files
 (renderers, helpers, internal modules) are not.
 
 - ✅ `keybindings.json → Ctrl+S auf Submit umgemappt` (file = deliverable)
-- ✅ `Skill devops-ship → Pre-flight prüft jetzt branch protection` (skill = deliverable)
+- ✅ `Skill ship → Pre-flight prüft jetzt branch protection` (skill = deliverable)
 - ❌ `lib/card-guard.js → neue Validierung hinzugefügt` (internal module)
 
 **Purely technical topic = technical wording is fine.** If the change really is
@@ -228,7 +228,7 @@ is "default to functional", not "forbid technical".
 
 **`area`** is the functional surface (what the user perceives or what the change
 is *about*), e.g. `Completion card`, `Ship pipeline`, `Branch cleanup`,
-`Skill devops-fix`. Not a file path, not an internal module name.
+`Skill fix`. Not a file path, not an internal module name.
 
 | Variants | Behavior |
 |----------|----------|
@@ -439,8 +439,8 @@ The footer line sits between the separator and the CTA. It contains:
 | 7 | aborted | 🚫 | opt. | — | — | if flagged | dep. | yes |
 | 8 | **fallback** | 🔧 | yes | — | — | if flagged | dep. | yes |
 
-- **ship-successful (1)**: ONLY after /devops-ship + successfully merged to origin/main. PR vs. direct push → state line shows the difference.
-- **ship-blocked (3)**: ONLY after /devops-ship + NOT merged (PR open, build fail, etc.).
+- **ship-successful (1)**: ONLY after /ship + successfully merged to origin/main. PR vs. direct push → state line shows the difference.
+- **ship-blocked (3)**: ONLY after /ship + NOT merged (PR open, build fail, etc.).
 - **test (4)**: Code edits + app/service started or startable. Applies to ANY project type (web, CLI, desktop, API, game — not just UI). If user needs to test, always use this variant and try to start the app.
 - **test-minimal (5)**: User starts app via prompt, no edits done yet. Minimal greeting card.
 - **analysis (6)**: No file changes — covers audit, plan, review, explanation, investigation.
@@ -473,8 +473,8 @@ else                                             → fallback (8)
 
 **STRICT variant rules (never violate):**
 
-- **ship-successful**: ONLY after `/devops-ship` ran `ship_release` and it was merged to origin/main. A commit, push, or PR alone is NEVER "ship-successful". Use `ready` instead.
-- **ship-blocked**: ONLY after `/devops-ship` ran but did NOT merge (build failed, PR open, gate failed). Never use for plain uncommitted/unpushed state.
+- **ship-successful**: ONLY after `/ship` ran `ship_release` and it was merged to origin/main. A commit, push, or PR alone is NEVER "ship-successful". Use `ready` instead.
+- **ship-blocked**: ONLY after `/ship` ran but did NOT merge (build failed, PR open, gate failed). Never use for plain uncommitted/unpushed state.
 - **test-minimal**: ONLY when the user freshly starts the app via a prompt and no code edits have been made yet. Never after a commit, task completion, or any other action. This is a session-start greeting, nothing else.
 - **ready**: Default for any completed code/doc change (>=1 edit) that hasn't gone through the ship pipeline. Threshold is >=1 edit — not >5.
 

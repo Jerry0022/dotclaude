@@ -20,7 +20,7 @@ In each layer, you can create two files:
 
 | File | Purpose | Example |
 |---|---|---|
-| `SKILL.md` | Override or add steps to the skill | Add a deploy step to /devops-ship |
+| `SKILL.md` | Override or add steps to the skill | Add a deploy step to /ship |
 | `reference.md` | Add context the skill reads before executing | List version files, deploy targets |
 
 Both are optional. Create only what you need.
@@ -72,7 +72,7 @@ Every plugin skill starts with Step 0:
 
 ## Extension examples by skill
 
-### /devops-ship
+### /ship
 ```markdown
 # reference.md
 ## Quality gates
@@ -87,7 +87,7 @@ Every plugin skill starts with Step 0:
 - electron-builder.json → `"version": "X.Y.Z"`
 ```
 
-### /devops-commit
+### /commit
 ```markdown
 # reference.md
 ## Scope rules
@@ -104,7 +104,7 @@ Every plugin skill starts with Step 0:
 - Angular dev server: terminal output
 ```
 
-### /devops-setup-issue
+### /setup-issue
 ```markdown
 # reference.md
 ## Project board
@@ -120,12 +120,12 @@ Every plugin skill starts with Step 0:
 
 ## Delivery targets
 
-Configure how `/devops-ship` delivers the release by setting a `deliver:` field in
+Configure how `/ship` delivers the release by setting a `deliver:` field in
 `{project}/.claude/skills/ship/reference.md`.
 
 ### 1. `git+gh` (default)
 
-No extension needed. `/devops-ship` creates a PR via `gh`, merges it, and pushes the
+No extension needed. `/ship` creates a PR via `gh`, merges it, and pushes the
 tag. This is the built-in behavior when no `deliver:` field is present.
 
 ### 2. `ssh-rsync` *(future work)*
@@ -161,7 +161,7 @@ after upload. Canonical use case: shipping HA YAML configs managed in git.
 ### 4. `none`
 
 For projects that only edit files in-place with no delivery step. `deliver: none` makes
-`/devops-ship` skip Step 4a entirely.
+`/ship` skip Step 4a entirely.
 
 ## Post-merge deploy verification
 
@@ -179,7 +179,7 @@ verify:
   timeout_seconds: 600
 ```
 
-Full field reference: see [`skills/devops-ship/deep-knowledge/post-merge-verify.md`](../skills/devops-ship/deep-knowledge/post-merge-verify.md).
+Full field reference: see [`skills/ship/deep-knowledge/post-merge-verify.md`](../skills/ship/deep-knowledge/post-merge-verify.md).
 
 Failures (CI red or verify probe failing) land in `<repo>/.claude/.ship-watcher/<sha>.json`
 and surface at the next SessionStart via the `ss.ship.verify` hook, plus a
@@ -199,7 +199,7 @@ Override responsibilities, tools, or collaboration rules per project.
 
 When a project-side skill extension opens a local HTML file in the browser
 via `file://` (instead of the bridge-server's `http://localhost:…`), the
-URL becomes invalid as soon as `/devops-ship` cleans up the worktree the
+URL becomes invalid as soon as `/ship` cleans up the worktree the
 file lived in. The user sees a 404 / blank tab and thinks the content
 itself is broken — when in reality the merged HTML is fine at the
 equivalent path inside the main repo.
@@ -215,11 +215,11 @@ node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
 
 - `<absolute native path>`: on Windows, run `cygpath -w` over a Git-Bash
   path first; on macOS/Linux a plain absolute path is enough.
-- `--context=<tag>` is optional metadata used in `/devops-ship` logs
+- `--context=<tag>` is optional metadata used in `/ship` logs
   (e.g. `concept`, `prototype`, `mockup`, `report`). Pick whatever makes
   the trail readable.
 
-`/devops-ship` Step 5c invokes the tracker's `reopen-main` subcommand
+`/ship` Step 5c invokes the tracker's `reopen-main` subcommand
 after `ship_cleanup` removes the worktree:
 
 ```bash
@@ -240,7 +240,7 @@ already invalid the moment the bridge server is killed.
 
 ## Scaffolding
 
-Run `/devops-claude-extend-skill` to interactively scaffold an extension for any plugin skill.
+Run `/claude-extend-skill` to interactively scaffold an extension for any plugin skill.
 It lists all available skills, checks whether an extension already exists in your
 project, and either scaffolds new files or opens the existing ones for editing.
 

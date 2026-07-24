@@ -8,7 +8,7 @@ description: >-
 
 # Ship Extension — dotclaude (plugin-source repo)
 
-Adds one project-specific step to `/devops-ship`: a **post-ship self-update** of the
+Adds one project-specific step to `/ship`: a **post-ship self-update** of the
 installed devops plugin. This repo ships the plugin that runs the ship, so the local
 install must be reconciled with what was just merged. See `reference.md` in this folder
 for the full rationale (double-restart problem, observed cache/registry drift).
@@ -18,7 +18,7 @@ This extension is **additive** — every plugin-default step still runs unchange
 ## Step 6.5 — Announce the local channel outcome IN the completion card
 
 Do this **before** calling `render_completion_card` in Step 6, using pure file reads
-(no MCP). **Channel-aware (ring model):** a plain `/devops-ship` publishes vNew to the
+(no MCP). **Channel-aware (ring model):** a plain `/ship` publishes vNew to the
 **alpha** channel only. The local install follows its channel pin at
 `~/.claude/plugins/.channels.json` (`{ "dotclaude": "<channel>" }`; absent → `stable`).
 Whether the local install moves to vNew depends on that pin — it does NOT
@@ -31,7 +31,7 @@ automatically sync to every ship.
      > `{ action: "devops lokal (alpha) auf v<vNew> synchronisiert — Claude einmal neu starten, dann ist die neue Version aktiv.", afterDeployment: true }`
    - **Pin is `beta`/`stable`** (the default) — an alpha-only ship does NOT reach this
      install. Do **not** claim any local sync; point to promotion:
-     > `{ action: "v<vNew> ist auf alpha veröffentlicht; dein <pin>-Install bleibt auf v<installed>. /devops-release promoten (alpha→<pin>), danach zieht der Install v<vNew> beim nächsten Start.", afterDeployment: true }`
+     > `{ action: "v<vNew> ist auf alpha veröffentlicht; dein <pin>-Install bleibt auf v<installed>. /promote promoten (alpha→<pin>), danach zieht der Install v<vNew> beim nächsten Start.", afterDeployment: true }`
 
 **Never assert "lokal auf vNew synchronisiert" on a beta/stable pin.** The finalizer
 (Step 8) correctly holds the install on its pinned channel tag, so an alpha-only ship
@@ -55,7 +55,7 @@ card — the card carries it.
 > (alpha-only) ship on a stable/beta pin the version does NOT move and the finalizer
 > only cache-repairs — that is EXPECTED, not a drift bug. Do NOT force the marketplace
 > clone onto `main`/an alpha tag to "fix" it (the pin resets it every SessionStart by
-> design). The install receives vNew only after `/devops-release` promotes it to the pin.
+> design). The install receives vNew only after `/promote` promotes it to the pin.
 
 ### Guards — skip the finalizer entirely when ANY of:
 
@@ -73,7 +73,7 @@ card — the card carries it.
 
 ### Action
 
-Run the canonical updater (same hook `/devops-auto-update` delegates to — single
+Run the canonical updater (same hook `/auto-update` delegates to — single
 source of truth, no duplicated logic).
 
 **Resolve the hook path fresh — do NOT use `${CLAUDE_PLUGIN_ROOT}`.** That variable

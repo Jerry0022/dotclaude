@@ -5,7 +5,7 @@
  * @event PostToolUse
  * @plugin devops
  * @matcher Write|Edit|NotebookEdit
- * @description Deterministic backstop for devops-concept pages. After a
+ * @description Deterministic backstop for concept pages. After a
  *   concept HTML is written, verify it carries the live decision panel +
  *   bridge-submit markers and contains NO clipboard / paste-into-chat
  *   fallback. Blocks (exit 2) with actionable feedback when the page is

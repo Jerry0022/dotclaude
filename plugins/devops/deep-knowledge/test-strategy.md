@@ -114,7 +114,7 @@ CI runs without live credentials, autonomous/background sessions. The mock step 
 ## Completion-Card Handoff (for any caller)
 
 When work is done and `render_completion_card` is called — **whether inline, via
-agents, or from `/devops-run-autonomous`** — the caller MUST populate `userFinalTest`
+agents, or from `/run-autonomous`** — the caller MUST populate `userFinalTest`
 whenever one of the rules above applies:
 
 - Packaged Electron/Tauri + no desktop takeover → one item per flow, `afterDeployment: false`

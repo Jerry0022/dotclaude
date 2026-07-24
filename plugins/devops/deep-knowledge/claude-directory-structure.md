@@ -51,5 +51,5 @@ Projects may keep reference docs at `{project}/.claude/deep-knowledge/<topic>.md
 — mirrors the plugin's `plugins/devops/deep-knowledge/` layout. Used for
 architecture notes, data-flow diagrams, conventions, and anything else that
 exceeds the CLAUDE.md ~20-line budget. Referenced from `CLAUDE.md` via a
-one-line pointer. The `/devops-claude-learn` skill writes here for project-specific
+one-line pointer. The `/claude-learn` skill writes here for project-specific
 reference content (see `content-conventions.md`).

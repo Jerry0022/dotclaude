@@ -175,7 +175,7 @@ function renderUsageMeter(usageData, delta5h, deltaWk) {
   // Staleness is surfaced here too \u2014 get_usage consumers previously saw stale
   // numbers with no hint in either the JSON or this meter string.
   if (usageData._loginRequired) {
-    lines.push('\u26a0 Edge fetch offline (not logged in) \u2014 showing cached data; /devops-auto-usage to reconnect');
+    lines.push('\u26a0 Edge fetch offline (not logged in) \u2014 showing cached data; /auto-usage to reconnect');
   } else if (freshness.cached && freshness.ageMinutes > 30) {
     const suffix = usageData._failureReason ? ` (${usageData._failureReason})` : '';
     lines.push(`cached \u00b7 ${formatAgeLabel(freshness.ageMinutes)}${suffix}`);
@@ -232,7 +232,7 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
   // is offline until a one-time manual login. Never nags, never blocks.
   if (usageData._loginRequired) {
     lines.push('');
-    lines.push('\u26a0 Edge fetch offline (not logged in) \u2014 showing statusLine/cached; /devops-auto-usage to reconnect');
+    lines.push('\u26a0 Edge fetch offline (not logged in) \u2014 showing statusLine/cached; /auto-usage to reconnect');
   } else if (cardFreshness.cached && cardFreshness.ageMinutes > 30) {
     const suffix = usageData._failureReason ? ` (${usageData._failureReason})` : '';
     lines.push('');
@@ -877,7 +877,7 @@ function refreshUsage() {
   // 2. Fallback — headless in-page API fetch via the dedicated Edge profile,
   //    ALWAYS non-interactive (--no-login): a logged-out profile serves cache
   //    without opening a window; login is offered only via an explicit
-  //    /devops-auto-usage run. NOTE: the script exits 0 even on its internal
+  //    /auto-usage run. NOTE: the script exits 0 even on its internal
   //    cache fallback (it stamps _cached/_failureReason into the file instead),
   //    so a zero exit code is NOT proof of a live fetch — the freshness of the
   //    re-read file is.
@@ -1040,7 +1040,7 @@ server.registerTool(
       changes: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.object({
-          area: z.string().describe("Functional surface the user perceives or the change is about (e.g. 'Completion card', 'Ship pipeline', 'Branch cleanup', 'Skill devops-fix'). NOT a file path or internal module name. Technical wording only when the topic itself is purely technical (parser, flag, protocol)."),
+          area: z.string().describe("Functional surface the user perceives or the change is about (e.g. 'Completion card', 'Ship pipeline', 'Branch cleanup', 'Skill fix'). NOT a file path or internal module name. Technical wording only when the topic itself is purely technical (parser, flag, protocol)."),
           description: z.string().describe("What behaves differently now, in user-domain language. Describe the functional/user-visible effect — same rule as `area`: technical phrasing only when the topic is genuinely technical."),
         })).max(3).optional(),
       ).describe("Top 3 FUNCTIONAL changes — both `area` AND description should describe what the user perceives or what behaves differently, not which files were edited. Keep the 'area → description' shape. Files/paths only when the file IS the deliverable (skill, keybindings.json, settings.json, CLAUDE.md, hook script). Internal helpers/renderers/libs never appear. Good: 'Completion card → Changes-Bullets jetzt funktional formuliert'. Good (purely technical topic): 'JSON parser → akzeptiert trailing commas'. Bad: 'mcp-server/index.js → renderChanges() angepasst'."),

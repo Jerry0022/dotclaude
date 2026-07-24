@@ -7,9 +7,9 @@ the old version and the next session lands in a stale state ("devops nicht verf�
 
 > **Channel caveat (ring model).** "In sync with what was just shipped" only holds
 > when the local install's channel pin (`~/.claude/plugins/.channels.json`, default
-> `stable`) actually receives the shipped version. A plain `/devops-ship` publishes to
+> `stable`) actually receives the shipped version. A plain `/ship` publishes to
 > **alpha** only, so on the default stable pin the local install correctly STAYS on the
-> previous stable version until `/devops-release` promotes it — the Step 8 finalizer is
+> previous stable version until `/promote` promotes it — the Step 8 finalizer is
 > then a cache-repair no-op, not a failure. Do not "fix" the detached-HEAD marketplace
 > clone by forcing it onto `main`; the pin resets it by design. See the memory
 > `project_ring_model_local_stays_stable` for the full symptom/diagnosis note.
@@ -17,7 +17,7 @@ the old version and the next session lands in a stale state ("devops nicht verf�
 ## Why a post-ship self-update is needed here (and nowhere else)
 
 A normal consumer project shipping its app has nothing to do with the devops plugin
-version, so the stock `/devops-ship` never self-updates. This repo is the exception:
+version, so the stock `/ship` never self-updates. This repo is the exception:
 the artifact it ships *is* the plugin running the ship.
 
 Without a post-ship sync, the update is left to the next `SessionStart`
@@ -40,7 +40,7 @@ directly on a clean, upgraded session. **Two restarts collapse into one.**
 
 ## Single source of truth
 
-The finalizer delegates to the **same hook** as `/devops-auto-update`:
+The finalizer delegates to the **same hook** as `/auto-update`:
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js"
@@ -49,7 +49,7 @@ node "${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js"
 No update logic is duplicated here. The hook does: `git pull --ff-only` on every
 marketplace clone → cache rebuild (`fs.cpSync`, archive-mode for dotfiles) →
 `installed_plugins.json` registry update → MCP-stale sentinel on a real version move.
-For the detailed verify/report contract, see `skills/devops-auto-update/SKILL.md`.
+For the detailed verify/report contract, see `skills/auto-update/SKILL.md`.
 
 ## Paths
 

@@ -179,7 +179,7 @@ Apply [test-plan.md](test-plan.md) — detect + pin, there is no command to invo
 - **Project override**: `.claude/skills/devops-test-plan/profile.json` in the
   consumer project (merged over plugin defaults at detection time).
 
-The testing skills (`devops-tune-*`, `devops-run-backlog`, the QA agent) and the
+The testing skills (`tune-*`, `run-backlog`, the QA agent) and the
 completion-flow hooks apply this reference automatically when `$TEST_PROFILE` is
 absent. Do not duplicate profile-detection logic.
 
@@ -218,7 +218,7 @@ pure refactor/chore, one item stating the intent and how behaviour was kept
 equivalent suffices.
 
 **Carve-outs** (never trigger either gate): docs/markdown/config edits,
-`*.test`/`*.spec` files, and devops-concept pages under `docs/concepts/*.html`.
+`*.test`/`*.spec` files, and concept pages under `docs/concepts/*.html`.
 
 ---
 

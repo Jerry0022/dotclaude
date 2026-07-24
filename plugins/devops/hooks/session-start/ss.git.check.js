@@ -84,7 +84,7 @@ function readmeStaleness(dir) {
   if (!readmeTime || !rosterTime || rosterTime <= readmeTime) return null;
   // Throttle to once per 8h so it nudges during active dev without nagging.
   if (!runOnce('ss-git-readme-stale', null, { cooldownMs: 8 * 60 * 60 * 1000 })) return null;
-  return '📝 README.md is older than the skills/hooks/agents roster — run `/devops-setup-readme` or `node plugins/devops/scripts/gen-readme-sections.js` to refresh counts & lists.';
+  return '📝 README.md is older than the skills/hooks/agents roster — run `/setup-readme` or `node plugins/devops/scripts/gen-readme-sections.js` to refresh counts & lists.';
 }
 
 function checkRepo(dir) {
@@ -288,7 +288,7 @@ if (workspace) {
   out.push('Resolution per option:');
   out.push('  - Worktree+branch: `git worktree add ../<feature> -b claude/<feature>` then cd there');
   if (hasChanges) {
-    out.push('  - Ship-first: invoke /devops-ship, then create worktree');
+    out.push('  - Ship-first: invoke /ship, then create worktree');
     out.push('  - Take-along: `git stash`, create worktree, `cd <worktree>`, `git stash pop`');
   }
   if (workspace.type === 'on-main-no-worktree') {
@@ -313,7 +313,7 @@ for (const r of dirty) {
     switch (issue.type) {
       case 'uncommitted':
       case 'unpushed':
-        lines.push(`- ${issue.label} → run \`/devops-ship\` to commit, push & create PR`);
+        lines.push(`- ${issue.label} → run \`/ship\` to commit, push & create PR`);
         break;
       case 'stash':
         lines.push(`- ${issue.label} → review with \`git stash list\`, then \`git stash pop\` or \`git stash drop\``);
