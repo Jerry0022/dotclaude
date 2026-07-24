@@ -254,25 +254,28 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
 // ---------------------------------------------------------------------------
 
 const VARIANTS = {
-  'ship-successful': { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
-  ready:             { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
-  'ready-files':     { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
-  'ship-blocked':    { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
-  test:              { usage: true,  changes: true,  tests: true,  state: true,  userTest: true,  userFinalTest: false, deployGate: false },
-  'test-minimal':    { usage: false, changes: false, tests: false, state: false, userTest: false, userFinalTest: false, deployGate: false },
-  analysis:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
-  aborted:           { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
-  fallback:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true,  deployGate: true  },
+  'ship-successful': { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: true  },
+  ready:             { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: true  },
+  'ready-files':     { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: false },
+  released:          { usage: true,  changes: false, tests: false, state: false, userTest: false, userFinalTest: true,  deployGate: false, delivery: true  },
+  'ship-blocked':    { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: false },
+  test:              { usage: true,  changes: true,  tests: true,  state: true,  userTest: true,  userFinalTest: false, deployGate: false, delivery: false },
+  'test-minimal':    { usage: false, changes: false, tests: false, state: false, userTest: false, userFinalTest: false, deployGate: false, delivery: false },
+  analysis:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: false },
+  aborted:           { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: false },
+  fallback:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: false },
 };
 
 const CTA = {
   en: {
-    'ship-successful-merged':      '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 All DONE',
-    'ship-successful-merged-kept': '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 KEEP CODING in `{branch}`',
-    'ship-successful-plain':       '## \ud83d\ude80 SHIPPED \u2014 All DONE',
-    'ship-successful-plain-kept':  '## \ud83d\ude80 SHIPPED \u2014 KEEP CODING in `{branch}`',
+    'ship-successful-merged':      '## \ud83d\ude80 SHIPPED{chan}. merged \u2192 origin/{merged} \u2014 All DONE',
+    'ship-successful-merged-kept': '## \ud83d\ude80 SHIPPED{chan}. merged \u2192 origin/{merged} \u2014 KEEP CODING in `{branch}`',
+    'ship-successful-plain':       '## \ud83d\ude80 SHIPPED{chan} \u2014 All DONE',
+    'ship-successful-plain-kept':  '## \ud83d\ude80 SHIPPED{chan} \u2014 KEEP CODING in `{branch}`',
     'ship-successful-deploy-merged': '## \ud83d\ude80 MERGED \u2192 origin/{merged} \u2014 \ud83d\udea8 DEPLOY REQUIRED (not live yet)',
     'ship-successful-deploy-plain':  '## \ud83d\ude80 SHIPPED \u2014 \ud83d\udea8 DEPLOY REQUIRED (not live yet)',
+    'released-beta':               '## \ud83d\udd3c PROMOTED. v{version} \u2192 beta',
+    'released-stable':             '## \ud83c\udf8a RELEASED. v{version} \u2192 stable \u2014 LIVE',
     ready:                    '## \ud83d\udce6 READY \u2014 SHIP or CHANGE?',
     'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
     test:                     '## \ud83e\uddea DONE \u2014 SHIP after your TEST?',
@@ -282,12 +285,14 @@ const CTA = {
     fallback:                 '## \ud83d\udd27 DONE \u2014 Anything ELSE?',
   },
   de: {
-    'ship-successful-merged':      '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 Alles ERLEDIGT',
-    'ship-successful-merged-kept': '## \ud83d\ude80 SHIPPED. merged \u2192 origin/{merged} \u2014 WEITER in `{branch}`',
-    'ship-successful-plain':       '## \ud83d\ude80 SHIPPED \u2014 Alles ERLEDIGT',
-    'ship-successful-plain-kept':  '## \ud83d\ude80 SHIPPED \u2014 WEITER in `{branch}`',
+    'ship-successful-merged':      '## \ud83d\ude80 SHIPPED{chan}. merged \u2192 origin/{merged} \u2014 Alles ERLEDIGT',
+    'ship-successful-merged-kept': '## \ud83d\ude80 SHIPPED{chan}. merged \u2192 origin/{merged} \u2014 WEITER in `{branch}`',
+    'ship-successful-plain':       '## \ud83d\ude80 SHIPPED{chan} \u2014 Alles ERLEDIGT',
+    'ship-successful-plain-kept':  '## \ud83d\ude80 SHIPPED{chan} \u2014 WEITER in `{branch}`',
     'ship-successful-deploy-merged': '## \ud83d\ude80 GEMERGED \u2192 origin/{merged} \u2014 \ud83d\udea8 DEPLOY erforderlich (noch nicht live)',
     'ship-successful-deploy-plain':  '## \ud83d\ude80 SHIPPED \u2014 \ud83d\udea8 DEPLOY erforderlich (noch nicht live)',
+    'released-beta':               '## \ud83d\udd3c PROMOTED. v{version} \u2192 beta',
+    'released-stable':             '## \ud83c\udf8a RELEASED. v{version} \u2192 stable \u2014 LIVE',
     ready:                    '## \ud83d\udce6 READY \u2014 SHIP oder ÄNDERN?',
     'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
     test:                     '## \ud83e\uddea DONE \u2014 SHIP nach deinem TEST?',
@@ -484,6 +489,95 @@ function renderState(state, variant, repoUrl) {
   return line;
 }
 
+const DELIVERY_LABEL = {
+  de: { header: 'Delivery', noPr: 'kein PR', here: { alpha: '← hier', beta: '← promotet', stable: '← LIVE' } },
+  en: { header: 'Delivery', noPr: 'no PR',   here: { alpha: '← here', beta: '← promoted', stable: '← LIVE' } },
+};
+
+// Delivery track — the through-line of a delivery: (PR) → Ship → Promote, where
+// Promote fans out into the alpha→beta→stable channel ladder. States WHERE in
+// the pipeline this turn landed (✅ done · 🟢 current · ⚪ pending · ⏭ skipped).
+// Driven by the `delivery` field; rendered in ready / ship-successful / released.
+function renderDelivery(delivery, lang, repoUrl) {
+  if (!delivery) return '';
+  const L = DELIVERY_LABEL[lang] || DELIVERY_LABEL.de;
+  const v = (x) => '`v' + String(x).replace(/^v/, '') + '`';
+  const lines = ['**' + L.header + '**'];
+
+  // PR node — ✅ with number/title when a PR exists, else "⊘ no PR" (skipped).
+  const pr = delivery.pr;
+  if (pr && pr.number) {
+    const num = repoUrl ? '[#' + pr.number + '](' + repoUrl + '/pull/' + pr.number + ')' : '#' + pr.number;
+    lines.push('✅ PR ' + num + (pr.title ? ' · ' + pr.title : ''));
+  } else {
+    lines.push('⊘ PR — ' + L.noPr);
+  }
+
+  // Ship node — ✅ with base + version once shipped, else ⚪ pending.
+  const ship = delivery.ship;
+  if (ship && ship.version) {
+    lines.push('✅ Ship' + (ship.base ? ' → `' + ship.base + '`' : '') + ' · ' + v(ship.version));
+  } else {
+    lines.push('⚪ Ship');
+  }
+
+  // Promote node + channel ladder. No promote object → not reached yet.
+  const promote = delivery.promote;
+  if (!promote) {
+    lines.push('⚪ Promote');
+    return lines.join('\n');
+  }
+  const order = ['alpha', 'beta', 'stable'];
+  const channels = promote.channels || {};
+  const current = promote.current;
+  const currentIdx = order.indexOf(current);
+  // Master node: ✅ once stable is reached (whole ring done), else ◐ in progress.
+  lines.push((current === 'stable' ? '✅' : '◐') + ' Promote');
+  for (const ch of order) {
+    const ver = channels[ch];
+    let icon, tail;
+    if (ch === current) {
+      icon = '🟢'; // 🟢 current
+      tail = (ver ? v(ver) + ' ' : '') + L.here[ch];
+    } else if (promote.fastTrack && ch === 'beta' && currentIdx > order.indexOf('beta') && !ver) {
+      icon = '⏭️'; // ⏭ fast-track skipped beta
+      tail = 'skipped';
+    } else if (ver) {
+      icon = '✅'; // ✅ already passed
+      tail = v(ver);
+    } else {
+      icon = '⚪'; // ⚪ not reached
+      tail = '—';
+    }
+    // Indent the ladder under Promote with non-breaking spaces — markdown folds
+    // regular leading spaces inside a blockquote.
+    lines.push('\u00a0\u00a0' + icon + ' ' + ch.padEnd(6, '\u00a0') + ' ' + tail);
+  }
+  return lines.join('\n');
+}
+
+const PROMOTION_LABEL = {
+  de: { header: 'Promotion', pushed: 'Tags gepusht', commit: 'commit', release: 'GitHub Release erstellt', identical: 'bit-identisch — kein Rebuild, gleiche SHA' },
+  en: { header: 'Promotion', pushed: 'tags pushed',  commit: 'commit', release: 'GitHub Release created', identical: 'bit-identical — no rebuild, same SHA' },
+};
+
+// Promotion facts (released variant) — the concrete end-info of a channel
+// promotion: which tags were pushed at which SHA, whether a GitHub Release
+// exists (stable only), and that the artifact is bit-identical (pure re-tag).
+function renderPromotion(promotion, lang) {
+  if (!promotion) return '';
+  const L = PROMOTION_LABEL[lang] || PROMOTION_LABEL.de;
+  const bullets = [];
+  const tags = (promotion.tags || []).map(t => '`' + t + '`');
+  if (tags.length) {
+    const sha = promotion.sha ? ' (' + L.commit + ' `' + String(promotion.sha).slice(0, 7) + '`)' : '';
+    bullets.push('* ' + tags.join(' + ') + ' — ' + L.pushed + sha);
+  }
+  if (promotion.release) bullets.push('* ' + L.release + ' ✅');
+  bullets.push('* ' + L.identical);
+  return '**' + L.header + '**\n' + bullets.join('\n');
+}
+
 const USER_TEST_LABEL = {
   de: '\uD83D\uDD2C **Bitte testen:**',
   en: '\uD83D\uDD2C **Please test:**',
@@ -537,7 +631,7 @@ function renderDeployGate(items, lang) {
   return labels.header + '\n' + bullets.join('\n') + '\n\n_' + labels.hint + '_';
 }
 
-function renderCTA(variant, cta, lang, state) {
+function renderCTA(variant, cta, lang, state, delivery) {
   const templates = CTA[lang] || CTA.de;
   cta = cta || {};
 
@@ -555,13 +649,26 @@ function renderCTA(variant, cta, lang, state) {
       const base = (state && state.merged) ? 'ship-successful-merged' : 'ship-successful-plain';
       key = (state && state.kept) ? `${base}-kept` : base;
     }
+  } else if (variant === 'released') {
+    // Promotion CTA keys off the channel reached: → beta is an intermediate
+    // step ("PROMOTED"), → stable is the live release ("RELEASED — LIVE").
+    const to = (delivery && delivery.promote && delivery.promote.current) || cta.to;
+    key = to === 'stable' ? 'released-stable' : 'released-beta';
   } else {
     key = variant;
   }
 
+  // ship-successful names the published channel in its CTA ("SHIPPED → alpha")
+  // when the delivery track knows it — the last line states WHERE it landed.
+  const chan = (variant === 'ship-successful' && !(state && state.deployPending)
+    && delivery && delivery.promote && delivery.promote.current)
+    ? ' → ' + delivery.promote.current : '';
+  // released CTA version: from the delivery ship stage, else explicit cta.version.
+  const version = (delivery && delivery.ship && delivery.ship.version) || cta.version || '';
+
   let tpl = templates[key] || templates.fallback;
   // Merge state fields into cta for template substitution
-  const vars = Object.assign({}, cta, state ? { merged: state.merged || '', branch: state.branch || '' } : {});
+  const vars = Object.assign({}, cta, { chan, version }, state ? { merged: state.merged || '', branch: state.branch || '' } : {});
   tpl = tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] || '');
 
   return tpl;
@@ -704,6 +811,27 @@ function renderCard(input, meterText, buildId) {
     parts.push('');
   }
 
+  // Delivery track — the pipeline through-line (PR → Ship → Promote channels).
+  // First block after the title/stamps: it frames WHERE this turn sits in the
+  // delivery process before the change/promotion details below.
+  if (config.delivery) {
+    const deliveryBlock = renderDelivery(input.delivery, lang, getRepoUrl(input.cwd));
+    if (deliveryBlock) {
+      parts.push(blockquote(deliveryBlock));
+      parts.push('');
+    }
+  }
+
+  // Promotion facts (released) — rendered whenever provided (variant-agnostic,
+  // like validation/deployGate): the tags/SHA/GitHub-release end-info.
+  {
+    const promotionBlock = renderPromotion(input.promotion, lang);
+    if (promotionBlock) {
+      parts.push(blockquote(promotionBlock));
+      parts.push('');
+    }
+  }
+
   if (config.changes) {
     const changesBlock = renderChanges(input.changes);
     if (changesBlock) {
@@ -803,7 +931,7 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
-  parts.push(renderCTA(variant, input.cta, lang, input.state));
+  parts.push(renderCTA(variant, input.cta, lang, input.state, input.delivery));
   parts.push('');
 
   parts.push('---');
@@ -1029,9 +1157,9 @@ server.registerTool(
       "after the closing ---.",
     inputSchema: z.object({
       variant: z.enum([
-        "ship-successful", "ready", "ship-blocked", "test",
+        "ship-successful", "ready", "released", "ship-blocked", "test",
         "test-minimal", "analysis", "aborted", "fallback",
-      ]).describe("Card variant based on task outcome"),
+      ]).describe("Card variant based on task outcome. `released` is the channel-promotion card (promote alpha→beta→stable) rendered by the promote skill."),
       summary: z.string().max(80).describe("Max ~10 words, user's language"),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
       cwd: z.string().optional().describe("Working directory of the target repo. STRONGLY RECOMMENDED for ship-* variants — without it, getRepoUrl falls back to the MCP server's own cwd (plugin dir) and the card cannot render clickable PR/commit/branch links."),
@@ -1113,6 +1241,29 @@ server.registerTool(
           evidence: z.string().optional().describe("How you CONFIRMED it (the test that proves it, the behaviour observed) — not a restatement of the requirement."),
         })).max(4).optional(),
       ).describe("V&V gate — validation attestation (“did we build the RIGHT thing”). REQUIRED for any turn that changed source code: map each requirement / acceptance criterion to how this change meets it and how you confirmed it. A code-change card without `validation` is blocked once by stop.flow.guard and re-requested. For a pure refactor/chore with no explicit requirement, pass one item stating the intent and how behaviour was kept equivalent. Each item: { requirement, status: met|partial|unmet, evidence }."),
+      delivery: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.object({
+          pr: z.object({ number: z.number(), title: z.string() }).nullable().optional().describe("PR for this work, or null for a direct commit (PR node renders '⊘ no PR')."),
+          ship: z.object({ version: z.string(), base: z.string().optional() }).nullable().optional().describe("Ship stage: version merged to `base` (e.g. main). null = not shipped yet."),
+          promote: z.object({
+            channels: z.object({ alpha: z.string().nullable().optional(), beta: z.string().nullable().optional(), stable: z.string().nullable().optional() }).describe("Version reached per channel; null = not reached (renders as —)."),
+            current: z.enum(["alpha", "beta", "stable"]).optional().describe("Channel this turn landed on — highlighted 🟢 in the ladder."),
+            fastTrack: z.boolean().optional().describe("alpha→stable direct: beta renders as ⏭ skipped."),
+          }).nullable().optional().describe("Promote stage: alpha→beta→stable ladder. null = not promoted yet (Promote node ⚪)."),
+        }).optional(),
+      ).describe("Delivery track (ready / ship-successful / released) — the pipeline through-line PR → Ship → Promote(alpha→beta→stable) showing WHERE this turn sits (✅ done · 🟢 current · ⚪ pending). ship-successful also names the reached channel in its CTA. Populate the stages that happened; leave later ones null/absent."),
+      promotion: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.object({
+          from: z.enum(["alpha", "beta"]).optional(),
+          to: z.enum(["beta", "stable"]).optional().describe("Target channel — drives the released CTA (beta = PROMOTED, stable = RELEASED — LIVE)."),
+          sha: z.string().optional().describe("Commit SHA the tags point at (bit-identical re-tag)."),
+          tags: z.array(z.string()).optional().describe("Tags pushed by ship_promote, e.g. ['stable/v0.117.0', 'v0.117.0']."),
+          release: z.boolean().optional().describe("A GitHub Release exists (stable only)."),
+          fastTrack: z.boolean().optional(),
+        }).optional(),
+      ).describe("Promotion facts (released variant) — the end-info of a channel promotion: tags pushed at which SHA, whether a GitHub Release exists (stable), and that the re-tag is bit-identical. Populate from the ship_promote result."),
     }),
   },
   async (params) => {

@@ -101,12 +101,21 @@ skip-if-exists idempotent; an already-completed step returns
 
 ## Step 4 — Report
 
-Render the completion card (`render_completion_card`, variant `ready`,
-summary "promoted vX.Y.Z to <channel>"). Include:
-- the new one-line channel state (re-run Step 1)
-- for stable: whether the GitHub Release exists (`release: true`)
-- any `userFinalTest` item for lagging consumers ("Consumer-Maschine:
-  nächster SessionStart pinnt auf stable/vX.Y.Z")
+Render the completion card (`render_completion_card`, variant **`released`**,
+summary e.g. "vX.Y.Z auf <channel> promotet"). Populate:
+- `delivery` — the pipeline track. Fill `pr`/`ship` when known, and
+  `promote: { channels: { alpha, beta, stable }, current: "<target>", fastTrack }`
+  using the per-channel versions from the re-run Step 1 (null for a channel not
+  yet reached → renders as —). `current` is the channel just promoted to.
+- `promotion` — the end-info straight from the `ship_promote` result:
+  `{ from, to, sha, tags: <result.pushed>, release: <result.release> }`. The CTA
+  keys off `to`: beta → "🔼 PROMOTED", stable → "🎊 RELEASED — LIVE".
+- `userFinalTest` — a lagging-consumer note ("Consumer-Maschine: nächster
+  SessionStart pinnt auf <channel>/vX.Y.Z"); for stable pass
+  `{ action, afterDeployment: true }`.
+
+Do NOT use variant `ready` — its CTA reads "SHIP or CHANGE?", which is wrong for
+a *completed* promotion. `released` is the purpose-built variant.
 
 ## Rollback = roll forward
 
