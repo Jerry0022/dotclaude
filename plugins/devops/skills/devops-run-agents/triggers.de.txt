@@ -1,4 +1,0 @@
-# German trigger phrases for devops-run-agents.
-orchestriere
-agents einsetzen
-lass agents das machen

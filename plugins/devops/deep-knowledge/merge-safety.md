@@ -1,7 +1,7 @@
 # Merge Safety — Parallel Development
 
 Cross-cutting reference for preventing silent overwrites when multiple developers
-(humans or agents) work in parallel. Referenced by `git-sync`, `/devops-ship`,
+(humans or agents) work in parallel. Referenced by `git-sync`, `/ship`,
 and agent collaboration flows.
 
 ## Core Principle
@@ -17,7 +17,7 @@ resolve **every** file edit against the worktree root — never the bare main-re
 root (`…/<repo>/plugins/…`). They are separate working directories on separate
 branches.
 
-**Why:** the main checkout may run a parallel `/devops-ship` or `git-sync` that
+**Why:** the main checkout may run a parallel `/ship` or `git-sync` that
 does `git reset --hard` / `git checkout`. Uncommitted edits made to the main
 checkout's files are silently wiped by that reset — the Edit tool reports
 success, you see confusing "file modified since read" races, and the change is
@@ -105,7 +105,7 @@ unsupported or unparseable files.
 
 - `git-sync` cron merging parent branches into the current working branch
 - Feature agent merging sub-agent branches at integration
-- `/devops-ship` when base branch has diverged
+- `/ship` when base branch has diverged
 - Any `git merge` or `git rebase` during collaborative work
 
 ## Conflict Resolution Protocol
@@ -171,13 +171,13 @@ After all textual conflicts are resolved (or after a clean merge):
 3. **If the project has build/lint/typecheck** → run it to catch compilation errors
 4. If semantic issues found → fix them as part of the merge resolution
 5. **Purpose-level verification (ship flow only):** code-semantic checks catch
-   broken wiring, not broken *intent*. During `/devops-ship`, the Purpose
+   broken wiring, not broken *intent*. During `/ship`, the Purpose
    Alignment Gate additionally verifies that the merged result honors the
    goals and cross-cutting conventions of recently merged branches — in both
    directions (e.g. "all elements get hotkeys" must cover an element the
    other branch added, and a convention introduced on the shipping branch is
    retro-applied to existing artifacts).
-   See `skills/devops-ship/deep-knowledge/purpose-alignment.md`. The git-sync
+   See `skills/ship/deep-knowledge/purpose-alignment.md`. The git-sync
    cron resolves code-level conflicts only — purpose alignment runs at ship
    time.
 

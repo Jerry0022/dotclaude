@@ -92,7 +92,7 @@ process.stdin.on('end', () => {
 
   process.stderr.write(
     `[pre.main.guard] BLOCKED: Write operation on local '${branch}' is not allowed.\n` +
-    `[pre.main.guard] Rule: Never commit/merge/push directly on ${branch}. Work on a branch derived from origin/${branch} and land via /devops-ship.\n` +
+    `[pre.main.guard] Rule: Never commit/merge/push directly on ${branch}. Work on a branch derived from origin/${branch} and land via /ship.\n` +
     `[pre.main.guard] Fix: git fetch origin && git switch -c <feat/topic> origin/${branch}\n` +
     `[pre.main.guard] Bypass (only if the user explicitly asked to work on ${branch}): set env DEVOPS_ALLOW_MAIN=1 for this single command.\n`
   );

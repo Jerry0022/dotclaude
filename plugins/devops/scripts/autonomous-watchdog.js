@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * autonomous-watchdog.js — External safety net for devops-run-autonomous.
+ * autonomous-watchdog.js — External safety net for run-autonomous.
  *
  * Registers a Windows Scheduled Task that fires after N hours. The task checks
  * for a "done-flag" file; if it's missing, the task takes a recovery action

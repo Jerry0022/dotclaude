@@ -15,7 +15,7 @@ PATCH  → Bug fixes, doc updates, internal improvements
 Current version is tracked in `.claude-plugin/plugin.json` → `"version"`.
 
 **Release channels (ring model):** every ship to main creates the annotated
-tag `alpha/vX.Y.Z` automatically. Promotion (`/devops-release`) re-tags the
+tag `alpha/vX.Y.Z` automatically. Promotion (`/promote`) re-tags the
 SAME commit as `beta/vX.Y.Z`, then `stable/vX.Y.Z` + bare `vX.Y.Z` (stable
 alias, triggers the Release workflow). Version files never carry a channel;
 published tags are never moved or deleted. Consumers pin a channel per
@@ -102,7 +102,7 @@ deep-knowledge/
 to find the right file. This avoids unnecessary reads and saves context tokens.
 
 **vs. skill-level deep-knowledge:**
-- `skills/devops-ship/deep-knowledge/versioning.md` → only used by `/devops-ship`
+- `skills/ship/deep-knowledge/versioning.md` → only used by `/ship`
 - `deep-knowledge/test-strategy.md` → used by hooks AND skills
 
 Hooks reference plugin-level deep-knowledge in their stdout instructions to Claude.
@@ -181,7 +181,7 @@ Silently check for optional overrides (do not surface "not found" in output):
 (via `/skill-creator` or manually), always include the Step 0 extension
 load sequence. Skills that skip this step are non-compliant.
 
-**Example: A user extends `/devops-ship` for their own project:**
+**Example: A user extends `/ship` for their own project:**
 
 ```
 my-project/
@@ -192,11 +192,11 @@ my-project/
             └── reference.md    ← "Deploy via SSH to <internal-host>"
 ```
 
-The plugin's `/devops-ship` reads these before executing and integrates the rules.
+The plugin's `/ship` reads these before executing and integrates the rules.
 
 **Eat-your-own-dogfood:** This plugin's own repo (`devops/`) uses
 the same mechanism. Project-specific ship rules live in `.claude/skills/ship/`
-within this repo — no separate `/devops-ship-dotclaude` skill needed.
+within this repo — no separate `/ship-dotclaude` skill needed.
 
 ## Script Conventions
 
@@ -265,7 +265,7 @@ preflight verify (catches the un-generated tables) → session nudge (catches
 The markers above cover **machine facts only**. The **content** layer — prose,
 flows, folder structure, curated descriptions — is kept current by people and
 agents, not generators: implementation agents update affected docs as part of
-their change, and `/devops-ship` Step 2.6 (Docs-Sync) reconciles living docs
+their change, and `/ship` Step 2.6 (Docs-Sync) reconciles living docs
 against the shipped diff before the version bump. Proportional (trivial changes
 need none), non-blocking, and it never rewrites dated specs/concepts. Rules and
 the trigger matrix: `deep-knowledge/documentation-maintenance.md`.

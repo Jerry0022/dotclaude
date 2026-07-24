@@ -21,7 +21,7 @@ It fires whenever a task is fully completed and Claude is waiting for the next u
 2. **Issue status** — if an issue is tracked (via `prompt.issue.detect` hook),
    update its status
 3. **Completion Card** — render per `templates/completion-card.md`
-4. **Ship recommendation** — after 5+ code edits, recommend `/devops-ship`
+4. **Ship recommendation** — after 5+ code edits, recommend `/ship`
 
 **Hook architecture:**
 
@@ -90,7 +90,7 @@ Most specific wins. See `CONVENTIONS.md` for details.
 ## Issue Creation — Always Delegate
 
 When a skill or hook needs to create a GitHub issue, it MUST delegate to
-`/devops-setup-issue` via the **Skill** tool — never call `gh issue create`
+`/setup-issue` via the **Skill** tool — never call `gh issue create`
 directly. The new-issue skill enforces title format, label set, milestone,
 project-board placement, and loads project-specific extensions from
 `{project}/.claude/skills/new-issue/`. Direct `gh issue create` calls

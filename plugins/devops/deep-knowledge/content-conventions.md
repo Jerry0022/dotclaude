@@ -1,7 +1,7 @@
 # Content Conventions — Sizing & Self-Reference
 
 How to size and structure project-persistent content (CLAUDE.md, skills,
-deep-knowledge). Referenced by `/devops-claude-learn`, `/devops-claude-lint`, and
+deep-knowledge). Referenced by `/claude-learn`, `/claude-lint`, and
 all skill authoring.
 
 These are **soft caps** — they bias routing decisions, they don't hard-fail.
@@ -29,7 +29,7 @@ When adding new content would push a file past its budget:
 
 The cap is stylistic. If the rule itself is short and the file is already over
 budget for unrelated reasons, just append — size-rebalancing is a separate
-concern handled by `/devops-claude-lint` and ordinary refactor passes.
+concern handled by `/claude-lint` and ordinary refactor passes.
 
 ## Self- and plugin-references over command redundancy
 
@@ -37,13 +37,13 @@ When a new rule says "do X", check first whether X is already a plugin skill,
 agent, hook, or deep-knowledge doc. **A reference is always preferred over a
 duplicate.** Examples:
 
-- "always commit conventionally" → reference `/devops-commit`, do NOT
+- "always commit conventionally" → reference `/commit`, do NOT
   re-document the commit format
-- "always run pre-flight before shipping" → reference `/devops-ship`, do NOT
+- "always run pre-flight before shipping" → reference `/ship`, do NOT
   re-list the pipeline steps
-- "open issues with the right labels" → reference `/devops-setup-issue`, do NOT
+- "open issues with the right labels" → reference `/setup-issue`, do NOT
   duplicate the label rules
-- "check branch hygiene before shipping" → reference `/devops-setup-cleanup`,
+- "check branch hygiene before shipping" → reference `/setup-cleanup`,
   do NOT re-document the cleanup steps
 - Generic conventions (browser tools, MCP deferred tools, code defaults,
   merge safety, …) → reference the existing `deep-knowledge/*.md` file by

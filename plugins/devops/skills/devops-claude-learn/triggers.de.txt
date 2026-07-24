@@ -1,6 +1,0 @@
-# German trigger phrases for devops-claude-learn.
-lerne das
-merk dir das fürs Projekt
-das soll Claude lernen
-projektspezifisch merken
-Learning festhalten

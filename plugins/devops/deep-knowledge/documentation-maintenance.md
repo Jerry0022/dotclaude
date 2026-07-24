@@ -2,7 +2,7 @@
 
 Keep project docs in their target state as behavior, flows, and architecture change.
 
-Cross-cutting rule for every implementation agent and for `/devops-ship`. It covers
+Cross-cutting rule for every implementation agent and for `/ship`. It covers
 the **content** layer of documentation — prose, flows, folder structure, curated
 descriptions — which no generator maintains. The mechanical roster layer (counts,
 hook lifecycle, skill/agent table rows) is handled separately by
@@ -75,7 +75,7 @@ Restructuring `docs/` is in scope — but bounded:
 - **Implementation agents** — as part of the *same* change that alters behavior,
   a flow, or architecture; never a deferred pass. Proportional per the matrix
   above (most changes need nothing).
-- **`/devops-ship` Step 2.6 (Docs-Sync)** — a reconciliation gate against the
+- **`/ship` Step 2.6 (Docs-Sync)** — a reconciliation gate against the
   frozen shipped diff, before the version bump. It is the safety net that catches
   living-doc drift the implementer missed, and its edits land in the version-bump
   commit. Non-blocking: a ship never aborts over docs; unavoidable doc debt is

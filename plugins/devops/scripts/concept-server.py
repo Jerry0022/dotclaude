@@ -34,7 +34,7 @@ Replaces `python -m http.server` with a custom server that adds:
   the browser polls and reloads when the counter advances.
 - POST /shutdown — Graceful self-termination. Same-origin gate (curl with
   no Origin header, or fetch from the served page). Used by the cleanup
-  path in /devops-concept Step 6 and by the watchdog when state files
+  path in /concept Step 6 and by the watchdog when state files
   vanish. PID-based kill is unreliable on Windows after process
   recycling — an HTTP endpoint targets the live process by port.
 

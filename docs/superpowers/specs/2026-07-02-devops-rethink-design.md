@@ -134,7 +134,7 @@ to the corridor:
 
 ### Step 6 — Concept Page
 
-Invoke `devops-concept` (decision template). Each approach is a variant with:
+Invoke `concept` (decision template). Each approach is a variant with:
 pros/cons, blast-radius label, effort estimate, migration sketch, and which
 success criteria it serves. Two decision actions:
 

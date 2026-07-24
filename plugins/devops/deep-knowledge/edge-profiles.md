@@ -23,7 +23,7 @@ Configuration and usage rules for the two Microsoft Edge profiles used by this p
 | Cookies / logins | User's actual cookies, persistent across sessions | Isolated; one-time login required per machine |
 | Tab interaction | DOM and CDP via Chrome-MCP extension | CDP via WebSocket on a dedicated port |
 | Window placement | **Always a separate window** via `--new-window` flag (own Alt-Tab entry; shares taskbar icon with main Edge due to profile grouping) | Headless — no visible window |
-| When triggered | Any test / browser task | `/devops-auto-usage` skill |
+| When triggered | Any test / browser task | `/auto-usage` skill |
 | Computer-use visibility | Visible in screenshots (read-only tier) | Not visible; headless CDP only |
 
 ---
@@ -65,4 +65,4 @@ to it. For click-level interaction in the browser, use Chrome-MCP tools instead.
 | Topic | File |
 |-------|------|
 | Browser tool waterfall and tier rules | [browser-tool-strategy.md](browser-tool-strategy.md) |
-| refresh-usage skill | `plugins/devops/skills/devops-auto-usage/` |
+| refresh-usage skill | `plugins/devops/skills/auto-usage/` |

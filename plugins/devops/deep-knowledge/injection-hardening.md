@@ -2,7 +2,7 @@
 
 Cross-cutting defense for any skill or agent that reads untrusted content (files,
 web pages, tool output) while holding private data and the ability to act. Most
-critical in **unsupervised** runs (`devops-run-autonomous`) where no human reviews a
+critical in **unsupervised** runs (`run-autonomous`) where no human reviews a
 bad call mid-flight.
 
 ## The Lethal Trifecta
@@ -56,7 +56,7 @@ outbound action.
 
 ## Autonomous-Mode Specifics
 
-In `devops-run-autonomous` the asymmetry is the whole problem: the outbound legs are
+In `run-autonomous` the asymmetry is the whole problem: the outbound legs are
 already constrained by the Step-5 guardrails (no push, no comms, no PRs), **but
 `WebFetch`/`WebSearch` remain enabled** for research. That single open channel is
 enough to complete the trifecta. Therefore, under the Lockout:

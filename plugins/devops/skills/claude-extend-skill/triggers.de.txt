@@ -1,0 +1,3 @@
+# German trigger phrases for claude-extend-skill.
+Skill erweitern
+Skill anpassen

@@ -92,7 +92,7 @@ registerTool(
   "Ship Promote",
   "Promote a shipped version to a higher channel (alpha→beta→stable) by re-tagging the SAME commit SHA. " +
   "Never rebuilds, never bumps versions — bit-identical ring promotion via annotated tags. " +
-  "Idempotent: re-run after partial failure completes the missing steps. Used by /devops-release, never by /devops-ship.",
+  "Idempotent: re-run after partial failure completes the missing steps. Used by /promote, never by /ship.",
   promoteSchema,
   promoteHandler,
 );

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the alpha/beta/stable ring model from `docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`: ship tags `alpha/vX.Y.Z` autonomously, `ship_promote` + `/devops-release` promote the same SHA, the consumer hook pins a channel via tag resolution.
+**Goal:** Implement the alpha/beta/stable ring model from `docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`: ship tags `alpha/vX.Y.Z` autonomously, `ship_promote` + `/promote` promote the same SHA, the consumer hook pins a channel via tag resolution.
 
 **Architecture:** Shared pure helpers exist twice by necessity — ESM (`mcp-server/ship/lib/channels.js`, imported by tools) and CJS (`hooks/lib/channels.js`, hooks must stay dependency-free standalone scripts). Both are small and tested independently. All git effects go through existing `lib/git.js` / `lib/github.js` patterns.
 
@@ -88,23 +88,23 @@ Handler logic (spec §4.1): ls-remote source tag → SHA; monotonicity guard (em
 - [ ] **Step 4: Run lib tests + `node -c`-style smoke** (`node --check ss.plugin.update.js`) — PASS.
 - [ ] **Step 5: Commit** `feat(hooks): channel-aware plugin updates (tag pinning + bootstrap fallback)`
 
-### Task 5: `/devops-release` skill
+### Task 5: `/promote` skill
 
 **Files:**
-- Create: `plugins/devops/skills/devops-release/SKILL.md`
+- Create: `plugins/devops/skills/promote/SKILL.md`
 
-Content per spec §4.2: frontmatter (name devops-release, triggers "release", "promote", "promotion", "channel release", explicit-invocation bias), one-line channel state via `git ls-remote --tags origin`, AskUserQuestion with precomputed meaningful promotions (recommended first), fast-track = two `ship_promote` calls with retry semantics, completion card. Document `cwd` requirement like devops-ship does.
+Content per spec §4.2: frontmatter (name promote, triggers "release", "promote", "promotion", "channel release", explicit-invocation bias), one-line channel state via `git ls-remote --tags origin`, AskUserQuestion with precomputed meaningful promotions (recommended first), fast-track = two `ship_promote` calls with retry semantics, completion card. Document `cwd` requirement like ship does.
 
 - [ ] **Step 1: Write SKILL.md** (skills have no unit tests; validate against `plugins/devops/CONVENTIONS.md` skill structure).
-- [ ] **Step 2: Commit** `feat(skills): /devops-release — deliberate channel promotion`
+- [ ] **Step 2: Commit** `feat(skills): /promote — deliberate channel promotion`
 
 ### Task 6: Ship skill nudge + plugin-update channel UX + docs
 
 **Files:**
-- Modify: `plugins/devops/skills/devops-ship/SKILL.md` (Step 4: tag is `alpha/vX.Y.Z`; Step 6: promotion-gap nudge — compute drift via `git ls-remote --tags origin 'refs/tags/stable/*' 'refs/tags/v*'`, escalate ≥3 versions/≥7 days, add as card `userFinalTest`/summary line)
-- Modify: `plugins/devops/skills/devops-auto-update/SKILL.md` (`--channel` flag → writes sidecar; drift line "latest visible vN (alpha has vM available)")
+- Modify: `plugins/devops/skills/ship/SKILL.md` (Step 4: tag is `alpha/vX.Y.Z`; Step 6: promotion-gap nudge — compute drift via `git ls-remote --tags origin 'refs/tags/stable/*' 'refs/tags/v*'`, escalate ≥3 versions/≥7 days, add as card `userFinalTest`/summary line)
+- Modify: `plugins/devops/skills/auto-update/SKILL.md` (`--channel` flag → writes sidecar; drift line "latest visible vN (alpha has vM available)")
 - Modify: `plugins/devops/CONVENTIONS.md` (ring-model tagging convention)
-- Modify: `plugins/devops/skills/devops-ship/deep-knowledge/versioning.md` + `release-flow.md` (channel section)
+- Modify: `plugins/devops/skills/ship/deep-knowledge/versioning.md` + `release-flow.md` (channel section)
 - Modify: `.github/workflows/release.yml` (checkout `fetch-depth: 0` + `fetch-tags: true`; `git describe --tags --match 'v[0-9]*' --abbrev=0 HEAD~1`)
 
 - [ ] **Step 1: Apply all edits.**
@@ -114,4 +114,4 @@ Content per spec §4.2: frontmatter (name devops-release, triggers "release", "p
 
 - [ ] **Step 1:** `npm test` — all green (expect existing suite + new tests).
 - [ ] **Step 2:** `npm run lint` — clean.
-- [ ] **Step 3:** CHANGELOG entry for the feature version; then `/devops-ship` (minor bump). Rollout checklist §5.4 note: steps 2–5 of the checklist (release.yml live check, content-identity, fast-track stable promotion, consumer verify) happen POST-ship via `/devops-release` — the bootstrap fallback keeps consumers safe until then.
+- [ ] **Step 3:** CHANGELOG entry for the feature version; then `/ship` (minor bump). Rollout checklist §5.4 note: steps 2–5 of the checklist (release.yml live check, content-identity, fast-track stable promotion, consumer verify) happen POST-ship via `/promote` — the bootstrap fallback keeps consumers safe until then.

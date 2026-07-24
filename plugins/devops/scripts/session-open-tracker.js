@@ -7,9 +7,9 @@
  *
  * Background
  * ----------
- * Many devops skills (devops-concept, devops-run-autonomous, …) write a local HTML
+ * Many devops skills (concept, run-autonomous, …) write a local HTML
  * artefact inside the current worktree and open it via `start msedge "file://…"`.
- * When `/devops-ship` later runs `ship_cleanup`, the worktree directory is
+ * When `/ship` later runs `ship_cleanup`, the worktree directory is
  * pruned and the user's browser tab now 404s on a path that no longer exists.
  *
  * The merged HTML still lives at the equivalent path inside the main repo,
@@ -187,7 +187,7 @@ function cmdTrack(argv) {
   const file = storePath(cwd);
   if (!file) {
     // Not in a git repo — silently skip. Tracking only matters for repos
-    // that go through /devops-ship.
+    // that go through /ship.
     return;
   }
   const store = pruneStale(loadStore(file));
@@ -231,7 +231,7 @@ function cmdPrune() {
 
 /**
  * Re-open every tracked file that lives under `--worktree=<path>` from the
- * main-repo equivalent path. Used by `/devops-ship` Step 5 after
+ * main-repo equivalent path. Used by `/ship` Step 5 after
  * `ship_cleanup` has removed the worktree.
  */
 function cmdReopenMain(argv) {
@@ -311,7 +311,7 @@ function cmdReopenMain(argv) {
   store.files = surviving;
   if (!dryRun) saveStore(file, store);
 
-  // Single-line summary so /devops-ship can relay it.
+  // Single-line summary so /ship can relay it.
   const summary = {
     mainRoot,
     worktree: wt,

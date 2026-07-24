@@ -152,7 +152,7 @@ process.stdin.on('end', () => {
   //   light-pending → a code file changed and still needs a Light check, scoped
   //     to the active $TEST_PROFILE (DOM profiles → web-renderable files only;
   //     runner/unknown profiles → any source file). Docs/markdown/config edits,
-  //     *.test/*.spec files, and devops-concept pages never set this.
+  //     *.test/*.spec files, and concept pages never set this.
   //   light-kind   → which Light check is required ('dom' | 'runner' | 'any'),
   //     so the Stop hook can render the right instruction.
   //   light-verified → an OBSERVABLE matching verification ran (browser tool for
@@ -280,7 +280,7 @@ process.stdin.on('end', () => {
   if (editCount >= 5) {
     lines.push(
       '',
-      `SHIP: ${editCount} code edits this session. Recommend /devops-ship when task is done.`,
+      `SHIP: ${editCount} code edits this session. Recommend /ship when task is done.`,
     );
     // Desktop-takeover question — only inject if profile lists packaged_electron_final_test as must-ask
     const lang = getLocale(hook.session_id);

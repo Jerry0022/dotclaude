@@ -25,7 +25,7 @@
  *       and is cleared whenever a new qualifying edit lands.
  *
  *   Flags are written by post.flow.completion; docs/markdown/config and
- *   devops-concept pages are excluded there. Decision logic lives in
+ *   concept pages are excluded there. Decision logic lives in
  *   lib/browsertest-guard.js (pure, unit-tested).
  *
  *   Runs BEFORE stop.flow.guard so the "verify first" instruction is delivered
