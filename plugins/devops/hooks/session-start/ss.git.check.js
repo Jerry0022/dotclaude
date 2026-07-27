@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 /**
  * @hook ss.git.check
- * @version 0.4.0
+ * @version 0.5.0
  * @event SessionStart
  * @plugin devops
  * @description Check for stale changes AND workspace setup issues at session
  *   start. Filters out active worktree branches to avoid false positives.
  *   Silent when clean. Outputs structured CTAs when issues are found.
+ *
+ *   Findings are emitted unconditionally and instruct the assistant to carry
+ *   them into its final report; the AskUserQuestion block is layered on top for
+ *   sessions that can prompt. A scheduled/headless run therefore still reports
+ *   what was found instead of dropping it with the skipped question (#268).
+ *   Composition lives in ../lib/git-check-output.js.
  *
  *   Workspace check (current repo only):
  *     - On main/master without worktree → high-priority warning, suggests
@@ -25,6 +31,7 @@
 require('../lib/plugin-guard');
 const { isActive: sentinelActive } = require('../lib/ship-sentinel');
 const { runOnce } = require('../lib/run-once');
+const { compose } = require('../lib/git-check-output');
 
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -243,97 +250,10 @@ if (dirty.length === 0 && !workspace && !staleNote) {
   process.exit(0);
 }
 
-// Build structured output with CTAs
-const out = [];
-
-if (workspace) {
-  const stagedTypes = new Set(['uncommitted', 'unpushed']);
-  const currentDirty = dirty.find(d => d.dir === cwd);
-  const pendingIssues = currentDirty
-    ? currentDirty.issues.filter(i => stagedTypes.has(i.type))
-    : [];
-  const hasChanges = pendingIssues.length > 0;
-
-  out.push('Workspace check at session start. Show this summary AS-IS and call AskUserQuestion as the FIRST action of this turn:');
-  out.push('');
-  out.push('**Workspace setup**');
-  switch (workspace.type) {
-    case 'on-main-no-worktree':
-      out.push(`- ⚠ On \`${workspace.branch}\` in repo root (not in a worktree) — write ops will be blocked by pre.main.guard / pre.edit.branch`);
-      break;
-    case 'detached-no-worktree':
-      out.push('- ⚠ Detached HEAD in repo root (not in a worktree) — commits will not belong to any branch');
-      break;
-    default:
-      out.push(`- On \`${workspace.branch}\` in repo root (not in a worktree)`);
-  }
-  if (hasChanges) {
-    out.push(`- Pending: ${pendingIssues.map(i => i.label).join(', ')}`);
-  }
-  out.push('');
-  out.push('Ask the user (in their language) via AskUserQuestion. Suggested options:');
-  if (hasChanges) {
-    out.push('  - Worktree + Feature-Branch anlegen');
-    out.push('  - Erst aktuelle Changes shippen (commit + push), dann Worktree anlegen (recommended)');
-    out.push('  - Changes mitnehmen in neuen Worktree (git stash → create → pop)');
-  } else {
-    out.push('  - Worktree + Feature-Branch anlegen (recommended)');
-  }
-  if (workspace.severity === 'high' && workspace.type === 'on-main-no-worktree') {
-    out.push('  - Hier bleiben (bypass: DEVOPS_ALLOW_MAIN=1 für diese Session)');
-  } else {
-    out.push('  - Hier bleiben (Warning bleibt informativ — kein Bypass-Flag nötig)');
-  }
-  out.push('');
-  out.push('Resolution per option:');
-  out.push('  - Worktree+branch: `git worktree add ../<feature> -b claude/<feature>` then cd there');
-  if (hasChanges) {
-    out.push('  - Ship-first: invoke /ship, then create worktree');
-    out.push('  - Take-along: `git stash`, create worktree, `cd <worktree>`, `git stash pop`');
-  }
-  if (workspace.type === 'on-main-no-worktree') {
-    out.push('  - Stay: set env `DEVOPS_ALLOW_MAIN=1` for this session to silence main-branch checks');
-  }
-  out.push('');
-}
-
-const staleHeaderShown = !workspace && dirty.length > 0;
-if (staleHeaderShown) {
-  out.push('Stale changes found at session start. Show the user this summary as-is:');
-  out.push('');
-}
-
-for (const r of dirty) {
-  const lines = [];
-  for (const issue of r.issues) {
-    if (workspace && r.dir === cwd
-        && (issue.type === 'uncommitted' || issue.type === 'unpushed')) {
-      continue;
-    }
-    switch (issue.type) {
-      case 'uncommitted':
-      case 'unpushed':
-        lines.push(`- ${issue.label} → run \`/ship\` to commit, push & create PR`);
-        break;
-      case 'stash':
-        lines.push(`- ${issue.label} → review with \`git stash list\`, then \`git stash pop\` or \`git stash drop\``);
-        break;
-    }
-  }
-  if (lines.length > 0) {
-    const header = workspace && r.dir === cwd
-      ? 'Additional in current repo:'
-      : `**${r.label}**`;
-    out.push(header);
-    out.push(...lines);
-    out.push('');
-  }
-}
-
-if (staleNote) {
-  if (out.length > 0) out.push('');
-  out.push(staleNote);
-}
+// Build structured output with CTAs.
+// Composition lives in hooks/lib/git-check-output.js so it is unit-testable and
+// so the "findings are never coupled to the ask" invariant (#268) has one home.
+const out = compose({ dirty, workspace, staleNote, cwd });
 
 if (out.length === 0) process.exit(0);
 
