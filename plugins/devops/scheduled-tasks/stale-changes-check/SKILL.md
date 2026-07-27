@@ -1,13 +1,13 @@
 ---
 name: stale-changes-check
 description: Session-start hook that checks for uncommitted/unpushed changes and warns the user only when issues exist.
-version: 0.2.0
-trigger: SessionStart (hook ss.stale.check.js)
+version: 0.3.0
+trigger: SessionStart (hook ss.git.check.js)
 ---
 
 # Stale Changes Check
 
-Runs automatically at every session start via `hooks/session-start/ss.stale.check.js`.
+Runs automatically at every session start via `hooks/session-start/ss.git.check.js`.
 Silent when everything is clean. Only surfaces a brief warning when issues are found.
 
 ## What the hook checks
@@ -28,8 +28,16 @@ defined in `~/.claude/scheduled-tasks/stale-changes-check/reference.md`:
 ## Output behaviour
 
 - **Clean** → hook exits silently, nothing shown to user.
-- **Issues found** → hook writes a one-line prompt to stdout; Claude relays a
+- **Issues found** → hook writes a structured summary to stdout; Claude relays a
   brief inline warning to the user (no full report, no table).
+
+Findings are **never coupled to a question**. The hook always emits them and
+instructs the assistant to restate them in its final message, before any
+completion card. When a workspace issue is also present, the AskUserQuestion
+block is layered on top — so an interactive session asks, while a scheduled,
+cron or headless session (which cannot answer a modal) still reports what was
+found instead of dropping it with the skipped question. See
+`hooks/lib/git-check-output.js`.
 
 ## Constraints
 

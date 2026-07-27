@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.123.2] — 2026-07-28
+
+### Fixed
+
+- **A scheduled or headless session no longer silently swallows the loose ends the session-start check found.** The workspace check rendered the current repo's uncommitted/unpushed findings only inside its `AskUserQuestion` block, and actively suppressed them from the plain report section whenever a workspace issue was present. A cron routine or headless run correctly skips the question it cannot answer — and the entire finding disappeared with it: neither acted on nor mentioned in the run's report. In one observed case 13 unpushed commits sat invisible on a branch with no PR until a later interactive session happened to ask.
+
+  Fixed by decoupling rather than by detecting the session type. No non-interactive signal exists at `SessionStart` (nothing in the hooks reads one, and the cron detector `prompt.flow.silent-turn` fires at `UserPromptSubmit` — after this hook has already emitted), so any detection would have been new, unverified, and able to fail open into the exact same bug. Findings are now emitted unconditionally and instruct the assistant to restate them in its final message, before any completion card; the `AskUserQuestion` block is layered on top, its "FIRST action of this turn" mandate unchanged, so interactive sessions behave exactly as before. Composition moved into the new `hooks/lib/git-check-output.js` so the decision is unit-testable — 31 colocated tests, mutation-verified: reintroducing the old suppression fails 5 of them. Codex review gate unavailable this ship (external usage limit) — covered by an adversarial red-team pass whose two findings (the ask mandate demoted below the findings; "final report" naming no landing zone compatible with the card-must-be-last rule) were both folded in before merge.
+
 ## [0.123.1] — 2026-07-24
 
 ### Fixed
