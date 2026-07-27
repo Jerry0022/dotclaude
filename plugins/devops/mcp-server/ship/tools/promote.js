@@ -12,51 +12,31 @@ import { execFileSync } from "node:child_process";
 import { git, gitStrict } from "../lib/git.js";
 import { createRelease, releaseExists } from "../lib/github.js";
 import { parseChannelTag, compareVersions } from "../lib/channels.js";
+import { parseLsRemoteTagOutput } from "../lib/remote-tags.js";
+import { retryUntil } from "../lib/retry.js";
+
+// Re-exported: the ls-remote dialect now lives in lib/remote-tags.js (shared
+// with ship_release), but this module is its established import site.
+export { parseLsRemoteTagOutput };
 
 export const schema = z.object({
-  version: z.string().describe("Bare version to promote, e.g. 0.113.0 (no v prefix, no channel)"),
+  // Constrained on purpose: `version` is interpolated into shell-executed git
+  // command strings (git()/gitStrict() run through cmd.exe on Windows), so an
+  // unvalidated string is a command-injection surface. Semver-shaped only.
+  version: z.string().regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/, "version must be semver-shaped, e.g. 0.113.0").describe("Bare version to promote, e.g. 0.113.0 (no v prefix, no channel)"),
   from: z.enum(["alpha", "beta"]).describe("Source channel the version currently lives in"),
   to: z.enum(["beta", "stable"]).describe("Target channel (must be more stable than source)"),
   releaseNotes: z.string().nullable().default(null).describe("CHANGELOG entry for the stable GitHub Release fallback — ignored for beta"),
   releasePollAttempts: z.number().int().min(1).max(30).default(6).describe("How often to poll for the release.yml-created GitHub Release before falling back"),
   releasePollDelayMs: z.number().int().min(0).max(60_000).default(10_000).describe("Delay between release polls"),
+  tagPushAttempts: z.number().int().min(1).max(10).default(3).describe("How often to (re-)push a tag whose remote presence could not be confirmed. NOTE: the verify loop nests inside this one, so the read budget per tag is tagPushAttempts × tagVerifyAttempts — bounded in wall-clock by tagBudgetMs"),
+  tagVerifyAttempts: z.number().int().min(1).max(20).default(4).describe("How often to re-query the remote per push attempt before declaring a pushed tag missing"),
+  tagRetryDelayMs: z.number().int().min(0).max(60_000).default(1_000).describe("Base delay for the tag push/verify backoff (exponential, ×3 per attempt)"),
+  tagBudgetMs: z.number().int().min(0).max(600_000).default(120_000).describe("Wall-clock cap for ALL tag push/verify retries in this call. 0 disables the cap. Bounds the nested loops so a promotion cannot hang for minutes on an unreachable remote"),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
 const ORDER = { alpha: 0, beta: 1, stable: 2 };
-
-/**
- * Parse `git ls-remote --tags` output for ONE tag and return the COMMIT sha it
- * points at, or null when the tag is absent. Pure — exported for unit tests.
- *
- * Three ls-remote traps this must handle (all bit us on the 0.116.2 promotion):
- * - An annotated tag has TWO refs: the tag OBJECT sha on `refs/tags/<tag>` and
- *   the peeled COMMIT sha on `refs/tags/<tag>^{}`. Tag objects differ by
- *   construction even when they point at the same commit (tagger/date/message),
- *   so every promotion comparison MUST use the peeled commit sha. Prefer the
- *   `^{}` line; fall back to the plain line (lightweight tags have no peeled
- *   entry — their plain sha IS the commit).
- * - A single-pattern query NEVER returns the `^{}` line: ls-remote tail-matches
- *   each pattern per path component, and `refs/tags/<tag>^{}` does not end in
- *   `/<tag>`. The CALLER must therefore query BOTH patterns
- *   (`<tag>` AND `<tag>^{}`) — see lsRemoteTag. Verified against a live
- *   GitHub remote; a mock that returns peeled lines for plain-pattern queries
- *   is lying about git.
- * - Tail-component matching also means querying `v0.116.2` returns
- *   `alpha/v0.116.2` &c. — only an exact-ref match may count, never "first
- *   line of the output".
- */
-export function parseLsRemoteTagOutput(out, tag) {
-  let plain = null;
-  let peeled = null;
-  for (const line of (out || "").split("\n")) {
-    const [sha, ref] = line.trim().split(/\s+/);
-    if (!sha || !ref) continue;
-    if (ref === `refs/tags/${tag}`) plain = sha;
-    else if (ref === `refs/tags/${tag}^{}`) peeled = sha;
-  }
-  return peeled || plain;
-}
 
 function lsRemoteTag(tag, opts) {
   // Both patterns, both double-quoted: the second is required to surface the
@@ -111,35 +91,144 @@ function listRemoteChannelTags(opts) {
 }
 
 /**
+ * One remote read for `tag`, classified into the four outcomes that decide
+ * what happens next. Never throws — the fail-closed throw from lsRemoteTag
+ * becomes `unreachable`, which is retryable, whereas `conflict` never is.
+ *
+ *   present     — tag is on the remote at the expected sha (idempotent success)
+ *   conflict    — tag is on the remote at a DIFFERENT sha (immutable, hard stop)
+ *   absent      — tag is not on the remote (retryable: may be replica lag)
+ *   unreachable — the ls-remote itself failed (retryable: transient network)
+ */
+function probeTag(tag, sha, opts) {
+  try {
+    const found = lsRemoteTag(tag, opts);
+    if (!found) return { state: "absent" };
+    return found === sha ? { state: "present" } : { state: "conflict", sha: found };
+  } catch (e) {
+    return { state: "unreachable", error: e.message?.slice(0, 200) };
+  }
+}
+
+function immutabilityError(tag, found, sha) {
+  return `tag ${tag} already exists on remote at ${found.slice(0, 12)} (expected ${sha.slice(0, 12)}) — published tags are immutable`;
+}
+
+/**
+ * Ask the remote about `tag` until it settles on present/conflict, or the
+ * attempts run out. `absent` and `unreachable` are both retried — the whole
+ * point of #251 is that ONE negative read proves nothing.
+ */
+async function confirmTag(tag, sha, opts, retry) {
+  let lastState = "absent";
+  const r = await retryUntil(
+    () => {
+      const p = probeTag(tag, sha, opts);
+      lastState = p.state;
+      return p.state === "present" || p.state === "conflict" ? p : null;
+    },
+    {
+      attempts: retry.verifyAttempts,
+      delayMs: retry.delayMs,
+      sleepFn: retry.sleepFn,
+      deadline: retry.deadline,
+    },
+  );
+  if (r.ok) return r.value;
+  // Budget exhausted. Keep WHY: an unreadable remote is not the same claim as
+  // "the tag is not there", and the caller's error text must not assert the
+  // stronger one. Both still resolve to "not confirmed" — fail-closed.
+  return { state: "absent", unreachable: lastState === "unreachable" };
+}
+
+/**
+ * Create the annotated tag locally, idempotently.
+ * A tag left behind by an earlier failed run must be reused, not re-created —
+ * `git tag -a` on an existing name fails, which used to turn a recoverable
+ * partial failure into a permanent one on every re-run.
+ */
+function ensureLocalTag(tag, sha, payload, opts) {
+  // FULLY QUALIFIED (`refs/tags/…`): a bare name goes through git's ref
+  // disambiguation, which also resolves `refs/heads/<name>` — a local BRANCH
+  // called `v0.113.0` would then read as "the tag already exists".
+  // Quoted: cmd.exe treats a bare `^` as its escape character (execSync shells out).
+  const local = git(`rev-parse -q --verify "refs/tags/${tag}^{commit}"`, opts);
+  if (local) {
+    if (local !== sha) {
+      throw new Error(
+        `local tag ${tag} points at ${local.slice(0, 12)}, expected ${sha.slice(0, 12)} — ` +
+        `a re-run cannot clear this; delete the stale local tag first (git tag -d ${tag})`,
+      );
+    }
+    return;
+  }
+  // Annotated (-a): promotion timestamp/actor live in the tag object —
+  // lightweight tags would collapse all channels onto the commit date (R4).
+  execFileSync("git", ["tag", "-a", tag, sha, "-m", JSON.stringify(payload)], {
+    cwd: opts.cwd,
+    encoding: "utf8",
+    timeout: 15_000,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+}
+
+/**
  * Create + push one annotated tag, skip-if-exists. Returns
  * { ok: true } | { ok: true, existed: true } | { ok: false, error }.
  * An existing remote tag on a DIFFERENT SHA is a hard error — published
  * tags are immutable, never moved (spec §2).
+ *
+ * #251: neither the push's exit code nor a single post-push read is
+ * authoritative. A push can throw ETIMEDOUT after the ref already updated,
+ * and a push can succeed while the very next ls-remote hits a replica that
+ * has not caught up. So every push attempt is followed by a *retrying*
+ * confirmation, and the confirmation — not the push — decides the outcome.
  */
-function ensureTag(tag, sha, payload, opts) {
-  const existing = lsRemoteTag(tag, opts);
-  if (existing) {
-    if (existing !== sha) {
-      return { ok: false, error: `tag ${tag} already exists on remote at ${existing.slice(0, 12)} (expected ${sha.slice(0, 12)}) — published tags are immutable` };
-    }
-    return { ok: true, existed: true };
-  }
+async function ensureTag(tag, sha, payload, opts, retry) {
+  // 1. Pre-check: idempotency + the immutability gate, before touching anything.
+  const pre = probeTag(tag, sha, opts);
+  if (pre.state === "conflict") return { ok: false, conflict: true, error: immutabilityError(tag, pre.sha, sha) };
+  if (pre.state === "present") return { ok: true, existed: true };
+  if (pre.state === "unreachable") return { ok: false, error: `cannot reach remote — refusing to promote (${pre.error})` };
+
   try {
-    // Annotated (-a): promotion timestamp/actor live in the tag object —
-    // lightweight tags would collapse all channels onto the commit date (R4).
-    execFileSync("git", ["tag", "-a", tag, sha, "-m", JSON.stringify(payload)], {
-      cwd: opts.cwd,
-      encoding: "utf8",
-      timeout: 15_000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    gitStrict(`push origin ${tag}`, { ...opts, timeout: 60_000 });
-    const verify = lsRemoteTag(tag, opts);
-    if (verify !== sha) return { ok: false, error: `tag ${tag} not verifiable on remote after push` };
-    return { ok: true };
+    ensureLocalTag(tag, sha, payload, opts);
   } catch (e) {
     return { ok: false, error: e.message?.slice(0, 300) || "tag creation failed" };
   }
+
+  let pushError = null;
+  let timedOut = false;
+  let unreadable = false;
+  for (let attempt = 1; attempt <= retry.pushAttempts; attempt++) {
+    if (attempt > 1 && retry.deadline !== null && Date.now() >= retry.deadline) {
+      timedOut = true;
+      break;
+    }
+    try {
+      // Explicit refspec for the same reason as the rev-parse above: `push
+      // origin <name>` would happily push a same-named BRANCH instead.
+      gitStrict(`push origin refs/tags/${tag}:refs/tags/${tag}`, { ...opts, timeout: 60_000 });
+      pushError = null;
+    } catch (e) {
+      // Recorded, not trusted: the confirmation below has the final word.
+      pushError = e.message?.slice(0, 300) || "push failed";
+    }
+
+    const confirmed = await confirmTag(tag, sha, opts, retry);
+    if (confirmed.state === "present") return { ok: true, pushAttempts: attempt };
+    if (confirmed.state === "conflict") {
+      return { ok: false, conflict: true, error: immutabilityError(tag, confirmed.sha, sha) };
+    }
+    if (confirmed.unreachable) unreadable = true;
+  }
+
+  const why = unreadable
+    ? `remote could not be read to confirm tag ${tag}`
+    : `tag ${tag} not verifiable on remote`;
+  const bound = timedOut ? `the ${retry.budgetMs}ms retry budget` : `${retry.pushAttempts} push attempt(s)`;
+  const suffix = pushError ? ` (last push error: ${pushError})` : "";
+  return { ok: false, error: `${why} after ${bound}${suffix}` };
 }
 
 export async function handler(params) {
@@ -147,6 +236,20 @@ export async function handler(params) {
   const cwd = params.cwd;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const opts = { cwd };
+  // Schema defaults apply in production; the `??` fallbacks keep direct callers
+  // (and tests) working when the params are passed raw.
+  const budgetMs = params.tagBudgetMs ?? 120_000;
+  const retry = {
+    pushAttempts: params.tagPushAttempts ?? 3,
+    verifyAttempts: params.tagVerifyAttempts ?? 4,
+    delayMs: params.tagRetryDelayMs ?? 1_000,
+    sleepFn: params.sleepFn,
+    budgetMs,
+    // One wall-clock deadline for every tag retry in this call. The push loop
+    // nests the verify loop, so attempt counts alone multiply into a worst case
+    // nobody sized (3 × 4 reads/tag × 2 tags); this is what actually caps it.
+    deadline: budgetMs > 0 ? Date.now() + budgetMs : null,
+  };
 
   const result = { version, from, to };
 
@@ -202,28 +305,53 @@ export async function handler(params) {
     }
 
     const pushed = [];
-    const missing = [];
+    const failed = [];
     let anyCreated = false;
     for (const step of plan) {
-      const r = ensureTag(step.tag, sha, step.payload, opts);
+      const r = await ensureTag(step.tag, sha, step.payload, opts, retry);
       if (r.ok) {
         pushed.push(step.tag);
         if (!r.existed) anyCreated = true;
       } else {
-        missing.push(step.tag);
+        failed.push(step.tag);
         result.error = r.error;
         break; // keep ordering guarantee — don't create bare before stable succeeded
       }
     }
     result.tag = plan[0].tag;
     if (to === "stable") result.bareTag = `v${version}`;
-    result.pushed = pushed;
-    if (missing.length) {
-      // Remaining plan steps that were never attempted are also missing.
-      const attempted = new Set([...pushed, ...missing]);
-      for (const step of plan) if (!attempted.has(step.tag)) missing.push(step.tag);
-      return { ...result, success: false, missing };
+    if (failed.length) {
+      // #251: never declare a tag missing without one last look at the remote.
+      // The reported failure was exactly this — `stable/v0.39.2` listed as
+      // missing while `git ls-remote` showed it present. A tag confirmed on the
+      // remote at the right sha belongs in `pushed`, whatever the push said.
+      const missing = [];
+      for (const tag of failed) {
+        const probe = await confirmTag(tag, sha, opts, retry);
+        if (probe.state === "present") {
+          pushed.push(tag);
+          anyCreated = true; // it did land — the push report was the thing that lied
+        } else {
+          missing.push(tag);
+        }
+      }
+      // Steps we broke out before ever attempting are missing by construction.
+      const accounted = new Set([...pushed, ...missing]);
+      for (const step of plan) if (!accounted.has(step.tag)) missing.push(step.tag);
+      result.pushed = pushed;
+      if (missing.length) {
+        // Keep the original per-tag error only when that tag is still missing;
+        // otherwise it would name a tag we just confirmed as pushed.
+        if (!failed.some((t) => missing.includes(t))) {
+          result.error = `tag(s) not created: ${missing.join(", ")} — re-run ship_promote to complete them`;
+        }
+        return { ...result, success: false, missing };
+      }
+      // Everything reconciled as present after all — the failure was the false
+      // negative itself. Drop the stale error and continue as a success.
+      delete result.error;
     }
+    result.pushed = pushed;
 
     // 6. GitHub Release — stable only (beta is tags-only at launch, PO/O2).
     //    The bare tag push triggers release.yml; poll for its Release, create

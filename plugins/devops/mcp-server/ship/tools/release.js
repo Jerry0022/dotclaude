@@ -8,6 +8,8 @@ import { execFileSync } from "node:child_process";
 import { git, gitStrict, gitArgs, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf } from "../lib/git.js";
 import { createPR, mergePR, findExistingPR, watchPRChecks } from "../lib/github.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
+import { remoteTagExists } from "../lib/remote-tags.js";
+import { retryUntil } from "../lib/retry.js";
 
 export const schema = z.object({
   base: z.string().default("main").describe("Base branch for PR (may be a feature branch for intermediate merges)"),
@@ -20,11 +22,16 @@ export const schema = z.object({
   mergeStrategy: z.enum(["squash", "merge", "rebase"]).default("squash").describe("PR merge strategy. Use 'merge' for overlapping files to preserve ancestry chain."),
   skipChecks: z.boolean().default(false).describe("Skip the pre-merge CI checks gate. Use only for hot-fixes when CI is broken. Env DEVOPS_SHIP_SKIP_CHECKS=1 also forces skip."),
   checksTimeoutSec: z.number().int().min(30).max(3600).default(600).describe("Max seconds to wait for PR CI checks before merging. Default 10 min."),
+  tagVerifyAttempts: z.number().int().min(1).max(20).default(4).describe("How often to re-query the remote before declaring the pushed channel tag unverified"),
+  tagRetryDelayMs: z.number().int().min(0).max(60_000).default(1_000).describe("Base delay for the tag-verify backoff (exponential, ×3 per attempt)"),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
 export async function handler(params) {
   const { base, title, body, tag, releaseNotes, commitMessage, mergeStrategy, skipChecks, checksTimeoutSec } = params;
+  // Schema defaults apply in production; `??` keeps direct callers/tests working.
+  const tagVerifyAttempts = params.tagVerifyAttempts ?? 4;
+  const tagRetryDelayMs = params.tagRetryDelayMs ?? 1_000;
   const cwd = params.cwd;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const opts = { cwd };
@@ -265,8 +272,22 @@ export async function handler(params) {
     if (!intermediate && tag) {
       const channelTag = `alpha/${tag}`;
       try {
-        const remoteTag = git(`ls-remote --tags origin ${channelTag}`, opts);
-        if (remoteTag && remoteTag.includes(channelTag)) {
+        // Retry the existence read too: a single null here (transient network /
+        // auth blip) used to read as "tag absent" and silently decide to create
+        // one — the same fail-open the verification below was hardened against.
+        const existing = await retryUntil(
+          () => git(`ls-remote --tags origin ${channelTag}`, opts),
+          { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },
+        );
+        if (!existing.ok) {
+          // Still unreadable. Creating + pushing is safe (git refuses a
+          // conflicting remote tag), but say so rather than implying we looked.
+          result.tagWarning = `Could not read remote tags to check for ${channelTag} — proceeding to create it.`;
+        }
+        const remoteTag = existing.ok ? existing.value : null;
+        // Exact ref, not a substring: ls-remote tail-matches per path component,
+        // so a query for `v1.0.0` also returns `refs/tags/alpha/v1.0.0` (#251).
+        if (remoteTag !== null && remoteTagExists(remoteTag, channelTag)) {
           result.tagWarning = `Tag ${channelTag} already exists on remote — skipping creation.`;
           result.tagVerified = true;
         } else {
@@ -275,9 +296,19 @@ export async function handler(params) {
             "tag", "-a", channelTag, `origin/${base}`, "-m",
             JSON.stringify({ channel: "alpha", version: tag.replace(/^v/, "") }),
           ], { cwd, encoding: "utf8", timeout: 15_000, stdio: ["pipe", "pipe", "pipe"] });
-          gitStrict(`push origin ${channelTag}`, opts);
-          const tagCheck = git(`ls-remote --tags origin ${channelTag}`, opts);
-          result.tagVerified = tagCheck !== null && tagCheck.includes(channelTag);
+          // 60s like ship_promote's tag push — the 15s default is below a slow
+          // remote's worst case and turned a healthy push into a hard failure.
+          gitStrict(`push origin ${channelTag}`, { ...opts, timeout: 60_000 });
+          // Retry the verification: one negative read right after a push proves
+          // nothing (replica lag), which is the #251 false-negative class.
+          const verified = await retryUntil(
+            () => {
+              const out = git(`ls-remote --tags origin ${channelTag}`, opts);
+              return out !== null && remoteTagExists(out, channelTag) ? true : null;
+            },
+            { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },
+          );
+          result.tagVerified = verified.ok;
         }
         result.tag = channelTag;
         result.channel = "alpha";

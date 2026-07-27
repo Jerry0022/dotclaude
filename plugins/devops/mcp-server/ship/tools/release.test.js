@@ -60,6 +60,9 @@ function params(overrides = {}) {
     skipChecks: false,
     checksTimeoutSec: 600,
     cwd: "/repo",
+    // Keep tests fast — production defaults are 4 attempts with a 1s×3^n backoff.
+    tagVerifyAttempts: 2,
+    tagRetryDelayMs: 0,
     ...overrides,
   };
 }
@@ -419,5 +422,89 @@ describe("ship_release — commitMessage staging (F1: no silent drop)", () => {
 
     expect(res.success).toBe(false);
     expect(ghLib.mergePR).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #251 — the channel-tag verification must not trust one negative read
+// ---------------------------------------------------------------------------
+
+describe("ship_release — #251 channel-tag verification", () => {
+  test("a verification that lags once still reports tagVerified", async () => {
+    // ls-remote calls: 1 = existence check (empty → create), 2 = first verify
+    // (still empty, replica lag), 3 = second verify (tag visible).
+    let lsCalls = 0;
+    gitLib.git.mockImplementation((cmd) => {
+      if (cmd.includes("ls-remote --tags")) {
+        lsCalls += 1;
+        return lsCalls >= 3 ? "abc\trefs/tags/alpha/v1.0.0" : "";
+      }
+      return "remoteSha";
+    });
+
+    const res = await handler(params({ tagVerifyAttempts: 3 }));
+    expect(res.success).toBe(true);
+    expect(res.tagVerified).toBe(true);
+    expect(res.tagError).toBeUndefined();
+  });
+
+  test("a tag genuinely absent after every attempt stays unverified", async () => {
+    gitLib.git.mockImplementation((cmd) => (cmd.includes("ls-remote --tags") ? "" : "remoteSha"));
+    const res = await handler(params({ tagVerifyAttempts: 2 }));
+    expect(res.success).toBe(true); // tag trouble never fails the ship
+    expect(res.tagVerified).toBe(false);
+  });
+
+  test("the existence check is an exact ref — a tail-matching sibling does not count", async () => {
+    // `ls-remote --tags origin alpha/v1.0.0` tail-matches per PATH COMPONENT,
+    // so real git can return `refs/tags/hotfix/alpha/v1.0.0` for this query.
+    // The old substring check (`out.includes("alpha/v1.0.0")`) said "already
+    // exists" and skipped creation; the exact-ref check must not. Picking a ref
+    // real git can actually produce is what makes this test discriminating —
+    // a made-up line both checks reject would prove nothing.
+    let lsCalls = 0;
+    gitLib.git.mockImplementation((cmd) => {
+      if (cmd.includes("ls-remote --tags")) {
+        lsCalls += 1;
+        return lsCalls === 1
+          ? "abc\trefs/tags/hotfix/alpha/v1.0.0" // sibling only — channel tag absent
+          : "abc\trefs/tags/alpha/v1.0.0";
+      }
+      return "remoteSha";
+    });
+
+    const res = await handler(params());
+    expect(res.tagWarning).toBeUndefined(); // did NOT mistake the sibling for the channel tag
+    const { execFileSync } = await import("node:child_process");
+    const tagCall = execFileSync.mock.calls.find((c) => c[0] === "git" && c[1][0] === "tag");
+    expect(tagCall).toBeDefined();
+    expect(tagCall[1][2]).toBe("alpha/v1.0.0");
+    expect(res.tagVerified).toBe(true);
+  });
+
+  test("an unreadable remote is not silently read as 'tag absent'", async () => {
+    // git() returns null on a transient failure. The existence read is retried,
+    // and a persisting null is reported rather than assumed to mean "absent".
+    gitLib.git.mockImplementation((cmd) => (cmd.includes("ls-remote --tags") ? null : "remoteSha"));
+    const res = await handler(params({ tagVerifyAttempts: 2 }));
+    expect(res.success).toBe(true); // tag trouble never fails the ship
+    expect(res.tagWarning).toMatch(/Could not read remote tags/);
+    expect(res.tagVerified).toBe(false);
+  });
+
+  test("the channel-tag push gets the 60s timeout, not the 15s default", async () => {
+    let lsCalls = 0;
+    gitLib.git.mockImplementation((cmd) => {
+      if (cmd.includes("ls-remote --tags")) {
+        lsCalls += 1;
+        return lsCalls === 1 ? "" : "abc\trefs/tags/alpha/v1.0.0";
+      }
+      return "remoteSha";
+    });
+
+    await handler(params());
+    const push = gitLib.gitStrict.mock.calls.find((c) => c[0] === "push origin alpha/v1.0.0");
+    expect(push).toBeDefined();
+    expect(push[1]).toMatchObject({ timeout: 60000 });
   });
 });
