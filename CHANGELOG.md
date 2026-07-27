@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.123.3] — 2026-07-28
+
+### Fixed
+
+- **A stable promotion no longer fails on a tag that actually landed, leaving the bare tag unpushed and the release un-built.** `ship_promote` pushed each tag once and verified it with a single `ls-remote` immediately afterwards. That read can hit a replica that has not caught up, so a tag that was genuinely on the remote came back as `tag stable/v0.39.2 not verifiable on remote after push` — `success: false`, `pushed: []`, and a `missing` list naming a tag `git ls-remote` could see. Worse, the failure broke the ordered plan before the bare `vX.Y.Z` tag was ever attempted, and only that bare tag triggers the consumer's `release.yml` — so the stable go-live silently did not build and needed manual tag surgery.
+
+  The remote now decides, and it gets asked more than once. Each push is followed by a *retrying* confirmation, and the confirmation — not the push's exit code — determines the outcome, so a client-side `ETIMEDOUT` fired after the ref already updated resolves as pushed rather than as a hard failure. No tag is reported in `missing` until a final re-query still fails to find it. A tag present on a **different** SHA is never retried: that is the immutability guard and it stays final, as does the fail-closed rule that an unreadable remote is never treated as "tag absent" — the error now says which of the two it was. Tunable via `tagPushAttempts` (3), `tagVerifyAttempts` (4) and `tagRetryDelayMs` (1000, ×3 per attempt), all bounded by a `tagBudgetMs` wall-clock cap (120 s) so the nested loops cannot hang a promotion for minutes on an unreachable remote. The ordering invariant (bare tag never before `stable/`) is unchanged.
+
+- **A local branch named like a version tag can no longer be mistaken for that tag — or pushed in its place.** The tag lookup and the tag push both used unqualified names, which git resolves against `refs/heads` as well as `refs/tags`. A branch called `v0.113.0` would have read as "the tag already exists", and the push could have published a branch under the tag's name. Both now use fully qualified refs (`refs/tags/…` and an explicit `refs/tags/x:refs/tags/x` refspec). `version` is additionally constrained to a semver shape, since it is interpolated into shell-executed git commands.
+
+- **A promotion re-run after a partial failure no longer fails permanently on its own leftover tag.** `git tag -a` refuses an existing name, so a local tag left behind by an interrupted run made every subsequent re-run fail — the opposite of the documented idempotency. A leftover tag pointing at the expected commit is now reused; one pointing anywhere else is refused before any push.
+
+- **`ship_release` no longer mistakes a tail-matching sibling for the channel tag it was asked about.** The channel-tag check used a substring test on `ls-remote` output, but `ls-remote` tail-matches per path component — a query for `alpha/v1.0.0` also returns `refs/tags/hotfix/alpha/v1.0.0`. It now compares exact refs, retries both the existence read and the post-push verification instead of trusting one negative result, no longer reads an unreachable remote as "tag absent" (it says so instead), and pushes with the same 60 s timeout `ship_promote` uses — the 15 s default sat below a slow remote's worst case.
+
 ## [0.123.2] — 2026-07-28
 
 ### Fixed
