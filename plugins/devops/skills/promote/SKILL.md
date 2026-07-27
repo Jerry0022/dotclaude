@@ -92,6 +92,21 @@ skip-if-exists idempotent; an already-completed step returns
 `alreadyPromoted: true` and the missing tags are completed
 (`pushed`/`missing` in the result show exactly what happened).
 
+`pushed`/`missing` are decided by the **remote**, not by the push exit code
+(#251). Each tag push is followed by a retrying `ls-remote` confirmation, and
+no tag is reported in `missing` until a final re-query still fails to find it —
+a push that throws `ETIMEDOUT` after the ref already landed therefore reports
+as pushed, not as a failure. Tune with `tagPushAttempts` (default 3),
+`tagVerifyAttempts` (default 4, **per push attempt** — the read budget per tag
+is the product) and `tagRetryDelayMs` (default 1000, ×3 per attempt); all of it
+is capped in wall-clock by `tagBudgetMs` (default 120 000). A tag present on a
+**different** SHA is never retried — that is the immutability guard, and it is
+final. An unreadable remote is likewise never read as "tag absent"; the error
+distinguishes the two.
+
+One state a re-run cannot clear: a **local** tag left at the wrong commit. The
+error names it and the remedy (`git tag -d <tag>`) — delete it, then re-run.
+
 **Guard errors are final** — do not work around them:
 - `monotonicity: ...` → the target channel is already ahead; roll forward
   (ship a newer version) instead.
