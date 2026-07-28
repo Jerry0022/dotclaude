@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.124.0] — 2026-07-28
+
+### Fixed
+
+- **The concept feedback panel's table of contents now shows where you are while scrolling — reliably, and without making you hunt for the marker in a long list.** The "you are here" highlight existed but was effectively dead in the two situations that matter most. It was bound once at `DOMContentLoaded`, while `buildSectionNav()` replaces the entire nav DOM on every iteration switch — so after clicking any tab, the observer pointed at detached nodes and nothing was ever highlighted again. And its `IntersectionObserver` band (`rootMargin: -30% 0px -60% 0px`) was only about a tenth of the viewport tall: a section shorter than the gap between two entries never won it, and neither did the last section, which on most pages cannot scroll far enough to reach the band at all.
+
+  The marker now follows a reading line at 28% viewport height — the last section starting above it wins — with the first and last entry pinned at the scroll extremes so both ends of the page are reachable. The spy rebinds from inside `buildSectionNav()`, so an iteration switch carries it along. In a TOC too long to fit the panel, the active entry auto-reveals: only the panel's own scroll box moves, never the content column, so it cannot fight your scrolling. The marker itself is a 3px inset accent bar plus tint and bold weight — an inset box-shadow rather than a border, so the entry does not shift horizontally when it activates. Two new validation-gate patterns (39, 40) keep the rebinding and the panel-only reveal from regressing.
+
 ## [0.123.3] — 2026-07-28
 
 ### Fixed

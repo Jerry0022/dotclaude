@@ -33,7 +33,7 @@ no legitimate matches — do not "keep it as a convenience". The decision panel
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 38 patterns, regardless of template:
+Every concept page must contain these 40 patterns, regardless of template:
 
 | # | Pattern to grep | Purpose |
 |---|----------------|---------|
