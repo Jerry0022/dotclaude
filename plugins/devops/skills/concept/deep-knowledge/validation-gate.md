@@ -33,7 +33,7 @@ no legitimate matches — do not "keep it as a convenience". The decision panel
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 38 patterns, regardless of template:
+Every concept page must contain these 40 patterns, regardless of template:
 
 | # | Pattern to grep | Purpose |
 |---|----------------|---------|
@@ -76,6 +76,8 @@ Every concept page must contain these 38 patterns, regardless of template:
 | 36 | `status-channel` | Persistent status channel on the final-report panel — the always-visible pipeline recap (Übermittelt → verarbeitet → implementiert → Bereit) that leads to the ship CTA. DOM-driven so it survives reload + stale heartbeat. See templates.md § Final Report Panel. |
 | 37 | `ship-btn` | The persistent channel's primary "🚀 Shippen" CTA. Fires `action: "ship"` (real release pipeline). |
 | 38 | `submitShip` | JS handler wired to `#ship-btn`. POSTs `action: "ship"` with the current disposition. Dropping it leaves the ship button visible but inert (no console error, no network request on click). |
+| 39 | `installScrollSpy` called from **inside** `buildSectionNav` | Scroll-position marker for the panel TOC. `buildSectionNav()` replaces the nav DOM on every iteration switch, so the spy MUST be rebound as its last step. Binding it once from `DOMContentLoaded` instead leaves the highlight dead on every tab except the initially loaded one. See templates.md § Section Navigation. |
+| 40 | `revealNavItem` | Auto-scrolls the TOC's own scroll box so the active entry stays visible in long lists. Must scroll only `nearestScrollBox(item.parentElement)` — never `scrollIntoView()` on the item, which drags the content column along and fights the user's scrolling. |
 
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
 at the post-generation gate. See § Generic Form Collection below for the

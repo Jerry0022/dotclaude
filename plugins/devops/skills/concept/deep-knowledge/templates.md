@@ -1733,6 +1733,11 @@ current iteration gets a clickable nav entry — not just variants. Sections
 with a bi-state radio group additionally display the current evaluation
 state.
 
+A scroll spy marks the section the user is currently reading with
+`.is-active` (accent bar + tint), and auto-scrolls the TOC so that marker
+stays visible even in a long list. Without it, a 20-entry TOC forces the user
+to hunt for their own position on every scroll.
+
 ```css
 .section-nav {
   display: flex;
@@ -1751,7 +1756,7 @@ state.
   text-decoration: none;
   color: var(--text-color, #c9d1d9);
   font-size: 0.9rem;
-  transition: background 0.15s;
+  transition: background 0.15s, box-shadow 0.15s;
   cursor: pointer;
 }
 .section-nav-item:hover {
@@ -1768,9 +1773,17 @@ state.
 }
 .section-nav-state.state-discard { color: var(--danger-color, #f85149); }
 .section-nav-state.state-only { color: var(--success-color, #3fb950); }
+/* "You are here" marker — driven by the scroll spy, NOT by :target or click
+   alone. The accent bar is an inset box-shadow (not a border) so the entry
+   never shifts horizontally when it becomes active. */
 .section-nav-item.is-active {
   background: color-mix(in srgb, var(--accent-color, #58a6ff) 18%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent-color, #58a6ff);
   font-weight: 600;
+}
+.section-nav-item.is-active .section-nav-label { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .section-nav-item { transition: none; }
 }
 ```
 
@@ -1787,6 +1800,12 @@ Sections without `data-nav-label` are skipped by the TOC auto-populator.
 
 ```javascript
 // --- Section Navigation (Decision Panel as TOC) ---
+// Rebuilt by installScrollSpy() on EVERY nav rebuild. An iteration switch
+// replaces the whole nav DOM, so a spy bound once at load would silently stop
+// highlighting on every tab except the one that existed at DOMContentLoaded.
+let scrollSpyEntries = [];
+let scrollSpyFrame = 0;
+
 function buildSectionNav() {
   const nav = document.getElementById('section-nav');
   if (!nav) return;
@@ -1817,6 +1836,7 @@ function buildSectionNav() {
     nav.appendChild(link);
   });
   updateSectionNavState();
+  installScrollSpy();   // nav DOM was replaced → rebind the spy
 }
 
 function updateSectionNavState() {
@@ -1838,41 +1858,106 @@ document.addEventListener('click', e => {
   if (!link) return;
   e.preventDefault();
   const target = document.querySelector(link.getAttribute('href'));
-  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!target) return;
+  setActiveNavItem(link);   // instant feedback; the spy confirms it once the smooth scroll settles
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
 function installScrollSpy() {
-  const items = document.querySelectorAll('.section-nav-item');
-  if (!items.length) return;
-  const byId = new Map();
-  items.forEach(i => byId.set(i.dataset.sectionId, i));
-  const io = new IntersectionObserver(entries => {
-    entries.forEach(en => {
-      const item = byId.get(en.target.id);
-      if (!item) return;
-      if (en.isIntersecting) {
-        items.forEach(i => i.classList.remove('is-active'));
-        item.classList.add('is-active');
-      }
-    });
-  }, { rootMargin: '-30% 0px -60% 0px', threshold: 0 });
-  byId.forEach((_, id) => {
-    const sec = document.getElementById(id);
-    if (sec) io.observe(sec);
+  scrollSpyEntries = [];
+  document.querySelectorAll('.section-nav-item').forEach(item => {
+    const sec = document.getElementById(item.dataset.sectionId);
+    if (sec) scrollSpyEntries.push({ item, section: sec });
+  });
+  updateScrollSpy();
+}
+
+function setActiveNavItem(item) {
+  if (!item || item.classList.contains('is-active')) return;
+  scrollSpyEntries.forEach(({ item: other }) => {
+    other.classList.remove('is-active');
+    other.removeAttribute('aria-current');
+  });
+  item.classList.add('is-active');
+  item.setAttribute('aria-current', 'true');
+  revealNavItem(item);
+}
+
+// Nearest ancestor that actually scrolls. Returns null when nothing between
+// `el` and <body> scrolls, so callers can fall back to the document.
+function nearestScrollBox(el) {
+  for (let n = el; n && n !== document.body; n = n.parentElement) {
+    const oy = getComputedStyle(n).overflowY;
+    if (/(auto|scroll|overlay)/.test(oy) && n.scrollHeight > n.clientHeight + 1) return n;
+  }
+  return null;
+}
+
+// Keeps the active entry inside the visible part of a long TOC. Scrolls ONLY
+// the panel's own scroll box — never the content column — and only when the
+// entry is genuinely out of view, so it can't fight the user's scrolling.
+function revealNavItem(item) {
+  const box = nearestScrollBox(item.parentElement);
+  if (!box) return;
+  const boxRect = box.getBoundingClientRect();
+  const itemRect = item.getBoundingClientRect();
+  const pad = 12;
+  if (itemRect.top < boxRect.top + pad) {
+    box.scrollTop -= (boxRect.top + pad) - itemRect.top;
+  } else if (itemRect.bottom > boxRect.bottom - pad) {
+    box.scrollTop += itemRect.bottom - (boxRect.bottom - pad);
+  }
+}
+
+// Picks the section that owns the "reading line" (28% down the viewport):
+// the LAST section whose top is above the line. This is deliberately not
+// IntersectionObserver's isIntersecting — a section taller than the observer
+// band, or shorter than the gap between two entries, produces gaps and
+// flicker there. Two edge cases are pinned explicitly: above the first
+// section the first entry stays active, and at the very bottom of the scroll
+// container the last entry wins (a short trailing section may never reach
+// the line on its own).
+function updateScrollSpy() {
+  if (!scrollSpyEntries.length) return;
+  const line = window.innerHeight * 0.28;
+  let active = null;
+  for (const entry of scrollSpyEntries) {
+    if (entry.section.getBoundingClientRect().top <= line) active = entry;
+  }
+  if (!active) active = scrollSpyEntries[0];
+  const box = nearestScrollBox(scrollSpyEntries[0].section.parentElement)
+    || document.documentElement;
+  if (box.scrollHeight - box.scrollTop - box.clientHeight < 4) {
+    active = scrollSpyEntries[scrollSpyEntries.length - 1];
+  }
+  setActiveNavItem(active.item);
+}
+
+function scheduleScrollSpy() {
+  if (scrollSpyFrame) return;
+  scrollSpyFrame = requestAnimationFrame(() => {
+    scrollSpyFrame = 0;
+    updateScrollSpy();
   });
 }
 
+// Capture phase: scroll events do NOT bubble, so a listener on document only
+// sees them during capture. This covers both the document scroll and an inner
+// .concept-content scroll box without knowing which one is in play.
+document.addEventListener('scroll', scheduleScrollSpy, { capture: true, passive: true });
+window.addEventListener('resize', scheduleScrollSpy, { passive: true });
+
 document.addEventListener('change', updateSectionNavState);
-document.addEventListener('DOMContentLoaded', () => {
-  buildSectionNav();
-  installScrollSpy();
-});
+document.addEventListener('DOMContentLoaded', buildSectionNav);
 ```
 
 **Important:**
 - Every navigable `<section>` needs `id` AND `data-nav-label`.
 - If a section has a bi-state radio group, its `name` MUST be `eval-{section-id}`.
 - `buildSectionNav()` must run again after every iteration switch.
+- Never call `installScrollSpy()` on its own — `buildSectionNav()` calls it as
+  its last step. Binding it independently is how the highlight goes stale
+  after a tab switch.
 
 ## Decision Panel State CSS
 
