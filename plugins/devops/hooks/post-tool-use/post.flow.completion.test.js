@@ -55,6 +55,17 @@ describe("post.flow.completion — completion-card instruction completeness", ()
     cleanup(dir);
   });
 
+  // Same gap, same root cause: a card input the renderer honours but nothing
+  // ever asks for. `cwd` decides whether PR/commit/branch are clickable links
+  // or dead text; `userFinalTest` carries the manual last-mile steps.
+  test("names `cwd` and `userFinalTest`, the other renderer inputs nothing asked for", () => {
+    const dir = project();
+    const out = runHook(dir, "s-inputs");
+    expect(out).toContain("cwd:");
+    expect(out).toContain("userFinalTest");
+    cleanup(dir);
+  });
+
   test("scopes `delivery` to turns that reached a pipeline stage, not every card", () => {
     const dir = project();
     const out = runHook(dir, "s-track-scope");
