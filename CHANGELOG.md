@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.124.1] — 2026-07-30
+
+### Fixed
+
+- **The completion card's delivery track finally shows up outside `/ship`.** The track (PR → Ship → Promote) and the `released` variant shipped in 0.123.0/0.123.1, were merged, tagged, and installed — and then nobody ever saw them. `renderDelivery` only draws anything when the optional `delivery` input is passed, and that input was named in exactly two places: the `ship` and `promote` skills. Every card rendered on any other path silently dropped the track, so a feature that was built and tested was, in practice, invisible.
+
+  The per-tool-call card instruction now names `delivery` alongside the fields it already listed, scoped to turns that actually reached a pipeline stage — a PR exists, it was shipped, or a channel was promoted — with an explicit instruction to omit it otherwise, since a track of three pending nodes is noise rather than information. Two other renderer inputs had the same defect and are now named too: `cwd`, without which PR, commit, and branch render as dead text instead of links, and `userFinalTest`, which carries the manual last-mile steps. The hook gets its first test, pinning both the presence of these fields and the scoping condition on `delivery`, so the next card feature cannot ship into a renderer that nothing ever asks for.
+
+- **Two completion-card tests no longer fail depending on machine load.** Every `render()` shells out to git for the build-ID and repo URL, and under full parallel suite load a single call has exceeded vitest's 5s per-test default — enough to fail whichever two tests happened to run first, on a clean checkout, for reasons unrelated to anything they assert. The file now gets 30s of headroom and warms the cold git path once in `beforeAll`.
+
 ## [0.124.0] — 2026-07-28
 
 ### Fixed
