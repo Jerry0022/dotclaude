@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.19.0
+ * @version 0.20.0
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -244,6 +244,9 @@ process.stdin.on('end', () => {
     'Only if the direct call fails with "tool not found", fall back to ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
     `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
     '  plus changes, tests, state, cta, userTest as applicable.',
+    '  `delivery` (the PR → Ship → Promote track) whenever this work reached a pipeline stage:',
+    '  a PR exists, it was shipped, or a channel was promoted. Populate the stages that happened,',
+    '  leave later ones absent. Omit it when none apply — an all-pending track is noise.',
     'Variant: ship-successful=ship pipeline ran+merged to remote/main, ship-blocked=ship pipeline ran+NOT merged,',
     '  aborted=task aborted/infeasible/rate-limited, test=code edits+app/service startable (ANY project type: web, CLI, API, desktop, game),',
     '  test-minimal=user started app via prompt no edits yet, ready=code/doc changes (>=1 edit) no app, analysis=no file changes (explanation/investigation), fallback=other.',

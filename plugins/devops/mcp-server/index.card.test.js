@@ -9,6 +9,12 @@ import { writeFileSync } from "node:fs";
 // slow and flaky under parallel load. The card renders without a usage meter.
 process.env.DEVOPS_COMPLETION_NO_USAGE = "1";
 
+// Every render() shells out to git (build-ID, repo URL). Under full parallel
+// suite load a single call has exceeded the 5s per-test default, failing
+// whichever tests happened to run first — a flake unrelated to what they
+// assert. These tests check rendering, not speed, so give them real headroom.
+vi.setConfig({ testTimeout: 30_000 });
+
 const captured = vi.hoisted(() => ({ handlers: {} }));
 
 vi.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
@@ -31,7 +37,10 @@ let render;
 beforeAll(async () => {
   await import("./index.js");
   render = captured.handlers["render_completion_card"];
-});
+  // Warm-up: pay the cold git/module cost once here rather than inside whichever
+  // test runs first, which keeps per-test duration closer to the render itself.
+  await render({ variant: "analysis", summary: "warmup", lang: "en", session_id: "test-warmup" });
+}, 60_000);
 
 async function cardText(params) {
   const res = await render(params);
