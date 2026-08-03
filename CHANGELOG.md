@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.125.1] — 2026-08-03
+
+### Fixed
+
+- **The position indicator in a fullscreen design concept now actually shows which iteration and design you are in.** The code that fills it addressed four spans the reference markup never declared, so those segments rendered — never. Every lookup is null-guarded, which is exactly why nobody noticed: nothing threw, nothing warned, the indicator simply read "Page N / total" forever. That matters most where it was least visible: in the fullscreen layout the iteration tabs sit behind the burger, so this line is the only thing telling you where you are.
+
+- **A concept page missing one panel element no longer dies whole.** The panel wiring dereferenced `decision-panel`, `panel-toggle`, `panel-close` and `panel-backdrop` unguarded, and that wiring block also installs screen switching, the feedback dock and click-through navigation. One absent element threw at boot and took all of it down — with no visible error, leaving a mockup that silently ignores every click. The wiring is guarded now and names what is missing in the console; two further indicator writes got the same treatment.
+
+- **Three classes of "silently broken generated page" are now pinned by tests.** The templates reference is not prose: its fenced code blocks are copied verbatim into every concept page, so a defect there ships into other people's projects and shows up days later as "the page does nothing". The new test asserts that every JS block parses, that no block contains a literal closing `script` tag — valid JavaScript, fatal the moment it is embedded, which had already happened once during development — and that every id the JS looks up is declared in the reference markup, behind an exemption list that requires a written reason per entry. Checked against the pre-fix tree, the id assertion reports exactly the four missing mount points, so it fails when it should.
+
 ## [0.125.0] — 2026-08-03
 
 ### Added
