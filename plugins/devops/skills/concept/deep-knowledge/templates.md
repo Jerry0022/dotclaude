@@ -118,6 +118,21 @@ must see their own language. The locale hint is authoritative.
 | `proto.feedback_current`       | Current screen                 | Aktueller Screen |
 | `proto.feedback_placeholder`   | Write a note on this screen…   | Notiz zu diesem Screen… |
 | `proto.screen_counter`         | Screen {n} / {total}           | Screen {n} / {total} |
+| `design.feedback_design`       | Notes on this design           | Anmerkungen zu diesem Design |
+| `design.feedback_design_placeholder` | Write a note on this design… | Notiz zu diesem Design… |
+| `design.switch_label`          | Switch design                  | Design wechseln |
+| `design.position_iteration`    | Iteration                      | Iteration |
+| `design.position_page`         | Page                           | Seite |
+
+**`design.position_iteration` and `design.position_page` are label words,
+not full sentences** — the numbers (`N`, `total`) are live spans the JS
+updates on every switch, exactly like the pre-existing `active-screen-idx`
+span, so only the word is baked in at generation time. They compose the
+screen indicator (§ Screen indicator, design template) as
+`{position_iteration} {i} · {design-nav-label} · {position_page} {n} /
+{total} · {screen-nav-label}`, with the iteration segment dropped when the
+concept has one iteration and the design segment dropped when the iteration
+has one design — see the indicator JS for the exact assembly.
 
 **Locale tag example on `<html>`:** `<html lang="de">`, `<html lang="en">`,
 `<html lang="fr">`, `<html lang="hi">`, `<html lang="ja">`. Match whatever
@@ -901,6 +916,14 @@ buttons:
     per-screen UI. CSS adds: `body[data-single-screen="true"] #screen-nav,
     body[data-single-screen="true"] .feedback-section:has(#screen-textareas)
     { display: none }`.
+- **Single-design iteration (exactly one `<section data-design>`):**
+  degenerates to today's behaviour — no design switcher, no per-design
+  feedback row, `#screen-nav` renders as a flat list (no design heading).
+  `buildDesignUI()` detects `designs.length === 1` and sets
+  `document.body.dataset.singleDesign = 'true'`, the sibling of
+  `data-single-screen` above, so CSS hides the same way. The `data-design`
+  wrapper is still required in the markup even when there's only one — see
+  § Screen-pattern markup.
 - **Do NOT invent artificial screens** to make the template fit. If the
   artefact has no meaningful secondary state, leave it as a single screen
   and let the dock collapse to general notes only.
@@ -966,30 +989,61 @@ The wiring is a single delegated click handler installed alongside
     <div class="concept-content">
       <main>
         <section data-iteration="1" data-iteration-template="design" data-active>
-          <!-- All screens live here. Exactly one carries data-screen-active="true"
-               (others get `hidden`). Every screen is position: absolute; inset: 0
-               so it fills the viewport. A <div class="device-frame"> inside
-               holds the actual mock content. -->
-          <section id="screen-1" data-screen data-nav-label="Welcome" data-screen-active="true">
-            <div class="device-frame">…mock…</div>
+          <!-- One or more designs. Exactly one <section data-design> carries
+               data-design-active="true" (others get `hidden`). A single
+               design still needs this wrapper for markup uniformity — it
+               just degenerates to today's behaviour (see body[data-single-design]
+               below). -->
+          <section data-design="dispatch" data-nav-label="Dispatch and Apparatus" data-design-active="true">
+            <!-- All pages of THIS design live here. Exactly one carries
+                 data-screen-active="true" (others get `hidden`). Every screen
+                 is position: absolute; inset: 0 so it fills the viewport. A
+                 <div class="device-frame"> inside holds the actual mock content. -->
+            <section id="d1-s1" data-screen data-nav-label="Welcome" data-screen-active="true">
+              <div class="device-frame">…mock…</div>
+            </section>
+            <section id="d1-s2" data-screen data-nav-label="Credentials" hidden>
+              <div class="device-frame">…mock…</div>
+            </section>
+            <section id="d1-s3" data-screen data-nav-label="Success" hidden>
+              <div class="device-frame">…mock…</div>
+            </section>
           </section>
-          <section id="screen-2" data-screen data-nav-label="Credentials" hidden>
-            <div class="device-frame">…mock…</div>
-          </section>
-          <section id="screen-3" data-screen data-nav-label="Success" hidden>
-            <div class="device-frame">…mock…</div>
+          <section data-design="holotable" data-nav-label="Holotable" hidden>
+            <section id="d2-s1" data-screen data-nav-label="Welcome" data-screen-active="true">
+              <div class="device-frame">…mock…</div>
+            </section>
           </section>
         </section>
       </main>
     </div>
 
-    <!-- Minimal screen counter (top-left overlay) — NOT a header bar.
-         Shows "Screen N / Total · {label}" so the user always knows where
-         they are. -->
-    <div class="screen-indicator">
-      Screen <strong id="active-screen-idx">1</strong> / <span id="total-screens">3</span>
+    <!-- Minimal position indicator (top-left overlay) — NOT a header bar.
+         Built entirely in JS from {{design.position_iteration}} and
+         {{design.position_page}} (§ UI Locale) — the iteration segment only
+         renders when the concept has >1 iteration, the design segment only
+         when the iteration has >1 design. See buildDesignUI() below; the
+         spans here are just the mount points it fills in. -->
+    <div class="screen-indicator" id="screen-indicator">
+      <!-- Fully rebuilt by updateIndicator() (§ Layout JS) on every
+           iteration/design/screen switch — segments are joined with " · "
+           only for the ones that apply, so a hidden segment never leaves a
+           dangling separator. Static fallback below is the generation-time
+           first-paint value (3-screen, single-iteration, single-design
+           example) so the page never flashes empty before JS runs. -->
+      {{design.position_page}} <strong id="active-screen-idx">1</strong> / <span id="total-screens">3</span>
       · <span id="active-screen-label">Welcome</span>
     </div>
+
+    <!-- Design switcher (ghost bar, top centre) — one segment per
+         <section data-design>, only rendered when the iteration has ≥2
+         designs (hidden via body[data-single-design], see Layout CSS).
+         Auto-populated by buildDesignUI(); resting state shows only the
+         active label (CSS collapses the rest), hover/:focus-within expands
+         to the full segmented control. -->
+    <nav class="design-switcher" id="design-switcher" aria-label="{{design.switch_label}}">
+      <!-- auto-populated: one <button class="design-switch-item"> per design -->
+    </nav>
 
     <!-- Two FABs — the only floating UI besides the screen itself.
          The 💬 FAB carries two labels: the dock toggle swaps aria-label
@@ -1008,10 +1062,15 @@ The wiring is a single delegated click handler installed alongside
       <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
       <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}"><!-- chips --></nav>
       <nav class="screen-nav" id="screen-nav" aria-label="Screens">
-        <!-- auto-populated: one button per <section data-screen>.
-             Each shows the screen index, label, and a ● marker when that
-             screen has unsubmitted notes. Clicking switches the active screen
-             AND closes the panel. -->
+        <!-- auto-populated, two levels: one .screen-nav-group per
+             <section data-design>, a .screen-nav-design-heading button at
+             the top of each group, then one .screen-nav-item per page
+             nested beneath. Single-design pages skip the heading (CSS,
+             body[data-single-design]) and render as today's flat list.
+             The ● marker applies at both levels: a design heading shows it
+             when ANY of its pages, or its own design-level comment field,
+             carries unsubmitted text. Clicking either level switches and
+             closes the panel. -->
       </nav>
       <div id="panel-ready">
         <!-- Connection status pill — same inline, non-blocking contract as the
@@ -1145,7 +1204,8 @@ section[data-screen][hidden] { display: none; }
 html:not([data-template="design"]) .screen-indicator,
 html:not([data-template="design"]) .panel-fab,
 html:not([data-template="design"]) .feedback-fab,
-html:not([data-template="design"]) .feedback-dock { display: none !important; }
+html:not([data-template="design"]) .feedback-dock,
+html:not([data-template="design"]) .design-switcher { display: none !important; }
 
 /* Minimal screen counter — NOT a header bar */
 .screen-indicator {
@@ -1157,6 +1217,53 @@ html:not([data-template="design"]) .feedback-dock { display: none !important; }
   backdrop-filter: blur(6px);
 }
 .screen-indicator strong { color: var(--text); }
+
+/* ── Design switcher — ghost bar, top centre ──
+   Deliberately barely-there at rest: the viewport belongs to the mockup, not
+   to chrome. Only the active design's label shows, no background fill, no
+   separators. Hover AND :focus-visible reveal the full segmented control —
+   focus-visible matters because this must be reachable without a mouse.
+   Never collides with the screen indicator (top-left) or the ☰ FAB
+   (top-right once Wave 3 moves it there): it sits centred and is hidden
+   entirely below two designs (body[data-single-design="true"], see below). */
+.design-switcher {
+  position: fixed; top: 0.75rem; left: 50%; transform: translateX(-50%);
+  z-index: 95;
+  display: flex; gap: 2px;
+  padding: 0.3rem; border-radius: 999px;
+  background: transparent;
+  backdrop-filter: blur(6px);
+  opacity: 0.18;
+  transition: opacity 0.16s ease;
+}
+.design-switcher:hover,
+.design-switcher:focus-within { opacity: 1; }
+.design-switch-item {
+  border: none; background: transparent; cursor: pointer;
+  padding: 0.35rem 0.85rem; border-radius: 999px;
+  font-size: 0.8rem; color: var(--text-secondary);
+  white-space: nowrap; transition: background 0.15s, color 0.15s;
+}
+/* Resting state shows ONLY the active label — siblings collapse to width 0
+   so no separators/background are visible until the bar expands on hover. */
+.design-switcher:not(:hover):not(:focus-within) .design-switch-item:not([data-active="true"]) {
+  width: 0; padding: 0; margin: 0; overflow: hidden; pointer-events: none;
+}
+.design-switcher:not(:hover):not(:focus-within) {
+  background: transparent; border: none;
+}
+.design-switcher:hover,
+.design-switcher:focus-within {
+  background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
+  border: 1px solid var(--border-color);
+}
+.design-switch-item[data-active="true"] {
+  color: var(--text); font-weight: 600;
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+}
+.design-switch-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+/* Auto-hides while the ☰ panel is open — the panel carries the same nav. */
+body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
 
 /* Overlay decision panel — hidden by default, same slide-in as the non-design
    overlay. Scoped: in a decision/free iteration the very same <aside> must
@@ -1239,6 +1346,23 @@ html:not([data-template="design"]) .feedback-dock { display: none !important; }
 }
 .screen-nav-item .screen-idx { color: var(--accent-color); font-weight: 600; margin-right: 0.5rem; }
 .screen-nav-item .has-notes { color: var(--warning-color); font-size: 0.75rem; }
+
+/* Two-level nav: a design heading per <section data-design>, its pages
+   nested/indented beneath. Single-design pages never render the heading
+   (see body[data-single-design="true"] below), so this stays invisible
+   until it's needed. */
+.screen-nav-group { display: flex; flex-direction: column; gap: 2px; }
+.screen-nav-group + .screen-nav-group { margin-top: 0.5rem; }
+.screen-nav-design-heading {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.5rem 0.85rem; border-radius: 8px; border: none;
+  background: transparent; color: var(--text); font-size: 0.9rem;
+  font-weight: 700; cursor: pointer; text-align: left; transition: background 0.15s;
+}
+.screen-nav-design-heading:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.screen-nav-design-heading[data-active="true"] { color: var(--accent-color); }
+.screen-nav-design-heading .has-notes { color: var(--warning-color); font-size: 0.75rem; }
+.screen-nav-group .screen-nav-item { margin-left: 0.75rem; }
 
 /* ── Feedback Dock — Speech-Bubble anchored to the 💬 FAB ──
    Geometry:
@@ -1345,15 +1469,32 @@ body[data-single-screen="true"] .feedback-section:has(#screen-textareas),
 body[data-single-screen="true"] .feedback-divider:has(+ .feedback-section #proto-general-feedback) {
   display: none;
 }
+
+/* Single-design iteration: sibling mechanism to single-screen above, set by
+   the same wiring pass (buildDesignUI()). Hides the design switcher and the
+   per-design feedback row via CSS only — no JS branching needed at the call
+   site, matching how single-screen already collapses. The design heading
+   level of #screen-nav also collapses back to a flat list since there is
+   nothing to group. */
+body[data-single-design="true"] .design-switcher,
+body[data-single-design="true"] .screen-nav-design-heading,
+body[data-single-design="true"] .feedback-section:has([data-design-comment]),
+body[data-single-design="true"] .feedback-divider:has(+ .feedback-section [data-design-comment]) {
+  display: none;
+}
+body[data-single-design="true"] .screen-nav-group .screen-nav-item { margin-left: 0; }
 ```
 
 ## Layout JS — single-screen navigation + context-sensitive feedback
 
-Only one screen is visible at a time. `showScreen(id)` swaps the active
-screen, updates the counter overlay, and swaps the feedback-dock textarea
-to the matching per-screen `<textarea>`. Per-screen textareas stay in the
-DOM (just hidden), so each one's value persists independently via
-`localStorage` (same mechanism as any `data-comment` field).
+Only one screen is visible at a time, scoped to the one active design. Each
+design remembers its own last-viewed page (`lastScreenByDesign`, persisted
+via `saveState()`), so switching designs and back returns to that page, not
+page 1. `showScreen(id)` swaps the active screen, rebuilds the position
+indicator, and swaps the feedback-dock textarea to the matching per-screen
+`<textarea>`. Per-screen textareas stay in the DOM (just hidden), so each
+one's value persists independently via `localStorage` (same mechanism as any
+`data-comment` field).
 
 ```javascript
 (function wireDesignLayout() {
@@ -1365,34 +1506,103 @@ DOM (just hidden), so each one's value persists independently via
                               + 'section[data-iteration][data-iteration-template="prototype"]');
   if (!hasDesign) return;
 
-  // Build screen-nav buttons (☰) and per-screen textareas (💬) from every
-  // <section data-screen> inside the VISIBLE iteration (may be a frozen
-  // tab the user clicked back to, not necessarily the live one).
-  function buildScreenUI() {
-    const visible = document.querySelector('section[data-iteration]:not([hidden])');
-    if (!visible) return;
-    const screens = [...visible.querySelectorAll('section[data-screen][id]')];
+  // Per-design "last viewed page" memory, keyed by design id. Restored from
+  // localStorage's `_activeScreenByDesign` on load (see saveState below) so
+  // it survives reloads, not just in-session switches.
+  let lastScreenByDesign = {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) lastScreenByDesign = JSON.parse(raw)._activeScreenByDesign || {};
+  } catch (e) {}
+
+  function visibleIteration() {
+    return document.querySelector('section[data-iteration]:not([hidden])');
+  }
+  function activeDesign() {
+    const it = visibleIteration();
+    return it ? it.querySelector('section[data-design][data-design-active="true"]') : null;
+  }
+  function designs() {
+    const it = visibleIteration();
+    return it ? [...it.querySelectorAll('section[data-design]')] : [];
+  }
+
+  // Build screen-nav (two-level: design heading + nested pages), the design
+  // switcher ghost bar, and per-screen textareas — all scoped to the
+  // VISIBLE iteration (may be a frozen tab the user clicked back to, not
+  // necessarily the live one).
+  function buildDesignUI() {
+    const allDesigns = designs();
+    const active = activeDesign();
+    if (!active) return;
+
+    // Single-design collapse: CSS keys off body[data-single-design="true"]
+    // to hide the switcher + design-level feedback row, mirroring
+    // body[data-single-screen] below.
+    document.body.dataset.singleDesign = allDesigns.length <= 1 ? 'true' : 'false';
+
+    // Design switcher (ghost bar) — one segment per design.
+    const switcher = document.getElementById('design-switcher');
+    switcher.innerHTML = '';
+    allDesigns.forEach(d => {
+      const btn = document.createElement('button');
+      btn.className = 'design-switch-item';
+      btn.type = 'button';
+      btn.dataset.designId = d.dataset.design;
+      btn.dataset.active = String(d === active);
+      btn.textContent = d.dataset.navLabel || d.dataset.design;
+      btn.addEventListener('click', () => showDesign(d.dataset.design));
+      switcher.appendChild(btn);
+    });
+
+    // Two-level screen-nav inside the ☰ panel: one .screen-nav-group per
+    // design, a heading button, then nested .screen-nav-item per page.
+    const nav = document.getElementById('screen-nav');
+    nav.innerHTML = '';
+    allDesigns.forEach(d => {
+      const group = document.createElement('div');
+      group.className = 'screen-nav-group';
+
+      const heading = document.createElement('button');
+      heading.className = 'screen-nav-design-heading';
+      heading.type = 'button';
+      heading.dataset.designId = d.dataset.design;
+      heading.dataset.active = String(d === active);
+      heading.innerHTML = `<span>${d.dataset.navLabel || d.dataset.design}</span>
+        <span class="has-notes" data-design-note-marker="${d.dataset.design}"></span>`;
+      heading.addEventListener('click', () => { showDesign(d.dataset.design); closePanel(); });
+      group.appendChild(heading);
+
+      const screens = [...d.querySelectorAll('section[data-screen][id]')];
+      screens.forEach((sec, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'screen-nav-item';
+        btn.type = 'button';
+        btn.dataset.screenId = sec.id;
+        btn.dataset.designId = d.dataset.design;
+        btn.innerHTML = `<span><span class="screen-idx">${idx + 1}.</span>${sec.dataset.navLabel || sec.id}</span>
+          <span class="has-notes" data-note-marker></span>`;
+        btn.addEventListener('click', () => {
+          if (d !== active) showDesign(d.dataset.design, sec.id);
+          else showScreen(sec.id);
+          closePanel();
+        });
+        group.appendChild(btn);
+      });
+      nav.appendChild(group);
+    });
+
+    buildScreenUI(active);
+  }
+
+  // Per-screen textareas (💬) for the design currently active.
+  function buildScreenUI(design) {
+    const screens = [...design.querySelectorAll('section[data-screen][id]')];
     document.getElementById('total-screens').textContent = screens.length;
 
     // Single-screen designs: hide screen-nav + per-screen feedback.
     // CSS keys off body[data-single-screen="true"].
     document.body.dataset.singleScreen = screens.length <= 1 ? 'true' : 'false';
-    if (screens.length <= 1) {
-      const indicator = document.querySelector('.screen-indicator');
-      if (indicator) indicator.style.display = 'none';
-    }
-
-    const nav = document.getElementById('screen-nav');
-    nav.innerHTML = '';
-    screens.forEach((sec, idx) => {
-      const btn = document.createElement('button');
-      btn.className = 'screen-nav-item';
-      btn.dataset.screenId = sec.id;
-      btn.innerHTML = `<span><span class="screen-idx">${idx + 1}.</span>${sec.dataset.navLabel || sec.id}</span>
-        <span class="has-notes" data-note-marker></span>`;
-      btn.addEventListener('click', () => { showScreen(sec.id); closePanel(); });
-      nav.appendChild(btn);
-    });
 
     const container = document.getElementById('screen-textareas');
     container.innerHTML = '';
@@ -1406,9 +1616,37 @@ DOM (just hidden), so each one's value persists independently via
     });
   }
 
+  // Switches the active design (and, within it, the given page or its
+  // remembered last-viewed page). Closes over showScreen defined below.
+  window.showDesign = function(designId, screenId) {
+    const it = visibleIteration();
+    if (!it) return;
+    const targets = [...it.querySelectorAll('section[data-design]')];
+    targets.forEach(d => {
+      const match = d.dataset.design === designId;
+      d.hidden = !match;
+      d.dataset.designActive = match ? 'true' : 'false';
+    });
+    document.querySelectorAll('.design-switch-item').forEach(item => {
+      item.dataset.active = String(item.dataset.designId === designId);
+    });
+    document.querySelectorAll('.screen-nav-design-heading').forEach(h => {
+      h.dataset.active = String(h.dataset.designId === designId);
+    });
+    const design = document.querySelector(`section[data-design="${CSS.escape(designId)}"]`);
+    if (!design) return;
+    buildScreenUI(design);
+    const remembered = screenId || lastScreenByDesign[designId];
+    const first = design.querySelector('section[data-screen]');
+    const target = (remembered && design.querySelector(`#${CSS.escape(remembered)}`)) ? remembered : first?.id;
+    if (target) showScreen(target);
+    updateDesignNoteMarkers();
+  };
+
   window.showScreen = function(id) {
-    const screens = document.querySelectorAll(
-      'section[data-iteration]:not([hidden]) section[data-screen][id]');
+    const design = activeDesign();
+    if (!design) return;
+    const screens = design.querySelectorAll('section[data-screen][id]');
     let idx = 0;
     screens.forEach((s, i) => {
       const match = s.id === id;
@@ -1420,16 +1658,48 @@ DOM (just hidden), so each one's value persists independently via
     const label = screen?.dataset.navLabel || id;
     document.getElementById('active-screen-label').textContent = label;
     document.getElementById('active-screen-idx').textContent = idx + 1;
-    document.getElementById('dock-screen-label').textContent = label;
+    const dockLabel = document.getElementById('dock-screen-label');
+    if (dockLabel) dockLabel.textContent = label;
     document.querySelectorAll('[data-screen-comment]').forEach(ta => {
       ta.hidden = ta.dataset.screenComment !== id;
     });
     document.querySelectorAll('.screen-nav-item').forEach(item => {
       item.dataset.active = String(item.dataset.screenId === id);
     });
+    lastScreenByDesign[design.dataset.design] = id;
+    updateIndicator();
     updateNoteMarkers();
     if (typeof saveState === 'function') saveState();
   };
+
+  // Rebuilds the position indicator from the locale word-primitives +
+  // live numbers: "{iteration} · {design} · {page} N/total · {label}",
+  // dropping the iteration segment when there is one iteration and the
+  // design segment when the active iteration has one design. Never a
+  // fixed-shape string — each segment is toggled `hidden` independently so
+  // a missing one leaves no dangling " · ".
+  function updateIndicator() {
+    const totalIterations = document.querySelectorAll('section[data-iteration]').length;
+    const iterEl = document.getElementById('indicator-iteration');
+    if (iterEl) {
+      iterEl.hidden = totalIterations <= 1;
+      if (!iterEl.hidden) {
+        const activeIter = document.querySelector('section[data-iteration]:not([hidden])');
+        const idxEl = document.getElementById('active-iteration-idx');
+        if (idxEl && activeIter) idxEl.textContent = activeIter.dataset.iteration;
+      }
+    }
+    const designEl = document.getElementById('indicator-design');
+    if (designEl) {
+      const total = designs().length;
+      designEl.hidden = total <= 1;
+      if (!designEl.hidden) {
+        const active = activeDesign();
+        const labelEl = document.getElementById('active-design-label');
+        if (labelEl && active) labelEl.textContent = active.dataset.navLabel || active.dataset.design;
+      }
+    }
+  }
 
   function updateNoteMarkers() {
     document.querySelectorAll('.screen-nav-item').forEach(item => {
@@ -1438,16 +1708,35 @@ DOM (just hidden), so each one's value persists independently via
       const marker = item.querySelector('[data-note-marker]');
       if (marker) marker.textContent = (ta && ta.value.trim()) ? '● Notiz' : '';
     });
+    updateDesignNoteMarkers();
   }
   window.updateNoteMarkers = updateNoteMarkers;
+
+  // Design heading marker: lights up when ANY of its pages, or its own
+  // design-level comment field (Feedback dock, Wave "design feedback row"
+  // — `[data-design-comment="{id}"]`, may not exist yet on older pages),
+  // carries unsubmitted text.
+  function updateDesignNoteMarkers() {
+    document.querySelectorAll('[data-design-note-marker]').forEach(marker => {
+      const id = marker.dataset.designNoteMarker;
+      const design = document.querySelector(`section[data-design="${CSS.escape(id)}"]`);
+      const pageHasNotes = design && [...design.querySelectorAll('[data-screen-comment]')]
+        .some(ta => ta.value.trim());
+      const designTa = document.querySelector(`[data-design-comment="${CSS.escape(id)}"]`);
+      const designHasNotes = designTa && designTa.value.trim();
+      marker.textContent = (pageHasNotes || designHasNotes) ? '●' : '';
+    });
+  }
 
   // Panel + dock toggles
   const panel = document.getElementById('decision-panel');
   const panelToggle = document.getElementById('panel-toggle');
   const panelCloseBtn = document.getElementById('panel-close');
   const backdrop = document.getElementById('panel-backdrop');
-  window.openPanel = () => { panel.classList.add('open'); backdrop.classList.add('visible'); panelToggle.classList.add('hidden'); };
-  window.closePanel = () => { panel.classList.remove('open'); backdrop.classList.remove('visible'); panelToggle.classList.remove('hidden'); };
+  // The switcher auto-hides while the panel is open (the panel carries the
+  // same navigation) — driven by body.panel-open, see Layout CSS.
+  window.openPanel = () => { panel.classList.add('open'); backdrop.classList.add('visible'); panelToggle.classList.add('hidden'); document.body.classList.add('panel-open'); };
+  window.closePanel = () => { panel.classList.remove('open'); backdrop.classList.remove('visible'); panelToggle.classList.remove('hidden'); document.body.classList.remove('panel-open'); };
   panelToggle.addEventListener('click', openPanel);
   panelCloseBtn.addEventListener('click', closePanel);
   backdrop.addEventListener('click', closePanel);
@@ -1501,42 +1790,52 @@ DOM (just hidden), so each one's value persists independently via
   }, true);
 
   document.addEventListener('DOMContentLoaded', () => {
-    buildScreenUI();
+    buildDesignUI();
     const active = document.querySelector('section[data-iteration][data-active]');
     if (active) {
-      // Restore last active screen from localStorage if available,
-      // otherwise default to the first screen.
-      let restored = null;
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) restored = JSON.parse(raw)._activeScreen;
-      } catch (e) {}
-      const first = active.querySelector('section[data-screen]');
-      showScreen(restored && document.getElementById(restored) ? restored : (first ? first.id : ''));
+      const design = active.querySelector('section[data-design][data-design-active="true"]');
+      if (design) {
+        // Restore last active screen from localStorage if available,
+        // otherwise default to the first screen of the active design.
+        let restored = null;
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) restored = JSON.parse(raw)._activeScreen;
+        } catch (e) {}
+        const first = design.querySelector('section[data-screen]');
+        showScreen(restored && design.querySelector(`#${CSS.escape(restored)}`) ? restored : (first ? first.id : ''));
+      }
     }
+    updateIndicator();
     document.addEventListener('input', updateNoteMarkers);
   });
 
-  // Rebuild after iteration switches (fresh screens, fresh textareas).
-  // Preserve the previously active screen if it still exists in the newly
-  // visible iteration; otherwise fall back to the first screen.
+  // Rebuild after iteration switches (fresh designs, fresh screens, fresh
+  // textareas). Preserve the previously active screen if it still exists in
+  // the newly visible design; otherwise fall back to that design's
+  // remembered page, or its first page.
   document.addEventListener('iteration:changed', () => {
-    buildScreenUI();
-    const visible = document.querySelector('section[data-iteration]:not([hidden])');
+    buildDesignUI();
+    const design = activeDesign();
+    if (!design) return;
     const prevId = document.querySelector('[data-screen][data-screen-active="true"]')?.id;
-    const stillThere = prevId && visible?.querySelector(`section[data-screen]#${CSS.escape(prevId)}`);
-    const first = visible?.querySelector('section[data-screen]');
-    const target = stillThere ? prevId : first?.id;
+    const stillThere = prevId && design.querySelector(`section[data-screen]#${CSS.escape(prevId)}`);
+    const remembered = lastScreenByDesign[design.dataset.design];
+    const first = design.querySelector('section[data-screen]');
+    const target = stillThere ? prevId
+      : (remembered && design.querySelector(`#${CSS.escape(remembered)}`)) ? remembered
+      : first?.id;
     if (target) showScreen(target);
   });
 
-  // Keyboard: Arrow Left/Right (and Space) jump between screens when no
-  // textarea/input is focused and no overlay is open.
+  // Keyboard: Arrow Left/Right (and Space) jump between screens (within the
+  // active design) when no textarea/input is focused and no overlay is open.
   document.addEventListener('keydown', e => {
     if (dock.dataset.open === 'true' || panel.classList.contains('open')) return;
     if (e.target.matches('textarea, input')) return;
-    const screens = [...document.querySelectorAll(
-      'section[data-iteration]:not([hidden]) section[data-screen]')];
+    const design = activeDesign();
+    if (!design) return;
+    const screens = [...design.querySelectorAll('section[data-screen]')];
     const currentIdx = screens.findIndex(s => s.dataset.screenActive === 'true');
     if (currentIdx < 0) return;
     let nextIdx = currentIdx;
@@ -1550,28 +1849,38 @@ DOM (just hidden), so each one's value persists independently via
 ```
 
 **Persistence extension:** the design layout's `saveState()` must also write
-`_activeScreen: '{current-screen-id}'` into the localStorage payload so the
-restore path on page load lands the user back on the last-viewed screen.
+`_activeScreen: '{current-screen-id}'` AND `_activeScreenByDesign: {designId:
+screenId, …}` into the localStorage payload — the former for the currently
+active design (kept for backward compatibility with the single-design
+degenerate case), the latter so EVERY design's last-viewed page survives a
+reload, not just the one on screen at save time.
 
 ## Click-through Handler
 
 Single delegated listener that interprets `data-screen-link` on any element
-inside a `[data-screen]` section. Closes the ☰ panel (harmless no-op if
-it's not open) and fires `showScreen()`.
+inside a `[data-screen]` section, **scoped to the active design** — a link
+may only target screens within its own design, never reach across into
+another design's pages. Closes the ☰ panel (harmless no-op if it's not open)
+and fires `showScreen()`.
 
 ```javascript
 document.addEventListener('click', e => {
   const link = e.target.closest('[data-screen-link]');
   if (!link) return;
+  const activeDesignEl = document.querySelector(
+    'section[data-iteration]:not([hidden]) section[data-design][data-design-active="true"]');
+  if (!activeDesignEl) return;
   const dest = link.dataset.screenLink;
-  const screens = [...document.querySelectorAll(
-    'section[data-iteration]:not([hidden]) section[data-screen]')];
+  const screens = [...activeDesignEl.querySelectorAll('section[data-screen]')];
   const currentIdx = screens.findIndex(s => s.dataset.screenActive === 'true');
   let targetId = null;
   if (dest === 'next') targetId = screens[Math.min(currentIdx + 1, screens.length - 1)]?.id;
   else if (dest === 'prev') targetId = screens[Math.max(currentIdx - 1, 0)]?.id;
   else targetId = dest;
-  if (!targetId || !document.getElementById(targetId)) return;
+  // Guard against cross-design links: the target id must resolve to a
+  // <section data-screen> INSIDE the active design, not merely exist
+  // somewhere on the page.
+  if (!targetId || !activeDesignEl.querySelector(`#${CSS.escape(targetId)}`)) return;
   e.preventDefault();
   if (typeof closePanel === 'function') closePanel();
   showScreen(targetId);
@@ -1580,7 +1889,9 @@ document.addEventListener('click', e => {
 
 ## Screen-pattern markup
 
-Each logical screen in a design is a `<section>` with `data-screen`:
+A design iteration holds one or more `<section data-design>`, each owning
+its own set of pages. Each logical page inside a design is a `<section>`
+with `data-screen`:
 
 ```html
 <section data-iteration="1" data-active>
@@ -1589,16 +1900,24 @@ Each logical screen in a design is a `<section>` with `data-screen`:
     <p>High-fidelity walkthrough of the three-step sign-in flow.</p>
   </header>
 
-  <section id="screen-welcome" data-nav-label="Welcome" data-screen>
-    <div class="device-frame">…mockup HTML for welcome screen…</div>
+  <section data-design="dispatch" data-nav-label="Dispatch and Apparatus" data-design-active="true">
+    <section id="d1-s1" data-nav-label="Welcome" data-screen data-screen-active="true">
+      <div class="device-frame">…mockup HTML for welcome screen…</div>
+    </section>
+
+    <section id="d1-s2" data-nav-label="Credentials" data-screen hidden>
+      <div class="device-frame">…mockup HTML for credentials screen…</div>
+    </section>
+
+    <section id="d1-s3" data-nav-label="Success" data-screen hidden>
+      <div class="device-frame">…mockup HTML for success screen…</div>
+    </section>
   </section>
 
-  <section id="screen-credentials" data-nav-label="Credentials" data-screen>
-    <div class="device-frame">…mockup HTML for credentials screen…</div>
-  </section>
-
-  <section id="screen-success" data-nav-label="Success" data-screen>
-    <div class="device-frame">…mockup HTML for success screen…</div>
+  <section data-design="holotable" data-nav-label="Holotable" hidden>
+    <section id="d2-s1" data-nav-label="Welcome" data-screen data-screen-active="true">
+      <div class="device-frame">…mockup HTML for welcome screen…</div>
+    </section>
   </section>
 </section>
 ```
@@ -1607,13 +1926,24 @@ Each logical screen in a design is a `<section>` with `data-screen`:
 - `data-screen` marks a block as a "feedback target" — it appears as a
   per-screen textarea in the dock. Use it only for screens worth commenting on.
 - Every `data-screen` section MUST also have `id` and `data-nav-label` so
-  the panel TOC and the feedback dock can reference it.
-- A design iteration section can still contain non-screen `<section>`s
-  (e.g. `id="design-notes" data-nav-label="Design notes"`). Those appear in
-  the TOC but NOT in the feedback dock.
+  the panel TOC and the feedback dock can reference it. Screen ids only need
+  to be unique across the whole page — `d{design-index}-s{page-index}`
+  (e.g. `d1-s1`, `d2-s1`) keeps them readable and collision-free without
+  coordinating names across designs.
+- Exactly one `data-design` carries `data-design-active="true"`; the others
+  are `hidden`. Within the active design, exactly one `data-screen` carries
+  `data-screen-active="true"`.
+- **One design** → the wrapper is still required (markup shape stays
+  uniform across single- and multi-design concepts) but degenerates to
+  today's behaviour: no switcher, no per-design feedback field. Do not omit
+  `data-design` just because there's only one.
+- A design iteration section can still contain non-screen, non-design
+  `<section>`s (e.g. `id="design-notes" data-nav-label="Design notes"`)
+  directly under the iteration. Those appear in the TOC but NOT in the
+  feedback dock.
 - Iteration tabs still apply — when Claude iterates on feedback, a new
-  `<section data-iteration="N+1">` is appended with updated screens and the
-  old one is frozen (see Shared Systems § Iteration Tabs).
+  `<section data-iteration="N+1">` is appended with updated designs/screens
+  and the old one is frozen (see Shared Systems § Iteration Tabs).
 
 ## Decision schema
 
