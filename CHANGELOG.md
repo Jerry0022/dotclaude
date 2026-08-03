@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.125.0] — 2026-08-03
+
+### Added
+
+- **A concept page can now switch layout per iteration, and design work finally gets the whole screen.** Until now a page picked one layout and kept it: sidebar with variant cards, or fullscreen mockup, for its entire life. Real concept work does not divide that cleanly — a round of "which data source do we use" is followed by a round of "which of these three looks right", and the second one needs the viewport that the first one spends on pros and cons. Each `<section data-iteration>` now carries its own `data-iteration-template`, and `<html data-template>` became a projection of whichever iteration is active. Clicking a tab switches the layout with it. Decision round, design round, decision round again — any order, as often as the work needs.
+
+  The fullscreen layout gained the structure that was missing for comparing designs: an iteration holds several `<section data-design>`, each owning its own pages, so three competing directions with two screens each are one iteration rather than three pages or eighteen variant cards. A switcher sits at the top centre at 18% opacity and expands on hover or keyboard focus — present enough to find, faint enough that the mockup owns the screen. Each design remembers the page you last looked at, so switching away to compare and back does not dump you on page one. Feedback comes in three levels — on the concept, on this design, on this page — in a dock that opens on load so you can see what it collects, then gets out of the way the first time you touch the mockup and never interrupts again. The burger moved to the top right, which freed the bottom-right corner the feedback bubble used to reserve.
+
+### Fixed
+
+- **Concepts that compare visual directions no longer get forced into the sidebar layout.** A tie-breaker rule said that a page with variants *and* mockups is a decision page with mockups inlined, and rethink runs hard-wired the decision template on top of it. Between them, the fullscreen layout was unreachable for exactly the work it was built for. The observed result was a page with 21 variants where the same three layout options appeared **twice** — once with pros and cons, once again labelled "visual" — because a mockup does not fit in a 340px card, so the model wrote the decision out a second time. The tie-breaker is gone with no replacement, the layout check runs per iteration, and rethink defers to it: visual directions get a design iteration with real mockups, everything else gets a decision iteration.
+
+- **Feedback typed into a design page survives switching designs.** The dock rebuilt its page textareas from scratch on every design switch, and the state writer serialises only what is currently in the DOM — so switching away deleted the note *and* its stored copy, and the submit payload silently carried only the design you happened to be looking at. Page textareas for every design of the iteration are now built once and shown or hidden, which also makes the payload complete: comment on four pages across two designs, submit, and all four arrive. The dock's auto-close had a second, unconditional listener behind the deliberately one-shot one, so it kept closing on every outside click even after you had reopened it by hand; there is one path now, and it honours the one-shot flag.
+
+- **The concept validation gate stopped failing pages for elements that no longer exist.** The gate is blocking and still required two ids the dock rebuild had renamed, so every freshly generated design page hard-failed its own check — with the plausible "repair" being two dead elements added to satisfy the checker. Both patterns accept the new and the legacy id now, and the design-level textarea got the pattern it never had. Alongside: a frozen design iteration stays navigable and shows its submitted feedback read-only instead of empty editable fields, click-through links inside a mockup can no longer reach into another design's pages, and the top-bar elements no longer overlap at 768px and 375px — measured at 0px, where the previous claim of "verified" was off by 21px and a full overlap respectively.
+
 ## [0.124.1] — 2026-07-30
 
 ### Fixed
