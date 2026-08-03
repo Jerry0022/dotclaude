@@ -112,7 +112,7 @@ into 340px variant cards, so stop trying to fit them there.
 
 | Template | Layout signature |
 |---|---|
-| **design** | Fullscreen content, overlay decision panel (FAB right), bottom feedback dock (general / per-design / per-screen comments), design switcher when ≥2 designs |
+| **design** | Fullscreen content, overlay decision panel (☰ FAB top right), speech-bubble feedback dock on the 💬 FAB bottom left (general / per-design / per-screen comments), design switcher when ≥2 designs |
 | **decision** | Sidebar (~80/~20), variant cards, tri-state per variant |
 | **free** | Sidebar (~80/~20), Claude-authored freeform body, optional tri-state per section |
 
@@ -203,7 +203,7 @@ Panel layout depends on the template picked in Step 1a:
 | Template | Panel mode | Extras |
 |---|---|---|
 | **decision** | Fixed sticky sidebar (~20% screen width), always visible | — |
-| **design** | Overlay panel (360px slide-in from right), FAB-toggled | Collapsible **feedback dock** at the bottom with general / per-design / per-screen comments; design switcher when ≥2 designs |
+| **design** | Overlay panel (360px slide-in from right), toggled by the ☰ FAB top right | **Feedback dock** as a speech bubble anchored to the 💬 FAB bottom left, with general / per-design / per-screen comments; design switcher when ≥2 designs |
 | **free** | Fixed sticky sidebar (~20%), always visible | — |
 
 On narrow screens (<768px), sidebar-mode panels collapse to a sticky bottom
@@ -246,7 +246,7 @@ Variant/section evaluation uses a **bi-state selector** (not tri-state):
 | Template | Evaluation behavior |
 |---|---|
 | **decision** | **Mandatory per variant card.** Every variant MUST carry the bi-state selector. |
-| **design** | **No evaluation.** Feedback is collected via the bottom feedback dock (general + per-design + per-screen textareas). |
+| **design** | **No evaluation.** Feedback is collected via the feedback dock on the 💬 FAB (general + per-design + per-screen textareas). |
 | **free** | **Opt-in per section.** Claude decides per section whether user evaluation is useful; sections with an `eval-{id}` radio group get evaluated, plain sections just show content. |
 
 **The two states:**

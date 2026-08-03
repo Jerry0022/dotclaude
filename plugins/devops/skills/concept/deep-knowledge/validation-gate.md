@@ -182,15 +182,23 @@ template instead. Reconsider the template pick before suppressing these.
 
 | # | Pattern | Purpose |
 |---|---------|---------|
-| P1 | `feedback-dock` | Collapsible bottom dock container |
+| P1 | `feedback-dock` | Speech-bubble dock anchored to the 💬 FAB (bottom-left) |
 | P2 | `feedback-toggle` | FAB that opens the dock |
-| P3 | `feedback-screen-list` | Auto-populated per-screen comment list |
+| P3 | `screen-textareas` OR `feedback-screen-list` | Auto-populated per-page comment container (legacy pages use `feedback-screen-list`) |
 | P4 | `data-screen` | Marker on screen sections that feed the dock |
-| P5 | `proto-general-feedback` | General-notes textarea (kept name for legacy compatibility) |
+| P5 | `design-general-feedback` OR `proto-general-feedback` | General-notes textarea (legacy pages use the `proto-` name) |
 | P6 | `panel-fab` | FAB that opens the decision overlay |
 | P7 | `panel-backdrop` | Overlay backdrop element |
 | P8 | `collectDesignDecisions` OR `collectPrototypeDecisions` | Design branch of `collectDecisions` (legacy pages may still name it `collectPrototypeDecisions`) |
 | P9 | `data-design` | Design wrapper marker — required even for a single design (uniform markup shape) |
+| P10 | `data-design-comment` | Design-level feedback textarea — required only when the iteration has ≥2 `data-design` wrappers |
+
+**Why P3/P5 carry alternates:** the dock was rebuilt for the design layer and
+its ids changed (`feedback-screen-list` → `screen-textareas`,
+`proto-general-feedback` → `design-general-feedback`). A gate pinned to the old
+ids alone hard-fails every freshly generated page, and the likely "repair" is
+Claude inventing two dead elements to satisfy the checker. Accept both, prefer
+the new ones.
 
 At least one `<section data-screen id="…" data-nav-label="…">` MUST exist
 inside the active design. A design iteration with zero screens can't collect
