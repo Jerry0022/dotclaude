@@ -1126,33 +1126,47 @@ The wiring is a single delegated click handler installed alongside
     </aside>
     <div class="panel-backdrop" id="panel-backdrop"></div>
 
-    <!-- Feedback dock (💬) — context-sensitive Speech-Bubble overlay.
+    <!-- Feedback dock (💬) — three-level Speech-Bubble overlay, top to
+         bottom: general → design → page. General sits at the top because
+         it is the one field that never disappears or changes label as the
+         user navigates — putting it first keeps the dock from jumping.
          Anchored to the 💬 FAB (bottom-left): the FAB stays visible and
          clickable, the dock floats above/around it like a chat bubble.
-         The right edge stops before the ☰ Menü-FAB so the user can still
-         reach decisions while the dock is open.
+         Now that ☰ lives top-right (Wave 3), the dock no longer reserves
+         space for it — see Layout CSS geometry comment.
          The close button minimises (does not destroy state) — user input
          is preserved on close, no value is lost.
-         * Top: ONE textarea for the active screen (swapped on navigation).
-         * Bottom: ONE textarea for general notes, always visible. -->
-    <aside class="feedback-dock" id="feedback-dock" data-open="false">
+         Open by default (data-open="true") — see Layout JS § Auto-close for
+         the "closes on first interaction, then manual-only" behaviour
+         driven by data-auto-close-armed. -->
+    <aside class="feedback-dock" id="feedback-dock" data-open="true" data-auto-close-armed="true">
       <div class="feedback-dock-header">
         <strong>Feedback</strong>
         <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" title="{{panel.minimize}}">−</button>
       </div>
       <div class="feedback-section">
-        <label>Aktueller Screen: <strong id="dock-screen-label">Welcome</strong></label>
+        <label>{{proto.feedback_general}}</label>
+        <textarea id="design-general-feedback" data-comment="general"
+                  placeholder="{{proto.feedback_general}}"></textarea>
+      </div>
+      <div class="feedback-divider"></div>
+      <!-- Design row — omitted for single-design iterations via
+           body[data-single-design="true"] (Layout CSS), no JS branching.
+           One hidden textarea per design; only the active one is shown,
+           same swap mechanism as the per-screen row below. Each carries
+           data-comment="design-{id}" AND data-design-comment="{id}". -->
+      <div class="feedback-section">
+        <label>{{design.feedback_design}}: <strong id="dock-design-label">Dispatch</strong></label>
+        <div id="design-textareas" data-placeholder="{{design.feedback_design_placeholder}}"><!-- auto-populated --></div>
+      </div>
+      <div class="feedback-divider"></div>
+      <div class="feedback-section">
+        <label>{{proto.feedback_current}}: <strong id="dock-screen-label">Welcome</strong></label>
         <!-- One hidden textarea per screen. Only the active one is shown.
              Each carries data-comment="{screen-id}" AND
              data-screen-comment="{screen-id}" — so saveState/restoreState
              treats it like any comment field. -->
-        <div id="screen-textareas"><!-- auto-populated --></div>
-      </div>
-      <div class="feedback-divider"></div>
-      <div class="feedback-section">
-        <label>{{proto.feedback_general}}</label>
-        <textarea id="proto-general-feedback" data-comment="general"
-                  placeholder="{{proto.feedback_general}}"></textarea>
+        <div id="screen-textareas" data-placeholder="{{proto.feedback_placeholder}}"><!-- auto-populated --></div>
       </div>
     </aside>
   </div>
@@ -1302,7 +1316,10 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   z-index: 100;
   transition: transform 0.2s, opacity 0.2s;
 }
-.panel-fab { bottom: 2rem; right: 2rem; background: var(--accent-color, #58a6ff); }
+/* ☰ lives top-right (Wave 3) — clear of the design switcher (top centre)
+   and the screen indicator (top left) at every viewport; verified at
+   1280/768/375px. 💬 stays bottom-left, unchanged. */
+.panel-fab { top: 2rem; right: 2rem; background: var(--accent-color, #58a6ff); }
 .feedback-fab { bottom: 2rem; left: 2rem; background: var(--warning-color, #d29922); }
 .panel-fab:hover,
 .feedback-fab:hover { transform: scale(1.1); }
@@ -1365,9 +1382,13 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
 .screen-nav-group .screen-nav-item { margin-left: 0.75rem; }
 
 /* ── Feedback Dock — Speech-Bubble anchored to the 💬 FAB ──
-   Geometry:
+   Geometry (simplified, Wave 3): now that ☰ lives top-right, the dock no
+   longer needs to reserve horizontal space for it, nor lift itself above
+   it on narrow viewports (both existed only because ☰ used to share the
+   bottom-right corner with 💬). The dock now spans to the right edge minus
+   a normal margin.
    * left = FAB.left (2rem)               → bubble's left edge aligns with FAB
-   * right = FAB.right + 56 + 1rem        → reserves the ☰ Menü-FAB area
+   * right = 2rem                         → normal margin, was reserved for ☰
    * bottom = FAB.bottom + 56 + 6px       → bubble sits directly above the FAB
                                             with a hair of overlap so the
                                             visual connection reads as "the
@@ -1377,12 +1398,14 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
                                             so labels/textareas never sit
                                             behind it (the FAB stays clickable
                                             on top via higher z-index).
-   The FAB keeps its z-index above the dock so it remains visible and
-   clickable while the dock is open — clicking the FAB toggles the dock. */
+   transform-origin still anchors to the 💬 FAB so the bubble reads as
+   growing out of it. The FAB keeps its z-index above the dock so it remains
+   visible and clickable while the dock is open — clicking the FAB toggles
+   the dock. */
 .feedback-dock {
   position: fixed;
   left: 2rem;
-  right: calc(2rem + 56px + 1rem);
+  right: 2rem;
   bottom: calc(2rem + 56px - 6px);
   max-height: min(60vh, 520px);
   padding: 1.25rem 1.5rem 1.5rem 80px;
@@ -1443,30 +1466,32 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
 .feedback-section textarea:focus { outline: none; border-color: var(--accent-color); }
 .feedback-divider { height: 1px; background: var(--border-color); margin: 0.25rem 0; }
 
-/* Narrow viewports (≤560px): lift the bubble ABOVE the 💬 FAB instead
-   of having it overlap. With ~150px reserved for FAB + Menü-FAB on a
-   320px phone the inner content column would otherwise collapse to an
-   unusable width. The FAB ends up below the dock, still visible and
-   still toggleable. */
+/* Narrow viewports (≤560px): just tighten the margins/padding. The old
+   "lift above the FAB" override is gone — it only existed to compensate
+   for the ☰ FAB's right-side reservation, which no longer exists now that
+   ☰ moved top-right (Wave 3). */
 @media (max-width: 560px) {
   .feedback-dock {
     left: 0.75rem;
-    right: calc(0.75rem + 56px + 0.5rem);
-    bottom: calc(1rem + 56px + 8px);
-    padding: 1rem;
+    right: 0.75rem;
+    padding: 1rem 1rem 1rem 72px;
     border-radius: 14px;
-    transform-origin: 28px calc(100% + 28px);
   }
 }
 
-/* Hidden per-screen textareas inside #screen-textareas: only active shown */
-#screen-textareas textarea[hidden] { display: none; }
+/* Hidden per-screen / per-design textareas: only the active one shown */
+#screen-textareas textarea[hidden],
+#design-textareas textarea[hidden] { display: none; }
 
-/* Single-screen design: hide screen-nav + per-screen feedback section.
-   Only general notes remain visible. */
+/* Single-screen design: hide screen-nav + per-screen feedback section +
+   its own leading divider. Order is general -> design -> page, so the
+   divider that must disappear with the page row is the one immediately
+   BEFORE it, not the one before general (which is always first, no
+   leading divider). Only general (and, if >=2 designs, per-design) notes
+   remain visible. */
 body[data-single-screen="true"] #screen-nav,
 body[data-single-screen="true"] .feedback-section:has(#screen-textareas),
-body[data-single-screen="true"] .feedback-divider:has(+ .feedback-section #proto-general-feedback) {
+body[data-single-screen="true"] .feedback-divider:has(+ .feedback-section #screen-textareas) {
   display: none;
 }
 
@@ -1551,7 +1576,10 @@ one's value persists independently via `localStorage` (same mechanism as any
       btn.dataset.designId = d.dataset.design;
       btn.dataset.active = String(d === active);
       btn.textContent = d.dataset.navLabel || d.dataset.design;
-      btn.addEventListener('click', () => showDesign(d.dataset.design));
+      // "a design switch" is one of the three auto-close triggers (§ Dock
+      // open/close below) — fired here, not from the generic mockup-click
+      // listener, so the switcher itself is exempt from that listener.
+      btn.addEventListener('click', () => { showDesign(d.dataset.design); fireAutoClose(); });
       switcher.appendChild(btn);
     });
 
@@ -1570,7 +1598,7 @@ one's value persists independently via `localStorage` (same mechanism as any
       heading.dataset.active = String(d === active);
       heading.innerHTML = `<span>${d.dataset.navLabel || d.dataset.design}</span>
         <span class="has-notes" data-design-note-marker="${d.dataset.design}"></span>`;
-      heading.addEventListener('click', () => { showDesign(d.dataset.design); closePanel(); });
+      heading.addEventListener('click', () => { showDesign(d.dataset.design); fireAutoClose(); closePanel(); });
       group.appendChild(heading);
 
       const screens = [...d.querySelectorAll('section[data-screen][id]')];
@@ -1585,6 +1613,7 @@ one's value persists independently via `localStorage` (same mechanism as any
         btn.addEventListener('click', () => {
           if (d !== active) showDesign(d.dataset.design, sec.id);
           else showScreen(sec.id);
+          fireAutoClose();
           closePanel();
         });
         group.appendChild(btn);
@@ -1592,7 +1621,29 @@ one's value persists independently via `localStorage` (same mechanism as any
       nav.appendChild(group);
     });
 
+    buildDesignTextareas(allDesigns, active);
     buildScreenUI(active);
+  }
+
+  // Per-design textareas (💬) — one per design, only the active one shown.
+  // Rebuilt whenever the design SET changes (buildDesignUI), unlike
+  // buildScreenUI which rebuilds on every design switch: the design list
+  // itself only changes across iteration switches, not screen switches.
+  function buildDesignTextareas(allDesigns, active) {
+    const container = document.getElementById('design-textareas');
+    if (!container) return;
+    const placeholder = container.dataset.placeholder || '';
+    container.innerHTML = '';
+    allDesigns.forEach(d => {
+      const ta = document.createElement('textarea');
+      ta.dataset.comment = `design-${d.dataset.design}`;
+      ta.dataset.designComment = d.dataset.design;
+      ta.placeholder = placeholder;
+      ta.hidden = d !== active;
+      container.appendChild(ta);
+    });
+    const label = document.getElementById('dock-design-label');
+    if (label && active) label.textContent = active.dataset.navLabel || active.dataset.design;
   }
 
   // Per-screen textareas (💬) for the design currently active.
@@ -1605,12 +1656,13 @@ one's value persists independently via `localStorage` (same mechanism as any
     document.body.dataset.singleScreen = screens.length <= 1 ? 'true' : 'false';
 
     const container = document.getElementById('screen-textareas');
+    const placeholder = container.dataset.placeholder || '';
     container.innerHTML = '';
     screens.forEach(sec => {
       const ta = document.createElement('textarea');
       ta.dataset.comment = sec.id;
       ta.dataset.screenComment = sec.id;
-      ta.placeholder = `Notiz zu ${sec.dataset.navLabel || sec.id}…`;
+      ta.placeholder = placeholder;
       ta.hidden = true;
       container.appendChild(ta);
     });
@@ -1633,6 +1685,14 @@ one's value persists independently via `localStorage` (same mechanism as any
     document.querySelectorAll('.screen-nav-design-heading').forEach(h => {
       h.dataset.active = String(h.dataset.designId === designId);
     });
+    // Swap the per-design textarea (built once by buildDesignTextareas —
+    // only its `hidden` state and the dock label change on switch, same
+    // pattern as showScreen swapping [data-screen-comment] below).
+    document.querySelectorAll('[data-design-comment]').forEach(ta => {
+      ta.hidden = ta.dataset.designComment !== designId;
+    });
+    const dockDesignLabel = document.getElementById('dock-design-label');
+    if (dockDesignLabel) dockDesignLabel.textContent = targets.find(d => d.dataset.design === designId)?.dataset.navLabel || designId;
     const design = document.querySelector(`section[data-design="${CSS.escape(designId)}"]`);
     if (!design) return;
     buildScreenUI(design);
@@ -1777,6 +1837,46 @@ one's value persists independently via `localStorage` (same mechanism as any
   });
   dockClose.addEventListener('click', closeDock);
 
+  // ── Open by default, closes on first interaction ──
+  // The dock starts open (data-open="true" in markup) so a first-time user
+  // sees all three feedback fields immediately. It auto-closes itself on the
+  // FIRST of: a click inside the mockup, a design switch, a page switch —
+  // tracked by data-auto-close-armed, cleared on first fire so the manual
+  // 💬 toggle governs everything afterwards (never auto-closes twice).
+  // Frozen iterations are exempt entirely: nothing to type, so the dock
+  // just stays open for read-only review (see primeDock()).
+  let autoCloseUsed = false;
+  function fireAutoClose() {
+    if (dock.dataset.autoCloseArmed !== 'true') return;
+    dock.dataset.autoCloseArmed = 'false';
+    autoCloseUsed = true;
+    if (dock.dataset.open === 'true') closeDock();
+  }
+  function primeDock() {
+    const frozen = document.body.classList.contains('viewing-frozen');
+    if (frozen) {
+      // Frozen: always (re-)open for review, never arm the auto-close —
+      // there is nothing to type, so nothing to hide the fields for.
+      openDock();
+      dock.dataset.autoCloseArmed = 'false';
+      return;
+    }
+    if (autoCloseUsed) return; // already fired once this session — manual-only from here
+    openDock();
+    dock.dataset.autoCloseArmed = 'true';
+  }
+
+  // Click inside the mockup itself (trigger #1 above). Explicitly excludes
+  // the dock, both FABs and the design switcher — those clicks are either
+  // not "inside the mockup" at all, or (design switcher) already fire
+  // fireAutoClose() from their own handler above, via the "design switch"
+  // trigger rather than this generic one.
+  document.addEventListener('click', e => {
+    if (e.target.closest('#feedback-dock') || e.target.closest('.panel-fab')
+      || e.target.closest('.feedback-fab') || e.target.closest('.design-switcher')) return;
+    if (e.target.closest('.device-frame') || e.target.closest('[data-screen]')) fireAutoClose();
+  });
+
   // Click outside the dock (anywhere on the design screen) closes it.
   // The ✕ button still works — this just adds click-away as an alternative
   // dismissal. Uses capture so it runs before the screen-link handler,
@@ -1808,6 +1908,11 @@ one's value persists independently via `localStorage` (same mechanism as any
     }
     updateIndicator();
     document.addEventListener('input', updateNoteMarkers);
+    // Runs last: the initial buildDesignUI()/showScreen() calls above are
+    // programmatic setup, not user interaction, so priming the dock here
+    // (not inside showScreen) keeps boot-time restore from being
+    // misread as the "first interaction" that auto-closes it.
+    primeDock();
   });
 
   // Rebuild after iteration switches (fresh designs, fresh screens, fresh
@@ -1826,6 +1931,11 @@ one's value persists independently via `localStorage` (same mechanism as any
       : (remembered && design.querySelector(`#${CSS.escape(remembered)}`)) ? remembered
       : first?.id;
     if (target) showScreen(target);
+    // Same boot-vs-interaction distinction as DOMContentLoaded: this rebuild
+    // is a consequence of the tab switch, not itself the "page switch"
+    // trigger (that already fired, if at all, from the tab-click handler
+    // elsewhere) — but frozen tabs must still (re-)open for review here.
+    primeDock();
   });
 
   // Keyboard: Arrow Left/Right (and Space) jump between screens (within the
@@ -1947,17 +2057,22 @@ with `data-screen`:
 
 ## Decision schema
 
-The design submit payload has **no variant evaluations** — only comments:
+The design submit payload has **no variant evaluations** — only comments,
+keyed by feedback level (general / designs / screens). `comments.screens`
+keeps flat screen-id keying regardless of which design a screen belongs to,
+so no consumer needs to learn the design nesting to read page feedback:
 
 ```json
 {
+  "submitted": true,
   "template": "design",
+  "iteration": 2,
   "decisions": [],
-  "comments": [
-    { "id": "general", "text": "..." },
-    { "id": "screen-welcome", "label": "Welcome", "text": "..." },
-    { "id": "screen-credentials", "label": "Credentials", "text": "..." }
-  ]
+  "comments": {
+    "general": "...",
+    "designs": { "dispatch": "...", "holotable": "..." },
+    "screens": { "d1-s1": "...", "d1-s2": "..." }
+  }
 }
 ```
 
@@ -1965,25 +2080,30 @@ The design submit payload has **no variant evaluations** — only comments:
 
 ```javascript
 // Called by the shared submit handler; `data-template` picks the branch.
+// Generic querySelectorAll('input, select, textarea') per the coverage gate
+// (iteration-rules.md § coverage gate) — no hand-listed field ids. Scoped to
+// #feedback-dock rather than [data-active]: the dock is an overlay that
+// lives outside section[data-iteration] in the DOM, but buildDesignUI() /
+// buildScreenUI() tear down and rebuild its textareas for the active
+// iteration/design on every switch, so this scan already only ever sees the
+// active iteration's fields.
 function collectDesignDecisions() {
-  const comments = [];
-  // General notes
-  const general = document.getElementById('proto-general-feedback');
-  if (general && general.value.trim()) {
-    comments.push({ id: 'general', text: general.value.trim() });
-  }
-  // Per-screen comments
-  document.querySelectorAll('[data-screen-comment]').forEach(el => {
-    if (!el.value.trim()) return;
-    const id = el.dataset.screenComment;
-    const screenEl = document.getElementById(id);
-    comments.push({
-      id,
-      label: screenEl ? (screenEl.dataset.navLabel || id) : id,
-      text: el.value.trim()
-    });
+  const comments = { general: '', designs: {}, screens: {} };
+  document.querySelectorAll('#feedback-dock input, #feedback-dock select, #feedback-dock textarea').forEach(el => {
+    const value = (el.value || '').trim();
+    if (!value) return;
+    if (el.dataset.designComment) comments.designs[el.dataset.designComment] = value;
+    else if (el.dataset.screenComment) comments.screens[el.dataset.screenComment] = value;
+    else if (el.dataset.comment === 'general') comments.general = value;
   });
-  return { submitted: true, template: 'design', decisions: [], comments };
+  const active = document.querySelector('section[data-iteration][data-active]');
+  return {
+    submitted: true,
+    template: 'design',
+    iteration: active ? Number(active.dataset.iteration) : undefined,
+    decisions: [],
+    comments
+  };
 }
 ```
 
