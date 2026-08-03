@@ -25,6 +25,14 @@ selections, read-only comments).
   which state the user submitted, read-only comment fields with the text
   the user entered. Users can click back to earlier tabs to review their
   own past feedback at any time.
+  - **Exemption for `design` iterations:** freezing must NOT disable
+    navigation — the user still has to be able to revisit the mockups. The
+    `disabled`-everything sweep MUST skip `.design-switch-item`,
+    `.screen-nav-item`, `#panel-toggle`, `#feedback-toggle`, and
+    `#feedback-close`. Textareas still go `readonly` (never `disabled`, so
+    their submitted text stays legible and copyable) and submit stays
+    unarmed — only navigation controls are exempt, not the form/comment
+    surface. See § Freezing Design Iterations below.
 - Only the active tab runs the heartbeat / submit UI ("music"). Clicking
   an older tab shows its frozen snapshot but does not re-arm submit.
 - Tab bar must stay compact — vertical chip list in the panel header.
@@ -32,6 +40,29 @@ selections, read-only comments).
   bottom on narrow screens.
 
 See `templates.md` § Iteration Tabs for the reference HTML/CSS/JS.
+
+## Freezing Design Iterations
+
+A frozen `design` iteration (`data-iteration-template="design"`, legacy
+alias `prototype`) is navigable, not inert. When freeze logic walks the
+section applying `disabled` to every interactive descendant, it MUST
+explicitly skip these selectors so the user can still browse the mockups
+and revisit their own submitted notes:
+
+- `.design-switch-item` — the design switcher segments (switching between
+  competing designs must keep working)
+- `.screen-nav-item` — per-screen navigation entries in the panel
+- `#panel-toggle` — the ☰ FAB that opens the panel/switcher
+- `#feedback-toggle` — the 💬 FAB that opens the feedback dock
+- `#feedback-close` — the dock's minimise control
+
+Everything else in a frozen `design` iteration follows the same rule as any
+other frozen iteration: comment textareas become `readonly` (so the
+submitted text stays visible but not editable), and the submit block is
+inert — no re-arming iterate/implement from a frozen tab. `readonly`, not
+`disabled`, is important here: a `disabled` textarea's value can render as
+unreadable/greyed-out in some browsers, defeating the "revisit past
+feedback" purpose that exists for every template.
 
 ## Iteration append checklist
 

@@ -135,13 +135,32 @@ Persist the reconciled set to `.claude/rethink/<date>-<slug>/approaches.md`.
 
 ## Step 6 — Concept Page
 
-Invoke `concept` (decision template). Each approach is a variant
-with: pros/cons, blast-radius label, effort estimate, migration sketch, and
-which success criteria it serves. The page offers two decision actions:
+Invoke `concept`. Do not hard-wire the template: apply `concept`'s own
+per-iteration template rule (`skills/concept/SKILL.md` § Step 1a) to the
+reconciled set of approaches.
+
+- If the approaches are substantive non-visual alternatives (architecture,
+  strategy, library, migration path — the common case for rethink) →
+  a `decision` iteration. Each approach is a variant with: pros/cons,
+  blast-radius label, effort estimate, migration sketch, and which success
+  criteria it serves.
+- If one or more approaches are primarily visual — competing UX/layout/
+  visual directions surfaced by the `ux-design` lens — those land in a
+  separate `design` iteration with real mockups per approach, not flattened
+  into variant cards. `enduser-feel`/`architecture` alternatives that are
+  entangled with the visual ones still get their own `decision` iteration;
+  split them rather than mixing layout and non-visual tradeoffs on one page.
+- A run that surfaces both kinds of approaches renders **both iterations on
+  the same concept page** — a `decision` iteration for the non-visual call
+  and a `design` iteration for the visual one — not two separate pages.
+
+Whichever iteration(s) result, the page offers two decision actions per
+iteration:
 
 - **Iterate** — feedback flows back: revise via Step 5, or run a new fresh
   round (Step 4) when the feedback changes direction fundamentally. Then
-  re-render. Nothing is implemented.
+  re-render (append a new iteration; the existing ones stay as frozen
+  history). Nothing is implemented.
 - **Implement** — locks the chosen approach and proceeds to Step 7. Only
   this explicit action starts implementation.
 

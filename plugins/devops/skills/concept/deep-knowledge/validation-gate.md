@@ -4,7 +4,11 @@ After writing the HTML file, validate that all mandatory interactive patterns
 are present. **Grep the generated file** for each required pattern. The check
 runs in three phases: first the forbidden patterns (hard fail), then the
 shared patterns (all templates), then the template-specific extras selected
-by `<html data-template="...">`.
+by the **active iteration's** template — `data-iteration-template` on
+`section[data-iteration]`, projected onto `<html data-template="...">` by
+`applyIterationTemplate()`. Each iteration on the page may carry a different
+template; validate every iteration's section against its own
+`data-iteration-template`, not just the one currently mirrored onto `<html>`.
 
 > **Deterministic backstop:** the `post.concept.gate` PostToolUse hook
 > re-checks a critical subset of this gate (the live decision panel + bridge
@@ -50,11 +54,12 @@ Every concept page must contain these 40 patterns, regardless of template:
 | 10 | `localStorage` | Reload resilience (state persistence with TTL) |
 | 11 | `data-page-version` | Page version tag for localStorage invalidation |
 | 12 | `data-iteration` | Iteration section marker |
+| 12b | `data-iteration-template` on every `section[data-iteration]` | Authoritative per-iteration template. **Missing → warning, not a hard fail** — the legacy fallback (page-level `<html data-template>` written at generation time) still works for pages predating this attribute. New pages MUST carry it on every iteration section. |
 | 13 | `iteration-tabs` | Tab bar container in the decision panel |
 | 14 | `pollReload` | Reload-signal poller (picks up file rewrites) |
 | 15 | `sec.hidden` | Tab-switch JS toggles the `hidden` attribute |
 | 16 | `pollProcessedState` | Auto-reset poll handler |
-| 17 | `section-nav` OR `screen-nav` | Panel navigation (TOC for decision/free, screen list for prototype) |
+| 17 | `section-nav` OR `screen-nav` | Panel navigation (TOC for decision/free, screen/design list for `design`, legacy alias `prototype`) |
 | 18 | `data-nav-label` | Marker on nav-eligible sections |
 | 19 | `submit-iterate-btn` | Primary submit: iterate action (no code changes) |
 | 20 | `submit-implement-btn` | Secondary submit: implement action (real changes) |
@@ -102,7 +107,7 @@ per field. Specific selectors (for grouped sub-objects like `decisions[]`,
 `comments[]`) are allowed *in addition* but must never replace the
 catch-all.
 
-### Required pattern (free, decision, and prototype branches)
+### Required pattern (free, decision, and design branches)
 
 ```javascript
 function collectAllFormFields(scope) {
@@ -142,14 +147,21 @@ function collectDecisions(action) {
 See `templates.md` § collectDecisions (dispatcher) for the live reference
 implementation that wires this into the per-template branches.
 
-Additionally, the `<html>` element MUST carry `data-template="decision"` (or
-`prototype`, or `free`) so `collectDecisions()` dispatches to the correct
-branch. The submit payload MUST include an `action` field with value
-`"iterate"` or `"implement"`.
+Additionally, every `section[data-iteration]` MUST carry
+`data-iteration-template="decision"` (or `design`, or `free`; `prototype` is
+accepted as a legacy alias for `design`), and `applyIterationTemplate()`
+MUST mirror the active iteration's value onto `<html data-template="...">`
+so `collectDecisions()` dispatches to the correct branch. **`<html
+data-template>` not matching the active iteration's
+`data-iteration-template` is an error** — it means the projection did not
+run before first paint (see § Frozen/Active Mismatch below). The submit
+payload MUST include an `action` field with value `"iterate"` or
+`"implement"`.
 
 ## Phase 2 — Template-specific patterns
 
-Run the subset matching the template picked in Step 1a of `SKILL.md`.
+Run the subset matching the template picked per-iteration in Step 1a of
+`SKILL.md`, using each iteration's own `data-iteration-template`.
 
 ### Template: decision
 
@@ -166,7 +178,7 @@ If the page contains no variants (unusual for the decision template), D1–D5
 may be skipped — but in that case the content likely belongs in the `free`
 template instead. Reconsider the template pick before suppressing these.
 
-### Template: prototype
+### Template: design (legacy alias: prototype)
 
 | # | Pattern | Purpose |
 |---|---------|---------|
@@ -174,14 +186,27 @@ template instead. Reconsider the template pick before suppressing these.
 | P2 | `feedback-toggle` | FAB that opens the dock |
 | P3 | `feedback-screen-list` | Auto-populated per-screen comment list |
 | P4 | `data-screen` | Marker on screen sections that feed the dock |
-| P5 | `proto-general-feedback` | General-notes textarea |
+| P5 | `proto-general-feedback` | General-notes textarea (kept name for legacy compatibility) |
 | P6 | `panel-fab` | FAB that opens the decision overlay |
 | P7 | `panel-backdrop` | Overlay backdrop element |
-| P8 | `collectPrototypeDecisions` | Prototype branch of `collectDecisions` |
+| P8 | `collectDesignDecisions` OR `collectPrototypeDecisions` | Design branch of `collectDecisions` (legacy pages may still name it `collectPrototypeDecisions`) |
+| P9 | `data-design` | Design wrapper marker — required even for a single design (uniform markup shape) |
 
 At least one `<section data-screen id="…" data-nav-label="…">` MUST exist
-inside the active iteration. A prototype with zero screens can't collect
-per-screen feedback.
+inside the active design. A design iteration with zero screens can't collect
+per-screen feedback. With ≥2 `data-design` wrappers, exactly one MUST carry
+`data-design-active="true"` and the rest `hidden`.
+
+### Frozen/Active Mismatch
+
+For every `section[data-iteration]`: if it carries `data-active`, its
+`data-iteration-template` MUST equal `<html data-template>` at validation
+time (simulate a tab switch to it, or check the generation-time initial
+state if it is the only active one). A mismatch is a **hard-fail error** —
+it means either `applyIterationTemplate()` was not wired into
+`showIteration()`, or the initial `<html data-template>` written at
+generation time does not match the active iteration, which produces a
+flash-of-wrong-layout on load.
 
 ### Template: free
 
@@ -211,7 +236,12 @@ enforces the same on write.
 - Panel states missing → no visual transition on submit/reset cycle
 - localStorage missing → user selections lost on reload or tab close
 - `data-template` missing → `collectDecisions` can't pick the right branch
-- Prototype without `data-screen` → feedback dock renders empty
+- `data-iteration-template` missing on a section → warning; legacy fallback
+  used, but new pages should always carry it
+- `<html data-template>` mismatched with the active section's
+  `data-iteration-template` → error; `applyIterationTemplate()` not wired or
+  fired too late, causing a flash of the wrong layout
+- Design iteration without `data-screen` → feedback dock renders empty
 - Heartbeat poller does an HTTP-only check (no `await r.json()` + `claude_ts` assignment) → indicator stays green forever because the server self-pulse always returns 200, even when Claude's cron is dead
 - Disconnected classified before the first `/heartbeat` response (no `_everPolled` guard) → a fresh page flashes connecting→disconnected→connected; with the old overlay it also forced two "Got it" clicks
 - Cache hint not wired to the disconnected state (`_setCacheHints` missing from `checkClaudeConnection`) → a click made while Claude is offline looks lost instead of visibly queued (the Offline Submit Queue still delivers it on reconnect, but the user gets no signal)
@@ -219,5 +249,5 @@ enforces the same on write.
 - `submitCreateIssues` / `collectDisposition` missing → final-report panel renders correctly but the "Issues erstellen" button does nothing on click (silent failure — no console error, no network request); same silent failure for "Concept beenden" if `collectDisposition` is missing from `submitDisposeConcept`
 
 The patterns in `templates.md` (§ Claude Connection Heartbeat, § Submit
-Handler, § State Persistence, § Template: prototype, § Template: free)
+Handler, § State Persistence, § Template: design, § Template: free)
 provide the reference implementations.
