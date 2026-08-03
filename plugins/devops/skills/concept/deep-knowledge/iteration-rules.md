@@ -28,11 +28,12 @@ selections, read-only comments).
   - **Exemption for `design` iterations:** freezing must NOT disable
     navigation — the user still has to be able to revisit the mockups. The
     `disabled`-everything sweep MUST skip `.design-switch-item`,
-    `.screen-nav-item`, `#panel-toggle`, `#feedback-toggle`, and
-    `#feedback-close`. Textareas still go `readonly` (never `disabled`, so
-    their submitted text stays legible and copyable) and submit stays
-    unarmed — only navigation controls are exempt, not the form/comment
-    surface. See § Freezing Design Iterations below.
+    `.screen-nav-item`, `.screen-nav-design-heading`, `[data-screen-link]`,
+    `#panel-toggle`, `#feedback-toggle`, and `#feedback-close`. Textareas
+    still go `readonly` (never `disabled`, so their submitted text stays
+    legible and copyable) and submit stays unarmed — only navigation
+    controls are exempt, not the form/comment surface.
+    See § Freezing Design Iterations below.
 - Only the active tab runs the heartbeat / submit UI ("music"). Clicking
   an older tab shows its frozen snapshot but does not re-arm submit.
 - Tab bar must stay compact — vertical chip list in the panel header.
@@ -52,6 +53,13 @@ and revisit their own submitted notes:
 - `.design-switch-item` — the design switcher segments (switching between
   competing designs must keep working)
 - `.screen-nav-item` — per-screen navigation entries in the panel
+- `.screen-nav-design-heading` — the design-level entries those items are
+  nested under; disabling them while their children stay live makes the
+  nav half-navigable
+- `[data-screen-link]` — click-dummy navigation INSIDE the mockup. These
+  are ordinary `<button>`s living inside `section[data-iteration]`, so a
+  naive sweep hits them and kills exactly the walkthrough the frozen tab
+  exists to preserve
 - `#panel-toggle` — the ☰ FAB that opens the panel/switcher
 - `#feedback-toggle` — the 💬 FAB that opens the feedback dock
 - `#feedback-close` — the dock's minimise control
@@ -63,6 +71,22 @@ inert — no re-arming iterate/implement from a frozen tab. `readonly`, not
 `disabled`, is important here: a `disabled` textarea's value can render as
 unreadable/greyed-out in some browsers, defeating the "revisit past
 feedback" purpose that exists for every template.
+
+**The feedback dock needs explicit handling.** Its textareas are built by
+JS and live OUTSIDE `section[data-iteration]`, so the freeze sweep never
+reaches them — a frozen tab would otherwise show empty, editable fields and
+imply the user submitted nothing. Freezing a `design` iteration therefore
+also requires embedding the submitted comments in the frozen section:
+
+```html
+<script type="application/json" data-frozen-feedback>
+  {"general": "…", "designs": {"dispatch": "…"}, "screens": {"d1-s1": "…"}}
+</script>
+```
+
+`applyDockFreezeState()` (templates.md § Layout JS) reads that blob whenever
+`body.viewing-frozen` is set, fills the dock read-only, and restores the live
+iteration's unsent text when the user switches back.
 
 ## Iteration append checklist
 

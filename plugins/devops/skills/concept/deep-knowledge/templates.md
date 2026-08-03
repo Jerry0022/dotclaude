@@ -911,7 +911,7 @@ buttons:
     per-screen section, no "Aktueller Screen" label)
   - No click-dummy wiring required — nothing to navigate to
   - The screen-indicator overlay can be hidden or simplified
-  - `buildScreenUI()` detects `screens.length === 1` and sets
+  - `updateScreenScope()` detects `screens.length === 1` and sets
     `document.body.dataset.singleScreen = 'true'` so CSS can hide the
     per-screen UI. CSS adds: `body[data-single-screen="true"] #screen-nav,
     body[data-single-screen="true"] .feedback-section:has(#screen-textareas)
@@ -1221,7 +1221,16 @@ html:not([data-template="design"]) .feedback-fab,
 html:not([data-template="design"]) .feedback-dock,
 html:not([data-template="design"]) .design-switcher { display: none !important; }
 
-/* Minimal screen counter — NOT a header bar */
+/* Minimal screen counter — NOT a header bar.
+   Left-anchored at 1rem and content-sized, so its natural width grows with
+   the page label while the switcher stays centred. Without a cap the two
+   overlap on narrow viewports (measured: 21px overlap at 768px, full
+   overlap at 375px). The cap is derived from the switcher's own geometry
+   below — switcher max-width 34vw, centred ⇒ its left edge is at 33vw, so
+   the indicator may occupy at most 33vw minus its 1rem offset minus a
+   0.5rem gap. Truncation with an ellipsis is the right degradation here:
+   the leading "page N/total" segment is the load-bearing part, the trailing
+   screen label is not. */
 .screen-indicator {
   position: fixed; top: 1rem; left: 1rem; z-index: 90;
   padding: 0.4rem 0.75rem; border-radius: 999px;
@@ -1229,17 +1238,30 @@ html:not([data-template="design"]) .design-switcher { display: none !important; 
   border: 1px solid var(--border-color);
   color: var(--text-secondary); font-size: 0.8rem;
   backdrop-filter: blur(6px);
+  /* border-box is REQUIRED: with the default content-box the 0.75rem
+     padding and the border are added ON TOP of max-width and the element
+     still runs into the switcher (measured: 25px over budget at 375px). */
+  box-sizing: border-box;
+  max-width: calc(33vw - 1.5rem);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* No switcher to avoid when the iteration has a single design — the only
+   neighbour left is the ☰ FAB at the top right (left edge 100vw - 88px). */
+body[data-single-design="true"] .screen-indicator { max-width: calc(100vw - 8rem); }
 .screen-indicator strong { color: var(--text); }
 
 /* ── Design switcher — ghost bar, top centre ──
    Deliberately barely-there at rest: the viewport belongs to the mockup, not
    to chrome. Only the active design's label shows, no background fill, no
-   separators. Hover AND :focus-visible reveal the full segmented control —
-   focus-visible matters because this must be reachable without a mouse.
+   separators. Hover AND :focus-within reveal the full segmented control —
+   :focus-within (not :focus-visible) is deliberate: the expanding element is
+   the container, and it must expand as soon as focus lands on ANY of its
+   segment buttons, which is exactly what keyboard tabbing produces. That
+   keeps the control reachable without a mouse.
    Never collides with the screen indicator (top-left) or the ☰ FAB
-   (top-right once Wave 3 moves it there): it sits centred and is hidden
-   entirely below two designs (body[data-single-design="true"], see below). */
+   (top-right once Wave 3 moves it there) — guaranteed by the width bands
+   documented at .panel-fab below, not by the labels happening to be short.
+   Hidden entirely below two designs (body[data-single-design="true"]). */
 .design-switcher {
   position: fixed; top: 0.75rem; left: 50%; transform: translateX(-50%);
   z-index: 95;
@@ -1249,6 +1271,14 @@ html:not([data-template="design"]) .design-switcher { display: none !important; 
   backdrop-filter: blur(6px);
   opacity: 0.18;
   transition: opacity 0.16s ease;
+  /* Hard width budget so the expanded (hover/focus) state cannot grow into
+     the screen indicator on the left or the ☰ FAB on the right — it spans
+     33vw…67vw at every viewport. Segments shrink and ellipsise instead;
+     min-width:0 is required or flex refuses to shrink below content width
+     because the labels are nowrap. */
+  box-sizing: border-box;
+  max-width: 34vw;
+  overflow: hidden;
 }
 .design-switcher:hover,
 .design-switcher:focus-within { opacity: 1; }
@@ -1257,6 +1287,7 @@ html:not([data-template="design"]) .design-switcher { display: none !important; 
   padding: 0.35rem 0.85rem; border-radius: 999px;
   font-size: 0.8rem; color: var(--text-secondary);
   white-space: nowrap; transition: background 0.15s, color 0.15s;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
 }
 /* Resting state shows ONLY the active label — siblings collapse to width 0
    so no separators/background are visible until the bar expands on hover. */
@@ -1316,9 +1347,17 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   z-index: 100;
   transition: transform 0.2s, opacity 0.2s;
 }
-/* ☰ lives top-right (Wave 3) — clear of the design switcher (top centre)
-   and the screen indicator (top left) at every viewport; verified at
-   1280/768/375px. 💬 stays bottom-left, unchanged. */
+/* ☰ lives top-right (Wave 3). The three top-edge overlays partition the
+   width by construction rather than by hope:
+     screen indicator  1rem … 33vw - 0.5rem   (max-width cap + ellipsis)
+     design switcher   33vw … 67vw            (max-width: 34vw, centred)
+     ☰ FAB             100vw - 88px … 100vw - 2rem
+   Those bands cannot intersect for any viewport width where
+   67vw < 100vw - 88px, i.e. above 267px — below that the layout is out of
+   scope anyway. Measured in Edge at 1280/768/375px: no overlap at any of
+   the three. Before the caps existed the indicator overlapped the switcher
+   by 21px at 768px and completely at 375px, where it also reached the ☰
+   FAB. 💬 stays bottom-left, unchanged. */
 .panel-fab { top: 2rem; right: 2rem; background: var(--accent-color, #58a6ff); }
 .feedback-fab { bottom: 2rem; left: 2rem; background: var(--warning-color, #d29922); }
 .panel-fab:hover,
@@ -1517,16 +1556,38 @@ design remembers its own last-viewed page (`lastScreenByDesign`, persisted
 via `saveState()`), so switching designs and back returns to that page, not
 page 1. `showScreen(id)` swaps the active screen, rebuilds the position
 indicator, and swaps the feedback-dock textarea to the matching per-screen
-`<textarea>`. Per-screen textareas stay in the DOM (just hidden), so each
-one's value persists independently via `localStorage` (same mechanism as any
-`data-comment` field).
+`<textarea>`.
+
+The dock holds **one textarea per screen of EVERY design in the iteration**,
+built once per iteration by `buildScreenTextareas()` — never per design
+switch. Switching design or page only flips `hidden`; no node is ever
+destroyed. This is load-bearing in three ways:
+
+1. Values survive a design switch. `restoreState()` runs once on
+   `DOMContentLoaded` and is never re-invoked, so a node destroyed later is
+   never rehydrated.
+2. `saveState()` serialises only nodes present in the DOM — destroying a
+   textarea would DELETE its `text:{screen-id}` localStorage key on the next
+   input event, making the note unrecoverable rather than merely invisible.
+3. `collectDesignDecisions()` scans the dock; only a dock holding all designs'
+   screens produces a complete `comments.screens` payload.
+
+Same rule, same reason as `buildDesignTextareas()` for the design-level row.
+Both builders carry values across the one rebuild they do have (iteration
+change) via `harvestDockValues()`.
 
 ```javascript
 (function wireDesignLayout() {
   // Guard on the PAGE, not on the current projection: a page whose first
   // iteration is `decision` may still contain a `design` iteration further
   // down, and this IIFE only runs once at load.
-  const hasDesign = document.documentElement.dataset.template === 'design'
+  // The legacy alias `prototype` is normalised FIRST — a page that carries
+  // data-template="prototype" on <html> and no data-iteration-template at
+  // all (the documented legacy shape) must still wire up. Comparing the raw
+  // value against 'design' only would fail both disjuncts and leave the
+  // page inert.
+  const DESIGN_TEMPLATES = new Set(['design', 'prototype']);
+  const hasDesign = DESIGN_TEMPLATES.has(document.documentElement.dataset.template || '')
     || !!document.querySelector('section[data-iteration][data-iteration-template="design"],'
                               + 'section[data-iteration][data-iteration-template="prototype"]');
   if (!hasDesign) return;
@@ -1622,17 +1683,32 @@ one's value persists independently via `localStorage` (same mechanism as any
     });
 
     buildDesignTextareas(allDesigns, active);
-    buildScreenUI(active);
+    buildScreenTextareas(allDesigns);
+    updateScreenScope(active);
+  }
+
+  // Snapshot the dock's current values, keyed by data-comment, so the one
+  // rebuild these builders still perform (iteration change) does not drop
+  // text. restoreState() only runs on DOMContentLoaded, so anything lost
+  // here is lost for good — and the next saveState() would delete its
+  // localStorage key too.
+  function harvestDockValues() {
+    const values = {};
+    document.querySelectorAll('#feedback-dock [data-comment]').forEach(el => {
+      if (el.value) values[el.dataset.comment] = el.value;
+    });
+    return values;
   }
 
   // Per-design textareas (💬) — one per design, only the active one shown.
-  // Rebuilt whenever the design SET changes (buildDesignUI), unlike
-  // buildScreenUI which rebuilds on every design switch: the design list
-  // itself only changes across iteration switches, not screen switches.
+  // Rebuilt only when the design SET changes (buildDesignUI, i.e. iteration
+  // switches). A design switch never rebuilds anything: showDesign() just
+  // flips `hidden`.
   function buildDesignTextareas(allDesigns, active) {
     const container = document.getElementById('design-textareas');
     if (!container) return;
     const placeholder = container.dataset.placeholder || '';
+    const carried = harvestDockValues();
     container.innerHTML = '';
     allDesigns.forEach(d => {
       const ta = document.createElement('textarea');
@@ -1640,32 +1716,50 @@ one's value persists independently via `localStorage` (same mechanism as any
       ta.dataset.designComment = d.dataset.design;
       ta.placeholder = placeholder;
       ta.hidden = d !== active;
+      if (carried[ta.dataset.comment]) ta.value = carried[ta.dataset.comment];
       container.appendChild(ta);
     });
     const label = document.getElementById('dock-design-label');
     if (label && active) label.textContent = active.dataset.navLabel || active.dataset.design;
   }
 
-  // Per-screen textareas (💬) for the design currently active.
-  function buildScreenUI(design) {
+  // Per-screen textareas (💬) — one per screen of EVERY design in the
+  // iteration, all hidden until showScreen() reveals the active one. Built
+  // ONCE per iteration, exactly like buildDesignTextareas above; never on a
+  // design switch. Destroying and rebuilding them per design lost user text
+  // (restoreState never re-runs) and truncated the submit payload
+  // (collectDesignDecisions scans this container).
+  // data-screen-design carries the owning design id — the dock lives outside
+  // section[data-design], so that attribute is the only link back.
+  function buildScreenTextareas(allDesigns) {
+    const container = document.getElementById('screen-textareas');
+    if (!container) return;
+    const placeholder = container.dataset.placeholder || '';
+    const carried = harvestDockValues();
+    container.innerHTML = '';
+    allDesigns.forEach(d => {
+      d.querySelectorAll('section[data-screen][id]').forEach(sec => {
+        const ta = document.createElement('textarea');
+        ta.dataset.comment = sec.id;
+        ta.dataset.screenComment = sec.id;
+        ta.dataset.screenDesign = d.dataset.design;
+        ta.placeholder = placeholder;
+        ta.hidden = true;
+        if (carried[sec.id]) ta.value = carried[sec.id];
+        container.appendChild(ta);
+      });
+    });
+  }
+
+  // Counters + single-screen collapse for the design currently active.
+  // Pure projection — touches no textarea, so it is safe to call on every
+  // design switch.
+  function updateScreenScope(design) {
     const screens = [...design.querySelectorAll('section[data-screen][id]')];
     document.getElementById('total-screens').textContent = screens.length;
-
     // Single-screen designs: hide screen-nav + per-screen feedback.
     // CSS keys off body[data-single-screen="true"].
     document.body.dataset.singleScreen = screens.length <= 1 ? 'true' : 'false';
-
-    const container = document.getElementById('screen-textareas');
-    const placeholder = container.dataset.placeholder || '';
-    container.innerHTML = '';
-    screens.forEach(sec => {
-      const ta = document.createElement('textarea');
-      ta.dataset.comment = sec.id;
-      ta.dataset.screenComment = sec.id;
-      ta.placeholder = placeholder;
-      ta.hidden = true;
-      container.appendChild(ta);
-    });
   }
 
   // Switches the active design (and, within it, the given page or its
@@ -1693,9 +1787,12 @@ one's value persists independently via `localStorage` (same mechanism as any
     });
     const dockDesignLabel = document.getElementById('dock-design-label');
     if (dockDesignLabel) dockDesignLabel.textContent = targets.find(d => d.dataset.design === designId)?.dataset.navLabel || designId;
-    const design = document.querySelector(`section[data-design="${CSS.escape(designId)}"]`);
+    // Scoped to the VISIBLE iteration — design ids repeat across iterations,
+    // so an unscoped lookup would resolve to a frozen iteration's node and
+    // navigate the wrong section.
+    const design = it.querySelector(`section[data-design="${CSS.escape(designId)}"]`);
     if (!design) return;
-    buildScreenUI(design);
+    updateScreenScope(design);
     const remembered = screenId || lastScreenByDesign[designId];
     const first = design.querySelector('section[data-screen]');
     const target = (remembered && design.querySelector(`#${CSS.escape(remembered)}`)) ? remembered : first?.id;
@@ -1714,14 +1811,20 @@ one's value persists independently via `localStorage` (same mechanism as any
       s.dataset.screenActive = match ? 'true' : 'false';
       if (match) idx = i;
     });
-    const screen = document.getElementById(id);
+    // Scoped to the active design for the same reason as showDesign's
+    // lookup: screen ids repeat across iterations.
+    const screen = design.querySelector(`#${CSS.escape(id)}`);
     const label = screen?.dataset.navLabel || id;
     document.getElementById('active-screen-label').textContent = label;
     document.getElementById('active-screen-idx').textContent = idx + 1;
     const dockLabel = document.getElementById('dock-screen-label');
     if (dockLabel) dockLabel.textContent = label;
-    document.querySelectorAll('[data-screen-comment]').forEach(ta => {
-      ta.hidden = ta.dataset.screenComment !== id;
+    // The dock holds every design's screen textareas, so match on the
+    // owning design too — screen ids are unique per iteration, but this
+    // keeps the swap correct even if a page reuses ids across designs.
+    document.querySelectorAll('#feedback-dock [data-screen-comment]').forEach(ta => {
+      ta.hidden = !(ta.dataset.screenComment === id
+        && (!ta.dataset.screenDesign || ta.dataset.screenDesign === design.dataset.design));
     });
     document.querySelectorAll('.screen-nav-item').forEach(item => {
       item.dataset.active = String(item.dataset.screenId === id);
@@ -1761,10 +1864,19 @@ one's value persists independently via `localStorage` (same mechanism as any
     }
   }
 
+  // Every per-screen textarea belongs to the DOCK, not to the mockup
+  // section — `section[data-design]` never contains one. Note markers must
+  // therefore query the dock and filter by the owning design id.
+  function dockScreenTextareas(designId) {
+    return [...document.querySelectorAll('#feedback-dock [data-screen-comment]')]
+      .filter(ta => !designId || !ta.dataset.screenDesign || ta.dataset.screenDesign === designId);
+  }
+
   function updateNoteMarkers() {
     document.querySelectorAll('.screen-nav-item').forEach(item => {
       const id = item.dataset.screenId;
-      const ta = document.querySelector(`[data-screen-comment="${id}"]`);
+      const ta = dockScreenTextareas(item.dataset.designId)
+        .find(t => t.dataset.screenComment === id);
       const marker = item.querySelector('[data-note-marker]');
       if (marker) marker.textContent = (ta && ta.value.trim()) ? '● Notiz' : '';
     });
@@ -1779,9 +1891,7 @@ one's value persists independently via `localStorage` (same mechanism as any
   function updateDesignNoteMarkers() {
     document.querySelectorAll('[data-design-note-marker]').forEach(marker => {
       const id = marker.dataset.designNoteMarker;
-      const design = document.querySelector(`section[data-design="${CSS.escape(id)}"]`);
-      const pageHasNotes = design && [...design.querySelectorAll('[data-screen-comment]')]
-        .some(ta => ta.value.trim());
+      const pageHasNotes = dockScreenTextareas(id).some(ta => ta.value.trim());
       const designTa = document.querySelector(`[data-design-comment="${CSS.escape(id)}"]`);
       const designHasNotes = designTa && designTa.value.trim();
       marker.textContent = (pageHasNotes || designHasNotes) ? '●' : '';
@@ -1852,7 +1962,68 @@ one's value persists independently via `localStorage` (same mechanism as any
     autoCloseUsed = true;
     if (dock.dataset.open === 'true') closeDock();
   }
+  // Dock content is per-iteration, but the dock itself is ONE shared overlay
+  // that lives outside section[data-iteration]. Entering a frozen tab
+  // stashes the live iteration's unsent values, shows the frozen
+  // iteration's SUBMITTED values read-only (never `disabled` — see
+  // iteration-rules.md § Freezing Design Iterations), and returning to the
+  // live tab restores the stash. Both directions write EVERY dock field,
+  // empty string included: screen ids repeat across iterations, so leaving a
+  // field untouched would leak the other iteration's text into it.
+  // The frozen payload is the JSON blob the freeze step writes into the
+  // section as a script[type="application/json"][data-frozen-feedback]
+  // element — same shape collectDesignDecisions() submitted
+  // ({general, designs, screens}); see iteration-rules.md § Freezing Design
+  // Iterations for the exact markup. Never write that closing script tag
+  // literally inside this JS, not even in a comment: the HTML parser ends
+  // the surrounding script element at it. Missing blob (older pages)
+  // degrades to empty read-only fields rather than editable ones.
+  let liveDockValues = null;
+  function frozenFeedback() {
+    const it = visibleIteration();
+    const node = it && it.querySelector('script[type="application/json"][data-frozen-feedback]');
+    if (!node) return null;
+    try { return JSON.parse(node.textContent); } catch (e) { return null; }
+  }
+  function applyDockFreezeState() {
+    const frozen = document.body.classList.contains('viewing-frozen');
+    const fields = [...document.querySelectorAll('#feedback-dock textarea')];
+    if (frozen) {
+      if (liveDockValues === null) liveDockValues = harvestDockValues();
+      const data = frozenFeedback() || {};
+      fields.forEach(ta => {
+        if (ta.dataset.designComment) ta.value = (data.designs || {})[ta.dataset.designComment] || '';
+        else if (ta.dataset.screenComment) ta.value = (data.screens || {})[ta.dataset.screenComment] || '';
+        else if (ta.dataset.comment === 'general') ta.value = data.general || '';
+        ta.readOnly = true;
+      });
+    } else {
+      const stash = liveDockValues;
+      liveDockValues = null;
+      fields.forEach(ta => {
+        ta.readOnly = false;
+        if (stash) ta.value = stash[ta.dataset.comment] || '';
+      });
+    }
+  }
+
+  // Called by the submit handler once the payload is accepted. The dock is
+  // shared across iterations and its ids are per-design-index (`d1-s1`), so
+  // iteration N+1 would otherwise open pre-filled with — and re-send —
+  // iteration N's text. Clearing on submit is preferred over namespacing the
+  // keys per iteration: the values have just been persisted server-side in
+  // the payload and mirrored into the frozen section's data-frozen-feedback
+  // blob, so nothing is lost, and the localStorage keys stay stable for the
+  // ordinary reload case.
+  window.clearDock = function() {
+    document.querySelectorAll('#feedback-dock textarea').forEach(ta => { ta.value = ''; });
+    liveDockValues = null;
+    updateNoteMarkers();
+    if (typeof saveState === 'function') saveState();
+  };
+
   function primeDock() {
+    applyDockFreezeState();
     const frozen = document.body.classList.contains('viewing-frozen');
     if (frozen) {
       // Frozen: always (re-)open for review, never arm the auto-close —
@@ -1871,23 +2042,18 @@ one's value persists independently via `localStorage` (same mechanism as any
   // not "inside the mockup" at all, or (design switcher) already fire
   // fireAutoClose() from their own handler above, via the "design switch"
   // trigger rather than this generic one.
+  //
+  // This is the ONLY click-away path. There must never be a second,
+  // unconditional "close on outside click" listener: it would bypass
+  // data-auto-close-armed and close the dock on EVERY mockup click, so a
+  // dock the user deliberately re-opened after the first auto-close would
+  // not survive the next click. The contract is one auto-close, then
+  // manual 💬 toggle only — enforced entirely by fireAutoClose().
   document.addEventListener('click', e => {
     if (e.target.closest('#feedback-dock') || e.target.closest('.panel-fab')
       || e.target.closest('.feedback-fab') || e.target.closest('.design-switcher')) return;
     if (e.target.closest('.device-frame') || e.target.closest('[data-screen]')) fireAutoClose();
   });
-
-  // Click outside the dock (anywhere on the design screen) closes it.
-  // The ✕ button still works — this just adds click-away as an alternative
-  // dismissal. Uses capture so it runs before the screen-link handler,
-  // which is fine: the click also triggers navigation if it hit a
-  // data-screen-link element, and dismissing the dock first is harmless.
-  document.addEventListener('click', (e) => {
-    if (dock.dataset.open !== 'true') return;
-    if (e.target.closest('#feedback-dock')) return;
-    if (e.target.closest('#feedback-toggle')) return;
-    closeDock();
-  }, true);
 
   document.addEventListener('DOMContentLoaded', () => {
     buildDesignUI();
@@ -2083,10 +2249,15 @@ so no consumer needs to learn the design nesting to read page feedback:
 // Generic querySelectorAll('input, select, textarea') per the coverage gate
 // (iteration-rules.md § coverage gate) — no hand-listed field ids. Scoped to
 // #feedback-dock rather than [data-active]: the dock is an overlay that
-// lives outside section[data-iteration] in the DOM, but buildDesignUI() /
-// buildScreenUI() tear down and rebuild its textareas for the active
-// iteration/design on every switch, so this scan already only ever sees the
-// active iteration's fields.
+// lives outside section[data-iteration] in the DOM.
+// The dock holds a textarea for EVERY screen of EVERY design in the active
+// iteration (buildScreenTextareas), not just the design on screen — the
+// non-active ones are `hidden`, which does not affect querySelectorAll. That
+// is what makes this scan complete: an earlier version rebuilt the container
+// per design switch, so submitting a 2-design iteration shipped only the
+// design the user happened to be looking at and silently dropped the rest.
+// The dock is emptied on submit (clearDock), so it never carries a previous
+// iteration's text into the next payload.
 function collectDesignDecisions() {
   const comments = { general: '', designs: {}, screens: {} };
   document.querySelectorAll('#feedback-dock input, #feedback-dock select, #feedback-dock textarea').forEach(el => {
@@ -3327,6 +3498,12 @@ async function submitWithAction(action) {
   const data = collectDecisions(action);
   const container = document.getElementById('concept-decisions');
   container.textContent = JSON.stringify(data);
+  // design template only: the feedback dock is a single overlay shared by
+  // every iteration and its field ids repeat per iteration (`d1-s1`), so it
+  // must be emptied once the payload is captured — otherwise the appended
+  // iteration N+1 opens pre-filled with iteration N's notes and re-sends
+  // them. Runs AFTER collectDecisions(), never before. See § Layout JS.
+  if (typeof clearDock === 'function') clearDock();
   document.body.classList.add('concept-submitted', 'content-dimmed');
   showContentDimmer();
   _submittedAt = Date.now();
