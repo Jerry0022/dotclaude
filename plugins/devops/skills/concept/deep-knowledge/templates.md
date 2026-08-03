@@ -1025,12 +1025,19 @@ The wiring is a single delegated click handler installed alongside
          when the iteration has >1 design. See buildDesignUI() below; the
          spans here are just the mount points it fills in. -->
     <div class="screen-indicator" id="screen-indicator">
-      <!-- Fully rebuilt by updateIndicator() (§ Layout JS) on every
-           iteration/design/screen switch — segments are joined with " · "
-           only for the ones that apply, so a hidden segment never leaves a
-           dangling separator. Static fallback below is the generation-time
-           first-paint value (3-screen, single-iteration, single-design
-           example) so the page never flashes empty before JS runs. -->
+      <!-- updateIndicator() (§ Layout JS) fills these mount points on every
+           iteration/design/screen switch. Each optional segment carries its
+           own trailing " · " INSIDE the span, so hiding the span removes the
+           separator with it and never leaves a dangling one.
+           Static values are the generation-time first-paint fallback
+           (3-screen, single-iteration, single-design example) so the page
+           never flashes empty before JS runs.
+           EVERY id below is required — updateIndicator() null-guards each
+           lookup, so a missing span does not throw; the segment simply never
+           appears. That failure is silent, which is why the reference markup
+           must carry all four. -->
+      <span id="indicator-iteration" hidden>{{design.position_iteration}} <strong id="active-iteration-idx">1</strong> · </span>
+      <span id="indicator-design" hidden><strong id="active-design-label">Dispatch</strong> · </span>
       {{design.position_page}} <strong id="active-screen-idx">1</strong> / <span id="total-screens">3</span>
       · <span id="active-screen-label">Welcome</span>
     </div>
@@ -1756,7 +1763,12 @@ change) via `harvestDockValues()`.
   // design switch.
   function updateScreenScope(design) {
     const screens = [...design.querySelectorAll('section[data-screen][id]')];
-    document.getElementById('total-screens').textContent = screens.length;
+    // Optional chaining throughout: the indicator is documented as
+    // "can be hidden or simplified" for single-screen designs, so its spans
+    // are genuinely optional — an unguarded write would turn that documented
+    // choice into a boot-time TypeError.
+    const totalEl = document.getElementById('total-screens');
+    if (totalEl) totalEl.textContent = screens.length;
     // Single-screen designs: hide screen-nav + per-screen feedback.
     // CSS keys off body[data-single-screen="true"].
     document.body.dataset.singleScreen = screens.length <= 1 ? 'true' : 'false';
@@ -1815,8 +1827,11 @@ change) via `harvestDockValues()`.
     // lookup: screen ids repeat across iterations.
     const screen = design.querySelector(`#${CSS.escape(id)}`);
     const label = screen?.dataset.navLabel || id;
-    document.getElementById('active-screen-label').textContent = label;
-    document.getElementById('active-screen-idx').textContent = idx + 1;
+    // Guarded like every other indicator write — see updateScreenScope().
+    const labelEl = document.getElementById('active-screen-label');
+    if (labelEl) labelEl.textContent = label;
+    const idxEl = document.getElementById('active-screen-idx');
+    if (idxEl) idxEl.textContent = idx + 1;
     const dockLabel = document.getElementById('dock-screen-label');
     if (dockLabel) dockLabel.textContent = label;
     // The dock holds every design's screen textareas, so match on the
@@ -1898,18 +1913,31 @@ change) via `harvestDockValues()`.
     });
   }
 
-  // Panel + dock toggles
+  // Panel + dock toggles.
+  // These four used to be dereferenced unguarded. A generated page missing
+  // any one of them died right here with a TypeError — and since this IIFE
+  // wires EVERYTHING below (screen switching, the dock, click-through), the
+  // whole page's JS went with it. Silently: no visible error, just a mockup
+  // that ignores every click. Guard the wiring and name what is missing.
   const panel = document.getElementById('decision-panel');
   const panelToggle = document.getElementById('panel-toggle');
   const panelCloseBtn = document.getElementById('panel-close');
   const backdrop = document.getElementById('panel-backdrop');
+  const missingPanelParts = [
+    ['decision-panel', panel], ['panel-toggle', panelToggle],
+    ['panel-close', panelCloseBtn], ['panel-backdrop', backdrop],
+  ].filter(([, el]) => !el).map(([id]) => id);
+  if (missingPanelParts.length) {
+    console.error('[concept] decision-panel markup incomplete, panel disabled — missing: '
+      + missingPanelParts.join(', '));
+  }
   // The switcher auto-hides while the panel is open (the panel carries the
   // same navigation) — driven by body.panel-open, see Layout CSS.
-  window.openPanel = () => { panel.classList.add('open'); backdrop.classList.add('visible'); panelToggle.classList.add('hidden'); document.body.classList.add('panel-open'); };
-  window.closePanel = () => { panel.classList.remove('open'); backdrop.classList.remove('visible'); panelToggle.classList.remove('hidden'); document.body.classList.remove('panel-open'); };
-  panelToggle.addEventListener('click', openPanel);
-  panelCloseBtn.addEventListener('click', closePanel);
-  backdrop.addEventListener('click', closePanel);
+  window.openPanel = () => { panel?.classList.add('open'); backdrop?.classList.add('visible'); panelToggle?.classList.add('hidden'); document.body.classList.add('panel-open'); };
+  window.closePanel = () => { panel?.classList.remove('open'); backdrop?.classList.remove('visible'); panelToggle?.classList.remove('hidden'); document.body.classList.remove('panel-open'); };
+  panelToggle?.addEventListener('click', openPanel);
+  panelCloseBtn?.addEventListener('click', closePanel);
+  backdrop?.addEventListener('click', closePanel);
 
   const dock = document.getElementById('feedback-dock');
   const dockToggle = document.getElementById('feedback-toggle');
