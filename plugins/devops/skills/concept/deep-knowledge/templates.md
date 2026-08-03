@@ -1,12 +1,17 @@
 # Concept HTML Templates
 
-Three page-level **templates** (layout modes) cover every concept use case:
+Three **templates** (layout modes) cover every concept use case. A template is
+picked **per iteration**, not per page — see § Per-Iteration Templates below:
 
 | Template | Layout | When to use |
 |---|---|---|
 | **decision** | Sidebar (~80/~20), multi-variant cards | Multi-option evaluation, trade-offs, architecture or tech decisions — the canonical "pick one" flow with bi-state (Verwerfen / Miteinbeziehen) per variant and multiple iterations |
-| **prototype** | Fullscreen content + overlay decision panel (☰ FAB right) + speech-bubble feedback dock anchored to the 💬 FAB (bottom-left), stops before the ☰ FAB so both stay clickable | UI mockups, wireframes, visual design concepts, click-through flows — one artefact that needs maximum screen real estate, plus structured per-screen feedback |
+| **design** | Fullscreen content + overlay decision panel (☰ FAB right) + speech-bubble feedback dock anchored to the 💬 FAB (bottom-left), stops before the ☰ FAB so both stay clickable | UI mockups, wireframes, visual design concepts, click-through flows — one artefact that needs maximum screen real estate, plus structured per-screen feedback |
 | **free** | Sidebar (~80/~20), freeform body content | Analysis, walkthrough, brainstorm, explainer, timeline — structured content without forced variant framing. Bi-state evaluation is optional (opt-in per section) |
+
+`prototype` is the **legacy alias** of `design`. Pages generated before the
+rename keep working — `applyIterationTemplate()` normalises it. Never emit
+`prototype` in new pages.
 
 **Content variants (analysis, plan, concept, comparison, dashboard, creative)
 are sub-structures of the decision template** — they describe how to lay out
@@ -108,7 +113,7 @@ must see their own language. The locale hint is authoritative.
 | `final.view_iterations`        | Review iterations              | Iterationen ansehen |
 | `proto.feedback_title`         | Feedback                       | Feedback |
 | `proto.feedback_toggle`        | Open feedback                  | Feedback öffnen |
-| `proto.feedback_general`       | General notes on this prototype | Allgemeine Anmerkungen zum Prototyp |
+| `proto.feedback_general`       | General notes on this concept  | Allgemeine Anmerkungen zum Konzept |
 | `proto.feedback_general_hint`  | Persists across all screens    | Screen-übergreifend persistent |
 | `proto.feedback_current`       | Current screen                 | Aktueller Screen |
 | `proto.feedback_placeholder`   | Write a note on this screen…   | Notiz zu diesem Screen… |
@@ -122,6 +127,10 @@ the `[ui-locale: ...]` hint produced.
 
 ```html
 <!DOCTYPE html>
+<!-- data-template is a PROJECTION of the ACTIVE iteration, not a page constant.
+     It MUST be written at generation time with the active iteration's
+     data-iteration-template value (normalised), otherwise the page paints the
+     wrong layout for one frame before showIteration() runs. -->
 <html lang="en" data-theme="dark" data-page-version="{generation-timestamp}" data-template="decision">
 <head>
   <meta charset="UTF-8">
@@ -159,7 +168,7 @@ the `[ui-locale: ...]` hint produced.
 
     <!-- Decision panel. Layout varies per template:
          decision: sticky sidebar, always visible.
-         prototype: overlay, FAB-toggled.
+         design: overlay, FAB-toggled.
          free: sticky sidebar (same as decision). -->
     <aside class="concept-decision-panel">
       <!-- All visible strings are referenced by key in the locale table above.
@@ -411,7 +420,37 @@ the `[ui-locale: ...]` hint produced.
 </html>
 ```
 
-Set `data-template` on the `<html>` element to one of `decision` | `prototype` | `free`. This is the single source of truth that drives template-specific CSS (`.concept-layout[data-template="prototype"]`) and JS branches (`collectDecisions`).
+## Per-Iteration Templates
+
+The template is chosen **per iteration**. Every `<section data-iteration="N">`
+MUST carry `data-iteration-template="decision|design|free"` — that attribute is
+authoritative:
+
+```html
+<html data-template="decision">              <!-- mirrors the ACTIVE iteration -->
+  <section data-iteration="1" data-iteration-template="decision" data-active>
+  <section data-iteration="2" data-iteration-template="design" hidden>
+  <section data-iteration="3" data-iteration-template="decision" hidden>
+```
+
+`data-template` on `<html>` stays the single source of truth *for CSS selectors
+and JS branches* (`[data-template="design"] …`, `collectDecisions`), but it is a
+**projection** of the currently shown iteration, not a page-level constant.
+`applyIterationTemplate(section)` writes it on every iteration switch (see
+Shared Systems § Tab Switch JS).
+
+Rules:
+
+- Iterations may mix templates freely and in any order — a `decision` round may
+  be followed by a `design` round and another `decision` round.
+- `prototype` is accepted as a **legacy alias** for `design` and normalised on
+  read. Never write it in new pages.
+- A missing `data-iteration-template` falls back to the current
+  `<html data-template>`, so pages generated before the rename keep working
+  unchanged.
+- The `<html data-template>` value written at generation time MUST already
+  equal the active iteration's (normalised) template — otherwise the first
+  paint shows the wrong layout.
 
 ---
 
@@ -821,7 +860,9 @@ additional `weight-*` entries for weight sliders.
 
 ---
 
-# Template: prototype
+# Template: design
+
+*(legacy alias: `prototype` — normalised to `design` on read)*
 
 **One visual artefact, one screen at a time, 100 % viewport.** The body shows
 exactly one screen from the flow. The user switches between screens via the
@@ -849,7 +890,7 @@ buttons:
   Each such state becomes its own `<section data-screen>`. The click-dummy
   wiring with `data-screen-link` handles the transition like any other
   screen switch.
-- **Single-screen prototype (exactly one `<section data-screen>`):**
+- **Single-screen design (exactly one `<section data-screen>`):**
   - No screen-nav rendered inside the ☰ panel
   - Feedback dock shows ONLY the general-notes textarea (no
     per-screen section, no "Aktueller Screen" label)
@@ -863,7 +904,7 @@ buttons:
 - **Do NOT invent artificial screens** to make the template fit. If the
   artefact has no meaningful secondary state, leave it as a single screen
   and let the dock collapse to general notes only.
-- **Design system alignment:** the prototype MUST use the project's existing
+- **Design system alignment:** the mockup MUST use the project's existing
   design tokens (colors, typography, spacing, component shapes) unless the
   user explicitly requests a different look. Read `design-tokens.*`,
   Tailwind config, Figma variables via the design MCP, or the existing UI
@@ -916,12 +957,15 @@ The wiring is a single delegated click handler installed alongside
 ## Layout — Fullscreen single-screen + Overlay Panel + Feedback Dock
 
 ```html
-<html data-template="prototype">
+<!-- data-template mirrors the ACTIVE iteration; applyIterationTemplate()
+     rewrites it on every tab switch. body overflow is set by that function,
+     the inline style below is only the first-paint value. -->
+<html data-template="design">
 <body style="overflow: hidden">
-  <div class="concept-layout prototype fullscreen">
+  <div class="concept-layout design fullscreen">
     <div class="concept-content">
       <main>
-        <section data-iteration="1" data-active>
+        <section data-iteration="1" data-iteration-template="design" data-active>
           <!-- All screens live here. Exactly one carries data-screen-active="true"
                (others get `hidden`). Every screen is position: absolute; inset: 0
                so it fills the viewport. A <div class="device-frame"> inside
@@ -959,7 +1003,7 @@ The wiring is a single delegated click handler installed alongside
             data-label-close="{{panel.minimize}}">💬</button>
 
     <!-- Decision panel (☰) — contains: iteration-tabs, screen-nav, submit.
-         No section-TOC here: the screen-nav replaces it for prototype. -->
+         No section-TOC here: the screen-nav replaces it for design. -->
     <aside class="concept-decision-panel overlay" id="decision-panel">
       <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
       <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}"><!-- chips --></nav>
@@ -1066,16 +1110,25 @@ The wiring is a single delegated click handler installed alongside
 ## Layout CSS
 
 ```css
-/* Fullscreen prototype — no body scroll, exactly one screen fills viewport */
-html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-.concept-layout.prototype.fullscreen { display: block; width: 100vw; height: 100vh; overflow: hidden; }
-.concept-layout.prototype .concept-content { position: absolute; inset: 0; overflow: hidden; }
+/* EVERY rule below is scoped to html[data-template="design"]. That attribute
+   is a projection of the ACTIVE iteration (see § Per-Iteration Templates), so
+   flipping it flips the whole layout: a decision/free iteration on the same
+   page falls back to the normal grid + document scroll with zero JS. Never
+   write these rules unscoped — an unscoped `html, body { overflow: hidden }`
+   would lock scrolling for the sidebar iterations too. */
+html { margin: 0; padding: 0; }
+body { margin: 0; padding: 0; }
+html[data-template="design"],
+html[data-template="design"] body { height: 100%; overflow: hidden; }
+[data-template="design"] .concept-layout.design.fullscreen { display: block; width: 100vw; height: 100vh; overflow: hidden; }
+[data-template="design"] .concept-layout.design .concept-content { position: absolute; inset: 0; overflow: hidden; }
 
 /* Iteration sections fill the viewport. Screens inside do too —
-   only the active one is visible (hidden attribute on the others). */
-section[data-iteration] { position: absolute; inset: 0; }
+   only the active one is visible (hidden attribute on the others).
+   Outside design mode iterations stay in normal document flow. */
+[data-template="design"] section[data-iteration] { position: absolute; inset: 0; }
 section[data-iteration][hidden] { display: none; }
-section[data-screen] {
+[data-template="design"] section[data-screen] {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   padding: 2rem; overflow-y: auto;
@@ -1083,6 +1136,16 @@ section[data-screen] {
 }
 section[data-screen][hidden] { display: none; }
 @keyframes screen-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Design-only chrome: FABs, screen indicator and feedback dock exist in the
+   DOM on every page but must only render in design mode. The `html` type
+   selector is REQUIRED — a bare `:not([data-template="design"])` also matches
+   <body> (which never carries the attribute) and would hide the chrome in
+   design mode too. */
+html:not([data-template="design"]) .screen-indicator,
+html:not([data-template="design"]) .panel-fab,
+html:not([data-template="design"]) .feedback-fab,
+html:not([data-template="design"]) .feedback-dock { display: none !important; }
 
 /* Minimal screen counter — NOT a header bar */
 .screen-indicator {
@@ -1095,8 +1158,10 @@ section[data-screen][hidden] { display: none; }
 }
 .screen-indicator strong { color: var(--text); }
 
-/* Overlay decision panel — hidden by default, same slide-in as non-prototype overlay */
-.concept-layout.prototype .concept-decision-panel {
+/* Overlay decision panel — hidden by default, same slide-in as the non-design
+   overlay. Scoped: in a decision/free iteration the very same <aside> must
+   dock back into the sidebar grid. */
+[data-template="design"] .concept-layout.design .concept-decision-panel {
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -1112,7 +1177,7 @@ section[data-screen][hidden] { display: none; }
   overflow-y: auto;
   transition: right 0.3s ease;
 }
-.concept-layout.prototype .concept-decision-panel.open {
+[data-template="design"] .concept-layout.design .concept-decision-panel.open {
   right: 0;
 }
 
@@ -1273,7 +1338,7 @@ section[data-screen][hidden] { display: none; }
 /* Hidden per-screen textareas inside #screen-textareas: only active shown */
 #screen-textareas textarea[hidden] { display: none; }
 
-/* Single-screen prototype: hide screen-nav + per-screen feedback section.
+/* Single-screen design: hide screen-nav + per-screen feedback section.
    Only general notes remain visible. */
 body[data-single-screen="true"] #screen-nav,
 body[data-single-screen="true"] .feedback-section:has(#screen-textareas),
@@ -1291,8 +1356,14 @@ DOM (just hidden), so each one's value persists independently via
 `localStorage` (same mechanism as any `data-comment` field).
 
 ```javascript
-(function wirePrototypeLayout() {
-  if (document.documentElement.dataset.template !== 'prototype') return;
+(function wireDesignLayout() {
+  // Guard on the PAGE, not on the current projection: a page whose first
+  // iteration is `decision` may still contain a `design` iteration further
+  // down, and this IIFE only runs once at load.
+  const hasDesign = document.documentElement.dataset.template === 'design'
+    || !!document.querySelector('section[data-iteration][data-iteration-template="design"],'
+                              + 'section[data-iteration][data-iteration-template="prototype"]');
+  if (!hasDesign) return;
 
   // Build screen-nav buttons (☰) and per-screen textareas (💬) from every
   // <section data-screen> inside the VISIBLE iteration (may be a frozen
@@ -1303,7 +1374,7 @@ DOM (just hidden), so each one's value persists independently via
     const screens = [...visible.querySelectorAll('section[data-screen][id]')];
     document.getElementById('total-screens').textContent = screens.length;
 
-    // Single-screen prototypes: hide screen-nav + per-screen feedback.
+    // Single-screen designs: hide screen-nav + per-screen feedback.
     // CSS keys off body[data-single-screen="true"].
     document.body.dataset.singleScreen = screens.length <= 1 ? 'true' : 'false';
     if (screens.length <= 1) {
@@ -1417,7 +1488,7 @@ DOM (just hidden), so each one's value persists independently via
   });
   dockClose.addEventListener('click', closeDock);
 
-  // Click outside the dock (anywhere on the prototype screen) closes it.
+  // Click outside the dock (anywhere on the design screen) closes it.
   // The ✕ button still works — this just adds click-away as an alternative
   // dismissal. Uses capture so it runs before the screen-link handler,
   // which is fine: the click also triggers navigation if it hit a
@@ -1478,7 +1549,7 @@ DOM (just hidden), so each one's value persists independently via
 })();
 ```
 
-**Persistence extension:** the prototype's `saveState()` must also write
+**Persistence extension:** the design layout's `saveState()` must also write
 `_activeScreen: '{current-screen-id}'` into the localStorage payload so the
 restore path on page load lands the user back on the last-viewed screen.
 
@@ -1509,7 +1580,7 @@ document.addEventListener('click', e => {
 
 ## Screen-pattern markup
 
-Each logical screen in the prototype is a `<section>` with `data-screen`:
+Each logical screen in a design is a `<section>` with `data-screen`:
 
 ```html
 <section data-iteration="1" data-active>
@@ -1519,15 +1590,15 @@ Each logical screen in the prototype is a `<section>` with `data-screen`:
   </header>
 
   <section id="screen-welcome" data-nav-label="Welcome" data-screen>
-    <div class="prototype-frame">…mockup HTML for welcome screen…</div>
+    <div class="device-frame">…mockup HTML for welcome screen…</div>
   </section>
 
   <section id="screen-credentials" data-nav-label="Credentials" data-screen>
-    <div class="prototype-frame">…mockup HTML for credentials screen…</div>
+    <div class="device-frame">…mockup HTML for credentials screen…</div>
   </section>
 
   <section id="screen-success" data-nav-label="Success" data-screen>
-    <div class="prototype-frame">…mockup HTML for success screen…</div>
+    <div class="device-frame">…mockup HTML for success screen…</div>
   </section>
 </section>
 ```
@@ -1537,7 +1608,7 @@ Each logical screen in the prototype is a `<section>` with `data-screen`:
   per-screen textarea in the dock. Use it only for screens worth commenting on.
 - Every `data-screen` section MUST also have `id` and `data-nav-label` so
   the panel TOC and the feedback dock can reference it.
-- The prototype iteration section can still contain non-screen `<section>`s
+- A design iteration section can still contain non-screen `<section>`s
   (e.g. `id="design-notes" data-nav-label="Design notes"`). Those appear in
   the TOC but NOT in the feedback dock.
 - Iteration tabs still apply — when Claude iterates on feedback, a new
@@ -1546,11 +1617,11 @@ Each logical screen in the prototype is a `<section>` with `data-screen`:
 
 ## Decision schema
 
-Prototype submit payload has **no variant evaluations** — only comments:
+The design submit payload has **no variant evaluations** — only comments:
 
 ```json
 {
-  "template": "prototype",
+  "template": "design",
   "decisions": [],
   "comments": [
     { "id": "general", "text": "..." },
@@ -1560,11 +1631,11 @@ Prototype submit payload has **no variant evaluations** — only comments:
 }
 ```
 
-## collectDecisions (prototype branch)
+## collectDecisions (design branch)
 
 ```javascript
 // Called by the shared submit handler; `data-template` picks the branch.
-function collectPrototypeDecisions() {
+function collectDesignDecisions() {
   const comments = [];
   // General notes
   const general = document.getElementById('proto-general-feedback');
@@ -1582,7 +1653,7 @@ function collectPrototypeDecisions() {
       text: el.value.trim()
     });
   });
-  return { submitted: true, template: 'prototype', decisions: [], comments };
+  return { submitted: true, template: 'design', decisions: [], comments };
 }
 ```
 
@@ -2586,8 +2657,11 @@ function ensureCommentSlots() {
 
 ## collectDecisions (dispatcher)
 
-The submit handler picks the branch based on `data-template` on `<html>`.
-An `action` (`iterate` | `implement`) is passed in from the button that was
+The submit handler picks the branch from the **active iteration's**
+`data-iteration-template` (via `resolveIterationTemplate()`, § Tab Switch JS),
+not from the `<html data-template>` projection — that projection follows the
+tab the user is *looking at* and would mis-route the payload when a frozen tab
+of a different template is open. An `action` (`iterate` | `implement`) is passed in from the button that was
 clicked and merged into the payload.
 
 The dispatcher ALSO runs a generic catch-all scoped to the active
@@ -2629,9 +2703,12 @@ function collectDecisions(action = 'iterate') {
               || document.body;
   const allFields = collectAllFormFields(active);
 
-  const template = document.documentElement.dataset.template || 'decision';
+  // Resolve the template from the ACTIVE iteration, never from <html>: the
+  // projection there could be stale (e.g. the user is viewing a frozen tab
+  // with a different layout) and would mis-route the payload.
+  const template = resolveIterationTemplate(active);
   let payload;
-  if (template === 'prototype') payload = collectPrototypeDecisions();
+  if (template === 'design') payload = collectDesignDecisions();
   else if (template === 'free') payload = collectFreeDecisions();
   else payload = collectDecisionDecisions();
   payload.action = action;
@@ -3433,7 +3510,7 @@ Iterations of a concept page are appended as `<section data-iteration="N">`
 blocks inside the same HTML file. The tab bar lives **at the top of the
 right-side decision panel** (a compact vertical chip list, rendered above
 the section TOC and submit block). All three templates support iterations —
-prototype and free include them identically.
+design and free include them identically.
 
 ### Tab Bar HTML
 
@@ -3543,7 +3620,33 @@ When appending iteration N+1, Claude must freeze the previous section:
 ### Tab Switch JS
 
 ```javascript
+// Resolve the template of ONE iteration section. Authoritative source is
+// data-iteration-template; `prototype` is the legacy alias of `design`;
+// a missing attribute falls back to the current <html data-template> so
+// pages generated before per-iteration templates behave exactly as before.
+function resolveIterationTemplate(section) {
+  const raw = (section && section.dataset && section.dataset.iterationTemplate)
+    || document.documentElement.dataset.template
+    || 'decision';
+  return raw === 'prototype' ? 'design' : raw;
+}
+
+// Project the shown iteration's template onto <html> and lock/unlock body
+// scroll. Everything else (layout, panel docking, FABs, dock) is pure CSS off
+// [data-template="design"] — no per-iteration layout code beyond these two
+// lines. Called FIRST from showIteration().
+function applyIterationTemplate(section) {
+  const template = resolveIterationTemplate(section);
+  document.documentElement.dataset.template = template;
+  document.body.style.overflow = template === 'design' ? 'hidden' : '';
+  return template;
+}
+
 function showIteration(n) {
+  // MUST run first: the layout must be correct before buildSectionNav() or
+  // any iteration:changed listener measures/renders against it.
+  applyIterationTemplate([...document.querySelectorAll('section[data-iteration]')]
+    .find(sec => String(sec.dataset.iteration) === String(n)));
   document.querySelectorAll('section[data-iteration]').forEach(sec => {
     const match = String(sec.dataset.iteration) === String(n);
     sec.hidden = !match;
