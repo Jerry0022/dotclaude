@@ -31,26 +31,36 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 
 ## Step 1 — Pick Template, then Content Variant
 
-### 1a. Pick the page template (layout mode)
+### 1a. Pick the template — per iteration
 
-Every concept page uses one of three layout **templates**. Pick via the
-**strict ordered check below** — first matching template wins, free is the
-explicit fallback when neither of the first two applies. Do NOT skip the
-order; `free` must never be chosen while `prototype` or `decision` would
-also fit.
+A concept page is a **stack of iterations**, and each iteration independently
+picks its own layout **template** — `decision`, `free`, or `design`. This
+check runs every time an iteration is created (the first one, and every one
+appended later via tune/rethink/iterate) — it is NOT a one-time, page-level
+decision. Iteration 1 may be a decision round, iteration 2 a fullscreen
+design round, iteration 3 a decision round again; nothing forces the page to
+stay on one template throughout.
 
-**Order of evaluation (mandatory):**
+Pick via the **strict ordered check below** — first matching template wins,
+free is the explicit fallback when neither of the first two applies. Do NOT
+skip the order; `free` must never be chosen while `design` or `decision`
+would also fit.
 
-1. **Is this a PROTOTYPE?**
-   Visual mockup, wireframe, click-through flow, screen-by-screen UI design,
-   any "design me / sketch / lay out a UI" task. If the output needs maximum
-   viewport real estate and per-screen feedback → `prototype`. **Stop.**
+**Order of evaluation (mandatory, per iteration):**
 
-   **Prototype is almost always a click-dummy.** If there are 2+ screens,
+1. **Is this iteration primarily VISUAL?**
+   The options this iteration puts up for decision are primarily visual —
+   layouts, design directions, screen composition, visual arrangement, a
+   click-through flow, screen-by-screen UI design, any "design me / sketch /
+   lay out a UI" task. If the output needs maximum viewport real estate and
+   per-screen (and, with 2+ competing designs, per-design) feedback →
+   `design`. **Stop.**
+
+   **`design` is almost always a click-dummy.** If a design has 2+ screens,
    the mockup's own buttons/links MUST be wired to navigate between screens
    (not just styled rectangles) — clicking "Continue" on screen 1 lands on
    screen 2, "Back" returns, etc. See `deep-knowledge/templates.md`
-   § Template: prototype for the `data-screen-link` attribute pattern.
+   § Template: design for the `data-screen-link` attribute pattern.
 
    **"Screen" is a logical state, not a full page.** A screen can be a
    distinct view (welcome → credentials → success), but it can also be a
@@ -59,19 +69,28 @@ also fit.
    list → populated list). Every state the user should be able to give
    feedback on separately becomes its own `<section data-screen>`.
 
-   **Single-screen prototype (exactly one `data-screen`):** no screen-nav,
-   no per-screen feedback textarea — the dock shows ONLY the general-notes
-   textarea. A static single-screen prototype needs no click-dummy wiring.
-   Do NOT invent artificial "screens" to justify the template; if the
-   artefact has no meaningful secondary states, one screen is correct.
+   **Several competing visual directions** (e.g. 21 layout variants that
+   don't fit a 340px card) are several **designs within the same `design`
+   iteration**, each with its own `data-design` wrapper and its own 1..n
+   screens — not variant cards, and not a second, duplicate "— visuell"
+   pass through a `decision` iteration. See the Architecture spec
+   (`docs/superpowers/specs/2026-08-03-concept-per-iteration-design-mode-design.md`)
+   for the markup shape.
 
-   **Design system:** the prototype MUST follow the project's existing
-   design system (colors, typography, component shapes, spacing) unless
-   the user explicitly asks for a different style in the request. Check
+   **Single-screen, single-design (exactly one `data-screen`):** no
+   screen-nav, no per-screen feedback textarea — the dock shows ONLY the
+   general-notes textarea. A static single-screen design needs no
+   click-dummy wiring. Do NOT invent artificial "screens" to justify the
+   template; if the artefact has no meaningful secondary states, one screen
+   is correct.
+
+   **Design system:** the mockup MUST follow the project's existing design
+   system (colors, typography, component shapes, spacing) unless the user
+   explicitly asks for a different style in the request. Check
    `design-tokens.*`, `theme.*`, `tailwind.config.*`, Figma tokens via
    the design MCP, or the existing UI code before inventing a look.
 
-2. **Is this a DECISION?**
+2. **Are there ≥2 substantive non-visual alternatives?**
    Multi-option evaluation where the user must pick from 2+ mutually-exclusive
    alternatives (architecture, tech, strategy, library, approach, …). If there
    are explicit variants A/B/C with pros/cons to weigh → `decision`. **Stop.**
@@ -83,21 +102,32 @@ also fit.
    Tri-state is opt-in per section (Claude adds it only where a finding
    genuinely needs user evaluation).
 
+**Entangled questions split across iterations.** If a concept's visual
+questions (which layout / design direction) and its non-visual questions
+(which architecture / which library / which strategy) are entangled, do NOT
+mix them into one layout. Split them: a `decision` iteration for the
+non-visual call, a separate `design` iteration for the visual one. This is
+the fix for the "same decision, written twice" failure — mockups do not fit
+into 340px variant cards, so stop trying to fit them there.
+
 | Template | Layout signature |
 |---|---|
-| **prototype** | Fullscreen content, overlay decision panel (FAB right), bottom feedback dock (per-screen comments) |
+| **design** | Fullscreen content, overlay decision panel (☰ FAB top right), speech-bubble feedback dock on the 💬 FAB bottom left (general / per-design / per-screen comments), design switcher when ≥2 designs |
 | **decision** | Sidebar (~80/~20), variant cards, tri-state per variant |
 | **free** | Sidebar (~80/~20), Claude-authored freeform body, optional tri-state per section |
 
-**Tie-breakers:**
-- A page with variants AND mockups (rare) is a `decision` with inline mockups,
-  not a `prototype` — prototype is reserved for single-artefact presentation.
-- A page that presents one recommended approach (no alternatives) is `free`,
-  not `decision` — decision requires ≥2 mutually-exclusive options.
+`design` is the canonical name; `prototype` is accepted as a legacy alias
+(older pages/prompts) and is normalised to `design` — see
+`deep-knowledge/templates.md` § `applyIterationTemplate()`.
 
-Set `<html data-template="...">` on the generated file so `collectDecisions`
-picks the right branch and template-specific CSS/JS activates. See
-`deep-knowledge/templates.md` for the full layout reference.
+Set `data-iteration-template="..."` on each `<section data-iteration="N">` —
+this is the **authoritative** value per iteration.
+`applyIterationTemplate()` copies the active iteration's value onto
+`<html data-template="...">` on every `showIteration()` call, so `<html
+data-template>` always **mirrors the active iteration** rather than being a
+page-level constant. This projection is what lets `collectDecisions` and all
+existing template-scoped CSS/JS keep branching on `<html data-template>`
+unchanged. See `deep-knowledge/templates.md` for the full layout reference.
 
 ### 1b. If template is `decision`: pick a content variant
 
@@ -113,8 +143,8 @@ cards:
 | **dashboard** | Status overviews, metric dashboards, health checks | Filters, toggles, expandable sections |
 | **creative** | Brainstorming, ideation, mind maps | Add/remove ideas, grouping, voting |
 
-Prototype and free templates have no sub-variants — their body is
-content-specific (prototype = visual mockup; free = Claude-authored).
+Design and free templates have no sub-variants — their body is
+content-specific (design = visual mockup(s); free = Claude-authored).
 
 These are **recommendations, not rigid categories**. Mix elements across
 variants, create hybrid layouts, or invent new structures when the content
@@ -173,7 +203,7 @@ Panel layout depends on the template picked in Step 1a:
 | Template | Panel mode | Extras |
 |---|---|---|
 | **decision** | Fixed sticky sidebar (~20% screen width), always visible | — |
-| **prototype** | Overlay panel (360px slide-in from right), FAB-toggled | Collapsible **feedback dock** at the bottom with per-screen comments |
+| **design** | Overlay panel (360px slide-in from right), toggled by the ☰ FAB top right | **Feedback dock** as a speech bubble anchored to the 💬 FAB bottom left, with general / per-design / per-screen comments; design switcher when ≥2 designs |
 | **free** | Fixed sticky sidebar (~20%), always visible | — |
 
 On narrow screens (<768px), sidebar-mode panels collapse to a sticky bottom
@@ -216,7 +246,7 @@ Variant/section evaluation uses a **bi-state selector** (not tri-state):
 | Template | Evaluation behavior |
 |---|---|
 | **decision** | **Mandatory per variant card.** Every variant MUST carry the bi-state selector. |
-| **prototype** | **No evaluation.** Feedback is collected via the bottom feedback dock (per-screen textareas + general notes). |
+| **design** | **No evaluation.** Feedback is collected via the feedback dock on the 💬 FAB (general + per-design + per-screen textareas). |
 | **free** | **Opt-in per section.** Claude decides per section whether user evaluation is useful; sections with an `eval-{id}` radio group get evaluated, plain sections just show content. |
 
 **The two states:**
@@ -253,25 +283,25 @@ mandatory: the user must move the mouse deliberately to reach it.
 based on which button was clicked. Claude reads that field and either runs
 another iteration (Step 5c) or executes code changes (Step 5b).
 
-This applies to **all three templates** — even prototype (implement = "build
-what we prototyped with the feedback") and free (implement = "act on the
+This applies to **all three templates** — even design (implement = "build
+what we designed with the feedback") and free (implement = "act on the
 findings I marked Miteinbeziehen").
 
-### Prototype Feedback Dock
+### Design Feedback Dock
 
-The prototype template has no tri-state. Instead, a **speech-bubble feedback
+The design template has no tri-state. Instead, a **speech-bubble feedback
 dock** anchored to the 💬 FAB (bottom-left) holds structured feedback:
 
-- A top-level textarea for general notes on the prototype
-- One textarea per `<section data-screen>` inside the active iteration,
+- A top-level textarea for general notes on the concept
+- One textarea per `data-design` (only when the iteration has ≥2 designs)
+- One textarea per `<section data-screen>` inside the active design,
   auto-populated by the dock (label = `data-nav-label` of that screen)
 
 The dock is toggled via the 💬 FAB. The FAB stays visible AND clickable
-while the dock is open (clicking it toggles closed again), and the dock's
-right edge stops before the ☰ Menü-FAB so decisions remain reachable
-during feedback. The close button is a **minimise** (`−`), not a destroy:
-text content stays intact in `localStorage` when the dock is closed. See
-`deep-knowledge/templates.md` § Template: prototype for the full HTML/CSS/JS.
+while the dock is open (clicking it toggles closed again). The close button
+is a **minimise** (`−`), not a destroy: text content stays intact in
+`localStorage` when the dock is closed. See `deep-knowledge/templates.md`
+§ Template: design for the full HTML/CSS/JS and current FAB/dock geometry.
 
 ### Reload Resilience
 
@@ -573,7 +603,7 @@ Branch on it:
    - For comparisons: proceed with the implicitly-selected winner (all
      others marked Verwerfen)
    - For free-template findings: apply the Miteinbeziehen findings as fixes
-   - For prototypes: build the designed UI/flow with the feedback applied
+   - For design iterations: build the designed UI/flow with the feedback applied
 3. **Signal completion to the panel.** Right after the implementation work
    is done — and BEFORE the final-report append + `/reload` in Step 5c — POST
    the implemented phase so the submit panel's third progress step lights
