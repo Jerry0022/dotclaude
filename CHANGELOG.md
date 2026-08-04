@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.125.2] — 2026-08-04
+
+### Changed
+
+- **The feedback bubble in a fullscreen design concept now sits bottom-right and is bigger.** It used to live bottom-left at the same 56px as the burger; it moves to the bottom-right corner and grows to 64px so it reads as the primary way to leave feedback, while the ☰ decision panel keeps the top-right corner it collapses behind. The speech-bubble dock follows the FAB — its anchor, vertical offset and the 80px gap that keeps text clear of the button all flip to the right edge, on desktop and on narrow screens. The dock still opens on load and closes on first interaction. Position docs that had drifted to describe the burger as bottom-right and the bubble as bottom-left were corrected across the skill, its template reference and the validation gate.
+
 ## [0.125.1] — 2026-08-03
 
 ### Fixed
