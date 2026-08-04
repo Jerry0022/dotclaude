@@ -182,7 +182,7 @@ template instead. Reconsider the template pick before suppressing these.
 
 | # | Pattern | Purpose |
 |---|---------|---------|
-| P1 | `feedback-dock` | Speech-bubble dock anchored to the 💬 FAB (bottom-left) |
+| P1 | `feedback-dock` | Speech-bubble dock anchored to the 💬 FAB (bottom-right) |
 | P2 | `feedback-toggle` | FAB that opens the dock |
 | P3 | `screen-textareas` OR `feedback-screen-list` | Auto-populated per-page comment container (legacy pages use `feedback-screen-list`) |
 | P4 | `data-screen` | Marker on screen sections that feed the dock |
