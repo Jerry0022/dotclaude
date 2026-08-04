@@ -112,7 +112,7 @@ into 340px variant cards, so stop trying to fit them there.
 
 | Template | Layout signature |
 |---|---|
-| **design** | Fullscreen content, overlay decision panel (☰ FAB top right), speech-bubble feedback dock on the 💬 FAB bottom left (general / per-design / per-screen comments), design switcher when ≥2 designs |
+| **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 64px 💬 FAB bottom right (general / per-design / per-screen comments), design switcher when ≥2 designs |
 | **decision** | Sidebar (~80/~20), variant cards, tri-state per variant |
 | **free** | Sidebar (~80/~20), Claude-authored freeform body, optional tri-state per section |
 
@@ -203,7 +203,7 @@ Panel layout depends on the template picked in Step 1a:
 | Template | Panel mode | Extras |
 |---|---|---|
 | **decision** | Fixed sticky sidebar (~20% screen width), always visible | — |
-| **design** | Overlay panel (360px slide-in from right), toggled by the ☰ FAB top right | **Feedback dock** as a speech bubble anchored to the 💬 FAB bottom left, with general / per-design / per-screen comments; design switcher when ≥2 designs |
+| **design** | Overlay panel (360px slide-in from right), toggled by the ☰ FAB top right | **Feedback dock** as a speech bubble anchored to the 64px 💬 FAB bottom right, with general / per-design / per-screen comments; design switcher when ≥2 designs |
 | **free** | Fixed sticky sidebar (~20%), always visible | — |
 
 On narrow screens (<768px), sidebar-mode panels collapse to a sticky bottom
@@ -290,7 +290,7 @@ findings I marked Miteinbeziehen").
 ### Design Feedback Dock
 
 The design template has no tri-state. Instead, a **speech-bubble feedback
-dock** anchored to the 💬 FAB (bottom-left) holds structured feedback:
+dock** anchored to the 💬 FAB (bottom-right) holds structured feedback:
 
 - A top-level textarea for general notes on the concept
 - One textarea per `data-design` (only when the iteration has ≥2 designs)

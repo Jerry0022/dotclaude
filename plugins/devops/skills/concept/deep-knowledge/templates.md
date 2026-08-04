@@ -6,7 +6,7 @@ picked **per iteration**, not per page — see § Per-Iteration Templates below:
 | Template | Layout | When to use |
 |---|---|---|
 | **decision** | Sidebar (~80/~20), multi-variant cards | Multi-option evaluation, trade-offs, architecture or tech decisions — the canonical "pick one" flow with bi-state (Verwerfen / Miteinbeziehen) per variant and multiple iterations |
-| **design** | Fullscreen content + overlay decision panel (☰ FAB right) + speech-bubble feedback dock anchored to the 💬 FAB (bottom-left), stops before the ☰ FAB so both stay clickable | UI mockups, wireframes, visual design concepts, click-through flows — one artefact that needs maximum screen real estate, plus structured per-screen feedback |
+| **design** | Fullscreen content + overlay decision panel (☰ FAB top-right, collapsed by default) + speech-bubble feedback dock anchored to the 64px 💬 FAB (bottom-right) | UI mockups, wireframes, visual design concepts, click-through flows — one artefact that needs maximum screen real estate, plus structured per-screen feedback |
 | **free** | Sidebar (~80/~20), freeform body content | Analysis, walkthrough, brainstorm, explainer, timeline — structured content without forced variant framing. Bi-state evaluation is optional (opt-in per section) |
 
 `prototype` is the **legacy alias** of `design`. Pages generated before the
@@ -956,8 +956,8 @@ Values:
 The wiring is a single delegated click handler installed alongside
 `showScreen` — see § Click-through Handler below.
 
-- `☰` (bottom-right) → Decision panel: iteration tabs, screen navigation, submit
-- `💬` (bottom-left) → Feedback dock: **context-sensitive** textarea for the
+- `☰` (top-right) → Decision panel: iteration tabs, screen navigation, submit
+- `💬` (bottom-right, 64px) → Feedback dock: **context-sensitive** textarea for the
   currently-visible screen + a persistent "general notes" textarea below
 
 ### Feedback behaviour (strict)
@@ -1137,7 +1137,7 @@ The wiring is a single delegated click handler installed alongside
          bottom: general → design → page. General sits at the top because
          it is the one field that never disappears or changes label as the
          user navigates — putting it first keeps the dock from jumping.
-         Anchored to the 💬 FAB (bottom-left): the FAB stays visible and
+         Anchored to the 💬 FAB (bottom-right): the FAB stays visible and
          clickable, the dock floats above/around it like a chat bubble.
          Now that ☰ lives top-right (Wave 3), the dock no longer reserves
          space for it — see Layout CSS geometry comment.
@@ -1364,9 +1364,13 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
    scope anyway. Measured in Edge at 1280/768/375px: no overlap at any of
    the three. Before the caps existed the indicator overlapped the switcher
    by 21px at 768px and completely at 375px, where it also reached the ☰
-   FAB. 💬 stays bottom-left, unchanged. */
+   FAB. 💬 lives bottom-right (64px), clear of the top edge entirely. */
 .panel-fab { top: 2rem; right: 2rem; background: var(--accent-color, #58a6ff); }
-.feedback-fab { bottom: 2rem; left: 2rem; background: var(--warning-color, #d29922); }
+.feedback-fab {
+  bottom: 2rem; right: 2rem;
+  width: 64px; height: 64px; font-size: 1.7rem;
+  background: var(--warning-color, #d29922);
+}
 .panel-fab:hover,
 .feedback-fab:hover { transform: scale(1.1); }
 /* Only the ☰ panel FAB hides when its panel opens (the decision panel is
@@ -1427,19 +1431,18 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
 .screen-nav-design-heading .has-notes { color: var(--warning-color); font-size: 0.75rem; }
 .screen-nav-group .screen-nav-item { margin-left: 0.75rem; }
 
-/* ── Feedback Dock — Speech-Bubble anchored to the 💬 FAB ──
-   Geometry (simplified, Wave 3): now that ☰ lives top-right, the dock no
-   longer needs to reserve horizontal space for it, nor lift itself above
-   it on narrow viewports (both existed only because ☰ used to share the
-   bottom-right corner with 💬). The dock now spans to the right edge minus
-   a normal margin.
-   * left = FAB.left (2rem)               → bubble's left edge aligns with FAB
-   * right = 2rem                         → normal margin, was reserved for ☰
-   * bottom = FAB.bottom + 56 + 6px       → bubble sits directly above the FAB
-                                            with a hair of overlap so the
+/* ── Feedback Dock — Speech-Bubble anchored to the 💬 FAB (bottom-right) ──
+   Geometry: ☰ lives top-right, 💬 bottom-right (64px). The dock spans the
+   full width (both side margins at 2rem) and reserves horizontal space on
+   the RIGHT — where the 💬 FAB now sits — so its fields never sit behind
+   the FAB it grows out of.
+   * left = 2rem                          → normal margin on the free (left) side
+   * right = FAB.right (2rem)             → bubble's right edge aligns with FAB
+   * bottom = FAB.bottom + 64 - 6px       → bubble sits directly above the 64px
+                                            FAB with a hair of overlap so the
                                             visual connection reads as "the
                                             bubble grows out of the FAB".
-   * padding-left = 80px                  → input fields start to the right
+   * padding-right = 80px                 → input fields stop to the left
                                             of where the FAB visually lives,
                                             so labels/textareas never sit
                                             behind it (the FAB stays clickable
@@ -1452,9 +1455,9 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   position: fixed;
   left: 2rem;
   right: 2rem;
-  bottom: calc(2rem + 56px - 6px);
+  bottom: calc(2rem + 64px - 6px);
   max-height: min(60vh, 520px);
-  padding: 1.25rem 1.5rem 1.5rem 80px;
+  padding: 1.25rem 80px 1.5rem 1.5rem;
   background: var(--panel-bg, #161b22);
   border: 1px solid var(--border-color, #30363d);
   border-radius: 18px;
@@ -1464,7 +1467,7 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   display: none;
   flex-direction: column;
   gap: 1.1rem;
-  transform-origin: 28px calc(100% + 22px); /* anchor: 💬 FAB centre below dock-bottom-left */
+  transform-origin: calc(100% - 32px) calc(100% + 26px); /* anchor: 💬 FAB centre below dock-bottom-right */
 }
 .feedback-dock[data-open="true"] {
   display: flex;
@@ -1520,7 +1523,7 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   .feedback-dock {
     left: 0.75rem;
     right: 0.75rem;
-    padding: 1rem 1rem 1rem 72px;
+    padding: 1rem 72px 1rem 1rem;
     border-radius: 14px;
   }
 }
