@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.125.3] — 2026-08-12
+
+### Fixed
+
+- **`ship_promote` no longer refuses with "cannot reach remote" on a healthy remote when the machine is busy.** Every remote-touching git call in the ship MCP server (`ls-remote`, `fetch`, `pull`, `push`) ran under the 15-second default timeout. On Windows each of those includes a git-credential-manager roundtrip that reproducibly takes ~30 seconds under CPU load (parallel sessions, test runs) — so promotion died with a deterministic ETIMEDOUT before it ever reached GitHub, ten times in a row on the day this was diagnosed. All network callsites now share an exported 60-second `NETWORK_TIMEOUT` (the value tag pushes already used), covering `ship_promote`'s tag reads and ancestry fetch, `ship_release`'s rebase-gate fetches and tag verification, `ship_cleanup`'s pull and remote-branch operations, `ship_preflight`'s base fetch and the local-branch sync. A test pins the timeout on every `ls-remote` read so the short default cannot creep back in.
+
 ## [0.125.2] — 2026-08-04
 
 ### Changed
