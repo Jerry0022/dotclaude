@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
-import { git, gitStrict, gitArgs, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf } from "../lib/git.js";
+import { git, gitStrict, gitArgs, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf, NETWORK_TIMEOUT } from "../lib/git.js";
 import { createPR, mergePR, findExistingPR, watchPRChecks } from "../lib/github.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
 import { remoteTagExists } from "../lib/remote-tags.js";
@@ -104,7 +104,7 @@ export async function handler(params) {
     }
 
     // Safety gate: verify branch is rebased onto latest base (prevents silent overwrites)
-    gitStrict(`fetch origin ${base}`, { cwd, timeout: 30_000 });
+    gitStrict(`fetch origin ${base}`, { cwd, timeout: NETWORK_TIMEOUT });
     if (!isRebasedOnto(`origin/${base}`, opts)) {
       // Check overlap to give actionable context
       const overlap = fileOverlap(`origin/${base}`, opts);
@@ -202,7 +202,7 @@ export async function handler(params) {
     // with --admin, the exact silent-overwrite vector #207 describes. Re-checking
     // here restores that guarantee at merge time. The skill's Step 1 loop rebases
     // and retries on rebaseRequired. (#207)
-    gitStrict(`fetch origin ${base}`, { cwd, timeout: 30_000 });
+    gitStrict(`fetch origin ${base}`, { cwd, timeout: NETWORK_TIMEOUT });
     if (!isRebasedOnto(`origin/${base}`, opts)) {
       const overlap = fileOverlap(`origin/${base}`, opts);
       result.success = false;
@@ -276,7 +276,7 @@ export async function handler(params) {
         // auth blip) used to read as "tag absent" and silently decide to create
         // one — the same fail-open the verification below was hardened against.
         const existing = await retryUntil(
-          () => git(`ls-remote --tags origin ${channelTag}`, opts),
+          () => git(`ls-remote --tags origin ${channelTag}`, { ...opts, timeout: NETWORK_TIMEOUT }),
           { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },
         );
         if (!existing.ok) {
@@ -296,14 +296,12 @@ export async function handler(params) {
             "tag", "-a", channelTag, `origin/${base}`, "-m",
             JSON.stringify({ channel: "alpha", version: tag.replace(/^v/, "") }),
           ], { cwd, encoding: "utf8", timeout: 15_000, stdio: ["pipe", "pipe", "pipe"] });
-          // 60s like ship_promote's tag push — the 15s default is below a slow
-          // remote's worst case and turned a healthy push into a hard failure.
-          gitStrict(`push origin ${channelTag}`, { ...opts, timeout: 60_000 });
+          gitStrict(`push origin ${channelTag}`, { ...opts, timeout: NETWORK_TIMEOUT });
           // Retry the verification: one negative read right after a push proves
           // nothing (replica lag), which is the #251 false-negative class.
           const verified = await retryUntil(
             () => {
-              const out = git(`ls-remote --tags origin ${channelTag}`, opts);
+              const out = git(`ls-remote --tags origin ${channelTag}`, { ...opts, timeout: NETWORK_TIMEOUT });
               return out !== null && remoteTagExists(out, channelTag) ? true : null;
             },
             { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },

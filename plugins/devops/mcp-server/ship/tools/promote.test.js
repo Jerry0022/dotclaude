@@ -14,6 +14,7 @@ vi.mock("node:child_process", () => ({
 vi.mock("../lib/git.js", () => ({
   git: vi.fn(() => ""),
   gitStrict: vi.fn(() => ""),
+  NETWORK_TIMEOUT: 60_000,
 }));
 
 vi.mock("../lib/github.js", () => ({
@@ -252,6 +253,32 @@ describe("ship_promote — fail-closed on unreachable remote (F2)", () => {
     expect(r.success).toBe(false);
     expect(r.error).toMatch(/source-tag-not-found/);
     expect(r.error).not.toMatch(/cannot reach remote/i);
+  });
+});
+
+// Every remote read goes through git-credential-manager on Windows, and under
+// CPU load (parallel sessions, test runs) that roundtrip reproducibly takes
+// ~30s — the 15s DEFAULT_TIMEOUT then turns a perfectly healthy remote into a
+// deterministic ETIMEDOUT → "cannot reach remote — refusing to promote"
+// (10 consecutive promote failures on 2026-08-12). Pin the 60s network timeout
+// on every remote-touching call so the short default can never creep back in.
+describe("ship_promote — network timeouts", () => {
+  test("every ls-remote read and the ancestry fetch carry NETWORK_TIMEOUT", async () => {
+    mockRemote({ "alpha/v0.113.0": SHA });
+    const r = await handler(params());
+    expect(r.success).toBe(true);
+
+    const lsCalls = gitLib.git.mock.calls.filter(([cmd]) => cmd.startsWith("ls-remote"));
+    expect(lsCalls.length).toBeGreaterThan(0);
+    for (const [cmd, opts] of lsCalls) {
+      expect(opts?.timeout, `timeout missing on: git ${cmd}`).toBe(gitLib.NETWORK_TIMEOUT);
+    }
+
+    const fetchCalls = gitLib.gitStrict.mock.calls.filter(([cmd]) => cmd.startsWith("fetch "));
+    expect(fetchCalls.length).toBeGreaterThan(0);
+    for (const [cmd, opts] of fetchCalls) {
+      expect(opts?.timeout, `timeout missing on: git ${cmd}`).toBe(gitLib.NETWORK_TIMEOUT);
+    }
   });
 });
 

@@ -6,8 +6,12 @@
 import { execSync, execFileSync } from "node:child_process";
 
 const DEFAULT_TIMEOUT = 15_000;
-// eslint-disable-next-line no-unused-vars -- reserved for push/fetch operations
-const PUSH_TIMEOUT = 60_000;
+// For every git call that talks to the remote (ls-remote, fetch, pull, push):
+// on Windows each of these includes a git-credential-manager roundtrip that
+// reproducibly takes ~30s under CPU load (parallel sessions, test runs). The
+// 15s DEFAULT_TIMEOUT turned that into a deterministic ETIMEDOUT — ship_promote
+// refused with "cannot reach remote" on a perfectly healthy remote.
+export const NETWORK_TIMEOUT = 60_000;
 
 /**
  * Run a git command and return trimmed stdout, or null on failure.
@@ -223,7 +227,7 @@ export function worktreePathForBranch(branch, opts) {
  */
 export function syncLocalBranch(branch, opts = {}) {
   // Refresh origin/branch first (best-effort; failure surfaces below as "none").
-  git(`fetch origin ${branch}`, opts);
+  git(`fetch origin ${branch}`, { ...opts, timeout: opts.timeout ?? NETWORK_TIMEOUT });
 
   const remoteRef = git(`rev-parse --verify refs/remotes/origin/${branch}`, opts);
   if (!remoteRef) {
@@ -260,7 +264,7 @@ export function syncLocalBranch(branch, opts = {}) {
 
   // Not checked out anywhere → update the ref directly (ff-only by git default).
   try {
-    gitStrict(`fetch origin ${branch}:${branch}`, opts);
+    gitStrict(`fetch origin ${branch}:${branch}`, { ...opts, timeout: opts.timeout ?? NETWORK_TIMEOUT });
     return { updated: true, method: "fetch-refspec" };
   } catch (e) {
     return {

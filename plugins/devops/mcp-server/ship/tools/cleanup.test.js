@@ -10,6 +10,7 @@ vi.mock("zod", () => {
 
 vi.mock("../lib/git.js", () => ({
   git: vi.fn(() => ""),
+  NETWORK_TIMEOUT: 60_000,
   gitStrict: vi.fn(() => ""),
   isWorktree: vi.fn(() => false),
   getWorktreeBranches: vi.fn(() => new Set()),

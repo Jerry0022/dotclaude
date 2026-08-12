@@ -23,6 +23,7 @@ vi.mock("../lib/repo-mode.js", () => ({
 
 vi.mock("../lib/git.js", () => ({
   git: vi.fn(() => ""),
+  NETWORK_TIMEOUT: 60_000,
   gitStrict: vi.fn(() => ""),
   gitArgs: vi.fn(() => ""),
   currentBranch: vi.fn(() => "feature-x"),
