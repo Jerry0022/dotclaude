@@ -9,7 +9,7 @@
 
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
-import { git, gitStrict } from "../lib/git.js";
+import { git, gitStrict, NETWORK_TIMEOUT } from "../lib/git.js";
 import { createRelease, releaseExists } from "../lib/github.js";
 import { parseChannelTag, compareVersions } from "../lib/channels.js";
 import { parseLsRemoteTagOutput } from "../lib/remote-tags.js";
@@ -42,7 +42,7 @@ function lsRemoteTag(tag, opts) {
   // Both patterns, both double-quoted: the second is required to surface the
   // peeled ^{} line at all (see parseLsRemoteTagOutput), and unquoted `^` is
   // cmd.exe's escape character (execSync runs through a shell on win32).
-  const out = git(`ls-remote --tags origin "${tag}" "${tag}^{}"`, opts);
+  const out = git(`ls-remote --tags origin "${tag}" "${tag}^{}"`, { ...opts, timeout: NETWORK_TIMEOUT });
   // FAIL-CLOSED (F2): git() returns null on a transient network/auth failure.
   // Distinguishing that from "tag absent" (an empty string that parses to null)
   // is load-bearing: a null swallowed as "absent" would let the source-tag
@@ -78,7 +78,7 @@ export function parseLsRemoteChannelTags(out) {
 }
 
 function listRemoteChannelTags(opts) {
-  const out = git(`ls-remote --tags origin`, opts);
+  const out = git(`ls-remote --tags origin`, { ...opts, timeout: NETWORK_TIMEOUT });
   // FAIL-CLOSED (F2): a null (network/auth failure) previously parsed to an
   // EMPTY tag list — targetLatest became null and BOTH the monotonicity guard
   // and the same-version/different-SHA immutability guard were skipped, letting
@@ -208,7 +208,7 @@ async function ensureTag(tag, sha, payload, opts, retry) {
     try {
       // Explicit refspec for the same reason as the rev-parse above: `push
       // origin <name>` would happily push a same-named BRANCH instead.
-      gitStrict(`push origin refs/tags/${tag}:refs/tags/${tag}`, { ...opts, timeout: 60_000 });
+      gitStrict(`push origin refs/tags/${tag}:refs/tags/${tag}`, { ...opts, timeout: NETWORK_TIMEOUT });
       pushError = null;
     } catch (e) {
       // Recorded, not trusted: the confirmation below has the final word.
@@ -290,7 +290,7 @@ export async function handler(params) {
 
     // 3. Ancestry guard: only commits reachable from origin/main are promotable.
     try {
-      gitStrict(`fetch origin main`, { ...opts, timeout: 30_000 });
+      gitStrict(`fetch origin main`, { ...opts, timeout: NETWORK_TIMEOUT });
       gitStrict(`merge-base --is-ancestor ${sha} origin/main`, opts);
     } catch {
       return { ...result, success: false, error: `ancestry: ${sha.slice(0, 12)} is not an ancestor of origin/main — refusing to promote an unmerged/foreign commit` };

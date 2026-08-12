@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import { git, gitStrict, isWorktree, getWorktreeBranches } from "../lib/git.js";
+import { git, gitStrict, isWorktree, getWorktreeBranches, NETWORK_TIMEOUT } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { clearSentinel } from "../lib/sentinel.js";
 
@@ -87,7 +87,7 @@ export async function handler(params) {
   // main stale ("ship succeeded but main not updated locally").
   // See skills/ship/deep-knowledge/cleanup.md §2.
   try {
-    gitStrict(`pull --ff-only origin ${base}`, opts);
+    gitStrict(`pull --ff-only origin ${base}`, { ...opts, timeout: NETWORK_TIMEOUT });
     cleaned.push(`sync:${base}`);
   } catch (e) {
     warnings.push(
@@ -106,10 +106,10 @@ export async function handler(params) {
   }
 
   // Verify remote branch is gone (merge step should have deleted it)
-  const remoteBranch = git(`ls-remote --heads origin ${branch}`, opts);
+  const remoteBranch = git(`ls-remote --heads origin ${branch}`, { ...opts, timeout: NETWORK_TIMEOUT });
   if (remoteBranch) {
     try {
-      gitStrict(`push origin --delete ${branch}`, opts);
+      gitStrict(`push origin --delete ${branch}`, { ...opts, timeout: NETWORK_TIMEOUT });
       cleaned.push(`remote-branch:${branch}`);
     } catch {
       warnings.push(`Could not delete remote branch ${branch} — may already be deleted`);

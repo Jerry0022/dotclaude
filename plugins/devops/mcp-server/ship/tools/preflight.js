@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { git, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, detectDefaultBranch, branchExists, fileOverlap, getConfig } from "../lib/git.js";
+import { git, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktree, detectParentBranch, detectDefaultBranch, branchExists, fileOverlap, getConfig, NETWORK_TIMEOUT } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
 import { writeSentinel } from "../lib/sentinel.js";
@@ -197,7 +197,7 @@ export async function handler(params) {
   checks.push({ name: "clean-tree", ok: !state.dirty, modified: state.modified.length, untracked: state.untracked.length });
 
   // 5. Fetch base from origin to ensure accurate commit count (skip when no remote)
-  if (!noRemote) git(`fetch origin ${base}`, opts);
+  if (!noRemote) git(`fetch origin ${base}`, { ...opts, timeout: NETWORK_TIMEOUT });
 
   // 6. Commits ahead (compare against origin/ ref for accuracy)
   const originBase = `origin/${base}`;

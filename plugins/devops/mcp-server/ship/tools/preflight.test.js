@@ -14,6 +14,7 @@ vi.mock("zod", () => {
 // path that is NOT the plugin source repo, so docSyncChecks() no-ops.
 vi.mock("../lib/git.js", () => ({
   git: vi.fn(() => ""),
+  NETWORK_TIMEOUT: 60_000,
   currentBranch: vi.fn(() => "feat/topic"),
   dirtyState: vi.fn(() => ({ dirty: false, untracked: [], modified: [], lines: [] })),
   commitsAhead: vi.fn(() => 1),
