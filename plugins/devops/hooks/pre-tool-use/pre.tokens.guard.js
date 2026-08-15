@@ -1,13 +1,25 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.8.0
+ * @version 0.9.0
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
  *   significant percentage of the ~200K context window. Threshold scales
  *   with the user's Claude plan (pro/max_5/max_20). Uses a flag-file
  *   mechanism: first call blocks with warning, retry allows through.
+ *
+ *   For Bash, a large file only counts when a command actually READS it
+ *   (`hooks/lib/bash-context-cost`): passing the path as an argument — a
+ *   server start, `ls`, `mv`, `echo` — costs nothing. Unrecognised command
+ *   heads stay costly (fail safe); the one relaxation is a detached
+ *   `run_in_background` non-reader. Any failure in that classification
+ *   falls back to the pre-0.9 substring match rather than failing open.
+ *
+ *   The retry flag is keyed on the cost-determining fields plus cwd, so a
+ *   reworded `description` or a flipped `run_in_background` no longer
+ *   defeats "retry to proceed", and a block in one project no longer
+ *   pre-authorises another.
  *
  *   Session-start injection: on the FIRST broad Grep/Glob (no `path`) of a
  *   session, attaches orientation as additionalContext and ALLOWS the search,
@@ -20,7 +32,11 @@
  *   Fires if EITHER source is present.
  */
 
-require('../lib/plugin-guard');
+// Every sibling require here is guarded. A consumer's plugin cache can update
+// this hook before (or without) a lib landing; an unguarded throw would exit
+// non-2, which PreToolUse treats as non-blocking, so the guard would fail OPEN
+// on every tool call while printing a stack trace each time.
+try { require('../lib/plugin-guard'); } catch { process.exit(0); }
 
 const fs = require('fs');
 const path = require('path');
@@ -37,7 +53,37 @@ const CONFIG_PATH = path.join(CONFIG_DIR, 'token-config.json');
 // also records ok/fail to a sentinel file so a silent failure (Gap #5) can
 // be surfaced at the next SessionStart instead of vanishing.
 
-const PLAN_DEFAULTS = require('../lib/plan-defaults');
+let PLAN_DEFAULTS;
+try {
+  PLAN_DEFAULTS = require('../lib/plan-defaults');
+} catch {
+  PLAN_DEFAULTS = {
+    pro:    { estimatedLimitTokens: 200000, confirmThresholdPct: 0.05 },
+    max_5:  { estimatedLimitTokens: 200000, confirmThresholdPct: 0.08 },
+    max_20: { estimatedLimitTokens: 200000, confirmThresholdPct: 0.10 },
+  };
+}
+// Falls back to the pre-0.9 substring match rather than failing open.
+let bashCost = null;
+try { bashCost = require('../lib/bash-context-cost'); } catch { /* fallback below */ }
+
+// A confirmation is meant to cover the retry that follows seconds later, not
+// to pre-authorise the same command indefinitely. Without an expiry the flag
+// would silently approve a command the user abandoned weeks ago.
+// Accepted: a forward clock jump larger than this window costs one extra
+// retry. That is the harmless direction — the alternative is a stale approval.
+const CONFIRM_TTL_MS = 30 * 60 * 1000;
+
+/** Pre-0.9 behaviour: any expensive path mentioned anywhere counts. */
+function substringMatch(cmd, expensiveFiles) {
+  const matched = [];
+  for (const ef of expensiveFiles) {
+    if (ef && ef.path && cmd.includes(ef.path)) {
+      matched.push({ path: ef.path, tokens: ef.estimatedTokens || 20000 });
+    }
+  }
+  return matched;
+}
 
 function loadConfig() {
   try {
@@ -50,6 +96,8 @@ function loadConfig() {
       cfg.estimatedLimitTokens = defaults.estimatedLimitTokens;
       cfg.confirmThresholdPct = defaults.confirmThresholdPct;
     }
+    // A hand-edited config must never crash the guard downstream.
+    if (!Array.isArray(cfg.expensiveFiles)) cfg.expensiveFiles = [];
     return cfg;
   } catch {
     // No config yet — use most conservative defaults (pro)
@@ -61,6 +109,32 @@ function loadConfig() {
 function flagPath(key) {
   const hash = crypto.createHash('md5').update(key).digest('hex').slice(0, 12);
   return path.join(os.tmpdir(), `claude_confirm_${hash}.flag`);
+}
+
+/**
+ * The subset of a tool input that actually determines the token cost, in a
+ * fixed key order. Everything else (`description`, `run_in_background`,
+ * `timeout`) is noise that used to break the retry-to-proceed release.
+ */
+function costFields(toolName, toolInput) {
+  switch (toolName) {
+    case 'Read':
+      return { file_path: toolInput.file_path || '', limit: toolInput.limit || 0, offset: toolInput.offset || 0 };
+    case 'Bash':
+      return { command: toolInput.command || '' };
+    case 'Glob':
+      return { pattern: toolInput.pattern || '', path: toolInput.path || '' };
+    case 'Grep':
+      return {
+        pattern: toolInput.pattern || '',
+        path: toolInput.path || '',
+        glob: toolInput.glob || '',
+        type: toolInput.type || '',
+        output_mode: toolInput.output_mode || '',
+      };
+    default:
+      return { tool: toolName };
+  }
 }
 
 // Read hook input from stdin
@@ -80,6 +154,11 @@ process.stdin.on('end', () => {
 
   let estimatedTokens = 0;
   let description = '';
+  // Kept local — never written back onto toolInput. The retry flag key is
+  // derived from the tool input, so mutating it here used to change the key
+  // between the block and the retry and the confirmation never released.
+  let verboseSuggestion = '';
+  let matchedFilesOut = null;
 
   // Per-tool estimation
   if (toolName === 'Read') {
@@ -104,12 +183,13 @@ process.stdin.on('end', () => {
 
   else if (toolName === 'Bash') {
     const cmd = toolInput.command || '';
-    // Commands that don't produce output Claude needs to process — no token cost
-    const noTokenCostPattern = /^\s*(cd\s|git\s+(push|fetch|remote|prune|worktree|branch\s+-[dD]|checkout|switch|pull|merge|rebase|tag|stash|rm|add|commit)|gh\s+(pr|issue|project|api)|npm\s+publish|rm\s|mkdir\s|cp\s|mv\s)/;
-    const segments = cmd.split(/\s*(?:&&|;)\s*/);
-    if (segments.every(seg => noTokenCostPattern.test(seg))) {
-      process.exit(0);
-    }
+    // Commands that don't produce output Claude needs to process — no token
+    // cost. Per-segment command-head classification (bash-context-cost):
+    // a path handed to `ls`/`mv`/`echo`/`git add` never reaches context.
+    // Any failure here falls through to the conservative path below.
+    try {
+      if (bashCost && bashCost.isFreeOfContextCost(cmd)) process.exit(0);
+    } catch { /* classify conservatively */ }
 
     // --- Verbose command detection (output bloat guard) ---
     // Detect commands that produce unbounded output and suggest limited alternatives.
@@ -147,22 +227,27 @@ process.stdin.on('end', () => {
     if (verboseMatch) {
       estimatedTokens = THRESHOLD;
       description = 'Bash: unbounded output — may flood context';
-      toolInput._verboseSuggestion = verboseMatch.suggestion;
+      verboseSuggestion = verboseMatch.suggestion;
     }
 
-    // Check if command references known expensive files
+    // Check whether the command actually READS a known expensive file, rather
+    // than merely mentioning its path. A detached (`run_in_background`)
+    // non-reader — a server start — streams nothing into context; a
+    // backgrounded reader still does, so it stays blocked.
     if (!verboseMatch) {
-      const expensiveFiles = cfg.expensiveFiles || [];
-      const matchedFiles = [];
-      for (const ef of expensiveFiles) {
-        if (cmd.includes(ef.path)) {
-          matchedFiles.push({ path: ef.path, tokens: ef.estimatedTokens || 20000 });
-        }
+      const known = cfg.expensiveFiles;
+      let matchedFiles;
+      try {
+        matchedFiles = bashCost
+          ? bashCost.matchCostlyFiles(cmd, known, { runInBackground: !!toolInput.run_in_background })
+          : substringMatch(cmd, known);
+      } catch {
+        matchedFiles = substringMatch(cmd, known);   // never fail open on a parse bug
       }
       if (matchedFiles.length > 0) {
         estimatedTokens = matchedFiles.reduce((sum, f) => sum + f.tokens, 0);
         description = 'Bash referencing large file(s)';
-        toolInput._matchedFiles = matchedFiles;
+        matchedFilesOut = matchedFiles;
       } else {
         process.exit(0);
       }
@@ -239,7 +324,11 @@ process.stdin.on('end', () => {
             metrics.record('self_heal_kicked', { newerCount, truncated: info.truncated }, { cwd, sid });
           }
         } else if (!gstate.queryDone(sid, cwd)) {
-          const gflag = flagPath(`graphgate:${sid}:${cwd}:${toolName}:${JSON.stringify(toolInput)}`);
+          // Same keying discipline as the confirmation flag below: hashing the
+          // whole tool_input made a retry that merely added `-i` or
+          // `head_limit` look like a brand-new search, so the escape hatch
+          // never opened.
+          const gflag = flagPath(`graphgate:${sid}:${cwd}:${toolName}:${JSON.stringify(costFields(toolName, toolInput))}`);
           if (!fs.existsSync(gflag)) {
             try { fs.writeFileSync(gflag, Date.now().toString()); } catch {}
             // Within tolerance but still lagging by >0 files — enforce AND kick
@@ -284,9 +373,13 @@ process.stdin.on('end', () => {
     const sid = hook.session_id || hook.sessionId || 'nosid';
     const mapKey = crypto.createHash('md5').update(`${sid}:${cwd}`).digest('hex').slice(0, 12);
     const mapFlag = path.join(os.tmpdir(), `devops_mapinject_${mapKey}.flag`);
-    const graphNudge = require('../lib/graph-nudge');
+    // Guarded like every other sibling require — a missing lib must degrade to
+    // "no graph nudge", never crash the guard into failing open.
+    let graphNudge = null;
+    try { graphNudge = require('../lib/graph-nudge'); } catch { /* map-only */ }
     const hasMap = fs.existsSync(projectMap);
-    const hasGraph = graphNudge.hasGraph(cwd);
+    let hasGraph = false;
+    try { hasGraph = !!graphNudge && graphNudge.hasGraph(cwd); } catch { /* map-only */ }
     // Fire once per session if EITHER the project-map or a graphify graph exists.
     if ((hasMap || hasGraph) && !fs.existsSync(mapFlag)) {
       try {
@@ -323,12 +416,35 @@ process.stdin.on('end', () => {
   }
 
   const pct = ((estimatedTokens / LIMIT) * 100).toFixed(1);
-  const flagKey = `${toolName}:${JSON.stringify(toolInput)}`;
+  // Key the confirmation on the fields that determine the token cost — and
+  // nothing else. Hashing the whole tool_input made the flag miss whenever
+  // Claude reworded the model-authored `description`, flipped
+  // `run_in_background`, or the key order changed, so the documented
+  // "retry to proceed" never released.
+  //
+  // `cwd` scopes it, so a block in one project no longer pre-authorises
+  // another. `session_id` is deliberately NOT in the key: lib/session-id.js
+  // documents that Claude Code may deliver a different or missing session_id
+  // between hook invocations (issue #10), and this path has no escape hatch —
+  // an unstable id would wedge the retry forever, which is the very failure
+  // being fixed. The residual over-share is one project's own later session
+  // inheriting a confirmation; that is strictly narrower than the previous
+  // behaviour, which leaked across projects too.
+  const flagKey = `${toolName}:${cwd}:${JSON.stringify(costFields(toolName, toolInput))}`;
   const flag = flagPath(flagKey);
 
   if (fs.existsSync(flag)) {
+    // Unreadable or unparsable (interrupted write, full disk) counts as
+    // expired, not fresh — the flag is re-armed below, so the cost is one
+    // extra retry rather than an unearned approval.
+    let fresh = false;
+    try {
+      const written = parseInt(fs.readFileSync(flag, 'utf8'), 10);
+      if (Number.isFinite(written)) fresh = (Date.now() - written) < CONFIRM_TTL_MS;
+    } catch { /* stays expired */ }
     try { fs.unlinkSync(flag); } catch {}
-    process.exit(0); // User confirmed — allow
+    if (fresh) process.exit(0); // User confirmed — allow
+    // Expired: fall through and block again, re-arming the flag below.
   }
 
   // First time — block and warn
@@ -352,12 +468,12 @@ process.stdin.on('end', () => {
       console.error(`\nLarge file:`);
       console.error(`  ${path.relative(process.cwd(), absP).replace(/\\/g, '/')}  (${kb} KB → ~${estimatedTokens.toLocaleString()} tokens)`);
     } catch {}
-  } else if (toolInput._verboseSuggestion) {
+  } else if (verboseSuggestion) {
     console.error(`\nUnbounded output — command has no limit flag.`);
-    console.error(`Try instead:  ${toolInput._verboseSuggestion}`);
-  } else if (toolInput._matchedFiles) {
+    console.error(`Try instead:  ${verboseSuggestion}`);
+  } else if (matchedFilesOut) {
     console.error(`\nLarge files referenced:`);
-    for (const f of toolInput._matchedFiles) {
+    for (const f of matchedFilesOut) {
       console.error(`  ${f.path}  (~${f.tokens.toLocaleString()} tokens)`);
     }
   }
