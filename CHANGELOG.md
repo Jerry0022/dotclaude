@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.126.1] — 2026-08-15
+
+### Fixed
+
+- **A command that only hands a large file's path to another program is no longer blocked as if it read the file.** The token guard matched any known expensive path anywhere in a Bash command with a plain substring test, so starting a server with `--html <big>.html`, and equally `ls -la <big>.html` or even `echo "wrote <big>.html"`, were all refused — none of which pulls a single byte into context. A per-segment classifier now decides per command: it splits on `&&`, `||`, `|`, `;`, `&` and newlines, lifts `$(…)` and backtick substitutions out quote-aware so a read hidden inside `echo "$(cat <big>)"` is still caught, resolves each segment's real command head through environment assignments and wrappers like `sudo`/`timeout`/`xargs`, and only counts the file when that head actually reads it. Anything it cannot positively recognise as content-free stays blocked — an unresolvable head, a segment that is only variable assignments, a `/dev/stdout` sink, or a known multiplexer in a mode outside its allowlist (`git diff`, `gh api`, `npm exec`). The single deliberate exemption is a detached `run_in_background` command whose head is unrecognised, which is what unblocks a server start; a backgrounded `cat` stays blocked, because its buffer is still retrievable. If the classifier fails for any reason it falls back to the old substring match rather than letting the operation through, and every sibling `require` is now guarded so a half-updated plugin cache can no longer disable the guard silently on every tool call.
+
+- **"To proceed, retry the same operation" now actually releases.** The confirmation flag was keyed on a hash of the entire tool input, so a reworded description — model-authored, rewritten every turn — or an added `run_in_background` produced a different key, and the retry was treated as a first attempt and blocked again, indefinitely. The key now covers only the fields that determine the token cost, plus the working directory; the hook also stopped writing its own scratch fields back onto the tool input before computing it. Two side effects fall out of the same change: a block in one project no longer pre-authorises the identical command in another, and a confirmation expires after 30 minutes instead of silently approving a command abandoned weeks ago. `session_id` is deliberately not part of the key — it can arrive changed or missing between hook invocations, and this path has no escape hatch, so keying on it could wedge the retry permanently. The graphify gate's escape-hatch flag had the identical defect and gets the identical fix, so a broad search retried with an added `-i` or `head_limit` is no longer gated twice.
+
 ## [0.126.0] — 2026-08-15
 
 ### Added
