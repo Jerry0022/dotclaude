@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-state
- * @version 0.7.0
+ * @version 0.7.1
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
  *   layer (auto-graph). Default-on / opt-out model: graphify enforcement is
@@ -601,7 +601,21 @@ if (require.main === module && process.argv[2] === BG_RUN_FLAG) {
   const runArgs = process.argv.slice(7);
   const writeSentinel = (text) => {
     if (sentinelArg === NO_SENTINEL) return;
-    try { fs.writeFileSync(sentinelArg, text); } catch { /* tmp unwritable — nothing to surface to */ }
+    // Publish ATOMICALLY: writeFileSync opens with O_TRUNC, so a concurrent
+    // reader landing between the truncate and the write sees a zero-byte file
+    // and readSentinel parses '' as {status:'unknown'} — a real outcome silently
+    // downgraded to garbage. Stage beside the target, then rename; both paths sit
+    // in the same directory, so the rename is atomic on POSIX and on win32
+    // (MoveFileEx + MOVEFILE_REPLACE_EXISTING). Matters for every poller: the
+    // SessionStart surface in ss.graphify.js as much as the tests.
+    const stage = `${sentinelArg}.${process.pid}.tmp`;
+    try {
+      fs.writeFileSync(stage, text);
+      fs.renameSync(stage, sentinelArg);
+    } catch {
+      // tmp unwritable — nothing to surface to; never leave the stage file behind
+      try { fs.unlinkSync(stage); } catch { /* nothing staged */ }
+    }
   };
   const clearLock = () => {
     if (lockArg === NO_SENTINEL) return;

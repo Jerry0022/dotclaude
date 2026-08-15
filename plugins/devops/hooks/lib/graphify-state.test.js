@@ -314,24 +314,64 @@ describe("background-build sentinel — read/clear", () => {
 // sentinel from Node's `exit` event, so both ok and non-zero exits are reported
 // on every platform. Detached spawn → poll.
 describe("background-build sentinel — bgWithSentinel end-to-end", () => {
-  const waitForSentinel = async (cwd, timeoutMs = 5000) => {
+  // Poll for the sentinel on a generous budget with a short interval — never a
+  // fixed wait. A healthy run settles in well under a second and returns
+  // immediately; a full-suite run (56 files, many parallel workers) starves the
+  // detached runner's node boot + child spawn far more than an isolated run
+  // does, and a tight budget turns that starvation into a false failure.
+  const SETTLE_MS = 30000;
+  const POLL_MS = 25;
+  const waitForSentinel = async (cwd, timeoutMs = SETTLE_MS) => {
     const start = Date.now();
     for (;;) {
       const s = readSentinel(cwd);
       if (s !== null) return s;
       if (Date.now() - start > timeoutMs) return null;
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, POLL_MS));
     }
   };
+  const waitForGone = async (p, timeoutMs = 10000) => {
+    const start = Date.now();
+    while (fs.existsSync(p)) {
+      if (Date.now() - start > timeoutMs) return false;
+      await new Promise((r) => setTimeout(r, POLL_MS));
+    }
+    return true;
+  };
+
+  // Isolate the lock dir — the actual cause of this pair going flaky. Both tests
+  // assert that bgWithSentinel SPAWNS, but its machine-wide cap counts every live
+  // `dotclaude-graphupdate-*.lock` in the SHARED os.tmpdir(): real graphify builds
+  // on the machine, other worktrees, and leftovers from a runner killed before it
+  // cleared its own lock (win32 recycles PIDs, so a stale lock can read as live).
+  // With the default cap of 2, two such foreign locks flip the expected spawn into
+  // a skip and bgWithSentinel returns false — reproduced exactly, as this pair
+  // failing under a loaded full-suite run and passing in isolation. An isolated
+  // lock dir makes the count start at 0 every test, so the spawn precondition no
+  // longer depends on machine state. Same isolation the two describes below use.
+  let origLockDir, isoDir;
+  beforeEach(() => {
+    origLockDir = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    isoDir = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-e2e-lockiso-"));
+    process.env.DOTCLAUDE_GRAPHLOCK_DIR = isoDir;
+  });
+  afterEach(() => {
+    try { fs.rmSync(isoDir, { recursive: true, force: true }); } catch {}
+    if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
+  });
 
   test("successful command → 'ok' sentinel", async () => {
     const dir = tmp();
     const okCmd = process.platform === "win32" ? "ver" : "true";
     expect(bgWithSentinel(okCmd, [], dir)).toBe(true);
     expect(await waitForSentinel(dir)).toEqual({ status: "ok" });
+    // Let the runner release its lock before teardown removes the iso dir, so
+    // this test never leaves a live-PID lock behind for a later run to trip on.
+    await waitForGone(updateLockPath(dir));
     clearSentinel(dir);
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
-  }, 10000);
+  }, 45000);
 
   test("failing command → parseable 'fail' sentinel (not 'unknown')", async () => {
     const dir = tmp();
@@ -341,9 +381,10 @@ describe("background-build sentinel — bgWithSentinel end-to-end", () => {
     const s = await waitForSentinel(dir);
     expect(s).not.toBeNull();
     expect(s.status).toBe("fail"); // the regression this guards against
+    await waitForGone(updateLockPath(dir));
     clearSentinel(dir);
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
-  }, 10000);
+  }, 45000);
 });
 
 // Direct-call tests for the runner's child-spawn logic — the shell-less default
@@ -399,10 +440,24 @@ describe("runBgEntrypointChild — shell-less default + shim fallback", () => {
 // as often, runs stacked without bound (measured: 12 concurrent, ~29 GB commit).
 // bgWithSentinel now takes a PID lock so at most ONE build runs per project.
 describe("updateInFlight / updateLockPath — graphify-update concurrency mutex", () => {
-  let dir;
-  beforeEach(() => { dir = tmp(); });
+  // Isolate the lock dir here too. These tests write locks holding a LIVE pid
+  // (this very process), and unisolated they land in the shared os.tmpdir() —
+  // the same pool bgWithSentinel's machine-wide cap counts. An interrupted run
+  // leaks one, and win32 PID reuse can later make it read as live, so the suite
+  // would seed exactly the foreign-lock contamination that made the end-to-end
+  // pair flaky. Keep this file's locks out of the shared pool.
+  let dir, origLockDir, isoDir;
+  beforeEach(() => {
+    origLockDir = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    isoDir = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-mutex-lockiso-"));
+    process.env.DOTCLAUDE_GRAPHLOCK_DIR = isoDir;
+    dir = tmp();
+  });
   afterEach(() => {
     clearUpdateLock(dir);
+    try { fs.rmSync(isoDir, { recursive: true, force: true }); } catch {}
+    if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
   });
 
