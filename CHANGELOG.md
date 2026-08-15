@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.126.3] — 2026-08-15
+
+### Fixed
+
+- **A decision submitted on a concept page is picked up on its own, without the user having to say anything in chat.** Clicking "Entscheidungen abschicken" and then typing nothing meant the submission sat unread: the page's connection indicator stayed green, so nothing looked wrong, and the user only found out by asking. The instructions told Claude to end the turn and wait for a message, while the same document claimed an indefinite autonomous poll and a third one forbade the very loop that would implement it. The mechanism was already written down and simply never referenced — a detached "pickup waker" that exits the moment a submission lands, which is what wakes Claude. It is now launched with the page, re-launched immediately after each round is processed rather than at the end of it, and re-armed after a Claude restart alongside the cron. The once-a-minute cron is a partial backup, not the primary path: it fires only while the session is idle, which is exactly when it is not needed. Every pickup check also moved from `/decisions` to `/pending` — only the latter acks a pickup, which is why the page's "Claude verarbeitet" step used to sit frozen while Claude was in fact working.
+
+- **The two watchers became a script instead of a shell loop pasted into three documents.** `scripts/concept-watch.js` replaces `while true; do … sleep 20; done` in both places that carried a copy. The loop shape was wrong in four independent ways, each of which silently reproduced the bug the watchers exist to prevent: it tested a *relative* state-file path against a working directory the docs say may differ; it was launched one step *before* the file it requires gets written; its port guard used `\b`, a GNU extension that never matches on BSD/macOS grep, so both watchers quit immediately there; and no honest `allowed-tools` prefix can cover a multi-line loop, so the only grant that did was a blanket one disguised as narrow. The script takes an absolute path, waits out a grace period, compares the port numerically, and runs as `node …`, which the existing grant already covers. A test pins the remaining copy byte-for-byte against the document.
+
+- **A resumed session's backup pickup path was dead on arrival.** The SessionStart recovery hook emitted its `python -c` snippet with escaped quotes, which reaches Python as a line continuation — a `SyntaxError` on every tick, in a path nobody watched because it only runs after a restart. Found by the byte-for-byte pin above.
+
+- **A duplicate wake can no longer run an `implement` round twice.** Two watchers on the same port both announce the same submission, and the second announcement arrives after the flag was already cleared — acting on it re-applied real code changes, which no version guard caught. Every wake is now re-confirmed before anything happens, and a matching version is read as "the previous reset never landed", not as a new submission.
+
 ## [0.126.2] — 2026-08-15
 
 ### Fixed
