@@ -223,7 +223,7 @@ the `[ui-locale: ...]` hint produced.
                               OR bootstrap (claude_ts==0 while server_ts fresh).
                               Pulsing accent dot + animated ellipsis.
                connected    — claude_ts fresh. Steady green dot.
-               disconnected — claude_ts stale (dead cron) OR server_ts stale /
+               disconnected — claude_ts stale (nothing pulsing) OR server_ts stale /
                               fetch failing (bridge down). Pulsing amber dot.
              It NEVER overlays or disables the submit buttons and has NO
              acknowledge button. A disconnected submit is cached and
@@ -3886,7 +3886,7 @@ list tracks:
 | Step | Trigger | Visible? |
 |---|---|---|
 | 1 · Übermittelt | The user just clicked submit (POST /decisions succeeded) | Always |
-| 2 · Claude verarbeitet | First `/pending=true` response on the server (Claude's cron picked up the submission) — surfaces via `_picked_up_at` in `/decisions` | Always |
+| 2 · Claude verarbeitet | First `/pending=true` response on the server (the pickup waker, or the backup cron, picked up the submission) — surfaces via `_picked_up_at` in `/decisions` | Always |
 | 3 · Implementierung abgeschlossen | Claude POSTs `/status {phase: "implemented"}` after the implement branch finishes — surfaces via `_phase === "implemented"` in `/decisions` | Only for `action: "implement"` submissions |
 
 The browser only writes step state in `submitWithAction` (reset to baseline)
@@ -3992,7 +3992,7 @@ self-pulse refreshed every 30s, so the page showed "Claude verbunden"
 indefinitely no matter what Claude was actually doing.
 
 ```javascript
-const HEARTBEAT_STALE_MS = 90000;  // claude_ts older than this → dead cron
+const HEARTBEAT_STALE_MS = 90000;  // claude_ts older than this → nothing is pulsing
 const SERVER_STALE_MS    = 90000;  // server_ts older than this → bridge process down
 // HEARTBEAT_GRACE_MS / _pageLoadedAt removed — the bootstrap window is now
 // keyed on claude_ts==0 && fresh server_ts (mirrors the concept-server
@@ -4089,7 +4089,7 @@ function checkClaudeConnection() {
   const now = Date.now();
 
   // Connected: Claude has pinged AND that ping is recent. (gate unchanged —
-  // never gates on server_ts, or a dead cron would read green forever.)
+  // never gates on server_ts, or a dead pulser would read green forever.)
   const isConnected = _lastHeartbeatTs && (now - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
 
   // Server liveness via the daemon self-pulse. Mirrors the concept-server
@@ -4103,7 +4103,7 @@ function checkClaudeConnection() {
   //       ~1 network RTT after load). Calling this disconnected IS the
   //       fresh-page connect→disconnect→connect flash; it is "connecting".
   //   (b) claude_ts==0 while server_ts is fresh — Claude has never pinged but
-  //       the bridge is alive; the first cron tick (<=60s) or the setup-time
+  //       the bridge is alive; the pickup waker (~20s), the backup cron tick (<=60s), or the setup-time
   //       POST flips us to connected.
   const bootstrapping = !_everPolled || ((_lastHeartbeatTs === 0) && serverAlive);
 

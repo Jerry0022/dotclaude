@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 /**
  * @hook ss.concept.resume
- * @version 0.2.0
+ * @version 0.3.0
  * @event SessionStart
  * @plugin devops
  * @description Recover an open concept session after a Claude restart.
  *   Reads `.claude/concept-active.json` (written by /concept Step 3),
  *   probes the bridge server to confirm it is still running, and instructs
- *   Claude to re-arm the polling cron — and pick up any unprocessed
- *   submission immediately. Without this hook the polling cron (which is
- *   session-only) dies with the prior session and any pending submission
- *   silently rots in the bridge server until the user notices.
+ *   Claude to re-arm everything that watches it — the backup cron AND the two
+ *   detached background tasks (keepalive pulser, pickup waker) — plus pick up
+ *   any unprocessed submission immediately. All three are session-scoped and
+ *   die with the prior session; re-arming only the cron left the resumed
+ *   session watching on a path that fires just while the REPL is idle, so a
+ *   submission could rot in the bridge while the page still showed a green
+ *   indicator (issue #276).
  *
  *   Trust model: `.claude/concept-active.json` is treated as a per-project
  *   state file, NOT as authenticated control input. We accept that anyone
@@ -27,8 +30,6 @@
  *   the realistic case (one user, one active session per worktree) is
  *   the only one we optimize for.
  */
-
-require('../lib/plugin-guard');
 
 const fs = require('fs');
 const path = require('path');
@@ -136,89 +137,165 @@ function probe(port, pathname, timeoutMs = 1500) {
   });
 }
 
-(async () => {
-  const state = readState();
-  if (!state) process.exit(0);
-
-  // Consistency check: the concept HTML on disk is the source of truth for
-  // "is this session still real?" If the file is gone, the concept was
-  // discarded / moved / never persisted and any running bridge is an orphan.
-  // We do this BEFORE the heartbeat probe so a still-running ghost server
-  // gets shut down explicitly — relying on the watchdog alone would leave
-  // the server alive for up to 30 s after this hook returns, surfacing
-  // misleading "concept active" state in the meantime.
-  const htmlAbs = path.join(cwd, state.html_path);
-  if (!fs.existsSync(htmlAbs)) {
-    await postShutdown(state.port);
-    deleteState();
-    process.exit(0);
-  }
-
-  const heartbeat = await probe(state.port, '/heartbeat');
-  if (!heartbeat) {
-    // Server gone. If the file is also stale, prune it; otherwise leave it
-    // alone — the user might be restarting the server in another terminal.
-    if (isStale(state)) deleteState();
-    process.exit(0);
-  }
-
-  // Server is alive. Check whether a submission is sitting unprocessed.
-  // We must distinguish three states explicitly:
-  //   - probe ok, pending: false → safe to wait on cron schedule
-  //   - probe ok, pending: true  → process immediately
-  //   - probe failed              → AMBIGUOUS, do NOT pretend it's false.
-  //     Hiding "I don't know" as "no submission pending" is the worst
-  //     failure mode for a waiting user. Tell Claude to fetch /decisions
-  //     once now so the answer is resolved authoritatively.
-  const pending = await probe(state.port, '/pending');
-  let pendingState; // 'pending' | 'idle' | 'unknown'
-  if (pending && typeof pending.pending === 'boolean') {
-    pendingState = pending.pending ? 'pending' : 'idle';
-  } else {
-    pendingState = 'unknown';
-  }
-
-  const cronBody =
-    `Silently service the concept bridge on port ${state.port}. ` +
+/**
+ * The combined heartbeat + auto-poll cron body. Canonical definition lives in
+ * `skills/concept/deep-knowledge/bridge-server.md` § step 3; this mirrors it so
+ * a resumed session re-arms exactly what the original session had.
+ */
+function buildCronBody(port) {
+  return (
+    `Silently service the concept bridge on port ${port}. ` +
     `(0) Self-cleanup gate (FIRST step every tick): Read \`.claude/concept-active.json\`. ` +
-    `Cleanup triggers if the file is missing, OR state.port ≠ ${state.port}, OR state.html_path does not exist on disk. ` +
-    `On trigger: (a) Bash: curl -s -X POST http://localhost:${state.port}/shutdown > /dev/null 2>&1 || true; ` +
+    `Cleanup triggers if the file is missing, OR state.port ≠ ${port}, OR state.html_path does not exist on disk. ` +
+    `On trigger: (a) Bash: curl -s -X POST http://localhost:${port}/shutdown > /dev/null 2>&1 || true; ` +
     `(b) CronDelete the cron_id from the still-readable state file — or, if the state file is gone, ` +
-    `CronList and delete every cron whose prompt mentions \`port ${state.port}\`. ` +
+    `CronList and delete every cron whose prompt mentions \`port ${port}\`. ` +
     `Produce NO output and skip steps 1+2. ` +
-    `(1) Heartbeat POST: Bash: curl -s -X POST http://localhost:${state.port}/heartbeat > /dev/null. ` +
-    `(2) Pending check via /pending: Bash: curl -s http://localhost:${state.port}/pending | python -c "import sys,json; d=json.load(sys.stdin); print(\\'true\\' if d.get(\\'pending\\') else \\'false\\')". ` +
+    `(1) Heartbeat POST: Bash: curl -s -X POST http://localhost:${port}/heartbeat > /dev/null. ` +
+    // The quotes here must reach Python bare. Escaping them as \' emits a
+    // literal backslash — bash does not strip it inside double quotes, so
+    // Python got a line-continuation SyntaxError and the resumed session's
+    // backup pickup path was dead on arrival. Pinned by a byte-for-byte test
+    // against bridge-server.md.
+    `(2) Pending check via /pending: Bash: curl -s http://localhost:${port}/pending | python -c "import sys,json; d=json.load(sys.stdin); print('true' if d.get('pending') else 'false')". ` +
     `If exactly "false" → produce NO output (silent tick). ` +
-    `If exactly "true" → curl -s http://localhost:${state.port}/decisions, parse JSON, note _version, process per concept SKILL.md Step 5 (rewrite HTML, POST /reload, then conditionally POST /reset with the noted version). On 409 retry with the new version. Report the outcome to the user.`;
+    `If exactly "true" → curl -s http://localhost:${port}/decisions, parse JSON, note _version, process per concept SKILL.md Step 5 (rewrite HTML, POST /reload, then conditionally POST /reset with the noted version). On 409 retry with the new version. Report the outcome to the user.`
+  );
+}
 
+/**
+ * The two detached background tasks from `bridge-server.md` § step 3, now a
+ * single script in two modes rather than a shell loop duplicated across three
+ * documents.
+ *
+ * Background Bash tasks are session-scoped exactly like crons, so a restart
+ * kills them too — and this hook used to re-arm only the cron. That left a
+ * resumed session with the failure mode from issue #276: the cron is idle-only
+ * and lags by minutes, so a submission could sit unread while the page still
+ * showed a green indicator.
+ *
+ * The state path is passed ABSOLUTE. The shell version tested a relative
+ * `.claude/concept-active.json` against the task cwd, which is not always the
+ * project root the state file lives in — both watchers then exited STATE_GONE
+ * on their first iteration.
+ *
+ * @param {number} port
+ * @param {string} statePath absolute path to .claude/concept-active.json
+ */
+function buildBackgroundTasks(port, statePath) {
+  const script = path.join(__dirname, '..', '..', 'scripts', 'concept-watch.js');
+  const invoke = (mode) =>
+    `node "${script}" --mode ${mode} --port ${port} --state "${statePath}"`;
+  return { pulser: invoke('pulse'), waker: invoke('watch') };
+}
+
+
+/**
+ * The instruction text handed to the resumed Claude session.
+ * @param {{port:number, html_path:string, slug?:string}} state
+ * @param {'pending'|'idle'|'unknown'} pendingState
+ */
+function buildResumeInstructions(state, pendingState, statePath = STATE_PATH) {
+  const bg = buildBackgroundTasks(state.port, statePath);
   const lines = [];
+
   lines.push(
     `An open /concept session was found in this project ` +
     `(port ${state.port}, html_path ${state.html_path}, slug ${state.slug || '?'}). ` +
-    `The bridge server is alive but the polling cron from the previous Claude session is gone (crons are session-only). ` +
-    `Re-arm it now: call CronCreate with cron "* * * * *" (recurring: true) and prompt: '${cronBody}'.`
+    `The bridge server is alive, but everything that watched it is gone — background Bash tasks ` +
+    `are session-scoped just like crons. Re-arm all three now.`
+  );
+  lines.push(
+    `(a) BACKUP pickup path — CronCreate with cron "* * * * *" (recurring: true) and prompt: ` +
+    `'${buildCronBody(state.port)}'.`
+  );
+  lines.push(
+    `(b) Keepalive pulser — launch as a background Bash task (run_in_background: true). Without it ` +
+    `the page's connection indicator goes red within 90s: ${bg.pulser}`
+  );
+  lines.push(
+    `(c) PRIMARY pickup path, the pickup waker — launch as a background Bash task ` +
+    `(run_in_background: true). It exits the moment a submission lands and wakes you, with no user ` +
+    `chat message required, and MUST be re-launched after every processing round: ${bg.waker}`
   );
 
   if (pendingState === 'pending') {
     lines.push(
-      `IMMEDIATELY ALSO process the pending submission BEFORE waiting for the first cron tick: ` +
+      `IMMEDIATELY ALSO process the pending submission BEFORE waiting on any of the above: ` +
       `curl -s http://localhost:${state.port}/decisions, parse, then run concept SKILL.md Step 5 ` +
       `(rewrite HTML at ${state.html_path}, POST /reload, conditional /reset with the captured _version). ` +
-      `The user already submitted and is waiting — do not delay this on the cron schedule.`
+      `The user already submitted and is waiting — do not delay this on a schedule.`
     );
   } else if (pendingState === 'unknown') {
     lines.push(
       `The /pending probe was inconclusive (timeout, non-200, or malformed JSON). ` +
       `Do NOT assume idle. Fetch /decisions once now: curl -s http://localhost:${state.port}/decisions. ` +
       `If submitted=true, run Step 5 immediately (rewrite ${state.html_path}, /reload, conditional /reset). ` +
-      `If submitted=false, just continue with the cron — the next tick will catch any later submission.`
+      `If submitted=false, the waker from (c) catches any later submission.`
     );
   } else {
     lines.push(
-      `No submission is pending right now — just keeping the cron alive is enough. ` +
-      `When the user submits, the next cron tick (≤60s) will pick it up automatically.`
+      `No submission is pending right now. Once (b) and (c) are running the waker picks up the next ` +
+      `submission within ~20s on its own — the user does not have to announce it in chat.`
     );
   }
 
-  process.stdout.write(lines.join(' ') + '\n');
-})();
+  return lines.join(' ');
+}
+
+module.exports = {
+  isValidHtmlPath,
+  isStale,
+  buildCronBody,
+  buildBackgroundTasks,
+  buildResumeInstructions,
+};
+
+if (require.main === module) {
+  require('../lib/plugin-guard');
+
+  (async () => {
+    const state = readState();
+    if (!state) process.exit(0);
+
+    // Consistency check: the concept HTML on disk is the source of truth for
+    // "is this session still real?" If the file is gone, the concept was
+    // discarded / moved / never persisted and any running bridge is an orphan.
+    // We do this BEFORE the heartbeat probe so a still-running ghost server
+    // gets shut down explicitly — relying on the watchdog alone would leave
+    // the server alive for up to 30 s after this hook returns, surfacing
+    // misleading "concept active" state in the meantime.
+    const htmlAbs = path.join(cwd, state.html_path);
+    if (!fs.existsSync(htmlAbs)) {
+      await postShutdown(state.port);
+      deleteState();
+      process.exit(0);
+    }
+
+    const heartbeat = await probe(state.port, '/heartbeat');
+    if (!heartbeat) {
+      // Server gone. If the file is also stale, prune it; otherwise leave it
+      // alone — the user might be restarting the server in another terminal.
+      if (isStale(state)) deleteState();
+      process.exit(0);
+    }
+
+    // Server is alive. Check whether a submission is sitting unprocessed.
+    // We must distinguish three states explicitly:
+    //   - probe ok, pending: false → safe to leave to the waker
+    //   - probe ok, pending: true  → process immediately
+    //   - probe failed              → AMBIGUOUS, do NOT pretend it's false.
+    //     Hiding "I don't know" as "no submission pending" is the worst
+    //     failure mode for a waiting user. Tell Claude to fetch /decisions
+    //     once now so the answer is resolved authoritatively.
+    const pending = await probe(state.port, '/pending');
+    let pendingState; // 'pending' | 'idle' | 'unknown'
+    if (pending && typeof pending.pending === 'boolean') {
+      pendingState = pending.pending ? 'pending' : 'idle';
+    } else {
+      pendingState = 'unknown';
+    }
+
+    process.stdout.write(buildResumeInstructions(state, pendingState) + '\n');
+  })();
+}
