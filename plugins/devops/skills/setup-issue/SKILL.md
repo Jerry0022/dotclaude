@@ -50,12 +50,15 @@ a cross-project learning against that project. **An issue silently created in
 the wrong repo is worse than none** — it looks successful, returns a valid URL,
 and leaves the real repo untouched.
 
-- Carry `{target_repo}` through to Step 2 as `--repo` and to Step 4's check.
+- Carry `{target_repo}` through to Step 2 as `--repo`, to Step 3's skip
+  condition, and to Step 4's check.
 - Labels, milestones, and board fields configured for the *current* project do
-  not necessarily exist in `{target_repo}`. Only pass what the target actually
-  has: verify with `gh label list --repo {target_repo}` before sending a label
-  set beyond `type:*`, and drop milestone/board steps unless the target is
-  configured for them.
+  not necessarily exist in `{target_repo}`. Verify with
+  `gh label list --repo {target_repo}` before sending any label — **including
+  `type:*`**: `gh issue create` hard-fails on an unknown label, and a target
+  repo that never adopted the `type:` scheme would reject every issue. Missing
+  there → create the issue without it and say so, rather than losing the issue.
+  Drop milestone/board steps unless the target is configured for them.
 
 ## Step 1a — User-value gate (mandatory)
 
@@ -95,7 +98,10 @@ Add optional flags based on project extension:
 
 ## Step 3 — Add to project board (if configured)
 
-Only if the project extension provides owner + project ID:
+Only if the project extension provides owner + project ID — **and Step 1 set no
+`{target_repo}`**. The board configured here belongs to the current project;
+GitHub happily accepts cross-repo project items, so without this guard an issue
+filed into someone else's repository still shows up on this project's board.
 
 Add the issue to the project board via the GitHub API.
 
@@ -109,9 +115,12 @@ Confirm all required parameters are set:
 3. Milestone: if configured
 4. Project board item: if configured
 5. **Landing repo** — when Step 1 set `{target_repo}`, the `owner/name` in the
-   returned issue URL MUST equal it. A mismatch means the issue was created in
-   the wrong repository: say so plainly, give the wrong URL, and do not report
-   success. Close the misfiled issue only if the user asks.
+   returned issue URL MUST match it, **compared case-insensitively** (GitHub
+   slugs are case-insensitive, and callers pass through whatever casing their
+   metadata carries — a case-sensitive check would fail a correctly filed
+   issue). A real mismatch means the issue was created in the wrong repository:
+   say so plainly, give the wrong URL, and do not report success. Close the
+   misfiled issue only if the user asks.
 
 Missing required items = hard error. Fix before reporting success.
 

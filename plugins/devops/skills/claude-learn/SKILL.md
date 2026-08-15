@@ -46,30 +46,39 @@ Claude cannot judge edge cases.
 
 **One decision, exactly one branch.** Run the gate, then answer Q1–Q3 in order.
 
-**Gate — before Q1: does the rule belong to any project at all?** If it would
-land outside every project — `~/.claude/CLAUDE.md`, `~/.claude/skills/`, or
-anything phrased as "in every project" / "egal in welchem Projekt" — the answer
-to Q1 does not exist. Stop here: **branch E**, ask first, never auto-write.
-Otherwise continue; the rest of Step 2 assumes some project owns this.
+**Gate — before Q1: does the rule belong to any project at all?** A rule that
+would land outside every project (`~/.claude/CLAUDE.md`, `~/.claude/skills/`) —
+typically about how Claude answers, regardless of what is being worked on —
+cannot answer Q1. Stop here: **branch E**, ask first, never auto-write.
 
-**Q1 — Whose rules does this learning change?** This is the only judgment call
-in the skill. Exactly two answers:
+"In jedem Projekt" is not the trigger by itself: *"in jedem Projekt soll
+`/commit` die Issue-Nummer schreiben"* changes a plugin default and is a plugin
+rule (Q1). The gate fires when no plugin part and no project is the subject —
+*"antworte mir immer auf Deutsch"*. Otherwise continue.
 
-- **the devops plugin** — a plugin skill (`/ship`, `/commit`, `/concept`, …), a
-  hook (session-start, pre/post-tool-use, stop, user-prompt-submit), an agent
-  (core, frontend, ai, qa, redteam, …), the MCP server, scripts under
-  `plugins/devops/`, a plugin convention (commit format, ship pipeline), or a
-  cross-cutting topic already in `{PLUGIN_ROOT}/deep-knowledge/`.
-- **a project** — its build commands, architecture, business-logic conventions,
-  file layout. Anything that would be wrong or meaningless for another consumer
-  of the plugin. *Which* project is Q3.
+**Q1 — Whose behavior changes: the plugin's, everywhere — or just here?** The
+only judgment call in the skill. Reach and subject together, not either alone:
+
+- **the devops plugin** — a plugin skill (`/ship`, `/commit`, `/concept`, …),
+  hook, agent, MCP server, script under `plugins/devops/`, or plugin
+  convention, **and** the change is one every consumer should get. The default
+  for anything naming a plugin part.
+- **a project** — build commands, architecture, business-logic conventions,
+  file layout: things the plugin has no opinion about. *Which* project is Q3.
+
+A learning that names a plugin part but must **not** reach other consumers is
+neither — it is the C-override special case below.
 
 **Q2 — Is this session the plugin source repo?** A fact, not a judgment. Get the
 root with `git rev-parse --show-toplevel`; it is the plugin source repo when
-`{git-root}/plugins/devops/.claude-plugin/plugin.json` exists and its `name` is
-`devops` (Read the JSON). Everything else is a consumer project — including a
-session with no git root at all. Same detection as `hooks/lib/plugin-scope.js`;
-canonical rules in `{PLUGIN_ROOT}/deep-knowledge/plugin-scope-routing.md`.
+`{git-root}/plugins/devops/.claude-plugin/plugin.json` exists with `name`
+`devops`, **or** the root `.claude-plugin/marketplace.json` lists a `devops`
+plugin — **except** when that root lives inside `~/.claude/plugins/{cache,
+marketplaces,repos}/**`, which is an installed copy and never the source, however
+authentic its metadata looks. Everything else is a consumer project, including a
+session with no git root. This mirrors `isPluginSourceRepo` in
+`hooks/lib/plugin-scope.js` branch for branch; canonical rules in
+`{PLUGIN_ROOT}/deep-knowledge/plugin-scope-routing.md`.
 
 **Q3 — Which project?** Only relevant when Q1 = *a project*. Scan the learning
 **text** for a named project; nothing named → the current one. The scan reads
@@ -83,9 +92,14 @@ the text, it does not survey the disk. Recipe and the `~/IdeaProjects/` bound:
 | a project             | either                      | this one           | **C** — this project's own `.claude/` instructions |
 | a project             | either                      | another one        | **D** — issue there, or a hand-off prompt          |
 
-| Special case — overrides the table above                                                        | Branch                                         |
-|---------------------------------------------------------------------------------------------------|------------------------------------------------|
-| Q1 = plugin, Q2 = no, **and** you can state why the rule must never become the plugin's default | **C-override** — local extension, this project |
+| Special case — overrides the table above                                                  | Branch                                         |
+|-----------------------------------------------------------------------------------------------|------------------------------------------------|
+| Names a plugin part, **and** you can state why the rule must never become the plugin's default | **C-override** — local extension, this project |
+
+The special case carries no Q2 condition on purpose. Being inside the plugin's
+own repo does not make a repo-local rule a plugin default — dotclaude is a
+consumer of its own plugin and keeps such rules in its `.claude/`, exactly like
+any other project (`plugin-scope-routing.md` row 2).
 
 Three tie-breakers, in force order:
 
@@ -104,14 +118,15 @@ Three tie-breakers, in force order:
 
 Worked examples — each lands in exactly one branch:
 
-| Learning                                                                     | Branch                                  |
-|------------------------------------------------------------------------------|-----------------------------------------|
-| "`/ship` bricht ab, wenn der Branchname einen Slash enthält" (in any project) | **B** — plugin defect, upstream issue   |
-| same, but the session is dotclaude                                            | **A** — implement it here               |
-| "In diesem Repo muss vor jedem Commit `npm run lint` laufen" (in dotclaude)   | **C** — its `.claude/`, per tie-breaker 2 |
-| "Im Projekt Foo brauchen DB-Migrationen einen eigenen Commit"                 | **D** — Q1 = a project, Q3 = Foo        |
-| "Antworte mir immer auf Deutsch, egal in welchem Projekt"                     | **E** — the gate catches it before Q1   |
-| "`/ship` soll hier den Docker-Publish überspringen, wir bauen kein Image"     | **C-override** — stated, plugin-wrong reason |
+| Learning (session in parentheses)                                                  | Branch                                       |
+|------------------------------------------------------------------------------------|----------------------------------------------|
+| "`/ship` bricht ab, wenn der Branchname einen Slash enthält" (consumer project)     | **B** — plugin defect, upstream issue        |
+| same learning (dotclaude)                                                            | **A** — implement it here                    |
+| "In diesem Repo muss vor jedem Commit `npm run lint` laufen" (dotclaude)             | **C** — its `.claude/`, per tie-breaker 2    |
+| "Im Projekt Foo brauchen DB-Migrationen einen eigenen Commit" (any)                  | **D** — Q1 = a project, Q3 = Foo             |
+| "Antworte mir immer auf Deutsch" (any)                                               | **E** — the gate catches it before Q1        |
+| "In jedem Projekt soll `/commit` die Issue-Nummer schreiben" (consumer project)      | **B** — plugin default, not the gate         |
+| "`/ship` soll hier den Docker-Publish überspringen, wir bauen kein Image" (either)   | **C-override** — reason holds off upstream   |
 
 ## Step 3 — Execute the branch
 
@@ -124,7 +139,8 @@ CLAUDE.md**, and re-route to the next-larger container rather than busting a
 budget. Sizing, re-route triggers, the reference-over-duplicate rule, and tone:
 `{PLUGIN_ROOT}/deep-knowledge/content-conventions.md`.
 
-Branches B and D persist nothing locally — skip Step 4.
+Branches B and D persist nothing locally, and E writes outside every project —
+all three skip Step 4.
 
 ## Step 4 — Prune duplicate feedback memory
 

@@ -20,14 +20,18 @@ says otherwise. Scan for a hint, in this order:
    case-insensitive substrings.
 3. **Project keyword** — "in projekt X", "im X repo", "for the X app".
 
-**The target must resolve to a directory under `~/IdeaProjects/`.** That bound
-is the safety property of this step: a hint pointing anywhere else is not a
-project this skill may write to. Treat it as no hint, and ask instead of
-guessing.
+Three outcomes, kept distinct — the middle one is the safety property of this
+step and must not collapse into the third:
 
-Exactly one hint resolving that way → that is the target; confirm once with the
-user before writing. No hint → current project, no ask. Conflicting hints →
-AskUserQuestion with the candidates plus "current project".
+1. **Exactly one hint, resolving under `~/IdeaProjects/`** → that is the target.
+   Confirm once with the user before writing.
+2. **A hint that resolves outside `~/IdeaProjects/`** (`H:\work\legacy-crm`, a
+   network share, a path that does not exist) → **ask**. The user pointed
+   somewhere specific; silently rewriting that to "the current project" files
+   another project's rule into this one. This is *not* the no-hint case.
+3. **No hint at all** → current project, no ask.
+
+Conflicting hints → AskUserQuestion with the candidates plus "current project".
 
 ## A — Plugin repo, plugin rule: pick the file
 
@@ -65,7 +69,11 @@ Delegate") with a self-contained prompt:
   — `setup-issue` treats a format violation as a hard error.
 - **body** — the full learning text, plus `Captured from a session in
   {current-project}.`, plus which plugin part it concerns (skill / hook / agent /
-  MCP / convention).
+  MCP / convention), plus a `**User value:**` line. That line is mandatory:
+  `setup-issue` Step 1a rejects an issue without one, and a rejected issue
+  leaves the learning persisted nowhere. Phrase it as the effect on anyone using
+  the plugin ("every project hitting X stops losing Y"), not as the effect on
+  this session.
 - **target repo** — the slug, so the issue lands upstream rather than in the
   consumer repo. `setup-issue` Step 1 takes this as `{target_repo}` and passes
   it to `gh issue create --repo`; its Step 4 verifies the returned URL's

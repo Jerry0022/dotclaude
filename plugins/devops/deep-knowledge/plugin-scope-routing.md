@@ -35,8 +35,12 @@ next sync.
 ## Detecting which repo you are in
 
 The session is the **plugin source repo** when `{git-root}/plugins/devops/.claude-plugin/plugin.json`
-exists and its `name` field is `devops`. Anything else is a **consumer project**
-— including a worktree of an unrelated repo and a session with no git root at all.
+exists with `name` `devops`, or the root `.claude-plugin/marketplace.json` lists
+a `devops` plugin — **unless** that root lives inside
+`~/.claude/plugins/{cache,marketplaces,repos}/**`. The marketplace clone carries
+byte-identical metadata; treating it as the source would stand the guard down
+inside the very tree it protects. Anything else is a **consumer project** —
+including a worktree of an unrelated repo and a session with no git root at all.
 
 Hooks share this detection via `hooks/lib/plugin-scope.js`
 (`isPluginSourceRepo`, `managedPluginArtifact`, `upstreamSlug`, `scopeFor`).
@@ -51,7 +55,8 @@ Do not re-implement it.
    Hand it a self-contained prompt:
    - **title** — `[BUG] <short>` for a defect, `[FEATURE] <short>` for a gap
    - **body** — symptom, the affected plugin part (skill / hook / agent / MCP /
-     convention), and `Captured from a session in {current-project}.`
+     convention), `Captured from a session in {current-project}.`, and a
+     mandatory `**User value:**` line (Step 1a rejects issues without one)
    - **target repo** — the upstream slug, so it does not land in the consumer repo
 3. Persist nothing locally. The issue *is* the deliverable.
 
