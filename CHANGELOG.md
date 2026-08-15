@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.126.0] — 2026-08-15
+
+### Added
+
+- **A devops-plugin bug noticed while working in some other project now becomes an issue in the plugin repo instead of a fix in the wrong place.** The rule was already written down — in the `/claude-learn` skill body, which triggers only on explicit invocation. So it applied exactly when nobody needed it: notice a plugin defect mid-session in another project, and there was nothing in context saying where the fix belongs, so it got patched locally as a workaround, into that project's CLAUDE.md, or straight into the installed copy under `~/.claude/plugins/**` — where the next sync erases it and the actual defect stays live for every other consumer. The hierarchy now lives in `deep-knowledge/plugin-scope-routing.md`, surfaced through the session-start index in every project, and two hooks enforce it: `pre.plugin.scope` blocks Edit/Write into the managed install trees from a consumer project (and lets them through in the plugin's own repo, where repairing the install is expected), and `prompt.plugin.scope` injects the routing rule once per session when a consumer's prompt turns to the plugin itself. Three routes, no ambiguity: plugin defect → upstream issue, project concern → that project's own `.claude/` instructions, plugin source repo → implement directly.
+
+### Fixed
+
+- **`/claude-learn` no longer files a plugin issue against the wrong repository.** Its decision table routed by target project before topic, so a plugin-level learning aimed at a *third* project fell into the cross-project branch and created the issue there — in a repo that does not own the code. Topic now outranks target: a plugin defect goes upstream no matter which project surfaced it.
+
+- **The scope guard cannot be stood down from inside the tree it protects.** The marketplace clone at `~/.claude/plugins/marketplaces/dotclaude` carries the same `plugin.json` and `marketplace.json` the real source repo does, so a session opened there passed the "is this the plugin source repo?" check and unblocked edits to the managed install. A checkout living inside a managed install tree is now never treated as the source repo. Found by the Codex review gate, along with four narrower defects fixed in the same pass: the prompt matcher swallowed a project's own `/run-tests`-style commands, missed hook filenames with hyphenated segments, missed Windows-spelled `.claude\plugins` paths, and could throw on a non-string tool payload — a crash a PreToolUse hook shows to the user.
+
 ## [0.125.3] — 2026-08-12
 
 ### Fixed

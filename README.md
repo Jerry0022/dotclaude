@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.125.3**
+**Version: 0.126.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -167,7 +167,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ## Features
 
-- **<!--devops:count:hooks-->37<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:hooks-->39<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->22<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, claude-lint, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, auto-graph
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
@@ -178,7 +178,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->37<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->39<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -212,6 +212,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.knowledge.dispatch` — On-demand deep-knowledge injection based on prompt keywords.
 - `prompt.git.sync` — Throttled git sync on user prompt — delegates to scripts/git-sync.js.
 - `prompt.issue.detect` — Detect issue references in user messages.
+- `prompt.plugin.scope` — Inject the scope-routing rule when a consumer project's session starts talking about…
 - `prompt.skill.enforce` — Detects inline skill commands (e.g.
 - `prompt.ship.detect` — Detect ship intent in user prompts and inject Skill('ship') instruction.
 - `prompt.flow.appstart` — Detect app start intent in user prompts.
@@ -223,6 +224,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `pre.ship.guard` — Block manual PR creation/merging via Bash.
 - `pre.main.guard` — Prevent accidental writes on local main/master.
 - `pre.worktree.split-guard` — WARN (never block) on git-mutating work driven from the main repo root while an agent…
+- `pre.plugin.scope` — Block hand-edits of installed devops plugin artifacts from a consumer project.
 - `pre.edit.branch` — Prevent Edit/Write tool calls while HEAD is on local main/master.
 - `pre.mcp.health` — Detects dead or stale MCP servers before tool calls fail cryptically.
 
@@ -688,7 +690,7 @@ Wk  ━━──╏─────────   15% +1%   · 4d 22h left
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->37<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── hooks/                         ← <!--devops:count:hooks-->39<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 ├── skills/                        ← <!--devops:count:skills-->22<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs

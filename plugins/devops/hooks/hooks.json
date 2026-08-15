@@ -40,6 +40,7 @@
       },
       {
         "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.plugin.scope.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.edit.branch.js" }
         ],
         "matcher": "Edit|Write|NotebookEdit"
@@ -88,6 +89,7 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.knowledge.dispatch.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.git.sync.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.issue.detect.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.plugin.scope.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.skill.enforce.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.ship.detect.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.flow.appstart.js" },
