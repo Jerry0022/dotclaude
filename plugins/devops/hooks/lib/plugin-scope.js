@@ -45,9 +45,15 @@ function readJson(file) {
  * `{root}/plugins/devops/.claude-plugin/plugin.json` with `name === 'devops'`.
  * The root marketplace.json is accepted as a secondary signal so a repo layout
  * change does not silently turn the source repo into a "consumer".
+ *
+ * A checkout that lives INSIDE a managed install tree is never the source repo,
+ * however true its metadata looks: the marketplace clone under
+ * `~/.claude/plugins/marketplaces/dotclaude` carries both signals, and treating
+ * it as the source would stand the guard down inside the very tree it protects.
  */
-function isPluginSourceRepo(repoRoot) {
+function isPluginSourceRepo(repoRoot, home = os.homedir()) {
   if (!repoRoot) return false;
+  if (managedPluginArtifact(repoRoot, home)) return false;
 
   const pluginJson = readJson(
     path.join(repoRoot, 'plugins', 'devops', '.claude-plugin', 'plugin.json')
@@ -84,12 +90,18 @@ function isUnder(parent, child) {
  * @returns {string|null} the managed subdir that matched, or null
  */
 function managedPluginArtifact(target, home = os.homedir()) {
-  if (!target) return null;
-  const pluginsRoot = path.join(home, '.claude', 'plugins');
-  for (const sub of MANAGED_SUBDIRS) {
-    const dir = path.join(pluginsRoot, sub);
-    // The directory itself is not an edit target — only paths beneath it.
-    if (isUnder(dir, target) && normalize(dir) !== normalize(target)) return sub;
+  // A non-string target (malformed hook stdin, a future tool payload shape)
+  // must never throw — a PreToolUse crash is user-visible.
+  if (typeof target !== 'string' || !target) return null;
+  try {
+    const pluginsRoot = path.join(home, '.claude', 'plugins');
+    for (const sub of MANAGED_SUBDIRS) {
+      const dir = path.join(pluginsRoot, sub);
+      // The directory itself is not an edit target — only paths beneath it.
+      if (isUnder(dir, target) && normalize(dir) !== normalize(target)) return sub;
+    }
+  } catch {
+    return null;
   }
   return null;
 }
@@ -128,7 +140,7 @@ function scopeFor(cwd, home = os.homedir()) {
   const repoRoot = gitTopLevel(cwd);
   return {
     repoRoot,
-    isPluginRepo: isPluginSourceRepo(repoRoot),
+    isPluginRepo: isPluginSourceRepo(repoRoot, home),
     slug: upstreamSlug(home),
   };
 }

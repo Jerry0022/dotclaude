@@ -63,6 +63,33 @@ describe("isPluginSourceRepo", () => {
     expect(isPluginSourceRepo(path.join(tmp, "does-not-exist"))).toBe(false);
   });
 
+  test("false inside the managed marketplace clone, despite valid metadata", () => {
+    // The clone under ~/.claude/plugins/marketplaces/dotclaude carries BOTH
+    // signals. Trusting them would stand the guard down inside the very tree
+    // it protects.
+    const home = path.join(tmp, "home-clone");
+    const clone = path.join(home, ".claude", "plugins", "marketplaces", "dotclaude");
+    write(
+      path.join(clone, "plugins", "devops", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "devops" }),
+    );
+    write(
+      path.join(clone, ".claude-plugin", "marketplace.json"),
+      JSON.stringify({ name: "dotclaude", plugins: [{ name: "devops" }] }),
+    );
+    expect(isPluginSourceRepo(clone, home)).toBe(false);
+  });
+
+  test("false inside a managed repos/ checkout", () => {
+    const home = path.join(tmp, "home-repos");
+    const checkout = path.join(home, ".claude", "plugins", "repos", "dotclaude");
+    write(
+      path.join(checkout, "plugins", "devops", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "devops" }),
+    );
+    expect(isPluginSourceRepo(checkout, home)).toBe(false);
+  });
+
   test("false when plugin.json is malformed JSON", () => {
     const root = path.join(tmp, "broken-json");
     write(
@@ -115,6 +142,14 @@ describe("managedPluginArtifact", () => {
   test("empty / missing target → null", () => {
     expect(managedPluginArtifact("", home)).toBe(null);
     expect(managedPluginArtifact(null, home)).toBe(null);
+  });
+
+  test("non-string target returns null instead of throwing", () => {
+    // A PreToolUse crash is user-visible, so a malformed payload must not throw.
+    expect(() => managedPluginArtifact({ file_path: cache }, home)).not.toThrow();
+    expect(managedPluginArtifact({ file_path: cache }, home)).toBe(null);
+    expect(managedPluginArtifact(42, home)).toBe(null);
+    expect(managedPluginArtifact(["a"], home)).toBe(null);
   });
 });
 

@@ -34,12 +34,22 @@ const PLUGIN_SIGNALS = [
   /\bdotclaude\b/i,
   /\bdevops[- ]?plugin\b/i,
   /\bdevops\s+(skill|hook|agent|command|mcp)\b/i,
+  // Plugin slash commands, enumerated by name. A `/(setup|run|auto)-\w+`
+  // wildcard would also swallow a project's own /run-tests or /setup-db.
   /(^|\s)\/(ship|commit|promote|fix|concept)\b/,
-  /(^|\s)\/(setup|run|tune|claude|auto)-[a-z]+/,
+  /(^|\s)\/setup-(issue|project|readme|cleanup)\b/,
+  /(^|\s)\/run-(agents|autonomous|backlog|burn)\b/,
+  /(^|\s)\/tune-(harden|polish|rethink)\b/,
+  /(^|\s)\/claude-(learn|lint|extend-skill)\b/,
+  /(^|\s)\/auto-(update|usage|graph)\b/,
   /\bcompletion[- ]card\b/i,
-  /\b(ss|pre|post|prompt|stop)\.[a-z]+\.[a-z.]+\.js\b/,
+  // Hook filenames: {event}.{domain}.{action}.js — action segments may be
+  // hyphenated (prompt.flow.silent-turn.js, pre.worktree.split-guard.js).
+  /\b(ss|pre|post|prompt|stop)\.[a-z-]+\.[a-z.-]+\.js\b/,
   /\bplugin\s+(cache|marketplace|install)\b/i,
-  /~\/\.claude\/plugins\b/,
+  // Matches both the POSIX shorthand and a full Windows path
+  // (C:\Users\me\.claude\plugins\…, %USERPROFILE%\.claude\plugins\…).
+  /\.claude[/\\]plugins\b/i,
 ];
 
 function hasPluginSignal(message) {

@@ -23,9 +23,25 @@ describe("hasPluginSignal — plugin-topic detector", () => {
     expect(hasPluginSignal("completion-card wird nicht gerendert")).toBe(true);
   });
 
-  test("references the install trees", () => {
+  test("references the install trees, POSIX and Windows spelling", () => {
     expect(hasPluginSignal("fix das im plugin cache")).toBe(true);
     expect(hasPluginSignal("liegt unter ~/.claude/plugins/cache/dotclaude")).toBe(true);
+    expect(hasPluginSignal("C:\\Users\\Jerem\\.claude\\plugins\\cache\\dotclaude ist stale")).toBe(true);
+    expect(hasPluginSignal("%USERPROFILE%\\.claude\\plugins\\marketplaces")).toBe(true);
+  });
+
+  test("hook filenames with hyphenated action segments still signal", () => {
+    expect(hasPluginSignal("prompt.flow.silent-turn.js schluckt meinen Turn")).toBe(true);
+    expect(hasPluginSignal("pre.worktree.split-guard.js meldet falsch")).toBe(true);
+    expect(hasPluginSignal("prompt.worktree.branch-guard.js nervt")).toBe(true);
+  });
+
+  test("a project's own slash commands do NOT signal", () => {
+    // A /(setup|run|auto)-\w+ wildcard would swallow these.
+    expect(hasPluginSignal("/run-tests schlägt fehl")).toBe(false);
+    expect(hasPluginSignal("/setup-db neu aufsetzen")).toBe(false);
+    expect(hasPluginSignal("/auto-format über das repo laufen lassen")).toBe(false);
+    expect(hasPluginSignal("/tune-cache anpassen")).toBe(false);
   });
 
   test("ordinary project work does NOT signal (false-positive guard)", () => {
