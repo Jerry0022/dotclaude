@@ -61,7 +61,16 @@ the `redteam` agent in Wave 0.
 ## Token Awareness
 
 - `ss.tokens.scan` scans for expensive files at session start
-- `pre.tokens.guard` blocks operations exceeding 2% of session limit
+- `pre.tokens.guard` blocks operations exceeding the plan-scaled share of the
+  context window (`plan-defaults`: 5% pro · 8% max_5 · 10% max_20)
+- For Bash, an expensive file only counts when a command actually READS it
+  (`hooks/lib/bash-context-cost`). Passing the path as an argument — a server
+  start, `ls`, `mv`, `echo`, `git add` — is free. A command that cannot be
+  reasoned about stays costly; the one exception is a detached
+  `run_in_background` non-reader
+- A block is a confirm-once gate: retrying the same operation releases it for
+  30 minutes, keyed per project. Reword the description or flip
+  `run_in_background` freely — neither affects the key
 - Never refuse work — surface the cost trade-off, let the user decide
 - Usage data displayed only in completion card battery line
 
