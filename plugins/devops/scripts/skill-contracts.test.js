@@ -76,22 +76,51 @@ describe("bare deep-knowledge/ refs resolve, in skills that own a sibling dir", 
   });
 });
 
+// Extension dirs that deliberately do NOT correspond to a shipped skill.
+// One entry per exemption, each with the reason it is not a stale name.
+const EXEMPT_EXTENSION_DIRS = new Map([
+  [
+    "devops-test-plan",
+    "Frozen consumer contract: projects keep their test profiles at this path. " +
+      "Stated in deep-knowledge/test-plan.md — the plugin ships no such skill by design.",
+  ],
+]);
+
 describe("skill extension paths point at skills that exist", () => {
+  test("every exemption states why it is not a stale name", () => {
+    for (const [dir, reason] of EXEMPT_EXTENSION_DIRS) {
+      expect(reason.length, `exemption "${dir}" needs a written reason`).toBeGreaterThan(40);
+    }
+  });
+
   // Two failure modes, both silent: a skill's own Step 0 naming a stale
   // directory (left behind by a rename) loads nothing at all, and a
   // cross-reference to another skill's extension dir under its old name sends
   // the reader somewhere that will never be read.
-  test.each(skillDirs())("%s", skill => {
-    const unknown = [];
+  // Cover every prose surface that can carry such a path — a stale name in
+  // plugin-level deep-knowledge or an agent misroutes just as silently.
+  const proseFiles = [];
+  for (const skill of skillDirs()) {
     for (const rel of skillDocs(skill)) {
-      const body = withoutCodeFences(
-        fs.readFileSync(path.join(SKILLS_DIR, skill, ...rel), "utf8"),
-      );
-      for (const m of body.matchAll(/\.claude\/skills\/([A-Za-z0-9._-]+)\//g)) {
-        const dir = m[1];
-        if (dir.startsWith("{") || dir.startsWith("<")) continue; // placeholder
-        if (!SKILL_NAMES.has(dir)) unknown.push(`${rel.join("/")} → .claude/skills/${dir}/`);
-      }
+      proseFiles.push([`skills/${skill}/${rel.join("/")}`, path.join(SKILLS_DIR, skill, ...rel)]);
+    }
+  }
+  for (const [dir, label] of [["deep-knowledge", "deep-knowledge"], ["agents", "agents"]]) {
+    const abs = path.join(PLUGIN_ROOT, dir);
+    if (!fs.existsSync(abs)) continue;
+    for (const f of fs.readdirSync(abs).filter(f => f.endsWith(".md"))) {
+      proseFiles.push([`${label}/${f}`, path.join(abs, f)]);
+    }
+  }
+
+  test.each(proseFiles)("%s", (_label, file) => {
+    const body = withoutCodeFences(fs.readFileSync(file, "utf8"));
+    const unknown = [];
+    for (const m of body.matchAll(/\.claude\/skills\/([A-Za-z0-9._-]+)\//g)) {
+      const dir = m[1];
+      if (dir.startsWith("{") || dir.startsWith("<")) continue; // placeholder
+      if (EXEMPT_EXTENSION_DIRS.has(dir)) continue;
+      if (!SKILL_NAMES.has(dir)) unknown.push(`.claude/skills/${dir}/`);
     }
     expect([...new Set(unknown)], "extension path names a skill that does not exist").toEqual([]);
   });
