@@ -5,7 +5,7 @@ in some other project becomes an **issue in the plugin source repo**, never a
 local fix there.
 
 This is the single source of truth for the "which repo owns this change?"
-question. `/claude-learn` Step 4b/5 implements it for captured learnings; every
+question. `/claude-learn` Step 2 implements it for captured learnings; every
 other skill, agent, and ad-hoc turn follows the same hierarchy.
 
 ## The hierarchy
