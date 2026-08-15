@@ -9,7 +9,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [agent-conventions.md](agent-conventions.md) | Agent Naming & Collaboration Conventions | [role:X · Type] Task description |
 | [agent-orchestration.md](agent-orchestration.md) | Agent Orchestration | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [agent-proactivity.md](agent-proactivity.md) | Proactive Agent Orchestration | Cross-cutting rule for when to involve specialized agents without explicit us... |
-| [autonomous-execution.md](autonomous-execution.md) | Autonomous Execution — Gate, Guardrails, Late-Permission Protocol | Detailed execution rules for `run-autonomous` Step 5. Read this at the... |
+| [autonomous-execution.md](autonomous-execution.md) | Autonomous Execution — Gate, Guardrails, Late-Permission Protocol | Detailed execution rules for `run-autonomous` Step 5. Read this at the start of |
 | [browser-file-urls.md](browser-file-urls.md) | Browser File URLs (Windows + Git-Bash) | Cross-cutting rule: whenever a skill opens a local HTML file in a browser |
 | [browser-tool-strategy.md](browser-tool-strategy.md) | Browser Tool Strategy | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [claude-desktop-app-setup.md](claude-desktop-app-setup.md) | Claude Desktop App Setup (Windows) | Windows-specific reference for Claude Desktop App launcher configuration and ... |
@@ -22,13 +22,14 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [documentation-maintenance.md](documentation-maintenance.md) | Documentation Maintenance | Keep project docs in their target state as behavior, flows, and architecture ... |
 | [edge-profiles.md](edge-profiles.md) | Edge Profiles | Configuration and usage rules for the two Microsoft Edge profiles used by thi... |
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |
-| [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/commit`, `/ship`, and h... |
-| [harden-polish-shared.md](harden-polish-shared.md) | Harden/Polish — Shared Reference | Cross-cutting reference for `/tune-harden` and `/tune-polish`. ... |
+| [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/commit`, `/ship`, and hooks. |
+| [harden-polish-shared.md](harden-polish-shared.md) | Harden/Polish — Shared Reference | Cross-cutting reference for `/tune-harden` and `/tune-polish`. Covers |
 | [injection-hardening.md](injection-hardening.md) | Prompt-Injection Hardening — Untrusted Content & Egress Control | Cross-cutting defense for any skill or agent that reads untrusted content (fi... |
 | [local-llm-delegation.md](local-llm-delegation.md) | Local LLM Delegation | Cross-cutting rule for all implementation agents (core, frontend, feature, ai) |
 | [mcp-deferred-tools.md](mcp-deferred-tools.md) | MCP Deferred Tools | Cross-cutting rule: in sessions with a large tool inventory (Computer Use, Ch... |
 | [merge-safety.md](merge-safety.md) | Merge Safety — Parallel Development | Cross-cutting reference for preventing silent overwrites when multiple develo... |
 | [plugin-behavior.md](plugin-behavior.md) | Plugin Behavior Rules | Core behavioral rules enforced by the devops plugin. |
+| [plugin-scope-routing.md](plugin-scope-routing.md) | Plugin Scope Routing — Where a Fix Belongs | Cross-cutting rule for every skill, hook, and agent: a devops-plugin defect f... |
 | [pre-mortem.md](pre-mortem.md) | Pre-Mortem / Red-Team Self-Critique | Cross-cutting rule for reducing blind spots before non-trivial changes. |
 | [preview-testing.md](preview-testing.md) | Claude Preview — Capabilities & Hard Limits | Canonical reference for **Claude Preview** (`preview_*`), the primary localhost |
 | [responsive-testing.md](responsive-testing.md) | Responsive Testing — Multi-Viewport Verification | Multi-device web apps require verification at phone, tablet, and desktop |

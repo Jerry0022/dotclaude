@@ -54,7 +54,9 @@ Determine whether the current project IS the devops plugin source repo:
   exists AND its `name` field equals `devops` (use Read on the JSON).
 - Otherwise it is a **consumer project**.
 
-Store as `{is_plugin_repo}`.
+Store as `{is_plugin_repo}`. This is the same detection the `pre.plugin.scope`
+and `prompt.plugin.scope` hooks apply — see
+`deep-knowledge/plugin-scope-routing.md`.
 
 ## Step 3 — Auto-detect target project from text
 
@@ -107,16 +109,11 @@ the rule must NOT become the plugin's default behavior. If unsure, treat it as
 `upstream` and create the issue. This is not set for plugin-repo or
 project-topic learnings.
 
-**Hard boundary in a consumer project:** this skill must NOT apply a plugin fix
-directly — not into the consumer's own tree, and **never** into the installed
-plugin copy under `~/.claude/plugins/cache/**` or
-`~/.claude/plugins/marketplaces/**`. Those are managed install artifacts; a
-hand-edit masks the real defect and is overwritten on the next sync. A plugin
-defect always leaves this skill as an **upstream issue** (5b). The only writes
-allowed here are a deliberate `local-override` extension (5b′). **Exception —
-plugin source repo:** when the current project IS the plugin's own repo, direct
-fixes are expected (5a) and touching the local cache is *optional* (e.g.
-repairing or testing the installed copy).
+**Hard boundary in a consumer project:** a plugin fix must never be applied
+directly here — not into the consumer's tree, and not into the installed copy
+under `~/.claude/plugins/**` (the `pre.plugin.scope` hook blocks the latter).
+The only local write allowed is a deliberate `local-override` extension (5b′).
+Full rule, exceptions, and detection: `deep-knowledge/plugin-scope-routing.md`.
 
 ## Step 5 — Route by target × topic
 
@@ -135,7 +132,8 @@ self-reference rule. Single source: `deep-knowledge/content-conventions.md`
 | current (consumer)     | plugin → upstream        | **5b.** Issue in plugin source repo (root-cause) |
 | current (consumer)     | plugin → local-override  | **5b′.** Skill-extension if it fits; else 5c     |
 | current (consumer)     | project                  | **5c.** Project-specific skill or deep-knowledge |
-| other project (any)    | any                      | **5d.** Cross-project — issue or prompt          |
+| other project          | plugin                   | **5b.** Topic wins — issue in the plugin repo    |
+| other project          | project                  | **5d.** Cross-project — issue or prompt          |
 | global / ambiguous     | any                      | **5e.** ASK FIRST — do not auto-write            |
 
 ### 5a — Plugin repo, plugin topic
@@ -222,7 +220,10 @@ single source of truth for size/structure checks.
 
 ### 5d — Different project (cross-project)
 
-This branch fires when `{target_project}` ≠ current project.
+This branch fires when `{target_project}` ≠ current project AND
+`{topic} == project`. **A plugin topic never lands here** — the topic outranks
+the target, so it goes to 5b and the issue is filed against the plugin source
+repo, not against `{target_project}`.
 
 1. Resolve the target's git root and check for a GitHub remote:
    ```bash
@@ -364,18 +365,12 @@ write this skill performs.
   — auto-memory owns that channel. The **only** permitted writes are Step 6
   duplicate-cleanup: deleting matched `feedback_*.md` files and removing
   their bullets from `MEMORY.md`, both requiring user confirmation per match.
-- **Default to the root cause's home.** A plugin defect/gap found in a consumer
-  project becomes an issue in the plugin source repo (5b), NOT a local
-  extension. Localize (5b′ / local dotclaude change) only for a deliberate
-  project-specific override you can justify keeping off upstream — and only when
-  it makes sense to implement in the current project at all.
-- **Never hand-edit installed plugin copies.** In a consumer project this skill
-  must not fix a plugin defect directly — not in the consumer's tree, and never
-  under `~/.claude/plugins/cache/**` or `~/.claude/plugins/marketplaces/**`
-  (managed artifacts, overwritten on the next sync). Route it upstream (5b);
-  the only local write allowed is a deliberate `local-override` extension (5b′).
-  **Exception:** when the current project IS the plugin source repo, direct
-  fixes are expected and touching the local cache is optional.
+- **Default to the root cause's home**, and **never hand-edit installed plugin
+  copies** — both rules, with their exceptions and the repo detection, live in
+  `deep-knowledge/plugin-scope-routing.md`. In short: a plugin defect/gap found
+  in a consumer project becomes an issue in the plugin source repo (5b), not a
+  local extension; localize (5b′) only for a deliberate project-specific
+  override you can justify keeping off upstream.
 - **Always** prefer deep-knowledge > skill/extension > CLAUDE.md.
 - **Respect the soft caps** above; re-route to the next-larger container
   before busting CLAUDE.md or SKILL.md targets.

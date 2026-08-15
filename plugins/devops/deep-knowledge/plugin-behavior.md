@@ -87,6 +87,16 @@ Plugin default → User global (~/.claude/) → Project ({project}/.claude/)
 ```
 Most specific wins. See `CONVENTIONS.md` for details.
 
+## Plugin Scope — Fix Upstream, Not Locally
+
+A devops-plugin defect noticed while working in **another** project becomes a
+GitHub issue in the plugin source repo — never a local workaround there, and
+never a hand-edit of the installed copy under `~/.claude/plugins/**` (blocked
+by `pre.plugin.scope`). Anything that is genuinely about the current project
+belongs in that project's own `.claude/` instructions. Inside the plugin source
+repo, direct implementation is the correct route and no issue is needed.
+Full hierarchy, detection, and exceptions: `plugin-scope-routing.md`.
+
 ## Issue Creation — Always Delegate
 
 When a skill or hook needs to create a GitHub issue, it MUST delegate to
