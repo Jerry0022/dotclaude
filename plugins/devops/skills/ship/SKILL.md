@@ -283,7 +283,7 @@ If `success: false` → call `render_completion_card` with variant `ship-blocked
 **MUST run** if codex-plugin-cc is installed — not optional, not suggested.
 
 1. Invoke Codex via Bash with hard timeout: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" "<review prompt containing git diff>"`. Do NOT use the `/codex:rescue` Agent tool.
-2. Evaluate by exit code (see `deep-knowledge/codex-integration.md` "Hard Timeout & Failure-Tolerance"):
+2. Evaluate by exit code (see `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` "Hard Timeout & Failure-Tolerance"):
    - **rc=0, no findings / clean** → continue to Step 3
    - **rc=0, auto-fixable** (typos, missing imports, style) → fix inline, continue
    - **rc=0, judgment required** (design concerns, logic flaws, security) →
@@ -379,7 +379,7 @@ Pass the bare `tag: "vX.Y.Z"` as before; the tool prefixes the channel. See
 - Tune timeout per call: `checksTimeoutSec: <30..3600>`.
 - See `deep-knowledge/quality-gates.md → Pre-Merge CI Checks Gate` for the full state matrix.
 
-**If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1b and rebase before retrying. This also fires as `baseAdvancedDuringChecks: true` when a **parallel ship landed on base while we waited for CI** — the PR is left open and unmerged (no silent overwrite). Same action: rebase + retry, then re-run the **Step 1d full check** before the retry: a parallel ship just landed, and its purpose may impose obligations on this branch (see `deep-knowledge/purpose-alignment.md`). See `deep-knowledge/merge-safety.md → How ship_release Prevents Overwrites`.
+**If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1b and rebase before retrying. This also fires as `baseAdvancedDuringChecks: true` when a **parallel ship landed on base while we waited for CI** — the PR is left open and unmerged (no silent overwrite). Same action: rebase + retry, then re-run the **Step 1d full check** before the retry: a parallel ship just landed, and its purpose may impose obligations on this branch (see `deep-knowledge/purpose-alignment.md`). See `{PLUGIN_ROOT}/deep-knowledge/merge-safety.md → How ship_release Prevents Overwrites`.
 
 **If `postMergeTreeMatch: false`** (merge succeeded but `postMergeWarning` is set): **verify before surfacing** — the guard can fire as a false alarm (a tooling error in the tree lookup or a stale `origin/<base>` ref right after the merge; observed as a permanent Windows false positive before v0.107.1). Run:
 
@@ -426,7 +426,7 @@ handler. Handlers `ssh-rsync` and `ha-rest` are extension points documented for
 consumer configuration — not yet implemented in this release (they fall through to
 `none` intentionally).
 
-See `deep-knowledge/skill-extension-guide.md -> Delivery targets` for reference.md examples.
+See `{PLUGIN_ROOT}/deep-knowledge/skill-extension-guide.md -> Delivery targets` for reference.md examples.
 
 ## Step 4b — Spawn Post-Merge Watcher (final ship only)
 
@@ -500,8 +500,8 @@ Each surface: `{ name, url, selector, expected }` where `expected` may use the
 For every declared surface:
 
 1. Pick the browser tool via the waterfall in
-   `deep-knowledge/browser-tool-strategy.md` (Claude-in-Chrome in Edge first).
-   This is a live post-deploy read — see `deep-knowledge/test-autonomy.md`.
+   `{PLUGIN_ROOT}/deep-knowledge/browser-tool-strategy.md` (Claude-in-Chrome in Edge first).
+   This is a live post-deploy read — see `{PLUGIN_ROOT}/deep-knowledge/test-autonomy.md`.
    Works in foreground, background, and autonomous mode.
 2. Open `url` in the **separate Edge testing window** (per the Edge Credo).
 3. Read the **rendered** version marker. Use **Eval JS** (`javascript_tool` /

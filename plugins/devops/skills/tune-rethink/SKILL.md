@@ -10,7 +10,7 @@ description: >-
   down), generates genuinely fresh approaches via code-blind lens agents,
   reconciles them against the codebase, lets the user decide on a
   concept page, then hands the chosen approach to run-autonomous
-  for implementation with test-plan verification (deep-knowledge/test-plan.md).
+  for implementation with test-plan verification ({PLUGIN_ROOT}/deep-knowledge/test-plan.md).
   Triggers on: "festgefahren", "stuck", "unstuck", "wir drehen uns im Kreis",
   "neu denken", "rethink", "frischer Ansatz", "fresh approach",
   "komplett neu denken", "das führt zu nichts".
@@ -111,7 +111,7 @@ The rethinker agent has **no file tools** — code-blindness is enforced by
 its tool set, not by a polite request. Do NOT paste code, file paths, or
 implementation details into its prompt; that would defeat the isolation.
 
-Naming per `deep-knowledge/agent-conventions.md`:
+Naming per `{PLUGIN_ROOT}/deep-knowledge/agent-conventions.md`:
 `[role:rethinker · Ideation] <lens> approach for <target>`.
 
 Each agent returns one `RETHINK_APPROACH` block (format in `lenses.md`).
@@ -172,7 +172,7 @@ Only after an explicit **Implement** decision. Assemble the task briefing:
 
 - the chosen approach (full concept content),
 - scope boundary, success criteria, no-gos, corridor,
-- test mandate: pin the profile per `deep-knowledge/test-plan.md` and verify per its
+- test mandate: pin the profile per `{PLUGIN_ROOT}/deep-knowledge/test-plan.md` and verify per its
   recommendation,
 - pointer to the `.claude/rethink/<date>-<slug>/` artifacts.
 

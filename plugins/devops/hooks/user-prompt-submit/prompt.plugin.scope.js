@@ -87,7 +87,7 @@ process.stdin.on('end', () => {
     `1. Defect/gap in the devops plugin itself (skill, hook, agent, MCP server, ` +
     `convention, installed copy under ~/.claude/plugins/**) → do NOT fix it here and ` +
     `do NOT hand-edit the installed copy. Invoke the /setup-issue skill and file it ` +
-    `against ${slug}: [BUG] for a defect, [FEAT] for a gap, body = symptom + affected ` +
+    `against ${slug}: [BUG] for a defect, [FEATURE] for a gap, body = symptom + affected ` +
     `plugin part + "Captured from a session in ${project}."\n` +
     `2. Anything about THIS project (its build, architecture, conventions, or a ` +
     `deliberate deviation from a plugin default) → persist it in this project's own ` +

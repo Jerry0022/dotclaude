@@ -15,11 +15,16 @@ Two facts decide everything: **is this session the plugin source repo**, and
 
 | Session repo          | Problem belongs to  | Route                                                   |
 |-----------------------|---------------------|---------------------------------------------------------|
-| Plugin source repo    | plugin              | **Implement directly.** No issue needed.                |
-| Plugin source repo    | that same repo      | Same as above — it is one repo.                          |
+| Plugin source repo    | the plugin          | **Implement directly** in `plugins/devops/`. No issue.  |
+| Plugin source repo    | that repo's own workflow | Its `.claude/` instructions — the repo dogfoods its own extensions. |
 | Consumer project      | plugin              | **Issue in the plugin source repo.** Nothing local.     |
 | Consumer project      | this project        | **This project's own `.claude/` instructions.**          |
 | Consumer project      | deliberate override | Local skill extension — only with a stated reason.       |
+
+Row 2 is a real distinction, not a formality: being inside the plugin's repo
+does not make every rule a plugin rule. "This repo runs `npm test` before every
+commit" belongs in its `.claude/`, where it stays local — shipped as a plugin
+default it would reach every consumer that never asked for it.
 
 The failure mode this prevents: noticing a plugin bug while working in another
 project and fixing it *there* — as a local workaround, a CLAUDE.md patch, or a
@@ -44,7 +49,7 @@ Do not re-implement it.
 2. Invoke `/setup-issue` via the **Skill** tool — never `gh issue create`
    directly (see `plugin-behavior.md` → "Issue Creation — Always Delegate").
    Hand it a self-contained prompt:
-   - **title** — `[BUG] <short>` for a defect, `[FEAT] <short>` for a gap
+   - **title** — `[BUG] <short>` for a defect, `[FEATURE] <short>` for a gap
    - **body** — symptom, the affected plugin part (skill / hook / agent / MCP /
      convention), and `Captured from a session in {current-project}.`
    - **target repo** — the upstream slug, so it does not land in the consumer repo

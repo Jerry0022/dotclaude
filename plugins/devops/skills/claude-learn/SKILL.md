@@ -25,8 +25,12 @@ feedback belongs in auto-memory and is handled elsewhere — this skill writes
 Use **Glob** to verify each path exists before reading; skip missing files
 silently (no output). Merge project > global > plugin defaults.
 
-1. Global: `~/.claude/skills/learn/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/learn/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/claude-learn/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/claude-learn/SKILL.md` + `reference.md`
+
+The directory name is the skill's own `name` (`claude-learn`), per
+`CONVENTIONS.md` → Extension Mechanism. Any other spelling silently loads
+nothing.
 
 ## Step 1 — Collect the learning
 
@@ -40,62 +44,85 @@ Claude cannot judge edge cases.
 
 ## Step 2 — Route
 
-**One decision, three inputs, exactly one branch.** Answer in order; the first
-two are almost always enough.
+**One decision, exactly one branch.** Run the gate, then answer Q1–Q3 in order.
+
+**Gate — before Q1: does the rule belong to any project at all?** If it would
+land outside every project — `~/.claude/CLAUDE.md`, `~/.claude/skills/`, or
+anything phrased as "in every project" / "egal in welchem Projekt" — the answer
+to Q1 does not exist. Stop here: **branch E**, ask first, never auto-write.
+Otherwise continue; the rest of Step 2 assumes some project owns this.
 
 **Q1 — Whose rules does this learning change?** This is the only judgment call
-in the skill.
+in the skill. Exactly two answers:
 
-- **the devops plugin** — a plugin skill, hook, agent, the MCP server, scripts
-  under `plugins/devops/`, a plugin convention (commit format, ship pipeline),
-  or a cross-cutting topic already in `plugins/devops/deep-knowledge/`.
-- **this project** — its build commands, architecture, business-logic
-  conventions, file layout. Anything that would be wrong or meaningless for
-  another consumer of the plugin.
+- **the devops plugin** — a plugin skill (`/ship`, `/commit`, `/concept`, …), a
+  hook (session-start, pre/post-tool-use, stop, user-prompt-submit), an agent
+  (core, frontend, ai, qa, redteam, …), the MCP server, scripts under
+  `plugins/devops/`, a plugin convention (commit format, ship pipeline), or a
+  cross-cutting topic already in `{PLUGIN_ROOT}/deep-knowledge/`.
+- **a project** — its build commands, architecture, business-logic conventions,
+  file layout. Anything that would be wrong or meaningless for another consumer
+  of the plugin. *Which* project is Q3.
 
-**Q2 — Is this session the plugin source repo?** A fact, not a judgment:
+**Q2 — Is this session the plugin source repo?** A fact, not a judgment. Get the
+root with `git rev-parse --show-toplevel`; it is the plugin source repo when
 `{git-root}/plugins/devops/.claude-plugin/plugin.json` exists and its `name` is
-`devops`. Everything else is a consumer project. Same detection as
-`hooks/lib/plugin-scope.js`; canonical rules in
-`deep-knowledge/plugin-scope-routing.md`.
+`devops` (Read the JSON). Everything else is a consumer project — including a
+session with no git root at all. Same detection as `hooks/lib/plugin-scope.js`;
+canonical rules in `{PLUGIN_ROOT}/deep-knowledge/plugin-scope-routing.md`.
 
-**Q3 — Does the text name a different project?** Only ask this when the learning
-text points somewhere else (detection recipe: `deep-knowledge/routing-details.md`).
-Default is the current project — do not go looking.
+**Q3 — Which project?** Only relevant when Q1 = *a project*. Scan the learning
+**text** for a named project; nothing named → the current one. The scan reads
+the text, it does not survey the disk. Recipe and the `~/IdeaProjects/` bound:
+`deep-knowledge/routing-details.md` (sibling of this file).
 
-| Q1 — changes rules of | Q2 — session is plugin repo | Branch                                        |
-|-----------------------|-----------------------------|-----------------------------------------------|
-| the devops plugin     | yes                         | **A** — edit the plugin files directly        |
-| the devops plugin     | no                          | **B** — issue in the plugin repo, nothing local |
-| this project          | either                      | **C** — this project's own `.claude/` instructions |
+| Q1 — changes rules of | Q2 — session is plugin repo | Q3 — which project | Branch                                             |
+|-----------------------|-----------------------------|--------------------|----------------------------------------------------|
+| the devops plugin     | yes                         | —                  | **A** — edit the plugin files directly             |
+| the devops plugin     | no                          | —                  | **B** — issue in the plugin repo, nothing local    |
+| a project             | either                      | this one           | **C** — this project's own `.claude/` instructions |
+| a project             | either                      | another one        | **D** — issue there, or a hand-off prompt          |
 
-| Special case (overrides the table above)              | Branch                          |
-|--------------------------------------------------------|---------------------------------|
-| Q3 named another project, and Q1 = that project's rules | **D** — issue or hand-off prompt |
-| The rule belongs to no single project (`~/.claude/**`)  | **E** — ASK FIRST, never auto-write |
+| Special case — overrides the table above                                                        | Branch                                         |
+|---------------------------------------------------------------------------------------------------|------------------------------------------------|
+| Q1 = plugin, Q2 = no, **and** you can state why the rule must never become the plugin's default | **C-override** — local extension, this project |
 
 Three tie-breakers, in force order:
 
 1. **Q1 outranks Q3.** A plugin rule goes to A/B no matter which project
    surfaced it — an issue against the wrong repo helps nobody.
-2. **Unsure between plugin and project → plugin.** A plugin defect fixed
-   locally stays live for every other consumer; a plugin issue that turns out
-   to be project-specific costs one closed issue.
-3. **In branch B, never write locally.** Not into this project's tree, and
-   never into `~/.claude/plugins/**` (`pre.plugin.scope` blocks the latter).
-   The single exception is **C-override** — a deliberate deviation from a plugin
-   default that must not become the plugin's behavior, and only when you can
-   state why. No reason → branch B.
+2. **Unsure between plugin and project, and Q2 = no → plugin.** A plugin defect
+   fixed locally stays live for every other consumer; a plugin issue that turns
+   out to be project-specific costs one closed issue. **When Q2 = yes this
+   inverts** — nothing is at stake upstream, and a dotclaude-only rule filed as
+   a plugin default ships to every consumer. In the plugin source repo, a tie
+   falls to **C** (this repo dogfoods its own extensions in `.claude/skills/`).
+3. **Unsure whether C-override applies → it does not.** Its entry condition is
+   a reason you can state out loud; no reason means branch B. And in B nothing
+   is written locally — not into this project's tree, and never into
+   `~/.claude/plugins/**` (`pre.plugin.scope` blocks the latter).
+
+Worked examples — each lands in exactly one branch:
+
+| Learning                                                                     | Branch                                  |
+|------------------------------------------------------------------------------|-----------------------------------------|
+| "`/ship` bricht ab, wenn der Branchname einen Slash enthält" (in any project) | **B** — plugin defect, upstream issue   |
+| same, but the session is dotclaude                                            | **A** — implement it here               |
+| "In diesem Repo muss vor jedem Commit `npm run lint` laufen" (in dotclaude)   | **C** — its `.claude/`, per tie-breaker 2 |
+| "Im Projekt Foo brauchen DB-Migrationen einen eigenen Commit"                 | **D** — Q1 = a project, Q3 = Foo        |
+| "Antworte mir immer auf Deutsch, egal in welchem Projekt"                     | **E** — the gate catches it before Q1   |
+| "`/ship` soll hier den Docker-Publish überspringen, wir bauen kein Image"     | **C-override** — stated, plugin-wrong reason |
 
 ## Step 3 — Execute the branch
 
 Per-branch procedure — which file, what to hand over, how to scaffold —
-lives in `deep-knowledge/routing-details.md`. Read the section for your branch.
+lives in `deep-knowledge/routing-details.md` (sibling of this file). Read the
+section for your branch.
 
 Within whatever container you land in, prefer **deep-knowledge > skill >
 CLAUDE.md**, and re-route to the next-larger container rather than busting a
 budget. Sizing, re-route triggers, the reference-over-duplicate rule, and tone:
-`deep-knowledge/content-conventions.md`.
+`{PLUGIN_ROOT}/deep-knowledge/content-conventions.md`.
 
 Branches B and D persist nothing locally — skip Step 4.
 
@@ -107,7 +134,7 @@ style and tone, not project rules. Delete matched entries **with per-match
 confirmation**.
 
 Mechanics — memory-dir resolution, matching criteria, the confirmation
-prompt: `deep-knowledge/feedback-cleanup.md`.
+prompt: `deep-knowledge/feedback-cleanup.md` (sibling of this file).
 
 ## Step 5 — Report
 
@@ -122,12 +149,12 @@ Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` with
 `variant`, `summary`, `lang`, `session_id`, and `changes` (file/issue → short
 delta). Output the markdown VERBATIM as the LAST thing in the response.
 
-| Situation                                | Variant    |
-|------------------------------------------|------------|
-| Files written (branch A or C)            | `ready`    |
-| Issue created (branch B or D)            | `fallback` |
-| Hand-off prompt only (branch D)          | `fallback` |
-| User aborted at branch E                 | `analysis` |
+| Situation                                        | Variant    |
+|--------------------------------------------------|------------|
+| Files written (branch A, C, C-override, or E)    | `ready`    |
+| Issue created (branch B or D)                    | `fallback` |
+| Hand-off prompt only (branch D)                  | `fallback` |
+| User aborted at branch E                         | `analysis` |
 
 ## Rules
 
@@ -136,9 +163,9 @@ delta). Output the markdown VERBATIM as the LAST thing in the response.
   confirmed.
 - **Fix a rule where it lives.** Full hierarchy, detection, and the
   never-hand-edit-an-installed-copy boundary:
-  `deep-knowledge/plugin-scope-routing.md`.
+  `{PLUGIN_ROOT}/deep-knowledge/plugin-scope-routing.md`.
 - **Always reference, never duplicate** existing skill/agent/hook/deep-knowledge
-  logic — see `deep-knowledge/content-conventions.md`.
+  logic — see `{PLUGIN_ROOT}/deep-knowledge/content-conventions.md`.
 - **Always ask** before a global change, or any cross-project file edit that is
   not a GitHub issue.
 - **Never silently overwrite a rule that says the opposite.** Show the conflict

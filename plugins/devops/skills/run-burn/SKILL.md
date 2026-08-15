@@ -188,7 +188,7 @@ Present the consolidated plan:
 - Estimated token usage: {aggressive / moderate}
 ```
 
-Model per agent comes from `deep-knowledge/agent-orchestration.md` § Model & Effort
+Model per agent comes from `{PLUGIN_ROOT}/deep-knowledge/agent-orchestration.md` § Model & Effort
 Defaults (`opus` for po/research/redteam, `sonnet` for the rest). Show a `default →
 override` when you downgrade a model for cost (§ Model override rules) so the budget
 impact is visible.

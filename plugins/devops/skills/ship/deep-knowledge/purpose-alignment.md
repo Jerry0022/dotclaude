@@ -1,7 +1,7 @@
 # Purpose Alignment Gate — Cross-Branch Purpose & Regression Check
 
 Referenced by `/ship` Step 1d. Verifies that a ship honors not only the
-**code** of recently merged branches (that is `deep-knowledge/merge-safety.md`)
+**code** of recently merged branches (that is `{PLUGIN_ROOT}/deep-knowledge/merge-safety.md`)
 but their **purposes**: the goals and conventions each branch established.
 
 ## Why code-level merge safety is not enough

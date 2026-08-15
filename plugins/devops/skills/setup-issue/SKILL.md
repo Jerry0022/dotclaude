@@ -37,8 +37,25 @@ Determine from user input or ask via AskUserQuestion:
 - **Title**: Must follow `[TYPE] Short imperative description` format
 - **Type**: bug, feature, refactor, chore, design, docs
 - **Description**: Imperative mood, sentence case, no trailing period
+- **Target repo** (`{target_repo}`): an `owner/name` slug when the issue belongs
+  to a **different** repository than the session's. Absent → the current repo.
 
 If project extension defines additional required fields (roles, modules), ask for those too.
+
+### Target repo — when a caller hands one over
+
+Callers route issues to other repositories: `/claude-learn` files a plugin
+defect against the plugin source repo from inside a consumer project, and files
+a cross-project learning against that project. **An issue silently created in
+the wrong repo is worse than none** — it looks successful, returns a valid URL,
+and leaves the real repo untouched.
+
+- Carry `{target_repo}` through to Step 2 as `--repo` and to Step 4's check.
+- Labels, milestones, and board fields configured for the *current* project do
+  not necessarily exist in `{target_repo}`. Only pass what the target actually
+  has: verify with `gh label list --repo {target_repo}` before sending a label
+  set beyond `type:*`, and drop milestone/board steps unless the target is
+  configured for them.
 
 ## Step 1a — User-value gate (mandatory)
 
@@ -60,6 +77,13 @@ or indirect (performance, stability, security).
 
 ```bash
 gh issue create --title "[TYPE] Title" --body "Description" --label "type:X"
+```
+
+**With a `{target_repo}` from Step 1, `--repo` is mandatory** — without it `gh`
+creates the issue in whatever repo the CWD happens to be:
+
+```bash
+gh issue create --repo "{target_repo}" --title "[TYPE] Title" --body "Description" --label "type:X"
 ```
 
 The body MUST include the user-value line (see deep-knowledge/issue-rules.md):
@@ -84,6 +108,10 @@ Confirm all required parameters are set:
 2. Labels: at least `type:*` (plus any project-specific requirements)
 3. Milestone: if configured
 4. Project board item: if configured
+5. **Landing repo** — when Step 1 set `{target_repo}`, the `owner/name` in the
+   returned issue URL MUST equal it. A mismatch means the issue was created in
+   the wrong repository: say so plainly, give the wrong URL, and do not report
+   success. Close the misfiled issue only if the user asks.
 
 Missing required items = hard error. Fix before reporting success.
 
