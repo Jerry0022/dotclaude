@@ -51,10 +51,13 @@ would land outside every project (`~/.claude/CLAUDE.md`, `~/.claude/skills/`) �
 typically about how Claude answers, regardless of what is being worked on —
 cannot answer Q1. Stop here: **branch E**, ask first, never auto-write.
 
-"In jedem Projekt" is not the trigger by itself: *"in jedem Projekt soll
-`/commit` die Issue-Nummer schreiben"* changes a plugin default and is a plugin
-rule (Q1). The gate fires when no plugin part and no project is the subject —
-*"antworte mir immer auf Deutsch"*. Otherwise continue.
+Judge by where the rule has to live, not by the words in it. "In jedem Projekt"
+is not the trigger: *"in jedem Projekt soll `/commit` die Issue-Nummer
+schreiben"* changes a plugin default and is a plugin rule (Q1). Nor does naming
+a plugin part keep the gate shut — *"sprich mich per Du an, auch wenn `/commit`
+nachfragt"* is a tone preference that merely mentions `/commit` as the venue;
+its home is auto-memory, so the gate fires. Ask what the rule is *about*: the
+plugin's behavior, a project's, or how Claude talks to you.
 
 **Q1 — Whose behavior changes: the plugin's, everywhere — or just here?** The
 only judgment call in the skill. Reach and subject together, not either alone:
@@ -112,9 +115,14 @@ Three tie-breakers, in force order:
    a plugin default ships to every consumer. In the plugin source repo, a tie
    falls to **C** (this repo dogfoods its own extensions in `.claude/skills/`).
 3. **Unsure whether C-override applies → it does not.** Its entry condition is
-   a reason you can state out loud; no reason means branch B. And in B nothing
-   is written locally — not into this project's tree, and never into
-   `~/.claude/plugins/**` (`pre.plugin.scope` blocks the latter).
+   a reason you can state out loud. Without one, fall back through the matrix,
+   not to a fixed branch: **Q2 = no → B**; **Q2 = yes → A**, or C when Q1 was
+   the tie tie-breaker 2 covers. Filing an issue against dotclaude from inside
+   dotclaude is never the answer.
+   In branch B nothing is written locally — not into this project's tree, and
+   never into `~/.claude/plugins/**`, which `pre.plugin.scope` blocks *from a
+   consumer project*. In the plugin source repo that hook stands down by
+   design, so there the rule is yours to keep, not the hook's to enforce.
 
 Worked examples — each lands in exactly one branch:
 
@@ -123,7 +131,8 @@ Worked examples — each lands in exactly one branch:
 | "`/ship` bricht ab, wenn der Branchname einen Slash enthält" (consumer project)     | **B** — plugin defect, upstream issue        |
 | same learning (dotclaude)                                                            | **A** — implement it here                    |
 | "In diesem Repo muss vor jedem Commit `npm run lint` laufen" (dotclaude)             | **C** — its `.claude/`, per tie-breaker 2    |
-| "Im Projekt Foo brauchen DB-Migrationen einen eigenen Commit" (any)                  | **D** — Q1 = a project, Q3 = Foo             |
+| "Im Projekt Foo brauchen DB-Migrationen einen eigenen Commit" (a third project)      | **D** — Q1 = a project, Q3 = Foo             |
+| same learning (session is Foo)                                                       | **C** — Q3 resolves to the current project   |
 | "Antworte mir immer auf Deutsch" (any)                                               | **E** — the gate catches it before Q1        |
 | "In jedem Projekt soll `/commit` die Issue-Nummer schreiben" (consumer project)      | **B** — plugin default, not the gate         |
 | "`/ship` soll hier den Docker-Publish überspringen, wir bauen kein Image" (either)   | **C-override** — reason holds off upstream   |

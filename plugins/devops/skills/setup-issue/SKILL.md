@@ -98,10 +98,14 @@ Add optional flags based on project extension:
 
 ## Step 3 — Add to project board (if configured)
 
-Only if the project extension provides owner + project ID — **and Step 1 set no
-`{target_repo}`**. The board configured here belongs to the current project;
-GitHub happily accepts cross-repo project items, so without this guard an issue
-filed into someone else's repository still shows up on this project's board.
+Only if the project extension provides owner + project ID — **and the issue
+landed in this session's own repository**. Compare `{target_repo}` against the
+current repo case-insensitively (same comparison as Step 4.5); equal, or unset,
+means the board applies. The board configured here belongs to the current
+project, and GitHub happily accepts cross-repo project items, so without this
+guard an issue filed into someone else's repository shows up on this project's
+board. A `{target_repo}` that merely names the current repo — callers pass the
+slug through rather than checking — must not lose its board item.
 
 Add the issue to the project board via the GitHub API.
 
@@ -111,9 +115,16 @@ Set custom fields (e.g., "Agent Role") via GraphQL if field IDs are provided in 
 
 Confirm all required parameters are set:
 1. User-value gate passed and body contains the `**User value:**` line
-2. Labels: at least `type:*` (plus any project-specific requirements)
+2. Labels: at least `type:*` (plus any project-specific requirements) — unless
+   Step 1 dropped a label the target repo does not have, which is a reported
+   omission, not a failure
 3. Milestone: if configured
-4. Project board item: if configured
+4. Project board item: if configured **and** Step 3 did not skip it for a
+   cross-repo issue
+
+Verify what Steps 1–3 were actually told to produce. A requirement that those
+steps deliberately skipped is met, not missing — reporting a successfully
+created issue as a hard failure is its own defect.
 5. **Landing repo** — when Step 1 set `{target_repo}`, the `owner/name` in the
    returned issue URL MUST match it, **compared case-insensitively** (GitHub
    slugs are case-insensitive, and callers pass through whatever casing their

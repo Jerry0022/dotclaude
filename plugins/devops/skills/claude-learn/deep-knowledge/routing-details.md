@@ -25,10 +25,12 @@ step and must not collapse into the third:
 
 1. **Exactly one hint, resolving under `~/IdeaProjects/`** → that is the target.
    Confirm once with the user before writing.
-2. **A hint that resolves outside `~/IdeaProjects/`** (`H:\work\legacy-crm`, a
-   network share, a path that does not exist) → **ask**. The user pointed
-   somewhere specific; silently rewriting that to "the current project" files
-   another project's rule into this one. This is *not* the no-hint case.
+2. **Any hint that does not resolve to a directory under `~/IdeaProjects/`** —
+   path-shaped or not: `H:\work\legacy-crm`, a network share, a path that does
+   not exist, or a bare name like "im Repo legacy-crm" that matches nothing
+   there → **ask**. The user pointed somewhere specific; silently rewriting
+   that to "the current project" files another project's rule into this one.
+   This is *not* the no-hint case.
 3. **No hint at all** → current project, no ask.
 
 Conflicting hints → AskUserQuestion with the candidates plus "current project".
@@ -48,8 +50,10 @@ In order of preference:
 3. **Agent behavior** → `plugins/devops/agents/<name>.md`.
 4. **Hook behavior** → `plugins/devops/hooks/<phase>/<hook>.js`.
 
-`plugins/devops/CLAUDE.md` and the root `CLAUDE.md` are the last resort — only
-when neither a skill nor deep-knowledge fits and the rule is a one-liner. After
+The repo-root `CLAUDE.md` is the last resort — only when neither a skill nor
+deep-knowledge fits and the rule is a one-liner. The plugin directory has no
+CLAUDE.md of its own; its conventions live in `{PLUGIN_ROOT}/CONVENTIONS.md`.
+After
 any CLAUDE.md edit, invoke `/claude-lint` via the **Skill** tool; do not eyeball
 line counts. Keep CLAUDE.md at ~20 lines (target).
 

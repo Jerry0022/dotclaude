@@ -60,26 +60,24 @@ function skillDocs(skill) {
 // dir have only one possible referent, so bare refs stay unambiguous there.
 const PLUGIN_DK_DIR = path.join(PLUGIN_ROOT, "deep-knowledge");
 
-// Skills whose `deep-knowledge/x.md` mentions are target paths they tell a
-// CONSUMER project to create, not references to docs that exist here.
+// Filenames that appear as `deep-knowledge/x.md` but name a file a CONSUMER
+// project is told to create — not a doc that exists here. Keyed per filename,
+// not per skill, so the rest of that skill's refs stay checked.
 // One entry per exemption, each with the reason.
-const EXEMPT_DK_REF_SKILLS = new Map([
-  [
-    "claude-lint",
-    "Its whole job is proposing where a consumer project should move content — " +
-      "`deep-knowledge/architecture.md` etc. are files it asks the user to create, not ones we ship.",
-  ],
+const EXEMPT_DK_REF_FILES = new Map([
+  ["architecture.md", "claude-lint proposes this as a destination for a consumer project's own content."],
+  ["api.md", "claude-lint proposes this as a destination for a consumer project's own content."],
+  ["setup.md", "claude-lint proposes this as a destination for a consumer project's own content."],
 ]);
 
 describe("bare deep-knowledge/ refs resolve", () => {
   test("every exemption states why it is not a broken reference", () => {
-    for (const [skill, reason] of EXEMPT_DK_REF_SKILLS) {
-      expect(reason.length, `exemption "${skill}" needs a written reason`).toBeGreaterThan(40);
+    for (const [file, reason] of EXEMPT_DK_REF_FILES) {
+      expect(reason.length, `exemption "${file}" needs a written reason`).toBeGreaterThan(40);
     }
   });
 
   test.each(skillDirs())("%s", skill => {
-    if (EXEMPT_DK_REF_SKILLS.has(skill)) return;
     const ownsSibling = fs.existsSync(path.join(SKILLS_DIR, skill, "deep-knowledge"));
     const unresolved = [];
 
@@ -92,6 +90,7 @@ describe("bare deep-knowledge/ refs resolve", () => {
       // the preceding character must not be part of a longer path.
       for (const m of body.matchAll(/(^|[\s(`"])deep-knowledge\/([A-Za-z0-9._-]+\.md)/g)) {
         const file = m[2];
+        if (EXEMPT_DK_REF_FILES.has(file)) continue;
         // With a sibling dir the bare prefix means the sibling — it must exist
         // there. Without one there is only one possible referent, the
         // plugin-level dir — but a typo there is just as dead, only silent.
@@ -110,6 +109,33 @@ describe("bare deep-knowledge/ refs resolve", () => {
         ? "bare deep-knowledge/ ref resolves to a non-existent sibling — qualify plugin-level refs with {PLUGIN_ROOT}/"
         : "bare deep-knowledge/ ref names no plugin-level file",
     ).toEqual([]);
+  });
+});
+
+describe("{PLUGIN_ROOT}-qualified refs resolve", () => {
+  // The fix for ambiguous bare refs tells authors to write
+  // `{PLUGIN_ROOT}/deep-knowledge/x.md` — a form no assertion checked, so a
+  // typo in the recommended spelling stayed as silent as the defect it fixed.
+  const targets = [];
+  for (const skill of skillDirs()) {
+    for (const rel of skillDocs(skill)) {
+      targets.push([`skills/${skill}/${rel.join("/")}`, path.join(SKILLS_DIR, skill, ...rel)]);
+    }
+  }
+  for (const f of fs.readdirSync(PLUGIN_DK_DIR).filter(f => f.endsWith(".md"))) {
+    targets.push([`deep-knowledge/${f}`, path.join(PLUGIN_DK_DIR, f)]);
+  }
+
+  test.each(targets)("%s", (_label, file) => {
+    const body = withoutCodeFences(fs.readFileSync(file, "utf8"));
+    const unresolved = [];
+    // Both spellings of "rooted at the plugin dir".
+    for (const m of body.matchAll(
+      /(?:\{PLUGIN_ROOT\}|\$\{CLAUDE_PLUGIN_ROOT\}|plugins\/devops)\/([A-Za-z0-9._\-/]+\.md)/g,
+    )) {
+      if (!fs.existsSync(path.join(PLUGIN_ROOT, m[1]))) unresolved.push(m[1]);
+    }
+    expect([...new Set(unresolved)], "qualified ref names a file that does not exist").toEqual([]);
   });
 });
 
@@ -189,7 +215,13 @@ describe("issue title prefixes are members of the canonical table", () => {
   // Documented placeholder for "whichever type applies".
   const PLACEHOLDERS = new Set(["TYPE"]);
   // Bracket tags that are log levels or callouts, never issue-title prefixes.
-  const NOT_TITLE_PREFIXES = new Set(["INFO", "WARN", "WARNING", "ERROR", "DEBUG", "NOTE", "TIP"]);
+  const NOT_TITLE_PREFIXES = new Set([
+    "INFO", "WARN", "WARNING", "ERROR", "DEBUG", "TRACE", "FATAL",
+    "NOTE", "TIP", "TODO", "CCD",
+  ]);
+  // `[PREFIX] ` followed by the title: a placeholder, or any word. Matching a
+  // word shape (`[A-Z][a-z]`) instead missed `[FEAT] API …` and `[FEAT] fix …`.
+  const TITLE_PREFIX_SHAPE = /\[([A-Z]{3,})\]\s+(?:<[^>]+>|[A-Za-z][A-Za-z-]*\b)/g;
 
   test("the canonical table itself is non-empty", () => {
     expect(canonical.size).toBeGreaterThan(3);
@@ -214,30 +246,36 @@ describe("issue title prefixes are members of the canonical table", () => {
     // (`[BUG] <short summary>`) or real title text (`[CHORE] Capture learning`).
     // Log levels and callouts are excluded by name, not by shape — relying on
     // the shape alone left `[FEAT] Fix the crash` invisible.
-    const used = new Set(
-      [...body.matchAll(/\[([A-Z]{3,})\]\s+(?:<[^>]+>|[A-Z][a-z])/g)].map(m => m[1]),
-    );
+    const used = new Set([...body.matchAll(TITLE_PREFIX_SHAPE)].map(m => m[1]));
     const bad = [...used].filter(
       p => !canonical.has(p) && !PLACEHOLDERS.has(p) && !NOT_TITLE_PREFIXES.has(p),
     );
     expect(bad, `title prefixes not in issue-rules.md: ${bad.join(", ")}`).toEqual([]);
   });
 
-  test("the assertion catches a real violation and spares a log level", () => {
-    // Negative fixtures — the shape-only version of this regex passed both.
-    const violating = "Hand over `[FEAT] Fix the crash` to the issue skill.";
-    const alsoViolating = "title: `[FEAT] <short summary>`";
-    const innocent = "- [INFO] <detail> is written to the log";
-    const shape = /\[([A-Z]{3,})\]\s+(?:<[^>]+>|[A-Z][a-z])/g;
+  test("the assertion catches real violations and spares log levels", () => {
+    // Negative fixtures. Earlier shapes let each of these through in turn:
+    // requiring `<lowercase-hyphen>` missed a multi-word placeholder, and
+    // requiring `[A-Z][a-z]` missed an acronym or a lowercase word.
+    const violating = [
+      "Hand over `[FEAT] Fix the crash` to the issue skill.",
+      "title: `[FEAT] <short summary>`",
+      "`[FEAT] API rate limiting`",
+      "`[FEAT] fix the crash`",
+    ];
+    const innocent = ["- [INFO] <detail> is written to the log", "[WARN] Disk almost full"];
 
-    for (const text of [violating, alsoViolating]) {
-      const found = [...text.matchAll(shape)].map(m => m[1]);
-      expect(found).toContain("FEAT");
-      expect(canonical.has("FEAT")).toBe(false);
+    for (const text of violating) {
+      const found = [...text.matchAll(new RegExp(TITLE_PREFIX_SHAPE))].map(m => m[1]);
+      expect(found, `missed a bad prefix in: ${text}`).toContain("FEAT");
     }
-    const innocentHits = [...innocent.matchAll(shape)]
-      .map(m => m[1])
-      .filter(p => !NOT_TITLE_PREFIXES.has(p));
-    expect(innocentHits).toEqual([]);
+    expect(canonical.has("FEAT")).toBe(false);
+
+    for (const text of innocent) {
+      const hits = [...text.matchAll(new RegExp(TITLE_PREFIX_SHAPE))]
+        .map(m => m[1])
+        .filter(p => !NOT_TITLE_PREFIXES.has(p));
+      expect(hits, `false positive in: ${text}`).toEqual([]);
+    }
   });
 });
