@@ -64,7 +64,7 @@ If nothing is staged:
 - **≤5 changed files**: Run `git diff` to see changes, then stage all relevant files with `git add <specific files>`.
 - **>5 changed files**: Use `AskUserQuestion` to present file groups and let the user choose. Group by directory or logical change.
 
-**Rules:** Never use `git add -A` or `git add .`. See `deep-knowledge/git-hygiene.md`.
+**Rules:** Never use `git add -A` or `git add .`. See `{PLUGIN_ROOT}/deep-knowledge/git-hygiene.md`.
 
 ## Step 4 — Read staged diff
 

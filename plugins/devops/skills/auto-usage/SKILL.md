@@ -18,8 +18,8 @@ Fetch live token usage for the completion card's battery line.
 Check for optional overrides. Use **Glob** to verify each path exists before reading.
 Do NOT call Read on files that may not exist — skip missing files silently (no output).
 
-1. Global: `~/.claude/skills/refresh-usage/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/refresh-usage/SKILL.md` + `reference.md`
+1. Global: `~/.claude/skills/auto-usage/SKILL.md` + `reference.md`
+2. Project: `{project}/.claude/skills/auto-usage/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
 ## Step 1 — Fetch data

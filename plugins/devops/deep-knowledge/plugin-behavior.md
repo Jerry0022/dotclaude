@@ -110,7 +110,9 @@ Full hierarchy, detection, and exceptions: `plugin-scope-routing.md`.
 
 When a skill or hook needs to create a GitHub issue, it MUST delegate to
 `/setup-issue` via the **Skill** tool — never call `gh issue create`
-directly. The new-issue skill enforces title format, label set, milestone,
-project-board placement, and loads project-specific extensions from
-`{project}/.claude/skills/new-issue/`. Direct `gh issue create` calls
-bypass all of that and silently drift from the project's conventions.
+directly. That skill enforces title format, label set, milestone,
+project-board placement, **the target repository** (an issue meant for another
+repo silently lands in the current one without `--repo`), and loads
+project-specific extensions from `{project}/.claude/skills/setup-issue/`.
+Direct `gh issue create` calls bypass all of that and silently drift from the
+project's conventions.

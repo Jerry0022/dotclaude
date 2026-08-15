@@ -68,7 +68,8 @@ process.stdin.on('end', () => {
     `      Managed install trees are overwritten on the next sync — the edit would be lost\n` +
     `      and the real defect would stay unfixed for every other project.\n` +
     `Fix: invoke the /setup-issue skill and file the defect against ${slug}\n` +
-    `     ([BUG]/[FEAT], body = symptom + which skill/hook/agent + "captured from a session in <this project>").\n` +
+    `     ([BUG]/[FEATURE], body = symptom + which skill/hook/agent + "captured from a session in <this project>"\n` +
+    `      + a mandatory "**User value:**" line — setup-issue rejects issues without one).\n` +
     `     Anything that is genuinely about THIS project belongs in this project's own\n` +
     `     .claude/ instructions instead. See deep-knowledge/plugin-scope-routing.md.\n` +
     `Bypass (only when the user explicitly asked to patch the local install): set env DEVOPS_ALLOW_PLUGIN_EDIT=1.\n`

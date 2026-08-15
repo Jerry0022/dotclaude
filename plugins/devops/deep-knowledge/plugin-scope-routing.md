@@ -5,7 +5,7 @@ in some other project becomes an **issue in the plugin source repo**, never a
 local fix there.
 
 This is the single source of truth for the "which repo owns this change?"
-question. `/claude-learn` Step 4b/5 implements it for captured learnings; every
+question. `/claude-learn` Step 2 implements it for captured learnings; every
 other skill, agent, and ad-hoc turn follows the same hierarchy.
 
 ## The hierarchy
@@ -15,11 +15,16 @@ Two facts decide everything: **is this session the plugin source repo**, and
 
 | Session repo          | Problem belongs to  | Route                                                   |
 |-----------------------|---------------------|---------------------------------------------------------|
-| Plugin source repo    | plugin              | **Implement directly.** No issue needed.                |
-| Plugin source repo    | that same repo      | Same as above — it is one repo.                          |
+| Plugin source repo    | the plugin          | **Implement directly** in `plugins/devops/`. No issue.  |
+| Plugin source repo    | that repo's own workflow | Its `.claude/` instructions — the repo dogfoods its own extensions. |
 | Consumer project      | plugin              | **Issue in the plugin source repo.** Nothing local.     |
 | Consumer project      | this project        | **This project's own `.claude/` instructions.**          |
 | Consumer project      | deliberate override | Local skill extension — only with a stated reason.       |
+
+Row 2 is a real distinction, not a formality: being inside the plugin's repo
+does not make every rule a plugin rule. "This repo runs `npm test` before every
+commit" belongs in its `.claude/`, where it stays local — shipped as a plugin
+default it would reach every consumer that never asked for it.
 
 The failure mode this prevents: noticing a plugin bug while working in another
 project and fixing it *there* — as a local workaround, a CLAUDE.md patch, or a
@@ -30,8 +35,12 @@ next sync.
 ## Detecting which repo you are in
 
 The session is the **plugin source repo** when `{git-root}/plugins/devops/.claude-plugin/plugin.json`
-exists and its `name` field is `devops`. Anything else is a **consumer project**
-— including a worktree of an unrelated repo and a session with no git root at all.
+exists with `name` `devops`, or the root `.claude-plugin/marketplace.json` lists
+a `devops` plugin — **unless** that root lives inside
+`~/.claude/plugins/{cache,marketplaces,repos}/**`. The marketplace clone carries
+byte-identical metadata; treating it as the source would stand the guard down
+inside the very tree it protects. Anything else is a **consumer project** —
+including a worktree of an unrelated repo and a session with no git root at all.
 
 Hooks share this detection via `hooks/lib/plugin-scope.js`
 (`isPluginSourceRepo`, `managedPluginArtifact`, `upstreamSlug`, `scopeFor`).
@@ -44,9 +53,10 @@ Do not re-implement it.
 2. Invoke `/setup-issue` via the **Skill** tool — never `gh issue create`
    directly (see `plugin-behavior.md` → "Issue Creation — Always Delegate").
    Hand it a self-contained prompt:
-   - **title** — `[BUG] <short>` for a defect, `[FEAT] <short>` for a gap
+   - **title** — `[BUG] <short>` for a defect, `[FEATURE] <short>` for a gap
    - **body** — symptom, the affected plugin part (skill / hook / agent / MCP /
-     convention), and `Captured from a session in {current-project}.`
+     convention), `Captured from a session in {current-project}.`, and a
+     mandatory `**User value:**` line (Step 1a rejects issues without one)
    - **target repo** — the upstream slug, so it does not land in the consumer repo
 3. Persist nothing locally. The issue *is* the deliverable.
 

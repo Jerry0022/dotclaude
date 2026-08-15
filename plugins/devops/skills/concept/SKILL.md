@@ -652,7 +652,7 @@ interruption is a hard `gh` failure that needs the user's eyes.
    for use in Step 6a; do NOT apply it now — issue routing and cleanup
    are decoupled so the user can still review the page before closing.
 3. **User-value gate (silent, mandatory).** Apply the gate from the
-   `setup-issue` skill's deep-knowledge/issue-rules.md to the
+   `setup-issue` skill's `{PLUGIN_ROOT}/skills/setup-issue/deep-knowledge/issue-rules.md` to the
    selected items BEFORE creating anything: each issue must deliver a
    standalone user effect — direct (feature, visual, bug fixed, fewer
    crashes) or indirect (performance, stability, security). Items that
@@ -685,7 +685,7 @@ interruption is a hard `gh` failure that needs the user's eyes.
    resolve project-specific labels in this order:
    - If `item.role` / `item.module` is set in the payload → use directly.
    - Else, check the project's `setup-issue` extension
-     (`{project}/.claude/skills/new-issue/reference.md` / `SKILL.md`)
+     (`{project}/.claude/skills/setup-issue/reference.md` / `SKILL.md`)
      for the declared label sets. If the concept's slug, file paths, or
      final-report content unambiguously maps to exactly one role / module
      value → apply it.

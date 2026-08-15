@@ -280,7 +280,7 @@ Open the page in the browser and monitor for the submit signal.
 Follow the open + monitor bridge in
 `skills/concept/deep-knowledge/bridge-server.md` (server launch,
 Edge-open, heartbeat + decision polling), respecting the
-**Edge Credo** (`deep-knowledge/browser-tool-strategy.md` § Edge Credo):
+**Edge Credo** (`{PLUGIN_ROOT}/deep-knowledge/browser-tool-strategy.md` § Edge Credo):
 new tab in running Edge, user's profile context, Claude extension for interaction.
 
 ```bash
@@ -296,7 +296,7 @@ node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
 **Windows note:** always run `{filepath}` through `cygpath -m` before
 prefixing `file:///` — raw `$(pwd)`-style paths produce a broken
 `file:///c/Users/...` URL (missing drive colon → `ERR_FILE_NOT_FOUND`).
-See `deep-knowledge/browser-file-urls.md`.
+See `{PLUGIN_ROOT}/deep-knowledge/browser-file-urls.md`.
 
 Inform the user:
 

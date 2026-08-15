@@ -37,8 +37,28 @@ Determine from user input or ask via AskUserQuestion:
 - **Title**: Must follow `[TYPE] Short imperative description` format
 - **Type**: bug, feature, refactor, chore, design, docs
 - **Description**: Imperative mood, sentence case, no trailing period
+- **Target repo** (`{target_repo}`): an `owner/name` slug when the issue belongs
+  to a **different** repository than the session's. Absent → the current repo.
 
 If project extension defines additional required fields (roles, modules), ask for those too.
+
+### Target repo — when a caller hands one over
+
+Callers route issues to other repositories: `/claude-learn` files a plugin
+defect against the plugin source repo from inside a consumer project, and files
+a cross-project learning against that project. **An issue silently created in
+the wrong repo is worse than none** — it looks successful, returns a valid URL,
+and leaves the real repo untouched.
+
+- Carry `{target_repo}` through to Step 2 as `--repo`, to Step 3's skip
+  condition, and to Step 4's check.
+- Labels, milestones, and board fields configured for the *current* project do
+  not necessarily exist in `{target_repo}`. Verify with
+  `gh label list --repo {target_repo}` before sending any label — **including
+  `type:*`**: `gh issue create` hard-fails on an unknown label, and a target
+  repo that never adopted the `type:` scheme would reject every issue. Missing
+  there → create the issue without it and say so, rather than losing the issue.
+  Drop milestone/board steps unless the target is configured for them.
 
 ## Step 1a — User-value gate (mandatory)
 
@@ -62,6 +82,13 @@ or indirect (performance, stability, security).
 gh issue create --title "[TYPE] Title" --body "Description" --label "type:X"
 ```
 
+**With a `{target_repo}` from Step 1, `--repo` is mandatory** — without it `gh`
+creates the issue in whatever repo the CWD happens to be:
+
+```bash
+gh issue create --repo "{target_repo}" --title "[TYPE] Title" --body "Description" --label "type:X"
+```
+
 The body MUST include the user-value line (see deep-knowledge/issue-rules.md):
 `**User value:** <direct or indirect effect>`
 
@@ -71,7 +98,14 @@ Add optional flags based on project extension:
 
 ## Step 3 — Add to project board (if configured)
 
-Only if the project extension provides owner + project ID:
+Only if the project extension provides owner + project ID — **and the issue
+landed in this session's own repository**. Compare `{target_repo}` against the
+current repo case-insensitively (same comparison as Step 4.5); equal, or unset,
+means the board applies. The board configured here belongs to the current
+project, and GitHub happily accepts cross-repo project items, so without this
+guard an issue filed into someone else's repository shows up on this project's
+board. A `{target_repo}` that merely names the current repo — callers pass the
+slug through rather than checking — must not lose its board item.
 
 Add the issue to the project board via the GitHub API.
 
@@ -81,9 +115,23 @@ Set custom fields (e.g., "Agent Role") via GraphQL if field IDs are provided in 
 
 Confirm all required parameters are set:
 1. User-value gate passed and body contains the `**User value:**` line
-2. Labels: at least `type:*` (plus any project-specific requirements)
+2. Labels: at least `type:*` (plus any project-specific requirements) — unless
+   Step 1 dropped a label the target repo does not have, which is a reported
+   omission, not a failure
 3. Milestone: if configured
-4. Project board item: if configured
+4. Project board item: if configured **and** Step 3 did not skip it for a
+   cross-repo issue
+
+Verify what Steps 1–3 were actually told to produce. A requirement that those
+steps deliberately skipped is met, not missing — reporting a successfully
+created issue as a hard failure is its own defect.
+5. **Landing repo** — when Step 1 set `{target_repo}`, the `owner/name` in the
+   returned issue URL MUST match it, **compared case-insensitively** (GitHub
+   slugs are case-insensitive, and callers pass through whatever casing their
+   metadata carries — a case-sensitive check would fail a correctly filed
+   issue). A real mismatch means the issue was created in the wrong repository:
+   say so plainly, give the wrong URL, and do not report success. Close the
+   misfiled issue only if the user asks.
 
 Missing required items = hard error. Fix before reporting success.
 

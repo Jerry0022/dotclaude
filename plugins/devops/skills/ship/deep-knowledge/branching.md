@@ -19,7 +19,7 @@ main
       └── feat/42/windows             ← agent worktree
 ```
 
-Merge order follows wave order (see `deep-knowledge/agent-collaboration.md`):
+Merge order follows wave order (see `{PLUGIN_ROOT}/deep-knowledge/agent-collaboration.md`):
 Core → Frontend/Windows/AI → integration branch → main.
 
 ## When to use sub-branches
