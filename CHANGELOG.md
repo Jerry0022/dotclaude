@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.126.4] — 2026-08-15
+
+### Fixed
+
+- **Two background-build tests no longer pass or fail depending on what else the machine happens to be doing.** They failed in a full suite run and passed when run alone, which reads as a timing problem and is not one. `bgWithSentinel` refuses to start a `graphify update` once two builds are already live anywhere on the machine, and it counts them by scanning lock files in the shared temp directory. The two tests asserting that it *does* start one were the only ones of their kind without an isolated lock directory, so a real graphify build in another worktree — or a leftover lock from a runner killed before it cleaned up, which Windows can resurrect by recycling the PID — pushed the count to the cap and turned the expected spawn into a skip. The two neighbouring test blocks already isolated their lock directory for exactly this reason; these now do too, and the block that writes live-PID locks was isolated as well, so the suite stops seeding that contamination into the shared pool for later runs. What the tests actually assert is unchanged.
+
+- **A finished background build is no longer reported as an unknown outcome.** The runner recorded its ok/fail result by truncating the file and then writing it, so anything reading in the gap between the two — including the next session start, the surface whose whole job is to reveal a build that failed silently — saw an empty file and reported "unknown" instead of the real result. The result is now staged beside the target and renamed into place, which is atomic on both Windows and POSIX.
+
 ## [0.126.3] — 2026-08-15
 
 ### Fixed
