@@ -30,7 +30,8 @@ The loop continues until the user is done (closes page or says "fertig").
 
 ### Primary: HTTP Bridge (preferred)
 
-Claude's cron polls the bridge server for the deterministic pending flag:
+The pickup waker polls the bridge server for the deterministic pending flag
+(the backup cron does the same, once a minute):
 
 ```bash
 curl -s http://localhost:$PORT/pending
@@ -41,9 +42,9 @@ curl -s http://localhost:$PORT/pending
 of substring-matching `/decisions`. The `/decisions` JSON response is
 formatted via `json.dumps` which emits `"submitted": true` **with** a space
 after the colon, so a literal `contains "submitted":true` check silently
-misses every real submission. The cron in SKILL.md Step 3 pipes `/pending`
-through `python -c` and only falls back to `/decisions` when pending is
-true, eliminating that class of bug.
+misses every real submission. Both the waker and the backup cron (bridge-server.md § step 3) pipe
+`/pending` through `python -c` and only fall back to `/decisions` once
+pending is true, eliminating that class of bug.
 
 Once pending is true, Claude fetches the full payload:
 
@@ -100,15 +101,19 @@ curl -s http://localhost:$PORT/heartbeat
 If this returns `{"ts": ...}` → bridge is running. If it fails → the server
 didn't start; debug before proceeding.
 
-### 2. Start heartbeat cron
+### 2. Arm the cron and the two background tasks
 
-Set up a recurring heartbeat so the page knows Claude is monitoring:
+**Single source of truth: `bridge-server.md` § step 3.** Do not redefine any of
+them here. That section carries the combined heartbeat **+ auto-poll** cron
+body, and the two detached background tasks — the keepalive pulser and the
+pickup waker — that do the actual work.
 
-```
-CronCreate(cron: "* * * * *", prompt: "Run silently: curl -s -X POST http://localhost:{port}/heartbeat > /dev/null. Output nothing.")
-```
+A heartbeat-only cron is NOT enough and is actively misleading: it advances
+`_claude_ts`, which is the only thing the page's connection indicator gates on,
+so the indicator turns green while nothing is watching for submissions. That
+combination is precisely how a submitted decision goes unnoticed.
 
-Also send the first heartbeat immediately:
+Send the first heartbeat immediately and verify it round-trips:
 
 ```bash
 curl -s -X POST http://localhost:$PORT/heartbeat
@@ -122,7 +127,8 @@ Store the cron job ID as `$HEARTBEAT_CRON_ID` for cleanup.
 ```bash
 curl -s -X POST http://localhost:$PORT/heartbeat
 ```
-Sent by the cron job every ~60s, and additionally on each manual poll cycle.
+Sent by the keepalive pulser every ~20s — the cron every ~60s is only a
+backup, and fires solely while the REPL is idle.
 
 The bridge server self-pulses `_server_ts` (NOT the heartbeat) every 30s
 from a daemon thread. That proves the *server process* is alive — it does
@@ -139,13 +145,20 @@ keepalive — it pulses every ~20s for the whole session and, crucially, does
 NOT exit when a submission is pending, so `claude_ts` stays warm even during
 a long `implement`.
 
-**Check submission** (poll for user decisions):
+**Check submission** — poll `/pending`, never `/decisions`:
 ```bash
-curl -s http://localhost:$PORT/decisions
+curl -s http://localhost:$PORT/pending
 ```
-Returns JSON. Check the `submitted` field:
-- `true` → user has submitted, read the decisions from the same response
-- `false` → not yet submitted, wait and retry
+Returns a strict `{"pending": true|false, "version": N}`.
+- `true` → fetch the full payload from `GET /decisions` and process it
+- `false` → not yet submitted, keep watching
+
+`/pending` is the **only** endpoint that acks a pickup — it stamps
+`_picked_up_at`, which is what advances the "Claude verarbeitet" step in the
+submitted panel. Polling `/decisions` returns the same data but acks nothing,
+so the user sees a progress list frozen at step 1 even though Claude is
+working. A `submitted: true` alongside an empty `_picked_up_at` is therefore
+proof that no `/pending` call ever ran while that submission was current.
 
 **Read decisions** — they're in the same JSON response from `GET /decisions`:
 ```json
@@ -218,28 +231,58 @@ console.log(document.getElementById('concept-decisions').textContent)
 ## Polling Strategy
 
 ### Timing
+
+Three tiers, and only one of them is primary:
+
 - **Initial wait**: 10 seconds after opening (give the page time to load and
-  the user time to orient)
-- **Poll interval**: 15 seconds
+  the user time to orient), then one manual heartbeat + `/pending` check.
+- **Pickup waker — 20 s, primary.** The detached background task from
+  `bridge-server.md` § step 3, task 2. 20 s is not arbitrary: it sits well
+  under the 90 s `HEARTBEAT_STALE_MS` the page uses to decide the indicator.
+- **Cron — 60 s, backup only, and only a partial one.** Session-only crons fire
+  only while the REPL is idle, so it cannot cover the window it looks like it
+  covers: during a processing round the REPL is busy. Re-launch the waker at
+  SKILL.md 5c step 7 instead of leaving that gap to the cron.
 - **Timeout**: NONE — monitoring runs indefinitely until the user explicitly
-  ends it (says "fertig"/"done", closes the page, or closes Claude). The
-  heartbeat cron keeps the connection alive. Never impose artificial timeouts.
+  ends it (says "fertig"/"done", closes the page, or closes Claude). Never
+  impose artificial timeouts.
 
 ### Non-Blocking Behavior
 
-Monitoring MUST NOT block the conversation:
+Monitoring must not block the conversation — and must not depend on one
+either. **The bridge page IS the submission channel.** A user who clicks
+"Entscheidungen abschicken" has no reason to also type "fertig" in chat, and
+expects Claude to react to the click itself.
 
-1. After opening the page, inform the user and **wait for their next message**
-2. If the user sends a message → respond normally, then resume monitoring
-3. If the user says "fertig" / "done" / "abgeschickt" → immediately read decisions
-4. If the user asks for something unrelated → pause monitoring, handle request
+1. After opening the page, confirm that the **pickup waker is running** (Step 3,
+   task 2). It watches `/pending` detached and exits the instant a submission
+   lands, which wakes Claude with no user message involved. This is step 1 —
+   not "wait for their next message".
+2. Re-launch the waker after **every** processing round (SKILL.md Step 5d). It
+   exited to wake you; until it is restarted, nothing is watching.
+3. If the user sends a message → respond normally. The waker keeps running; it
+   is a separate process, not a turn.
+4. If the user says "fertig" / "done" / "abgeschickt" → read decisions
+   immediately rather than waiting for the next waker cycle. This is a
+   shortcut, never the trigger.
+
+Ending the turn with nothing watching is the failure this section exists to
+prevent: the pulser keeps the indicator green, so the page looks connected
+while the submission sits unread.
+
+**Do not poll in the foreground.** A `sleep` loop inside a normal Bash call
+blocks the turn and the conversation with it. The pulser and the waker are the
+sanctioned form: the same loop, launched **detached** with
+`run_in_background: true`, so it watches without occupying a turn. See
+`bridge-server.md` § step 3 for both bodies.
 
 ### Per-Poll Validation
 
 On each poll cycle:
 
 1. **Send heartbeat**: `curl -s -X POST http://localhost:$PORT/heartbeat`
-2. **Check decisions**: `curl -s http://localhost:$PORT/decisions`
+2. **Check pending**: `curl -s http://localhost:$PORT/pending` — then fetch
+   `/decisions` only once `pending` is `true`
 3. If curl fails → bridge server may have crashed → attempt restart
 
 **Tab-alive check** (via HTTP):
@@ -252,30 +295,25 @@ On each poll cycle:
 
 A page reload (F5) is **not a problem** with the HTTP bridge:
 - The bridge server keeps running independently of the page
-- Heartbeat cron keeps posting → page reconnects automatically after reload
+- The keepalive pulser keeps posting → page reconnects automatically after reload
 - `localStorage` preserves user selections (see `templates.md` § State Persistence)
 - The `concept-submitted` class resets (correct — user can re-submit)
 - Decisions in the bridge server persist across reloads
 
 **No special recovery needed** — the HTTP bridge makes page reloads transparent.
 
-**Do NOT use sleep loops.** Instead, check the page state:
-- When the user sends a message that could indicate completion
-- When the user explicitly says they're done
-- Periodically if the conversation is idle (via cron or tool-based check)
-
 ### No Timeout Policy
 
 There is **no timeout**. The user decides when to submit — whether that takes
-2 minutes or 2 hours. Claude keeps the heartbeat cron alive and responds
-whenever the user submits or sends a chat message.
+2 minutes or 2 hours. The pulser and the waker keep running, so Claude
+responds to the submission itself — no chat message required.
 
 The monitoring loop ends ONLY when:
 - The user says "fertig" / "done" / "abbrechen" in chat
 - The user closes the browser tab (detected when bridge server stays alive
   but no submissions arrive and the user confirms in chat)
 - The user closes Claude Desktop
-- The heartbeat cron expires after 7 days (platform limit, effectively infinite)
+- The backup cron expires after 7 days (platform limit, effectively infinite)
 
 ## Decision Processing
 
@@ -398,8 +436,9 @@ Each round appends to the same file (array of rounds), preserving full history:
 | Error | Symptom | Recovery |
 |-------|---------|----------|
 | Bridge server not responding | `curl /heartbeat` fails or times out | Check if server process is alive, restart if needed |
-| Bridge server crashed | Connection refused on all endpoints | Re-run `python concept-server.py $PORT "$DIR" &` |
-| Heartbeat cron stopped | Page shows "nicht verbunden" despite server running | Send manual `curl -s -X POST /heartbeat`, re-create cron |
+| Bridge server crashed | Connection refused on all endpoints | Relaunch per `bridge-server.md` § step 2 — same port, `run_in_background: true`, `--html` set. Never the `&` form: a child backgrounded inside one Bash call is reaped when that call ends. Then re-launch both watchers |
+| Keepalive pulser stopped (`PULSER_EXIT`) | Page shows "nicht verbunden" despite server running | Send a manual `curl -s -X POST /heartbeat`, then re-launch the pulser (bridge-server.md § step 3, task 1) |
+| Pickup waker stopped without a submission (`WAKER_EXIT reason=SERVER_DEAD`) | Submissions go unnoticed while the indicator may still be green | Restart the bridge server ON THE SAME PORT (a new one orphans the state file, the open tab, and makes fresh watchers exit PORT_CHANGED), then re-launch BOTH background tasks |
 | Decisions JSON parse error | `curl /decisions` returns malformed JSON | Show raw content to user, ask to verify |
 | Empty decisions array | Parsed but `decisions.length === 0` | Ask if intentional (all defaults accepted) |
 | Tab closed by user | Bridge server alive but no activity | Ask user via AskUserQuestion when they send a chat message |
@@ -410,7 +449,11 @@ Each round appends to the same file (array of rounds), preserving full history:
 
 ### Retry Protocol
 
-1. **Bridge server failure**: Restart the server, re-create heartbeat cron
+1. **Bridge server failure**: restart the server on the SAME port, re-arm the
+   backup cron, and re-launch BOTH background tasks (pulser + waker). A new
+   port orphans the state file and the user's open tab; restarting the server
+   alone leaves nothing watching `/pending`, so the page goes green again while
+   submissions rot.
 2. **Browser tool failure** (for page updates): Inform user, continue monitoring via HTTP
 3. **Both fail**: Manual fallback (AskUserQuestion + console.log)
 4. **NEVER silently stop monitoring** — always inform the user why monitoring ended

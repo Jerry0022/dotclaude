@@ -8,7 +8,14 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 > is **milliseconds since the Unix epoch**, byte-compatible with JavaScript's
 > `Date.now()`. The browser compares them directly, with no conversion:
 > ```js
-> Date.now() - _lastHeartbeatTs < HEARTBEAT_STALE_MS   // both in ms
+> Date.now() - _lastHeartbeatTs < HEARTBEAT_STALE_MS   
+
+   **Verify both actually started.** They are the only launches in this document
+   whose failure is silent — the server has a heartbeat round-trip, the port has
+   a single-listener assert, the page has a 200-gate, and these had nothing.
+   Read each task's output once after launching: a `*_EXIT reason=` line within
+   seconds means it never got going. `STATE_NEVER_APPEARED` in particular means
+   the launch outran step 4 — write the state file, then re-launch.// both in ms
 > Date.now() - _lastServerTs    < SERVER_STALE_MS       // same unit contract
 > ```
 > `_lastServerTs` (cached from `server_ts`) is compared against `SERVER_STALE_MS`
@@ -256,24 +263,20 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    removes that coupling.
 
    Launch both as **detached background tasks** (Bash tool,
-   `run_in_background: true`, no trailing `&`, no `nohup`):
+   `run_in_background: true`, no trailing `&`, no `nohup`). Both are the same
+   script in two modes — `scripts/concept-watch.js`, resolved the same way as
+   the server in step 1.
+
+   **Resolve the path INSIDE each launch command.** Every Bash tool call is a
+   fresh shell (see § Troubleshooting), so a `WATCH=$(...)` assignment in one
+   call is empty in the next — `node "" --mode pulse` dies in under 100 ms and,
+   unlike every other launch in this document, does so silently.
 
    **(1) Keepalive pulser — pulses only, NEVER exits on pending.** Launched
    once at concept open; runs for the whole session so `claude_ts` stays warm
    even across a long `implement`. Exits only when the concept is truly gone:
    ```bash
-   fails=0
-   while true; do
-     [ -f .claude/concept-active.json ] || { echo "PULSER_EXIT reason=STATE_GONE"; exit 0; }
-     grep -q '"port": {port}' .claude/concept-active.json 2>/dev/null || { echo "PULSER_EXIT reason=PORT_CHANGED"; exit 0; }
-     if curl -s -X POST --max-time 8 http://localhost:{port}/heartbeat >/dev/null 2>&1; then
-       fails=0
-     else
-       fails=$((fails+1))
-       [ "$fails" -ge 4 ] && { echo "PULSER_EXIT reason=SERVER_DEAD"; exit 0; }
-     fi
-     sleep 20
-   done
+   node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | head -1)" --mode pulse --port {port} --state "{project-root}/.claude/concept-active.json"
    ```
 
    **(2) Pickup waker — wakes Claude the instant a submission lands.** Its
@@ -281,37 +284,57 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    the next cron tick. Re-launched after each processing round. It does NOT
    pulse the heartbeat (that is the pulser's job) — it only watches `/pending`:
    ```bash
-   fails=0
-   while true; do
-     [ -f .claude/concept-active.json ] || { echo "WAKER_EXIT reason=STATE_GONE"; exit 0; }
-     grep -q '"port": {port}' .claude/concept-active.json 2>/dev/null || { echo "WAKER_EXIT reason=PORT_CHANGED"; exit 0; }
-     if p=$(curl -s --max-time 8 http://localhost:{port}/pending | python -c "import sys,json;print('yes' if json.load(sys.stdin).get('pending') else 'no')" 2>/dev/null); then
-       fails=0
-       [ "$p" = "yes" ] && { echo "WAKER_EXIT reason=PENDING_SUBMISSION"; exit 0; }
-     else
-       fails=$((fails+1))
-       [ "$fails" -ge 4 ] && { echo "WAKER_EXIT reason=SERVER_DEAD"; exit 0; }
-     fi
-     sleep 20
-   done
+   node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | head -1)" --mode watch --port {port} --state "{project-root}/.claude/concept-active.json"
    ```
 
-   Both pulse/poll every ~20 s (well under the 90 s threshold). **Tolerate
-   transient blips:** declare `SERVER_DEAD` only after ≥4 consecutive failures
-   — a single failed `curl` (server busy, a competing request, a
-   duplicate-instance wedge per step 2) must NOT tear a task down, or the page
-   goes stale again on every hiccup. Both self-terminate when the state file
-   is gone, its port changed, or the server is truly unreachable, so neither
-   can become a ghost (the `--html` watchdog still backs them up).
+   **Verify both actually started.** They are the only launches in this document
+   whose failure would be silent — the server has a heartbeat round-trip, the
+   port has a single-listener assert, the page has a 200-gate, and these had
+   nothing. Read each task's output once after launching: a `*_EXIT reason=`
+   line within seconds means it never got going. `STATE_NEVER_APPEARED` in
+   particular means the launch outran step 4 — write the state file, then
+   re-launch.
+
+   **Why a script and not an inline `while true; do … sleep 20; done`.** The
+   loop shape is easy to write and was wrong in four independent ways, each of
+   which silently reproduced the bug the watchers exist to prevent:
+   - it tested a **relative** `.claude/concept-active.json`, but this document
+     mandates the state file at the project root, which is not always the
+     task's cwd — both watchers then exited `STATE_GONE` on iteration 1;
+   - it was launched here, in step 3, **before** step 4 writes that file, so a
+     literal reading killed both at t=0. `--state` is absolute and `--grace`
+     (60 s) waits for the file instead of treating its absence as terminal, so
+     the step 3 → step 4 order is safe as written;
+   - its port guard `grep -qE '"port"…\b'` depended on JSON spacing and on
+     `\b`, a GNU extension — on BSD/macOS grep it never matched, so both
+     watchers exited `PORT_CHANGED` immediately. The script compares the port
+     numerically;
+   - `allowed-tools` matches command *prefixes*, and a multi-line loop has no
+     usable prefix, so the only grant that covered it was a blanket one. A
+     `node …` invocation is already covered by `Bash(node *)`.
+
+   Behaviour is otherwise unchanged: both poll every ~20 s (well under the 90 s
+   threshold), and **tolerate transient blips** — `SERVER_DEAD` only after ≥4
+   consecutive failures, because a single failed request (server busy, a
+   competing request, a duplicate-instance wedge per step 2) must NOT tear a
+   task down, or the page goes stale on every hiccup. Both self-terminate when
+   the state file is gone, its port changed, or the server is truly
+   unreachable, so neither can become a ghost (the `--html` watchdog still
+   backs them up). The exit lines (`PULSER_EXIT reason=…` / `WAKER_EXIT
+   reason=…`) are unchanged, so the reason → action table in SKILL.md Step 5d
+   applies verbatim.
 
    **Lifecycle:** launch BOTH at concept open. On `PENDING_SUBMISSION` the
-   waker exits and wakes Claude; Claude processes the payload, then
-   **re-launches only the waker** for the next round — the pulser is still
-   running and must not be duplicated (a second pulser on the same port is
-   harmless but wasteful; if unsure, the pulser's `STATE_GONE`/`PORT_CHANGED`
-   guards make a stale one exit on its own). Keep the cron too: it is the
-   backup pickup path during the brief window between the waker exiting and
-   being re-launched.
+   waker exits and wakes Claude; Claude processes the payload and
+   **re-launches only the waker** — immediately after `/reset` (SKILL.md 5c
+   step 7), not at the end of the round. The pulser is still running and must
+   not be duplicated (a second pulser on the same port is harmless but
+   wasteful; if unsure, the pulser's `STATE_GONE`/`PORT_CHANGED` guards make a
+   stale one exit on its own). Keep the cron too — but as a **partial** backup
+   only: it fires solely while the REPL is idle, so it cannot cover the window
+   between the waker exiting and being re-launched, because during a
+   processing round the REPL is busy. That window is closed by re-launching
+   early, not by the cron.
 
 4. **Persist active-concept state.** Write `.claude/concept-active.json` in
    the project root with the metadata the SessionStart resume hook

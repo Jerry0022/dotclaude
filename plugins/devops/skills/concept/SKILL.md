@@ -12,7 +12,7 @@ description: >-
   Do NOT trigger for: simple code explanations, debugging
   (use /fix), or static documentation (use /setup-readme).
 argument-hint: "[topic, analysis result, plan, or concept to visualize]"
-allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*
+allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), Bash(node *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*
 ---
 
 # Concept
@@ -502,6 +502,29 @@ the read-back is mandatory; a naked POST leaves a dead-bridge failure
 mode invisible until the user submits and gets no response), then open
 the page in the user's existing Edge window using the exact command above.
 
+**Then launch the two background tasks — the concept does not work without
+them.** Both are the same script in two modes, `scripts/concept-watch.js`,
+launched via the Bash tool with `run_in_background: true` (exact invocations in
+`deep-knowledge/bridge-server.md` § step 3):
+
+1. **Keepalive pulser** — POSTs `/heartbeat` every ~20 s for the whole session
+   and never exits on a pending submission, so the connection indicator stays
+   green even through a long `implement`.
+2. **Pickup waker** — polls `/pending` every ~20 s and exits the instant a
+   submission lands, which wakes Claude immediately.
+
+The cron alone is NOT sufficient for either job: it fires only while the REPL
+is idle and has multi-minute gaps in practice (observed: 638 s with the cron
+registered and the session idle). It stays armed as the backup pickup path,
+never as the primary one.
+
+Pass the state file's **absolute** path via `--state`. The watchers used to
+test a relative `.claude/concept-active.json` against their own cwd, which is
+not always the project root the state file lives in — both then exited
+`STATE_GONE` on their first iteration, which looks exactly like the bug they
+prevent. They also tolerate the state file not existing yet (60 s grace), so
+launching them here, before step 4 writes it, is safe.
+
 The state file (`port`, `html_path`, `slug`, `server_pid`, `cron_id`,
 `started_at`) is what makes the concept survivable across Claude restarts:
 the `ss.concept.resume` SessionStart hook reads it, verifies the bridge
@@ -531,37 +554,46 @@ Pick the wording that matches the `[ui-locale: ...]` hint injected by
 
 The bridge server handles all communication — no JS eval injection needed.
 
-**Heartbeat** is handled by the cron job set up in Step 3. Additionally,
-send a heartbeat POST on each manual poll cycle:
+**Heartbeat** is the keepalive pulser's job (Step 3, task 1), backed up by the
+cron. Send an extra POST on any manual poll cycle:
 
 ```bash
 curl -s -X POST http://localhost:$PORT/heartbeat
 ```
 
-**Polling for decisions** — check if the user has submitted:
+**Checking for a submission** — use `/pending`, not `/decisions`:
 
 ```bash
-curl -s http://localhost:$PORT/decisions
+curl -s http://localhost:$PORT/pending
 ```
 
-Parse the JSON response. If `submitted` is `true` → process decisions (Step 5).
-If `false` → wait and retry.
+`/pending` is the only endpoint that acks a pickup: it stamps `_picked_up_at`,
+which is what advances the "Claude verarbeitet" step in the page's submitted
+panel. A poll of `/decisions` reads the same data but acks nothing, so the user
+watches a progress list that never moves. Once `pending` is `true`, fetch the
+full payload from `/decisions` and process it (Step 5).
 
 **Polling schedule:**
-- **Primary mechanism**: the combined cron from Step 3 fires every minute and
-  handles heartbeat + decision pickup + reset automatically. No manual polling
-  needed from Claude between user turns.
-- **Initial wait**: 10 seconds after opening, then send one manual heartbeat +
-  decision check to close the 0–60 s gap before the first cron tick lands.
+- **Primary mechanism**: the **pickup waker** from Step 3. It exits the moment
+  a submission lands, which wakes Claude — no user chat message required.
+- **Backup**: the combined cron from Step 3, every minute — and only a partial
+  one. It covers the window between the waker exiting and being re-launched
+  ONLY while the REPL is idle, which is exactly when that window is not open:
+  during a processing round the REPL is busy and the cron cannot fire. That is
+  why 5c step 7 re-launches the waker immediately rather than leaving the gap
+  to the cron.
+- **Initial wait**: 10 seconds after opening, then one manual heartbeat +
+  `/pending` check to close the gap before the first waker cycle lands.
 - **No timeout** — monitoring runs indefinitely until the user ends it
   (says "fertig"/"done", closes the page, or closes Claude).
-- **On demand**: if the user asks "did my submission arrive?", do a manual
-  `curl http://localhost:$PORT/decisions` — do NOT wait for the next cron tick.
+- **On demand**: if the user asks "did my submission arrive?", poll
+  `/pending` manually — do NOT wait for the next tick.
 
-**Important:** While waiting, do NOT block the conversation. Inform the
-user that you're monitoring and they can continue chatting. If the user
-sends a message while monitoring, pause monitoring and respond normally.
-Resume monitoring after responding.
+**Important:** monitoring MUST NOT block the conversation, and it must not
+depend on one either. The waker runs detached, so an idle turn keeps watching
+on its own; a user who clicks submit and types nothing still gets picked up.
+If the user sends an unrelated message, respond normally — the waker keeps
+running and wakes you when the submission arrives.
 
 ## Step 5 — Live Feedback Loop
 
@@ -820,6 +852,13 @@ iteration must be live in the browser BEFORE the server signals "processed".
    it will only restore the panel state when a reload counter advance
    has been observed OR a long stale timeout elapses. See
    `deep-knowledge/templates.md` § Panel State Reset for the polling contract.
+7. **Immediately re-launch the pickup waker** (Step 5d) — right here, not
+   after the rest of the round. `/reset` clears the pending flag and
+   `/reload` has already handed the user a fresh panel, so from this moment
+   they can submit again. Every second between here and the re-launch is a
+   window with nothing watching, and the cron cannot cover it: it fires only
+   while the REPL is idle, and processing an `implement` keeps the REPL busy
+   for minutes.
 
 The tab bar is anchored at the top of the right-side decision panel —
 above the section TOC and the submit block. It must never appear inside
@@ -858,7 +897,11 @@ preservation) stays identical.
 5. Set `submitted: false` in `#concept-decisions`, remove `concept-submitted`
    from `<body>`. The submit-button reset is irrelevant because the
    final-report panel doesn't surface iterate/implement at all.
-6. /reload → /reset as steps 5–6 above.
+6. /reload → /reset → **re-launch the pickup waker**, as steps 5–7 above.
+   Step 7 is not optional here: the final-report panel still accepts `ship`,
+   `create-issues` and `dispose-concept` submissions, and `implement` is the
+   longest round there is — leaving it unwatched is the widest window in the
+   whole flow.
 
 **Verbatim copy directive (mandatory):**
 The final-report JS block — `updateCreateIssuesPanel`, `submitCreateIssues`,
@@ -892,7 +935,44 @@ the final report, they can start a new concept session — that's a clear
 new scope, not an additional iteration on a closed one.
 
 ### 5d. Resume Monitoring
-Return to Step 4 (monitor for next submission). The loop continues until:
+
+**Re-launch the pickup waker.** It exited to wake you for the submission you
+just processed, so nothing is watching `/pending` until you start it again —
+exactly as in Step 3 (`bridge-server.md` § step 3, task 2), with
+`run_in_background: true`. Do this at 5c step 7, the moment `/reset` lands; by
+the time you reach 5d it should already be running.
+
+**Before processing a wake, re-confirm.** Two wakers on the same port both exit
+`PENDING_SUBMISSION`, and the second wake arrives after `/reset` has already
+cleared the flag. Acting on it re-runs Step 5b — for `action: "implement"` that
+means writing real code changes a second time, which no version guard catches
+(`/reset`'s 409 only detects a *newer* submission). So on every wake, poll
+`/pending` once before doing anything: `false` means the wake is stale — just
+re-launch the waker and carry on. If it is `true`, compare `_version` against
+the one you last processed: **equal means the previous round's `/reset` never
+landed**, not that the user resubmitted. Retry the reset instead of running the
+same payload again.
+
+Skipping it is how a concept silently stops responding after iteration 1: the
+page still shows a green indicator (the pulser keeps `claude_ts` warm), the user
+submits again, and nothing picks it up until they ask in chat.
+
+**Act on the exit reason.** A background task announces why it stopped; each
+reason has exactly one correct response:
+
+| Exit line | What happened | Do this |
+|---|---|---|
+| `WAKER_EXIT reason=PENDING_SUBMISSION` | A submission landed | Re-confirm via `/pending`, then process it (Step 5a) and re-launch the waker. A `false` here is a stale wake — re-launch and carry on |
+| `WAKER_EXIT reason=SERVER_DEAD` / `PULSER_EXIT reason=SERVER_DEAD` | 4 consecutive failed polls — the bridge is gone | Restart the bridge server **on the same port** (do NOT pick a new one — the state file, the open tab and both watchers are all bound to it), then re-launch **both** tasks |
+| `*_EXIT reason=STATE_GONE` | `.claude/concept-active.json` is gone — the concept ended | Nothing. Do not re-launch; the session is over |
+| `*_EXIT reason=STATE_NEVER_APPEARED` | The launch outran the step that writes the state file | Write it, then re-launch. NOT the same as STATE_GONE — the concept is alive |
+| `*_EXIT reason=PORT_CHANGED` | A newer concept took over | Nothing. This task belongs to a superseded session |
+| No `*_EXIT` line at all | The task died without announcing why — bad arguments, a crash, `node` missing, killed | Do NOT assume the session ended. Verify the bridge with one `curl /heartbeat`, then re-launch both tasks |
+
+Re-launch the pulser only when you actually saw a `PULSER_EXIT` — normally it
+runs for the whole session and a second one on the same port is wasted work.
+
+Then return to Step 4 (monitor for next submission). The loop continues until:
 - The user closes the page
 - The user says "fertig" / "done" in chat
 - There are no more decisions to make (all items processed)
