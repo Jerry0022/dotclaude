@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.132.3] — 2026-08-16
+
+### Fixed
+
+- **`/setup-project` now ships the plugin's own runtime artifacts in its ignore list** ([#292](https://github.com/Jerry0022/dotclaude/issues/292)). `git status` in a consumer project showed `?? .claude/batch-activity` — a 13-byte timestamp the plugin writes and reads itself, pure machine-local state, surfacing as untracked dirt in the middle of unrelated work. It was not a one-off: the shipped ignore list covered generic Claude Code state (`worktrees/`, `todos/`, `plans/`, …) but almost none of what the plugin itself writes, so every consumer project rediscovered each artifact separately and hand-grew its own list, one dirty worktree at a time. This repo's `.gitignore` was exactly such a list.
+
+  The artifacts now ship as a marker-delimited block a later `/setup-project` run can replace in place rather than append a second copy of, with the configuration carve-out spelled out: `.claude/graphify.json` and `.claude/settings.json` stay tracked. That line — plugin *configuration* is tracked, plugin *runtime state* is ignored — is the only thing separating two sets of files that otherwise look alike.
+
+  Verifying the issue's own list against the code turned up a correction worth keeping: `claude-batch.json`, `graphify-metrics.jsonl`, `usage-live.json`, `usage-baseline.json`, `edge-usage-profile`, `concept-bridges/` and `devops-concepts/` are written under the user's **home** directory, not the project's. They cannot dirty a repo, and listing them in a project `.gitignore` would imply a hazard that does not exist. Only project-rooted artifacts are in the block.
+
+  The real fix, though, is that completeness is now checked rather than remembered. `scripts/check-claude-artifacts.js` scans the plugin for project-rooted `.claude/` writes and fails when one is not covered by the ignore list — so a release that starts writing a new artifact cannot silently dirty every repo that installs it. Without that, the list would simply drift out of date again with the next feature.
+
 ## [0.132.2] — 2026-08-16
 
 ### Fixed
