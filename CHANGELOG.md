@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.130.0] — 2026-08-16
+
+### Changed
+
+- **The concept bridge's cron no longer fills the background-tasks panel either.** The previous release fixed this for the git sync; the concept bridge had the same shape and was left standing. Its cron prompt spelled out the whole per-tick procedure inline — the self-cleanup gate, the heartbeat POST, a `curl | python -c` probe of `/pending`, and the entire pending-branch procedure with its five action branches — 1128 characters that Claude Code renders verbatim as the cron's card, so one card covered the panel and the user could not see their other background tasks at a glance. Unlike the git sync this cron cannot simply be deleted: it drives a live interaction, keeping the page's connection indicator green and picking up submissions once a minute.
+
+  So nothing was dropped — the procedure moved into `scripts/concept-tick.js`, which performs all three steps and prints an instruction only on the ticks that need one: the cleanup tick, which still needs Claude because `CronDelete` is a tool, and the tick a submission lands on, which receives the pending-branch procedure verbatim. An idle tick — the overwhelmingly common case — prints nothing at all, so it now costs no tokens instead of restating the procedure every minute, and the single Bash call replaces the two `curl` calls the old body already made. The remaining prompt is 375 characters, most of it the script path.
+
+  Two phrasings in that prompt are load-bearing and documented as such, because both read like noise and both are one "cleanup" away from a silent regression. It opens with `Silently run` because `prompt.flow.silent-turn` flags a tick as silent only when the prompt *opens* with a marker — put a `Concept bridge, port N — ` lead-in in front and every tick becomes a real user turn, firing the completion-card reminder once a minute for the whole session. And it names `port N` in prose because the orphan sweep deletes crons whose prompt mentions exactly that, which is the only way to reap this cron once the state file, and with it `cron_id`, is gone. The prompt also resolves the script through a glob rather than a baked-in versioned path: a cron outlives a plugin rebuild, so an in-session `/ship` would otherwise leave it failing `MODULE_NOT_FOUND` every minute.
+
+  The doc-sync pin against `bridge-server.md` got stricter rather than weaker in the process. It used to compare a single line of a 1128-character prompt; the prompt now fits in one byte-for-byte comparison, the displaced procedure is pinned against the script that inherited it, and a length ceiling guards the card against the procedure creeping back one helpful sentence at a time.
+
+### Fixed
+
+- **A merge artifact in the concept bridge documentation.** A paragraph from step 3 had been spliced into the middle of the timestamp-convention code block in the file's preamble, breaking that block's markdown and leaving the unit contract — the single most expensive silent-failure mode the document warns about — sitting behind mangled formatting.
+
 ## [0.129.0] — 2026-08-16
 
 ### Changed
