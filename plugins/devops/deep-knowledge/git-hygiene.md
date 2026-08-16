@@ -33,7 +33,7 @@ Cross-cutting git rules referenced by `/commit`, `/ship`, and hooks.
 
 - **Never** use `--ours`, `--theirs`, or any strategy that silently picks one side.
 - Conflict resolution follows `deep-knowledge/merge-safety.md`.
-- The `git-sync` cron detects conflicts and defers resolution to Claude.
+- The background `git-sync` detects conflicts and defers resolution to Claude.
 - Complementary changes (both additions, non-overlapping edits) → AI resolves automatically.
 - Mutually exclusive design decisions (user-facing choices) → user decides via `AskUserQuestion`.
 - After resolving conflicts, verify the merged code is semantically correct (not just textually).

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.10.0
+ * @version 0.11.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -30,6 +30,10 @@
  *   identity and de-registers the plugin's skills/slash-commands from Claude
  *   Code's already-loaded registry for the rest of the session (issue #219) —
  *   an in-place overwrite keeps the dir so /devops-* stays registered.
+ *
+ *   OUTPUT POLICY: only version changes and failures are printed. A successful
+ *   same-version cache repair is housekeeping the user cannot act on, so it is
+ *   done silently — see the `reportable` filter at the bottom.
  */
 
 require('../lib/plugin-guard');
@@ -241,14 +245,18 @@ function rebuildCache(marketplace, pluginName, pluginDir, version, sha, { versio
     return { ok: false, missing: 'copy failed — .claude-plugin/plugin.json not found after copy' };
   }
 
-  // Verify cache completeness
-  const checks = [
-    path.join(newCache, 'skills'),
-    path.join(newCache, 'hooks'),
-  ];
-  for (const check of checks) {
-    if (!fs.existsSync(check)) {
-      return { ok: false, missing: check };
+  // Verify cache completeness — asserted PER-PLUGIN against what the SOURCE
+  // actually ships, exactly like missingMcpFiles(). Requiring both `skills/`
+  // and `hooks/` unconditionally fails every plugin that ships only one of
+  // them (claude-code-setup has no hooks/, code-simplifier no skills/). Such a
+  // plugin can never satisfy the check, so rebuildCache returns ok:false, the
+  // registry SHA is never advanced, and the next SessionStart rebuilds it
+  // again — a permanent loop that reprinted the same "⚠ …/skills [cache
+  // repair]" block in chat every single session.
+  for (const dirName of ['skills', 'hooks']) {
+    if (!fs.existsSync(path.join(pluginDir, dirName))) continue;
+    if (!fs.existsSync(path.join(newCache, dirName))) {
+      return { ok: false, missing: path.join(newCache, dirName) };
     }
   }
 
@@ -492,11 +500,17 @@ if (mcpAffected.length > 0) {
   try { fs.unlinkSync(sentinelFile); } catch { /* ignore */ }
 }
 
-if (updated.length === 0) process.exit(0);
+// Report only what the user can act on. A SUCCESSFUL same-version cache repair
+// is pure housekeeping — the plugin was already at the right version, nothing
+// changed for the user, and no restart is needed — yet it used to print a
+// three-line block at the top of every session ("1.0.0 → 1.0.0 [cache repair]").
+// Version changes and failures still surface: those are real.
+const reportable = updated.filter(u => !u.verified || u.from !== u.to);
+if (reportable.length === 0) process.exit(0);
 
 const lines = [t('header', lang, DICT)];
 lines.push('');
-for (const u of updated) {
+for (const u of reportable) {
   const status = u.verified ? '✓ cache rebuilt' : `⚠ ${u.error}`;
   const repair = u.cacheRepair ? ' [cache repair]' : '';
   lines.push(`- **${u.name}**: ${u.from} → ${u.to} (${status}${repair})`);

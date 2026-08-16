@@ -296,5 +296,24 @@ for (const parent of parents) {
 }
 
 if (messages.length) {
-  process.stdout.write(`[git-sync] ${messages.join(' | ')}\n`);
+  const line = `[git-sync] ${messages.join(' | ')}\n`;
+
+  // Background mode (hooks/lib/git-sync-bg.js): the caller detached this process
+  // and is not reading stdout — it polls a result file on the next user turn.
+  // Write it atomically (tmp + rename) so a mid-sync read can never see a
+  // partial line, and write it ONLY when there is something to report: the
+  // absence of the file is what "nothing happened, stay silent" means.
+  const resultFile = process.env.DEVOPS_GIT_SYNC_RESULT_FILE;
+  if (resultFile) {
+    try {
+      const tmp = `${resultFile}.tmp`;
+      writeFileSync(tmp, line, 'utf8');
+      require('fs').renameSync(tmp, resultFile);
+    } catch {
+      // Result file unwritable — fall through to stdout so the output is not lost
+      process.stdout.write(line);
+    }
+  } else {
+    process.stdout.write(line);
+  }
 }
