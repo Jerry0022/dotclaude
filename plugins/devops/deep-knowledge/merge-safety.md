@@ -103,7 +103,7 @@ unsupported or unparseable files.
 
 ## When This Applies
 
-- `git-sync` cron merging parent branches into the current working branch
+- background `git-sync` merging parent branches into the current working branch
 - Feature agent merging sub-agent branches at integration
 - `/ship` when base branch has diverged
 - Any `git merge` or `git rebase` during collaborative work
@@ -177,9 +177,9 @@ After all textual conflicts are resolved (or after a clean merge):
    directions (e.g. "all elements get hotkeys" must cover an element the
    other branch added, and a convention introduced on the shipping branch is
    retro-applied to existing artifacts).
-   See `skills/ship/deep-knowledge/purpose-alignment.md`. The git-sync
-   cron resolves code-level conflicts only — purpose alignment runs at ship
-   time.
+   See `skills/ship/deep-knowledge/purpose-alignment.md`. The background
+   git-sync resolves code-level conflicts only — purpose alignment runs at
+   ship time.
 
 ### Step 6 — Complete the merge
 
@@ -200,7 +200,11 @@ As of v0.3.0, `git-sync.js` resolves conflicts in two tiers:
 2. **Ambiguous conflicts** — merge is aborted, warning printed:
    - Both sides changed the same code in different ways
    - No trivial resolution determinable from the diff alone
-   - Claude resolves semantically via the cron callback (Steps 2–6 above)
+   - Claude resolves semantically (Steps 2–6 above) on the next user turn:
+     the sync runs detached from `ss.git.sync` / `stop.git.sync` and leaves a
+     result file that `prompt.git.sync` injects as turn context. Conflicts
+     therefore surface inside a turn the user is already in — there is no
+     cron waking Claude up in a turn of its own.
 
 ## How ship_release Prevents Overwrites
 
@@ -262,7 +266,7 @@ belt-and-suspenders for history readability.
 The `git push --force-with-lease` only ever targets the **feature branch**,
 never `base` — so it cannot clobber base commits. It uses an **explicit lease**
 pinned to the last-known remote sha (`--force-with-lease=<branch>:<sha>`) rather
-than the bare form, so an implicit background fetch (the git-sync cron) cannot
+than the bare form, so an implicit background fetch (the background git-sync) cannot
 widen the lease and let a concurrent push to the same branch slip through
 unseen. Brand-new branches (no remote-tracking ref) push without a lease.
 

@@ -119,3 +119,60 @@ describe("ss.plugin.update missingMcpFiles — per-plugin completeness", () => {
     expect(missingMcpFiles(dst, src)).toEqual([".mcp.json"]);
   });
 });
+
+/**
+ * Same class of bug, one layer up: rebuildCache's skills/hooks completeness
+ * check required BOTH directories from every plugin. Third-party plugins ship
+ * one or the other — claude-code-setup has skills/ but no hooks/,
+ * code-simplifier has hooks/ but no skills/. Neither can ever satisfy an
+ * unconditional check, so rebuildCache returned ok:false, the registry SHA was
+ * never advanced, and the next SessionStart rebuilt them again — printing the
+ * same "⚠ …\hooks [cache repair]" block in chat every single session.
+ *
+ * Mirror of the post-fix loop (the hook's module body self-executes on import,
+ * so the function cannot be imported directly — same constraint as above).
+ */
+function missingPluginDirs(targetRoot, sourceRoot) {
+  const missing = [];
+  for (const dirName of ["skills", "hooks"]) {
+    if (!fs.existsSync(path.join(sourceRoot, dirName))) continue;
+    if (!fs.existsSync(path.join(targetRoot, dirName))) missing.push(dirName);
+  }
+  return missing;
+}
+
+describe("ss.plugin.update rebuildCache — per-plugin skills/hooks completeness", () => {
+  test("source with skills/ but no hooks/, cache mirrors it → NOT flagged", () => {
+    // claude-code-setup shape. The regression: reported …\hooks as missing forever.
+    write(src, path.join("skills", "x", "SKILL.md"), "# x");
+    write(dst, path.join("skills", "x", "SKILL.md"), "# x");
+    expect(missingPluginDirs(dst, src)).toEqual([]);
+  });
+
+  test("source with hooks/ but no skills/, cache mirrors it → NOT flagged", () => {
+    // code-simplifier shape.
+    write(src, path.join("hooks", "h.js"), "// h");
+    write(dst, path.join("hooks", "h.js"), "// h");
+    expect(missingPluginDirs(dst, src)).toEqual([]);
+  });
+
+  test("source with both, cache mirrors both → NOT flagged", () => {
+    write(src, path.join("skills", "x", "SKILL.md"), "# x");
+    write(src, path.join("hooks", "h.js"), "// h");
+    write(dst, path.join("skills", "x", "SKILL.md"), "# x");
+    write(dst, path.join("hooks", "h.js"), "// h");
+    expect(missingPluginDirs(dst, src)).toEqual([]);
+  });
+
+  test("source with both, cache dropped hooks/ → still flagged (real incomplete copy)", () => {
+    write(src, path.join("skills", "x", "SKILL.md"), "# x");
+    write(src, path.join("hooks", "h.js"), "// h");
+    write(dst, path.join("skills", "x", "SKILL.md"), "# x");
+    expect(missingPluginDirs(dst, src)).toEqual(["hooks"]);
+  });
+
+  test("source with neither (docs-only plugin) → asserts nothing", () => {
+    write(src, "README.md", "# docs only");
+    expect(missingPluginDirs(dst, src)).toEqual([]);
+  });
+});

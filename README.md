@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.128.0**
+**Version: 0.129.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -167,7 +167,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ## Features
 
-- **<!--devops:count:hooks-->40<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:hooks-->41<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->21<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, auto-graph
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
@@ -178,7 +178,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->40<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->41<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -200,7 +200,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.mcp.reap` — Reclaim orphaned Claude Desktop MCP server processes leaked by previously-closed sess…
 - `ss.tokens.scan` — Scan project for expensive files and update config for the pre.tokens.guard hook.
 - `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
-- `ss.git.sync` — Registers a recurring git sync cron job (every 10 minutes).
+- `ss.git.sync` — Starts ONE detached background git sync for this worktree.
 - `ss.graphify` — graphify enforcement — install-check + auto-build wiring for the auto-graph feature.
 - `ss.ship.verify` — Surface results from the post-merge watcher (post-ship CI + optional deploy verify).
 - `ss.concept.resume` — Recover an open concept session after a Claude restart.
@@ -210,7 +210,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 - `prompt.flow.silent-turn` — Detects background/cron-injected prompts and marks the turn as "silent" so post.flow.…
 - `prompt.knowledge.dispatch` — On-demand deep-knowledge injection based on prompt keywords.
-- `prompt.git.sync` — Throttled git sync on user prompt — delegates to scripts/git-sync.js.
+- `prompt.git.sync` — Delivers the result of a background git sync — nothing else.
 - `prompt.issue.detect` — Detect issue references in user messages.
 - `prompt.plugin.scope` — Inject the scope-routing rule when a consumer project's session starts talking about…
 - `prompt.skill.enforce` — Detects inline skill commands (e.g.
@@ -238,6 +238,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 #### Stop — runs when Claude finishes responding
 
+- `stop.git.sync` — Throttled background git sync at turn end.
 - `stop.flow.browsertest` — Light-verification enforcement gate (the "V" of the V&V gate).
 - `stop.flow.guard` — Per-turn completion card + validation enforcement (the validation half of the V&V gate).
 - `stop.flow.selfcalibration` — Run self-calibration when Claude finishes a response turn.
@@ -257,8 +258,9 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 #### git — keep the working tree in sync
 
 - `ss.git.check` — Check for uncommitted/unpushed changes *(SessionStart)*
-- `ss.git.sync` — Register recurring git-sync cron, every 10 min *(SessionStart)*
-- `prompt.git.sync` — Throttled pull/merge main, every 15 min *(UserPromptSubmit)*
+- `ss.git.sync` — Start one detached background sync per worktree *(SessionStart)*
+- `stop.git.sync` — Same, throttled to 30 min, at turn end *(Stop)*
+- `prompt.git.sync` — Deliver a background sync's result, if any *(UserPromptSubmit)*
 
 #### ship — enforce the shipping pipeline
 
@@ -690,7 +692,7 @@ Wk  ━━──╏─────────   15% +1%   · 4d 22h left
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->40<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── hooks/                         ← <!--devops:count:hooks-->41<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 ├── skills/                        ← <!--devops:count:skills-->21<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs

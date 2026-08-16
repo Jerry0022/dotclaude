@@ -24,7 +24,8 @@
  *   default 2) so the TOTAL live builds across all cwds is bounded. The
  *   SessionStart (10-min) and PreToolUse (2-min) throttles only DEBOUNCE bursts;
  *   on a large repo a single build outlasts its throttle window while a trigger
- *   recurs (e.g. a 10-min git-sync cron), so time-based throttling alone let
+ *   recurs (historically the 10-min git-sync cron, since removed — but any
+ *   recurring session trigger does it), so time-based throttling alone let
  *   builds stack without bound — measured at 12 concurrent runs / ~29 GB commit,
  *   exhausting RAM. The per-project lock alone still let N worktrees each run a
  *   heavy build (RAM + disk saturation), which the global cap prevents.
@@ -230,8 +231,9 @@ const BG_RUN_FLAG = '--bg-run';
 //   1. PER-PROJECT lock (updateInFlight): a single `graphify update .` on a large
 //      repo can outlast the SessionStart (10-min) and PreToolUse (2-min) spawn
 //      throttles, which only DEBOUNCE bursts. When a trigger recurs at least as
-//      often as the build takes (e.g. a 10-min git-sync cron opening a fresh
-//      session), time-based throttling alone let builds stack without bound
+//      often as the build takes (historically the 10-min git-sync cron opening a
+//      fresh session; that cron is gone, the hazard is not), time-based
+//      throttling alone let builds stack without bound
 //      (measured: 12 concurrent runs, ~29 GB commit, RAM exhausted). The PID lock
 //      caps concurrency at ONE build PER PROJECT across every trigger.
 //   2. MACHINE-WIDE cap (globalUpdatesInFlight + updateGlobalCap): the per-project

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.129.0] — 2026-08-16
+
+### Changed
+
+- **The git sync no longer costs a Claude turn every ten minutes.** It ran as a recurring cron that re-entered Claude with a prompt of roughly 1600 characters, so every tick rendered as a full turn — the Bash call inline, a model reply after it, and completion/stop hooks to suppress afterwards — for a `fetch` + `merge` that has nothing to say in almost every tick. Claude Code renders a cron's entire prompt as its card in the background-tasks panel, which meant this one card filled the panel and hid every other task behind it. A mechanical fetch and merge needs no model in the loop; only a genuinely ambiguous conflict does. The sync now runs as a detached child process, started once per worktree at session start and again at turn end on a 30-minute throttle shared across every session on that worktree — turn end rather than an arbitrary instant, because a merge landing mid-tool-call could otherwise move a file out from under the work in progress. The child writes its result atomically to a per-worktree file and the next user prompt picks it up, so a conflict now surfaces inside a turn the user is already in instead of waking Claude up in one of its own.
+
+  What reaches the chat is what happened: commits merged gets one informational line, an ambiguous conflict gets the full resolution procedure, a failure gets reported. A sync that found nothing — the overwhelming majority — is silent, as is the `✓ skipped (throttled, last sync 4m ago)` line the prompt hook used to print about not having done anything. The user-facing sync frequency drops from every 10 minutes plus every 15 minutes of prompting to a single sync per 30-minute window per worktree.
+
+### Fixed
+
+- **Plugins that ship only skills, or only hooks, are no longer "repaired" on every single session start.** The cache completeness check demanded both a `skills/` and a `hooks/` directory from every installed plugin, but plugins legitimately ship one without the other — so those could never satisfy the check. The rebuild reported failure, the registry commit SHA was therefore never advanced, and the next session found the same apparent damage and rebuilt again, printing the same `1.0.0 → 1.0.0 [cache repair]` block at the top of every session forever. The check now asserts only what the source plugin actually ships, the same per-plugin rule the MCP-file check already used for exactly this reason. A successful same-version cache repair is also no longer reported at all: it is housekeeping the user cannot act on and no restart follows from it. Version changes and real failures still surface.
+
 ## [0.128.0] — 2026-08-16
 
 ### Changed

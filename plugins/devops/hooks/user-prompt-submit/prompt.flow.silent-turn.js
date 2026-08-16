@@ -8,7 +8,8 @@
  *   as "silent" so post.flow.completion skips the completion-card reminder
  *   and stop.flow.guard skips enforcement.
  *
- *   Why: cron jobs (git-sync, concept bridge poll) and autonomous loops
+ *   Why: cron jobs (concept bridge poll — git-sync no longer uses one, it runs
+ *   detached from ss.git.sync/stop.git.sync) and autonomous loops
  *   re-enter Claude with a prompt that ALWAYS begins with a silence marker
  *   ("Silently run", "Run silently") or with a loop sentinel
  *   (`<<autonomous-loop>>`). Without this flag, every silent tick is
