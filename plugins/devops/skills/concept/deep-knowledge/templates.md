@@ -3284,6 +3284,8 @@ function ensureCommentSlots() {
 
     row.appendChild(label);
     row.appendChild(ta);
+    // Image attachments for this comment — see § Comment Attachments.
+    row.appendChild(buildAttachmentBar(commentKey));
 
     // Insert right after the bi-state group when both share the same parent;
     // otherwise append to the card so the override is visually attached.
@@ -3293,6 +3295,9 @@ function ensureCommentSlots() {
       card.appendChild(row);
     }
   });
+  // Wire paste / drop / button on every comment textarea, including the ones
+  // emitted inline by the generator rather than injected above.
+  initCommentAttachments();
 }
 ```
 
@@ -3306,6 +3311,326 @@ function ensureCommentSlots() {
   section is inserted; the `DOMContentLoaded` hook only fires on full
   reloads. Either trigger it manually or rely on the next `/reload` POST
   which forces a `location.reload()`.
+
+## Comment Attachments (images)
+
+Every comment slot accepts images: a 📎 button, **Ctrl/Cmd+V paste** into the
+focused textarea, and drag & drop onto it. A screenshot is very often the
+fastest way to say what is wrong with a concept, and re-describing it in prose
+is exactly the work users should not have to redo.
+
+**The durability rule: upload on ATTACH, never on submit.** The image is
+`POST`ed to the bridge the moment it is pasted and is fsynced to
+`.claude/concepts/<slug>/attachments/<sha256>.<ext>` seconds later — long
+before the user decides to submit. A teardown mid-review therefore cannot lose
+it. Deferring the upload to submit time would put every pasted image back
+inside the exact window that made submissions disappear (#284).
+
+Two independent copies exist until the submission is processed:
+
+| Copy | Written when | Survives |
+|------|-------------|----------|
+| IndexedDB (`concept-attachments`) | immediately, before the network call | server down, bridge reaped, offline |
+| `attachments/<sha256>.<ext>` on disk | on the `POST /attachments` ack | browser cache wipe, tab close, PC restart |
+
+The local copy is kept — not deleted on a successful upload — until the whole
+submission has been processed. An upload that fails leaves the attachment
+marked `synced: false` with a visible retry badge, and it is retried on the
+next reconnect alongside `retryPendingSubmission()`.
+
+Content addressing by sha256 makes all of this idempotent: pasting the same
+image twice, or a retry re-sending one, resolves to the same file. A retry can
+never duplicate a blob.
+
+**Only raster images are accepted** (`png`, `jpeg`, `gif`, `webp`). SVG is
+rejected by the server (HTTP 415) because attachments are served back from the
+bridge origin, where a script inside an uploaded SVG would run against every
+bridge endpoint.
+
+### HTML
+
+The bar is injected per comment slot by `ensureCommentSlots()`; generated
+pages may also emit it inline:
+
+```html
+<div class="attach-bar" data-attach-for="variant-a-note">
+  <button type="button" class="attach-btn" title="{{attach.button_title}}">📎</button>
+  <span class="attach-hint">{{attach.hint}}</span>
+  <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+  <div class="attach-thumbs"></div>
+</div>
+```
+
+`{{attach.button_title}}` → e.g. "Bild anhängen (oder Strg+V / hierher ziehen)",
+`{{attach.hint}}` → e.g. "Strg+V oder ablegen". Resolve both at generation time
+per § UI Locale.
+
+### CSS
+
+```css
+.attach-bar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-top: .4rem; }
+.attach-btn {
+  background: var(--surface-2); border: 1px solid var(--border-color);
+  color: var(--text-secondary); border-radius: 6px; cursor: pointer;
+  padding: .15rem .45rem; font-size: .95rem; line-height: 1.4;
+}
+.attach-btn:hover { border-color: var(--accent-color); color: var(--text-primary); }
+.attach-hint { font-size: .72rem; color: var(--text-tertiary); }
+.attach-thumbs { display: flex; gap: .4rem; flex-wrap: wrap; width: 100%; }
+.attach-thumb { position: relative; width: 64px; height: 64px; border-radius: 6px;
+                overflow: hidden; border: 1px solid var(--border-color); }
+.attach-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.attach-thumb .attach-remove {
+  position: absolute; top: 1px; right: 1px; width: 16px; height: 16px;
+  border: none; border-radius: 50%; cursor: pointer; font-size: .7rem; line-height: 1;
+  background: rgba(0,0,0,.65); color: #fff;
+}
+/* Unsynced = on this machine only. Must be visible: it is the difference
+   between "safe everywhere" and "safe until this browser forgets". */
+.attach-thumb[data-synced="false"] { border-color: var(--warning-color, #d08c30); }
+.attach-thumb[data-synced="false"]::after {
+  content: "⟳"; position: absolute; bottom: 1px; left: 3px;
+  font-size: .7rem; color: var(--warning-color, #d08c30);
+}
+/* Drop affordance on the textarea itself. */
+textarea[data-comment].attach-dragover { outline: 2px dashed var(--accent-color); outline-offset: 2px; }
+```
+
+### JS
+
+```javascript
+// --- IndexedDB mirror: the copy that survives the bridge being gone ---
+const ATTACH_DB_NAME = 'concept-attachments';
+const ATTACH_STORE = 'blobs';
+
+function attachDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(ATTACH_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(ATTACH_STORE)) {
+        const os = db.createObjectStore(ATTACH_STORE, { keyPath: 'key' });
+        os.createIndex('bySlot', 'slot', { unique: false });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function attachDBPut(rec) {
+  const db = await attachDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ATTACH_STORE, 'readwrite');
+    tx.objectStore(ATTACH_STORE).put(rec);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function attachDBAll() {
+  const db = await attachDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ATTACH_STORE, 'readonly');
+    const req = tx.objectStore(ATTACH_STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function attachDBDelete(key) {
+  const db = await attachDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction(ATTACH_STORE, 'readwrite');
+    tx.objectStore(ATTACH_STORE).delete(key);
+    tx.oncomplete = resolve;
+    tx.onerror = resolve;
+  });
+}
+
+// Slot key -> [{key, slot, id, name, mime, size, synced, blob}]
+const _attachments = new Map();
+
+function buildAttachmentBar(slotKey) {
+  const bar = document.createElement('div');
+  bar.className = 'attach-bar';
+  bar.dataset.attachFor = slotKey;
+  bar.innerHTML =
+    '<button type="button" class="attach-btn" title="{{attach.button_title}}">📎</button>' +
+    '<span class="attach-hint">{{attach.hint}}</span>' +
+    '<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>' +
+    '<div class="attach-thumbs"></div>';
+  return bar;
+}
+
+function _slotKeyOf(ta) { return ta.dataset.comment || ta.id || ''; }
+
+function _barFor(slotKey) {
+  return document.querySelector('.attach-bar[data-attach-for="' + CSS.escape(slotKey) + '"]');
+}
+
+function initCommentAttachments() {
+  document.querySelectorAll('textarea[data-comment]').forEach(ta => {
+    if (ta.dataset.attachWired) return;      // idempotent, like ensureCommentSlots
+    ta.dataset.attachWired = '1';
+    const slotKey = _slotKeyOf(ta);
+    if (!slotKey) return;
+
+    // A page whose textarea was emitted inline has no bar yet.
+    if (!_barFor(slotKey) && ta.parentElement) {
+      ta.parentElement.appendChild(buildAttachmentBar(slotKey));
+    }
+    const bar = _barFor(slotKey);
+    if (!bar) return;
+
+    const fileInput = bar.querySelector('input[type="file"]');
+    bar.querySelector('.attach-btn').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      addAttachments(slotKey, Array.from(fileInput.files || []));
+      fileInput.value = '';
+    });
+
+    // Hotkey: plain Ctrl/Cmd+V into the textarea. The clipboard carries the
+    // image as a file item, so nothing extra needs pressing.
+    ta.addEventListener('paste', ev => {
+      const items = Array.from((ev.clipboardData || {}).items || []);
+      const files = items.filter(i => i.kind === 'file' && i.type.startsWith('image/'))
+                         .map(i => i.getAsFile())
+                         .filter(Boolean);
+      if (!files.length) return;             // plain text paste — leave it alone
+      ev.preventDefault();
+      addAttachments(slotKey, files);
+    });
+
+    ['dragenter', 'dragover'].forEach(evt =>
+      ta.addEventListener(evt, e => { e.preventDefault(); ta.classList.add('attach-dragover'); }));
+    ['dragleave', 'drop'].forEach(evt =>
+      ta.addEventListener(evt, () => ta.classList.remove('attach-dragover')));
+    ta.addEventListener('drop', e => {
+      const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith('image/'));
+      if (!files.length) return;
+      e.preventDefault();
+      addAttachments(slotKey, files);
+    });
+  });
+}
+
+async function addAttachments(slotKey, files) {
+  for (const file of files) {
+    const key = slotKey + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 8);
+    const rec = {
+      key, slot: slotKey, id: null, name: file.name || 'pasted-image',
+      mime: file.type, size: file.size, synced: false, blob: file,
+    };
+    // LOCAL FIRST — before the network call, so a failure at any point after
+    // this leaves the image recoverable on this machine.
+    try { await attachDBPut(rec); } catch { /* private mode: server copy still applies */ }
+    const list = _attachments.get(slotKey) || [];
+    list.push(rec);
+    _attachments.set(slotKey, list);
+    renderAttachments(slotKey);
+    uploadAttachment(rec).then(() => renderAttachments(slotKey));
+    if (typeof _markUserInteracted === 'function') _markUserInteracted();
+  }
+}
+
+async function uploadAttachment(rec) {
+  try {
+    const data = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+      fr.onerror = () => reject(fr.error);
+      fr.readAsDataURL(rec.blob);
+    });
+    const res = await fetch('/attachments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: rec.name, mime: rec.mime, data })
+    });
+    if (!res.ok) return false;               // 415/413/507 — keep it local, badge stays
+    const meta = await res.json();
+    rec.id = meta.id;
+    rec.synced = true;
+    try { await attachDBPut(rec); } catch { /* ignore */ }
+    return true;
+  } catch {
+    return false;                            // offline — the reconnect path retries
+  }
+}
+
+function renderAttachments(slotKey) {
+  const bar = _barFor(slotKey);
+  if (!bar) return;
+  const thumbs = bar.querySelector('.attach-thumbs');
+  thumbs.innerHTML = '';
+  for (const rec of _attachments.get(slotKey) || []) {
+    const wrap = document.createElement('div');
+    wrap.className = 'attach-thumb';
+    wrap.dataset.synced = String(!!rec.synced);
+    wrap.title = rec.name + (rec.synced ? '' : ' — {{attach.not_synced}}');
+    const img = document.createElement('img');
+    // Prefer the server copy once it exists: it proves the durable write
+    // landed, and it survives an IndexedDB eviction.
+    img.src = rec.synced && rec.id ? '/attachments/' + rec.id : URL.createObjectURL(rec.blob);
+    img.alt = rec.name;
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.className = 'attach-remove';
+    rm.textContent = '×';
+    rm.addEventListener('click', () => removeAttachment(slotKey, rec.key));
+    wrap.appendChild(img);
+    wrap.appendChild(rm);
+    thumbs.appendChild(wrap);
+  }
+}
+
+async function removeAttachment(slotKey, key) {
+  // Drops the LOCAL reference only. The server blob is content-addressed and
+  // may be referenced by another slot or an earlier round; the store is
+  // cleaned as a whole by the disposition step, never piecemeal from the UI.
+  _attachments.set(slotKey, (_attachments.get(slotKey) || []).filter(r => r.key !== key));
+  await attachDBDelete(key);
+  renderAttachments(slotKey);
+}
+
+async function restoreAttachments() {
+  let all = [];
+  try { all = await attachDBAll(); } catch { return; }
+  for (const rec of all) {
+    const list = _attachments.get(rec.slot) || [];
+    list.push(rec);
+    _attachments.set(rec.slot, list);
+  }
+  // Anything that never reached the bridge gets another chance now.
+  for (const rec of all.filter(r => !r.synced)) await uploadAttachment(rec);
+  for (const slot of _attachments.keys()) renderAttachments(slot);
+}
+
+// Called from collectDecisionDecisions — only synced attachments are named in
+// the payload, because Claude reads them from disk by id. An unsynced one is
+// still on this machine and is retried, but it must not be advertised as a
+// path that does not exist.
+function attachmentsFor(slotKey) {
+  return (_attachments.get(slotKey) || [])
+    .filter(r => r.synced && r.id)
+    .map(r => ({ id: r.id, name: r.name, mime: r.mime, size: r.size,
+                 path: '.claude/concepts/{{slug}}/attachments/' + r.id }));
+}
+
+function unsyncedAttachmentCount() {
+  let n = 0;
+  for (const list of _attachments.values()) n += list.filter(r => !r.synced).length;
+  return n;
+}
+```
+
+Wire `restoreAttachments()` into `DOMContentLoaded` **after** `ensureCommentSlots()`
+(the bars must exist before thumbnails render), and call `initCommentAttachments()`
+again after any iteration append, exactly like `ensureCommentSlots()`.
+
+`{{slug}}` is the concept's date-slug, substituted at generation time — it is
+the store directory name, so Claude can open the referenced file directly with
+the Read tool.
 
 ## collectDecisions (dispatcher)
 
@@ -3381,11 +3706,14 @@ function collectDecisionDecisions() {
   });
 
   document.querySelectorAll('[data-comment]').forEach(el => {
-    if (el.value.trim()) {
-      comments.push({
-        id: el.dataset.comment,
-        text: el.value.trim()
-      });
+    const text = el.value.trim();
+    const attachments = (typeof attachmentsFor === 'function')
+      ? attachmentsFor(el.dataset.comment) : [];
+    // An image with no prose is a complete comment — a screenshot often says
+    // it better than a sentence. Gating on `text` alone (as this did before
+    // attachments existed) would silently drop an image-only remark.
+    if (text || attachments.length) {
+      comments.push({ id: el.dataset.comment, text, attachments });
     }
   });
 
@@ -3466,6 +3794,22 @@ deliberately to reach the implement button.
 }
 .implement-btn .warn-icon { font-size: 1rem; }
 .hint-warn { color: var(--warning-color, #d29922); }
+
+/* Durability warning strip — shown when a submission or an attachment did
+   not reach the bridge's durable store. Deliberately loud: a silent failure
+   here is the exact bug the store exists to remove. */
+.submit-warning {
+  display: none;
+  margin: 0 0 .75rem;
+  padding: .5rem .7rem;
+  border: 1px solid var(--warning-color, #d29922);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--warning-color, #d29922) 12%, transparent);
+  color: var(--text-primary);
+  font-size: .8rem;
+  line-height: 1.4;
+}
 ```
 
 ### JS
@@ -3549,21 +3893,88 @@ async function submitWithAction(action) {
   document.getElementById('panel-ready').style.display = 'none';
   document.getElementById('panel-submitted').style.display = 'block';
 
+  // The submitted panel is already on screen, and it is a promise that the
+  // payload is safe. That promise must be backed by a DURABLE ack, not by
+  // "the request did not throw". `fetch` rejects only on a transport failure,
+  // so a 507 (bridge could not persist) resolved like any other response and
+  // the old code counted it as success — then cleared the local copy. That is
+  // the client-side half of #284.
+  let durable = false;
+  let transportFailed = false;
   try {
-    await fetch('/decisions', {
+    const res = await fetch('/decisions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
+    const body = res.ok ? await res.json().catch(() => ({})) : {};
+    durable = res.ok && body.durable !== false;
   } catch (e) {
-    localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data));
+    transportFailed = true;
   }
+
+  if (!durable) {
+    // Keep a local copy first, whatever went wrong.
+    localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data));
+    if (transportFailed) {
+      // Offline / bridge down. This case self-heals — retryPendingSubmission()
+      // fires on reconnect — so the submitted panel stays up and we only
+      // explain the delay.
+      showSubmitWarning('{{panel.submit_queued_offline}}');
+    } else {
+      // The bridge answered but could not persist (disk full, store gone).
+      // Nothing retries this on its own, so do NOT leave a "sent" panel
+      // standing over it: hand control back and say why.
+      restorePanelToReady();
+      showSubmitWarning('{{panel.submit_not_durable}}');
+    }
+  }
+
+  const unsynced = (typeof unsyncedAttachmentCount === 'function')
+    ? unsyncedAttachmentCount() : 0;
+  if (unsynced > 0) showSubmitWarning('{{panel.attachments_not_synced}}');
+
   saveState();
   _submitInFlight = false;
 }
 
 wireSubmit('submit-iterate-btn', 'iterate');
 wireSubmit('submit-implement-btn', 'implement');
+
+// --- Submit warnings ---
+// A submission that did not reach disk must SAY SO on the page. The whole
+// failure mode this guards against is a confident "übermittelt" panel sitting
+// on top of work that no longer exists anywhere, which is what sends the user
+// away believing Claude will pick it up.
+//
+// Locale strings, resolved at generation time per § UI Locale:
+//   {{panel.submit_queued_offline}}   — "Bridge nicht erreichbar — wird bei
+//                                        Reconnect automatisch nachgeholt.
+//                                        Deine Eingaben sind lokal gesichert."
+//   {{panel.submit_not_durable}}      — "Die Bridge konnte die Übermittlung
+//                                        nicht sichern (Speicherproblem).
+//                                        Nichts ist verloren — deine Eingaben
+//                                        liegen lokal. Bitte erneut absenden."
+//   {{panel.attachments_not_synced}}  — "Ein Bild liegt noch nur lokal vor und
+//                                        wird automatisch nachgereicht."
+function showSubmitWarning(msg) {
+  const host = document.getElementById('panel-submitted')
+            || document.getElementById('panel-ready');
+  if (!host) return;
+  let strip = host.querySelector('.submit-warning');
+  if (!strip) {
+    strip = document.createElement('div');
+    strip.className = 'submit-warning';
+    strip.setAttribute('role', 'alert');
+    host.insertBefore(strip, host.firstChild);
+  }
+  strip.textContent = msg;
+  strip.style.display = 'block';
+}
+
+function clearSubmitWarning() {
+  document.querySelectorAll('.submit-warning').forEach(el => el.remove());
+}
 
 // --- Content dimmer (focus shifter after submit) ---
 // After a submit the user's attention belongs on the decision panel / FAB,
@@ -3832,8 +4243,13 @@ async function retryPendingSubmission() {
       headers: { 'Content-Type': 'application/json' },
       body: pending
     });
-    if (res.ok) localStorage.removeItem(pendingKey);
+    const body = res.ok ? await res.json().catch(() => ({})) : {};
+    // Drop the local copy ONLY once the bridge confirms it reached disk.
+    // `res.ok` alone is not that confirmation — see submitWithAction.
+    if (res.ok && body.durable !== false) localStorage.removeItem(pendingKey);
   } catch (e) { /* still offline */ }
+  // Images that never made it up get another attempt on the same trigger.
+  if (typeof restoreAttachments === 'function') restoreAttachments();
 }
 ```
 

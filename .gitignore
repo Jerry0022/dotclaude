@@ -16,6 +16,9 @@ node_modules/
 .claude/.ship-in-progress
 .claude/.ship-watcher/
 .claude/concept-active.json
+# Durable concept-bridge stores: submissions, progress journals and pasted
+# screenshots. Never committed — disposed of by /concept Step 6a.
+.claude/concepts/
 .claude/session-opened-files.json
 # Plugin-managed runtime dirs
 .claude/.plugin-version

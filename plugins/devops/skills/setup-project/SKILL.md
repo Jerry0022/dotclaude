@@ -80,6 +80,7 @@ See `deep-knowledge/claude-directory-structure.md` for the canonical `.claude/` 
 .claude/*.log
 .claude/token-config.json
 .claude/concept-active.json
+.claude/concepts/
 .claude/session-opened-files.json
 ```
 

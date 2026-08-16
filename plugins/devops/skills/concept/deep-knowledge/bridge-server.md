@@ -370,6 +370,62 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    (add `concept-active.json` to `.gitignore` if not already covered by
    `.claude/`).
 
+4b. **The durable store — nothing to launch, but know it exists (#284).**
+   The server creates `.claude/concepts/<html-basename>/` on startup, derived
+   from `--html`, and **refuses to start (exit 1) if it cannot write there**.
+   That is deliberate: a bridge without durability looks perfectly healthy
+   right up until it eats a submission, so the failure belongs at launch time
+   where the 200-gate and the single-listener assert already catch problems.
+   Override the location with `--store <path>` only if you have a reason to.
+
+   ```
+   .claude/concepts/{date}-{slug}/
+     journal.jsonl    append-only, fsynced: submissions, pickups, progress
+                      checkpoints, attachments, resets, teardowns
+     state.json       atomically-replaced snapshot; restored on boot
+     attachments/     <sha256>.<png|jpg|gif|webp> — pasted/dropped images
+     UNPROCESSED      present iff a submission has not been processed yet
+   ```
+
+   What this buys, concretely: `POST /decisions` fsyncs the payload BEFORE it
+   acks the browser, and the server reloads `state.json` on boot. A bridge
+   that dies for any reason — PC restart, crash, or the watchdog reaping it
+   because Claude hit a usage limit and the session-scoped pulser stopped
+   heartbeating — comes back serving the SAME `pending: true` and the same
+   `_version`. Before this, `GET /pending` answered `false` afterwards, which
+   is indistinguishable from "the user never submitted".
+
+   **Restart on the same port, always.** The store is keyed to the concept,
+   not the port, but the open tab and `concept-active.json` both point at the
+   old port. A new port orphans them and makes fresh watchers exit
+   `PORT_CHANGED`.
+
+   **Ask the server where you stand** before processing anything on a resumed
+   session:
+   ```bash
+   curl -s http://localhost:{port}/recovery
+   ```
+   It returns `{unprocessed, version, marker, progress[], last_checkpoint,
+   attachments[]}`. A non-null `marker` means the previous process was torn
+   down hard rather than exiting cleanly.
+
+   **Checkpoint as you process.** For `implement` / `create-issues` / `ship`,
+   POST each real artifact as it comes into existence:
+   ```bash
+   curl -s -X POST -H "Content-Type: application/json" \
+     -d '{"action":"ship","step":"pr-opened","status":"done","version":<v>,"artifacts":{"branch":"feat/x","pr":42}}' \
+     http://localhost:{port}/progress
+   ```
+   A recovered run reads these to find out how far the dead run got — and
+   then **verifies each artifact against reality** (`git rev-parse`,
+   `gh pr view`, `gh issue view`) before continuing, because the checkpoint
+   records what the previous run believed, and it died for a reason. The
+   checkpoint says where to look; git and gh say what is true.
+
+   The store is disposed of by SKILL.md § Step 6a alongside the concept HTML —
+   `discard` removes the whole directory, guarded so an `UNPROCESSED` marker
+   is never deleted silently.
+
 5. **Verified heartbeat round-trip.** A naked `POST /heartbeat` with no
    read-back is not enough — if the server failed to bind, never started,
    or crashed on the first request, the POST exits 0 and the next step
