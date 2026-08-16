@@ -19,6 +19,14 @@ fs.mkdirSync(path.join(HOME_DIR, ".claude"), { recursive: true });
 function project() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tokguard-"));
   fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
+  // Private tmpdir for THIS project's confirmation flags. The hook writes them
+  // to `os.tmpdir()`, which honours TMPDIR/TEMP/TMP, so pointing those at a
+  // per-project directory keeps each test's flags to itself. Without it every
+  // test in the suite drops `claude_confirm_*` into the one shared system
+  // tmpdir, and the flag-lookup tests below — which pick the first file that
+  // appeared since a `before` snapshot — could grab a PARALLEL test's flag,
+  // expire that one, and then see their own confirmation still valid.
+  fs.mkdirSync(path.join(dir, ".tmp"), { recursive: true });
   fs.writeFileSync(
     path.join(dir, ".claude", "settings.json"),
     JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } })
@@ -42,11 +50,16 @@ function runBash(dir, sid, toolInput) {
   // harness pressure, not a hook verdict, so retry it — but never retry a
   // child that actually ran, or a real block would be masked.
   for (let attempt = 0; ; attempt++) {
+    const tmp = path.join(dir, ".tmp");
     const res = spawnSync(process.execPath, [HOOK], {
       cwd: dir,
       input: JSON.stringify({ tool_name: "Bash", tool_input: toolInput, session_id: sid }),
       encoding: "utf8",
-      env: { ...process.env, HOME: HOME_DIR, USERPROFILE: HOME_DIR },
+      env: {
+        ...process.env,
+        HOME: HOME_DIR, USERPROFILE: HOME_DIR,
+        TMPDIR: tmp, TEMP: tmp, TMP: tmp,
+      },
     });
     if (res.status !== null || attempt >= 3) {
       if (res.status === null) {
@@ -58,6 +71,18 @@ function runBash(dir, sid, toolInput) {
 }
 
 const blocked = r => r.status === 2 && /HIGH TOKEN COST/.test(r.stderr);
+
+/**
+ * Confirmation flags this project wrote. Reads the project's PRIVATE tmpdir,
+ * so the result cannot contain another test's flag no matter how many run in
+ * parallel — which a `before`/`after` diff of the shared system tmpdir could.
+ */
+const confirmFlags = dir => {
+  const tmp = path.join(dir, ".tmp");
+  return fs.readdirSync(tmp)
+    .filter(f => f.startsWith("claude_confirm_"))
+    .map(f => path.join(tmp, f));
+};
 const cleanup = dir => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} };
 
 describe("pre.tokens.guard — Bash large-file matching (integration)", () => {
@@ -117,7 +142,7 @@ describe("pre.tokens.guard — Bash large-file matching (integration)", () => {
       expect(r.stderr, command).toContain("Unbounded output");
     }
     cleanup(dir);
-  });
+  }, 30_000);
 
   test("commands the old noTokenCostPattern exempted are still exempt", () => {
     const dir = project();
@@ -129,7 +154,9 @@ describe("pre.tokens.guard — Bash large-file matching (integration)", () => {
       expect(runBash(dir, "s-parity", { command }).status, command).toBe(0);
     }
     cleanup(dir);
-  });
+    // Ten node spawns. Vitest's 5s default is not a budget this can meet while
+    // 60+ other test files compete for the machine.
+  }, 30_000);
 });
 
 describe("pre.tokens.guard — degraded inputs must not fail open", () => {
@@ -216,31 +243,26 @@ describe("pre.tokens.guard — retry-to-proceed release (integration)", () => {
   test("an expired confirmation blocks again instead of auto-approving", () => {
     const dir = project();
     const input = { command: `cat ${BIG}` };
-    const before = new Set(fs.readdirSync(os.tmpdir()).filter(f => f.startsWith("claude_confirm_")));
     expect(blocked(runBash(dir, "s-ttl", input))).toBe(true);
-    const flag = fs.readdirSync(os.tmpdir())
-      .filter(f => f.startsWith("claude_confirm_") && !before.has(f))
-      .map(f => path.join(os.tmpdir(), f))[0];
+    const flag = confirmFlags(dir)[0];
     expect(flag).toBeTruthy();
     fs.writeFileSync(flag, String(Date.now() - 31 * 60 * 1000));  // older than the 30min TTL
     expect(blocked(runBash(dir, "s-ttl", input))).toBe(true);
     // …and the re-armed flag releases immediately on the next retry.
     expect(runBash(dir, "s-ttl", input).status).toBe(0);
     cleanup(dir);
-  });
+  }, 30_000);
 
   test("an unreadable confirmation body counts as expired, not as approval", () => {
     const dir = project();
     const input = { command: `cat ${BIG}` };
-    const before = new Set(fs.readdirSync(os.tmpdir()).filter(f => f.startsWith("claude_confirm_")));
     expect(blocked(runBash(dir, "s-garbage", input))).toBe(true);
-    const flag = fs.readdirSync(os.tmpdir())
-      .filter(f => f.startsWith("claude_confirm_") && !before.has(f))
-      .map(f => path.join(os.tmpdir(), f))[0];
+    const flag = confirmFlags(dir)[0];
+    expect(flag).toBeTruthy();
     fs.writeFileSync(flag, "");            // interrupted write / full disk
     expect(blocked(runBash(dir, "s-garbage", input))).toBe(true);
     cleanup(dir);
-  });
+  }, 30_000);
 
   test("a different command is not released by an unrelated confirmation", () => {
     const dir = project();
