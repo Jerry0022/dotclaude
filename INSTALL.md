@@ -16,7 +16,7 @@ claude plugin add devops@Jerry0022
 
 > **Note:** The Desktop App marketplace UI may not list third-party plugins for installation. If the plugin tab appears empty, use the CLI command above or see [Troubleshooting](#troubleshooting) below.
 
-Start a new session for hooks to take effect. Skills (`/ship`, `/commit`, `/fix`, etc.) are available immediately.
+Start a new session for hooks to take effect. Skills (`/ship`, `/fix`, `/concept`, etc.) are available immediately.
 
 ## Update
 

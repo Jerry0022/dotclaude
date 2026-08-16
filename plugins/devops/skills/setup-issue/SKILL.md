@@ -7,7 +7,7 @@ description: >-
   when the user wants to create a GitHub issue, plan a milestone, or manage issue
   lifecycle. Triggers on: "neues Issue", "create issue", "Issue erstellen",
   "mach ein Issue", "new issue", "milestone planen", "plan a milestone".
-  Do NOT trigger for: PR creation (use /ship), commit operations (use /commit),
+  Do NOT trigger for: PR creation (use /ship), plain commits,
   or code implementation.
 allowed-tools: Bash(gh *), AskUserQuestion, Read, Grep, mcp__plugin_devops_dotclaude-issues__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

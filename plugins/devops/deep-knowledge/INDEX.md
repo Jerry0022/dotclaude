@@ -16,15 +16,17 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [claude-directory-structure.md](claude-directory-structure.md) | Claude Directory Structure Convention | All Claude Code configuration belongs inside `.claude/`. Nothing Claude-specific |
 | [code-defaults.md](code-defaults.md) | Code Defaults | Standard coding conventions enforced across all projects using the devops plu... |
 | [codex-integration.md](codex-integration.md) | Codex Integration | Cross-cutting reference for all points where `codex-plugin-cc` skills are |
+| [commit-conventions.md](commit-conventions.md) | Commit Conventions | How commits are written in projects using this plugin. Referenced by `/ship`, |
 | [content-conventions.md](content-conventions.md) | Content Conventions — Sizing & Self-Reference | How to size and structure project-persistent content (CLAUDE.md, skills, |
 | [decision-format.md](decision-format.md) | Decision Format | When presenting multiple options (via AskUserQuestion or inline), use this |
 | [desktop-testing.md](desktop-testing.md) | Automated Desktop Testing (Computer Use) | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [documentation-maintenance.md](documentation-maintenance.md) | Documentation Maintenance | Keep project docs in their target state as behavior, flows, and architecture ... |
 | [edge-profiles.md](edge-profiles.md) | Edge Profiles | Configuration and usage rules for the two Microsoft Edge profiles used by thi... |
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |
-| [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/commit`, `/ship`, and hooks. |
+| [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/ship`, the role agents, and hooks. |
 | [harden-polish-shared.md](harden-polish-shared.md) | Harden/Polish — Shared Reference | Cross-cutting reference for `/tune-harden` and `/tune-polish`. Covers |
 | [injection-hardening.md](injection-hardening.md) | Prompt-Injection Hardening — Untrusted Content & Egress Control | Cross-cutting defense for any skill or agent that reads untrusted content (fi... |
+| [issue-trust.md](issue-trust.md) | Issue Trust — Who May Fill an Autonomous Queue | Cross-cutting rule for every skill that turns GitHub issues into **autonomously |
 | [local-llm-delegation.md](local-llm-delegation.md) | Local LLM Delegation | Cross-cutting rule for all implementation agents (core, frontend, feature, ai) |
 | [mcp-deferred-tools.md](mcp-deferred-tools.md) | MCP Deferred Tools | Cross-cutting rule: in sessions with a large tool inventory (Computer Use, Ch... |
 | [merge-safety.md](merge-safety.md) | Merge Safety — Parallel Development | Cross-cutting reference for preventing silent overwrites when multiple develo... |

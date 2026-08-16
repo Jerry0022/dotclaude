@@ -131,7 +131,7 @@ container artifact" — nothing to push upstream there.
 
 A stated reason that only explains the local need is not a reason. Route to B.
 
-1. Match the learning to a plugin skill by topic (`ship`, `commit`, `concept`,
+1. Match the learning to a plugin skill by topic (`ship`, `fix`, `concept`,
    `flow`, …).
 2. Create `{project}/.claude/skills/<skill>/SKILL.md` if absent, scaffolded from
    the same template as `claude-extend-skill` Step 4.2.

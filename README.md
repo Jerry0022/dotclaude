@@ -28,7 +28,7 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 | Prompt guards (per message) | ~150K–250K | Ship detection, issue tracking, git sync — most exit silently |
 | Tool guards (per tool call) | ~100K–200K | Token budget + ship enforcement — early-exit when clean |
 | Self-calibration (every 10 min) | ~200K–400K | Deep-knowledge rotation, skill internalization |
-| Skill invocations (~15–25/week) | ~15K–30K | Only when you call /ship, /commit, etc. |
+| Skill invocations (~15–25/week) | ~15K–30K | Only when you call /ship, /fix, etc. |
 | **Total** | **~500K–900K** | **~0.7M tokens/week on average** |
 
 ### Percentage of your plan
@@ -55,7 +55,7 @@ Based on ~0.7M tokens/week plugin overhead:
 | Forgetting to bump the version | /ship handles version, PR, merge, cleanup |
 | "Why is my context window gone?" | Token guard kills expensive reads before they land |
 | Debugging the same error 4 times | /fix kicks in after the second failure |
-| Writing commit messages by hand | Conventional commits, auto-staged, one command |
+| Writing commit messages by hand | Conventional commits enforced by shared conventions |
 
 **Token guard payoff:** The token guard blocks any single operation above your plan's per-operation share of the ~200K context window — **5% (~10K tokens) on Pro, 8% (~16K) on Max 5×, 10% (~20K) on Max 20×**. In a typical session, Claude attempts 5–15 broad searches or large-file reads that would each burn 20–80K tokens — that's 100–400K tokens/session evaporating into context you never asked for. Across ~10 sessions/week, the guard saves roughly **1–4M tokens/week** in prevented waste. The plugin's own overhead (~0.7M tokens/week for hooks, startup checks, and skill prompts) pays for itself 1.5–6x over just by keeping Claude from reading files it doesn't need.
 
@@ -168,7 +168,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 ## Features
 
 - **<!--devops:count:hooks-->42<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->22<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, auto-graph
+- **<!--devops:count:skills-->21<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, auto-graph
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /ship skill routing
@@ -312,7 +312,6 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 |---|---|---|
 | `/ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
 | `/promote` | Explicit | Channel promotion (alpha→beta→stable): re-tag the same SHA, no rebuild |
-| `/commit` | Explicit | Conventional commits with smart staging |
 | `/fix` (alias: `/debug`) | Explicit + Hook | Root-cause analysis, diagnostics, and fix cycle |
 | `/setup-issue` | Explicit | GitHub issue creation with labels and milestones |
 | `/setup-project` | Explicit | Repo hygiene audit and initialization |
@@ -696,7 +695,7 @@ devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
 ├── hooks/                         ← <!--devops:count:hooks-->42<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
-├── skills/                        ← <!--devops:count:skills-->22<!--/devops:count:skills--> skill definitions (SKILL.md)
+├── skills/                        ← <!--devops:count:skills-->21<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates

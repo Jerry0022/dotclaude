@@ -10,7 +10,7 @@ describe("hasPluginSignal — plugin-topic detector", () => {
 
   test("references a plugin slash command", () => {
     expect(hasPluginSignal("/ship bricht beim preflight ab")).toBe(true);
-    expect(hasPluginSignal("nach /commit fehlt die Karte")).toBe(true);
+    expect(hasPluginSignal("nach /promote fehlt die Karte")).toBe(true);
     expect(hasPluginSignal("/setup-issue nimmt das Milestone nicht")).toBe(true);
     expect(hasPluginSignal("/tune-harden läuft ins Leere")).toBe(true);
     expect(hasPluginSignal("/claude-learn schreibt in die falsche Datei")).toBe(true);

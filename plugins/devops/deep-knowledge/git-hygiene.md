@@ -1,6 +1,7 @@
 # Git Hygiene
 
-Cross-cutting git rules referenced by `/commit`, `/ship`, and hooks.
+Cross-cutting git rules referenced by `/ship`, the role agents, and hooks.
+Commit message format and granularity: [commit-conventions.md](commit-conventions.md).
 
 ## Main-branch protection (hard rule)
 

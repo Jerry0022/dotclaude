@@ -2,7 +2,7 @@
 
 ## Commit + Push
 
-Stage version-bumped files and remaining changes. Commit per `/commit` skill conventions.
+Stage version-bumped files and remaining changes. Commit per `{PLUGIN_ROOT}/deep-knowledge/commit-conventions.md`.
 
 ```bash
 git push -u origin <branch>

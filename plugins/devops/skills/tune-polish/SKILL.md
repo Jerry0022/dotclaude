@@ -374,4 +374,4 @@ applies the chosen items.
   (see `deep-knowledge/pre-mortem.md`).
 - **Surface harden-candidates explicitly** — backend-only findings get
   flagged for `/tune-harden`, not silently dropped.
-- **Never commit automatically** — user commits via `/commit`.
+- **Never commit automatically** — the user decides when to commit.

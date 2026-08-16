@@ -348,4 +348,4 @@ or dismisses it.
 - **Surface polish-candidates explicitly** so the user can run `/tune-polish`
   as a natural follow-up.
 - **Never commit automatically** — this skill modifies files; the user
-  commits via `/commit` or `/ship`.
+  commits via `/ship` (or an inline commit per `deep-knowledge/commit-conventions.md`).
