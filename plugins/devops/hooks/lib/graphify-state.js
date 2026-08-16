@@ -178,6 +178,17 @@ function markRefresh(cwd, cooldownMs) {
   }
 }
 
+/**
+ * Give back a throttle slot taken by `markRefresh` when the spawn it guarded
+ * was declined downstream (issue #291). Without this the cooldown is spent on a
+ * build that never started, and the self-heal cannot retry until it expires —
+ * on a machine whose global cap is usually saturated, that is a graph which
+ * never converges. Never throws; an already-absent flag is the desired state.
+ */
+function releaseRefresh(cwd) {
+  try { fs.unlinkSync(refreshFlagPath(cwd)); } catch { /* already gone */ }
+}
+
 function queryFlagPath(sessionId, cwd) {
   const key = crypto.createHash('md5').update(`${sessionId || 'nosid'}:${cwd}`).digest('hex').slice(0, 12);
   return path.join(os.tmpdir(), `dotclaude-graphq-${key}.flag`);
@@ -261,6 +272,43 @@ function updateGlobalCap() {
 function updateLockPath(cwd) {
   const key = crypto.createHash('md5').update(`updatelock:${cwd}`).digest('hex').slice(0, 12);
   return path.join(lockBaseDir(), `dotclaude-graphupdate-${key}.lock`);
+}
+
+/**
+ * Per-project counter of consecutive DECLINED spawns (issue #291).
+ *
+ * A decline is normally harmless — the project already has a build, or the
+ * machine is at its cap, and the next trigger picks it up. On a machine with
+ * many active worktrees, though, a project can lose that draw every single
+ * time: ~15 cwds competing for a global cap of 2 leaves most of them silently
+ * stale for weeks. That matters more than an ordinary skip, because
+ * `pre.tokens.guard` steers broad searches TOWARD the graph — a starved project
+ * quietly serves a month-old view of its code. The counter makes a persistent
+ * loser visible; a spawn that issues resets it.
+ */
+function declineCountPath(cwd) {
+  const key = crypto.createHash('md5').update(`updatelock:${cwd}`).digest('hex').slice(0, 12);
+  return path.join(lockBaseDir(), `dotclaude-graphdecline-${key}`);
+}
+
+/** Consecutive declined spawns for `cwd`. 0 when unknown. Never throws. */
+function declineCount(cwd) {
+  try {
+    const n = parseInt(fs.readFileSync(declineCountPath(cwd), 'utf8'), 10);
+    return Number.isInteger(n) && n > 0 ? n : 0;
+  } catch { return 0; }
+}
+
+/** Record one more declined spawn; returns the new count. Never throws. */
+function noteDecline(cwd) {
+  const n = declineCount(cwd) + 1;
+  try { fs.writeFileSync(declineCountPath(cwd), String(n)); } catch { /* best effort */ }
+  return n;
+}
+
+/** Forget the decline streak — called when a spawn actually issues. */
+function clearDeclines(cwd) {
+  try { fs.unlinkSync(declineCountPath(cwd)); } catch { /* already gone */ }
 }
 
 /**
@@ -442,13 +490,17 @@ function bgWindowless(cmd, args, cwd) {
  *   already building, or global cap reached) or the spawn errored.
  */
 function bgWithSentinel(cmd, args, cwd) {
-  if (updateInFlight(cwd)) return false; // this project already has a live build
-  if (globalUpdatesInFlight() >= updateGlobalCap()) return false; // machine-wide cap reached
+  // A decline is bookkept (issue #291): callers throttle themselves before
+  // getting here, so a declined spawn that leaves no trace burns the caller's
+  // throttle window for work that never ran.
+  if (updateInFlight(cwd)) { noteDecline(cwd); return false; } // this project already has a live build
+  if (globalUpdatesInFlight() >= updateGlobalCap()) { noteDecline(cwd); return false; } // machine-wide cap reached
   const sentinel = sentinelPath(cwd);
   const lock = updateLockPath(cwd);
   try { fs.unlinkSync(sentinel); } catch { /* no previous sentinel */ }
   const pid = spawnBgRunner(cmd, args, cwd, sentinel, lock);
-  if (pid != null) writeUpdateLock(cwd, pid);
+  if (pid != null) { writeUpdateLock(cwd, pid); clearDeclines(cwd); }
+  else noteDecline(cwd);
   return pid != null;
 }
 
@@ -501,6 +553,11 @@ module.exports = {
   updateLockPath,
   updateInFlight,
   globalUpdatesInFlight,
+  declineCountPath,
+  declineCount,
+  noteDecline,
+  clearDeclines,
+  releaseRefresh,
   writeUpdateLock,
   clearUpdateLock,
   bgWindowless,

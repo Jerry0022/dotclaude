@@ -29,6 +29,11 @@ import {
   clearUpdateLock,
   globalUpdatesInFlight,
   updateGlobalCap,
+  releaseRefresh,
+  declineCount,
+  declineCountPath,
+  noteDecline,
+  clearDeclines,
 } from "./graphify-state.js";
 
 function tmp() {
@@ -634,4 +639,82 @@ describe("globalUpdatesInFlight / machine-wide cap", () => {
     clearSentinel(fresh);
     try { fs.rmSync(fresh, { recursive: true, force: true }); } catch {}
   }, 10000);
+});
+
+// ---------------------------------------------------------------------------
+// #291 — a declined spawn must not spend the caller's throttle token
+// ---------------------------------------------------------------------------
+
+describe("releaseRefresh — declined spawn gives the cooldown back", () => {
+  test("released slot lets the next self-heal attempt run immediately", () => {
+    const d = tmp();
+    expect(markRefresh(d, 120_000)).toBe(true);   // first attempt takes the slot
+    expect(markRefresh(d, 120_000)).toBe(false);  // throttled for 2 min
+
+    // The spawn was declined (PID lock / global cap), so nothing ran — the
+    // cooldown must not be charged for it.
+    releaseRefresh(d);
+    expect(markRefresh(d, 120_000)).toBe(true);
+    expect(fs.existsSync(refreshFlagPath(d))).toBe(true);
+  });
+
+  test("releasing without a flag is a no-op", () => {
+    const d = tmp();
+    expect(() => releaseRefresh(d)).not.toThrow();
+    expect(markRefresh(d, 120_000)).toBe(true);
+  });
+});
+
+describe("decline bookkeeping — a permanently starved project is visible", () => {
+  let origLockDir, isoDir;
+  beforeEach(() => {
+    origLockDir = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    isoDir = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-decline-iso-"));
+    process.env.DOTCLAUDE_GRAPHLOCK_DIR = isoDir;
+  });
+  afterEach(() => {
+    try { fs.rmSync(isoDir, { recursive: true, force: true }); } catch {}
+    if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
+  });
+
+  test("counts consecutive declines per project, independently", () => {
+    const a = tmp(), b = tmp();
+    expect(declineCount(a)).toBe(0);
+    expect(noteDecline(a)).toBe(1);
+    expect(noteDecline(a)).toBe(2);
+    expect(declineCount(a)).toBe(2);
+    expect(declineCount(b)).toBe(0); // a neighbour's streak is not ours
+  });
+
+  test("clearDeclines resets the streak", () => {
+    const d = tmp();
+    noteDecline(d); noteDecline(d);
+    clearDeclines(d);
+    expect(declineCount(d)).toBe(0);
+  });
+
+  test("a garbled counter file reads as 0 rather than throwing", () => {
+    const d = tmp();
+    fs.writeFileSync(declineCountPath(d), "not-a-number");
+    expect(declineCount(d)).toBe(0);
+    expect(noteDecline(d)).toBe(1);
+  });
+
+  test("bgWithSentinel records a decline when the per-project lock is held", () => {
+    const d = tmp();
+    writeUpdateLock(d, process.pid); // this project already has a live build
+    expect(bgWithSentinel("ver", [], d)).toBe(false);
+    expect(declineCount(d)).toBe(1);
+    clearUpdateLock(d);
+  });
+
+  test("bgWithSentinel records a decline when the machine-wide cap is reached", () => {
+    const d = tmp();
+    // Fill the cap with foreign live locks, then attempt this project's build.
+    for (let i = 0; i < updateGlobalCap(); i++) writeUpdateLock(tmp(), process.pid);
+    expect(globalUpdatesInFlight()).toBeGreaterThanOrEqual(updateGlobalCap());
+    expect(bgWithSentinel("ver", [], d)).toBe(false);
+    expect(declineCount(d)).toBe(1);
+  });
 });

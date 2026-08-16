@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.132.2] — 2026-08-16
+
+### Fixed
+
+- **A declined graph refresh no longer burns the throttle token that guarded it** ([#291](https://github.com/Jerry0022/dotclaude/issues/291)). `/auto-graph` promises the knowledge graph is kept fresh windowlessly, yet a project's graph had gone a month without a rebuild while graphify was installed, enabled, and the graph stale by the plugin's own definition.
+
+  The trigger consumed its throttle as a side effect of the condition — `runOnce(…, { cooldownMs: 10min })` wrote its marker *before* `bgWithSentinel` decided whether to spawn at all. That call declines silently whenever the per-project PID lock is held or the machine-wide build cap is reached, so the token was spent, no build ran, and nothing was recorded: the next session redrew the same losing ticket. With roughly fifteen worktrees competing for a default cap of two, most projects lose that draw every time and starve indefinitely. `runOnce` gained a `releaseOnce` counterpart, and every trigger now hands the token back when the spawn is declined, so the next attempt lands the moment a slot frees up.
+
+  Both PreToolUse self-heal paths had the same shape and are fixed with it — plus a detail that made the starvation hard to see from the logs: they recorded a `self_heal_kicked` metric unconditionally, so the log claimed self-heals that had never spawned. The metric now only records a spawn that actually issued.
+
+  Losing every draw for a long stretch is worse than an ordinary skip, because `pre.tokens.guard` hard-gates broad searches *toward* the graph — a starved project quietly steers agents to a month-old view of its code. So declines are now counted per project and, every fifth consecutive one, the session says so and names the two ways out (`graphify update .`, or raising `DOTCLAUDE_GRAPH_MAX_BUILDS`). A spawn that issues resets the streak.
+
+  One pre-existing test turned out to depend on the old dishonest behaviour: it asserted the refresh flag existed after a self-heal, which now holds only when the spawn was not declined — so under a loaded full-suite run, with the shared lock directory saturated by other tests, it failed about one run in three. It now isolates the lock directory, measuring the gate's logic instead of the machine's load.
+
 ## [0.132.1] — 2026-08-16
 
 ### Fixed

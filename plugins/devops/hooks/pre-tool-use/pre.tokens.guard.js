@@ -318,10 +318,18 @@ process.stdin.on('end', () => {
           // sentinel-tracked — see Gap #5) so the graph converges and the gate
           // can enforce on LATER searches this session. Never blocks.
           if (gstate.markRefresh(cwd, 2 * 60 * 1000)) {
-            gstate.bgWithSentinel('graphify', ['update', '.'], cwd);
-            // Infinity is JSON-null; -1 keeps "unbounded" distinguishable in the log.
-            const newerCount = Number.isFinite(info.newerCount) ? info.newerCount : -1;
-            metrics.record('self_heal_kicked', { newerCount, truncated: info.truncated }, { cwd, sid });
+            // Release the throttle slot when the spawn is declined (PID lock /
+            // global cap) — otherwise the cooldown is spent on a build that
+            // never ran and the graph cannot converge (issue #291). The metric
+            // must only record a spawn that actually issued, or the log claims
+            // self-heals that never happened.
+            if (gstate.bgWithSentinel('graphify', ['update', '.'], cwd)) {
+              // Infinity is JSON-null; -1 keeps "unbounded" distinguishable in the log.
+              const newerCount = Number.isFinite(info.newerCount) ? info.newerCount : -1;
+              metrics.record('self_heal_kicked', { newerCount, truncated: info.truncated }, { cwd, sid });
+            } else {
+              gstate.releaseRefresh(cwd);
+            }
           }
         } else if (!gstate.queryDone(sid, cwd)) {
           // Same keying discipline as the confirmation flag below: hashing the
@@ -334,8 +342,11 @@ process.stdin.on('end', () => {
             // Within tolerance but still lagging by >0 files — enforce AND kick
             // a refresh in parallel so it converges toward newerCount 0.
             if (info.newerCount > 0 && gstate.markRefresh(cwd, 2 * 60 * 1000)) {
-              gstate.bgWithSentinel('graphify', ['update', '.'], cwd);
-              metrics.record('self_heal_kicked', { newerCount: info.newerCount, truncated: false }, { cwd, sid });
+              if (gstate.bgWithSentinel('graphify', ['update', '.'], cwd)) {
+                metrics.record('self_heal_kicked', { newerCount: info.newerCount, truncated: false }, { cwd, sid });
+              } else {
+                gstate.releaseRefresh(cwd); // declined — do not spend the cooldown (#291)
+              }
             }
             const suggestion = graphNudge.suggestQuery(toolInput.pattern);
             console.error('\n⛔  GRAPHIFY GATE — broad search blocked (graph available)');

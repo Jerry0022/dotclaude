@@ -1,10 +1,15 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { markQueryDone, refreshFlagPath } from "../lib/graphify-state.js";
+import {
+  markQueryDone,
+  refreshFlagPath,
+  writeUpdateLock,
+  updateGlobalCap,
+} from "../lib/graphify-state.js";
 
 // This file spawns real processes (hooks, scripts, or a server). The full suite
 // runs 64 files in parallel, all starting `node` at once, so process-start tail
@@ -77,6 +82,24 @@ function cleanup(dir) {
 }
 
 describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
+  // Isolate the graphify update-lock dir (#291). The self-heal now releases its
+  // refresh slot when bgWithSentinel declines the spawn, so a machine-wide cap
+  // filled by OTHER tests — or by real builds on this machine — turns
+  // "refresh kicked" into "refresh correctly not kicked" and the assertions
+  // below flip. An isolated lock dir makes the live-build count start at 0, so
+  // these tests measure the gate's logic instead of the machine's load.
+  let origLockDir, isoLockDir;
+  beforeEach(() => {
+    origLockDir = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    isoLockDir = fs.mkdtempSync(path.join(os.tmpdir(), "graphgate-lockiso-"));
+    process.env.DOTCLAUDE_GRAPHLOCK_DIR = isoLockDir;
+  });
+  afterEach(() => {
+    try { fs.rmSync(isoLockDir, { recursive: true, force: true }); } catch {}
+    if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
+  });
+
   test("consent + fresh graph → first broad search is BLOCKED by the graph gate", () => {
     const dir = project({ consent: true, graph: "fresh" });
     const r = runGrep(dir, "s-block", "alpha");
@@ -152,6 +175,26 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     const r = runGrep(dir, "s-heal", "omega");
     expect(r.stderr).not.toContain("GRAPHIFY GATE"); // never block beyond tolerance
     expect(fs.existsSync(refreshFlagPath(dir))).toBe(true); // background refresh kicked
+    cleanup(dir);
+  });
+
+  test("declined self-heal hands the refresh slot back instead of burning it (#291)", () => {
+    const dir = project({ consent: true, graph: "stale" });
+    for (let i = 0; i < 30; i++) {
+      const p = path.join(dir, `extra${i}.js`);
+      fs.writeFileSync(p, "x");
+      fs.utimesSync(p, NOW, NOW);
+    }
+    // Saturate the machine-wide build cap so bgWithSentinel must decline.
+    for (let i = 0; i < updateGlobalCap(); i++) {
+      writeUpdateLock(fs.mkdtempSync(path.join(os.tmpdir(), "graphgate-busy-")), process.pid);
+    }
+
+    const r = runGrep(dir, "s-heal-declined", "omega");
+    expect(r.stderr).not.toContain("GRAPHIFY GATE"); // still never blocks beyond tolerance
+    // The spawn never happened, so the 2-minute cooldown must NOT be charged —
+    // otherwise the next search cannot retry and the graph never converges.
+    expect(fs.existsSync(refreshFlagPath(dir))).toBe(false);
     cleanup(dir);
   });
 });
