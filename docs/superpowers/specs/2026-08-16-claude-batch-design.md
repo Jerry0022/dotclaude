@@ -71,7 +71,7 @@ Passthrough is unconditional for:
 
 | Class | Why |
 |---|---|
-| Machine prompts | Cron re-entries arrive as UserPromptSubmit. Collecting them kills the concept bridge (1 poll/min) and stops git-sync for the whole window. |
+| Machine prompts | Cron re-entries arrive as UserPromptSubmit. Collecting them kills the `/concept` bridge, which polls once a minute. (Note: git-sync no longer re-enters via cron since #287 moved it to a detached background sync — the `Silently run …` shape stays on the allowlist because other crons use it.) |
 | `AUTONOMOUS_AUTOSTART:` / `AUTONOMOUS_RESUME:` | These do **not** match the existing patterns in `prompt.flow.silent-turn.js` — an allowlist reusing only that module misses them, and an AFK run would never start. |
 | Expanded slash commands | Arrive with a `<command-name>` tag; the raw text is not literally `/claude-batch off`. A naive text comparison misses exactly the escape hatch it is meant to protect. |
 | Prompts with attachments or `@file` | The prompt is *erased* from the UI on block. A collected screenshot is unrecoverable, and an expanded `@file` would dump whole files into the queue — inverting the saving. |
