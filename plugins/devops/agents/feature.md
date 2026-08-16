@@ -129,5 +129,5 @@ Agent({ subagent_type: "research", model: "sonnet", prompt: "..." })
 - Always work in a worktree (isolation: worktree)
 - Commit logical units, not mega-commits
 - Push before reporting completion
-- Follow commit conventions from /commit skill
+- Follow `{PLUGIN_ROOT}/deep-knowledge/commit-conventions.md`
 - Hand off to QA agent after completion

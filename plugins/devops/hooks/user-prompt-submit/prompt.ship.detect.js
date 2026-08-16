@@ -129,7 +129,7 @@ process.stdin.on('end', () => {
     'The /ship skill handles: pre-flight checks, build, version bump, commit,',
     'push, PR, merge, sync, cleanup, and the completion card.',
     '',
-    'If the user seems to want only a commit (not shipping), use Skill("commit") instead.',
+    'If the user seems to want only a commit (not shipping), commit inline per deep-knowledge/commit-conventions.md — there is no commit skill.',
   ].join('\n');
 
   process.stdout.write(instruction + '\n');

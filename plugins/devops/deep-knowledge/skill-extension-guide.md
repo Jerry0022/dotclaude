@@ -32,12 +32,12 @@ Lives in `~/.claude/skills/{skill-name}/`. Applies to ALL your projects.
 ```
 ~/.claude/
 └── skills/
-    └── commit/
-        └── reference.md    ← "Always use scope 'app' for this user"
+    └── setup-readme/
+        └── reference.md    ← "Always include a Windows install section"
 ```
 
-**Use for:** Personal conventions that apply everywhere (commit style, preferred
-tools, default configurations).
+**Use for:** Personal conventions that apply everywhere (documentation style,
+preferred tools, default configurations).
 
 ## Layer 3: Project Extensions
 
@@ -50,8 +50,8 @@ my-angular-app/
         ├── ship/
         │   ├── SKILL.md        ← "Before PR: run ng build --prod"
         │   └── reference.md    ← "Deploy via SSH to 192.168.178.32"
-        ├── commit/
-        │   └── reference.md    ← "Scope must be one of: core, ui, api"
+        ├── run-backlog/
+        │   └── reference.md    ← "Also trust @our-release-bot as an author"
         └── debug/
             └── reference.md    ← "Logs at %APPDATA%/MyApp/logs/"
 ```
@@ -87,12 +87,12 @@ Every plugin skill starts with Step 0:
 - electron-builder.json → `"version": "X.Y.Z"`
 ```
 
-### /commit
+### /run-backlog
 ```markdown
 # reference.md
-## Scope rules
-- Valid scopes: core, ui, api, auth, config
-- Always use module name as scope, not file name
+## Issue trust
+- Additionally trust: @our-release-bot (opens the weekly chore issues)
+- Never queue issues labelled `discussion`
 ```
 
 ### /debug

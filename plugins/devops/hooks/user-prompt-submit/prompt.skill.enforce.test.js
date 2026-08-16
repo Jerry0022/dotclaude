@@ -3,7 +3,7 @@ import { detectInlineSkillMentions } from "./prompt.skill.enforce.js";
 
 const KNOWN = [
   "run-agents",
-  "commit",
+  "promote",
   "concept",
   "fix",
   "tune-harden",
@@ -38,7 +38,7 @@ describe("detectInlineSkillMentions — inline /devops-* references (#235)", () 
 
   test("adjacent punctuation does not break detection", () => {
     expect(detectInlineSkillMentions("(siehe /fix)", KNOWN)).toEqual(["fix"]);
-    expect(detectInlineSkillMentions("nutze /commit.", KNOWN)).toEqual(["commit"]);
+    expect(detectInlineSkillMentions("nutze /promote.", KNOWN)).toEqual(["promote"]);
     expect(detectInlineSkillMentions('"/ship" wäre gut', KNOWN)).toEqual(["ship"]);
   });
 

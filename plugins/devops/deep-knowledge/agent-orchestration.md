@@ -91,7 +91,7 @@ Every spawned agent MUST receive:
 1. **Parent branch name** — for branch inheritance protocol
 2. **Task description** — specific to their role, not the full user request
 3. **Context from previous waves** — handoff data (contracts, findings, decisions)
-4. **Commit instruction** — follow commit conventions from `/commit`
+4. **Commit instruction** — follow `deep-knowledge/commit-conventions.md`
 5. **Interaction directive** — set by the calling skill (see below)
 6. **Effort budget** — a tool-call / scope ceiling scaled to the complexity tier
    (see § Complexity Tiers). Counters the "over-investment on simple work" failure

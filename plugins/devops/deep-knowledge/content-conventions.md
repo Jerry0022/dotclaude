@@ -157,8 +157,8 @@ When a new rule says "do X", check first whether X is already a plugin skill,
 agent, hook, or deep-knowledge doc. **A reference is always preferred over a
 duplicate.** Examples:
 
-- "always commit conventionally" → reference `/commit`, do NOT
-  re-document the commit format
+- "always commit conventionally" → reference
+  `deep-knowledge/commit-conventions.md`, do NOT re-document the commit format
 - "always run pre-flight before shipping" → reference `/ship`, do NOT
   re-list the pipeline steps
 - "open issues with the right labels" → reference `/setup-issue`, do NOT

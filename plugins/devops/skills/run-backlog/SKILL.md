@@ -1,6 +1,6 @@
 ---
 name: run-backlog
-version: 0.4.0
+version: 0.5.0
 description: >-
   Milestone-centric backlog runner. Picks open GitHub milestones (or loose
   issues when there are none), then works the selected items off end-to-end —
@@ -104,19 +104,42 @@ Step 4 loop in place — no special handling needed.
 Determine `{owner}/{repo}` from `git remote`. There is no MCP milestone helper —
 use `gh` directly.
 
+**Author trust gate — resolve BEFORE any issue reaches a selection list.**
+Only issues authored by this repo's owners and write-level collaborators may
+enter the queue; a stranger's issue must never be implemented and shipped
+unsupervised. The trusted set is resolved per repo at runtime and is never a
+hardcoded login list — the maintainers differ per project. Full rule, fallbacks,
+and reporting format: `{PLUGIN_ROOT}/deep-knowledge/issue-trust.md`.
+
+```bash
+gh api "repos/{owner}/{repo}/collaborators?per_page=100" --paginate \
+  --jq '.[] | select(.permissions.push) | select(.type != "Bot") | .login'
+gh repo view --json owner --jq .owner.login   # add explicitly
+```
+
+If that returns 403, use the `author_association` fallback from that reference.
+If the trusted set cannot be resolved at all, run **nothing** and say why — never
+fall back to "run everything". Apply the filter to milestone issues, loose
+issues, and any sub-issue created in Step 2 alike; a trusted milestone does not
+launder an untrusted author's issue inside it. Dropped issues are carried to the
+Step 5 report as `🚫 fremd (nicht im Backlog): #N <title> — @author` and are
+never commented on, labelled, or closed.
+
 **Presence-timeout autostart — arm before the first question.** The user may walk
 away anywhere in this Präsenz phase (selection, triage, or the gate), so the
 timeout must cover all of it, not just the final confirmation. Immediately after
-the milestone fetch (step 1 below) and **before** showing the selection question
-(step 2), arm a one-shot cron that starts the run with safe defaults if no answer
-comes within 3 minutes:
+the milestone fetch and the trust gate (step 1 below) and **before** showing the
+selection question (step 2), arm a one-shot cron that starts the run with safe
+defaults if no answer comes within 3 minutes. The default queue is
+**trust-filtered** — a timeout must never widen the queue past what a present
+user would have been offered:
 
 ```
 CronCreate({ recurring: false, cron: "<now+3min>",
   prompt: "RUN_BACKLOG_AUTOSTART: presence timeout. phase=presence,
-  queue=<all open milestone issue numbers; or all open loose issue numbers when
-  there are no milestones>, milestones=<all open titles>, shutdown=yes,
-  autoResume=no, burnMode=no, branch=<current-branch>." })
+  queue=<all trusted open milestone issue numbers; or all trusted open loose
+  issue numbers when there are no milestones>, milestones=<all open titles>,
+  shutdown=yes, autoResume=no, burnMode=no, branch=<current-branch>." })
 ```
 
 **Re-arm** it (delete + recreate at a fresh `now + 3min`) after **every** answered
@@ -131,28 +154,32 @@ is still on screen, apply the Step 0.1 pending-question guard (re-arm + wait).
    gh api "repos/{owner}/{repo}/milestones?state=open" \
      --jq '.[] | {title, number, open_issues, description}'
    ```
-2. **Selection logic (follow exactly):**
-   - **Milestones with ≥1 open issue exist** → ONE `AskUserQuestion`
+2. **Selection logic (follow exactly):** the counts from step 1 include issues
+   from untrusted authors, so **apply the trust gate before presenting anything**
+   — a milestone whose open issues are all untrusted has an effective count of 0
+   and is not offered.
+   - **Milestones with ≥1 trusted open issue exist** → ONE `AskUserQuestion`
      multi-select over **milestones only**. Each option label = milestone title
-     + open-issue count; description = the milestone description. All open issues
-     of a chosen milestone are taken **wholesale** — never offer per-issue
-     selection inside a milestone. If there are **>4** milestones, split the
-     selection across several multi-select questions (max 4 options each).
-   - **Second step — only if** open issues **without any milestone** exist →
+     + trusted open-issue count; description = the milestone description. All
+     trusted open issues of a chosen milestone are taken **wholesale** — never
+     offer per-issue selection inside a milestone. If there are **>4** milestones,
+     split the selection across several multi-select questions (max 4 options each).
+   - **Second step — only if** trusted open issues **without any milestone** exist →
      a separate multi-select over those loose issues
-     (`gh issue list --state open --json number,title,labels,milestone` →
-     filter `milestone == null`). Skip this step when every open issue already
-     belongs to a milestone.
-   - **No milestones with open issues** → skip the milestone step; go straight to
-     the loose-issue selection.
-   - **No open milestones AND no open issues** → stop cleanly with a one-line
-     message and render an `analysis` completion card. Do nothing else.
+     (`gh issue list --state open --json number,title,labels,author,milestone` →
+     filter `milestone == null` + trust gate). Skip this step when every trusted
+     open issue already belongs to a milestone.
+   - **No milestones with trusted open issues** → skip the milestone step; go
+     straight to the loose-issue selection.
+   - **No open milestones AND no trusted open issues** → stop cleanly with a
+     one-line message (naming any `🚫 fremd` issues that were filtered out) and
+     render an `analysis` completion card. Do nothing else.
 3. **Enumerate the selected issues and build the work queue:** the milestone
    fetch above returns only counts — now list the actual issues. For each
-   selected milestone, pull its open issues wholesale:
+   selected milestone, pull its open issues wholesale and drop untrusted authors:
    ```bash
    gh issue list --milestone "<title>" --state open \
-     --json number,title,labels,body
+     --json number,title,labels,body,author
    ```
    Add the loose issues chosen in the second step. From all of them build a
    flat, ordered **work queue**, plus a per-milestone tracking set (which issue
@@ -325,8 +352,10 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
 
 1. **Report** — write a self-contained `BACKLOG-REPORT.html` (dark theme, per
    `skills/run-autonomous/deep-knowledge/html-report.md`) to the project root: per item
-   `shipped` / `parked` / `blocked` (+ reason + branch), milestone progress, and
-   the list of shipped PRs. Open it in Edge (convert the path with
+   `shipped` / `parked` / `blocked` (+ reason + branch), milestone progress, the
+   list of shipped PRs, and a separate `🚫 fremd` section listing every open issue
+   dropped by the Step 1 trust gate (`#N <title> — @author`) so a shortened queue
+   is never mistaken for an empty backlog. Open it in Edge (convert the path with
    `cygpath -m` first — see `deep-knowledge/browser-file-urls.md`) and track it
    via `scripts/session-open-tracker.js`.
 2. **Blocked / parked → chat thread** — for each blocked or parked item, emit
@@ -359,6 +388,12 @@ git-exclude entries (Step 3). Semantics mirror the `AUTONOMOUS-*` family.
 
 ## Rules
 
+- **Owners and write-collaborators only** — the queue may contain issues authored
+  by this repo's owners and write-level collaborators, resolved per repo at
+  runtime, never a hardcoded login list (`deep-knowledge/issue-trust.md`). A
+  third party's issue is never implemented, shipped, commented on, or closed by
+  this runner; it is reported as `🚫 fremd` and left untouched. Unresolvable
+  trusted set ⇒ run nothing.
 - **Never modify `run-autonomous`** — ship authority lives ONLY in this skill;
   the autonomous no-ship guarantee stays intact.
 - **Ship only via MCP ship tools, own repo, no force-push.**

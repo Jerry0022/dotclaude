@@ -52,17 +52,17 @@ typically about how Claude answers, regardless of what is being worked on —
 cannot answer Q1. Stop here: **branch E**, ask first, never auto-write.
 
 Judge by where the rule has to live, not by the words in it. "In jedem Projekt"
-is not the trigger: *"in jedem Projekt soll `/commit` die Issue-Nummer
+is not the trigger: *"in jedem Projekt soll `/ship` die Issue-Nummer
 schreiben"* changes a plugin default and is a plugin rule (Q1). Nor does naming
-a plugin part keep the gate shut — *"sprich mich per Du an, auch wenn `/commit`
-nachfragt"* is a tone preference that merely mentions `/commit` as the venue;
+a plugin part keep the gate shut — *"sprich mich per Du an, auch wenn `/ship`
+nachfragt"* is a tone preference that merely mentions `/ship` as the venue;
 its home is auto-memory, so the gate fires. Ask what the rule is *about*: the
 plugin's behavior, a project's, or how Claude talks to you.
 
 **Q1 — Whose behavior changes: the plugin's, everywhere — or just here?** The
 only judgment call in the skill. Reach and subject together, not either alone:
 
-- **the devops plugin** — a plugin skill (`/ship`, `/commit`, `/concept`, …),
+- **the devops plugin** — a plugin skill (`/ship`, `/fix`, `/concept`, …),
   hook, agent, MCP server, script under `plugins/devops/`, or plugin
   convention, **and** the change is one every consumer should get. The default
   for anything naming a plugin part.
@@ -134,7 +134,7 @@ Worked examples — each lands in exactly one branch:
 | "Im Projekt Foo brauchen DB-Migrationen einen eigenen Commit" (a third project)      | **D** — Q1 = a project, Q3 = Foo             |
 | same learning (session is Foo)                                                       | **C** — Q3 resolves to the current project   |
 | "Antworte mir immer auf Deutsch" (any)                                               | **E** — the gate catches it before Q1        |
-| "In jedem Projekt soll `/commit` die Issue-Nummer schreiben" (consumer project)      | **B** — plugin default, not the gate         |
+| "In jedem Projekt soll `/ship` die Issue-Nummer schreiben" (consumer project)        | **B** — plugin default, not the gate         |
 | "`/ship` soll hier den Docker-Publish überspringen, wir bauen kein Image" (either)   | **C-override** — reason holds off upstream   |
 
 ## Step 3 — Execute the branch

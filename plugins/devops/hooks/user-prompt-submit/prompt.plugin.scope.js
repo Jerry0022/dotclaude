@@ -36,7 +36,7 @@ const PLUGIN_SIGNALS = [
   /\bdevops\s+(skill|hook|agent|command|mcp)\b/i,
   // Plugin slash commands, enumerated by name. A `/(setup|run|auto)-\w+`
   // wildcard would also swallow a project's own /run-tests or /setup-db.
-  /(^|\s)\/(ship|commit|promote|fix|concept)\b/,
+  /(^|\s)\/(ship|promote|fix|concept)\b/,
   /(^|\s)\/setup-(issue|project|readme|cleanup)\b/,
   /(^|\s)\/run-(agents|autonomous|backlog|burn)\b/,
   /(^|\s)\/tune-(harden|polish|rethink)\b/,
