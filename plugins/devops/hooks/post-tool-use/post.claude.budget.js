@@ -56,8 +56,16 @@ process.stdin.on('end', () => {
   // One report per file per severity per session. A refactor pass touching the
   // same file five times should say this once; an escalation from warn to
   // critical is genuinely new information and gets its own report.
+  //
+  // A cooldown rather than strict-once, deliberately: runOnce keys on
+  // session_id, which falls back to the literal "unknown" when a hook payload
+  // carries none. Strict-once would then write one marker shared by every
+  // session that ever lacks an id — and since the marker outlives the process,
+  // the hook would go permanently silent for that file. A window degrades to
+  // "reports again later" instead of "never reports again".
   const fileKey = crypto.createHash('sha1').update(path.resolve(file)).digest('hex').slice(0, 12);
-  if (!runOnce(`claude-budget-${fileKey}-${result.severity}`, hook.session_id)) process.exit(0);
+  const dedupeKey = `claude-budget-${fileKey}-${result.severity}`;
+  if (!runOnce(dedupeKey, hook.session_id, { cooldownMs: 2 * 60 * 60 * 1000 })) process.exit(0);
 
   process.stderr.write(buildSummary(file, result) + '\n');
   process.stdout.write(buildInstruction(file, result) + '\n');
