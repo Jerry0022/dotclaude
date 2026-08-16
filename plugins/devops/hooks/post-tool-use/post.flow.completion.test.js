@@ -17,21 +17,41 @@ function project() {
     path.join(dir, ".claude", "settings.json"),
     JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } })
   );
+  // Private tmpdir: the hook keeps once-per-session state as a flag file in
+  // `os.tmpdir()`, which honours TMPDIR/TEMP/TMP. Sharing the system tmpdir
+  // with every other hook test lets a foreign flag suppress this hook's
+  // output. Same isolation as pre.tokens.guard.bash.test.js.
+  fs.mkdirSync(path.join(dir, ".tmp"), { recursive: true });
   return dir;
 }
 
 function runHook(dir, sid, toolName = "Read") {
-  const res = spawnSync(process.execPath, [HOOK], {
-    cwd: dir,
-    input: JSON.stringify({
-      tool_name: toolName,
-      tool_input: { file_path: path.join(dir, "a.js") },
-      session_id: sid,
+  // The full suite runs 60+ files in parallel; on a loaded machine spawnSync
+  // can fail to start the child at all (status null, res.error set), and the
+  // hook's stdout then comes back empty — which reads as "the hook emitted no
+  // instruction" and fails the assertion for a reason that has nothing to do
+  // with the hook. Retry only that case; never retry a child that actually
+  // ran, or a genuinely missing instruction would be masked.
+  const tmp = path.join(dir, ".tmp");
+  for (let attempt = 0; ; attempt++) {
+    const res = spawnSync(process.execPath, [HOOK], {
       cwd: dir,
-    }),
-    encoding: "utf8",
-  });
-  return res.stdout || "";
+      input: JSON.stringify({
+        tool_name: toolName,
+        tool_input: { file_path: path.join(dir, "a.js") },
+        session_id: sid,
+        cwd: dir,
+      }),
+      encoding: "utf8",
+      env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp },
+    });
+    if (res.status !== null || attempt >= 3) {
+      if (res.status === null) {
+        throw new Error(`hook never started after ${attempt + 1} attempts: ${res.error}`);
+      }
+      return res.stdout || "";
+    }
+  }
 }
 
 function cleanup(dir) {

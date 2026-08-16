@@ -606,6 +606,14 @@ User submits → Claude reads → Claude processes → Claude updates page → U
 ### 5a. Read & Parse
 1. Read the JSON from `#concept-decisions`
 2. Parse into structured decisions and comments
+3. **Open any attached images.** A comment may carry
+   `attachments: [{id, name, mime, size, path}]` — pasted or dropped
+   screenshots, already persisted by the bridge at
+   `.claude/concepts/{date}-{slug}/attachments/<id>`. Read every one with the
+   Read tool before acting on that comment. A comment can also be
+   image-ONLY with an empty `text`; that is a complete remark, not an empty
+   one, and skipping it because the text is blank silently discards the
+   user's point.
 
 **Coverage check:** before processing decisions, verify every named form
 field that exists in the just-frozen iteration HTML appears in the
@@ -619,6 +627,31 @@ Collection for the required pattern.
 
 The submit payload carries an `action` field (`"iterate"` or `"implement"`).
 Branch on it:
+
+**Checkpoint duty (all branches except `iterate`).** `implement`,
+`create-issues` and `ship` create real, externally-visible artifacts, and any
+of them can be cut short mid-flight — a usage limit, a crash, a PC restart.
+POST a checkpoint to the bridge as each artifact comes into existence:
+
+```bash
+curl -s -X POST -H "Content-Type: application/json" \
+  -d '{"action":"ship","step":"pr-opened","status":"done","version":<captured _version>,"artifacts":{"branch":"feat/x","pr":42}}' \
+  http://localhost:$PORT/progress
+```
+
+Use `step` values that name what now exists in the world — `branch-created`,
+`code-written`, `committed`, `pr-opened`, `merged`, `issues-created` (with the
+numbers in `artifacts`) — not internal phases. A resumed session replays these
+to learn how far the dead run got.
+
+**And on the receiving end: verify, never trust.** When you resume a run that
+has checkpoints (`ss.concept.resume` hands you the mandate, or `GET /recovery`
+shows them), establish the real state before acting — `git rev-parse --verify`
+for a branch, `gh pr view <n> --json state,mergedAt` for a PR, `gh issue view`
+for issues, and read the files for code changes. Then continue from what you
+observed. Never re-create an artifact that exists, never re-merge a merged PR,
+never re-run a completed step. The checkpoint records what the previous run
+*believed* it had done, and it died for a reason.
 
 **`action: "iterate"` (default — "Zur nächsten Iteration" button):**
 1. **Summarize** what was selected/rejected/commented
@@ -1054,6 +1087,54 @@ NOT match.
 | `gitignore` | null | Files stay at original path. Append `docs/concepts/{date}-{slug}.*` to `.gitignore` if not already covered. Run `git rm --cached -- "<html>" "<decisions.json>"` to untrack them if they were already added. |
 | `gitignore` | set | `mkdir -p -- "<moveTo>"` then `mv -- "<html>" "<moveTo>/"`; same for the decisions JSON. Append `<moveTo>/{date}-{slug}.*` to `.gitignore` if not already covered. Run `git rm --cached -- "<original-html>" "<original-decisions.json>"` on the original tracked entries. |
 
+**Also dispose of the durable store.** The bridge keeps every submission,
+progress checkpoint and pasted image under
+`.claude/concepts/{date}-{slug}/` (§ Durable store in `concept-server.py`).
+It is deliberately gitignored and invisible, which is exactly why it needs an
+explicit disposition step — otherwise pasted screenshots silt up forever in a
+directory nobody looks at.
+
+| `mode` | Store action |
+|---|---|
+| `discard` | `rm -rf -- ".claude/concepts/{date}-{slug}"` — journal and attachments go with the concept. Subject to the UNPROCESSED guard below. |
+| `keep` | Keep the store. If it holds attachments, copy them to `docs/concepts/{date}-{slug}-attachments/` and `git add` them, so the kept record is self-contained instead of pointing into an ignored directory. Skip when there are none. |
+| `gitignore` | Leave the store in place — it is already outside git. No extra `.gitignore` entry is needed beyond the blanket `.claude/concepts/` rule. |
+
+**UNPROCESSED guard — never discard unseen work.** Before any `rm -rf` of a
+store, check for `.claude/concepts/{date}-{slug}/UNPROCESSED`. Its presence
+means a submission was made that Claude never finished processing, so the user
+has not yet seen a result for it. Deleting that is the very loss this whole
+mechanism exists to prevent, and a default-`discard` disposition (§ above:
+`discard` is what an aborted session falls back to) would otherwise do it
+silently.
+
+```bash
+store=".claude/concepts/{date}-{slug}"
+if [ -e "$store/UNPROCESSED" ]; then
+  echo "UNPROCESSED submission in $store — not deleting"
+else
+  rm -rf -- "$store"
+fi
+```
+
+When the guard trips: keep the store, and report it as a `⏸ Rückfrage`-style
+line in the completion card naming the directory, so the user can decide.
+Never resolve it by deleting.
+
+**Orphan sweep.** A store whose concept HTML no longer exists — the file was
+deleted manually, a worktree was wiped, an older session never ran cleanup —
+is an orphan. Sweep those whose `state.json` is older than 7 days, applying
+the same UNPROCESSED guard to each:
+
+```bash
+for d in .claude/concepts/*/; do
+  slug="$(basename "$d")"
+  [ -e "docs/concepts/$slug.html" ] && continue          # live concept
+  [ -e "$d/UNPROCESSED" ] && continue                    # unseen work — keep
+  [ -n "$(find "$d/state.json" -mtime +7 2>/dev/null)" ] && rm -rf -- "$d"
+done
+```
+
 **Safety rules:**
 
 - `moveTo` is treated as a project-relative path. Resolve it relative to
@@ -1074,6 +1155,11 @@ NOT match.
   `docs/concepts/{date}-{slug}.*` pattern for THIS session's slug.
   Other concept HTML files in `docs/concepts/` belong to other
   sessions and MUST be preserved.
+- The same applies to the store: `rm -rf` exactly
+  `.claude/concepts/{date}-{slug}` and nothing else. A parallel concept
+  session in another worktree has its own directory next to it, and a
+  glob that catches it destroys a live bridge's state. Never
+  `rm -rf .claude/concepts/*` outside the guarded orphan sweep above.
 - `.gitignore` edits are append-only. Before appending, grep for an
   existing exact match (the full `docs/concepts/{date}-{slug}.*` line)
   — if it already exists, skip the append. Never rewrite or reorder

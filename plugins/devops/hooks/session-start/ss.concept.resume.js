@@ -83,6 +83,126 @@ function deleteState() {
 }
 
 /**
+ * Directory of the durable store for a concept (#284). Must mirror the
+ * server's own derivation in `concept-server.py` __main__ — the HTML basename
+ * without its extension, under `.claude/concepts/` in the project root.
+ */
+function storeDirFor(htmlPath) {
+  const base = path.basename(String(htmlPath || '')).replace(/\.html$/i, '');
+  return path.join(cwd, '.claude', 'concepts', base);
+}
+
+/**
+ * Read whatever the bridge managed to persist, WITHOUT needing it to be alive.
+ *
+ * This is the half that did not exist before. The hook used to probe
+ * `/heartbeat` and give up when it failed, because there was nothing on disk
+ * to fall back to — which is precisely why a submission lost to a usage-limit
+ * watchdog reap was unrecoverable and, worse, invisible.
+ *
+ * @returns {{unprocessed:boolean, version:number|null, marker:object|null,
+ *            lastCheckpoint:object|null, progress:object[], attachments:number,
+ *            storeDir:string, present:boolean}}
+ */
+function readStore(storeDir) {
+  const empty = {
+    unprocessed: false, version: null, marker: null, lastCheckpoint: null,
+    progress: [], attachments: 0, storeDir, present: false,
+  };
+  let state = null;
+  try {
+    state = JSON.parse(fs.readFileSync(path.join(storeDir, 'state.json'), 'utf8'));
+  } catch {
+    return empty;
+  }
+  if (!state || typeof state !== 'object') return empty;
+
+  // `submitted: true` in the persisted payload is the authoritative signal.
+  // The marker file is corroborating evidence of HOW the process died
+  // (watchdog reap / crash vs. a clean exit), not the source of truth — a
+  // marker write can fail on a full disk while the fsynced payload is fine.
+  let unprocessed = false;
+  try {
+    const payload = JSON.parse(state.decisions);
+    unprocessed = payload && payload.submitted === true;
+  } catch { /* unparseable payload — treat as nothing pending */ }
+
+  let marker = null;
+  try {
+    marker = JSON.parse(fs.readFileSync(path.join(storeDir, 'UNPROCESSED'), 'utf8'));
+  } catch { /* absent = clean teardown */ }
+
+  const progress = [];
+  try {
+    const raw = fs.readFileSync(path.join(storeDir, 'journal.jsonl'), 'utf8');
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const rec = JSON.parse(line);
+        if (rec && rec.type === 'progress') progress.push(rec);
+      } catch { /* skip a torn final line */ }
+    }
+  } catch { /* no journal yet */ }
+
+  let attachments = 0;
+  try {
+    attachments = fs.readdirSync(path.join(storeDir, 'attachments')).length;
+  } catch { /* none */ }
+
+  return {
+    unprocessed,
+    version: typeof state.version === 'number' ? state.version : null,
+    marker,
+    lastCheckpoint: progress.length ? progress[progress.length - 1] : null,
+    progress,
+    attachments,
+    storeDir,
+    present: true,
+  };
+}
+
+/**
+ * The verification mandate. The user's rule is auto-resume, but auto-resume
+ * that trusts a checkpoint is how you double-ship: the checkpoint records what
+ * a previous run *believed* it had done, and it died precisely because
+ * something went wrong. So the checkpoint is only ever a place to LOOK.
+ * Reality — git, gh — decides what actually happened, and the resumed run
+ * continues from the observed state.
+ */
+function buildVerificationMandate(store) {
+  const cp = store.lastCheckpoint;
+  const lines = [
+    `RECOVERY (concept bridge, store ${store.storeDir}): an unprocessed submission ` +
+    `(version ${store.version}) survived a teardown` +
+    (store.marker && store.marker.reason ? ` — cause: ${store.marker.reason}` : '') +
+    `. The user's work was preserved on disk; do NOT ask them to redo it.`,
+  ];
+  if (cp) {
+    lines.push(
+      `A previous run got as far as: action=${cp.action || '?'}, step=${cp.step || '?'}, ` +
+      `status=${cp.status || '?'}, artifacts=${JSON.stringify(cp.artifacts || {})}.`
+    );
+  } else {
+    lines.push(`No progress checkpoint was written — the previous run died before it started processing.`);
+  }
+  lines.push(
+    `VERIFY BEFORE YOU ACT — the checkpoint says where to look, never what to trust. ` +
+    `Establish the real state first: for a branch, \`git rev-parse --verify <branch>\` and \`git log\`; ` +
+    `for a PR, \`gh pr view <n> --json state,mergedAt\`; for issues, \`gh issue view <n>\`; ` +
+    `for code changes, read the files. THEN resume from what you observed, not from the checkpoint: ` +
+    `never re-create a branch/PR/issue that exists, never re-merge a merged PR, never re-run a ` +
+    `completed step. Checkpoint each further step via POST /progress as you go.`
+  );
+  if (store.attachments > 0) {
+    lines.push(
+      `${store.attachments} attachment(s) are in ${path.join(store.storeDir, 'attachments')} — ` +
+      `read the referenced images with the Read tool when processing the comments.`
+    );
+  }
+  return lines.join(' ');
+}
+
+/**
  * Fire-and-forget POST /shutdown. We don't wait for the response — even on
  * Windows with PID recycling, the server's listening socket is on the port
  * we know, and the watchdog already handles the no-response case. Best-effort
@@ -195,7 +315,7 @@ function buildBackgroundTasks(port, statePath) {
  * @param {{port:number, html_path:string, slug?:string}} state
  * @param {'pending'|'idle'|'unknown'} pendingState
  */
-function buildResumeInstructions(state, pendingState, statePath = STATE_PATH) {
+function buildResumeInstructions(state, pendingState, statePath = STATE_PATH, store = null) {
   const bg = buildBackgroundTasks(state.port, statePath);
   const lines = [];
 
@@ -226,6 +346,13 @@ function buildResumeInstructions(state, pendingState, statePath = STATE_PATH) {
       `(rewrite HTML at ${state.html_path}, POST /reload, conditional /reset with the captured _version). ` +
       `The user already submitted and is waiting — do not delay this on a schedule.`
     );
+    // A checkpoint means a PREVIOUS run already started processing this very
+    // submission and died partway. Re-running it blind is how a half-finished
+    // ship becomes a double ship, so the verification mandate applies here
+    // just as it does to a dead-bridge recovery.
+    if (store && store.lastCheckpoint) {
+      lines.push(buildVerificationMandate(store));
+    }
   } else if (pendingState === 'unknown') {
     lines.push(
       `The /pending probe was inconclusive (timeout, non-200, or malformed JSON). ` +
@@ -243,12 +370,39 @@ function buildResumeInstructions(state, pendingState, statePath = STATE_PATH) {
   return lines.join(' ');
 }
 
+/**
+ * Instructions for the case the hook could not handle at all before: the
+ * bridge process is GONE, but the user's submission is on disk.
+ *
+ * The old code path exited 0 here. That silence is the bug the user actually
+ * hit — Claude ran out of budget, the watchdog reaped the bridge 30 min later,
+ * and the next session had no idea anything had ever been submitted.
+ */
+function buildDeadBridgeRecovery(state, store) {
+  const server = path.join(__dirname, '..', '..', 'scripts', 'concept-server.py');
+  const bg = buildBackgroundTasks(state.port, STATE_PATH);
+  return [
+    buildVerificationMandate(store),
+    `The bridge process itself is gone. Relaunch it on the SAME port so the open tab and the ` +
+    `state file stay valid — it restores the pending submission from the store automatically: ` +
+    `\`python "${server}" ${state.port} "${cwd}" --html "${state.html_path}"\` ` +
+    `(Bash tool, run_in_background: true — no trailing &, no nohup).`,
+    `Then confirm the recovery with \`curl -s http://localhost:${state.port}/recovery\`, ` +
+    `re-arm the keepalive pulser (${bg.pulser}) and the pickup waker (${bg.waker}), ` +
+    `and process the recovered submission.`,
+  ].join(' ');
+}
+
 module.exports = {
   isValidHtmlPath,
   isStale,
   buildCronBody,
   buildBackgroundTasks,
   buildResumeInstructions,
+  storeDirFor,
+  readStore,
+  buildVerificationMandate,
+  buildDeadBridgeRecovery,
 };
 
 if (require.main === module) {
@@ -265,17 +419,41 @@ if (require.main === module) {
     // gets shut down explicitly — relying on the watchdog alone would leave
     // the server alive for up to 30 s after this hook returns, surfacing
     // misleading "concept active" state in the meantime.
+    // Read the durable store FIRST. Every branch below needs to know whether
+    // the user has unprocessed work sitting on disk, and none of them may
+    // throw that away just because a process or a file went missing.
+    const store = readStore(storeDirFor(state.html_path));
+
     const htmlAbs = path.join(cwd, state.html_path);
     if (!fs.existsSync(htmlAbs)) {
       await postShutdown(state.port);
       deleteState();
+      // The concept HTML is gone, so there is no page left to iterate on —
+      // but an unprocessed submission must not disappear with it. Surface it
+      // and leave the store alone; deleting it is the user's call, made
+      // through the disposition flow, not a side effect of a missing file.
+      if (store.unprocessed) {
+        process.stdout.write(
+          buildVerificationMandate(store) +
+          ` NOTE: the concept HTML (${state.html_path}) no longer exists, so there is no page to ` +
+          `iterate on. Report the recovered submission to the user and ask how they want to use it ` +
+          `BEFORE removing anything under ${store.storeDir}.\n`
+        );
+      }
       process.exit(0);
     }
 
     const heartbeat = await probe(state.port, '/heartbeat');
     if (!heartbeat) {
-      // Server gone. If the file is also stale, prune it; otherwise leave it
-      // alone — the user might be restarting the server in another terminal.
+      // The bridge process is dead. This branch used to exit silently, which
+      // is exactly how a usage-limit watchdog reap turned into an invisible
+      // loss. Now the store answers the question the dead server cannot.
+      if (store.unprocessed) {
+        process.stdout.write(buildDeadBridgeRecovery(state, store) + '\n');
+        process.exit(0);
+      }
+      // Nothing pending. If the state file is also stale, prune it; otherwise
+      // leave it — the user might be restarting the server in another terminal.
       if (isStale(state)) deleteState();
       process.exit(0);
     }
@@ -296,6 +474,6 @@ if (require.main === module) {
       pendingState = 'unknown';
     }
 
-    process.stdout.write(buildResumeInstructions(state, pendingState) + '\n');
+    process.stdout.write(buildResumeInstructions(state, pendingState, STATE_PATH, store) + '\n');
   })();
 }

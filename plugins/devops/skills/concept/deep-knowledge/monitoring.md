@@ -415,10 +415,23 @@ lands.
 
 ### Persistence
 
-Write processed decisions to:
-`docs/concepts/{same-timestamp}-{same-slug}-v{same-version}-decisions.json`
+Two layers, and it matters which one is load-bearing.
 
-Each round appends to the same file (array of rounds), preserving full history:
+**1. The bridge's durable store — automatic, Claude-independent (#284).**
+`.claude/concepts/{date}-{slug}/` is written by the SERVER, not by Claude:
+`POST /decisions` fsyncs the payload before it acks the browser, `/progress`
+journals each processing checkpoint, `/attachments` persists pasted images on
+attach. This is the layer that survives the failures that matter — a PC
+restart, a crash, or the watchdog reaping the bridge because Claude hit a
+usage limit and stopped heartbeating. Nothing Claude does or fails to do can
+lose a submission any more.
+
+Read the store when resuming: `GET /recovery` on a live bridge, or the files
+directly when the bridge is gone (which is what `ss.concept.resume` does).
+
+**2. The readable round history — written by Claude after processing.**
+`docs/concepts/{same-timestamp}-{same-slug}-v{same-version}-decisions.json`,
+appending one entry per round:
 
 ```json
 {
@@ -429,6 +442,28 @@ Each round appends to the same file (array of rounds), preserving full history:
 }
 ```
 
+This is a human-readable artefact for the repo, subject to the Step 6a
+disposition rules — **not** a safety net. It is written only after a round
+completes, so it covers none of the window where work is actually at risk.
+Treating it as the persistence layer is what left that window open in the
+first place.
+
+### Checkpointing while processing
+
+For anything longer than an `iterate` — `implement`, `create-issues`, `ship` —
+POST a checkpoint as each real-world artifact comes into existence:
+
+```bash
+curl -s -X POST -H "Content-Type: application/json" \
+  -d '{"action":"ship","step":"pr-opened","status":"done","version":<v>,"artifacts":{"branch":"feat/x","pr":42}}' \
+  http://localhost:$PORT/progress
+```
+
+A resumed session replays these to find out where the previous run stopped.
+Without them, recovering a half-finished `ship` means either re-running it
+blind or giving up — which is why the checkpoint is not optional for the
+non-`iterate` branches. See SKILL.md Step 5b.
+
 ## Error Handling
 
 ### Error Recovery Matrix
@@ -436,7 +471,9 @@ Each round appends to the same file (array of rounds), preserving full history:
 | Error | Symptom | Recovery |
 |-------|---------|----------|
 | Bridge server not responding | `curl /heartbeat` fails or times out | Check if server process is alive, restart if needed |
-| Bridge server crashed | Connection refused on all endpoints | Relaunch per `bridge-server.md` § step 2 — same port, `run_in_background: true`, `--html` set. Never the `&` form: a child backgrounded inside one Bash call is reaped when that call ends. Then re-launch both watchers |
+| Bridge server crashed | Connection refused on all endpoints | Relaunch per `bridge-server.md` § step 2 — same port, `run_in_background: true`, `--html` set. Never the `&` form: a child backgrounded inside one Bash call is reaped when that call ends. Then re-launch both watchers. The restarted server restores its state from the store, so a submission made before the crash is served again as `pending: true` |
+| Bridge reaped while a submission was unprocessed | New session, `.claude/concepts/<slug>/UNPROCESSED` exists | The usage-limit path: the pulser died with the turn and the watchdog reaped the bridge 30 min later. Nothing is lost — relaunch on the same port, `GET /recovery`, verify the last checkpoint against reality, resume. `ss.concept.resume` emits these instructions automatically |
+| Submission rejected as not durable | Page shows the durability warning strip, HTTP 507 | The bridge could not write its store (disk full, store directory removed). The payload is still in the page's localStorage and the panel is back in ready state — fix the disk/path, then re-submit. Do NOT tell the user to retype anything |
 | Keepalive pulser stopped (`PULSER_EXIT`) | Page shows "nicht verbunden" despite server running | Send a manual `curl -s -X POST /heartbeat`, then re-launch the pulser (bridge-server.md § step 3, task 1) |
 | Pickup waker stopped without a submission (`WAKER_EXIT reason=SERVER_DEAD`) | Submissions go unnoticed while the indicator may still be green | Restart the bridge server ON THE SAME PORT (a new one orphans the state file, the open tab, and makes fresh watchers exit PORT_CHANGED), then re-launch BOTH background tasks |
 | Decisions JSON parse error | `curl /decisions` returns malformed JSON | Show raw content to user, ask to verify |

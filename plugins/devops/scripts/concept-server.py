@@ -37,6 +37,26 @@ Replaces `python -m http.server` with a custom server that adds:
   path in /concept Step 6 and by the watchdog when state files
   vanish. PID-based kill is unreliable on Windows after process
   recycling — an HTTP endpoint targets the live process by port.
+- POST /attachments — Persist one pasted/dropped image, content-addressed by
+  sha256. Uploaded at ATTACH time, not at submit time, so an image is durable
+  seconds after the user pastes it. Raster only (png/jpeg/gif/webp); SVG is
+  rejected because attachments are served back same-origin.
+- GET /attachments/<sha256>.<ext> — Read a blob back. The identifier is shape-
+  validated before it touches the filesystem and the Content-Type comes from
+  the server's own extension map, with nosniff.
+- POST /progress — Claude checkpoints its processing (action, step, status and
+  real-world artifacts: branch, commit, PR, created issues) into the journal.
+- GET /recovery — "Where did we stand?" for a resumed session: whether a
+  submission is unprocessed, its version, the teardown marker, and every
+  progress checkpoint the previous run managed to write.
+
+DURABILITY (#284). Submissions used to live in RAM only, so a PC restart, a
+crash, or the watchdog reaping a server whose heartbeat went stale (which is
+what happens when Claude hits a usage limit) destroyed them silently — the
+restarted bridge answered `pending: false`, indistinguishable from "never
+submitted". Now every submission is fsynced to a per-concept store BEFORE the
+browser is acked, the state is restored on boot, and teardown paths leave an
+UNPROCESSED marker. See § Durable store below for the on-disk layout.
 
 A background **watchdog daemon** terminates the process when:
 - `--html <path>` was passed and the file disappeared for > 10 s
@@ -80,6 +100,8 @@ Example:
 """
 
 import argparse
+import base64
+import hashlib
 import http.server
 import json
 import os
@@ -138,6 +160,285 @@ _lock = threading.Lock()
 
 def _iso_now():
     return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+
+
+# ---------------------------------------------------------------------------
+# Durable store (#284)
+# ---------------------------------------------------------------------------
+# Every global above this line lives in RAM only, and that was the whole bug.
+# A submission existed exclusively as `_decisions`, so a bridge that died for
+# ANY reason took the user's work with it — silently. The three real paths:
+#
+#   * the PC is restarted mid-review;
+#   * the process crashes;
+#   * Claude hits a usage limit, the session-scoped heartbeat pulser dies with
+#     the turn, and 30 min later the watchdog reaps a server that was still
+#     holding an unprocessed submission.
+#
+# In all three, `GET /pending` afterwards answers `false` — indistinguishable
+# from "the user never submitted". The store closes that hole from two sides:
+# the submission is durable BEFORE the browser is told the POST succeeded, and
+# processing progress is journalled AS IT HAPPENS, so a resumed session can
+# establish where it stood instead of guessing.
+#
+#   <store>/journal.jsonl   append-only, fsynced, NEVER truncated — the full
+#                           history of submissions, pickups, progress
+#                           checkpoints, attachments and resets.
+#   <store>/state.json      atomically replaced snapshot of the live globals,
+#                           so a restart restores in O(1) without replaying.
+#   <store>/attachments/    content-addressed image blobs (sha256).
+#   <store>/UNPROCESSED     written when the process is torn down while a
+#                           submission is unprocessed; read by the
+#                           `ss.concept.resume` SessionStart hook.
+#
+# The store lives under the PROJECT ROOT (`.claude/concepts/<slug>/`) rather
+# than beside the concept HTML in `docs/concepts/`. It survives worktree wipes
+# for the same reason `.claude/concept-active.json` does, it stays out of the
+# tracked content tree so a pasted screenshot cannot be committed by accident,
+# and it is one directory to remove when the user discards the concept.
+
+_store_dir = None
+_journal_path = None
+_state_path = None
+_attach_dir = None
+_marker_path = None
+_journal_seq = 0
+_store_ok = False  # stays False until the store is initialised AND writable
+_store_lock = threading.Lock()
+
+# Lock ordering is always `_lock` -> `_store_lock`, never the reverse. Request
+# handlers take `_lock`; store helpers take only `_store_lock`. Holding `_lock`
+# across an fsync costs a few ms on the other endpoints, which is the right
+# trade: a heartbeat that waits is harmless, an unpersisted submission is not.
+
+MAX_DECISIONS_BYTES = 32 * 1024 * 1024
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+MAX_ATTACHMENT_TOTAL_BYTES = 200 * 1024 * 1024
+_attach_total_bytes = 0
+# Guards the quota-check → write → accounting sequence as one critical section.
+# Separate from `_store_lock` so a large blob write never blocks a heartbeat.
+_attachment_quota_lock = threading.Lock()
+
+# Raster only, and SVG is deliberately absent. The bridge serves attachments
+# back to the page from the SAME origin, so an inline <script> in an uploaded
+# SVG would execute against the bridge origin and could drive every endpoint
+# on it. There is no use case for a pasted vector screenshot that justifies it.
+ATTACH_EXT_BY_MIME = {
+    'image/png': '.png',
+    'image/jpeg': '.jpg',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+}
+# Reverse map for serving. Deriving the response Content-Type from OUR map
+# rather than from the stored upload means a blob can only ever be served as
+# one of the four raster types we accepted in the first place.
+ATTACH_MIME_BY_EXT = {v: k for k, v in ATTACH_EXT_BY_MIME.items()}
+_SHA256_RE = None  # compiled in _store_init to keep the import list tight
+
+
+def _durable_write(path, data_bytes):
+    """Atomically replace `path`, fsyncing the payload before the rename.
+
+    tmp-write + fsync + os.replace is the only sequence that cannot leave a
+    half-written state.json behind: os.replace is atomic on both POSIX and
+    Windows (same volume), and the fsync guarantees the bytes are on the
+    platter before the rename publishes them.
+    """
+    tmp = path + '.tmp'
+    with open(tmp, 'wb') as f:
+        f.write(data_bytes)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def _store_init(store_dir):
+    """Create the store and prove it is writable. Returns True on success.
+
+    A store we cannot write to must fail LOUDLY at startup rather than at the
+    moment the user submits — the launcher checks the exit code, so a bad
+    path surfaces before the browser tab is ever opened.
+    """
+    global _store_dir, _journal_path, _state_path, _attach_dir, _marker_path
+    global _store_ok, _journal_seq, _attach_total_bytes, _SHA256_RE
+    import re
+    _SHA256_RE = re.compile(r'^[0-9a-f]{64}$')
+    try:
+        os.makedirs(store_dir, exist_ok=True)
+        _attach_dir = os.path.join(store_dir, 'attachments')
+        os.makedirs(_attach_dir, exist_ok=True)
+        _store_dir = store_dir
+        _journal_path = os.path.join(store_dir, 'journal.jsonl')
+        _state_path = os.path.join(store_dir, 'state.json')
+        _marker_path = os.path.join(store_dir, 'UNPROCESSED')
+        # Journal line count is authoritative for the sequence: records may
+        # have been appended after the last state.json snapshot was written.
+        if os.path.exists(_journal_path):
+            with open(_journal_path, 'r', encoding='utf-8') as f:
+                _journal_seq = sum(1 for line in f if line.strip())
+        _attach_total_bytes = sum(
+            os.path.getsize(os.path.join(_attach_dir, n))
+            for n in os.listdir(_attach_dir)
+            if os.path.isfile(os.path.join(_attach_dir, n))
+        )
+        _store_ok = True
+        return True
+    except OSError as exc:
+        sys.stderr.write(f"[concept-server] store unusable at {store_dir}: {exc}\n")
+        _store_ok = False
+        return False
+
+
+def _journal_append(record):
+    """Append one fsynced record. Raises OSError so callers that must not
+    silently succeed (POST /decisions, POST /attachments) can refuse to ack."""
+    global _journal_seq
+    if not _store_ok:
+        return None
+    with _store_lock:
+        _journal_seq += 1
+        rec = dict(record)
+        rec['seq'] = _journal_seq
+        rec['ts'] = _iso_now()
+        with open(_journal_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+            f.flush()
+            os.fsync(f.fileno())
+        return _journal_seq
+
+
+def _state_write(snapshot):
+    """Persist a caller-built snapshot. The caller assembles it while holding
+    `_lock` so the on-disk state is a consistent view, never a torn read."""
+    if not _store_ok:
+        return
+    _durable_write(_state_path, json.dumps(snapshot, ensure_ascii=False).encode('utf-8'))
+
+
+def _snapshot(decisions, version, processed_at, picked_up_at, phase):
+    return {
+        'decisions': decisions,
+        'version': version,
+        'processed_at': processed_at,
+        'picked_up_at': picked_up_at,
+        'phase': phase,
+        'journal_seq': _journal_seq,
+        'saved_at': _iso_now(),
+    }
+
+
+def _is_submitted(raw):
+    try:
+        obj = json.loads(raw)
+        return bool(isinstance(obj, dict) and obj.get('submitted') is True)
+    except (ValueError, TypeError):
+        return False
+
+
+def _set_unprocessed_marker(version, reason=''):
+    """Flag that a submission exists which nobody has processed yet.
+
+    Written on submit and removed on reset, so its mere presence after a
+    teardown is the signal `ss.concept.resume` needs — no journal replay
+    required to answer "did we lose something?".
+    """
+    if not _store_ok:
+        return
+    try:
+        _durable_write(_marker_path, json.dumps({
+            'version': version,
+            'reason': reason,
+            'at': _iso_now(),
+        }).encode('utf-8'))
+    except OSError:
+        pass
+
+
+def _clear_unprocessed_marker():
+    if not _store_ok:
+        return
+    try:
+        os.remove(_marker_path)
+    except OSError:
+        pass
+
+
+def _store_restore():
+    """Reload state.json at boot so a restarted bridge serves the SAME pending
+    submission and version it held before it died. This single function is
+    what turns #284's "version: 0, indistinguishable from never submitted"
+    into a faithful resume."""
+    global _decisions, _version, _processed_at, _picked_up_at, _phase
+    if not _store_ok or not os.path.exists(_state_path):
+        return None
+    try:
+        with open(_state_path, 'r', encoding='utf-8') as f:
+            snap = json.load(f)
+    except (OSError, ValueError):
+        sys.stderr.write("[concept-server] state.json unreadable — starting clean\n")
+        return None
+    if not isinstance(snap, dict):
+        return None
+    decisions = snap.get('decisions')
+    version = snap.get('version')
+    if not isinstance(decisions, str) or not isinstance(version, int) or version < 0:
+        return None
+    try:
+        parsed = json.loads(decisions)
+        if not isinstance(parsed, dict):
+            return None
+    except (ValueError, TypeError):
+        return None
+    _decisions = decisions
+    _version = version
+    _processed_at = snap.get('processed_at') if isinstance(snap.get('processed_at'), str) else ''
+    _picked_up_at = snap.get('picked_up_at') if isinstance(snap.get('picked_up_at'), str) else ''
+    _phase = snap.get('phase') if isinstance(snap.get('phase'), str) else ''
+    return snap
+
+
+def _read_progress():
+    """Replay the journal's progress checkpoints for GET /recovery.
+
+    This is the "where did we stand" half of the contract. Checkpoints are the
+    ONLY evidence a resumed session has about how far a previous run got, and
+    they are advisory: the resume flow verifies each claimed artifact against
+    reality (does the branch exist, is the PR merged, were the issues created)
+    before continuing. A checkpoint says where to look, never what to trust.
+    """
+    if not _store_ok or not os.path.exists(_journal_path):
+        return []
+    out = []
+    try:
+        with open(_journal_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(rec, dict) and rec.get('type') == 'progress':
+                    out.append(rec)
+    except OSError:
+        return out
+    return out
+
+
+def _attachment_meta():
+    """List persisted attachments so a reloaded page can rebuild thumbnails."""
+    if not _store_ok or not _attach_dir or not os.path.isdir(_attach_dir):
+        return []
+    out = []
+    try:
+        for name in sorted(os.listdir(_attach_dir)):
+            p = os.path.join(_attach_dir, name)
+            if os.path.isfile(p):
+                out.append({'id': name, 'size': os.path.getsize(p)})
+    except OSError:
+        pass
+    return out
 
 
 class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
@@ -228,6 +529,55 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             with _lock:
                 counter = _reload_counter
             self._json_response({"counter": counter})
+        elif self.path == '/recovery':
+            # "Where did we stand?" — the endpoint a resumed session asks
+            # before doing anything else. Reports whether a submission is
+            # unprocessed, which version it is, and every progress checkpoint
+            # a previous run managed to journal.
+            #
+            # `unprocessed` is computed from the LIVE payload, not from the
+            # marker file, so it stays correct even if a marker write failed.
+            # The marker is reported separately as corroborating evidence of
+            # a hard teardown (watchdog reap, crash) rather than a clean exit.
+            with _lock:
+                data = _decisions
+                version = _version
+                processed_at = _processed_at
+                picked_up_at = _picked_up_at
+                phase = _phase
+            marker = None
+            if _store_ok and _marker_path and os.path.exists(_marker_path):
+                try:
+                    with open(_marker_path, 'r', encoding='utf-8') as f:
+                        marker = json.load(f)
+                except (OSError, ValueError):
+                    marker = {'unreadable': True}
+            progress = _read_progress()
+            self._json_response({
+                "durable": _store_ok,
+                "store_dir": _store_dir or '',
+                "unprocessed": _is_submitted(data),
+                "version": version,
+                "processed_at": processed_at,
+                "picked_up_at": picked_up_at,
+                "phase": phase,
+                "marker": marker,
+                "progress": progress,
+                "last_checkpoint": progress[-1] if progress else None,
+                "attachments": _attachment_meta(),
+                "journal_seq": _journal_seq,
+            })
+        elif self.path.startswith('/attachments/'):
+            # Content-addressed read-back so a reloaded page can rebuild its
+            # thumbnails from the server instead of trusting only IndexedDB.
+            #
+            # The id is matched against a strict sha256+known-extension shape
+            # BEFORE it touches the filesystem, so a user-supplied filename can
+            # never traverse out of the attachments directory. Content-Type
+            # comes from our own extension map (never from the upload) and
+            # nosniff blocks the browser from re-interpreting a raster blob as
+            # something executable.
+            self._serve_attachment(self.path[len('/attachments/'):])
         else:
             super().do_GET()
 
@@ -244,18 +594,102 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             self._json_response({"ok": True, "ts": ts, "claude_ts": ts})
         elif self.path == '/decisions':
             length = int(self.headers.get('Content-Length', 0))
+            if length > MAX_DECISIONS_BYTES:
+                self.send_error(413, "decisions payload too large")
+                return
             body = self.rfile.read(length).decode()
+            # ---- DURABILITY GATE (#284) --------------------------------
+            # The browser is told "ok" only after the payload is on disk.
+            # Accepting in RAM and acking optimistically is exactly what
+            # made submissions vanish: the page cleared its local copy on
+            # a success it had no right to trust. If the disk write fails
+            # we answer 507 and the page KEEPS its IndexedDB copy and
+            # surfaces the failure, instead of painting a success panel
+            # over work that no longer exists anywhere.
+            err = None
+            seq = None
+            version = None
             with _lock:
-                _decisions = body
-                _version += 1
-                version = _version
-                # New submission supersedes any prior pickup/phase state.
-                # If we kept _picked_up_at across submissions, the progress
-                # list on the new submission would already show "Claude
-                # verarbeitet" before Claude's cron actually noticed.
-                _picked_up_at = ''
-                _phase = ''
-            self._json_response({"ok": True, "version": version})
+                next_version = _version + 1
+                try:
+                    seq = _journal_append({
+                        'type': 'submission',
+                        'version': next_version,
+                        'payload': body,
+                    })
+                    _state_write(_snapshot(body, next_version, _processed_at, '', ''))
+                    if _is_submitted(body):
+                        _set_unprocessed_marker(next_version, 'submitted')
+                except OSError as exc:
+                    err = str(exc)
+                if err is None:
+                    _decisions = body
+                    _version = next_version
+                    version = next_version
+                    # A new submission supersedes any prior pickup/phase
+                    # state. Keeping _picked_up_at would make the new
+                    # submission's progress list show "Claude verarbeitet"
+                    # before Claude's cron had actually noticed it.
+                    _picked_up_at = ''
+                    _phase = ''
+            if err is not None:
+                self._error_response(507, {
+                    "ok": False,
+                    "durable": False,
+                    "reason": "store_write_failed",
+                    "detail": err,
+                })
+                return
+            self._json_response({
+                "ok": True,
+                "version": version,
+                "durable": _store_ok,
+                "seq": seq,
+            })
+        elif self.path == '/attachments':
+            self._handle_attachment_upload()
+        elif self.path == '/progress':
+            # Claude checkpoints its own processing here: which action it is
+            # running, which step it reached, and the real-world artifacts it
+            # produced (branch, commit, PR number, created issue numbers).
+            #
+            # This is what makes auto-resume safe. Without checkpoints a
+            # recovered `implement` or `ship` could only be re-run blind;
+            # with them the resume flow knows where to LOOK, verifies each
+            # artifact against reality, and continues from the observed
+            # state. Checkpoints are evidence to check, never truth to trust.
+            length = int(self.headers.get('Content-Length', 0))
+            payload = {}
+            if length > 0:
+                try:
+                    raw = self.rfile.read(length).decode()
+                    payload = json.loads(raw) if raw else {}
+                except (ValueError, UnicodeDecodeError):
+                    payload = {}
+            if not isinstance(payload, dict):
+                payload = {}
+            with _lock:
+                current_version = _version
+            try:
+                seq = _journal_append({
+                    'type': 'progress',
+                    'version': payload.get('version', current_version),
+                    'action': str(payload.get('action') or ''),
+                    'step': str(payload.get('step') or ''),
+                    'status': str(payload.get('status') or ''),
+                    'artifacts': payload.get('artifacts')
+                    if isinstance(payload.get('artifacts'), dict) else {},
+                    'note': str(payload.get('note') or ''),
+                })
+            except OSError as exc:
+                self._error_response(507, {
+                    "ok": False,
+                    "durable": False,
+                    "reason": "store_write_failed",
+                    "detail": str(exc),
+                })
+                return
+            self._json_response({"ok": True, "seq": seq, "durable": _store_ok})
         elif self.path == '/status':
             # Free-form phase channel: Claude POSTs {"phase": "implemented",
             # "version": N} after the implement branch finished its code
@@ -333,6 +767,25 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     self.send_error(403, "forbidden origin")
                     return
             self._json_response({"ok": True, "shutting_down": True})
+            # Final durable snapshot before we go. A graceful /shutdown is
+            # normally the cleanup path (concept disposed), but it is also how
+            # `ss.concept.resume` reaps an orphan — so an unprocessed
+            # submission must survive this exit exactly as it survives a
+            # watchdog reap.
+            with _lock:
+                _snap = _snapshot(_decisions, _version, _processed_at, _picked_up_at, _phase)
+                _unprocessed = _is_submitted(_decisions)
+            try:
+                _journal_append({
+                    'type': 'shutdown',
+                    'version': _snap['version'],
+                    'unprocessed': _unprocessed,
+                })
+                _state_write(_snap)
+            except OSError:
+                pass
+            if _unprocessed:
+                _set_unprocessed_marker(_snap['version'], 'shutdown')
             _remove_registry()  # drop our port-registry entry (os._exit skips atexit)
             # Flush the response, then exit on a short delay so the wfile
             # has time to drain before the socket closes. os._exit skips
@@ -365,6 +818,25 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     # state so the next submission starts from a clean panel.
                     _picked_up_at = ''
                     _phase = ''
+                    # Durable side of the reset. The journal is append-only,
+                    # so the processed submission stays recoverable forever;
+                    # only the LIVE payload is cleared. Dropping the marker
+                    # here is what tells a later resume "nothing was lost".
+                    # Best-effort: a reset that cannot reach disk must still
+                    # succeed in RAM, or a full disk would wedge the loop with
+                    # a submission Claude has already acted on.
+                    try:
+                        _journal_append({
+                            'type': 'processed',
+                            'version': _version,
+                            'processed_at': _processed_at,
+                        })
+                        _state_write(_snapshot(
+                            _decisions, _version, _processed_at, '', ''))
+                    except OSError as exc:
+                        sys.stderr.write(
+                            f"[concept-server] reset persisted in memory only: {exc}\n")
+                    _clear_unprocessed_marker()
                     self._json_response({"ok": True, "version": _version, "processed_at": _processed_at})
                 else:
                     # Mismatch — newer submission landed after Claude read
@@ -397,6 +869,190 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         self._cors_headers()
         self.end_headers()
         self.wfile.write(body)
+
+    def _error_response(self, code, data):
+        """Structured non-200 with a machine-readable reason.
+
+        The page distinguishes "rejected, keep your local copy and tell the
+        user" (507 store_write_failed) from a transport error, so the body
+        matters — a bare send_error would give it only an HTML page.
+        """
+        body = json.dumps(data).encode()
+        self.send_response(code)
+        self.send_header('Content-Type', 'application/json')
+        self._cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _same_origin_ok(self):
+        """True for curl (no Origin) or a fetch from the served page itself."""
+        origin = self.headers.get('Origin')
+        if origin is None:
+            return True
+        host = self.headers.get('Host', '')
+        port_part = host.split(':')[-1] if ':' in host else ''
+        return origin in {
+            f'http://{host}',
+            f'http://localhost:{port_part}',
+            f'http://127.0.0.1:{port_part}',
+        }
+
+    def _serve_attachment(self, ident):
+        """Serve one content-addressed blob.
+
+        `ident` is validated against a strict `<sha256>.<known-ext>` shape
+        before it is joined to a path, so nothing a user can type reaches the
+        filesystem as a traversal. Content-Type comes from our own extension
+        map — never from the upload — and nosniff stops the browser from
+        re-interpreting the bytes as anything executable.
+        """
+        if not _store_ok or not _attach_dir:
+            self.send_error(404)
+            return
+        base, _, ext = ident.rpartition('.')
+        mime = ATTACH_MIME_BY_EXT.get('.' + ext) if ext else None
+        if not mime or not _SHA256_RE or not _SHA256_RE.match(base):
+            self.send_error(404)
+            return
+        path = os.path.join(_attach_dir, ident)
+        try:
+            with open(path, 'rb') as f:
+                blob = f.read()
+        except OSError:
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header('Content-Type', mime)
+        self.send_header('Content-Length', str(len(blob)))
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Content-Disposition', 'inline')
+        self._cors_headers()
+        self.end_headers()
+        self.wfile.write(blob)
+
+    def _handle_attachment_upload(self):
+        """Persist one pasted/dropped image, content-addressed by sha256.
+
+        Uploaded at ATTACH time, not at submit time — that is the whole point.
+        An image the user pasted is on disk seconds later, long before they
+        decide to submit, so even a hard teardown mid-review cannot lose it.
+
+        Content addressing makes the write idempotent for free: the same image
+        pasted twice (or re-sent by the client's retry queue) resolves to the
+        same file, so a retry can never duplicate a blob or corrupt one.
+        """
+        global _attach_total_bytes
+        if not self._same_origin_ok():
+            self.send_error(403, "forbidden origin")
+            return
+        if not _store_ok:
+            self._error_response(507, {
+                "ok": False, "durable": False, "reason": "store_unavailable",
+            })
+            return
+        length = int(self.headers.get('Content-Length', 0))
+        # base64 inflates by ~4/3; cap the wire size before reading it in.
+        if length > MAX_ATTACHMENT_BYTES * 2:
+            self._error_response(413, {
+                "ok": False, "reason": "too_large",
+                "max_bytes": MAX_ATTACHMENT_BYTES,
+            })
+            return
+        try:
+            payload = json.loads(self.rfile.read(length).decode())
+        except (ValueError, UnicodeDecodeError):
+            self._error_response(400, {"ok": False, "reason": "bad_json"})
+            return
+        if not isinstance(payload, dict):
+            self._error_response(400, {"ok": False, "reason": "bad_json"})
+            return
+        mime = str(payload.get('mime') or '').lower()
+        ext = ATTACH_EXT_BY_MIME.get(mime)
+        if not ext:
+            # SVG lands here on purpose — see ATTACH_EXT_BY_MIME.
+            self._error_response(415, {
+                "ok": False, "reason": "unsupported_type", "mime": mime,
+                "allowed": sorted(ATTACH_EXT_BY_MIME),
+            })
+            return
+        try:
+            blob = base64.b64decode(str(payload.get('data') or ''), validate=True)
+        except (ValueError, TypeError):
+            self._error_response(400, {"ok": False, "reason": "bad_base64"})
+            return
+        if not blob:
+            self._error_response(400, {"ok": False, "reason": "empty"})
+            return
+        if len(blob) > MAX_ATTACHMENT_BYTES:
+            self._error_response(413, {
+                "ok": False, "reason": "too_large",
+                "size": len(blob), "max_bytes": MAX_ATTACHMENT_BYTES,
+            })
+            return
+
+        digest = hashlib.sha256(blob).hexdigest()
+        ident = digest + ext
+        path = os.path.join(_attach_dir, ident)
+
+        # Quota check, write and accounting must be ONE critical section. This
+        # is a ThreadingHTTPServer, so `_attach_total_bytes += n` is a
+        # read-modify-write that two concurrent uploads can interleave: both
+        # pass the check against a stale total, and one increment is lost, so
+        # the cap drifts upward permanently. `_attachment_quota_lock` is taken
+        # WITHOUT holding `_lock`, keeping the global `_lock -> _store_lock`
+        # ordering intact (_journal_append takes _store_lock below).
+        already = False
+        err = None
+        quota_exceeded = False
+        with _attachment_quota_lock:
+            already = os.path.exists(path)
+            if not already and (_attach_total_bytes + len(blob)) > MAX_ATTACHMENT_TOTAL_BYTES:
+                quota_exceeded = True
+            elif not already:
+                try:
+                    _durable_write(path, blob)
+                    _attach_total_bytes += len(blob)
+                except OSError as exc:
+                    err = str(exc)
+        if quota_exceeded:
+            self._error_response(507, {
+                "ok": False, "reason": "quota_exceeded",
+                "total_bytes": _attach_total_bytes,
+                "max_total_bytes": MAX_ATTACHMENT_TOTAL_BYTES,
+            })
+            return
+        if err is not None:
+            self._error_response(507, {
+                "ok": False, "durable": False,
+                "reason": "store_write_failed", "detail": err,
+            })
+            return
+        if not already:
+            try:
+                _journal_append({
+                    'type': 'attachment',
+                    'id': ident,
+                    'sha256': digest,
+                    'mime': mime,
+                    'size': len(blob),
+                    # Display name only. It never touches a filesystem path —
+                    # the stored filename is derived purely from the digest.
+                    'name': str(payload.get('name') or '')[:200],
+                })
+            except OSError:
+                # The blob itself is already fsynced, which is what matters for
+                # recovery; a missing journal line only costs an audit entry.
+                pass
+        self._json_response({
+            "ok": True,
+            "durable": True,
+            "id": ident,
+            "sha256": digest,
+            "mime": mime,
+            "size": len(blob),
+            "url": f"/attachments/{ident}",
+            "deduplicated": already,
+        })
 
     def _send_raw_json(self, raw):
         self.send_response(200)
@@ -463,6 +1119,7 @@ def _watchdog(html_path, heartbeat_timeout_ms, interval_s=30, html_grace_s=10):
                         f"[watchdog] html_path gone for > {html_grace_s}s: "
                         f"{html_path} — shutting down\n"
                     )
+                    _watchdog_teardown('html_gone')
                     _remove_registry()
                     os._exit(0)
             else:
@@ -475,8 +1132,49 @@ def _watchdog(html_path, heartbeat_timeout_ms, interval_s=30, html_grace_s=10):
                 f"[watchdog] claude_ts stale by {now_ms - claude_ts}ms "
                 f"(threshold {heartbeat_timeout_ms}ms) — shutting down\n"
             )
+            _watchdog_teardown('heartbeat_stale')
             _remove_registry()
             os._exit(0)
+
+
+def _watchdog_teardown(reason):
+    """Last rites before `os._exit(0)`.
+
+    The watchdog used to be a silent data shredder: the `heartbeat_stale`
+    branch fires exactly when Claude has hit a usage limit (the session-scoped
+    pulser died with the turn, nothing else POSTs /heartbeat), so after the
+    default 30 min it reaped a server that was still holding the user's
+    unprocessed submission — with the payload only ever in RAM.
+
+    Killing the process is still correct; it is what keeps a ghost bridge from
+    outliving its session. What changes is that the kill is no longer
+    destructive. The submission is already on disk from the /decisions
+    durability gate, and this records HOW the process died plus a marker so
+    the next SessionStart reports a recoverable loss instead of silence.
+    """
+    with _lock:
+        data = _decisions
+        version = _version
+        processed_at = _processed_at
+        picked_up_at = _picked_up_at
+        phase = _phase
+    unprocessed = _is_submitted(data)
+    try:
+        _journal_append({
+            'type': 'watchdog_exit',
+            'reason': reason,
+            'version': version,
+            'unprocessed': unprocessed,
+        })
+        _state_write(_snapshot(data, version, processed_at, picked_up_at, phase))
+    except OSError:
+        pass  # we are exiting either way; the submission was fsynced at POST
+    if unprocessed:
+        _set_unprocessed_marker(version, f'watchdog:{reason}')
+        sys.stderr.write(
+            f"[watchdog] UNPROCESSED submission v{version} preserved in "
+            f"{_store_dir} — the next session will recover it\n"
+        )
 
 
 class ConceptBridgeServer(http.server.ThreadingHTTPServer):
@@ -574,6 +1272,12 @@ if __name__ == '__main__':
                              'Default 1800000 (30 min). Calibrated for concept-review '
                              'flows with long user-idle phases. Pass a lower value '
                              '(e.g. 300000) for active coding sessions.')
+    parser.add_argument('--store', default=None,
+                        help='Durable store directory for submissions, progress '
+                             'checkpoints and attachments. Defaults to '
+                             '.claude/concepts/<html-basename>/ inside <directory>. '
+                             'Without a usable store the bridge refuses to start — '
+                             'a bridge that cannot persist is the bug (#284).')
     args = parser.parse_args()
 
     port = int(args.port)
@@ -585,6 +1289,42 @@ if __name__ == '__main__':
     # cwd-change (unlikely, but cheap to be defensive) cannot misdirect the
     # existence check.
     html_path = os.path.abspath(args.html) if args.html else None
+
+    # ---- Durable store (#284) --------------------------------------------
+    # Derived from the concept filename so each concept gets its own directory
+    # and `discard` is a single recursive delete. Anchored at the project root
+    # (cwd after the chdir above), never inside a worktree.
+    if args.store:
+        store_dir = os.path.abspath(args.store)
+    elif args.html:
+        slug = os.path.splitext(os.path.basename(args.html))[0]
+        store_dir = os.path.abspath(os.path.join('.claude', 'concepts', slug))
+    else:
+        store_dir = os.path.abspath(os.path.join('.claude', 'concepts', f'port-{port}'))
+
+    if not _store_init(store_dir):
+        # Refusing to start is the point. A bridge that silently runs without
+        # durability is precisely the failure this whole change removes — it
+        # would look healthy right up until it ate a submission.
+        sys.stderr.write(
+            f"[concept-server] refusing to start without a writable store.\n"
+            f"[concept-server] tried: {store_dir}\n"
+        )
+        sys.exit(1)
+
+    restored = _store_restore()
+    if restored:
+        _resume_note = (
+            f"[concept-server] restored state v{_version} from {store_dir}"
+        )
+        if _is_submitted(_decisions):
+            _resume_note += "  ** UNPROCESSED SUBMISSION — pending stays true **"
+        print(_resume_note)
+        _journal_append({
+            'type': 'restore',
+            'version': _version,
+            'unprocessed': _is_submitted(_decisions),
+        })
 
     # Prime + self-pulse: the browser checks the heartbeat within 5s of page
     # load, so set `_server_ts` once before serving and then refresh every 30s
