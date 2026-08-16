@@ -53,9 +53,13 @@ In order of preference:
 The repo-root `CLAUDE.md` is the last resort — only when neither a skill nor
 deep-knowledge fits and the rule is a one-liner. The plugin directory has no
 CLAUDE.md of its own; its conventions live in `{PLUGIN_ROOT}/CONVENTIONS.md`.
-After
-any CLAUDE.md edit, invoke `/claude-lint` via the **Skill** tool; do not eyeball
-line counts. Keep CLAUDE.md at ~20 lines (target).
+
+Every CLAUDE.md edit is measured by the `post.claude.budget` hook (25-line
+budget) — do not eyeball line counts and do not re-check by hand. If it
+reports, either extract per
+`{PLUGIN_ROOT}/deep-knowledge/content-conventions.md` or say in Step 5 why you
+left it; a reported overage that goes unmentioned is the failure this
+measurement exists to prevent.
 
 ## B — Upstream issue: what to hand over
 
@@ -109,7 +113,8 @@ Prefer the largest fitting container: **deep-knowledge > skill > CLAUDE.md**.
   AskUserQuestion: create a new project skill, or fall back to deep-knowledge.
 
 Append a one-line pointer to `{project}/CLAUDE.md` only as a last resort, so the
-new file gets discovered — then invoke `/claude-lint` via the **Skill** tool.
+new file gets discovered. The `post.claude.budget` hook measures the result;
+relay what it says rather than counting lines yourself.
 
 ### C-override — a deliberate deviation from a plugin default
 

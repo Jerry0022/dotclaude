@@ -64,11 +64,14 @@ const PLUGIN_DK_DIR = path.join(PLUGIN_ROOT, "deep-knowledge");
 // project is told to create — not a doc that exists here. Keyed per filename,
 // not per skill, so the rest of that skill's refs stay checked.
 // One entry per exemption, each with the reason.
-const EXEMPT_DK_REF_FILES = new Map([
-  ["architecture.md", "claude-lint proposes this as a destination for a consumer project's own content."],
-  ["api.md", "claude-lint proposes this as a destination for a consumer project's own content."],
-  ["setup.md", "claude-lint proposes this as a destination for a consumer project's own content."],
-]);
+//
+// Currently empty: the extraction targets that needed exempting
+// (architecture.md, api.md, setup.md) moved out of skills/ and into
+// deep-knowledge/content-conventions.md, which this assertion does not scan.
+// The mechanism stays because the next skill proposing a consumer-side path
+// will need it — an unexplained bare ref is otherwise indistinguishable from
+// a typo.
+const EXEMPT_DK_REF_FILES = new Map([]);
 
 describe("bare deep-knowledge/ refs resolve", () => {
   test("every exemption states why it is not a broken reference", () => {

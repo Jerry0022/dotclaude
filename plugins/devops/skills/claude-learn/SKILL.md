@@ -164,7 +164,8 @@ prompt: `deep-knowledge/feedback-cleanup.md` (sibling of this file).
 ## Step 5 — Report
 
 - Which file(s) changed (path + line delta), and the verbatim rule added
-- CLAUDE.md touched → relay the `/claude-lint` output, do not re-count lines
+- CLAUDE.md touched → relay what `post.claude.budget` reported, if anything; do
+  not re-count lines by hand
 - Feedback memories deleted in Step 4 → list them
 - Branch B / D → the issue URL; branch D without a remote → the hand-off block
 
