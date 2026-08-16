@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.132.0] — 2026-08-16
+
+### Changed
+
+- **The autonomous runners only queue issues written by people who can already push to the repo.** Anyone on the internet can open an issue on a public repository, and `/run-backlog` treats an issue body as a work order — it refines it, implements it, tests it, and merges it into `main` while nobody is watching. That made the issue body the highest-privilege untrusted input in the whole pipeline, and a stranger's issue indistinguishable from the maintainer's. Both runners now resolve the repo's owners and write-level collaborators before any issue reaches a selection list, and queue only those. Read-only collaborators and outside contributors who merely open pull requests do not qualify.
+
+  The trusted set is resolved at runtime from the repository the skill happens to be running in — never a login list carried between projects, because the maintainers of the next project are different people. The collaborators API is the authority; when the token cannot read it (a fork, a read-only clone), GitHub's own per-issue `author_association` stands in, restricted to `OWNER`, `MEMBER`, and `COLLABORATOR`. Two details in that fallback are easy to get wrong and are documented as such: the issues endpoint returns pull requests alongside issues, and `gh issue list --json` has no `authorAssociation` field at all — the association exists only via `gh api`. If the trusted set cannot be resolved by either route, the run does nothing rather than falling back to "run everything". Widening the set is a repository setting, not a plugin one: add the contributor as a collaborator and the next run picks them up.
+
+  Filtering is never silent. Dropped issues are carried into the report and the presence-timeout path as `🚫 fremd`, so a shortened queue can't be mistaken for an empty backlog — and they are never commented on, labelled, or closed, since reacting to them at all would be outward-facing communication with a third party on the user's behalf. The gate also applies inside a milestone taken wholesale, and to the timeout default that fires when the user walks away mid-selection: a timeout must never widen the queue past what a present user would have been offered.
+
+### Removed
+
+- **The `/commit` skill.** Writing a conventional commit is something the model does unaided; wrapping it in a skill bought a turn's worth of ceremony for a message it would have written anyway. What was actually worth keeping was never the procedure but the conventions — the type table, the subject rules, the co-author footer, and the granularity guidance with its 50-commit soft cap per branch — and those now live in `deep-knowledge/commit-conventions.md`, referenced by `/ship` and every role agent rather than re-derived. Staging and branch rules stay in `git-hygiene.md`, unduplicated.
+
+  Two references were load-bearing rather than cosmetic and are worth naming: the plugin-scope detector matched `/commit` as a plugin signal, which would have mis-routed any prompt about an ordinary git commit into plugin-defect handling, and the ship-detection hook offered `Skill("commit")` as the fallback for "I only want a commit" — a suggestion for a skill that no longer exists. Both now point at the conventions instead.
+
 ## [0.131.0] — 2026-08-16
 
 ### Added
