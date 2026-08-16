@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.131.0] — 2026-08-16
+
+### Added
+
+- **`/claude-batch` collects prompts instead of executing them, then merges the whole set into one plan.** Working alongside a running app produces a stream of small observations — a misplaced button, a wrong error string, an idea for a filter — and sending each as its own prompt costs a full turn apiece, every one of them paying the entire accumulated context as input. The larger cost is not the tokens, though: observation five routinely supersedes observation one, and whatever was built for one was built for nothing. Collecting first removes both. While the mode is active a UserPromptSubmit hook blocks each prompt — the harness erases it, so it never reaches the model — and appends it to `.claude/batch.md`. A configurable marker at the start of a line (`!` by default, chosen once on first use) means "work on it now": the full note set is injected as context, checked for feasibility against the actual code, and merged into a single plan whose contradictions are listed one by one rather than quietly resolved by "later wins". After approval it routes to `/concept` when the conflicts deserve a decision page, and straight into implementation when they do not.
+
+  The notes live in the project, not in the temp directory: they survive a crash, a reboot, and `/clear` — which mints a new session id and would orphan session-scoped state — and they can be read, corrected, or filled entirely without Claude running. Four things are never collected, each for a reason that would otherwise cost the user something real. Machine prompts pass through, including `AUTONOMOUS_AUTOSTART:` and `AUTONOMOUS_RESUME:`, which do not match the existing silent-turn patterns and would leave an AFK run to never start; the `/concept` bridge polls once a minute and would die inside the window. Expanded slash commands pass through, because a real command arrives carrying a `<command-name>` tag rather than the typed text, and a naive comparison would miss exactly the escape hatch it is meant to protect. Prompts with attachments or `@file` mentions pass through, because a blocked prompt is erased and a collected screenshot would be gone for good. And any failure to store a note lets the prompt run normally instead of blocking it — a lost prompt is worse than a missed collection.
+
+  Being locked out is structurally impossible rather than merely unlikely: the mode carries both a time limit and a note cap, and either one ends collection on its own. A detached watchdog reminds via a Windows toast after ten minutes without a *user* prompt — its clock is a dedicated file, not the notes' timestamp, because the once-a-minute bridge cron would otherwise reset it forever and the threshold would never be reached. Sibling hooks in the same event group run in parallel and are not short-circuited by a block, so the four that write one-shot state now check whether the prompt is being collected and stand down; `prompt.git.sync` in particular no longer consumes its background-sync result into a turn that does not exist. The optional local-LLM path is limited to de-duplication and formatting, never interpretation — the delegation rules classify ambiguous user requests as never-delegate, and a wrong compaction would drop a requirement whose original is no longer on screen to check against.
+
+  **Two limits worth knowing.** A question sent without the marker lands silently in the queue instead of being answered; a hint is appended when a note ends in a question mark, but the hook deliberately never guesses what a question is. And zero token cost is a reasonable inference, not a guarantee — the documentation states only that a blocked prompt never reaches the model, and Anthropic promises nothing about billing.
+
 ## [0.130.0] — 2026-08-16
 
 ### Changed
@@ -16,6 +28,7 @@
 
 - **A merge artifact in the concept bridge documentation.** A paragraph from step 3 had been spliced into the middle of the timestamp-convention code block in the file's preamble, breaking that block's markdown and leaving the unit contract — the single most expensive silent-failure mode the document warns about — sitting behind mangled formatting.
 
+||||||| parent of 366426a (chore(release): v0.130.0)
 ## [0.129.0] — 2026-08-16
 
 ### Changed

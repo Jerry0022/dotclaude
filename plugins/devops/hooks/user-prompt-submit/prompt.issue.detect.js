@@ -26,6 +26,11 @@ process.stdin.on('end', () => {
   try { hook = JSON.parse(inputData); }
   catch { process.exit(0); }
 
+  // A collected prompt produces no turn — recording a tracked issue or fixing
+  // the session locale from it would stick while the payload goes nowhere.
+  try { if (require('../lib/batch-state').willBeCollected(hook)) process.exit(0); }
+  catch { /* fail open */ }
+
   const message = hook.user_message || hook.message || '';
   if (!message) process.exit(0);
 

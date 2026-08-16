@@ -23,6 +23,11 @@ process.stdin.on('end', () => {
   try { hook = JSON.parse(inputData); }
   catch { process.exit(0); }
 
+  // A collected prompt produces no turn — recording a start intent from it
+  // would leave the flag set for a prompt that was erased.
+  try { if (require('../lib/batch-state').willBeCollected(hook)) process.exit(0); }
+  catch { /* fail open */ }
+
   const userMessage = (hook.user_message || hook.message || '').toLowerCase().trim();
   if (!userMessage) process.exit(0);
 

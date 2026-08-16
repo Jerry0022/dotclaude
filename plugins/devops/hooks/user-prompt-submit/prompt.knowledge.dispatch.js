@@ -156,6 +156,11 @@ process.stdin.on('end', () => {
   try { hook = JSON.parse(inputData); }
   catch { process.exit(0); }
 
+  // A collected prompt produces no turn — marking a doc "already injected" here
+  // would burn the one-shot for a prompt nobody ever sees. See willBeCollected().
+  try { if (require('../lib/batch-state').willBeCollected(hook)) process.exit(0); }
+  catch { /* fail open */ }
+
   const userMessage = (hook.user_message || hook.message || '').toLowerCase().trim();
   if (!userMessage || userMessage.length < 5) process.exit(0);
 
