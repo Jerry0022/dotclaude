@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.130.0**
+**Version: 0.131.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -167,8 +167,8 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ## Features
 
-- **<!--devops:count:hooks-->41<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->21<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, auto-graph
+- **<!--devops:count:hooks-->42<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:skills-->22<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, auto-graph
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /ship skill routing
@@ -178,7 +178,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->41<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->42<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -208,6 +208,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 #### UserPromptSubmit — runs when the user sends a message
 
+- `prompt.batch.collect` — Collect mode for `/claude-batch`: while active, blocks the user prompt (exit 2 — the…
 - `prompt.flow.silent-turn` — Detects background/cron-injected prompts and marks the turn as "silent" so post.flow.…
 - `prompt.knowledge.dispatch` — On-demand deep-knowledge injection based on prompt keywords.
 - `prompt.git.sync` — Delivers the result of a background git sync — nothing else.
@@ -272,6 +273,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 - `post.flow.completion` — Track code edits, inject completion reminder *(PostToolUse)*
 - `post.flow.debug` — Recommend /fix after repeated failures *(PostToolUse)*
+- `prompt.batch.collect` — Collect prompts instead of executing them, in `/claude-batch` mode *(UserPromptSubmit)*
 - `prompt.flow.appstart` — Detect app start intent, enforce completion card *(UserPromptSubmit)*
 - `prompt.flow.silent-turn` — Mark background/cron-injected turns *(UserPromptSubmit)*
 - `stop.flow.guard` — Enforce completion card before response ends *(Stop)*
@@ -329,6 +331,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/tune-polish` | Explicit | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
 | `/auto-graph` | Explicit + Hook | On-demand code knowledge graph via graphify, with opt-in auto-build + hard-gate enforcement |
 | `/tune-rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, concept decision, autonomous implementation |
+| `/claude-batch` | Explicit + Hook | Collect mode: batch prompts into `.claude/batch.md` instead of executing them, then merge into one feasibility-checked plan |
 
 #### The `run-*` family — let Claude execute autonomously
 
@@ -692,8 +695,8 @@ Wk  ━━──╏─────────   15% +1%   · 4d 22h left
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->41<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
-├── skills/                        ← <!--devops:count:skills-->21<!--/devops:count:skills--> skill definitions (SKILL.md)
+├── hooks/                         ← <!--devops:count:hooks-->42<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── skills/                        ← <!--devops:count:skills-->22<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
