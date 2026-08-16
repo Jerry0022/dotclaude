@@ -46,12 +46,15 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
-const { runOnce } = require('../lib/run-once');
+const { runOnce, releaseOnce } = require('../lib/run-once');
 const gstate = require('../lib/graphify-state');
 const graphNudge = require('../lib/graph-nudge');
 
 const cwd = process.cwd();
 const cwdKey = crypto.createHash('md5').update(cwd).digest('hex').slice(0, 12);
+
+/** Report a starved refresh every Nth consecutive decline, not every session. */
+const DECLINE_REPORT_EVERY = 5;
 
 /**
  * Gap #5/#6: surface a background-build failure or a graph that looks
@@ -178,6 +181,28 @@ const needsRebuild = !graphNudge.hasGraph(cwd)
 // gstate.bgWithSentinel (a per-project PID lock) — it is what actually caps
 // concurrency at one build per project across all spawn triggers.
 if (needsRebuild && runOnce('ss-graphify-update', cwdKey, { cooldownMs: 10 * 60 * 1000 })) {
-  gstate.bgWithSentinel('graphify', ['update', '.'], cwd); // background, key-less, AST-only, free
+  // background, key-less, AST-only, free
+  const spawned = gstate.bgWithSentinel('graphify', ['update', '.'], cwd);
+  if (!spawned) {
+    // The throttle token was consumed as a side effect of the condition above,
+    // BEFORE bgWithSentinel got to decline (PID lock held, or the machine-wide
+    // cap reached). Keeping it would mean the next session redraws the same
+    // losing ticket for 10 minutes with no build having run — on a machine with
+    // many worktrees competing for a cap of 2, that starves a project
+    // indefinitely, and silently (issue #291). Hand the token back so the next
+    // trigger gets a real attempt the moment a slot frees up.
+    releaseOnce('ss-graphify-update', cwdKey);
+    // Losing every draw for a long stretch is not an ordinary skip: the search
+    // hard-gate steers agents toward a graph that is now weeks old. Say so —
+    // once per streak-threshold, not every session.
+    const declines = gstate.declineCount(cwd);
+    if (declines > 0 && declines % DECLINE_REPORT_EVERY === 0) {
+      console.log(
+        `[graphify] Graph-Refresh ${declines}× in Folge abgelehnt (andere Builds laufen, ` +
+        `Cap ${gstate.updateGlobalCap()}). Der Graph dieses Projekts ist womöglich veraltet — ` +
+        `mit \`graphify update .\` manuell erzwingen oder DOTCLAUDE_GRAPH_MAX_BUILDS erhöhen.`,
+      );
+    }
+  }
 }
 process.exit(0);
