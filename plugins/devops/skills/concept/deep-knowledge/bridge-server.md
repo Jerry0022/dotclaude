@@ -8,14 +8,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 > is **milliseconds since the Unix epoch**, byte-compatible with JavaScript's
 > `Date.now()`. The browser compares them directly, with no conversion:
 > ```js
-> Date.now() - _lastHeartbeatTs < HEARTBEAT_STALE_MS   
-
-   **Verify both actually started.** They are the only launches in this document
-   whose failure is silent — the server has a heartbeat round-trip, the port has
-   a single-listener assert, the page has a 200-gate, and these had nothing.
-   Read each task's output once after launching: a `*_EXIT reason=` line within
-   seconds means it never got going. `STATE_NEVER_APPEARED` in particular means
-   the launch outran step 4 — write the state file, then re-launch.// both in ms
+> Date.now() - _lastHeartbeatTs < HEARTBEAT_STALE_MS   // both in ms
 > Date.now() - _lastServerTs    < SERVER_STALE_MS       // same unit contract
 > ```
 > `_lastServerTs` (cached from `server_ts`) is compared against `SERVER_STALE_MS`
@@ -144,43 +137,89 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    the connection indicator green AND automatically picks up user submissions
    — no manual trigger needed from the user.
 
+   **The prompt is two sentences — the procedure is a script.** Claude Code
+   renders a cron's *entire* prompt text as its card in the background tasks
+   panel, so the old inline body (gate + heartbeat + `curl | python -c` probe +
+   the whole pending-branch procedure, 1128 characters) made one card fill the
+   panel and hid every other background task from the user. Nothing was
+   dropped: `scripts/concept-tick.js` performs every one of those steps and
+   prints an instruction only on the ticks that need one, so an ordinary idle
+   tick now costs zero tokens instead of re-reading the procedure every minute.
+
+   **Resolve the script at run time, never bake in a versioned path.** A cron
+   outlives a plugin rebuild: an in-session `/ship` writes the new version under
+   a fresh `.../devops/<version>/` directory and deletes the old one, so an
+   absolute path baked into the prompt dangles from that moment and every tick
+   fails MODULE_NOT_FOUND — once a minute, silently, for the rest of the
+   session. In the versioned cache layout emit the same `ls -d … | head -1`
+   prefix `ss.git.sync` uses (the rebuild leaves exactly one version directory,
+   so the glob is unambiguous), with the literal path as the fallback:
+   `f="$(ls -d "{cache-root}/devops"/*/scripts/concept-tick.js 2>/dev/null | head -1)"; node "${f:-{literal}}"`.
+   A dev/marketplace checkout has no version directory and just uses the
+   literal path, which is the form shown below.
+
    ```
    CronCreate(cron: "* * * * *", recurring: true, prompt: <<EOF
-   Silently service the concept bridge on port {port}.
+   Silently run via Bash: node "{plugin-root}/scripts/concept-tick.js" --port {port} --state "{project-root}/.claude/concept-active.json" — this services the concept bridge on port {port}. No output → produce NO output (silent tick). Any output IS your instruction for this tick: follow it exactly.
+   EOF)
+   ```
 
-   (0) Self-cleanup gate (FIRST step every tick).
-       Read `.claude/concept-active.json` from the project root. Cleanup
-       triggers when ANY of these is true:
+   **Two phrasings in that prompt are load-bearing — do not tidy them up.**
+   - It MUST **start** with `Silently run`. The `prompt.flow.silent-turn` hook
+     marks a cron tick as a silent turn only when the prompt *opens* with a
+     silence marker. Put anything in front of it — a `Concept bridge, port N — `
+     lead-in reads nicely and is exactly the trap — and every tick is treated as
+     a real user turn: the completion-card reminder fires and the stop hook
+     blocks the turn to force a card, once a minute, for the whole session.
+   - It MUST contain the literal `port {port}`. Step (0)'s orphan sweep deletes
+     "every cron whose prompt mentions `port {port}`" when the state file, and
+     with it `cron_id`, is gone. `--port {port}` alone does not match that
+     phrasing, so the trailing clause is what keeps the sweep able to find this
+     cron.
+
+   **`--state` must be ABSOLUTE**, for the same reason it is absolute for the
+   watchers below: a relative `.claude/concept-active.json` is resolved against
+   the cron task's cwd, which is not always the project root the state file
+   lives in.
+
+   **What `concept-tick.js` does on each tick** — the same three steps, in the
+   same order, with the same triggers:
+
+   (0) **Self-cleanup gate (FIRST step every tick).** It reads the state file
+       at `--state`. Cleanup triggers when ANY of these is true:
          - The state file is missing.
-         - State.port ≠ {port} (this cron is for a stale session — a
-           newer concept overwrote the state file with a different port).
-         - State.html_path does not exist on disk.
-       On trigger:
-         - Bash: curl -s -X POST http://localhost:{port}/shutdown > /dev/null 2>&1 || true
-         - Then call CronDelete with the id from the (still-readable)
-           state file's `cron_id` field — OR, if the state file is gone
-           entirely, list crons via CronList and delete every cron whose
-           prompt mentions `port {port}` (a missing state file proves
-           the session is unrecoverable; sweeping by-port catches the
-           orphan even when the id is lost).
-       Produce NO user-visible output. Skip steps 1 and 2.
+         - `state.port` ≠ `{port}` (this cron is for a stale session — a newer
+           concept overwrote the state file with a different port).
+         - `state.html_path` does not exist on disk (resolved against the
+           state file's grandparent, i.e. the project root).
+       A state file that is present but *unreadable* (EBUSY/EPERM during a
+       rewrite on Windows, EMFILE under load) or half-written is explicitly
+       NOT a trigger — one unlucky tick must not tear down a live concept.
+       On trigger the script POSTs `/shutdown` itself, then prints the one
+       instruction it cannot execute, because `CronDelete` is a tool:
+       delete `cron_id` from the still-readable state file — or, if the state
+       file is gone entirely, `CronList` and delete every cron whose prompt
+       mentions `port {port}` (a missing state file proves the session is
+       unrecoverable; sweeping by-port catches the orphan even when the id is
+       lost). Steps 1 and 2 are skipped.
 
-   (1) Heartbeat POST:
-       Bash: curl -s -X POST http://localhost:{port}/heartbeat > /dev/null
+   (1) **Heartbeat POST** to `/heartbeat`. A failure here is reported on
+       stderr only, never as an instruction: bridge liveness is owned by the
+       keepalive pulser and the server-side `--html` watchdog, and a per-tick
+       complaint about a dying bridge would spam the transcript once a minute.
 
-   (2) Pending check — use the deterministic /pending endpoint, NOT a
-       substring match on /decisions. The response is a strict JSON object
-       `{"pending": true|false, "version": N}` with no free-form content.
-       Bash (produces ONLY the literal string "true" or "false"):
-         curl -s http://localhost:{port}/pending | python -c "import sys,json; d=json.load(sys.stdin); print('true' if d.get('pending') else 'false')"
+   (2) **Pending check** against the deterministic `/pending` endpoint — a
+       strict `{"pending": true|false, "version": N}` with no free-form
+       content, **never** a substring match on `/decisions`. Not pending →
+       the script prints nothing at all and the tick is silent.
 
-       If the output is exactly "false" → produce NO user-visible output. Silent tick.
-
-       If the output is exactly "true" → fetch the full payload and process:
-         Bash: curl -s http://localhost:{port}/decisions
-         • Parse the JSON. Note `_version`. Strip `_version` and `_processed_at`
-           before treating the rest as decision data. Read `action` — it is
-           one of FIVE values, each with its own SKILL.md Step 5b branch:
+       Pending → it prints the processing instruction, carrying the version
+       from `/pending`. That instruction is the branch procedure that used to
+       sit in the cron prompt, and it is unchanged:
+         • Fetch `curl -s http://localhost:{port}/decisions`. Parse the JSON.
+           Note `_version`. Strip `_version` and `_processed_at` before
+           treating the rest as decision data. Read `action` — it is one of
+           FIVE values, each with its own SKILL.md Step 5b branch:
              - "iterate"        → next iteration on the concept page only
              - "implement"      → apply real code changes + final-report
              - "create-issues"  → apply the user-value gate (SKILL.md Step 5b,
@@ -212,26 +251,32 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 
          • After the file rewrite AND the `/reload` POST have completed,
            reset conditionally — pass the noted version:
-           Bash: curl -s -o /dev/null -w "%{http_code}" -X POST \
-                       -H "Content-Type: application/json" \
-                       -d '{"version": <noted>}' http://localhost:{port}/reset
+           `curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d '{"version": <noted>}' http://localhost:{port}/reset`
          • If the HTTP code is 409 (version mismatch) → the user submitted
            again while you were processing. Re-fetch /decisions, process the
            new payload (which supersedes what you just finished), then retry
            the conditional reset with the new `_version`.
-         • Report the outcome to the user. The visible panel reset happens
-           via the `/reload`-triggered `location.reload()` in the browser —
-           the page reloads onto the new iteration with a fresh ready panel.
-           The `_processed_at` poll is only a safety-net for stuck states.
-   EOF)
-   ```
+         • Re-launch the pickup waker immediately after `/reset`, then report
+           the outcome to the user. The visible panel reset happens via the
+           `/reload`-triggered `location.reload()` in the browser — the page
+           reloads onto the new iteration with a fresh ready panel. The
+           `_processed_at` poll is only a safety-net for stuck states.
 
-   **Why `/pending` + `python -c` instead of a substring check?** The
-   `/decisions` JSON response is formatted via Python's default
-   `json.dumps`, which emits `"submitted": true` **with** a space after the
-   colon — a literal `contains "submitted":true` test silently misses every
-   submission. `/pending` collapses the signal to a strict boolean so the
-   cron body cannot drift into false negatives between ticks.
+   **Why `/pending` and not a substring check on `/decisions`?** The
+   `/decisions` JSON response is formatted via Python's default `json.dumps`,
+   which emits `"submitted": true` **with** a space after the colon — a literal
+   `contains "submitted":true` test silently misses every submission.
+   `/pending` collapses the signal to a strict boolean, and `concept-tick.js`
+   parses it as JSON rather than string-matching it, so the check cannot drift
+   into false negatives between ticks.
+
+   **Why a script and not a Read per tick.** The other way to shorten the
+   prompt would be to have the cron read the procedure from a file. That costs
+   tokens on *every* tick, and the idle tick is the overwhelmingly common case
+   — a submission arrives once every few minutes at best. A Bash call that
+   prints nothing costs nothing, and it replaces the TWO curl calls the old
+   body already made per tick, so this is strictly cheaper than what it
+   replaced rather than a new per-tick cost.
 
    **Side effect — submit-panel progress list.** The first `/pending=true`
    response also stamps `_picked_up_at` on the server. The browser reads

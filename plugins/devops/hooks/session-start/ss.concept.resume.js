@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.concept.resume
- * @version 0.3.0
+ * @version 0.4.0
  * @event SessionStart
  * @plugin devops
  * @description Recover an open concept session after a Claude restart.
@@ -258,28 +258,57 @@ function probe(port, pathname, timeoutMs = 1500) {
 }
 
 /**
+ * A `node "<script>"` prefix that still resolves after an in-session `/ship`.
+ *
+ * A cron outlives a plugin rebuild. `ss.plugin.update.rebuildCache` writes the
+ * new version under a fresh `.../devops/<version>/` directory and removes the
+ * old one, so an absolute path baked into a cron prompt dangles from that
+ * moment on and every tick fails MODULE_NOT_FOUND — once a minute, silently,
+ * for the rest of the session. Same reasoning and same shape as
+ * `ss.git.sync`: in the versioned cache layout, resolve from the current
+ * version directory at run time (the rebuild leaves exactly one, so the glob
+ * is unambiguous) and fall back to the literal path if the glob comes up
+ * empty. A dev/marketplace checkout has no version directory, so it just uses
+ * the literal path.
+ */
+function resolveScript(name, baseDir = __dirname) {
+  const literal = path.resolve(baseDir, '..', '..', 'scripts', name);
+  const versionDir = path.resolve(baseDir, '..', '..');
+  if (!/^\d+\.\d+\.\d+/.test(path.basename(versionDir))) return `node "${literal}"`;
+  const parent = path.dirname(versionDir).replace(/\\/g, '/');
+  return `f="$(ls -d "${parent}"/*/scripts/${name} 2>/dev/null | head -1)"; node "\${f:-${literal.replace(/\\/g, '/')}}"`;
+}
+
+/**
  * The combined heartbeat + auto-poll cron body. Canonical definition lives in
  * `skills/concept/deep-knowledge/bridge-server.md` § step 3; this mirrors it so
  * a resumed session re-arms exactly what the original session had.
+ *
+ * The body used to spell out all three steps inline — 1128 characters of gate,
+ * heartbeat, `curl | python -c` probe and pending-branch procedure. Claude Code
+ * renders a cron's whole prompt as its card in the background tasks panel, so
+ * that one card filled the panel and hid every other task. The procedure did
+ * not shrink; it moved into `scripts/concept-tick.js`, which prints an
+ * instruction only on the ticks that need one and stays silent otherwise.
+ *
+ * Two phrasings here are load-bearing and must not be "tidied up":
+ *   - It has to START with `Silently run`. `prompt.flow.silent-turn` classifies
+ *     a cron tick as a silent turn only when the prompt OPENS with a silence
+ *     marker; anything in front of it (a `Concept bridge, port N — ` lead-in,
+ *     say) makes every tick look like a real user turn, and the completion-card
+ *     reminder plus the stop-hook enforcement fire once a minute.
+ *   - It has to contain the literal `port ${port}`. The cleanup path sweeps
+ *     orphaned crons via CronList "every cron whose prompt mentions
+ *     `port {port}`" once the state file — and with it `cron_id` — is gone.
+ *     `--port ${port}` alone does not match that phrasing.
  */
-function buildCronBody(port) {
+function buildCronBody(port, statePath = STATE_PATH) {
   return (
-    `Silently service the concept bridge on port ${port}. ` +
-    `(0) Self-cleanup gate (FIRST step every tick): Read \`.claude/concept-active.json\`. ` +
-    `Cleanup triggers if the file is missing, OR state.port ≠ ${port}, OR state.html_path does not exist on disk. ` +
-    `On trigger: (a) Bash: curl -s -X POST http://localhost:${port}/shutdown > /dev/null 2>&1 || true; ` +
-    `(b) CronDelete the cron_id from the still-readable state file — or, if the state file is gone, ` +
-    `CronList and delete every cron whose prompt mentions \`port ${port}\`. ` +
-    `Produce NO output and skip steps 1+2. ` +
-    `(1) Heartbeat POST: Bash: curl -s -X POST http://localhost:${port}/heartbeat > /dev/null. ` +
-    // The quotes here must reach Python bare. Escaping them as \' emits a
-    // literal backslash — bash does not strip it inside double quotes, so
-    // Python got a line-continuation SyntaxError and the resumed session's
-    // backup pickup path was dead on arrival. Pinned by a byte-for-byte test
-    // against bridge-server.md.
-    `(2) Pending check via /pending: Bash: curl -s http://localhost:${port}/pending | python -c "import sys,json; d=json.load(sys.stdin); print('true' if d.get('pending') else 'false')". ` +
-    `If exactly "false" → produce NO output (silent tick). ` +
-    `If exactly "true" → curl -s http://localhost:${port}/decisions, parse JSON, note _version, process per concept SKILL.md Step 5 (rewrite HTML, POST /reload, then conditionally POST /reset with the noted version). On 409 retry with the new version. Report the outcome to the user.`
+    `Silently run via Bash: ${resolveScript('concept-tick.js')} ` +
+    `--port ${port} --state "${statePath}" ` +
+    `— this services the concept bridge on port ${port}. ` +
+    `No output → produce NO output (silent tick). ` +
+    `Any output IS your instruction for this tick: follow it exactly.`
   );
 }
 
@@ -327,7 +356,7 @@ function buildResumeInstructions(state, pendingState, statePath = STATE_PATH, st
   );
   lines.push(
     `(a) BACKUP pickup path — CronCreate with cron "* * * * *" (recurring: true) and prompt: ` +
-    `'${buildCronBody(state.port)}'.`
+    `'${buildCronBody(state.port, statePath)}'.`
   );
   lines.push(
     `(b) Keepalive pulser — launch as a background Bash task (run_in_background: true). Without it ` +
@@ -396,6 +425,7 @@ function buildDeadBridgeRecovery(state, store) {
 module.exports = {
   isValidHtmlPath,
   isStale,
+  resolveScript,
   buildCronBody,
   buildBackgroundTasks,
   buildResumeInstructions,

@@ -1,11 +1,14 @@
 import { describe, test, expect } from "vitest";
+import path from "node:path";
 import {
   isValidHtmlPath,
   isStale,
+  resolveScript,
   buildCronBody,
   buildBackgroundTasks,
   buildResumeInstructions,
 } from "./ss.concept.resume.js";
+import { isSilent as isSilentTurn } from "../user-prompt-submit/prompt.flow.silent-turn.js";
 
 const STATE = { port: 8883, html_path: "docs/concepts/2026-08-15-x.html", slug: "x" };
 
@@ -38,19 +41,70 @@ describe("isStale", () => {
   });
 });
 
+// The cron prompt IS its card in the background tasks panel, so the procedure
+// it used to spell out inline (1128 characters of gate + heartbeat + probe +
+// pending branch) now lives in scripts/concept-tick.js. What is left has to
+// stay small — and has to keep two phrasings that are easy to "tidy up" into
+// a regression.
 describe("buildCronBody", () => {
-  test("carries the port into every endpoint", () => {
-    const body = buildCronBody(8883);
-    expect(body).toContain("http://localhost:8883/heartbeat");
-    expect(body).toContain("http://localhost:8883/pending");
-    expect(body).toContain("http://localhost:8883/decisions");
-    expect(body).toContain("http://localhost:8883/shutdown");
+  const STATE_PATH = "C:/proj/.claude/concept-active.json";
+
+  test("delegates the whole tick to concept-tick.js", () => {
+    const body = buildCronBody(8883, STATE_PATH);
+    expect(body).toContain("concept-tick.js");
+    expect(body).toContain("--port 8883");
+    expect(body).toContain(`--state "${STATE_PATH}"`);
   });
 
-  test("checks /pending, not a substring match on /decisions", () => {
-    // A `contains "submitted":true` test silently misses every submission,
-    // because json.dumps emits a space after the colon.
-    expect(buildCronBody(8883)).not.toMatch(/"submitted":\s*true/);
+  test("passes the state path ABSOLUTE", () => {
+    // A relative `.claude/concept-active.json` resolves against the cron task's
+    // cwd, which is not always the project root — the exact defect the watchers
+    // already had to fix.
+    expect(buildCronBody(8883)).toMatch(/--state "(?:[a-zA-Z]:[\\/]|\/)/);
+  });
+
+  test("carries no endpoint or procedure text any more", () => {
+    const body = buildCronBody(8883, STATE_PATH);
+    for (const leak of ["/heartbeat", "/pending", "/decisions", "/shutdown", "python -c", "CronDelete"]) {
+      expect(body, leak).not.toContain(leak);
+    }
+  });
+
+  test("stays short enough to be one card among many", () => {
+    expect(buildCronBody(8883, STATE_PATH).length).toBeLessThan(400);
+  });
+
+  test("OPENS with the silence marker prompt.flow.silent-turn keys off", () => {
+    // Not cosmetic. That hook flags a tick as silent only when the prompt
+    // *opens* with the marker; a lead-in in front of it makes every tick look
+    // like a real user turn, so the completion-card reminder and the stop-hook
+    // enforcement fire once a minute for the whole session.
+    expect(isSilentTurn(buildCronBody(8883, STATE_PATH))).toBe(true);
+  });
+
+  test("resolves the script at run time in the versioned cache layout", () => {
+    // A cron outlives a plugin rebuild: an in-session /ship writes the new
+    // version under a fresh .../devops/<version>/ and deletes the old one, so
+    // a baked-in absolute path fails MODULE_NOT_FOUND once a minute after it.
+    const cache = path.join("C:", "cache", "dotclaude", "devops", "0.128.0", "hooks", "session-start");
+    const out = resolveScript("concept-tick.js", cache);
+    expect(out).toContain("ls -d");
+    expect(out).toContain("/*/scripts/concept-tick.js");
+    expect(out).toContain("head -1");
+    // …and still runs SOMETHING if the glob comes up empty.
+    expect(out).toMatch(/node "\$\{f:-[^}]*concept-tick\.js\}"/);
+  });
+
+  test("a dev checkout has no version dir, so it uses the literal path", () => {
+    const dev = path.join("C:", "repo", "plugins", "devops", "hooks", "session-start");
+    expect(resolveScript("concept-tick.js", dev)).not.toContain("ls -d");
+    expect(resolveScript("concept-tick.js", dev)).toContain("concept-tick.js");
+  });
+
+  test("still mentions `port N` literally, for the orphan sweep", () => {
+    // Cleanup lists crons and deletes "every cron whose prompt mentions
+    // `port {port}`" when the state file, and with it cron_id, is gone.
+    expect(buildCronBody(8883, STATE_PATH)).toContain("port 8883");
   });
 });
 
@@ -133,6 +187,7 @@ describe("buildResumeInstructions", () => {
   test("a slug-less state file still produces usable instructions", () => {
     const out = buildResumeInstructions({ port: 9001, html_path: "docs/concepts/y.html" }, "idle");
     expect(out).toContain("slug ?");
-    expect(out).toContain("http://localhost:9001/pending");
+    // The port has to reach all three re-armed watchers, slug or no slug.
+    expect(out.match(/--port 9001/g)).toHaveLength(3);
   });
 });
