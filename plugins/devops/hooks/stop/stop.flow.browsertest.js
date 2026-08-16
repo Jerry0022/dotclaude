@@ -49,12 +49,16 @@ process.stdin.on('end', () => {
 
   const sessionId = hook.session_id;
 
-  const pendingResult = readSessionFile('dotclaude-devops-light-pending', sessionId);
-  const verifiedResult = readSessionFile('dotclaude-devops-light-verified', sessionId);
-  const redResult = readSessionFile('dotclaude-devops-light-red', sessionId);
-  const kindResult = readSessionFile('dotclaude-devops-light-kind', sessionId);
-  const silentResult = readSessionFile('dotclaude-devops-silent-turn', sessionId);
-  const blockCountResult = readSessionFile('dotclaude-devops-light-blockcount', sessionId);
+  // Every flag here is read EXACT (issue #290). This gate blocks on them and
+  // unlinks them on reset — a glob fallback would let it fire on a concurrent
+  // session's state and then delete that session's still-owed pending flag.
+  const EXACT = { exact: true };
+  const pendingResult = readSessionFile('dotclaude-devops-light-pending', sessionId, EXACT);
+  const verifiedResult = readSessionFile('dotclaude-devops-light-verified', sessionId, EXACT);
+  const redResult = readSessionFile('dotclaude-devops-light-red', sessionId, EXACT);
+  const kindResult = readSessionFile('dotclaude-devops-light-kind', sessionId, EXACT);
+  const silentResult = readSessionFile('dotclaude-devops-silent-turn', sessionId, EXACT);
+  const blockCountResult = readSessionFile('dotclaude-devops-light-blockcount', sessionId, EXACT);
 
   const blockCount = blockCountResult ? (parseInt(blockCountResult.content, 10) || 0) : 0;
 

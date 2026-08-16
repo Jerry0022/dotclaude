@@ -1,8 +1,10 @@
 import { describe, test, expect } from "vitest";
+import os from "os";
 import {
   BLOCK_CAP,
   isWebRenderableChange,
   isCodeChange,
+  isTempPath,
   classifyProfile,
   compileCarveOuts,
   carveOutsFromProfile,
@@ -207,6 +209,42 @@ describe("configured carve-outs in change detection", () => {
   test("default behavior unchanged without carve-outs", () => {
     expect(isWebRenderableChange("ideas/pitch.html")).toBe(true);
     expect(isCodeChange("ideas/inline.js")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scratchpad / temp carve-out (#290b)
+// ---------------------------------------------------------------------------
+
+describe("harness scratchpad is never a project change", () => {
+  const scratch = (f) =>
+    `${os.tmpdir()}\\claude\\C--Users-x-IdeaProjects-proj\\d27f6d54-e962\\scratchpad\\${f}`;
+
+  test("a probe script in the scratchpad does not arm the gate", () => {
+    for (const f of ["probe.js", "check.cjs", "dump.py", "render.html", "patch.ts"]) {
+      expect(isCodeChange(scratch(f))).toBe(false);
+      expect(isWebRenderableChange(scratch(f))).toBe(false);
+      expect(needsLightVerification("runner", scratch(f))).toBe(false);
+      expect(needsLightVerification("dom", scratch(f))).toBe(false);
+    }
+  });
+
+  test("recognised by shape too — any tmpdir root, both separators", () => {
+    expect(isTempPath("/var/folders/t9/claude/proj/sess/scratchpad/probe.js")).toBe(true);
+    expect(isCodeChange("D:\\other-temp\\claude\\proj\\sess\\scratchpad\\probe.js")).toBe(false);
+  });
+
+  test("anything else under the OS temp dir is not project source either", () => {
+    expect(isTempPath(`${os.tmpdir()}/some-tool/out.js`.replace(/\\/g, "/"))).toBe(true);
+    expect(isCodeChange(`${os.tmpdir()}\\some-tool\\out.js`)).toBe(false);
+  });
+
+  test("a real project file is unaffected", () => {
+    expect(isTempPath("src/app/store.ts")).toBe(false);
+    expect(isCodeChange("src/app/store.ts")).toBe(true);
+    expect(isWebRenderableChange("src/App.vue")).toBe(true);
+    // A project directory that merely contains the word 'scratchpad' still counts.
+    expect(isCodeChange("src/scratchpad/editor.ts")).toBe(true);
   });
 });
 

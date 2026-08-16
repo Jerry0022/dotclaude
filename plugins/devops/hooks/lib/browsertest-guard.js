@@ -38,6 +38,8 @@
 // Change detection
 // ---------------------------------------------------------------------------
 
+const os = require('os');
+
 // Markup / style / framework-component files are ALWAYS browser-renderable.
 const ALWAYS_WEB_RE = /\.(html?|css|scss|sass|less|vue|svelte|astro|tsx|jsx)$/i;
 // Bare scripts count as renderable only when they live under a UI source dir.
@@ -50,6 +52,31 @@ const CODE_EXT_RE =
 const TEST_FILE_RE = /\.(test|spec)\.[a-z]+$/i;
 // concept artifacts — generated analysis pages, NOT product UI.
 const CONCEPT_RE = /(^|\/)docs\/concepts\//i;
+// Harness scratchpad — the sanctioned, project-isolated temp dir for throwaway
+// probe scripts (`<tmpdir>/claude/<project>/<session>/scratchpad/`). Writing one
+// is not a project change and must never arm a project verification gate.
+// Matched by shape so a path from a differently-rooted tmpdir still qualifies.
+const SCRATCHPAD_RE = /(^|\/)claude\/[^/]+\/[^/]+\/scratchpad\//i;
+
+/**
+ * Is this path outside the project entirely — i.e. under the OS temp dir?
+ * Nothing there is project source, whatever its extension. Checked before any
+ * extension test so a `.js` probe script in the scratchpad cannot arm the gate.
+ * @param {string} normalizedPath — forward-slash path
+ * @returns {boolean}
+ */
+function isTempPath(normalizedPath) {
+  if (SCRATCHPAD_RE.test(normalizedPath)) return true;
+  let tmp;
+  try { tmp = String(os.tmpdir() || '').replace(/\\/g, '/').replace(/\/+$/, ''); }
+  catch { return false; }
+  if (!tmp) return false;
+  // Windows paths are case-insensitive; comparing lowercased is safe on POSIX
+  // too, where a genuine project path under /tmp is not something we track.
+  const p = normalizedPath.toLowerCase();
+  const t = tmp.toLowerCase();
+  return p === t || p.startsWith(t + '/');
+}
 
 /**
  * Compile project-configured carve-out patterns (no-runtime static paths that
@@ -123,6 +150,7 @@ const BLOCK_CAP = 2;
 function isWebRenderableChange(filePath, carveOuts) {
   if (!filePath) return false;
   const p = String(filePath).replace(/\\/g, '/');
+  if (isTempPath(p)) return false;          // scratchpad / temp — not the project
   if (CONCEPT_RE.test(p)) return false;     // concept carve-out
   if (isCarvedOut(p, carveOuts)) return false; // project no-runtime carve-out
   if (TEST_FILE_RE.test(p)) return false;   // *.test / *.spec — not a view
@@ -144,6 +172,7 @@ function isWebRenderableChange(filePath, carveOuts) {
 function isCodeChange(filePath, carveOuts) {
   if (!filePath) return false;
   const p = String(filePath).replace(/\\/g, '/');
+  if (isTempPath(p)) return false;
   if (CONCEPT_RE.test(p)) return false;
   if (isCarvedOut(p, carveOuts)) return false;
   if (TEST_FILE_RE.test(p)) return false;
@@ -486,6 +515,7 @@ module.exports = {
   BLOCK_CAP,
   isWebRenderableChange,
   isCodeChange,
+  isTempPath,
   classifyProfile,
   compileCarveOuts,
   carveOutsFromProfile,

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.132.1] — 2026-08-16
+
+### Fixed
+
+- **The Light-verification gate no longer blocks sessions that changed nothing** ([#290](https://github.com/Jerry0022/dotclaude/issues/290)). A purely read-only turn was blocked twice with "Code changed but no Light verification ran this session" and its completion card stamped ⚠ UNVERIFIED, in a session where `git status` was clean and no Edit or Write had run. Two independent causes compounded.
+
+  The first is the glob fallback in `readSessionFile`. When no file exists for this session's id, it returns the newest file with a matching prefix from *any* session in the last two hours — a workaround for Claude Code delivering different session ids to different hook types. Its inline comment claimed this prevented cross-session state bleeding; it was the cause of it. The gate read four foreign `light-pending` flags belonging to concurrent sessions, and worse, on reset it unlinked the file it had read — deleting another session's still-owed verification flag, so a session that really had changed code could finish unverified. Enforcement flags now read exact-only: every flag `stop.flow.browsertest`, `stop.flow.guard`, and the card's own `readVVState` block on. The fallback remains for advisory counters, where borrowing a neighbour's number costs nothing. That last one also explains a symptom nobody had connected to this issue: a card could be stamped ⚠ UNVERIFIED with all of its own tests green, because a *different* session still owed a check.
+
+  The second is that throwaway probe scripts in the harness scratchpad counted as code edits. The scratchpad (`<tmpdir>/claude/<project>/<session>/scratchpad/`) is the sanctioned place for one-off probe scripts, and all four live pending flags pointed at `.js`/`.cjs`/`.py` files there. Nothing under the OS temp directory is project source, whatever its extension, so `isCodeChange` and `isWebRenderableChange` now reject temp paths before any extension test — recognised both by tmpdir prefix and by the scratchpad's shape, so a path rooted in a different tmpdir is caught too. A project directory that merely happens to be named `scratchpad` is unaffected.
+
 ## [0.132.0] — 2026-08-16
 
 ### Changed

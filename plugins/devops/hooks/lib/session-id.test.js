@@ -81,3 +81,42 @@ describe("writeSessionFile + readSessionFile", () => {
     expect(result.content).toBe("glob-content");
   });
 });
+
+// ---------------------------------------------------------------------------
+// exact mode — enforcement flags must never read a foreign session's file (#290)
+// ---------------------------------------------------------------------------
+
+describe("readSessionFile — { exact: true }", () => {
+  test("a foreign session's file is NOT returned", () => {
+    const foreign = sessionFile(TEST_PREFIX, "exact-foreign-writer");
+    cleanupFiles.push(foreign, foreign + ".tmp");
+    writeSessionFile(foreign, "foreign-content");
+
+    // Without exact: the glob fallback hands over the neighbour's state.
+    expect(readSessionFile(TEST_PREFIX, "exact-reader").content).toBe("foreign-content");
+    // With exact: this session has no file, so it gets nothing — and crucially
+    // no `filePath` a gate could then unlink out from under the other session.
+    expect(readSessionFile(TEST_PREFIX, "exact-reader", { exact: true })).toBeNull();
+  });
+
+  test("this session's own file is still returned", () => {
+    const own = sessionFile(TEST_PREFIX, "exact-own");
+    cleanupFiles.push(own, own + ".tmp");
+    writeSessionFile(own, "own-content");
+
+    const result = readSessionFile(TEST_PREFIX, "exact-own", { exact: true });
+    expect(result).not.toBeNull();
+    expect(result.content).toBe("own-content");
+    expect(result.filePath).toBe(own);
+  });
+
+  test("only exact:true disables the fallback — other option shapes do not", () => {
+    const foreign = sessionFile(TEST_PREFIX, "exact-shape-writer");
+    cleanupFiles.push(foreign, foreign + ".tmp");
+    writeSessionFile(foreign, "shape-content");
+
+    for (const opts of [undefined, {}, { exact: false }, { exact: "yes" }]) {
+      expect(readSessionFile(TEST_PREFIX, "exact-shape-reader", opts)).not.toBeNull();
+    }
+  });
+});
