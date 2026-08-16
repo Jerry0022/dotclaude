@@ -13,12 +13,18 @@
  * PreToolUse). readSessionFile() handles this by falling back to a glob
  * search when the exact file is not found.
  *
+ * That fallback reads the newest matching file from ANY session, so it is
+ * scoped to advisory state only. **Enforcement flags — anything a gate blocks
+ * on — must pass `{ exact: true }`** (issue #290).
+ *
  * Usage:
  *   const { sessionFile, readSessionFile } = require('../lib/session-id');
  *   // Write: always use sessionFile() for the path
  *   const file = sessionFile('dotclaude-devops-edits', hookInput.session_id);
- *   // Read: use readSessionFile() which handles session_id mismatches
+ *   // Read (advisory): glob fallback handles session_id mismatches
  *   const content = readSessionFile('dotclaude-devops-edits', hookInput.session_id);
+ *   // Read (enforcement): this session's file or nothing
+ *   const flag = readSessionFile('dotclaude-devops-light-pending', id, { exact: true });
  */
 
 const path = require('path');
@@ -44,8 +50,20 @@ function writeSessionFile(filePath, content) {
  * Read a session file with glob fallback for session_id mismatches.
  * Tries exact match first, then searches for any file matching the prefix.
  * Returns { content, filePath } or null if not found.
+ *
+ * @param {string} prefix
+ * @param {string} sessionId
+ * @param {{ exact?: boolean }} [opts] — `exact: true` disables the glob
+ *   fallback entirely. **Mandatory for every enforcement flag** (issue #290):
+ *   the fallback returns the newest file with a matching prefix from ANY
+ *   concurrent session, so a gate reading it fires on foreign state — and a
+ *   gate that then unlinks `filePath` deletes the other session's still-owed
+ *   flag, letting a session that really did change code finish unverified. The
+ *   2-hour mtime window narrows that race, it does not close it. The fallback
+ *   exists for the issue-#10 session_id mismatch and is acceptable only for
+ *   advisory counters, where reading a neighbour's value costs nothing.
  */
-function readSessionFile(prefix, sessionId) {
+function readSessionFile(prefix, sessionId, opts) {
   // 1. Try exact match
   const exact = sessionFile(prefix, sessionId);
   try {
@@ -57,9 +75,11 @@ function readSessionFile(prefix, sessionId) {
     }
   }
 
+  if (opts && opts.exact === true) return null;
+
   // 2. Glob fallback — find any file matching the prefix.
-  //    Only consider files modified in the last 2 hours to prevent
-  //    cross-session state bleeding in concurrent sessions.
+  //    The 2-hour mtime window bounds how stale a foreign file may be; it does
+  //    NOT make the result this session's state. Never use it for enforcement.
   try {
     const tmpdir = os.tmpdir();
     const maxAgeMs = 2 * 60 * 60 * 1000; // 2 hours

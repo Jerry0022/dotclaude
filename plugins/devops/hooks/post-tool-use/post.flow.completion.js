@@ -109,7 +109,9 @@ process.stdin.on('end', () => {
   // user turn already rendered its card; this background tick must not trigger
   // a second one. Flag is written by prompt.flow.silent-turn and cleared by
   // stop.flow.guard at turn end.
-  const silentResult = readSessionFile('dotclaude-devops-silent-turn', hook.session_id);
+  // Exact match only (issue #290): a neighbouring session's silent-turn flag
+  // must not suppress this session's card reminder and light-pending bookkeeping.
+  const silentResult = readSessionFile('dotclaude-devops-silent-turn', hook.session_id, { exact: true });
   if (silentResult) process.exit(0);
 
   const toolName = hook.tool_name || '';

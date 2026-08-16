@@ -717,9 +717,10 @@ function renderContextHealth(toolCallCount) {
 
 const FLAG_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2h \u2014 matches session-id.js
 
-function readSessionFlagRaw(prefix, sessionId) {
+function readSessionFlagRaw(prefix, sessionId, opts) {
   const key = sessionId || 'unknown';
   try { return readFileSync(join(tmpdir(), `${prefix}-${key}`), 'utf8'); } catch { /* fall through */ }
+  if (opts && opts.exact === true) return null;
   try {
     const p = `${prefix}-`;
     const tmp = tmpdir();
@@ -734,8 +735,8 @@ function readSessionFlagRaw(prefix, sessionId) {
   return null;
 }
 
-function sessionFlagExists(prefix, sessionId) {
-  return readSessionFlagRaw(prefix, sessionId) !== null;
+function sessionFlagExists(prefix, sessionId, opts) {
+  return readSessionFlagRaw(prefix, sessionId, opts) !== null;
 }
 
 /**
@@ -743,11 +744,17 @@ function sessionFlagExists(prefix, sessionId) {
  * code change still owes a passing Light check (pending && !verified) \u2014 i.e. the
  * turn is finishing without verification (a silent skip, an order violation, or
  * a red run). `red` distinguishes "a test ran but failed" for the stamp wording.
+ *
+ * Read EXACT (issue #290). These three flags decide whether the card carries the
+ * \u26a0 UNVERIFIED stamp, so the glob fallback would let a concurrent session's
+ * pending flag stamp this card \u2014 the observed symptom: a turn whose tests all
+ * passed rendered as unverified because a neighbouring session still owed one.
  */
 function readVVState(sessionId) {
-  const pending = sessionFlagExists('dotclaude-devops-light-pending', sessionId);
-  const verified = sessionFlagExists('dotclaude-devops-light-verified', sessionId);
-  const red = sessionFlagExists('dotclaude-devops-light-red', sessionId);
+  const EXACT = { exact: true };
+  const pending = sessionFlagExists('dotclaude-devops-light-pending', sessionId, EXACT);
+  const verified = sessionFlagExists('dotclaude-devops-light-verified', sessionId, EXACT);
+  const red = sessionFlagExists('dotclaude-devops-light-red', sessionId, EXACT);
   return { unverified: pending && !verified, red };
 }
 

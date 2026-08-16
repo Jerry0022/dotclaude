@@ -39,11 +39,15 @@ process.stdin.on('end', () => {
 
   const sessionId = hook.session_id;
 
-  const workResult = readSessionFile('dotclaude-devops-work-happened', sessionId);
-  const cardResult = readSessionFile('dotclaude-devops-card-rendered', sessionId);
-  const silentResult = readSessionFile('dotclaude-devops-silent-turn', sessionId);
-  const valPendingResult = readSessionFile('dotclaude-devops-validation-pending', sessionId);
-  const valAttestedResult = readSessionFile('dotclaude-devops-validation-attested', sessionId);
+  // Enforcement flags — exact match only, never the glob fallback (issue #290):
+  // this gate blocks the stop on them, so a neighbouring session's file must not
+  // be able to answer for this one in either direction.
+  const EXACT = { exact: true };
+  const workResult = readSessionFile('dotclaude-devops-work-happened', sessionId, EXACT);
+  const cardResult = readSessionFile('dotclaude-devops-card-rendered', sessionId, EXACT);
+  const silentResult = readSessionFile('dotclaude-devops-silent-turn', sessionId, EXACT);
+  const valPendingResult = readSessionFile('dotclaude-devops-validation-pending', sessionId, EXACT);
+  const valAttestedResult = readSessionFile('dotclaude-devops-validation-attested', sessionId, EXACT);
 
   const workHappened = workResult !== null;
   const flagCardRendered = cardResult !== null;
