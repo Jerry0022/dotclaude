@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.128.0] — 2026-08-16
+
+### Changed
+
+- **The CLAUDE.md size budget is now measured when a file is written, instead of when someone remembers to check it.** It lived in `/claude-lint`, a skill that had to be invoked by hand — so in practice the budget was documented and never enforced. Nothing about the audit was wrong; the trigger was. The rules moved into `deep-knowledge/content-conventions.md`, which already owned the size table, and a new `post.claude.budget` hook measures the file at write time. Coverage widened along the way: the skill only ever looked at CLAUDE.md, while every file loaded as context costs its length in every session that touches it, so `SKILL.md`, agent definitions, a skill's `reference.md` and `deep-knowledge/*.md` are measured too, each against its own budget and its own ceiling. The two numbers that used to disagree — the norm said ~20/25 lines, the skill said 25/50 — are one table again, mirrored in the hook so they cannot drift apart silently.
+
+  The hook reports **growth, not size**, which is what keeps it from becoming noise: a file already over budget that is not getting worse says nothing, and neither do generated files. It never blocks — an oversized document is a debt to schedule, not a broken artifact — and it reports once per file per severity, on a two-hour cooldown rather than once-and-never-again, so a payload arriving without a session id cannot silence it permanently. `/setup-project` keeps the one-time sweep across both CLAUDE.md files; `/claude-learn` now relays what the hook found instead of counting lines by hand.
+
+  **Breaking:** `/claude-lint` no longer exists (22 skills → 21). Anything scripted against that command needs to drop it; the audit it performed now happens on its own.
+
+### Fixed
+
+- **The completion-flow hook test can no longer be silenced by a stray file in the temp directory.** The previous release gave these tests private temp directories, which fixed the failures; what it did not do is pin the behaviour, so nothing would notice if that isolation were removed later — the tests would simply go back to passing or failing according to what else had touched the machine. The hook reads its session state through a lookup that falls back to *any* file with a matching prefix younger than two hours, so a marker left by another test, an earlier run, or a real Claude session used to make it exit before printing anything. A regression test now plants exactly such a foreign marker and asserts the hook still speaks. The 30-second budget for process-spawning tests was extended to the four remaining files that spawn `node` and had been left on the five-second default.
+
+  The underlying lookup is unchanged and still applies in production: two Claude sessions running side by side can read each other's state. Narrowing it risks reviving the session-id inconsistency the fallback was written for, so it is tracked separately rather than patched blind.
+
 ## [0.127.0] — 2026-08-16
 
 ### Added
