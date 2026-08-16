@@ -24,6 +24,18 @@ require('../lib/plugin-guard');
 
 const { takeResult, renderContext } = require('../lib/git-sync-bg');
 
+// While /claude-batch collect mode is active, do not TAKE the result.
+// takeResult() consumes the file, and the payload leaves via stdout — i.e. as
+// turn context. A collected prompt is erased and produces no turn, so the
+// result would be consumed into nothing and a ⚠ conflict would never reach
+// anyone. Hooks in one event group run in PARALLEL and are not short-circuited
+// by a sibling's block, so the collect hook cannot prevent this for us.
+// Nothing is lost: the result file stays put and is delivered by the first
+// prompt that is not collected.
+try {
+  if (require('../lib/batch-state').isModeActive(process.cwd())) process.exit(0);
+} catch { /* batch state unreadable — deliver as usual */ }
+
 const result = takeResult(process.cwd());
 if (!result) process.exit(0);
 
