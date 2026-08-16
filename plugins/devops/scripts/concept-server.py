@@ -215,6 +215,9 @@ MAX_DECISIONS_BYTES = 32 * 1024 * 1024
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 MAX_ATTACHMENT_TOTAL_BYTES = 200 * 1024 * 1024
 _attach_total_bytes = 0
+# Guards the quota-check → write → accounting sequence as one critical section.
+# Separate from `_store_lock` so a large blob write never blocks a heartbeat.
+_attachment_quota_lock = threading.Lock()
 
 # Raster only, and SVG is deliberately absent. The bridge serves attachments
 # back to the page from the SAME origin, so an inline <script> in an uploaded
@@ -990,18 +993,42 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         digest = hashlib.sha256(blob).hexdigest()
         ident = digest + ext
         path = os.path.join(_attach_dir, ident)
-        already = os.path.exists(path)
-        if not already and (_attach_total_bytes + len(blob)) > MAX_ATTACHMENT_TOTAL_BYTES:
+
+        # Quota check, write and accounting must be ONE critical section. This
+        # is a ThreadingHTTPServer, so `_attach_total_bytes += n` is a
+        # read-modify-write that two concurrent uploads can interleave: both
+        # pass the check against a stale total, and one increment is lost, so
+        # the cap drifts upward permanently. `_attachment_quota_lock` is taken
+        # WITHOUT holding `_lock`, keeping the global `_lock -> _store_lock`
+        # ordering intact (_journal_append takes _store_lock below).
+        already = False
+        err = None
+        quota_exceeded = False
+        with _attachment_quota_lock:
+            already = os.path.exists(path)
+            if not already and (_attach_total_bytes + len(blob)) > MAX_ATTACHMENT_TOTAL_BYTES:
+                quota_exceeded = True
+            elif not already:
+                try:
+                    _durable_write(path, blob)
+                    _attach_total_bytes += len(blob)
+                except OSError as exc:
+                    err = str(exc)
+        if quota_exceeded:
             self._error_response(507, {
                 "ok": False, "reason": "quota_exceeded",
                 "total_bytes": _attach_total_bytes,
                 "max_total_bytes": MAX_ATTACHMENT_TOTAL_BYTES,
             })
             return
+        if err is not None:
+            self._error_response(507, {
+                "ok": False, "durable": False,
+                "reason": "store_write_failed", "detail": err,
+            })
+            return
         if not already:
             try:
-                _durable_write(path, blob)
-                _attach_total_bytes += len(blob)
                 _journal_append({
                     'type': 'attachment',
                     'id': ident,
@@ -1012,12 +1039,10 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     # the stored filename is derived purely from the digest.
                     'name': str(payload.get('name') or '')[:200],
                 })
-            except OSError as exc:
-                self._error_response(507, {
-                    "ok": False, "durable": False,
-                    "reason": "store_write_failed", "detail": str(exc),
-                })
-                return
+            except OSError:
+                # The blob itself is already fsynced, which is what matters for
+                # recovery; a missing journal line only costs an audit entry.
+                pass
         self._json_response({
             "ok": True,
             "durable": True,

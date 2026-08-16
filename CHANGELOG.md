@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.127.0] — 2026-08-16
+
+### Added
+
+- **Concept comments take images — paste, drop, or click the paperclip.** A screenshot is usually the fastest way to say what is wrong with a concept, and describing it in prose instead is work nobody should have to do twice. Every comment field now accepts `Ctrl`/`Cmd`+`V`, drag & drop, and a 📎 button. The image uploads the moment it is attached rather than when the form is submitted, so it is on disk seconds after being pasted — long before the decision to submit is made, and therefore outside the window where anything could be lost. A comment consisting of nothing but an image now counts as a comment; it used to be dropped for having no text. Images are content-addressed, so pasting the same one twice costs nothing and a retry can never duplicate it. Only real image formats are accepted, and a thumbnail marked with ⟳ means that one is still only on this machine.
+
+### Fixed
+
+- **A concept submission can no longer be lost, whatever happens to Claude or the machine.** Submissions lived in the bridge server's memory and nowhere else, so anything that ended that process took the user's work with it — and said nothing. Afterwards the bridge reported "nothing pending", which is indistinguishable from never having submitted, so the user waited for an iteration that was never coming and eventually had to redo the whole round. Three routes led there: restarting the PC, a crash, and — the common one — Claude hitting its usage limit, because the heartbeat that keeps the bridge alive dies with the turn and the watchdog then reaps the bridge half an hour later, holding the unread submission. Every submission is now written to disk and confirmed there *before* the page is told it went through, and the bridge reloads it on startup. The watchdog still shuts a stale bridge down, but shutting down no longer destroys anything.
+
+- **Work interrupted halfway through is now resumed from where it actually got to.** A submission that asks Claude to implement or ship can be cut off mid-flight, leaving a branch, a commit, or an open PR behind. Claude now records each of those as it happens, and a later session reads that record to find out how far the previous run got — then checks each item against reality before continuing, so nothing gets created twice and a merged PR is never merged again.
+
+- **The page no longer claims a submission went through when it did not.** It treated any answer from the bridge as success, including the one that means "I could not save this". The result was a confident "übermittelt" panel sitting on top of work that no longer existed anywhere. It now waits for confirmation that the submission reached disk, and says plainly when it did not — distinguishing a bridge that is merely unreachable, which resolves itself on reconnect, from one that cannot save, which needs attention.
+
+- **Discarding a concept now clears its attachments too**, and never silently deletes a submission Claude has not yet processed — that case is reported instead. Concept stores left behind by a wiped worktree or an interrupted session are swept after a week.
+
+- **Two hook test files no longer fail depending on what else the suite is doing.** Both passed alone and failed at random in a full run. The token-guard tests located their confirmation flag by looking for new files in the machine-wide temp directory and taking the first one, which under parallel execution could be a different test's flag — expiring that one left the test's own confirmation valid, so the expected block never came. The completion-card test read a hook's output without checking the hook had started at all, so a child process that failed to launch under load looked exactly like a hook that emitted nothing. Each test now gets a private temp directory, and the launch failure is retried while a process that genuinely ran is not, so a real defect still fails.
+
 ## [0.126.4] — 2026-08-15
 
 ### Fixed
