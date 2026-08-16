@@ -3,6 +3,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+// This file spawns real processes (hooks, scripts, or a server). The full suite
+// runs 64 files in parallel, all starting `node` at once, so process-start tail
+// latency reaches many times its isolated cost — enough for a spawn-heavy test
+// to blow the 5s default on a load spike rather than on a defect. Measured
+// 2026-08-16: the worst offender costs 832ms isolated and still timed out at 5s
+// during a full run. 30s leaves that headroom and still catches a genuine hang.
+vi.setConfig({ testTimeout: 30_000 });
+
 /**
  * Characterization test for the copy primitive behind ss.plugin.update.js's
  * copyDir() — issue #190.
