@@ -131,8 +131,20 @@ splitting the volatile value into a separate gitignored file.
 
 ## Step 2b — CLAUDE.md audit
 
-Run `/claude-lint` to check CLAUDE.md size and structure.
-Report the result in the final output under a `### CLAUDE.md` section.
+Check the project `CLAUDE.md` and the global `~/.claude/CLAUDE.md`: whether each
+exists, and its line count. Budgets, what to extract and where, the extraction
+procedure, and the scaffold for a missing file all live in
+`{PLUGIN_ROOT}/deep-knowledge/content-conventions.md` — read it rather than
+re-deriving the numbers.
+
+Report in the final output under a `### CLAUDE.md` section, per file:
+`[OK|WARNING|CRITICAL|MISSING]`, the line count against its budget, and whether
+it reads as an index or as documentation. With `--fix`, run the extraction
+procedure; without it, report only.
+
+This is the one-time sweep at setup. Ongoing enforcement is the
+`post.claude.budget` hook, which measures every Claude context file at write
+time — do not duplicate it into a recurring check here.
 
 ## Step 2c — Platform-specific permissions audit (Windows only)
 

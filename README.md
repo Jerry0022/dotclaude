@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.127.0**
+**Version: 0.128.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -167,8 +167,8 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ## Features
 
-- **<!--devops:count:hooks-->39<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->22<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, claude-lint, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, auto-graph
+- **<!--devops:count:hooks-->40<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:skills-->21<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, auto-graph
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /ship skill routing
@@ -178,7 +178,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->39<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->40<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -234,6 +234,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `post.flow.debug` — After 2+ consecutive Bash failures: recommend the flow skill.
 - `post.graphify.query` — When Claude runs `graphify query ...`, record a per-session flag so the PreToolUse gr…
 - `post.concept.gate` — Deterministic backstop for concept pages.
+- `post.claude.budget` — Deterministic context-budget gate for Claude configuration files — CLAUDE.md, SKILL.m…
 
 #### Stop — runs when Claude finishes responding
 
@@ -316,7 +317,6 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/claude-extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
 | `/setup-cleanup` | Explicit | Repository branch hygiene analysis and cleanup |
 | `/auto-update` | Explicit | Update the plugin to the latest version from GitHub |
-| `/claude-lint` | Explicit | Audit CLAUDE.md files for size, structure, and token efficiency |
 | `/concept` | Explicit | Interactive HTML page for analysis, plans, concepts, and prototypes |
 | `/run-agents` | Explicit | Evaluate agents and orchestrate parallel execution |
 | `/run-autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |
@@ -690,8 +690,8 @@ Wk  ━━──╏─────────   15% +1%   · 4d 22h left
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->39<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
-├── skills/                        ← <!--devops:count:skills-->22<!--/devops:count:skills--> skill definitions (SKILL.md)
+├── hooks/                         ← <!--devops:count:hooks-->40<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── skills/                        ← <!--devops:count:skills-->21<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
