@@ -165,10 +165,13 @@ function pendingInstruction(port, version) {
     (version === null ? '' : ` (version ${version})`) + `. ` +
     `Fetch it: curl -s http://localhost:${port}/decisions. Parse the JSON, note \`_version\`, and strip ` +
     `\`_version\` and \`_processed_at\` before treating the rest as decision data. Read \`action\` — it is one ` +
-    `of "iterate", "implement", "create-issues", "ship" or "dispose-concept", each with its own branch in ` +
+    `of "iterate", "implement" or "finalize" (legacy pages may still send "create-issues", "ship" or ` +
+    `"dispose-concept" one at a time), each with its own branch in ` +
     `concept SKILL.md Step 5b. Process per Step 5 (Live Feedback Loop). ` +
-    `Zero-prompt invariant: create-issues, ship and dispose-concept MUST complete without asking the user ` +
-    `anything — the button click was the sign-off, and the payload is self-sufficient (a ship-pipeline hard ` +
+    `"finalize" carries issues{} + ship{} + disposition{} in ONE payload — run the selected parts in the ` +
+    `fixed order issues, then ship, then Step 6 cleanup, and skip cleanup when the ship hard-fails. ` +
+    `Zero-prompt invariant: finalize MUST complete without asking the user ` +
+    `anything — the wizard's review screen was the sign-off, and the payload is self-sufficient (a ship-pipeline hard ` +
     `gate failure is the one exception, and a force-push to main still needs confirmation). ` +
     `Step 5c writes the new iteration to the HTML file and POSTs /reload BEFORE the reset. ` +
     `Reset LAST and conditionally, passing the noted version: curl -s -o /dev/null -w "%{http_code}" ` +

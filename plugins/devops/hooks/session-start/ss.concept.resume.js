@@ -182,6 +182,29 @@ function buildVerificationMandate(store) {
       `A previous run got as far as: action=${cp.action || '?'}, step=${cp.step || '?'}, ` +
       `status=${cp.status || '?'}, artifacts=${JSON.stringify(cp.artifacts || {})}.`
     );
+    // The LAST checkpoint alone is a trap for a multi-part action: a
+    // `finalize` that died after its ship part looks exactly like a
+    // stand-alone ship, so a resumed run verifies the release, calls the job
+    // done, and never runs the cleanup part — leaving the concept files, the
+    // durable store and concept-active.json behind. Emit the full trail and
+    // name the remaining parts explicitly.
+    if (store.progress.length > 1) {
+      lines.push(
+        `Full checkpoint trail (oldest first): ` +
+        store.progress
+          .map((p) => `${p.action || '?'}/${p.step || '?'}=${p.status || '?'}`)
+          .join(', ') + '.'
+      );
+    }
+    if (store.progress.some((p) => String(p.action || '').startsWith('finalize'))) {
+      lines.push(
+        `This was a close-out (\`finalize\`): it has THREE parts in fixed order — ` +
+        `issues, ship, then Step 6 cleanup. Re-read the submission payload for ` +
+        `\`issues\`/\`ship\`/\`disposition\` and finish every part the trail does not ` +
+        `already show as done. Finishing only the part the last checkpoint names is ` +
+        `the failure mode this trail exists to prevent.`
+      );
+    }
   } else {
     lines.push(`No progress checkpoint was written — the previous run died before it started processing.`);
   }

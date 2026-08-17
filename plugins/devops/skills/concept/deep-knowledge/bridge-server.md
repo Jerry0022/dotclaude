@@ -219,35 +219,37 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
          • Fetch `curl -s http://localhost:{port}/decisions`. Parse the JSON.
            Note `_version`. Strip `_version` and `_processed_at` before
            treating the rest as decision data. Read `action` — it is one of
-           FIVE values, each with its own SKILL.md Step 5b branch:
+           THREE values, each with its own SKILL.md Step 5b branch:
              - "iterate"        → next iteration on the concept page only
              - "implement"      → apply real code changes + final-report
-             - "create-issues"  → apply the user-value gate (SKILL.md Step 5b,
-                                  merges combination-only items silently), then
-                                  autonomously run `gh issue create` for each
-                                  gated item; NO AskUserQuestion, the user
-                                  already committed by clicking the button
-             - "ship"           → run the full ship pipeline (/ship),
-                                  mark the final report shipped, advance to
-                                  Step 6; NO AskUserQuestion, the button click
-                                  authorised the release. Stop + report on a
-                                  hard gate failure — never force past a gate
-             - "dispose-concept"→ record disposition, advance to Step 6
+             - "finalize"       → the final report's close-out wizard, ONE
+                                  payload carrying issues{} + ship{} +
+                                  disposition{}. Run the selected parts in a
+                                  FIXED order: (A) issues — user-value gate
+                                  (merges combination-only items silently),
+                                  then `gh issue create` per gated item;
+                                  (B) ship — the full /ship pipeline, stop +
+                                  report on a hard gate failure and skip (C);
+                                  (C) Step 6 cleanup with the disposition
+           Legacy pages generated before the wizard still send "create-issues",
+           "ship" or "dispose-concept" one at a time — map each onto the
+           matching part above (SKILL.md § Legacy final-report actions).
            Process per Step 5 (Live Feedback Loop) — act on the user's choices
            (approve/tweak/reject, included options, comment-driven tweaks).
            Step 5c writes the new iteration to the HTML file and POSTs
            `/reload` BEFORE the reset below. Reset is the LAST action.
 
-         • **Zero-prompt invariant for create-issues + ship + dispose-concept.**
-           These branches MUST complete end-to-end without asking the user
-           anything. The payload (items[] for create-issues, disposition{} for
-           ship + dispose-concept) is self-sufficient by design; any missing
-           optional field falls back to a sane default. If you catch yourself
-           reaching for AskUserQuestion in any of them, stop — the answer is in
-           the payload, the concept HTML, or the project's new-issue extension.
-           The user signed off by clicking the button. (Exception: `ship` MUST
-           still stop and surface a hard ship-pipeline gate failure, and a
-           force-push to main/master still needs explicit confirmation.)
+         • **Zero-prompt invariant for finalize (and its legacy variants).**
+           This branch MUST complete end-to-end without asking the user
+           anything. The payload (issues.items[], ship.run, disposition{}) is
+           self-sufficient by design; any missing optional field falls back to
+           a sane default. If you catch yourself reaching for AskUserQuestion,
+           stop — the answer is in the payload, the concept HTML, or the
+           project's new-issue extension. The user signed off on the wizard's
+           review screen, which named every consequence before the click.
+           (Exception: the ship part MUST still stop and surface a hard
+           ship-pipeline gate failure, and a force-push to main/master still
+           needs explicit confirmation.)
 
          • After the file rewrite AND the `/reload` POST have completed,
            reset conditionally — pass the noted version:
@@ -454,11 +456,15 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    attachments[]}`. A non-null `marker` means the previous process was torn
    down hard rather than exiting cleanly.
 
-   **Checkpoint as you process.** For `implement` / `create-issues` / `ship`,
-   POST each real artifact as it comes into existence:
+   **Checkpoint as you process.** For `implement` and for each part of a
+   `finalize`, POST each real artifact as it comes into existence. Namespace
+   the `action` per finalize part (`finalize:issues`, `finalize:ship`,
+   `finalize:cleanup`) — a bare `"ship"` is indistinguishable from a legacy
+   stand-alone ship submission, and a resumed session would then stop after
+   verifying the release instead of running the cleanup part:
    ```bash
    curl -s -X POST -H "Content-Type: application/json" \
-     -d '{"action":"ship","step":"pr-opened","status":"done","version":<v>,"artifacts":{"branch":"feat/x","pr":42}}' \
+     -d '{"action":"finalize:ship","step":"pr-opened","status":"done","version":<v>,"artifacts":{"branch":"feat/x","pr":42}}' \
      http://localhost:{port}/progress
    ```
    A recovered run reads these to find out how far the dead run got — and
@@ -574,9 +580,9 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    back to the preview MCP — the concept flow needs a real visible
    browser window with an active tab.
 
-7. After monitoring ends (user says "fertig"/"done", aborts, clicks
-   "Concept beenden" on the final-report panel, or Step 6 of SKILL.md
-   fires the completion card), run the bridge-side cleanup:
+7. After monitoring ends (user says "fertig"/"done", aborts, finishes the
+   final report's close-out wizard, or Step 6 of SKILL.md fires the
+   completion card), run the bridge-side cleanup:
    ```bash
    # Graceful shutdown via HTTP — survives PID recycling on Windows where
    # `kill $SERVER_PID` may target a process that already exited and got

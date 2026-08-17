@@ -112,7 +112,7 @@ into 340px variant cards, so stop trying to fit them there.
 
 | Template | Layout signature |
 |---|---|
-| **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 64px 💬 FAB bottom right (general / per-design / per-screen comments), design switcher when ≥2 designs |
+| **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 💬 FAB bottom right (same 60px circle as ☰; collapsed by default; general / per-design / per-screen comments), design switcher when ≥2 designs |
 | **decision** | Sidebar (~80/~20), variant cards, tri-state per variant |
 | **free** | Sidebar (~80/~20), Claude-authored freeform body, optional tri-state per section |
 
@@ -203,7 +203,7 @@ Panel layout depends on the template picked in Step 1a:
 | Template | Panel mode | Extras |
 |---|---|---|
 | **decision** | Fixed sticky sidebar (~20% screen width), always visible | — |
-| **design** | Overlay panel (360px slide-in from right), toggled by the ☰ FAB top right | **Feedback dock** as a speech bubble anchored to the 64px 💬 FAB bottom right, with general / per-design / per-screen comments; design switcher when ≥2 designs |
+| **design** | Overlay panel (360px slide-in from right), toggled by the ☰ FAB top right | **Feedback dock** as a speech bubble anchored to the 💬 FAB bottom right, with general / per-design / per-screen comments; design switcher when ≥2 designs |
 | **free** | Fixed sticky sidebar (~20%), always visible | — |
 
 On narrow screens (<768px), sidebar-mode panels collapse to a sticky bottom
@@ -297,11 +297,19 @@ dock** anchored to the 💬 FAB (bottom-right) holds structured feedback:
 - One textarea per `<section data-screen>` inside the active design,
   auto-populated by the dock (label = `data-nav-label` of that screen)
 
-The dock is toggled via the 💬 FAB. The FAB stays visible AND clickable
-while the dock is open (clicking it toggles closed again). The close button
-is a **minimise** (`−`), not a destroy: text content stays intact in
-`localStorage` when the dock is closed. See `deep-knowledge/templates.md`
-§ Template: design for the full HTML/CSS/JS and current FAB/dock geometry.
+The dock is toggled via the 💬 FAB and starts **collapsed** — the artefact,
+not an empty form, is what a concept opens on. The FAB stays visible AND
+clickable while the dock is open (clicking it toggles closed again). The
+close button is a **minimise** (`−`), not a destroy: text content stays
+intact in `localStorage` when the dock is closed.
+
+**Fixed chrome geometry — do not restyle per page.** Both FABs are one 60px
+accent circle differing only in glyph and corner, and the open dock has
+exactly two widths (compact 420px / wide 560px, picked by `applyDockSize()`).
+Copy these verbatim; hand-tuning them per concept is what made the two FABs
+different sizes and the dock alternately a mini-box and a full-width bar. See
+`deep-knowledge/templates.md` § Template: design for the full HTML/CSS/JS and
+the geometry rationale.
 
 ### Reload Resilience
 
@@ -625,12 +633,14 @@ Collection for the required pattern.
 
 ### 5b. Process & Act — branch by `action`
 
-The submit payload carries an `action` field (`"iterate"` or `"implement"`).
-Branch on it:
+The submit payload carries an `action` field — `"iterate"` / `"implement"`
+from an iteration panel, `"finalize"` from the final report's close-out
+wizard. Branch on it:
 
-**Checkpoint duty (all branches except `iterate`).** `implement`,
-`create-issues` and `ship` create real, externally-visible artifacts, and any
-of them can be cut short mid-flight — a usage limit, a crash, a PC restart.
+**Checkpoint duty (all branches except `iterate`).** `implement` and the
+issues / ship parts of `finalize` create real, externally-visible artifacts,
+and any of them can be cut short mid-flight — a usage limit, a crash, a PC
+restart.
 POST a checkpoint to the bridge as each artifact comes into existence:
 
 ```bash
@@ -643,6 +653,13 @@ Use `step` values that name what now exists in the world — `branch-created`,
 `code-written`, `committed`, `pr-opened`, `merged`, `issues-created` (with the
 numbers in `artifacts`) — not internal phases. A resumed session replays these
 to learn how far the dead run got.
+
+**Namespace the `action` for finalize parts:** `finalize:issues`,
+`finalize:ship`, `finalize:cleanup` — never a bare `"ship"`. A bare `"ship"`
+checkpoint is indistinguishable from a legacy stand-alone ship submission, and
+a resumed session that reads it as one verifies the PR, calls the job done and
+never runs part C — leaving the concept files, the durable store and
+`.claude/concept-active.json` behind as a phantom resume hint.
 
 **And on the receiving end: verify, never trust.** When you resume a run that
 has checkpoints (`ss.concept.resume` hands you the mandate, or `GET /recovery`
@@ -694,28 +711,49 @@ never re-run a completed step. The checkpoint records what the previous run
    closing artefact of the concept session — see Step 5c §
    "Final-report append (implement only)" for the structure.
 
-**`action: "create-issues"` ("Issues erstellen" button — only on final report):**
+**`action: "finalize"` (close-out wizard — only on the final report):**
 
-**Zero-prompt invariant.** The user already committed when they clicked
-"Issues erstellen". Asking a follow-up question — for issue body, labels,
-milestone, anything — is a UX regression equivalent to the old
-"paste the JSON from the console" anti-pattern. Every field needed to
-land a complete `gh issue create` call is in the payload OR derivable
-from the concept HTML in `docs/concepts/{date}-{slug}.html`. If a field
-is genuinely missing AND the project requires it, fall back to a sane
-default (silent) — never an `AskUserQuestion`. The only justified
-interruption is a hard `gh` failure that needs the user's eyes.
+The final-report panel is a **guided wizard**, not a wall of buttons, so a
+single submission carries every close-out decision the user made:
 
-1. Read the `items` array from the payload — each entry now carries
+```json
+{ "action": "finalize",
+  "issues": { "create": true, "items": [ … ] },
+  "ship":   { "run": true },
+  "disposition": { "mode": "discard", "moveTo": null } }
+```
+
+**Zero-prompt invariant.** The user committed on the wizard's review screen,
+which listed every consequence by name before they clicked. Asking a follow-up
+question — for issue body, labels, milestone, ship confirmation, anything — is
+a UX regression equivalent to the old "paste the JSON from the console"
+anti-pattern. Every field needed is in the payload OR derivable from the
+concept HTML in `docs/concepts/{date}-{slug}.html`. If a field is genuinely
+missing AND the project requires it, fall back to a sane default (silent) —
+never an `AskUserQuestion`. The only justified interruptions are a hard `gh`
+failure or a ship-pipeline gate failure that need the user's eyes.
+
+**Fixed execution order — A (issues) → B (ship) → C (cleanup).** Never
+reorder: issues must not depend on a release succeeding, ship is the one part
+that can hard-fail, and cleanup can DELETE the concept HTML — running it
+before the outward-facing parts would destroy the record while it is still
+needed. Skip any part whose flag is false; a payload may legitimately carry
+none of them (`ship.run: false`, `issues.create: false`) and then finalize is
+just Step 6.
+
+**Checkpoint each part as it lands** (see Checkpoint duty above) — a finalize
+that dies mid-flight must be resumable without re-creating issues or
+re-shipping.
+
+### A · Issues (`issues.create === true`)
+
+1. Read the `items` array from `issues` — each entry carries
    `{ id, title, type, description, role?, module?, milestone?, selected: true }`.
    `description` falls back to the visible `.oq-label` text when the
    author of the final-report did not set `data-issue-body`; either is
    enough to skip prompting.
-2. Read the `disposition` sub-object from the same payload — even if the
-   user never touches "Concept beenden", `submitCreateIssues` always
-   bundles the current disposition state for Step 6 cleanup. Store it
-   for use in Step 6a; do NOT apply it now — issue routing and cleanup
-   are decoupled so the user can still review the page before closing.
+2. Read the `disposition` sub-object from the same payload and store it for
+   part C. Do NOT apply it here — cleanup runs last, after ship.
 3. **User-value gate (silent, mandatory).** Apply the gate from the
    `setup-issue` skill's `{PLUGIN_ROOT}/skills/setup-issue/deep-knowledge/issue-rules.md` to the
    selected items BEFORE creating anything: each issue must deliver a
@@ -767,69 +805,66 @@ interruption is a hard `gh` failure that needs the user's eyes.
    each created item's label with `[Issue #NNN] {title}` (linked to the
    issue URL), disable the checkbox, and add a small ✓ badge. For items
    that were merged by the user-value gate, link ALL source items to the
-   one merged issue.
-8. POST `/reload` so the browser shows the updated state. If every item
-   was processed, the "Issues erstellen" button auto-hides on reload
-   (panel JS gates it on the presence of un-created checkable items).
-9. Then POST `/reset` with the captured `_version` as usual.
-10. The concept session stays open — the user may still review previous
-   iteration tabs but cannot trigger further iterate/implement actions
-   from the final report.
+   one merged issue. Disabling is what makes the wizard's issues step
+   disappear on the next render — an already-routed item can never be
+   submitted twice.
 
-**`action: "dispose-concept"` ("Concept beenden" button — only on final report):**
-1. Read the `disposition` sub-object from the payload — shape
-   `{ mode: "discard" | "keep" | "gitignore", moveTo: string | null }`.
-2. Do NOT apply the cleanup here — instead, record the disposition for
-   Step 6a (which is the authoritative cleanup step) and signal session
-   end. Treat this submission as the explicit "fertig" signal from the
-   user.
-3. POST `/reset` with the captured `_version` so the bridge stops
-   surfacing this submission as `_pending`.
-4. Proceed to Step 6 — Completion Card. The disposition recorded here
-   drives the cleanup branch in Step 6a.
+### B · Ship (`ship.run === true`)
 
-**`action: "ship"` ("🚀 Shippen" button — only on final report):**
-
-**Zero-prompt invariant.** The user committed by clicking Shippen — an
-explicit authorisation for a real, outward-facing release, exactly like the
-"Mit Feedback implementieren" button authorises real code changes. Do NOT ask
-a follow-up question; the payload plus the final-report context are
-sufficient. The ONLY justified interruption is a hard ship-pipeline failure
-that needs the user's eyes (merge conflict, failing build/preflight gate) —
-surface that verbatim and stop.
-
-1. Read the `disposition` sub-object from the payload (same shape as
-   dispose-concept) and store it for Step 6a. Do NOT apply cleanup yet.
-2. Run the full ship pipeline via the `ship` skill (ship_preflight →
-   ship_build → ship_version_bump → ship_release → ship_cleanup). The button
-   click authorises the ship; it does NOT waive the gates `ship`
-   already enforces. If a gate blocks, report the blocker to the user and
-   STOP — never fake a completion or force past a failing gate. (A force-push
-   to main/master still requires explicit user confirmation per the user's
-   own rules — the Shippen click does not stand in for that.)
+1. Run the full ship pipeline via the `ship` skill (ship_preflight →
+   ship_build → ship_version_bump → ship_release → ship_cleanup). The wizard
+   click authorises the ship; it does NOT waive the gates `ship` already
+   enforces. If a gate blocks, report the blocker to the user and STOP —
+   never fake a completion or force past a failing gate. (A force-push to
+   main/master still requires explicit user confirmation per the user's own
+   rules — the wizard click does not stand in for that.)
+2. **On a blocked ship, stop the whole finalize here.** Issues created in
+   part A stand; part C does NOT run. POST `/reload` then `/reset`, leave the
+   concept session open so the user can retry from the wizard, and report the
+   blocker verbatim. Never fall through to cleanup — a `discard` disposition
+   would delete the concept the user still needs.
 3. On a successful release, rewrite the live final-report section in place:
-   - Reveal the `[data-ship-state="done"]` hint and set the channel to the
-     shipped state, including the version (e.g. "Geshippt · v0.113.0").
-   - Add a one-line "Shipped" note (version + tag) to the Zusammenfassung.
-   Then POST `/reload`, and only AFTER that POST `/reset` with the captured
-   `_version` (reload-before-reset, same order as every other branch).
-4. Run Step 6a cleanup only (bridge shutdown + disposition from step 1). Do
-   **NOT** render a second concept completion card — `ship` already
-   rendered its own ship card, which is the authoritative closing artefact
-   (rendering another here would be a duplicate summary). If the ship was
-   blocked at a gate in step 2, skip cleanup, leave the concept session open
-   so the user can retry, and report the blocker instead.
+   add a one-line "Shipped" note (version + tag) to the Zusammenfassung.
+
+### C · Close out
+
+1. **`keep` / `gitignore`:** add `data-closed` to the
+   `<section data-final-report>` (the wizard renders its done state instead of
+   re-arming — the bridge is about to be shut down, so a live execute button
+   would queue a submission nobody picks up), then POST `/reload` so the
+   browser shows the rewritten report (issue links, shipped note), and only
+   AFTER that POST `/reset` with the captured `_version` —
+   reload-before-reset, same order as every other branch.
+   **`discard`:** POST `/reset` only, no `/reload`. The browser's reload poll
+   runs on a 3 s interval and the file is about to be deleted, so a `/reload`
+   here is a coin flip on whether the user's closing impression is the final
+   report or an HTTP 404. The bridge shutdown that follows is the honest
+   end-of-session signal.
+2. Proceed to Step 6 with the `disposition` stored in part A step 2. Treat
+   this submission as the explicit "fertig" signal from the user.
+3. **Card selection:** if part B ran successfully, `ship` already rendered
+   its own ship card — that is the authoritative closing artefact and you
+   MUST NOT render a second concept completion card (duplicate summary).
+   Otherwise render the concept card per Step 6b.
+
+### Legacy final-report actions
+
+Pages generated before the close-out wizard submit one action at a time:
+`create-issues` (part A + Step 6 with the bundled disposition),
+`ship` (part B + Step 6), `dispose-concept` (part C only). Keep accepting
+them — a mid-session plugin update leaves such a page open in the browser —
+and map each onto the matching part above. Newly generated pages MUST emit
+`finalize` only.
 
 **Critical invariant:** a submit with `action: "iterate"` MUST NEVER cause
 code or file changes outside of the concept HTML file itself. The user
-relies on that guarantee to explore ideas safely. `action: "create-issues"`
-only writes GitHub issues + the final-report HTML — no code/file changes
-in the project tree. `action: "dispose-concept"` only triggers Step 6
-cleanup — no code/file changes either, just disposition of the concept's
-own HTML / decisions JSON artefacts. `action: "ship"` is the one action that
-DOES reach outward — it runs the real release pipeline — and that is exactly
-why it is gated behind its own explicit final-report button, never behind
-iterate/implement.
+relies on that guarantee to explore ideas safely. Within `finalize`, part A
+only writes GitHub issues + the final-report HTML and part C only disposes of
+the concept's own artefacts — neither touches project code. Part B is the one
+thing that reaches outward, it runs only when `ship.run` is true, and that
+flag can only become true by the user answering the wizard's ship step, which
+has no default and lists its consequence on the review screen before the
+single execute click.
 ### 5c. Update the Page
 After processing, **append a new tab** to the same HTML file and signal
 the browser to reload. This is the ONLY update path — there is no
@@ -838,9 +873,9 @@ separate "in-place edit" vs. "new file" distinction anymore.
 For `action: "iterate"` → append a regular iteration section.
 For `action: "implement"` → append a **final-report section** (one-time,
 see § "Final-report append (implement only)" below).
-For `action: "create-issues"` → no new section; rewrite the existing
-final-report HTML in place (replace processed items with linked
-`[Issue #NNN]` labels) and POST `/reload`.
+For `action: "finalize"` → no new section; rewrite the existing final-report
+HTML in place (linked `[Issue #NNN]` labels for routed items, a shipped note
+when part B ran) and POST `/reload`.
 
 Procedure on every iteration (including the very first response to feedback).
 
@@ -931,24 +966,23 @@ preservation) stays identical.
    from `<body>`. The submit-button reset is irrelevant because the
    final-report panel doesn't surface iterate/implement at all.
 6. /reload → /reset → **re-launch the pickup waker**, as steps 5–7 above.
-   Step 7 is not optional here: the final-report panel still accepts `ship`,
-   `create-issues` and `dispose-concept` submissions, and `implement` is the
-   longest round there is — leaving it unwatched is the widest window in the
-   whole flow.
+   Step 7 is not optional here: the final-report panel still accepts the
+   `finalize` submission, and `implement` is the longest round there is —
+   leaving it unwatched is the widest window in the whole flow.
 
 **Verbatim copy directive (mandatory):**
-The final-report JS block — `updateCreateIssuesPanel`, `submitCreateIssues`,
-`collectDisposition`, `submitShip`, `submitDisposeConcept`, plus the
-`ship-btn` / `view-iterations-btn` wiring, the `change` listener on
-`section[data-open-questions] input[type="checkbox"]` and the
+The final-report JS block — `refreshFinalizeWizard`, `renderWizard`,
+`openQuestionBoxes`, `collectIssueItems`, `collectDisposition`,
+`wizardShipChoice`, `buildWizardIssueList`, `buildWizardPlan`,
+`submitFinalize`, plus the `wizard-next` / `wizard-back` / `wizard-execute` /
+`view-iterations-btn` wiring, the `change` listener and the
 `DOMContentLoaded` wiring — MUST be copied verbatim from
 `deep-knowledge/templates.md` (the block starting at the comment
-`// --- Final-report "Issues erstellen" action ---` through the
-`// --- Final-report "Shippen" action ---` block). Do NOT
-inline a simplified `updateCreateIssuesPanel`, drop `submitShip`, or omit the
-event-listener wiring; any omission leaves a visible-but-inert button.
-After writing, the post-generation validation gate
-(`deep-knowledge/validation-gate.md` Phase 1) MUST find patterns 28–38
+`// --- Final-report close-out wizard (action: "finalize") ---`). Do NOT
+inline a simplified wizard, collapse it back into separate buttons, or omit
+the event-listener wiring; any omission leaves a visible-but-inert control or
+a flow the user cannot finish. After writing, the post-generation validation
+gate (`deep-knowledge/validation-gate.md` Phase 1) MUST find patterns 28–38
 in the generated file.
 
 **Open questions / TODOs section — when to include:**
@@ -957,10 +991,10 @@ Include the `<section data-open-questions>` block only when there are real
 items worth tracking as GitHub issues — things you knowingly deferred,
 bugs surfaced but out of scope, doc gaps, follow-up refactors. Skip it
 entirely (do NOT render an empty stub) when the implementation is
-genuinely clean. The presence of this section is what surfaces the
-"Issues erstellen" button in the panel — see `deep-knowledge/templates.md`
-§ Final Report Panel for the HTML pattern. Default each `<input
-type="checkbox">` to `checked` so the user opts items OUT rather than IN.
+genuinely clean. The presence of this section is what adds the issues step to
+the close-out wizard — see `deep-knowledge/templates.md` § Final Report Panel
+for the HTML pattern. Default each `<input type="checkbox">` to `checked` so
+the user opts items OUT rather than IN.
 
 **No further iterations from the final report.** The panel deliberately
 omits the iterate/implement buttons. If the user wants more work after
@@ -1010,16 +1044,12 @@ Then return to Step 4 (monitor for next submission). The loop continues until:
 - The user says "fertig" / "done" in chat
 - There are no more decisions to make (all items processed)
 
-If the active section is the final report, the submissions Claude expects
-are:
-- `action: "ship"` — fired by the persistent status channel's primary
-  "🚀 Shippen" button. Runs the real release pipeline (Step 5b · ship).
-  Carries the current disposition for Step 6a cleanup.
-- `action: "create-issues"` — fired by the "Issues erstellen" button when
-  open questions / TODOs are present and at least one is selected.
-- `action: "dispose-concept"` — fired by the always-visible "Concept
-  beenden" button. Carries the file disposition decision (discard /
-  keep / gitignore + optional moveTo).
+If the active section is the final report, the submission Claude expects is
+`action: "finalize"` — one payload from the close-out wizard carrying
+`issues` (selected open questions), `ship` (run the release or not) and
+`disposition` (discard / keep / gitignore + optional moveTo). Legacy pages may
+still send `ship`, `create-issues` or `dispose-concept` individually; map them
+per Step 5b § Legacy final-report actions.
 
 All other action types from the final-report panel should be treated as
 protocol errors and reported back to the user.
@@ -1044,18 +1074,18 @@ on the user's disposition choice (see `deep-knowledge/templates.md`
 
 **Determine the disposition** in this order of preference:
 
-1. The last `dispose-concept` payload received this session → use its
-   `disposition` field directly.
-2. Otherwise, the last `create-issues` payload's `disposition` field.
+1. The `finalize` payload's `disposition` field → use it directly.
+2. Otherwise, the last legacy payload (`dispose-concept`, then
+   `create-issues`, then `ship`) that carried a `disposition` field.
 3. Otherwise (no payload carried a disposition — old session, user
-   aborted, page closed before clicking either final-report button):
-   default to `{ mode: "discard", moveTo: null }`.
+   aborted, page closed before finishing the wizard): default to
+   `{ mode: "discard", moveTo: null }`.
 
 The default = `discard` is deliberate. Most concept sessions are one-shot
 refinements whose outcome already landed in commits / GitHub issues /
 the implement step. Persisting the HTML in git by default accumulates
 silt in `docs/concepts/`. Power users opt in to `keep` or `gitignore`
-via the final-report panel.
+in the wizard's files step.
 
 **Cleanup procedure (always):**
 

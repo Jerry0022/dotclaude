@@ -450,12 +450,15 @@ first place.
 
 ### Checkpointing while processing
 
-For anything longer than an `iterate` — `implement`, `create-issues`, `ship` —
-POST a checkpoint as each real-world artifact comes into existence:
+For anything longer than an `iterate` — `implement`, and each part of a
+`finalize` — POST a checkpoint as each real-world artifact comes into
+existence. Finalize parts namespace their `action` (`finalize:issues`,
+`finalize:ship`, `finalize:cleanup`) so a resumed session can tell which part
+of a multi-part close-out died:
 
 ```bash
 curl -s -X POST -H "Content-Type: application/json" \
-  -d '{"action":"ship","step":"pr-opened","status":"done","version":<v>,"artifacts":{"branch":"feat/x","pr":42}}' \
+  -d '{"action":"finalize:ship","step":"pr-opened","status":"done","version":<v>,"artifacts":{"branch":"feat/x","pr":42}}' \
   http://localhost:$PORT/progress
 ```
 
