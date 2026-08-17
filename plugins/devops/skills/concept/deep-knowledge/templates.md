@@ -64,6 +64,9 @@ must see their own language. The locale hint is authoritative.
 | `panel.step_implemented_active`| Implementation in progress     | Implementierung läuft |
 | `panel.step_waiting`           | Waiting…                       | Warten… |
 | `panel.step_ready`             | Ready to ship                  | Bereit zum Shippen |
+| `panel.frozen`                 | Frozen iteration               | Eingefrorene Iteration |
+| `panel.frozen_hint`            | You are reading an earlier round. It is read-only — its decisions were already submitted. | Du liest eine frühere Runde. Sie ist schreibgeschützt — ihre Entscheidungen wurden bereits übermittelt. |
+| `panel.frozen_back`            | Back to the current round      | Zurück zur aktuellen Runde |
 | `panel.connecting_title`       | Claude is connecting           | Claude verbindet sich |
 | `panel.connected_title`        | Claude connected               | Claude verbunden |
 | `panel.disconnected_title`     | Claude not connected           | Claude nicht verbunden |
@@ -292,6 +295,23 @@ the `[ui-locale: ...]` hint produced.
         </ol>
         <p class="submitted-hint">{{panel.submitted_hint}}</p>
         <div class="waiting-animation"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+      </div>
+
+      <!-- Frozen state: shown while the user reviews a PAST iteration tab.
+           showIteration() flips this on for every non-live tab (and sets
+           body.viewing-frozen, which the design template's dock reads to fill
+           its textareas read-only). Without this block the panel simply loses
+           its whole lower half on a frozen tab — no controls, no explanation,
+           just empty space under the TOC, which reads as a broken page rather
+           than as "this is history". The back-link is the only way out that
+           does not require guessing which tab was live. -->
+      <div id="panel-frozen" style="display: none;">
+        <div class="frozen-indicator">
+          <span class="frozen-icon" aria-hidden="true">🕘</span>
+          <strong>{{panel.frozen}}</strong>
+        </div>
+        <p class="hint">{{panel.frozen_hint}}</p>
+        <button type="button" id="back-to-live-btn" class="link-btn">{{panel.frozen_back}}</button>
       </div>
 
       <!-- Final-report state: shown when the active section carries
@@ -1196,6 +1216,14 @@ page: it is the first thing that looks broken when concepts sit side by side.
         </ol>
         <p class="submitted-hint">{{panel.submitted_hint}}</p>
       </div>
+      <!-- The remaining two panel states — #panel-frozen and
+           #panel-final-report — are IDENTICAL to § Common Structure and MUST
+           be copied verbatim from there into this aside. showIteration()
+           switches all four states regardless of template, so a design page
+           that ships only the two above loses its close-out wizard the moment
+           a final report is appended, and shows an empty panel on every past
+           tab. Only the containing aside differs (overlay vs sidebar), never
+           the states inside it. -->
     </aside>
     <div class="panel-backdrop" id="panel-backdrop"></div>
 
@@ -2867,6 +2895,22 @@ body.content-dimmed .content-dimmer:not([hidden]) {
   color: var(--text-secondary);
   margin-bottom: 1rem;
 }
+
+/* Frozen panel state — same indicator language as the submitted panel, in the
+   muted border colour rather than a status colour: a frozen tab is neither
+   good news nor a warning, it is history. */
+.frozen-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #30363d);
+  background: color-mix(in srgb, var(--text-secondary, #8b949e) 10%, transparent);
+  color: var(--text-secondary, #8b949e);
+}
+.frozen-indicator .frozen-icon { font-size: 1.2rem; }
 
 /* Progress steps inside the submitted panel.
    Three states per <li>:
@@ -5086,6 +5130,14 @@ function showIteration(n) {
 
 document.querySelectorAll('.iteration-tab').forEach(tab => {
   tab.addEventListener('click', () => showIteration(tab.dataset.iteration));
+});
+
+// The frozen panel's way back. Without it the only exit from a past tab is to
+// spot which chip is the live one — and the live tab is not always the last
+// chip (the final report is), so guessing is a real failure mode.
+document.getElementById('back-to-live-btn')?.addEventListener('click', () => {
+  const live = document.querySelector('section[data-iteration][data-active]');
+  if (live) showIteration(live.dataset.iteration);
 });
 
 document.addEventListener('DOMContentLoaded', () => {

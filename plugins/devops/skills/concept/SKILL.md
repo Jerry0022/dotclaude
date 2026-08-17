@@ -416,11 +416,11 @@ and `deep-knowledge/templates.md` § Iteration Tabs for the reference HTML.
 
 ### Post-Generation Validation (mandatory gate)
 
-After writing the HTML file, grep it for the 38 mandatory interactive
-patterns (heartbeat, panel states, iteration tabs, section TOC, reload
-polling, generic form-collection catch-all scoped to the active
-iteration, post-submit content dimmer, persistent status channel + ship
-CTA, etc.).
+After writing the HTML file, grep it for every mandatory interactive
+pattern listed in Phase 1 (heartbeat, all four panel states incl. the
+frozen one, iteration tabs, section TOC, reload polling, generic
+form-collection catch-all scoped to the active iteration, post-submit
+content dimmer, persistent status channel + close-out wizard, etc.).
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. See `deep-knowledge/validation-gate.md` for the full
 pattern list and common failure modes.
@@ -982,8 +982,8 @@ The final-report JS block — `refreshFinalizeWizard`, `renderWizard`,
 inline a simplified wizard, collapse it back into separate buttons, or omit
 the event-listener wiring; any omission leaves a visible-but-inert control or
 a flow the user cannot finish. After writing, the post-generation validation
-gate (`deep-knowledge/validation-gate.md` Phase 1) MUST find patterns 28–38
-in the generated file.
+gate (`deep-knowledge/validation-gate.md` Phase 1) MUST find the panel-state
+and wizard patterns (28–38b) in the generated file.
 
 **Open questions / TODOs section — when to include:**
 

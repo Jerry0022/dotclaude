@@ -37,7 +37,9 @@ no legitimate matches — do not "keep it as a convenience". The decision panel
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 40 patterns, regardless of template:
+Every concept page must contain these 44 patterns, regardless of template
+(the numbering carries `b` suffixes where a pattern was added next to a
+related one — count the rows, not the highest number):
 
 | # | Pattern to grep | Purpose |
 |---|----------------|---------|
@@ -71,6 +73,7 @@ Every concept page must contain these 40 patterns, regardless of template:
 | 26 | `_setCacheHints(` inside `checkClaudeConnection` | The checker MUST wire the per-button cache hint to the disconnected state, so a click made while Claude is offline reads as visibly queued (then auto-delivered by the Offline Submit Queue) rather than lost. Submit buttons stay enabled in every state — the queue, not a disabled button, is what prevents a black hole. |
 | 27 | `Date.now() - _lastHeartbeatTs` (millis vs. millis) | Both sides of the staleness comparison MUST be in milliseconds since the Unix epoch. Server returns `claude_ts` in ms; browser uses `Date.now()`. Never divide either side by 1000 — a millis-vs-seconds mix-up produces a giant negative age that always evaluates as "fresh" and silently hides outages. |
 | 28 | `panel-final-report` | Final-report panel element. Auto-shown by `showIteration()` when the active section carries `data-final-report`; replaces `panel-ready` (no iterate/implement buttons). |
+| 28b | `panel-frozen` | Frozen panel state, shown on every non-live iteration tab. `showIteration()` switches to it unconditionally, so a page without it loses the panel's whole lower half whenever the user reviews an earlier round — no controls, no explanation, and no way back to the live tab except guessing which chip it is. Must include the `#back-to-live-btn`. |
 | 29 | `refreshFinalizeWizard({ reset: true })` — grep the CALL, not the symbol | Recomputes the close-out wizard's step list (the issues step exists only while the active section has un-routed `[data-open-questions]` checkboxes) and re-renders. The call must appear inside `showIteration()` so a tab switch restarts the flow at step 1. A page that defines the function but never calls it passes a symbol-only grep and renders a wizard that never updates. |
 | 30 | `content-dimmer` | Shared post-submit focus overlay. After a submit, `body.content-dimmed` flips it on; the decision panel + FABs sit at higher z-index and paint above it. Click-to-dismiss; auto-clears on page reload. See `templates.md` § Common Structure (HTML) and § Decision Panel State CSS for the reference implementation. |
 | 31 | `ensureCommentSlots` | Auto-injects an adjacent `<textarea data-comment="$decisionId-note">` for every `[data-decision]` bi-state group that lacks one. MUST be called from `DOMContentLoaded` BEFORE `restoreState` so the restore step rehydrates the typed values onto real nodes. See templates.md § Comment Slot Injection. |

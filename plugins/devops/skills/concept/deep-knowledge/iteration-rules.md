@@ -88,6 +88,13 @@ also requires embedding the submitted comments in the frozen section:
 `body.viewing-frozen` is set, fills the dock read-only, and restores the live
 iteration's unsent text when the user switches back.
 
+**The panel itself switches to `#panel-frozen`** on any non-live tab — a short
+"this is an earlier round, it is read-only" note plus a back-link to the live
+iteration. It applies to every template, not just `design`. Without that block
+the panel's lower half is simply empty on a frozen tab, and the only way back
+is guessing which chip is live — which is not the last one once a final report
+exists. See templates.md § Common Structure.
+
 ## Iteration append checklist
 
 When appending a new iteration section (Step 5c of `SKILL.md`), verify
