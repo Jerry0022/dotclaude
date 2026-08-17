@@ -27,6 +27,14 @@ structured format with risk markers and a clear recommendation.
 - Risk levels are relative to the specific decision context
 - If all options have equal risk, say so explicitly
 - For AskUserQuestion: use the `description` field for risk/strength info
+- **A free-text answer via "Sonstiges" (Other) is a real answer and outranks
+  every offered option.** The options are suggestions; typing something else is
+  the user telling you the list was incomplete. Take the typed value as the
+  decision — never dismiss it as "that doesn't answer the question", and never
+  silently fall back to your own recommendation. Only push back when the value
+  is genuinely unusable for the mechanism behind it (wrong type, out of range,
+  technically impossible), and then say exactly why and ask again. If it merely
+  carries a downside, apply it and name the downside in one clause.
 - For AskUserQuestion after inline results: if the preceding output contains
   substantial inline content (analysis, report, long text), the **first option
   of the first question** must always be **"Erstmal in Ruhe durchlesen"** with

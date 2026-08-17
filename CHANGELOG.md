@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.132.4] — 2026-08-17
+
+### Fixed
+
+- **A marker phrase typed under "Sonstiges" is now accepted as the answer it is.** `/claude-batch` asks once what should fire the merge and offers three options; a user typed their own phrase into the free-text field and it was dismissed as "that doesn't answer the question", with the recommended `!` silently applied instead. The options were always suggestions — typing something else is the user saying the list was incomplete, not refusing to choose. Step 2.1 of the skill now makes the free-text value binding, and the same rule is stated cross-cutting in `deep-knowledge/decision-format.md`, since nothing about it is specific to this skill.
+
+  Accepting the phrase is only half of it: a phrase is retyped by hand every time, so the stored marker now matches case-insensitively and tolerates extra inner whitespace. Without that, a marker saved as `Let's go` and retyped as `let's go` would fail to fire — and failing to fire is not a visible error here, it silently collects the prompt that was meant to start the work. Markers ending in a word character additionally require a word boundary, so a short marker like `go` no longer fires on "google das mal", and `saveConfig` normalises what it persists rather than storing whatever was passed.
+
+- **A correctly collected note no longer reads like a crash.** Collect mode works by blocking the prompt, and the harness renders every blocked prompt as a red "a hook blocked your input" panel — the only rendering available, and not the plugin's to change. The acknowledgement's first line now leads with the all-clear ("Notiz #N gespeichert — alles korrekt, kein Fehler") instead of burying it behind the count.
+
 ## [0.132.3] — 2026-08-16
 
 ### Fixed

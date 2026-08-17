@@ -7,7 +7,7 @@ import {
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
   touchActivity, readActivity,
   isMachinePrompt, isExpandedCommand, hasAttachment,
-  startsWithMarker, stripMarker, looksLikeQuestion,
+  startsWithMarker, stripMarker, looksLikeQuestion, validateMarker,
   classify, willBeCollected, notesPath, modePath,
 } from "./batch-state.js";
 
@@ -120,6 +120,55 @@ describe("marker handling", () => {
   test("multi-character phrase works as a marker", () => {
     expect(startsWithMarker("los: bau das", "los:")).toBe(true);
     expect(stripMarker("los: bau das", "los:")).toBe("bau das");
+  });
+});
+
+describe("custom markers typed via the 'Sonstiges' option", () => {
+  // The user answered the marker question with their own phrase. Anything that
+  // silently fails to match here collects a prompt the user meant to execute.
+  test("a free-text phrase is a valid marker", () => {
+    const v = validateMarker("Let's go");
+    expect(v.ok).toBe(true);
+    expect(v.marker).toBe("Let's go");
+    expect(startsWithMarker("Let's go bau das um", "Let's go")).toBe(true);
+    expect(stripMarker("Let's go bau das um", "Let's go")).toBe("bau das um");
+    expect(classify({ text: "Let's go bau das um", marker: "Let's go", modeActive: true }))
+      .toBe("execute");
+  });
+
+  test("a retyped phrase matches regardless of case and inner spacing", () => {
+    expect(startsWithMarker("let's go weiter", "Let's go")).toBe(true);
+    expect(startsWithMarker("LET'S GO weiter", "Let's go")).toBe(true);
+    expect(startsWithMarker("Let's   go weiter", "Let's go")).toBe(true);
+    expect(stripMarker("let's go weiter", "Let's go")).toBe("weiter");
+  });
+
+  test("a word marker needs a word boundary", () => {
+    expect(startsWithMarker("google das mal", "go")).toBe(false);
+    expect(startsWithMarker("go bau das", "go")).toBe(true);
+    expect(classify({ text: "google das mal", marker: "go", modeActive: true }))
+      .toBe("collect");
+  });
+
+  test("regex metacharacters in a phrase are literal", () => {
+    expect(startsWithMarker("mach.es jetzt", "mach.es")).toBe(true);
+    expect(startsWithMarker("machxes jetzt", "mach.es")).toBe(false);
+  });
+
+  test("normalisation trims and collapses whitespace", () => {
+    expect(validateMarker("  jetzt   los  ")).toMatchObject({ ok: true, marker: "jetzt los" });
+  });
+
+  test("only genuinely unusable input is rejected", () => {
+    expect(validateMarker("   ")).toMatchObject({ ok: false, reason: "empty" });
+    expect(validateMarker(undefined)).toMatchObject({ ok: false, reason: "empty" });
+    expect(validateMarker("x".repeat(33))).toMatchObject({ ok: false, reason: "too-long" });
+  });
+
+  test("a letters-only marker is accepted but flagged as collision-prone", () => {
+    expect(validateMarker("Let's go").warning).toBe(null);
+    expect(validateMarker("jetzt").warning).toBe("wordy");
+    expect(validateMarker("!").warning).toBe(null);
   });
 });
 

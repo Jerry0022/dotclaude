@@ -94,7 +94,13 @@ function loadConfig() {
 }
 
 function saveConfig(cfg) {
-  const merged = { ...loadConfig(), ...cfg };
+  const incoming = { ...(cfg || {}) };
+  if ('marker' in incoming) {
+    const v = validateMarker(incoming.marker);
+    if (!v.ok) throw new Error(`invalid marker (${v.reason})`);
+    incoming.marker = v.marker;
+  }
+  const merged = { ...loadConfig(), ...incoming };
   const dir = path.dirname(configPath());
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(merged, null, 2) + '\n', 'utf8');
@@ -256,14 +262,57 @@ function hasAttachment(text, hookInput) {
   return ATTACHMENT_PATTERNS.some(rx => rx.test(text));
 }
 
+const MARKER_MAX_LENGTH = 32;
+
+/**
+ * Normalise and sanity-check a marker the user typed themselves.
+ *
+ * The three offered options are suggestions, not a closed set — a free-text
+ * answer ("Let's go") is a legitimate marker and must survive to the config
+ * file. Only genuinely unusable input is rejected, and always with a reason
+ * the skill can quote back.
+ *
+ * @returns {{ok:true,marker:string,warning:?'wordy'}|{ok:false,reason:'empty'|'too-long'}}
+ */
+function validateMarker(raw) {
+  if (typeof raw !== 'string') return { ok: false, reason: 'empty' };
+  const marker = raw.trim().replace(/\s+/g, ' ');
+  if (!marker) return { ok: false, reason: 'empty' };
+  if (marker.length > MARKER_MAX_LENGTH) return { ok: false, reason: 'too-long' };
+  // A letters-only phrase can also be the honest start of a collected prompt.
+  // Word-boundary matching keeps that rare, but the user should hear it once.
+  const wordy = /^[\p{L}\p{N} ]+$/u.test(marker) ? 'wordy' : null;
+  return { ok: true, marker, warning: wordy };
+}
+
+/**
+ * Anchored matcher for a marker.
+ *
+ * Case-insensitive and whitespace-tolerant, because a phrase marker is retyped
+ * by hand every time: "let's go" must fire a marker stored as "Let's go", or
+ * the prompt is silently collected instead of executed — the exact lock-out the
+ * failsafe bounds exist to make impossible.
+ *
+ * A marker ending in a word character additionally requires a word boundary, so
+ * `go` does not fire on "google das mal".
+ */
+function markerMatch(text, marker) {
+  if (typeof text !== 'string' || !text) return null;
+  const v = validateMarker(marker);
+  if (!v.ok) return null;
+  const escaped = v.marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+');
+  const boundary = /[\p{L}\p{N}_]$/u.test(v.marker) ? '(?![\\p{L}\\p{N}_])' : '';
+  return new RegExp(`^\\s*${escaped}${boundary}`, 'iu').exec(text);
+}
+
 function startsWithMarker(text, marker) {
-  if (typeof text !== 'string' || !text || !marker) return false;
-  return text.trimStart().startsWith(marker);
+  return markerMatch(text, marker) !== null;
 }
 
 function stripMarker(text, marker) {
-  if (!startsWithMarker(text, marker)) return String(text ?? '');
-  return text.trimStart().slice(marker.length).trimStart();
+  const s = String(text ?? '');
+  const m = markerMatch(s, marker);
+  return m ? s.slice(m[0].length).trimStart() : s;
 }
 
 /**
@@ -330,5 +379,6 @@ module.exports = {
   touchActivity, readActivity,
   isMachinePrompt, isExpandedCommand, hasAttachment,
   startsWithMarker, stripMarker, looksLikeQuestion,
+  validateMarker, markerMatch, MARKER_MAX_LENGTH,
   classify, willBeCollected,
 };
