@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.133.1] — 2026-08-17
+
+### Fixed
+
+- **A git conflict marker that had been sitting in this file since v0.130.0 is gone, and the pipeline that let it through now looks.** `CHANGELOG.md` on `main` carried the line `||||||| parent of 366426a (chore(release): v0.130.0)` between the 0.130.0 entry and the `## [0.129.0]` heading — the diff3 base marker left behind when the conflict that renumbered the `/claude-batch` entry to 0.131.0 was resolved. The other three markers were deleted; that one was not. It survived five releases. The irony is exact: the entry immediately above it is titled "A merge artifact in the concept bridge documentation."
+
+  Git history was checked before anything was deleted, because a marker can just as easily have swallowed or duplicated an entry as sat inertly between two. It had not: the conflict's base section was **empty** — both sides had added a new entry above an unchanged `## [0.129.0]` — so the merged file minus that one line is byte-for-byte the union of both sides, and the commit that introduced it changed exactly one line. Removing the line is the whole fix; no entry text needed restoring.
+
+  Nothing in the ship pipeline reads file *content*. Preflight counts commits and compares version files, `ship_release` diffs refs and trees — so broken text passes every gate. Worse, preflight *enforces* `merge.conflictstyle=diff3`, which is what puts the fourth and least-familiar marker into a conflicted file in the first place: a resolver deleting `<<<<<<<`, `=======` and `>>>>>>>` from muscle memory leaves `|||||||` one line up, and the file still looks plausible. The style is right — the diff3 base section is what makes a semantic resolution possible — but it widens the failure by one marker nobody checks for.
+
+  `ship_preflight` and `ship_release` now scan for markers, at two different strengths. The files **this ship would land** (the branch diff since the merge-base, plus whatever is uncommitted) are a hard error in both tools; release re-scans rather than trusting preflight, because the ship's own rebase — where conflicts are actually resolved — happens after preflight ran, and it scans before committing, so a block leaves nothing to unwind. Every **other** tracked text file is swept by preflight as a warning: a marker that predates the branch is a repo defect to fix separately, not a reason to hold an unrelated release hostage — and a hard gate there would have no escape hatch for a repo that legitimately carries conflict-marker fixtures, which this plugin's own `git-sync` parses. That warning scope is the one that matters for this bug: the diff-scoped gate could never have found the v0.130.0 line, because no shipping branch since touched it.
+
+  Two rules keep the scan from crying wolf, both of them load-bearing in a repo whose largest file is markdown. `=======` counts only when the file also carries an unambiguous marker — a seven-character setext H1 underline is byte-identical to git's separator, and blocking a release on a legal heading is how a guard gets switched off. And `|||||||` must carry its label (git always writes one), so an empty markdown table row does not read as a conflict. The sweep is capped at 5000 files with the truncation reported rather than silently dropped; on this repo it reads 372 files in about half a second.
+
 ## [0.133.0] — 2026-08-17
 
 ### Added
