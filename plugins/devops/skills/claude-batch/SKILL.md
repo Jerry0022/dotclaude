@@ -25,35 +25,49 @@ Silently check (do not surface "not found"):
 | `on`, `an`, `start` | Step 2 (activate) |
 | `off`, `aus`, `stop` | Step 5 (deactivate) |
 | `go`, `los`, `merge` | Step 4 (fire) |
+| `marker` | Step 2.1 (ask again, overwrite the stored marker) |
 | `status`, none | Step 3 (report) |
 
 ## Step 2 — Activate
 
 **2.1 First-run marker setup.** Read `~/.claude/claude-batch.json`. If it is
-missing or has no `marker`, ask ONCE via `AskUserQuestion`:
+missing, has no `marker`, or `loadConfig()` reports a `markerFallback` (a stored
+marker that cannot work — see below), ask via `AskUserQuestion`. Reached via
+`/claude-batch marker`, always ask and then stop — that route only rewrites the
+marker, it does not activate the mode:
 
 > header: "Marker"
 > question: "Womit sagst du mir, dass ein Prompt NICHT gesammelt, sondern
 > bearbeitet werden soll? Alles ohne dieses Zeichen wird ab jetzt gesammelt."
 > Options (fixed order):
-> 1. `!` am Zeilenanfang (empfohlen) — ein Zeichen, kein Shift, kollidiert mit nichts
+> 1. `>>` am Zeilenanfang (empfohlen) — kurz, visuell eindeutig, kollidiert mit nichts
 > 2. `los:` am Zeilenanfang — ausgeschrieben, praktisch nie versehentlich getippt
-> 3. `>>` am Zeilenanfang — kurz und visuell eindeutig
+> 3. `jetzt:` am Zeilenanfang — wie ein Zuruf, mit Doppelpunkt eindeutig
 
-**The three options are suggestions, not a closed set.** A free-text answer via
-"Sonstiges" IS the answer — it is what the user wants their marker to be, and it
-outranks every offered option. Never read it as "the question wasn't answered"
-and never fall back to the recommendation instead. `validateMarker(raw)` from
-`batch-state.js` normalises it; only `ok: false` goes back to the user, quoting
-the reason (`empty`, `too-long` = over 32 characters). A `warning: 'wordy'`
-marker (letters only, e.g. `Let's go`) is **accepted** — say once, in a single
-clause, that a collected prompt starting with those words would fire the merge,
-then move on. Matching is case-insensitive and requires a word boundary, so
-retyping it in lower case still works.
+**`!`, `/`, `#` and `@` cannot be the first character of a marker.** The harness
+claims those before a prompt exists — `!` opens bash mode and runs the line as a
+shell command, `/` expands a slash command, `#` writes to CLAUDE.md, `@` expands
+a file mention. Such a prompt never reaches the collect hook, so the marker would
+be dead: collection keeps swallowing everything and the advertised escape does
+nothing. `validateMarker` rejects them with `reason: 'harness-reserved'`; never
+suggest one, and never write one into the config by hand.
+
+**Otherwise the three options are suggestions, not a closed set.** A free-text
+answer via "Sonstiges" IS the answer — it is what the user wants their marker to
+be, and it outranks every offered option. Never read it as "the question wasn't
+answered" and never fall back to the recommendation instead. `validateMarker(raw)`
+from `batch-state.js` normalises it; only `ok: false` goes back to the user,
+quoting the reason (`empty`, `too-long` = over 32 characters,
+`harness-reserved` = starts with `!`, `/`, `#` or `@` — name the mechanism in one
+clause and ask for a different one). A `warning: 'wordy'` marker (letters only,
+e.g. `Let's go`) is **accepted** — say once, in a single clause, that a collected
+prompt starting with those words would fire the merge, then move on. Matching is
+case-insensitive and requires a word boundary, so retyping it in lower case still
+works.
 
 Persist the choice via `saveConfig({ marker })` from `hooks/lib/batch-state.js`.
-Never ask again — a later change is a manual edit of that file, or
-`/claude-batch marker`.
+Never ask again unless the stored marker is unusable — a later change is
+`/claude-batch marker`, or a manual edit of that file.
 
 **2.2 Activate and start the watchdog:**
 
@@ -79,10 +93,14 @@ exits. Then render an `analysis` completion card.
 Read the mode and notes via `batch-state.js`, plus
 `node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" status .`
 
-Report: active or not, note count, time since the last note, whether the
-watchdog runs, and — when `expiryReason()` is non-null — that collection stopped
-on its own (`expired` / `full`) and why. Do NOT dump every note unless asked;
-name the count and the first few.
+Report: active or not, note count, time since the last note, the marker actually
+in force (`effectiveMarker(cwd)`), and — when `expiryReason()` is non-null — that
+collection stopped on its own (`expired` / `full`) and why. Do NOT dump every
+note unless asked; name the count and the first few.
+
+When `loadConfig()` returns a `markerFallback`, say so: the stored marker is
+unusable, the default is in force instead, and `/claude-batch marker` fixes it
+permanently. Never report the config value as if it were live.
 
 ## Step 4 — Fire the merge
 

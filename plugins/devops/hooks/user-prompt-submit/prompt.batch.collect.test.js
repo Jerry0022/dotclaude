@@ -16,13 +16,23 @@ let cwd;
  * The temp project carries its own settings.json so plugin-guard passes
  * regardless of the machine's global plugin state.
  */
-function runHook(payload) {
+function runHook(payload, env) {
   const res = spawnSync(process.execPath, [HOOK], {
     input: JSON.stringify({ cwd, ...payload }),
     cwd,
     encoding: "utf8",
+    env: { ...process.env, ...(env || {}) },
   });
   return { code: res.status, stdout: res.stdout || "", stderr: res.stderr || "" };
+}
+
+/** A throwaway home dir holding a known claude-batch.json, so a test never
+ *  depends on the developer's own global marker config. */
+function fakeHome(config) {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "batch-hook-home-"));
+  fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
+  fs.writeFileSync(path.join(home, ".claude", "claude-batch.json"), JSON.stringify(config), "utf8");
+  return { HOME: home, USERPROFILE: home };
 }
 
 beforeEach(() => {
@@ -119,12 +129,14 @@ describe("mode on — what is never collected", () => {
 });
 
 describe("mode on — firing the merge", () => {
-  beforeEach(() => activate(cwd));
+  // Marker pinned into the mode file: without it these tests would inherit the
+  // developer's own ~/.claude/claude-batch.json.
+  beforeEach(() => activate(cwd, { marker: ">>" }));
 
   test("the marker injects every note as context and does not block", () => {
     appendNote(cwd, "Button verrutscht");
     appendNote(cwd, "Fehlertext falsch");
-    const r = runHook({ prompt: "! leg los" });
+    const r = runHook({ prompt: ">> leg los" });
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("Button verrutscht");
     expect(r.stdout).toContain("Fehlertext falsch");
@@ -134,14 +146,30 @@ describe("mode on — firing the merge", () => {
 
   test("the marked prompt itself is not stored as a note", () => {
     appendNote(cwd, "eine notiz");
-    runHook({ prompt: "! jetzt umsetzen" });
+    runHook({ prompt: ">> jetzt umsetzen" });
     expect(readNotes(cwd).map(n => n.text)).toEqual(["eine notiz"]);
   });
 
   test("the marker with an empty queue is just a normal turn", () => {
-    const r = runHook({ prompt: "! leg los" });
+    const r = runHook({ prompt: ">> leg los" });
     expect(r.code).toBe(0);
     expect(r.stdout).toBe("");
+  });
+
+  test("a mode file pinned to the old `!` marker still has a working escape", () => {
+    // `!` never reaches this hook — the harness runs the line as a shell command.
+    // A mode file written before that rule must not be honoured, or the merge
+    // could never be fired again.
+    const mode = JSON.parse(fs.readFileSync(path.join(cwd, ".claude", "batch-mode.json"), "utf8"));
+    fs.writeFileSync(
+      path.join(cwd, ".claude", "batch-mode.json"),
+      JSON.stringify({ ...mode, marker: "!" }),
+      "utf8",
+    );
+    appendNote(cwd, "eine notiz");
+    const r = runHook({ prompt: "los: leg los" }, fakeHome({ marker: "los:" }));
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("eine notiz");
   });
 });
 
@@ -180,9 +208,9 @@ describe("failsafe — collection cannot trap the user", () => {
 
 describe("message builders", () => {
   test("the acknowledgement names the count and both exits", () => {
-    const ack = buildAck(3, "!", false);
+    const ack = buildAck(3, ">>", false);
     expect(ack).toContain("Notiz #3 gespeichert");
-    expect(ack).toContain('"! <text>"');
+    expect(ack).toContain('">> <text>"');
     expect(ack).toContain("/claude-batch off");
     expect(ack).not.toContain("Frage");
   });
@@ -190,11 +218,11 @@ describe("message builders", () => {
   test("the acknowledgement defuses the harness's red block panel", () => {
     // The user reads a red "a hook blocked your input" box. The first line has
     // to say the note landed, or a correct collection reads as a failure.
-    expect(buildAck(3, "!", false).split("\n")[0]).toContain("kein Fehler");
+    expect(buildAck(3, ">>", false).split("\n")[0]).toContain("kein Fehler");
   });
 
   test("the question hint appears only for question-shaped notes", () => {
-    expect(buildAck(1, "!", true)).toContain("Frage");
+    expect(buildAck(1, ">>", true)).toContain("Frage");
   });
 
   test("oversized note sets fall back to a file pointer", () => {

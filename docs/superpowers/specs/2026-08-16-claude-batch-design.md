@@ -36,8 +36,18 @@ consumes GitHub issues as its input. What is missing is lightweight capture
 
 Opt-in per session. `/claude-batch on` writes a mode file; `/claude-batch off`
 removes it. On very first use the skill asks once for the **execute marker** and
-stores it user-globally in `~/.claude/claude-batch.json`. Default proposal: `!`
+stores it user-globally in `~/.claude/claude-batch.json`. Default proposal: `>>`
 at the start of the line.
+
+**A marker may not start with `!`, `/`, `#` or `@`.** The harness claims those
+before a prompt exists — `!` switches the input line to bash mode and runs it as
+a shell command, `/` expands a slash command, `#` appends to CLAUDE.md, `@`
+expands a file mention. None of them arrive at UserPromptSubmit as a prompt, so a
+marker built on one is dead on arrival: collection keeps blocking every prompt
+while the single documented escape does nothing. `validateMarker` therefore
+rejects them (`reason: 'harness-reserved'`) instead of warning, and `loadConfig`
+re-validates on every read so a config written before this rule (`!`) falls back
+to the default rather than trapping the user.
 
 ### Collection
 

@@ -20,6 +20,10 @@
  *     - expanded slash commands (<command-name> tag)
  *     - prompts carrying attachments or @file mentions
  *
+ *   The marker can never start with `!`, `/`, `#` or `@`: the harness claims
+ *   those before a prompt exists (bash mode, slash command, memory capture, file
+ *   mention), so this hook would never see the escape at all.
+ *
  *   Failsafe: the mode file carries an expiry and a note cap, so a bug in the
  *   marker comparison can never lock the user out of their own session.
  *
@@ -122,7 +126,7 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
-  const marker = B.readMode(cwd)?.marker || B.loadConfig().marker;
+  const marker = B.effectiveMarker(cwd);
   let verdict;
   try {
     verdict = B.classify({ text, hookInput: hook, marker, modeActive: true });
