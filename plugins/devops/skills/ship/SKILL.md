@@ -176,7 +176,9 @@ Check the result:
 - `ready: false` → report errors and **STOP**. Do not proceed.
 - `needsRebase: true` → continue to 1b (do NOT stop).
 
-The tool checks: clean tree, commits ahead, all pushed, version consistency (skipped for intermediate), worktree detection, and unresolved conflict markers in the files this ship would land (`no-conflict-markers` — a hard error; `ship_release` re-scans immediately before committing, so a marker left behind by the rebase in 1b is caught there).
+The tool checks: clean tree, commits ahead, all pushed, version consistency (skipped for intermediate), worktree detection, and unresolved conflict markers (`no-conflict-markers`).
+
+The marker check has two scopes. A marker in the files **this ship would land** is a hard error — `ship_release` re-scans immediately before committing, so one left behind by the rebase in 1b is caught there too. A marker anywhere else in the repo is a **warning**: it predates this branch, so report it and open a separate fix rather than holding an unrelated release hostage.
 Merge-safety issues (`base-ahead`, `file-overlap`, `config-conflictstyle`) are **warnings, not errors** — they are resolved autonomously below.
 
 ### 1b. Resolve merge-safety warnings

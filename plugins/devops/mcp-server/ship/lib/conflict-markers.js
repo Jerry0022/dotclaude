@@ -24,6 +24,8 @@ const MAX_BYTES = 4 * 1024 * 1024;
 /** The report is a pointer to the damage, not an inventory of it. */
 const MAX_REPORTED_FILES = 20;
 const MAX_REPORTED_HITS = 5;
+/** Ceiling for the advisory whole-repo sweep, so a monorepo cannot stall a ship. */
+const MAX_REPO_FILES = 5000;
 
 /**
  * Classify a single line. A git conflict marker is EXACTLY seven of its
@@ -112,35 +114,86 @@ export function candidateFiles(cwd, base) {
   return { root, files: [...files], scope };
 }
 
+/** Every tracked path, repo-root-relative. Empty when git cannot answer. */
+function trackedFiles(cwd) {
+  const raw = git("ls-files -z", { cwd });
+  return raw ? raw.split("\0").filter(Boolean) : [];
+}
+
 /**
- * Scan the ship's files for unresolved conflict markers.
+ * Read and classify one file. Returns null when it is not scannable text
+ * (deleted, oversized, binary, unreadable), else `{ file, count, hits }`.
+ */
+function scanFile(root, rel) {
+  let buf;
+  try {
+    if (statSync(join(root, rel)).size > MAX_BYTES) return null;
+    buf = readFileSync(join(root, rel));
+  } catch {
+    return null; // deleted by the diff, renamed away, or unreadable — nothing to land
+  }
+  if (isBinary(buf)) return null;
+  const hits = findMarkersInText(buf.toString("utf8"));
+  return { file: rel, count: hits.length, hits: hits.slice(0, MAX_REPORTED_HITS) };
+}
+
+/**
+ * Scan for unresolved conflict markers. Two scopes, deliberately weighted
+ * differently:
  *
- * @returns {{clean: boolean, scanned: number, scope: string, offenders: Array<{file: string, count: number, hits: Array<{line: number, marker: string}>}>}}
+ *   `offenders`     — the files THIS ship would land. **Blocking**: a marker here
+ *                     is the ship's own damage and must not reach the base branch.
+ *   `repoOffenders` — every other tracked text file, only with `scanRepo: true`.
+ *                     **Advisory.** A marker that predates this branch is a repo
+ *                     defect, not this release's, and holding an unrelated ship
+ *                     hostage to it is the wrong trade — not least because a repo
+ *                     may legitimately carry conflict-marker fixtures (this
+ *                     plugin's own git-sync parses them) with no way to opt out of
+ *                     a hard gate. Reporting is what was missing: the v0.130.0
+ *                     marker survived five releases because nothing ever looked at
+ *                     a file the shipping branch had not touched.
+ *
+ * @returns {{clean: boolean, scanned: number, scope: string, offenders: Array, repoOffenders: Array, repoScanned: number, repoTruncated: boolean}}
  */
 export function scanConflictMarkers(cwd, options = {}) {
-  const { base = null } = options;
+  const { base = null, scanRepo = false } = options;
   const { root, files, scope } = candidateFiles(cwd, base);
   const offenders = [];
   let scanned = 0;
 
   for (const rel of files) {
     if (offenders.length >= MAX_REPORTED_FILES) break;
-    let buf;
-    try {
-      if (statSync(join(root, rel)).size > MAX_BYTES) continue;
-      buf = readFileSync(join(root, rel));
-    } catch {
-      continue; // deleted by the diff, renamed away, or unreadable — nothing to land
-    }
-    if (isBinary(buf)) continue;
+    const result = scanFile(root, rel);
+    if (!result) continue;
     scanned++;
-    const hits = findMarkersInText(buf.toString("utf8"));
-    if (hits.length > 0) {
-      offenders.push({ file: rel, count: hits.length, hits: hits.slice(0, MAX_REPORTED_HITS) });
+    if (result.count > 0) offenders.push(result);
+  }
+
+  const repoOffenders = [];
+  let repoScanned = 0;
+  let repoTruncated = false;
+  if (scanRepo) {
+    const shipped = new Set(files);
+    const rest = trackedFiles(cwd).filter((f) => !shipped.has(f));
+    repoTruncated = rest.length > MAX_REPO_FILES;
+    for (const rel of rest.slice(0, MAX_REPO_FILES)) {
+      if (repoOffenders.length >= MAX_REPORTED_FILES) break;
+      const result = scanFile(root, rel);
+      if (!result) continue;
+      repoScanned++;
+      if (result.count > 0) repoOffenders.push(result);
     }
   }
 
-  return { clean: offenders.length === 0, scanned, scope, offenders };
+  return {
+    clean: offenders.length === 0,
+    scanned,
+    scope,
+    offenders,
+    repoOffenders,
+    repoScanned,
+    repoTruncated,
+  };
 }
 
 /** One-line, actionable summary of a failed scan. */

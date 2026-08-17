@@ -301,7 +301,11 @@ export async function handler(params) {
   //     other gate here, because nothing else in the pipeline reads file
   //     content. v0.130.0 shipped exactly that line into CHANGELOG.md on main.
   //     Hard error: a marker is unambiguously broken content and trivially fixed.
-  const markerScan = scanConflictMarkers(cwd, { base });
+  //     The rest of the repo is swept too, but only as a warning: a marker that
+  //     predates this branch is a repo defect, not this release's. Reporting it
+  //     is the part that was missing — the v0.130.0 line survived five ships
+  //     because nothing ever looked at a file the shipping branch hadn't touched.
+  const markerScan = scanConflictMarkers(cwd, { base, scanRepo: true });
   if (!markerScan.clean) {
     errors.push(`${describeMarkers(markerScan.offenders)} — resolve before shipping`);
   }
@@ -311,6 +315,10 @@ export async function handler(params) {
     scanned: markerScan.scanned,
     scope: markerScan.scope,
     ...(markerScan.clean ? {} : { offenders: markerScan.offenders }),
+    ...(markerScan.repoOffenders.length > 0 && {
+      repoOffenders: markerScan.repoOffenders,
+      warning: `${describeMarkers(markerScan.repoOffenders)} — pre-existing, outside this ship's diff; fix separately`,
+    }),
   });
 
   // Version consistency (skip for intermediate merges — versions only matter on main)

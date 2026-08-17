@@ -30,11 +30,12 @@ afterEach(() => {
 });
 
 /** Drive candidateFiles: `root` is the temp dir, the branch diff lists `files`. */
-function stubRepo(files, { worktree = [] } = {}) {
+function stubRepo(files, { worktree = [], tracked = null } = {}) {
   git.mockImplementation((cmd) => {
     if (cmd.startsWith("rev-parse --show-toplevel")) return dir;
     if (cmd.startsWith("merge-base")) return "abc123";
     if (cmd.startsWith("diff --name-only")) return files.join("\n");
+    if (cmd.startsWith("ls-files")) return (tracked ?? files).join("\0");
     return null;
   });
   dirtyState.mockReturnValue({ dirty: worktree.length > 0, modified: worktree, untracked: [], lines: [] });
@@ -173,6 +174,39 @@ describe("scanConflictMarkers", () => {
     const out = scanConflictMarkers("/repo", { base: "main" });
     expect(out.scanned).toBe(2);
     expect(out.offenders.map((o) => o.file)).toEqual(["b.md"]);
+  });
+
+  test("without scanRepo, a marker outside the ship's diff is invisible", () => {
+    write("touched.md", "ok\n");
+    write("untouched.md", "||||||| parent of abc (x)\n");
+    stubRepo(["touched.md"], { tracked: ["touched.md", "untouched.md"] });
+    const out = scanConflictMarkers("/repo", { base: "main" });
+    expect(out).toMatchObject({ clean: true, repoOffenders: [], repoScanned: 0 });
+    expect(git).not.toHaveBeenCalledWith("ls-files -z", expect.anything());
+  });
+
+  test("with scanRepo, it is reported separately and does NOT flip `clean`", () => {
+    // The v0.130.0 shape: damage already on main, untouched by this branch.
+    write("touched.md", "ok\n");
+    write("untouched.md", "||||||| parent of abc (x)\n");
+    stubRepo(["touched.md"], { tracked: ["touched.md", "untouched.md"] });
+    const out = scanConflictMarkers("/repo", { base: "main", scanRepo: true });
+    expect(out.clean).toBe(true);
+    expect(out.offenders).toEqual([]);
+    expect(out.repoOffenders).toEqual([
+      { file: "untouched.md", count: 1, hits: [{ line: 1, marker: "|||||||" }] },
+    ]);
+    expect(out.repoScanned).toBe(1);
+    expect(out.repoTruncated).toBe(false);
+  });
+
+  test("the repo sweep never re-reports a file the ship's diff already covers", () => {
+    write("both.md", "<<<<<<< HEAD\n");
+    stubRepo(["both.md"], { tracked: ["both.md"] });
+    const out = scanConflictMarkers("/repo", { base: "main", scanRepo: true });
+    expect(out.clean).toBe(false);
+    expect(out.offenders.map((o) => o.file)).toEqual(["both.md"]);
+    expect(out.repoOffenders).toEqual([]);
   });
 });
 

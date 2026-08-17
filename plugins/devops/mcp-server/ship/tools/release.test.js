@@ -48,7 +48,7 @@ vi.mock("../lib/github.js", () => ({
 // suite) and keep the real formatter, so these tests drive the gate itself.
 vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
   ...(await importOriginal()),
-  scanConflictMarkers: vi.fn(() => ({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [] })),
+  scanConflictMarkers: vi.fn(() => ({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [], repoOffenders: [], repoScanned: 0, repoTruncated: false })),
 }));
 
 import { handler } from "./release.js";
@@ -132,7 +132,7 @@ beforeEach(() => {
   ghLib.createPR.mockReturnValue({ number: 42, url: "https://example.com/pull/42" });
   ghLib.mergePR.mockReturnValue("merge12");
   ghLib.watchPRChecks.mockReturnValue({ status: "passed", checks: [] });
-  scanConflictMarkers.mockReturnValue({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [] });
+  scanConflictMarkers.mockReturnValue({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [], repoOffenders: [], repoScanned: 0, repoTruncated: false });
 });
 
 describe("ship_release — unresolved conflict markers", () => {
