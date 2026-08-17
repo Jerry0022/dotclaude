@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.132.5] — 2026-08-17
+
+### Fixed
+
+- **The execute marker can no longer be a character the harness swallows.** `/claude-batch` shipped `!` as its recommended marker, and `!` at the start of an input line is the harness's bash mode: the line runs as a shell command and never arrives as a prompt, so the collect hook never sees it. The consequence was the worst shape a mode like this has — collection kept blocking and storing every prompt while the single documented escape did nothing, silently, until the failsafe expiry hours later. `/`, `#` and `@` fail identically (slash command, memory capture, file mention), so all four are now rejected as the first character of a marker (`reason: 'harness-reserved'`) instead of being offered, and the shipped default is `>>`.
+
+  Rejecting them at write time is not enough: a config written before this rule carries `!`. `loadConfig` therefore re-validates the stored marker on every read and falls back to the default when it cannot work, reporting the substitution as `markerFallback` so the skill tells the user instead of quietly behaving differently than the config file says. The same applies one level down — the mode file pins the marker collection started with, and `effectiveMarker(cwd)` now sanitises that pin rather than trusting it. This is the one hard exception to the rule added in 0.132.4 that a free-text answer outranks every offered option: `deep-knowledge/decision-format.md` already carves out values that are technically impossible for the mechanism behind them, and this is precisely such a value.
+
+  `/claude-batch marker` was documented in the skill's prose as the way to change a stored marker but was missing from the routing table, so the argument did nothing. It is now routed.
+
+### Changed
+
+- **The test suite no longer fails on machine load.** Hook tests spawn real node processes — that is the contract under test, since the harness invokes hooks as child processes — and on Windows a single spawn costs 1–20 s once 70+ test files compete. Against vitest's 5 s default that produced up to 9 red tests per run, all of them timeouts rather than assertions, in whichever suites happened to lose the scheduling lottery; individual files had begun pinning `30_000` by hand. The default is now 60 s repo-wide, which turns the same suite from 1799/1808 into 1808/1808 without touching a single test's logic.
+
 ## [0.132.4] — 2026-08-17
 
 ### Fixed
