@@ -40,6 +40,17 @@ missing or has no `marker`, ask ONCE via `AskUserQuestion`:
 > 2. `los:` am Zeilenanfang — ausgeschrieben, praktisch nie versehentlich getippt
 > 3. `>>` am Zeilenanfang — kurz und visuell eindeutig
 
+**The three options are suggestions, not a closed set.** A free-text answer via
+"Sonstiges" IS the answer — it is what the user wants their marker to be, and it
+outranks every offered option. Never read it as "the question wasn't answered"
+and never fall back to the recommendation instead. `validateMarker(raw)` from
+`batch-state.js` normalises it; only `ok: false` goes back to the user, quoting
+the reason (`empty`, `too-long` = over 32 characters). A `warning: 'wordy'`
+marker (letters only, e.g. `Let's go`) is **accepted** — say once, in a single
+clause, that a collected prompt starting with those words would fire the merge,
+then move on. Matching is case-insensitive and requires a word boundary, so
+retyping it in lower case still works.
+
 Persist the choice via `saveConfig({ marker })` from `hooks/lib/batch-state.js`.
 Never ask again — a later change is a manual edit of that file, or
 `/claude-batch marker`.
@@ -141,6 +152,11 @@ The dependency is soft. Resolve the plugin path and skip silently if absent —
 
 - **Never collect** machine prompts, expanded slash commands, or prompts with
   attachments. The hook enforces this; do not add exceptions in the skill.
+- **The red "Ein Hook hat deine Eingabe blockiert" panel is the normal collect
+  path, not a failure.** Blocking the prompt is how the mode saves the turn; the
+  harness has no quieter rendering for it. If the user reports it as an error,
+  confirm the note actually landed (Step 3) and explain the mechanism — do not
+  start debugging the hook.
 - **Never resolve a contradiction silently.** Name it, then decide.
 - **Never delete notes.** Archive them.
 - **A question in the queue is a defect, not content.** If a note is clearly a

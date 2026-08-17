@@ -53,14 +53,14 @@ describe("mode on — collecting", () => {
   test("an ordinary prompt is blocked and stored", () => {
     const r = runHook({ prompt: "Der Button im Header ist verrutscht" });
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("#1 gesammelt");
+    expect(r.stderr).toContain("Notiz #1 gespeichert");
     expect(readNotes(cwd).map(n => n.text)).toEqual(["Der Button im Header ist verrutscht"]);
   });
 
   test("the counter advances across prompts", () => {
     runHook({ prompt: "erste" });
     const r = runHook({ prompt: "zweite" });
-    expect(r.stderr).toContain("#2 gesammelt");
+    expect(r.stderr).toContain("Notiz #2 gespeichert");
     expect(readNotes(cwd)).toHaveLength(2);
   });
 
@@ -181,10 +181,16 @@ describe("failsafe — collection cannot trap the user", () => {
 describe("message builders", () => {
   test("the acknowledgement names the count and both exits", () => {
     const ack = buildAck(3, "!", false);
-    expect(ack).toContain("#3 gesammelt");
+    expect(ack).toContain("Notiz #3 gespeichert");
     expect(ack).toContain('"! <text>"');
     expect(ack).toContain("/claude-batch off");
     expect(ack).not.toContain("Frage");
+  });
+
+  test("the acknowledgement defuses the harness's red block panel", () => {
+    // The user reads a red "a hook blocked your input" box. The first line has
+    // to say the note landed, or a correct collection reads as a failure.
+    expect(buildAck(3, "!", false).split("\n")[0]).toContain("kein Fehler");
   });
 
   test("the question hint appears only for question-shaped notes", () => {

@@ -36,12 +36,21 @@ const INLINE_LIMIT = 8000;
 
 /**
  * Acknowledgement shown to the user on a blocked (collected) prompt.
+ *
+ * The harness renders every UserPromptSubmit block as a red "a hook blocked
+ * your input" panel — that framing is not ours to change, and blocking IS the
+ * mechanism the mode runs on. So the first line has to carry the all-clear:
+ * the note landed, nothing failed.
+ *
  * @param {number} count total notes after this one
  * @param {string} marker configured execute marker
  * @param {boolean} question whether the note reads like a question
  */
 function buildAck(count, marker, question) {
-  const lines = [`[claude-batch] ✓ #${count} gesammelt — nicht ausgeführt.`];
+  const lines = [
+    `[claude-batch] ✓ Notiz #${count} gespeichert — alles korrekt, kein Fehler.`,
+    'Der Sammelmodus stoppt den Prompt absichtlich, statt ihn zu bearbeiten.',
+  ];
   if (question) {
     // Advisory only. The hook never decides what is a question; it just makes a
     // forgotten marker visible instead of silent.
