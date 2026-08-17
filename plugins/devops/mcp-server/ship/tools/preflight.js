@@ -14,6 +14,7 @@ import { readVersion, verifyVersionFiles } from "../lib/version.js";
 import { writeSentinel } from "../lib/sentinel.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
 import { detectOutOfBandDeploys, DEFAULT_OUT_OF_BAND_GLOBS } from "../lib/infra-deploy.js";
+import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
 
 export const schema = z.object({
   base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
@@ -292,6 +293,33 @@ export async function handler(params) {
   } else {
     checks.push({ name: "config-conflictstyle", ok: true, current: conflictStyle });
   }
+
+  // 11. Unresolved conflict markers in the files this ship would land.
+  //     The check above *enforces* diff3, which is what puts the fourth and
+  //     least-familiar marker (`|||||||`) into a conflicted file — and a
+  //     resolution that deletes the other three and misses that one passes every
+  //     other gate here, because nothing else in the pipeline reads file
+  //     content. v0.130.0 shipped exactly that line into CHANGELOG.md on main.
+  //     Hard error: a marker is unambiguously broken content and trivially fixed.
+  //     The rest of the repo is swept too, but only as a warning: a marker that
+  //     predates this branch is a repo defect, not this release's. Reporting it
+  //     is the part that was missing — the v0.130.0 line survived five ships
+  //     because nothing ever looked at a file the shipping branch hadn't touched.
+  const markerScan = scanConflictMarkers(cwd, { base, scanRepo: true });
+  if (!markerScan.clean) {
+    errors.push(`${describeMarkers(markerScan.offenders)} — resolve before shipping`);
+  }
+  checks.push({
+    name: "no-conflict-markers",
+    ok: markerScan.clean,
+    scanned: markerScan.scanned,
+    scope: markerScan.scope,
+    ...(markerScan.clean ? {} : { offenders: markerScan.offenders }),
+    ...(markerScan.repoOffenders.length > 0 && {
+      repoOffenders: markerScan.repoOffenders,
+      warning: `${describeMarkers(markerScan.repoOffenders)} — pre-existing, outside this ship's diff; fix separately`,
+    }),
+  });
 
   // Version consistency (skip for intermediate merges — versions only matter on main)
   let versionInfo = { version: null, type: null };

@@ -176,7 +176,9 @@ Check the result:
 - `ready: false` → report errors and **STOP**. Do not proceed.
 - `needsRebase: true` → continue to 1b (do NOT stop).
 
-The tool checks: clean tree, commits ahead, all pushed, version consistency (skipped for intermediate), worktree detection.
+The tool checks: clean tree, commits ahead, all pushed, version consistency (skipped for intermediate), worktree detection, and unresolved conflict markers (`no-conflict-markers`).
+
+The marker check has two scopes. A marker in the files **this ship would land** is a hard error — `ship_release` re-scans immediately before committing, so one left behind by the rebase in 1b is caught there too. A marker anywhere else in the repo is a **warning**: it predates this branch, so report it and open a separate fix rather than holding an unrelated release hostage.
 Merge-safety issues (`base-ahead`, `file-overlap`, `config-conflictstyle`) are **warnings, not errors** — they are resolved autonomously below.
 
 ### 1b. Resolve merge-safety warnings
@@ -200,7 +202,10 @@ Merge-safety issues (`base-ahead`, `file-overlap`, `config-conflictstyle`) are *
       - Analyze **both sides semantically**: what did our branch change vs. what did base change?
       - Check **chronological context**: which change is newer? Do they contradict or complement each other?
       - Produce a merged version that preserves **both** intents
-      - Write the resolved file, then `git add <file>`
+      - Write the resolved file, then `git add <file>` — with **all four** marker
+        lines removed, `|||||||` included. Deleting the familiar three and
+        leaving the diff3 base marker is the failure `no-conflict-markers` exists
+        for; it blocks the ship at Step 4 rather than landing on main.
    c. `git rebase --continue`
    d. If more conflicts appear (multi-commit rebase), repeat (b)–(c)
    e. **Truly ambiguous conflicts** (both sides change the same logic in contradictory ways and the correct resolution is not determinable from code context): abort the rebase (`git rebase --abort`) and ask the user via AskUserQuestion with a clear, developer-readable explanation:

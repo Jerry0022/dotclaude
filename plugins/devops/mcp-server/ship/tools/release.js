@@ -10,6 +10,7 @@ import { createPR, mergePR, findExistingPR, watchPRChecks } from "../lib/github.
 import { detectRepoMode } from "../lib/repo-mode.js";
 import { remoteTagExists } from "../lib/remote-tags.js";
 import { retryUntil } from "../lib/retry.js";
+import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
 
 export const schema = z.object({
   base: z.string().default("main").describe("Base branch for PR (may be a feature branch for intermediate merges)"),
@@ -49,6 +50,22 @@ export async function handler(params) {
   const result = { branch, base, intermediate, mode: repoMode };
 
   try {
+    // Unresolved conflict markers — the last gate before this content becomes a
+    // commit. ship_preflight runs the same scan, but the ship's own rebase
+    // (skill Step 1b) happens AFTER it: a marker introduced while resolving that
+    // rebase is only caught here, and only if the check sits before the commit.
+    // Blocks rather than warns — the branch is untouched at this point, so the
+    // fix is "edit the file and retry", with nothing to unwind.
+    const markerScan = scanConflictMarkers(cwd, { base });
+    if (!markerScan.clean) {
+      result.success = false;
+      result.conflictMarkers = markerScan.offenders;
+      result.error =
+        `${describeMarkers(markerScan.offenders)}. Nothing was committed, pushed or merged. ` +
+        `Resolve the marker(s) and retry ship_release.`;
+      return result;
+    }
+
     // Optional: commit version-bumped files
     if (commitMessage) {
       const state = dirtyState(opts);
