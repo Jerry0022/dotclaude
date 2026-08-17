@@ -20,8 +20,25 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 
+/**
+ * First characters the harness claims before a prompt exists.
+ *
+ * A prompt starting with one of these never arrives at UserPromptSubmit as a
+ * prompt at all, so a marker built on them can never fire the merge:
+ *   `!` → bash mode, the line runs as a shell command
+ *   `/` → slash command, expanded into a different payload
+ *   `#` → memory capture, appended to CLAUDE.md
+ *   `@` → file mention, expanded into file content (also an ATTACHMENT_PATTERN)
+ *
+ * The failure is silent and total: collection keeps swallowing prompts while the
+ * one escape the user was told about does nothing. Hence a hard reject, not a
+ * warning.
+ */
+const HARNESS_RESERVED_PREFIXES = ['!', '/', '#', '@'];
+
 const DEFAULTS = {
-  marker: '!',
+  // `>>` and not `!`: see HARNESS_RESERVED_PREFIXES.
+  marker: '>>',
   inactivityMinutes: 10,
   // Failsafe bounds — either one deactivates collection on its own, so a bug in
   // marker comparison can never lock the user out of their own session.
@@ -83,14 +100,36 @@ function lockPath(cwd)     { return path.join(claudeDir(cwd), 'batch-watchdog.lo
 
 // ── config ─────────────────────────────────────────────────────────────────
 
-/** @returns {{marker:string,inactivityMinutes:number,expiryHours:number,maxNotes:number}} */
+/**
+ * Config with an ALWAYS-USABLE marker.
+ *
+ * A stored marker is re-validated on every read, not just on write: configs
+ * written before the reserved-prefix rule existed carry `!`, and honouring one
+ * would leave collection running with no way to fire the merge. When that
+ * happens the default takes over and `markerFallback` records it, so the skill
+ * can tell the user instead of the mode silently behaving differently than the
+ * config file says.
+ *
+ * @returns {{marker:string,inactivityMinutes:number,expiryHours:number,maxNotes:number,markerFallback?:{was:string,reason:string}}}
+ */
 function loadConfig() {
+  let raw = {};
   try {
-    const raw = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
-    return { ...DEFAULTS, ...(raw && typeof raw === 'object' ? raw : {}) };
-  } catch {
-    return { ...DEFAULTS };
+    const parsed = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
+    if (parsed && typeof parsed === 'object') raw = parsed;
+  } catch { /* missing or corrupt — defaults below */ }
+  const cfg = { ...DEFAULTS, ...raw };
+  delete cfg.markerFallback;
+  const v = validateMarker(cfg.marker);
+  if (!v.ok) {
+    return {
+      ...cfg,
+      marker: DEFAULTS.marker,
+      markerFallback: { was: String(cfg.marker ?? ''), reason: v.reason },
+    };
   }
+  cfg.marker = v.marker;
+  return cfg;
 }
 
 function saveConfig(cfg) {
@@ -101,6 +140,8 @@ function saveConfig(cfg) {
     incoming.marker = v.marker;
   }
   const merged = { ...loadConfig(), ...incoming };
+  // Derived state, never persisted — it would outlive the condition it reports.
+  delete merged.markerFallback;
   const dir = path.dirname(configPath());
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(merged, null, 2) + '\n', 'utf8');
@@ -149,6 +190,7 @@ function expiryReason(cwd, now) {
 
 function activate(cwd, opts = {}) {
   const cfg = loadConfig();
+  const asked = validateMarker(opts.marker);
   const startedAt = opts.startedAt ? new Date(opts.startedAt) : new Date();
   const hours = opts.expiryHours ?? cfg.expiryHours;
   const mode = {
@@ -156,7 +198,9 @@ function activate(cwd, opts = {}) {
     startedAt: startedAt.toISOString(),
     expiresAt: new Date(startedAt.getTime() + hours * 3600_000).toISOString(),
     maxNotes: opts.maxNotes ?? cfg.maxNotes,
-    marker: opts.marker ?? cfg.marker,
+    // Pinned so a later config edit cannot change the marker mid-collection —
+    // but never an unusable one, or the mode starts with no way out.
+    marker: asked.ok ? asked.marker : cfg.marker,
   };
   fs.mkdirSync(claudeDir(cwd), { recursive: true });
   fs.writeFileSync(modePath(cwd), JSON.stringify(mode, null, 2) + '\n', 'utf8');
@@ -272,13 +316,20 @@ const MARKER_MAX_LENGTH = 32;
  * file. Only genuinely unusable input is rejected, and always with a reason
  * the skill can quote back.
  *
- * @returns {{ok:true,marker:string,warning:?'wordy'}|{ok:false,reason:'empty'|'too-long'}}
+ * The one hard exception to "the user's own answer wins": a marker the harness
+ * intercepts before the hook runs (see HARNESS_RESERVED_PREFIXES) cannot work at
+ * all, so it is rejected rather than accepted with a warning.
+ *
+ * @returns {{ok:true,marker:string,warning:?'wordy'}|{ok:false,reason:'empty'|'too-long'|'harness-reserved'}}
  */
 function validateMarker(raw) {
   if (typeof raw !== 'string') return { ok: false, reason: 'empty' };
   const marker = raw.trim().replace(/\s+/g, ' ');
   if (!marker) return { ok: false, reason: 'empty' };
   if (marker.length > MARKER_MAX_LENGTH) return { ok: false, reason: 'too-long' };
+  if (HARNESS_RESERVED_PREFIXES.includes(marker[0])) {
+    return { ok: false, reason: 'harness-reserved' };
+  }
   // A letters-only phrase can also be the honest start of a collected prompt.
   // Word-boundary matching keeps that rare, but the user should hear it once.
   const wordy = /^[\p{L}\p{N} ]+$/u.test(marker) ? 'wordy' : null;
@@ -313,6 +364,22 @@ function stripMarker(text, marker) {
   const s = String(text ?? '');
   const m = markerMatch(s, marker);
   return m ? s.slice(m[0].length).trimStart() : s;
+}
+
+/**
+ * The marker actually in force for this project.
+ *
+ * The mode file wins over the config (it pins the marker the mode was started
+ * with), but only if it is still usable: a mode file written before the
+ * reserved-prefix rule carries `!`, and returning it would mean no prompt can
+ * ever fire the merge.
+ *
+ * @param {string} cwd
+ * @returns {string}
+ */
+function effectiveMarker(cwd) {
+  const pinned = validateMarker(readMode(cwd)?.marker);
+  return pinned.ok ? pinned.marker : loadConfig().marker;
 }
 
 /**
@@ -361,8 +428,7 @@ function willBeCollected(hookInput) {
     const cwd = hookInput.cwd || process.cwd();
     if (!isModeActive(cwd)) return false;
     const text = hookInput.prompt || hookInput.user_message || hookInput.message || '';
-    const marker = readMode(cwd)?.marker || loadConfig().marker;
-    return classify({ text, hookInput, marker, modeActive: true }) === 'collect';
+    return classify({ text, hookInput, marker: effectiveMarker(cwd), modeActive: true }) === 'collect';
   } catch {
     return false;
   }
@@ -370,6 +436,7 @@ function willBeCollected(hookInput) {
 
 module.exports = {
   DEFAULTS,
+  HARNESS_RESERVED_PREFIXES,
   MACHINE_PATTERNS,
   ATTACHMENT_PATTERNS,
   configPath, claudeDir, notesPath, modePath, activityPath, lockPath,
@@ -379,6 +446,6 @@ module.exports = {
   touchActivity, readActivity,
   isMachinePrompt, isExpandedCommand, hasAttachment,
   startsWithMarker, stripMarker, looksLikeQuestion,
-  validateMarker, markerMatch, MARKER_MAX_LENGTH,
+  validateMarker, markerMatch, effectiveMarker, MARKER_MAX_LENGTH,
   classify, willBeCollected,
 };

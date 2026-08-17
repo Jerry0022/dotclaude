@@ -20,6 +20,10 @@
  *     - expanded slash commands (<command-name> tag)
  *     - prompts carrying attachments or @file mentions
  *
+ *   The marker can never start with `!`, `/`, `#` or `@`: the harness claims
+ *   those before a prompt exists (bash mode, slash command, memory capture, file
+ *   mention), so this hook would never see the escape at all.
+ *
  *   Failsafe: the mode file carries an expiry and a note cap, so a bug in the
  *   marker comparison can never lock the user out of their own session.
  *
@@ -85,6 +89,10 @@ function buildMergeContext(notes, rest, notesFile) {
     'Umsetzung ist breit gemeint — Code, Concepting, UI-Concepting, oder auch nur',
     'ein erster Schritt.',
     '',
+    'Der Sammelmodus ist mit diesem Prompt automatisch BEENDET. Folgeprompts sind',
+    'die Unterhaltung über die Umsetzung und laufen wieder normal — frage NICHT,',
+    'ob der Modus aktiv bleiben soll. Nur ein neues /claude-batch on sammelt wieder.',
+    '',
   ];
 
   const body = notes.map((n, i) => `--- Notiz #${i + 1} (${n.at}) ---\n${n.text}`).join('\n\n');
@@ -122,7 +130,7 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
-  const marker = B.readMode(cwd)?.marker || B.loadConfig().marker;
+  const marker = B.effectiveMarker(cwd);
   let verdict;
   try {
     verdict = B.classify({ text, hookInput: hook, marker, modeActive: true });
@@ -139,9 +147,14 @@ process.stdin.on('end', () => {
     try {
       B.touchActivity(cwd);
       const notes = B.readNotes(cwd);
-      if (notes.length === 0) process.exit(0); // nothing collected — normal turn
+      if (notes.length === 0) process.exit(0); // nothing collected — mode stays armed
       const rest = B.stripMarker(text, marker);
       process.stdout.write(buildMergeContext(notes, rest, B.notesPath(cwd)) + '\n');
+      // Firing the merge ENDS collection. What follows is the conversation about
+      // the implementation — approvals, answers to Claude's questions, course
+      // corrections — and collecting those is actively wrong: they are blocked,
+      // erased and answered by nobody. Re-arming is an explicit `/claude-batch on`.
+      B.deactivate(cwd);
     } catch { /* non-fatal — the turn still runs */ }
     process.exit(0);
   }
