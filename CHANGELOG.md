@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.133.0] — 2026-08-17
+
+### Added
+
+- **The concept final report closes out through a guided wizard instead of a wall of buttons.** The panel showed four controls at once — 🚀 Shippen, Issues erstellen, Concept beenden, Iterationen ansehen — each firing its own submit. Two things were wrong with that, and both were structural rather than cosmetic: three of the four were irreversible actions with a correct sequence (issues before ship before file cleanup) presented as peers, and wanting more than one of them had no expression at all — the first click sent a payload, dimmed the page and ended the round.
+
+  The panel now asks one question per step (issues → shippen → files), shows a review screen naming every consequence in execution order, and sends a single `finalize` payload carrying all three decisions. Claude executes them in a fixed order: issues, then ship, then Step 6 cleanup. The order is not a preference — issues must not depend on a release succeeding, ship is the one part that can hard-fail, and cleanup can delete the concept HTML, so a blocked ship stops the run before it and leaves the session open to retry.
+
+  The ship step deliberately has no preselected answer and is excluded from `localStorage`: a release must be an answered question, never a skipped one and never a restored one from an earlier round. Legacy `create-issues` / `ship` / `dispose-concept` submissions stay accepted, because a mid-session plugin update leaves an older page open in the browser.
+
+  Hardening the wizard turned up defects worth naming: a `finalize` did not join the submit-state machine, so the five-minute stuck-round recovery could never fire for the longest action there is; `POST /decisions` has no version guard, so a payload the bridge had already persisted before the response was lost could be re-delivered by the offline queue and create its issues and run its release a second time (now guarded by a `submission_id` the retry checks first); and the panel-reset safety net would have painted the iterate/implement buttons onto a closed final report.
+
+### Changed
+
+- **A design concept's two floating buttons are one component again.** The ☰ menu FAB was a 56px accent circle, the 💬 feedback FAB a 64px amber one — different sizes, different colours, sitting on the same edge and visibly mismatched across concepts. They now share a single 60px rule; per-FAB size overrides are rejected by a test rather than by memory.
+
+  The feedback dock starts **collapsed** in every state. It used to open itself on load and auto-close on the first mockup click, so a concept opened onto three empty textareas covering the artefact the user came to look at. Opened, it has exactly two sizes — 420px for a general note, 560px when per-design and per-screen fields are present — instead of being sized to its content (a box too small to type three lines into) or to the viewport (a full-width bar whose textareas never wrap).
+
+### Fixed
+
+- **Reviewing an earlier iteration no longer empties the panel.** `showIteration()` switched between four panel states, but only three existed: no markup anywhere declared `#panel-frozen`, so every past-iteration tab hid the live states and put nothing in their place — no controls, no explanation, and no way back to the live tab except guessing which chip it is (and it is not the last one once a final report exists). The frozen state now renders a read-only notice plus a back-to-live link.
+
+  The gap was masked by a test exemption claiming the block was "rendered by the shared panel-state markup". It was not. The second exemption in that list was stale in the other direction — the final-report panel had been declared all along. Both are gone and the list is empty, which is what let the missing state surface at all.
+
 ## [0.132.5] — 2026-08-17
 
 ### Fixed

@@ -6,7 +6,7 @@ picked **per iteration**, not per page — see § Per-Iteration Templates below:
 | Template | Layout | When to use |
 |---|---|---|
 | **decision** | Sidebar (~80/~20), multi-variant cards | Multi-option evaluation, trade-offs, architecture or tech decisions — the canonical "pick one" flow with bi-state (Verwerfen / Miteinbeziehen) per variant and multiple iterations |
-| **design** | Fullscreen content + overlay decision panel (☰ FAB top-right, collapsed by default) + speech-bubble feedback dock anchored to the 64px 💬 FAB (bottom-right) | UI mockups, wireframes, visual design concepts, click-through flows — one artefact that needs maximum screen real estate, plus structured per-screen feedback |
+| **design** | Fullscreen content + overlay decision panel (☰ FAB top-right, collapsed by default) + speech-bubble feedback dock anchored to the 💬 FAB (bottom-right, same 60px circle as ☰, dock collapsed by default) | UI mockups, wireframes, visual design concepts, click-through flows — one artefact that needs maximum screen real estate, plus structured per-screen feedback |
 | **free** | Sidebar (~80/~20), freeform body content | Analysis, walkthrough, brainstorm, explainer, timeline — structured content without forced variant framing. Bi-state evaluation is optional (opt-in per section) |
 
 `prototype` is the **legacy alias** of `design`. Pages generated before the
@@ -64,6 +64,9 @@ must see their own language. The locale hint is authoritative.
 | `panel.step_implemented_active`| Implementation in progress     | Implementierung läuft |
 | `panel.step_waiting`           | Waiting…                       | Warten… |
 | `panel.step_ready`             | Ready to ship                  | Bereit zum Shippen |
+| `panel.frozen`                 | Frozen iteration               | Eingefrorene Iteration |
+| `panel.frozen_hint`            | You are reading an earlier round. It is read-only — its decisions were already submitted. | Du liest eine frühere Runde. Sie ist schreibgeschützt — ihre Entscheidungen wurden bereits übermittelt. |
+| `panel.frozen_back`            | Back to the current round      | Zurück zur aktuellen Runde |
 | `panel.connecting_title`       | Claude is connecting           | Claude verbindet sich |
 | `panel.connected_title`        | Claude connected               | Claude verbunden |
 | `panel.disconnected_title`     | Claude not connected           | Claude nicht verbunden |
@@ -82,14 +85,10 @@ must see their own language. The locale hint is authoritative.
 | `iteration.active_suffix`      | · active                       | · aktiv |
 | `iteration.final_tab`          | Final report                   | Abschlussbericht |
 | `nav.sections`                 | Sections                       | Abschnitte |
-| `final.status`                 | Implementation complete        | Implementierung abgeschlossen |
-| `final.hint`                   | The implementation is done. Review the report on the left. | Die Implementierung ist abgeschlossen. Sieh dir den Bericht links an. |
+| `final.status_heading`         | Close out concept              | Concept abschliessen |
 | `final.open_questions`         | Open questions & TODOs         | Offene Fragen & TODOs |
-| `final.create_issues_btn`      | Create issues                  | Issues erstellen |
-| `final.create_issues_hint`     | Creates GitHub issues for the selected items via setup-issue. | Erstellt GitHub-Issues für die ausgewählten Punkte via setup-issue. |
-| `final.create_issues_none`     | No items selected.             | Keine Punkte ausgewählt. |
-| `final.create_issues_running`  | Creating issues …              | Issues werden erstellt … |
-| `final.create_issues_done`     | Issues created                 | Issues erstellt |
+| `final.create_issues_hint`     | Unchecked items are dropped — they end with the concept. | Nicht angehakte Punkte fallen weg — sie enden mit dem Concept. |
+| `final.create_issues_none`     | No items selected — no issues will be created. | Keine Punkte ausgewählt — es werden keine Issues erstellt. |
 | `final.issue_link_prefix`      | Issue                          | Issue |
 | `final.dispose_heading`        | Keep concept files?            | Concept-Files behalten? |
 | `final.dispose_hint`           | Default = discard. Decisions already landed in commits/issues — the HTML rarely needs to live in git. | Default = verwerfen. Entscheidungen sind bereits in Commits/Issues — die HTML-Datei muss selten in git bleiben. |
@@ -101,16 +100,26 @@ must see their own language. The locale hint is authoritative.
 | `final.dispose_gitignore_hint` | Files stay locally, an entry is appended to .gitignore. | Files bleiben lokal, ein Eintrag wird zur .gitignore hinzugefügt. |
 | `final.dispose_move_label`     | Move to (optional):            | Verschieben nach (optional): |
 | `final.dispose_move_placeholder` | e.g. docs/architecture/      | z.B. docs/architecture/ |
-| `final.dispose_btn`            | End concept                    | Concept beenden |
-| `final.dispose_btn_hint`       | Closes the concept session and applies the file disposition above. | Schliesst die Concept-Session und wendet die Datei-Disposition oben an. |
-| `final.dispose_running`        | Cleaning up …                  | Räume auf … |
-| `final.dispose_done`           | Concept ended.                 | Concept beendet. |
-| `final.ship_heading`           | Ready to ship                  | Bereit zum Shippen |
-| `final.ship_btn`               | Ship it                        | Shippen |
 | `final.ship_hint`              | Runs the full ship pipeline (build, version bump, release, merge). | Startet die komplette Ship-Pipeline (Build, Version-Bump, Release, Merge). |
-| `final.ship_running`           | Shipping …                     | Wird geshippt … |
-| `final.ship_done`              | Shipped                        | Geshippt |
 | `final.view_iterations`        | Review iterations              | Iterationen ansehen |
+| `final.wizard_heading`         | Close-out                      | Abschluss |
+| `final.wizard_step_word`       | Step                           | Schritt |
+| `final.wizard_issues_q`        | Track open points as issues?   | Offene Punkte als Issues anlegen? |
+| `final.wizard_ship_q`          | Ship this now?                 | Jetzt shippen? |
+| `final.wizard_ship_yes`        | Yes, run the ship pipeline     | Ja, Ship-Pipeline starten |
+| `final.wizard_ship_no`         | No, leave it unreleased        | Nein, nicht releasen |
+| `final.wizard_ship_no_hint`    | The code stays as committed. You can ship later from the chat. | Der Code bleibt wie committed. Shippen geht später jederzeit im Chat. |
+| `final.wizard_choice_required` | Pick one to continue.          | Triff eine Wahl um fortzufahren. |
+| `final.wizard_review_q`        | This is what will happen:      | Das passiert jetzt: |
+| `final.wizard_review_warn`     | One click, all of it — including anything outward-facing. | Ein Klick, alles davon — inklusive allem was nach aussen geht. |
+| `final.wizard_back`            | Back                           | Zurück |
+| `final.wizard_next`            | Next                           | Weiter |
+| `final.wizard_execute`         | Run all of it                  | Alles ausführen |
+| `final.wizard_running`         | Claude is working through it … | Claude arbeitet es ab … |
+| `final.wizard_done`            | Concept closed.                | Concept abgeschlossen. |
+| `final.wizard_plan_issues`     | create GitHub issue(s)         | GitHub-Issue(s) anlegen |
+| `final.wizard_plan_ship`       | run the ship pipeline          | Ship-Pipeline starten |
+| `final.wizard_plan_close`      | end the concept session        | Concept-Session beenden |
 | `proto.feedback_title`         | Feedback                       | Feedback |
 | `proto.feedback_toggle`        | Open feedback                  | Feedback öffnen |
 | `proto.feedback_general`       | General notes on this concept  | Allgemeine Anmerkungen zum Konzept |
@@ -288,21 +297,41 @@ the `[ui-locale: ...]` hint produced.
         <div class="waiting-animation"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
       </div>
 
+      <!-- Frozen state: shown while the user reviews a PAST iteration tab.
+           showIteration() flips this on for every non-live tab (and sets
+           body.viewing-frozen, which the design template's dock reads to fill
+           its textareas read-only). Without this block the panel simply loses
+           its whole lower half on a frozen tab — no controls, no explanation,
+           just empty space under the TOC, which reads as a broken page rather
+           than as "this is history". The back-link is the only way out that
+           does not require guessing which tab was live. -->
+      <div id="panel-frozen" style="display: none;">
+        <div class="frozen-indicator">
+          <span class="frozen-icon" aria-hidden="true">🕘</span>
+          <strong>{{panel.frozen}}</strong>
+        </div>
+        <p class="hint">{{panel.frozen_hint}}</p>
+        <button type="button" id="back-to-live-btn" class="link-btn">{{panel.frozen_back}}</button>
+      </div>
+
       <!-- Final-report state: shown when the active section carries
-           data-final-report. No iterate/implement submit; controls are
-           the conditional "Issues erstellen" button (gated on
-           [data-open-questions] content) and the always-visible
-           disposition fieldset that drives Step 6 cleanup. -->
+           data-final-report. No iterate/implement submit. Instead the panel
+           runs a GUIDED CLOSE-OUT WIZARD: one question per step
+           (issues → ship → files), then a review screen, then a SINGLE submit
+           (action: "finalize") that carries all three decisions at once.
+           The wizard replaced four independent, simultaneously-visible buttons
+           whose execution order was implicit and which could not express
+           "I want all three" — see § Final Report Panel for the rationale. -->
       <div id="panel-final-report" style="display: none;">
         <!-- Persistent status channel. Renders the concept's whole pipeline
-             at a glance and culminates in the ship CTA. It is DOM-driven —
+             at a glance and hands over to the wizard. It is DOM-driven —
              present because the active section carries data-final-report — so
              it survives page reloads AND stays fully visible even when the
-             Claude heartbeat is stale (the ship affordance never depends on a
-             live connection, which is the whole point of the persistent
+             Claude heartbeat is stale (the close-out affordance never depends
+             on a live connection, which is the whole point of the persistent
              channel over a transient completion overlay). -->
         <div class="status-channel" id="status-channel">
-          <div class="status-channel__heading">{{final.ship_heading}}</div>
+          <div class="status-channel__heading">{{final.status_heading}}</div>
           <ol class="status-steps" aria-live="polite">
             <li data-step="submitted" data-state="done">
               <span class="step-icon" aria-hidden="true">✓</span>
@@ -321,96 +350,141 @@ the `[ui-locale: ...]` hint produced.
               <span class="step-label">{{panel.step_ready}}</span>
             </li>
           </ol>
-          <button id="ship-btn" class="primary submit-btn ship-btn">
-            <span aria-hidden="true">🚀</span> {{final.ship_btn}}
-          </button>
-          <p class="hint">{{final.ship_hint}}</p>
-          <p class="hint hint-running" data-ship-state="running" hidden>
-            <span aria-hidden="true">⏳</span> {{final.ship_running}}
-          </p>
-          <p class="hint hint-done" data-ship-state="done" hidden>
-            <span aria-hidden="true">✓</span> {{final.ship_done}}
-          </p>
-          <button type="button" id="view-iterations-btn" class="link-btn">{{final.view_iterations}}</button>
         </div>
 
-        <div class="final-report-indicator">
-          <span class="check-icon">✓</span>
-          <strong>{{final.status}}</strong>
-        </div>
-        <p class="final-report-hint">{{final.hint}}</p>
-        <div id="panel-create-issues" hidden>
-          <button id="create-issues-btn" class="primary submit-btn" disabled>{{final.create_issues_btn}}</button>
-          <p class="hint">{{final.create_issues_hint}}</p>
-          <p class="hint hint-none" data-issues-state="none" hidden>
-            <span aria-hidden="true">⚠</span> {{final.create_issues_none}}
-          </p>
-          <p class="hint hint-running" data-issues-state="running" hidden>
-            <span aria-hidden="true">⏳</span> {{final.create_issues_running}}
-          </p>
-          <p class="hint hint-done" data-issues-state="done" hidden>
-            <span aria-hidden="true">✓</span> {{final.create_issues_done}}
-          </p>
-        </div>
-
-        <!-- Disposition fieldset: always visible on the final-report panel.
-             Drives Step 6 cleanup behaviour (discard / keep / gitignore /
-             optional moveTo). Default = discard, matching the typical
-             one-shot refinement workflow where decisions already landed
-             in commits/issues and the HTML is no longer needed. -->
-        <fieldset id="panel-dispose-concept" class="dispose-fieldset">
-          <legend>{{final.dispose_heading}}</legend>
-          <p class="hint dispose-hint">{{final.dispose_hint}}</p>
-
-          <label class="dispose-option">
-            <input type="radio" name="dispose-mode" value="discard" checked>
-            <span class="dispose-label">
-              <strong>{{final.dispose_discard}}</strong>
-              <span class="dispose-sub">{{final.dispose_discard_hint}}</span>
-            </span>
-          </label>
-
-          <label class="dispose-option">
-            <input type="radio" name="dispose-mode" value="keep">
-            <span class="dispose-label">
-              <strong>{{final.dispose_keep}}</strong>
-              <span class="dispose-sub">{{final.dispose_keep_hint}}</span>
-            </span>
-          </label>
-
-          <label class="dispose-option">
-            <input type="radio" name="dispose-mode" value="gitignore">
-            <span class="dispose-label">
-              <strong>{{final.dispose_gitignore}}</strong>
-              <span class="dispose-sub">{{final.dispose_gitignore_hint}}</span>
-            </span>
-          </label>
-
-          <div class="dispose-move-row">
-            <label for="dispose-move-to">{{final.dispose_move_label}}</label>
-            <input id="dispose-move-to"
-                   name="dispose-move-to"
-                   type="text"
-                   autocomplete="off"
-                   spellcheck="false"
-                   placeholder="{{final.dispose_move_placeholder}}">
+        <!-- Close-out wizard. Exactly ONE step is visible at a time; the step
+             list is computed at runtime (the issues step is dropped when the
+             report has no open questions), so the counter is 3/3 or 4/4.
+             The data-plan-* / data-word-* attributes carry localised strings
+             into the JS-rendered review list — the JS itself never hard-codes
+             user-facing text. -->
+        <div id="finalize-wizard" class="finalize-wizard"
+             data-plan-issues="{{final.wizard_plan_issues}}"
+             data-plan-ship="{{final.wizard_plan_ship}}"
+             data-plan-close="{{final.wizard_plan_close}}"
+             data-word-step="{{final.wizard_step_word}}">
+          <div class="wizard-head">
+            <strong class="wizard-title">{{final.wizard_heading}}</strong>
+            <span class="wizard-count" id="wizard-count" aria-live="polite"></span>
           </div>
 
+          <!-- Step 1 (conditional) — open questions → GitHub issues. The
+               checkboxes here MIRROR the [data-open-questions] boxes in the
+               report body; the body remains the single source of truth, the
+               mirrors carry no name/id so they are never persisted nor
+               collected as form fields. -->
+          <section class="wizard-step" data-wizard-step="issues" hidden>
+            <h4 class="wizard-q">{{final.wizard_issues_q}}</h4>
+            <p class="hint">{{final.create_issues_hint}}</p>
+            <div class="wizard-issue-list" id="wizard-issue-list"></div>
+            <p class="hint hint-none" id="wizard-issues-none" hidden>
+              <span aria-hidden="true">⚠</span> {{final.create_issues_none}}
+            </p>
+          </section>
+
+          <!-- Step 2 — ship or not. Deliberately has NO default: the wizard
+               refuses to advance until the user picks one, so a release is
+               never the consequence of clicking through. -->
+          <section class="wizard-step" data-wizard-step="ship" hidden>
+            <h4 class="wizard-q">{{final.wizard_ship_q}}</h4>
+            <label class="wizard-choice">
+              <input type="radio" name="wizard-ship" value="yes" data-no-persist>
+              <span class="wizard-choice-label">
+                <strong><span aria-hidden="true">🚀</span> {{final.wizard_ship_yes}}</strong>
+                <span class="wizard-sub">{{final.ship_hint}}</span>
+              </span>
+            </label>
+            <label class="wizard-choice">
+              <input type="radio" name="wizard-ship" value="no" data-no-persist>
+              <span class="wizard-choice-label">
+                <strong>{{final.wizard_ship_no}}</strong>
+                <span class="wizard-sub">{{final.wizard_ship_no_hint}}</span>
+              </span>
+            </label>
+            <p class="hint hint-warn" id="wizard-ship-required" role="alert" aria-live="polite" hidden>
+              <span aria-hidden="true">⚠</span> {{final.wizard_choice_required}}
+            </p>
+          </section>
+
+          <!-- Step 3 — file disposition. Drives Step 6 cleanup behaviour
+               (discard / keep / gitignore / optional moveTo). Default =
+               discard, matching the typical one-shot refinement workflow
+               where decisions already landed in commits/issues. -->
+          <section class="wizard-step" data-wizard-step="files" hidden>
+            <fieldset id="panel-dispose-concept" class="dispose-fieldset">
+              <legend>{{final.dispose_heading}}</legend>
+              <p class="hint dispose-hint">{{final.dispose_hint}}</p>
+
+              <label class="dispose-option">
+                <input type="radio" name="dispose-mode" value="discard" checked>
+                <span class="dispose-label">
+                  <strong>{{final.dispose_discard}}</strong>
+                  <span class="dispose-sub">{{final.dispose_discard_hint}}</span>
+                </span>
+              </label>
+
+              <label class="dispose-option">
+                <input type="radio" name="dispose-mode" value="keep">
+                <span class="dispose-label">
+                  <strong>{{final.dispose_keep}}</strong>
+                  <span class="dispose-sub">{{final.dispose_keep_hint}}</span>
+                </span>
+              </label>
+
+              <label class="dispose-option">
+                <input type="radio" name="dispose-mode" value="gitignore">
+                <span class="dispose-label">
+                  <strong>{{final.dispose_gitignore}}</strong>
+                  <span class="dispose-sub">{{final.dispose_gitignore_hint}}</span>
+                </span>
+              </label>
+
+              <div class="dispose-move-row">
+                <label for="dispose-move-to">{{final.dispose_move_label}}</label>
+                <input id="dispose-move-to"
+                       name="dispose-move-to"
+                       type="text"
+                       autocomplete="off"
+                       spellcheck="false"
+                       placeholder="{{final.dispose_move_placeholder}}">
+              </div>
+            </fieldset>
+          </section>
+
+          <!-- Step 4 — review. The one screen that names every consequence
+               before the single irreversible click. -->
+          <section class="wizard-step" data-wizard-step="review" hidden>
+            <h4 class="wizard-q">{{final.wizard_review_q}}</h4>
+            <ol class="wizard-plan" id="wizard-plan"></ol>
+            <p class="hint hint-warn">{{final.wizard_review_warn}}</p>
+          </section>
+
+          <div class="wizard-nav">
+            <button type="button" id="wizard-back" class="link-btn" hidden>
+              <span aria-hidden="true">‹</span> {{final.wizard_back}}
+            </button>
+            <button type="button" id="wizard-next" class="primary submit-btn">
+              {{final.wizard_next}} <span aria-hidden="true">›</span>
+            </button>
+          </div>
+
+          <!-- Execute lives OUTSIDE .wizard-nav and behind the same
+               .submit-gap the implement button uses: reaching it must stay a
+               deliberate mouse move, never a repeat click on "Weiter". -->
           <div class="submit-gap" aria-hidden="true"></div>
-
-          <button id="dispose-concept-btn" class="implement-btn dispose-btn">
-            <span aria-hidden="true">⤓</span>
-            {{final.dispose_btn}}
+          <button type="button" id="wizard-execute" class="implement-btn" hidden>
+            <span aria-hidden="true">⚠</span> {{final.wizard_execute}}
           </button>
-          <p class="hint hint-warn">{{final.dispose_btn_hint}}</p>
 
-          <p class="hint hint-running" data-dispose-state="running" hidden>
-            <span aria-hidden="true">⏳</span> {{final.dispose_running}}
+          <p class="hint hint-running" data-finalize-state="running" hidden>
+            <span aria-hidden="true">⏳</span> {{final.wizard_running}}
           </p>
-          <p class="hint hint-done" data-dispose-state="done" hidden>
-            <span aria-hidden="true">✓</span> {{final.dispose_done}}
+          <p class="hint hint-done" data-finalize-state="done" hidden>
+            <span aria-hidden="true">✓</span> {{final.wizard_done}}
           </p>
-        </fieldset>
+        </div>
+
+        <button type="button" id="view-iterations-btn" class="link-btn">{{final.view_iterations}}</button>
       </div>
     </aside>
   </div>
@@ -957,10 +1031,22 @@ The wiring is a single delegated click handler installed alongside
 `showScreen` — see § Click-through Handler below.
 
 - `☰` (top-right) → Decision panel: iteration tabs, screen navigation, submit
-- `💬` (bottom-right, 64px) → Feedback dock: **context-sensitive** textarea for the
+- `💬` (bottom-right) → Feedback dock: **context-sensitive** textarea for the
   currently-visible screen + a persistent "general notes" textarea below
 
+Both FABs are the same 60px circle in the same accent colour — they differ
+only by glyph and position (see § Layout CSS). Do not re-size either one per
+page: it is the first thing that looks broken when concepts sit side by side.
+
 ### Feedback behaviour (strict)
+
+- The dock starts **collapsed** in every state, including frozen iterations.
+  The 💬 FAB is the only thing that opens it. At concept start the artefact
+  is what the user came for, not three empty textareas over it.
+- Open, the dock has exactly two sizes — `compact` (420px, general note only)
+  and `wide` (560px, general + design + per-screen). `applyDockSize()` picks
+  one from `body[data-single-screen]` / `body[data-single-design]`. Never
+  size it to its content or to a viewport fraction.
 
 - The 💬 dock always shows **one textarea for the currently-active screen**
   (label: "Aktueller Screen: {screen-label}"). Its content is private to that
@@ -1130,6 +1216,14 @@ The wiring is a single delegated click handler installed alongside
         </ol>
         <p class="submitted-hint">{{panel.submitted_hint}}</p>
       </div>
+      <!-- The remaining two panel states — #panel-frozen and
+           #panel-final-report — are IDENTICAL to § Common Structure and MUST
+           be copied verbatim from there into this aside. showIteration()
+           switches all four states regardless of template, so a design page
+           that ships only the two above loses its close-out wizard the moment
+           a final report is appended, and shows an empty panel on every past
+           tab. Only the containing aside differs (overlay vs sidebar), never
+           the states inside it. -->
     </aside>
     <div class="panel-backdrop" id="panel-backdrop"></div>
 
@@ -1143,10 +1237,10 @@ The wiring is a single delegated click handler installed alongside
          space for it — see Layout CSS geometry comment.
          The close button minimises (does not destroy state) — user input
          is preserved on close, no value is lost.
-         Open by default (data-open="true") — see Layout JS § Auto-close for
-         the "closes on first interaction, then manual-only" behaviour
-         driven by data-auto-close-armed. -->
-    <aside class="feedback-dock" id="feedback-dock" data-open="true" data-auto-close-armed="true">
+         CLOSED by default (data-open="false"): at concept start the user
+         wants to look at the mockup, not at three empty textareas covering
+         it. data-size is written by applyDockSize() — see Layout JS. -->
+    <aside class="feedback-dock" id="feedback-dock" data-open="false" data-size="compact">
       <div class="feedback-dock-header">
         <strong>Feedback</strong>
         <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" title="{{panel.minimize}}">−</button>
@@ -1340,15 +1434,33 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   right: 0;
 }
 
+/* ── The two FABs are ONE component with two positions ──
+   They are the only floating chrome on a design page, they sit on the same
+   right-hand edge, and the user reads them as a pair — so every property
+   that governs their shape lives in this single rule and NOTHING below may
+   override size, radius, padding or typography. Divergent sizes (the old
+   56px ☰ vs 64px 💬) read as an accident, and per-page tweaks made it worse:
+   across concepts the two ended up visibly different every time.
+   `box-sizing`, `padding: 0`, `line-height: 1` and the flex centring are
+   what keep them perfectly circular with the glyph centred — a bare
+   width/height on a <button> still inherits UA padding and baseline
+   metrics, which is how "round" turns into "slightly egg-shaped". */
 .panel-fab,
 .feedback-fab {
   position: fixed;
-  width: 56px;
-  height: 56px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  padding: 0;
   border-radius: 50%;
   border: none;
-  color: white;
-  font-size: 1.5rem;
+  background: var(--accent-color, #58a6ff);
+  color: #fff;
+  font-size: 1.6rem;
+  line-height: 1;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
   z-index: 100;
@@ -1358,21 +1470,17 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
    width by construction rather than by hope:
      screen indicator  1rem … 33vw - 0.5rem   (max-width cap + ellipsis)
      design switcher   33vw … 67vw            (max-width: 34vw, centred)
-     ☰ FAB             100vw - 88px … 100vw - 2rem
+     ☰ FAB             100vw - 92px … 100vw - 2rem   (60px + 2rem margin)
    Those bands cannot intersect for any viewport width where
-   67vw < 100vw - 88px, i.e. above 267px — below that the layout is out of
+   67vw < 100vw - 92px, i.e. above 279px — below that the layout is out of
    scope anyway. Measured in Edge at 1280/768/375px: no overlap at any of
    the three. Before the caps existed the indicator overlapped the switcher
    by 21px at 768px and completely at 375px, where it also reached the ☰
-   FAB. 💬 lives bottom-right (64px), clear of the top edge entirely. */
-.panel-fab { top: 2rem; right: 2rem; background: var(--accent-color, #58a6ff); }
-.feedback-fab {
-  bottom: 2rem; right: 2rem;
-  width: 64px; height: 64px; font-size: 1.7rem;
-  background: var(--warning-color, #d29922);
-}
+   FAB. 💬 lives bottom-right, clear of the top edge entirely. */
+.panel-fab { top: 2rem; right: 2rem; }
+.feedback-fab { bottom: 2rem; right: 2rem; }
 .panel-fab:hover,
-.feedback-fab:hover { transform: scale(1.1); }
+.feedback-fab:hover { transform: scale(1.08); }
 /* Only the ☰ panel FAB hides when its panel opens (the decision panel is
    a full overlay). The 💬 feedback FAB stays visible while the dock is
    open so the user can toggle it back closed via the same FAB. */
@@ -1432,32 +1540,34 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
 .screen-nav-group .screen-nav-item { margin-left: 0.75rem; }
 
 /* ── Feedback Dock — Speech-Bubble anchored to the 💬 FAB (bottom-right) ──
-   Geometry: ☰ lives top-right, 💬 bottom-right (64px). The dock spans the
-   full width (both side margins at 2rem) and reserves horizontal space on
-   the RIGHT — where the 💬 FAB now sits — so its fields never sit behind
-   the FAB it grows out of.
-   * left = 2rem                          → normal margin on the free (left) side
+   Geometry: ☰ lives top-right, 💬 bottom-right (60px). The dock is anchored
+   to the FAB's corner and has EXACTLY TWO sizes — never a viewport-
+   proportional one, never shrink-to-content:
+     compact  420px wide  — one general note (single design, single screen)
+     wide     560px wide  — general + design + per-screen notes
+   Both sizes are deliberate. A dock that spans the page turns every textarea
+   into one 1200px line nobody ever wraps in; a dock sized to its content
+   becomes a box you cannot type three lines into without scrolling. Which
+   size applies is decided in JS by applyDockSize() from the same
+   body[data-single-*] flags the rest of the layout uses, so the same
+   iteration shape always yields the same dock.
    * right = FAB.right (2rem)             → bubble's right edge aligns with FAB
-   * bottom = FAB.bottom + 64 - 6px       → bubble sits directly above the 64px
+   * bottom = FAB.bottom + 60 - 6px       → bubble sits directly above the 60px
                                             FAB with a hair of overlap so the
                                             visual connection reads as "the
                                             bubble grows out of the FAB".
-   * padding-right = 80px                 → input fields stop to the left
-                                            of where the FAB visually lives,
-                                            so labels/textareas never sit
-                                            behind it (the FAB stays clickable
-                                            on top via higher z-index).
-   transform-origin still anchors to the 💬 FAB so the bubble reads as
-   growing out of it. The FAB keeps its z-index above the dock so it remains
-   visible and clickable while the dock is open — clicking the FAB toggles
+   The dock no longer reserves padding for the FAB: it now ends above it
+   rather than spanning across it. The FAB keeps its higher z-index so it
+   stays visible and clickable while the dock is open — clicking it toggles
    the dock. */
 .feedback-dock {
   position: fixed;
-  left: 2rem;
+  left: auto;
   right: 2rem;
-  bottom: calc(2rem + 64px - 6px);
-  max-height: min(60vh, 520px);
-  padding: 1.25rem 80px 1.5rem 1.5rem;
+  bottom: calc(2rem + 60px - 6px);
+  width: min(420px, calc(100vw - 4rem));
+  max-height: min(58vh, 460px);
+  padding: 1.25rem 1.5rem 1.5rem;
   background: var(--panel-bg, #161b22);
   border: 1px solid var(--border-color, #30363d);
   border-radius: 18px;
@@ -1467,7 +1577,11 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   display: none;
   flex-direction: column;
   gap: 1.1rem;
-  transform-origin: calc(100% - 32px) calc(100% + 26px); /* anchor: 💬 FAB centre below dock-bottom-right */
+  transform-origin: 100% 100%; /* anchor: the 💬 FAB it grows out of */
+}
+.feedback-dock[data-size="wide"] {
+  width: min(560px, calc(100vw - 4rem));
+  max-height: min(72vh, 620px);
 }
 .feedback-dock[data-open="true"] {
   display: flex;
@@ -1515,15 +1629,17 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
 .feedback-section textarea:focus { outline: none; border-color: var(--accent-color); }
 .feedback-divider { height: 1px; background: var(--border-color); margin: 0.25rem 0; }
 
-/* Narrow viewports (≤560px): just tighten the margins/padding. The old
-   "lift above the FAB" override is gone — it only existed to compensate
-   for the ☰ FAB's right-side reservation, which no longer exists now that
-   ☰ moved top-right (Wave 3). */
+/* Narrow viewports (≤560px): the two fixed widths stop making sense below
+   the compact size, so the dock spans the viewport with tight margins.
+   Both size variants collapse to the same geometry here. */
 @media (max-width: 560px) {
-  .feedback-dock {
+  .feedback-dock,
+  .feedback-dock[data-size="wide"] {
     left: 0.75rem;
     right: 0.75rem;
-    padding: 1rem 72px 1rem 1rem;
+    width: auto;
+    max-height: 62vh;
+    padding: 1rem;
     border-radius: 14px;
   }
 }
@@ -1647,10 +1763,7 @@ change) via `harvestDockValues()`.
       btn.dataset.designId = d.dataset.design;
       btn.dataset.active = String(d === active);
       btn.textContent = d.dataset.navLabel || d.dataset.design;
-      // "a design switch" is one of the three auto-close triggers (§ Dock
-      // open/close below) — fired here, not from the generic mockup-click
-      // listener, so the switcher itself is exempt from that listener.
-      btn.addEventListener('click', () => { showDesign(d.dataset.design); fireAutoClose(); });
+      btn.addEventListener('click', () => { showDesign(d.dataset.design); });
       switcher.appendChild(btn);
     });
 
@@ -1669,7 +1782,7 @@ change) via `harvestDockValues()`.
       heading.dataset.active = String(d === active);
       heading.innerHTML = `<span>${d.dataset.navLabel || d.dataset.design}</span>
         <span class="has-notes" data-design-note-marker="${d.dataset.design}"></span>`;
-      heading.addEventListener('click', () => { showDesign(d.dataset.design); fireAutoClose(); closePanel(); });
+      heading.addEventListener('click', () => { showDesign(d.dataset.design); closePanel(); });
       group.appendChild(heading);
 
       const screens = [...d.querySelectorAll('section[data-screen][id]')];
@@ -1684,7 +1797,6 @@ change) via `harvestDockValues()`.
         btn.addEventListener('click', () => {
           if (d !== active) showDesign(d.dataset.design, sec.id);
           else showScreen(sec.id);
-          fireAutoClose();
           closePanel();
         });
         group.appendChild(btn);
@@ -1978,20 +2090,22 @@ change) via `harvestDockValues()`.
   });
   dockClose.addEventListener('click', closeDock);
 
-  // ── Open by default, closes on first interaction ──
-  // The dock starts open (data-open="true" in markup) so a first-time user
-  // sees all three feedback fields immediately. It auto-closes itself on the
-  // FIRST of: a click inside the mockup, a design switch, a page switch —
-  // tracked by data-auto-close-armed, cleared on first fire so the manual
-  // 💬 toggle governs everything afterwards (never auto-closes twice).
-  // Frozen iterations are exempt entirely: nothing to type, so the dock
-  // just stays open for read-only review (see primeDock()).
-  let autoCloseUsed = false;
-  function fireAutoClose() {
-    if (dock.dataset.autoCloseArmed !== 'true') return;
-    dock.dataset.autoCloseArmed = 'false';
-    autoCloseUsed = true;
-    if (dock.dataset.open === 'true') closeDock();
+  // ── Closed by default, opened only by the user ──
+  // The dock starts minimised (data-open="false" in markup). It used to open
+  // itself on load and auto-close on the first mockup click, which meant the
+  // first thing a concept showed was three empty textareas over the artefact
+  // the user came to look at. Now the 💬 FAB is the only thing that opens it,
+  // in every iteration state including frozen ones — no auto-open, no
+  // auto-close, nothing to un-learn.
+  //
+  // Size is one of exactly two values, derived from the same body flags the
+  // layout already sets. Never size the dock to its content or to the
+  // viewport: content-sizing produces the mini-box nobody can type in, and
+  // viewport-sizing produces the full-width panel whose textareas never wrap.
+  function applyDockSize() {
+    const singleScreen = document.body.dataset.singleScreen === 'true';
+    const singleDesign = document.body.dataset.singleDesign === 'true';
+    dock.dataset.size = (singleScreen && singleDesign) ? 'compact' : 'wide';
   }
   // Dock content is per-iteration, but the dock itself is ONE shared overlay
   // that lives outside section[data-iteration]. Entering a frozen tab
@@ -2053,38 +2167,15 @@ change) via `harvestDockValues()`.
     if (typeof saveState === 'function') saveState();
   };
 
+  // Runs on load and after every iteration / design / screen switch: keep the
+  // frozen-vs-live field state and the dock size in sync with what is on
+  // screen. It deliberately does NOT open or close the dock — that is the
+  // user's call alone, and a switch must never yank the dock open over the
+  // mockup they just navigated to.
   function primeDock() {
     applyDockFreezeState();
-    const frozen = document.body.classList.contains('viewing-frozen');
-    if (frozen) {
-      // Frozen: always (re-)open for review, never arm the auto-close —
-      // there is nothing to type, so nothing to hide the fields for.
-      openDock();
-      dock.dataset.autoCloseArmed = 'false';
-      return;
-    }
-    if (autoCloseUsed) return; // already fired once this session — manual-only from here
-    openDock();
-    dock.dataset.autoCloseArmed = 'true';
+    applyDockSize();
   }
-
-  // Click inside the mockup itself (trigger #1 above). Explicitly excludes
-  // the dock, both FABs and the design switcher — those clicks are either
-  // not "inside the mockup" at all, or (design switcher) already fire
-  // fireAutoClose() from their own handler above, via the "design switch"
-  // trigger rather than this generic one.
-  //
-  // This is the ONLY click-away path. There must never be a second,
-  // unconditional "close on outside click" listener: it would bypass
-  // data-auto-close-armed and close the dock on EVERY mockup click, so a
-  // dock the user deliberately re-opened after the first auto-close would
-  // not survive the next click. The contract is one auto-close, then
-  // manual 💬 toggle only — enforced entirely by fireAutoClose().
-  document.addEventListener('click', e => {
-    if (e.target.closest('#feedback-dock') || e.target.closest('.panel-fab')
-      || e.target.closest('.feedback-fab') || e.target.closest('.design-switcher')) return;
-    if (e.target.closest('.device-frame') || e.target.closest('[data-screen]')) fireAutoClose();
-  });
 
   document.addEventListener('DOMContentLoaded', () => {
     buildDesignUI();
@@ -2105,10 +2196,9 @@ change) via `harvestDockValues()`.
     }
     updateIndicator();
     document.addEventListener('input', updateNoteMarkers);
-    // Runs last: the initial buildDesignUI()/showScreen() calls above are
-    // programmatic setup, not user interaction, so priming the dock here
-    // (not inside showScreen) keeps boot-time restore from being
-    // misread as the "first interaction" that auto-closes it.
+    // Runs last, once buildDesignUI() has set the body[data-single-*] flags
+    // applyDockSize() reads. The dock stays closed — priming only syncs its
+    // field state and its size.
     primeDock();
   });
 
@@ -2128,10 +2218,9 @@ change) via `harvestDockValues()`.
       : (remembered && design.querySelector(`#${CSS.escape(remembered)}`)) ? remembered
       : first?.id;
     if (target) showScreen(target);
-    // Same boot-vs-interaction distinction as DOMContentLoaded: this rebuild
-    // is a consequence of the tab switch, not itself the "page switch"
-    // trigger (that already fired, if at all, from the tab-click handler
-    // elsewhere) — but frozen tabs must still (re-)open for review here.
+    // Re-sync frozen-vs-live fields and the dock size for the iteration we
+    // just switched to. Never touches open/closed — a tab switch must not
+    // yank the dock open over the mockup the user just navigated to.
     primeDock();
   });
 
@@ -2807,6 +2896,22 @@ body.content-dimmed .content-dimmer:not([hidden]) {
   margin-bottom: 1rem;
 }
 
+/* Frozen panel state — same indicator language as the submitted panel, in the
+   muted border colour rather than a status colour: a frozen tab is neither
+   good news nor a warning, it is history. */
+.frozen-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #30363d);
+  background: color-mix(in srgb, var(--text-secondary, #8b949e) 10%, transparent);
+  color: var(--text-secondary, #8b949e);
+}
+.frozen-indicator .frozen-icon { font-size: 1.2rem; }
+
 /* Progress steps inside the submitted panel.
    Three states per <li>:
      data-state="pending" → not yet started (muted, ○ icon)
@@ -2892,35 +2997,14 @@ body.content-dimmed .content-dimmer:not([hidden]) {
   cursor: not-allowed;
 }
 
-/* Final-report panel. No iterate/implement controls — only the closing
-   indicator + optional "Issues erstellen" block. Uses the same indicator
-   visual language as the submitted panel for continuity. */
-#panel-final-report .final-report-indicator {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-  color: var(--success-color, #3fb950);
-  font-weight: 600;
-}
-#panel-final-report .check-icon {
-  font-size: 1.1rem;
-}
-#panel-final-report .final-report-hint {
-  margin: 0 0 1rem 0;
-  color: var(--text-secondary, #8b949e);
-  font-size: 0.85rem;
-  line-height: 1.5;
-}
-
-/* Persistent status channel — the always-visible pipeline recap that ends in
-   the ship CTA. Boxed so it reads as a distinct "status" surface. Pure DOM /
-   connection-independent by design: the ship affordance must never disappear
-   just because the heartbeat went stale. */
+/* Persistent status channel — the always-visible pipeline recap that hands
+   over to the close-out wizard. Boxed so it reads as a distinct "status"
+   surface. Pure DOM / connection-independent by design: the close-out
+   affordance must never disappear just because the heartbeat went stale. */
 .status-channel {
   border: 1px solid var(--border-color, #30363d);
   border-radius: 8px;
-  padding: 0.85rem 0.95rem 1rem;
+  padding: 0.85rem 0.95rem 0.9rem;
   margin-bottom: 1rem;
   background: color-mix(in srgb, var(--success-color, #3fb950) 6%, transparent);
 }
@@ -2931,8 +3015,117 @@ body.content-dimmed .content-dimmer:not([hidden]) {
   color: var(--text-secondary, #8b949e);
   margin-bottom: 0.6rem;
 }
-.status-channel .status-steps { margin-bottom: 0.85rem; }
-.ship-btn {
+.status-channel .status-steps { margin-bottom: 0; }
+
+/* Close-out wizard. One step visible at a time; the surrounding box is what
+   tells the user they are inside a bounded flow rather than staring at a wall
+   of independent buttons.
+   The padding deliberately undercuts the 1.5rem "card padding" token from
+   § Design System: the panel is 360px (min(360px, 90vw) — 337px at a 375px
+   viewport), and after the panel's own 1.5rem gutters a 1.5rem wizard padding
+   would leave ~230px for two-column rows like [radio][label]. Do not "restore"
+   it to the token without re-checking that budget. */
+.finalize-wizard {
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 8px;
+  padding: 0.9rem 0.95rem 1rem;
+}
+.finalize-wizard .wizard-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+.finalize-wizard .wizard-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #8b949e);
+}
+.finalize-wizard .wizard-count {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #8b949e);
+  font-variant-numeric: tabular-nums;
+}
+.finalize-wizard .wizard-q {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.finalize-wizard .wizard-step[hidden] { display: none; }
+.finalize-wizard .wizard-issue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0.2rem;
+}
+.finalize-wizard .wizard-issue,
+.finalize-wizard .wizard-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.finalize-wizard .wizard-issue:hover,
+.finalize-wizard .wizard-choice:hover {
+  border-color: var(--accent-color, #58a6ff);
+}
+.finalize-wizard .wizard-choice { margin-bottom: 0.45rem; }
+.finalize-wizard .wizard-choice input[type="radio"],
+.finalize-wizard .wizard-issue input[type="checkbox"] {
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+.finalize-wizard .wizard-choice-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+/* Flex items default to min-width:auto, so a row only refuses to shrink below
+   its longest unbroken token — which in German (and in any URL-ish
+   data-issue-title) is easily 35+ characters. At the 375px viewport the row
+   has ~240px to work with, so without these three the step scrolls
+   horizontally instead of wrapping. */
+.finalize-wizard .wizard-issue > span,
+.finalize-wizard .wizard-choice-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.finalize-wizard .wizard-sub {
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+/* Review list — the only screen that names every consequence at once. */
+.finalize-wizard .wizard-plan {
+  margin: 0.6rem 0 0.8rem;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+.finalize-wizard .wizard-plan li { margin-bottom: 0.2rem; }
+.finalize-wizard .wizard-plan li[data-plan-kind="ship"] {
+  color: var(--warning-color, #d29922);
+  font-weight: 600;
+}
+.finalize-wizard .wizard-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+.finalize-wizard .wizard-nav #wizard-next { flex: 1; }
+.finalize-wizard .wizard-nav #wizard-back { margin-top: 0; white-space: nowrap; }
+.finalize-wizard #wizard-next:disabled { opacity: 0.5; cursor: not-allowed; }
+.finalize-wizard #wizard-execute {
   width: 100%;
   display: flex;
   align-items: center;
@@ -2940,9 +3133,9 @@ body.content-dimmed .content-dimmer:not([hidden]) {
   gap: 0.5rem;
   font-weight: 600;
 }
-#ship-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.status-channel .hint[data-ship-state="running"] { color: var(--accent-color, #58a6ff); }
-.status-channel .hint[data-ship-state="done"] { color: var(--success-color, #3fb950); }
+.finalize-wizard #wizard-execute:disabled { opacity: 0.5; cursor: not-allowed; }
+.finalize-wizard .hint[data-finalize-state="running"] { color: var(--accent-color, #58a6ff); }
+.finalize-wizard .hint[data-finalize-state="done"] { color: var(--success-color, #3fb950); }
 .link-btn {
   display: inline-block;
   margin-top: 0.6rem;
@@ -2962,26 +3155,15 @@ body.content-dimmed .content-dimmer:not([hidden]) {
   30% { box-shadow: 0 0 0 2px var(--accent-color, #58a6ff); }
 }
 
-#panel-create-issues #create-issues-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-#panel-create-issues .hint[data-issues-state="running"] {
-  color: var(--accent-color, #58a6ff);
-}
-#panel-create-issues .hint[data-issues-state="done"] {
-  color: var(--success-color, #3fb950);
-}
-#panel-create-issues .hint[data-issues-state="none"] {
+.finalize-wizard #wizard-issues-none {
   color: var(--warning-color, #d29922);
 }
 
-/* Disposition fieldset — controls Step 6 cleanup. Always rendered on the
-   final-report panel; default selection is "discard" (matches the typical
-   one-shot refinement workflow). The fieldset visually separates from the
-   create-issues block above with a thin top divider. */
+/* Disposition fieldset — controls Step 6 cleanup. Lives inside the wizard's
+   "files" step; default selection is "discard" (matches the typical one-shot
+   refinement workflow). */
 .dispose-fieldset {
-  margin-top: 1.25rem;
+  margin-top: 0;
   padding: 0.85rem 0.95rem 1rem;
   border: 1px solid var(--border-color, #30363d);
   border-radius: 10px;
@@ -3056,14 +3238,6 @@ body.content-dimmed .content-dimmer:not([hidden]) {
   outline: none;
   border-color: var(--accent-color, #58a6ff);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color, #58a6ff) 30%, transparent);
-}
-.dispose-fieldset .dispose-btn { margin-top: 0; }
-.dispose-fieldset .dispose-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.dispose-fieldset .hint[data-dispose-state="running"] {
-  color: var(--accent-color, #58a6ff);
-}
-.dispose-fieldset .hint[data-dispose-state="done"] {
-  color: var(--success-color, #3fb950);
 }
 
 /* Iteration tab styling for the final-report tab — distinct from
@@ -3145,6 +3319,11 @@ function saveState() {
     _pageVersion: document.documentElement.dataset.pageVersion || ''
   };
   document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
+    // data-no-persist opts a control out of reload restoration. Used by the
+    // close-out wizard's ship question, which must be answered fresh every
+    // time: a restored "yes" from hours ago would sail through a later
+    // wizard run and trigger a real release the user never re-authorised.
+    if (el.dataset.noPersist !== undefined) return;
     if (el.name || el.id) state['input:' + (el.name || el.id) + ':' + el.value] = el.checked;
   });
   document.querySelectorAll('textarea, input[type="text"], input[type="number"]').forEach(el => {
@@ -3192,7 +3371,9 @@ function restoreState() {
       if (type === 'input') {
         const [name, val] = [rest.slice(0, -1).join(':'), rest[rest.length - 1]];
         const el = document.querySelector(`input[name="${name}"][value="${val}"], input[id="${name}"][value="${val}"]`);
-        if (el) el.checked = value;
+        // Mirror of the saveState() guard — also covers stale entries written
+        // before a control was marked data-no-persist.
+        if (el && el.dataset.noPersist === undefined) el.checked = value;
       } else if (type === 'text') {
         const id = rest.join(':');
         const el = document.querySelector(`[data-comment="${id}"]`) || document.querySelector(`textarea#${CSS.escape(id)}, input#${CSS.escape(id)}`);
@@ -4004,123 +4185,63 @@ document.addEventListener('keydown', e => {
   if (dim && !dim.hidden) hideContentDimmer();
 });
 
-// --- Final-report "Issues erstellen" action ---
-// Gating rules (only ALL of these true → panel visible + button enabled):
-//   1. Active section carries data-final-report.
-//   2. Active section contains a [data-open-questions] block.
-//   3. That block has at least one un-created (still-checkable, not
-//      disabled) checkbox.
-//   4. At least one of those checkboxes is currently checked.
-// On click: POST /decisions { action: "create-issues", items: [...] }
-// then disable + show "running" hint. Claude rewrites the open-questions
-// HTML with linked [Issue #NNN] labels and POSTs /reload — the reload
-// re-enters this gating logic with disabled checkboxes, so the button
-// auto-hides once all items are routed.
-function updateCreateIssuesPanel() {
-  const wrap = document.getElementById('panel-create-issues');
-  const btn = document.getElementById('create-issues-btn');
-  if (!wrap || !btn) return;
+// --- Final-report close-out wizard (action: "finalize") ---
+// The final report used to hand the user four independent controls at once —
+// Shippen, Issues erstellen, Concept beenden, Iterationen ansehen — each with
+// its own submit. The execution order was implicit, and "I actually want three
+// of these" had no expression at all: the first click sent a payload and ended
+// the round. The wizard replaces them with ONE guided pass
+// (issues → ship → files → review) and a SINGLE submit carrying every
+// decision, which Claude then executes in a fixed order
+// (SKILL.md Step 5b · finalize).
+//
+// The step list is computed, not fixed: the issues step is dropped when the
+// report has no still-open questions, so the counter reads 3/3 rather than
+// promising a step that would be skipped.
+let _wizardSteps = [];
+let _wizardIndex = 0;
+
+function finalReportSection() {
   const active = document.querySelector('section[data-iteration][data-active]');
-  const isFinal = !!(active && active.hasAttribute('data-final-report'));
-  const oqBlock = isFinal ? active.querySelector('[data-open-questions]') : null;
-  const pendingBoxes = oqBlock
-    ? oqBlock.querySelectorAll('input[type="checkbox"]:not(:disabled)')
+  return (active && active.hasAttribute('data-final-report')) ? active : null;
+}
+
+// The [data-open-questions] checkboxes in the REPORT BODY stay the single
+// source of truth for issue selection. Already-routed items carry `disabled`
+// (Claude sets it when it writes the [Issue #NNN] link), so they drop out here
+// and the whole step disappears once everything is routed.
+function openQuestionBoxes() {
+  const active = finalReportSection();
+  const block = active ? active.querySelector('[data-open-questions]') : null;
+  return block
+    ? Array.from(block.querySelectorAll('input[type="checkbox"]:not(:disabled)'))
     : [];
-  const visible = isFinal && pendingBoxes.length > 0;
-  wrap.hidden = !visible;
-  if (!visible) return;
-  const checked = Array.from(pendingBoxes).some(el => el.checked);
-  btn.disabled = !checked;
-  // Reset transient state hints whenever the gating recomputes (e.g.
-  // after a reload that added Issue badges to some items).
-  wrap.querySelectorAll('.hint[data-issues-state]').forEach(el => {
-    el.hidden = el.dataset.issuesState !== 'none' || checked;
+}
+
+function collectIssueItems() {
+  return openQuestionBoxes().filter(el => el.checked).map(el => {
+    const labelEl = el.closest('label')?.querySelector('.oq-label');
+    const labelText = labelEl ? labelEl.textContent.trim() : '';
+    // description = explicit data-issue-body wins; otherwise the visible
+    // .oq-label text. Either is enough for Claude to skip the setup-issue
+    // AskUserQuestion path — the user committed on the review screen, so we
+    // MUST NOT ask again.
+    return {
+      id: el.name || el.id || '',
+      title: el.dataset.issueTitle || labelText,
+      type: el.dataset.issueType || 'chore',
+      description: el.dataset.issueBody || labelText,
+      // Optional project-specific label hints — picked up by Claude when
+      // present, silently ignored when absent. Concept HTML is generated by
+      // Claude, so these are populated from concept context.
+      role: el.dataset.issueRole || null,
+      module: el.dataset.issueModule || null,
+      milestone: el.dataset.issueMilestone || null,
+      selected: true
+    };
   });
 }
 
-async function submitCreateIssues() {
-  const active = document.querySelector('section[data-iteration][data-active]');
-  if (!active || !active.hasAttribute('data-final-report')) return;
-  const oqBlock = active.querySelector('[data-open-questions]');
-  if (!oqBlock) return;
-
-  const items = Array.from(
-    oqBlock.querySelectorAll('input[type="checkbox"]:not(:disabled)')
-  )
-    .filter(el => el.checked)
-    .map(el => {
-      const labelEl = el.closest('label')?.querySelector('.oq-label');
-      const labelText = labelEl ? labelEl.textContent.trim() : '';
-      // description = explicit data-issue-body wins; otherwise the visible
-      // .oq-label text. Either is enough for Claude to skip the
-      // setup-issue AskUserQuestion path — the user has already
-      // committed by clicking "Issues erstellen", we MUST NOT ask again.
-      const body = el.dataset.issueBody || labelText;
-      return {
-        id: el.name || el.id || '',
-        title: el.dataset.issueTitle || labelText,
-        type: el.dataset.issueType || 'chore',
-        description: body,
-        // Optional project-specific label hints — picked up by Claude when
-        // present, silently ignored when absent. Concept HTML is generated
-        // by Claude, so these are populated from concept context.
-        role: el.dataset.issueRole || null,
-        module: el.dataset.issueModule || null,
-        milestone: el.dataset.issueMilestone || null,
-        selected: true
-      };
-    });
-
-  const wrap = document.getElementById('panel-create-issues');
-  const btn = document.getElementById('create-issues-btn');
-  if (!items.length) {
-    wrap?.querySelector('.hint[data-issues-state="none"]')
-        ?.removeAttribute('hidden');
-    return;
-  }
-
-  btn.disabled = true;
-  wrap.querySelectorAll('.hint[data-issues-state]').forEach(el => {
-    el.hidden = el.dataset.issuesState !== 'running';
-  });
-
-  // Always ship the current disposition state so Claude can apply Step 6
-  // cleanup based on the user's choice. If the user only clicks
-  // "Issues erstellen" and the disposition button never fires, this
-  // payload still carries the disposition for cleanup.
-  const payload = {
-    submitted: true,
-    action: 'create-issues',
-    items,
-    disposition: collectDisposition()
-  };
-  const container = document.getElementById('concept-decisions');
-  if (container) container.textContent = JSON.stringify(payload);
-  document.body.classList.add('concept-submitted', 'content-dimmed');
-  showContentDimmer();
-
-  try {
-    await fetch('/decisions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-  } catch (e) {
-    // Offline — queue alongside the regular pending submit so it retries
-    // on reconnect via retryPendingSubmission().
-    localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(payload));
-  }
-}
-
-document.getElementById('create-issues-btn')
-  ?.addEventListener('click', submitCreateIssues);
-
-// --- Final-report "Concept beenden" / dispose-concept action ---
-// Always available on the final-report panel. Submits the user's
-// disposition choice (discard | keep | gitignore + optional moveTo) and
-// signals Claude to run Step 6 cleanup. Independent from create-issues —
-// the user may end the concept without ever creating issues, or click
-// both in any order.
 function collectDisposition() {
   const radio = document.querySelector('input[name="dispose-mode"]:checked');
   const moveEl = document.getElementById('dispose-move-to');
@@ -4129,90 +4250,303 @@ function collectDisposition() {
   return { mode, moveTo };
 }
 
-async function submitDisposeConcept() {
-  const active = document.querySelector('section[data-iteration][data-active]');
-  if (!active || !active.hasAttribute('data-final-report')) return;
+function wizardShipChoice() {
+  const el = document.querySelector('input[name="wizard-ship"]:checked');
+  return el ? el.value : null;
+}
 
-  const fs = document.getElementById('panel-dispose-concept');
-  const btn = document.getElementById('dispose-concept-btn');
-  if (!fs || !btn) return;
+// Recomputes the step list and re-renders. Called from showIteration() with
+// { reset: true } (a tab switch restarts the flow) and from the change
+// listener without it (the user is mid-flow; keep them where they are).
+function refreshFinalizeWizard(opts) {
+  const wiz = document.getElementById('finalize-wizard');
+  if (!wiz) return;
+  const steps = [];
+  if (openQuestionBoxes().length) steps.push('issues');
+  steps.push('ship', 'files', 'review');
+  const previousIndex = _wizardIndex;
+  const previous = _wizardSteps[previousIndex];
+  _wizardSteps = steps;
+  if (opts && opts.reset) {
+    _wizardIndex = 0;
+  } else {
+    // Keep the user where they were. If their step vanished underneath them
+    // (Claude routed the last open question while they sat on it), clamp to
+    // the nearest surviving position instead of throwing them back to step 1
+    // — a silent jump to the start with the counter reset reads as the wizard
+    // losing their answers, which it has not.
+    const kept = steps.indexOf(previous);
+    _wizardIndex = kept >= 0 ? kept : Math.min(previousIndex, steps.length - 1);
+  }
+  renderWizard();
+}
 
-  btn.disabled = true;
-  fs.querySelectorAll('.hint[data-dispose-state]').forEach(el => {
-    el.hidden = el.dataset.disposeState !== 'running';
+// Freezing is not cosmetic: after a submit the payload is fixed, so a live
+// checkbox or a re-enabled execute button would let the user act on a screen
+// that no longer describes what was sent.
+// Scoped to the wizard's own controls ONLY. Never touch the body's
+// [data-open-questions] checkboxes here: Claude disables those permanently as
+// it routes each item, and a blanket re-enable on unfreeze would hand back
+// checkboxes for issues that already exist.
+function setWizardFrozen(frozen) {
+  const wiz = document.getElementById('finalize-wizard');
+  if (!wiz) return;
+  wiz.dataset.frozen = frozen ? 'true' : 'false';
+  wiz.querySelectorAll('input, button').forEach(el => { el.disabled = frozen; });
+}
+
+// Re-arm after a finalize that did not complete — a blocked ship, a stale
+// processed state, a bridge that could not persist. Without this the execute
+// button stays disabled forever and the user's only way out is a reload.
+function restoreWizardToReady() {
+  const wiz = document.getElementById('finalize-wizard');
+  if (!wiz) return;
+  wiz.querySelectorAll('.hint[data-finalize-state]').forEach(el => { el.hidden = true; });
+  setWizardFrozen(false);
+  renderWizard();
+}
+
+function renderWizard() {
+  const wiz = document.getElementById('finalize-wizard');
+  if (!wiz) return;
+
+  // A closed-out report is done. Claude stamps data-closed on the section
+  // before the final /reload, so the reloaded page shows the outcome instead
+  // of re-arming a wizard whose bridge has already been shut down — a live
+  // execute button there would queue a submission nobody will ever pick up.
+  const section = finalReportSection();
+  if (section && section.hasAttribute('data-closed')) {
+    wiz.querySelectorAll('.wizard-step, .wizard-nav').forEach(el => { el.hidden = true; });
+    const done = document.getElementById('wizard-execute');
+    if (done) done.hidden = true;
+    wiz.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
+      el.hidden = el.dataset.finalizeState !== 'done';
+    });
+    const label = document.getElementById('wizard-count');
+    if (label) label.textContent = '';
+    return;
+  }
+
+  const current = _wizardSteps[_wizardIndex];
+
+  wiz.querySelectorAll('.wizard-step').forEach(sec => {
+    sec.hidden = sec.dataset.wizardStep !== current;
   });
 
+  const count = document.getElementById('wizard-count');
+  if (count) {
+    count.textContent = (wiz.dataset.wordStep || 'Step') + ' ' +
+      (_wizardIndex + 1) + '/' + _wizardSteps.length;
+  }
+
+  const onReview = current === 'review';
+  const back = document.getElementById('wizard-back');
+  const next = document.getElementById('wizard-next');
+  const exec = document.getElementById('wizard-execute');
+  if (back) back.hidden = _wizardIndex === 0;
+  if (next) next.hidden = onReview;
+  if (exec) exec.hidden = !onReview;
+
+  if (current === 'issues') buildWizardIssueList();
+  if (onReview) buildWizardPlan();
+
+  const none = document.getElementById('wizard-issues-none');
+  if (none) none.hidden = !(current === 'issues' && collectIssueItems().length === 0);
+  const req = document.getElementById('wizard-ship-required');
+  if (req) req.hidden = true;
+
+  // Re-apply after the rebuilds above: buildWizardIssueList() creates fresh
+  // mirror checkboxes, which would otherwise come back live on a frozen
+  // wizard.
+  if (wiz.dataset.frozen === 'true') setWizardFrozen(true);
+}
+
+// The wizard's issue checkboxes MIRROR the body ones so the user never has to
+// leave the panel to decide — the body block stays authoritative.
+function buildWizardIssueList() {
+  const host = document.getElementById('wizard-issue-list');
+  if (!host) return;
+  const boxes = openQuestionBoxes();
+  // Only rebuild when the underlying item SET changed — a rebuild driven by a
+  // mirror's own change event would tear the row out from under the user's
+  // cursor mid-click. The comparison is by id, never by count: Claude can
+  // route one item (it gains `disabled`, leaving openQuestionBoxes) while the
+  // same rewrite appends another, and a count-keyed fast path would then sync
+  // every mirror to the WRONG body checkbox — the user ticks a row labelled A
+  // and files an issue for B.
+  const ids = boxes.map(el => el.name || el.id || '').join(' ');
+  if (host.dataset.itemKey === ids) {
+    Array.from(host.children).forEach((row, i) => {
+      const box = row.querySelector('input');
+      if (box && boxes[i]) box.checked = boxes[i].checked;
+    });
+    return;
+  }
+  host.dataset.itemKey = ids;
+  host.textContent = '';
+  boxes.forEach(src => {
+    const row = document.createElement('label');
+    row.className = 'wizard-issue';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = src.checked;
+    // Deliberately no name/id: saveState() and collectAllFormFields() key off
+    // dataset.field / name / id, so a keyless control is never persisted and
+    // never uploaded — no second source of truth, no duplicate payload field.
+    box.dataset.mirrorFor = src.name || src.id || '';
+    box.addEventListener('change', () => {
+      src.checked = box.checked;
+      src.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const labelEl = src.closest('label')?.querySelector('.oq-label');
+    const text = document.createElement('span');
+    text.textContent = src.dataset.issueTitle
+      || (labelEl ? labelEl.textContent.trim() : '');
+    row.appendChild(box);
+    row.appendChild(text);
+    host.appendChild(row);
+  });
+}
+
+// The review screen is the only place that names every consequence at once —
+// it is what makes a single "Alles ausführen" click legitimate.
+function buildWizardPlan() {
+  const wiz = document.getElementById('finalize-wizard');
+  const list = document.getElementById('wizard-plan');
+  if (!wiz || !list) return;
+  list.textContent = '';
+  const add = (kind, text) => {
+    const li = document.createElement('li');
+    li.dataset.planKind = kind;
+    li.textContent = text;
+    list.appendChild(li);
+  };
+  const items = collectIssueItems();
+  if (items.length) add('issues', items.length + ' × ' + (wiz.dataset.planIssues || ''));
+  if (wizardShipChoice() === 'yes') add('ship', wiz.dataset.planShip || '');
+  const mode = document.querySelector('input[name="dispose-mode"]:checked');
+  const modeLabel = mode?.closest('label')?.querySelector('strong')?.textContent.trim();
+  const moveTo = collectDisposition().moveTo;
+  if (modeLabel) add('files', modeLabel + (moveTo ? ' → ' + moveTo : ''));
+  add('close', wiz.dataset.planClose || '');
+}
+
+document.getElementById('wizard-next')?.addEventListener('click', () => {
+  // The ship step has no preselected answer on purpose: a release must never
+  // be the by-product of clicking through. Explain the block instead of
+  // disabling the button, which would look broken.
+  if (_wizardSteps[_wizardIndex] === 'ship' && !wizardShipChoice()) {
+    const req = document.getElementById('wizard-ship-required');
+    if (req) {
+      req.hidden = false;
+      req.scrollIntoView({ block: 'nearest' });
+    }
+    return;
+  }
+  if (_wizardIndex < _wizardSteps.length - 1) _wizardIndex += 1;
+  renderWizard();
+});
+
+document.getElementById('wizard-back')?.addEventListener('click', () => {
+  if (_wizardIndex > 0) _wizardIndex -= 1;
+  renderWizard();
+});
+
+// One submit for the whole close-out. Claude executes the parts in a fixed
+// order (issues → ship → disposition), so the user never has to sequence
+// outward-facing actions by clicking things in the right order.
+// POST /decisions has NO version guard (that lives on /reset and /status), so
+// a payload the bridge already fsynced but whose response never reached the
+// browser sits in two places at once. For an iterate that is harmless; for a
+// finalize it means a second `gh issue create` run and a second real release.
+// The id is what lets retryPendingSubmission() recognise its own payload on
+// the bridge and drop the local copy instead of re-sending it.
+function newSubmissionId() {
+  return 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+async function submitFinalize() {
+  const active = finalReportSection();
+  const wiz = document.getElementById('finalize-wizard');
+  const btn = document.getElementById('wizard-execute');
+  if (!active || !wiz || !btn) return;
+  if (wiz.dataset.frozen === 'true') return;
+
+  const items = collectIssueItems();
   const payload = {
     submitted: true,
-    action: 'dispose-concept',
+    action: 'finalize',
+    submission_id: newSubmissionId(),
+    issues: { create: items.length > 0, items },
+    ship: { run: wizardShipChoice() === 'yes' },
     disposition: collectDisposition()
   };
+
+  setWizardFrozen(true);
+  wiz.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
+    el.hidden = el.dataset.finalizeState !== 'running';
+  });
+
   const container = document.getElementById('concept-decisions');
   if (container) container.textContent = JSON.stringify(payload);
   document.body.classList.add('concept-submitted', 'content-dimmed');
   showContentDimmer();
+  // Same submit-state bookkeeping submitWithAction does. Without it
+  // pollProcessedState() returns at its first line, so a finalize gets no
+  // `_picked_up_at` progress in the status channel and — worse — no
+  // PROCESSED_SAFETY_MS recovery: a Claude that dies mid-finalize would leave
+  // the wizard disabled under a spinner forever.
+  _submittedAt = Date.now();
+  _submittedReloadCounter = _bootReloadCounter;
+  _submittedAction = 'finalize';
 
+  // A finalize can ship. "The request did not throw" is not good enough here —
+  // require the bridge's durable ack, exactly as submitWithAction does.
+  let durable = false;
+  let transportFailed = false;
   try {
-    await fetch('/decisions', {
+    const res = await fetch('/decisions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+    const body = res.ok ? await res.json().catch(() => ({})) : {};
+    durable = res.ok && body.durable !== false;
   } catch (e) {
+    transportFailed = true;
+  }
+
+  if (!durable) {
     localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(payload));
+    if (transportFailed) {
+      // Offline / bridge down — retryPendingSubmission() delivers it on
+      // reconnect, so leave the sent state up and just explain the delay.
+      if (typeof showSubmitWarning === 'function') {
+        showSubmitWarning('{{panel.submit_queued_offline}}');
+      }
+    } else {
+      // The bridge answered but could not persist. Nothing retries that on its
+      // own, so hand the wizard back rather than leave a "sent" state standing
+      // over a payload that never landed.
+      restoreWizardToReady();
+      document.body.classList.remove('concept-submitted', 'content-dimmed');
+      hideContentDimmer();
+      _submittedAt = 0;
+      _submittedReloadCounter = null;
+      _submittedAction = null;
+      if (typeof showSubmitWarning === 'function') {
+        showSubmitWarning('{{panel.submit_not_durable}}');
+      }
+    }
   }
 }
 
-document.getElementById('dispose-concept-btn')
-  ?.addEventListener('click', submitDisposeConcept);
-
-// --- Final-report "Shippen" action ---
-// Primary CTA of the persistent status channel. Available whenever the
-// final-report section is live (implementation done). Clicking it is an
-// EXPLICIT user commit — like "Mit Feedback implementieren" it authorises a
-// real, outward-facing action — so Claude runs the full ship pipeline on
-// pickup (SKILL.md Step 5b · ship branch). Ships the current disposition too
-// so Step 6 cleanup still runs after the release lands.
-async function submitShip() {
-  const active = document.querySelector('section[data-iteration][data-active]');
-  if (!active || !active.hasAttribute('data-final-report')) return;
-
-  const btn = document.getElementById('ship-btn');
-  const wrap = document.getElementById('status-channel');
-  if (!btn || !wrap) return;
-
-  btn.disabled = true;
-  wrap.querySelectorAll('.hint[data-ship-state]').forEach(el => {
-    el.hidden = el.dataset.shipState !== 'running';
-  });
-
-  const payload = {
-    submitted: true,
-    action: 'ship',
-    disposition: collectDisposition()
-  };
-  const container = document.getElementById('concept-decisions');
-  if (container) container.textContent = JSON.stringify(payload);
-  document.body.classList.add('concept-submitted', 'content-dimmed');
-  showContentDimmer();
-
-  try {
-    await fetch('/decisions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-  } catch (e) {
-    localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(payload));
-  }
-}
-
-document.getElementById('ship-btn')?.addEventListener('click', submitShip);
+document.getElementById('wizard-execute')?.addEventListener('click', submitFinalize);
 
 // "Iterationen ansehen" — non-committal, client-only. Scrolls the iteration
 // tab bar into view and flashes it so the user can revisit earlier iterations
-// / the agenda without leaving the final report. The ship CTA stays put — the
-// whole point of the persistent channel is that there is nothing to re-open.
+// / the agenda without leaving the final report. The wizard stays put — the
+// whole point of the persistent panel is that there is nothing to re-open.
 document.getElementById('view-iterations-btn')?.addEventListener('click', () => {
   const tabs = document.querySelector('.iteration-tabs');
   if (!tabs) return;
@@ -4222,21 +4556,50 @@ document.getElementById('view-iterations-btn')?.addEventListener('click', () => 
   tabs.classList.add('tabs-nudge');
 });
 
-// Recompute gating whenever the user toggles a checkbox inside the
-// open-questions section. The generic change listener (for saveState)
-// fires the same event, so we just hook into the same channel.
+// Recompute whenever an input the wizard summarises changes — the
+// open-questions checkboxes in the body, the ship choice, the disposition
+// mode. The generic change listener (for saveState) fires the same event, so
+// we just hook into the same channel.
 document.addEventListener('change', e => {
-  if (e.target && e.target.matches('section[data-open-questions] input[type="checkbox"]')) {
-    updateCreateIssuesPanel();
+  const t = e.target;
+  if (!t || !t.matches) return;
+  // A frozen wizard describes a payload that is already on its way — nothing
+  // on screen may still re-render against newer input.
+  if (document.getElementById('finalize-wizard')?.dataset.frozen === 'true') return;
+  // Element-agnostic on purpose: openQuestionBoxes() and the gating contract
+  // both accept ANY element carrying [data-open-questions]. A listener pinned
+  // to `section[...]` silently stops updating the mirrors and the review plan
+  // on a report that used a div or ul — so the review screen would name the
+  // wrong issue count right before the one irreversible click.
+  if (t.matches('[data-open-questions] input[type="checkbox"]') ||
+      t.matches('input[name="wizard-ship"]') ||
+      t.matches('input[name="dispose-mode"]')) {
+    refreshFinalizeWizard();
   }
 });
-document.addEventListener('DOMContentLoaded', updateCreateIssuesPanel);
+document.addEventListener('DOMContentLoaded', () => {
+  refreshFinalizeWizard({ reset: true });
+});
 
 // --- Offline Submit Queue ---
 async function retryPendingSubmission() {
   const pendingKey = STORAGE_KEY + '-pending';
   const pending = localStorage.getItem(pendingKey);
   if (!pending) return;
+  // Did this exact payload already land? `fetch` can throw after the bridge
+  // has fsynced (tab closed, Wi-Fi drop mid-response), which queues a payload
+  // that is already being processed. Re-POSTing a finalize that way runs its
+  // side effects — issue creation, a real release, file deletion — a second
+  // time. Payloads without a submission_id (iterate/implement, legacy pages)
+  // keep the old unconditional-retry behaviour.
+  try {
+    const id = JSON.parse(pending).submission_id;
+    if (id) {
+      const cur = await fetch('/decisions', { cache: 'no-store' });
+      const seen = cur.ok ? await cur.json().catch(() => ({})) : {};
+      if (seen.submission_id === id) { localStorage.removeItem(pendingKey); return; }
+    }
+  } catch (e) { /* unparseable or bridge unreachable — fall through and retry */ }
   try {
     const res = await fetch('/decisions', {
       method: 'POST',
@@ -4257,10 +4620,13 @@ Claude-side: on receiving the payload, branch on `action`:
 - `iterate` → Step 5b iterate branch: summarize + append next iteration only
 - `implement` → Step 5b implement branch: actually write code/files, then
   append the final-report section (frozen "implementiert" record)
-- `create-issues` → Step 5b create-issues branch: user-value gate + `gh issue create`
-- `ship` → Step 5b ship branch: run the full ship pipeline (`/ship`),
-  then mark the final report shipped and run Step 6 cleanup
-- `dispose-concept` → Step 5b dispose branch: record disposition, run Step 6
+- `finalize` → Step 5b finalize branch: run the selected close-out parts in a
+  FIXED order — issues (`gh issue create` behind the user-value gate) → ship
+  (full `/ship` pipeline) → Step 6 cleanup with the bundled disposition
+- `create-issues` / `ship` / `dispose-concept` → **legacy**, still accepted:
+  pages generated before the wizard send these one at a time. Each maps onto
+  the matching part of the finalize branch (see SKILL.md § Legacy final-report
+  actions); never emit them from newly generated pages
 
 ## Panel State Reset
 
@@ -4276,12 +4642,21 @@ elapsed (recovery for closed tabs / JS errors where reload never fired).
 
 ```javascript
 function restorePanelToReady() {
-  document.getElementById('panel-submitted').style.display = 'none';
-  document.getElementById('panel-ready').style.display = 'block';
-  ['submit-iterate-btn', 'submit-implement-btn'].forEach(id => {
-    const btn = document.getElementById(id);
-    if (btn) btn.disabled = false;
-  });
+  // A final report has no ready panel — its ready state is a re-armed wizard.
+  // Un-hiding #panel-ready here would paint the iterate/implement buttons over
+  // a final report and let the user submit `iterate` against a closed session,
+  // which showIteration() forbids by construction.
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (active && active.hasAttribute('data-final-report')) {
+    if (typeof restoreWizardToReady === 'function') restoreWizardToReady();
+  } else {
+    document.getElementById('panel-submitted').style.display = 'none';
+    document.getElementById('panel-ready').style.display = 'block';
+    ['submit-iterate-btn', 'submit-implement-btn'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.disabled = false;
+    });
+  }
   document.body.classList.remove('concept-submitted', 'content-dimmed');
   hideContentDimmer();
   _submittedAt = 0;
@@ -4628,8 +5003,8 @@ Rules:
   hides all others.
 - A concept session has **at most one** `data-final-report` section.
   Once it exists, no further iterate/implement submissions are
-  accepted (the panel-final-report has no such buttons). Only
-  `action: "create-issues"` may still fire from the final-report tab.
+  accepted (the panel-final-report has no such buttons). The only
+  submission the final-report tab can produce is `action: "finalize"`.
 
 ### Tab Bar CSS
 
@@ -4749,12 +5124,20 @@ function showIteration(n) {
   if (panelFinal) panelFinal.style.display = isFinal ? 'block' : 'none';
   if (panelFrozen) panelFrozen.style.display = isLive ? 'none' : 'block';
   if (typeof buildSectionNav === 'function') buildSectionNav();
-  if (typeof updateCreateIssuesPanel === 'function') updateCreateIssuesPanel();
+  if (typeof refreshFinalizeWizard === 'function') refreshFinalizeWizard({ reset: true });
   document.dispatchEvent(new CustomEvent('iteration:changed'));
 }
 
 document.querySelectorAll('.iteration-tab').forEach(tab => {
   tab.addEventListener('click', () => showIteration(tab.dataset.iteration));
+});
+
+// The frozen panel's way back. Without it the only exit from a past tab is to
+// spot which chip is the live one — and the live tab is not always the last
+// chip (the final report is), so guessing is a real failure mode.
+document.getElementById('back-to-live-btn')?.addEventListener('click', () => {
+  const live = document.querySelector('section[data-iteration][data-active]');
+  if (live) showIteration(live.dataset.iteration);
 });
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -4819,20 +5202,93 @@ The final-report section closes a concept session. It is appended via the
 implement-action branch of Step 5b (see `SKILL.md` § Final-report append).
 The right-side panel automatically switches to `panel-final-report` mode
 when `showIteration()` detects `data-final-report` on the active section
-— no iterate / implement buttons. Instead it leads with the **persistent
-status channel** (`#status-channel`): the full pipeline recap (Übermittelt →
-verarbeitet → implementiert → Bereit) topped by the primary **🚀 Shippen**
-CTA and a non-committal "Iterationen ansehen" link. Below that sit the
-optional "Issues erstellen" button (gated on open questions / TODOs) and the
-always-visible disposition fieldset.
+— no iterate / implement buttons. It leads with the **persistent status
+channel** (`#status-channel`), the full pipeline recap (Übermittelt →
+verarbeitet → implementiert → Bereit), and hands over to the **close-out
+wizard** (`#finalize-wizard`). A non-committal "Iterationen ansehen" link
+sits below the wizard.
 
 The status channel is deliberately **DOM-driven, not connection-driven**: it
 is present because the section carries `data-final-report`, so it survives
 reloads and stays fully visible even when the Claude heartbeat is stale. This
-is the design reason it replaces a transient completion overlay — the ship
+is the design reason it replaces a transient completion overlay — the close-out
 affordance must never vanish just because the connection flickered. Reviewing
 earlier iterations (via the ever-present tab bar or the "Iterationen ansehen"
-nudge) never hides the ship CTA, so there is nothing to "re-open".
+nudge) never hides it, so there is nothing to "re-open".
+
+### The close-out wizard
+
+**Why a wizard and not buttons.** The panel used to show four controls at
+once — 🚀 Shippen, Issues erstellen, Concept beenden, Iterationen ansehen —
+each firing its own submit. Two things were wrong with that, and both are
+structural rather than cosmetic:
+
+1. **No order.** Three of the four were real, irreversible actions with a
+   correct sequence (issues before ship before file cleanup), but the panel
+   presented them as peers and left the sequencing to the user.
+2. **No way to want more than one.** The first click submitted, dimmed the
+   content and ended the round. A user who wanted issues *and* a ship *and*
+   a specific disposition had no way to say so.
+
+The wizard fixes both by collecting decisions client-side and submitting once.
+
+**Steps** — exactly one visible at a time, list computed at render:
+
+| Step | Shown when | Default | Produces |
+|---|---|---|---|
+| `issues` | the report has a `[data-open-questions]` block with ≥1 non-disabled checkbox | all items checked (opt-out) | `issues: { create, items[] }` |
+| `ship` | always | **none — the user must pick** | `ship: { run }` |
+| `files` | always | `discard` | `disposition: { mode, moveTo }` |
+| `review` | always | — | the single `finalize` submit |
+
+**The ship step has no default on purpose.** It is the one step that reaches
+outside the repo, so it must be an answered question, never a skipped one.
+"Weiter" stays enabled and explains the block (`#wizard-ship-required`) rather
+than sitting there disabled and looking broken. Its radios also carry
+`data-no-persist`, so the answer never survives a reload — `saveState()`
+otherwise restores every named radio document-wide, and a "yes" from an
+earlier round would sail through a later wizard run and ship without the user
+re-authorising it. Every other wizard control persists normally.
+
+**The review step is what licenses the single click.** It lists every
+consequence in execution order — "2 × GitHub-Issue anlegen", "Ship-Pipeline
+starten", "Verwerfen (Standard)", "Concept-Session beenden" — before the user
+commits. `#wizard-execute` sits behind the same `.submit-gap` as the implement
+button, so reaching it is a deliberate mouse move rather than a third click in
+the same spot.
+
+**Issue checkboxes are mirrors.** The wizard renders a copy of the
+`[data-open-questions]` checkboxes so the user decides without leaving the
+panel, but the body block stays the single source of truth: mirrors carry
+`data-mirror-for` and no `name`/`id`, so they are never persisted by
+`saveState()` and never collected by `collectAllFormFields()`.
+
+**Payload:**
+
+```json
+{
+  "submitted": true,
+  "action": "finalize",
+  "issues": { "create": true, "items": [ /* same shape as before */ ] },
+  "ship": { "run": true },
+  "disposition": { "mode": "discard", "moveTo": null }
+}
+```
+
+`submitFinalize()` requires the bridge's **durable ack** (`body.durable`), not
+just a non-throwing fetch — a finalize can ship, so a 507 that silently looked
+like success would be the worst possible place to lose a payload. On transport
+failure it queues via the offline submit queue; on a non-durable answer it
+hands the wizard back and warns.
+
+**Lifecycle of the wizard's own state:**
+
+| Moment | State |
+|---|---|
+| Submit | `setWizardFrozen(true)` — every control disabled, running hint up, `_submittedAt` set so `pollProcessedState()` tracks the round like any other submission |
+| Non-durable answer | `restoreWizardToReady()` — re-armed, warning shown; the payload is in the offline queue |
+| Blocked ship / stuck round | `restorePanelToReady()` routes to `restoreWizardToReady()` for a final report — it must never un-hide `#panel-ready`, which would paint iterate/implement onto a closed session |
+| Successful close-out | Claude stamps `data-closed` on the section before the last `/reload`; `renderWizard()` then shows the done hint and no controls at all |
 
 ### Final-report section HTML
 
@@ -4866,8 +5322,8 @@ section TOC automatically. Open questions / TODOs use a dedicated
   </section>
 
   <!-- Optional — render only when there are real follow-ups to track.
-       Each <li> is one item; data-issue-* attributes feed the
-       "Issues erstellen" payload directly so Claude can call
+       Each <li> is one item; data-issue-* attributes feed the finalize
+       payload's issues.items[] directly so Claude can call
        `gh issue create` end-to-end without ever asking the user a
        follow-up question. Mandatory attrs: data-issue-title,
        data-issue-type. Recommended: data-issue-body (richer description
@@ -4935,12 +5391,12 @@ the final-report block; do not leave the user to fill them in.
 | `data-issue-module` | optional | Project-specific module label hint (`auth`, `ingest`, `ui-core`, …). Same gating as `role` |
 | `data-issue-milestone` | optional | Milestone name to attach. Claude will only honor this if the milestone already exists; never auto-creates one from this attribute |
 | `checked` | default `true` | User opts out, not in |
-| `disabled` | set by Claude | Added after the item has been routed (becomes `[Issue #NNN]`) so the gating logic in `updateCreateIssuesPanel()` ignores it on the next reload |
+| `disabled` | set by Claude | Added after the item has been routed (becomes `[Issue #NNN]`) so `openQuestionBoxes()` ignores it on the next reload |
 
 ### After issues are created — HTML rewrite pattern
 
-When Claude processes `action: "create-issues"`, the response loop
-rewrites each routed `<li>` so the user sees the resulting issue
+When Claude processes the issues part of a `finalize` payload, the response
+loop rewrites each routed `<li>` so the user sees the resulting issue
 number + link. The checkbox stays in the DOM but is disabled, which
 keeps `restoreState()` consistent across reloads:
 
@@ -4961,36 +5417,34 @@ keeps `restoreState()` consistent across reloads:
 </li>
 ```
 
-Once every `<li>` in the section is `disabled`, `updateCreateIssuesPanel()`
-hides the "Issues erstellen" button automatically — the section becomes a
-read-only audit log of what was routed.
+Once every `<li>` in the section is `disabled`, the wizard's issues step
+drops out of the step list automatically — the section becomes a read-only
+audit log of what was routed.
 
-### Panel gating rules
+### Wizard step gating
 
-`updateCreateIssuesPanel()` (see § Two-Button Submit) recomputes on:
+`refreshFinalizeWizard()` recomputes the step list on:
 - `DOMContentLoaded`
-- `iteration:changed` (via `showIteration()`)
-- any `change` event on a `[data-open-questions] input[type="checkbox"]`
+- `iteration:changed` (via `showIteration()`) — with `{ reset: true }`, so a
+  tab switch restarts the flow at step 1
+- any `change` on a `[data-open-questions]` checkbox, the ship radios, or the
+  disposition radios — without reset, so a user mid-flow stays put
 
-The panel is **visible** iff all of:
+The `issues` step exists iff all of:
 1. Active section has `data-final-report`.
 2. Active section contains a `[data-open-questions]` block.
 3. That block has at least one `:not(:disabled)` checkbox.
 
-The button is **enabled** iff additionally at least one of those
-checkboxes is currently checked.
-
-Both gates run client-side only — Claude never enables/disables the
-button via the bridge; instead it controls visibility indirectly by
-disabling checkboxes when it writes the issue-routed HTML.
+Gating runs client-side only — Claude never adds or removes a step via the
+bridge; it controls the issues step indirectly by disabling checkboxes when it
+writes the issue-routed HTML.
 
 ### Disposition Control
 
-The disposition fieldset (`#panel-dispose-concept`) is **always visible**
-when the panel is in `panel-final-report` mode — it is not gated on
-open-questions content. Its three radios + optional `moveTo` text input
-drive Step 6 cleanup behaviour. The user chooses how the concept files
-should land on disk before closing the session.
+The disposition fieldset (`#panel-dispose-concept`) is the wizard's `files`
+step — always present, not gated on open-questions content. Its three radios +
+optional `moveTo` text input drive Step 6 cleanup behaviour. The user chooses
+how the concept files should land on disk before closing the session.
 
 **Disposition modes:**
 
@@ -5011,40 +5465,42 @@ the `mode` semantics. Empty / whitespace-only input is treated as null.
 { "mode": "discard" | "keep" | "gitignore", "moveTo": "docs/architecture/" | null }
 ```
 
-Both `create-issues` and `dispose-concept` payloads carry the same
-`disposition` sub-object. The contract is documented in `SKILL.md`
-§ Step 6 — Cleanup-By-Disposition.
+The `finalize` payload carries this sub-object alongside `issues` and `ship`;
+so do the legacy `create-issues` / `ship` / `dispose-concept` payloads. The
+contract is documented in `SKILL.md` § Step 6 — Cleanup-By-Disposition.
 
-**Backward compatibility:** old concept sessions that submitted a
-`create-issues` payload without a `disposition` field, or any submission
-that ended the session before this control existed, default to
-`disposition: { mode: "discard", moveTo: null }`. The default is
-intentionally aggressive — most one-shot refinements do not need to
-persist the HTML in git, and a stray opt-out is cheaper to fix
+**Backward compatibility:** old concept sessions that submitted without a
+`disposition` field, or any submission that ended the session before this
+control existed, default to `disposition: { mode: "discard", moveTo: null }`.
+The default is intentionally aggressive — most one-shot refinements do not
+need to persist the HTML in git, and a stray opt-out is cheaper to fix
 (re-render or check-in manually) than a stale concept directory full of
 forgotten artefacts.
 
-### `submitCreateIssues` + `submitDisposeConcept` interplay
+### One submission, three consequences
 
-The two final-report submissions are independent and may fire in any
-order, including just one of them:
+`finalize` is a single submission that can carry up to three real actions.
+Claude executes them in a fixed order — **issues → ship → Step 6 cleanup** —
+and the order is not negotiable:
 
-- **Issues only** — user clicks "Issues erstellen" with checked items.
-  Payload `action: "create-issues"` carries `items[]` + `disposition`.
-  Claude routes issues per Step 5b § create-issues branch, then runs
-  Step 6 cleanup with the bundled disposition.
-- **Dispose only** — user clicks "Concept beenden" without ever
-  touching the issue list (or there is no `[data-open-questions]`
-  block at all). Payload `action: "dispose-concept"` carries only
-  `disposition`. Claude skips issue routing and runs Step 6 cleanup
-  directly.
-- **Issues then dispose** — both fire in sequence. Step 6 runs after
-  the second submission with the latest disposition state. Issue
-  routing is not repeated.
+- Issues first, because they are cheap, local to GitHub, and their creation
+  must not depend on a release succeeding.
+- Ship second, because it is the one part that can hard-fail on a gate. When
+  it does, Claude stops there: already-created issues stand, **cleanup does
+  not run**, and the concept session stays open so the user can retry.
+- Cleanup last, because `discard` deletes the concept HTML — doing that before
+  the outward-facing steps would destroy the record while it is still needed.
 
-A `disposition` payload is **never replayed** — once Step 6 has been
-applied, subsequent payloads (e.g. an offline-queue replay) are
-ignored on the server side by the standard `_version` mismatch guard.
+**Replay protection is client-side, and it has to be.** The `_version`
+mismatch guard people reach for here only exists on `POST /reset` and
+`POST /status` — `POST /decisions` has no such guard, it just creates a new
+version and flips `/pending` to true. So a finalize whose response was lost
+in transit after the bridge had already fsynced it sits in BOTH places, and
+the offline queue would happily deliver it again: duplicate `gh issue create`,
+a second real release, `discard` applied twice. That is why every finalize
+carries a `submission_id` and `retryPendingSubmission()` compares it against
+what `/decisions` already holds before re-POSTing (see § Offline Submit
+Queue). Do not drop that field, and do not "simplify" the retry.
 
 ## Design System
 

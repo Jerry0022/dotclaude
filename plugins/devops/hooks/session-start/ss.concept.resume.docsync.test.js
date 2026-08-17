@@ -97,7 +97,7 @@ describe("the hook's cron copy matches bridge-server.md", () => {
 describe("concept-tick.js carries the procedure the prompt gave up", () => {
   test("the pending branch still names every action the doc lists", () => {
     const out = pendingInstruction(PORT, 7);
-    for (const action of ["iterate", "implement", "create-issues", "ship", "dispose-concept"]) {
+    for (const action of ["iterate", "implement", "finalize", "create-issues", "ship", "dispose-concept"]) {
       expect(out, action).toContain(`"${action}"`);
       expect(BRIDGE, action).toContain(`"${action}"`);
     }

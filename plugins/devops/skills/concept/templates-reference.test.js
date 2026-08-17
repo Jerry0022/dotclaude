@@ -40,13 +40,15 @@ const htmlBlocks = blocks("html");
 const htmlSource = htmlBlocks.map((b) => b.code).join("\n");
 
 // Ids the JS looks up but the reference markup deliberately does not declare.
-// Every entry needs a reason: an unexplained exemption is how a real hole hides.
-const OPTIONAL_IDS = {
-  // Panel state block belonging to the decision/free layouts, whose markup
-  // lives in § Common Structure rather than in a fenced html block here.
-  "panel-frozen": "rendered by the shared panel-state markup, guarded at every use",
-  "panel-final-report": "final-report panel, appended only once a report exists",
-};
+// Every entry needs a reason: an unexplained exemption is how a real hole hides
+// — and both former entries were exactly that. "panel-final-report" was listed
+// as "appended only once a report exists" while § Common Structure had declared
+// it all along, and "panel-frozen" was listed as "rendered by the shared
+// panel-state markup" when no markup anywhere rendered it: showIteration()
+// toggled a panel state that did not exist, so every past-iteration tab showed
+// an empty panel. The frozen block now exists; keep this map empty unless a new
+// exemption can state a reason that survives being checked.
+const OPTIONAL_IDS = {};
 
 describe("concept templates reference — embedded code integrity", () => {
   test("every JS block parses", () => {
@@ -69,6 +71,19 @@ describe("concept templates reference — embedded code integrity", () => {
       .filter((b) => /<\/script/i.test(b.code))
       .map((b) => `line ${b.line}`);
     expect(offenders).toEqual([]);
+  });
+
+  // showIteration() switches FOUR panel states, unconditionally. Three of them
+  // were declared; the frozen one was not, so reviewing any earlier tab emptied
+  // the panel's lower half with no explanation and no way back to the live tab.
+  test("every panel state showIteration switches is declared and reachable", () => {
+    for (const id of ["panel-ready", "panel-submitted", "panel-frozen", "panel-final-report"]) {
+      expect(htmlSource, id).toContain(`id="${id}"`);
+      expect(md, id).toContain(`getElementById('${id}')`);
+    }
+    // The frozen state is a dead end without its exit.
+    expect(htmlSource).toContain('id="back-to-live-btn"');
+    expect(md).toContain("getElementById('back-to-live-btn')");
   });
 
   test("every id the JS looks up is declared in the reference markup", () => {
