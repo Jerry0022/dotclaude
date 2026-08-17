@@ -44,9 +44,19 @@ vi.mock("../lib/worktree.js", () => ({
   dirtySessionWorktrees: vi.fn(() => []),
 }));
 
+// The marker scan reads real files off disk. Stub the scan (the lib has its own
+// suite) and keep the real formatter, so these tests drive the gate itself.
+vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  scanConflictMarkers: vi.fn(() => ({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [] })),
+}));
+
 import { handler } from "./preflight.js";
 import { isWorktree, fileOverlap } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
+import { scanConflictMarkers } from "../lib/conflict-markers.js";
+
+const CLEAN_SCAN = { clean: true, scanned: 0, scope: "diff+worktree", offenders: [] };
 
 const CWD = "/fake/consumer-repo";
 
@@ -58,6 +68,7 @@ beforeEach(() => {
   // Default: empty diff (no overlap, no out-of-band artifacts). Tests that need
   // a populated diff override this — resetting here keeps them isolated.
   fileOverlap.mockReturnValue({ mergeBase: "abc", branchFiles: [], baseFiles: [], overlap: [] });
+  scanConflictMarkers.mockReturnValue(CLEAN_SCAN);
 });
 
 function checkByName(result, name) {
@@ -176,5 +187,39 @@ describe("ship_preflight — out-of-band deploy detection (#243)", () => {
     });
     const result = await handler({ cwd: CWD, outOfBandGlobs: ["infra/**"] });
     expect(result.outOfBandDeploys.files).toEqual(["infra/terraform/main.tf"]);
+  });
+});
+
+describe("ship_preflight — unresolved conflict markers", () => {
+  test("clean scan → ok check, scope recorded, no offenders key, ready", async () => {
+    scanConflictMarkers.mockReturnValue({ clean: true, scanned: 12, scope: "diff+worktree", offenders: [] });
+    const result = await handler({ cwd: CWD });
+    expect(checkByName(result, "no-conflict-markers")).toEqual({
+      name: "no-conflict-markers", ok: true, scanned: 12, scope: "diff+worktree",
+    });
+    expect(result.ready).toBe(true);
+  });
+
+  test("a leftover marker is a hard error, not a warning", async () => {
+    scanConflictMarkers.mockReturnValue({
+      clean: false,
+      scanned: 3,
+      scope: "diff+worktree",
+      offenders: [{ file: "CHANGELOG.md", count: 1, hits: [{ line: 109, marker: "|||||||" }] }],
+    });
+    const result = await handler({ cwd: CWD });
+    expect(result.ready).toBe(false);
+    expect(result.errors.some((e) => /CHANGELOG\.md:109 \(\|{7}\)/.test(e))).toBe(true);
+    // A blocking finding must not be downgraded into the advisory channel.
+    expect(result.warnings.some((w) => /conflict marker/i.test(w))).toBe(false);
+    expect(checkByName(result, "no-conflict-markers")).toMatchObject({
+      ok: false,
+      offenders: [{ file: "CHANGELOG.md", hits: [{ line: 109, marker: "|||||||" }] }],
+    });
+  });
+
+  test("scans against the resolved base, not the caller's raw argument", async () => {
+    await handler({ cwd: CWD });
+    expect(scanConflictMarkers).toHaveBeenCalledWith(CWD, { base: "main" });
   });
 });

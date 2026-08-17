@@ -130,7 +130,6 @@
 
 - **A merge artifact in the concept bridge documentation.** A paragraph from step 3 had been spliced into the middle of the timestamp-convention code block in the file's preamble, breaking that block's markdown and leaving the unit contract — the single most expensive silent-failure mode the document warns about — sitting behind mangled formatting.
 
-||||||| parent of 366426a (chore(release): v0.130.0)
 ## [0.129.0] — 2026-08-16
 
 ### Changed

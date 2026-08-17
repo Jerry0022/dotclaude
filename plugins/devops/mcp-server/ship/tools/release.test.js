@@ -44,9 +44,17 @@ vi.mock("../lib/github.js", () => ({
   watchPRChecks: vi.fn(() => ({ status: "passed", checks: [] })),
 }));
 
+// The marker scan reads real files off disk. Stub the scan (the lib has its own
+// suite) and keep the real formatter, so these tests drive the gate itself.
+vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  scanConflictMarkers: vi.fn(() => ({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [] })),
+}));
+
 import { handler } from "./release.js";
 import * as gitLib from "../lib/git.js";
 import * as ghLib from "../lib/github.js";
+import { scanConflictMarkers } from "../lib/conflict-markers.js";
 
 function params(overrides = {}) {
   return {
@@ -124,6 +132,49 @@ beforeEach(() => {
   ghLib.createPR.mockReturnValue({ number: 42, url: "https://example.com/pull/42" });
   ghLib.mergePR.mockReturnValue("merge12");
   ghLib.watchPRChecks.mockReturnValue({ status: "passed", checks: [] });
+  scanConflictMarkers.mockReturnValue({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [] });
+});
+
+describe("ship_release — unresolved conflict markers", () => {
+  const dirty = {
+    clean: false,
+    scanned: 4,
+    scope: "diff+worktree",
+    offenders: [{ file: "CHANGELOG.md", count: 1, hits: [{ line: 109, marker: "|||||||" }] }],
+  };
+
+  test("blocks before anything is committed, pushed, PR'd or merged", async () => {
+    scanConflictMarkers.mockReturnValue(dirty);
+    const result = await handler(params({ commitMessage: "chore(release): v1.0.0" }));
+
+    expect(result.success).toBe(false);
+    expect(result.conflictMarkers).toEqual(dirty.offenders);
+    expect(result.error).toMatch(/CHANGELOG\.md:109/);
+    expect(result.error).toMatch(/Nothing was committed, pushed or merged/);
+    // The whole point of gating here: the branch is still untouched.
+    expect(result.commit).toBeUndefined();
+    expect(result.pushed).toBeUndefined();
+    expect(result.merged).toBeUndefined();
+    expect(ghLib.createPR).not.toHaveBeenCalled();
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+    expect(gitLib.gitArgs).not.toHaveBeenCalled();
+  });
+
+  test("runs AFTER preflight's own scan — catches a marker from the ship's rebase", async () => {
+    // ship_preflight scans, then skill Step 1b rebases and resolves conflicts.
+    // Only this gate sees what that resolution left behind.
+    scanConflictMarkers.mockReturnValue(dirty);
+    const result = await handler(params({ base: "main" }));
+    expect(scanConflictMarkers).toHaveBeenCalledWith("/repo", { base: "main" });
+    expect(result.success).toBe(false);
+  });
+
+  test("a clean scan does not disturb the happy path", async () => {
+    const result = await handler(params());
+    expect(result.success).toBe(true);
+    expect(result.conflictMarkers).toBeUndefined();
+    expect(result.merged).toBe("main");
+  });
 });
 
 describe("ship_release — #207 parallel-change data-loss guards", () => {

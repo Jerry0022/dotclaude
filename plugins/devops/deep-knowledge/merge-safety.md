@@ -309,7 +309,12 @@ same — only the side labels change.
 ## Anti-Patterns
 
 - **`--ours` / `--theirs`**: Silently drops one side's work. **Never use.**
-- **Skipping conflicts**: Leaving conflict markers (`<<<<<<<`) in code. Never commit unresolved markers.
+- **Skipping conflicts**: Leaving conflict markers in code. Never commit unresolved markers.
+  Delete **all four** — `<<<<<<<`, `|||||||`, `=======`, `>>>>>>>`. The diff3 base
+  marker is the one that gets missed, because it only exists under the `diff3`
+  style this document mandates and the other three are the ones muscle memory
+  reaches for. `ship_preflight` and `ship_release` both scan the files a ship
+  would land and refuse it on any leftover marker.
 - **Retry without analysis**: Re-running merge hoping it works. Diagnose the conflict first.
 - **Timestamp-based priority**: "Their commit is newer so it wins." Timestamps don't determine correctness.
 - **Asking the user for every conflict**: Auto-resolve complementary/technical changes. Only escalate genuine design decisions.
