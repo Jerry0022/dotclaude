@@ -10,6 +10,8 @@
 
   `/claude-batch marker` was documented in the skill's prose as the way to change a stored marker but was missing from the routing table, so the argument did nothing. It is now routed.
 
+- **Firing the merge now ends collection instead of collecting the conversation about it.** The mode stayed armed after the merge had been triggered, so the prompts that follow — approving the plan, answering Claude's questions, correcting course — were blocked, erased and appended to a note queue that had already been archived. The user was answering questions nobody received. Collection is single-shot per activation: the hook deactivates the mode in the same run that injects the notes, the watchdog retires with it, and re-arming is an explicit `/claude-batch on`. A marker prompt on an *empty* queue fires nothing and therefore leaves the mode armed. The skill's Step 4.7 no longer asks whether to stay in the mode — that question was asking whether to keep blocking the answers to its own questions.
+
 ### Changed
 
 - **The test suite no longer fails on machine load.** Hook tests spawn real node processes — that is the contract under test, since the harness invokes hooks as child processes — and on Windows a single spawn costs 1–20 s once 70+ test files compete. Against vitest's 5 s default that produced up to 9 red tests per run, all of them timeouts rather than assertions, in whichever suites happened to lose the scheduling lottery; individual files had begun pinning `30_000` by hand. The default is now 60 s repo-wide, which turns the same suite from 1799/1808 into 1808/1808 without touching a single test's logic.

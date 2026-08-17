@@ -102,6 +102,14 @@ After approval: `/concept` when the conflicts justify a decision page, otherwise
 straight to implementation. Implementation is deliberately broad — code,
 concepting, UI concepting, or only a first step.
 
+**Firing deactivates the mode**, in the same hook run that injects the notes.
+Everything after the fired prompt is the conversation *about* the implementation —
+plan approval, answers to Claude's questions, course corrections — and collecting
+those blocks and erases the very prompts the work depends on, with the note queue
+already archived. The mode is single-shot per activation: re-arming is an explicit
+`/claude-batch on`. A marker prompt on an **empty** queue fires nothing and
+therefore leaves the mode armed.
+
 ### Reminder
 
 A detached watchdog (`scripts/batch-watchdog.js`) fires a Windows toast after 10

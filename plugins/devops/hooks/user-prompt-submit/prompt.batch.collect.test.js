@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildAck, buildMergeContext, INLINE_LIMIT } from "./prompt.batch.collect.js";
-import { activate, appendNote, readNotes } from "../lib/batch-state.js";
+import { activate, appendNote, readNotes, isModeActive } from "../lib/batch-state.js";
 
 const HOOK = fileURLToPath(new URL("./prompt.batch.collect.js", import.meta.url));
 
@@ -154,6 +154,26 @@ describe("mode on — firing the merge", () => {
     const r = runHook({ prompt: ">> leg los" });
     expect(r.code).toBe(0);
     expect(r.stdout).toBe("");
+  });
+
+  test("firing the merge ends collection — follow-up prompts run normally", () => {
+    // Everything after the fired prompt is the conversation ABOUT the work:
+    // plan approval, answers to Claude's questions. Collecting those blocks and
+    // erases exactly the prompts the implementation depends on.
+    appendNote(cwd, "Button verrutscht");
+    expect(runHook({ prompt: ">> leg los" }).code).toBe(0);
+    expect(isModeActive(cwd)).toBe(false);
+
+    const followUp = runHook({ prompt: "ja, so umsetzen" });
+    expect(followUp.code).toBe(0);
+    expect(followUp.stderr).not.toContain("gespeichert");
+  });
+
+  test("a marker prompt on an empty queue leaves the mode armed", () => {
+    // Nothing fired, so nothing ended — the user just typed the marker early.
+    expect(runHook({ prompt: ">> leg los" }).code).toBe(0);
+    expect(isModeActive(cwd)).toBe(true);
+    expect(runHook({ prompt: "noch eine beobachtung" }).code).toBe(2);
   });
 
   test("a mode file pinned to the old `!` marker still has a working escape", () => {

@@ -108,6 +108,12 @@ Reached either by `/claude-batch go` or automatically: the collect hook injects
 the full note set into the turn when the user sends a marker-prefixed prompt.
 In both cases the procedure is identical.
 
+**Firing ends collection.** The hook deactivates the mode in the same run that
+injects the notes, because everything after it — plan approval, answers to your
+questions, course corrections — is the conversation *about* the implementation.
+Collecting those would block and erase exactly the prompts the work depends on.
+Treat the mode as OFF for the rest of this turn and all following ones.
+
 **4.1 Read every note.** `.claude/batch.md`, verbatim. Notes are the user's own
 words — never paraphrase them away before analysing.
 
@@ -139,8 +145,18 @@ a first step of what the notes ask for.
 originals stay recoverable; a merge must never be the only record of what the
 user actually wrote.
 
-**4.7 Ask whether to stay in collect mode.** After a fired merge the mode is
-usually no longer wanted. Ask once, default off.
+**4.7 Retire the mode — never ask whether to stay in it.** Collection is already
+off (the hook deactivated it when the merge fired; on the `/claude-batch go` path
+do it yourself — `deactivate(cwd)` is idempotent). Stop the watchdog so it does
+not linger for its next poll:
+
+```bash
+node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" stop .
+```
+
+Say in one clause that follow-up prompts run normally again and `/claude-batch on`
+re-arms collection. A question here would be asking whether to keep blocking the
+answers to your own questions.
 
 ## Step 5 — Deactivate
 
