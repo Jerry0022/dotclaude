@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.133.2] — 2026-08-18
+
+### Fixed
+
+- **The detached background git sync no longer opens a visible terminal window for every git command it runs.** v0.129.0 moved the sync out of the ten-minute cron into a detached, console-less child process — correct in itself, but the script it detached ran each of its ~13 git commands through `execSync`, i.e. a `cmd.exe` shell string. From a parent that owns no console, every one of those `cmd.exe` launches gets a fresh console, and on Windows 11 with Windows Terminal as the default terminal each fresh console is rendered as a visible, focus-stealing window. Measured on the affected machine: one sync run produced 20 WindowsTerminal/OpenConsole processes. With the sync triggering on every SessionStart and every 30 minutes per worktree across several active worktrees, this was the reported storm of "thousands of terminal windows" — and it pattern-matched to graphify only because graphify had the identical bug before 0.116.2 fixed it there.
+
+  `git()` now spawns `git` directly in argv form (`execFileSync`, no shell layer) with `windowsHide`, the exact mechanism `graphify-state.js` documents and measures for its own background runner. Re-measured end-to-end: a full detached sync run spawns zero visible windows and still fetches and merges. The conversion also retires the string-quoted `add -- "<file>"` interpolation, which a filename with shell metacharacters could break. `post-merge-watcher.js` gets `windowsHide` on its `gh`/`git` spawns as defense-in-depth — it currently runs with its own hidden console that children inherit, but a future console-less launch mode would otherwise reintroduce the same class of window.
+
 ## [0.133.1] — 2026-08-17
 
 ### Fixed
