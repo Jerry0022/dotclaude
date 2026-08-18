@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script post-merge-watcher
- * @version 0.1.0
+ * @version 0.1.1
  * @plugin devops
  * @description Background watcher that runs after ship_release succeeds.
  *   Waits for the GitHub Actions run on the merge commit, optionally probes
@@ -66,7 +66,7 @@ function resolveMainRepoRoot(cwd) {
     const commonDir = execFileSync(
       "git",
       ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-      { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true },
     ).trim();
     // Only trust the parent when the common dir actually ends in `.git` — for an
     // unusual layout (bare repo, separate git dir) the parent is NOT the worktree
@@ -89,6 +89,10 @@ function resolveStateDir({ stateDir, cwd }) {
   return join(resolveMainRepoRoot(cwd), ".claude", ".ship-watcher");
 }
 
+// windowsHide on every child spawn: the watcher normally runs with its own
+// hidden console (Start-Process -WindowStyle Hidden), but if it is ever
+// launched DETACHED (console-less), children would otherwise get a fresh
+// visible console each — see scripts/git-sync.js git() for the measured case.
 function gh(args, cwd, { timeout = 30_000, allowFail = false } = {}) {
   try {
     return execFileSync("gh", args, {
@@ -96,6 +100,7 @@ function gh(args, cwd, { timeout = 30_000, allowFail = false } = {}) {
       encoding: "utf8",
       timeout,
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     }).trim();
   } catch (e) {
     if (allowFail) return null;
@@ -127,6 +132,7 @@ function watchRun({ cwd, runId, maxWaitSec }) {
       encoding: "utf8",
       timeout: maxWaitSec * 1000,
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     });
     return { ok: true };
   } catch (e) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script git-sync
- * @version 0.3.0
+ * @version 0.3.1
  * @plugin devops
  * @description Core git sync logic — fetch remote, merge parent chain into
  *   current branch. Supports branch hierarchy (feat/auth/login merges
@@ -11,20 +11,27 @@
  *   Standalone: called by prompt.git.sync hook and session-start cron.
  */
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const { readFileSync, writeFileSync } = require('fs');
 const { join } = require('path');
 
 const cwd = process.cwd();
 const MAIN = 'main';
 
-function git(cmd) {
+// argv-form + windowsHide, NEVER a shell string: this script runs as a DETACHED,
+// console-less child (git-sync-bg.js). From such a parent every execSync string
+// goes through a fresh cmd.exe that cannot inherit a console, and Windows
+// Terminal's default-terminal delegation surfaces each one as a visible,
+// focus-stealing window — one per git call, measured on this machine (same
+// mechanism as documented in hooks/lib/graphify-state.js spawnBgRunner).
+function git(args) {
   try {
-    return execSync(`git ${cmd}`, {
+    return execFileSync('git', args, {
       cwd,
       encoding: 'utf8',
       timeout: 15000,
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
     }).trim();
   } catch {
     return null;
@@ -32,21 +39,21 @@ function git(cmd) {
 }
 
 // Only run in a git repo
-if (git('rev-parse --is-inside-work-tree') !== 'true') {
+if (git(['rev-parse', '--is-inside-work-tree']) !== 'true') {
   process.exit(0);
 }
 
-const remote = git('remote');
+const remote = git(['remote']);
 if (!remote) process.exit(0);
 const origin = remote.split('\n')[0];
 
-const branch = git('rev-parse --abbrev-ref HEAD');
+const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']);
 if (!branch || branch === MAIN) process.exit(0);
 
 // Ensure diff3 is set for meaningful conflict markers
-const conflictStyle = git('config --get merge.conflictstyle');
+const conflictStyle = git(['config', '--get', 'merge.conflictstyle']);
 if (conflictStyle !== 'diff3' && conflictStyle !== 'zdiff3') {
-  git('config merge.conflictstyle diff3');
+  git(['config', 'merge.conflictstyle', 'diff3']);
 }
 
 // Build parent chain from branch name hierarchy.
@@ -192,7 +199,7 @@ function resolveFile(filePath) {
   }
 
   writeFileSync(fullPath, result, 'utf8');
-  git(`add -- "${filePath}"`);
+  git(['add', '--', filePath]);
   return { resolved: true, content: result };
 }
 
@@ -200,22 +207,22 @@ function resolveFile(filePath) {
 // warn only for genuinely ambiguous conflicts that need semantic resolution.
 // See deep-knowledge/merge-safety.md for the full resolution protocol.
 function tryMerge(source) {
-  const behind = git(`rev-list --count HEAD..${source}`);
+  const behind = git(['rev-list', '--count', `HEAD..${source}`]);
   if (!behind || parseInt(behind) === 0) return null; // already up to date
 
   const count = parseInt(behind);
 
   // Normal merge (clean — no conflicts)
-  if (git(`merge ${source} --no-edit --quiet`) !== null) {
+  if (git(['merge', source, '--no-edit', '--quiet']) !== null) {
     return { source, commits: count };
   }
 
   // Merge conflicted — try resolving trivial conflicts
-  const conflictOutput = git('diff --name-only --diff-filter=U');
+  const conflictOutput = git(['diff', '--name-only', '--diff-filter=U']);
   const files = conflictOutput ? conflictOutput.split('\n').filter(Boolean) : [];
 
   if (files.length === 0) {
-    git('merge --abort');
+    git(['merge', '--abort']);
     return { source, commits: count, conflict: true, files: [] };
   }
 
@@ -232,10 +239,10 @@ function tryMerge(source) {
 
   if (totalAmbiguous > 0) {
     // Some conflicts couldn't be resolved — abort and warn
-    git('merge --abort');
+    git(['merge', '--abort']);
 
     // Verify abort succeeded — if tree is still dirty, the abort failed
-    const postAbort = git('status --porcelain');
+    const postAbort = git(['status', '--porcelain']);
     if (postAbort) {
       return { source, commits: count, failed: true };
     }
@@ -250,22 +257,22 @@ function tryMerge(source) {
   }
 
   // All conflicts resolved — complete the merge
-  git('commit --no-edit');
+  git(['commit', '--no-edit']);
   return { source, commits: count, autoResolved: files.length };
 }
 
 // Fetch main
-if (git(`fetch ${origin} ${MAIN} --quiet`) === null) {
+if (git(['fetch', origin, MAIN, '--quiet']) === null) {
   process.exit(0);
 }
-git(`fetch ${origin} ${MAIN}:${MAIN} --quiet`);
+git(['fetch', origin, `${MAIN}:${MAIN}`, '--quiet']);
 
 // Build parent chain, fetch each from origin, keep only existing branches
 const parents = getParentChain(branch).filter(p => {
   if (p === MAIN) return true;
   // Fetch and update local ref from origin (fast-forward)
-  git(`fetch ${origin} ${p}:${p} --quiet`);
-  return git(`rev-parse --verify ${p}`) !== null;
+  git(['fetch', origin, `${p}:${p}`, '--quiet']);
+  return git(['rev-parse', '--verify', p]) !== null;
 });
 
 // Merge each parent into current branch (root → closest parent)
