@@ -218,3 +218,45 @@ for something else is a real comprehension cost.
 | `skills/claude-batch/SKILL.md` | Activation, marker setup, merge and routing |
 | `.claude/batch.md` | The notes (git-excluded, per project) |
 | `~/.claude/claude-batch.json` | Marker + defaults (user-global) |
+
+## 0.3.0 — hardening after the first real collection run
+
+Five defects, all with the same visible symptom: notes went in and did not come
+out.
+
+1. **The marker lost to the attachment rule.** `classify()` checked
+   `hasAttachment` before `startsWithMarker`, so `>> so wie hier [Image #1]` —
+   the natural way to fire a merge while pointing at something — was demoted to
+   a plain turn. No notes were injected, and the model correctly reported an
+   empty batch while ten notes sat in the file. The two rules exist for opposite
+   reasons: attachments pass through so a *blocked* prompt can never erase an
+   image, and an execute prompt is never blocked. The marker now wins.
+2. **Attachment prompts left no trace.** While collecting, a prompt carrying an
+   image passed through untouched: the model acted on it immediately (the one
+   thing the mode exists to prevent) and the merge never learned it happened.
+   It still cannot be collected — blocking erases the image — so the hook now
+   injects a guard telling the turn to file it as a note with a written
+   `[Anhang]` description and `[Anhang-Datei]` paths. The turn is the only place
+   the attachment is ever visible, so it is the only place that can preserve it.
+3. **CRLF emptied the queue.** `readNotes` matched `-->\n`. The file header
+   invites manual editing and every Windows editor rewrites it CRLF on save, at
+   which point the whole queue parsed as zero notes with no error anywhere.
+   Line endings are normalised before parsing.
+4. **An unreadable queue was reported as an empty one.** The execute path exited
+   silently on zero notes, which is indistinguishable from "no notes were ever
+   taken". It now injects a notice naming the file, whether it exists and its
+   size, and — when the file has content the parser could not split — forbids
+   the denial and requires a raw read instead.
+5. **Long queues lost their tail.** Over `INLINE_LIMIT` the merge context
+   dropped every note for a bare file pointer. It now always carries a numbered
+   index of all notes plus a mandatory full read, and says explicitly when the
+   index itself had to be truncated.
+
+Two behavioural additions follow from the same principle — the notes outlive the
+mode that collected them:
+
+- The marker fires the merge even when collection already ended (expiry, note
+  cap, manual off). Otherwise the failsafes silently strand the queue.
+- The merge context requires a coverage list: one line per note, `#1` … `#N`,
+  each with a disposition. A note without a line is a lost requirement, not a
+  shorter plan.

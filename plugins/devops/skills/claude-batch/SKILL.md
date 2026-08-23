@@ -1,6 +1,6 @@
 ---
 name: claude-batch
-version: 0.2.0
+version: 0.3.0
 description: >-
   Collect mode — batch prompts into one master plan instead of executing them one by one. While active, a UserPromptSubmit hook blocks each prompt (it never reaches the model, costing nothing) and appends it to `.claude/batch.md`; a configurable execute marker fires the merge, where the whole note set becomes ONE feasibility-checked plan. Purpose: avoid the rework of building for prompt 1 what prompt 5 supersedes, and avoid paying a full turn per observation. Triggers on "/claude-batch", "sammelmodus", "collect mode", "batch mode", "erstmal sammeln", "nicht sofort umsetzen". Do NOT trigger for normal work, for backlog execution (/run-backlog), or for issue creation (/setup-issue).
 ---
@@ -120,9 +120,36 @@ you think the separate items are — a note is the user's own words, and the mer
 in Step 4 reads content, not note boundaries. Guessing boundaries only risks
 losing a requirement. Skip this step silently when the invocation was bare.
 
+If the activating prompt carried an attachment, follow Step 2.6 for it in the
+same note.
+
 **2.5 Confirm in one short block** — the marker, where notes land, both exits,
 and (when 2.4 ran) that the first note is already stored, with the count. Then
 render an `analysis` completion card.
+
+**2.6 Attachments are filed by you, because only you can see them.** This is a
+standing rule for the whole collection window, not a one-off part of activation:
+it applies every time such a prompt arrives while the mode is on.
+
+A prompt carrying an image, pasted text, or an `@file` mention is never collected
+by the hook — blocking it would erase the prompt, and an erased screenshot is
+unrecoverable. So it passes through to you, and `prompt.batch.collect.js` injects
+a guard telling you to file it. Do that, and nothing else:
+
+1. **Do not act on it.** No planning, no research, no reading code for it. The
+   whole point of the mode is that this happens later, once.
+2. Note text = the prompt **verbatim**.
+3. Add a line `[Anhang] <sachliche Beschreibung>`. You see the attachment in this
+   turn; at merge time it is gone from the context. The description has to make
+   the note usable without it — what is visible, and what is wrong with it. "Bild
+   angehängt" is not a description.
+4. Add `[Anhang-Datei] <pfad>` for every path you know (`@file` targets, saved
+   screenshots). The guard lists the ones the hook could extract.
+5. Store it as ONE note via `appendNote`, then answer with a single line naming
+   the note number.
+
+Without this, the note reaches the merge as "mach das so wie hier" with no
+"hier" — the linkage the user actually cared about is the first thing lost.
 
 ## Step 3 — Status
 
@@ -151,17 +178,41 @@ Collecting those would block and erase exactly the prompts the work depends on.
 Treat the mode as OFF for the rest of this turn and all following ones.
 
 **4.1 Read every note.** `.claude/batch.md`, verbatim. Notes are the user's own
-words — never paraphrase them away before analysing.
+words — never paraphrase them away before analysing. When the injected context
+says the notes were too large to inline, read the file **completely** first; the
+index it carries is a checksum, not a substitute.
 
-**4.2 Feasibility-check against the real code BEFORE planning.** This is the
+**A note's `[Anhang]` / `[Anhang-Datei]` lines belong to that note and to no
+other.** Where an `[Anhang-Datei]` path still exists, open it before judging the
+note. Where only the `[Anhang]` description survives, that description IS the
+evidence — do not silently drop the note for lacking the image.
+
+**4.2 Write the coverage list before planning.** Exactly one line per note,
+`#1` … `#N`, each with a disposition:
+
+| Disposition | Meaning |
+|---|---|
+| übernommen | goes into the plan as written |
+| zusammengeführt mit #x | same surface as another note |
+| Konflikt mit #x | contradicts another note — Step 4.4 |
+| nicht machbar (Grund) | fails the feasibility check — named, not skipped |
+| Frage | answered first, then merged |
+
+Count the lines against the note count in the injected context before you go on.
+A note without a line is the defect this whole mode exists to prevent: it is not
+a shorter plan, it is a lost requirement. If the user enriched the execute prompt
+with extra text, it becomes `#N+1` and gets its own line — and if it was a
+question, answer it before the plan.
+
+**4.3 Feasibility-check against the real code BEFORE planning.** This is the
 step that pays for the whole mode: the notes were written blind, without Claude
 looking at anything. Some of them will be impossible, and later notes may depend
 on those. Check the substantive ones against the codebase.
 
-**4.3 Merge into ONE plan.** Not a list of n tasks executed in sequence — one
+**4.4 Merge into ONE plan.** Not a list of n tasks executed in sequence — one
 coherent piece of work. Where notes describe the same surface, they merge.
 
-**4.4 Surface conflicts individually — never resolve them silently.**
+**4.5 Surface conflicts individually — never resolve them silently.**
 
 > "#2 wollte den Header rot, #6 blau — ich nehme blau (später), sag Bescheid falls nicht."
 > "#3 setzt eine Filter-API voraus, die es nicht gibt. #5 und #9 hängen daran und fallen mit."
@@ -169,19 +220,19 @@ coherent piece of work. Where notes describe the same surface, they merge.
 Silent "later wins" resolution is the failure mode this step exists to prevent.
 An impossible item is **named**, never quietly routed around.
 
-**4.5 Present the plan and get approval.** After the OK:
+**4.6 Present the plan and get approval.** After the OK:
 - conflicts substantial enough to deserve clickable decisions → invoke `/concept`
 - otherwise → straight into implementation
 
 "Implementation" is deliberately broad: code, concepting, UI concepting, or only
 a first step of what the notes ask for.
 
-**4.6 Archive, do not delete.** After the plan is approved, call
+**4.7 Archive, do not delete.** After the plan is approved, call
 `archiveNotes(cwd)` — it renames `batch.md` to `batch-<timestamp>.md`. The
 originals stay recoverable; a merge must never be the only record of what the
 user actually wrote.
 
-**4.7 Retire the mode — never ask whether to stay in it.** Collection is already
+**4.8 Retire the mode — never ask whether to stay in it.** Collection is already
 off (the hook deactivated it when the merge fired; on the `/claude-batch go` path
 do it yourself — `deactivate(cwd)` is idempotent). Stop the watchdog so it does
 not linger for its next poll:
@@ -221,7 +272,19 @@ The dependency is soft. Resolve the plugin path and skip silently if absent —
 ## Rules
 
 - **Never collect** machine prompts, expanded slash commands, or prompts with
-  attachments. The hook enforces this; do not add exceptions in the skill.
+  attachments. The hook enforces this; do not add exceptions in the skill. An
+  attachment prompt is not collected *automatically*, but it is still filed —
+  by you, per Step 2.6. Passing it through untouched loses it entirely.
+- **The execute marker outranks everything except machine prompts and slash
+  commands.** `>> so wie hier [Image #1]` fires the merge; the attachment rule
+  does not apply, because an execute prompt is never blocked. And the marker
+  reaches the notes even when the mode already expired or hit its cap — the
+  notes outlive the mode.
+- **Never report an empty queue without looking.** If the marker fired and the
+  hook says nothing could be parsed, read `.claude/batch.md` raw before saying
+  there were no notes. A hand-edited file, a destroyed separator, or an editor
+  rewriting the file are all cases where content exists and the parse fails —
+  and "there are no notes" is then simply false.
 - **The red "Ein Hook hat deine Eingabe blockiert" panel is the normal collect
   path, not a failure.** Blocking the prompt is how the mode saves the turn; the
   harness has no quieter rendering for it. If the user reports it as an error,

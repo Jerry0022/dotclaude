@@ -1,6 +1,6 @@
 /**
  * @module batch-state
- * @version 0.2.0
+ * @version 0.3.0
  * @description State and classification for the `/claude-batch` collect mode.
  *
  * Collect mode batches user prompts into `.claude/batch.md` instead of acting
@@ -295,10 +295,20 @@ function appendNote(cwd, text, when) {
   return countNotes(cwd);
 }
 
-/** Parsed notes in collection order. @returns {{at:string,text:string}[]} */
+/**
+ * Parsed notes in collection order.
+ *
+ * Line endings are normalised before parsing. The file header invites manual
+ * editing, and every Windows editor rewrites it CRLF on save — a CRLF
+ * separator after `-->`
+ * separator matches nothing, so the whole queue would read as EMPTY and the
+ * merge would fire on zero notes with no error anywhere.
+ *
+ * @returns {{at:string,text:string}[]}
+ */
 function readNotes(cwd) {
   let raw;
-  try { raw = fs.readFileSync(notesPath(cwd), 'utf8'); } catch { return []; }
+  try { raw = fs.readFileSync(notesPath(cwd), 'utf8').replace(/\r\n?/g, '\n'); } catch { return []; }
   const out = [];
   const re = /<!--\s*(\S+?)\s*-->\n([\s\S]*?)(?=\n<!--\s*\S+?\s*-->\n|$)/g;
   for (const m of raw.matchAll(re)) {
@@ -369,6 +379,38 @@ function hasAttachment(text, hookInput) {
   }
   if (typeof text !== 'string' || !text) return false;
   return ATTACHMENT_PATTERNS.some(rx => rx.test(text));
+}
+
+/**
+ * Best-effort references for whatever is attached to this prompt.
+ *
+ * An attached prompt is passed through instead of collected (blocking would
+ * erase the image), so the only way it can still reach the merge is as a note
+ * the TURN writes. That note is useless without a pointer back to the file it
+ * belonged to — "make it like the screenshot" with no screenshot named is
+ * exactly the lost linkage this exists to prevent.
+ *
+ * @returns {string[]} paths / filenames / urls, de-duplicated, capped
+ */
+function attachmentRefs(text, hookInput) {
+  const refs = [];
+  if (hookInput && typeof hookInput === 'object') {
+    for (const key of ['attachments', 'images', 'files']) {
+      const v = hookInput[key];
+      if (!v) continue;
+      for (const item of (Array.isArray(v) ? v : [v])) {
+        if (typeof item === 'string') { refs.push(item); continue; }
+        if (item && typeof item === 'object') {
+          const p = item.path || item.file_path || item.filename || item.name || item.url;
+          if (p) refs.push(String(p));
+        }
+      }
+    }
+  }
+  if (typeof text === 'string') {
+    for (const m of text.matchAll(/(^|\s)@([\w.\-/\\]+\.[A-Za-z0-9]{1,8})(\s|$)/g)) refs.push(m[2]);
+  }
+  return [...new Set(refs.filter(Boolean))].slice(0, 20);
 }
 
 const MARKER_MAX_LENGTH = 32;
@@ -528,14 +570,26 @@ function detectActivation(text) {
 
 /**
  * The single decision.
+ *
+ * Order matters. The marker is checked BEFORE the attachment rule, because the
+ * two rules exist for opposite reasons: attachments pass through so a blocked
+ * prompt can never erase an image, but an execute prompt is never blocked in
+ * the first place. Checking attachments first meant `>> so wie hier [Image #1]`
+ * — the most natural way to fire a merge — silently downgraded to a plain turn:
+ * no notes injected, and the model truthfully reporting that it sees no batch
+ * while ten notes sat in the file.
+ *
  * @returns {'passthrough'|'collect'|'execute'}
  */
 function classify({ text, hookInput, marker, modeActive }) {
-  if (!modeActive) return 'passthrough';
   if (isMachinePrompt(text)) return 'passthrough';
   if (isExpandedCommand(text)) return 'passthrough';
-  if (hasAttachment(text, hookInput)) return 'passthrough';
+  // The marker fires the merge even with the mode already off: an expired or
+  // note-capped mode must not swallow the user's only way to reach the queue.
+  // The caller decides whether notes actually exist.
   if (startsWithMarker(text, marker)) return 'execute';
+  if (!modeActive) return 'passthrough';
+  if (hasAttachment(text, hookInput)) return 'passthrough';
   return 'collect';
 }
 
@@ -580,7 +634,7 @@ module.exports = {
   readMode, isModeActive, expiryReason, activate, deactivate,
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
   touchActivity, readActivity,
-  isMachinePrompt, isExpandedCommand, hasAttachment, detectActivation,
+  isMachinePrompt, isExpandedCommand, hasAttachment, attachmentRefs, detectActivation,
   startsWithMarker, stripMarker, looksLikeQuestion,
   validateMarker, markerMatch, effectiveMarker, MARKER_MAX_LENGTH,
   classify, willBeCollected,

@@ -4,7 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildAck, buildMergeContext, buildActivationGuard, INLINE_LIMIT } from "./prompt.batch.collect.js";
+import {
+  buildAck, buildMergeContext, buildActivationGuard, buildAttachmentGuard,
+  buildEmptyQueueNotice, INLINE_LIMIT,
+} from "./prompt.batch.collect.js";
 import { activate, appendNote, readNotes, isModeActive } from "../lib/batch-state.js";
 
 const HOOK = fileURLToPath(new URL("./prompt.batch.collect.js", import.meta.url));
@@ -150,9 +153,99 @@ describe("mode on — firing the merge", () => {
     expect(readNotes(cwd).map(n => n.text)).toEqual(["eine notiz"]);
   });
 
-  test("the marker with an empty queue is just a normal turn", () => {
+  test("the marker with an empty queue reports the empty queue by path", () => {
+    // Exiting silently here was data loss disguised as a normal turn: the model
+    // saw a bare `>> leg los` and truthfully said it had no notes — which is
+    // indistinguishable from ten notes the parser failed to read.
     const r = runHook({ prompt: ">> leg los" });
     expect(r.code).toBe(0);
+    expect(r.stdout).toContain("KEINE Notiz lesen");
+    expect(r.stdout).toContain(path.join(cwd, ".claude", "batch.md"));
+    expect(r.stdout).toContain("Datei vorhanden: nein");
+  });
+
+  test("a queue the parser cannot read is reported, never denied", () => {
+    // The classic cause: the user edits batch.md and the editor rewrites it, or
+    // a separator is destroyed. The file has content; the parse yields nothing.
+    appendNote(cwd, "eine notiz");
+    const file = path.join(cwd, ".claude", "batch.md");
+    fs.writeFileSync(file, "hier stehen zehn Beobachtungen, aber ohne Trenner\n", "utf8");
+    const r = runHook({ prompt: ">> leg los" });
+    expect(r.stdout).toContain("Sag dem Nutzer NICHT, es gebe keine Notizen");
+    expect(r.stdout).toContain("Lies die Datei roh");
+    expect(isModeActive(cwd)).toBe(true);
+  });
+
+  test("a marker prompt carrying an image still fires the merge", () => {
+    // The reported bug: the attachment rule was checked BEFORE the marker, so
+    // enriching the execute prompt with a screenshot downgraded it to a plain
+    // turn — no notes injected, and Claude reporting an empty batch while ten
+    // notes sat in the file.
+    appendNote(cwd, "Button verrutscht");
+    const r = runHook({ prompt: ">> so wie auf dem Screenshot [Image #1]" });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("Button verrutscht");
+    expect(r.stdout).toContain("so wie auf dem Screenshot");
+  });
+
+  test("a marker prompt carrying an @file mention still fires the merge", () => {
+    appendNote(cwd, "Fehlertext falsch");
+    const r = runHook({ prompt: ">> und @src/app/Header.tsx dabei beachten" });
+    expect(r.stdout).toContain("Fehlertext falsch");
+    expect(r.stdout).toContain("Header.tsx");
+  });
+
+  test("the enriched execute prompt is carried as part of the job", () => {
+    appendNote(cwd, "eine notiz");
+    const r = runHook({ prompt: ">> und warum ist das eigentlich so langsam?" });
+    expect(r.stdout).toContain("warum ist das eigentlich so langsam?");
+    expect(r.stdout).toContain("Ist es eine Frage, beantworte sie");
+  });
+
+  test("an expired mode still lets the marker reach its notes", () => {
+    // Expiry and the note cap end collection on their own. If the marker died
+    // with the mode, the queue would be unreachable by the one gesture the user
+    // was taught, and the merge would read as "there are no notes".
+    appendNote(cwd, "Button verrutscht");
+    activate(cwd, { marker: ">>", startedAt: Date.now() - 9 * 3600_000, expiryHours: 8 });
+    expect(isModeActive(cwd)).toBe(false);
+    const r = runHook({ prompt: ">> leg los" });
+    expect(r.stdout).toContain("Button verrutscht");
+    expect(r.stdout).toContain("bereits beendet");
+  });
+
+  test("the merge context demands a per-note disposition", () => {
+    appendNote(cwd, "eins");
+    appendNote(cwd, "zwei");
+    const r = runHook({ prompt: ">> leg los" });
+    expect(r.stdout).toContain("GENAU 2 Zeilen");
+    expect(r.stdout).toContain("Abdeckungsliste");
+  });
+});
+
+describe("mode on — an attachment prompt is filed, not executed", () => {
+  beforeEach(() => activate(cwd, { marker: ">>" }));
+
+  test("a prompt with an image gets the note-it-down guard", () => {
+    // It cannot be blocked (a blocked prompt is erased and the screenshot with
+    // it), so it passes through — but silently passing it through meant the
+    // model acted on it immediately AND the merge never learned it existed.
+    const r = runHook({ prompt: "so soll es aussehen [Image #1]" });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("Setze NICHTS davon um");
+    expect(r.stdout).toContain("[Anhang]");
+    expect(r.stdout).toContain("appendNote");
+  });
+
+  test("known attachment paths are named so the note can point at them", () => {
+    const r = runHook({ prompt: "vergleich mit @docs/spec.md", files: ["/tmp/shot.png"] });
+    expect(r.stdout).toContain("/tmp/shot.png");
+    expect(r.stdout).toContain("docs/spec.md");
+  });
+
+  test("an attachment-free collected prompt gets no guard", () => {
+    const r = runHook({ prompt: "ganz normale beobachtung" });
+    expect(r.code).toBe(2);
     expect(r.stdout).toBe("");
   });
 
@@ -245,7 +338,9 @@ describe("message builders", () => {
     expect(buildAck(1, ">>", true)).toContain("Frage");
   });
 
-  test("oversized note sets fall back to a file pointer", () => {
+  test("oversized note sets keep an index, never a bare file pointer", () => {
+    // A pointer alone is how a long queue lost items: the turn was told to read
+    // a file, read part of it, and nothing said what was missing.
     const notes = Array.from({ length: 400 }, (_, i) => ({
       at: "2026-08-16T10:00:00.000Z",
       text: `Notiz ${i} mit reichlich Text, damit die Grenze sicher überschritten wird.`,
@@ -254,6 +349,31 @@ describe("message builders", () => {
     expect(ctx.length).toBeLessThan(INLINE_LIMIT);
     expect(ctx).toContain("/tmp/p/.claude/batch.md");
     expect(ctx).toContain("los");
+    expect(ctx).toContain("Index aller 400 Notizen");
+    expect(ctx).toContain("#1 (2026-08-16T10:00:00.000Z) Notiz 0");
+  });
+
+  test("a truncated index says so instead of looking complete", () => {
+    const notes = Array.from({ length: 400 }, (_, i) => ({
+      at: "2026-08-16T10:00:00.000Z",
+      text: `Notiz ${i} `.repeat(20),
+    }));
+    const ctx = buildMergeContext(notes, "", "/tmp/p/.claude/batch.md");
+    expect(ctx).toMatch(/bis #400 sind hier NICHT gelistet/);
+  });
+
+  test("the empty-queue notice separates 'no file' from 'unreadable file'", () => {
+    expect(buildEmptyQueueNotice("/p/.claude/batch.md", false, 0, ">>"))
+      .toContain("tatsächlich leer");
+    expect(buildEmptyQueueNotice("/p/.claude/batch.md", true, 4096, ">>"))
+      .toContain("Sag dem Nutzer NICHT");
+  });
+
+  test("the attachment guard tells the turn to describe what only it can see", () => {
+    const g = buildAttachmentGuard(">>", ["/tmp/shot.png"]);
+    expect(g).toContain("beim Merge ist er nicht mehr im Kontext");
+    expect(g).toContain("/tmp/shot.png");
+    expect(g).toContain("WÖRTLICH");
   });
 });
 
