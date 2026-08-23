@@ -49,6 +49,35 @@ rejects them (`reason: 'harness-reserved'`) instead of warning, and `loadConfig`
 re-validates on every read so a config written before this rule (`!`) falls back
 to the default rather than trapping the user.
 
+#### The activation race
+
+The activating prompt is the one prompt collection can never catch. The hook arms
+the mode *in the turn that prompt starts*, so it necessarily sees that prompt
+while the mode is still off and has to let it through. When the user activates
+and types their first observations into the same prompt — `/claude-batch on der
+Header ist rot …`, or "Sammelmodus an, erste Notiz: …" — the model reads
+actionable text, starts working it, and skips the marker question. The notes are
+never filed: the mode ends up **on and empty** while the work it exists to defer
+is already half-done. Observed twice in real use.
+
+The hook cannot fix this by storing the text itself. Nothing has activated at
+UserPromptSubmit time, and a "note" written for a prompt that turns out to be a
+question *about* the mode would be pure corruption. So the split is:
+
+- `detectActivation()` (`batch-state.js`) recognises an activating prompt —
+  either an expanded `/claude-batch`, or a trigger phrase that shares its clause
+  with an intent word (`an`, `on`, `aktivier…`); naming the mode in passing is
+  not activating it. Machine prompts are excluded, same as in collection. It
+  then reports whether anything beyond the route word rides along.
+- The hook injects a **guard** into that turn: the extra content is a note, do
+  not act on it, do not skip Step 2.1, file it in Step 2.4.
+- `SKILL.md` Step 1 routes on the first token only and Step 2.4 seeds the
+  remainder verbatim as one note via `appendNote`.
+
+Guidance, not enforcement — deliberately. The detection is a heuristic, and the
+guard says so: a false positive must cost nothing but a few ignored lines, never
+a swallowed prompt.
+
 ### Collection
 
 While the mode is active, `prompt.batch.collect` (UserPromptSubmit) blocks the

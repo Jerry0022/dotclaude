@@ -1,6 +1,6 @@
 /**
  * @module batch-state
- * @version 0.1.0
+ * @version 0.2.0
  * @description State and classification for the `/claude-batch` collect mode.
  *
  * Collect mode batches user prompts into `.claude/batch.md` instead of acting
@@ -79,6 +79,71 @@ const ATTACHMENT_PATTERNS = [
   // @path/to/file.ext — the harness expands these into the prompt
   /(^|\s)@[\w.\-/\\]+\.[A-Za-z0-9]{1,8}(\s|$)/,
 ];
+
+/**
+ * Phrases that turn an ordinary prompt into a claude-batch invocation.
+ *
+ * Mirrors the skill's own trigger list. Used ONLY to recognise an activating
+ * prompt while the mode is still OFF — never to decide collect vs. execute.
+ */
+const ACTIVATION_PATTERNS = [
+  /sammel[-\s]?modus/i,
+  /collect[-\s]?mode/i,
+  /batch[-\s]?mode/i,
+  /erstmal\s+sammeln/i,
+  /nicht\s+sofort\s+umsetzen/i,
+];
+
+/**
+ * Triggers that ARE the request, not just the mode's name. "Erstmal sammeln"
+ * cannot be said about the mode without asking for it, so these need no
+ * separate on-word.
+ */
+const SELF_ACTIVATING_PATTERNS = [
+  /erstmal\s+sammeln/i,
+  /nicht\s+sofort\s+umsetzen/i,
+];
+
+/**
+ * Words that turn a mention of the mode into a request to switch it on.
+ *
+ * Naming the mode is not asking for it: "wir sollten den Sammelmodus
+ * dokumentieren" is prose, "Sammelmodus an" is an invocation. Requiring one of
+ * these in the SAME clause as the trigger is what separates the two.
+ */
+const ACTIVATION_INTENT = /\b(an|on|start\w*|aktivier\w*|ein|los|bitte)\b/i;
+
+/** Clause boundaries — an intent word two sentences away is not this clause. */
+const CLAUSE_BOUNDARIES = ['.', ',', ';', ':', '!', '?', '\n'];
+
+/**
+ * The clause `index` sits in — the text between the nearest clause boundaries
+ * on either side.
+ * @param {string} s
+ * @param {number} index
+ */
+function clauseAround(s, index) {
+  let start = 0;
+  let end = s.length;
+  for (const c of CLAUSE_BOUNDARIES) {
+    const before = s.lastIndexOf(c, index);
+    if (before !== -1 && before + 1 > start) start = before + 1;
+    const after = s.indexOf(c, index);
+    if (after !== -1 && after < end) end = after;
+  }
+  return s.slice(start, end);
+}
+
+/** Words that are pure routing (Step 1 of the skill), never note content. */
+const ROUTE_WORDS = /\b(on|an|start|off|aus|stop|go|los|merge|marker|status|bitte|mal|jetzt)\b/gi;
+
+/**
+ * Below this many characters of residue, an invocation is "activation only" —
+ * `/claude-batch on` and friends. Above it the user typed work into the very
+ * prompt that turns collection on, and that work must be filed as a note
+ * instead of executed.
+ */
+const ACTIVATION_CONTENT_MIN = 12;
 
 // ── paths ──────────────────────────────────────────────────────────────────
 
@@ -393,6 +458,75 @@ function looksLikeQuestion(text) {
 }
 
 /**
+ * Does this prompt turn collect mode ON — and does it carry work on top?
+ *
+ * The failure this exists for: the user activates the mode and already types
+ * their first observations into the SAME prompt. Collection is not armed yet,
+ * so the collect hook cannot catch them; the model sees actionable text, starts
+ * working it, and skips the skill's own dialogs. The notes are never filed, the
+ * mode is on but empty, and the whole point of batching is gone.
+ *
+ * The hook cannot fix that by storing the text itself: at UserPromptSubmit time
+ * nothing has activated yet, and a note written for a prompt that turns out to
+ * be a question ABOUT the mode would be pure corruption. So this only reports
+ * the shape, and the hook injects a guard telling the turn what to do with it.
+ *
+ * `payload` is best-effort and exists for the length heuristic — the split into
+ * activation vs. content is made in the turn, against the user's actual words.
+ *
+ * @param {string} text raw prompt text
+ * @returns {{activating:boolean,viaCommand:boolean,carriesContent:boolean,payload:string}}
+ */
+function detectActivation(text) {
+  const none = { activating: false, viaCommand: false, carriesContent: false, payload: '' };
+  const s = typeof text === 'string' ? text : '';
+  if (!s.trim()) return none;
+  // A cron or an AFK resume that happens to say "batch-mode" is not a user
+  // turning the mode on, and nothing in such a turn would read the guard's
+  // self-escape clause. Same exclusion the collect path already makes.
+  if (isMachinePrompt(s)) return none;
+
+  let residue;
+  let viaCommand = false;
+  const cmd = /<command-name>\s*\/?([\w.-]+)\s*<\/command-name>/i.exec(s);
+  if (cmd) {
+    // An expanded slash command is unambiguous: either it IS /claude-batch, or
+    // it is some other command and none of this applies.
+    if (!/claude-batch/i.test(cmd[1])) return none;
+    viaCommand = true;
+    const args = /<command-args>([\s\S]*?)<\/command-args>/i.exec(s);
+    residue = args ? args[1] : '';
+  } else {
+    const hit = ACTIVATION_PATTERNS.map(rx => rx.exec(s)).find(Boolean);
+    if (!hit) return none;
+    // Naming the mode is not asking for it. Without this, ordinary prose about
+    // the feature ("wir sollten den Sammelmodus dokumentieren, aber davor …")
+    // drew the guard into a turn that had nothing to do with collecting.
+    if (!SELF_ACTIVATING_PATTERNS.some(rx => rx.test(s))) {
+      const clause = clauseAround(s, hit.index).replace(hit[0], ' ');
+      if (!ACTIVATION_INTENT.test(clause)) return none;
+    }
+    residue = s;
+    for (const rx of ACTIVATION_PATTERNS) {
+      residue = residue.replace(new RegExp(rx.source, 'gi'), ' ');
+    }
+  }
+
+  const payload = residue.replace(ROUTE_WORDS, ' ').replace(/[\s.,;:!?]+/g, ' ').trim();
+  // "Was macht der Sammelmodus?" is a question ABOUT the mode, not an activation
+  // carrying notes. Short + interrogative is the reliable shape of that; a long
+  // one still trips the guard, which is harmless — the guard says to ignore it
+  // when the prompt is not actually activating.
+  const asking = looksLikeQuestion(s) && payload.length < 40;
+  return {
+    activating: true,
+    viaCommand,
+    carriesContent: !asking && payload.length >= ACTIVATION_CONTENT_MIN,
+    payload: residue.trim(),
+  };
+}
+
+/**
  * The single decision.
  * @returns {'passthrough'|'collect'|'execute'}
  */
@@ -439,12 +573,14 @@ module.exports = {
   HARNESS_RESERVED_PREFIXES,
   MACHINE_PATTERNS,
   ATTACHMENT_PATTERNS,
+  ACTIVATION_PATTERNS,
+  ACTIVATION_CONTENT_MIN,
   configPath, claudeDir, notesPath, modePath, activityPath, lockPath,
   loadConfig, saveConfig,
   readMode, isModeActive, expiryReason, activate, deactivate,
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
   touchActivity, readActivity,
-  isMachinePrompt, isExpandedCommand, hasAttachment,
+  isMachinePrompt, isExpandedCommand, hasAttachment, detectActivation,
   startsWithMarker, stripMarker, looksLikeQuestion,
   validateMarker, markerMatch, effectiveMarker, MARKER_MAX_LENGTH,
   classify, willBeCollected,

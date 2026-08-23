@@ -6,7 +6,7 @@ import {
   activate, deactivate, isModeActive, expiryReason, readMode,
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
   touchActivity, readActivity,
-  isMachinePrompt, isExpandedCommand, hasAttachment,
+  isMachinePrompt, isExpandedCommand, hasAttachment, detectActivation,
   startsWithMarker, stripMarker, looksLikeQuestion, validateMarker,
   classify, willBeCollected, notesPath, modePath,
   loadConfig, saveConfig, configPath, effectiveMarker,
@@ -459,5 +459,91 @@ describe("question hint is advisory only", () => {
   test("a question is still collected — the hook never classifies it away", () => {
     expect(classify({ text: "gibt es das schon?", marker: ">>", modeActive: true }))
       .toBe("collect");
+  });
+});
+
+describe("detectActivation — the prompt that turns the mode on", () => {
+  // Regression guard for the mode's worst failure: the user activates AND types
+  // their first notes into the same prompt. Collection is not armed yet, so the
+  // notes were executed instead of filed and the marker dialog got skipped.
+  test("a bare activation carries no content", () => {
+    for (const t of [
+      "<command-name>/claude-batch</command-name><command-args>on</command-args>",
+      "<command-name>/claude-batch</command-name>",
+      "sammelmodus an",
+      "Sammelmodus bitte an",
+      "collect mode on",
+    ]) {
+      const d = detectActivation(t);
+      expect(d.activating).toBe(true);
+      expect(d.carriesContent).toBe(false);
+    }
+  });
+
+  test("an activation with notes typed into it is flagged", () => {
+    const cmd = detectActivation(
+      "<command-name>/claude-batch</command-name>" +
+      "<command-args>on der Header ist rot und die Filter-API fehlt</command-args>",
+    );
+    expect(cmd).toMatchObject({ activating: true, viaCommand: true, carriesContent: true });
+    expect(cmd.payload).toContain("Header ist rot");
+
+    const nl = detectActivation(
+      "Sammelmodus an, erste Notiz: der Header ist rot, zweite: die Filter-API fehlt",
+    );
+    expect(nl).toMatchObject({ activating: true, viaCommand: false, carriesContent: true });
+  });
+
+  test("another slash command with a long payload is not an activation", () => {
+    expect(detectActivation(
+      "<command-name>/ship</command-name><command-args>der Header ist rot</command-args>",
+    ).activating).toBe(false);
+  });
+
+  test("naming the mode is not asking for it", () => {
+    // Regression guard: the trigger phrases are substrings, so prose ABOUT the
+    // feature used to drag the guard into an unrelated turn.
+    for (const t of [
+      "Wir sollten den Sammelmodus im Team dokumentieren, aber davor klaeren wir die Architektur",
+      "der batch mode war letzte Woche kaputt, siehe Issue #289",
+      "wie funktioniert collect mode eigentlich intern?",
+    ]) {
+      expect(detectActivation(t).activating).toBe(false);
+    }
+  });
+
+  test("intent in the same clause still activates", () => {
+    for (const t of [
+      "Sammelmodus an",
+      "aktiviere den Sammelmodus",
+      "mach den batch mode bitte an",
+    ]) {
+      expect(detectActivation(t).activating).toBe(true);
+    }
+  });
+
+  test("a self-activating phrase needs no on-word", () => {
+    const d = detectActivation("erstmal sammeln: der Header ist rot und die Filter-API fehlt");
+    expect(d).toMatchObject({ activating: true, carriesContent: true });
+  });
+
+  test("a machine prompt that mentions the mode is never an activation", () => {
+    // An AFK resume or a cron cannot switch the mode on, and nothing in such a
+    // turn would read the guard's self-escape clause.
+    expect(detectActivation("AUTONOMOUS_RESUME: continue the batch mode parser work").activating)
+      .toBe(false);
+    expect(detectActivation("Silently run the sammelmodus watchdog tick").activating)
+      .toBe(false);
+  });
+
+  test("an ordinary prompt is not an activation", () => {
+    expect(detectActivation("Der Button ist verrutscht").activating).toBe(false);
+    expect(detectActivation("").activating).toBe(false);
+    expect(detectActivation(null).activating).toBe(false);
+  });
+
+  test("a short question ABOUT the mode does not count as carried content", () => {
+    expect(detectActivation("was macht der sammelmodus?").carriesContent).toBe(false);
+    expect(detectActivation("wie funktioniert collect mode?").carriesContent).toBe(false);
   });
 });

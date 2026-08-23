@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildAck, buildMergeContext, INLINE_LIMIT } from "./prompt.batch.collect.js";
+import { buildAck, buildMergeContext, buildActivationGuard, INLINE_LIMIT } from "./prompt.batch.collect.js";
 import { activate, appendNote, readNotes, isModeActive } from "../lib/batch-state.js";
 
 const HOOK = fileURLToPath(new URL("./prompt.batch.collect.js", import.meta.url));
@@ -254,5 +254,42 @@ describe("message builders", () => {
     expect(ctx.length).toBeLessThan(INLINE_LIMIT);
     expect(ctx).toContain("/tmp/p/.claude/batch.md");
     expect(ctx).toContain("los");
+  });
+});
+
+describe("mode off — the activating prompt gets a guard, not a turn of work", () => {
+  test("an activation carrying notes injects the guard", () => {
+    const r = runHook({
+      prompt:
+        "<command-name>/claude-batch</command-name>" +
+        "<command-args>on der Header ist rot und die Filter-API fehlt</command-args>",
+    });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("[claude-batch]");
+    expect(r.stdout).toContain("NOTIZ, nicht Auftrag");
+    // Nothing is stored: the mode is not on yet, and a note written here for a
+    // prompt that turns out to be a question would be corruption.
+    expect(readNotes(cwd)).toEqual([]);
+  });
+
+  test("a bare activation stays silent", () => {
+    const r = runHook({
+      prompt: "<command-name>/claude-batch</command-name><command-args>on</command-args>",
+    });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe("");
+  });
+
+  test("an ordinary prompt stays silent", () => {
+    const r = runHook({ prompt: "Der Button ist verrutscht" });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe("");
+  });
+
+  test("the guard names the marker dialog it exists to protect", () => {
+    const g = buildActivationGuard();
+    expect(g).toContain("AskUserQuestion");
+    expect(g).toContain("Step 2.4");
+    expect(g).toContain("ignoriere diesen Hinweis");
   });
 });
