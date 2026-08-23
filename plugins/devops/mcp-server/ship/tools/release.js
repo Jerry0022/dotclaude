@@ -11,10 +11,14 @@ import { detectRepoMode } from "../lib/repo-mode.js";
 import { remoteTagExists } from "../lib/remote-tags.js";
 import { retryUntil } from "../lib/retry.js";
 import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
+import { clampText } from "../../lib/soft-limits.js";
+
+/** Soft budget for the PR title — over-long titles are clamped, never rejected. */
+export const PR_TITLE_MAX = 70;
 
 export const schema = z.object({
   base: z.string().default("main").describe("Base branch for PR (may be a feature branch for intermediate merges)"),
-  title: z.string().max(70).describe("PR title (conventional commit format)"),
+  title: z.string().describe("PR title (conventional commit format). Aim for ≤70 chars — a longer title is clamped on a word boundary, not rejected."),
   body: z.string().describe("PR body (must start with Closes #N if applicable)"),
   tag: z.string().nullable().default(null).describe("Bare version tag (e.g. v0.18.0) — the tool publishes it as alpha/<tag> (ring model), null to skip. Ignored for intermediate merges"),
   releaseNotes: z.string().nullable().default(null).describe("CHANGELOG entry — NOT published at ship time (releases happen at promotion via ship_promote); recorded as releaseDeferred"),
@@ -29,7 +33,12 @@ export const schema = z.object({
 });
 
 export async function handler(params) {
-  const { base, title, body, tag, releaseNotes, commitMessage, mergeStrategy, skipChecks, checksTimeoutSec } = params;
+  const { base, body, tag, releaseNotes, commitMessage, mergeStrategy, skipChecks, checksTimeoutSec } = params;
+  // Clamp rather than reject: by the time we get here preflight, build and the
+  // version bump have already committed, so failing on title length would abort
+  // the pipeline with the version raised and no PR to show for it.
+  const titleClamp = clampText(params.title, PR_TITLE_MAX);
+  const title = titleClamp.value;
   // Schema defaults apply in production; `??` keeps direct callers/tests working.
   const tagVerifyAttempts = params.tagVerifyAttempts ?? 4;
   const tagRetryDelayMs = params.tagRetryDelayMs ?? 1_000;
@@ -178,6 +187,9 @@ export async function handler(params) {
       pr = createPR({ title, body, base, head: branch }, opts);
     }
     result.pr = { number: pr.number, url: pr.url, title };
+    if (titleClamp.clamped) {
+      result.titleClamped = { original: titleClamp.original, applied: title, max: PR_TITLE_MAX };
+    }
     result.mergeStrategy = mergeStrategy;
 
     // Pre-Merge Checks Gate — wait for CI on the PR before merging.
