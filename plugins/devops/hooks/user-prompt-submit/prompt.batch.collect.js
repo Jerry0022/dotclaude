@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.1.0
+ * @version 0.2.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/claude-batch`: while active, blocks the user
@@ -141,7 +141,9 @@ function buildActivationGuard() {
     '   Notizzahl im Bestätigungsblock.',
     '',
     'Falls dieser Prompt den Modus gar nicht aktiviert — eine Frage ÜBER den',
-    'Modus, Status, oder /claude-batch off —, ignoriere diesen Hinweis.',
+    'Modus, ein Status, /claude-batch off, oder einfach ein Satz, in dem der',
+    'Sammelmodus nur vorkommt —, ignoriere diesen Hinweis vollständig und',
+    'bearbeite den Prompt normal. Die Erkennung ist eine Heuristik.',
   ].join('\n');
 }
 

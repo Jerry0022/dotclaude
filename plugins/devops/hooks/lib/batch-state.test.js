@@ -500,6 +500,42 @@ describe("detectActivation — the prompt that turns the mode on", () => {
     ).activating).toBe(false);
   });
 
+  test("naming the mode is not asking for it", () => {
+    // Regression guard: the trigger phrases are substrings, so prose ABOUT the
+    // feature used to drag the guard into an unrelated turn.
+    for (const t of [
+      "Wir sollten den Sammelmodus im Team dokumentieren, aber davor klaeren wir die Architektur",
+      "der batch mode war letzte Woche kaputt, siehe Issue #289",
+      "wie funktioniert collect mode eigentlich intern?",
+    ]) {
+      expect(detectActivation(t).activating).toBe(false);
+    }
+  });
+
+  test("intent in the same clause still activates", () => {
+    for (const t of [
+      "Sammelmodus an",
+      "aktiviere den Sammelmodus",
+      "mach den batch mode bitte an",
+    ]) {
+      expect(detectActivation(t).activating).toBe(true);
+    }
+  });
+
+  test("a self-activating phrase needs no on-word", () => {
+    const d = detectActivation("erstmal sammeln: der Header ist rot und die Filter-API fehlt");
+    expect(d).toMatchObject({ activating: true, carriesContent: true });
+  });
+
+  test("a machine prompt that mentions the mode is never an activation", () => {
+    // An AFK resume or a cron cannot switch the mode on, and nothing in such a
+    // turn would read the guard's self-escape clause.
+    expect(detectActivation("AUTONOMOUS_RESUME: continue the batch mode parser work").activating)
+      .toBe(false);
+    expect(detectActivation("Silently run the sammelmodus watchdog tick").activating)
+      .toBe(false);
+  });
+
   test("an ordinary prompt is not an activation", () => {
     expect(detectActivation("Der Button ist verrutscht").activating).toBe(false);
     expect(detectActivation("").activating).toBe(false);
