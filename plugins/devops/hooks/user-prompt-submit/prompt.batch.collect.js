@@ -109,6 +109,42 @@ function buildMergeContext(notes, rest, notesFile) {
   ].join('\n');
 }
 
+/**
+ * Guard injected when the prompt that ACTIVATES collect mode already carries the
+ * user's first observations.
+ *
+ * That prompt is the one prompt the mode can never catch: collection is armed by
+ * the turn it starts, so the hook sees it while the mode is still off and has to
+ * let it through. What used to happen then is the whole failure mode of the
+ * feature — the model reads actionable text, starts working it, skips the
+ * marker dialog, and the notes are never filed. The mode ends up ON and EMPTY
+ * while the work it was supposed to defer is already half-done.
+ *
+ * Guidance, not enforcement: the hook cannot store the text itself (nothing has
+ * activated yet, and a "note" written for a question ABOUT the mode would be
+ * corruption), so it states the rule in the turn where the decision is made.
+ */
+function buildActivationGuard() {
+  return [
+    '[claude-batch] Dieser Prompt startet den Sammelmodus UND trägt zusätzlichen Inhalt.',
+    '',
+    'Der Inhalt neben der Aktivierung ist NOTIZ, nicht Auftrag:',
+    '1. Setze nichts davon um. Nicht planen, nicht recherchieren, nicht den Code',
+    '   dafür lesen — der Modus existiert genau dafür, dass das später und',
+    '   gebündelt passiert.',
+    '2. Überspringe KEINEN Schritt des claude-batch-Skills. Die Marker-Rückfrage',
+    '   (AskUserQuestion, Step 2.1) kommt zuerst, auch wenn der Prompt schon',
+    '   Arbeit beschreibt. Ein Prompt voller Aufgaben ist kein Grund, den Dialog',
+    '   zu überspringen — er ist der Grund, warum es ihn gibt.',
+    '3. Nach dem Aktivieren: lege den Inhalt WÖRTLICH als erste Notiz ab',
+    '   (`appendNote` aus hooks/lib/batch-state.js, Step 2.4) und nenne die',
+    '   Notizzahl im Bestätigungsblock.',
+    '',
+    'Falls dieser Prompt den Modus gar nicht aktiviert — eine Frage ÜBER den',
+    'Modus, Status, oder /claude-batch off —, ignoriere diesen Hinweis.',
+  ].join('\n');
+}
+
 let inputData = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', d => { inputData += d; });
@@ -127,6 +163,12 @@ process.stdin.on('end', () => {
     // Not collecting — but a real user prompt still advances the clock the
     // watchdog reads, so a later activation starts from a truthful timestamp.
     try { if (!B.isMachinePrompt(text)) B.touchActivity(cwd); } catch { /* non-fatal */ }
+    // The one prompt collection can never catch is the one that turns it on.
+    // When it also carries work, say so before the model starts doing it.
+    try {
+      const act = B.detectActivation(text);
+      if (act.activating && act.carriesContent) process.stdout.write(buildActivationGuard() + '\n');
+    } catch { /* advisory only — never let this cost a turn */ }
     process.exit(0);
   }
 
@@ -173,4 +215,4 @@ process.stdin.on('end', () => {
   }
 });
 
-module.exports = { buildAck, buildMergeContext, INLINE_LIMIT };
+module.exports = { buildAck, buildMergeContext, buildActivationGuard, INLINE_LIMIT };

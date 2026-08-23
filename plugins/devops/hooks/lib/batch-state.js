@@ -80,6 +80,31 @@ const ATTACHMENT_PATTERNS = [
   /(^|\s)@[\w.\-/\\]+\.[A-Za-z0-9]{1,8}(\s|$)/,
 ];
 
+/**
+ * Phrases that turn an ordinary prompt into a claude-batch invocation.
+ *
+ * Mirrors the skill's own trigger list. Used ONLY to recognise an activating
+ * prompt while the mode is still OFF — never to decide collect vs. execute.
+ */
+const ACTIVATION_PATTERNS = [
+  /sammel[-\s]?modus/i,
+  /collect[-\s]?mode/i,
+  /batch[-\s]?mode/i,
+  /erstmal\s+sammeln/i,
+  /nicht\s+sofort\s+umsetzen/i,
+];
+
+/** Words that are pure routing (Step 1 of the skill), never note content. */
+const ROUTE_WORDS = /\b(on|an|start|off|aus|stop|go|los|merge|marker|status|bitte|mal|jetzt)\b/gi;
+
+/**
+ * Below this many characters of residue, an invocation is "activation only" —
+ * `/claude-batch on` and friends. Above it the user typed work into the very
+ * prompt that turns collection on, and that work must be filed as a note
+ * instead of executed.
+ */
+const ACTIVATION_CONTENT_MIN = 12;
+
 // ── paths ──────────────────────────────────────────────────────────────────
 
 function configPath() {
@@ -393,6 +418,63 @@ function looksLikeQuestion(text) {
 }
 
 /**
+ * Does this prompt turn collect mode ON — and does it carry work on top?
+ *
+ * The failure this exists for: the user activates the mode and already types
+ * their first observations into the SAME prompt. Collection is not armed yet,
+ * so the collect hook cannot catch them; the model sees actionable text, starts
+ * working it, and skips the skill's own dialogs. The notes are never filed, the
+ * mode is on but empty, and the whole point of batching is gone.
+ *
+ * The hook cannot fix that by storing the text itself: at UserPromptSubmit time
+ * nothing has activated yet, and a note written for a prompt that turns out to
+ * be a question ABOUT the mode would be pure corruption. So this only reports
+ * the shape, and the hook injects a guard telling the turn what to do with it.
+ *
+ * `payload` is best-effort and exists for the length heuristic — the split into
+ * activation vs. content is made in the turn, against the user's actual words.
+ *
+ * @param {string} text raw prompt text
+ * @returns {{activating:boolean,viaCommand:boolean,carriesContent:boolean,payload:string}}
+ */
+function detectActivation(text) {
+  const none = { activating: false, viaCommand: false, carriesContent: false, payload: '' };
+  const s = typeof text === 'string' ? text : '';
+  if (!s.trim()) return none;
+
+  let residue;
+  let viaCommand = false;
+  const cmd = /<command-name>\s*\/?([\w.-]+)\s*<\/command-name>/i.exec(s);
+  if (cmd) {
+    // An expanded slash command is unambiguous: either it IS /claude-batch, or
+    // it is some other command and none of this applies.
+    if (!/claude-batch/i.test(cmd[1])) return none;
+    viaCommand = true;
+    const args = /<command-args>([\s\S]*?)<\/command-args>/i.exec(s);
+    residue = args ? args[1] : '';
+  } else {
+    if (!ACTIVATION_PATTERNS.some(rx => rx.test(s))) return none;
+    residue = s;
+    for (const rx of ACTIVATION_PATTERNS) {
+      residue = residue.replace(new RegExp(rx.source, 'gi'), ' ');
+    }
+  }
+
+  const payload = residue.replace(ROUTE_WORDS, ' ').replace(/[\s.,;:!?]+/g, ' ').trim();
+  // "Was macht der Sammelmodus?" is a question ABOUT the mode, not an activation
+  // carrying notes. Short + interrogative is the reliable shape of that; a long
+  // one still trips the guard, which is harmless — the guard says to ignore it
+  // when the prompt is not actually activating.
+  const asking = looksLikeQuestion(s) && payload.length < 40;
+  return {
+    activating: true,
+    viaCommand,
+    carriesContent: !asking && payload.length >= ACTIVATION_CONTENT_MIN,
+    payload: residue.trim(),
+  };
+}
+
+/**
  * The single decision.
  * @returns {'passthrough'|'collect'|'execute'}
  */
@@ -439,12 +521,14 @@ module.exports = {
   HARNESS_RESERVED_PREFIXES,
   MACHINE_PATTERNS,
   ATTACHMENT_PATTERNS,
+  ACTIVATION_PATTERNS,
+  ACTIVATION_CONTENT_MIN,
   configPath, claudeDir, notesPath, modePath, activityPath, lockPath,
   loadConfig, saveConfig,
   readMode, isModeActive, expiryReason, activate, deactivate,
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
   touchActivity, readActivity,
-  isMachinePrompt, isExpandedCommand, hasAttachment,
+  isMachinePrompt, isExpandedCommand, hasAttachment, detectActivation,
   startsWithMarker, stripMarker, looksLikeQuestion,
   validateMarker, markerMatch, effectiveMarker, MARKER_MAX_LENGTH,
   classify, willBeCollected,

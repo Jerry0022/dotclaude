@@ -28,6 +28,28 @@ Silently check (do not surface "not found"):
 | `marker` | Step 2.1 (ask again, overwrite the stored marker) |
 | `status`, none | Step 3 (report) |
 
+**Route on the FIRST token only. Everything after it is note content, never an
+instruction.** `/claude-batch on der Header ist rot` is the `on` branch carrying
+one note — not an unrecognised argument, and not a request to look at the header.
+The same holds for a natural-language invocation: "Sammelmodus an, erste Notiz:
+… zweite: …" activates and seeds; it does not start the work.
+
+**This is the one prompt collection can never catch.** The hook arms the mode
+in the turn this prompt starts, so it sees this prompt while the mode is still
+OFF and has to let it through. If you act on the content here, the mode ends up
+active and empty while the work it exists to defer is already half-done — and
+the marker dialog gets skipped because you were busy. So, on an invocation that
+carries content:
+
+- Do **not** implement, plan, or research it. Do not read code for it.
+- Do **not** skip Step 2.1. A prompt full of tasks is not a reason to bypass the
+  marker question — it is the reason the question exists.
+- File the content as note #1 in Step 2.4, verbatim.
+
+`prompt.batch.collect.js` injects the same three rules as a guard when it sees an
+activating prompt carrying content (`detectActivation` in `batch-state.js`). Its
+absence is not permission to act — the detection is best-effort.
+
 ## Step 2 — Activate
 
 **2.1 First-run marker setup.** Read `~/.claude/claude-batch.json`. If it is
@@ -85,8 +107,22 @@ mkdir -p "${x%/*}"
 grep -qxF '/.claude/batch*' "$x" 2>/dev/null || echo '/.claude/batch*' >> "$x"
 ```
 
-**2.4 Confirm in one short block** — the marker, where notes land, and both
-exits. Then render an `analysis` completion card.
+**2.4 Seed the invocation's own content.** If the activating prompt carried
+anything beyond the route word (Step 1), file it now — after `activate`, before
+the confirmation:
+
+```bash
+node -e "require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').appendNote(process.cwd(), process.argv[1])" "<text>"
+```
+
+**Verbatim, and as ONE note.** Do not summarise, re-order, or split it into what
+you think the separate items are — a note is the user's own words, and the merge
+in Step 4 reads content, not note boundaries. Guessing boundaries only risks
+losing a requirement. Skip this step silently when the invocation was bare.
+
+**2.5 Confirm in one short block** — the marker, where notes land, both exits,
+and (when 2.4 ran) that the first note is already stored, with the count. Then
+render an `analysis` completion card.
 
 ## Step 3 — Status
 
@@ -191,6 +227,9 @@ The dependency is soft. Resolve the plugin path and skip silently if absent —
   harness has no quieter rendering for it. If the user reports it as an error,
   confirm the note actually landed (Step 3) and explain the mechanism — do not
   start debugging the hook.
+- **The activating prompt is never executed.** Whatever it carries beyond the
+  route word becomes note #1 (Step 2.4). Acting on it defeats the mode in the
+  very turn that starts it, and it is how the marker dialog gets skipped.
 - **Never resolve a contradiction silently.** Name it, then decide.
 - **Never delete notes.** Archive them.
 - **A question in the queue is a defect, not content.** If a note is clearly a
