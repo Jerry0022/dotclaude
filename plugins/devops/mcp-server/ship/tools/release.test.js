@@ -51,7 +51,7 @@ vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
   scanConflictMarkers: vi.fn(() => ({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [], repoOffenders: [], repoScanned: 0, repoTruncated: false })),
 }));
 
-import { handler } from "./release.js";
+import { handler, PR_TITLE_MAX } from "./release.js";
 import * as gitLib from "../lib/git.js";
 import * as ghLib from "../lib/github.js";
 import { scanConflictMarkers } from "../lib/conflict-markers.js";
@@ -558,5 +558,42 @@ describe("ship_release — #251 channel-tag verification", () => {
     const push = gitLib.gitStrict.mock.calls.find((c) => c[0] === "push origin alpha/v1.0.0");
     expect(push).toBeDefined();
     expect(push[1]).toMatchObject({ timeout: 60000 });
+  });
+});
+
+// A PR title a few characters over budget used to be a hard schema reject, and
+// the reject landed here — after preflight, build and the version bump had
+// already committed. The ship died with the version raised and no PR to show
+// for it, which reads as a crash rather than as "your title was too long".
+describe("ship_release — over-long PR title is clamped, never fatal", () => {
+  const LONG = "fix(ship): clamp over-long PR titles on a word boundary instead of aborting the entire release pipeline";
+
+  test("an over-long title still ships and reports what was cut", async () => {
+    const res = await handler(params({ title: LONG }));
+
+    expect(res.success).toBe(true);
+    expect(res.titleClamped).toEqual({
+      original: LONG,
+      applied: expect.any(String),
+      max: PR_TITLE_MAX,
+    });
+    expect(res.titleClamped.applied.length).toBeLessThanOrEqual(PR_TITLE_MAX);
+  });
+
+  test("the PR is created with the clamped title, not the raw one", async () => {
+    await handler(params({ title: LONG }));
+
+    const [prArgs] = ghLib.createPR.mock.calls.at(-1);
+    expect(prArgs.title.length).toBeLessThanOrEqual(PR_TITLE_MAX);
+    expect(prArgs.title).not.toBe(LONG);
+    // Word boundary, so the conventional-commit prefix survives intact.
+    expect(prArgs.title.startsWith("fix(ship): clamp over-long PR titles")).toBe(true);
+  });
+
+  test("a title within budget is passed through untouched and not reported", async () => {
+    const res = await handler(params({ title: "fix(ship): short enough" }));
+
+    expect(res.titleClamped).toBeUndefined();
+    expect(ghLib.createPR.mock.calls.at(-1)[0].title).toBe("fix(ship): short enough");
   });
 });

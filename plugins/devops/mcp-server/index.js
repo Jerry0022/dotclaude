@@ -25,6 +25,7 @@ import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
+import { clampText, clampList } from "./lib/soft-limits.js";
 import {
   assessFreshness,
   isLiveSnapshot,
@@ -1182,7 +1183,8 @@ server.registerTool(
         "ship-successful", "ready", "released", "ship-blocked", "test",
         "test-minimal", "analysis", "aborted", "fallback",
       ]).describe("Card variant based on task outcome. `released` is the channel-promotion card (promote alpha→beta→stable) rendered by the promote skill."),
-      summary: z.string().max(80).describe("Max ~10 words, user's language"),
+      summary: z.string().transform(v => clampText(v, 80).value)
+        .describe("Max ~10 words, user's language (over-long summaries are clamped, not rejected)"),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
       cwd: z.string().optional().describe("Working directory of the target repo. STRONGLY RECOMMENDED for ship-* variants — without it, getRepoUrl falls back to the MCP server's own cwd (plugin dir) and the card cannot render clickable PR/commit/branch links."),
       buildId: z.string().optional().describe("Pre-computed build-ID (from ship_build). If provided, skips internal computation. Use this when the worktree/branch state may have changed after building (e.g. post-merge)."),
@@ -1192,14 +1194,14 @@ server.registerTool(
         z.array(z.object({
           area: z.string().describe("Functional surface the user perceives or the change is about (e.g. 'Completion card', 'Ship pipeline', 'Branch cleanup', 'Skill fix'). NOT a file path or internal module name. Technical wording only when the topic itself is purely technical (parser, flag, protocol)."),
           description: z.string().describe("What behaves differently now, in user-domain language. Describe the functional/user-visible effect — same rule as `area`: technical phrasing only when the topic is genuinely technical."),
-        })).max(3).optional(),
+        })).transform(v => clampList(v, 3).value).optional(),
       ).describe("Top 3 FUNCTIONAL changes — both `area` AND description should describe what the user perceives or what behaves differently, not which files were edited. Keep the 'area → description' shape. Files/paths only when the file IS the deliverable (skill, keybindings.json, settings.json, CLAUDE.md, hook script). Internal helpers/renderers/libs never appear. Good: 'Completion card → Changes-Bullets jetzt funktional formuliert'. Good (purely technical topic): 'JSON parser → akzeptiert trailing commas'. Bad: 'mcp-server/index.js → renderChanges() angepasst'."),
       tests: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.object({
           method: z.string(),
           result: z.string(),
-        })).max(3).optional(),
+        })).transform(v => clampList(v, 3).value).optional(),
       ).describe("Test results (max 3)"),
       state: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
@@ -1261,7 +1263,7 @@ server.registerTool(
           requirement: z.string().describe("A requirement / acceptance criterion the change had to satisfy — in user-domain language."),
           status: z.enum(["met", "partial", "unmet"]).optional().describe("Whether this change satisfies the requirement."),
           evidence: z.string().optional().describe("How you CONFIRMED it (the test that proves it, the behaviour observed) — not a restatement of the requirement."),
-        })).max(4).optional(),
+        })).transform(v => clampList(v, 4).value).optional(),
       ).describe("V&V gate — validation attestation (“did we build the RIGHT thing”). REQUIRED for any turn that changed source code: map each requirement / acceptance criterion to how this change meets it and how you confirmed it. A code-change card without `validation` is blocked once by stop.flow.guard and re-requested. For a pure refactor/chore with no explicit requirement, pass one item stating the intent and how behaviour was kept equivalent. Each item: { requirement, status: met|partial|unmet, evidence }."),
       delivery: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,

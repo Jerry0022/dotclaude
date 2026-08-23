@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.133.6] — 2026-08-23
+
+### Fixed
+
+- **A PR title a few characters too long no longer kills the release.** The title was enforced as a hard `z.string().max(70)`, so an over-long one was rejected by the MCP layer rather than shortened — and the reject landed at the worst possible point in the pipeline. By the time `ship_release` is called, preflight has passed, the build is green, and the version bump plus CHANGELOG have already been committed; the ship then died with the version raised and no PR to show for it. Nothing in the failure said "your title was too long", so it read as a crash, and it recurred across several projects over the past weeks. The title is now clamped on a word boundary instead — no ellipsis, because a squash merge turns the title into the commit subject and a subject trailing off in dots is worse than one that simply ends early. The cut is reported back as `titleClamped` (`{ original, applied, max }`), so a shortened title is visible rather than silent, and the 70-char budget survives as guidance in the tool description.
+
+- **The completion card no longer refuses to render over one bullet too many.** The same defect sat on `summary` (80 chars) and on the `changes`, `tests` and `validation` arrays (3/3/4 entries). Here it was worse than cosmetic: the stop hook *requires* a card before a turn may end, so the one call able to satisfy that requirement could be rejected for a formatting overrun — leaving the turn with no way out. All four caps now clamp instead of rejecting.
+
 ## [0.133.5] — 2026-08-23
 
 ### Fixed
