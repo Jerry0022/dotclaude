@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.133.4] — 2026-08-23
+
+### Fixed
+
+- **The two usage rows in the completion card now line up, and the bar reads the way people actually use it.** The `5h` and `Wk` rows started at different offsets and their percentages, deltas and reset times each began somewhere else — reported as the one rough edge on an otherwise liked card. The padding logic was not the cause: the card renders in a **proportional** font, where space padding cannot align columns at all, because `Wk` is wider than `5h` and a space is narrower than a digit. The previous fix had swapped regular spaces for non-breaking ones, which stops markdown from folding the runs but does nothing about their width — it preserved a grid that was never aligned. The bars now render in a code fence, where monospace makes a fixed column grid actually hold, and the padding is plain spaces only. Health and staleness notes stay dim blockquotes above and below the fence.
+
+  The glyphs changed roles at the same time. The vertical marker used to sit at the elapsed-time position while the heavy run encoded consumption; it is now the reverse — the marker is where **consumption** stands, heavy is time already **elapsed** in the cycle, light is time **left**. That makes the heavy/light junction the clock, so a marker to its right means burning faster than time passes: the `Pace!` warning, readable at a glance instead of only as a number. Gaps right of the bar tightened from 23 to 19 columns and the inner reset number is space-padded (`4h 33m` / `4h  5m`) so its digits align too.
+
+  The template spec dropped two things it documented as rendered that the canonical renderer never emitted: the delta severity markers (`!` / `!!`) and the ` left` suffix after the reset time.
+
 ## [0.133.3] — 2026-08-23
 
 ### Fixed

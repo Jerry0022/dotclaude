@@ -98,17 +98,18 @@ All variables in `{{...}}`. Sections wrapped in `{{#if}}` are conditional per va
 
 ### Usage meter
 
-Directly under the title. Two usage bars with inline elapsed-time marker, greyed
-as subinfo (blockquote) to match the Changes block. Column alignment is held by
-non-breaking spaces (a blockquote folds runs of regular spaces); only `⚠` and
-**Pace!** keep their white color.
+Directly under the title. Two rows — `5h` and `Wk` — rendered inside a **code
+fence**. The card is displayed in a proportional font, where space padding can
+never align columns (`Wk` is wider than `5h`, a space narrower than a digit);
+monospace is what makes the fixed column grid hold. Health and staleness notes
+around the bars stay dim blockquotes.
 If `usage-live.json` is missing: show error message instead of bars.
 
 **Example rendering:**
 
 ```
-5h  ━━━━━━━━━╏────   67%  +1%  · 1h 42m left
-Wk  ━━━━╏━━━──────   60%  +8% !!  · 4d 11h left  ⚠ Pace!
+5h  ━────────╏────  62% +0%  · 4h 33m  ⚠ Pace!
+Wk  ─╏────────────   7% +0%  · 6d 23h
 ```
 
 **Error rendering (no data):**
@@ -119,18 +120,22 @@ Wk  ━━━━╏━━━──────   60%  +8% !!  · 4d 11h left  �
 
 **Bar rendering:**
 
+The bar encodes the **time window**; the marker encodes **usage** inside it.
+
 ```
 total_blocks = 14
-filled       = round(usage_pct / 100 * total_blocks)
-elapsed_pos  = round(elapsed_pct / 100 * total_blocks)
+usage_pos    = min(13, round(usage_pct   / 100 * total_blocks))
+elapsed_end  =         round(elapsed_pct / 100 * total_blocks)
 ```
 
 Each position in the 14-character bar is one of:
-- `━` (heavy horizontal) — used area
-- `─` (light horizontal) — free area
-- `╏` (light dashed vertical) — elapsed-time marker, same glyph regardless of fill zone
+- `╏` (light dashed vertical) — usage marker at `usage_pos`, wins over both zones
+- `━` (heavy horizontal) — time already elapsed in the cycle (`i < elapsed_end`)
+- `─` (light horizontal) — time still left
 
-The elapsed marker replaces the character at `elapsed_pos` regardless of fill. No separate arrow line is used.
+Reading it: the heavy/light junction is where the **clock** stands, the marker is
+where **consumption** stands. Marker right of the junction ⇒ burning faster than
+time passes — the same signal the `⚠ Pace!` flag raises numerically.
 
 **Elapsed-time calculation:**
 
@@ -141,17 +146,9 @@ elapsed_pct (Wk):  (10080 - reset_minutes) / 10080 * 100
 
 **Delta display rules:**
 
-Only show the delta when a previous `usage-live.json` snapshot exists **and** is within the current reset window. If no previous snapshot exists or it is outside the current reset window, omit the delta entirely — no padding.
+Only show the delta when a previous `usage-live.json` snapshot exists **and** is within the current reset window. If no previous snapshot exists or it is outside the current reset window, omit the delta entirely — the column keeps its width so the `·` never shifts.
 
-Delta format: `+N%` optionally followed by a severity marker:
-
-| Threshold | Marker | Example |
-|-----------|--------|---------|
-| delta < 2pp | _(none)_ | `+1%` |
-| delta ≥ 2pp | `!` | `+3% !` |
-| delta ≥ 6pp | `!!` | `+8% !!` |
-
-**Implementation:** Pass `delta5h: null` / `deltaWk: null` in the render-card input JSON when no valid previous snapshot is available. The renderer will omit the delta field entirely.
+**Implementation:** Pass `delta5h: null` / `deltaWk: null` in the render-card input JSON when no valid previous snapshot is available. The renderer will render the field empty.
 
 **Pace comparison (usage vs. elapsed time):**
 
@@ -169,24 +166,23 @@ pace_delta = usage_pct - elapsed_pct
 
 **Column alignment:**
 
+Fixed grid, identical on both rows. Padding is **plain spaces only** — no NBSP,
+no filler glyphs. Trailing pad is trimmed so no stray whitespace sits in the fence.
+
 ```
 Column       Width    Content
 ──────────   ──────   ──────────────────────────
 Label         2 chr   "5h" / "Wk"
 Gap           2 chr   "  "
 Bar          14 chr   ━━━╏── (always 14)
-Gap           2 chr   "  "
-Pct           3 chr   right-aligned, space-padded
-Pct-suffix    1 chr   "%"
-Delta         var.    "  +N%" / "  +N% !" / "  +N% !!" — omitted when null
-Gap           2 chr   "  "
+Gap           1 chr   " "
+Pct           4 chr   right-aligned, space-padded, incl. "%"
+Gap           1 chr   " "
+Delta         5 chr   "+0%  " / "+12% " — empty (5 spaces) when null
 Separator     2 chr   "· "
-Reset-value   var.    "1h 42m" / "4d 11h"
-Reset-suffix  5 chr   " left"
+Reset         6 chr   "4h 33m" / "6d 23h" — inner number space-padded
 Warn          var.    "  ⚠ Pace!" or empty
 ```
-
-- `· {reset} left` aligns when delta is present; when delta is absent the `·` shifts left.
 
 | Variants | Behavior |
 |----------|----------|
