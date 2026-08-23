@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.133.3] — 2026-08-23
+
+### Fixed
+
+- **Starting `/claude-batch` and typing your first notes into the same prompt no longer executes them.** The activating prompt is the one prompt collect mode can never catch: the hook arms the mode *in the turn that prompt starts*, so it necessarily sees that prompt while the mode is still off and has to let it through. When the prompt also carried the first observations — `/claude-batch on der Header ist rot …`, or "Sammelmodus an, erste Notiz: …" — the model read actionable text, started working it, and skipped the marker question on the way. The notes were never filed. The mode ended up **on and empty** while the work it exists to defer was already half-done, which is the entire feature inverted. Reported after it happened on two consecutive days. Step 1's routing table made it worse by matching `$ARGUMENTS` as a whole, so `on der Header ist rot` fell through to the `status` branch.
+
+  The hook cannot fix this by storing the text itself. Nothing has activated at `UserPromptSubmit` time, and a "note" written for a prompt that turns out to be a question *about* the mode would be corruption, not rescue. So the fix splits: `detectActivation()` recognises an activating prompt — an expanded `/claude-batch`, or a trigger phrase sharing its clause with an intent word — and reports whether anything beyond the route word rides along; the hook then injects a guard into that turn saying the extra content is a note, not an instruction, that no step of the skill may be skipped because the prompt looks busy, and that it belongs in `appendNote` verbatim. `SKILL.md` routes on the first token only and gained Step 2.4, which files the remainder as one note before the confirmation.
+
+  Requiring the intent word is what keeps the guard from becoming noise. The trigger phrases are substrings tested against the whole prompt, so a first cut fired on any sentence that merely named the feature ("wir sollten den Sammelmodus dokumentieren, aber davor …") and on machine prompts mentioning `batch-mode`, where nothing would ever read the guard's self-escape clause. Naming the mode is not asking for it: the trigger now needs `an`/`on`/`aktivier…` in the same clause, machine prompts are excluded up front as they already are in collection, and `erstmal sammeln` / `nicht sofort umsetzen` are exempt because they cannot be said about the mode without asking for it.
+
+  Guidance, not enforcement — deliberately. The detection is a heuristic and the guard says so in its own last line: a false positive must cost nothing but a few ignored lines, never a swallowed prompt.
+
 ## [0.133.2] — 2026-08-18
 
 ### Fixed
