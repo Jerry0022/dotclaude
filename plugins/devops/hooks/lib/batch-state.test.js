@@ -6,7 +6,7 @@ import {
   activate, deactivate, isModeActive, expiryReason, readMode,
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
   touchActivity, readActivity,
-  isMachinePrompt, isExpandedCommand, hasAttachment, detectActivation,
+  isMachinePrompt, isExpandedCommand, hasAttachment, attachmentRefs, detectActivation,
   startsWithMarker, stripMarker, looksLikeQuestion, validateMarker,
   classify, willBeCollected, notesPath, modePath,
   loadConfig, saveConfig, configPath, effectiveMarker,
@@ -270,9 +270,66 @@ describe("stored config with an unusable marker falls back instead of trapping",
 });
 
 describe("classification is inert when the mode is off", () => {
-  test("everything passes through", () => {
+  test("an ordinary prompt passes through", () => {
     expect(classify({ text: "irgendwas", marker: ">>", modeActive: false })).toBe("passthrough");
-    expect(classify({ text: ">> irgendwas", marker: ">>", modeActive: false })).toBe("passthrough");
+  });
+
+  test("the marker still fires — notes outlive the mode that collected them", () => {
+    // The mode auto-deactivates on expiry and on the note cap. If the marker
+    // went inert with it, the queue would be unreachable by the one gesture the
+    // user was told about, and the merge would read as "there are no notes".
+    // The caller decides whether notes actually exist.
+    expect(classify({ text: ">> irgendwas", marker: ">>", modeActive: false })).toBe("execute");
+  });
+});
+
+describe("classification — the marker outranks the attachment rule", () => {
+  test("a marker prompt carrying an image still fires the merge", () => {
+    // Attachments pass through so a BLOCKED prompt can never erase an image.
+    // An execute prompt is never blocked, so the rule does not apply to it —
+    // and `>> so wie hier [Image #1]` is the most natural way to fire a merge.
+    expect(
+      classify({ text: ">> so wie hier [Image #1]", hookInput: {}, marker: ">>", modeActive: true }),
+    ).toBe("execute");
+  });
+
+  test("a marker prompt carrying an @file mention still fires the merge", () => {
+    expect(
+      classify({ text: ">> und @src/app/Header.tsx anschauen", marker: ">>", modeActive: true }),
+    ).toBe("execute");
+  });
+
+  test("an attachment WITHOUT the marker still passes through unstored", () => {
+    expect(
+      classify({ text: "mach das so wie hier [Image #1]", marker: ">>", modeActive: true }),
+    ).toBe("passthrough");
+  });
+});
+
+describe("readNotes survives a hand-edited file", () => {
+  test("CRLF line endings still parse — an editor save must not empty the queue", () => {
+    // The file header invites editing, and every Windows editor rewrites it
+    // CRLF on save. A `-->\r\n` separator matches nothing, so the whole queue
+    // read as empty and the merge fired on zero notes with no error anywhere.
+    appendNote(cwd, "erste notiz");
+    appendNote(cwd, "zweite notiz");
+    const file = notesPath(cwd);
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/\n/g, "\r\n"), "utf8");
+    expect(readNotes(cwd).map(n => n.text)).toEqual(["erste notiz", "zweite notiz"]);
+  });
+});
+
+describe("attachmentRefs — keeping a note tied to its file", () => {
+  test("collects hook-provided paths and @file mentions, de-duplicated", () => {
+    const refs = attachmentRefs("schau in @src/app/Header.tsx und @src/app/Header.tsx", {
+      images: [{ path: "/tmp/shot.png" }],
+      files: ["notes/spec.md"],
+    });
+    expect(refs).toEqual(["/tmp/shot.png", "notes/spec.md", "src/app/Header.tsx"]);
+  });
+
+  test("an attachment-free prompt yields nothing", () => {
+    expect(attachmentRefs("ganz normaler text", {})).toEqual([]);
   });
 });
 

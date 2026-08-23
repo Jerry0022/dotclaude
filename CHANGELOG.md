@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.133.5] — 2026-08-23
+
+### Fixed
+
+- **Firing a `/claude-batch` merge with a screenshot or a question attached no longer reports an empty queue.** Reported after the first real collection run: ten notes visibly collected, then `>>` with an enriched prompt, and the answer was that there were no notes. The classifier checked the attachment rule *before* the execute marker, so `>> so wie hier [Image #1]` — the most natural way to fire a merge while pointing at something — was demoted to an ordinary turn. No notes were injected, and the model then truthfully reported an empty batch while the file held all ten. The two rules exist for opposite reasons: attachments pass through so that a *blocked* prompt can never erase an image, and an execute prompt is never blocked in the first place. The marker now wins over everything except machine prompts and expanded slash commands, and it reaches the notes even after the mode auto-deactivated on its expiry or note cap — the notes outlive the mode that collected them.
+
+- **Screenshots stay attached to the note they belong to.** A prompt carrying an image, pasted text, or an `@file` mention still cannot be collected — blocking erases the prompt, and an erased screenshot is unrecoverable — but passing it through silently was worse than it looked: the model acted on it immediately, which is the one thing the mode exists to prevent, and the merge never learned the prompt had happened. By the time the plan was written, "mach das so wie hier" had no "hier". The turn is the only place the attachment is ever visible, so the hook now injects a guard telling that turn to file the prompt verbatim as a note plus an `[Anhang]` description written while the image is still in context, and `[Anhang-Datei]` lines for every path the hook could extract. The merge context binds those lines to their own note and requires the referenced files to be opened before the note is judged.
+
+- **A hand-edited notes file no longer reads as an empty one.** `readNotes` matched `-->\n`, and `batch.md` carries a header inviting manual editing — so the first save from any Windows editor rewrote it CRLF and the entire queue parsed as zero notes, with no error anywhere. Line endings are normalised before parsing. Independently, the execute path used to exit silently on zero parsed notes, which is indistinguishable from "no notes were ever taken"; it now injects a notice naming the file, whether it exists and its size, and where the file holds content the parser could not split it forbids the denial and requires a raw read instead.
+
+- **Long queues no longer lose their tail in the merge.** Above the inline limit the merge context dropped every note in favour of a bare "read this file" pointer — the turn read part of the file, and nothing in the context said what was missing. It now always carries a numbered index of every note alongside a mandatory full read, and says explicitly when the index itself had to be truncated. The limit itself rose from 8K to 24K characters. Completeness is enforced rather than hoped for: the context requires a coverage list of exactly N lines, `#1` … `#N`, each with a disposition (übernommen · zusammengeführt · Konflikt · nicht machbar · Frage). A note without a line is a lost requirement, not a shorter plan.
+
 ## [0.133.4] — 2026-08-23
 
 ### Fixed
