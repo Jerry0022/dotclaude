@@ -71,19 +71,26 @@ const WARM_MAX_AGE_MS = 60_000;
 // Usage-meter renderer (canonical source — authoritative implementation)
 // ---------------------------------------------------------------------------
 
+const clampPct = (v) => Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0));
+
+// The bar encodes the TIME window, the marker encodes USAGE inside it:
+//   \u2501 heavy  \u2014 time already elapsed in this cycle
+//   \u2500 light  \u2014 time still left
+//   \u254f marker \u2014 where consumption currently stands
+// Marker right of the heavy/light junction = burning faster than the clock.
 function renderBar(pct, elapsedPct) {
   const total = BAR_WIDTH;
-  const filled = Math.round((pct / 100) * total);
-  const elapsedPos = Math.round(Math.max(0, Math.min(100, elapsedPct || 0)) / 100 * total);
+  const usagePos = Math.min(total - 1, Math.round(clampPct(pct) / 100 * total));
+  const elapsedEnd = Math.round(clampPct(elapsedPct) / 100 * total);
 
   let bar = '';
   for (let i = 0; i < total; i++) {
-    if (i === elapsedPos) {
-      bar += '\u254f'; // ╏ light dashed vertical — consistent marker glyph in both filled and free zones
-    } else if (i < filled) {
-      bar += '\u2501'; // ━ heavy horizontal — used
+    if (i === usagePos) {
+      bar += '\u254f'; // usage marker \u2014 same glyph in both time zones
+    } else if (i < elapsedEnd) {
+      bar += '\u2501'; // heavy horizontal \u2014 time elapsed
     } else {
-      bar += '\u2500'; // ─ light horizontal — free
+      bar += '\u2500'; // light horizontal \u2014 time left
     }
   }
   return bar;
@@ -105,29 +112,35 @@ function computeDelta(freshPct, prevPct) {
 }
 
 function formatResetShort(minutes) {
-  if (minutes == null || isNaN(minutes)) return '—';
+  if (minutes == null || isNaN(minutes)) return '\u2014';
   if (minutes >= 1440) {
     const d = Math.floor(minutes / 1440);
     const h = Math.floor((minutes % 1440) / 60);
-    return d + 'd ' + h + 'h';
+    return d + 'd ' + String(h).padStart(2, ' ') + 'h';
   }
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return h + 'h ' + m + 'm';
+  return h + 'h ' + String(m).padStart(2, ' ') + 'm';
 }
 
+// One row, fixed column grid \u2014 every field starts at the same offset on both
+// lines. Padding is plain spaces only; the card renders the block inside a code
+// fence, so the monospace grid is what actually makes the columns line up (a
+// proportional font would break any space-based alignment).
+//
+//   label(2) sp bar(14) sp pct(4) sp delta(5) '\u00b7 ' reset(6) warn
 function renderUsageLine(label, pct, elapsedPct, delta, resetMinutes) {
   const bar = renderBar(pct, elapsedPct);
-  const pctStr = String(pct).padStart(3, ' ') + '%';
+  const pctStr = String(Math.round(pct)).padStart(3, ' ') + '%';
   const deltaStr = formatDelta(delta);
-  // Fixed-width reset column (max '23h 59m' = 7 chars) so both lines align
-  // regardless of whether one shows '30m' and the other '1d 17h'.
-  const resetStr = formatResetShort(resetMinutes).padEnd(7, ' ');
+  // Fixed-width delta column so the '\u00b7 reset' field never shifts between rows.
+  const deltaPart = (deltaStr || '').padEnd(5, ' ');
+  // Fixed-width reset column ('4h 33m' / '6d 23h') \u2014 minutes and hours are
+  // space-padded inside so their digits align too.
+  const resetStr = formatResetShort(resetMinutes).padEnd(6, ' ');
   const pace = pct - elapsedPct;
   const warn = pace > 10 ? '  \u26a0 Pace!' : '';
-  // Fixed-width delta column so · reset always aligns
-  const deltaPart = deltaStr ? (' ' + deltaStr).padEnd(5, ' ') : '     ';
-  return label + '  ' + bar + '  ' + pctStr + deltaPart + '  \u00b7 ' + resetStr + warn;
+  return label.padEnd(2, ' ') + '  ' + bar + ' ' + pctStr + ' ' + deltaPart + '\u00b7 ' + resetStr + warn;
 }
 
 /** Age label for stale notes: '~47h old' / '~33d old'. */
@@ -185,19 +198,16 @@ function renderUsageMeter(usageData, delta5h, deltaWk) {
 }
 
 // ---------------------------------------------------------------------------
-// Usage-meter variant for completion card (with deltas + code fences)
+// Usage-meter variant for completion card (with deltas + code fence)
 // ---------------------------------------------------------------------------
 
-// Dim a meter line to the muted blockquote grey while preserving column
-// alignment. Markdown folds runs of regular spaces, so the padding columns
-// would collapse inside a blockquote \u2014 non-breaking spaces hold the
-// layout the way a code fence used to. The pace icon is font-rendered (keeps
-// its color), and **Pace!** is bolded so it pops white instead of dimming with
-// the rest of the text.
-function dimMeterLine(line) {
-  return line
-    .replace(/ /g, '\u00a0')
-    .replace('Pace!', '**Pace!**');
+// The two bar rows live in a code fence: the card is rendered in a
+// PROPORTIONAL font, where space padding cannot align columns at all ('Wk' is
+// wider than '5h', a space narrower than a digit). Monospace is the only thing
+// that makes the fixed column grid of renderUsageLine actually line up.
+// Surrounding notes (health, cached, login) stay in the dim blockquote.
+function fence(block) {
+  return '```\n' + block + '\n```';
 }
 
 function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
@@ -216,37 +226,34 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
 
   const s = usageData.session;
   const w = usageData.weekly;
-  const lines = [];
+  const bars = [];
 
   const elapsed5hPct = s.resetInMinutes != null ? ((WINDOW_5H_MIN - s.resetInMinutes) / WINDOW_5H_MIN) * 100 : 0;
-  lines.push(dimMeterLine(renderUsageLine('5h', s.pct, elapsed5hPct, delta5h, s.resetInMinutes)));
+  bars.push(renderUsageLine('5h', s.pct, elapsed5hPct, delta5h, s.resetInMinutes));
 
   if (w) {
     const elapsedWkPct = ((WINDOW_WK_MIN - w.resetInMinutes) / WINDOW_WK_MIN) * 100;
-    lines.push(dimMeterLine(renderUsageLine('Wk', w.pct, elapsedWkPct, deltaWk, w.resetInMinutes)));
+    bars.push(renderUsageLine('Wk', w.pct, elapsedWkPct, deltaWk, w.resetInMinutes));
   }
 
-  // Failure indicator — the automatic path never opens a login window, so this
+  // Trailing pad columns would show up as stray whitespace inside the fence.
+  const blocks = [fence(bars.map(l => l.replace(/\s+$/, '')).join('\n'))];
+
+  // Health line sits above the bars, dimmed as subinfo.
+  if (healthLine) blocks.unshift(blockquote(healthLine));
+
+  // Failure indicator \u2014 the automatic path never opens a login window, so this
   // is a SOFT, non-actionable note: the numbers shown come from statusLine/cache,
   // and the optional Edge scrape (its only extra is the manual weekly-Sonnet box)
   // is offline until a one-time manual login. Never nags, never blocks.
   if (usageData._loginRequired) {
-    lines.push('');
-    lines.push('\u26a0 Edge fetch offline (not logged in) \u2014 showing statusLine/cached; /auto-usage to reconnect');
+    blocks.push(blockquote('\u26a0 Edge fetch offline (not logged in) \u2014 showing statusLine/cached; /auto-usage to reconnect'));
   } else if (cardFreshness.cached && cardFreshness.ageMinutes > 30) {
     const suffix = usageData._failureReason ? ` (${usageData._failureReason})` : '';
-    lines.push('');
-    lines.push(`cached \u00b7 ${formatAgeLabel(cardFreshness.ageMinutes)}${suffix}`);
+    blocks.push(blockquote(`cached \u00b7 ${formatAgeLabel(cardFreshness.ageMinutes)}${suffix}`));
   }
 
-  // Health line sits above the bars, separated by a blank line.
-  if (healthLine) {
-    lines.unshift(healthLine, '');
-  }
-
-  // Whole block is greyed as subinfo (matching the Changes block above); the
-  // pace icon and **Pace!** keep their own color inside the quote.
-  return blockquote(lines.join('\n'));
+  return blocks.join('\n\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -909,7 +916,7 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
-  // Usage block (health line is first line inside the code fence)
+  // Usage block: bars in a code fence, health/staleness notes as dim quotes
   if (config.usage && meterText) {
     parts.push(meterText);
     parts.push('');
@@ -1352,6 +1359,10 @@ server.registerTool(
     };
   }
 );
+
+// Exported for unit tests — the usage meter is pure and worth asserting on
+// directly (column grid, bar semantics) without driving the whole card.
+export { renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard };
 
 // Connect and start
 const transport = new StdioServerTransport();
