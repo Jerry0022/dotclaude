@@ -430,7 +430,12 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      journal.jsonl    append-only, fsynced: submissions, pickups, progress
                       checkpoints, attachments, resets, teardowns
      state.json       atomically-replaced snapshot; restored on boot
-     attachments/     <sha256>.<png|jpg|gif|webp> — pasted/dropped images
+     attachments/     <sha256>.<ext> — pasted/dropped/uploaded files, any
+                      type (#312). Extension is derived, never trusted
+                      verbatim — see § Attachment HTTP contract.
+       index.json     id -> {name, mime, size, sha256, added_at} — the
+                      only place the ORIGINAL filename survives; the
+                      on-disk name is purely content-addressed.
      UNPROCESSED      present iff a submission has not been processed yet
    ```
 
@@ -476,6 +481,185 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    The store is disposed of by SKILL.md § Step 6a alongside the concept HTML —
    `discard` removes the whole directory, guarded so an `UNPROCESSED` marker
    is never deleted silently.
+
+4c. **Attachment HTTP contract (#312).** The bridge accepts arbitrary file
+   attachments — "basically any file type, size does not matter" — through
+   two request shapes on the SAME endpoint, `POST /attachments`, dispatched
+   on `Content-Type`. Both shapes return the identical response body on
+   success, so a client implementer only needs to pick a shape once, per
+   file size, and everything downstream (read-back URL, dedup handling) is
+   the same.
+
+   **Limits and how to change them.**
+
+   | Constant                       | Default   | CLI flag                          | Env var                              |
+   |---------------------------------|-----------|------------------------------------|----------------------------------------|
+   | Per-file cap (streaming path)   | 256 MiB   | `--max-attachment-bytes <n>`       | `CONCEPT_MAX_ATTACHMENT_BYTES`         |
+   | Total store cap (all files)     | 4 GiB     | `--max-attachment-total-bytes <n>` | `CONCEPT_MAX_ATTACHMENT_TOTAL_BYTES`   |
+   | Per-file cap (legacy JSON path) | 32 MiB    | *(fixed, not configurable)*        | *(fixed, not configurable)*            |
+   | `/decisions` payload cap        | 32 MiB    | *(fixed — JSON only carries references now, not blobs)* | |
+
+   Resolution order for the two configurable caps: CLI flag > env var >
+   default. The legacy base64-in-JSON path is memory-bound (the whole file
+   is base64-decoded into RAM before it touches disk), so it keeps its own
+   fixed, lower 32 MiB cap regardless of `--max-attachment-bytes` — files
+   above that MUST use the streaming path.
+
+   Before accepting any upload the server checks free disk space on the
+   store volume (`shutil.disk_usage`) against the declared/decoded size plus
+   a 64 MiB safety margin, and refuses with `507 disk_full` if it would not
+   fit — this protects `state.json`/`journal.jsonl` from landing a write on
+   a full disk mid-mutation.
+
+   **Shape A — legacy base64-in-JSON** (existing pages; kept working
+   unchanged). `Content-Type: application/json` (or no `Content-Type` at
+   all — an empty header also routes here):
+   ```json
+   POST /attachments
+   Content-Type: application/json
+
+   {"name": "shot.png", "mime": "image/png", "data": "<base64>"}
+   ```
+   Rejects a decoded payload above 32 MiB with `413` and a `hint` field
+   pointing at Shape B.
+
+   **Shape B — streaming raw body** (any Content-Type other than
+   `application/json`, e.g. the file's real MIME or
+   `application/octet-stream`). Metadata travels in headers instead of the
+   JSON envelope so the body can be piped straight to disk without ever
+   being fully materialised in memory:
+   ```
+   POST /attachments
+   Content-Type: application/octet-stream        (or the file's real MIME)
+   X-Attach-Name: spec.pdf                        (percent-encoded UTF-8,
+                                                    i.e. encodeURIComponent(name))
+   X-Attach-Mime: application/pdf
+   Content-Length: 8421553                        (REQUIRED — no chunked
+                                                    transfer-encoding support;
+                                                    the cap and disk-space
+                                                    checks both run against
+                                                    this value BEFORE any
+                                                    body byte is read)
+
+   <raw file bytes>
+   ```
+   Server behaviour: reads the body in ~1 MiB chunks into a temp file
+   (`attachments/.upload-<uuid>.tmp`) inside the store dir, hashing with
+   `sha256` as it streams — the process never holds the full file in memory.
+   `Content-Length > MAX_ATTACHMENT_BYTES` is rejected with `413`
+   immediately, before any read. A missing `Content-Length` is rejected with
+   `411`. On success the temp file is `fsync`ed then `os.replace`d onto the
+   content-addressed final name; on ANY failure (client aborts mid-upload,
+   the per-file cap is exceeded, the disk fills, a dedup hit makes the temp
+   file redundant) the temp file is removed — no orphaned `.tmp` is ever
+   left in the store, even across a hard kill (a leftover `.upload-*.tmp`
+   from an unclean process death is swept at the NEXT server startup, since
+   it was never finalised — no journal line, no quota accounting — so
+   discarding it is always safe).
+
+   **Response — identical for both shapes:**
+   ```json
+   {
+     "ok": true,
+     "durable": true,
+     "id": "<sha256>.<ext>",
+     "sha256": "<sha256>",
+     "mime": "image/png",
+     "size": 8421553,
+     "url": "/attachments/<sha256>.<ext>",
+     "deduplicated": false
+   }
+   ```
+   `deduplicated: true` means the sha256 already existed on disk — the
+   upload was a no-op past the hash compare, no bytes were rewritten, and
+   quota was not incremented a second time. This applies across BOTH shapes:
+   the same content uploaded once via Shape A and again via Shape B (or
+   under an entirely different claimed filename) still resolves to one file
+   and one quota charge.
+
+   **Error responses** (`{"ok": false, "reason": "...", ...}` JSON body,
+   except `411`/`403` which use the plain `send_error` HTML body):
+
+   | Status | `reason`             | When | Extra fields |
+   |--------|-----------------------|------|---------------|
+   | 400    | `empty`               | zero-byte upload (both shapes) | |
+   | 400    | `bad_json`            | Shape A body is not valid JSON | |
+   | 400    | `bad_base64`          | Shape A `data` does not decode | |
+   | 400    | `bad_content_length`  | Shape B `Content-Length` is not an integer | |
+   | 400    | `client_aborted`      | Shape B: connection closed before all declared bytes arrived | `detail` |
+   | 403    | *(none — `send_error`)* | cross-origin request (see § same-origin gate below) | |
+   | 411    | `length_required`     | Shape B has no `Content-Length` header | |
+   | 413    | `too_large`           | over the applicable per-file cap | `size`\*, `max_bytes`, `hint`\*\* |
+   | 507    | `disk_full`           | free space would drop below the safety margin | `free_bytes`, `needed_bytes` |
+   | 507    | `quota_exceeded`      | would exceed `MAX_ATTACHMENT_TOTAL_BYTES` | `total_bytes`, `max_total_bytes` |
+   | 507    | `store_write_failed`  | write/rename failed for a reason other than disk-full | `detail` |
+   | 507    | `store_unavailable`   | the durable store itself failed to initialise at boot | |
+
+   \* `size` is present when the actual/decoded size is known (Shape A, or
+   Shape B's declared `Content-Length` check); \*\* `hint` is present only
+   when the legacy path's fixed 32 MiB cap was hit, pointing at Shape B.
+
+   **Same-origin gate.** `POST /attachments` uses the same `_same_origin_ok`
+   check as `/reload` and `/shutdown`: no `Origin` header (curl, Claude's own
+   requests) or an `Origin` matching the bridge's own host/localhost/127.0.0.1
+   is accepted; anything else gets a bare `403`.
+
+   **`GET /attachments/<sha256>.<ext>` — serving policy.** The identifier is
+   shape-validated (`^[0-9a-f]{64}\.[a-z0-9]{1,12}$`) before it ever touches
+   the filesystem — traversal-proof regardless of stored extension. Only the
+   four raster image types are ever served **inline**:
+
+   | Extension | Content-Type |
+   |-----------|---------------|
+   | `.png`  | `image/png`  |
+   | `.jpg`  | `image/jpeg` |
+   | `.gif`  | `image/gif`  |
+   | `.webp` | `image/webp` |
+
+   For those four, the response is `Content-Type: <real mime>` +
+   `Content-Disposition: inline`. **Every other extension** — `.svg`,
+   `.html`, `.js`, `.pdf`, office formats, archives, media, anything with an
+   unrecognised or absent extension (`.bin`) — is always served as
+   `Content-Type: application/octet-stream` with
+   `Content-Disposition: attachment; filename="<sanitised original name>";
+   filename*=UTF-8''<percent-encoded original name>` (RFC 5987, so non-ASCII
+   names still round-trip in browsers that support the extended parameter,
+   with a safe ASCII fallback for those that don't). `filename` comes from
+   `attachments/index.json` when known, falling back to the blob id.
+   `X-Content-Type-Options: nosniff` is set on EVERY response, inline or not.
+
+   This is what replaces the old outright SVG ban: an uploaded SVG (or HTML
+   or JS file) can only execute script against the bridge's own origin if
+   the browser renders it in place, and a forced download served as an inert
+   content-type can't do that — so accepting the type and controlling how
+   it's served is strictly safer than a growing list of type-specific
+   rejections, and it is what makes "basically any file type" possible
+   without reopening the XSS risk the old allowlist existed to close.
+
+   **Stored extension derivation.** Never trusts the client's filename
+   extension blindly — only its *shape*. Given the client-supplied `name`
+   and `mime`: (1) if `name` contains a `.`, take the substring after the
+   last `.`, lowercase it, and use it if it matches `^[a-z0-9]{1,12}$`;
+   (2) else if the declared `mime` is one of the four raster types above,
+   use that type's canonical extension; (3) else fall back to Python's
+   stdlib `mimetypes.guess_extension(mime)` if it produces something matching
+   the same shape; (4) else `.bin`. The stored filename is always
+   `<sha256><ext>` — the client-supplied name is NEVER used as a filesystem
+   path component, only as free text in `index.json` and the
+   `Content-Disposition` header.
+
+   **`attachments/index.json`.** The blob store is purely content-addressed,
+   so the original filename would otherwise be unrecoverable outside the
+   journal. `index.json` is a flat `{ "<id>": {"name", "mime", "size",
+   "sha256", "added_at"} }` map, read-modify-write merged (never replaced
+   wholesale) and atomically written (`_durable_write`: tmp + fsync +
+   `os.replace`) under the SAME `_attachment_quota_lock` that already
+   serialises quota-check → write → accounting for attachments — so
+   concurrent uploads under `ThreadingHTTPServer` cannot race each other's
+   index entries. Entries are written only for a NEW blob (a dedup hit
+   leaves the original entry as-is). `GET /recovery`'s `attachments[]` now
+   also carries `name`/`mime` from this index for each entry, so a resumed
+   session can say "you attached spec.pdf" instead of a hash.
 
 5. **Verified heartbeat round-trip.** A naked `POST /heartbeat` with no
    read-back is not enough — if the server failed to bind, never started,

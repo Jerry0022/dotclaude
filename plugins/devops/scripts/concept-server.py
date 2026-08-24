@@ -37,13 +37,22 @@ Replaces `python -m http.server` with a custom server that adds:
   path in /concept Step 6 and by the watchdog when state files
   vanish. PID-based kill is unreliable on Windows after process
   recycling — an HTTP endpoint targets the live process by port.
-- POST /attachments — Persist one pasted/dropped image, content-addressed by
-  sha256. Uploaded at ATTACH time, not at submit time, so an image is durable
-  seconds after the user pastes it. Raster only (png/jpeg/gif/webp); SVG is
-  rejected because attachments are served back same-origin.
+- POST /attachments — Persist one pasted/dropped file, content-addressed by
+  sha256. Uploaded at ATTACH time, not at submit time, so a file is durable
+  seconds after the user attaches it. Any file type is accepted (#312) — the
+  old raster-only allowlist is gone. Two request shapes share the endpoint:
+  a legacy base64-in-JSON body (memory-bound, capped at 32 MiB decoded) and a
+  streaming raw-body upload (Content-Type != application/json, metadata in
+  `X-Attach-Name`/`X-Attach-Mime` headers) for large files — see
+  bridge-server.md § Attachment HTTP contract for the exact shapes.
 - GET /attachments/<sha256>.<ext> — Read a blob back. The identifier is shape-
-  validated before it touches the filesystem and the Content-Type comes from
-  the server's own extension map, with nosniff.
+  validated before it touches the filesystem. Only the four raster image
+  types (png/jpeg/gif/webp) are served inline with their real Content-Type;
+  everything else is forced to `application/octet-stream` +
+  `Content-Disposition: attachment` so an uploaded SVG/HTML/JS can never
+  execute against the bridge origin (that was the whole reason SVG used to be
+  banned outright — forced download removes the risk without banning the
+  type). `X-Content-Type-Options: nosniff` is set on every response.
 - POST /progress — Claude checkpoints its processing (action, step, status and
   real-world artifacts: branch, commit, PR, created issues) into the journal.
 - GET /recovery — "Where did we stand?" for a resumed session: whether a
@@ -93,6 +102,9 @@ REPL) while the server kept ticking. POST /heartbeat now updates ONLY
 Usage:
     python concept-server.py <port> [directory] [--html <relative-path>]
                                                 [--heartbeat-timeout-ms <ms>]
+                                                [--store <path>]
+                                                [--max-attachment-bytes <n>]
+                                                [--max-attachment-total-bytes <n>]
 
 Example:
     python concept-server.py 8742 /path/to/project \
@@ -101,15 +113,21 @@ Example:
 
 import argparse
 import base64
+import errno
 import hashlib
 import http.server
 import json
+import mimetypes
 import os
+import re
+import shutil
 import socket
 import sys
 import time
 import threading
 import atexit
+import urllib.parse
+import uuid
 from datetime import datetime, timezone
 
 _server_ts = 0
@@ -186,7 +204,9 @@ def _iso_now():
 #                           checkpoints, attachments and resets.
 #   <store>/state.json      atomically replaced snapshot of the live globals,
 #                           so a restart restores in O(1) without replaying.
-#   <store>/attachments/    content-addressed image blobs (sha256).
+#   <store>/attachments/    content-addressed blobs (sha256), any file type
+#                           (#312) — see attachments/index.json for the
+#                           original filename each blob was uploaded under.
 #   <store>/UNPROCESSED     written when the process is torn down while a
 #                           submission is unprocessed; read by the
 #                           `ss.concept.resume` SessionStart hook.
@@ -201,6 +221,7 @@ _store_dir = None
 _journal_path = None
 _state_path = None
 _attach_dir = None
+_attach_index_path = None
 _marker_path = None
 _journal_seq = 0
 _store_ok = False  # stays False until the store is initialised AND writable
@@ -212,28 +233,66 @@ _store_lock = threading.Lock()
 # trade: a heartbeat that waits is harmless, an unpersisted submission is not.
 
 MAX_DECISIONS_BYTES = 32 * 1024 * 1024
-MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
-MAX_ATTACHMENT_TOTAL_BYTES = 200 * 1024 * 1024
+
+# Per-file / total attachment caps (#312 — "basically any file type, size
+# does not matter"). Both are resolved at startup from --max-attachment-bytes
+# / --max-attachment-total-bytes or the matching CONCEPT_MAX_ATTACHMENT_BYTES
+# / CONCEPT_MAX_ATTACHMENT_TOTAL_BYTES env vars, falling back to these
+# defaults — see the __main__ argparse block. The module-level names are
+# reassigned once at startup, before the server starts accepting requests.
+DEFAULT_MAX_ATTACHMENT_BYTES = 256 * 1024 * 1024
+DEFAULT_MAX_ATTACHMENT_TOTAL_BYTES = 4 * 1024 * 1024 * 1024
+MAX_ATTACHMENT_BYTES = DEFAULT_MAX_ATTACHMENT_BYTES
+MAX_ATTACHMENT_TOTAL_BYTES = DEFAULT_MAX_ATTACHMENT_TOTAL_BYTES
+
+# The legacy base64-in-JSON upload path is memory-bound (base64 read fully
+# into RAM, then decoded fully into RAM), so it keeps its OWN lower cap
+# regardless of --max-attachment-bytes. Large files must use the streaming
+# path (see _handle_attachment_upload_stream).
+LEGACY_BASE64_MAX_BYTES = 32 * 1024 * 1024
+
+# Chunk size for both the streaming upload reader and the download writer.
+STREAM_CHUNK_BYTES = 1024 * 1024
+
+# Headroom kept free on the store volume after any accepted write. Refuses
+# uploads that would leave less than this free rather than risk state.json /
+# journal.jsonl writes landing on a full disk mid-mutation.
+DISK_SAFETY_MARGIN_BYTES = 64 * 1024 * 1024
+
 _attach_total_bytes = 0
 # Guards the quota-check → write → accounting sequence as one critical section.
 # Separate from `_store_lock` so a large blob write never blocks a heartbeat.
 _attachment_quota_lock = threading.Lock()
 
-# Raster only, and SVG is deliberately absent. The bridge serves attachments
-# back to the page from the SAME origin, so an inline <script> in an uploaded
-# SVG would execute against the bridge origin and could drive every endpoint
-# on it. There is no use case for a pasted vector screenshot that justifies it.
+# Inline-safe raster types ONLY. This is now a SERVING policy, not an
+# acceptance gate (#312 dropped the acceptance allowlist — any type is
+# accepted and content-addressed). GET /attachments/<id> still consults this
+# map: a hit is served with its real Content-Type and `Content-Disposition:
+# inline`; a miss (SVG, HTML, JS, PDF, office docs, archives, media, …) is
+# always forced to `application/octet-stream` + `Content-Disposition:
+# attachment`. That is what replaces the old outright SVG ban — the actual
+# risk was an inline <script> in an uploaded SVG executing against the
+# bridge's own origin because the browser rendered it in-place; forcing a
+# download with an inert content-type removes that risk without needing a
+# type-specific ban, so every other type gets the same safe treatment for
+# free instead of growing its own bespoke rejection rule.
 ATTACH_EXT_BY_MIME = {
     'image/png': '.png',
     'image/jpeg': '.jpg',
     'image/gif': '.gif',
     'image/webp': '.webp',
 }
-# Reverse map for serving. Deriving the response Content-Type from OUR map
-# rather than from the stored upload means a blob can only ever be served as
-# one of the four raster types we accepted in the first place.
+# Reverse map for serving. Deriving the inline Content-Type from OUR map
+# rather than from the stored upload means a blob can only ever be served
+# inline as one of the four raster types above — everything else always
+# takes the octet-stream/attachment branch regardless of what MIME the
+# uploader claimed.
 ATTACH_MIME_BY_EXT = {v: k for k, v in ATTACH_EXT_BY_MIME.items()}
-_SHA256_RE = None  # compiled in _store_init to keep the import list tight
+_SHA256_RE = re.compile(r'^[0-9a-f]{64}$')
+# Shape for a STORED extension: derived from the last path segment after
+# the final '.', lowercased. Deliberately excludes '.', '/', '\' so an ident
+# built from it can never traverse — see _serve_attachment.
+_EXT_SHAPE_RE = re.compile(r'^[a-z0-9]{1,12}$')
 
 
 def _durable_write(path, data_bytes):
@@ -260,9 +319,7 @@ def _store_init(store_dir):
     path surfaces before the browser tab is ever opened.
     """
     global _store_dir, _journal_path, _state_path, _attach_dir, _marker_path
-    global _store_ok, _journal_seq, _attach_total_bytes, _SHA256_RE
-    import re
-    _SHA256_RE = re.compile(r'^[0-9a-f]{64}$')
+    global _store_ok, _journal_seq, _attach_total_bytes, _attach_index_path
     try:
         os.makedirs(store_dir, exist_ok=True)
         _attach_dir = os.path.join(store_dir, 'attachments')
@@ -271,15 +328,30 @@ def _store_init(store_dir):
         _journal_path = os.path.join(store_dir, 'journal.jsonl')
         _state_path = os.path.join(store_dir, 'state.json')
         _marker_path = os.path.join(store_dir, 'UNPROCESSED')
+        _attach_index_path = os.path.join(_attach_dir, 'index.json')
         # Journal line count is authoritative for the sequence: records may
         # have been appended after the last state.json snapshot was written.
         if os.path.exists(_journal_path):
             with open(_journal_path, 'r', encoding='utf-8') as f:
                 _journal_seq = sum(1 for line in f if line.strip())
+        # Sweep leftover streaming-upload temp files from a hard kill mid-write
+        # (SIGKILL, power loss, watchdog reap during a chunked read). They were
+        # never finalised (no rename, no journal line, no quota accounting), so
+        # they are safe to discard rather than count against quota forever.
+        try:
+            for n in os.listdir(_attach_dir):
+                if n.startswith('.upload-') and n.endswith('.tmp'):
+                    try:
+                        os.remove(os.path.join(_attach_dir, n))
+                    except OSError:
+                        pass
+        except OSError:
+            pass
         _attach_total_bytes = sum(
             os.path.getsize(os.path.join(_attach_dir, n))
             for n in os.listdir(_attach_dir)
             if os.path.isfile(os.path.join(_attach_dir, n))
+            and n != 'index.json' and not n.endswith('.tmp')
         )
         _store_ok = True
         return True
@@ -426,16 +498,129 @@ def _read_progress():
     return out
 
 
+def _index_load():
+    """Read attachments/index.json (id -> {name, mime, size, sha256,
+    added_at}). Missing/corrupt index reads as empty rather than raising —
+    the blob store itself (content-addressed filenames) is the source of
+    truth; the index is a display-name convenience on top of it."""
+    if not _attach_index_path or not os.path.exists(_attach_index_path):
+        return {}
+    try:
+        with open(_attach_index_path, 'r', encoding='utf-8') as f:
+            obj = json.load(f)
+        return obj if isinstance(obj, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _index_update(ident, meta):
+    """Merge one entry into index.json and persist atomically.
+
+    Caller MUST hold `_attachment_quota_lock` — read-modify-write on the
+    whole file is only race-free inside the same critical section that
+    already serialises quota-check → write → accounting for attachments.
+    """
+    idx = _index_load()
+    idx[ident] = meta
+    try:
+        _durable_write(_attach_index_path, json.dumps(idx, ensure_ascii=False).encode('utf-8'))
+    except OSError:
+        pass  # the blob itself is already durable; a missing index entry
+              # only costs a display name, recoverable from the journal.
+
+
+def _index_lookup_name(ident):
+    entry = _index_load().get(ident)
+    return entry.get('name', '') if isinstance(entry, dict) else ''
+
+
+def _check_disk_space(needed_bytes):
+    """True if the store volume has `needed_bytes` PLUS a safety margin free.
+
+    Checked before any large write starts so a full disk fails the upload
+    cleanly (507 disk_full) instead of racing state.json / journal.jsonl
+    writes against ENOSPC mid-mutation.
+    """
+    try:
+        usage = shutil.disk_usage(_store_dir)
+    except OSError:
+        return True, None  # cannot determine — do not block on an unknown
+    free = usage.free
+    return (free - needed_bytes) >= DISK_SAFETY_MARGIN_BYTES, free
+
+
+def _derive_ext(name, mime):
+    """Stored extension for an upload. Never trusted verbatim from the
+    client — only its SHAPE is: lowercase, `[a-z0-9]{1,12}`, taken from the
+    substring after the last '.' in the client-supplied filename. Falls back
+    to our own inline-safe MIME map first (so a raster image uploaded
+    without a filename extension still gets its canonical `.png`/`.jpg`/…
+    rather than whatever `mimetypes` happens to prefer), then to the stdlib
+    `mimetypes` guess, then to `.bin`. The stored filename is always
+    `<sha256><ext>` — this function never touches a filesystem path.
+    """
+    name = str(name or '')
+    if '.' in name:
+        candidate = name.rsplit('.', 1)[-1].lower()
+        if _EXT_SHAPE_RE.match(candidate):
+            return '.' + candidate
+    mime_clean = str(mime or '').split(';')[0].strip().lower()
+    if mime_clean in ATTACH_EXT_BY_MIME:
+        return ATTACH_EXT_BY_MIME[mime_clean]
+    if mime_clean:
+        guessed = mimetypes.guess_extension(mime_clean, strict=False)
+        if guessed:
+            candidate = guessed.lstrip('.').lower()
+            if _EXT_SHAPE_RE.match(candidate):
+                return '.' + candidate
+    return '.bin'
+
+
+def _safe_remove_file(path):
+    """Best-effort cleanup for a temp file on any upload error path (client
+    abort, over-cap, disk full, quota exceeded, dedup). Never raises — the
+    error being handled is what matters to the caller, not a rm failure."""
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _content_disposition_attachment(name):
+    """`Content-Disposition: attachment` header value for a non-inline-safe
+    blob. `name` is the client-supplied original filename (never a
+    filesystem path — it only ever appears inside this header value).
+    Carries both a sanitised ASCII fallback and an RFC 5987
+    `filename*=UTF-8''...` extended parameter so non-ASCII names still
+    round-trip correctly in browsers that support it, while ones that don't
+    still get a safe ASCII name instead of a broken download.
+    """
+    raw = re.sub(r'[\r\n]', ' ', str(name or 'download')).strip()[:200] or 'download'
+    ascii_name = re.sub(r'["\\]', '_', raw).encode('ascii', 'replace').decode('ascii')
+    utf8_quoted = urllib.parse.quote(raw, safe='')
+    return f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{utf8_quoted}'
+
+
 def _attachment_meta():
-    """List persisted attachments so a reloaded page can rebuild thumbnails."""
+    """List persisted attachments so a reloaded page can rebuild thumbnails,
+    enriched with the original filename/MIME from index.json where known."""
     if not _store_ok or not _attach_dir or not os.path.isdir(_attach_dir):
         return []
+    idx = _index_load()
     out = []
     try:
         for name in sorted(os.listdir(_attach_dir)):
+            if name == 'index.json' or name.endswith('.tmp'):
+                continue
             p = os.path.join(_attach_dir, name)
             if os.path.isfile(p):
-                out.append({'id': name, 'size': os.path.getsize(p)})
+                meta = idx.get(name) if isinstance(idx.get(name), dict) else {}
+                out.append({
+                    'id': name,
+                    'size': os.path.getsize(p),
+                    'name': meta.get('name', ''),
+                    'mime': meta.get('mime', ''),
+                })
     except OSError:
         pass
     return out
@@ -900,48 +1085,81 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
     def _serve_attachment(self, ident):
         """Serve one content-addressed blob.
 
-        `ident` is validated against a strict `<sha256>.<known-ext>` shape
-        before it is joined to a path, so nothing a user can type reaches the
-        filesystem as a traversal. Content-Type comes from our own extension
-        map — never from the upload — and nosniff stops the browser from
-        re-interpreting the bytes as anything executable.
+        `ident` is validated against a strict `<sha256>.<ext-shape>` shape
+        before it is ever joined to a path — `base` must be exactly 64 hex
+        chars and `ext` must match `_EXT_SHAPE_RE` (`[a-z0-9]{1,12}`, no '.',
+        '/' or '\\' possible) — so nothing a user can type reaches the
+        filesystem as a traversal, regardless of what extension the file was
+        originally stored under.
+
+        Serving policy (#312): only the four raster types in
+        `ATTACH_MIME_BY_EXT` are served inline with their real Content-Type.
+        Every other extension — including `.svg`, `.html`, `.js`, `.pdf`,
+        office/archive/media formats — is forced to
+        `application/octet-stream` with `Content-Disposition: attachment`.
+        This is what replaces the old blanket SVG ban: an uploaded SVG's
+        `<script>` (or an HTML/JS upload) can only ever execute if the
+        browser renders it in-place against this origin, and a forced
+        download of an inert-content-type response can't do that — so every
+        non-raster type gets the same safe treatment instead of a growing
+        list of type-specific bans. `X-Content-Type-Options: nosniff` is set
+        on every response so the browser never re-sniffs the bytes into
+        something executable regardless of the declared type.
         """
         if not _store_ok or not _attach_dir:
             self.send_error(404)
             return
-        base, _, ext = ident.rpartition('.')
-        mime = ATTACH_MIME_BY_EXT.get('.' + ext) if ext else None
-        if not mime or not _SHA256_RE or not _SHA256_RE.match(base):
+        base, dot, ext = ident.rpartition('.')
+        if not dot or not _SHA256_RE.match(base) or not _EXT_SHAPE_RE.match(ext):
             self.send_error(404)
             return
         path = os.path.join(_attach_dir, ident)
         try:
-            with open(path, 'rb') as f:
-                blob = f.read()
+            size = os.path.getsize(path)
+            if not os.path.isfile(path):
+                raise OSError("not a regular file")
         except OSError:
             self.send_error(404)
             return
+        inline_mime = ATTACH_MIME_BY_EXT.get('.' + ext)
         self.send_response(200)
-        self.send_header('Content-Type', mime)
-        self.send_header('Content-Length', str(len(blob)))
+        if inline_mime:
+            self.send_header('Content-Type', inline_mime)
+            self.send_header('Content-Disposition', 'inline')
+        else:
+            self.send_header('Content-Type', 'application/octet-stream')
+            original_name = _index_lookup_name(ident) or ident
+            self.send_header('Content-Disposition', _content_disposition_attachment(original_name))
+        self.send_header('Content-Length', str(size))
         self.send_header('X-Content-Type-Options', 'nosniff')
-        self.send_header('Content-Disposition', 'inline')
         self._cors_headers()
         self.end_headers()
-        self.wfile.write(blob)
+        try:
+            with open(path, 'rb') as f:
+                shutil.copyfileobj(f, self.wfile, length=STREAM_CHUNK_BYTES)
+        except (OSError, ConnectionError):
+            pass  # client disconnected mid-download; nothing left to recover
 
     def _handle_attachment_upload(self):
-        """Persist one pasted/dropped image, content-addressed by sha256.
+        """Persist one pasted/dropped/streamed file, content-addressed by
+        sha256. Uploaded at ATTACH time, not at submit time — that is the
+        whole point. A file the user attached is on disk seconds later, long
+        before they decide to submit, so even a hard teardown mid-review
+        cannot lose it. Content addressing makes the write idempotent for
+        free: the same bytes uploaded twice (or re-sent by the client's
+        retry queue) resolve to the same file, so a retry can never
+        duplicate a blob or corrupt one.
 
-        Uploaded at ATTACH time, not at submit time — that is the whole point.
-        An image the user pasted is on disk seconds later, long before they
-        decide to submit, so even a hard teardown mid-review cannot lose it.
-
-        Content addressing makes the write idempotent for free: the same image
-        pasted twice (or re-sent by the client's retry queue) resolves to the
-        same file, so a retry can never duplicate a blob or corrupt one.
+        Two request shapes share this endpoint, dispatched on Content-Type
+        (see bridge-server.md § Attachment HTTP contract for the exact wire
+        format of each):
+          - `application/json` (or no Content-Type) — the legacy
+            base64-in-JSON body. Memory-bound; capped at
+            LEGACY_BASE64_MAX_BYTES decoded.
+          - anything else — the streaming raw-body upload, metadata carried
+            in `X-Attach-Name` / `X-Attach-Mime` headers. Capped at
+            MAX_ATTACHMENT_BYTES, never buffers the whole body.
         """
-        global _attach_total_bytes
         if not self._same_origin_ok():
             self.send_error(403, "forbidden origin")
             return
@@ -950,12 +1168,31 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 "ok": False, "durable": False, "reason": "store_unavailable",
             })
             return
+        content_type = (self.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+        if content_type in ('', 'application/json'):
+            self._handle_attachment_upload_json()
+        else:
+            self._handle_attachment_upload_stream()
+
+    def _handle_attachment_upload_json(self):
+        """Legacy shape: JSON body `{name, mime, data}`, `data` = raw base64.
+
+        Kept working unchanged for existing pages. Deliberately memory-bound
+        (base64 decoded fully into RAM) so it keeps its own LOWER cap
+        (LEGACY_BASE64_MAX_BYTES, 32 MiB decoded) independent of
+        MAX_ATTACHMENT_BYTES — a large file must go through the streaming
+        path instead, and exceeding this cap says so in the error body.
+        """
+        global _attach_total_bytes
         length = int(self.headers.get('Content-Length', 0))
         # base64 inflates by ~4/3; cap the wire size before reading it in.
-        if length > MAX_ATTACHMENT_BYTES * 2:
+        if length > LEGACY_BASE64_MAX_BYTES * 2:
             self._error_response(413, {
                 "ok": False, "reason": "too_large",
-                "max_bytes": MAX_ATTACHMENT_BYTES,
+                "max_bytes": LEGACY_BASE64_MAX_BYTES,
+                "hint": "use the streaming upload path for files above this "
+                        "size (POST with Content-Type != application/json "
+                        "and X-Attach-Name/X-Attach-Mime headers)",
             })
             return
         try:
@@ -967,14 +1204,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             self._error_response(400, {"ok": False, "reason": "bad_json"})
             return
         mime = str(payload.get('mime') or '').lower()
-        ext = ATTACH_EXT_BY_MIME.get(mime)
-        if not ext:
-            # SVG lands here on purpose — see ATTACH_EXT_BY_MIME.
-            self._error_response(415, {
-                "ok": False, "reason": "unsupported_type", "mime": mime,
-                "allowed": sorted(ATTACH_EXT_BY_MIME),
-            })
-            return
+        name = str(payload.get('name') or '')
         try:
             blob = base64.b64decode(str(payload.get('data') or ''), validate=True)
         except (ValueError, TypeError):
@@ -983,13 +1213,23 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         if not blob:
             self._error_response(400, {"ok": False, "reason": "empty"})
             return
-        if len(blob) > MAX_ATTACHMENT_BYTES:
+        if len(blob) > LEGACY_BASE64_MAX_BYTES:
             self._error_response(413, {
                 "ok": False, "reason": "too_large",
-                "size": len(blob), "max_bytes": MAX_ATTACHMENT_BYTES,
+                "size": len(blob), "max_bytes": LEGACY_BASE64_MAX_BYTES,
+                "hint": "use the streaming upload path for files above this size",
             })
             return
 
+        fits, free = _check_disk_space(len(blob))
+        if not fits:
+            self._error_response(507, {
+                "ok": False, "reason": "disk_full",
+                "free_bytes": free, "needed_bytes": len(blob),
+            })
+            return
+
+        ext = _derive_ext(name, mime)
         digest = hashlib.sha256(blob).hexdigest()
         ident = digest + ext
         path = os.path.join(_attach_dir, ident)
@@ -1012,6 +1252,10 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 try:
                     _durable_write(path, blob)
                     _attach_total_bytes += len(blob)
+                    _index_update(ident, {
+                        'name': name[:200], 'mime': mime, 'size': len(blob),
+                        'sha256': digest, 'added_at': _iso_now(),
+                    })
                 except OSError as exc:
                     err = str(exc)
         if quota_exceeded:
@@ -1027,6 +1271,135 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 "reason": "store_write_failed", "detail": err,
             })
             return
+        self._journal_and_respond_attachment(ident, digest, mime, len(blob), name, already)
+
+    def _handle_attachment_upload_stream(self):
+        """Streaming shape: raw body, metadata in headers.
+
+        `X-Attach-Name` is percent-encoded UTF-8 (`encodeURIComponent` on the
+        client). `X-Attach-Mime` is the declared MIME, taken verbatim (only
+        used for extension derivation and the response `mime` field — never
+        trusted for serving Content-Type). `Content-Length` is REQUIRED (no
+        chunked-transfer support) so the per-file cap and the disk-space
+        check can both be enforced BEFORE a single body byte is read.
+
+        The body is streamed into a temp file inside the store dir in
+        STREAM_CHUNK_BYTES chunks, hashing as it goes, so the process never
+        holds the whole file in memory. The temp file is fsynced then
+        `os.replace`d onto the content-addressed final name. Every error
+        path (cap exceeded, client abort, disk full, quota exceeded, dedup)
+        removes the temp file — see _safe_remove_file — so a failed or
+        superseded upload never leaves an orphan `.tmp` in the store.
+        """
+        global _attach_total_bytes
+        name_hdr = self.headers.get('X-Attach-Name', '') or ''
+        try:
+            name = urllib.parse.unquote(name_hdr, encoding='utf-8', errors='strict')
+        except (UnicodeDecodeError, ValueError):
+            name = name_hdr
+        mime = str(self.headers.get('X-Attach-Mime', '') or '').split(';')[0].strip().lower()
+
+        length_hdr = self.headers.get('Content-Length')
+        if length_hdr is None:
+            self._error_response(411, {"ok": False, "reason": "length_required"})
+            return
+        try:
+            declared_length = int(length_hdr)
+        except ValueError:
+            self._error_response(400, {"ok": False, "reason": "bad_content_length"})
+            return
+        if declared_length <= 0:
+            self._error_response(400, {"ok": False, "reason": "empty"})
+            return
+        if declared_length > MAX_ATTACHMENT_BYTES:
+            self._error_response(413, {
+                "ok": False, "reason": "too_large",
+                "size": declared_length, "max_bytes": MAX_ATTACHMENT_BYTES,
+            })
+            return
+
+        fits, free = _check_disk_space(declared_length)
+        if not fits:
+            self._error_response(507, {
+                "ok": False, "reason": "disk_full",
+                "free_bytes": free, "needed_bytes": declared_length,
+            })
+            return
+
+        ext = _derive_ext(name, mime)
+        tmp_path = os.path.join(_attach_dir, f'.upload-{uuid.uuid4().hex}.tmp')
+        hasher = hashlib.sha256()
+        written = 0
+        try:
+            with open(tmp_path, 'wb') as f:
+                remaining = declared_length
+                while remaining > 0:
+                    chunk = self.rfile.read(min(STREAM_CHUNK_BYTES, remaining))
+                    if not chunk:
+                        raise ConnectionError("client closed the connection early")
+                    f.write(chunk)
+                    hasher.update(chunk)
+                    written += len(chunk)
+                    remaining -= len(chunk)
+                f.flush()
+                os.fsync(f.fileno())
+        except ConnectionError as exc:
+            _safe_remove_file(tmp_path)
+            self._error_response(400, {"ok": False, "reason": "client_aborted", "detail": str(exc)})
+            return
+        except OSError as exc:
+            _safe_remove_file(tmp_path)
+            reason = "disk_full" if getattr(exc, 'errno', None) == errno.ENOSPC else "store_write_failed"
+            self._error_response(507, {
+                "ok": False, "durable": False, "reason": reason, "detail": str(exc),
+            })
+            return
+
+        digest = hasher.hexdigest()
+        ident = digest + ext
+        final_path = os.path.join(_attach_dir, ident)
+
+        already = False
+        err = None
+        quota_exceeded = False
+        with _attachment_quota_lock:
+            already = os.path.exists(final_path)
+            if already:
+                _safe_remove_file(tmp_path)
+            elif (_attach_total_bytes + written) > MAX_ATTACHMENT_TOTAL_BYTES:
+                quota_exceeded = True
+                _safe_remove_file(tmp_path)
+            else:
+                try:
+                    os.replace(tmp_path, final_path)
+                    _attach_total_bytes += written
+                    _index_update(ident, {
+                        'name': str(name or '')[:200], 'mime': mime, 'size': written,
+                        'sha256': digest, 'added_at': _iso_now(),
+                    })
+                except OSError as exc:
+                    err = str(exc)
+                    _safe_remove_file(tmp_path)
+
+        if quota_exceeded:
+            self._error_response(507, {
+                "ok": False, "reason": "quota_exceeded",
+                "total_bytes": _attach_total_bytes,
+                "max_total_bytes": MAX_ATTACHMENT_TOTAL_BYTES,
+            })
+            return
+        if err is not None:
+            self._error_response(507, {
+                "ok": False, "durable": False,
+                "reason": "store_write_failed", "detail": err,
+            })
+            return
+        self._journal_and_respond_attachment(ident, digest, mime, written, name, already)
+
+    def _journal_and_respond_attachment(self, ident, digest, mime, size, name, already):
+        """Shared tail for both upload shapes: journal the new blob (skipped
+        on dedup — the blob already has a journal entry from its first
+        upload) and send the response shape both shapes share."""
         if not already:
             try:
                 _journal_append({
@@ -1034,10 +1407,10 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     'id': ident,
                     'sha256': digest,
                     'mime': mime,
-                    'size': len(blob),
+                    'size': size,
                     # Display name only. It never touches a filesystem path —
                     # the stored filename is derived purely from the digest.
-                    'name': str(payload.get('name') or '')[:200],
+                    'name': str(name or '')[:200],
                 })
             except OSError:
                 # The blob itself is already fsynced, which is what matters for
@@ -1049,7 +1422,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             "id": ident,
             "sha256": digest,
             "mime": mime,
-            "size": len(blob),
+            "size": size,
             "url": f"/attachments/{ident}",
             "deduplicated": already,
         })
@@ -1278,11 +1651,43 @@ if __name__ == '__main__':
                              '.claude/concepts/<html-basename>/ inside <directory>. '
                              'Without a usable store the bridge refuses to start — '
                              'a bridge that cannot persist is the bug (#284).')
+    parser.add_argument('--max-attachment-bytes', type=int, default=None,
+                        help='Per-file cap for the streaming attachment upload '
+                             'path, in bytes. Overrides CONCEPT_MAX_ATTACHMENT_BYTES. '
+                             f'Default {DEFAULT_MAX_ATTACHMENT_BYTES} (256 MiB). '
+                             'The legacy base64-in-JSON path always uses the lower, '
+                             'fixed 32 MiB decoded cap regardless of this flag.')
+    parser.add_argument('--max-attachment-total-bytes', type=int, default=None,
+                        help='Total cap across all attachments in one store, in '
+                             'bytes. Overrides CONCEPT_MAX_ATTACHMENT_TOTAL_BYTES. '
+                             f'Default {DEFAULT_MAX_ATTACHMENT_TOTAL_BYTES} (4 GiB).')
     args = parser.parse_args()
 
     port = int(args.port)
     directory = args.directory
     os.chdir(directory)
+
+    def _resolve_int_setting(cli_value, env_name, default):
+        """CLI flag wins, then the matching env var, then the default. Both
+        --max-attachment-bytes/--max-attachment-total-bytes and their
+        CONCEPT_MAX_ATTACHMENT_BYTES/CONCEPT_MAX_ATTACHMENT_TOTAL_BYTES env
+        vars resolve through this — flags let a single launch override the
+        limit, env vars let a launcher script set a site-wide default without
+        threading a flag through every call site."""
+        if cli_value is not None:
+            return cli_value
+        env_val = os.environ.get(env_name)
+        if env_val:
+            try:
+                return int(env_val)
+            except ValueError:
+                sys.stderr.write(f"[concept-server] ignoring invalid {env_name}={env_val!r}\n")
+        return default
+
+    MAX_ATTACHMENT_BYTES = _resolve_int_setting(
+        args.max_attachment_bytes, 'CONCEPT_MAX_ATTACHMENT_BYTES', DEFAULT_MAX_ATTACHMENT_BYTES)
+    MAX_ATTACHMENT_TOTAL_BYTES = _resolve_int_setting(
+        args.max_attachment_total_bytes, 'CONCEPT_MAX_ATTACHMENT_TOTAL_BYTES', DEFAULT_MAX_ATTACHMENT_TOTAL_BYTES)
 
     # The watchdog resolves `--html` against cwd AFTER chdir, so callers can
     # pass repo-relative paths. We capture the absolute path so a later

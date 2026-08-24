@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
@@ -51,7 +52,24 @@ async function call(port, p, method = "GET", body) {
   const buf = Buffer.from(await res.arrayBuffer());
   let json = null;
   try { json = JSON.parse(buf.toString("utf8")); } catch { /* binary */ }
-  return { status: res.status, json, buf };
+  return { status: res.status, json, buf, headers: res.headers };
+}
+
+// Streaming upload shape: raw body, Content-Type != application/json,
+// metadata in X-Attach-Name (percent-encoded UTF-8) / X-Attach-Mime headers.
+async function callStream(port, bytesBuf, { name, mime } = {}) {
+  const headers = { "Content-Type": mime || "application/octet-stream" };
+  if (name !== undefined) headers["X-Attach-Name"] = encodeURIComponent(name);
+  if (mime !== undefined) headers["X-Attach-Mime"] = mime;
+  const res = await fetch(`http://127.0.0.1:${port}/attachments`, {
+    method: "POST",
+    headers,
+    body: bytesBuf,
+  });
+  const buf = Buffer.from(await res.arrayBuffer());
+  let json = null;
+  try { json = JSON.parse(buf.toString("utf8")); } catch { /* binary */ }
+  return { status: res.status, json, buf, headers: res.headers };
 }
 
 async function boot(port, root, htmlRel) {
@@ -93,10 +111,14 @@ beforeAll(async () => {
     name: "shot.png", mime: "image/png", data: PNG_1PX,
   })).json;
 
-  results.svgStatus = (await call(port, "/attachments", "POST", {
+  // SVG is no longer rejected (#312 dropped the acceptance allowlist) — it
+  // is accepted and content-addressed like any other file. The safety net
+  // moved to the SERVING side: see "attachments are durable and safe to
+  // serve" below for the read-back assertion (octet-stream + attachment).
+  results.svgUpload = (await call(port, "/attachments", "POST", {
     name: "x.svg", mime: "image/svg+xml",
     data: Buffer.from("<svg onload=alert(1)/>").toString("base64"),
-  })).status;
+  })).json;
 
   await call(port, "/progress", "POST", {
     action: "ship", step: "pr-opened", status: "done",
@@ -116,6 +138,7 @@ beforeAll(async () => {
   results.decisionsAfter = (await call(port, "/decisions")).json;
   results.recovery = (await call(port, "/recovery")).json;
   results.blob = await call(port, `/attachments/${results.upload.id}`);
+  results.svgBlob = await call(port, `/attachments/${results.svgUpload.id}`);
   results.traversalStatus = (await call(port, "/attachments/../../../../state.json")).status;
 
   // --- processing completes ---
@@ -204,13 +227,24 @@ describe("attachments are durable and safe to serve", () => {
     expect(results.upload.id).toMatch(/^[0-9a-f]{64}\.png$/);
   });
 
-  it("it reads back byte-identical after the restart", () => {
+  it("it reads back byte-identical after the restart, inline, with the real image Content-Type", () => {
     expect(results.blob.status).toBe(200);
     expect(results.blob.buf.equals(Buffer.from(PNG_1PX, "base64"))).toBe(true);
+    expect(results.blob.headers.get("content-type")).toBe("image/png");
+    expect(results.blob.headers.get("content-disposition")).toBe("inline");
   });
 
-  it("SVG is rejected — it would run script on the bridge origin", () => {
-    expect(results.svgStatus).toBe(415);
+  it("SVG is accepted (no type gate) but served as a forced download, never inline", () => {
+    // #312: the acceptance allowlist is gone — SVG is content-addressed like
+    // any other file. What stops it from running script against the bridge
+    // origin now is the SERVING policy: it is forced to octet-stream +
+    // Content-Disposition: attachment instead of being rendered inline.
+    expect(results.svgUpload.ok).toBe(true);
+    expect(results.svgUpload.id).toMatch(/^[0-9a-f]{64}\.svg$/);
+    expect(results.svgBlob.status).toBe(200);
+    expect(results.svgBlob.headers.get("content-type")).toBe("application/octet-stream");
+    expect(results.svgBlob.headers.get("content-disposition")).toMatch(/^attachment;/);
+    expect(results.svgBlob.headers.get("x-content-type-options")).toBe("nosniff");
   });
 
   it("a traversal attempt on the attachment route is refused", () => {
@@ -235,5 +269,150 @@ describe("a processed submission stays processed", () => {
     expect(types.filter(t => t === "submission")).toHaveLength(1);
     expect(types).toContain("processed");
     expect(types.filter(t => t === "restore").length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #312 — arbitrary file attachments: streaming upload path, extension
+// derivation, the attachments/index.json display-name map, and dedup.
+// Runs against its own bridge instance (separate port/store) so it does not
+// interleave with the kill/restart scenario above.
+// ---------------------------------------------------------------------------
+
+const SLUG2 = "2026-08-24-any-file-type";
+const r2 = {};
+let root2, store2, attachDir2, port2, proc2;
+
+beforeAll(async () => {
+  if (!PY) return;
+  root2 = fs.mkdtempSync(path.join(os.tmpdir(), "concept-attach-"));
+  fs.mkdirSync(path.join(root2, "docs", "concepts"), { recursive: true });
+  const htmlRel2 = `docs/concepts/${SLUG2}.html`;
+  fs.writeFileSync(path.join(root2, htmlRel2), "<html><body>c</body></html>");
+  store2 = path.join(root2, ".claude", "concepts", SLUG2);
+  attachDir2 = path.join(store2, "attachments");
+  port2 = await freePort();
+
+  // A tiny per-file cap makes the "above the cap" case cheap to trigger
+  // without actually shipping a multi-hundred-MB fixture through CI.
+  proc2 = spawn(
+    PY,
+    [SERVER, String(port2), root2, "--html", htmlRel2, "--max-attachment-bytes", "1000"],
+    { stdio: "pipe" },
+  );
+  for (let i = 0; i < 100; i++) {
+    await sleep(100);
+    try {
+      const r = await call(port2, "/heartbeat");
+      if (r.status === 200) break;
+    } catch { /* not up yet */ }
+  }
+
+  // 1. Streaming upload of a non-image binary.
+  const binBytes = Buffer.from(Array.from({ length: 500 }, (_, i) => i % 256));
+  r2.streamUpload = await callStream(port2, binBytes, { name: "payload.bin", mime: "application/octet-stream" });
+
+  // 2. Above the per-file cap via the streaming path.
+  const tooBig = Buffer.alloc(5000, 7);
+  r2.overCapStatus = (await callStream(port2, tooBig, { name: "huge.bin", mime: "application/octet-stream" })).status;
+  r2.tmpLeftoversAfterOverCap = fs.readdirSync(attachDir2).filter(n => n.endsWith(".tmp"));
+
+  // 3. Unknown/absent extension.
+  r2.noExtUpload = await callStream(port2, Buffer.from("abc"), { name: "", mime: "" });
+
+  // 4b. Non-image read-back (from upload #1).
+  r2.streamBlob = await call(port2, `/attachments/${r2.streamUpload.json.id}`);
+
+  // 5. index.json contains the original filename, and a second, DIFFERENT
+  // upload does not clobber the first entry.
+  r2.pngUpload = (await call(port2, "/attachments", "POST", {
+    name: "shot.png", mime: "image/png", data: PNG_1PX,
+  })).json;
+  r2.index = JSON.parse(fs.readFileSync(path.join(attachDir2, "index.json"), "utf8"));
+
+  // 6. Dedup via the streaming path: identical bytes twice.
+  r2.dedupFirst = await callStream(port2, binBytes, { name: "payload.bin", mime: "application/octet-stream" });
+  r2.dedupSecond = await callStream(port2, binBytes, { name: "payload-retry.bin", mime: "application/octet-stream" });
+  r2.recovery = (await call(port2, "/recovery")).json;
+}, 60_000);
+
+afterAll(async () => {
+  if (proc2 && proc2.exitCode === null && proc2.signalCode === null) {
+    await new Promise(resolve => {
+      proc2.once("exit", resolve);
+      try { proc2.kill("SIGKILL"); } catch { resolve(); }
+      setTimeout(resolve, 3000);
+    });
+  }
+  await sleep(400);
+  if (root2) {
+    fs.rmSync(root2, { recursive: true, force: true, maxRetries: 12, retryDelay: 250 });
+  }
+}, 30_000);
+
+describe("streaming upload accepts any file type", () => {
+  it("a non-image binary uploads via the streaming path with the right sha256 and extension", () => {
+    expect(r2.streamUpload.status).toBe(200);
+    expect(r2.streamUpload.json.ok).toBe(true);
+    expect(r2.streamUpload.json.sha256).toBe(crypto.createHash("sha256").update(
+      Buffer.from(Array.from({ length: 500 }, (_, i) => i % 256)),
+    ).digest("hex"));
+    expect(r2.streamUpload.json.id).toMatch(/^[0-9a-f]{64}\.bin$/);
+  });
+
+  it("a file above the per-file cap is refused with 413 and leaves no orphan temp file", () => {
+    expect(r2.overCapStatus).toBe(413);
+    expect(r2.tmpLeftoversAfterOverCap).toEqual([]);
+  });
+
+  it("an absent extension and MIME fall back to .bin", () => {
+    expect(r2.noExtUpload.status).toBe(200);
+    expect(r2.noExtUpload.json.id).toMatch(/^[0-9a-f]{64}\.bin$/);
+  });
+
+  it("a non-image blob reads back as a forced download, never inline", () => {
+    expect(r2.streamBlob.status).toBe(200);
+    expect(r2.streamBlob.headers.get("content-type")).toBe("application/octet-stream");
+    expect(r2.streamBlob.headers.get("content-disposition")).toMatch(/^attachment;.*filename="payload\.bin"/);
+    expect(r2.streamBlob.buf.equals(Buffer.from(Array.from({ length: 500 }, (_, i) => i % 256)))).toBe(true);
+  });
+});
+
+describe("attachments/index.json remembers original filenames", () => {
+  it("records the streamed upload's original name", () => {
+    const entry = r2.index[r2.streamUpload.json.id];
+    expect(entry).toBeTruthy();
+    expect(entry.name).toBe("payload.bin");
+  });
+
+  it("a second, different upload does not clobber the first entry", () => {
+    const pngEntry = r2.index[r2.pngUpload.id];
+    expect(pngEntry).toBeTruthy();
+    expect(pngEntry.name).toBe("shot.png");
+    // The earlier entry must still be there — index.json is a merge, not a
+    // full-file overwrite keyed to only the most recent upload.
+    expect(r2.index[r2.streamUpload.json.id].name).toBe("payload.bin");
+  });
+
+  it("/recovery's attachments[] also carries the original name", () => {
+    const entry = r2.recovery.attachments.find(a => a.id === r2.pngUpload.id);
+    expect(entry).toBeTruthy();
+    expect(entry.name).toBe("shot.png");
+  });
+});
+
+describe("identical bytes dedup regardless of upload path or claimed filename", () => {
+  it("the second upload of identical bytes resolves to the same id and reports deduplicated", () => {
+    expect(r2.dedupFirst.json.id).toBe(r2.streamUpload.json.id);
+    expect(r2.dedupFirst.json.deduplicated).toBe(true);
+    expect(r2.dedupSecond.json.id).toBe(r2.streamUpload.json.id);
+    expect(r2.dedupSecond.json.deduplicated).toBe(true);
+  });
+
+  it("quota is counted once — a dedup hit never re-adds the blob's size", () => {
+    // The bin file appears exactly once on disk regardless of how many times
+    // its bytes were re-uploaded under different claimed names.
+    const onDisk = fs.readdirSync(attachDir2).filter(n => n === r2.streamUpload.json.id);
+    expect(onDisk).toHaveLength(1);
   });
 });
