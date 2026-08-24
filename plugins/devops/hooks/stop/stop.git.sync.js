@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 /**
  * @hook stop.git.sync
- * @version 0.1.0
+ * @version 0.2.0
  * @event Stop
  * @plugin devops
  * @description Throttled background git sync at turn end. Replaces the former
  *   ten-minute git-sync cron as the in-session recurrence mechanism.
  *
- *   Stop is the right moment: the turn is over, so a merge cannot land under a
- *   file the assistant is mid-edit on — the cron could fire at any instant,
- *   including inside a tool call. The child is detached and this hook returns
+ *   Stop is the better moment: the turn is over, so the merge does not land in
+ *   the middle of a tool call the way the ten-minute cron could. It is not a
+ *   guarantee — the child is detached and takes a second or two, so a merge can
+ *   still overlap the START of the next turn. What keeps that safe is in
+ *   scripts/git-sync.js, not here: it refuses to touch any path with
+ *   uncommitted changes, and bails outright on a repo that is mid-merge,
+ *   mid-rebase or detached. The child is detached and this hook returns
  *   immediately, so turn end is never delayed by a fetch.
  *
  *   Always exits 0 with no output. A sync that finds something writes a result
@@ -43,10 +47,21 @@ function maybeSync() {
   // pure waste while the window is closed.
   if (!claimSyncSlot(cwd, { peek: true })) return;
 
+  // A ship spans several turns (approval questions, CI wait), so Stop fires
+  // INSIDE the pipeline. A merge commit landing between ship's rebase and its
+  // release would mean the tree that was tested is not the tree being shipped.
+  try {
+    if (require('../lib/ship-sentinel').isActive(cwd)) return;
+  } catch { /* sentinel unreadable — a sync is not worth failing turn end over */ }
+
   if (git('rev-parse --is-inside-work-tree') !== 'true') return;
   if (!git('remote')) return;
 
-  const branch = git('rev-parse --abbrev-ref HEAD');
+  // symbolic-ref, not rev-parse --abbrev-ref: the latter answers the literal
+  // 'HEAD' on a detached HEAD, which passes the !== 'main' test and burns the
+  // 30-minute throttle slot on a sync the child then refuses outright. These
+  // worktrees sit detached between tasks, so that is the common state.
+  const branch = git('symbolic-ref --quiet --short HEAD');
   if (!branch || branch === 'main') return;
 
   // Claim only now that a sync will actually happen.

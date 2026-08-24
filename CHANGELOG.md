@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.133.7] — 2026-08-24
+
+### Fixed
+
+- **The background git sync was doing nothing at all, and said so by staying quiet.** It merged the *local* `main` ref and kept that ref current with `git fetch origin main:main` — a fetch git refuses outright whenever `main` is checked out in any worktree, which is the standard layout here: the primary worktree parked on main, feature work in linked worktrees. The refusal went into the script's catch-all and vanished, so every run compared `HEAD` against a ref frozen at whatever was last pulled by hand, `rev-list --count HEAD..main` answered 0, and the sync correctly reported that there was nothing to do. Measured before the fix: across 96 sessions in three days it delivered exactly one result, and none at all in this repo, while `main` advanced six times a day. The local ref in this checkout had not moved in a week. The sync now merges `refs/remotes/<origin>/<parent>` — refs that are never checked out and can always be updated — and the default branch is asked for via `origin/HEAD` instead of assumed to be `main`, so a `master` repo is no longer a silent no-op either.
+
+- **A sync that actually runs needed guards a no-op never did.** It now refuses to touch the index when HEAD is detached (these worktrees sit detached between tasks, where a merge writes a commit nothing points at), when another operation owns the index — including a conflicted `git stash pop`, which leaves unmerged entries but no marker file and would otherwise have had its conflicts resolved and committed by the sync — and while a `/ship` is in flight, checked both when the sync is spawned and again immediately before the merge. It never touches a path with uncommitted work, untracked files and renames included, and a probe that fails reads as "busy", never as "clean".
+
+- **Repo commit hooks no longer turn every sync into a recurring failure report.** The sync commits from a detached, console-less process: a hook that prompts cannot be answered, and a commitlint `commit-msg` rejecting git's auto-generated "Merge remote-tracking branch …" subject would have produced a `✗` every thirty minutes for as long as `main` stayed ahead. Its own git calls now run with `core.hooksPath` pointed at a directory that cannot exist — deliberately not `--no-verify`, which `git merge` only accepts from Git 2.36 and which on an older git would have recreated the same loop through an unknown-option error.
+
+- **A failed merge can no longer wedge the sync shut.** When the auto-resolve commit fails, the merge is rolled back before the failure is reported; leaving `MERGE_HEAD` in place would have made the new quiescence gate read the worktree as busy and silence every future sync in it. The report names the leftover state when the rollback itself does not take.
+
+- **The three report shapes stopped being interchangeable.** A merge git refused without producing a single conflicted file used to be reported as a conflict with an empty file list, which handed the assistant the full semantic-resolution procedure for nothing; it is now an error. In the other direction, a genuine conflict was downgraded to an error whenever any unrelated scratch file sat in the worktree — and only the conflict shape carries the resolution procedure, so the one case the feature exists for was the one that never reached anyone.
+
 ## [0.133.6] — 2026-08-23
 
 ### Fixed
