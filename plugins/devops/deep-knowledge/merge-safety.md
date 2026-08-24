@@ -188,9 +188,36 @@ git add <resolved-files>
 git commit --no-edit
 ```
 
-## How git-sync.js Handles Conflicts
+## What git-sync.js Merges, and When It Refuses
 
-As of v0.3.0, `git-sync.js` resolves conflicts in two tiers:
+The sync merges **remote-tracking refs** (`origin/main`, and `origin/<parent>`
+for a hierarchical branch), never the local branch ref. That is not a
+preference: `git fetch origin main:main` is refused by git whenever `main` is
+checked out in any worktree — the standard layout here — so a sync built on the
+local ref compares HEAD against a frozen ref and silently reports nothing. It
+did exactly that, for weeks, until v0.4.0.
+
+Before touching the index, the sync refuses to run at all when:
+
+- **HEAD is detached** — worktrees sit detached between tasks, and a merge there
+  writes a commit nothing points at.
+- **Another operation owns the index** — an unfinished merge, rebase,
+  cherry-pick, revert or bisect, or *any* unmerged index entry. The last one
+  matters on its own: a conflicted `git stash pop` leaves no marker file, and a
+  merge attempted on top of it would pick up that operation's conflicted files
+  and commit them.
+- **A `/ship` is in flight** — checked at spawn time by the hooks and again
+  immediately before the merge, so a ship started mid-fetch is still caught.
+- **The incoming change touches a path with uncommitted work** — untracked files
+  and renames included. The sync stays silent and merges at a later window.
+
+Its own git calls run with `core.hooksPath` pointed at a non-existent directory:
+the process is detached and console-less, so a repo hook that prompts cannot be
+answered and one that rejects (commitlint refusing git's auto-generated merge
+subject) would turn every sync into a recurring failure report. `--no-verify` is
+deliberately NOT used — `git merge` only accepts it from Git 2.36.
+
+Conflicts are then resolved in two tiers:
 
 1. **Trivial conflicts** — resolved automatically without user intervention:
    - One side unchanged from base → take the other side
@@ -205,6 +232,13 @@ As of v0.3.0, `git-sync.js` resolves conflicts in two tiers:
      result file that `prompt.git.sync` injects as turn context. Conflicts
      therefore surface inside a turn the user is already in — there is no
      cron waking Claude up in a turn of its own.
+
+The three report shapes are not interchangeable. Only `⚠` carries the
+resolution procedure to the assistant; `✗` is classified as an error and stops
+there. A merge git refused without producing a single conflicted file is
+therefore reported as `✗`, never as a `⚠` with an empty file list, and a real
+conflict is never downgraded to `✗` because unrelated scratch files happen to
+sit in the worktree.
 
 ## How ship_release Prevents Overwrites
 
