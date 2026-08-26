@@ -156,6 +156,12 @@ must see their own language. The locale hint is authoritative.
 | `attach.error_disk_full`       | Bridge disk is full               | Bridge-Festplatte ist voll |
 | `attach.error_offline`         | Bridge unreachable — kept locally, will retry on reconnect | Bridge nicht erreichbar — lokal gespeichert, Wiederholung bei Verbindung |
 | `state.persist_failed`         | Could not save your changes locally — storage is full. Free up space or export your work soon. | Deine Änderungen konnten lokal nicht gespeichert werden — der Speicher ist voll. Platz freigeben oder Arbeit bald exportieren. |
+| `design.viewport_switch`       | View                           | Ansicht |
+| `design.viewport_desktop`      | Desktop                        | Desktop |
+| `design.viewport_tablet`       | Tablet                         | Tablet |
+| `design.viewport_phone`        | Phone                          | Handy |
+| `design.orientation_portrait`  | Portrait                       | Hochkant |
+| `design.orientation_landscape` | Landscape                      | Querformat |
 
 **`design.position_iteration` and `design.position_page` are label words,
 not full sentences** — the numbers (`N`, `total`) are live spans the JS
@@ -1053,6 +1059,62 @@ buttons:
   `data-anno*` attribute names when doing so, since the shared JS and the
   submit payload both key off them.
 
+## Responsive device views
+
+A design page mocks an app that may ship on more than one form factor. The
+concept **declares** which ones; the user switches between them with the
+`.viewport-toggle` bottom-left. Desktop is the pre-existing full-bleed
+rendering, unchanged: no stage, no clone, no frame. A concept that declares
+nothing behaves exactly as it did before this existed and never renders the
+toggle.
+
+Declared on `section[data-iteration]`, overridable on a single
+`section[data-design]` whose form factors genuinely differ:
+
+| Attribute | Meaning | Default |
+|---|---|---|
+| `data-viewports` | Ordered, space-separated subset of `desktop tablet phone`. The order IS the click-cycle order. | `desktop` (→ no toggle) |
+| `data-viewport-default` | Which of them the page opens in. A phone-only app declares `data-viewports="phone"` and opens straight into the phone frame. | first entry of `data-viewports` |
+| `data-orientations` | Subset of `portrait landscape`. Both are rendered **side by side, simultaneously** — the reviewer compares them without switching. Declare one only for an app that locks its orientation. | `portrait landscape` |
+| `data-device-tablet`, `data-device-phone` | `WIDTHxHEIGHT` in portrait CSS pixels, e.g. `360x800` for an Android target. | `834x1194` / `390x844` |
+
+**Mock authoring constraints (device mode makes these load-bearing).** The
+frames are DOM clones of the screen's content rendered into a
+`container-type: size` box; they are not iframes and the browser viewport
+does not change. Inside `section[data-screen]`, therefore:
+
+- **No `vh` / `vw` / `dvh` / `svh` / `lvh` units.** They resolve against the
+  browser window, not the frame: a `height: 100vh` hero renders 1080px tall
+  inside a 390×844 phone shell and bursts out of it. Use `100%` (the frame
+  is definitely sized) or `cqh` / `cqw` against `container-name: device`.
+- **No `@media` queries for the device breakpoints.** They key off the
+  window, which never changes. Style device variants off the shell instead —
+  `.device-shell[data-device="phone"] .nav { … }`,
+  `.device-shell[data-orientation="landscape"] .sidebar { … }` — or use
+  `@container device (max-width: 480px)`.
+- **No `position: fixed`.** It anchors to the window in desktop mode and to
+  the transformed stage in device mode, i.e. two different results from one
+  rule. Use `position: absolute` inside the frame.
+- **No `<script>`, `<canvas>`, `<style>` or `<iframe>`.** A cloned `<script>`
+  is spec-marked "already started" and never runs; a cloned `<canvas>` comes
+  out blank because the bitmap is not copied. Both render correctly in
+  desktop mode and dead in device mode — a divergence with no error anywhere.
+  Mockups are declarative markup; their CSS lives in the page's single
+  `<head>` stylesheet like all other concept CSS.
+- **The annotation layer never enters a frame.** `[data-anno-layer]` is
+  stripped from every clone: its JS collects `[data-anno-pin]` and
+  `textarea[data-annotation]` document-wide, and a cloned answer is a third
+  textarea that persistence and the submit payload both skip — it would be
+  typed and silently lost. Annotations stay a desktop-view affordance.
+- **A view suspends device mode.** While a `section[data-view]` is the active
+  top-level item (`body[data-view-active="true"]`) no screen is on display,
+  so the stage is torn down and the toggle hides — a question view is prose,
+  not a screen to frame.
+- **Style mocks by class, never by `#id`.** Clone ids are namespaced per
+  frame (`dv1-`, `dv2-`) so the two copies cannot collide, which means an
+  `#id` rule stops matching inside the frames while it still matches the
+  hidden original.
+
 ## Click-through wiring (`data-screen-link`)
 
 Buttons inside a mockup get `data-screen-link` to declare their navigation:
@@ -1481,7 +1543,15 @@ it today.
   <div class="concept-layout design fullscreen">
     <div class="concept-content">
       <main>
-        <section data-iteration="1" data-iteration-template="design" data-active>
+        <!-- data-viewports / data-orientations declare the form factors this
+             concept's app supports (§ Responsive device views). Omit both for
+             a desktop-only concept: the toggle then never renders and the
+             layout is byte-for-byte what it was before device views existed.
+             A single design may override them; the iteration is the normal
+             place to declare. -->
+        <section data-iteration="1" data-iteration-template="design" data-active
+                 data-viewports="desktop tablet phone"
+                 data-orientations="portrait landscape">
           <!-- One or more designs. Exactly one <section data-design> carries
                data-design-active="true" (others get `hidden`). A single
                design still needs this wrapper for markup uniformity — it
@@ -1598,6 +1668,52 @@ it today.
             aria-expanded="false"
             data-label-open="{{proto.feedback_toggle}}"
             data-label-close="{{panel.minimize}}">💬</button>
+
+    <!-- Device-view toggle (bottom-left) — the fourth corner, and the
+         quietest thing on the page. One button, one gesture: each click
+         advances to the next DECLARED viewport and wraps around. It is
+         deliberately NOT a 60px FAB — those two are one accent-coloured
+         component for the page's two actions, this is a view control that
+         must not compete with them. Hidden entirely when the iteration
+         declares fewer than two viewports (body[data-single-viewport]).
+         Every label is a data-attribute rather than baked text: the JS
+         rewrites glyph + label + aria-label on each cycle, and the locale
+         substitution has to happen once, here, at generation time. -->
+    <button id="viewport-toggle" class="viewport-toggle" type="button" data-mode="desktop"
+            data-label-prefix="{{design.viewport_switch}}"
+            data-label-desktop="{{design.viewport_desktop}}"
+            data-label-tablet="{{design.viewport_tablet}}"
+            data-label-phone="{{design.viewport_phone}}"
+            data-label-portrait="{{design.orientation_portrait}}"
+            data-label-landscape="{{design.orientation_landscape}}"
+            aria-label="{{design.viewport_switch}}">
+      <!-- Inline SVG, not emoji: 🖥/📱 render as full-colour platform art
+           that clashes with a dark chrome pill and differs per OS. All three
+           share one 20×20 grid, stroke-only, currentColor — so they read as
+           one set. The monitor keeps a stand because a bare rectangle is
+           indistinguishable from a tablet in landscape; neither tablet nor
+           phone gets a notch or home button, which would have to move
+           between orientations and carries no information the label lacks. -->
+      <svg data-glyph="desktop" viewBox="0 0 20 20" width="20" height="20" fill="none"
+           stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="3" width="16" height="11" rx="1.5"/>
+        <line x1="10" y1="14" x2="10" y2="17"/>
+        <line x1="7" y1="17" x2="13" y2="17"/>
+      </svg>
+      <svg data-glyph="tablet" viewBox="0 0 20 20" width="20" height="20" fill="none"
+           stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <rect x="4" y="2" width="12" height="16" rx="2"/>
+      </svg>
+      <svg data-glyph="phone" viewBox="0 0 20 20" width="20" height="20" fill="none"
+           stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <rect x="6" y="1" width="8" height="18" rx="2.2"/>
+        <line x1="8.5" y1="3.3" x2="11.5" y2="3.3"/>
+      </svg>
+      <span class="viewport-toggle-label">{{design.viewport_desktop}}</span>
+    </button>
 
     <!-- Decision panel (☰) — contains: iteration-tabs, screen-nav, submit.
          No section-TOC here: the screen-nav replaces it for design. -->
@@ -1849,6 +1965,7 @@ html:not([data-template="design"]) .screen-indicator,
 html:not([data-template="design"]) .panel-fab,
 html:not([data-template="design"]) .feedback-fab,
 html:not([data-template="design"]) .feedback-dock,
+html:not([data-template="design"]) .viewport-toggle,
 html:not([data-template="design"]) .design-switcher,
 html:not([data-template="design"]) .anno-toggle-fab,
 html:not([data-template="design"]) .anno-layer { display: none !important; }
@@ -2445,6 +2562,217 @@ body[data-view-active="true"] .feedback-divider:has(+ .feedback-section #screen-
    between a view switch and the next updateIndicator() call. */
 body[data-view-active="true"] #indicator-screen-info { display: none; }
 body:not([data-view-active="true"]) #indicator-view { display: none; }
+
+/* ── Viewport toggle — device switcher, bottom-left ──
+   The fourth corner: indicator top-left, switcher top-centre, ☰ top-right,
+   💬 bottom-right. It must read as the quietest element on the page, and it
+   is deliberately 34px against the FABs' 60px — a third circle of the same
+   size would read as a third action, which this is not. Do NOT fold it into
+   the .panel-fab/.feedback-fab rule; that rule is one component with two
+   positions and this is a different component.
+   Corner arithmetic, so nobody has to re-derive it:
+     toggle   left 32px … 32+160px = 192px   (expanded), top edge 66px
+     💬 FAB   left 100vw - 92px                (60px + 2rem margin)
+   The two can only meet below 284px viewport width, which is out of scope.
+   Vertically the expanded toggle tops out at 66px while .feedback-dock
+   bottoms out at calc(2rem + 60px - 6px) = 86px — a 20px gap that holds
+   even where the dock becomes a full-width sheet at ≤560px. */
+.viewport-toggle {
+  position: fixed;
+  left: 2rem;
+  bottom: 2rem;
+  /* Same tier as .screen-indicator: quiet corner chrome. Above
+     .content-dimmer (50) so the view stays switchable after a submit,
+     below .panel-backdrop (150), .feedback-dock (180) and the panel (200). */
+  z-index: 90;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 34px;
+  /* Resting state is a plain circle showing only the glyph. max-width — not
+     width — is what animates: `width: auto` is not interpolable, and
+     animating a fixed width re-positions the glyph mid-transition. With
+     overflow: hidden the label reveals without the left edge ever moving,
+     which is what keeps a bottom-LEFT anchored control growing rightward
+     instead of drifting into the corner. */
+  max-width: 34px;
+  overflow: hidden;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-color, #30363d) 70%, transparent);
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 70%, transparent);
+  color: var(--text-secondary, #8b949e);
+  /* Barely-there, but not the switcher's 0.18: that bar can afford near-
+     invisibility because it carries a readable text label. An icon-only
+     button at 0.18 is undiscoverable. */
+  opacity: 0.55;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: max-width 0.22s cubic-bezier(0.2, 0.9, 0.3, 1),
+              opacity 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+.viewport-toggle svg { flex: none; width: 20px; height: 20px; }
+/* Exactly one glyph is visible, picked by the mode the JS wrote onto the
+   button. Driving it from CSS keeps the JS free of SVG construction. */
+.viewport-toggle svg { display: none; }
+.viewport-toggle[data-mode="desktop"] svg[data-glyph="desktop"],
+.viewport-toggle[data-mode="tablet"] svg[data-glyph="tablet"],
+.viewport-toggle[data-mode="phone"] svg[data-glyph="phone"] { display: block; }
+.viewport-toggle-label {
+  font-size: 0.8rem;               /* .screen-indicator's scale */
+  color: var(--text, #c9d1d9);
+  white-space: nowrap;
+  opacity: 0;
+  /* Delayed so the text fades in once the pill has mostly finished
+     widening — fading in while still clipped looks like chewed-off text. */
+  transition: opacity 0.15s ease 0.05s;
+}
+.viewport-toggle:hover,
+.viewport-toggle:focus-visible {
+  max-width: 160px;
+  opacity: 1;
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 92%, transparent);
+  border-color: var(--border-color, #30363d);
+}
+.viewport-toggle:hover .viewport-toggle-label,
+.viewport-toggle:focus-visible .viewport-toggle-label { opacity: 1; }
+/* Outline, not a border swap: a border change would fight the max-width
+   transition and shift the glyph by a pixel on focus. */
+.viewport-toggle:focus-visible { outline: 2px solid var(--accent-color, #58a6ff); outline-offset: 2px; }
+/* Press-in, deliberately the inverse of the FABs' :hover grow, so the two
+   never read as the same gesture. */
+.viewport-toggle:active { transform: scale(0.93); transition: transform 0.1s ease; }
+/* One declared viewport is no choice, so there is no control. Same collapse
+   idiom as body[data-single-design] / body[data-single-screen] above. */
+body[data-single-viewport="true"] .viewport-toggle { display: none; }
+/* A view (§ Views (optional)) replaces the design as the active top-level
+   item — no screen is on display, so there is no device to switch. Mirrors
+   the dock/indicator swaps that key off the same flag. */
+body[data-view-active="true"] .viewport-toggle { display: none; }
+/* Fades out under an open ☰ panel exactly like .design-switcher — it sits
+   below the backdrop anyway, and a half-dimmed control invites dead clicks. */
+body.panel-open .viewport-toggle { opacity: 0; pointer-events: none; }
+
+/* ── Device stage — the portrait/landscape frame pair ──
+   Only ever built for the ACTIVE screen, and only outside desktop mode.
+   Desktop mode has no stage at all, which IS the visual distinction: bezels
+   and a canvas wash appear, nothing more elaborate.
+   The authored mockup stays in the DOM as the clone source and is hidden
+   with display:none — NOT opacity or off-screen positioning, both of which
+   leave it focusable and readable by a screen reader, i.e. the content would
+   be announced three times instead of two. */
+[data-template="design"] section[data-screen][data-device-mode] > *:not(.device-stage) { display: none; }
+/* Device mode replaces the section's own scrolling with the stage's. Leaving
+   overflow-y: auto here makes the scrollbar's appearance shrink clientWidth,
+   which lowers the fit scale, which removes the scrollbar again — a visible
+   oscillation, and a "ResizeObserver loop" warning in Chromium. */
+[data-template="design"] section[data-screen][data-device-mode] { overflow: hidden; padding: 1.5rem; }
+.device-stage {
+  align-self: stretch;             /* the section centres its children; the
+                                      stage must instead fill it, or the
+                                      available height is undefined and the
+                                      fit maths has nothing to measure */
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* A quiet wash so the eye reads "staged device view" without a new colour:
+     40% of --input-bg, already the recessed-surface token of this template. */
+  background: color-mix(in srgb, var(--input-bg, #0d1117) 40%, transparent);
+  border-radius: 12px;
+}
+/* Below MIN_DEVICE_SCALE the pair genuinely does not fit and scrolling beats
+   squinting. Centred content that overflows its scroll container is unreachable
+   at the leading edge, so the alignment flips with the overflow. */
+.device-stage[data-clamped="true"] { overflow: auto; align-items: flex-start; justify-content: flex-start; }
+/* transform: scale() leaves the LAYOUT box at full size. .device-fit is the
+   compensator: JS sets it to the SCALED size while .device-pair scales inside
+   it from the top-left corner. Without this pair of elements a scaled-down
+   mock still reserves its full unscaled height, the section grows scrollbars
+   around empty space, and the top of the stage ends up above the scroll
+   origin where it cannot be reached at all. */
+.device-fit { position: relative; flex: none; }
+.device-pair {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  /* ONE gap for both axes, deliberately. fitDeviceStage() reads it once and
+     scores the row and the column candidate with the same value, because the
+     axis is not known until bestFit() has answered. An axis-specific gap
+     override would therefore be scored with the PREVIOUS render's value and
+     the pick would lag one switch behind. If a differing gap is ever wanted,
+     bestFit() has to take one per axis — do not add a
+     `[data-axis="…"] { gap }` rule here. */
+  gap: 2rem;
+}
+/* Axis is chosen by JS from whichever direction yields the larger scale, not
+   by a width breakpoint — see bestFit() for why a fixed breakpoint is wrong
+   in both directions. */
+.device-pair[data-axis="column"] { flex-direction: column; }
+.device-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  /* Never shrink individually: the pair is scaled once, as a unit. Flex's
+     default shrink would otherwise make the two frames different sizes and
+     destroy the comparison the pair exists for. */
+  flex: none;
+}
+/* Restrained bezel: one border in --panel-bg so it recedes instead of
+   reading as glossy plastic, a hairline inset ring for definition against
+   dark backgrounds, one soft shadow for elevation. Phones carry thinner
+   bezels and rounder corners than tablets on every shipping device, so a
+   single uniform radius reads as wrong to anyone who has held either. */
+.device-bezel {
+  box-sizing: content-box;
+  background: var(--panel-bg, #161b22);
+  border: var(--device-bezel, 10px) solid var(--panel-bg, #161b22);
+  border-radius: var(--device-radius-outer, 20px);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.35), inset 0 0 0 1px var(--border-color, #30363d);
+}
+.device-bezel[data-device="tablet"] { --device-bezel: 10px; --device-radius-outer: 20px; --device-radius-inner: 10px; }
+.device-bezel[data-device="phone"]  { --device-bezel: 8px;  --device-radius-outer: 26px; --device-radius-inner: 18px; }
+/* The simulated screen. It scrolls itself — that is what a real device's
+   screen does, and it saves every mockup from managing its own scroll
+   region. container-type: size is what makes @container device (…) inside
+   the mock resolve against the SIMULATED size instead of the browser
+   window; it is the only mechanism that can, since the window never
+   changes. */
+.device-viewport {
+  width: var(--device-w);
+  height: var(--device-h);
+  border-radius: var(--device-radius-inner, 12px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--input-bg, #0d1117);
+  container-type: size;
+  container-name: device;
+}
+/* Same quiet-metadata register as .screen-indicator, so captions do not read
+   as a new text style. */
+.device-caption { font-size: 0.8rem; color: var(--text-secondary, #8b949e); text-align: center; }
+.device-caption strong { color: var(--text, #c9d1d9); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  /* The pill still expands — it has to, or the label is unreachable — it
+     just snaps rather than animating. */
+  .viewport-toggle { transition: opacity 0.16s ease, background 0.16s ease, border-color 0.16s ease; }
+  .viewport-toggle:active { transform: none; transition: none; }
+  /* Nothing to disable on .device-pair: its transform is recomputed on every
+     resize frame, so it is deliberately NOT transitioned in the base rule —
+     an animated scale would lag a frame behind the .device-fit box that has
+     to change instantly with it. */
+}
 ```
 
 ## Layout JS — single-screen navigation + context-sensitive feedback
@@ -2494,9 +2822,26 @@ change) via `harvestDockValues()`.
   // localStorage's `_activeScreenByDesign` on load (see saveState below) so
   // it survives reloads, not just in-session switches.
   let lastScreenByDesign = {};
+  // Two values, deliberately: the device view is a VIEWING preference that
+  // belongs to the reader, while what can actually be RENDERED belongs to
+  // whatever the visible iteration and design declare.
+  //   viewportPref — the last mode the user chose. Persisted. NEVER clamped.
+  //   viewportMode — the effective mode, derived from pref ∩ declaration.
+  // Collapsing the two into one variable silently downgrades the choice: a
+  // page that mixes a design iteration with a decision one (the documented
+  // split for entangled questions) clamps the single variable to `desktop`
+  // the moment the user clicks the decision tab, and coming back shows a
+  // desktop view they never asked for. Same for a design that declares fewer
+  // form factors than its neighbour.
+  let viewportPref = null;
+  let viewportMode = 'desktop';
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) lastScreenByDesign = JSON.parse(raw)._activeScreenByDesign || {};
+    if (raw) {
+      const saved = JSON.parse(raw);
+      lastScreenByDesign = saved._activeScreenByDesign || {};
+      viewportPref = saved._viewportMode || null;
+    }
   } catch (e) {}
 
   function visibleIteration() {
@@ -2766,6 +3111,367 @@ change) via `harvestDockValues()`.
     document.body.dataset.singleScreen = screens.length <= 1 ? 'true' : 'false';
   }
 
+  // ── Responsive device views ──────────────────────────────────────────
+  // See § Responsive device views for the declaration attributes. Desktop
+  // mode is a no-op by construction: no stage is built, nothing is cloned,
+  // and the layout is what it was before this code existed.
+  const VIEWPORT_MODES = ['desktop', 'tablet', 'phone'];
+  const VIEWPORT_ORIENTATIONS = ['portrait', 'landscape'];
+  // Portrait CSS pixels. iPad Air 11" and iPhone 15 — mid-range devices
+  // whose widths (834 / 390) are the ones layouts actually break at.
+  const DEVICE_SIZES = { tablet: [834, 1194], phone: [390, 844] };
+  // Below this a frame's text is unreadable; scrolling the pair is the
+  // better degradation than shrinking further.
+  const MIN_DEVICE_SCALE = 0.3;
+  const VIEWPORT_LABELS = (() => {
+    const d = (document.getElementById('viewport-toggle') || {}).dataset || {};
+    return {
+      desktop: d.labelDesktop || 'Desktop', tablet: d.labelTablet || 'Tablet',
+      phone: d.labelPhone || 'Phone',
+      portrait: d.labelPortrait || 'Portrait', landscape: d.labelLandscape || 'Landscape'
+    };
+  })();
+
+  // "834x1194" -> [834, 1194]. A malformed value falls back instead of
+  // producing NaN geometry: a NaN width collapses the frame to 0px and the
+  // mockup silently disappears with nothing logged anywhere.
+  function parseDeviceSize(raw, fallback) {
+    const m = /^\s*(\d{2,5})\s*[x×*]\s*(\d{2,5})\s*$/i.exec(String(raw == null ? '' : raw));
+    return m ? [parseInt(m[1], 10), parseInt(m[2], 10)] : fallback.slice();
+  }
+
+  // Space/comma separated token list, filtered against `allowed`, order
+  // preserved, duplicates dropped. Returns null when nothing valid remains so
+  // callers can apply their own default rather than inheriting an empty list.
+  function parseTokenList(raw, allowed) {
+    const out = [];
+    String(raw == null ? '' : raw).split(/[\s,]+/).forEach(tok => {
+      const k = tok.trim().toLowerCase();
+      if (k && allowed.indexOf(k) >= 0 && out.indexOf(k) < 0) out.push(k);
+    });
+    return out.length ? out : null;
+  }
+
+  // Cycles the DECLARED order, never VIEWPORT_MODES: a tablet+phone concept
+  // must not land on a desktop view its app does not have. An unknown current
+  // value (index -1) wraps to the first entry.
+  function nextViewportMode(modes, current) {
+    if (!modes.length) return 'desktop';
+    return modes[(modes.indexOf(current) + 1) % modes.length];
+  }
+
+  // Lays the pair out along whichever axis leaves the bigger uniform scale.
+  // A fixed "stack below 900px" breakpoint is wrong in BOTH directions:
+  // measured for a phone pair in a 900×800 window, side-by-side yields 0.70
+  // and stacked only 0.55, while a 1000×600 window is the reverse. Deciding
+  // from the two candidate scales is the same three lines and is right at
+  // every size. Ties go to `row` — side by side is the point of the view.
+  function bestFit(frames, availW, availH, gap) {
+    const add = (a, b) => a + b;
+    const span = gap * Math.max(0, frames.length - 1);
+    const rowW = frames.map(f => f[0]).reduce(add, 0) + span;
+    const rowH = frames.reduce((m, f) => Math.max(m, f[1]), 0);
+    const colW = frames.reduce((m, f) => Math.max(m, f[0]), 0);
+    const colH = frames.map(f => f[1]).reduce(add, 0) + span;
+    const fit = (w, h) => (w > 0 && h > 0 && availW > 0 && availH > 0)
+      ? Math.min(1, availW / w, availH / h) : 1;
+    const row = fit(rowW, rowH);
+    const col = fit(colW, colH);
+    const axis = col > row ? 'column' : 'row';
+    const raw = Math.max(row, col);
+    return {
+      axis,
+      scale: Math.max(MIN_DEVICE_SCALE, raw),
+      clamped: raw < MIN_DEVICE_SCALE,
+      width: axis === 'row' ? rowW : colW,
+      height: axis === 'row' ? rowH : colH
+    };
+  }
+
+  // Resolution order: active design -> its iteration -> built-in default.
+  // Declaring once on the iteration is the common case; the per-design
+  // override exists for the rare concept whose designs target different form
+  // factors. Because this reads the LIVE DOM on every call, a design switch
+  // picks up the new declaration without buildDesignUI() having to re-run
+  // (it deliberately does not — see buildScreenTextareas).
+  function viewportSpec() {
+    const design = activeDesign();
+    const iter = visibleIteration();
+    const read = key => (design && design.dataset[key]) || (iter && iter.dataset[key]) || '';
+    const modes = parseTokenList(read('viewports'), VIEWPORT_MODES) || ['desktop'];
+    const wanted = String(read('viewportDefault') || '').trim().toLowerCase();
+    return {
+      modes,
+      orientations: parseTokenList(read('orientations'), VIEWPORT_ORIENTATIONS)
+        || VIEWPORT_ORIENTATIONS.slice(),
+      initial: modes.indexOf(wanted) >= 0 ? wanted : modes[0],
+      sizes: {
+        tablet: parseDeviceSize(read('deviceTablet'), DEVICE_SIZES.tablet),
+        phone: parseDeviceSize(read('devicePhone'), DEVICE_SIZES.phone)
+      }
+    };
+  }
+
+  // Attributes that carry an id REFERENCE and must follow their target's
+  // rename. Missing one of these is silent: the control still renders, it
+  // just points at the other frame's copy.
+  const ID_REF_ATTRS = ['for', 'form', 'list', 'headers',
+                        'aria-labelledby', 'aria-describedby', 'aria-controls',
+                        'aria-owns', 'aria-activedescendant', 'aria-details',
+                        'aria-errormessage'];
+  // SVG paints reference defs by url(#id); an un-rewritten one resolves to
+  // the HIDDEN original's def, which works by accident in one frame and not
+  // at all once the original is display:none in some browsers.
+  const URL_REF_ATTRS = ['fill', 'stroke', 'clip-path', 'mask', 'filter',
+                         'marker-start', 'marker-mid', 'marker-end', 'style'];
+  // Deep-clones a subtree and namespaces every identifier in it. Without this
+  // the frames are two elements sharing one id (getElementById resolves to
+  // whichever comes first, label[for] focuses the wrong frame) and two radios
+  // in ONE group — clicking the landscape copy would clear the portrait one.
+  function prefixClone(node, prefix) {
+    const clone = node.cloneNode(true);
+    if (clone.nodeType !== 1) return clone;
+    // Same reason as the top-level filter in renderDeviceStage: a layer
+    // nested deeper than the screen's direct children must not reach a frame
+    // either, or its answers become unpersistable.
+    clone.querySelectorAll('[data-anno-layer]').forEach(el => el.remove());
+    [clone].concat([...clone.querySelectorAll('*')]).forEach(el => {
+      if (el.id) el.id = prefix + el.id;
+      const name = el.getAttribute('name');
+      if (name) el.setAttribute('name', prefix + name);
+      // Never carried into a clone: it would yank focus out of whatever the
+      // user was doing on every screen switch.
+      el.removeAttribute('autofocus');
+      ID_REF_ATTRS.forEach(attr => {
+        const v = el.getAttribute(attr);
+        if (v) el.setAttribute(attr, v.split(/\s+/).filter(Boolean).map(t => prefix + t).join(' '));
+      });
+      URL_REF_ATTRS.forEach(attr => {
+        const v = el.getAttribute(attr);
+        if (v && v.indexOf('url(#') >= 0) {
+          el.setAttribute(attr, v.replace(/url\(#([^)"']+)\)/g, (_, id) => 'url(#' + prefix + id + ')'));
+        }
+      });
+      ['href', 'xlink:href'].forEach(attr => {
+        const v = el.getAttribute(attr);
+        if (v && v.charAt(0) === '#' && v.length > 1) el.setAttribute(attr, '#' + prefix + v.slice(1));
+      });
+    });
+    return clone;
+  }
+
+  // Builds the stage for the ACTIVE screen only. Every other screen is
+  // `hidden`, so cloning into all of them would duplicate the page for
+  // nothing. Teardown is unconditional and page-wide: a stage left on the
+  // iteration the user just switched away from keeps a stale copy alive and
+  // would be found by the next fit pass.
+  function renderDeviceStage(spec) {
+    document.querySelectorAll('.device-stage').forEach(el => el.remove());
+    document.querySelectorAll('section[data-screen][data-device-mode]')
+      .forEach(s => { delete s.dataset.deviceMode; });
+    if (viewportMode === 'desktop') return;
+    // A view (§ Views (optional)) is the active top-level item instead of a
+    // design: its screens are hidden, so there is nothing to frame. Teardown
+    // above has already run, which is the whole point of returning here
+    // rather than earlier.
+    if (document.body.dataset.viewActive === 'true') return;
+    const size = spec.sizes[viewportMode];
+    const design = activeDesign();
+    const screen = design && design.querySelector('section[data-screen][data-screen-active="true"]');
+    if (!size || !screen) return;
+    // The clone source is EVERY element child except a stage — not
+    // `.device-frame`. That class is a documented convention with no CSS and
+    // no gate behind it, so a page that lays its mock out differently is
+    // legal today; keying on it would render empty frames on exactly those
+    // pages, and look correct while doing it.
+    // The annotation layer (§ Annotation Layer (optional)) is authored INSIDE
+    // the screen, so a naive clone carries it into both frames. Its own IIFE
+    // collects [data-anno-pin] and textarea[data-annotation] DOCUMENT-WIDE and
+    // keys them by attribute value, so a cloned pin would open its bubble in
+    // every copy — harmless — but a cloned ANSWER is a third textarea that
+    // saveState() and the submit payload both skip, because clones are
+    // excluded via [data-device-clone]. An answer typed inside a device frame
+    // would be silently lost. Annotations therefore stay a desktop-view
+    // affordance and the frames show the mockup itself.
+    const source = [...screen.children]
+      .filter(el => !el.classList.contains('device-stage') && !el.hasAttribute('data-anno-layer'));
+    if (!source.length) return;
+
+    const stage = document.createElement('div');
+    stage.className = 'device-stage';
+    // One marker for the whole subtree. saveState() and collectAllFormFields()
+    // filter on it via closest() — the clones must never reach localStorage or
+    // the submit payload, where they would triple every mock field under
+    // names no human ever typed into.
+    stage.setAttribute('data-device-clone', '');
+    const fitBox = document.createElement('div');
+    fitBox.className = 'device-fit';
+    const pair = document.createElement('div');
+    pair.className = 'device-pair';
+    fitBox.appendChild(pair);
+    stage.appendChild(fitBox);
+
+    spec.orientations.forEach((orientation, i) => {
+      const landscape = orientation === 'landscape';
+      const w = landscape ? size[1] : size[0];
+      const h = landscape ? size[0] : size[1];
+      const shell = document.createElement('div');
+      shell.className = 'device-shell';
+      shell.dataset.device = viewportMode;
+      shell.dataset.orientation = orientation;
+      // Labelled, NOT aria-hidden. Both frames are interactive by design, and
+      // aria-hidden over focusable content is an ARIA violation that produces
+      // a worse experience than the duplication it hides. The duplication is
+      // the point of this view; naming each frame is what makes it legible.
+      shell.setAttribute('role', 'group');
+      shell.setAttribute('aria-label',
+        (VIEWPORT_LABELS[viewportMode] || viewportMode) + ' · ' +
+        (VIEWPORT_LABELS[orientation] || orientation));
+
+      const bezel = document.createElement('div');
+      bezel.className = 'device-bezel';
+      bezel.dataset.device = viewportMode;
+      const vp = document.createElement('div');
+      vp.className = 'device-viewport';
+      vp.style.setProperty('--device-w', w + 'px');
+      vp.style.setProperty('--device-h', h + 'px');
+      const prefix = 'dv' + (i + 1) + '-';
+      source.forEach(node => vp.appendChild(prefixClone(node, prefix)));
+      bezel.appendChild(vp);
+
+      const caption = document.createElement('div');
+      caption.className = 'device-caption';
+      const strong = document.createElement('strong');
+      strong.textContent = VIEWPORT_LABELS[orientation] || orientation;
+      caption.appendChild(strong);
+      caption.appendChild(document.createTextNode(' · ' + w + ' × ' + h));
+
+      shell.appendChild(bezel);
+      shell.appendChild(caption);
+      pair.appendChild(shell);
+    });
+
+    screen.appendChild(stage);
+    screen.dataset.deviceMode = viewportMode;
+    wireFrameMirroring(pair);
+  }
+
+  // The frames render one screen twice; a box ticked in one has to tick in
+  // the other, or the pair reads as two different states of the same app.
+  // Index matching is exact because both frames are clones of one source.
+  // The handler assigns values WITHOUT dispatching further events: an echoed
+  // `input` would re-enter this handler from the twin and loop forever, and
+  // the clones are excluded from persistence anyway, so there is nothing
+  // downstream that needs the echo. Listeners live on the pair, which is
+  // destroyed and rebuilt on every switch — nothing to unbind, nothing to leak.
+  function wireFrameMirroring(pair) {
+    const SEL = 'input, select, textarea';
+    const sync = e => {
+      const el = e.target;
+      if (!el || !el.matches || !el.matches(SEL)) return;
+      const shell = el.closest('.device-shell');
+      if (!shell) return;
+      const idx = [...shell.querySelectorAll(SEL)].indexOf(el);
+      if (idx < 0) return;
+      pair.querySelectorAll('.device-shell').forEach(other => {
+        if (other === shell) return;
+        const twin = other.querySelectorAll(SEL)[idx];
+        if (!twin) return;
+        if (twin.type === 'checkbox' || twin.type === 'radio') twin.checked = el.checked;
+        else twin.value = el.value;
+      });
+    };
+    pair.addEventListener('input', sync);
+    pair.addEventListener('change', sync);
+  }
+
+  // Measures the pair unscaled (offsetWidth/offsetHeight are pre-transform),
+  // picks the axis, then writes the scaled size onto .device-fit so the
+  // LAYOUT box matches what is actually painted. Skipping that step is what
+  // puts a scrollbar around empty space and pushes the top of the stage above
+  // the scroll origin, where it cannot be reached at all.
+  function fitDeviceStage() {
+    // Scoped to the active design, exactly like renderDeviceStage's lookup.
+    // showDesign() hides the previous design but leaves its screens' own
+    // data-screen-active flag set, so a document-wide query here is one
+    // stale flag away from measuring a screen nobody is looking at.
+    const design = activeDesign();
+    const stage = design && design.querySelector(
+      'section[data-screen][data-screen-active="true"] .device-stage');
+    if (!stage) return;
+    const pair = stage.querySelector('.device-pair');
+    const fitBox = stage.querySelector('.device-fit');
+    if (!pair || !fitBox) return;
+    const shells = [...pair.children];
+    if (!shells.length) return;
+    const gap = parseFloat(getComputedStyle(pair).gap) || 0;
+    const frames = shells.map(s => [s.offsetWidth, s.offsetHeight]);
+    const box = stage.getBoundingClientRect();
+    const res = bestFit(frames, box.width, box.height, gap);
+    pair.dataset.axis = res.axis;
+    pair.style.transform = 'scale(' + res.scale + ')';
+    fitBox.style.width = Math.ceil(res.width * res.scale) + 'px';
+    fitBox.style.height = Math.ceil(res.height * res.scale) + 'px';
+    stage.dataset.clamped = res.clamped ? 'true' : 'false';
+  }
+
+  function renderViewportToggle(spec) {
+    const btn = document.getElementById('viewport-toggle');
+    if (!btn) return;
+    const current = VIEWPORT_LABELS[viewportMode] || viewportMode;
+    const upcoming = nextViewportMode(spec.modes, viewportMode);
+    btn.dataset.mode = viewportMode;
+    // Names the NEXT state, like #feedback-toggle's open/close label swap —
+    // this is a cycle, not an on/off control, so aria-pressed would be a lie.
+    const label = (btn.dataset.labelPrefix ? btn.dataset.labelPrefix + ': ' : '')
+      + current + ' → ' + (VIEWPORT_LABELS[upcoming] || upcoming);
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+    const text = btn.querySelector('.viewport-toggle-label');
+    if (text) text.textContent = current;
+  }
+
+  // The one entry point. Idempotent, so every caller can just invoke it.
+  // Derives the effective mode from the preference WITHOUT writing back to
+  // it — see the two-variable comment at the top of this IIFE.
+  function applyViewport() {
+    const spec = viewportSpec();
+    viewportMode = (viewportPref && spec.modes.indexOf(viewportPref) >= 0)
+      ? viewportPref : spec.initial;
+    document.body.dataset.viewportMode = viewportMode;   // what is rendered
+    document.body.dataset.viewportPref = viewportPref || '';  // what was chosen
+    document.body.dataset.singleViewport = spec.modes.length <= 1 ? 'true' : 'false';
+    renderViewportToggle(spec);
+    renderDeviceStage(spec);
+    fitDeviceStage();
+  }
+  window.applyViewport = applyViewport;
+
+  function cycleViewport() {
+    const spec = viewportSpec();
+    if (spec.modes.length <= 1) return;
+    // Advances from what is CURRENTLY RENDERED, not from the stored
+    // preference: the user is clicking what they can see.
+    viewportPref = nextViewportMode(spec.modes, viewportMode);
+    applyViewport();
+    if (typeof saveState === 'function') saveState();
+  }
+
+  document.getElementById('viewport-toggle')?.addEventListener('click', cycleViewport);
+
+  // Exactly ONE resize listener, installed here at IIFE level rather than in
+  // the stage builder — installing it per build would accumulate one listener
+  // per screen switch, each measuring a detached stage.
+  let fitFrame = 0;
+  function scheduleFit() {
+    if (fitFrame) cancelAnimationFrame(fitFrame);
+    fitFrame = requestAnimationFrame(() => { fitFrame = 0; fitDeviceStage(); });
+  }
+  window.addEventListener('resize', scheduleFit);
+  // Late-arriving webfonts and images change the mock's intrinsic size after
+  // the first measurement.
+  window.addEventListener('load', scheduleFit);
+
   // Switches the active design (and, within it, the given page or its
   // remembered last-viewed page). Closes over showScreen defined below.
   window.showDesign = function(designId, screenId) {
@@ -2813,7 +3519,14 @@ change) via `harvestDockValues()`.
     const remembered = screenId || lastScreenByDesign[designId];
     const first = design.querySelector('section[data-screen]');
     const target = (remembered && design.querySelector(`#${CSS.escape(remembered)}`)) ? remembered : first?.id;
+    // showScreen() is the usual route to applyViewport(). A design with no
+    // screens has no target, so that route does not exist here — and the
+    // device stage cloned for the PREVIOUS design's screen would stay in the
+    // DOM, showing the old design's mockup under the new design's name.
+    // Teardown lives inside renderDeviceStage(), so the call has to happen
+    // either way.
     if (target) showScreen(target);
+    else applyViewport();
     updateDesignNoteMarkers();
   };
 
@@ -2907,6 +3620,12 @@ change) via `harvestDockValues()`.
       item.dataset.active = String(item.dataset.screenId === id);
     });
     lastScreenByDesign[design.dataset.design] = id;
+    // Rebuilds the device frames for the screen that just became active, and
+    // re-clamps the mode against what THIS design declares. Runs before
+    // saveState() so the persisted `_viewportMode` is the one now on screen.
+    // Every other entry point (showDesign, iteration:changed, boot) reaches
+    // the switcher through this call rather than duplicating it.
+    applyViewport();
     updateIndicator();
     updateNoteMarkers();
     if (typeof saveState === 'function') saveState();
@@ -3232,6 +3951,13 @@ change) via `harvestDockValues()`.
     // applyDockSize() reads. The dock stays closed — priming only syncs its
     // field state and its size.
     primeDock();
+    // The stage showScreen() just built cloned the mock BEFORE restoreState()
+    // ran: that listener lives in a later block and therefore fires after this
+    // one. A rAF callback lands after EVERY DOMContentLoaded listener, so this
+    // rebuild clones the restored DOM instead of the pristine one. It is also
+    // the only viewport pass a design with zero screens gets, since showScreen()
+    // never runs there and the toggle would otherwise stay unbuilt.
+    requestAnimationFrame(applyViewport);
   });
 
   // Rebuild after iteration switches (fresh designs, fresh screens, fresh
@@ -3274,6 +4000,12 @@ change) via `harvestDockValues()`.
       });
     }
     buildDesignUI();
+    // BEFORE the early return below, not after: switching to a decision/free
+    // iteration leaves no active design, so showScreen() — the usual route to
+    // applyViewport() — never runs. Without this call the device stage of the
+    // design iteration the user just left stays in the DOM, and the toggle
+    // keeps offering viewports that iteration never declared.
+    applyViewport();
     const design = activeDesign();
     if (!design) return;
     const prevId = document.querySelector('[data-screen][data-screen-active="true"]')?.id;
@@ -3294,10 +4026,19 @@ change) via `harvestDockValues()`.
   // active design) when no textarea/input is focused and no overlay is open.
   document.addEventListener('keydown', e => {
     if (dock.dataset.open === 'true' || panel.classList.contains('open')) return;
-    if (e.target.matches('textarea, input')) return;
+    // Bailing out on textarea/input alone was too narrow: Space activates a
+    // FOCUSED BUTTON, so pressing it on a mock's "Continue" advanced the
+    // screen and swallowed the click at the same time. Device mode doubles
+    // the focusable mock surface, which is what made it worth fixing here.
+    if (e.target && e.target.closest
+        && e.target.closest('textarea, input, select, button, a[href], [contenteditable], [role="button"]')) return;
     // A view is scrollable prose/questions, not a screen sequence — Arrow
     // Left/Right must not hijack it into switching designs (§ Views (optional)).
+    // It has no device frames either, so `v` below is equally out of scope.
     if (document.body.dataset.viewActive === 'true') return;
+    // `v` cycles the device view — the keyboard equivalent of the bottom-left
+    // toggle, and a no-op on concepts that declare a single viewport.
+    if (e.key === 'v' || e.key === 'V') { e.preventDefault(); cycleViewport(); return; }
     const design = activeDesign();
     if (!design) return;
     const screens = [...design.querySelectorAll('section[data-screen]')];
@@ -3563,7 +4304,10 @@ a reload used to always drop back to design mode even when the user was
 reading a question view; the `DOMContentLoaded` handler below now tries the
 restored view FIRST and only falls back to the screen-restore path when
 there is no view id, or the id no longer resolves to a `section[data-view]`
-in the active iteration.
+in the active iteration. `_viewportMode` rides along
+in the shared `saveState()` block below, read straight off
+`body[data-viewport-pref]` so there is exactly one writer of the state blob
+and no cross-scope variable to keep in sync.
 
 ## Click-through Handler
 
@@ -3616,7 +4360,8 @@ its own set of pages. Each logical page inside a design is a `<section>`
 with `data-screen`:
 
 ```html
-<section data-iteration="1" data-active>
+<section data-iteration="1" data-active
+         data-viewports="desktop phone" data-viewport-default="phone">
   <header class="iteration-intro">
     <h2>Iteration 1 · Login flow mockup</h2>
     <p>High-fidelity walkthrough of the three-step sign-in flow.</p>
@@ -3666,6 +4411,17 @@ with `data-screen`:
 - Iteration tabs still apply — when Claude iterates on feedback, a new
   `<section data-iteration="N+1">` is appended with updated designs/screens
   and the old one is frozen (see Shared Systems § Iteration Tabs).
+- **Form factors are declared on the iteration** via `data-viewports` /
+  `data-viewport-default` / `data-orientations` (§ Responsive device views).
+  Omit them for a desktop-only concept. The example above declares a
+  phone-first app that also has a desktop view, so the page opens in the
+  phone frames and the bottom-left toggle cycles the two.
+- **A screen's children are the clone source.** Everything inside
+  `section[data-screen]` (whether or not it is wrapped in `.device-frame`)
+  is cloned into each device frame, so it must be declarative markup —
+  no `<script>`, `<canvas>`, `<style>` or `<iframe>`, no `vh`/`vw` units, no
+  `position: fixed`, and no `#id` selectors in its CSS. § Responsive device
+  views explains what each of those does when cloned.
 
 ### Annotated screen (optional annotation layer)
 
@@ -4925,23 +5681,42 @@ function saveState() {
     _savedAt: Date.now(),
     _pageVersion: document.documentElement.dataset.pageVersion || ''
   };
+  // Device-view frames are CLONES of a mockup (§ Responsive device views).
+  // They carry namespaced ids, so persisting them would fill the blob with
+  // dead `dv1-*` / `dv2-*` keys — and, worse, the next screen switch tears the
+  // stage down before saveState() runs, which would DELETE those keys again.
+  // The authored original is still in the DOM (display:none) and is the one
+  // legitimate copy, so skipping the clones loses nothing.
+  const persistable = el => !el.closest('[data-device-clone]');
   document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
     // data-no-persist opts a control out of reload restoration. Used by the
     // close-out wizard's ship question, which must be answered fresh every
     // time: a restored "yes" from hours ago would sail through a later
     // wizard run and trigger a real release the user never re-authorised.
     if (el.dataset.noPersist !== undefined) return;
+    if (!persistable(el)) return;
     if (el.name || el.id) state['input:' + (el.name || el.id) + ':' + el.value] = el.checked;
   });
   document.querySelectorAll('textarea, input[type="text"], input[type="number"]').forEach(el => {
+    if (!persistable(el)) return;
     if (el.id || el.dataset.comment) state['text:' + (el.id || el.dataset.comment)] = el.value;
   });
   document.querySelectorAll('input[type="range"]').forEach(el => {
+    if (!persistable(el)) return;
     if (el.id || el.name) state['range:' + (el.id || el.name)] = el.value;
   });
   document.querySelectorAll('select').forEach(el => {
+    if (!persistable(el)) return;
     if (el.id || el.name) state['select:' + (el.id || el.name)] = el.value;
   });
+  // Design template only, and read off the DOM rather than passed in: the
+  // design layout keeps its viewport state inside its own IIFE, and
+  // applyViewport() mirrors it onto the body precisely so this one writer can
+  // see it. Absent on every other template, where the key is simply not
+  // written. It persists the PREFERENCE (data-viewport-pref), not the mode
+  // currently rendered — saving while a decision-template tab is open would
+  // otherwise write back the clamped `desktop` and lose the user's choice.
+  if (document.body.dataset.viewportPref) state['_viewportMode'] = document.body.dataset.viewportPref;
   state['theme'] = document.documentElement.getAttribute('data-theme');
   // Same non-form-state precedent as 'theme' above: the (optional)
   // annotation layer's show/hide toggle is global and outlives a single
@@ -5745,6 +6520,15 @@ function collectAllFormFields(scope) {
   const fields = {};
   // Catch-all: every named input, select, textarea inside scope.
   scope.querySelectorAll('input, select, textarea').forEach(el => {
+    // Device-view frames are CLONES of the mockup (§ Responsive device views)
+    // and they live inside section[data-iteration][data-active], i.e. exactly
+    // this scope. Without this filter a login mock ships `email`, `dv1-email`
+    // and `dv2-email` — three fields for one control, under names no human
+    // ever typed into, and the panel goes green either way. The authored
+    // original is untouched and still collected; only the copies are dropped.
+    // Additive on purpose: the selector string above is pinned by
+    // validation-gate.md pattern 21 and must stay literal.
+    if (el.closest('[data-device-clone]')) return;
     const key = el.dataset.field
              || el.dataset.v4
              || el.dataset.confirm

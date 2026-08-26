@@ -133,7 +133,7 @@ into 340px variant cards, so stop trying to fit them there.
 
 | Template | Layout signature |
 |---|---|
-| **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 💬 FAB bottom right (same 60px circle as ☰; collapsed by default; general / per-design / per-screen / per-view comments), design switcher when ≥2 designs, view segments alongside it when ≥1 optional view (§ Views (optional)) |
+| **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 💬 FAB bottom right (same 60px circle as ☰; collapsed by default; general / per-design / per-screen / per-view comments), design switcher when ≥2 designs, view segments alongside it when ≥1 optional view (§ Views (optional)), device-view toggle bottom-left when ≥2 form factors |
 | **decision** | Sidebar (~80/~20), variant cards, tri-state per variant |
 | **free** | Sidebar (~80/~20), Claude-authored freeform body, optional tri-state per section |
 
@@ -149,6 +149,28 @@ data-template>` always **mirrors the active iteration** rather than being a
 page-level constant. This projection is what lets `collectDecisions` and all
 existing template-scoped CSS/JS keep branching on `<html data-template>`
 unchanged. See `deep-knowledge/templates.md` for the full layout reference.
+
+### 1a-ii. If template is `design`: declare the target form factors
+
+Before writing any mockup, decide which form factors the app or site being
+designed actually ships on, and declare them on the iteration section:
+`data-viewports="desktop tablet phone"` (the order is the click-cycle order),
+plus `data-viewport-default` and `data-orientations` where they differ from
+the defaults. Portrait and landscape are shown **side by side at once** in
+tablet/phone mode, so a reviewer compares them without switching.
+
+Derive the answer from evidence, not assumption — a responsive web app in
+the repo, a mobile manifest, the user's own words ("app", "website",
+"mobile-only"). When it is genuinely a desktop tool, declare nothing: the
+toggle then never renders and the layout is exactly what it was before device
+views existed. When it is phone-only, declare `data-viewports="phone"` and
+the page opens straight into the phone frames.
+
+Declaring device views constrains the mockup markup — no `<script>`,
+`<canvas>`, `<style>` or `<iframe>` inside a screen, no `vh`/`vw` units, no
+`position: fixed`, no `#id` selectors in mock CSS. See
+`deep-knowledge/templates.md` § Responsive device views for what each of
+those does once the screen is cloned into a frame.
 
 ### 1b. If template is `decision`: pick a content variant
 
