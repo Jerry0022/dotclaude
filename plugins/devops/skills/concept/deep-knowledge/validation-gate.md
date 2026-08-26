@@ -37,7 +37,7 @@ no legitimate matches — do not "keep it as a convenience". The decision panel
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 44 patterns, regardless of template
+Every concept page must contain these 47 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -87,6 +87,9 @@ related one — count the rows, not the highest number):
 | 38b | `submission_id` inside `submitFinalize` | Client-side replay guard. `POST /decisions` has no version guard, so a payload the bridge fsynced before the response was lost sits in the offline queue too; without the id, `retryPendingSubmission()` re-delivers it and the close-out creates its issues and runs its release a second time. |
 | 39 | `installScrollSpy` called from **inside** `buildSectionNav` | Scroll-position marker for the panel TOC. `buildSectionNav()` replaces the nav DOM on every iteration switch, so the spy MUST be rebound as its last step. Binding it once from `DOMContentLoaded` instead leaves the highlight dead on every tab except the initially loaded one. See templates.md § Section Navigation. |
 | 40 | `revealNavItem` | Auto-scrolls the TOC's own scroll box so the active entry stays visible in long lists. Must scroll only `nearestScrollBox(item.parentElement)` — never `scrollIntoView()` on the item, which drags the content column along and fights the user's scrolling. |
+| 41 | `data-attachable` | The ONE marker `initCommentAttachments()` matches to decide which fields get an attachment bar. MUST NOT be `data-comment` — several fields carry `data-comment` without being attachable (plain text-only comments), and several carry both (annotation answers, decision notes); matching on `data-comment` wires a bar onto every one of those a second time or onto fields that were never meant to take a file. See templates.md § Attachments. |
+| 42 | `initCommentAttachments` | Wires the 📎 button, drag & drop, and Ctrl/Cmd+V paste onto every `textarea[data-attachable]`. Missing → attachment bars render (if emitted inline) but do nothing. |
+| 43 | `_guardedSetItem` | Every `localStorage.setItem` call site (state persistence + both `-pending` submit-queue writes) MUST go through this wrapper, never a bare `localStorage.setItem`. A `QuotaExceededError` thrown out of an unguarded call kills ALL further persistence for the rest of the page with nothing telling the user — see templates.md § State Persistence. |
 
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
 at the post-generation gate. See § Generic Form Collection below for the
@@ -97,6 +100,19 @@ AND `ensureCommentSlots` is missing, the user has nowhere to attach
 free-form overrides to their include/discard choices. Fix the HTML (emit
 the textarea inline per § Bi-State Variant Evaluation) and ship the JS
 safety net (per § Comment Slot Injection) before opening.
+
+**Failure for 41 / 42:** if a page contains ANY `.attach-bar` /
+`.attach-thumbs` markup or ANY `textarea[data-comment]` that is clearly
+meant to take a file (an annotation answer, a decision note, a dock field)
+but lacks `data-attachable`, or if `initCommentAttachments` matches
+`data-comment` instead of `data-attachable`, treat it as a missing
+mandatory pattern — either fields double-wire a second bar, or a field the
+user expects to attach a file to silently accepts none.
+
+**Failure for 43:** grep every `localStorage.setItem(` occurrence in the
+rendered page; each one MUST read `_guardedSetItem(`, no exceptions. One
+unguarded call site reintroduces the exact silent-persistence-death defect
+this pattern exists to catch.
 
 ## Generic Form Collection (mandatory for all templates)
 
@@ -199,6 +215,10 @@ template instead. Reconsider the template pick before suppressing these.
 | P11 | `data-open="false"` on `#feedback-dock` | The dock MUST start collapsed. A page that ships `data-open="true"` opens onto three empty textareas covering the artefact. |
 | P12 | `applyDockSize` | Picks the dock's size from `body[data-single-*]`. Missing → the dock falls back to whatever width the page's CSS happens to declare, which is how the same concept renders as a mini-box in one iteration and a full-width bar in the next. |
 | P13 | `.panel-fab,` + `.feedback-fab` sharing ONE size/shape rule | Both FABs are one component with two positions. A page that declares separate `width`/`height`/`border-radius` per FAB has the 56-vs-64px mismatch back. |
+| P13b | `feedback-maximize` | Dock maximise/restore control — a DISTINCT button from `feedback-close` (minimise closes, this only resizes). Mandatory on every `design` page: the dock has no other way to grow past its automatic compact/wide size. |
+| P13c | `data-user-maximized` on `#feedback-dock` | The persisted maximise override. Deliberately a SEPARATE attribute from `data-size` (which `applyDockSize()` still only ever sets to `compact`/`wide` — exactly two automatic sizes, unchanged): the maximised CSS rule (`.feedback-dock[data-user-maximized="true"]`) composes on top of whichever of the two is current. Missing → the maximise button toggles the DOM but nothing resizes, or a reload silently drops the user's choice. |
+
+Both dock textareas (P5 general field, `design-textareas`/`screen-textareas`/`view-textareas`) and every attachable field inside them MUST carry `data-attachable` per pattern 41 — the dock is the field most likely to be missed since it is rebuilt by `buildDesignUI()` rather than authored once inline.
 
 **Why P3/P5 carry alternates:** the dock was rebuilt for the design layer and
 its ids changed (`feedback-screen-list` → `screen-textareas`,
@@ -211,6 +231,56 @@ At least one `<section data-screen id="…" data-nav-label="…">` MUST exist
 inside the active design. A design iteration with zero screens can't collect
 per-screen feedback. With ≥2 `data-design` wrappers, exactly one MUST carry
 `data-design-active="true"` and the rest `hidden`.
+
+**Annotation layer (conditional — only when the page contains
+`[data-anno-layer]`):** the layer is optional (§ Annotation Layer
+(optional), templates.md); a design page with none of these patterns is not
+a failure. Once a page contains `data-anno-layer` anywhere, run this subset:
+
+| # | Pattern | Purpose |
+|---|---------|---------|
+| P14 | `anno-toggle` | The eye pill that toggles the whole layer — must exist once the page has any `[data-anno-layer]`, and must NOT be inside `html:not([data-template="design"])`-hidden chrome. |
+| P15 | `anno-hidden` | Body class the eye pill toggles; drives the `body.anno-hidden .anno-layer { display: none }` pixel-clean hide. |
+| P16 | `data-anno-pin` | Pin marker inside each `.anno` wrapper. |
+| P17 | `data-anno-bubble` | Bubble marker, `id` MUST match the pin's `aria-controls`. |
+| P18 | `data-annotation` on a `textarea` | The answer field the payload scan (`collectDesignDecisions`) reads. |
+| P19 | `data-comment="anno-` (prefix) on that same textarea | Required for `saveState()`/`restoreState()` to persist the answer — a `data-annotation` textarea without a matching `data-comment` loses its answer on reload. |
+| P20 | `data-attach-slot="anno-` (prefix) | Dedicated attachment mount next to the answer textarea. `initCommentAttachments()` (pattern 42) places the bar inside this mount rather than appending after the textarea — see templates.md § Attachments. |
+| P21 | `wireAnnotationLayer` | The JS that wires pins, bubbles, the eye pill and the counter. Missing → every pin renders inert. |
+| P21b | **every `data-anno` value is unique page-wide** | **Structural assertion, not a grep for a token:** collect all `data-anno="..."` values and fail on any duplicate. Two annotations sharing an id share ONE `text:anno-{id}` storage slot — the last one saved wins, the other answer is lost on reload, and both pins come back showing the same text. Their `annotations[]` payload entries collide too. Prefix ids with the screen id (`d1-s2-a1`) so uniqueness is structural. Caught in a browser on a page that numbered them `a1` per screen. |
+
+**Failure for P14–P21:** if `[data-anno-layer]` is present anywhere on the
+page but any of these is missing, treat it the same as a missing mandatory
+pattern for that iteration — a half-wired annotation layer (pins that don't
+open, or open onto a bubble that never persists) is worse than no layer at
+all. A page with **zero** `[data-anno-layer]` occurrences skips P14–P21
+entirely; it is not a design without opinions, it is a design with no
+element-level questions to ask.
+
+**Views (conditional — only when the page contains `data-view=`):** views
+are optional (§ Views (optional), templates.md); a design page with none of
+these patterns is not a failure. Once a page contains `data-view` anywhere,
+run this subset:
+
+| # | Pattern | Purpose |
+|---|---------|---------|
+| P22 | `section[data-design]` — at least one, count ≥1 | **Structural assertion, always run once `data-view=` is present:** a design iteration with views MUST still carry ≥1 `data-design`. Views never stand alone — a page with `data-view` and zero `data-design` picked the wrong template; it belongs in `decision`. |
+| P23 | `data-view-kind="decision"` OR `data-view-kind="comparison"` | Every `[data-view]` MUST declare its kind — an unrecognised or missing kind means the page invented a third shape with no reference implementation. |
+| P24 | `view-switch-item` | View segments in the top-centre switcher — required once any view exists, so switching to it is reachable without opening the ☰ panel. |
+| P25 | `screen-nav-view-item` | View entries in the panel's second `#screen-nav` group. |
+| P26 | `showView` | The JS that switches the active top-level item to a view — missing means the switcher/nav segments render but do nothing. |
+| P27 | `data-decision` inside every `[data-view-kind="decision"]` — at least one, count ≥2 | A decision-kind view with fewer than two alternatives is not a decision; reconsider whether it belongs in the artefact's mockup notes instead. |
+| P28 | `data-compare-option` inside every `[data-view-kind="comparison"]` — count ≥2 | A comparison-kind view MUST have ≥2 `article[data-compare-option]` — see § Views (optional) → View kind `comparison`. |
+| P29 | `data-decision` inside every `[data-compare-option]`'s owning `[data-view-kind="comparison"]` — one per option | Each comparison option's verdict reuses the bi-state `[data-decision]` markup, not a bespoke control. |
+| P30 | `view-textareas` | Dock mount for the per-view feedback textarea (general + per-view shown while a view is active, § Layout — Fullscreen…). |
+| P30b | `_activeView` inside the `DOMContentLoaded` restore block | Reload persistence for the active view (Work package C) — without it, a reload always drops back to design mode even if the user was reading a question view when they left. Must be tried BEFORE the pre-existing `_activeScreen` restore, with a defensive fallback to it when the stored view id no longer resolves. |
+
+**Failure for P22–P30:** if `data-view` is present anywhere on the page but
+any of these is missing (scoped to the view kind that requires it — P27 only
+applies to `decision`-kind views, P28/P29 only to `comparison`-kind views),
+treat it the same as a missing mandatory pattern for that iteration. P22 is
+the hardest failure of the set: it means the page should not have used the
+`design` template at all.
 
 ### Frozen/Active Mismatch
 
@@ -263,6 +333,7 @@ enforces the same on write.
 - Staleness math mixes seconds and milliseconds (`Date.now() / 1000`, or `_lastHeartbeatTs * 1000`) → comparison flips negative, page renders "Claude verbunden" even when the heartbeat is hours old
 - `submitFinalize` / `collectDisposition` / `collectIssueItems` missing → the final-report panel renders correctly but "Alles ausführen" does nothing on click (silent failure — no console error, no network request), or ships a payload with the user's issue selection silently emptied
 - `renderWizard` missing or never called → all wizard steps render at once, which is exactly the undifferentiated button wall the wizard replaced
+- `data-anno-layer` present but `anno-toggle` / `wireAnnotationLayer` missing → pins render but never open, or open onto a bubble whose answer is never persisted
 
 The patterns in `templates.md` (§ Claude Connection Heartbeat, § Submit
 Handler, § State Persistence, § Template: design, § Template: free)

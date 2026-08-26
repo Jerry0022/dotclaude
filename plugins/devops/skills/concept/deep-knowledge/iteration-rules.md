@@ -29,10 +29,29 @@ selections, read-only comments).
     navigation — the user still has to be able to revisit the mockups. The
     `disabled`-everything sweep MUST skip `.design-switch-item`,
     `.screen-nav-item`, `.screen-nav-design-heading`, `[data-screen-link]`,
-    `#panel-toggle`, `#feedback-toggle`, and `#feedback-close`. Textareas
-    still go `readonly` (never `disabled`, so their submitted text stays
-    legible and copyable) and submit stays unarmed — only navigation
-    controls are exempt, not the form/comment surface.
+    `#feedback-close`, and — for the optional annotation layer, when the
+    iteration uses one — `.anno-pin` and `[data-anno-summary]` (the
+    collapsed question row is a second, fully equivalent way to open the
+    same bubble; it is a real `<button>` living inside
+    `section[data-iteration]` and the click handler treats it exactly like
+    the pin, so exempting the pin but not the summary leaves the layer
+    half-navigable on a frozen tab). `#panel-toggle`, `#feedback-toggle` and
+    `#anno-toggle` live OUTSIDE `section[data-iteration]` entirely (they are
+    page-level chrome, not descendants of the iteration section the sweep
+    walks) — their entries here are decorative, kept only so this list
+    reads as the complete "controls that must survive freezing" set; the
+    sweep itself never reaches them and needs no exemption for them.
+    **When the iteration uses views (optional, see
+    templates.md § Views (optional)), also skip `.view-switch-item` and
+    `.screen-nav-view-item`** — switching to/between views must keep working
+    on a frozen tab exactly like switching designs/screens does. Textareas
+    (including annotation answers and view notes) still go `readonly`
+    (never `disabled`, so their submitted text stays legible and copyable)
+    and submit stays unarmed — only navigation controls are exempt, not the
+    form/comment surface. A view's own `[data-decision]` bi-state radios are
+    NOT exempt — they freeze `disabled` exactly like every other decision
+    card on the page (see § Freezing Design Iterations below for how their
+    submitted state is restored).
     See § Freezing Design Iterations below.
 - Only the active tab runs the heartbeat / submit UI ("music"). Clicking
   an older tab shows its frozen snapshot but does not re-arm submit.
@@ -60,9 +79,30 @@ and revisit their own submitted notes:
   are ordinary `<button>`s living inside `section[data-iteration]`, so a
   naive sweep hits them and kills exactly the walkthrough the frozen tab
   exists to preserve
-- `#panel-toggle` — the ☰ FAB that opens the panel/switcher
-- `#feedback-toggle` — the 💬 FAB that opens the feedback dock
+- `#panel-toggle` — the ☰ FAB that opens the panel/switcher. Lives OUTSIDE
+  `section[data-iteration]` (page-level chrome), so the sweep never reaches
+  it in the first place; listed here only for completeness.
+- `#feedback-toggle` — the 💬 FAB that opens the feedback dock. Same
+  outside-the-section caveat as `#panel-toggle` above — decorative entry.
 - `#feedback-close` — the dock's minimise control
+- `.anno-pin` — the (optional) annotation layer's pins, when the iteration
+  uses one. Freezing must not strand the user unable to reopen a bubble to
+  re-read their own past answer.
+- `[data-anno-summary]` — the annotation layer's collapsed question row (the
+  truncated-question button shown instead of the full pin+bubble in some
+  layouts). It is a real `<button>` inside `section[data-iteration]` and the
+  click handler treats it as fully equivalent to `.anno-pin` for opening a
+  bubble — exempt it alongside the pin, or the row goes dead on a frozen tab
+  while the pin next to it keeps working.
+- `#anno-toggle` — the annotation layer's eye pill. It must keep toggling
+  the layer on a frozen tab exactly as it does on the live one. Also lives
+  OUTSIDE `section[data-iteration]`, same decorative caveat as
+  `#panel-toggle`/`#feedback-toggle` above.
+- `.view-switch-item` — the view segments in the top-centre switcher, when
+  the iteration uses views (optional, templates.md § Views (optional)).
+- `.screen-nav-view-item` — the view entries in the panel's second nav
+  group. Their (non-interactive) `.screen-nav-views-heading` label needs no
+  exemption — it was never disabled in the first place.
 
 Everything else in a frozen `design` iteration follows the same rule as any
 other frozen iteration: comment textareas become `readonly` (so the
@@ -70,7 +110,10 @@ submitted text stays visible but not editable), and the submit block is
 inert — no re-arming iterate/implement from a frozen tab. `readonly`, not
 `disabled`, is important here: a `disabled` textarea's value can render as
 unreadable/greyed-out in some browsers, defeating the "revisit past
-feedback" purpose that exists for every template.
+feedback" purpose that exists for every template. This applies to
+annotation answer textareas (`textarea[data-annotation]`) the same as to
+every other comment field — they go `readonly`, never `disabled`, and their
+submitted answer is what the reader sees when they reopen the pin's bubble.
 
 **The feedback dock needs explicit handling.** Its textareas are built by
 JS and live OUTSIDE `section[data-iteration]`, so the freeze sweep never
@@ -80,13 +123,42 @@ also requires embedding the submitted comments in the frozen section:
 
 ```html
 <script type="application/json" data-frozen-feedback>
-  {"general": "…", "designs": {"dispatch": "…"}, "screens": {"d1-s1": "…"}}
+  {"general": "…", "designs": {"dispatch": "…"}, "screens": {"d1-s1": "…"}, "views": {"nav-model": "…"}}
 </script>
 ```
 
 `applyDockFreezeState()` (templates.md § Layout JS) reads that blob whenever
 `body.viewing-frozen` is set, fills the dock read-only, and restores the live
-iteration's unsent text when the user switches back.
+iteration's unsent text when the user switches back. `views` follows the
+same rule as `designs`/`screens` — present (possibly `{}`) whenever the
+iteration uses views, keyed by view id, and only needed because the
+view-level dock textarea lives OUTSIDE `section[data-iteration]` just like
+the general/design/screen ones.
+
+**A frozen view's own `[data-decision]` bi-state and notes need no blob at
+all.** Unlike the dock, a view's bi-state groups and their adjacent
+`textarea[data-comment="{decisionId}-note"]` live INSIDE
+`section[data-iteration]` (§ Views (optional), templates.md) — so the
+generic freeze sweep already reaches them exactly the way it reaches every
+other decision card on the page: the freeze step sets the `checked`
+attribute on the radio matching the user's submitted `evaluation` and adds
+`disabled` to both radios, and sets the note textarea's submitted value with
+`readonly` (never `disabled`). Reopening a frozen tab and clicking into that
+view shows the exact submitted bi-state and note, already rendered, with no
+JS read step — same "no JSON blob, no JS read step" shortcut the annotation
+layer gets, for the same DOM-location reason.
+
+**The (optional) annotation layer needs no such blob.** Unlike the dock,
+`[data-anno-layer]` and its `.anno` pins live INSIDE
+`section[data-iteration]` (§ Annotation Layer (optional), templates.md), so
+the freeze sweep already reaches their textareas the same way it reaches
+every other comment field on the page. A frozen annotation's answer is
+simply whatever text is already sitting in
+`textarea[data-annotation]` in that section's static HTML — set it to the
+user's submitted answer and mark it `readonly` (never `disabled`, same rule
+as above), and it renders correctly the moment the user reopens that pin's
+bubble on the frozen tab. No JSON blob, no JS read step, no extra freeze
+step beyond "same as every other comment textarea".
 
 **The panel itself switches to `#panel-frozen`** on any non-live tab — a short
 "this is an earlier round, it is read-only" note plus a back-link to the live

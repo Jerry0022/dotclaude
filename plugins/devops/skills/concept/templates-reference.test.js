@@ -86,6 +86,36 @@ describe("concept templates reference — embedded code integrity", () => {
     expect(md).toContain("getElementById('back-to-live-btn')");
   });
 
+  // The double-wiring defect this pins: initCommentAttachments() used to
+  // match textarea[data-comment], which is a superset of the attachable
+  // fields (plain comment-only textareas carry data-comment too, and
+  // several attachable fields carry BOTH data-comment and data-attachable).
+  // Matching on data-comment either wires a second bar onto an already-slot
+  // ted field or wires one onto a field that was never meant to take a
+  // file. The marker must be data-attachable, exclusively.
+  test("initCommentAttachments matches data-attachable, not data-comment", () => {
+    const fnMatch = md.match(/function initCommentAttachments\(\) \{[\s\S]*?\n\}/);
+    expect(fnMatch).not.toBeNull();
+    const body = fnMatch[0];
+    expect(body).toContain("querySelectorAll('textarea[data-attachable]')");
+    expect(body).not.toContain("querySelectorAll('textarea[data-comment]')");
+  });
+
+  // A QuotaExceededError from an unguarded localStorage.setItem throws out
+  // of every change/input handler and silently kills all further
+  // persistence — every call site in the reference (state save + both
+  // submit-queue "-pending" writes) MUST go through the guard.
+  test("every localStorage.setItem call site is guarded", () => {
+    const rawCalls = jsBlocks.flatMap((b) => b.code.match(/localStorage\.setItem\(/g) || []);
+    const guardDef = md.match(/function _guardedSetItem\(key, value\) \{[\s\S]*?\n\}/);
+    expect(guardDef).not.toBeNull();
+    const guardOwnCalls = (guardDef[0].match(/localStorage\.setItem\(/g) || []).length;
+    // Every raw call outside the guard's own body must be zero — i.e. the
+    // only literal localStorage.setItem( calls in the whole reference are
+    // the ones inside _guardedSetItem itself.
+    expect(rawCalls.length).toBe(guardOwnCalls);
+  });
+
   test("every id the JS looks up is declared in the reference markup", () => {
     const used = new Set();
     const re = /getElementById\(['"]([A-Za-z0-9_-]+)['"]\)/g;

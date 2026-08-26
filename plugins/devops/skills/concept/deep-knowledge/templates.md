@@ -132,6 +132,30 @@ must see their own language. The locale hint is authoritative.
 | `design.switch_label`          | Switch design                  | Design wechseln |
 | `design.position_iteration`    | Iteration                      | Iteration |
 | `design.position_page`         | Page                           | Seite |
+| `anno.toggle_show`             | Show annotations                | Anmerkungen einblenden |
+| `anno.toggle_hide`             | Hide annotations                | Anmerkungen ausblenden |
+| `anno.answer_placeholder`      | Your answer…                    | Deine Antwort… |
+| `anno.pin_label`                | Question {n}                    | Frage {n} |
+| `design.nav_views_heading`     | Questions                       | Fragen |
+| `design.feedback_view`         | Notes on this view               | Anmerkungen zu dieser Ansicht |
+| `design.feedback_view_placeholder` | Write a note on this view…  | Notiz zu dieser Ansicht… |
+| `view.compare_favourite`       | Favourite                       | Favorit |
+| `view.compare_no_preference`   | No preference                   | Keine Präferenz |
+| `view.compare_criteria`        | Criteria                        | Kriterien |
+| `panel.maximize`               | Maximize                        | Maximieren |
+| `panel.restore_size`           | Restore size                    | Größe wiederherstellen |
+| `attach.button_title`          | Attach file (or Ctrl+V / drag & drop) | Datei anhängen (oder Strg+V / hierher ziehen) |
+| `attach.hint`                  | Ctrl+V or drop any file          | Strg+V oder beliebige Datei ablegen |
+| `attach.not_synced`            | not yet synced                  | noch nicht synchronisiert |
+| `attach.uploading`             | Uploading…                      | Wird hochgeladen… |
+| `attach.remove`                | Remove attachment                | Anhang entfernen |
+| `attach.retry`                 | Retry upload                     | Upload wiederholen |
+| `attach.error_generic`         | Upload failed                    | Upload fehlgeschlagen |
+| `attach.error_too_large`       | File too large for this bridge   | Datei zu groß für diese Bridge |
+| `attach.error_quota`           | Storage full on the bridge       | Speicher auf der Bridge voll |
+| `attach.error_disk_full`       | Bridge disk is full               | Bridge-Festplatte ist voll |
+| `attach.error_offline`         | Bridge unreachable — kept locally, will retry on reconnect | Bridge nicht erreichbar — lokal gespeichert, Wiederholung bei Verbindung |
+| `state.persist_failed`         | Could not save your changes locally — storage is full. Free up space or export your work soon. | Deine Änderungen konnten lokal nicht gespeichert werden — der Speicher ist voll. Platz freigeben oder Arbeit bald exportieren. |
 
 **`design.position_iteration` and `design.position_page` are label words,
 not full sentences** — the numbers (`N`, `total`) are live spans the JS
@@ -615,11 +639,12 @@ exactly two options.
 ### HTML
 
 Every `[data-decision]` group MUST be followed by an adjacent
-`<textarea data-comment="$decisionId-note">` so the user can attach a
-free-form override (e.g. "only for X", "with variant Y") to the bi-state
-choice. Place the textarea inside the same row container so the comment is
-visually anchored to the card. The catch-all `collectAllFormFields` picks
-it up via `data-comment` without any collector change.
+`<textarea data-comment="$decisionId-note" data-attachable>` so the user can
+attach a free-form override (e.g. "only for X", "with variant Y") to the
+bi-state choice, and attach a file to it (§ Attachments). Place the textarea
+inside the same row container so the comment is visually anchored to the
+card. The catch-all `collectAllFormFields` picks it up via `data-comment`
+without any collector change.
 
 ```html
 <div class="variant-evaluation" data-decision="variant-a" data-label="Variant A">
@@ -637,6 +662,7 @@ it up via `data-comment` without any collector change.
     <label for="variant-a-note">{{decision.comment_label}}</label>
     <textarea id="variant-a-note"
               data-comment="variant-a-note"
+              data-attachable
               placeholder="{{decision.comment_placeholder}}"
               rows="2"></textarea>
   </div>
@@ -1001,6 +1027,13 @@ buttons:
 - **Do NOT invent artificial screens** to make the template fit. If the
   artefact has no meaningful secondary state, leave it as a single screen
   and let the dock collapse to general notes only.
+- **Views are optional, additional top-level items — ≥1 `data-design` stays
+  mandatory.** Alongside the design(s), a `design` iteration MAY hold any
+  number of `section[data-view]` siblings (§ Views (optional) below). Views
+  never stand alone: an iteration that is only questions, with no artefact
+  in front of the user, is a `decision` iteration, not a `design` one with
+  zero designs. The validation gate enforces this — see
+  `deep-knowledge/validation-gate.md`.
 - **Design system alignment:** the mockup MUST use the project's existing
   design tokens (colors, typography, spacing, component shapes) unless the
   user explicitly requests a different look. Read `design-tokens.*`,
@@ -1008,6 +1041,17 @@ buttons:
   layer before inventing a style. The example in this file uses the generic
   GitHub-style palette only because dotclaude has no project-specific
   tokens — consumer projects will differ.
+- **Annotation layer is optional.** Only pin questions onto a screen when
+  Claude has a concrete, element-level question to ask ("should this list
+  auto-refresh?", "is this the right empty state?") — not as a default
+  decoration on every design iteration. A design with no annotations simply
+  omits `[data-anno-layer]` entirely; nothing degrades. See § Annotation
+  Layer (optional) below. The layer's pin/bubble/leader visuals MAY be
+  restyled via its CSS custom properties (`--anno-accent`,
+  `--anno-bubble-bg`, `--anno-pin-size`, …) to match the design's own theme
+  — never change the toggle semantics (`body.anno-hidden`) or the
+  `data-anno*` attribute names when doing so, since the shared JS and the
+  submit payload both key off them.
 
 ## Click-through wiring (`data-screen-link`)
 
@@ -1063,6 +1107,369 @@ page: it is the first thing that looks broken when concepts sit side by side.
   switch back to iteration N via the iteration-tabs and re-read their frozen
   notes per screen.
 
+## Annotation Layer (optional)
+
+A second, independent feedback channel: instead of (or alongside) the 💬
+dock's free-form notes, Claude can pin a numbered question directly onto a
+concrete element of a screen and the user answers it right there. Use it
+only when there is a concrete, element-level question — it is not a default
+decoration on every screen.
+
+- **Pin + short leader line to a bubble.** A numbered pin (`data-anno-pin`)
+  sits on the annotated element; a short leader line connects it to a speech
+  bubble (`data-anno-bubble`) beside it. Collapsed, the bubble shows one
+  truncated line of the question plus a chevron. Expanded
+  (`data-open="true"`), it shows the full question, an answer textarea and
+  an attachment drop area.
+- **Positioned in percentages, not pixels.** `--anno-x` / `--anno-y` on the
+  wrapping `.anno` element place the pin as a percentage of the screen box,
+  so it survives any viewport size. `data-anno-side="right|left|top|bottom"`
+  picks which side the bubble opens on — Claude chooses this at generation
+  time from the element's position in the mock; there is no runtime
+  collision math.
+- **The eye pill (`#anno-toggle`) toggles the whole layer**, globally, for
+  every screen — not per screen. It shows a live count of annotations on
+  the *current* screen and is the only thing that stays visible once the
+  layer is hidden, so the user can always bring it back. It only renders
+  when the active screen has ≥1 annotation (`updateAnnoUI()`, § Layout JS).
+  Hiding the layer (`body.anno-hidden`) removes pins, leaders and bubbles
+  completely — the design underneath must be pixel-clean, not just dimmed.
+- **The two existing FABs are untouched.** ☰ and 💬 keep working exactly as
+  before, independently of the annotation layer's state — the feedback dock
+  remains the normal way to leave free-form notes whether the layer is
+  shown or hidden.
+- **Answers persist for free.** The answer textarea carries
+  `data-comment="anno-{id}"`, so the existing `saveState()` / `restoreState()`
+  (§ State Persistence) picks it up with zero extra code, exactly like any
+  other comment field. The layer's own visibility (`body.anno-hidden`) is
+  persisted the same way `state['theme']` is (§ State Persistence).
+- **Attachments.** Each answer textarea carries `data-annotation="{id}"`
+  and `data-attachable`, plus an adjacent mount
+  `<div class="attach-slot" data-attach-slot="anno-{id}"></div>`. §
+  Attachments wires exactly one attachment bar per field: it matches on
+  `data-attachable` — not `data-comment`, which the textarea also carries,
+  so matching on it would double-wire — and mounts the bar into this
+  dedicated `.attach-slot` instead of appending after the textarea.
+- **Frozen iterations stay browsable.** `.anno-pin`, `[data-anno-summary]`
+  and `#anno-toggle` are exempt from the freeze sweep exactly like
+  `.design-switch-item` and `#panel-toggle` — see `iteration-rules.md` §
+  Freezing Design Iterations. The summary row must be exempt alongside the
+  pin: it is a second, fully equivalent way to open the same bubble, and
+  exempting only the pin leaves the layer half-navigable on a frozen tab.
+  Answer textareas become `readonly`, never `disabled`.
+- **Click-through safety.** A click on a pin, a summary row, or inside a
+  bubble must never be interpreted as `data-screen-link` navigation, even
+  though all three live inside the same `[data-screen]` — the click-through
+  handler (§ Click-through Handler) explicitly ignores `[data-anno-pin]`,
+  `[data-anno-summary]` and `.anno-bubble` before it looks for a navigation
+  target.
+
+See § Layout (markup), § Layout CSS (pin/bubble/eye-pill styling and the
+top-edge partition) and § Layout JS (`wireAnnotationLayer()`) below for the
+reference implementation, and § Screen-pattern markup for a worked example.
+
+## Views (optional)
+
+A third, independent thing a `design` iteration may hold: non-visual
+questions that belong **inside** the same round as the artefact they are
+about, instead of being deferred to a separate `decision` iteration one
+round later. A `section[data-view]` is a **top-level sibling of
+`section[data-design]`** — switched exactly like a design, fullscreen, with
+its own entry in the switcher and the panel TOC.
+
+```html
+<section data-iteration="3" data-iteration-template="design" data-active>
+  <section data-design="dispatch" data-nav-label="Dispatch board" data-design-active="true">
+    <section id="d1-s1" data-screen data-nav-label="Overview" data-screen-active="true">…</section>
+    <section id="d1-s2" data-screen data-nav-label="Detail" hidden>…</section>
+  </section>
+
+  <section data-view="nav-model" data-view-kind="decision"
+           data-nav-label="Navigation model" hidden>…</section>
+
+  <section data-view="card-density" data-view-kind="comparison"
+           data-nav-label="Card density A/B" hidden>…</section>
+</section>
+```
+
+**Rules:**
+
+- **≥1 `data-design` is mandatory** — see § Rules above. Views are never the
+  only top-level content.
+- **Exactly one top-level item is active** at a time: a design carrying
+  `data-design-active="true"` (and NOT `hidden`) or a view carrying
+  `data-view-active="true"` (and NOT `hidden`). Every other top-level item —
+  every other design, every other view — carries `hidden`. `showView()` and
+  `showDesign()` (§ Layout JS) both maintain this invariant; neither ever
+  leaves two top-level items simultaneously visible.
+- **Authored markup always makes a DESIGN the active item, never a view.**
+  A view becomes active only at runtime, through `showView()` — from the
+  switcher, the panel TOC, or the `_activeView` restore after a reload.
+  This is not a style preference: `buildDesignUI()` early-returns without an
+  active design, which would leave the switcher, both nav groups and all
+  three dock textarea containers unbuilt. The same rule holds after a tab
+  switch — the `iteration:changed` handler deliberately drops back to the
+  incoming iteration's active design (§ Layout JS).
+- `data-view` ids are unique **page-wide** — and this is the one id space
+  where that matters, so do not pattern-match it off the others. Design ids
+  and screen ids deliberately REPEAT across iterations (that is what lets
+  `harvestDockValues()` carry a note forward when the same screen reappears
+  in the next round); a view id that repeated would collide in exactly the
+  places where designs and screens are meant to.
+- **A view scrolls; a design screen does not.** `body` keeps
+  `overflow: hidden` in `design` mode throughout — only the active view's own
+  box scrolls internally (`overflow-y: auto`), never the page. See § Layout CSS.
+- **When to use a view instead of a separate `decision` iteration** (also
+  stated in `SKILL.md` § Step 1a): the question is *about the artefact in
+  front of you* right now → a view inside this `design` iteration. The
+  question stands on its own, independent of any one mockup → its own
+  `decision` iteration. When in doubt, ask whether the user would need to
+  flip back to a screen to answer sensibly — if yes, it is a view.
+- **Navigation.** `#screen-nav` gains a second `.screen-nav-group` below the
+  designs group, headed by a plain (non-interactive) `.screen-nav-views-heading`
+  label, then one `.screen-nav-view-item` button per view. The top-centre
+  switcher (`#design-switcher`) lists designs and views in one row: design
+  segments (`.design-switch-item`), a thin `.switcher-divider`, then view
+  segments (`.view-switch-item`) — one click from anywhere, no detour through
+  the ☰ panel. Both are auto-populated by `buildDesignUI()`, exactly like the
+  design-only case.
+- **Screen indicator.** While a view is active, `#screen-indicator` shows the
+  view's `data-nav-label` instead of the screen counter — the "Page N/total"
+  segment (`#indicator-screen-info`) hides, `#indicator-view` shows. Every
+  mount is null-guarded, same discipline as every other indicator segment.
+- **Feedback dock.** While a view is active, the dock shows **general +
+  one view-level textarea** (`data-comment="view-{id}"`,
+  `data-view-comment="{id}"`, label from the view's `data-nav-label`) and
+  hides the per-design and per-screen rows; the reverse holds while a design
+  is active. The view textareas are built **once per iteration** by
+  `buildViewTextareas()`, in the same build-once-per-iteration + hidden-swap
+  pattern `buildDesignTextareas()`/`buildScreenTextareas()` already use —
+  never rebuilt on a design/view switch, for the same reason documented at
+  the top of § Layout JS: a rebuild would drop unsent text and truncate the
+  submit payload.
+- **Click-through safety.** The `data-screen-link` click-through handler
+  (§ Click-through Handler) is scoped to the visible design and returns
+  immediately whenever a view is active (`body[data-view-active="true"]`) —
+  a stray `data-screen-link` button reachable only through markup reuse must
+  never fire screen navigation while the user is looking at a view.
+- **Freezing.** A frozen `design` iteration stays fully browsable: view
+  switching and the view nav keep working, exactly like the design switcher
+  and screen nav today. See `iteration-rules.md` § Freezing Design
+  Iterations for the exact exemption list and how a frozen view's submitted
+  values (bi-state selections, notes) are restored.
+
+### View kind `decision`
+
+Reuses the decision template's proven bi-state mechanics wholesale — no new
+markup vocabulary. A `data-view-kind="decision"` view is a fullscreen frame
+(heading + free prose authored above/between the alternatives) around one
+or more `[data-decision]` groups, each with the same bi-state
+(`Miteinbeziehen` / `Verwerfen`, default include) and the same mandatory
+adjacent `textarea[data-comment="{decisionId}-note"]` as § Bi-State Variant
+Evaluation. `ensureCommentSlots()` (§ Comment Slot Injection) already runs
+page-wide on `DOMContentLoaded` and reaches every `[data-decision]` group
+regardless of which template or view it lives in — nothing view-specific
+needs wiring there. What changes is only the frame: fullscreen, no sidebar,
+no 340px card constraint, so alternatives can carry as much authored context
+as the question needs.
+
+```html
+<section data-view="nav-model" data-view-kind="decision" data-nav-label="Navigation model" hidden>
+  <div class="view-frame">
+    <h2>Navigation model</h2>
+    <p>Tabs or a drawer for the second level? Both are wired in the mockup —
+       flip back to Dispatch board to try either one before deciding.</p>
+
+    <div class="variant-evaluation" data-decision="nav-tabs" data-label="Tabs">
+      <h3>Tabs</h3>
+      <p>Always-visible, one click, costs permanent header height.</p>
+      <div class="eval-group">
+        <label class="eval-option">
+          <input type="radio" name="eval-nav-tabs" value="discard">
+          <span class="eval-label">Verwerfen</span>
+        </label>
+        <label class="eval-option">
+          <input type="radio" name="eval-nav-tabs" value="include" checked>
+          <span class="eval-label">Miteinbeziehen</span>
+        </label>
+      </div>
+      <div class="field-row decision-comment-row">
+        <label for="nav-tabs-note">{{decision.comment_label}}</label>
+        <textarea id="nav-tabs-note" data-comment="nav-tabs-note" data-attachable
+                  placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+      </div>
+    </div>
+
+    <div class="variant-evaluation" data-decision="nav-drawer" data-label="Drawer">
+      <h3>Drawer</h3>
+      <p>Hidden by default, saves header height, one extra click per visit.</p>
+      <div class="eval-group">
+        <label class="eval-option">
+          <input type="radio" name="eval-nav-drawer" value="discard">
+          <span class="eval-label">Verwerfen</span>
+        </label>
+        <label class="eval-option">
+          <input type="radio" name="eval-nav-drawer" value="include" checked>
+          <span class="eval-label">Miteinbeziehen</span>
+        </label>
+      </div>
+      <div class="field-row decision-comment-row">
+        <label for="nav-drawer-note">{{decision.comment_label}}</label>
+        <textarea id="nav-drawer-note" data-comment="nav-drawer-note" data-attachable
+                  placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+      </div>
+    </div>
+  </div>
+</section>
+```
+
+**Rules:**
+- Mandatory: ≥2 named alternatives (`[data-decision]` groups), each with the
+  bi-state selector and its adjacent note textarea.
+- `.view-frame` is a plain wrapper (no positioning of its own) — the view's
+  own `overflow-y: auto` scroll box does the layout work, see § Layout CSS.
+- `collectDesignDecisions()` (§ collectDecisions (design branch)) scans every
+  `[data-decision]` group inside every view of the active iteration — not
+  just the one on screen — and tags each entry with `view: "{viewId}"`. See
+  § Decision schema.
+
+### View kind `comparison` — mandatory skeleton, free interior
+
+Deliberately loose, the same way the design template's mockups are loose:
+Claude is free to author whatever the comparison needs, as long as the
+mandatory skeleton below is present. **Freedom here is a requirement, not an
+afterthought** — do not pad every comparison view with every optional block
+just because it is documented below.
+
+**Mandatory:**
+- a heading stating the question,
+- **≥2** `article[data-compare-option="{id}"]`, each with a title and a free
+  body (Claude may put anything inside — bullet points, a small mock,
+  metrics, prose),
+- a verdict control per option — the same bi-state (`Miteinbeziehen` /
+  `Verwerfen`) as § Bi-State Variant Evaluation, keyed
+  `data-decision="{optionId}"` so it reuses `ensureCommentSlots()` and
+  `collectDesignDecisions()` unchanged; an additional "favourite" radio group
+  (`name="compare-favourite-{viewId}"`) is allowed but never replaces the
+  per-option bi-state,
+- one note `textarea[data-attachable]` per option **and** one for the view as
+  a whole — all wired the same way as every other comment slot (§ State
+  Persistence picks them up via `data-comment`; `data-attachable` is the
+  hook § Attachments wires, appending a bar since these notes have no
+  dedicated `.attach-slot` mount).
+
+**Two layouts, both first-class — pick per comparison via
+`data-compare-layout`:**
+
+| Value | Shape | Use when |
+|---|---|---|
+| `grid` | Option cards side by side in a `repeat(auto-fit, minmax(280px, 1fr))` grid | The options differ in SHAPE — each needs its own preview, mockup fragment or prose |
+| `table` | One `table.cmp-table`: criteria as rows, options as columns, the evaluation controls in a final row | The options differ in VALUES along shared criteria — the reader wants to scan one row and compare like with like |
+
+Reach for `table` whenever the same handful of criteria applies to every
+option. A grid of cards then forces the reader to hop between columns to
+compare a single criterion, which is precisely the work a comparison view
+exists to remove. `.cmp-table` keeps its own horizontal scroll container so a
+five-option comparison never widens the page.
+
+**Optional, freely combinable — use only what the comparison needs:**
+- a criteria matrix (`table.cmp-matrix`, criteria as rows, options as
+  columns, an optional per-cell rating `<select>`) — this is the `grid`
+  layout's companion; with `data-compare-layout="table"` the matrix IS the
+  view and a second one is redundant,
+- per-criterion weight sliders,
+- pros/cons lists per option,
+- meta chips (effort, risk, cost — whatever is relevant),
+- live mockup fragments reusing `.device-frame` from § Screen-pattern markup,
+- a "no preference" escape checkbox/radio.
+
+```html
+<section data-view="card-density" data-view-kind="comparison" data-nav-label="Card density A/B" hidden>
+  <div class="view-frame view-compare" data-compare-layout="grid">
+    <h2>Which card density for the dispatch board?</h2>
+    <p>Both are wired into the Dispatch board mockup — switch back and try
+       scrolling a full shift's worth of calls in each before deciding.</p>
+
+    <div class="cmp-options">
+      <article class="cmp-option" data-compare-option="compact">
+        <h3>Compact</h3>
+        <p>More calls per screen, denser typography, icon-only actions.</p>
+        <!-- optional: pros/cons, meta chips, a .device-frame fragment -->
+        <div class="eval-group" data-decision="compact" data-label="Compact">
+          <label class="eval-option">
+            <input type="radio" name="eval-compact" value="discard">
+            <span class="eval-label">Verwerfen</span>
+          </label>
+          <label class="eval-option">
+            <input type="radio" name="eval-compact" value="include" checked>
+            <span class="eval-label">Miteinbeziehen</span>
+          </label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="compact-note">{{decision.comment_label}}</label>
+          <textarea id="compact-note" data-comment="compact-note" data-attachable
+                    placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </article>
+
+      <article class="cmp-option" data-compare-option="comfortable">
+        <h3>Comfortable</h3>
+        <p>Fewer calls per screen, larger tap targets, labelled actions.</p>
+        <div class="eval-group" data-decision="comfortable" data-label="Comfortable">
+          <label class="eval-option">
+            <input type="radio" name="eval-comfortable" value="discard">
+            <span class="eval-label">Verwerfen</span>
+          </label>
+          <label class="eval-option">
+            <input type="radio" name="eval-comfortable" value="include" checked>
+            <span class="eval-label">Miteinbeziehen</span>
+          </label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="comfortable-note">{{decision.comment_label}}</label>
+          <textarea id="comfortable-note" data-comment="comfortable-note" data-attachable
+                    placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </article>
+    </div>
+
+    <!-- Optional favourite pick, additive to the per-option bi-state above. -->
+    <fieldset class="cmp-favourite">
+      <legend>{{view.compare_favourite}}</legend>
+      <label><input type="radio" name="compare-favourite-card-density" value="compact"> Compact</label>
+      <label><input type="radio" name="compare-favourite-card-density" value="comfortable"> Comfortable</label>
+      <label><input type="radio" name="compare-favourite-card-density" value=""> {{view.compare_no_preference}}</label>
+    </fieldset>
+
+    <div class="field-row decision-comment-row">
+      <label for="card-density-view-note">{{decision.comment_label}}</label>
+      <textarea id="card-density-view-note" data-comment="card-density-view-note" data-attachable
+                placeholder="{{decision.comment_placeholder}}" rows="3"></textarea>
+    </div>
+  </div>
+</section>
+```
+
+**Layout:** `.cmp-options` is a CSS grid, `repeat(auto-fit, minmax(280px, 1fr))`
+— 2–4 candidates sit side by side and **wrap to a new row instead of
+shrinking** below a readable width. `data-compare-layout` on `.view-compare`
+is a layout hint Claude may set (`"grid"` default, `"stacked"` when the
+options genuinely need full width each) — purely presentational, no JS reads
+it today.
+
+**Rules:**
+- Mandatory skeleton only: ≥2 `[data-compare-option]`, a per-option
+  bi-state, one note per option + one for the view. Everything else is
+  optional and freely combinable — do not treat the optional list as a
+  checklist to fulfil.
+- Each `[data-compare-option]`'s bi-state reuses `data-decision="{optionId}"`
+  verbatim, so it is collected exactly like any other decision (tagged with
+  `view: "{viewId}"`, § Decision schema) — do not invent a parallel
+  "verdict" schema.
+- The "favourite" radio group, when present, carries no `data-decision` and
+  is picked up by the generic form catch-all (`el.name`/`el.id` key) like any
+  other named input — it augments, never replaces, the per-option verdicts.
+
 ## Layout — Fullscreen single-screen + Overlay Panel + Feedback Dock
 
 ```html
@@ -1100,6 +1507,15 @@ page: it is the first thing that looks broken when concepts sit side by side.
               <div class="device-frame">…mock…</div>
             </section>
           </section>
+
+          <!-- Views — OPTIONAL top-level siblings of section[data-design],
+               never a replacement for the ≥1 design above. See § Views
+               (optional) and § Screen-pattern markup → View sections for the
+               full worked examples of both kinds. -->
+          <section data-view="nav-model" data-view-kind="decision"
+                    data-nav-label="Navigation model" hidden>…</section>
+          <section data-view="card-density" data-view-kind="comparison"
+                    data-nav-label="Card density A/B" hidden>…</section>
         </section>
       </main>
     </div>
@@ -1124,18 +1540,52 @@ page: it is the first thing that looks broken when concepts sit side by side.
            must carry all four. -->
       <span id="indicator-iteration" hidden>{{design.position_iteration}} <strong id="active-iteration-idx">1</strong> · </span>
       <span id="indicator-design" hidden><strong id="active-design-label">Dispatch</strong> · </span>
-      {{design.position_page}} <strong id="active-screen-idx">1</strong> / <span id="total-screens">3</span>
-      · <span id="active-screen-label">Welcome</span>
+      <!-- Screen-counter segment — swaps out entirely (not just dimmed) for
+           #indicator-view below while a view is active. Both are
+           null-guarded by updateIndicator() (§ Layout JS), so a page that
+           omits one of the two degrades silently rather than throwing. -->
+      <span id="indicator-screen-info">
+        {{design.position_page}} <strong id="active-screen-idx">1</strong> / <span id="total-screens">3</span>
+        · <span id="active-screen-label">Welcome</span>
+      </span>
+      <!-- View-label segment — OPTIONAL, only ever shown while a
+           section[data-view] is the active top-level item (§ Views
+           (optional)). hidden by default so a page with no views never
+           shows an empty strong tag. -->
+      <span id="indicator-view" hidden><strong id="active-view-label">Navigation model</strong></span>
     </div>
+
+    <!-- Annotation layer eye pill — OPTIONAL, only emitted when at least one
+         screen carries [data-anno-layer]. Sits on the left edge directly
+         BELOW #screen-indicator (never in the top-left corner itself, which
+         the indicator owns) — see § Layout CSS for the exact offset and the
+         updated top-edge partition comment. `hidden` by default; JS
+         (updateAnnoUI(), § Layout JS) reveals it only when the ACTIVE screen
+         has ≥1 annotation, and keeps the count live across screen/iteration
+         switches. aria-pressed / aria-label reflect body.anno-hidden. -->
+    <button id="anno-toggle" class="anno-toggle-fab" type="button" hidden
+            aria-pressed="true"
+            aria-label="{{anno.toggle_hide}}"
+            data-label-show="{{anno.toggle_show}}"
+            data-label-hide="{{anno.toggle_hide}}">
+      <span class="anno-eye" aria-hidden="true">👁</span>
+      <span id="anno-count" class="anno-count">0</span>
+    </button>
 
     <!-- Design switcher (ghost bar, top centre) — one segment per
          <section data-design>, only rendered when the iteration has ≥2
          designs (hidden via body[data-single-design], see Layout CSS).
          Auto-populated by buildDesignUI(); resting state shows only the
          active label (CSS collapses the rest), hover/:focus-within expands
-         to the full segmented control. -->
+         to the full segmented control.
+         When the iteration ALSO has ≥1 view (§ Views (optional)),
+         buildDesignUI() appends a thin .switcher-divider then one
+         .view-switch-item per view, in the SAME row — switching between a
+         design and a question about it is one click from anywhere. -->
     <nav class="design-switcher" id="design-switcher" aria-label="{{design.switch_label}}">
-      <!-- auto-populated: one <button class="design-switch-item"> per design -->
+      <!-- auto-populated: one <button class="design-switch-item"> per
+           design, then (if any) a <span class="switcher-divider"> and one
+           <button class="view-switch-item"> per view -->
     </nav>
 
     <!-- Two FABs — the only floating UI besides the screen itself.
@@ -1163,7 +1613,13 @@ page: it is the first thing that looks broken when concepts sit side by side.
              The ● marker applies at both levels: a design heading shows it
              when ANY of its pages, or its own design-level comment field,
              carries unsubmitted text. Clicking either level switches and
-             closes the panel. -->
+             closes the panel.
+             A SECOND .screen-nav-group renders below the designs group
+             whenever the iteration has ≥1 view (§ Views (optional)): a
+             plain, non-interactive .screen-nav-views-heading label, then
+             one .screen-nav-view-item button per view. Own class family
+             (screen-nav-view-*) so it can be styled independently of the
+             design nav items it sits below. -->
       </nav>
       <div id="panel-ready">
         <!-- Connection status pill — same inline, non-blocking contract as the
@@ -1240,15 +1696,22 @@ page: it is the first thing that looks broken when concepts sit side by side.
          CLOSED by default (data-open="false"): at concept start the user
          wants to look at the mockup, not at three empty textareas covering
          it. data-size is written by applyDockSize() — see Layout JS. -->
-    <aside class="feedback-dock" id="feedback-dock" data-open="false" data-size="compact">
+    <aside class="feedback-dock" id="feedback-dock" data-open="false" data-size="compact" data-user-maximized="false">
       <div class="feedback-dock-header">
         <strong>Feedback</strong>
+        <!-- Maximise (Work package B) is a distinct control from minimise:
+             minimise CLOSES the dock (data-open toggle), maximise RESIZES it
+             (data-size override) without touching data-open at all. The two
+             must never be merged into one button. -->
+        <button id="feedback-maximize" class="feedback-maximize-btn" aria-pressed="false"
+                aria-label="{{panel.maximize}}" title="{{panel.maximize}}">⤢</button>
         <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" title="{{panel.minimize}}">−</button>
       </div>
       <div class="feedback-section">
         <label>{{proto.feedback_general}}</label>
-        <textarea id="design-general-feedback" data-comment="general"
+        <textarea id="design-general-feedback" data-comment="general" data-attachable
                   placeholder="{{proto.feedback_general}}"></textarea>
+        <div class="attach-slot" data-attach-slot="general"></div>
       </div>
       <div class="feedback-divider"></div>
       <!-- Design row — omitted for single-design iterations via
@@ -1268,6 +1731,20 @@ page: it is the first thing that looks broken when concepts sit side by side.
              data-screen-comment="{screen-id}" — so saveState/restoreState
              treats it like any comment field. -->
         <div id="screen-textareas" data-placeholder="{{proto.feedback_placeholder}}"><!-- auto-populated --></div>
+      </div>
+      <div class="feedback-divider"></div>
+      <!-- View row — OPTIONAL, only present when the iteration has ≥1
+           section[data-view] (§ Views (optional)). Shown ONLY while a view
+           is the active top-level item (body[data-view-active="true"],
+           § Layout CSS); the design and per-screen rows above hide in that
+           state and this one takes their place — never all three visible
+           at once. One hidden textarea per view, built ONCE per iteration by
+           buildViewTextareas(), same build-once-swap-hidden discipline as
+           the design/screen rows. Each carries data-comment="view-{id}" AND
+           data-view-comment="{id}". -->
+      <div class="feedback-section">
+        <label>{{design.feedback_view}}: <strong id="dock-view-label">Navigation model</strong></label>
+        <div id="view-textareas" data-placeholder="{{design.feedback_view_placeholder}}"><!-- auto-populated --></div>
       </div>
     </aside>
   </div>
@@ -1311,6 +1788,58 @@ section[data-iteration][hidden] { display: none; }
 section[data-screen][hidden] { display: none; }
 @keyframes screen-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
+/* ── Views (optional, § Views (optional)) — top-level siblings of
+   section[data-design]. Unlike a screen, a view SCROLLS inside its own box
+   — body stays overflow:hidden throughout design mode (see the html/body
+   rule above), only .view-frame's ancestor here gets overflow-y. Same
+   position:absolute/inset:0 fullscreen treatment as a screen otherwise, so
+   switching between a design and a view never shifts the surrounding
+   chrome (indicator/switcher/FABs stay put). */
+[data-template="design"] section[data-view] {
+  position: absolute; inset: 0;
+  padding: 2rem; overflow-y: auto;
+  animation: screen-in 0.25s ease;
+}
+section[data-view][hidden] { display: none; }
+.view-frame { max-width: 860px; margin: 0 auto; }
+/* Comparison view kind — see § Views (optional) → View kind `comparison`. */
+.cmp-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin: 1.25rem 0;
+}
+.cmp-option {
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 60%, transparent);
+}
+.cmp-favourite {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 1rem;
+  border: 1px solid var(--border-color, #30363d); border-radius: 10px;
+  padding: 0.75rem 1rem; margin: 1rem 0;
+}
+.cmp-favourite legend { padding: 0 0.4rem; font-size: 0.85rem; color: var(--text-secondary); }
+/* data-compare-layout="table": the comparison IS the table. Wrapped in its
+   own scroll container so five options never widen the page — the view
+   scrolls vertically, this one horizontally, and body never scrolls. */
+.view-compare[data-compare-layout="table"] .cmp-options { display: block; overflow-x: auto; }
+.cmp-table { width: 100%; min-width: 34rem; border-collapse: collapse; margin: 1rem 0; }
+.cmp-table th, .cmp-table td {
+  border: 1px solid var(--border-color); padding: 0.55rem 0.7rem;
+  text-align: left; vertical-align: top; font-size: 0.9rem;
+}
+.cmp-table thead th { position: sticky; top: 0; background: var(--bg-secondary, #161b22); }
+.cmp-table tbody th { font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
+.cmp-table tr:hover td { background: rgba(127, 127, 127, 0.06); }
+.cmp-table .cmp-verdict-row td { border-top: 2px solid var(--border-color); }
+.cmp-matrix { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+.cmp-matrix th, .cmp-matrix td {
+  border: 1px solid var(--border-color, #30363d); padding: 0.5rem 0.75rem;
+  text-align: left; font-size: 0.9rem;
+}
+
 /* Design-only chrome: FABs, screen indicator and feedback dock exist in the
    DOM on every page but must only render in design mode. The `html` type
    selector is REQUIRED — a bare `:not([data-template="design"])` also matches
@@ -1320,7 +1849,9 @@ html:not([data-template="design"]) .screen-indicator,
 html:not([data-template="design"]) .panel-fab,
 html:not([data-template="design"]) .feedback-fab,
 html:not([data-template="design"]) .feedback-dock,
-html:not([data-template="design"]) .design-switcher { display: none !important; }
+html:not([data-template="design"]) .design-switcher,
+html:not([data-template="design"]) .anno-toggle-fab,
+html:not([data-template="design"]) .anno-layer { display: none !important; }
 
 /* Minimal screen counter — NOT a header bar.
    Left-anchored at 1rem and content-sized, so its natural width grows with
@@ -1350,6 +1881,121 @@ html:not([data-template="design"]) .design-switcher { display: none !important; 
    neighbour left is the ☰ FAB at the top right (left edge 100vw - 88px). */
 body[data-single-design="true"] .screen-indicator { max-width: calc(100vw - 8rem); }
 .screen-indicator strong { color: var(--text); }
+
+/* ── Annotation layer eye pill — left edge, directly below the screen
+   indicator (see the top-edge partition comment at .panel-fab below for the
+   3.75rem derivation). `hidden` by default in the markup; JS only unhides it
+   once the active screen has ≥1 annotation. Sits between the design switcher
+   (z-index 95) and the two FABs (z-index 100) — it is chrome of the same
+   weight as the switcher, not as load-bearing as the FABs. Theming hooks:
+   restyle via --anno-accent / --anno-bubble-bg, never by overriding this
+   rule's geometry per page (same discipline as the FAB pair below). */
+.anno-toggle-fab {
+  position: fixed; top: 3.75rem; left: 1rem; z-index: 96;
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.35rem 0.7rem; border-radius: 999px; border: none;
+  background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary); font-size: 0.8rem;
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.anno-toggle-fab:hover { transform: scale(1.04); }
+.anno-toggle-fab[hidden] { display: none; }
+.anno-toggle-fab .anno-eye { font-size: 0.95rem; line-height: 1; }
+.anno-toggle-fab .anno-count {
+  min-width: 1.1rem; text-align: center; font-weight: 600; color: var(--text);
+}
+/* Hidden layer state: the eye pill itself always stays visible/clickable
+   (it is the only remnant, per spec) — everything ELSE the layer owns
+   disappears completely, not just dims. */
+body.anno-hidden .anno-toggle-fab .anno-eye { opacity: 0.5; }
+body.anno-hidden .anno-layer { display: none !important; }
+/* Auto-hides while the ☰ panel is open, same treatment as the design
+   switcher — both are secondary chrome the overlay panel supersedes. */
+body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
+
+/* ── Annotation layer — pins pinned to a screen element via percentage
+   coordinates (--anno-x / --anno-y), each with a short leader line to a
+   speech bubble. Every visual property below is a CSS custom property with
+   a sane default so a concept can restyle the layer to match its own theme
+   without touching the data-attribute contract (§ Annotation Layer). ── */
+.anno-layer {
+  position: absolute; inset: 0; pointer-events: none; z-index: 40;
+}
+.anno {
+  position: absolute;
+  left: var(--anno-x, 50%); top: var(--anno-y, 50%);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+.anno-pin {
+  width: var(--anno-pin-size, 28px); height: var(--anno-pin-size, 28px);
+  border-radius: 50%;
+  border: 2px solid var(--anno-accent, var(--accent-color, #58a6ff));
+  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
+  color: var(--anno-accent, var(--accent-color, #58a6ff));
+  font-size: 0.8rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  transition: transform 0.15s;
+}
+.anno-pin:hover { transform: scale(1.08); }
+/* Answered pins invert to a filled state — visibly different at a glance
+   from the still-open questions. Recomputed on every input, never only at
+   generation time (see wireAnnotationLayer()). */
+.anno-pin[data-answered="true"] {
+  background: var(--anno-accent, var(--accent-color, #58a6ff));
+  color: #fff;
+}
+.anno-bubble {
+  position: absolute;
+  z-index: 1;
+  min-width: 180px; max-width: min(280px, 60vw);
+  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: var(--anno-bubble-radius, 12px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  font-size: 0.85rem;
+}
+/* One open bubble reads above every collapsed pin/bubble around it. Uses
+   :has() rather than a JS-set attribute — same pattern as the single-screen
+   collapse rules above (body[data-single-screen] .feedback-section:has(...)). */
+.anno:has(.anno-bubble[data-open="true"]) { z-index: 2; }
+.anno-bubble-summary {
+  display: flex; align-items: center; gap: 0.4rem; width: 100%;
+  padding: 0.55rem 0.75rem; border: none; background: none; cursor: pointer;
+  color: var(--text-color, #c9d1d9); text-align: left; font: inherit;
+}
+.anno-bubble-question {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.anno-bubble[data-open="true"] .anno-bubble-question { white-space: normal; }
+.anno-chevron { transition: transform 0.15s; color: var(--text-secondary); }
+.anno-bubble[data-open="true"] .anno-chevron { transform: rotate(90deg); }
+.anno-bubble-body { display: none; flex-direction: column; gap: 0.5rem; padding: 0 0.75rem 0.75rem; }
+.anno-bubble[data-open="true"] .anno-bubble-body { display: flex; }
+.anno-answer {
+  width: 100%; min-height: 64px; resize: vertical;
+  padding: 0.5rem 0.6rem; border-radius: 8px;
+  border: 1px solid var(--border-color, #30363d);
+  background: var(--input-bg, #0d1117); color: var(--text-color, #c9d1d9);
+  font: inherit;
+}
+/* Attachment mount — deliberately empty, see § Annotation Layer. */
+.attach-slot:empty { display: none; }
+/* Leader line + bubble offset, one rule pair per side. The line is a short
+   fixed-length connector (14px), never computed at runtime. */
+.anno[data-anno-side="right"] .anno-bubble { left: calc(var(--anno-pin-size, 28px) + 14px); top: 50%; transform: translateY(-50%); }
+.anno[data-anno-side="right"] .anno-bubble::before { content: ''; position: absolute; top: 50%; left: -14px; width: 14px; height: 2px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateY(-50%); }
+.anno[data-anno-side="left"] .anno-bubble { right: calc(var(--anno-pin-size, 28px) + 14px); top: 50%; transform: translateY(-50%); }
+.anno[data-anno-side="left"] .anno-bubble::before { content: ''; position: absolute; top: 50%; right: -14px; width: 14px; height: 2px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateY(-50%); }
+.anno[data-anno-side="top"] .anno-bubble { left: 50%; bottom: calc(var(--anno-pin-size, 28px) + 14px); transform: translateX(-50%); }
+.anno[data-anno-side="top"] .anno-bubble::before { content: ''; position: absolute; left: 50%; bottom: -14px; width: 2px; height: 14px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateX(-50%); }
+.anno[data-anno-side="bottom"] .anno-bubble { left: 50%; top: calc(var(--anno-pin-size, 28px) + 14px); transform: translateX(-50%); }
+.anno[data-anno-side="bottom"] .anno-bubble::before { content: ''; position: absolute; left: 50%; top: -14px; width: 2px; height: 14px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateX(-50%); }
 
 /* ── Design switcher — ghost bar, top centre ──
    Deliberately barely-there at rest: the viewport belongs to the mockup, not
@@ -1410,6 +2056,40 @@ body[data-single-design="true"] .screen-indicator { max-width: calc(100vw - 8rem
 .design-switch-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
 /* Auto-hides while the ☰ panel is open — the panel carries the same nav. */
 body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
+
+/* ── View segments (§ Views (optional)) — same row as the design segments,
+   separated by a thin divider so switching between a design and a question
+   about it is one click. Same class family shape as .design-switch-item on
+   purpose: they read as one continuous control, not two bars glued
+   together. Only rendered (by buildDesignUI()) when the iteration has ≥1
+   view — a design-only iteration never emits either. */
+.switcher-divider {
+  align-self: center;
+  width: 1px; height: 1.1rem;
+  margin: 0 2px;
+  background: var(--border-color);
+  flex: none;
+}
+.design-switcher:not(:hover):not(:focus-within) .switcher-divider { width: 0; margin: 0; overflow: hidden; }
+.view-switch-item {
+  border: none; background: transparent; cursor: pointer;
+  padding: 0.35rem 0.85rem; border-radius: 999px;
+  font-size: 0.8rem; color: var(--text-secondary);
+  white-space: nowrap; transition: background 0.15s, color 0.15s;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
+.design-switcher:not(:hover):not(:focus-within) .view-switch-item:not([data-active="true"]) {
+  width: 0; padding: 0; margin: 0; overflow: hidden; pointer-events: none;
+}
+.view-switch-item[data-active="true"] {
+  color: var(--text); font-weight: 600;
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+}
+.view-switch-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+/* Resting state: if a VIEW is the active item, its own segment must stay
+   visible even though the bar is collapsed — same rule the resting design
+   segment already gets, just for the sibling class. */
+.design-switcher:not(:hover):not(:focus-within) .design-switch-item[data-active="true"] { width: auto; padding: 0.35rem 0.85rem; }
 
 /* Overlay decision panel — hidden by default, same slide-in as the non-design
    overlay. Scoped: in a decision/free iteration the very same <aside> must
@@ -1476,7 +2156,20 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
    scope anyway. Measured in Edge at 1280/768/375px: no overlap at any of
    the three. Before the caps existed the indicator overlapped the switcher
    by 21px at 768px and completely at 375px, where it also reached the ☰
-   FAB. 💬 lives bottom-right, clear of the top edge entirely. */
+   FAB. 💬 lives bottom-right, clear of the top edge entirely.
+
+   #anno-toggle (the optional annotation eye pill) does NOT compete for this
+   horizontal partition at all — it sits on a SEPARATE row, left edge,
+   directly below the screen indicator: `top: 3.75rem; left: 1rem`. That
+   offset is fixed regardless of viewport width because the indicator's own
+   height never changes: `.screen-indicator` is `white-space: nowrap` with a
+   `max-width` + ellipsis (it never wraps to a second line), so its height
+   stays the padding + single-line-box height (~1.9rem) at every viewport,
+   including the narrowest ones this file scopes to (≥279px, see above).
+   `3.75rem` = indicator `top: 1rem` + its ~1.9rem measured height + a
+   0.5rem breathing gap, rounded up. The pill's own content-width (glyph +
+   counter) is small and fixed, so unlike the indicator/switcher it needs no
+   max-width cap — there is nothing else sharing its row. */
 .panel-fab { top: 2rem; right: 2rem; }
 .feedback-fab { bottom: 2rem; right: 2rem; }
 .panel-fab:hover,
@@ -1539,6 +2232,29 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
 .screen-nav-design-heading .has-notes { color: var(--warning-color); font-size: 0.75rem; }
 .screen-nav-group .screen-nav-item { margin-left: 0.75rem; }
 
+/* ── Views group (§ Views (optional)) — second .screen-nav-group, only
+   rendered when the iteration has ≥1 view. The heading is a plain label,
+   NOT a button (unlike .screen-nav-design-heading): there is no single
+   "views" thing to switch to, only individual views below it. */
+.screen-nav-views-heading {
+  padding: 0.5rem 0.85rem 0.25rem;
+  color: var(--text-secondary); font-size: 0.75rem;
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.screen-nav-view-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.6rem 0.85rem; border-radius: 8px; text-decoration: none;
+  color: var(--text-color, #c9d1d9); font-size: 0.95rem;
+  border: 1px solid var(--border-color); background: transparent;
+  cursor: pointer; transition: all 0.15s; text-align: left;
+}
+.screen-nav-view-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.screen-nav-view-item[data-active="true"] {
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+  border-color: var(--accent-color); font-weight: 600;
+}
+.screen-nav-view-item .has-notes { color: var(--warning-color); font-size: 0.75rem; }
+
 /* ── Feedback Dock — Speech-Bubble anchored to the 💬 FAB (bottom-right) ──
    Geometry: ☰ lives top-right, 💬 bottom-right (60px). The dock is anchored
    to the FAB's corner and has EXACTLY TWO sizes — never a viewport-
@@ -1583,6 +2299,19 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   width: min(560px, calc(100vw - 4rem));
   max-height: min(72vh, 620px);
 }
+/* Work package B — user-controlled maximise. Deliberately keyed off a
+   SEPARATE attribute (data-user-maximized), not a third data-size value:
+   applyDockSize() (§ Layout JS) still only ever assigns compact/wide from
+   the iteration shape — exactly the same two sizes as before — and this
+   rule composes on top of whichever one is active by appearing later in
+   the stylesheet (same specificity, source-order wins). */
+.feedback-dock[data-size][data-user-maximized="true"] {
+  width: min(1100px, calc(100vw - 4rem));
+  max-height: min(82vh, 860px);
+}
+.feedback-dock[data-size][data-user-maximized="true"] .feedback-section textarea {
+  min-height: 220px;
+}
 .feedback-dock[data-open="true"] {
   display: flex;
   animation: feedback-dock-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
@@ -1617,6 +2346,22 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   color: var(--text-color, #c9d1d9);
 }
 
+/* Maximise/restore — a DISTINCT control from minimise (above): minimise
+   closes the dock, this one only resizes it. Same visual language so the
+   two read as a pair, but a different icon/meaning entirely. */
+.feedback-maximize-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-secondary, #8b949e);
+  font-size: 1.1rem; line-height: 1;
+  padding: 0.2rem 0.4rem; border-radius: 6px; margin-right: 0.15rem;
+  transition: background 0.15s, color 0.15s;
+}
+.feedback-maximize-btn:hover {
+  background: color-mix(in srgb, var(--text-color) 12%, transparent);
+  color: var(--text-color, #c9d1d9);
+}
+.feedback-maximize-btn[aria-pressed="true"] { color: var(--accent-color); }
+
 .feedback-section { display: flex; flex-direction: column; gap: 0.4rem; }
 .feedback-section label { font-size: 0.9rem; color: var(--text-secondary); font-weight: 500; }
 .feedback-section label strong { color: var(--accent-color); }
@@ -1634,7 +2379,8 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
    Both size variants collapse to the same geometry here. */
 @media (max-width: 560px) {
   .feedback-dock,
-  .feedback-dock[data-size="wide"] {
+  .feedback-dock[data-size="wide"],
+  .feedback-dock[data-size][data-user-maximized="true"] {
     left: 0.75rem;
     right: 0.75rem;
     width: auto;
@@ -1673,6 +2419,32 @@ body[data-single-design="true"] .feedback-divider:has(+ .feedback-section [data-
   display: none;
 }
 body[data-single-design="true"] .screen-nav-group .screen-nav-item { margin-left: 0; }
+
+/* ── View mode dock swap (§ Views (optional)) — the dock never shows the
+   design/screen rows and the view row at once. Default (no view active):
+   the view row (built once per iteration, may be empty of any view) stays
+   hidden along with its leading divider. Once a view IS active
+   (body[data-view-active="true"], set by showView()/showDesign()), the
+   design + screen rows and THEIR leading dividers hide instead, and the
+   view row takes their place. Same :has()-based divider targeting as the
+   single-screen/single-design rules above. */
+body:not([data-view-active="true"]) .feedback-section:has(#view-textareas),
+body:not([data-view-active="true"]) .feedback-divider:has(+ .feedback-section #view-textareas) {
+  display: none;
+}
+body[data-view-active="true"] .feedback-section:has(#design-textareas),
+body[data-view-active="true"] .feedback-divider:has(+ .feedback-section #design-textareas),
+body[data-view-active="true"] .feedback-section:has(#screen-textareas),
+body[data-view-active="true"] .feedback-divider:has(+ .feedback-section #screen-textareas) {
+  display: none;
+}
+
+/* Indicator swap (§ Views (optional)) — belt-and-suspenders CSS mirror of
+   the JS hidden-toggle in updateIndicator(); JS is authoritative (it also
+   fills #active-view-label), this rule only guards against a stale paint
+   between a view switch and the next updateIndicator() call. */
+body[data-view-active="true"] #indicator-screen-info { display: none; }
+body:not([data-view-active="true"]) #indicator-view { display: none; }
 ```
 
 ## Layout JS — single-screen navigation + context-sensitive feedback
@@ -1738,6 +2510,23 @@ change) via `harvestDockValues()`.
     const it = visibleIteration();
     return it ? [...it.querySelectorAll('section[data-design]')] : [];
   }
+  // Views (§ Views (optional)) — top-level siblings of section[data-design].
+  // Mirrors designs()/activeDesign() above. A page with no data-view
+  // sections simply yields an empty array everywhere below; every view
+  // code path is additive and no-ops in that case.
+  function views() {
+    const it = visibleIteration();
+    return it ? [...it.querySelectorAll('section[data-view]')] : [];
+  }
+  // Only returns a view that is BOTH marked active AND actually visible —
+  // unlike activeDesign() above, a view's data-view-active can legitimately
+  // go stale while a design is on screen (showDesign() does not touch it),
+  // so callers that care about "what is on screen right now" must use this,
+  // not a bare data-view-active lookup.
+  function activeViewVisible() {
+    const it = visibleIteration();
+    return it ? it.querySelector('section[data-view][data-view-active="true"]:not([hidden])') : null;
+  }
 
   // Build screen-nav (two-level: design heading + nested pages), the design
   // switcher ghost bar, and per-screen textareas — all scoped to the
@@ -1766,6 +2555,28 @@ change) via `harvestDockValues()`.
       btn.addEventListener('click', () => { showDesign(d.dataset.design); });
       switcher.appendChild(btn);
     });
+    // Views (§ Views (optional)) — appended to the SAME row after a thin
+    // divider, only when the iteration has ≥1. Never rendered for a
+    // design-only iteration (allViews.length === 0 short-circuits both the
+    // divider and the loop, so the switcher's markup is byte-identical to
+    // pre-views pages when no view exists).
+    const allViews = views();
+    if (allViews.length) {
+      const divider = document.createElement('span');
+      divider.className = 'switcher-divider';
+      divider.setAttribute('aria-hidden', 'true');
+      switcher.appendChild(divider);
+      allViews.forEach(v => {
+        const btn = document.createElement('button');
+        btn.className = 'view-switch-item';
+        btn.type = 'button';
+        btn.dataset.viewId = v.dataset.view;
+        btn.dataset.active = 'false';
+        btn.textContent = v.dataset.navLabel || v.dataset.view;
+        btn.addEventListener('click', () => { showView(v.dataset.view); });
+        switcher.appendChild(btn);
+      });
+    }
 
     // Two-level screen-nav inside the ☰ panel: one .screen-nav-group per
     // design, a heading button, then nested .screen-nav-item per page.
@@ -1804,9 +2615,37 @@ change) via `harvestDockValues()`.
       nav.appendChild(group);
     });
 
+    // Second nav group, below the designs — only when the iteration has
+    // ≥1 view. Heading is a plain label (no click handler): there is
+    // nothing to "switch to" at the group level, only the individual views
+    // nested under it.
+    if (allViews.length) {
+      const viewGroup = document.createElement('div');
+      viewGroup.className = 'screen-nav-group screen-nav-views-group';
+      const heading = document.createElement('div');
+      heading.className = 'screen-nav-views-heading';
+      heading.textContent = '{{design.nav_views_heading}}';
+      viewGroup.appendChild(heading);
+      allViews.forEach(v => {
+        const btn = document.createElement('button');
+        btn.className = 'screen-nav-view-item';
+        btn.type = 'button';
+        btn.dataset.viewId = v.dataset.view;
+        btn.innerHTML = `<span>${v.dataset.navLabel || v.dataset.view}</span>
+          <span class="has-notes" data-view-note-marker="${v.dataset.view}"></span>`;
+        btn.addEventListener('click', () => { showView(v.dataset.view); closePanel(); });
+        viewGroup.appendChild(btn);
+      });
+      nav.appendChild(viewGroup);
+    }
+
     buildDesignTextareas(allDesigns, active);
     buildScreenTextareas(allDesigns);
+    buildViewTextareas(allViews);
     updateScreenScope(active);
+    // § Attachments — rebuild bars for the freshly (re)created textareas
+    // and re-render any attachments already tracked for their slot keys.
+    if (typeof initCommentAttachments === 'function') initCommentAttachments();
   }
 
   // Snapshot the dock's current values, keyed by data-comment, so the one
@@ -1836,10 +2675,15 @@ change) via `harvestDockValues()`.
       const ta = document.createElement('textarea');
       ta.dataset.comment = `design-${d.dataset.design}`;
       ta.dataset.designComment = d.dataset.design;
+      ta.dataset.attachable = '';
       ta.placeholder = placeholder;
       ta.hidden = d !== active;
       if (carried[ta.dataset.comment]) ta.value = carried[ta.dataset.comment];
       container.appendChild(ta);
+      const slot = document.createElement('div');
+      slot.className = 'attach-slot';
+      slot.dataset.attachSlot = ta.dataset.comment;
+      container.appendChild(slot);
     });
     const label = document.getElementById('dock-design-label');
     if (label && active) label.textContent = active.dataset.navLabel || active.dataset.design;
@@ -1865,11 +2709,44 @@ change) via `harvestDockValues()`.
         ta.dataset.comment = sec.id;
         ta.dataset.screenComment = sec.id;
         ta.dataset.screenDesign = d.dataset.design;
+        ta.dataset.attachable = '';
         ta.placeholder = placeholder;
         ta.hidden = true;
         if (carried[sec.id]) ta.value = carried[sec.id];
         container.appendChild(ta);
+        const slot = document.createElement('div');
+        slot.className = 'attach-slot';
+        slot.dataset.attachSlot = sec.id;
+        container.appendChild(slot);
       });
+    });
+  }
+
+  // Per-view textareas (💬) — one per view of the iteration, built ONCE per
+  // iteration exactly like buildDesignTextareas/buildScreenTextareas above,
+  // for the same reason: rebuilding on every design/view switch would drop
+  // unsent text and truncate collectDesignDecisions()'s comments.views scan
+  // (§ Views (optional)). Only the currently-active view's textarea is
+  // shown; showView() below flips `hidden`, nothing is ever destroyed.
+  function buildViewTextareas(allViews) {
+    const container = document.getElementById('view-textareas');
+    if (!container) return;
+    const placeholder = container.dataset.placeholder || '';
+    const carried = harvestDockValues();
+    container.innerHTML = '';
+    allViews.forEach(v => {
+      const ta = document.createElement('textarea');
+      ta.dataset.comment = `view-${v.dataset.view}`;
+      ta.dataset.viewComment = v.dataset.view;
+      ta.dataset.attachable = '';
+      ta.placeholder = placeholder;
+      ta.hidden = true;
+      if (carried[ta.dataset.comment]) ta.value = carried[ta.dataset.comment];
+      container.appendChild(ta);
+      const slot = document.createElement('div');
+      slot.className = 'attach-slot';
+      slot.dataset.attachSlot = ta.dataset.comment;
+      container.appendChild(slot);
     });
   }
 
@@ -1894,6 +2771,19 @@ change) via `harvestDockValues()`.
   window.showDesign = function(designId, screenId) {
     const it = visibleIteration();
     if (!it) return;
+    // Leaving view mode, if we were in it (§ Views (optional)) — no-op when
+    // already in design mode (every view already hidden/inactive). Views'
+    // own data-view-active memory is intentionally NOT preserved across a
+    // design switch: unlike designs, there is no "last active view" to
+    // return to, showView() is always an explicit click.
+    it.querySelectorAll('section[data-view]').forEach(v => {
+      v.hidden = true;
+      v.dataset.viewActive = 'false';
+    });
+    document.querySelectorAll('.view-switch-item, .screen-nav-view-item').forEach(item => {
+      item.dataset.active = 'false';
+    });
+    document.body.dataset.viewActive = 'false';
     const targets = [...it.querySelectorAll('section[data-design]')];
     targets.forEach(d => {
       const match = d.dataset.design === designId;
@@ -1926,6 +2816,63 @@ change) via `harvestDockValues()`.
     if (target) showScreen(target);
     updateDesignNoteMarkers();
   };
+
+  // Switches the active top-level item to a view (§ Views (optional)).
+  // Mirrors showDesign() above: hides every OTHER top-level item (every
+  // design AND every other view), marks the target visible + active, and
+  // re-derives every piece of chrome that cares which item is on screen
+  // (switcher, screen-nav, indicator, dock). Unlike showScreen(), there is
+  // no "remembered" view to restore — the user always reaches a view via an
+  // explicit click on its switcher segment or nav item.
+  window.showView = function(viewId) {
+    const it = visibleIteration();
+    if (!it) return;
+    // Hide every design (top-level) without touching data-design-active —
+    // that attribute is design-vs-design memory, orthogonal to whether
+    // design mode itself is what's on screen right now.
+    it.querySelectorAll('section[data-design]').forEach(d => { d.hidden = true; });
+    const allViews = views();
+    let target = null;
+    allViews.forEach(v => {
+      const match = v.dataset.view === viewId;
+      v.hidden = !match;
+      v.dataset.viewActive = match ? 'true' : 'false';
+      if (match) target = v;
+    });
+    if (!target) return; // unknown view id — leave the page as-is rather than blanking it
+    document.querySelectorAll('.design-switch-item').forEach(item => { item.dataset.active = 'false'; });
+    document.querySelectorAll('.view-switch-item').forEach(item => {
+      item.dataset.active = String(item.dataset.viewId === viewId);
+    });
+    document.querySelectorAll('.screen-nav-design-heading, .screen-nav-item').forEach(item => {
+      item.dataset.active = 'false';
+    });
+    document.querySelectorAll('.screen-nav-view-item').forEach(item => {
+      item.dataset.active = String(item.dataset.viewId === viewId);
+    });
+    document.querySelectorAll('#feedback-dock [data-view-comment]').forEach(ta => {
+      ta.hidden = ta.dataset.viewComment !== viewId;
+    });
+    const label = target.dataset.navLabel || viewId;
+    const dockViewLabel = document.getElementById('dock-view-label');
+    if (dockViewLabel) dockViewLabel.textContent = label;
+    document.body.dataset.viewActive = 'true';
+    updateIndicator();
+    updateViewNoteMarkers();
+    if (typeof saveState === 'function') saveState();
+    // Consistent with showScreen()'s screen:changed below — lets
+    // wireAnnotationLayer() and any other cross-cutting listener react
+    // without knowing views exist.
+    document.dispatchEvent(new CustomEvent('view:changed', { detail: { id: viewId } }));
+  };
+
+  function updateViewNoteMarkers() {
+    document.querySelectorAll('[data-view-note-marker]').forEach(marker => {
+      const id = marker.dataset.viewNoteMarker;
+      const ta = document.querySelector(`#feedback-dock [data-view-comment="${CSS.escape(id)}"]`);
+      marker.textContent = (ta && ta.value.trim()) ? '●' : '';
+    });
+  }
 
   window.showScreen = function(id) {
     const design = activeDesign();
@@ -1963,6 +2910,10 @@ change) via `harvestDockValues()`.
     updateIndicator();
     updateNoteMarkers();
     if (typeof saveState === 'function') saveState();
+    // Lets the (optional) annotation layer refresh its per-screen counter
+    // without this function knowing that layer exists — see
+    // wireAnnotationLayer() below. Fired even when no listener is attached.
+    document.dispatchEvent(new CustomEvent('screen:changed', { detail: { id } }));
   };
 
   // Rebuilds the position indicator from the locale word-primitives +
@@ -1992,6 +2943,21 @@ change) via `harvestDockValues()`.
         if (labelEl && active) labelEl.textContent = active.dataset.navLabel || active.dataset.design;
       }
     }
+    // View label swap (§ Views (optional)) — while a view is the visible
+    // top-level item, the screen-counter segment hides and the view label
+    // takes its place. Both spans are optional/null-guarded, same
+    // discipline as every other indicator segment above.
+    const viewInfoEl = document.getElementById('indicator-screen-info');
+    const viewLabelEl = document.getElementById('indicator-view');
+    const activeView = activeViewVisible();
+    if (viewInfoEl) viewInfoEl.hidden = !!activeView;
+    if (viewLabelEl) {
+      viewLabelEl.hidden = !activeView;
+      if (activeView) {
+        const labelEl = document.getElementById('active-view-label');
+        if (labelEl) labelEl.textContent = activeView.dataset.navLabel || activeView.dataset.view;
+      }
+    }
   }
 
   // Every per-screen textarea belongs to the DOCK, not to the mockup
@@ -2011,6 +2977,7 @@ change) via `harvestDockValues()`.
       if (marker) marker.textContent = (ta && ta.value.trim()) ? '● Notiz' : '';
     });
     updateDesignNoteMarkers();
+    updateViewNoteMarkers();
   }
   window.updateNoteMarkers = updateNoteMarkers;
 
@@ -2090,6 +3057,32 @@ change) via `harvestDockValues()`.
   });
   dockClose.addEventListener('click', closeDock);
 
+  // Maximise/restore (Work package B) — a RESIZE, never a close. Distinct
+  // from minimise above: minimise flips data-open, this flips
+  // data-userMaximized, a SEPARATE attribute from data-size (applyDockSize()
+  // below still only ever computes compact/wide from the iteration shape,
+  // unchanged) — § Layout CSS composes the two via
+  // `.feedback-dock[data-size][data-user-maximized="true"]`, which applies on top of
+  // whichever of compact/wide is current. The choice is persisted
+  // (state['dockMaximized'], § State Persistence) and restored on reload via
+  // window.applyDockSize() (see restoreState()) — primeDock() must never
+  // silently clear data-userMaximized on an iteration switch, and it does
+  // not: applyDockSize() only ever writes data-size.
+  const dockMaximize = document.getElementById('feedback-maximize');
+  function syncMaximizeButton() {
+    if (!dockMaximize) return;
+    const on = dock.dataset.userMaximized === 'true';
+    dockMaximize.setAttribute('aria-pressed', String(on));
+    const label = on ? '{{panel.restore_size}}' : '{{panel.maximize}}';
+    dockMaximize.setAttribute('aria-label', label);
+    dockMaximize.title = label;
+  }
+  dockMaximize?.addEventListener('click', () => {
+    dock.dataset.userMaximized = dock.dataset.userMaximized === 'true' ? 'false' : 'true';
+    applyDockSize();
+    if (typeof saveState === 'function') saveState();
+  });
+
   // ── Closed by default, opened only by the user ──
   // The dock starts minimised (data-open="false" in markup). It used to open
   // itself on load and auto-close on the first mockup click, which meant the
@@ -2103,10 +3096,29 @@ change) via `harvestDockValues()`.
   // viewport: content-sizing produces the mini-box nobody can type in, and
   // viewport-sizing produces the full-width panel whose textareas never wrap.
   function applyDockSize() {
+    // Sync the maximise button's a11y state on every call — cheap, and
+    // covers both the click handler's own call and any call site that
+    // re-applies sizing without having touched the button (restoreState(),
+    // an iteration switch via primeDock()).
+    syncMaximizeButton();
+    // The automatic compact/wide computation is UNCHANGED and always runs —
+    // still exactly two sizes, same as before Work package B. The user's
+    // maximise override lives on a SEPARATE attribute (data-userMaximized)
+    // and composes with whichever of these two is current via CSS (§ Layout
+    // CSS `.feedback-dock[data-size][data-user-maximized="true"]`), rather than
+    // replacing this value — so it also survives an iteration switch
+    // untouched: primeDock() calls this on every switch but never clears
+    // data-userMaximized itself.
     const singleScreen = document.body.dataset.singleScreen === 'true';
     const singleDesign = document.body.dataset.singleDesign === 'true';
     dock.dataset.size = (singleScreen && singleDesign) ? 'compact' : 'wide';
   }
+  // Exposed so restoreState() (§ State Persistence, a separate script block
+  // whose DOMContentLoaded listener may run before OR after this one — see
+  // the ordering note there) can re-apply sizing immediately after it sets
+  // dock.dataset.userMaximized from the persisted value, rather than waiting
+  // for a switch that may never come.
+  window.applyDockSize = applyDockSize;
   // Dock content is per-iteration, but the dock itself is ONE shared overlay
   // that lives outside section[data-iteration]. Entering a frozen tab
   // stashes the live iteration's unsent values, shows the frozen
@@ -2139,6 +3151,10 @@ change) via `harvestDockValues()`.
       fields.forEach(ta => {
         if (ta.dataset.designComment) ta.value = (data.designs || {})[ta.dataset.designComment] || '';
         else if (ta.dataset.screenComment) ta.value = (data.screens || {})[ta.dataset.screenComment] || '';
+        // Views (§ Views (optional)) — same treatment as designs/screens
+        // above: the dock lives outside section[data-iteration], so its
+        // view-level textareas need the same frozen blob restore.
+        else if (ta.dataset.viewComment) ta.value = (data.views || {})[ta.dataset.viewComment] || '';
         else if (ta.dataset.comment === 'general') ta.value = data.general || '';
         ta.readOnly = true;
       });
@@ -2181,17 +3197,33 @@ change) via `harvestDockValues()`.
     buildDesignUI();
     const active = document.querySelector('section[data-iteration][data-active]');
     if (active) {
-      const design = active.querySelector('section[data-design][data-design-active="true"]');
-      if (design) {
-        // Restore last active screen from localStorage if available,
-        // otherwise default to the first screen of the active design.
-        let restored = null;
-        try {
-          const raw = localStorage.getItem(STORAGE_KEY);
-          if (raw) restored = JSON.parse(raw)._activeScreen;
-        } catch (e) {}
-        const first = design.querySelector('section[data-screen]');
-        showScreen(restored && design.querySelector(`#${CSS.escape(restored)}`) ? restored : (first ? first.id : ''));
+      // Work package C — restore an active VIEW first. Defensive by
+      // design: an unknown/removed view id (edited between sessions, or
+      // belongs to a different iteration after a reload) simply fails the
+      // querySelector check below and falls through to the pre-existing
+      // screen-restore path exactly as if no view had ever been active —
+      // it must never leave the page blank.
+      let restoredView = null;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) restoredView = JSON.parse(raw)._activeView;
+      } catch (e) {}
+      const viewTarget = restoredView && active.querySelector(`section[data-view="${CSS.escape(restoredView)}"]`);
+      if (viewTarget) {
+        showView(restoredView);
+      } else {
+        const design = active.querySelector('section[data-design][data-design-active="true"]');
+        if (design) {
+          // Restore last active screen from localStorage if available,
+          // otherwise default to the first screen of the active design.
+          let restored = null;
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) restored = JSON.parse(raw)._activeScreen;
+          } catch (e) {}
+          const first = design.querySelector('section[data-screen]');
+          showScreen(restored && design.querySelector(`#${CSS.escape(restored)}`) ? restored : (first ? first.id : ''));
+        }
       }
     }
     updateIndicator();
@@ -2207,6 +3239,40 @@ change) via `harvestDockValues()`.
   // the newly visible design; otherwise fall back to that design's
   // remembered page, or its first page.
   document.addEventListener('iteration:changed', () => {
+    // Stash the OUTGOING iteration's unsent dock text before buildDesignUI()
+    // empties the three containers. applyDockFreezeState() (via primeDock()
+    // at the end of this handler) does the same stash, but by then the
+    // harvest reads an already-rebuilt dock and writes empty strings over
+    // the user's text. Design and screen ids happen to repeat across
+    // iterations so harvestDockValues() masks it there; view ids are unique
+    // page-wide, so a view note was lost every single time.
+    // showIteration() sets body.viewing-frozen BEFORE dispatching this
+    // event, so the class already describes the tab we are moving TO.
+    if (document.body.classList.contains('viewing-frozen') && liveDockValues === null) {
+      liveDockValues = harvestDockValues();
+    }
+    // A question view never survives a tab switch. buildDesignUI() requires
+    // an active design, and a stale body[data-view-active] leaves the
+    // position indicator empty, kills arrow-key navigation and makes every
+    // data-screen-link click-dummy inert with no visible cause.
+    document.querySelectorAll('section[data-view]').forEach(v => {
+      v.dataset.viewActive = 'false';
+      v.hidden = true;
+    });
+    document.body.dataset.viewActive = 'false';
+    // ...and put the designs back on screen. showView() hides every design
+    // when a question view takes over the viewport, and nothing else undoes
+    // that: only showDesign() un-hides, and it is not on this path. Without
+    // this, a view -> other iteration tab -> back round trip lands on a
+    // design that still says data-design-active="true" while being
+    // display:none — no mockup, dead click-dummy, dead arrow keys, and no
+    // visible cause. Verified in a browser, not deduced.
+    const incoming = visibleIteration();
+    if (incoming) {
+      incoming.querySelectorAll(':scope > section[data-design]').forEach(d => {
+        d.hidden = d.dataset.designActive !== 'true';
+      });
+    }
     buildDesignUI();
     const design = activeDesign();
     if (!design) return;
@@ -2229,6 +3295,9 @@ change) via `harvestDockValues()`.
   document.addEventListener('keydown', e => {
     if (dock.dataset.open === 'true' || panel.classList.contains('open')) return;
     if (e.target.matches('textarea, input')) return;
+    // A view is scrollable prose/questions, not a screen sequence — Arrow
+    // Left/Right must not hijack it into switching designs (§ Views (optional)).
+    if (document.body.dataset.viewActive === 'true') return;
     const design = activeDesign();
     if (!design) return;
     const screens = [...design.querySelectorAll('section[data-screen]')];
@@ -2244,12 +3313,257 @@ change) via `harvestDockValues()`.
 })();
 ```
 
+## Annotation Layer JS — `wireAnnotationLayer()`
+
+Entirely independent of `wireDesignLayout()` above: a page with no
+`[data-anno-layer]` anywhere runs this IIFE and does nothing else, forever
+(the `!toggle` early return). It never reaches into `wireDesignLayout()`'s
+closed-over state — the two communicate only via the `screen:changed` /
+`iteration:changed` DOM events and via `document.body.classList`, exactly
+like every other cross-cutting concern on this page (`viewing-frozen`,
+`panel-open`, `single-screen`, …).
+
+```javascript
+(function wireAnnotationLayer() {
+  const toggle = document.getElementById('anno-toggle');
+  if (!toggle) return; // no eye pill mounted — layer not used on this page
+
+  function activeScreen() {
+    // Scoped through the visible iteration and its active design, exactly
+    // like wireDesignLayout()'s own activeDesign()/activeScreen() lookups —
+    // this IIFE cannot reuse those closures (see note above) so the same
+    // scoping is reimplemented here. An unscoped
+    // 'section[data-screen][data-screen-active="true"]' would always
+    // resolve to the FIRST such screen in document order: the reference
+    // markup ships two simultaneously-active screens (one per design), and
+    // frozen iterations keep their own data-screen-active too. Without this
+    // scoping the eye pill would permanently report design 1 of iteration 1.
+    const it = document.querySelector('section[data-iteration]:not([hidden])');
+    if (!it) return null;
+    const design = it.querySelector('section[data-design][data-design-active="true"]');
+    if (!design) return null;
+    return design.querySelector('section[data-screen][data-screen-active="true"]');
+  }
+  function annotationsInScreen(screen) {
+    return screen ? [...screen.querySelectorAll('[data-anno]')] : [];
+  }
+
+  // Only one bubble open at a time, across every screen/design — a bubble
+  // left open under a screen the user has since navigated away from would
+  // otherwise reappear open on return.
+  function openBubble(id) {
+    document.querySelectorAll('[data-anno-bubble]').forEach(b => {
+      b.dataset.open = String(b.dataset.annoBubble === id);
+    });
+    document.querySelectorAll('[data-anno-pin], [data-anno-summary]').forEach(el => {
+      const owns = el.dataset.annoPin === id || el.dataset.annoSummary === id;
+      el.setAttribute('aria-expanded', String(owns));
+    });
+    openBubbleAt(id);
+  }
+  function closeAllBubbles() {
+    document.querySelectorAll('[data-anno-bubble]').forEach(b => { b.dataset.open = 'false'; });
+    document.querySelectorAll('[data-anno-pin], [data-anno-summary]').forEach(el => {
+      el.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  // Recomputed on every input, not just at generation time — an answer
+  // typed and then deleted must revert the pin to "unanswered".
+  function recomputeAnswered(anno) {
+    const ta = anno.querySelector('textarea[data-annotation]');
+    const pin = anno.querySelector('[data-anno-pin]');
+    if (!ta || !pin) return;
+    pin.dataset.answered = String(!!ta.value.trim());
+  }
+
+  // --- placement ---------------------------------------------------------
+  // Two problems the percentage-only approach had, both reported from a real
+  // page: pins landed in empty space next to the element they asked about,
+  // and bubbles opened straight off the edge of the screen. Authored
+  // coordinates stay supported (and stay the fallback), but a pin can now
+  // name the element it belongs to and the bubble is always pulled back into
+  // view.
+  function annoLayerOf(anno) { return anno.closest('[data-anno-layer]'); }
+
+  // data-anno-target is a CSS selector resolved INSIDE the pin's own screen,
+  // so the same selector may repeat on other screens without colliding.
+  function anchorToTarget(anno) {
+    const sel = anno.dataset.annoTarget;
+    if (!sel) return;                       // authored --anno-x/--anno-y wins
+    const screen = anno.closest('section[data-screen]');
+    const layer = annoLayerOf(anno);
+    if (!screen || !layer) return;
+    let target = null;
+    try { target = screen.querySelector(sel); } catch (e) { target = null; }
+    if (!target) return;                    // stale selector: keep last known spot
+    const box = layer.getBoundingClientRect();
+    const t = target.getBoundingClientRect();
+    if (!box.width || !box.height || !t.width) return;   // not laid out yet
+    const x = ((t.right - box.left) / box.width) * 100;
+    const y = ((t.top + t.height / 2 - box.top) / box.height) * 100;
+    anno.style.setProperty('--anno-x', Math.max(0, Math.min(100, x)).toFixed(2) + '%');
+    anno.style.setProperty('--anno-y', Math.max(0, Math.min(100, y)).toFixed(2) + '%');
+  }
+
+  // Keep an open bubble inside the viewport: flip to the opposite side first
+  // (that is what the authored side is for), then shift by whatever is still
+  // sticking out. A bubble the user cannot read is worse than one that opens
+  // on the "wrong" side.
+  function placeBubble(anno) {
+    if (!anno) return;
+    const bubble = anno.querySelector('[data-anno-bubble]');
+    if (!bubble || bubble.dataset.open !== 'true') return;
+    if (!anno.dataset.annoSideAuthored) {
+      anno.dataset.annoSideAuthored = anno.dataset.annoSide || 'right';
+    }
+    anno.dataset.annoSide = anno.dataset.annoSideAuthored;
+    bubble.style.marginLeft = '';
+    bubble.style.marginTop = '';
+    const pad = 12;
+    let r = bubble.getBoundingClientRect();
+    if (anno.dataset.annoSide === 'right' && r.right > window.innerWidth - pad) {
+      anno.dataset.annoSide = 'left';
+      r = bubble.getBoundingClientRect();
+    } else if (anno.dataset.annoSide === 'left' && r.left < pad) {
+      anno.dataset.annoSide = 'right';
+      r = bubble.getBoundingClientRect();
+    }
+    let dx = 0;
+    if (r.right > window.innerWidth - pad) dx = (window.innerWidth - pad) - r.right;
+    if (r.left + dx < pad) dx = pad - r.left;
+    if (dx) bubble.style.marginLeft = Math.round(dx) + 'px';
+    r = bubble.getBoundingClientRect();
+    let dy = 0;
+    if (r.bottom > window.innerHeight - pad) dy = (window.innerHeight - pad) - r.bottom;
+    if (r.top + dy < pad) dy = pad - r.top;
+    if (dy) bubble.style.marginTop = Math.round(dy) + 'px';
+  }
+
+  function openBubbleAt(id) {
+    const anno = document.querySelector(`[data-anno="${CSS.escape(id)}"]`);
+    if (anno) { anchorToTarget(anno); placeBubble(anno); }
+  }
+
+  function updateAnnoUI() {
+    const screen = activeScreen();
+    // Reconciliation with § Views (optional): showView() never clears the
+    // previously-active screen's data-screen-active, so activeScreen()
+    // above can still resolve to a (now hidden) screen while a view is on
+    // screen. The eye pill must not show a stale count — or render at all —
+    // over a view's own content. body[data-view-active] is undefined on
+    // pages that never use views, so this is a pure no-op there.
+    const viewActive = document.body.dataset.viewActive === 'true';
+    const all = viewActive ? [] : annotationsInScreen(screen);
+    // Recompute here, not only on `input`: restoreState() writes persisted
+    // answers back programmatically and fires no input event, so a reloaded
+    // page would otherwise paint every already-answered pin as unanswered.
+    all.forEach(anno => recomputeAnswered(anno));
+    all.forEach(anchorToTarget);
+    toggle.hidden = all.length === 0;
+    // The pill counts OPEN questions, not annotations — an answered pin is
+    // done, and a pill stuck at "3" after answering all three reads as broken.
+    const open = all.filter(anno => {
+      const pin = anno.querySelector('[data-anno-pin]');
+      return !pin || pin.dataset.answered !== 'true';
+    }).length;
+    const countEl = document.getElementById('anno-count');
+    if (countEl) countEl.textContent = String(open);
+    const hidden = document.body.classList.contains('anno-hidden');
+    const label = (hidden ? toggle.dataset.labelShow : toggle.dataset.labelHide) || '';
+    if (label) toggle.setAttribute('aria-label', label);
+    toggle.setAttribute('aria-pressed', String(!hidden));
+  }
+  // Called from § State Persistence's DOMContentLoaded handler AFTER
+  // restoreState() has applied the persisted body.anno-hidden class — see
+  // the note there. Exposed the same way updateNoteMarkers() is.
+  window.updateAnnoUI = updateAnnoUI;
+
+  document.querySelectorAll('[data-anno]').forEach(recomputeAnswered);
+
+  // Pin clicks toggle their own bubble. Bubble-summary clicks (the
+  // collapsed truncated-question row) do the same — either is a valid way
+  // to open the same bubble. Neither must ever reach the click-through
+  // handler's data-screen-link lookup — guarded there directly (§
+  // Click-through Handler), not by relying on event ordering here.
+  document.addEventListener('click', e => {
+    const trigger = e.target.closest('[data-anno-pin], [data-anno-summary]');
+    if (trigger) {
+      const id = trigger.dataset.annoPin || trigger.dataset.annoSummary;
+      const bubble = document.querySelector(`[data-anno-bubble="${CSS.escape(id)}"]`);
+      const isOpen = bubble && bubble.dataset.open === 'true';
+      if (isOpen) closeAllBubbles(); else openBubble(id);
+      return;
+    }
+    // Clicking anywhere else in the bubble (the textarea, the attach slot)
+    // must never close it; clicking anywhere outside the layer does.
+    if (e.target.closest('.anno-bubble')) return;
+    closeAllBubbles();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeAllBubbles();
+  });
+
+  document.addEventListener('input', e => {
+    if (!e.target.matches('textarea[data-annotation]')) return;
+    const anno = e.target.closest('[data-anno]');
+    if (!anno) return;
+    recomputeAnswered(anno);
+    updateAnnoUI();
+    // data-comment on the same textarea already drives saveState()/
+    // restoreState() (§ State Persistence) — no extra persistence code
+    // needed for the answer text itself.
+  });
+
+  toggle.addEventListener('click', () => {
+    document.body.classList.toggle('anno-hidden');
+    // Hiding the layer must not leave a bubble open underneath it —
+    // reopening later should start from a clean collapsed state.
+    if (document.body.classList.contains('anno-hidden')) closeAllBubbles();
+    updateAnnoUI();
+    if (typeof saveState === 'function') saveState();
+  });
+
+  // The IIFE runs before the mock has its final layout, so the first anchor
+  // pass can read a half-measured box and pin the marker to a corner — where
+  // it then STAYS, because nothing else recomputes on a page that is simply
+  // sitting there. Re-run once the frame is painted and again on load (web
+  // fonts and images move things a second time).
+  requestAnimationFrame(() => updateAnnoUI());
+  window.addEventListener('load', () => updateAnnoUI());
+
+  document.addEventListener('screen:changed', updateAnnoUI);
+  document.addEventListener('iteration:changed', updateAnnoUI);
+  // A view takes over the whole viewport, so the pill must not keep floating
+  // over it with the previous screen's count. showView() dispatches this;
+  // without the listener the guard inside updateAnnoUI() never runs on the
+  // design -> view transition (the reverse works only by accident, because
+  // showDesign() routes through showScreen()).
+  document.addEventListener('view:changed', updateAnnoUI);
+  // A resize moves every anchored pin and can push an open bubble off-screen.
+  window.addEventListener('resize', () => {
+    updateAnnoUI();
+    const open = document.querySelector('[data-anno-bubble][data-open="true"]');
+    if (open) placeBubble(open.closest('[data-anno]'));
+  });
+  updateAnnoUI();
+})();
+```
+
 **Persistence extension:** the design layout's `saveState()` must also write
 `_activeScreen: '{current-screen-id}'` AND `_activeScreenByDesign: {designId:
 screenId, …}` into the localStorage payload — the former for the currently
 active design (kept for backward compatibility with the single-design
 degenerate case), the latter so EVERY design's last-viewed page survives a
-reload, not just the one on screen at save time.
+reload, not just the one on screen at save time. **Work package C** adds
+`_activeView` the same way (§ State Persistence `saveState()` already shows
+the literal code, a plain DOM read of `section[data-view-active="true"]`) —
+a reload used to always drop back to design mode even when the user was
+reading a question view; the `DOMContentLoaded` handler below now tries the
+restored view FIRST and only falls back to the screen-restore path when
+there is no view id, or the id no longer resolves to a `section[data-view]`
+in the active iteration.
 
 ## Click-through Handler
 
@@ -2257,10 +3571,22 @@ Single delegated listener that interprets `data-screen-link` on any element
 inside a `[data-screen]` section, **scoped to the active design** — a link
 may only target screens within its own design, never reach across into
 another design's pages. Closes the ☰ panel (harmless no-op if it's not open)
-and fires `showScreen()`.
+and fires `showScreen()`. Returns immediately while a view is the active
+top-level item (§ Views (optional)) — there is no screen on screen to
+navigate within.
 
 ```javascript
 document.addEventListener('click', e => {
+  // Annotation pins/bubbles (§ Annotation Layer JS) live inside
+  // [data-screen] too and have their own click handling — they must never
+  // fall through to click-dummy navigation, even if a future pin design
+  // nests a [data-screen-link] ancestor by accident.
+  if (e.target.closest('[data-anno-pin], [data-anno-summary], .anno-bubble')) return;
+  // A view (§ Views (optional)) is the active top-level item — no design is
+  // on screen to navigate within, even though a hidden design still carries
+  // data-design-active="true" as its own "last shown page" memory. Bail
+  // before the lookup below would otherwise resolve to that hidden design.
+  if (document.body.dataset.viewActive === 'true') return;
   const link = e.target.closest('[data-screen-link]');
   if (!link) return;
   const activeDesignEl = document.querySelector(
@@ -2341,26 +3667,184 @@ with `data-screen`:
   `<section data-iteration="N+1">` is appended with updated designs/screens
   and the old one is frozen (see Shared Systems § Iteration Tabs).
 
+### Annotated screen (optional annotation layer)
+
+A screen with concrete, element-level questions adds `[data-anno-layer]`
+inside the `<section data-screen>`, one `.anno` per question. This is
+**additive** to the plain shape above — `data-screen`/`id`/`data-nav-label`
+work exactly the same either way:
+
+```html
+<section id="d1-s1" data-nav-label="Welcome" data-screen data-screen-active="true">
+  <div class="device-frame">…mockup HTML for welcome screen…</div>
+
+  <div class="anno-layer" data-anno-layer>
+    <div class="anno" data-anno="a1" data-anno-side="right" style="--anno-x:62.5%;--anno-y:31.2%">
+      <button class="anno-pin" type="button" data-anno-pin="a1"
+              aria-expanded="false" aria-controls="anno-bubble-a1"
+              aria-label="{{anno.pin_label}}">1</button>
+      <div class="anno-bubble" id="anno-bubble-a1" data-anno-bubble="a1" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="a1"
+                aria-expanded="false" aria-controls="anno-bubble-a1">
+          <span class="anno-bubble-question">Should the dispatch queue auto-refresh, or stay manual?</span>
+          <span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-a1" data-annotation="a1" data-attachable
+                    placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-a1"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+```
+
+**Rules (in addition to the plain screen rules above):**
+- `[data-anno-layer]` is a plain wrapper (no positioning of its own) placed
+  anywhere inside the `[data-screen]` section — it is absolutely positioned
+  to the screen's own box by CSS (§ Layout CSS), so it does not need to
+  live inside `.device-frame` specifically.
+- Annotation ids (`data-anno`, `data-anno-pin`, `data-anno-bubble`,
+  `data-anno-summary`, `data-annotation`, `data-attach-slot`'s `anno-{id}`
+  suffix) MUST be unique **page-wide**. Prefix them with the screen id —
+  `d1-s2-a1`, `d2-s1-a1` — which makes uniqueness structural instead of
+  something the author has to remember.
+  Do NOT number them `a1`, `a2` per screen. That reads harmless and is not:
+  `saveState()` keys the answer as `text:anno-{id}`, so two screens both
+  using `a1` share ONE storage slot — the last field saved wins, the other
+  answer is gone on reload, and both pins come back showing the same text.
+  The payload's `annotations[]` entries collide the same way
+  (§ Decision schema). Observed in a browser, not theorised.
+- **Prefer `data-anno-target` over hand-picked coordinates.** It takes a CSS
+  selector resolved inside the pin's own screen (`data-anno-target=".kb-card
+  .kb-title"`), and the pin is placed on that element's right edge at load,
+  on every screen/design/iteration switch and on resize. Hand-guessed
+  percentages drift the moment the mock reflows, and the reported symptom is
+  exactly that: numbered pins floating in empty space next to the thing they
+  ask about.
+- `--anno-x` / `--anno-y` stay supported as percentages of the screen box and
+  are the fallback whenever no target is given or the selector matches
+  nothing — a stale selector keeps the last known position instead of
+  collapsing the pin into a corner.
+- `data-anno-side` picks the side the bubble PREFERS to open toward. It is a
+  preference, not a promise: `placeBubble()` flips to the opposite side when
+  the preferred one would overflow the viewport, then shifts by whatever is
+  still sticking out, so a bubble is never half off-screen. The authored side
+  is remembered, so the bubble returns to it as soon as there is room again.
+- The pin number (`1`, `2`, …) and `{{anno.pin_label}}`'s `{n}` MUST match —
+  both are the 1-based order Claude assigns per screen, not a global counter
+  across the whole design.
+- Every answer textarea MUST carry `data-comment="anno-{id}"` (state
+  persistence, § State Persistence), `data-annotation="{id}"` (the payload
+  scan, § collectDecisions (design branch)) and `data-attachable` (hook for
+  a later change — do not wire uploads here). The immediately-following
+  `<div class="attach-slot" data-attach-slot="anno-{id}"></div>` stays empty.
+- Do not add the eye pill (`#anno-toggle`) or `body.anno-hidden` handling
+  per screen — both are page-global, emitted once in § Layout, driven by
+  `wireAnnotationLayer()` (§ Annotation Layer JS).
+
+### View sections (optional)
+
+`section[data-view]` is a top-level sibling of `section[data-design]`, not
+something nested inside one — see § Views (optional) above (right before
+§ Layout) for the full worked reference markup of both view kinds
+(`data-view-kind="decision"` and `data-view-kind="comparison"`), their CSS
+(`section[data-view]`, `.view-frame`, `.cmp-*`, `.view-switch-item`,
+`.screen-nav-view-item`) and their JS (`views()`, `showView()`,
+`buildViewTextareas()`). This subsection exists only as the same
+cross-reference anchor § Annotated screen has above, so a reader scanning
+top-to-bottom through § Screen-pattern markup does not miss that views
+exist. **≥1 `data-design` remains mandatory** alongside any number of views
+— see § Rules.
+
 ## Decision schema
 
-The design submit payload has **no variant evaluations** — only comments,
-keyed by feedback level (general / designs / screens). `comments.screens`
-keeps flat screen-id keying regardless of which design a screen belongs to,
-so no consumer needs to learn the design nesting to read page feedback:
+The design submit payload's comments are keyed by feedback level (general /
+designs / screens / **views**). `comments.screens` keeps flat screen-id
+keying regardless of which design a screen belongs to, so no consumer needs
+to learn the design nesting to read page feedback. `decisions` was always
+`[]` for a design iteration with no views — it is now populated whenever the
+iteration has ≥1 `data-view-kind="decision"` or `"comparison"` view, one
+entry per `[data-decision]` group across every view, each tagged with the
+owning `view` id (§ Views (optional)):
 
 ```json
 {
   "submitted": true,
   "template": "design",
   "iteration": 2,
-  "decisions": [],
+  "decisions": [
+    { "id": "nav-tabs", "label": "Tabs", "evaluation": "include", "view": "nav-model", "note": "only for the desktop layout" },
+    { "id": "nav-drawer", "label": "Drawer", "evaluation": "discard", "view": "nav-model", "note": "" },
+    { "id": "compact", "label": "Compact", "evaluation": "include", "view": "card-density", "note": "" }
+  ],
   "comments": {
     "general": "...",
     "designs": { "dispatch": "...", "holotable": "..." },
-    "screens": { "d1-s1": "...", "d1-s2": "..." }
+    "screens": { "d1-s1": "...", "d1-s2": "..." },
+    "views": { "nav-model": "...", "card-density": "..." }
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "screen": "d1-s1",
+      "design": "dispatch",
+      "question": "Should the dispatch queue auto-refresh, or stay manual?",
+      "answer": "Auto-refresh, but with a manual pause toggle."
+    }
+  ],
+  "attachments": {
+    "general": [ { "id": "<sha256>.png", "name": "shot.png", "mime": "image/png", "size": 84213, "path": ".claude/concepts/{{slug}}/attachments/<sha256>.png" } ],
+    "design-dispatch": [],
+    "d1-s1": [],
+    "view-nav-model": [],
+    "anno-a1": [],
+    "nav-tabs-note": []
   }
 }
 ```
+
+`decisions[]` entries use the **same shape as the decision template's own
+schema** (`{id, label, evaluation}` — § Bi-State Variant Evaluation →
+Decision schema — `evaluation` is `"include"` or `"discard"`), plus the
+`view` field so Claude knows which view each entry answers and the `note`
+field carrying the mandatory adjacent `{decisionId}-note` textarea (empty
+string when the user left it blank) — the verdict without the reasoning is
+half the message, and it must not be reachable only through `allFields`.
+The comparison view's freer controls (favourite radios, criteria-matrix
+selects, weight sliders) deliberately stay untyped and arrive in
+`allFields` — they are author-invented per page, so no fixed schema can
+describe them. A design
+iteration with no views still emits `"decisions": []`, never omits the key
+— same empty-array convention as `annotations` above. `comments.views` is
+**optional and only present when the iteration has ≥1 view** — a view-less
+design iteration emits `"views": {}`, matching how `comments.designs`
+already degenerates to `{}` for a single-design iteration. Only views with
+non-empty, trimmed dock text are included, same trimming rule as every
+other `comments.*` level.
+
+`annotations` is **optional** and only present when the page uses the
+annotation layer (§ Annotation Layer (optional)) — a page with none emits
+`"annotations": []`, never omits the key (same convention as the empty
+`"decisions": []` above, so consumers never need an existence check). Only
+entries with a non-empty, trimmed `answer` are included — an unanswered pin
+contributes nothing to the payload, matching how `comments.*` already skips
+empty fields. `question` is read from the pin's bubble markup at submit
+time (`.anno-bubble-question` textContent), not hand-duplicated anywhere.
+
+`attachments` is a top-level map, keyed by the same slot key every
+`textarea[data-attachable]` carries as its `data-comment` value (`general`,
+`design-{id}`, `{screenId}`, `view-{id}`, `anno-{id}`, `{decisionId}-note`)
+— see § Attachments. Each value is the array `attachmentsFor(slotKey)`
+already produces (`{id, name, mime, size, path}`, synced files only). A slot
+with zero attachments is simply absent from the map — it is not padded with
+an empty array, unlike `comments.*`, because the map itself may legitimately
+be `{}` for an iteration where nothing was attached. This is a *separate*
+top-level key from the decision template's own inline `comments[].attachments`
+(§ collectDecisions (dispatcher)) — the design template's comments are a
+keyed object, not an array of `{id, text}` records, so attachments cannot be
+inlined the same way and get their own top-level map instead.
 
 ## collectDecisions (design branch)
 
@@ -2379,21 +3863,104 @@ so no consumer needs to learn the design nesting to read page feedback:
 // The dock is emptied on submit (clearDock), so it never carries a previous
 // iteration's text into the next payload.
 function collectDesignDecisions() {
-  const comments = { general: '', designs: {}, screens: {} };
+  const comments = { general: '', designs: {}, screens: {}, views: {} };
   document.querySelectorAll('#feedback-dock input, #feedback-dock select, #feedback-dock textarea').forEach(el => {
     const value = (el.value || '').trim();
     if (!value) return;
     if (el.dataset.designComment) comments.designs[el.dataset.designComment] = value;
     else if (el.dataset.screenComment) comments.screens[el.dataset.screenComment] = value;
+    // Views (§ Views (optional)) — same "dock lives outside
+    // section[data-iteration]" reasoning as designs/screens above.
+    else if (el.dataset.viewComment) comments.views[el.dataset.viewComment] = value;
     else if (el.dataset.comment === 'general') comments.general = value;
   });
   const active = document.querySelector('section[data-iteration][data-active]');
+  // Decisions authored inside views (§ Views (optional)) — reuses the same
+  // [data-decision] bi-state markup and value convention
+  // ("include"/"discard") as the decision template's own cards (§ Bi-State
+  // Variant Evaluation), just scanned wherever it lives on THIS page: unlike
+  // the dock, views live INSIDE section[data-iteration][data-active], so
+  // this scan is scoped to `active` directly, same as the annotations scan
+  // below. Every view is scanned regardless of which is on screen — a view
+  // rebuilds nothing on switch (only `hidden` flips), so this sees all of
+  // them. A design iteration with no views yields `decisions: []`, the same
+  // empty-but-present convention as `annotations` below.
+  const decisions = [];
+  if (active) {
+    active.querySelectorAll('section[data-view]').forEach(view => {
+      view.querySelectorAll('[data-decision]').forEach(group => {
+        const checked = group.querySelector('input[type="radio"]:checked');
+        if (!checked) return;
+        // The adjacent {decisionId}-note textarea is mandatory (§ View kind
+        // decision, and ensureCommentSlots() injects it when an author
+        // forgets). Without it here the typed payload reports the verdict
+        // and drops the reasoning, leaving it reachable only through the
+        // untyped allFields bag. Look inside the group, then its card, then
+        // the view — ensureCommentSlots() appends next to the group, hand
+        // authored markup tends to put it one level up.
+        const decisionId = group.dataset.decision;
+        const noteEl = group.querySelector(`[data-comment="${decisionId}-note"]`)
+          || (group.parentElement && group.parentElement.querySelector(`[data-comment="${decisionId}-note"]`))
+          || view.querySelector(`[data-comment="${decisionId}-note"]`);
+        decisions.push({
+          id: decisionId,
+          label: group.dataset.label || decisionId,
+          evaluation: checked.value,
+          view: view.dataset.view,
+          note: ((noteEl && noteEl.value) || '').trim()
+        });
+      });
+    });
+  }
+  // Annotations (§ Annotation Layer (optional)) live INSIDE
+  // section[data-iteration][data-active] — unlike the dock above, which is
+  // an overlay outside it — so this scan is scoped to `active` directly.
+  // Every design's screens are scanned regardless of which is on screen
+  // (same "every design, not just the active one" rule the dock scan
+  // relies on): the annotation layer is a per-screen DOM fixture, not
+  // something rebuilt on design switch, so querySelectorAll sees all of
+  // them whether their screen is currently `hidden` or not. Only answered
+  // pins (non-empty, trimmed textarea) produce an entry — an optional
+  // feature that ships zero completed annotations must still emit
+  // "annotations": [] (see § Decision schema), not omit the key.
+  const annotations = [];
+  if (active) {
+    active.querySelectorAll('[data-anno]').forEach(anno => {
+      const ta = anno.querySelector('textarea[data-annotation]');
+      const answer = ta ? (ta.value || '').trim() : '';
+      if (!answer) return;
+      const screen = anno.closest('section[data-screen][id]');
+      const design = anno.closest('section[data-design]');
+      const questionEl = anno.querySelector('.anno-bubble-question');
+      annotations.push({
+        id: anno.dataset.anno,
+        screen: screen ? screen.id : null,
+        design: design ? design.dataset.design : null,
+        question: questionEl ? questionEl.textContent.trim() : '',
+        answer
+      });
+    });
+  }
+  // Attachments (§ Attachments) — one entry per slot key that has at least
+  // one synced file. Design iterations have no single [data-comment] scan
+  // point the way the decision/free branches do (their comments are a flat
+  // array), so this walks every slot the attachment engine knows about
+  // rather than re-deriving the slot-key list from the DOM.
+  const attachments = {};
+  if (typeof attachmentsFor === 'function' && typeof _attachments !== 'undefined') {
+    for (const slotKey of _attachments.keys()) {
+      const list = attachmentsFor(slotKey);
+      if (list.length) attachments[slotKey] = list;
+    }
+  }
   return {
     submitted: true,
     template: 'design',
     iteration: active ? Number(active.dataset.iteration) : undefined,
-    decisions: [],
-    comments
+    decisions,
+    comments,
+    annotations,
+    attachments
   };
 }
 ```
@@ -2522,7 +4089,10 @@ function collectFreeDecisions() {
   });
   const comments = [];
   document.querySelectorAll('[data-comment]').forEach(el => {
-    if (el.value.trim()) comments.push({ id: el.dataset.comment, text: el.value.trim() });
+    const text = el.value.trim();
+    const attachments = (typeof attachmentsFor === 'function')
+      ? attachmentsFor(el.dataset.comment) : [];
+    if (text || attachments.length) comments.push({ id: el.dataset.comment, text, attachments });
   });
   return { submitted: true, template: 'free', decisions, comments };
 }
@@ -3313,6 +4883,43 @@ losing selections, comments, and ratings.
 const STORAGE_KEY = 'concept-state-' + location.pathname.split('/').pop().replace('.html', '');
 const STATE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+// A QuotaExceededError from localStorage.setItem, unguarded, throws OUT of
+// every change/input handler — one oversized state (e.g. a very long
+// session with many iterations) then silently kills ALL persistence for the
+// rest of the page, with nothing telling the user their edits stopped being
+// saved. Every setItem call site in this file (saveState, both `-pending`
+// writes near the submit handler) MUST go through this wrapper rather than
+// calling localStorage.setItem directly.
+let _persistWarnEl = null;
+let _persistWarned = false;
+function _showPersistWarning() {
+  // Once is enough — re-showing it on every subsequent failed write would
+  // spam the page while the underlying problem (storage full) persists
+  // across many `input` events in a row.
+  if (_persistWarned) return;
+  _persistWarned = true;
+  if (!_persistWarnEl) {
+    _persistWarnEl = document.createElement('div');
+    _persistWarnEl.className = 'persist-warning-banner';
+    _persistWarnEl.setAttribute('role', 'alert');
+    _persistWarnEl.textContent = '{{state.persist_failed}}';
+    document.body.appendChild(_persistWarnEl);
+  }
+  _persistWarnEl.hidden = false;
+}
+function _guardedSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    // QuotaExceededError (or, rarely, a disabled/private-mode store) — the
+    // in-memory state (and the IndexedDB attachment mirror, § Attachments)
+    // is unaffected, only this localStorage mirror failed to write.
+    _showPersistWarning();
+    return false;
+  }
+}
+
 function saveState() {
   const state = {
     _savedAt: Date.now(),
@@ -3336,6 +4943,26 @@ function saveState() {
     if (el.id || el.name) state['select:' + (el.id || el.name)] = el.value;
   });
   state['theme'] = document.documentElement.getAttribute('data-theme');
+  // Same non-form-state precedent as 'theme' above: the (optional)
+  // annotation layer's show/hide toggle is global and outlives a single
+  // element, so it is keyed directly rather than through the input/text/
+  // range/select scans. Written unconditionally (not just when true) so
+  // toggling back to visible also persists past a reload.
+  state['annoHidden'] = document.body.classList.contains('anno-hidden');
+  // Work package B — the dock's user-controlled maximise override (a DOM
+  // attribute, not a JS closure variable, so it can be read/written from
+  // this script block even though applyDockSize() lives in a different
+  // IIFE — § Layout JS `wireDesignLayout()`). Only meaningful for the
+  // design template's dock; absent everywhere else, so the `?.` guard
+  // degenerates to `undefined` -> falsy, never a crash.
+  state['dockMaximized'] = document.getElementById('feedback-dock')?.dataset.userMaximized === 'true';
+  // Work package C — persist the active VIEW (§ Views (optional)) the same
+  // DOM-read way: a view's active state lives on the element itself
+  // (data-view-active), so this needs no dependency on wireDesignLayout()'s
+  // closures despite living in a different script block. Absent on pages
+  // with no views, or while a design (not a view) is on screen.
+  const _activeViewEl = document.querySelector('section[data-view][data-view-active="true"]:not([hidden])');
+  if (_activeViewEl) state['_activeView'] = _activeViewEl.dataset.view;
   // Persist the user-interacted flag so a reload while the user has unsaved
   // edits does not re-arm the empty-submit confirm dialog. Restored values
   // would otherwise look like "untouched defaults" because change/input
@@ -3343,7 +4970,7 @@ function saveState() {
   if (typeof _userInteracted !== 'undefined' && _userInteracted) {
     state['_userInteracted'] = true;
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  _guardedSetItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 function restoreState() {
@@ -3361,6 +4988,19 @@ function restoreState() {
       return;
     }
     if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+    // Mirror of the theme restore above — see saveState(). Only ADDS the
+    // class; never removes it here, since the default (no class) already
+    // means "visible" and a missing/false key must not fight that default.
+    if (state.annoHidden) document.body.classList.add('anno-hidden');
+    // Mirror of the annoHidden restore above — see saveState(). Re-applies
+    // sizing immediately (not just on the next iteration switch) because
+    // this script block's DOMContentLoaded listener is not guaranteed to
+    // run after wireDesignLayout()'s own initial applyDockSize() call.
+    if (state.dockMaximized) {
+      const dockEl = document.getElementById('feedback-dock');
+      if (dockEl) dockEl.dataset.userMaximized = 'true';
+    }
+    if (typeof window.applyDockSize === 'function') window.applyDockSize();
     // Preserve the user's prior interaction flag across reloads — see saveState().
     if (state._userInteracted && typeof _userInteracted !== 'undefined') {
       _userInteracted = true;
@@ -3376,7 +5016,17 @@ function restoreState() {
         if (el && el.dataset.noPersist === undefined) el.checked = value;
       } else if (type === 'text') {
         const id = rest.join(':');
-        const el = document.querySelector(`[data-comment="${id}"]`) || document.querySelector(`textarea#${CSS.escape(id)}, input#${CSS.escape(id)}`);
+        // Resolve inside the LIVE iteration first. Annotation ids (`anno-a1`)
+        // and `{decisionId}-note` keys are only unique per iteration, so a
+        // page-wide first match writes the live text into iteration 1's
+        // frozen textarea and brings the live field back blank. Frozen
+        // iterations carry their submitted values in the HTML and must never
+        // be restored from localStorage. The page-wide fallback is what the
+        // feedback dock needs — it is an overlay outside section[data-iteration].
+        const live = document.querySelector('section[data-iteration][data-active]');
+        const el = (live && live.querySelector(`[data-comment="${id}"]`))
+          || document.querySelector(`[data-comment="${id}"]`)
+          || document.querySelector(`textarea#${CSS.escape(id)}, input#${CSS.escape(id)}`);
         if (el) el.value = value;
       } else if (type === 'range') {
         const id = rest.join(':');
@@ -3397,6 +5047,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Injection for why this safety net exists.
   if (typeof ensureCommentSlots === 'function') ensureCommentSlots();
   restoreState();
+  // Re-sync the (optional) annotation eye pill's aria-label/aria-pressed
+  // AFTER restoreState() has applied the persisted body.anno-hidden class —
+  // wireAnnotationLayer()'s own DOMContentLoaded-time updateAnnoUI() call
+  // may run before this listener (script order is not guaranteed across
+  // the page's several IIFEs), so relying on that alone would read the
+  // toggle's pre-restore state. See § Annotation Layer JS.
+  if (typeof updateAnnoUI === 'function') updateAnnoUI();
 });
 document.addEventListener('change', saveState);
 document.addEventListener('input', saveState);
@@ -3411,6 +5068,32 @@ document.addEventListener('input', saveState);
   the restore step rehydrates their values)
 - The `concept-submitted` class is NOT persisted
 - Theme preference IS persisted — prevents dark/light flash on reload
+- The (optional) annotation layer's global show/hide state IS persisted the
+  same way (`state['annoHidden']`) — see § Annotation Layer (optional).
+  Individual answers persist for free via the ordinary `text:` scan since
+  their textareas carry `data-comment`.
+- Every `localStorage.setItem` call site (here and the two `-pending` writes
+  near the submit handler) goes through `_guardedSetItem()`, never a bare
+  `localStorage.setItem` — a `QuotaExceededError` is caught, surfaces a
+  visible `.persist-warning-banner` (`{{state.persist_failed}}`) instead of
+  throwing out of the `change`/`input` handler, and further writes keep
+  being attempted (a later one may succeed once the user frees up space).
+
+### Persist Warning Banner CSS
+
+`_showPersistWarning()` (above) creates this element on first failure —
+there is no static markup for it, it never appears unless a write actually
+fails, so nothing needs to reserve space for it up front.
+
+```css
+.persist-warning-banner {
+  position: fixed; left: 50%; top: 12px; transform: translateX(-50%);
+  z-index: 10000; max-width: min(480px, calc(100vw - 2rem));
+  background: var(--danger-color, #f85149); color: #fff;
+  padding: .6rem 1rem; border-radius: 8px; font-size: .82rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+```
 
 ## Comment Slot Injection
 
@@ -3460,13 +5143,15 @@ function ensureCommentSlots() {
     const ta = document.createElement('textarea');
     ta.id = commentKey;
     ta.dataset.comment = commentKey;
+    ta.dataset.attachable = '';
     ta.placeholder = '{{decision.comment_placeholder}}';
     ta.rows = 2;
 
     row.appendChild(label);
     row.appendChild(ta);
-    // Image attachments for this comment — see § Comment Attachments.
-    row.appendChild(buildAttachmentBar(commentKey));
+    // Attachments for this comment (§ Attachments) — initCommentAttachments()
+    // (called at the bottom of this function) mounts the bar itself; it is
+    // the single place a bar is ever created, so it is not built here too.
 
     // Insert right after the bi-state group when both share the same parent;
     // otherwise append to the card so the override is visually attached.
@@ -3493,19 +5178,45 @@ function ensureCommentSlots() {
   reloads. Either trigger it manually or rely on the next `/reload` POST
   which forces a `location.reload()`.
 
-## Comment Attachments (images)
+## Attachments
 
-Every comment slot accepts images: a 📎 button, **Ctrl/Cmd+V paste** into the
-focused textarea, and drag & drop onto it. A screenshot is very often the
-fastest way to say what is wrong with a concept, and re-describing it in prose
-is exactly the work users should not have to redo.
+Every field marked `textarea[data-attachable]` — the feedback dock (general,
+per-design, per-screen, per-view), annotation answers, comparison option and
+view notes, and decision comment slots — accepts a file: a 📎 button, **drag
+& drop** onto the textarea, and **Ctrl/Cmd+V paste**. A screenshot, a log
+file, a PDF spec, a recording — whatever explains the feedback best — beats
+re-describing it in prose, and the user should never have to pick which
+field "supports" attachments: they all do.
 
-**The durability rule: upload on ATTACH, never on submit.** The image is
-`POST`ed to the bridge the moment it is pasted and is fsynced to
-`.claude/concepts/<slug>/attachments/<sha256>.<ext>` seconds later — long
-before the user decides to submit. A teardown mid-review therefore cannot lose
-it. Deferring the upload to submit time would put every pasted image back
-inside the exact window that made submissions disappear (#284).
+**The marker is `data-attachable`, never `data-comment`.** Several
+attachable fields — annotation answers, the decision-note textareas — also
+carry `data-comment` for `saveState()`/`restoreState()` and the comment
+collectors. Matching on `data-comment` would wire an attachment bar onto
+*every* comment field a second time wherever `data-attachable` is also
+present, and would wire one onto plain text-only comment fields that were
+never meant to take a file. `data-attachable` is the one selector
+`initCommentAttachments()` uses, so there is exactly one bar per field,
+full stop.
+
+**One bar per field, one mount rule.** A field may already own a dedicated
+`<div class="attach-slot" data-attach-slot="{slotKey}">` immediately after
+it — the annotation layer and every dock-built textarea (design/screen/view
+rows, § Layout JS) declare one. When that mount exists, the bar is placed
+inside it; when it does not (decision comment slots, comparison notes,
+inline decision-template textareas), the bar is appended right after the
+textarea, exactly like the original image-only version of this section did.
+Either way, `initCommentAttachments()` is idempotent: it flags each wired
+textarea (`dataset.attachWired`) and never creates a second bar for the
+same slot key, so calling it again after `ensureCommentSlots()`, after a
+dock rebuild (§ Layout JS `buildDesignUI()`), or after an iteration append
+is always safe.
+
+**The durability rule is unchanged: upload on ATTACH, never on submit.** The
+file is sent to the bridge the moment it is picked/pasted/dropped and is
+fsynced to `.claude/concepts/<slug>/attachments/<sha256>.<ext>` shortly
+after. A teardown mid-review cannot lose it. Deferring the upload to submit
+time would put every attached file back inside the exact window that made
+submissions disappear (#284).
 
 Two independent copies exist until the submission is processed:
 
@@ -3514,37 +5225,65 @@ Two independent copies exist until the submission is processed:
 | IndexedDB (`concept-attachments`) | immediately, before the network call | server down, bridge reaped, offline |
 | `attachments/<sha256>.<ext>` on disk | on the `POST /attachments` ack | browser cache wipe, tab close, PC restart |
 
-The local copy is kept — not deleted on a successful upload — until the whole
-submission has been processed. An upload that fails leaves the attachment
-marked `synced: false` with a visible retry badge, and it is retried on the
-next reconnect alongside `retryPendingSubmission()`.
+The local copy is kept — not deleted on a successful upload — until the
+whole submission has been processed. An upload that fails leaves the
+attachment marked `synced: false` with a visible retry control, and it is
+retried on the next reconnect (`restoreAttachments()`) alongside
+`retryPendingSubmission()`.
 
-Content addressing by sha256 makes all of this idempotent: pasting the same
-image twice, or a retry re-sending one, resolves to the same file. A retry can
-never duplicate a blob.
+Content addressing by sha256 makes all of this idempotent: attaching the
+same file twice, or a retry re-sending one, resolves to the same file. A
+retry can never duplicate a blob.
 
-**Only raster images are accepted** (`png`, `jpeg`, `gif`, `webp`). SVG is
-rejected by the server (HTTP 415) because attachments are served back from the
-bridge origin, where a script inside an uploaded SVG would run against every
-bridge endpoint.
+**Any file type is accepted.** The picker's `accept` restriction is gone,
+drag & drop and Ctrl+V no longer filter on `type.startsWith('image/')` —
+see § Bridge server: the server accepts "basically any file type", so the
+client no longer gatekeeps ahead of it. Plain-text paste is untouched: only
+`clipboardData.files` is intercepted, so pasting text into a focused
+textarea behaves exactly as before — a paste event with zero files falls
+through to the browser's default text-paste handling.
+
+**Rendering — only four raster types get a thumbnail.** `png`, `jpeg`,
+`gif`, `webp` render as an `<img>` thumbnail, same as before. Every other
+type — including a server-hosted SVG/PDF/office/archive file, which always
+comes back `application/octet-stream` (§ Bridge server, `GET
+/attachments/<id>` serving policy) and can never be rendered in an `<img>`
+— renders as a **file chip**: a type-derived icon, the original filename,
+a human-readable size, and a remove control. Chips and thumbnails share the
+same `.attach-thumb` wrapper and remove affordance; only the inner content
+differs.
+
+**Streaming upload with progress, JSON fallback.** The primary upload path
+sends the raw `File`/`Blob` via `XMLHttpRequest` with `X-Attach-Name`
+(percent-encoded) and `X-Attach-Mime` headers — the streaming shape from
+§ Bridge server. `xhr.upload.onprogress` drives a per-attachment progress
+bar so a large file never looks frozen. If the streaming shape is rejected
+as unsupported (a `404`/`501`-shaped response from an older bridge that
+only knows the legacy JSON shape), the client automatically falls back to
+the base64 JSON path used before this change. `413`/`507` responses are
+parsed for `reason` and surfaced as a readable message on the chip
+(too large / bridge storage full / bridge disk full) instead of a silent
+failure — the attachment stays local and marked unsynced either way, so
+nothing is lost, only unsynced until the next successful retry.
 
 ### HTML
 
-The bar is injected per comment slot by `ensureCommentSlots()`; generated
-pages may also emit it inline:
+The bar is injected per field by `ensureCommentSlots()` and
+`initCommentAttachments()`; generated pages may also emit it inline. No
+`accept` attribute on the file input — every type is allowed:
 
 ```html
 <div class="attach-bar" data-attach-for="variant-a-note">
   <button type="button" class="attach-btn" title="{{attach.button_title}}">📎</button>
   <span class="attach-hint">{{attach.hint}}</span>
-  <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+  <input type="file" multiple hidden>
   <div class="attach-thumbs"></div>
 </div>
 ```
 
-`{{attach.button_title}}` → e.g. "Bild anhängen (oder Strg+V / hierher ziehen)",
-`{{attach.hint}}` → e.g. "Strg+V oder ablegen". Resolve both at generation time
-per § UI Locale.
+`{{attach.button_title}}` → e.g. "Datei anhängen (oder Strg+V / hierher
+ziehen)", `{{attach.hint}}` → e.g. "Strg+V oder beliebige Datei ablegen".
+Resolve both at generation time per § UI Locale.
 
 ### CSS
 
@@ -3561,20 +5300,52 @@ per § UI Locale.
 .attach-thumb { position: relative; width: 64px; height: 64px; border-radius: 6px;
                 overflow: hidden; border: 1px solid var(--border-color); }
 .attach-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.attach-thumb .attach-remove {
+/* File chip — anything that is not one of the four raster types. Fixed
+   height to match .attach-thumb so a mixed row of thumbnails and chips
+   stays aligned; width grows to fit the filename instead of clipping it,
+   since (unlike a thumbnail) there is no image to fall back on. */
+.attach-chip {
+  display: flex; align-items: center; gap: .35rem; height: 64px; min-width: 64px;
+  max-width: 160px; padding: 0 .5rem; border-radius: 6px;
+  border: 1px solid var(--border-color); background: var(--surface-2);
+}
+.attach-chip .attach-chip-icon { font-size: 1.3rem; flex: none; }
+.attach-chip .attach-chip-meta { min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
+.attach-chip .attach-chip-name {
+  font-size: .7rem; color: var(--text-primary); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 100px;
+}
+.attach-chip .attach-chip-size { font-size: .65rem; color: var(--text-tertiary); }
+.attach-thumb .attach-remove, .attach-chip .attach-remove {
   position: absolute; top: 1px; right: 1px; width: 16px; height: 16px;
   border: none; border-radius: 50%; cursor: pointer; font-size: .7rem; line-height: 1;
   background: rgba(0,0,0,.65); color: #fff;
 }
+.attach-chip { position: relative; }
 /* Unsynced = on this machine only. Must be visible: it is the difference
    between "safe everywhere" and "safe until this browser forgets". */
-.attach-thumb[data-synced="false"] { border-color: var(--warning-color, #d08c30); }
-.attach-thumb[data-synced="false"]::after {
+.attach-thumb[data-synced="false"], .attach-chip[data-synced="false"] { border-color: var(--warning-color, #d08c30); }
+.attach-thumb[data-synced="false"]::after, .attach-chip[data-synced="false"]::after {
   content: "⟳"; position: absolute; bottom: 1px; left: 3px;
   font-size: .7rem; color: var(--warning-color, #d08c30);
 }
+/* Upload-in-flight progress bar — bottom edge of the thumb/chip. Width is
+   driven inline (style.width) from xhr.upload.onprogress; the element only
+   exists while synced === false AND a request is actually in flight. */
+.attach-progress {
+  position: absolute; left: 0; bottom: 0; height: 3px; width: 0;
+  background: var(--accent-color); transition: width .15s linear;
+}
+/* Failed upload — distinct from "still trying" (data-synced=false with no
+   error) so the user knows a retry needs a click, not just patience. */
+.attach-thumb[data-error="true"], .attach-chip[data-error="true"] { border-color: var(--danger-color, #f85149); }
+.attach-retry {
+  position: absolute; bottom: 1px; right: 1px; width: 16px; height: 16px;
+  border: none; border-radius: 50%; cursor: pointer; font-size: .65rem; line-height: 1;
+  background: var(--danger-color, #f85149); color: #fff;
+}
 /* Drop affordance on the textarea itself. */
-textarea[data-comment].attach-dragover { outline: 2px dashed var(--accent-color); outline-offset: 2px; }
+textarea[data-attachable].attach-dragover { outline: 2px dashed var(--accent-color); outline-offset: 2px; }
 ```
 
 ### JS
@@ -3583,6 +5354,7 @@ textarea[data-comment].attach-dragover { outline: 2px dashed var(--accent-color)
 // --- IndexedDB mirror: the copy that survives the bridge being gone ---
 const ATTACH_DB_NAME = 'concept-attachments';
 const ATTACH_STORE = 'blobs';
+const ATTACH_RASTER_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
 function attachDB() {
   return new Promise((resolve, reject) => {
@@ -3629,7 +5401,7 @@ async function attachDBDelete(key) {
   });
 }
 
-// Slot key -> [{key, slot, id, name, mime, size, synced, blob}]
+// Slot key -> [{key, slot, id, name, mime, size, synced, error, blob}]
 const _attachments = new Map();
 
 function buildAttachmentBar(slotKey) {
@@ -3639,7 +5411,7 @@ function buildAttachmentBar(slotKey) {
   bar.innerHTML =
     '<button type="button" class="attach-btn" title="{{attach.button_title}}">📎</button>' +
     '<span class="attach-hint">{{attach.hint}}</span>' +
-    '<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>' +
+    '<input type="file" multiple hidden>' +
     '<div class="attach-thumbs"></div>';
   return bar;
 }
@@ -3650,19 +5422,55 @@ function _barFor(slotKey) {
   return document.querySelector('.attach-bar[data-attach-for="' + CSS.escape(slotKey) + '"]');
 }
 
+// Resolves where a slot's bar lives: a dedicated .attach-slot mount when the
+// markup declares one (annotation answers, every dock-built textarea — see
+// § Layout JS), otherwise appended straight after the textarea (decision
+// comment slots, comparison notes, inline decision-template textareas) —
+// same fallback the original image-only bar used.
+function _mountAttachmentBar(ta, slotKey) {
+  const existing = _barFor(slotKey);
+  if (existing) return existing;
+  const bar = buildAttachmentBar(slotKey);
+  const dedicated = document.querySelector('.attach-slot[data-attach-slot="' + CSS.escape(slotKey) + '"]');
+  if (dedicated) dedicated.appendChild(bar);
+  else if (ta.parentElement) ta.parentElement.appendChild(bar);
+  return bar;
+}
+
+function formatAttachSize(bytes) {
+  if (!bytes && bytes !== 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let n = bytes, i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return (i === 0 ? n : n.toFixed(1)) + ' ' + units[i];
+}
+
+function attachFileIcon(mime, name) {
+  const ext = (name || '').split('.').pop().toLowerCase();
+  if ((mime || '').startsWith('image/')) return '🖼️';
+  if ((mime || '').startsWith('video/')) return '🎬';
+  if ((mime || '').startsWith('audio/')) return '🎵';
+  if (mime === 'application/pdf' || ext === 'pdf') return '📕';
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '🗜️';
+  if (['doc', 'docx', 'txt', 'md', 'rtf'].includes(ext)) return '📄';
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return '📊';
+  if (['ppt', 'pptx'].includes(ext)) return '📽️';
+  if (['js', 'ts', 'py', 'json', 'html', 'css', 'java', 'go', 'rs', 'c', 'cpp'].includes(ext)) return '💻';
+  return '📎';
+}
+
 function initCommentAttachments() {
-  document.querySelectorAll('textarea[data-comment]').forEach(ta => {
-    if (ta.dataset.attachWired) return;      // idempotent, like ensureCommentSlots
-    ta.dataset.attachWired = '1';
+  document.querySelectorAll('textarea[data-attachable]').forEach(ta => {
     const slotKey = _slotKeyOf(ta);
     if (!slotKey) return;
-
-    // A page whose textarea was emitted inline has no bar yet.
-    if (!_barFor(slotKey) && ta.parentElement) {
-      ta.parentElement.appendChild(buildAttachmentBar(slotKey));
-    }
-    const bar = _barFor(slotKey);
-    if (!bar) return;
+    // Idempotent: a rebuilt textarea (dock rebuild, iteration append) is a
+    // brand-new node with a clean dataset, so this only short-circuits a
+    // genuine double-call on the SAME still-attached node.
+    if (ta.dataset.attachWired && _barFor(slotKey)) { renderAttachments(slotKey); return; }
+    ta.dataset.attachWired = '1';
+    const bar = _mountAttachmentBar(ta, slotKey);
+    if (bar.dataset.wired) { renderAttachments(slotKey); return; }
+    bar.dataset.wired = '1';
 
     const fileInput = bar.querySelector('input[type="file"]');
     bar.querySelector('.attach-btn').addEventListener('click', () => fileInput.click());
@@ -3671,11 +5479,12 @@ function initCommentAttachments() {
       fileInput.value = '';
     });
 
-    // Hotkey: plain Ctrl/Cmd+V into the textarea. The clipboard carries the
-    // image as a file item, so nothing extra needs pressing.
+    // Ctrl/Cmd+V into the textarea — ANY file type in the clipboard, not
+    // just images. Plain text paste (files.length === 0) is left alone so
+    // the default text-paste behaviour is never touched.
     ta.addEventListener('paste', ev => {
       const items = Array.from((ev.clipboardData || {}).items || []);
-      const files = items.filter(i => i.kind === 'file' && i.type.startsWith('image/'))
+      const files = items.filter(i => i.kind === 'file')
                          .map(i => i.getAsFile())
                          .filter(Boolean);
       if (!files.length) return;             // plain text paste — leave it alone
@@ -3688,11 +5497,13 @@ function initCommentAttachments() {
     ['dragleave', 'drop'].forEach(evt =>
       ta.addEventListener(evt, () => ta.classList.remove('attach-dragover')));
     ta.addEventListener('drop', e => {
-      const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith('image/'));
+      const files = Array.from(e.dataTransfer?.files || []);   // any type
       if (!files.length) return;
       e.preventDefault();
       addAttachments(slotKey, files);
     });
+
+    renderAttachments(slotKey);
   });
 }
 
@@ -3700,11 +5511,12 @@ async function addAttachments(slotKey, files) {
   for (const file of files) {
     const key = slotKey + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 8);
     const rec = {
-      key, slot: slotKey, id: null, name: file.name || 'pasted-image',
-      mime: file.type, size: file.size, synced: false, blob: file,
+      key, slot: slotKey, id: null, name: file.name || 'attachment',
+      mime: file.type || 'application/octet-stream', size: file.size,
+      synced: false, error: null, progress: 0, blob: file,
     };
     // LOCAL FIRST — before the network call, so a failure at any point after
-    // this leaves the image recoverable on this machine.
+    // this leaves the file recoverable on this machine.
     try { await attachDBPut(rec); } catch { /* private mode: server copy still applies */ }
     const list = _attachments.get(slotKey) || [];
     list.push(rec);
@@ -3715,28 +5527,77 @@ async function addAttachments(slotKey, files) {
   }
 }
 
+// Streaming upload (§ Bridge server, Shape B) with progress, falling back to
+// the legacy base64-in-JSON path (Shape A) only when the streaming shape is
+// rejected as unsupported — an older bridge that has never heard of it.
+function _uploadStreaming(rec) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/attachments');
+    xhr.setRequestHeader('Content-Type', rec.mime || 'application/octet-stream');
+    xhr.setRequestHeader('X-Attach-Name', encodeURIComponent(rec.name));
+    xhr.setRequestHeader('X-Attach-Mime', rec.mime || 'application/octet-stream');
+    xhr.upload.onprogress = e => {
+      if (!e.lengthComputable) return;
+      rec.progress = Math.round((e.loaded / e.total) * 100);
+      renderAttachments(rec.slot);
+    };
+    xhr.onload = () => {
+      if (xhr.status === 404 || xhr.status === 501) { resolve({ unsupported: true }); return; }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        let reason = 'error_generic';
+        try { reason = 'error_' + (JSON.parse(xhr.responseText).reason || 'generic'); } catch { /* ignore */ }
+        resolve({ ok: false, reason });
+        return;
+      }
+      try { resolve({ ok: true, meta: JSON.parse(xhr.responseText) }); }
+      catch { resolve({ ok: false, reason: 'error_generic' }); }
+    };
+    xhr.onerror = () => resolve({ ok: false, reason: 'error_offline' });
+    xhr.send(rec.blob);
+  });
+}
+
+function _uploadLegacyJSON(rec) {
+  return new Promise((resolve) => {
+    const fr = new FileReader();
+    fr.onerror = () => resolve({ ok: false, reason: 'error_offline' });
+    fr.onload = async () => {
+      const data = String(fr.result).split(',')[1] || '';
+      try {
+        const res = await fetch('/attachments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: rec.name, mime: rec.mime, data })
+        });
+        if (!res.ok) {
+          let reason = 'error_generic';
+          try { reason = 'error_' + ((await res.json()).reason || 'generic'); } catch { /* ignore */ }
+          resolve({ ok: false, reason });
+          return;
+        }
+        resolve({ ok: true, meta: await res.json() });
+      } catch { resolve({ ok: false, reason: 'error_offline' }); }
+    };
+    fr.readAsDataURL(rec.blob);
+  });
+}
+
 async function uploadAttachment(rec) {
-  try {
-    const data = await new Promise((resolve, reject) => {
-      const fr = new FileReader();
-      fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
-      fr.onerror = () => reject(fr.error);
-      fr.readAsDataURL(rec.blob);
-    });
-    const res = await fetch('/attachments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: rec.name, mime: rec.mime, data })
-    });
-    if (!res.ok) return false;               // 415/413/507 — keep it local, badge stays
-    const meta = await res.json();
-    rec.id = meta.id;
+  rec.error = null;
+  let result;
+  try { result = await _uploadStreaming(rec); }
+  catch { result = { ok: false, reason: 'error_offline' }; }
+  if (result.unsupported) result = await _uploadLegacyJSON(rec);
+  if (result.ok) {
+    rec.id = result.meta.id;
     rec.synced = true;
+    rec.progress = 100;
     try { await attachDBPut(rec); } catch { /* ignore */ }
     return true;
-  } catch {
-    return false;                            // offline — the reconnect path retries
   }
+  rec.error = result.reason || 'error_generic';    // {{attach.<reason>}} on the chip
+  return false;
 }
 
 function renderAttachments(slotKey) {
@@ -3745,21 +5606,66 @@ function renderAttachments(slotKey) {
   const thumbs = bar.querySelector('.attach-thumbs');
   thumbs.innerHTML = '';
   for (const rec of _attachments.get(slotKey) || []) {
+    const raster = ATTACH_RASTER_MIME.has(rec.mime);
     const wrap = document.createElement('div');
-    wrap.className = 'attach-thumb';
+    wrap.className = raster ? 'attach-thumb' : 'attach-chip';
     wrap.dataset.synced = String(!!rec.synced);
-    wrap.title = rec.name + (rec.synced ? '' : ' — {{attach.not_synced}}');
-    const img = document.createElement('img');
-    // Prefer the server copy once it exists: it proves the durable write
-    // landed, and it survives an IndexedDB eviction.
-    img.src = rec.synced && rec.id ? '/attachments/' + rec.id : URL.createObjectURL(rec.blob);
-    img.alt = rec.name;
+    wrap.dataset.error = String(!!rec.error);
+    wrap.title = rec.name + (rec.synced ? '' : rec.error ? ' — {{attach.' + rec.error + '}}' : ' — {{attach.uploading}}');
+
+    if (raster) {
+      const img = document.createElement('img');
+      // Prefer the server copy once it exists: it proves the durable write
+      // landed, and it survives an IndexedDB eviction.
+      img.src = rec.synced && rec.id ? '/attachments/' + rec.id : URL.createObjectURL(rec.blob);
+      img.alt = rec.name;
+      wrap.appendChild(img);
+    } else {
+      // Never <img> a non-raster blob — a server-hosted SVG/PDF/etc. is
+      // always served application/octet-stream (§ Bridge server), so there
+      // is nothing an <img> tag could show.
+      const icon = document.createElement('span');
+      icon.className = 'attach-chip-icon';
+      icon.textContent = attachFileIcon(rec.mime, rec.name);
+      const meta = document.createElement('div');
+      meta.className = 'attach-chip-meta';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'attach-chip-name';
+      nameEl.textContent = rec.name;
+      const sizeEl = document.createElement('span');
+      sizeEl.className = 'attach-chip-size';
+      sizeEl.textContent = formatAttachSize(rec.size);
+      meta.appendChild(nameEl);
+      meta.appendChild(sizeEl);
+      wrap.appendChild(icon);
+      wrap.appendChild(meta);
+    }
+
+    // In-flight progress — only while genuinely uploading (not yet synced,
+    // no error recorded yet).
+    if (!rec.synced && !rec.error) {
+      const bar2 = document.createElement('div');
+      bar2.className = 'attach-progress';
+      bar2.style.width = (rec.progress || 0) + '%';
+      wrap.appendChild(bar2);
+    }
+
+    if (rec.error) {
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'attach-retry';
+      retry.title = '{{attach.retry}}';
+      retry.textContent = '⟳';
+      retry.addEventListener('click', () => { uploadAttachment(rec).then(() => renderAttachments(slotKey)); });
+      wrap.appendChild(retry);
+    }
+
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'attach-remove';
+    rm.title = '{{attach.remove}}';
     rm.textContent = '×';
     rm.addEventListener('click', () => removeAttachment(slotKey, rec.key));
-    wrap.appendChild(img);
     wrap.appendChild(rm);
     thumbs.appendChild(wrap);
   }
@@ -3787,10 +5693,10 @@ async function restoreAttachments() {
   for (const slot of _attachments.keys()) renderAttachments(slot);
 }
 
-// Called from collectDecisionDecisions — only synced attachments are named in
-// the payload, because Claude reads them from disk by id. An unsynced one is
-// still on this machine and is retried, but it must not be advertised as a
-// path that does not exist.
+// Called from every collectDecisions branch — only synced attachments are
+// named in the payload, because Claude reads them from disk by id. An
+// unsynced one is still on this machine and is retried, but it must not be
+// advertised as a path that does not exist.
 function attachmentsFor(slotKey) {
   return (_attachments.get(slotKey) || [])
     .filter(r => r.synced && r.id)
@@ -3807,7 +5713,10 @@ function unsyncedAttachmentCount() {
 
 Wire `restoreAttachments()` into `DOMContentLoaded` **after** `ensureCommentSlots()`
 (the bars must exist before thumbnails render), and call `initCommentAttachments()`
-again after any iteration append, exactly like `ensureCommentSlots()`.
+again after any iteration append, exactly like `ensureCommentSlots()` — and,
+for the design template, after every dock rebuild (§ Layout JS
+`buildDesignUI()` already does this — see the `initCommentAttachments()` call
+at the end of that function).
 
 `{{slug}}` is the concept's date-slug, substituted at generation time — it is
 the store directory name, so Claude can open the referenced file directly with
@@ -4096,7 +6005,7 @@ async function submitWithAction(action) {
 
   if (!durable) {
     // Keep a local copy first, whatever went wrong.
-    localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data));
+    _guardedSetItem(STORAGE_KEY + '-pending', JSON.stringify(data));
     if (transportFailed) {
       // Offline / bridge down. This case self-heals — retryPendingSubmission()
       // fires on reconnect — so the submitted panel stays up and we only
@@ -4374,7 +6283,7 @@ function buildWizardIssueList() {
   // same rewrite appends another, and a count-keyed fast path would then sync
   // every mirror to the WRONG body checkbox — the user ticks a row labelled A
   // and files an issue for B.
-  const ids = boxes.map(el => el.name || el.id || '').join(' ');
+  const ids = JSON.stringify(boxes.map(el => el.name || el.id || ''));
   if (host.dataset.itemKey === ids) {
     Array.from(host.children).forEach((row, i) => {
       const box = row.querySelector('input');
@@ -4517,7 +6426,7 @@ async function submitFinalize() {
   }
 
   if (!durable) {
-    localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(payload));
+    _guardedSetItem(STORAGE_KEY + '-pending', JSON.stringify(payload));
     if (transportFailed) {
       // Offline / bridge down — retryPendingSubmission() delivers it on
       // reconnect, so leave the sent state up and just explain the delay.
