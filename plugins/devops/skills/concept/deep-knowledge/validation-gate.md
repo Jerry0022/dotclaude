@@ -217,8 +217,19 @@ template instead. Reconsider the template pick before suppressing these.
 | P13 | `.panel-fab,` + `.feedback-fab` sharing ONE size/shape rule | Both FABs are one component with two positions. A page that declares separate `width`/`height`/`border-radius` per FAB has the 56-vs-64px mismatch back. |
 | P13b | `feedback-maximize` | Dock maximise/restore control — a DISTINCT button from `feedback-close` (minimise closes, this only resizes). Mandatory on every `design` page: the dock has no other way to grow past its automatic compact/wide size. |
 | P13c | `data-user-maximized` on `#feedback-dock` | The persisted maximise override. Deliberately a SEPARATE attribute from `data-size` (which `applyDockSize()` still only ever sets to `compact`/`wide` — exactly two automatic sizes, unchanged): the maximised CSS rule (`.feedback-dock[data-user-maximized="true"]`) composes on top of whichever of the two is current. Missing → the maximise button toggles the DOM but nothing resizes, or a reload silently drops the user's choice. |
+| P14 | `data-device-clone` appearing in BOTH `saveState()` and `collectAllFormFields()` | Device frames are clones of the mockup living inside `section[data-iteration][data-active]`. Without the `closest('[data-device-clone]')` filter in both, every mock field ships two extra times in `allFields` under namespaced names, and the localStorage blob fills with `dv1-*` keys that the next screen switch deletes again. Silent in both directions — the panel goes green either way. |
+| P15 | `applyViewport()` called from inside `showScreen()` | The single route that rebuilds the frames for the screen that just became active and re-clamps the mode against what the design declares. Defined-but-never-called leaves the toggle switching a mode nothing renders. |
 
 Both dock textareas (P5 general field, `design-textareas`/`screen-textareas`/`view-textareas`) and every attachable field inside them MUST carry `data-attachable` per pattern 41 — the dock is the field most likely to be missed since it is rebuilt by `buildDesignUI()` rather than authored once inline.
+
+**Only when the page declares device views** (any `section[data-iteration]`
+or `section[data-design]` carrying `data-viewports` with ≥2 entries):
+
+| # | Pattern | Purpose |
+|---|---------|---------|
+| P16 | `viewport-toggle` | The bottom-left device switcher. A page that declares two viewports and ships no toggle offers no way to reach the second one. |
+| P17 | `bestFit` + `device-fit` | The fit maths and the size-compensating wrapper. `transform: scale()` leaves the layout box unscaled, so a page missing `.device-fit` scrolls around empty space and puts the top of the stage out of reach. |
+| P18 | NO `<script>`, `<canvas>`, `<style>` or `<iframe>` inside any `section[data-screen]`, and NO `vh`/`vw`/`dvh`/`svh` unit or `position: fixed` in their CSS | These survive `cloneNode()` badly or not at all (a cloned `<script>` never runs, a cloned `<canvas>` is blank) or resolve against the browser window instead of the frame. Each renders correctly in desktop mode and dead or oversized in device mode — a divergence with no error anywhere. See templates.md § Responsive device views. |
 
 **Why P3/P5 carry alternates:** the dock was rebuilt for the design layer and
 its ids changed (`feedback-screen-list` → `screen-textareas`,
@@ -327,6 +338,12 @@ enforces the same on write.
   `data-iteration-template` → error; `applyIterationTemplate()` not wired or
   fired too late, causing a flash of the wrong layout
 - Design iteration without `data-screen` → feedback dock renders empty
+- Device-view clones not excluded from `saveState` / `collectAllFormFields`
+  → every mock field ships two extra times in `allFields`, and the
+  localStorage blob grows dead `dv1-*` keys that the next screen switch drops
+- `vh`/`vw` units or `<script>`/`<canvas>` inside a `data-screen` on a page
+  that declares device views → the mockup renders correctly at desktop and
+  oversized or blank inside the phone/tablet frames, with nothing logged
 - Heartbeat poller does an HTTP-only check (no `await r.json()` + `claude_ts` assignment) → indicator stays green forever because the server self-pulse always returns 200, even when Claude's cron is dead
 - Disconnected classified before the first `/heartbeat` response (no `_everPolled` guard) → a fresh page flashes connecting→disconnected→connected; with the old overlay it also forced two "Got it" clicks
 - Cache hint not wired to the disconnected state (`_setCacheHints` missing from `checkClaudeConnection`) → a click made while Claude is offline looks lost instead of visibly queued (the Offline Submit Queue still delivers it on reconnect, but the user gets no signal)
