@@ -90,6 +90,27 @@ would also fit.
    `design-tokens.*`, `theme.*`, `tailwind.config.*`, Figma tokens via
    the design MCP, or the existing UI code before inventing a look.
 
+   **Optional annotation layer:** when Claude has a concrete, element-level
+   question about a specific spot in the mock, pin it there instead of (or
+   in addition to) the general feedback dock — see § Annotation Layer
+   (optional) below. Skip it entirely when there is nothing that specific
+   to ask; it is not a default addition to every design iteration.
+
+   **Optional views:** alongside the ≥1 design, this same `design` iteration
+   MAY also hold `section[data-view]` — fullscreen, non-visual questions
+   with their own TOC entry, switched exactly like a design (see
+   `deep-knowledge/templates.md` § Views (optional)). Two kinds ship as
+   templates: `decision` (2..n named alternatives, bi-state per alternative)
+   and `comparison` (2..n concrete candidates side by side, verdict per
+   option, optional criteria matrix). **Rule of thumb — view vs. its own
+   `decision` iteration:** if the question is *about the artefact in front
+   of the user* (they need to look at, or click through, the mock to answer
+   sensibly) → a view inside this iteration. If the question stands on its
+   own, independent of any one screen → its own `decision` iteration one
+   round later. Views are never mandatory and never a substitute for the
+   ≥1 design — an iteration that is only questions is a `decision`
+   iteration, not a `design` one with zero designs.
+
 2. **Are there ≥2 substantive non-visual alternatives?**
    Multi-option evaluation where the user must pick from 2+ mutually-exclusive
    alternatives (architecture, tech, strategy, library, approach, …). If there
@@ -112,7 +133,7 @@ into 340px variant cards, so stop trying to fit them there.
 
 | Template | Layout signature |
 |---|---|
-| **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 💬 FAB bottom right (same 60px circle as ☰; collapsed by default; general / per-design / per-screen comments), design switcher when ≥2 designs |
+| **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 💬 FAB bottom right (same 60px circle as ☰; collapsed by default; general / per-design / per-screen / per-view comments), design switcher when ≥2 designs, view segments alongside it when ≥1 optional view (§ Views (optional)) |
 | **decision** | Sidebar (~80/~20), variant cards, tri-state per variant |
 | **free** | Sidebar (~80/~20), Claude-authored freeform body, optional tri-state per section |
 
@@ -203,7 +224,7 @@ Panel layout depends on the template picked in Step 1a:
 | Template | Panel mode | Extras |
 |---|---|---|
 | **decision** | Fixed sticky sidebar (~20% screen width), always visible | — |
-| **design** | Overlay panel (360px slide-in from right), toggled by the ☰ FAB top right | **Feedback dock** as a speech bubble anchored to the 💬 FAB bottom right, with general / per-design / per-screen comments; design switcher when ≥2 designs |
+| **design** | Overlay panel (360px slide-in from right), toggled by the ☰ FAB top right | **Feedback dock** as a speech bubble anchored to the 💬 FAB bottom right, with general / per-design / per-screen / per-view comments; design switcher when ≥2 designs; `#screen-nav` gains a second group below the designs group, one entry per optional view (§ Views (optional)) |
 | **free** | Fixed sticky sidebar (~20%), always visible | — |
 
 On narrow screens (<768px), sidebar-mode panels collapse to a sticky bottom
@@ -246,7 +267,7 @@ Variant/section evaluation uses a **bi-state selector** (not tri-state):
 | Template | Evaluation behavior |
 |---|---|
 | **decision** | **Mandatory per variant card.** Every variant MUST carry the bi-state selector. |
-| **design** | **No evaluation.** Feedback is collected via the feedback dock on the 💬 FAB (general + per-design + per-screen textareas). |
+| **design** | **No evaluation on screens.** Feedback on the mockups themselves is collected via the feedback dock (general + per-design + per-screen textareas). **Bi-state inside optional question views** — a `data-view-kind="decision"` or `"comparison"` view (§ Views (optional)) carries the same mandatory `[data-decision]` bi-state as the decision template; screens stay evaluation-free either way. |
 | **free** | **Opt-in per section.** Claude decides per section whether user evaluation is useful; sections with an `eval-{id}` radio group get evaluated, plain sections just show content. |
 
 **The two states:**
@@ -310,6 +331,52 @@ Copy these verbatim; hand-tuning them per concept is what made the two FABs
 different sizes and the dock alternately a mini-box and a full-width bar. See
 `deep-knowledge/templates.md` § Template: design for the full HTML/CSS/JS and
 the geometry rationale.
+
+### Annotation Layer (optional)
+
+A second, independent feedback channel for the design template: instead of
+(or alongside) the dock's free-form notes, pin a numbered question directly
+onto a concrete element of a screen — "should this list auto-refresh?", "is
+this the right empty state?" — and the user answers it right there, next to
+the thing it's about. **Use it only when there is a concrete, element-level
+question to ask; it is not a default decoration on every design iteration.**
+A screen with nothing specific to ask about simply has no
+`[data-anno-layer]` — nothing degrades, nothing is missing.
+
+- A pin sits on the element, connected by a short leader line to a speech
+  bubble beside it. Collapsed, the bubble shows a truncated question line;
+  clicking it (or the pin) expands to the full question, an answer
+  textarea, and an attachment bar — any file type, drag & drop / Ctrl+V /
+  picker, same as every other feedback field (`deep-knowledge/templates.md`
+  § Attachments).
+- The **eye pill** (top-left, directly below the screen-position indicator)
+  toggles the whole layer for the whole page. It shows how many questions
+  are open on the *current* screen and is the only thing left visible once
+  the layer is hidden, so the user can always bring it back.
+- **The ☰ and 💬 FABs are completely unaffected** — they keep working
+  exactly as before, independently of whether the annotation layer is shown
+  or hidden. The feedback dock stays the normal, always-available way to
+  leave general notes.
+
+See `deep-knowledge/templates.md` § Annotation Layer (optional) for the
+full HTML/CSS/JS reference, the payload shape (`annotations[]`), and how a
+frozen iteration keeps its annotations browsable and read-only.
+
+### Views (optional)
+
+A third, independent thing a `design` iteration may hold: fullscreen,
+non-visual questions that belong in the SAME round as the artefact they are
+about — `section[data-view]`, a top-level sibling of `section[data-design]`,
+switched exactly like a design (its own switcher segment, its own second
+`#screen-nav` group). Two kinds: `data-view-kind="decision"` (2..n named
+alternatives, bi-state per alternative) and `data-view-kind="comparison"`
+(2..n concrete candidates side by side, verdict per option, optional
+criteria matrix — mandatory skeleton, free interior). See § Step 1a above
+for when to use a view instead of a separate `decision` iteration, and
+`deep-knowledge/templates.md` § Views (optional) for the full HTML/CSS/JS
+reference and the payload shape (`decisions[].view`, `comments.views`).
+**≥1 `data-design` stays mandatory** — views augment a design iteration,
+they never replace it.
 
 ### Reload Resilience
 
@@ -614,14 +681,23 @@ User submits → Claude reads → Claude processes → Claude updates page → U
 ### 5a. Read & Parse
 1. Read the JSON from `#concept-decisions`
 2. Parse into structured decisions and comments
-3. **Open any attached images.** A comment may carry
-   `attachments: [{id, name, mime, size, path}]` — pasted or dropped
-   screenshots, already persisted by the bridge at
-   `.claude/concepts/{date}-{slug}/attachments/<id>`. Read every one with the
-   Read tool before acting on that comment. A comment can also be
-   image-ONLY with an empty `text`; that is a complete remark, not an empty
-   one, and skipping it because the text is blank silently discards the
-   user's point.
+3. **Open every attachment — any file type, not just images.** A `decision`/
+   `free` template comment may carry `attachments: [{id, name, mime, size,
+   path}]` inline; a `design` template iteration instead carries a
+   top-level `attachments` object keyed by slot (`general`, `design-{id}`,
+   `{screenId}`, `view-{id}`, `anno-{id}`, `{decisionId}-note}` — see
+   `deep-knowledge/templates.md` § Decision schema (design branch) — walk
+   every key and treat each entry the same as an inline one. Both shapes
+   are already persisted by the bridge at
+   `.claude/concepts/{date}-{slug}/attachments/<id>` (§ Bridge server §
+   Attachment HTTP contract). Read every one with the Read tool before
+   acting on the comment it belongs to: text/code/markdown/JSON files read
+   directly, images render inline, and for a format the Read tool cannot
+   open (an archive, a binary office format) at least surface the filename
+   and size to the user in your response rather than silently skipping it.
+   A comment (or a design slot) can also be attachment-ONLY with an empty
+   `text`; that is a complete remark, not an empty one, and skipping it
+   because the text is blank silently discards the user's point.
 
 **Coverage check:** before processing decisions, verify every named form
 field that exists in the just-frozen iteration HTML appears in the

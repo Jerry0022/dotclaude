@@ -99,7 +99,9 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -EA SilentlyContinue }
    ```
    After launch, assert a **single** listener (`netstat -ano | grep
-   "0.0.0.0:{port}"` → exactly one LISTENING row) before opening the browser.
+   "127.0.0.1:{port}"` → exactly one LISTENING row — the server binds
+   loopback-only, see § Loopback-only bind below, so it will NOT show up
+   under `0.0.0.0:{port}`) before opening the browser.
    If the bind still fails because a foreign session grabbed the port in the
    race window, re-run `node "$REG" pick "{project-root}"` for a fresh port and
    retry — never force the sweep.
@@ -117,6 +119,27 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    present identically. If you ever fork the script, keep it threaded.
    `$PORT` is written to `.claude/concept-active.json` in step 6 so the
    SessionStart resume hook can find this server again after a Claude restart.
+
+   **Loopback-only bind, origin gate on every data-bearing endpoint, no CORS
+   wildcard (#312 red-team F1).** `concept-server.py` binds `127.0.0.1`, not
+   all interfaces — the server holds the user's full review notes and every
+   file attached to the concept with no authentication beyond origin
+   checking, so it must not be reachable from other hosts on the LAN. The
+   single origin check, `_same_origin_ok` (no `Origin` header — curl, i.e.
+   Claude's own polling — or an `Origin` matching the bridge's own
+   host/localhost/127.0.0.1; anything else 403s), gates every endpoint that
+   returns or accepts real content: `GET /decisions`, `GET /pending`,
+   `GET /recovery`, `GET /attachments/<id>`, `POST /decisions`,
+   `POST /attachments`, `POST /reload`, `POST /shutdown`. It deliberately
+   does NOT gate `GET /heartbeat` or `GET /reload` (a bare counter, nothing
+   sensitive) — those stay reachable from same-origin without a check so the
+   page's own poll loop never has an extra failure mode. `Access-Control-
+   Allow-Origin` is never a wildcard: the server echoes the request's own
+   `Origin` back only when `_same_origin_ok` accepts it, and omits the CORS
+   headers entirely for a request with no `Origin` (CORS is a browser-only
+   concept; `curl` never needs it). **A missing `Origin` header always
+   passes** — that is Claude's own `curl` polling, and the whole monitoring
+   loop depends on it continuing to work with no header at all.
 
    **The `--html` flag is mandatory.** It arms the server-side watchdog:
    if the concept HTML file disappears for > 10 s, the watchdog terminates
@@ -505,11 +528,17 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    fixed, lower 32 MiB cap regardless of `--max-attachment-bytes` — files
    above that MUST use the streaming path.
 
-   Before accepting any upload the server checks free disk space on the
-   store volume (`shutil.disk_usage`) against the declared/decoded size plus
-   a 64 MiB safety margin, and refuses with `507 disk_full` if it would not
-   fit — this protects `state.json`/`journal.jsonl` from landing a write on
-   a full disk mid-mutation.
+   Free disk space on the store volume (`shutil.disk_usage`) is checked
+   against the size plus a 64 MiB safety margin TWICE: once as an advisory
+   pre-check (before decoding Shape A's base64, or before Shape B streams
+   the body to a temp file at all — fails obviously-hopeless uploads fast),
+   and once authoritatively inside `_attachment_quota_lock`, in the same
+   critical section as the quota check and the write/rename. Only the
+   second check is what actually prevents two concurrent uploads from both
+   observing free space, both passing the advisory check, and together
+   eating into the safety margin — a single un-locked check cannot do that
+   regardless of where it runs. Either check failing refuses with
+   `507 disk_full`.
 
    **Shape A — legacy base64-in-JSON** (existing pages; kept working
    unchanged). `Content-Type: application/json` (or no `Content-Type` at
@@ -585,7 +614,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    | 400    | `empty`               | zero-byte upload (both shapes) | |
    | 400    | `bad_json`            | Shape A body is not valid JSON | |
    | 400    | `bad_base64`          | Shape A `data` does not decode | |
-   | 400    | `bad_content_length`  | Shape B `Content-Length` is not an integer | |
+   | 400    | `bad_content_length`  | `Content-Length` is not a non-negative integer (either shape; also guards `/decisions`, `/reset`, `/progress`, `/status`) | |
    | 400    | `client_aborted`      | Shape B: connection closed before all declared bytes arrived | `detail` |
    | 403    | *(none — `send_error`)* | cross-origin request (see § same-origin gate below) | |
    | 411    | `length_required`     | Shape B has no `Content-Length` header | |
@@ -600,14 +629,17 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    when the legacy path's fixed 32 MiB cap was hit, pointing at Shape B.
 
    **Same-origin gate.** `POST /attachments` uses the same `_same_origin_ok`
-   check as `/reload` and `/shutdown`: no `Origin` header (curl, Claude's own
-   requests) or an `Origin` matching the bridge's own host/localhost/127.0.0.1
-   is accepted; anything else gets a bare `403`.
+   check as every other data-bearing endpoint — see § Loopback-only bind,
+   origin gate on every data-bearing endpoint above: no `Origin` header
+   (curl, Claude's own requests) or an `Origin` matching the bridge's own
+   host/localhost/127.0.0.1 is accepted; anything else gets a bare `403`.
 
    **`GET /attachments/<sha256>.<ext>` — serving policy.** The identifier is
    shape-validated (`^[0-9a-f]{64}\.[a-z0-9]{1,12}$`) before it ever touches
-   the filesystem — traversal-proof regardless of stored extension. Only the
-   four raster image types are ever served **inline**:
+   the filesystem — traversal-proof regardless of stored extension. A query
+   string on the request (e.g. a cache-busting `?v=2`) is stripped before
+   this check, so it never 404s a valid id. Only the four raster image types
+   are ever **candidates** for inline serving:
 
    | Extension | Content-Type |
    |-----------|---------------|
@@ -616,25 +648,41 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    | `.gif`  | `image/gif`  |
    | `.webp` | `image/webp` |
 
-   For those four, the response is `Content-Type: <real mime>` +
-   `Content-Disposition: inline`. **Every other extension** — `.svg`,
-   `.html`, `.js`, `.pdf`, office formats, archives, media, anything with an
-   unrecognised or absent extension (`.bin`) — is always served as
+   Being one of those four extensions is necessary but not sufficient
+   (#312 red-team F3). The stored extension comes from the UPLOADER's
+   claimed filename, not from the bytes — an SVG or HTML file uploaded as
+   `payload.png` with `X-Attach-Mime: image/png` would otherwise be served
+   `Content-Type: image/png` + `Content-Disposition: inline`, with
+   `X-Content-Type-Options: nosniff` as the only thing stopping the browser
+   from executing it. Before choosing the inline branch the server checks
+   the blob's own leading bytes against that extension's magic-byte
+   signature (PNG's 8-byte header, JPEG's `FF D8 FF`, GIF's `GIF87a`/
+   `GIF89a`, WebP's `RIFF….WEBP` container) — see `_sniff_matches_ext` in
+   `concept-server.py`. Only a match gets `Content-Type: <real mime>` +
+   `Content-Disposition: inline`.
+
+   **Everything else** — a signature mismatch on one of the four
+   extensions, any other extension (`.svg`, `.html`, `.js`, `.pdf`, office
+   formats, archives, media), and anything with an unrecognised or absent
+   extension (`.bin`) — is always served as
    `Content-Type: application/octet-stream` with
    `Content-Disposition: attachment; filename="<sanitised original name>";
    filename*=UTF-8''<percent-encoded original name>` (RFC 5987, so non-ASCII
    names still round-trip in browsers that support the extended parameter,
    with a safe ASCII fallback for those that don't). `filename` comes from
    `attachments/index.json` when known, falling back to the blob id.
-   `X-Content-Type-Options: nosniff` is set on EVERY response, inline or not.
+   `X-Content-Type-Options: nosniff` is set on EVERY response, inline or
+   not, as defense in depth — but the signature check, not nosniff, is what
+   actually decides whether a blob is ever offered inline.
 
    This is what replaces the old outright SVG ban: an uploaded SVG (or HTML
    or JS file) can only execute script against the bridge's own origin if
    the browser renders it in place, and a forced download served as an inert
    content-type can't do that — so accepting the type and controlling how
-   it's served is strictly safer than a growing list of type-specific
-   rejections, and it is what makes "basically any file type" possible
-   without reopening the XSS risk the old allowlist existed to close.
+   it's served (bytes-verified, not extension-trusted) is strictly safer
+   than a growing list of type-specific rejections, and it is what makes
+   "basically any file type" possible without reopening the XSS risk the
+   old allowlist existed to close.
 
    **Stored extension derivation.** Never trusts the client's filename
    extension blindly — only its *shape*. Given the client-supplied `name`
