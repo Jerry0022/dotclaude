@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.135.0] — 2026-08-26
+
+### Added
+
+- **A design round can be looked at as a phone or a tablet, not only as a browser window.** The prototype view always filled the whole window, which is the one shape most of the designs it shows will never ship in — a reviewer had to imagine the phone layout, and a mockup that only works at 1440px wide got approved on that basis. An iteration now declares which form factors the app it is mocking actually has (`data-viewports="desktop tablet phone"`, plus optional per-concept device sizes), and a small, deliberately quiet button in the bottom-left corner cycles them; nothing is declared by default, so a desktop-only concept looks exactly as it did before and never sees the button. A phone-only app opens straight into the phone frames. In a device mode the same screen is shown **twice at once, portrait beside landscape**, because the question "does this still work rotated" is asked about the same screen and answering it should not cost a switch. Both frames are live: clicking through the click-dummy in either one moves both, and typing in one shows up in the other. The pair scales to fit and picks the side-by-side or stacked arrangement by whichever leaves the frames bigger, rather than by a fixed window-width breakpoint that gets it wrong in both directions. Mockup CSS can react to the simulated device — the frames are real CSS containers, so `@container` and the frame's own `data-device` / `data-orientation` attributes both work; `vh`/`vw` units, `position: fixed` and `<script>`/`<canvas>` inside a screen do not, and are now called out as such.
+
 ## [0.134.0] — 2026-08-25
 
 ### Added
