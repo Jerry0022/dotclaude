@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.135.1] — 2026-08-29
+
+### Fixed
+
+- **Switching design in a concept emptied the menu and stranded you there.** The ☰ panel's table of contents lists every design of the round, each entry doubling as the control that switches to it — but the whole container was hidden whenever the design *currently on the canvas* happened to hold a single screen. So on a round with five designs, opening the one with one screen blanked all five entries at once, and the only way back was a floating switcher sitting at 18% opacity. The collapse now happens per design row instead of on the shared container, decided once per design when the panel is built, so it no longer changes under you when you switch. The container itself only disappears when there is genuinely nothing left to navigate — one design, one screen, and no questions attached to the round; that last condition matters because the question entries live in the same container and the only other route to them is the switcher, which a single-design round already hides.
+
+- **The ☰ menu and the 💬 feedback dock sat on top of each other.** Both open against the right edge and neither knew about the other, so opening one over the other left two panels stacked with 326×445 pixels of overlap. Opening either now minimises the other; dismissing one never resurrects the other. If the cursor was in a feedback field when the menu opened, focus moves into the menu rather than onto the 💬 button — that button paints above the menu's backdrop, so focus parked there would have been sitting on a control that closes what you just opened.
+
+- **Design mockups were painted under the floating chrome.** The canvas runs edge to edge while the page counter, the design switcher and the ☰ button float over it, so the first lines of any screen tall enough to fill the window were unreadable — 18 pixels of overlap on every screen of every round. The canvas now reserves that band. The reserve is deliberately not symmetric: the top edge is occupied across its whole width, the bottom only in its two corners, so mirroring it would have cost another 60 pixels of artefact height on an edge that is empty in the middle — and in a device view that height is what the phone and tablet frames are scaled against.
+
+- **A decision round could show the previous design round's table of contents.** The panel builder returns early when the visible round has no design, before it clears the list, so the stale entries survived the switch and offered to jump to a design nobody was looking at.
+
 ## [0.135.0] — 2026-08-26
 
 ### Added
