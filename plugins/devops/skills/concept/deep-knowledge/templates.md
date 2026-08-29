@@ -1012,19 +1012,31 @@ buttons:
   wiring with `data-screen-link` handles the transition like any other
   screen switch.
 - **Single-screen design (exactly one `<section data-screen>`):**
-  - No screen-nav rendered inside the ☰ panel
+  - Only THAT design's row collapses in the ☰ panel: its
+    `.screen-nav-group` keeps the heading that switches to it, and just the
+    one redundant screen entry goes. `#screen-nav` itself must NOT be
+    gated on this — it lists every design in the iteration, so hiding the
+    container on the active design's screen count blanks the whole table
+    of contents and strands the user (see § Layout CSS). The container
+    disappears only when the iteration ALSO has a single design, i.e.
+    when there is genuinely nothing left to navigate.
   - Feedback dock shows ONLY the general-notes textarea (no
     per-screen section, no "Aktueller Screen" label)
   - No click-dummy wiring required — nothing to navigate to
   - The screen-indicator overlay can be hidden or simplified
-  - `updateScreenScope()` detects `screens.length === 1` and sets
-    `document.body.dataset.singleScreen = 'true'` so CSS can hide the
-    per-screen UI. CSS adds: `body[data-single-screen="true"] #screen-nav,
-    body[data-single-screen="true"] .feedback-section:has(#screen-textareas)
-    { display: none }`.
+  - Two flags, two scopes, deliberately: `updateScreenScope()` sets
+    `document.body.dataset.singleScreen` from the design currently on the
+    canvas — that is the right scope for the DOCK, which always talks about
+    the active screen. `buildDesignUI()` stamps
+    `group.dataset.singleScreen` per design — the right scope for the
+    PANEL, which shows all of them at once and must stay stable when the
+    active design changes. Never drive one from the other's flag.
 - **Single-design iteration (exactly one `<section data-design>`):**
   degenerates to today's behaviour — no design switcher, no per-design
-  feedback row, `#screen-nav` renders as a flat list (no design heading).
+  feedback row, `#screen-nav` renders the screens as a flat list (the
+  design heading collapses). A views group, if the iteration has one, still
+  renders WITH its heading — `body[data-single-design]` hides
+  `.screen-nav-design-heading`, not `.screen-nav-views-heading`.
   `buildDesignUI()` detects `designs.length === 1` and sets
   `document.body.dataset.singleDesign = 'true'`, the sibling of
   `data-single-screen` above, so CSS hides the same way. The `data-design`
@@ -1184,8 +1196,13 @@ decoration on every screen.
   (`data-open="true"`), it shows the full question, an answer textarea and
   an attachment drop area.
 - **Positioned in percentages, not pixels.** `--anno-x` / `--anno-y` on the
-  wrapping `.anno` element place the pin as a percentage of the screen box,
-  so it survives any viewport size. `data-anno-side="right|left|top|bottom"`
+  wrapping `.anno` element place the pin as a percentage of the screen box —
+  `.anno-layer` is `inset: 0`, so that box is the FULL section including the
+  chrome safe area (§ Layout CSS), not the padded content box the mock is
+  drawn in. Hand-picked coordinates must be read off the whole viewport, not
+  off the artefact. `anchorToTarget()` measures live rects and is unaffected;
+  this only matters for coordinates authored by hand. They survive any
+  viewport size either way. `data-anno-side="right|left|top|bottom"`
   picks which side the bubble opens on — Claude chooses this at generation
   time from the element's position in the mock; there is no runtime
   collision math.
@@ -1890,6 +1907,53 @@ html[data-template="design"] body { height: 100%; overflow: hidden; }
 [data-template="design"] .concept-layout.design.fullscreen { display: block; width: 100vw; height: 100vh; overflow: hidden; }
 [data-template="design"] .concept-layout.design .concept-content { position: absolute; inset: 0; overflow: hidden; }
 
+/* ── Chrome safe area ───────────────────────────────────────────────────
+   Every fixed control in design mode sits on the viewport's top or bottom
+   edge while the canvas beneath runs edge to edge (inset: 0). A flat 2rem
+   padding therefore starts the content at 32px where the chrome reaches
+   92px, so the first rows of any screen tall enough to fill the viewport
+   are painted UNDER the indicator, the design switcher and the ☰ FAB
+   (measured in Edge at 921x873: content top 32px, indicator bottom 50px —
+   18px of unreadable overlap on every screen of the page).
+
+   The § Layout CSS top-edge partition above solves the chrome-vs-chrome
+   collisions; this is the missing chrome-vs-CONTENT one. Two tokens, derived
+   from the geometry already fixed there, so the reserve can never drift from
+   the chrome that caused it:
+     TOP     .panel-fab        2rem offset + 60px circle   = 92px  (right)
+             .anno-toggle-fab  3.75rem offset + ~2rem pill = 92px  (left)
+             .screen-indicator 1rem offset + ~2.1rem pill  = 50px  (left)
+             .design-switcher  0.75rem offset + ~2.3rem    = 49px  (centre)
+     BOTTOM  .feedback-fab     2rem offset + 60px circle   = 92px  (right)
+             .viewport-toggle  2rem offset + 34px pill     = 66px  (left)
+
+   The reserve is deliberately NOT symmetric, because the two edges are not.
+   The top edge is occupied across its whole width — indicator on the left,
+   switcher in the centre, ☰ on the right — so content must clear its
+   deepest element everywhere: 92px = 5.75rem. The bottom edge carries two
+   CORNER controls and nothing in between, so the ordinary 2rem gutter is
+   the honest reserve there; a 60px FAB floating over a canvas corner is the
+   normal pattern, and mirroring the top would have spent another 60px of
+   artefact height on an edge that is empty across ~96% of its width. In
+   device mode that height is multiplicative — fitDeviceStage() scales the
+   frame pair to the box — so it is the most expensive space on the page.
+   The cost of the asymmetry is that `align-items: center` now centres the
+   artefact 30px below the true optical centre at 873px height (3.4%), which
+   is well under the threshold where anyone reads it as misaligned.
+   Chromium keeps centred overflow reachable in a scroll container (verified:
+   a 2000px probe in a 560px box still scrolls to its first row), so the
+   smaller content box this creates needs no `safe center` companion.
+
+   Every consumer repeats the value as a var() fallback. That is not
+   belt-and-braces: this file is a REFERENCE that gets copied in pieces, and
+   a page that takes the section rules without this declaration would have
+   the whole `padding` shorthand invalidated at computed-value time — losing
+   the horizontal gutter too, silently, with no chrome reserve either. */
+html[data-template="design"] {
+  --chrome-safe-top: 5.75rem;
+  --chrome-safe-bottom: 2rem;
+}
+
 /* Iteration sections fill the viewport. Screens inside do too —
    only the active one is visible (hidden attribute on the others).
    Outside design mode iterations stay in normal document flow. */
@@ -1898,7 +1962,9 @@ section[data-iteration][hidden] { display: none; }
 [data-template="design"] section[data-screen] {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  padding: 2rem; overflow-y: auto;
+  /* Chrome safe area top, plain gutter sides and bottom. */
+  padding: var(--chrome-safe-top, 5.75rem) 2rem var(--chrome-safe-bottom, 2rem);
+  overflow-y: auto;
   animation: screen-in 0.25s ease;
 }
 section[data-screen][hidden] { display: none; }
@@ -1913,7 +1979,10 @@ section[data-screen][hidden] { display: none; }
    chrome (indicator/switcher/FABs stay put). */
 [data-template="design"] section[data-view] {
   position: absolute; inset: 0;
-  padding: 2rem; overflow-y: auto;
+  /* Same chrome safe area as a screen — a view is the other thing that can
+     be full-height, and it is the one that always scrolls. */
+  padding: var(--chrome-safe-top, 5.75rem) 2rem var(--chrome-safe-bottom, 2rem);
+  overflow-y: auto;
   animation: screen-in 0.25s ease;
 }
 section[data-view][hidden] { display: none; }
@@ -1969,6 +2038,17 @@ html:not([data-template="design"]) .viewport-toggle,
 html:not([data-template="design"]) .design-switcher,
 html:not([data-template="design"]) .anno-toggle-fab,
 html:not([data-template="design"]) .anno-layer { display: none !important; }
+
+/* The panel carries BOTH navs because a page may mix iteration templates:
+   #screen-nav for design iterations, #section-nav for decision/free ones
+   (incl. the final report). Exactly one may render at a time, and the swap
+   must be driven by the template, never by JS: buildDesignUI() returns early
+   when the visible iteration has no design (`if (!active) return`), BEFORE it
+   clears nav.innerHTML — so on a decision tab the previous design's entries
+   are still sitting in #screen-nav. Without this rule they render as a dead
+   TOC whose headings switch to a design nobody is looking at. */
+html:not([data-template="design"]) #screen-nav,
+html[data-template="design"] #section-nav { display: none !important; }
 
 /* Minimal screen counter — NOT a header bar.
    Left-anchored at 1rem and content-sized, so its natural width grows with
@@ -2511,15 +2591,43 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
 #screen-textareas textarea[hidden],
 #design-textareas textarea[hidden] { display: none; }
 
-/* Single-screen design: hide screen-nav + per-screen feedback section +
-   its own leading divider. Order is general -> design -> page, so the
-   divider that must disappear with the page row is the one immediately
-   BEFORE it, not the one before general (which is always first, no
-   leading divider). Only general (and, if >=2 designs, per-design) notes
-   remain visible. */
-body[data-single-screen="true"] #screen-nav,
+/* Single-screen design: hide the per-screen feedback section + its own
+   leading divider. Order is general -> design -> page, so the divider that
+   must disappear with the page row is the one immediately BEFORE it, not
+   the one before general (which is always first, no leading divider). Only
+   general (and, if >=2 designs, per-design) notes remain visible.
+   body[data-single-screen] is the correct scope HERE: the dock always talks
+   about the screen currently on the canvas, so an active-design flag is
+   exactly what it needs. */
 body[data-single-screen="true"] .feedback-section:has(#screen-textareas),
 body[data-single-screen="true"] .feedback-divider:has(+ .feedback-section #screen-textareas) {
+  display: none;
+}
+
+/* The panel TOC collapses PER GROUP, never per body. #screen-nav is a
+   CROSS-design container: one .screen-nav-group per design, each led by the
+   heading that switches to it. body[data-single-screen] is written by
+   updateScreenScope() from the ACTIVE design's screen count, so gating the
+   container on it blanked the entire table of contents — every other
+   design's entry, and the only in-panel way back — the moment the user
+   switched to a design that happened to hold one screen. The flag belongs
+   on the group, stamped once per design by buildDesignUI(), where it is
+   also stable across switches instead of flipping under the user. */
+.screen-nav-group[data-single-screen="true"] .screen-nav-item { display: none; }
+
+/* Only when there is genuinely nothing left to navigate — one design, that
+   one design holds one screen, AND the iteration has no views — may the
+   container itself go. Without this the emptied flex box keeps its
+   border-bottom and paints a stray divider under the iteration tabs.
+   The :has() guard is load-bearing, not defensive: the views group lives
+   inside THIS container, and the only other route to a view is the
+   .view-switch-item row inside .design-switcher — which
+   body[data-single-design="true"] hides two rules down. Drop the guard and a
+   single-design, single-screen iteration with views has no route to any of
+   them at all, in either surface. "Nothing left to navigate" has to mean
+   nothing, views included. */
+body[data-single-design="true"][data-single-screen="true"]
+  #screen-nav:not(:has(.screen-nav-view-item)) {
   display: none;
 }
 
@@ -2668,7 +2776,7 @@ body.panel-open .viewport-toggle { opacity: 0; pointer-events: none; }
    overflow-y: auto here makes the scrollbar's appearance shrink clientWidth,
    which lowers the fit scale, which removes the scrollbar again — a visible
    oscillation, and a "ResizeObserver loop" warning in Chromium. */
-[data-template="design"] section[data-screen][data-device-mode] { overflow: hidden; padding: 1.5rem; }
+[data-template="design"] section[data-screen][data-device-mode] { overflow: hidden; padding: var(--chrome-safe-top, 5.75rem) 1.5rem var(--chrome-safe-bottom, 2rem); }
 .device-stage {
   align-self: stretch;             /* the section centres its children; the
                                       stage must instead fill it, or the
@@ -2942,6 +3050,12 @@ change) via `harvestDockValues()`.
       group.appendChild(heading);
 
       const screens = [...d.querySelectorAll('section[data-screen][id]')];
+      // Per-design collapse flag for the TOC (§ Layout CSS,
+      // .screen-nav-group[data-single-screen]). Derived from THIS design's
+      // own screens — body[data-single-screen] tracks only the design on the
+      // canvas, and using it here would hide every other design's rows too,
+      // flipping the whole TOC on every switch.
+      group.dataset.singleScreen = String(screens.length <= 1);
       screens.forEach((sec, idx) => {
         const btn = document.createElement('button');
         btn.className = 'screen-nav-item';
@@ -3106,8 +3220,11 @@ change) via `harvestDockValues()`.
     // choice into a boot-time TypeError.
     const totalEl = document.getElementById('total-screens');
     if (totalEl) totalEl.textContent = screens.length;
-    // Single-screen designs: hide screen-nav + per-screen feedback.
-    // CSS keys off body[data-single-screen="true"].
+    // Single-screen designs: hide the per-screen FEEDBACK row (and, combined
+    // with body[data-single-design], the now-empty #screen-nav). This flag
+    // describes the design currently on the canvas, so it must never gate the
+    // panel's per-design rows on its own — buildDesignUI() stamps
+    // group.dataset.singleScreen for those. See § Layout CSS.
     document.body.dataset.singleScreen = screens.length <= 1 ? 'true' : 'false';
   }
 
@@ -3734,7 +3851,26 @@ change) via `harvestDockValues()`.
   }
   // The switcher auto-hides while the panel is open (the panel carries the
   // same navigation) — driven by body.panel-open, see Layout CSS.
-  window.openPanel = () => { panel?.classList.add('open'); backdrop?.classList.add('visible'); panelToggle?.classList.add('hidden'); document.body.classList.add('panel-open'); };
+  // The ☰ panel and the 💬 dock are both right-edge overlays and are
+  // therefore mutually exclusive: opening one minimises the other, so they
+  // can never sit expanded on top of each other. The reciprocal call belongs
+  // in the OPEN paths only — a close path must never touch the other
+  // overlay, or dismissing one would resurrect the other.
+  // The call goes through `window.` and is optional on purpose: the dock
+  // wiring below has its own markup preconditions, and a page missing them
+  // must not take the panel down with it (same failure mode the guard above
+  // documents).
+  window.openPanel = () => {
+    const fromDock = dock?.contains(document.activeElement);
+    window.closeDock?.(true);
+    panel?.classList.add('open');
+    backdrop?.classList.add('visible');
+    panelToggle?.classList.add('hidden');
+    document.body.classList.add('panel-open');
+    // Only re-home focus that the dock just lost — never steal it from a
+    // pointer user who was not typing anywhere.
+    if (fromDock) panelCloseBtn?.focus();
+  };
   window.closePanel = () => { panel?.classList.remove('open'); backdrop?.classList.remove('visible'); panelToggle?.classList.remove('hidden'); document.body.classList.remove('panel-open'); };
   panelToggle?.addEventListener('click', openPanel);
   panelCloseBtn?.addEventListener('click', closePanel);
@@ -3758,12 +3894,19 @@ change) via `harvestDockValues()`.
   const LABEL_OPEN = dockToggle.dataset.labelOpen || dockToggle.getAttribute('aria-label');
   const LABEL_CLOSE = dockToggle.dataset.labelClose || LABEL_OPEN;
   function openDock() {
+    window.closePanel?.();   // mutually exclusive overlays, see openPanel above
     dock.dataset.open = 'true';
     dockToggle.setAttribute('aria-expanded', 'true');
     dockToggle.setAttribute('aria-label', LABEL_CLOSE);
   }
-  function closeDock() {
-    const focusWasInside = dock.contains(document.activeElement);
+  // `handOff` = the dock is closing because the panel is taking over. Then
+  // the FAB must NOT be focused: it sits at z-index 220, above the panel
+  // backdrop, so a keyboard user would be left standing on a control that
+  // dismisses the overlay that just opened. openPanel() moves focus into the
+  // panel instead. Every other close still restores the FAB, or focus would
+  // be orphaned inside a display:none dock.
+  function closeDock(handOff) {
+    const focusWasInside = !handOff && dock.contains(document.activeElement);
     dock.dataset.open = 'false';
     dockToggle.setAttribute('aria-expanded', 'false');
     dockToggle.setAttribute('aria-label', LABEL_OPEN);
