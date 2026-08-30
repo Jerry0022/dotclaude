@@ -266,12 +266,29 @@ describe("the git-exclude idiom is guarded in every skill that uses it", () => {
     expect(body).toMatch(/if \[ -n "\$gcd" \]/);
   });
 
-  test("the guarded form is a no-op outside a repo", () => {
-    const res = spawnSync(
-      "bash",
-      ["-c", 'gcd="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; if [ -n "$gcd" ]; then echo "WOULD-WRITE ${gcd}/info"; else echo "SKIPPED"; fi'],
-      { cwd: noneDir, encoding: "utf8", timeout: 20_000 },
-    );
-    expect(res.stdout.trim()).toBe("SKIPPED");
+  // The condition the guard keys on, asserted directly rather than through a
+  // shell: `bash` is not reliably on PATH everywhere this suite runs (it is
+  // absent in the ship pipeline's build step), and spawning a missing binary
+  // yields an undefined stdout rather than a useful failure.
+  function gitCommonDir(cwd) {
+    try {
+      return execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+        cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 20_000,
+      }).trim();
+    } catch {
+      return "";
+    }
+  }
+
+  test("outside a repo the substitution is empty, so the guard skips", () => {
+    // Empty is precisely what made the unguarded `x="$(...)/info/exclude"`
+    // resolve to "/info/exclude" and write at the filesystem root.
+    expect(gitCommonDir(noneDir)).toBe("");
+  });
+
+  test("inside a repo it resolves, so the guard still writes", () => {
+    const gcd = gitCommonDir(noRemoteDir);
+    expect(gcd).not.toBe("");
+    expect(gcd).toMatch(/\.git$/);
   });
 });
