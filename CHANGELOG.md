@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.136.0] — 2026-08-30
+
+### Fixed
+
+- **A git repo without a remote could not be worked in at all.** On `main` in a local-only repo — `git init`, some commits, no `origin` — every file edit and every write git command was refused, and the refusal named a way out that cannot exist there: `git fetch origin && git switch -c <topic> origin/main` fails twice over when there is no origin. The guards checked whether a repo exists but never whether it has a remote, so a state that is perfectly ordinary for a scratch project, an appliance config directory or an offline machine became a dead end with no printed escape. The block itself was right and stays — work still belongs on a feature branch — but the suggested fix is now the one that actually runs there, `git switch -c <topic>`. With an origin present nothing changed.
+
+- **Two of the unattended runners wrote outside the project, at the filesystem root.** The idiom that registers run artifacts in `.git/info/exclude` builds its path from a command substitution that is *empty* outside a repo, so the path collapsed from `<repo>/.git/info/exclude` to `/info/exclude` — and the line that creates the directory first duly created `/info` at the root of the drive and appended there. It went unnoticed because the two skills it affects most, `run-backlog` and `run-autonomous`, are precisely the ones that run while nobody is watching. All three call sites now test the substitution before using it.
+
+- **A ship could check out and pull inside a repository the project does not own.** Git's "are we inside a work tree" question answers yes for any directory *beneath* a repo, so a plain non-git project that happens to sit under a dotfiles checkout, a monorepo or a stray `git init` two levels up was classified as a normal repo. `ship_cleanup` — the one ship tool that had no repo-mode check at all — then ran `git checkout <base>` and `git pull --ff-only origin <base>` against that unrelated repository, and deleted branches in it. Repo detection now distinguishes "this directory is the repo root" from "some ancestor is a repo", and every destructive ship step refuses the latter.
+
+- **Every session in a project without git opened with a warning that was not true.** The workspace check reads the current branch and treats "no branch" as a detached HEAD — but a directory with no repo also has no branch, so it reported a high-severity `Detached HEAD in repo root` and demanded an answer before anything else could happen. In a repo without a remote it also announced that every commit in the history was unpushed, because "commits not on any remote" is the entire history when there are no remotes, and offered to push them somewhere that does not exist.
+
+- **The completion card asserted that a remote was up to date in projects that have none.** The card's status line fell back to `up-to-date origin/main` whenever it had nothing better to say — including in a directory with no `.git` at all, and even from an entirely empty state. The file-only status line that should have covered this had been unreachable for sixty-odd versions: the field carrying the mode was silently dropped by the input schema, and the variant meant to render it was missing from the list of accepted variants. Both are reconnected, and the card no longer claims a sync it never checked.
+
+- **A ship without a remote reported success while leaving the release uncommitted.** `ship_release` returned early for a repo with no origin, reporting success and `delivered: "local-commit-only"` — but it returned *before* the commit step, so the version bump and the CHANGELOG entry stayed sitting in the working tree while the pipeline said the work had landed. A repo without a remote can commit perfectly well; it just cannot push. It now commits, then stops at the first step that genuinely needs an origin and says so.
+
+- **The ship skill never read the repo mode it was given.** Pre-flight had reported the mode correctly for a long time, and the skill ignored it — so a repo-less project went straight into rebase, push and merge, and the documented return shape did not match what those paths actually return. The skill now forks on the mode, and the two skipped shapes are documented with the warning that `success: true` there does not mean anything merged.
+
+- **Six agent definitions began with a step that cannot run without a remote.** They shared one copy-pasted branch-setup block hardcoding a reset onto `origin/<parent>`. The feature agent additionally passed its parent branch name into every sub-agent it spawned, so one unusable branch name failed once per agent rather than once.
+
+### Added
+
+- **`file-only` is now a declared, degraded mode instead of an accident.** In a project that is not a git repo, the plugin's promise is narrow and explicit: it will not lie and it will not touch anything, but it offers no release story, because without a remote there is no PR, no merge, no tag and no rollback. That is deliberately not the same as doing nothing — a ship there still builds, still runs the tests and the quality gates, still checks whether the docs kept up; only the git actions drop out, and the card that reports it says plainly that there is no repo and nothing was pushed.
+
+- **A regression suite that fails when this decays again.** Non-git support was built once before and rotted silently, because nothing tested it. Every hook that mentions git is now executed against a real repo-less directory and a real remote-less repo, and asserted not to invent a branch, a remote or an unpushed commit. The hook list is read from disk at run time rather than written down, so a hook added later is covered on arrival; dropping one from the sweep requires naming it and giving a reason.
+
 ## [0.135.1] — 2026-08-29
 
 ### Fixed
