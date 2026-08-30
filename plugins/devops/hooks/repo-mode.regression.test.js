@@ -63,6 +63,37 @@ function hooksIn(subdir) {
     .map((f) => ({ name: `${subdir}/${f}`, path: join(dir, f) }));
 }
 
+/**
+ * Of those, the ones that could possibly say something about git.
+ *
+ * Executing ALL of them in both modes meant ~60 node spawns, each also running
+ * git. Alongside the other git-heavy suites that saturated the machine and made
+ * UNRELATED tests time out — the suite guarding against decay was destabilising
+ * the run it belongs to.
+ *
+ * A hook that never mentions git cannot invent git state, so skipping it loses
+ * no coverage. The set is still derived at run time, and `covers every hook that
+ * touches git` below fails if a newly added git-touching hook is missed — so the
+ * anti-decay property survives the cost reduction.
+ */
+function touchesGit(hook) {
+  return /\bgit\b/.test(readFileSync(hook.path, "utf8"));
+}
+
+/**
+ * Hooks excluded from the sweep, each for a stated reason. Keep this list
+ * empty unless a hook genuinely cannot make a claim about the CONSUMER repo.
+ *
+ * ss.plugin.update operates on the plugin's OWN marketplace clone under
+ * ~/.claude/plugins, never on the passed cwd, so it cannot invent git state for
+ * the project being worked on. It also performs a real network fetch, which
+ * made it by far the slowest and most contended spawn in this suite — enough to
+ * time out unrelated git suites running in parallel.
+ */
+const EXEMPT = new Map([
+  ["session-start/ss.plugin.update.js", "operates on the plugin's own install, not the consumer repo; network-bound"],
+]);
+
 /** Run one hook with a JSON payload on stdin; never throws. */
 function runHook(hookPath, payload, cwd) {
   const res = spawnSync(process.execPath, [hookPath], {
@@ -79,16 +110,35 @@ function runHook(hookPath, payload, cwd) {
   };
 }
 
-const sessionHooks = hooksIn("session-start");
-const promptHooks = hooksIn("user-prompt-submit");
+const allHooks = [...hooksIn("session-start"), ...hooksIn("user-prompt-submit")];
+const gitHooks = allHooks.filter((h) => touchesGit(h) && !EXEMPT.has(h.name));
 
-describe("mode 'none' — a directory that is not a git repo", () => {
-  test("the hook set is non-empty (guards against a silently empty sweep)", () => {
-    expect(sessionHooks.length).toBeGreaterThan(5);
-    expect(promptHooks.length).toBeGreaterThan(5);
+describe("coverage", () => {
+  test("the sweep is non-empty (guards against a silently empty run)", () => {
+    expect(allHooks.length).toBeGreaterThan(10);
+    expect(gitHooks.length).toBeGreaterThan(3);
   });
 
-  test.each([...sessionHooks, ...promptHooks])(
+  test("covers every git-touching hook that is not explicitly exempt", () => {
+    // The anti-decay contract: a hook added later that mentions git is picked
+    // up here automatically. Dropping one requires adding it to EXEMPT with a
+    // reason — silence is not an option.
+    const executed = new Set(gitHooks.map((h) => h.name));
+    const missed = allHooks
+      .filter(touchesGit)
+      .filter((h) => !executed.has(h.name) && !EXEMPT.has(h.name));
+    expect(missed.map((h) => h.name)).toEqual([]);
+  });
+
+  test("every exemption names a hook that still exists", () => {
+    // A stale exemption would silently shrink coverage after a rename.
+    const known = new Set(allHooks.map((h) => h.name));
+    expect([...EXEMPT.keys()].filter((n) => !known.has(n))).toEqual([]);
+  });
+});
+
+describe("mode 'none' — a directory that is not a git repo", () => {
+  test.each(gitHooks)(
     "$name invents no git state",
     ({ path }) => {
       const out = runHook(
@@ -111,7 +161,7 @@ describe("mode 'none' — a directory that is not a git repo", () => {
 });
 
 describe("mode 'git-no-remote' — a local repo with commits and no origin", () => {
-  test.each([...sessionHooks, ...promptHooks])(
+  test.each(gitHooks)(
     "$name neither counts unpushed commits nor prescribes an origin",
     ({ path }) => {
       const out = runHook(
