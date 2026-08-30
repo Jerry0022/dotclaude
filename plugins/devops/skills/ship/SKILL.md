@@ -181,6 +181,43 @@ The tool checks: clean tree, commits ahead, all pushed, version consistency (ski
 The marker check has two scopes. A marker in the files **this ship would land** is a hard error — `ship_release` re-scans immediately before committing, so one left behind by the rebase in 1b is caught there too. A marker anywhere else in the repo is a **warning**: it predates this branch, so report it and open a separate fix rather than holding an unrelated release hostage.
 Merge-safety issues (`base-ahead`, `file-overlap`, `config-conflictstyle`) are **warnings, not errors** — they are resolved autonomously below.
 
+### 1a-ii. Read `mode` — the repo-mode fork
+
+`ship_preflight` returns a `mode` field. **Read it.** It decides which of the
+steps below can run at all, and ignoring it is how a ship in a repo-less
+project marched into rebase/push/PR and reported a merge that never happened.
+
+| `mode` | What it means | How the pipeline changes |
+|---|---|---|
+| `git` | Repo with an origin | Full pipeline, nothing changes. |
+| `git-no-remote` | Local repo, no origin | Everything up to and including the **commit** runs. `ship_release` commits and then stops; push, PR, merge, tag and release are skipped and reported as skipped. |
+| `file-only` | Not a git repo at all | Everything that is not a git action still runs — see below. |
+
+**`file-only` is NOT "skip the ship".** A ship is worth running in a repo-less
+project for everything it does besides git: the build, the test suite, the
+doc-freshness check, the quality gates, the worktree/merge sanity questions,
+and the honest report at the end. Only the git actions are meaningless there.
+
+Concretely, in `file-only`:
+
+- **Run** Step 2 (build + tests) and Step 3 (version bump) exactly as normal —
+  `ship_build` and `ship_version_bump` already handle the mode.
+- **Run** the documentation and quality checks you would otherwise run; a
+  repo-less project benefits from them just as much.
+- **Skip** Step 1b entirely (there is nothing to rebase onto) and Step 4b (no
+  merge to watch).
+- **Call** `ship_release` anyway — it returns
+  `{ success: true, skipped: true, reason: "file-only-mode", delivered: "none" }`
+  without touching git.
+- **Call** `ship_cleanup` anyway — it clears the ship sentinel and refuses every
+  destructive git call.
+- **Render** the `ready-files` completion card, not `ship-successful`, and pass
+  `state: { mode: "file-only", filesModified: <n>, delivered: "none" }`. Never
+  claim a commit, branch, PR or merge.
+
+Report the outcome in plain terms: what was built, what the tests said, what
+changed on disk — and that there is no repo, so nothing was pushed.
+
 ### 1b. Resolve merge-safety warnings
 
 **Only runs when `needsRebase: true`.** Otherwise skip to Step 2.
@@ -372,6 +409,19 @@ The tool handles: commit (optional), rebase verification, push (explicit force-w
 
 Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeStrategy, intermediate, tag, channel, tagVerified, releaseDeferred, postMergeTreeMatch, postMergeWarning, titleClamped }`.
 
+**Two other return shapes exist and must not be mistaken for the one above.**
+Both set `success: true` — success means "the tool did what it could", NOT
+"the work reached main":
+
+- `{ success: true, skipped: true, reason: "file-only-mode", delivered: "none" }`
+  — not a git repo. Nothing was committed, and there was nothing to commit to.
+- `{ success: true, skipped: true, reason: "no-remote", delivered: "local-commit-only", commit, pushed: false, merged: null }`
+  — local repo without an origin. The commit **did** happen; push/PR/merge did not.
+
+In both, `merged` is absent or `null`. **Never read `success: true` alone as a
+merge.** Always check `merged` before reporting one, and check `skipped` before
+continuing to any step that assumes a remote.
+
 **If `titleClamped` is set**: the PR title exceeded the 70-char budget and was cut on a word boundary — the ship proceeded, it is not an error. The field carries `{ original, applied, max }`. Aim for a shorter title next time; surface it only if the clamped subject reads badly.
 
 **Ring model (channels):** the tag is `alpha/vX.Y.Z` — every ship publishes to
@@ -439,7 +489,12 @@ See `{PLUGIN_ROOT}/deep-knowledge/skill-extension-guide.md -> Delivery targets` 
 
 **Skip this step for intermediate merges** — only relevant when shipping to main.
 
-After `ship_release` returns `success: true` and `merged: "main"`, spawn the post-merge
+**Also skip it whenever `merged` is absent or null** — that is the `file-only`
+and `git-no-remote` case, where no merge happened and there is no GitHub
+Actions run to wait for. Gate on `merged`, never on `success` alone: both
+skipped shapes return `success: true`.
+
+After `ship_release` returns `success: true` **and** `merged: "main"`, spawn the post-merge
 watcher in the background. It waits for the GitHub Actions run triggered by the merge
 and (if configured) probes the production URL — all without blocking the ship flow.
 

@@ -28,13 +28,30 @@ Implement a feature in an isolated worktree branch.
 Your worktree starts on HEAD (main). You MUST rebase immediately:
 
 1. Read the `parent_branch` from your prompt (the caller MUST provide it)
-2. Run: `git fetch origin && git reset --hard origin/<parent_branch>`
+2. Sync onto the parent branch. **Probe the repo first** — the classic form
+   fails outright without an `origin`, and there may be no repo at all:
+   ```bash
+   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || echo "no repo"
+   git remote get-url origin >/dev/null 2>&1 || echo "no origin"
+   ```
+   - **Repo with origin:** `git fetch origin && git reset --hard origin/<parent_branch>`
+   - **Repo without origin:** `git switch <parent_branch>` — there is no
+     `origin/<parent_branch>` to reset onto, and the fetch would abort the run.
+   - **No repo at all:** skip steps 2-5 entirely. Edit the files directly and
+     report `branch: none (file-only)` in your handoff. Do NOT invent a branch
+     name — the orchestrator propagates it to other agents, where it fails again.
 3. Create your integration branch: `git checkout -b <feature-branch-name>`
 4. **Push the integration branch to origin immediately:**
    `git push -u origin <feature-branch-name>`
-   This is mandatory — sub-agents need it on origin for `/ship` auto-detection.
+   This is mandatory **when an origin exists** — sub-agents need it on origin
+   for `/ship` auto-detection. Without an origin, skip the push: the branch is
+   local and sub-agents in the same repo can still branch off it. With no repo
+   at all, there is no integration branch to push.
 5. When delegating to sub-agents, ALWAYS include:
-   `Parent branch: <your-integration-branch>`
+   `Parent branch: <your-integration-branch>` — **only if you actually created
+   one.** In a repo-less project pass `Parent branch: none (file-only)` instead.
+   Never pass a branch name you did not create: every sub-agent re-runs the
+   sync in step 2 against it, so one invented name fails once per agent.
 6. After each sub-agent wave completes, ship their branches **sequentially** (one at a time):
    Call `/ship` for each sub-branch, wait for completion before the next.
    Do NOT ship multiple sub-branches in parallel to avoid merge conflicts.

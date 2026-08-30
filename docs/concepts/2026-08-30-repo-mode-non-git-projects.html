@@ -1,0 +1,2016 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark" data-page-version="2026-08-30T12:00:00" data-template="decision">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept — Repo-Mode für Nicht-Git-Projekte</title>
+<style>
+:root {
+  --bg: #0d1117; --text: #c9d1d9; --text-secondary: #8b949e;
+  --panel-bg: #161b22; --border-color: #30363d; --input-bg: #0d1117;
+  --accent-color: #58a6ff; --success-color: #3fb950; --warning-color: #d29922; --danger-color: #f85149;
+  --code-bg: #1c2128;
+}
+html[data-theme="light"] {
+  --bg: #ffffff; --text: #24292f; --text-secondary: #57606a;
+  --panel-bg: #f6f8fa; --border-color: #d0d7de; --input-bg: #ffffff;
+  --accent-color: #0969da; --code-bg: #f0f3f6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
+h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; }
+button { font-family: inherit; }
+code { background: var(--code-bg); padding: 0.12em 0.4em; border-radius: 4px;
+  font-family: 'Cascadia Code', 'SF Mono', Consolas, monospace; font-size: 0.87em; }
+pre { background: var(--code-bg); padding: 0.9rem 1rem; border-radius: 8px; overflow-x: auto;
+  border: 1px solid var(--border-color); font-size: 0.82rem; line-height: 1.5; }
+pre code { background: none; padding: 0; }
+a { color: var(--accent-color); }
+
+.concept-layout { display: flex; min-height: 100vh; }
+.concept-content { flex: 1; padding: 2rem; overflow-y: auto; max-width: 1100px; }
+.concept-decision-panel {
+  width: 20%; min-width: 280px; max-width: 380px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  padding: 1.5rem; border-left: 1px solid var(--border-color); background: var(--panel-bg); z-index: 40; }
+@media (max-width: 768px) {
+  .concept-layout { flex-direction: column; }
+  .concept-decision-panel { width: 100%; max-width: none; height: auto;
+    position: sticky; bottom: 0; border-left: none; border-top: 1px solid var(--border-color); }
+}
+
+header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+header h1 { margin: 0; font-size: 1.7rem; }
+header .subtitle { color: var(--text-secondary); margin: 0; flex: 1; font-size: 0.92rem; }
+#theme-toggle { background: none; border: 1px solid var(--border-color); color: var(--text);
+  padding: 0.5rem 0.75rem; border-radius: 8px; cursor: pointer; }
+
+.iteration-intro { border-left: 3px solid var(--accent-color); padding: 0.75rem 1rem;
+  margin-bottom: 2rem; background: color-mix(in srgb, var(--accent-color) 8%, transparent); border-radius: 0 8px 8px 0; }
+.iteration-intro h2 { margin: 0 0 0.25rem 0; font-size: 1.1rem; }
+.iteration-intro p { margin: 0; color: var(--text-secondary); font-size: 0.92rem; }
+
+.block { margin-bottom: 2.5rem; }
+.block > h3 { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.75rem; }
+
+.variant-card { border: 1px solid var(--border-color); border-radius: 10px;
+  padding: 1.4rem 1.5rem; margin-bottom: 1.6rem; background: color-mix(in srgb, var(--panel-bg) 50%, transparent); }
+.variant-card h3 { margin-top: 0; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.variant-card .procons { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; margin: 1rem 0; }
+@media (max-width: 900px) { .variant-card .procons { grid-template-columns: 1fr; } }
+.variant-card .procons ul { margin: 0.3rem 0 0 0; padding-left: 1.2rem; font-size: 0.88rem; }
+.variant-card .procons .pros li { color: var(--success-color); }
+.variant-card .procons .cons li { color: var(--danger-color); }
+.variant-card .procons h4 { margin: 0; font-size: 0.8rem; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-secondary); }
+
+.badge { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 0.2rem 0.5rem; border-radius: 999px; white-space: nowrap; }
+.badge.blocker { background: color-mix(in srgb, var(--danger-color) 20%, transparent); color: var(--danger-color);
+  border: 1px solid var(--danger-color); }
+.badge.destructive { background: var(--danger-color); color: #fff; }
+.badge.degraded { background: color-mix(in srgb, var(--warning-color) 20%, transparent); color: var(--warning-color);
+  border: 1px solid var(--warning-color); }
+.badge.verified { background: color-mix(in srgb, var(--success-color) 18%, transparent); color: var(--success-color);
+  border: 1px solid var(--success-color); }
+.badge.agent { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--accent-color);
+  border: 1px solid var(--accent-color); }
+.badge.rec { background: var(--success-color); color: #04240f; }
+
+.evidence { border-left: 2px solid var(--border-color); padding: 0.5rem 0 0.5rem 1rem;
+  margin: 0.9rem 0; font-size: 0.87rem; color: var(--text-secondary); }
+.evidence strong { color: var(--text); }
+
+table.matrix { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.86rem; }
+table.matrix th, table.matrix td { border: 1px solid var(--border-color); padding: 0.55rem 0.7rem; text-align: left; }
+table.matrix th { background: var(--panel-bg); font-weight: 600; }
+table.matrix td.ok { color: var(--success-color); }
+table.matrix td.bad { color: var(--danger-color); }
+table.matrix td.warn { color: var(--warning-color); }
+
+.bi-state-group { display: flex; gap: 0; border: 1px solid var(--border-color);
+  border-radius: 8px; overflow: hidden; margin-top: 1.1rem; }
+.bi-state-option { flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 0.7rem 1rem; cursor: pointer; text-align: center; position: relative;
+  border-right: 1px solid var(--border-color); transition: background 0.2s, box-shadow 0.2s; }
+.bi-state-option:last-child { border-right: none; }
+.bi-state-option:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.bi-state-option input { display: none; }
+.bi-state-label { font-size: 0.9rem; transition: font-weight 0.15s; }
+.bi-state-option:has(input:checked) .bi-state-label { font-weight: 700; }
+.bi-state-option:has(input:checked)::after {
+  content: '✓'; position: absolute; top: 4px; right: 6px; font-size: 0.7rem; font-weight: 700;
+  width: 18px; height: 18px; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; pointer-events: none; }
+.bi-state-option:has(input[value="include"]:checked) {
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  box-shadow: inset 0 0 0 2px var(--accent-color); }
+.bi-state-option:has(input[value="include"]:checked)::after { background: var(--accent-color); color: #fff; }
+.bi-state-option:has(input[value="discard"]:checked) {
+  background: color-mix(in srgb, var(--danger-color) 12%, transparent);
+  box-shadow: inset 0 0 0 2px var(--danger-color); }
+.bi-state-option:has(input[value="discard"]:checked)::after { background: var(--danger-color); color: #fff; }
+.bi-state-option:has(input[value="discard"]:checked) .bi-state-label { color: var(--danger-color); }
+.bi-state-option:has(input:not(:checked)) { opacity: 0.65; }
+.bi-state-option:has(input:not(:checked)):hover { opacity: 1; }
+
+.comment-field { margin-top: 0.85rem; }
+.comment-field textarea { width: 100%; min-height: 80px; padding: 0.75rem;
+  border: 1px solid var(--border-color); border-radius: 8px; background: var(--input-bg);
+  color: var(--text); font-family: inherit; font-size: 0.9rem; line-height: 1.5; resize: vertical; }
+.comment-field textarea:focus { outline: none; border-color: var(--accent-color); }
+.comment-field label { display: block; font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.3rem; }
+
+.iteration-tabs { display: flex; flex-direction: column; gap: 4px; margin-bottom: 1rem;
+  padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); }
+.iteration-tab { text-align: left; padding: 6px 10px;
+  border: 1px solid var(--border-color); border-radius: 6px; background: transparent;
+  color: var(--text-secondary); font-size: 0.85rem; cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s; }
+.iteration-tab:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); color: var(--text); }
+.iteration-tab[aria-selected="true"] { background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  color: var(--text); border-color: var(--accent-color); font-weight: 600; }
+.iteration-tab[aria-selected="true"]::before { content: "● "; color: var(--accent-color); }
+
+.section-nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+.section-nav-item { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.42rem 0.6rem; border-radius: 6px; text-decoration: none; color: var(--text);
+  font-size: 0.84rem; transition: background 0.15s; cursor: pointer; }
+.section-nav-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.section-nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.section-nav-state { font-size: 0.72rem; color: var(--accent-color); white-space: nowrap; }
+.section-nav-state.state-discard { color: var(--danger-color); }
+.section-nav-item.is-active { background: color-mix(in srgb, var(--accent-color) 18%, transparent); font-weight: 600; }
+
+.panel-h { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-secondary); margin: 0 0 0.5rem 0; }
+#decision-summary { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem; }
+#decision-summary strong { color: var(--text); }
+.submit-btn { width: 100%; padding: 0.8rem 1rem; border-radius: 8px; cursor: pointer;
+  font-size: 0.92rem; font-weight: 600; border: none; transition: filter 0.15s; }
+.submit-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+#submit-iterate-btn { background: var(--accent-color); color: #fff; }
+#submit-implement-btn { margin-top: 2rem; background: transparent; color: var(--warning-color);
+  border: 1px solid var(--warning-color); }
+
+#connection-status { display: inline-flex; align-items: center; gap: 0.45rem;
+  font-size: 0.76rem; padding: 0.3rem 0.65rem; border-radius: 999px;
+  border: 1px solid var(--border-color); margin-bottom: 0.85rem;
+  color: var(--text-secondary); background: color-mix(in srgb, var(--panel-bg) 60%, transparent); }
+#connection-status .dot { width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-secondary); flex: 0 0 auto; }
+#connection-status[data-state="connecting"] { color: var(--accent-color); border-color: var(--accent-color); }
+#connection-status[data-state="connecting"] .dot { background: var(--accent-color); animation: cs-pulse 1.2s ease-in-out infinite; }
+#connection-status[data-state="connected"] { color: var(--success-color); border-color: var(--success-color); }
+#connection-status[data-state="connected"] .dot { background: var(--success-color); animation: cs-pulse 2.4s ease-in-out infinite; }
+#connection-status[data-state="disconnected"] { color: var(--warning-color); border-color: var(--warning-color); }
+#connection-status[data-state="disconnected"] .dot { background: var(--warning-color); }
+@keyframes cs-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.82); } }
+
+.conn { display: none; align-items: center; gap: 0.5rem; font-size: 0.8rem;
+  padding: 0.55rem 0.7rem; border-radius: 6px; margin-bottom: 0.85rem; }
+#connection-connecting { background: color-mix(in srgb, var(--accent-color) 12%, transparent); color: var(--accent-color); }
+#connection-warning { background: color-mix(in srgb, var(--warning-color) 12%, transparent); color: var(--warning-color); }
+
+#panel-submitted { display: none; }
+#panel-submitted .done-icon { font-size: 1.6rem; }
+#panel-submitted ol { padding-left: 1.1rem; font-size: 0.83rem; color: var(--text-secondary); }
+.frozen-note { display: none; font-size: 0.82rem; color: var(--warning-color);
+  background: color-mix(in srgb, var(--warning-color) 10%, transparent);
+  padding: 0.55rem 0.7rem; border-radius: 6px; margin-bottom: 0.85rem; }
+body.viewing-frozen .frozen-note { display: block; }
+
+#content-dimmer { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  z-index: 30; cursor: pointer; }
+body.content-dimmed #content-dimmer { display: block; }
+
+section[data-iteration][hidden] { display: none; }
+
+.warn-note { border-left: 3px solid var(--warning-color); padding: 0.6rem 1rem;
+  background: color-mix(in srgb, var(--warning-color) 8%, transparent); border-radius: 0 8px 8px 0; }
+
+.oq-row { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 0.5rem; cursor: pointer; }
+.oq-row:hover { background: color-mix(in srgb, var(--accent-color) 7%, transparent); }
+.oq-row input { margin-top: 0.28rem; flex: 0 0 auto; }
+.oq-label { font-size: 0.9rem; }
+
+/* ---- Final report panel: status channel + close-out wizard ---- */
+.status-channel { border: 1px solid var(--border-color); border-radius: 10px;
+  padding: 0.85rem 1rem; margin-bottom: 1.1rem; background: var(--input-bg); }
+.status-channel__heading { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-secondary); margin-bottom: 0.6rem; }
+.status-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.status-steps li { display: flex; align-items: center; gap: 0.5rem; font-size: 0.84rem; color: var(--text-secondary); }
+.status-steps li[data-state="done"] { color: var(--success-color); }
+.status-steps li[data-state="active"] { color: var(--accent-color); font-weight: 600; }
+.step-icon { width: 1.1em; flex: 0 0 auto; text-align: center; }
+
+.finalize-wizard { border: 1px solid var(--border-color); border-radius: 10px;
+  padding: 1rem; background: color-mix(in srgb, var(--panel-bg) 60%, transparent); }
+.finalize-wizard[data-frozen="true"] { opacity: 0.65; }
+.wizard-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem;
+  margin-bottom: 0.75rem; }
+.wizard-title { font-size: 0.95rem; }
+.wizard-count { font-size: 0.75rem; color: var(--text-secondary); }
+.finalize-wizard .wizard-step[hidden] { display: none; }
+.wizard-q { margin: 0 0 0.5rem 0; font-size: 0.9rem; }
+.hint { font-size: 0.78rem; color: var(--text-secondary); margin: 0.4rem 0; }
+.hint-warn { color: var(--warning-color); }
+.hint-none { color: var(--warning-color); }
+.hint-running { color: var(--accent-color); }
+.hint-done { color: var(--success-color); }
+
+.wizard-issue, .wizard-choice, .dispose-option {
+  display: flex; gap: 0.55rem; align-items: flex-start; padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 0.45rem;
+  cursor: pointer; font-size: 0.85rem; }
+.wizard-issue:hover, .wizard-choice:hover, .dispose-option:hover {
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent); }
+.wizard-issue input, .wizard-choice input, .dispose-option input { margin-top: 0.22rem; flex: 0 0 auto; }
+.wizard-choice-label, .dispose-label { display: flex; flex-direction: column; gap: 0.15rem; }
+.wizard-sub, .dispose-sub { font-size: 0.75rem; color: var(--text-secondary); }
+.wizard-choice:has(input:checked), .dispose-option:has(input:checked) {
+  border-color: var(--accent-color); background: color-mix(in srgb, var(--accent-color) 12%, transparent); }
+
+.dispose-fieldset { border: none; margin: 0; padding: 0; }
+.dispose-fieldset legend { font-size: 0.9rem; font-weight: 600; padding: 0; margin-bottom: 0.35rem; }
+.dispose-move-row { margin-top: 0.6rem; }
+.dispose-move-row label { display: block; font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.25rem; }
+.dispose-move-row input { width: 100%; padding: 0.5rem 0.6rem; border: 1px solid var(--border-color);
+  border-radius: 6px; background: var(--input-bg); color: var(--text); font-family: inherit; font-size: 0.85rem; }
+
+.wizard-plan { margin: 0.5rem 0; padding-left: 1.2rem; font-size: 0.85rem; }
+.wizard-plan li { margin-bottom: 0.25rem; }
+.wizard-plan li[data-plan-kind="ship"] { color: var(--warning-color); font-weight: 600; }
+.wizard-plan li[data-plan-kind="issues"] { color: var(--accent-color); }
+
+.wizard-nav { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.85rem; }
+.wizard-nav .submit-btn { flex: 1; }
+.link-btn { background: none; border: none; color: var(--accent-color); cursor: pointer;
+  font-size: 0.84rem; padding: 0.4rem 0.2rem; }
+.link-btn:hover { text-decoration: underline; }
+.submit-gap { height: 2rem; }
+.implement-btn { background: transparent; color: var(--warning-color); border: 1px solid var(--warning-color); }
+
+@keyframes tabs-nudge-kf { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.iteration-tabs.tabs-nudge { animation: tabs-nudge-kf 0.45s ease-in-out; }
+.iteration-tab[data-final-report] { border-style: dashed; }
+</style>
+</head>
+<body>
+<div id="content-dimmer" title="Klicken zum Ausblenden"></div>
+<div class="concept-layout">
+<main class="concept-content">
+
+<header>
+  <h1>Repo-Mode für Nicht-Git-Projekte</h1>
+  <p class="subtitle">devops-Plugin v0.135.1 · Befundlage &amp; Strategieentscheidung</p>
+  <button id="theme-toggle" type="button">🌓</button>
+</header>
+
+<section data-iteration="1" data-iteration-template="decision" hidden>
+
+  <div class="iteration-intro">
+    <h2>Iteration 1 · Befunde und Grundsatzentscheidung</h2>
+    <p>Drei Agents (Audit, Red-Team, Product Owner) plus eigene Reproduktion. Der Audit hat 28 Hooks und
+       die ship-Tools in eigens gebauten Test-Repos <em>ausgeführt</em> — die Ausgaben unten sind echt,
+       nicht geschätzt. Neun Befunde, davon zwei mit Schreibzugriff außerhalb des gemeinten Ziels und einer,
+       der Arbeiten komplett unmöglich macht. Die Grundsatzfrage steht weiter unten:
+       <em>degraded</em> oder <em>supported</em>.</p>
+  </div>
+
+  <!-- ================= IST-ZUSTAND ================= -->
+  <section id="ist-zustand" data-nav-label="Ist-Zustand" class="block">
+    <h3>Ist-Zustand — was heute wirklich passiert</h3>
+    <p>Die ursprüngliche Idee war: beim ersten Mal fragen, ob das Projekt ein Git-Projekt werden soll,
+       Entscheidung speichern, in Hooks und Skills berücksichtigen. Die Recherche hat das Bild verschoben.</p>
+
+    <p><strong>Der Detektor existiert seit v0.73.0.</strong> Commit <code>9761a08</code>
+       <em>„feat(non-vcs): repo-mode + guards + delivery docs (0.73.0) (#150)"</em> hat genau dieses Feature
+       gebaut — inklusive drei Zuständen <code>none</code> / <code>git-no-remote</code> / <code>git</code>.
+       Wir sind heute bei v0.135.1. Das Feature ist in 62 Minor-Versionen still verrottet: die Card-Verdrahtung
+       wurde durch Schema-Drift gekappt, die Skill-Gates sind im De-Prefix-Refactor verschwunden.
+       Nichts ist laut kaputtgegangen, weil nichts es getestet hat.</p>
+
+    <p><strong>Der wichtigste Befund der Inventur:</strong> <code>git-no-remote</code> ist
+       <em>schlimmer</em> als <code>none</code>. Mode <code>none</code> ist an den meisten
+       Git-Eintrittspunkten abgefangen. <code>git-no-remote</code> kommt durch jeden
+       <code>is-inside-work-tree</code>-Guard <em>durch</em> und scheitert erst am Remote —
+       dort, wo niemand mehr prüft.</p>
+
+    <table class="matrix">
+      <thead><tr><th>Surface</th><th><code>none</code> (kein Git)</th><th><code>git-no-remote</code></th></tr></thead>
+      <tbody>
+        <tr><td>Hooks — 19 von 28 ausgeführt sauber</td><td class="ok">exit 0, still</td><td class="ok">exit 0, still</td></tr>
+        <tr><td><code>pre.main.guard</code> + <code>pre.edit.branch</code></td><td class="ok">gegated</td><td class="bad">Totale Blockade, Exit 2</td></tr>
+        <tr><td><code>ss.git.check.js</code></td><td class="bad">Falschmeldung + erzwungene Rückfrage</td><td class="bad">meldet jeden Commit als „unpushed"</td></tr>
+        <tr><td>ship: preflight / version-bump</td><td class="ok">file-only-Pfad vorhanden</td><td class="warn"><code>needsRebase:true</code> → treibt in fatal</td></tr>
+        <tr><td>ship: <code>release.js</code></td><td class="warn">skip, ok</td><td class="bad">Erfolg gemeldet, nichts committed</td></tr>
+        <tr><td>ship: <code>cleanup.js</code></td><td class="bad">kein Gate — Fremd-Repo / raw fatal</td><td class="bad">kein Gate</td></tr>
+        <tr><td><code>skills/ship/SKILL.md</code></td><td class="bad">kein file-only-Zweig</td><td class="bad">meldet Merge, der nie stattfand</td></tr>
+        <tr><td>Completion Card</td><td class="bad">behauptet <code>up-to-date origin/main</code></td><td class="bad">dito</td></tr>
+        <tr><td>Agents (6 von 12)</td><td class="bad">identischer Branch-Block, fatal</td><td class="bad">fatal</td></tr>
+        <tr><td>AFK-Skills (Exclude-Idiom)</td><td class="bad">schreibt nach <code>/info/exclude</code></td><td class="ok">ok</td></tr>
+      </tbody>
+    </table>
+
+    <p><strong>Korrektur zu meiner ersten Einschätzung:</strong> ich hatte behauptet, die Hooks seien
+       bereits alle still. Das war doppelt falsch — es sind vier Hook-Blocker, nicht einer, und der
+       schwerste liegt nicht in <code>none</code>, sondern in <code>git-no-remote</code>.</p>
+
+    <p>Sauberes Vorbild im eigenen Haus: <code>ss.git.sync.js:41-42</code> und
+       <code>stop.git.sync.js:57-58</code> haben als einzige den <strong>korrekten Doppel-Guard</strong>
+       — Repo <em>und</em> Remote. Das ist das Muster, das der Rest kopieren sollte.</p>
+  </section>
+
+  <!-- ================= BEFUND F7 (schwerster) ================= -->
+  <section id="f7-lockout" data-nav-label="F7 · Totale Blockade" class="block">
+    <div class="variant-card" data-decision="f7-lockout" data-label="F7 — Totale Arbeitsblockade in git-no-remote">
+      <h3>F7 — Totale Arbeitsblockade in lokalen Repos ohne Remote
+        <span class="badge blocker">schwerster Befund</span>
+        <span class="badge agent">Audit, ausgeführt</span></h3>
+
+      <p>In einem Repo mit <code>git init</code> + Commits, aber ohne Remote, auf <code>main</code>:
+         Claude kann <strong>weder eine Datei editieren noch einen schreibenden Git-Befehl absetzen</strong>.
+         Beide Guards prüfen <code>isGitRepo()</code>, aber keiner prüft, ob ein Remote existiert.</p>
+
+      <pre><code>pre.main.guard.js:86,96   → Exit 2
+  BLOCKED: Write operation on local 'main' is not allowed.
+  Fix: git fetch origin &amp;&amp; git switch -c &lt;feat/topic&gt; origin/main
+
+pre.edit.branch.js:102,115 → Exit 2 (schon bei einem simplen Edit)
+  BLOCKED: Editing files on local 'main' is not allowed.</code></pre>
+
+      <div class="evidence">
+        <strong>Der ausgegebene Ausweg existiert nicht.</strong> Beides verifiziert:<br>
+        <code>git fetch origin</code> → <em>fatal: 'origin' does not appear to be a git repository</em><br>
+        <code>git switch -c feat/topic origin/main</code> → <em>fatal: invalid reference: origin/main</em><br>
+        Der einzige funktionierende Ausweg ist <code>DEVOPS_ALLOW_MAIN=1</code> — im Text nur als
+        Notnagel erwähnt.
+      </div>
+
+      <p>Das ist die Sackgasse, aus der ein Nutzer sich ohne Kenntnis der Plugin-Interna nicht befreien
+         kann: die Fehlermeldung nennt einen Fix, der garantiert scheitert. Fix ist klein — Remote-Check
+         ergänzen, und ohne Remote entweder überspringen oder den Text auf
+         <code>git switch -c &lt;feat/topic&gt;</code> ändern.</p>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-f7-lockout" value="include" checked><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-f7-lockout" value="discard"><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="f7-lockout-note">Anmerkung</label>
+        <textarea id="f7-lockout-note" data-comment="f7-lockout-note"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================= BEFUND F8 ================= -->
+  <section id="f8-rootwrite" data-nav-label="F8 · Schreiben außerhalb des Projekts" class="block">
+    <div class="variant-card" data-decision="f8-rootwrite" data-label="F8 — Schreibzugriff auf den Dateisystem-Root">
+      <h3>F8 — AFK-Skills schreiben in den Dateisystem-Root
+        <span class="badge destructive">destruktiv</span>
+        <span class="badge agent">Audit, reproduziert</span></h3>
+
+      <p>Drei Skills benutzen dasselbe Idiom, um Pfade in <code>.git/info/exclude</code> einzutragen:</p>
+      <pre><code>x="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+mkdir -p "$(dirname "$x")"</code></pre>
+
+      <div class="evidence">
+        <strong>Ohne Git kollabiert die Kommandosubstitution zu einem Leerstring:</strong><br>
+        <code>resolved x = [/info/exclude]</code> · <code>mkdir -p target = [/info]</code><br>
+        Also <code>mkdir -p /info</code> plus Append — <strong>außerhalb des Projekts</strong>,
+        im Wurzelverzeichnis.
+      </div>
+
+      <p>Betroffen: <code>run-autonomous/SKILL.md:269-271</code>, <code>run-backlog/SKILL.md:227-233</code>,
+         <code>claude-batch/SKILL.md:105-108</code>. <code>run-autonomous:275</code> hat Prosa-Schadensbegrenzung
+         über das <em>Ergebnis</em> — der Shell-Block läuft trotzdem. Die anderen zwei haben gar nichts.</p>
+
+      <p>Besonders unangenehm: zwei davon sind die unbeaufsichtigten AFK-Runner. Der Fehler passiert,
+         während niemand hinschaut.</p>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-f8-rootwrite" value="include" checked><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-f8-rootwrite" value="discard"><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="f8-rootwrite-note">Anmerkung</label>
+        <textarea id="f8-rootwrite-note" data-comment="f8-rootwrite-note"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================= BEFUND F4 (destruktiv, zuerst) ================= -->
+  <section id="f4-ancestor" data-nav-label="F4 · Fremd-Repo-Schreibzugriff" class="block">
+    <div class="variant-card" data-decision="f4-ancestor" data-label="F4 — Ancestor-Erkennung schreibt in fremdes Repo">
+      <h3>F4 — Ancestor-Erkennung schreibt in ein fremdes Repo
+        <span class="badge destructive">destruktiv</span>
+        <span class="badge verified">selbst reproduziert</span></h3>
+
+      <p><code>detectRepoMode()</code> fragt <code>git rev-parse --is-inside-work-tree</code>. Das ist
+         <em>vorfahrenbewusst</em>: liegt das Projekt irgendwo unterhalb eines Git-Repos — Home-Dotfiles,
+         Monorepo-Checkout, ein versehentliches <code>git init</code> zwei Ebenen höher — meldet es Erfolg.
+         Das Nicht-Git-Projekt wird als <code>git</code> klassifiziert, mit <code>toplevel</code> auf dem Vorfahren.</p>
+
+      <div class="evidence">
+        <strong>Reproduktion:</strong> <code>git init outer</code>, darin <code>outer/sub/notgit</code> anlegen,
+        dort <code>rev-parse --is-inside-work-tree</code> → Erfolg, <code>--show-toplevel</code> → <code>…/outer</code>.
+      </div>
+
+      <p><code>ship_cleanup</code> ist das einzige ship-Tool <strong>ganz ohne</strong> Repo-Mode-Gate —
+         preflight, release und version-bump haben eines, cleanup nicht. Es führt aus:</p>
+      <pre><code>cleanup.js:71   gitStrict(`checkout ${base}`, opts)
+cleanup.js:90   gitStrict(`pull --ff-only origin ${base}`, {...opts, timeout: NETWORK_TIMEOUT})</code></pre>
+      <p>— im Repo des Vorfahren, das der Nutzer nie gemeint hat. Plus Branch-Löschung.
+         Auf Windows ist „Projekt unter einem Home-Repo" kein Randfall.</p>
+
+      <div class="procons">
+        <div class="pros"><h4>Fix zieht</h4><ul>
+          <li>Ein zusätzlicher Modus <code>git-foreign-root</code>: <code>--show-toplevel</code> gegen die Session-Wurzel vergleichen</li>
+          <li>Repo-Mode-Gate in <code>cleanup.js</code> nachziehen — die anderen drei Tools haben es bereits</li>
+        </ul></div>
+        <div class="cons"><h4>Wenn nicht gefixt</h4><ul>
+          <li>Bleibt ein stiller Schreibzugriff auf ein fremdes Repo</li>
+          <li>Wird durch „ein Detektor für alles" repo-weit zementiert statt behoben</li>
+        </ul></div>
+      </div>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-f4-ancestor" value="include" checked><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-f4-ancestor" value="discard"><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="f4-ancestor-note">Anmerkung</label>
+        <textarea id="f4-ancestor-note" data-comment="f4-ancestor-note" placeholder="z. B. nur den cleanup-Gate, foreign-root später"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================= BEFUND F1 ================= -->
+  <section id="f1-gitcheck" data-nav-label="F1 · Falscher Detached-HEAD" class="block">
+    <div class="variant-card" data-decision="f1-gitcheck" data-label="F1 — ss.git.check meldet Detached HEAD in Nicht-Git-Ordnern">
+      <h3>F1 — Falschmeldung „Detached HEAD" bei jedem Session-Start
+        <span class="badge blocker">Blocker</span>
+        <span class="badge verified">selbst reproduziert</span></h3>
+
+      <p><code>checkWorkspace()</code> kann „kein Branch, weil detached" nicht von „kein Branch, weil kein Repo"
+         unterscheiden. <code>currentBranch()</code> gibt in beiden Fällen <code>null</code> zurück, und der
+         <code>if (!branch)</code>-Zweig meldet hohe Severity.</p>
+
+      <div class="evidence">
+        <strong>Reproduktion</strong> (Hook in leerem Temp-Ordner ausgeführt):<br>
+        <code>⚠ Detached HEAD in repo root (not in a worktree) — commits will not belong to any branch</code><br>
+        plus <em>„Call AskUserQuestion as the FIRST action of this turn"</em>. Exit 0.
+      </div>
+
+      <p>Das ist die einzige der zehn Git-Hooks ohne Repo-Guard. Alle anderen haben ihn bereits —
+         <code>pre.main.guard.js:86</code> macht exakt <code>if (!isGitRepo(cwd)) process.exit(0)</code>.
+         Es fehlt eine Zeile, kein Subsystem.</p>
+
+      <div class="procons">
+        <div class="pros"><h4>Dafür</h4><ul>
+          <li>Größter Schmerzanteil, kleinster Fix</li>
+          <li>Kaputt ist eine <em>selbstbewusste Falschaussage</em>, nicht ein stilles Nichts</li>
+          <li>Kapert zusätzlich den ersten Zug jeder Session mit einer Rückfrage</li>
+        </ul></div>
+        <div class="cons"><h4>Dagegen</h4><ul>
+          <li>Keine — reine Regressionsreparatur</li>
+        </ul></div>
+      </div>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-f1-gitcheck" value="include" checked><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-f1-gitcheck" value="discard"><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="f1-gitcheck-note">Anmerkung</label>
+        <textarea id="f1-gitcheck-note" data-comment="f1-gitcheck-note"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================= BEFUND F2 ================= -->
+  <section id="f2-card" data-nav-label="F2 · Card-Pfad ist toter Code" class="block">
+    <div class="variant-card" data-decision="f2-card" data-label="F2 — Completion-Card file-only-Pfad ist toter Code">
+      <h3>F2 — Der file-only-Pfad der Completion Card ist toter Code
+        <span class="badge blocker">Blocker</span>
+        <span class="badge verified">selbst verifiziert</span></h3>
+
+      <p>Deine Beobachtung („die Card landet auf ship-blocked") trifft ein echtes Problem, aber die Ursache
+         liegt eine Ebene tiefer: die Card kann den file-only-Zustand gar nicht empfangen.</p>
+
+      <div class="evidence">
+        <strong>Zwei unabhängige Brüche, beide nachgeprüft:</strong><br>
+        1. <code>index.js:398-406</code> rendert eine file-only-Statuszeile, abhängig von <code>state.mode</code>.
+        Das zod-Schema für <code>state</code> (<code>index.js:1206</code>) kennt nur
+        <code>branch, worktree, commit, pushed, pr, merged, appStatus, kept, deployPending</code>.
+        Zod entfernt unbekannte Keys — <code>state.mode</code> kommt <em>nie</em> an. Zweig unerreichbar.<br>
+        2. <code>index.js:267</code> definiert die Variante <code>ready-files</code>. Das Varianten-Enum
+        (<code>index.js:1183</code>) listet sie <em>nicht</em>. Einzige Fundstelle im ganzen Repo. Ebenfalls unerreichbar.
+      </div>
+
+      <p>Zusätzlich rät <code>variant-guard.js</code> beim Downgrade dazu,
+         <code>state:{pushed:true, merged:"&lt;base&gt;"}</code> mitzugeben — ein Rat, der in einem Repo ohne
+         Remote nicht befolgbar ist.</p>
+
+      <p><strong>Der Audit hat es schlimmer gefunden als „toter Code".</strong> Er hat die Card über den
+         echten MCP-Server in einem Nicht-Git-Ordner gerendert:</p>
+      <pre><code>&gt; ➖ up-to-date origin/main · uncommitted        (variant: ready)
+&gt; ➖ up-to-date origin/main · uncommitted        (variant: analysis, state {})
+## 🚀 SHIPPED. merged → origin/main — All DONE   (variant: ship-successful)</code></pre>
+      <p>Die Card behauptet, ein Remote-Branch sei aktuell — <em>in einem Verzeichnis ganz ohne
+         <code>.git</code></em>. Der <code>else</code>-Zweig in <code>index.js:478-480</code> feuert das
+         sogar bei leerem <code>state:{}</code>, also trägt <strong>jede</strong> Card in einem
+         Nicht-Git-Projekt eine falsche origin-Aussage. Und nichts hindert eine
+         <code>ship-successful</code>-Card daran, dort einen Merge zu behaupten.</p>
+      <p>Deine Beobachtung war also nicht nur richtig, sondern untertrieben: es ist nicht bloß die falsche
+         Variante, es ist eine erfundene Remote-Aussage.</p>
+
+      <div class="procons">
+        <div class="pros"><h4>Dafür</h4><ul>
+          <li>~6 Zeilen: Schema erweitern, Enum ergänzen, Guard bei file-only aussetzen</li>
+          <li>Der Rendering-Code existiert bereits und ist ungetestet, aber geschrieben</li>
+        </ul></div>
+        <div class="cons"><h4>Offene Frage</h4><ul>
+          <li>War die Trennung irgendwann Absicht? Dann wird hier eine geschlossene Entscheidung neu aufgemacht</li>
+        </ul></div>
+      </div>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-f2-card" value="include" checked><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-f2-card" value="discard"><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="f2-card-note">Anmerkung</label>
+        <textarea id="f2-card-note" data-comment="f2-card-note"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================= BEFUND F5 ================= -->
+  <section id="f5-release" data-nav-label="F5 · Erfolg ohne Commit" class="block">
+    <div class="variant-card" data-decision="f5-release" data-label="F5 — ship_release meldet Erfolg mit uncommitteten Änderungen">
+      <h3>F5 — <code>ship_release</code> meldet Erfolg, lässt aber Änderungen uncommitted
+        <span class="badge blocker">Blocker</span>
+        <span class="badge verified">selbst verifiziert</span></h3>
+
+      <pre><code>release.js:49  const repoMode = detectRepoMode(cwd)
+release.js:50  if (repoMode === "none")           return { success: true, skipped: true, reason: "file-only-mode" }
+release.js:53  if (repoMode === "git-no-remote")  return { success: true, skipped: true, reason: "no-remote" }
+               // ↓ nie erreicht: Konfliktmarker-Scan, Version-Commit, CHANGELOG</code></pre>
+
+      <p>In <code>git-no-remote</code> ist das besonders falsch: das Repo <em>kann</em> committen, es hat nur
+         kein Remote. Version-Bump und CHANGELOG-Edits früherer Schritte bleiben liegen, während die Pipeline
+         Erfolg meldet und die Card auf <code>ready</code> herunterstuft — was für den Nutzer wie „fertig" aussieht.</p>
+
+      <div class="evidence">
+        <strong>Vom Audit real durchgespielt:</strong><br>
+        <code>dirty before: M package.json</code> · <code>HEAD before: acc6108</code><br>
+        → <code>{"success":true,"skipped":true,"reason":"no-remote","delivered":"local-commit-only"}</code><br>
+        <code>HEAD after: acc6108</code> (unverändert) · <code>dirty after: M package.json</code><br>
+        Das Feld <code>delivered:"local-commit-only"</code> ist damit schlicht <strong>gelogen</strong> —
+        es wurde nichts committed.
+      </div>
+
+      <p>Und die Kette geht weiter: <code>skills/ship/SKILL.md:442</code> sagt <em>„After ship_release
+         returns success: true and merged: 'main'…"</em>. <code>success</code> ist <code>true</code>,
+         <code>merged</code> ist <code>undefined</code> — der Nutzer bekommt gemeldet, seine Arbeit sei
+         nach main geshippt, während nichts die Maschine verlassen hat. Der dokumentierte Rückgabetyp bei
+         <code>SKILL.md:371-374</code> stimmt ebenfalls nicht mit der echten <code>skipped</code>-Form überein.</p>
+
+      <div class="procons">
+        <div class="pros"><h4>Zwei saubere Auswege</h4><ul>
+          <li><code>git-no-remote</code> bekommt einen echten Local-Commit-Pfad</li>
+          <li>oder <code>/ship</code> verweigert ehrlich statt Erfolg zu melden</li>
+        </ul></div>
+        <div class="cons"><h4>Risiko</h4><ul>
+          <li>Ein binäres Git/Kein-Git-Modell hat für diesen Zustand keinen Platz</li>
+          <li><code>git-no-remote</code> ist der häufigere Fall als <code>none</code></li>
+        </ul></div>
+      </div>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-f5-release" value="include" checked><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-f5-release" value="discard"><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="f5-release-note">Anmerkung</label>
+        <textarea id="f5-release-note" data-comment="f5-release-note"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================= BEFUND F3 ================= -->
+  <section id="f3-ship-skill" data-nav-label="F3 · ship-Skill ohne Zweig" class="block">
+    <div class="variant-card" data-decision="f3-ship-skill" data-label="F3 — ship/SKILL.md hat keinen file-only-Zweig">
+      <h3>F3 — <code>skills/ship/SKILL.md</code> hat keinen file-only-Zweig
+        <span class="badge degraded">degradiert</span>
+        <span class="badge agent">Agent-Befund</span></h3>
+
+      <p>Die Tool-Schicht ist angepasst, die Skill-Schicht nicht. <code>preflight</code> liefert korrekt
+         <code>ready:true, mode:"file-only", branch:"&lt;file-only&gt;"</code> — und der Skill liest
+         <code>mode</code> nie. Schritt 1a wertet <code>autoDetectedBase</code>, <code>intermediate</code> und
+         <code>outOfBandDeploys</code> aus, dann marschiert er in Codex-Review, Rebase, Push, PR, Merge.</p>
+
+      <div class="evidence">
+        Einzige <code>file-only</code>-Fundstelle im ganzen Skill: Zeile 261, ein Purpose-Alignment-Skip.
+        <em>Das</em> ist das eigentliche Ship-Versagen — eine Datei, nicht fünf bis acht.
+      </div>
+
+      <p><strong>Namenskollision beachten:</strong> ein „Step 0 — Repo-Mode" geht nicht,
+         <code>SKILL.md:107</code> hat bereits „Step 0 — Load Extensions".</p>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-f3-ship-skill" value="include" checked><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-f3-ship-skill" value="discard"><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="f3-ship-skill-note">Anmerkung</label>
+        <textarea id="f3-ship-skill-note" data-comment="f3-ship-skill-note"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================= BEFUND F9 ================= -->
+  <section id="f9-agents" data-nav-label="F9 · Agent-Branch-Block" class="block">
+    <div class="variant-card" data-decision="f9-agents" data-label="F9 — Copy-paste Branch-Block in 6 Agent-Dateien">
+      <h3>F9 — Ein kopierter Branch-Block bricht sechs Agents
+        <span class="badge blocker">Blocker</span>
+        <span class="badge agent">Audit</span></h3>
+
+      <p><code>ai.md</code>, <code>core.md</code>, <code>frontend.md</code>, <code>windows.md</code>,
+         <code>designer.md</code> und <code>feature.md</code> tragen einen <strong>byteidentischen</strong>
+         Block „Branch Setup (mandatory first step)":</p>
+      <pre><code>git fetch origin &amp;&amp; git reset --hard origin/&lt;parent_branch&gt;   # beide Modi fatal
+git checkout -b &lt;parent_branch&gt;/&lt;role&gt;                        # mode none fatal</code></pre>
+
+      <p><code>feature.md</code> ist der schlimmste Fall: es propagiert einen nicht existierenden
+         <code>Parent branch:</code> in <em>jeden</em> Sub-Agent, der dann denselben scheiternden
+         <code>git reset --hard origin/&lt;that&gt;</code> ausführt — Kaskadenfehler. Und
+         <code>feature.md:92-93</code> zwingt über <code>FEATURE_RESULT: branch/commits</code>
+         erfundene Werte zurück in den Orchestrator.</p>
+
+      <p><strong>Gute Nachricht:</strong> ein einziger geguardeter Rewrite patcht alle sechs Dateien,
+         weil der Block überall identisch ist.</p>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-f9-agents" value="include" checked><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-f9-agents" value="discard"><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="f9-agents-note">Anmerkung</label>
+        <textarea id="f9-agents-note" data-comment="f9-agents-note"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================= BEFUND F6 ================= -->
+  <section id="f6-test" data-nav-label="F6 · Verrottungs-Test" class="block">
+    <div class="variant-card" data-decision="f6-test" data-label="F6 — Regressionstest gegen erneute Verrottung">
+      <h3>F6 — Der Test, der die zweite Verrottung verhindert
+        <span class="badge rec">höchster Langzeitwert</span></h3>
+
+      <p>#150 hat dieses Feature schon einmal gebaut. Es ist still gestorben, weil kein Test es gehalten hat.
+         Ohne diesen Punkt verrottet auch die jetzige Reparatur — die Frage ist nur, bis welcher Version.</p>
+
+      <p>Zwei Tests, klein:</p>
+      <ul>
+        <li>Jeden <code>SessionStart</code>- und <code>UserPromptSubmit</code>-Hook in einem leeren Temp-Ordner
+            <em>und</em> in einem <code>git init</code>-ohne-Remote-Ordner ausführen, leeres stdout erwarten</li>
+        <li>Card-Test: <code>mode:'file-only'</code> überlebt das Schema und rendert <code>ready-files</code></li>
+      </ul>
+
+      <p>Weitere Lücken, die der Red-Team-Durchgang benannt hat: Nicht-Git-Ordner unter einem Git-Repo (F4),
+         Bare-Repo, cwd innerhalb <code>.git</code>, gesetztes <code>GIT_DIR</code>, sowie ein voller
+         <code>/ship</code> in beiden Zwischenzuständen mit der Zusicherung, dass die Pipeline nicht Erfolg
+         meldet, solange Version/CHANGELOG noch im Working Tree liegen.</p>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-f6-test" value="include" checked><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-f6-test" value="discard"><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="f6-test-note">Anmerkung</label>
+        <textarea id="f6-test-note" data-comment="f6-test-note"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================= DEINE URSPRUNGSIDEE, ZERLEGT ================= -->
+  <section id="opt-repojson" data-nav-label="Idee A · .claude/repo.json" class="block">
+    <div class="variant-card" data-decision="opt-repojson" data-label="Persistierte Entscheidung .claude/repo.json">
+      <h3>Deine Idee A — Entscheidung in <code>.claude/repo.json</code> speichern
+        <span class="badge blocker">beide Agents dagegen</span></h3>
+
+      <p>Beide Agents empfehlen unabhängig, das <em>nicht</em> zu bauen. Die Gegenargumente, geordnet:</p>
+
+      <div class="procons">
+        <div class="pros"><h4>Dafür spricht</h4><ul>
+          <li>Konsistent mit dem vorhandenen Consent-Muster (<code>graphify-state.js</code>)</li>
+          <li>Unterdrückt Wiederholungsfragen</li>
+        </ul></div>
+        <div class="cons"><h4>Dagegen spricht</h4><ul>
+          <li><code>repo-mode.js:3-4</code> verwirft explizit sogar einen <em>In-Memory</em>-Cache: „staleness is the bigger risk". Eine Datei auf Platte ist strikt schlechter</li>
+          <li>Kein Zuhause: in einem Nicht-Git-Projekt ist es eine untracked lokale Datei ohne Backup — ausgerechnet ihr Zweck ist Persistenz</li>
+          <li>Schlüsselt auf rohem <code>cwd</code> → jeder Worktree und jedes Unterverzeichnis bekommt einen eigenen Datensatz, die Unterdrückung konvergiert nie</li>
+          <li><code>check-claude-artifacts.js:24-45</code> bricht den Build, wenn eine neue projektwurzel-<code>.claude/</code>-Datei nicht registriert ist</li>
+          <li>Getrackt wandert die Aussage „ist kein Git-Projekt" in jeden Clone, wo sie falsch ist</li>
+          <li>Global gespiegelt bedeutet es „nirgends auf dieser Maschine Git anbieten" — semantisch etwas völlig anderes als bei graphify</li>
+          <li>Einziger Konsument ist Nag-Unterdrückung — und <code>run-once.js</code> kann das bereits per Cooldown ohne jede Persistenz</li>
+        </ul></div>
+      </div>
+
+      <p><strong>Die Regel „Live-Erkennung gewinnt immer" ist Konvention, kein Enforcement.</strong>
+         Sobald die Lib einen Reader exportiert, liest ihn irgendwann jemand als Wahrheit — und nichts schlägt fehl, wenn er es tut.</p>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-opt-repojson" value="include"><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-opt-repojson" value="discard" checked><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="opt-repojson-note">Anmerkung — hier gerne widersprechen</label>
+        <textarea id="opt-repojson-note" data-comment="opt-repojson-note" placeholder="Wenn du die Persistenz trotzdem willst: wofür genau?"></textarea></div>
+    </div>
+  </section>
+
+  <section id="opt-prompt" data-nav-label="Idee B · Erstfrage / Lazy-Prompt" class="block">
+    <div class="variant-card" data-decision="opt-prompt" data-label="Erstfrage bzw. Lazy-Prompt für git init">
+      <h3>Deine Idee B — beim ersten Mal fragen (bzw. lazy fragen)
+        <span class="badge blocker">Deadlock in autonomen Skills</span></h3>
+
+      <p>Ich hatte im ersten Durchgang vorgeschlagen, die Frage von SessionStart auf „lazy, erst wenn Git
+         gebraucht wird" zu verschieben. Das Red-Team hat den Vorschlag zerlegt:</p>
+
+      <div class="procons">
+        <div class="pros"><h4>Dafür</h4><ul>
+          <li>Frage erscheint dort, wo sie relevant ist</li>
+        </ul></div>
+        <div class="cons"><h4>Dagegen</h4><ul>
+          <li><code>run-autonomous/SKILL.md:428-432</code> verbietet jede <code>AskUserQuestion</code> nach der Freigabe;
+              <code>run-backlog</code> <em>ist</em> die ship-Instanz, die AFK läuft. Der Lazy-Prompt blockiert die Schleife
+              — oder das Modell antwortet stellvertretend und schreibt eine Entscheidung fest, die niemand getroffen hat</li>
+          <li>Verletzt die Invariante aus #268 („ein Befund wird nie an die Rückfrage gekoppelt", <code>git-check-output.js:9-24</code>)</li>
+          <li>Das Plugin verhandelt eine bewusste Nutzerentscheidung neu: wer kein Git will, hat kein <code>git init</code> getippt</li>
+          <li><code>graphify</code> hat dieselbe Abwägung schon getroffen — <code>ss.graphify.js:128</code> sagt wörtlich „Not an offer"</li>
+        </ul></div>
+      </div>
+
+      <p>Falls überhaupt: eine gedrosselte Transparenzzeile ohne Rückfrage, und <em>niemals</em> ein Schreibvorgang
+         aus einem nicht-interaktiven Pfad.</p>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-opt-prompt" value="include"><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-opt-prompt" value="discard" checked><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="opt-prompt-note">Anmerkung</label>
+        <textarea id="opt-prompt-note" data-comment="opt-prompt-note"></textarea></div>
+    </div>
+  </section>
+
+  <section id="opt-skillgates" data-nav-label="Idee C · Repo-Gates in Skills" class="block">
+    <div class="variant-card" data-decision="opt-skillgates" data-label="Repo-Mode-Gates in mehreren SKILL.md">
+      <h3>Deine Idee C — Repo-Mode-Gate in alle Git-abhängigen Skills
+        <span class="badge degraded">auf einen Skill eindampfen</span></h3>
+
+      <p>Korrektur meiner Zahl aus dem ersten Durchgang: das Plugin hat <strong>21 Skills</strong>, nicht 67
+         (67 sind Dateien unter <code>skills/</code> inklusive deep-knowledge). Von den 21 führt genau einer
+         eine mehrstufige Git-Pipeline aus, die ohne Git <em>lügt</em>: <code>ship</code>.</p>
+
+      <p>Das Trennkriterium: ein Skill braucht ein Gate nur, wenn er ohne eines eine
+         <strong>Falschaussage erzeugt oder etwas zerstört</strong>. Alles andere scheitert laut und lesbar
+         („not a git repository") — der Nutzer versteht es sofort, nichts wird zerstört.</p>
+
+      <table class="matrix">
+        <thead><tr><th>Kategorie</th><th>Skills</th><th>Maßnahme</th></tr></thead>
+        <tbody>
+          <tr><td class="bad">Erzeugt Falschaussage</td><td><code>ship</code></td><td>Gate — siehe F3</td></tr>
+          <tr><td class="warn">Scheitert laut</td><td><code>setup-issue</code>, <code>promote</code>, <code>setup-cleanup</code>, <code>run-backlog</code>, <code>tune-*</code>, <code>fix</code></td><td>unangetastet lassen</td></tr>
+          <tr><td class="ok">Bereits gegated</td><td>9 Git-Hooks</td><td>nichts tun</td></tr>
+        </tbody>
+      </table>
+
+      <p><strong>Und: Prosa ist kein Enforcement.</strong> Genau die Skill-Gates aus #150 sind im
+         De-Prefix-Refactor <code>d3e9b6b</code> verdunstet. Das billigste echte Enforcement ist die
+         Tool-Grenze — jeder <code>ship_*</code>-Handler bekommt bereits <code>cwd</code>, drei rufen den
+         Detektor schon auf. <code>cleanup.js</code> nachziehen wirkt mehr als jeder Markdown-Absatz.</p>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-opt-skillgates" value="include"><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-opt-skillgates" value="discard" checked><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="opt-skillgates-note">Anmerkung</label>
+        <textarea id="opt-skillgates-note" data-comment="opt-skillgates-note"></textarea></div>
+    </div>
+  </section>
+
+  <section id="opt-shared-detector" data-nav-label="Idee D · Geteilter Detektor" class="block">
+    <div class="variant-card" data-decision="opt-shared-detector" data-label="Ein geteilter Detektor über CJS und ESM">
+      <h3>Idee D — <em>ein</em> Detektor über Hooks (CJS) und MCP-Server (ESM)
+        <span class="badge degraded">umstritten</span></h3>
+
+      <p>Hier widersprechen sich die Agents, deshalb steht es als eigene Entscheidung.</p>
+
+      <div class="procons">
+        <div class="pros"><h4>Red-Team: Teil 1 ist tragfähig</h4><ul>
+          <li>Sollte allein ausgeliefert werden — mit F4, Timeout und Vokabular-Fix</li>
+          <li>Beseitigt zwei stille Vertragsbrüche: Hooks vergleichen <code>stdout === 'true'</code>,
+              <code>repo-mode.js</code> prüft nur den Exit-Code → in einem Bare-Repo oder innerhalb <code>.git</code>
+              kippt das Verhalten von „überspringen" auf „ausführen"</li>
+          <li>Beendet die Doppel-Vokabular-Falle: der Detektor sagt <code>none</code>, preflight benennt es in
+              <code>file-only</code> um — ein Prosa-Vergleich gegen das falsche Token feuert nie und scheitert offen</li>
+        </ul></div>
+        <div class="cons"><h4>PO: nicht als Voraussetzung verkaufen</h4><ul>
+          <li>Vier Hook-Kopien à ~6 Zeilen; ein Dual-Format-Shim hat mehr bewegliche Teile als die Duplikation</li>
+          <li><code>repo-mode.js</code> hat <em>kein</em> Timeout und bewusst keinen Cache — im Hook-Pfad
+              (feuert bei jedem Bash-Write) blockiert ein hängendes Netzlaufwerk die Session;
+              jeder existierende Hook-Detektor setzt eines (<code>ss.graphify.js:103</code> = 4000 ms)</li>
+          <li>Eine fünfte Kopie in <code>ss.git.check.js</code> löst F1 sofort</li>
+        </ul></div>
+      </div>
+
+      <p><strong>Auflösung:</strong> beide haben in ihrem Teil recht. Kurzfristig eine Kopie für F1;
+         die Konsolidierung ist eine eigene, saubere Aufräumarbeit — kein Türsteher vor den Fixes.</p>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-opt-shared-detector" value="include"><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-opt-shared-detector" value="discard" checked><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="opt-shared-detector-note">Anmerkung</label>
+        <textarea id="opt-shared-detector-note" data-comment="opt-shared-detector-note"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================= DIE GRUNDSATZENTSCHEIDUNG ================= -->
+  <section id="grundsatz" data-nav-label="★ Grundsatzentscheidung" class="block">
+    <h3>★ Die eine Entscheidung, die alles andere bestimmt</h3>
+    <p>Ist <em>file-only</em> ein <strong>unterstützter Modus</strong> oder ein <strong>degradierter Modus</strong>?
+       Alles Weitere folgt daraus mechanisch. Wähle unten genau eine Variante — die andere auf „Verwerfen".</p>
+  </section>
+
+  <section id="var-degraded" data-nav-label="Variante A · Degraded Mode" class="block">
+    <div class="variant-card" data-decision="var-degraded" data-label="Variante A — Degraded Mode">
+      <h3>Variante A — Degraded Mode <span class="badge rec">Empfehlung beider Agents</span></h3>
+      <p>Das Plugin ist in einem Nicht-Git-Projekt <strong>still, ehrlich und nicht-destruktiv</strong> —
+         und verspricht nicht mehr. Die Akzeptanzschwelle lautet: <em>lügt es, oder zerstört es etwas?</em>
+         Nicht: <em>funktioniert das Feature in beiden Modi?</em></p>
+
+      <div class="procons">
+        <div class="pros"><h4>Dafür</h4><ul>
+          <li>Das „unterstützt"-Versprechen ist ohnehin nicht haltbar: ohne Remote gibt es keinen PR, keinen Merge, kein Tag, kein Rollback. Ein „Ship" in file-only ist ein <code>cp</code></li>
+          <li>Der Beweis liegt im Repo: #150 hat „supported" gewählt, das Versprechen verfiel in unter 60 Minors — gemessen, nicht geschätzt</li>
+          <li>Begrenzt den langen Schwanz dauerhaft per Politik statt per Feature-Matrix</li>
+          <li>Macht den P0-Schnitt selbsterklärend richtig</li>
+        </ul></div>
+        <div class="cons"><h4>Dagegen / Konsequenz</h4><ul>
+          <li><code>/setup-issue</code>, <code>/promote</code>, <code>/setup-cleanup</code> scheitern weiterhin — laut, aber sie scheitern</li>
+          <li>Konsequent zu Ende gedacht steht auch <code>preflight.js:45</code> auf der falschen Seite: ein synthetischer Commit-Hash ist kosmetische Fiktion. Degraded heißt <code>—</code> rendern, keinen Fake-Hash</li>
+        </ul></div>
+      </div>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-var-degraded" value="include" checked><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-var-degraded" value="discard"><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="var-degraded-note">Anmerkung</label>
+        <textarea id="var-degraded-note" data-comment="var-degraded-note"></textarea></div>
+    </div>
+  </section>
+
+  <section id="var-supported" data-nav-label="Variante B · Supported Mode" class="block">
+    <div class="variant-card" data-decision="var-supported" data-label="Variante B — Supported Mode (Ursprungsidee)">
+      <h3>Variante B — Supported Mode <span class="badge agent">deine Ursprungsidee, vollständig</span></h3>
+      <p>File-only wird ein erstklassiger Modus: Erkennung, persistierte Entscheidung, Prompt, Gates in Skills,
+         eigener Ship-Pfad, eigene Card-Variante, dauerhafte Zwei-Wege-Testmatrix.</p>
+
+      <div class="procons">
+        <div class="pros"><h4>Dafür</h4><ul>
+          <li>Nutzer in Nicht-Git-Projekten bekommen eine durchgängige Story statt Sackgassen</li>
+          <li>Der Fall ist real und stabil — #150 entstand aus einem echten, dauerhaft nicht-versionierten Verzeichnis</li>
+        </ul></div>
+        <div class="cons"><h4>Dagegen</h4><ul>
+          <li>Investiert in die ~20 % des Produkts, die in solchen Projekten überhaupt funktionieren</li>
+          <li>Jedes künftige Git-Feature bekommt dauerhaft einen zweiten Codepfad plus zweite Testmatrix</li>
+          <li>Genau dieser Weg wurde einmal gegangen und ist unbemerkt verfallen</li>
+        </ul></div>
+      </div>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-var-supported" value="include"><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-var-supported" value="discard" checked><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="var-supported-note">Anmerkung</label>
+        <textarea id="var-supported-note" data-comment="var-supported-note"></textarea></div>
+    </div>
+  </section>
+
+  <section id="var-minimal" data-nav-label="Variante C · Nur die Lügen" class="block">
+    <div class="variant-card" data-decision="var-minimal" data-label="Variante C — nur F1 + F4, sonst nichts">
+      <h3>Variante C — Minimalschnitt: nur Blockade und Fremdschreibzugriffe</h3>
+      <p>Nur die Positionen 1–3 der Reihenfolge unten: F7 (totale Blockade), F8 (Schreiben in den
+         Dateisystem-Root) und F4 (Schreiben ins fremde Repo). Card, Ship-Skill, Release und
+         <code>ss.git.check</code> bleiben, wie sie sind.</p>
+
+      <div class="procons">
+        <div class="pros"><h4>Dafür</h4><ul>
+          <li>Drei kleine, risikoarme Änderungen</li>
+          <li>Beseitigt genau das, was Arbeit verhindert oder außerhalb des Ziels schreibt</li>
+          <li>Erfordert keine Grundsatzentscheidung — funktioniert unter A wie unter B</li>
+        </ul></div>
+        <div class="cons"><h4>Dagegen</h4><ul>
+          <li>Deine konkrete Beschwerde — die Card nach dem Ship — bleibt ungelöst</li>
+          <li>F5 bleibt: Erfolgsmeldung mit uncommitteten Änderungen, plus die Merge-Behauptung in <code>SKILL.md:442</code></li>
+          <li>F1 bleibt: Falschmeldung bei jedem Session-Start</li>
+        </ul></div>
+      </div>
+
+      <div class="bi-state-group">
+        <label class="bi-state-option"><input type="radio" name="eval-var-minimal" value="include"><span class="bi-state-label">Miteinbeziehen</span></label>
+        <label class="bi-state-option"><input type="radio" name="eval-var-minimal" value="discard" checked><span class="bi-state-label">Verwerfen</span></label>
+      </div>
+      <div class="comment-field"><label for="var-minimal-note">Anmerkung</label>
+        <textarea id="var-minimal-note" data-comment="var-minimal-note"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================= EMPFEHLUNG ================= -->
+  <section id="empfehlung" data-nav-label="Empfehlung &amp; Reihenfolge" class="block">
+    <h3>Empfehlung und Reihenfolge</h3>
+    <p><strong>Variante A (Degraded Mode)</strong> als Politik — aber der Befundstapel ist größer als
+       die Grundsatzfrage. Deine drei Ursprungsideen (repo.json, Prompt, Skill-Gates) fallen weg; nicht
+       weil die Idee schlecht war, sondern weil die Recherche zwei Dinge zeigt: der Detektor ist seit
+       v0.73.0 da, und das eigentliche Problem heißt <em>Verrottung plus fehlender Remote-Check</em>,
+       nicht fehlende Erkennung.</p>
+
+    <p>Der Punkt, an dem deine Ausgangsfrage sich gedreht hat: du hast gefragt, ob man Nicht-Git-Projekte
+       erkennen und die Entscheidung speichern kann. Die Antwort ist ja — aber das Speichern löst nichts.
+       Was tatsächlich weh tut, sind zehn konkrete Stellen, an denen das Plugin ohne Remote lügt, blockiert
+       oder außerhalb des Projekts schreibt.</p>
+
+    <table class="matrix">
+      <thead><tr><th>#</th><th>Was</th><th>Wo</th><th>Warum in dieser Reihenfolge</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Remote-Check ergänzen; ohne Remote überspringen oder Fix-Text auf <code>git switch -c &lt;feat/topic&gt;</code> ändern</td><td><code>pre.main.guard.js</code>, <code>pre.edit.branch.js</code></td><td class="bad">F7 — hebt die totale Arbeitsblockade auf</td></tr>
+        <tr><td>2</td><td>Exclude-Idiom absichern (leerer <code>git-common-dir</code> → abbrechen)</td><td><code>run-autonomous</code>, <code>run-backlog</code>, <code>claude-batch</code></td><td class="bad">F8 — Schreibzugriff außerhalb des Projekts</td></tr>
+        <tr><td>3</td><td><code>foreign-root</code> erkennen + fehlendes Gate in <code>cleanup.js</code></td><td>ship-Tools</td><td class="bad">F4 — Schreibzugriff auf fremdes Repo</td></tr>
+        <tr><td>4</td><td>Repo-Guard vor <code>checkWorkspace()</code>; no-remote-Skip für die unpushed-Zählung</td><td><code>ss.git.check.js</code></td><td>F1 — sichtbarster Schmerz, zwei Zeilen</td></tr>
+        <tr><td>5</td><td>Committen <em>oder</em> ehrlich <code>delivered:"none"</code> melden; Rückgabetyp in der Doku korrigieren</td><td><code>release.js</code>, <code>ship/SKILL.md:371,442</code></td><td>F5 — „Erfolg ohne Commit" ist die schlimmste Kategorie</td></tr>
+        <tr><td>6</td><td><code>needsRebase</code> hinter <code>noRemote</code> gaten</td><td><code>preflight.js:290,389</code></td><td>Der Mechanismus, der die Ship-Kette überhaupt auslöst</td></tr>
+        <tr><td>7</td><td><code>mode</code> ins state-Schema, <code>ready-files</code> ins Enum, sync-Segment bei file-only unterdrücken</td><td><code>index.js</code>, <code>variant-guard.js</code></td><td>F2 — beendet die erfundene origin-Aussage</td></tr>
+        <tr><td>8</td><td>file-only-Zweig in Schritt 1a (anderer Name als „Step 0")</td><td><code>ship/SKILL.md</code></td><td>F3</td></tr>
+        <tr><td>9</td><td>Ein geguardeter Rewrite des Branch-Blocks</td><td>6 Agent-Dateien</td><td>F9 — eine Änderung, sechs Dateien</td></tr>
+        <tr><td>10</td><td>Non-Git- und No-Remote-Hook-Regressionstest + Card-Schema-Test</td><td>eigener PR</td><td>F6 — verhindert die zweite Verrottung</td></tr>
+      </tbody>
+    </table>
+
+    <p><strong>Schnitt-Vorschlag:</strong> 1–3 sind ein eigener, sofortiger PR (Blockade + zwei
+       Schreibzugriffe außerhalb des gemeinten Ziels). 4–9 ein zweiter. 10 ein dritter, und der ist
+       der einzige, der verhindert, dass wir in 60 Minors wieder hier sitzen.</p>
+
+    <p><strong>Offene Frage, die du entscheiden musst:</strong> war die Trennung von <code>ready-files</code>
+       und <code>state.mode</code> irgendwann bewusst? Falls ja, macht Punkt 3 eine geschlossene Entscheidung
+       wieder auf, und ich sollte erst deren Begründung suchen.</p>
+  </section>
+
+</section>
+
+<!-- ==================== ABSCHLUSSBERICHT ==================== -->
+<section data-iteration="2" data-iteration-template="decision" data-final-report data-active>
+
+  <div class="iteration-intro">
+    <h2>Abschlussbericht · Repo-Mode umgesetzt</h2>
+    <p>Alle neun Befunde implementiert, Variante A (Degraded Mode) als Politik — mit deiner
+       Einschränkung, dass <code>/ship</code> in file-only alles ausführt, was keine Git-Aktion ist.</p>
+  </div>
+
+  <section id="fr-summary" data-nav-label="Zusammenfassung" class="block">
+    <h3>Zusammenfassung</h3>
+    <p>Die Grundsatzfrage ist als <strong>Degraded Mode</strong> beantwortet, aber nicht als
+       „Plugin schweigt und tut nichts". Dein Kommentar hat den file-only-Ship-Pfad neu definiert:
+       Build, Tests, Doku-Frische und Quality-Gates laufen weiter, nur Push/PR/Merge entfallen —
+       und das Ergebnis wird ehrlich berichtet statt als Merge ausgegeben.</p>
+
+    <p>Die vier Ursprungsideen sind verworfen und nicht gebaut: kein <code>.claude/repo.json</code>,
+       kein Erst- oder Lazy-Prompt, keine Prosa-Gates über mehrere Skills, kein Dual-Format-Detektor.
+       Der Detektor existierte bereits seit v0.73.0 — er war nur ungenau und ungetestet.</p>
+
+    <table class="matrix">
+      <thead><tr><th>Befund</th><th>Status</th><th>Verifikation</th></tr></thead>
+      <tbody>
+        <tr><td>F7 Totale Blockade (no-remote)</td><td class="ok">behoben</td><td>Hook ausgeführt: blockt weiter, Fix jetzt ausführbar</td></tr>
+        <tr><td>F8 Schreiben in Dateisystem-Root</td><td class="ok">behoben</td><td>Guarded-Idiom als No-op ohne Repo verifiziert</td></tr>
+        <tr><td>F4 Fremd-Repo-Schreibzugriff</td><td class="ok">behoben</td><td>neuer Modus <code>git-foreign-root</code> + Gate in cleanup</td></tr>
+        <tr><td>F1 Falscher Detached HEAD</td><td class="ok">behoben</td><td>Hook in leerem Ordner: still, Exit 0</td></tr>
+        <tr><td>F2 Card erfindet origin</td><td class="ok">behoben</td><td>4 Render-Tests gegen echten Card-Renderer</td></tr>
+        <tr><td>F5 Erfolg ohne Commit</td><td class="ok">behoben</td><td>commit passiert jetzt, dann ehrlicher Stopp</td></tr>
+        <tr><td>F3 ship-Skill ohne Zweig</td><td class="ok">behoben</td><td>Schritt 1a-ii + korrigierter Rückgabetyp</td></tr>
+        <tr><td>F9 Agent-Branch-Block</td><td class="ok">behoben</td><td>6 Dateien, ein Rewrite</td></tr>
+        <tr><td>F6 Verrottungs-Test</td><td class="ok">gebaut</td><td>65 Tests; gegen alten Code nachweislich rot</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="fr-files" data-nav-label="Geänderte Dateien" class="block">
+    <h3>Geänderte Dateien</h3>
+    <p><strong>Hooks</strong></p>
+    <ul>
+      <li><code>pre.main.guard.js</code>, <code>pre.edit.branch.js</code> — <code>hasRemote()</code>;
+          ohne Remote wird der Fix-Text auf <code>git switch -c &lt;feat/topic&gt;</code> umgestellt.
+          Die Blockade selbst bleibt: Branch-Hygiene hängt nicht am Remote.</li>
+      <li><code>ss.git.check.js</code> — <code>isGitRepo()</code>-Guard vor <code>checkWorkspace()</code>
+          und <code>checkRepo()</code>; die unpushed-Zählung läuft nur noch mit Remote. Als Block
+          geguardet, nicht als Early-Return, damit die Stash-Prüfung ohne Remote erhalten bleibt.</li>
+    </ul>
+    <p><strong>ship-Tools</strong></p>
+    <ul>
+      <li><code>repo-mode.js</code> — neuer Modus <code>git-foreign-root</code>; striktes
+          <code>=== "true"</code> statt Exit-Code (fängt Bare-Repo und cwd innerhalb <code>.git</code>);
+          4 s Timeout auf jeder Probe; neuer Export <code>refusesGitWrites()</code>.</li>
+      <li><code>cleanup.js</code> — das einzige ship-Tool ganz ohne Gate hat jetzt eines.</li>
+      <li><code>release.js</code> — <code>git-no-remote</code> committet jetzt und stoppt danach;
+          <code>git-foreign-root</code> wird verweigert.</li>
+      <li><code>preflight.js</code> — <code>needsRebase</code> hinter <code>noRemote</code> gegatet.</li>
+    </ul>
+    <p><strong>Completion Card</strong></p>
+    <ul>
+      <li><code>index.js</code> — <code>mode</code>/<code>filesModified</code>/<code>delivered</code>
+          im state-Schema (vorher von zod verworfen), <code>ready-files</code> im Enum und in beiden
+          CTA-Tabellen, und der <code>else</code>-Zweig behauptet kein origin mehr ohne Evidenz.</li>
+      <li><code>variant-guard.js</code> — file-only wird zu <code>ready-files</code> statt zu
+          <code>ready</code> mit einem unbefolgbaren Rat.</li>
+    </ul>
+    <p><strong>Skills &amp; Agents</strong></p>
+    <ul>
+      <li><code>ship/SKILL.md</code> — Schritt 1a-ii (Repo-Mode-Fork), echte Rückgabetypen dokumentiert,
+          Step 4b gatet auf <code>merged</code> statt auf <code>success</code>.</li>
+      <li><code>run-autonomous</code>, <code>run-backlog</code>, <code>claude-batch</code> — Exclude-Idiom geguardet.</li>
+      <li>6 Agent-Dateien — Branch-Block mit Repo-Probe; <code>feature.md</code> zusätzlich beim
+          Push-Mandat und der Parent-Branch-Propagierung.</li>
+    </ul>
+  </section>
+
+  <section id="fr-tests" data-nav-label="Tests &amp; Verifikation" class="block">
+    <h3>Tests &amp; Verifikation</h3>
+    <ul>
+      <li><strong>2091 Tests grün, 82 Testdateien, keine Fehler.</strong> Neu:
+          <code>repo-mode.regression.test.js</code> (65 Tests) plus Ergänzungen in repo-mode,
+          cleanup, release, variant-guard und index.card.</li>
+      <li><strong>Lint sauber.</strong></li>
+      <li><strong>Der Anti-Verrottungs-Test hat Zähne:</strong> die HEAD-Version von
+          <code>ss.git.check.js</code> gegen einen Nicht-Git-Ordner laufen lassen liefert exakt
+          <code>⚠ Detached HEAD in repo root</code> — genau den String, den der neue Test verbietet.
+          Er zählt Hooks dynamisch aus dem Verzeichnis auf, deckt also auch künftige Hooks ab.</li>
+      <li><strong>Empirisch reproduziert und danach gegengeprüft:</strong> F1, F4, F5, F7, F8 —
+          jeweils vorher der Fehler, nachher das gewünschte Verhalten, plus Regressionsprobe mit Remote.</li>
+    </ul>
+
+    <p class="warn-note"><strong>Beobachtung, korrigiert:</strong> in einem früheren Lauf schlugen
+       2 Tests in <code>locale.test.js</code> fehl — auch isoliert reproduzierbar, auf Dateien die
+       byteidentisch mit HEAD sind. Im Wiederholungslauf sind sie grün. Es ist also kein stabiler
+       Fehler, sondern ein <strong>zeitabhängig flakiger Test</strong> (die Sticky-Language-Prüfung
+       hat eine Freshness-Komponente). Nicht durch diese Arbeit verursacht und bewusst nicht
+       mitgefixt — aber ein Flake ist ein eigener Defekt, deshalb steht er unten als Issue-Kandidat.</p>
+  </section>
+
+  <section id="fr-open" data-nav-label="Offene Fragen &amp; TODOs" class="block">
+    <h3>Offene Fragen &amp; TODOs</h3>
+    <p>Angehakte Punkte werden als GitHub-Issues angelegt. Nicht angehakte fallen mit dem Concept weg.</p>
+    <div data-open-questions>
+      <label class="oq-row">
+        <input type="checkbox" name="oq-locale" checked
+               data-issue-title="fix(hooks): locale.test.js ist zeitabhängig flaky"
+               data-issue-type="bug"
+               data-issue-body="Zwei Tests in locale.test.js (Sticky-Language: erwartet 'de', bekommt 'en') schlugen in einem Lauf reproduzierbar fehl — auch isoliert — und waren im Wiederholungslauf grün, ohne Codeänderung. Die Dateien sind byteidentisch mit HEAD, also unabhängig von der Repo-Mode-Arbeit. Verdacht: die Freshness-/TTL-Komponente von ensureLocale macht das Ergebnis von der Uhrzeit bzw. von Marker-Dateien aus früheren Läufen abhängig. Ein Flake in der Sprach-Erkennung ist teuer, weil er still die falsche Antwortsprache setzt.">
+        <span class="oq-label"><code>locale.test.js</code> — zeitabhängig flaky (einmal rot, einmal grün, ohne Codeänderung)</span>
+      </label>
+      <label class="oq-row">
+        <input type="checkbox" name="oq-buildid" checked
+               data-issue-title="chore(ship): build-id gibt rohe git-Fatals auf stderr aus"
+               data-issue-type="chore"
+               data-issue-body="In einem Projekt ohne git schreibt build-id.js zweimal 'fatal: not a git repository' auf MCP-stderr, bevor es korrekt {success:true, buildId:'no-build-id', skipped:true} liefert. Ergebnis ist sicher, das Log-Rauschen nicht.">
+        <span class="oq-label"><code>build-id.js</code> — rohe git-Fatals im Log, obwohl das Ergebnis korrekt ist</span>
+      </label>
+      <label class="oq-row">
+        <input type="checkbox" name="oq-issues-mcp" checked
+               data-issue-title="fix(issues): match_issues wird auch ohne Repo vorgeschlagen"
+               data-issue-type="bug"
+               data-issue-body="prompt.issue.detect.js hat keinen Repo-Guard und weist das Modell an, match_issues aufzurufen. Das dahinterliegende 'gh issue list' scheitert ohne Repo, der Tool-Call ist also immer leer. Entweder Guard im Hook oder ehrliche Fehlermeldung im MCP-Tool.">
+        <span class="oq-label"><code>prompt.issue.detect.js</code> — schickt das Modell in ein Tool, das ohne Repo nie etwas liefern kann</span>
+      </label>
+      <label class="oq-row">
+        <input type="checkbox" name="oq-pseudocommit"
+               data-issue-title="refactor(ship): Pseudo-Commit in file-only als solchen kennzeichnen"
+               data-issue-type="refactor"
+               data-issue-body="preflight.js:45 erzeugt aus der mtime einen 7-stelligen Hex-String, der von einem echten Short-SHA nicht zu unterscheiden ist. Konsequent zu Degraded Mode wäre '—' statt eines Fake-Hashes, oder ein Präfix, das die Card nicht verlinken kann.">
+        <span class="oq-label">Konsequenz von Degraded Mode: Pseudo-Commit aus mtime ist kosmetische Fiktion</span>
+      </label>
+      <label class="oq-row">
+        <input type="checkbox" name="oq-setupcleanup"
+               data-issue-title="fix(setup-cleanup): Branch-Hygiene ohne Remote zeigt unverifizierte Löschkandidaten"
+               data-issue-type="bug"
+               data-issue-body="setup-cleanup/SKILL.md gatet mode 'none' korrekt, aber nicht das fehlende Remote. Jede origin/main-Referenz wird zu 'fatal: bad revision', und das Modell zeigt danach Lösch-Controls für Branches, deren Merge-Status es nicht verifizieren konnte.">
+        <span class="oq-label"><code>setup-cleanup</code> — ohne Remote unverifizierte Löschkandidaten statt eines Fehlers</span>
+      </label>
+    </div>
+  </section>
+
+  <section id="fr-next" data-nav-label="Nächste Schritte" class="block">
+    <h3>Nächste Schritte</h3>
+    <p>Der natürliche Schnitt für den Release: das hier ist ein zusammenhängender Fix-Block, kein
+       Feature. Ein Ship landet ihn als eine Version.</p>
+    <p>Was ich bewusst <em>nicht</em> getan habe: <code>setup-issue</code>, <code>promote</code> und
+       <code>run-burn</code> anfassen. Die scheitern ohne Repo laut und lesbar — nach der gewählten
+       Politik ist das akzeptabel und kein Grund für einen zweiten Codepfad.</p>
+  </section>
+
+</section>
+</main>
+
+<aside class="concept-decision-panel">
+  <div class="iteration-tabs" id="iteration-tabs">
+    <button type="button" class="iteration-tab" data-iteration="1" aria-selected="false">Iteration 1 · Befunde</button>
+    <button type="button" class="iteration-tab" data-iteration="2" data-final-report aria-selected="true">Abschlussbericht</button>
+  </div>
+
+  <div class="frozen-note">Frühere Iteration — nur zum Nachlesen, keine Eingabe möglich.</div>
+
+  <p class="panel-h">Abschnitte</p>
+  <nav class="section-nav" id="section-nav"></nav>
+
+  <div id="panel-ready">
+    <p class="panel-h">Entscheidungen</p>
+    <div id="decision-summary"></div>
+
+    <div id="connection-status" data-state="connecting">
+      <span class="dot"></span><span class="cs-label">Verbinde…</span>
+    </div>
+
+    <div class="conn" id="connection-connecting"><span>◌</span><span>Verbinde mit Claude…</span></div>
+    <div class="conn" id="connection-warning"><span>⚠</span><span>Keine Verbindung zu Claude — Absenden wird zwischengespeichert.</span></div>
+
+    <button type="button" class="submit-btn" id="submit-iterate-btn">Zur nächsten Iteration</button>
+    <button type="button" class="submit-btn" id="submit-implement-btn">⚠ Mit Feedback implementieren</button>
+  </div>
+
+  <div id="panel-submitted">
+    <p class="done-icon">✅</p>
+    <p class="panel-h">Entscheidungen übermittelt</p>
+    <p style="font-size:0.86rem;color:var(--text-secondary)">Wechsle zum Claude-Chat — ich übernehme ab hier.</p>
+    <ol>
+      <li>Übermittelt</li>
+      <li>Claude verarbeitet</li>
+      <li>Implementierung abgeschlossen</li>
+    </ol>
+  </div>
+
+  <div id="panel-final-report" style="display: none;">
+    <div class="status-channel" id="status-channel">
+      <div class="status-channel__heading">Concept abschliessen</div>
+      <ol class="status-steps" aria-live="polite">
+        <li data-step="submitted" data-state="done">
+          <span class="step-icon" aria-hidden="true">✓</span>
+          <span class="step-label">Übermittelt</span>
+        </li>
+        <li data-step="received" data-state="done">
+          <span class="step-icon" aria-hidden="true">✓</span>
+          <span class="step-label">Claude verarbeitet</span>
+        </li>
+        <li data-step="implemented" data-state="done">
+          <span class="step-icon" aria-hidden="true">✓</span>
+          <span class="step-label">Implementierung abgeschlossen</span>
+        </li>
+        <li data-step="ready" data-state="active">
+          <span class="step-icon" aria-hidden="true">●</span>
+          <span class="step-label">Bereit zum Abschluss</span>
+        </li>
+      </ol>
+    </div>
+
+    <div id="finalize-wizard" class="finalize-wizard"
+         data-plan-issues="GitHub-Issue(s) anlegen"
+         data-plan-ship="Ship-Pipeline starten"
+         data-plan-close="Concept-Session beenden"
+         data-word-step="Schritt">
+      <div class="wizard-head">
+        <strong class="wizard-title">Abschluss</strong>
+        <span class="wizard-count" id="wizard-count" aria-live="polite"></span>
+      </div>
+
+      <section class="wizard-step" data-wizard-step="issues" hidden>
+        <h4 class="wizard-q">Offene Punkte als Issues anlegen?</h4>
+        <p class="hint">Nicht angehakte Punkte fallen weg — sie enden mit dem Concept.</p>
+        <div class="wizard-issue-list" id="wizard-issue-list"></div>
+        <p class="hint hint-none" id="wizard-issues-none" hidden>
+          <span aria-hidden="true">⚠</span> Keine Punkte ausgewählt — es werden keine Issues erstellt.
+        </p>
+      </section>
+
+      <section class="wizard-step" data-wizard-step="ship" hidden>
+        <h4 class="wizard-q">Jetzt shippen?</h4>
+        <label class="wizard-choice">
+          <input type="radio" name="wizard-ship" value="yes" data-no-persist>
+          <span class="wizard-choice-label">
+            <strong><span aria-hidden="true">🚀</span> Ja, Ship-Pipeline starten</strong>
+            <span class="wizard-sub">Startet die komplette Ship-Pipeline (Build, Version-Bump, Release, Merge).</span>
+          </span>
+        </label>
+        <label class="wizard-choice">
+          <input type="radio" name="wizard-ship" value="no" data-no-persist>
+          <span class="wizard-choice-label">
+            <strong>Nein, nicht releasen</strong>
+            <span class="wizard-sub">Der Code bleibt wie committed. Shippen geht später jederzeit im Chat.</span>
+          </span>
+        </label>
+        <p class="hint hint-warn" id="wizard-ship-required" role="alert" aria-live="polite" hidden>
+          <span aria-hidden="true">⚠</span> Triff eine Wahl um fortzufahren.
+        </p>
+      </section>
+
+      <section class="wizard-step" data-wizard-step="files" hidden>
+        <fieldset id="panel-dispose-concept" class="dispose-fieldset">
+          <legend>Concept-Files behalten?</legend>
+          <p class="hint dispose-hint">Default = verwerfen. Entscheidungen sind bereits in Commits/Issues — die HTML-Datei muss selten in git bleiben.</p>
+
+          <label class="dispose-option">
+            <input type="radio" name="dispose-mode" value="discard" checked>
+            <span class="dispose-label">
+              <strong>Verwerfen (Standard)</strong>
+              <span class="dispose-sub">HTML + Decisions-JSON löschen, kein git-Eintrag.</span>
+            </span>
+          </label>
+
+          <label class="dispose-option">
+            <input type="radio" name="dispose-mode" value="keep">
+            <span class="dispose-label">
+              <strong>Im Projekt behalten</strong>
+              <span class="dispose-sub">Files bleiben in docs/concepts/ und sind git-getrackte Artefakte.</span>
+            </span>
+          </label>
+
+          <label class="dispose-option">
+            <input type="radio" name="dispose-mode" value="gitignore">
+            <span class="dispose-label">
+              <strong>Nur lokal / .gitignore</strong>
+              <span class="dispose-sub">Files bleiben lokal, ein Eintrag wird zur .gitignore hinzugefügt.</span>
+            </span>
+          </label>
+
+          <div class="dispose-move-row">
+            <label for="dispose-move-to">Verschieben nach (optional):</label>
+            <input id="dispose-move-to" name="dispose-move-to" type="text"
+                   autocomplete="off" spellcheck="false" placeholder="z.B. docs/architecture/">
+          </div>
+        </fieldset>
+      </section>
+
+      <section class="wizard-step" data-wizard-step="review" hidden>
+        <h4 class="wizard-q">Das passiert jetzt:</h4>
+        <ol class="wizard-plan" id="wizard-plan"></ol>
+        <p class="hint hint-warn">Ein Klick, alles davon — inklusive allem was nach aussen geht.</p>
+      </section>
+
+      <div class="wizard-nav">
+        <button type="button" id="wizard-back" class="link-btn" hidden>
+          <span aria-hidden="true">‹</span> Zurück
+        </button>
+        <button type="button" id="wizard-next" class="primary submit-btn">
+          Weiter <span aria-hidden="true">›</span>
+        </button>
+      </div>
+
+      <div class="submit-gap" aria-hidden="true"></div>
+      <button type="button" id="wizard-execute" class="implement-btn submit-btn" hidden>
+        <span aria-hidden="true">⚠</span> Alles ausführen
+      </button>
+
+      <p class="hint hint-running" data-finalize-state="running" hidden>
+        <span aria-hidden="true">⏳</span> Claude arbeitet es ab …
+      </p>
+      <p class="hint hint-done" data-finalize-state="done" hidden>
+        <span aria-hidden="true">✓</span> Concept abgeschlossen.
+      </p>
+    </div>
+
+    <button type="button" id="view-iterations-btn" class="link-btn">Iterationen ansehen</button>
+  </div>
+</aside>
+</div>
+
+<script type="application/json" id="concept-decisions">
+{ "submitted": false, "decisions": [], "comments": [] }
+</script>
+
+<script>
+// --- State Persistence ---
+const STORAGE_KEY = 'concept-state-' + location.pathname.split('/').pop().replace('.html', '');
+const STATE_TTL_MS = 24 * 60 * 60 * 1000;
+function saveState() {
+  const state = { _savedAt: Date.now(), _pageVersion: document.documentElement.dataset.pageVersion || '' };
+  document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
+    if (el.name || el.id) state['input:' + (el.name || el.id) + ':' + el.value] = el.checked; });
+  document.querySelectorAll('textarea, input[type="text"]').forEach(el => {
+    if (el.id || el.dataset.comment) state['text:' + (el.id || el.dataset.comment)] = el.value; });
+  state['theme'] = document.documentElement.getAttribute('data-theme');
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+function restoreState() {
+  const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return;
+  try { const state = JSON.parse(raw);
+    if (state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) { localStorage.removeItem(STORAGE_KEY); return; }
+    const currentVersion = document.documentElement.dataset.pageVersion || '';
+    if (state._pageVersion && state._pageVersion !== currentVersion) { localStorage.removeItem(STORAGE_KEY); return; }
+    if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+    Object.entries(state).forEach(([key, value]) => {
+      if (key.startsWith('_')) return;
+      const [type, ...rest] = key.split(':');
+      if (type === 'input') { const name = rest.slice(0, -1).join(':'), val = rest[rest.length - 1];
+        const el = document.querySelector('input[name="' + name + '"][value="' + val + '"]'); if (el) el.checked = value; }
+      else if (type === 'text') { const id = rest.join(':');
+        const el = document.querySelector('[data-comment="' + id + '"]') || document.getElementById(id); if (el) el.value = value; }
+    });
+  } catch (e) {}
+}
+document.addEventListener('DOMContentLoaded', restoreState);
+document.addEventListener('change', saveState);
+document.addEventListener('input', saveState);
+
+// --- Comment slot safety net ---
+function ensureCommentSlots() {
+  document.querySelectorAll('[data-decision]').forEach(card => {
+    const id = card.dataset.decision;
+    if (card.querySelector('[data-comment="' + id + '-note"]')) return;
+    const wrap = document.createElement('div'); wrap.className = 'comment-field';
+    const ta = document.createElement('textarea');
+    ta.id = id + '-note'; ta.dataset.comment = id + '-note';
+    wrap.appendChild(ta); card.appendChild(wrap);
+  });
+}
+document.addEventListener('DOMContentLoaded', ensureCommentSlots);
+
+// --- Section Nav ---
+function buildSectionNav() {
+  const nav = document.getElementById('section-nav'); if (!nav) return;
+  const visibleIteration = document.querySelector('section[data-iteration]:not([hidden])'); if (!visibleIteration) return;
+  const sections = visibleIteration.querySelectorAll('section[id][data-nav-label]');
+  nav.innerHTML = '';
+  sections.forEach(sec => {
+    const id = sec.id, label = sec.dataset.navLabel;
+    const decisionEl = sec.querySelector('[data-decision]');
+    const link = document.createElement('a');
+    link.href = '#' + id; link.className = 'section-nav-item'; link.dataset.sectionId = id;
+    if (decisionEl) link.dataset.decisionId = decisionEl.dataset.decision;
+    const labelEl = document.createElement('span'); labelEl.className = 'section-nav-label'; labelEl.textContent = label;
+    link.appendChild(labelEl);
+    if (decisionEl) { const s = document.createElement('span'); s.className = 'section-nav-state'; link.appendChild(s); }
+    nav.appendChild(link);
+  });
+  updateSectionNavState();
+}
+function updateSectionNavState() {
+  const labels = { include: 'Einbez.', discard: 'Verworfen' };
+  document.querySelectorAll('.section-nav-item[data-decision-id]').forEach(link => {
+    const id = link.dataset.decisionId;
+    const checked = document.querySelector('input[name="eval-' + id + '"]:checked');
+    const currentState = checked ? checked.value : 'include';
+    const stateEl = link.querySelector('.section-nav-state');
+    if (stateEl) { stateEl.textContent = labels[currentState] || currentState;
+      stateEl.className = 'section-nav-state state-' + currentState; }
+  });
+  updateDecisionSummary();
+}
+function updateDecisionSummary() {
+  const el = document.getElementById('decision-summary'); if (!el) return;
+  const groups = document.querySelectorAll('section[data-iteration][data-active] [data-decision]');
+  let inc = 0, disc = 0;
+  groups.forEach(g => {
+    const checked = document.querySelector('input[name="eval-' + g.dataset.decision + '"]:checked');
+    ((checked ? checked.value : 'include') === 'discard') ? disc++ : inc++;
+  });
+  el.innerHTML = '<strong>' + inc + '</strong> miteinbeziehen · <strong>' + disc + '</strong> verworfen';
+}
+document.addEventListener('click', e => {
+  const link = e.target.closest('.section-nav-item'); if (!link) return;
+  e.preventDefault();
+  const target = document.querySelector(link.getAttribute('href'));
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+document.addEventListener('change', updateSectionNavState);
+
+// --- Iteration tabs + freeze ---
+function applyIterationTemplate(sec) {
+  if (sec && sec.dataset.iterationTemplate) {
+    document.documentElement.setAttribute('data-template', sec.dataset.iterationTemplate);
+  }
+}
+function showIteration(n) {
+  document.querySelectorAll('section[data-iteration]').forEach(sec => {
+    sec.hidden = String(sec.dataset.iteration) !== String(n); });
+  document.querySelectorAll('.iteration-tab').forEach(tab => {
+    tab.setAttribute('aria-selected', String(tab.dataset.iteration) === String(n) ? 'true' : 'false'); });
+  const shown = document.querySelector('section[data-iteration]:not([hidden])');
+  applyIterationTemplate(shown);
+  const activeSec = document.querySelector('section[data-iteration][data-active]');
+  const isLive = activeSec && String(activeSec.dataset.iteration) === String(n);
+  document.body.classList.toggle('viewing-frozen', !isLive);
+
+  // A final report replaces the iterate/implement panel entirely: that round is
+  // closed, and the only remaining decisions belong to the close-out wizard.
+  const isFinal = !!(activeSec && activeSec.hasAttribute('data-final-report'));
+  const panelReady = document.getElementById('panel-ready');
+  const panelSubmitted = document.getElementById('panel-submitted');
+  const panelFinal = document.getElementById('panel-final-report');
+  const submitted = document.body.classList.contains('concept-submitted');
+
+  if (panelFinal) panelFinal.style.display = (isLive && isFinal) ? 'block' : 'none';
+  if (panelReady) panelReady.style.display = (isLive && !isFinal) ? 'block' : 'none';
+  if (panelSubmitted) {
+    panelSubmitted.style.display = (isLive && !isFinal && submitted) ? 'block' : 'none';
+  }
+
+  buildSectionNav();
+  if (isFinal && typeof refreshFinalizeWizard === 'function') {
+    refreshFinalizeWizard({ reset: true });
+  }
+  document.dispatchEvent(new CustomEvent('iteration:changed'));
+}
+
+// Frozen iterations stay readable but never editable, and their submitted
+// values must survive exactly as sent. Doing this in JS rather than rewriting
+// every card's markup keeps the freeze in ONE place, so a future iteration
+// cannot be appended in an accidentally-live state.
+function freezeInactiveIterations() {
+  document.querySelectorAll('section[data-iteration]:not([data-active])').forEach(sec => {
+    sec.querySelectorAll('input, select, button').forEach(el => { el.disabled = true; });
+    sec.querySelectorAll('textarea, input[type="text"]').forEach(el => { el.readOnly = true; });
+  });
+}
+document.addEventListener('DOMContentLoaded', freezeInactiveIterations);
+document.querySelectorAll('.iteration-tab').forEach(tab =>
+  tab.addEventListener('click', () => showIteration(tab.dataset.iteration)));
+document.addEventListener('DOMContentLoaded', () => {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (active) showIteration(active.dataset.iteration);
+});
+
+// --- Theme ---
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const html = document.documentElement;
+  html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  saveState();
+});
+
+// --- Dimmer dismiss ---
+document.getElementById('content-dimmer').addEventListener('click', () => {
+  document.body.classList.remove('content-dimmed');
+});
+
+// --- collectDecisions (decision branch, generic catch-all) ---
+function collectDecisions(action) {
+  action = action || 'iterate';
+  const decisions = [], comments = [];
+  const scope = document.querySelector('section[data-iteration][data-active]') || document;
+  scope.querySelectorAll('[data-decision]').forEach(el => {
+    const id = el.dataset.decision;
+    const checked = document.querySelector('input[name="eval-' + id + '"]:checked');
+    decisions.push({ id: id, label: el.dataset.label || '', evaluation: checked ? checked.value : 'include' });
+  });
+  scope.querySelectorAll('[data-comment]').forEach(el => {
+    if (el.value && el.value.trim()) comments.push({ id: el.dataset.comment, text: el.value.trim() });
+  });
+  // Generic catch-all so no named field is ever silently dropped
+  const allFields = {};
+  scope.querySelectorAll('input, select, textarea').forEach(el => {
+    const key = el.dataset.comment || el.name || el.id; if (!key) return;
+    if (el.type === 'radio' || el.type === 'checkbox') { if (el.checked) allFields[key] = el.value; }
+    else if (el.value && el.value.trim()) allFields[key] = el.value.trim();
+  });
+  return { submitted: true, template: 'decision', action: action,
+           iteration: scope.dataset ? scope.dataset.iteration : null,
+           decisions: decisions, comments: comments, allFields: allFields };
+}
+
+// --- Submit + heartbeat ---
+let _submittedAt = 0;
+async function submitWithAction(action) {
+  const data = collectDecisions(action);
+  document.getElementById('concept-decisions').textContent = JSON.stringify(data);
+  document.body.classList.add('concept-submitted');
+  document.body.classList.add('content-dimmed');
+  _submittedAt = Date.now();
+  document.getElementById('panel-ready').style.display = 'none';
+  document.getElementById('panel-submitted').style.display = 'block';
+  try { await fetch('/decisions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); }
+  catch (e) { localStorage.setItem(STORAGE_KEY + '-pending', JSON.stringify(data)); }
+  saveState();
+}
+document.getElementById('submit-iterate-btn').addEventListener('click', () => submitWithAction('iterate'));
+document.getElementById('submit-implement-btn').addEventListener('click', () => {
+  if (!confirm('Mit Feedback echt implementieren? Claude schreibt jetzt Code-Änderungen.')) return;
+  submitWithAction('implement');
+});
+// --- Helpers the close-out wizard depends on ---
+// Declared here so the verbatim wizard block below can stay unmodified.
+let _submittedReloadCounter = null;
+let _submittedAction = null;
+
+function _guardedSetItem(key, value) {
+  try { localStorage.setItem(key, value); } catch (e) { /* quota / private mode */ }
+}
+function showContentDimmer() { document.body.classList.add('content-dimmed'); }
+function hideContentDimmer() { document.body.classList.remove('content-dimmed'); }
+function showSubmitWarning(msg) {
+  const w = document.getElementById('connection-warning');
+  if (!w) return;
+  const label = w.querySelector('span:last-child');
+  if (label) label.textContent = msg;
+  w.style.display = 'flex';
+}
+function restorePanelToReady() {
+  document.getElementById('panel-submitted').style.display = 'none';
+  document.getElementById('panel-ready').style.display = 'block';
+  ['submit-iterate-btn', 'submit-implement-btn'].forEach(id => {
+    const btn = document.getElementById(id); if (btn) btn.disabled = false; });
+  document.body.classList.remove('concept-submitted');
+  document.body.classList.remove('content-dimmed');
+  _submittedAt = 0;
+  localStorage.removeItem(STORAGE_KEY);
+}
+const HEARTBEAT_STALE_MS = 90000, HEARTBEAT_GRACE_MS = 30000;
+const _pageLoadedAt = Date.now(); let _lastHeartbeatTs = 0;
+async function pollHeartbeat() {
+  try { const res = await fetch('/heartbeat', { cache: 'no-store' }); const data = await res.json();
+    _lastHeartbeatTs = data.ts || 0; } catch (e) {}
+}
+async function pollProcessedState() {
+  if (!_submittedAt) return;
+  try { const res = await fetch('/decisions', { cache: 'no-store' }); const data = await res.json();
+    const processedIso = data && data._processed_at; if (!processedIso) return;
+    const processedMs = Date.parse(processedIso);
+    if (Number.isFinite(processedMs) && processedMs > _submittedAt) restorePanelToReady();
+  } catch (e) {}
+}
+function checkClaudeConnection() {
+  const isConnected = _lastHeartbeatTs && (Date.now() - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
+  const inGrace = Date.now() - _pageLoadedAt < HEARTBEAT_GRACE_MS;
+  const connecting = document.getElementById('connection-connecting');
+  const warning = document.getElementById('connection-warning');
+  const btns = ['submit-iterate-btn', 'submit-implement-btn']
+    .map(id => document.getElementById(id)).filter(Boolean);
+  const panelSubmitted = document.getElementById('panel-submitted');
+  const pill = document.getElementById('connection-status');
+  if (pill) {
+    const state = isConnected ? 'connected' : (inGrace ? 'connecting' : 'disconnected');
+    const label = { connected: 'Claude verbunden', connecting: 'Verbinde…', disconnected: 'Keine Verbindung' }[state];
+    pill.setAttribute('data-state', state);
+    const lbl = pill.querySelector('.cs-label'); if (lbl) lbl.textContent = label;
+  }
+  if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
+  if (isConnected) {
+    if (connecting) connecting.style.display = 'none';
+    if (warning) warning.style.display = 'none';
+    btns.forEach(b => b.disabled = false);
+    retryPendingSubmission();
+  } else if (inGrace) {
+    if (connecting) connecting.style.display = 'flex';
+    if (warning) warning.style.display = 'none';
+    btns.forEach(b => b.disabled = false);
+  } else {
+    if (connecting) connecting.style.display = 'none';
+    if (warning) warning.style.display = 'flex';
+    btns.forEach(b => b.disabled = false);
+  }
+}
+setInterval(async () => { await pollHeartbeat(); checkClaudeConnection(); await pollProcessedState(); }, 5000);
+
+// --- Reload poller ---
+let _bootReloadCounter = null;
+async function pollReload() {
+  try { const res = await fetch('/reload', { cache: 'no-store' }); if (!res.ok) return;
+    const data = await res.json();
+    if (_bootReloadCounter === null) { _bootReloadCounter = data.counter; return; }
+    if (data.counter > _bootReloadCounter) location.reload();
+  } catch (e) {}
+}
+setInterval(pollReload, 3000);
+document.addEventListener('DOMContentLoaded', pollReload);
+document.addEventListener('DOMContentLoaded', updateSectionNavState);
+
+// --- Final-report close-out wizard (action: "finalize") ---
+// The final report used to hand the user four independent controls at once —
+// Shippen, Issues erstellen, Concept beenden, Iterationen ansehen — each with
+// its own submit. The execution order was implicit, and "I actually want three
+// of these" had no expression at all: the first click sent a payload and ended
+// the round. The wizard replaces them with ONE guided pass
+// (issues → ship → files → review) and a SINGLE submit carrying every
+// decision, which Claude then executes in a fixed order
+// (SKILL.md Step 5b · finalize).
+//
+// The step list is computed, not fixed: the issues step is dropped when the
+// report has no still-open questions, so the counter reads 3/3 rather than
+// promising a step that would be skipped.
+let _wizardSteps = [];
+let _wizardIndex = 0;
+
+function finalReportSection() {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  return (active && active.hasAttribute('data-final-report')) ? active : null;
+}
+
+// The [data-open-questions] checkboxes in the REPORT BODY stay the single
+// source of truth for issue selection. Already-routed items carry `disabled`
+// (Claude sets it when it writes the [Issue #NNN] link), so they drop out here
+// and the whole step disappears once everything is routed.
+function openQuestionBoxes() {
+  const active = finalReportSection();
+  const block = active ? active.querySelector('[data-open-questions]') : null;
+  return block
+    ? Array.from(block.querySelectorAll('input[type="checkbox"]:not(:disabled)'))
+    : [];
+}
+
+function collectIssueItems() {
+  return openQuestionBoxes().filter(el => el.checked).map(el => {
+    const labelEl = el.closest('label')?.querySelector('.oq-label');
+    const labelText = labelEl ? labelEl.textContent.trim() : '';
+    // description = explicit data-issue-body wins; otherwise the visible
+    // .oq-label text. Either is enough for Claude to skip the setup-issue
+    // AskUserQuestion path — the user committed on the review screen, so we
+    // MUST NOT ask again.
+    return {
+      id: el.name || el.id || '',
+      title: el.dataset.issueTitle || labelText,
+      type: el.dataset.issueType || 'chore',
+      description: el.dataset.issueBody || labelText,
+      // Optional project-specific label hints — picked up by Claude when
+      // present, silently ignored when absent. Concept HTML is generated by
+      // Claude, so these are populated from concept context.
+      role: el.dataset.issueRole || null,
+      module: el.dataset.issueModule || null,
+      milestone: el.dataset.issueMilestone || null,
+      selected: true
+    };
+  });
+}
+
+function collectDisposition() {
+  const radio = document.querySelector('input[name="dispose-mode"]:checked');
+  const moveEl = document.getElementById('dispose-move-to');
+  const mode = radio ? radio.value : 'discard';
+  const moveTo = (moveEl && moveEl.value.trim()) ? moveEl.value.trim() : null;
+  return { mode, moveTo };
+}
+
+function wizardShipChoice() {
+  const el = document.querySelector('input[name="wizard-ship"]:checked');
+  return el ? el.value : null;
+}
+
+// Recomputes the step list and re-renders. Called from showIteration() with
+// { reset: true } (a tab switch restarts the flow) and from the change
+// listener without it (the user is mid-flow; keep them where they are).
+function refreshFinalizeWizard(opts) {
+  const wiz = document.getElementById('finalize-wizard');
+  if (!wiz) return;
+  const steps = [];
+  if (openQuestionBoxes().length) steps.push('issues');
+  steps.push('ship', 'files', 'review');
+  const previousIndex = _wizardIndex;
+  const previous = _wizardSteps[previousIndex];
+  _wizardSteps = steps;
+  if (opts && opts.reset) {
+    _wizardIndex = 0;
+  } else {
+    // Keep the user where they were. If their step vanished underneath them
+    // (Claude routed the last open question while they sat on it), clamp to
+    // the nearest surviving position instead of throwing them back to step 1
+    // — a silent jump to the start with the counter reset reads as the wizard
+    // losing their answers, which it has not.
+    const kept = steps.indexOf(previous);
+    _wizardIndex = kept >= 0 ? kept : Math.min(previousIndex, steps.length - 1);
+  }
+  renderWizard();
+}
+
+// Freezing is not cosmetic: after a submit the payload is fixed, so a live
+// checkbox or a re-enabled execute button would let the user act on a screen
+// that no longer describes what was sent.
+// Scoped to the wizard's own controls ONLY. Never touch the body's
+// [data-open-questions] checkboxes here: Claude disables those permanently as
+// it routes each item, and a blanket re-enable on unfreeze would hand back
+// checkboxes for issues that already exist.
+function setWizardFrozen(frozen) {
+  const wiz = document.getElementById('finalize-wizard');
+  if (!wiz) return;
+  wiz.dataset.frozen = frozen ? 'true' : 'false';
+  wiz.querySelectorAll('input, button').forEach(el => { el.disabled = frozen; });
+}
+
+// Re-arm after a finalize that did not complete — a blocked ship, a stale
+// processed state, a bridge that could not persist. Without this the execute
+// button stays disabled forever and the user's only way out is a reload.
+function restoreWizardToReady() {
+  const wiz = document.getElementById('finalize-wizard');
+  if (!wiz) return;
+  wiz.querySelectorAll('.hint[data-finalize-state]').forEach(el => { el.hidden = true; });
+  setWizardFrozen(false);
+  renderWizard();
+}
+
+function renderWizard() {
+  const wiz = document.getElementById('finalize-wizard');
+  if (!wiz) return;
+
+  // A closed-out report is done. Claude stamps data-closed on the section
+  // before the final /reload, so the reloaded page shows the outcome instead
+  // of re-arming a wizard whose bridge has already been shut down — a live
+  // execute button there would queue a submission nobody will ever pick up.
+  const section = finalReportSection();
+  if (section && section.hasAttribute('data-closed')) {
+    wiz.querySelectorAll('.wizard-step, .wizard-nav').forEach(el => { el.hidden = true; });
+    const done = document.getElementById('wizard-execute');
+    if (done) done.hidden = true;
+    wiz.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
+      el.hidden = el.dataset.finalizeState !== 'done';
+    });
+    const label = document.getElementById('wizard-count');
+    if (label) label.textContent = '';
+    return;
+  }
+
+  const current = _wizardSteps[_wizardIndex];
+
+  wiz.querySelectorAll('.wizard-step').forEach(sec => {
+    sec.hidden = sec.dataset.wizardStep !== current;
+  });
+
+  const count = document.getElementById('wizard-count');
+  if (count) {
+    count.textContent = (wiz.dataset.wordStep || 'Step') + ' ' +
+      (_wizardIndex + 1) + '/' + _wizardSteps.length;
+  }
+
+  const onReview = current === 'review';
+  const back = document.getElementById('wizard-back');
+  const next = document.getElementById('wizard-next');
+  const exec = document.getElementById('wizard-execute');
+  if (back) back.hidden = _wizardIndex === 0;
+  if (next) next.hidden = onReview;
+  if (exec) exec.hidden = !onReview;
+
+  if (current === 'issues') buildWizardIssueList();
+  if (onReview) buildWizardPlan();
+
+  const none = document.getElementById('wizard-issues-none');
+  if (none) none.hidden = !(current === 'issues' && collectIssueItems().length === 0);
+  const req = document.getElementById('wizard-ship-required');
+  if (req) req.hidden = true;
+
+  // Re-apply after the rebuilds above: buildWizardIssueList() creates fresh
+  // mirror checkboxes, which would otherwise come back live on a frozen
+  // wizard.
+  if (wiz.dataset.frozen === 'true') setWizardFrozen(true);
+}
+
+// The wizard's issue checkboxes MIRROR the body ones so the user never has to
+// leave the panel to decide — the body block stays authoritative.
+function buildWizardIssueList() {
+  const host = document.getElementById('wizard-issue-list');
+  if (!host) return;
+  const boxes = openQuestionBoxes();
+  // Only rebuild when the underlying item SET changed — a rebuild driven by a
+  // mirror's own change event would tear the row out from under the user's
+  // cursor mid-click. The comparison is by id, never by count: Claude can
+  // route one item (it gains `disabled`, leaving openQuestionBoxes) while the
+  // same rewrite appends another, and a count-keyed fast path would then sync
+  // every mirror to the WRONG body checkbox — the user ticks a row labelled A
+  // and files an issue for B.
+  const ids = JSON.stringify(boxes.map(el => el.name || el.id || ''));
+  if (host.dataset.itemKey === ids) {
+    Array.from(host.children).forEach((row, i) => {
+      const box = row.querySelector('input');
+      if (box && boxes[i]) box.checked = boxes[i].checked;
+    });
+    return;
+  }
+  host.dataset.itemKey = ids;
+  host.textContent = '';
+  boxes.forEach(src => {
+    const row = document.createElement('label');
+    row.className = 'wizard-issue';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = src.checked;
+    // Deliberately no name/id: saveState() and collectAllFormFields() key off
+    // dataset.field / name / id, so a keyless control is never persisted and
+    // never uploaded — no second source of truth, no duplicate payload field.
+    box.dataset.mirrorFor = src.name || src.id || '';
+    box.addEventListener('change', () => {
+      src.checked = box.checked;
+      src.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const labelEl = src.closest('label')?.querySelector('.oq-label');
+    const text = document.createElement('span');
+    text.textContent = src.dataset.issueTitle
+      || (labelEl ? labelEl.textContent.trim() : '');
+    row.appendChild(box);
+    row.appendChild(text);
+    host.appendChild(row);
+  });
+}
+
+// The review screen is the only place that names every consequence at once —
+// it is what makes a single "Alles ausführen" click legitimate.
+function buildWizardPlan() {
+  const wiz = document.getElementById('finalize-wizard');
+  const list = document.getElementById('wizard-plan');
+  if (!wiz || !list) return;
+  list.textContent = '';
+  const add = (kind, text) => {
+    const li = document.createElement('li');
+    li.dataset.planKind = kind;
+    li.textContent = text;
+    list.appendChild(li);
+  };
+  const items = collectIssueItems();
+  if (items.length) add('issues', items.length + ' × ' + (wiz.dataset.planIssues || ''));
+  if (wizardShipChoice() === 'yes') add('ship', wiz.dataset.planShip || '');
+  const mode = document.querySelector('input[name="dispose-mode"]:checked');
+  const modeLabel = mode?.closest('label')?.querySelector('strong')?.textContent.trim();
+  const moveTo = collectDisposition().moveTo;
+  if (modeLabel) add('files', modeLabel + (moveTo ? ' → ' + moveTo : ''));
+  add('close', wiz.dataset.planClose || '');
+}
+
+document.getElementById('wizard-next')?.addEventListener('click', () => {
+  // The ship step has no preselected answer on purpose: a release must never
+  // be the by-product of clicking through. Explain the block instead of
+  // disabling the button, which would look broken.
+  if (_wizardSteps[_wizardIndex] === 'ship' && !wizardShipChoice()) {
+    const req = document.getElementById('wizard-ship-required');
+    if (req) {
+      req.hidden = false;
+      req.scrollIntoView({ block: 'nearest' });
+    }
+    return;
+  }
+  if (_wizardIndex < _wizardSteps.length - 1) _wizardIndex += 1;
+  renderWizard();
+});
+
+document.getElementById('wizard-back')?.addEventListener('click', () => {
+  if (_wizardIndex > 0) _wizardIndex -= 1;
+  renderWizard();
+});
+
+// One submit for the whole close-out. Claude executes the parts in a fixed
+// order (issues → ship → disposition), so the user never has to sequence
+// outward-facing actions by clicking things in the right order.
+// POST /decisions has NO version guard (that lives on /reset and /status), so
+// a payload the bridge already fsynced but whose response never reached the
+// browser sits in two places at once. For an iterate that is harmless; for a
+// finalize it means a second `gh issue create` run and a second real release.
+// The id is what lets retryPendingSubmission() recognise its own payload on
+// the bridge and drop the local copy instead of re-sending it.
+function newSubmissionId() {
+  return 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+async function submitFinalize() {
+  const active = finalReportSection();
+  const wiz = document.getElementById('finalize-wizard');
+  const btn = document.getElementById('wizard-execute');
+  if (!active || !wiz || !btn) return;
+  if (wiz.dataset.frozen === 'true') return;
+
+  const items = collectIssueItems();
+  const payload = {
+    submitted: true,
+    action: 'finalize',
+    submission_id: newSubmissionId(),
+    issues: { create: items.length > 0, items },
+    ship: { run: wizardShipChoice() === 'yes' },
+    disposition: collectDisposition()
+  };
+
+  setWizardFrozen(true);
+  wiz.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
+    el.hidden = el.dataset.finalizeState !== 'running';
+  });
+
+  const container = document.getElementById('concept-decisions');
+  if (container) container.textContent = JSON.stringify(payload);
+  document.body.classList.add('concept-submitted', 'content-dimmed');
+  showContentDimmer();
+  // Same submit-state bookkeeping submitWithAction does. Without it
+  // pollProcessedState() returns at its first line, so a finalize gets no
+  // `_picked_up_at` progress in the status channel and — worse — no
+  // PROCESSED_SAFETY_MS recovery: a Claude that dies mid-finalize would leave
+  // the wizard disabled under a spinner forever.
+  _submittedAt = Date.now();
+  _submittedReloadCounter = _bootReloadCounter;
+  _submittedAction = 'finalize';
+
+  // A finalize can ship. "The request did not throw" is not good enough here —
+  // require the bridge's durable ack, exactly as submitWithAction does.
+  let durable = false;
+  let transportFailed = false;
+  try {
+    const res = await fetch('/decisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const body = res.ok ? await res.json().catch(() => ({})) : {};
+    durable = res.ok && body.durable !== false;
+  } catch (e) {
+    transportFailed = true;
+  }
+
+  if (!durable) {
+    _guardedSetItem(STORAGE_KEY + '-pending', JSON.stringify(payload));
+    if (transportFailed) {
+      // Offline / bridge down — retryPendingSubmission() delivers it on
+      // reconnect, so leave the sent state up and just explain the delay.
+      if (typeof showSubmitWarning === 'function') {
+        showSubmitWarning('Keine Verbindung — die Übermittlung ist zwischengespeichert und wird nachgeholt.');
+      }
+    } else {
+      // The bridge answered but could not persist. Nothing retries that on its
+      // own, so hand the wizard back rather than leave a "sent" state standing
+      // over a payload that never landed.
+      restoreWizardToReady();
+      document.body.classList.remove('concept-submitted', 'content-dimmed');
+      hideContentDimmer();
+      _submittedAt = 0;
+      _submittedReloadCounter = null;
+      _submittedAction = null;
+      if (typeof showSubmitWarning === 'function') {
+        showSubmitWarning('Die Bridge konnte die Übermittlung nicht speichern — bitte erneut ausführen.');
+      }
+    }
+  }
+}
+
+document.getElementById('wizard-execute')?.addEventListener('click', submitFinalize);
+
+// "Iterationen ansehen" — non-committal, client-only. Scrolls the iteration
+// tab bar into view and flashes it so the user can revisit earlier iterations
+// / the agenda without leaving the final report. The wizard stays put — the
+// whole point of the persistent panel is that there is nothing to re-open.
+document.getElementById('view-iterations-btn')?.addEventListener('click', () => {
+  const tabs = document.querySelector('.iteration-tabs');
+  if (!tabs) return;
+  tabs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  tabs.classList.remove('tabs-nudge');
+  void tabs.offsetWidth;  // force reflow so the animation restarts
+  tabs.classList.add('tabs-nudge');
+});
+
+// Recompute whenever an input the wizard summarises changes — the
+// open-questions checkboxes in the body, the ship choice, the disposition
+// mode. The generic change listener (for saveState) fires the same event, so
+// we just hook into the same channel.
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (!t || !t.matches) return;
+  // A frozen wizard describes a payload that is already on its way — nothing
+  // on screen may still re-render against newer input.
+  if (document.getElementById('finalize-wizard')?.dataset.frozen === 'true') return;
+  // Element-agnostic on purpose: openQuestionBoxes() and the gating contract
+  // both accept ANY element carrying [data-open-questions]. A listener pinned
+  // to `section[...]` silently stops updating the mirrors and the review plan
+  // on a report that used a div or ul — so the review screen would name the
+  // wrong issue count right before the one irreversible click.
+  if (t.matches('[data-open-questions] input[type="checkbox"]') ||
+      t.matches('input[name="wizard-ship"]') ||
+      t.matches('input[name="dispose-mode"]')) {
+    refreshFinalizeWizard();
+  }
+});
+document.addEventListener('DOMContentLoaded', () => {
+  refreshFinalizeWizard({ reset: true });
+});
+
+// --- Offline Submit Queue ---
+async function retryPendingSubmission() {
+  const pendingKey = STORAGE_KEY + '-pending';
+  const pending = localStorage.getItem(pendingKey);
+  if (!pending) return;
+  // Did this exact payload already land? `fetch` can throw after the bridge
+  // has fsynced (tab closed, Wi-Fi drop mid-response), which queues a payload
+  // that is already being processed. Re-POSTing a finalize that way runs its
+  // side effects — issue creation, a real release, file deletion — a second
+  // time. Payloads without a submission_id (iterate/implement, legacy pages)
+  // keep the old unconditional-retry behaviour.
+  try {
+    const id = JSON.parse(pending).submission_id;
+    if (id) {
+      const cur = await fetch('/decisions', { cache: 'no-store' });
+      const seen = cur.ok ? await cur.json().catch(() => ({})) : {};
+      if (seen.submission_id === id) { localStorage.removeItem(pendingKey); return; }
+    }
+  } catch (e) { /* unparseable or bridge unreachable — fall through and retry */ }
+  try {
+    const res = await fetch('/decisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: pending
+    });
+    const body = res.ok ? await res.json().catch(() => ({})) : {};
+    // Drop the local copy ONLY once the bridge confirms it reached disk.
+    // `res.ok` alone is not that confirmation — see submitWithAction.
+    if (res.ok && body.durable !== false) localStorage.removeItem(pendingKey);
+  } catch (e) { /* still offline */ }
+  // Images that never made it up get another attempt on the same trigger.
+  if (typeof restoreAttachments === 'function') restoreAttachments();
+}
+
+</script>
+</body>
+</html>

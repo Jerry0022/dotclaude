@@ -266,9 +266,15 @@ show up as untracked changes — otherwise session archiving warns about
 `git add -A` would sweep them into a commit:
 
 ```bash
-x="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
-mkdir -p "${x%/*}"
-grep -qxF '/AUTONOMOUS-*' "$x" 2>/dev/null || echo '/AUTONOMOUS-*' >> "$x"
+# The guard is mandatory: outside a git repo the command substitution is
+# EMPTY, so `x` becomes "/info/exclude" and `mkdir -p "${x%/*}"` creates
+# /info at the FILESYSTEM ROOT and appends there — outside the project.
+gcd="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+if [ -n "$gcd" ]; then
+  x="$gcd/info/exclude"
+  mkdir -p "${x%/*}"
+  grep -qxF '/AUTONOMOUS-*' "$x" 2>/dev/null || echo '/AUTONOMOUS-*' >> "$x"
+fi
 ```
 
 Idempotent; `.git/info/exclude` is never committed and one entry covers every

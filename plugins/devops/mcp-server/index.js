@@ -285,6 +285,7 @@ const CTA = {
     'released-beta':               '## \ud83d\udd3c PROMOTED. v{version} \u2192 beta',
     'released-stable':             '## \ud83c\udf8a RELEASED. v{version} \u2192 stable \u2014 LIVE',
     ready:                    '## \ud83d\udce6 READY \u2014 SHIP or CHANGE?',
+    'ready-files':            '## \ud83d\udcc2 DONE on disk \u2014 no repo, nothing to push',
     'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
     test:                     '## \ud83e\uddea DONE \u2014 SHIP after your TEST?',
     'test-minimal':           '## \u25b6\ufe0f STARTED. {description} \u2014 HAVE FUN',
@@ -302,6 +303,7 @@ const CTA = {
     'released-beta':               '## \ud83d\udd3c PROMOTED. v{version} \u2192 beta',
     'released-stable':             '## \ud83c\udf8a RELEASED. v{version} \u2192 stable \u2014 LIVE',
     ready:                    '## \ud83d\udce6 READY \u2014 SHIP oder ÄNDERN?',
+    'ready-files':            '## 📂 FERTIG auf der Platte — kein Repo, nichts zu pushen',
     'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
     test:                     '## \ud83e\uddea DONE \u2014 SHIP nach deinem TEST?',
     'test-minimal':           '## \u25b6\ufe0f STARTED. {description} \u2014 VIEL SPASS',
@@ -467,7 +469,16 @@ function renderState(state, variant, repoUrl) {
     }
   } else {
     const b = state.merged || branch || 'main';
-    if (state.merged) {
+    // Without a resolvable origin there is nothing to be up-to-date WITH.
+    // getRepoUrl() returns '' both for a directory that is not a repo and for
+    // a repo with no remote, and the branches below used to assert
+    // "up-to-date origin/main" in either case — including from an entirely
+    // empty state:{}, so every card in a non-git project carried a fabricated
+    // remote claim.
+    const hasOrigin = !!repoUrl;
+    if (!hasOrigin) {
+      syncStr = state.commit ? 'committed locally' : 'no remote';
+    } else if (state.merged) {
       syncStr = 'up-to-date ' + originRef(b);
       syncRefBranch = b;
     } else if (state.pushed) {
@@ -476,8 +487,10 @@ function renderState(state, variant, repoUrl) {
     } else if (state.commit) {
       syncStr = 'not updated'; // committed locally, origin not updated yet
     } else {
-      syncStr = 'up-to-date ' + originRef(b);
-      syncRefBranch = b;
+      // No PR, no merge, no push, no commit: nothing happened that could have
+      // moved origin, and nothing here checked it either. Report the absence
+      // of activity instead of asserting a freshness we never verified.
+      syncStr = 'no repo activity';
     }
   }
 
@@ -830,7 +843,7 @@ function renderCard(input, meterText, buildId) {
   // lib/variant-guard.js) — so a genuinely-shipped run that forgot to pass
   // state isn't silently presented as "READY — SHIP?".
   if (input._downgraded) {
-    parts.push(blockquote(renderDowngradeNote(lang)));
+    parts.push(blockquote(renderDowngradeNote(lang, input._downgradeReason)));
     parts.push('');
   }
 
@@ -1181,8 +1194,8 @@ server.registerTool(
     inputSchema: z.object({
       variant: z.enum([
         "ship-successful", "ready", "released", "ship-blocked", "test",
-        "test-minimal", "analysis", "aborted", "fallback",
-      ]).describe("Card variant based on task outcome. `released` is the channel-promotion card (promote alpha→beta→stable) rendered by the promote skill."),
+        "test-minimal", "analysis", "aborted", "fallback", "ready-files",
+      ]).describe("Card variant based on task outcome. `released` is the channel-promotion card (promote alpha→beta→stable) rendered by the promote skill. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report."),
       summary: z.string().transform(v => clampText(v, 80).value)
         .describe("Max ~10 words, user's language (over-long summaries are clamped, not rejected)"),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
@@ -1216,6 +1229,9 @@ server.registerTool(
           }).nullable().optional(),
           merged: z.string().nullable().optional(),
           appStatus: z.enum(["running", "not-started"]).nullable().optional(),
+          mode: z.enum(["file-only", "git-no-remote", "git"]).optional().describe("Repo mode from ship_preflight. 'file-only' switches the state line to the files/delivered form — the branch/PR/origin segments have no meaning without a repo. Omitting this was why the file-only render path was unreachable: unknown keys are stripped, so state.mode never arrived."),
+          filesModified: z.number().optional().describe("file-only mode: how many files changed on disk. Replaces the commit count."),
+          delivered: z.string().optional().describe("file-only / no-remote mode: what actually left the working tree ('none', 'local-commit-only', ...). Never claim a merge here."),
           kept: z.boolean().optional().describe("Ship cleanup was skipped — branch + worktree preserved for follow-up work. Switches the ship-successful CTA from 'All DONE' to 'KEEP CODING in {branch}'."),
           deployPending: z.boolean().optional().describe("Out-of-band deploy artifacts (DB migrations / edge functions) were merged but NOT deployed (#243). Flips the ship-successful CTA from 'All DONE' to '🚨 DEPLOY erforderlich (noch nicht live)'. Pair with the top-level `deployGate` list naming each artifact."),
         }).optional(),
@@ -1305,6 +1321,7 @@ server.registerTool(
       );
       params.variant = shipGuard.variant;
       params._downgraded = true;
+      params._downgradeReason = shipGuard.reason;
     }
 
     // 1. Fetch fresh usage data

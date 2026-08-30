@@ -50,9 +50,25 @@ export async function handler(params) {
   if (repoMode === "none") {
     return { success: true, skipped: true, reason: "file-only-mode", delivered: "none" }
   }
-  if (repoMode === "git-no-remote") {
-    return { success: true, skipped: true, reason: "no-remote", delivered: "local-commit-only" }
+  if (repoMode === "git-foreign-root") {
+    return {
+      success: false,
+      skipped: true,
+      reason: "foreign-repo-root",
+      delivered: "none",
+      error:
+        `Repository root is not this directory (${cwd} sits inside a parent repo). ` +
+        `Refusing to commit or push into a repository this project does not own.`,
+    }
   }
+
+  // NOT an early return: a no-remote repo CAN commit, it just cannot push.
+  // Returning here used to skip the commit block below while still reporting
+  // `success: true, delivered: "local-commit-only"` — so the version bump and
+  // CHANGELOG edits made by earlier ship steps were silently abandoned in the
+  // working tree while the pipeline claimed the work had landed. The commit
+  // now happens; only push/PR/merge are skipped, further down.
+  const noRemote = repoMode === "git-no-remote"
 
   const branch = currentBranch(opts);
   const intermediate = base !== "main";
@@ -127,6 +143,23 @@ export async function handler(params) {
         );
       }
       result.commit = headShort(opts);
+    }
+
+    // No remote → the local commit above IS the delivery. Everything past this
+    // point (fetch, rebase gate, push, PR, merge) requires an origin, so stop
+    // here and say so honestly rather than reporting a merge that never
+    // happened. `delivered` now reflects what actually occurred.
+    if (noRemote) {
+      result.success = true;
+      result.skipped = true;
+      result.reason = "no-remote";
+      result.delivered = result.commit ? "local-commit-only" : "nothing-to-commit";
+      result.pushed = false;
+      result.merged = null;
+      result.warnings = [
+        `No origin remote — committed locally on '${branch}'. Push, PR and merge were skipped.`,
+      ];
+      return result;
     }
 
     // Safety gate: verify branch is rebased onto latest base (prevents silent overwrites)

@@ -52,6 +52,8 @@ vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
 }));
 
 import { handler, PR_TITLE_MAX } from "./release.js";
+import { execFileSync } from "node:child_process";
+import { detectRepoMode } from "../lib/repo-mode.js";
 import * as gitLib from "../lib/git.js";
 import * as ghLib from "../lib/github.js";
 import { scanConflictMarkers } from "../lib/conflict-markers.js";
@@ -595,5 +597,66 @@ describe("ship_release — over-long PR title is clamped, never fatal", () => {
 
     expect(res.titleClamped).toBeUndefined();
     expect(ghLib.createPR.mock.calls.at(-1)[0].title).toBe("fix(ship): short enough");
+  });
+});
+
+describe("repo modes without a usable origin", () => {
+  test("git-no-remote: COMMITS the pending work, then stops before push/PR/merge", async () => {
+    // Regression: this used to return before the commit block while still
+    // reporting success + delivered:"local-commit-only", so the version bump
+    // and CHANGELOG edits were abandoned in the working tree while the
+    // pipeline claimed the work had been delivered.
+    detectRepoMode.mockReturnValue("git-no-remote");
+    gitLib.dirtyState.mockReturnValue({
+      dirty: true, modified: ["package.json"], untracked: [], lines: [],
+    });
+
+    const result = await handler(params({ commitMessage: "chore(release): v1.0.0" }));
+
+    // The commit actually happened.
+    expect(execFileSync).toHaveBeenCalledWith(
+      "git",
+      ["commit", "-m", "chore(release): v1.0.0"],
+      expect.objectContaining({ cwd: "/repo" }),
+    );
+    expect(result.commit).toBe("abc1234");
+
+    // ...and the report is honest about what did NOT happen.
+    expect(result.success).toBe(true);
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe("no-remote");
+    expect(result.delivered).toBe("local-commit-only");
+    expect(result.pushed).toBe(false);
+    expect(result.merged).toBeNull();
+
+    // Nothing that needs an origin was attempted.
+    expect(gitLib.gitArgs).not.toHaveBeenCalledWith(
+      expect.arrayContaining(["push"]),
+      expect.anything(),
+    );
+    expect(ghLib.createPR).not.toHaveBeenCalled();
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+  });
+
+  test("git-foreign-root: refuses outright, commits nothing", async () => {
+    detectRepoMode.mockReturnValue("git-foreign-root");
+
+    const result = await handler(params({ commitMessage: "chore(release): v1.0.0" }));
+
+    expect(result.success).toBe(false);
+    expect(result.reason).toBe("foreign-repo-root");
+    expect(result.delivered).toBe("none");
+    expect(execFileSync).not.toHaveBeenCalledWith("git", ["commit", "-m", "chore(release): v1.0.0"], expect.anything());
+  });
+
+  test("file-only: nothing is delivered and nothing is claimed", async () => {
+    detectRepoMode.mockReturnValue("none");
+
+    const result = await handler(params());
+
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe("file-only-mode");
+    expect(result.delivered).toBe("none");
+    expect(result.merged).toBeUndefined();
   });
 });

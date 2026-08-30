@@ -24,14 +24,23 @@ vi.mock("../lib/sentinel.js", () => ({
   clearSentinel: vi.fn(),
 }));
 
+// Default to a normal repo the project owns; individual tests override to
+// exercise the file-only / foreign-root refusals.
+vi.mock("../lib/repo-mode.js", () => ({
+  detectRepoMode: vi.fn(() => "git"),
+  refusesGitWrites: (mode) => mode === "none" || mode === "git-foreign-root",
+}));
+
 import { handler } from "./cleanup.js";
 import { git, gitStrict, isWorktree, getWorktreeBranches } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
+import { detectRepoMode } from "../lib/repo-mode.js";
 
 const CWD = "/fake/consumer-repo";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  detectRepoMode.mockReturnValue("git");
   isWorktree.mockReturnValue(false);
   getWorktreeBranches.mockReturnValue(new Set());
   dirtySessionWorktrees.mockReturnValue([]);
@@ -88,5 +97,38 @@ describe("ship_cleanup — session-worktree final-gate invariant", () => {
     });
     const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
     expect(result.warnings.some((w) => /not fully landed locally/i.test(w))).toBe(true);
+  });
+});
+
+describe("repo-mode gate", () => {
+  test("file-only mode: refuses every destructive git call, still clears the sentinel", async () => {
+    detectRepoMode.mockReturnValue("none");
+    const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
+
+    expect(result.success).toBe(true);
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe("file-only-mode");
+    expect(result.cleaned).toEqual(["sentinel"]);
+    // The pre-fix behaviour was a raw `fatal: not a git repository` from these.
+    expect(gitStrict).not.toHaveBeenCalled();
+  });
+
+  test("foreign repo root: refuses rather than operating on the ancestor's repo", async () => {
+    detectRepoMode.mockReturnValue("git-foreign-root");
+    const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
+
+    expect(result.success).toBe(true);
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe("foreign-repo-root");
+    // This is the destructive case: `checkout <base>` + `pull --ff-only origin
+    // <base>` used to run against a repository the user never targeted.
+    expect(gitStrict).not.toHaveBeenCalled();
+    expect(result.warnings.some((w) => /does not own/i.test(w))).toBe(true);
+  });
+
+  test("normal repo is unaffected by the gate", async () => {
+    detectRepoMode.mockReturnValue("git");
+    const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
+    expect(result.skipped).toBeUndefined();
   });
 });

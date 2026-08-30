@@ -8,6 +8,7 @@ import { z } from "zod";
 import { git, gitStrict, isWorktree, getWorktreeBranches, NETWORK_TIMEOUT } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { clearSentinel } from "../lib/sentinel.js";
+import { detectRepoMode, refusesGitWrites } from "../lib/repo-mode.js";
 
 export const schema = z.object({
   branch: z.string().describe("Feature branch to delete"),
@@ -23,6 +24,36 @@ export async function handler(params) {
   const intermediate = base !== "main";
   const cleaned = [];
   const warnings = [];
+
+  // Repo-mode gate. This was the ONLY ship tool without one, while being the
+  // most destructive: it runs `git checkout <base>`, `git pull --ff-only
+  // origin <base>` and branch deletion.
+  //   - "none":             those commands died with a raw git fatal, at the
+  //                         last step of a pipeline preflight had declared
+  //                         ready in file-only mode.
+  //   - "git-foreign-root": far worse — the repo belongs to an ANCESTOR
+  //                         directory, so the checkout and pull silently
+  //                         operated on a repository the user never targeted.
+  const repoMode = detectRepoMode(cwd);
+  if (refusesGitWrites(repoMode)) {
+    clearSentinel(cwd);
+    const reason = repoMode === "none" ? "file-only-mode" : "foreign-repo-root";
+    return {
+      success: true,
+      skipped: true,
+      reason,
+      mode: repoMode,
+      intermediate,
+      branchBeforeCleanup: null,
+      cleaned: ["sentinel"],
+      warnings: [
+        repoMode === "none"
+          ? "No git repository — nothing to clean up (no branch, no worktree, no remote)."
+          : `Repository root is not this directory (${cwd} sits inside a parent repo). ` +
+            `Refusing to check out, pull or delete branches in a repo this project does not own.`,
+      ],
+    };
+  }
 
   // Keep-mode: skip all destructive cleanup. Only the sentinel needs clearing
   // so Edit/branch guards stop treating this as "ship in progress".

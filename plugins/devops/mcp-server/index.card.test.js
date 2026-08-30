@@ -1,5 +1,6 @@
 import { describe, test, expect, vi, beforeAll } from "vitest";
 import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 // index.js boots an MCP server over stdio at import time and pulls in the
 // @modelcontextprotocol SDK + zod (neither is a devDependency of this repo).
@@ -210,5 +211,64 @@ describe("render_completion_card — delivery track + released variant", () => {
     expect(text).toMatch(/## 🎊 RELEASED\. v0\.117\.0 → stable — LIVE/);
     expect(text).toMatch(/← here|← LIVE/);
     expect(text).toMatch(/GitHub Release created/);
+  });
+});
+
+describe("render_completion_card — projects without a usable origin", () => {
+  // A directory that is definitively not a git repo, so getRepoUrl() returns ''.
+  const NON_REPO = tmpdir();
+
+  test("file-only state renders the files line, never a branch/origin line", async () => {
+    const text = await cardText({
+      variant: "ready-files",
+      summary: "File-only Projekt",
+      lang: "de",
+      session_id: "test-file-only-1",
+      cwd: NON_REPO,
+      state: { mode: "file-only", filesModified: 3, delivered: "none" },
+    });
+    expect(text).toMatch(/📂 files: 3 modified · delivered: none/);
+    expect(text).not.toMatch(/origin\//);
+  });
+
+  test("empty state in a non-repo does NOT claim origin is up to date", async () => {
+    // The regression: the final else-branch asserted "up-to-date origin/main"
+    // from an empty state, in a directory with no .git at all.
+    const text = await cardText({
+      variant: "analysis",
+      summary: "Kein Repo",
+      lang: "de",
+      session_id: "test-file-only-2",
+      cwd: NON_REPO,
+      state: {},
+    });
+    expect(text).not.toMatch(/up-to-date origin/);
+    expect(text).not.toMatch(/origin\/main/);
+  });
+
+  test("a local commit without a remote is reported as local, not as pushed", async () => {
+    const text = await cardText({
+      variant: "ready",
+      summary: "Lokaler Commit",
+      lang: "de",
+      session_id: "test-file-only-3",
+      cwd: NON_REPO,
+      state: { branch: "feat/x", commit: "abc1234" },
+    });
+    expect(text).toMatch(/committed locally/);
+    expect(text).not.toMatch(/up-to-date origin/);
+  });
+
+  test("ready-files renders its own CTA heading", async () => {
+    const text = await cardText({
+      variant: "ready-files",
+      summary: "Disk-Deliverable",
+      lang: "de",
+      session_id: "test-file-only-4",
+      cwd: NON_REPO,
+      state: { mode: "file-only", filesModified: 1, delivered: "none" },
+    });
+    expect(text).toMatch(/FERTIG auf der Platte/);
+    expect(text).not.toMatch(/READY — SHIP oder ÄNDERN/);
   });
 });

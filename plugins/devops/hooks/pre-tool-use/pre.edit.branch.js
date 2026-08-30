@@ -45,6 +45,24 @@ function gitTopLevel(cwd) {
   }
 }
 
+/**
+ * Does this repo have an `origin` remote?
+ *
+ * The block stays correct without one, but the suggested fix did not: in a
+ * local-only repo `git fetch origin && git switch -c <topic> origin/main`
+ * fails on both halves, so an Edit was refused with an unusable remedy.
+ */
+function hasRemote(cwd) {
+  try {
+    execFileSync('git', ['remote', 'get-url', 'origin'], {
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function extractTargetPath(toolName, input) {
   if (!input) return null;
   if (toolName === 'Edit' || toolName === 'Write') return input.file_path || null;
@@ -109,10 +127,18 @@ process.stdin.on('end', () => {
   if (!branch) process.exit(0);
   if (branch !== 'main' && branch !== 'master') process.exit(0);
 
+  const remote = hasRemote(repoRoot);
+  const rule = remote
+    ? `New work always happens on a branch derived from origin/${branch}.`
+    : `New work always happens on a feature branch.`;
+  const fix = remote
+    ? `git fetch origin && git switch -c <feat/topic> origin/${branch}  — then retry the edit.`
+    : `git switch -c <feat/topic>  — no origin remote, so this branches from local ${branch}. Then retry the edit.`;
+
   process.stderr.write(
     `BLOCKED: Editing files on local '${branch}' is not allowed.\n` +
-    `Rule: New work always happens on a branch derived from origin/${branch}.\n` +
-    `Fix: git fetch origin && git switch -c <feat/topic> origin/${branch}  — then retry the edit.\n` +
+    `Rule: ${rule}\n` +
+    `Fix: ${fix}\n` +
     `Bypass (only if the user explicitly asked to edit ${branch}): set env DEVOPS_ALLOW_MAIN=1 for this single action.\n`
   );
   process.exit(2);
