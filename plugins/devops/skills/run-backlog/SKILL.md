@@ -224,12 +224,18 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
    MCP tools **including the ship MCP tools**. Artifact hygiene registers the run
    artifacts in the git exclude BEFORE anything writes them:
    ```bash
-   x="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
-   mkdir -p "${x%/*}"
-   grep -qxF '/BACKLOG-*' "$x" 2>/dev/null || echo '/BACKLOG-*' >> "$x"
-   # Also the composed autonomous-family artifacts (lockout sentinel, and the
-   # watchdog's own AUTONOMOUS-RECOVERY.flag / AUTONOMOUS-STALLED.txt).
-   grep -qxF '/AUTONOMOUS-*' "$x" 2>/dev/null || echo '/AUTONOMOUS-*' >> "$x"
+   # The guard is mandatory: outside a git repo the command substitution is
+   # EMPTY, so `x` becomes "/info/exclude" and `mkdir -p "${x%/*}"` creates
+   # /info at the FILESYSTEM ROOT and appends there — outside the project.
+   gcd="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+   if [ -n "$gcd" ]; then
+     x="$gcd/info/exclude"
+     mkdir -p "${x%/*}"
+     grep -qxF '/BACKLOG-*' "$x" 2>/dev/null || echo '/BACKLOG-*' >> "$x"
+     # Also the composed autonomous-family artifacts (lockout sentinel, and the
+     # watchdog's own AUTONOMOUS-RECOVERY.flag / AUTONOMOUS-STALLED.txt).
+     grep -qxF '/AUTONOMOUS-*' "$x" 2>/dev/null || echo '/AUTONOMOUS-*' >> "$x"
+   fi
    ```
 2. **Ship-mandate confirmation (explicit gate point)** — ask via
    `AskUserQuestion`:

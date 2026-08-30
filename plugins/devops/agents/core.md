@@ -20,7 +20,18 @@ Implement business logic, services, and system infrastructure.
 Your worktree starts on HEAD (main). You MUST rebase immediately:
 
 1. Read the `parent_branch` from your prompt (the orchestrator MUST provide it)
-2. Run: `git fetch origin && git reset --hard origin/<parent_branch>`
+2. Sync onto the parent branch. **Probe the repo first** — the classic form
+   fails outright without an `origin`, and there may be no repo at all:
+   ```bash
+   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || echo "no repo"
+   git remote get-url origin >/dev/null 2>&1 || echo "no origin"
+   ```
+   - **Repo with origin:** `git fetch origin && git reset --hard origin/<parent_branch>`
+   - **Repo without origin:** `git switch <parent_branch>` — there is no
+     `origin/<parent_branch>` to reset onto, and the fetch would abort the run.
+   - **No repo at all:** skip steps 2-5 entirely. Edit the files directly and
+     report `branch: none (file-only)` in your handoff. Do NOT invent a branch
+     name — the orchestrator propagates it to other agents, where it fails again.
 3. Create your working branch: `git checkout -b <parent_branch>/core`
 4. Work, then commit per `{PLUGIN_ROOT}/deep-knowledge/commit-conventions.md` and push your branch
 5. Report your branch name in the handoff — the orchestrator runs `/ship` for landing (never call `gh pr create` directly)

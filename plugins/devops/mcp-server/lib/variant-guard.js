@@ -22,6 +22,11 @@ export const DOWNGRADE_NOTE = {
   en: 'ℹ️ **Variant corrected to `ready`** — `ship-successful` needs `state.merged` + `state.pushed` as merge proof; both were missing from the call. Actually merged? Pass `state:{ pushed:true, merged:"<base>" }` when rendering.',
 };
 
+export const FILE_ONLY_NOTE = {
+  de: 'ℹ️ **Variante auf `ready-files` korrigiert** — dieses Projekt ist kein Git-Repo (`state.mode: "file-only"`), also gibt es weder Push noch PR noch Merge. Die Arbeit liegt auf der Platte; die Card behauptet bewusst nichts über ein Remote.',
+  en: 'ℹ️ **Variant corrected to `ready-files`** — this project is not a git repo (`state.mode: "file-only"`), so there is no push, no PR and no merge. The work is on disk; the card deliberately claims nothing about a remote.',
+};
+
 /**
  * Decide the effective completion-card variant. Only `ship-successful` is policed.
  * @param {string} variant - the requested variant
@@ -31,6 +36,18 @@ export const DOWNGRADE_NOTE = {
 export function correctShipVariant(variant, state) {
   if (variant === 'ship-successful') {
     const s = state || {};
+    // A file-only project can never satisfy pushed+merged — there is no remote
+    // to push to and no PR to merge. Downgrading it to `ready` with the standard
+    // note told the user to pass `state:{pushed:true, merged:"<base>"}`, advice
+    // that is impossible to follow and would be a lie if it were. Route it to
+    // the file-only variant instead, which claims nothing about a remote.
+    if (s.mode === 'file-only') {
+      return {
+        variant: 'ready-files',
+        downgraded: true,
+        reason: 'file-only: no remote to push to, no PR to merge',
+      };
+    }
     if (!s.pushed || !s.merged) {
       return {
         variant: 'ready',
@@ -42,7 +59,12 @@ export function correctShipVariant(variant, state) {
   return { variant, downgraded: false, reason: null };
 }
 
-/** Localized self-documenting note shown on the card when a downgrade fired. */
-export function renderDowngradeNote(lang) {
-  return DOWNGRADE_NOTE[lang] || DOWNGRADE_NOTE.de;
+/**
+ * Localized self-documenting note shown on the card when a downgrade fired.
+ * The file-only downgrade gets its own wording — the generic note's remedy
+ * cannot be carried out in a project without a remote.
+ */
+export function renderDowngradeNote(lang, reason) {
+  const table = (reason && reason.startsWith('file-only')) ? FILE_ONLY_NOTE : DOWNGRADE_NOTE;
+  return table[lang] || table.de;
 }

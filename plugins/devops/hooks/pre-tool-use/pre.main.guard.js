@@ -66,6 +66,27 @@ function isGitRepo(cwd) {
   }
 }
 
+/**
+ * Does this repo have an `origin` remote?
+ *
+ * The block itself stays correct without one — "don't work directly on main"
+ * is about branch hygiene, not about the remote. But the SUGGESTED FIX was
+ * `git fetch origin && git switch -c <topic> origin/main`, which in a
+ * local-only repo fails twice over ("'origin' does not appear to be a git
+ * repository", then "invalid reference: origin/main"). The user was left
+ * blocked with an escape hatch that could not be executed.
+ */
+function hasRemote(cwd) {
+  try {
+    execFileSync('git', ['remote', 'get-url', 'origin'], {
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 let inputData = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', d => { inputData += d; });
@@ -90,10 +111,20 @@ process.stdin.on('end', () => {
   if (!branch) process.exit(0);
   if (branch !== 'main' && branch !== 'master') process.exit(0);
 
+  // Without an origin the remote-based fix is not executable — offer the
+  // local-only equivalent instead of a command that is guaranteed to fail.
+  const remote = hasRemote(cwd);
+  const rule = remote
+    ? `Never commit/merge/push directly on ${branch}. Work on a branch derived from origin/${branch} and land via /ship.`
+    : `Never commit directly on ${branch}. Work on a feature branch and land it via /ship.`;
+  const fix = remote
+    ? `git fetch origin && git switch -c <feat/topic> origin/${branch}`
+    : `git switch -c <feat/topic>   (no origin remote — branches from local ${branch})`;
+
   process.stderr.write(
     `[pre.main.guard] BLOCKED: Write operation on local '${branch}' is not allowed.\n` +
-    `[pre.main.guard] Rule: Never commit/merge/push directly on ${branch}. Work on a branch derived from origin/${branch} and land via /ship.\n` +
-    `[pre.main.guard] Fix: git fetch origin && git switch -c <feat/topic> origin/${branch}\n` +
+    `[pre.main.guard] Rule: ${rule}\n` +
+    `[pre.main.guard] Fix: ${fix}\n` +
     `[pre.main.guard] Bypass (only if the user explicitly asked to work on ${branch}): set env DEVOPS_ALLOW_MAIN=1 for this single command.\n`
   );
   process.exit(2);

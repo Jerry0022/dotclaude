@@ -66,6 +66,22 @@ function getWorktreeBranches(dir) {
 }
 
 /**
+ * Is `dir` inside a git work tree?
+ *
+ * Strict `=== 'true'` on purpose: `rev-parse --is-inside-work-tree` PRINTS
+ * "false" and exits 0 when cwd is inside a `.git` directory or a bare repo,
+ * so an exit-code-only check would misclassify both as a normal work tree.
+ */
+function isGitRepo(dir) {
+  return run('git rev-parse --is-inside-work-tree', dir) === 'true';
+}
+
+/** Does this repo have any remote configured? */
+function hasRemote(dir) {
+  return run('git remote', dir) !== '';
+}
+
+/**
  * Detect whether `dir` is a linked worktree (not the main working tree).
  */
 function isLinkedWorktree(dir) {
@@ -96,13 +112,19 @@ function readmeStaleness(dir) {
 
 function checkRepo(dir) {
   const issues = [];
+  // Not a repo at all → nothing here is meaningful. Without this the git
+  // calls below merely return '' and the function is accidentally silent;
+  // the explicit gate also stops the pointless `git fetch` spawn.
+  if (!isGitRepo(dir)) return issues;
+
   const inWorktree = isLinkedWorktree(dir);
   const worktreeBranches = getWorktreeBranches(dir);
+  const remote = hasRemote(dir);
 
   // Fetch remote refs so unpushed detection is accurate.
   // Without this, commits already merged via GitHub PRs appear "unpushed"
   // because local refs/remotes/* are stale.
-  run('git fetch --quiet', dir);
+  if (remote) run('git fetch --quiet', dir);
 
   // Uncommitted files (scoped to this worktree automatically by git)
   const status = run('git status --porcelain', dir);
@@ -115,37 +137,45 @@ function checkRepo(dir) {
     });
   }
 
-  // Unpushed commits
-  // In a linked worktree: only check the current branch (HEAD), not --branches.
-  // --branches is repo-wide and shows all local branches' unpushed commits,
-  // which are irrelevant noise in a worktree context.
-  const logTarget = inWorktree ? 'HEAD' : '--branches';
-  const unpushed = run(`git log ${logTarget} --not --remotes --oneline --decorate`, dir);
-  if (unpushed) {
-    const lines = unpushed.split('\n').filter(Boolean);
-    if (inWorktree) {
-      // In a worktree all returned commits belong to the current branch
-      if (lines.length > 0) {
-        issues.push({
-          type: 'unpushed',
-          count: lines.length,
-          label: `${lines.length} unpushed commit(s)`,
+  // Unpushed commits — only meaningful when there IS somewhere to push.
+  // With no remote, `git log --not --remotes` subtracts an empty set and
+  // reports EVERY commit in the repo as "unpushed", so a 500-commit local
+  // repo announced "500 unpushed commit(s)" every session and offered a CTA
+  // to push to a remote that does not exist.
+  // Guarded as a BLOCK, not an early return — the stash check below is still
+  // meaningful in a repo without a remote.
+  if (remote) {
+    // In a linked worktree: only check the current branch (HEAD), not --branches.
+    // --branches is repo-wide and shows all local branches' unpushed commits,
+    // which are irrelevant noise in a worktree context.
+    const logTarget = inWorktree ? 'HEAD' : '--branches';
+    const unpushed = run(`git log ${logTarget} --not --remotes --oneline --decorate`, dir);
+    if (unpushed) {
+      const lines = unpushed.split('\n').filter(Boolean);
+      if (inWorktree) {
+        // In a worktree all returned commits belong to the current branch
+        if (lines.length > 0) {
+          issues.push({
+            type: 'unpushed',
+            count: lines.length,
+            label: `${lines.length} unpushed commit(s)`,
+          });
+        }
+      } else {
+        // In main working tree: exclude active worktree branches as before
+        const staleLines = lines.filter(line => {
+          const branchMatch = line.match(/\(([^)]+)\)/);
+          if (!branchMatch) return true;
+          const refs = branchMatch[1].split(',').map(r => r.trim().replace(/^HEAD -> /, ''));
+          return !refs.every(ref => worktreeBranches.has(ref));
         });
-      }
-    } else {
-      // In main working tree: exclude active worktree branches as before
-      const staleLines = lines.filter(line => {
-        const branchMatch = line.match(/\(([^)]+)\)/);
-        if (!branchMatch) return true;
-        const refs = branchMatch[1].split(',').map(r => r.trim().replace(/^HEAD -> /, ''));
-        return !refs.every(ref => worktreeBranches.has(ref));
-      });
-      if (staleLines.length > 0) {
-        issues.push({
-          type: 'unpushed',
-          count: staleLines.length,
-          label: `${staleLines.length} unpushed commit(s)`,
-        });
+        if (staleLines.length > 0) {
+          issues.push({
+            type: 'unpushed',
+            count: staleLines.length,
+            label: `${staleLines.length} unpushed commit(s)`,
+          });
+        }
       }
     }
   }
@@ -171,6 +201,12 @@ function currentBranch(dir) {
 }
 
 function checkWorkspace(dir) {
+  // Not a repo → there is no workspace to have an opinion about. Without this
+  // gate currentBranch() returns null for BOTH "detached HEAD" and "no repo
+  // at all", and the branch below reported a confident high-severity
+  // "Detached HEAD in repo root" in every non-git project — plus a forced
+  // AskUserQuestion that hijacked the first turn of the session.
+  if (!isGitRepo(dir)) return null;
   if (sentinelActive(dir)) return null;
   const inWorktree = isLinkedWorktree(dir);
   if (inWorktree) return null;

@@ -385,8 +385,15 @@ export async function handler(params) {
   const warnings = checks.filter(c => c.warning).map(c => c.warning);
   if (noRemote) warnings.push("No origin remote — push, PR creation, and merge will be skipped");
 
-  // Determine if rebase is needed (any merge-safety warnings present)
-  const needsRebase = checks.some(c =>
+  // Determine if rebase is needed (any merge-safety warnings present).
+  //
+  // Never without a remote: there is no `origin/<base>` to rebase onto. The
+  // `config-conflictstyle` check is a purely LOCAL git setting and was not
+  // gated behind `noRemote`, and since `merge.conflictstyle` is unset by
+  // default every no-remote repo reported `needsRebase: true`. That drove the
+  // ship skill straight into `git fetch origin <base>` / `git rebase
+  // origin/<base>` — the mechanism that turned "no remote" into a fatal.
+  const needsRebase = !noRemote && checks.some(c =>
     !c.ok && (c.name === "base-ahead" || c.name === "file-overlap" || c.name === "config-conflictstyle")
   );
 

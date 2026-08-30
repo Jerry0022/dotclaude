@@ -102,9 +102,15 @@ node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" start .
 decision — never `.gitignore`):
 
 ```bash
-x="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
-mkdir -p "${x%/*}"
-grep -qxF '/.claude/batch*' "$x" 2>/dev/null || echo '/.claude/batch*' >> "$x"
+# The guard is mandatory: outside a git repo the command substitution is
+# EMPTY, so `x` becomes "/info/exclude" and `mkdir -p "${x%/*}"` creates
+# /info at the FILESYSTEM ROOT and appends there — outside the project.
+gcd="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+if [ -n "$gcd" ]; then
+  x="$gcd/info/exclude"
+  mkdir -p "${x%/*}"
+  grep -qxF '/.claude/batch*' "$x" 2>/dev/null || echo '/.claude/batch*' >> "$x"
+fi
 ```
 
 **2.4 Seed the invocation's own content.** If the activating prompt carried
