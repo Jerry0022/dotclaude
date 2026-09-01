@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.136.1] — 2026-09-01
+
+### Fixed
+
+- **A concept page's feedback dock stacked one attachment bar per hidden field.** The dock builds a textarea for every screen, every design and every view up front and then only flips `hidden` on switch — but each field's attachment mount is its *sibling*, not its child, and `.attach-slot:empty` stops hiding a mount the instant a bar is mounted into it. So from the moment the attachment engine wired the page, every hidden field's paperclip row rendered underneath the single visible textarea: measured on a real page, eight identical "Ctrl+V or drop any file" rows stacked under one note field. Hiding a mount with its field is now a CSS rule rather than something the switchers have to remember, and the bar keeps existing while hidden so files already attached to an inactive field survive the switch back. The mountless fallback path used to append the bar to the end of the row instead of next to its field, which put half of them out of reach of that rule; it now inserts directly after the textarea.
+
+- **A design iteration could paint every one of its designs on top of each other.** Designs and screens in a `design` iteration are `position: absolute; inset: 0`, so a section that ships without `hidden` does not land somewhere wrong — it lands on the same square as the active one. The markup is asked to emit `hidden` on every inactive design and screen, but nothing enforced it, and a real generated page emitted it on none of its three designs: five screens painted at once, headings and mockups interleaved, the page unreadable and every click ambiguous. The active flags are already what the page resolves by — `activeDesign()` and `activeScreen()` both key on them, and the switchers keep them in step with `hidden` — so they now carry the visibility as well. The rules are `:has()`-guarded, so markup that omits the flags entirely degrades to the previous behaviour instead of blanking the canvas; a view, which has no boot state in which it should show, is kept off screen outside view mode.
+
+### Changed
+
+- **The attachment affordance is the paperclip alone.** Every attachable field carries a bar, so the spelled-out "Ctrl+V or drop any file" line under each one repeated the same sentence down the length of the dock and out-weighed the field it decorated. The shortcuts moved into the button's `title` and a new `aria-label`; the drop target still announces itself with the dashed outline the moment a file is dragged over it.
+
 ## [0.136.0] — 2026-08-30
 
 ### Fixed
