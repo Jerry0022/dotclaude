@@ -37,7 +37,7 @@ no legitimate matches — do not "keep it as a convenience". The decision panel
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 47 patterns, regardless of template
+Every concept page must contain these 49 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -90,6 +90,8 @@ related one — count the rows, not the highest number):
 | 41 | `data-attachable` | The ONE marker `initCommentAttachments()` matches to decide which fields get an attachment bar. MUST NOT be `data-comment` — several fields carry `data-comment` without being attachable (plain text-only comments), and several carry both (annotation answers, decision notes); matching on `data-comment` wires a bar onto every one of those a second time or onto fields that were never meant to take a file. See templates.md § Attachments. |
 | 42 | `initCommentAttachments` | Wires the 📎 button, drag & drop, and Ctrl/Cmd+V paste onto every `textarea[data-attachable]`. Missing → attachment bars render (if emitted inline) but do nothing. |
 | 43 | `_guardedSetItem` | Every `localStorage.setItem` call site (state persistence + both `-pending` submit-queue writes) MUST go through this wrapper, never a bare `localStorage.setItem`. A `QuotaExceededError` thrown out of an unguarded call kills ALL further persistence for the rest of the page with nothing telling the user — see templates.md § State Persistence. |
+| 44 | `textarea[hidden] + .attach-slot` | The CSS rule that takes an inactive field's 📎 bar off the page. The dock builds one textarea per screen / design / view and hides all but the active one, but a `.attach-slot` mount is that textarea's SIBLING — and `.attach-slot:empty` stops covering it the moment `initCommentAttachments()` mounts a bar into it. Missing → the page renders one 📎 row per hidden field, stacked under the single visible textarea. See templates.md § Attachments. |
+| 45 | `section[data-design]:not([data-design-active="true"])` | The CSS backstop for "exactly one design and one screen paint". Designs and screens are `position:absolute; inset:0`, so a single inactive section that ships without `hidden` does not sit somewhere wrong — it paints on top of the active one. Measured on a real page: three designs, five screens, all stacked on the same square, headings and mockups interleaved. `hidden` cannot be the only guard because the markup is merely ASKED to emit it. Must be `:has()`-guarded, together with the matching `section[data-screen]:not([data-screen-active="true"])` rule and `body:not([data-view-active="true"]) section[data-view]`. See templates.md § Layout CSS. |
 
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
 at the post-generation gate. See § Generic Form Collection below for the
@@ -109,10 +111,22 @@ but lacks `data-attachable`, or if `initCommentAttachments` matches
 mandatory pattern — either fields double-wire a second bar, or a field the
 user expects to attach a file to silently accepts none.
 
+**Failure for 45:** a page missing the rule is not merely un-hardened — grep
+its markup for `section[data-design]` and `section[data-screen]` and check
+that every inactive one carries `hidden`. If any does not, the page is
+already stacking sections on top of each other and must be regenerated, not
+just patched with the rule.
+
 **Failure for 43:** grep every `localStorage.setItem(` occurrence in the
 rendered page; each one MUST read `_guardedSetItem(`, no exceptions. One
 unguarded call site reintroduces the exact silent-persistence-death defect
 this pattern exists to catch.
+
+**Failure for 44:** the rule is an ADJACENT sibling combinator, so its
+presence is only half the check — every `.attach-slot` in the page must also
+sit directly after the textarea it belongs to. Grep the mounts: any one
+separated from its field by another element is hidden by nothing and puts a
+duplicate bar back on screen.
 
 ## Generic Form Collection (mandatory for all templates)
 
