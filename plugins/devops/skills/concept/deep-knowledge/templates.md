@@ -145,7 +145,6 @@ must see their own language. The locale hint is authoritative.
 | `panel.maximize`               | Maximize                        | Maximieren |
 | `panel.restore_size`           | Restore size                    | Größe wiederherstellen |
 | `attach.button_title`          | Attach file (or Ctrl+V / drag & drop) | Datei anhängen (oder Strg+V / hierher ziehen) |
-| `attach.hint`                  | Ctrl+V or drop any file          | Strg+V oder beliebige Datei ablegen |
 | `attach.not_synced`            | not yet synced                  | noch nicht synchronisiert |
 | `attach.uploading`             | Uploading…                      | Wird hochgeladen… |
 | `attach.remove`                | Remove attachment                | Anhang entfernen |
@@ -1968,6 +1967,23 @@ section[data-iteration][hidden] { display: none; }
   animation: screen-in 0.25s ease;
 }
 section[data-screen][hidden] { display: none; }
+/* Structural backstop for the "exactly one of these is on screen" invariant.
+   `hidden` is the switchers' mechanism, and the markup above asks for it on
+   every inactive design and screen — but nothing enforces that, and these
+   boxes are position:absolute/inset:0. A single forgotten `hidden` therefore
+   does not misplace a section, it paints every sibling onto the same square:
+   three designs' mockups drawn on top of each other, their headings and
+   labels interleaved, the page unreadable and every click ambiguous.
+   The active flags are already this page's own source of truth — both
+   activeDesign() and activeScreen() resolve by them, and showDesign() /
+   showScreen() keep them in step with `hidden` on every switch — so they can
+   carry the visibility too. Both rules are `:has()`-guarded: they bite only
+   once a sibling IS marked active, so markup that omits the flags entirely
+   degrades to the old behaviour instead of blanking the canvas. */
+section[data-iteration]:has(> section[data-design][data-design-active="true"])
+  > section[data-design]:not([data-design-active="true"]) { display: none; }
+section[data-design]:has(section[data-screen][data-screen-active="true"])
+  section[data-screen]:not([data-screen-active="true"]) { display: none; }
 @keyframes screen-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ── Views (optional, § Views (optional)) — top-level siblings of
@@ -1986,6 +2002,13 @@ section[data-screen][hidden] { display: none; }
   animation: screen-in 0.25s ease;
 }
 section[data-view][hidden] { display: none; }
+/* Same backstop, the other direction: outside view mode NO view paints, flag
+   or not. A view is fullscreen and absolutely positioned like a screen, so a
+   view that boots without `hidden` covers the design the page opened on.
+   body[data-view-active] is maintained by showView() (true) and by
+   showDesign() + the iteration switch (false), and its ABSENCE — nothing ran
+   yet — reads as "not in view mode", which is exactly the boot state. */
+body:not([data-view-active="true"]) section[data-view] { display: none; }
 .view-frame { max-width: 860px; margin: 0 auto; }
 /* Comparison view kind — see § Views (optional) → View kind `comparison`. */
 .cmp-options {
@@ -2183,6 +2206,19 @@ body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
 }
 /* Attachment mount — deliberately empty, see § Annotation Layer. */
 .attach-slot:empty { display: none; }
+/* …and deliberately hidden while the field it belongs to is. The dock builds
+   one textarea PER screen / design / view and hides all but the active one
+   (§ Layout JS), but `.attach-slot` is that textarea's SIBLING, not its child:
+   the moment initCommentAttachments() mounts a bar the slot stops being
+   `:empty`, so without this rule every inactive field's bar renders under the
+   one visible textarea — a stack of N identical 📎 rows instead of one.
+   The mount is always emitted immediately after its textarea, so the adjacent
+   sibling combinator ties their visibility together with no JS to keep in
+   sync — showScreen()/showDesign()/showView() only touch `ta.hidden`. The
+   `.attach-bar` half covers the mountless fallback path, where the bar is
+   inserted straight after the textarea instead of into a slot. */
+textarea[hidden] + .attach-slot,
+textarea[hidden] + .attach-bar { display: none; }
 /* Leader line + bubble offset, one rule pair per side. The line is a short
    fixed-length connector (14px), never computed at runtime. */
 .anno[data-anno-side="right"] .anno-bubble { left: calc(var(--anno-pin-size, 28px) + 14px); top: 50%; transform: translateY(-50%); }
@@ -2587,9 +2623,12 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   }
 }
 
-/* Hidden per-screen / per-design textareas: only the active one shown */
+/* Hidden per-screen / per-design / per-view textareas: only the active one
+   shown. #view-textareas belongs here for the same reason the other two do —
+   buildViewTextareas() hides every one of its textareas identically. */
 #screen-textareas textarea[hidden],
-#design-textareas textarea[hidden] { display: none; }
+#design-textareas textarea[hidden],
+#view-textareas textarea[hidden] { display: none; }
 
 /* Single-screen design: hide the per-screen feedback section + its own
    leading divider. Order is general -> design -> page, so the divider that
@@ -3139,6 +3178,10 @@ change) via `harvestDockValues()`.
       ta.hidden = d !== active;
       if (carried[ta.dataset.comment]) ta.value = carried[ta.dataset.comment];
       container.appendChild(ta);
+      // The mount goes DIRECTLY after its textarea — nothing in between.
+      // `textarea[hidden] + .attach-slot` (§ Layout CSS) is what hides an
+      // inactive field's 📎 bar, and it only reaches an adjacent sibling.
+      // Same rule in buildScreenTextareas/buildViewTextareas below.
       const slot = document.createElement('div');
       slot.className = 'attach-slot';
       slot.dataset.attachSlot = ta.dataset.comment;
@@ -6129,6 +6172,25 @@ same slot key, so calling it again after `ensureCommentSlots()`, after a
 dock rebuild (§ Layout JS `buildDesignUI()`), or after an iteration append
 is always safe.
 
+**One bar per field is not one bar on screen — the mount must follow its
+field's visibility.** The dock builds a textarea per screen, per design and
+per view up front and then only flips `hidden` on switch (§ Layout JS), so
+at any moment most attachable fields are hidden. Their `.attach-slot` mounts
+are *siblings* of those textareas, and `.attach-slot:empty { display: none }`
+stops covering them the instant a bar is mounted — which is why the dock
+rendered one 📎 row per hidden field stacked under the single visible
+textarea. `textarea[hidden] + .attach-slot { display: none }` (§ Layout
+CSS) is what keeps the two in step; it works because the mount is always
+emitted directly after the textarea it belongs to. **Emit it that way** — a
+mount separated from its field, or one nested somewhere else in the row,
+silently reintroduces the stack. The same rule names `.attach-bar` for the
+mountless path, where `_mountAttachmentBar()` inserts the bar itself
+`afterend` of the textarea for exactly this reason. Hiding the bar is deliberately CSS-only:
+`showScreen()`/`showDesign()`/`showView()` must stay free to toggle nothing
+but `ta.hidden`, and the bar has to keep existing (and stay wired) while
+hidden so the attachments already on an inactive field are still there when
+the user switches back to it.
+
 **The durability rule is unchanged: upload on ATTACH, never on submit.** The
 file is sent to the bridge the moment it is picked/pasted/dropped and is
 fsynced to `.claude/concepts/<slug>/attachments/<sha256>.<ext>` shortly
@@ -6192,16 +6254,23 @@ The bar is injected per field by `ensureCommentSlots()` and
 
 ```html
 <div class="attach-bar" data-attach-for="variant-a-note">
-  <button type="button" class="attach-btn" title="{{attach.button_title}}">📎</button>
-  <span class="attach-hint">{{attach.hint}}</span>
+  <button type="button" class="attach-btn"
+          title="{{attach.button_title}}" aria-label="{{attach.button_title}}">📎</button>
   <input type="file" multiple hidden>
   <div class="attach-thumbs"></div>
 </div>
 ```
 
 `{{attach.button_title}}` → e.g. "Datei anhängen (oder Strg+V / hierher
-ziehen)", `{{attach.hint}}` → e.g. "Strg+V oder beliebige Datei ablegen".
-Resolve both at generation time per § UI Locale.
+ziehen)". Resolve it at generation time per § UI Locale.
+
+**The 📎 alone is the affordance — no hint label.** Every attachable field
+carries a bar, so a spelled-out "Ctrl+V or drop any file" line repeated under
+each one is pure noise: it out-weighs the field it decorates and reads as
+clutter down a dock of them. The paste/drop shortcuts live in the button's
+`title`/`aria-label`, which is where a discoverable-but-quiet affordance
+belongs, and the drop target itself stays advertised by the dashed
+`.attach-dragover` outline the moment a file is dragged over the textarea.
 
 ### CSS
 
@@ -6213,7 +6282,6 @@ Resolve both at generation time per § UI Locale.
   padding: .15rem .45rem; font-size: .95rem; line-height: 1.4;
 }
 .attach-btn:hover { border-color: var(--accent-color); color: var(--text-primary); }
-.attach-hint { font-size: .72rem; color: var(--text-tertiary); }
 .attach-thumbs { display: flex; gap: .4rem; flex-wrap: wrap; width: 100%; }
 .attach-thumb { position: relative; width: 64px; height: 64px; border-radius: 6px;
                 overflow: hidden; border: 1px solid var(--border-color); }
@@ -6327,8 +6395,8 @@ function buildAttachmentBar(slotKey) {
   bar.className = 'attach-bar';
   bar.dataset.attachFor = slotKey;
   bar.innerHTML =
-    '<button type="button" class="attach-btn" title="{{attach.button_title}}">📎</button>' +
-    '<span class="attach-hint">{{attach.hint}}</span>' +
+    '<button type="button" class="attach-btn" title="{{attach.button_title}}"' +
+    ' aria-label="{{attach.button_title}}">📎</button>' +
     '<input type="file" multiple hidden>' +
     '<div class="attach-thumbs"></div>';
   return bar;
@@ -6351,7 +6419,11 @@ function _mountAttachmentBar(ta, slotKey) {
   const bar = buildAttachmentBar(slotKey);
   const dedicated = document.querySelector('.attach-slot[data-attach-slot="' + CSS.escape(slotKey) + '"]');
   if (dedicated) dedicated.appendChild(bar);
-  else if (ta.parentElement) ta.parentElement.appendChild(bar);
+  // `afterend`, not parentElement.appendChild: the bar belongs to ITS field,
+  // and appending to the container drops it after whatever else the row holds
+  // — far from the textarea, and out of reach of the
+  // `textarea[hidden] + .attach-bar` rule that hides it with its field.
+  else if (ta.parentElement) ta.insertAdjacentElement('afterend', bar);
   return bar;
 }
 

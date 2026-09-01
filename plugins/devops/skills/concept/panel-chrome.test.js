@@ -512,3 +512,135 @@ describe("panel and dock are mutually exclusive overlays", () => {
     expect(h.panelOpen(), "closing the dock opened the panel").toBe(false);
   });
 });
+
+describe("attachment bars — one 📎 on screen, not one per hidden field", () => {
+  // The dock builds a textarea per screen, per design and per view up front
+  // and then only flips `hidden` on switch, but each textarea's `.attach-slot`
+  // mount is a SIBLING of it. `.attach-slot:empty` covers a mount only until a
+  // bar lands in it, so the moment initCommentAttachments() ran, every hidden
+  // field's bar rendered under the one visible textarea — the dock showed
+  // eight identical "📎 Strg+V oder beliebige Datei ablegen" rows.
+
+  test("a hidden field's bar is hidden with it, on both mount paths", () => {
+    // Two paths exist: a dedicated `.attach-slot` (every dock-built field,
+    // annotation answers) and the mountless fallback that inserts the bar
+    // itself after the textarea. Covering only the first leaves the second
+    // free to stack.
+    for (const sub of [".attach-slot", ".attach-bar"]) {
+      const rule = hidden.find((r) => r.selectors.some((s) =>
+        new RegExp("^textarea\\[hidden\\]\\s*\\+\\s*\\" + sub + "$").test(s.trim())));
+      expect(rule, "textarea[hidden] + " + sub).toBeDefined();
+    }
+  });
+
+  test("the mountless fallback puts the bar next to its field", () => {
+    // …which is what makes the `.attach-bar` half of that rule reachable.
+    // `parentElement.appendChild` drops the bar after everything else in the
+    // row instead — no longer an adjacent sibling, no longer hideable.
+    const mount = slice(jsSource, "function _mountAttachmentBar(");
+    expect(mount, "fallback insert point").toMatch(/insertAdjacentElement\('afterend', bar\)/);
+    expect(mount, "fallback must not append to the container")
+      .not.toMatch(/parentElement\.appendChild\(bar\)/);
+  });
+
+  test("every dock builder emits the mount adjacent to its textarea", () => {
+    // The rule above is an ADJACENT sibling combinator, so it only reaches a
+    // mount that directly follows its field. Anything appended in between
+    // silently restores the stack while the CSS still reads correct.
+    const builders = [
+      "function buildDesignTextareas(",
+      "function buildScreenTextareas(",
+      "function buildViewTextareas(",
+    ];
+    for (const fn of builders) {
+      const body = slice(jsSource, fn);
+      const ta = body.indexOf("appendChild(ta)");
+      const slot = body.indexOf("appendChild(slot)");
+      expect(ta, fn + " appends its textarea").toBeGreaterThan(-1);
+      expect(slot, fn + " appends its attach mount after the textarea").toBeGreaterThan(ta);
+      const between = body.slice(ta + "appendChild(ta)".length, slot);
+      expect(between, fn + " appends something between field and mount")
+        .not.toMatch(/appendChild\(/);
+    }
+  });
+
+  test("the visibility hand-off stays CSS-only", () => {
+    // The bar must keep EXISTING (and stay wired) while its field is hidden —
+    // attachments already on an inactive field have to survive the switch —
+    // so the switchers may only toggle `ta.hidden`, never unmount a bar.
+    const switchers = [
+      "window.showScreen = function(",
+      "window.showDesign = function(",
+      "window.showView = function(",
+    ];
+    for (const fn of switchers) {
+      const body = slice(jsSource, fn);
+      expect(body, fn + " must not tear down attachment mounts")
+        .not.toMatch(/attach-slot|attachSlot|attach-bar|attachFor/);
+    }
+  });
+
+  test("the bar is the icon alone — no hint label", () => {
+    // One 📎 per field is already the affordance; a spelled-out shortcut line
+    // repeated under every field out-weighs the field it decorates. The
+    // shortcuts live in the button's title/aria-label instead.
+    const bar = slice(jsSource, "function buildAttachmentBar(");
+    expect(bar, "the 📎 keeps an accessible name once its label is gone")
+      .toMatch(/aria-label="\{\{attach\.button_title\}\}"/);
+    expect(md, "attach-hint markup, CSS or locale key came back")
+      .not.toMatch(/attach-hint|`attach\.hint`/);
+  });
+});
+
+describe("exactly one design / screen / view paints", () => {
+  // Measured on a real generated page: an iteration holding three designs
+  // emitted `hidden` on none of them, so five screens across all three
+  // rendered at once — every one position:absolute/inset:0, all stacked on
+  // the same square. Headings, labels and mockups interleaved; the page was
+  // unreadable and every click ambiguous. `hidden` alone could not prevent
+  // it: it is set by JS the markup is merely ASKED to pre-empt, and nothing
+  // enforced that. These rules make the active flags carry visibility too.
+
+  const norm = (s) => s.replace(/\s+/g, " ").trim();
+
+  test("an inactive design and an inactive screen are off the canvas", () => {
+    for (const [sel, flag] of [
+      ["section[data-design]", "data-design-active"],
+      ["section[data-screen]", "data-screen-active"],
+    ]) {
+      const subject = sel + ':not([' + flag + '="true"])';
+      const matching = hidden.flatMap((r) => r.selectors.map(norm))
+        .filter((s) => s.endsWith(subject));
+      expect(matching.length, subject).toBeGreaterThan(0);
+      // ...but only once something IS marked active. Unguarded, a page whose
+      // markup omits the flag entirely would render an empty canvas - a worse
+      // failure than the stack this replaces.
+      for (const s of matching) {
+        expect(s, "must be :has()-guarded").toContain(":has(");
+      }
+    }
+  });
+
+  test("no view paints outside view mode", () => {
+    // The other direction: at boot nothing has run, so body[data-view-active]
+    // is absent — which must read as "not in view mode", or a view that ships
+    // without `hidden` covers the design the page opens on.
+    const rule = hidden.find((r) => r.selectors.some((s) =>
+      /^body:not\(\[data-view-active="true"\]\)\s+section\[data-view\]$/.test(s.trim())));
+    expect(rule, 'body:not([data-view-active="true"]) section[data-view]').toBeDefined();
+  });
+
+  test("the switchers still maintain the flags the rules key on", () => {
+    // The CSS above is only as good as the attributes it reads. A switcher
+    // that stopped writing one would leave the canvas permanently blank
+    // instead of merely mis-highlighted, so pin the writes.
+    expect(slice(jsSource, "window.showDesign = function("), "showDesign writes designActive")
+      .toMatch(/dataset\.designActive\s*=/);
+    expect(slice(jsSource, "window.showScreen = function("), "showScreen writes screenActive")
+      .toMatch(/dataset\.screenActive\s*=/);
+    const view = slice(jsSource, "window.showView = function(");
+    expect(view, "showView writes body[data-view-active]").toMatch(/body\.dataset\.viewActive\s*=\s*'true'/);
+    expect(slice(jsSource, "window.showDesign = function("), "showDesign clears it again")
+      .toMatch(/body\.dataset\.viewActive\s*=\s*'false'/);
+  });
+});
