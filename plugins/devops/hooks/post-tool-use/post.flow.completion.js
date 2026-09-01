@@ -41,6 +41,13 @@ const {
   testRunOutcome,
 } = require('../lib/browsertest-guard');
 
+// Offline card renderer — the same module that backs the MCP tool, invoked as a
+// CLI. Named in the reminder so a session whose MCP servers never connected
+// still knows how to produce a card. Forward slashes: the reminder is a Bash
+// command line, and Windows paths must survive it.
+const OFFLINE_RENDERER = (process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..'))
+  .replace(/\\/g, '/') + '/mcp-server/index.js';
+
 /**
  * Read the pinned $TEST_PROFILE for this session (cache written per
  * deep-knowledge/test-plan.md) plus the project's no-runtime static carve-outs
@@ -244,6 +251,7 @@ process.stdin.on('end', () => {
     'COMPLETION CARD — when ALL work is done:',
     'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly (already loaded MCP tool).',
     'Only if the direct call fails with "tool not found", fall back to ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
+    `If the MCP server never connected this session (CONNECT_TIMEOUT), render offline instead — never skip the card: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
     `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
     '  plus changes, tests, state, cta, userTest, userFinalTest as applicable.',
     `  cwd:"${hook.cwd || ''}" — without it PR/commit/branch render as dead text, not links.`,

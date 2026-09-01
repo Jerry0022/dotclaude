@@ -21,6 +21,7 @@
 require('../lib/plugin-guard');
 
 const fs = require('fs');
+const path = require('path');
 const { readSessionFile } = require('../lib/session-id');
 const {
   decideAction,
@@ -76,6 +77,9 @@ process.stdin.on('end', () => {
     silent,
     validationPending,
     validationAttested,
+    // Active install root — the block reason names the offline renderer under it
+    // for the case where the MCP server never connected this session.
+    pluginRoot: process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..'),
   });
 
   if (decision.resetFlags) {

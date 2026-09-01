@@ -83,11 +83,13 @@ function lastAssistantContainsCard(transcriptContent) {
  *                                     not the user. Never enforce the card.
  * @param {boolean} [s.validationPending]  — a code change owes a validation attestation
  * @param {boolean} [s.validationAttested] — the card was rendered with a `validation` field
+ * @param {string}  [s.pluginRoot]   — active install root, so the block reason can name
+ *                                     the offline renderer path for this install
  * @returns {{ action: 'block' | 'pass', resetFlags: boolean, reason?: string }}
  */
 function decideAction({
   workHappened, cardRendered, stopHookActive, substantial, silent,
-  validationPending, validationAttested,
+  validationPending, validationAttested, pluginRoot,
 }) {
   if (silent) {
     // Background tick (cron git-sync, concept bridge poll, autonomous loop).
@@ -110,7 +112,7 @@ function decideAction({
     return {
       action: 'block',
       resetFlags: false, // keep flags so the post-render stop hook sees consistent state
-      reason: buildBlockReason(),
+      reason: buildBlockReason(pluginRoot),
     };
   }
 
@@ -127,13 +129,31 @@ function decideAction({
   return { action: 'pass', resetFlags: true };
 }
 
-function buildBlockReason() {
+/**
+ * Path of the offline card renderer for this install, in a form Bash accepts on
+ * Windows too (forward slashes). Falls back to the env placeholder when the
+ * caller could not resolve a root — a named variable still beats no instruction.
+ */
+function offlineRendererPath(pluginRoot) {
+  const root = pluginRoot ? String(pluginRoot).replace(/\\/g, '/') : '$CLAUDE_PLUGIN_ROOT';
+  return `${root}/mcp-server/index.js`;
+}
+
+function buildBlockReason(pluginRoot) {
   return [
     '[stop.flow.guard] Completion card required — not yet rendered this turn.',
     '',
     'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW as the FIRST action.',
     'If the direct call fails with "tool not found", fall back to ToolSearch:',
     '  select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
+    '',
+    'If ToolSearch ALSO cannot find it because the MCP server never connected this',
+    'session (CONNECT_TIMEOUT / "failed to connect"), the card is still required —',
+    'render it offline through the same renderer, via Bash:',
+    `  node "${offlineRendererPath(pluginRoot)}" --render-card <payload.json>`,
+    'Write the exact arguments you would have passed to the tool into payload.json',
+    '(same field names, including "session_id"), then relay stdout VERBATIM. Do not',
+    'report "no card possible" — that path exists precisely for a dead MCP server.',
     '',
     'Variant decision (pick exactly one):',
     '  ship pipeline ran + merged → ship-successful  (ONLY after /ship + merge)',

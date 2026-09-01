@@ -424,4 +424,33 @@ describe("buildBlockReason", () => {
     expect(r).toMatch(/VERBATIM/);
     expect(r).toMatch(/LAST/);
   });
+
+  // A session whose MCP servers never connected (CONNECT_TIMEOUT under load)
+  // used to end with no card at all: the tool is absent, ToolSearch cannot load
+  // it, the gate blocks once and then yields. The reason must name the offline
+  // renderer so that session still produces a card.
+  test("names the offline renderer under the given plugin root", () => {
+    const r = buildBlockReason("C:\\Users\\x\\.claude\\plugins\\cache\\dotclaude\\devops\\0.1.0");
+    expect(r).toMatch(/CONNECT_TIMEOUT/);
+    expect(r).toContain(
+      'node "C:/Users/x/.claude/plugins/cache/dotclaude/devops/0.1.0/mcp-server/index.js" --render-card',
+    );
+  });
+
+  test("falls back to the env placeholder when no plugin root is known", () => {
+    const r = buildBlockReason();
+    expect(r).toContain('node "$CLAUDE_PLUGIN_ROOT/mcp-server/index.js" --render-card');
+  });
+
+  test("decideAction threads the plugin root into the card block reason", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: false,
+      pluginRoot: "/opt/devops",
+    });
+    expect(d.action).toBe("block");
+    expect(d.reason).toContain('node "/opt/devops/mcp-server/index.js" --render-card');
+  });
 });

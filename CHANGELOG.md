@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.137.0] — 2026-09-01
+
+### Fixed
+
+- **A session whose MCP servers never connected lost its completion card entirely — for every turn, and quietly.** The card existed only as an MCP tool, so when the servers timed out while starting (thirty seconds, and under heavy parallel load it took all of them down at once, the unrelated ones included) the tool was simply not in the session. The Stop gate still fired and still demanded a card; the fallback it named, ToolSearch, cannot load a tool from a server that never came up; and because the gate deliberately blocks only once per turn, it then yielded. The turn ended with an explanation instead of a card, and so did every turn after it, for the rest of the session. Over the three hours in which this was measured, five of six enforced cards were never rendered — against a baseline of virtually none in the weeks before.
+
+### Added
+
+- **The card renders without MCP at all.** The completion server takes a second entry point, `--render-card <payload.json>`: the same renderer, the same field names, the same coercions, the same flags that satisfy the Stop gate, with the card markdown on stdout. The MCP SDK and its schema library moved behind that branch as lazy imports, so the fallback runs on a bare node with no third-party module in its graph — the situation it exists for is precisely the one where the MCP stack is unavailable. Both places that enforce the card, the Stop gate's block reason and the reminder injected after every tool call, now name that path, so "no card was possible" is no longer a reachable answer.
+
 ## [0.136.1] — 2026-09-01
 
 ### Fixed

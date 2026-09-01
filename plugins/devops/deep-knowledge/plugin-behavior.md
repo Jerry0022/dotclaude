@@ -36,6 +36,19 @@ It fires whenever a task is fully completed and Claude is waiting for the next u
 - `render_completion_card` (MCP tool) — writes `card-rendered` flag after successful
   render so `stop.flow.guard` knows the card was produced.
 
+**When the MCP server is not there:** if the servers failed to connect for a
+session (`CONNECT_TIMEOUT`, "failed to connect" — it happens under heavy parallel
+load), the tool is absent and ToolSearch cannot load it either. The card is still
+required. Render it offline through the same renderer:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/mcp-server/index.js" --render-card <payload.json>
+```
+
+Same field names as the tool (including `session_id`), card markdown on stdout,
+same `card-rendered` / `validation-attested` flags written. Relay stdout VERBATIM.
+"No card possible" is never the answer — that path exists for exactly this case.
+
 **Desktop App visibility:** The `render_completion_card` MCP tool result is hidden
 inside a collapsed "Hat ein Tool verwendet" element. All hooks instruct Claude to
 copy the returned markdown and output it VERBATIM as direct text response.
