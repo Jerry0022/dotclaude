@@ -29,6 +29,55 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 2. Project: `{project}/.claude/skills/concept/SKILL.md` + `reference.md`
 3. Merge: project > global > plugin defaults
 
+## Step 0.5 — Concept Mode (asked once, at the start)
+
+Before Step 1 runs for the **first** iteration, settle which kind of
+concept the user wants. Three modes exist:
+
+| Mode | What the page is | Templates in scope |
+|---|---|---|
+| **decision** | Pure decision concept — non-visual alternatives to weigh (architecture, strategy, library, approach, …) | `decision` (plus `free` for surrounding analysis) — no mockups |
+| **design** | Pure design concept — visual directions / mockups / click-dummies | `design` only — no decision views, no `decision` iteration |
+| **mixed** | Both — the visual call AND the non-visual calls belong to the same concept | `design` iteration(s) carrying decision views where the question is *about the mock*, and/or a separate `decision` iteration where it stands on its own (entangled-questions rule in 1a) |
+
+**Ask unless it is already obvious.** If the invocation prompt names the
+mode, or it can be derived unambiguously — "design me the settings page"
+→ design; "which auth library should we take" → decision; "concept for the
+onboarding: the flow, the screens and which state library" → mixed; a
+caller skill (e.g. `/tune-rethink`, `/setup-cleanup`) that pins the
+template → that — **skip the question and proceed.** Otherwise ask exactly
+ONE `AskUserQuestion` with the three modes, **mixed first and marked
+"(Recommended)"**, one line of description each (what the page will
+contain). Whenever the prompt allows two readings, lean towards mixed —
+a decision-only page hides the visual consequences, a design-only page
+hides the trade-offs behind the visuals. Do NOT prefix this question with
+"Erstmal in Ruhe durchlesen" — no inline result precedes it. A typed
+"Other" answer is a real answer (`{PLUGIN_ROOT}/deep-knowledge/decision-format.md`).
+
+The mode is decided **once per concept**, not once per iteration. Later
+iterations (Step 5c) still pick their own template through the 1a check —
+the mode only says which templates are in scope. Feedback that pulls the
+concept the other way ("zeig mir das mal als Mockup" on a decision concept)
+widens the mode silently; no second question.
+
+### Count preferences — recommendations, not instructions
+
+These keep the page scannable for the user. They are Claude's defaults,
+not user instructions: an explicit count from the user always wins, and
+Claude may deviate when the content genuinely demands it.
+
+- **Decision concepts and decision/comparison views: prefer 7 alternatives**
+  set against each other. Fewer when the problem honestly has fewer
+  distinct answers — never pad with near-duplicates to reach seven. More
+  than seven gets unreadable; fold minor variants into one card instead.
+- **Design concepts: prefer 3 main designs**, each **clearly — even
+  excessively — different** from the other two (unless the user asked for
+  subtle variants). Show each design in its relevant states/screens
+  (1a: "a screen is a logical state"). Fine-tuning within one direction is
+  a later iteration's job, not designs 4 to 7.
+- **Mixed concepts** combine both: 7 on the decision side, 3 on the design
+  side.
+
 ## Step 1 — Pick Template, then Content Variant
 
 ### 1a. Pick the template — per iteration
@@ -72,7 +121,8 @@ would also fit.
    **Several competing visual directions** (e.g. 21 layout variants that
    don't fit a 340px card) are several **designs within the same `design`
    iteration**, each with its own `data-design` wrapper and its own 1..n
-   screens — not variant cards, and not a second, duplicate "— visuell"
+   screens (count preference: 3 main designs, distinctly different — see
+   Step 0.5) — not variant cards, and not a second, duplicate "— visuell"
    pass through a `decision` iteration. See the Architecture spec
    (`docs/superpowers/specs/2026-08-03-concept-per-iteration-design-mode-design.md`)
    for the markup shape.
@@ -102,7 +152,10 @@ would also fit.
    `deep-knowledge/templates.md` § Views (optional)). Two kinds ship as
    templates: `decision` (2..n named alternatives, bi-state per alternative)
    and `comparison` (2..n concrete candidates side by side, verdict per
-   option, optional criteria matrix). **Rule of thumb — view vs. its own
+   option, optional criteria matrix); count preference 7 per view (Step
+   0.5). In **design** mode (Step 0.5) views are out of scope — the
+   non-visual questions belong to a later `decision` iteration only when
+   the user widens the mode. **Rule of thumb — view vs. its own
    `decision` iteration:** if the question is *about the artefact in front
    of the user* (they need to look at, or click through, the mock to answer
    sensibly) → a view inside this iteration. If the question stands on its
@@ -115,6 +168,9 @@ would also fit.
    Multi-option evaluation where the user must pick from 2+ mutually-exclusive
    alternatives (architecture, tech, strategy, library, approach, …). If there
    are explicit variants A/B/C with pros/cons to weigh → `decision`. **Stop.**
+   Count preference: 7 alternatives compared (Step 0.5). In **design** mode
+   (Step 0.5) this step is skipped — visual-only concepts do not get a
+   `decision` iteration.
 
 3. **Otherwise → FREE.**
    Only reach this step after 1 AND 2 have both been ruled out. Analysis,
@@ -123,10 +179,10 @@ would also fit.
    Tri-state is opt-in per section (Claude adds it only where a finding
    genuinely needs user evaluation).
 
-**Entangled questions split across iterations.** If a concept's visual
-questions (which layout / design direction) and its non-visual questions
-(which architecture / which library / which strategy) are entangled, do NOT
-mix them into one layout. Split them: a `decision` iteration for the
+**Entangled questions split across iterations (the mixed mode, Step 0.5).**
+If a concept's visual questions (which layout / design direction) and its
+non-visual questions (which architecture / which library / which strategy)
+are entangled, do NOT mix them into one layout. Split them: a `decision` iteration for the
 non-visual call, a separate `design` iteration for the visual one. This is
 the fix for the "same decision, written twice" failure — mockups do not fit
 into 340px variant cards, so stop trying to fit them there.
