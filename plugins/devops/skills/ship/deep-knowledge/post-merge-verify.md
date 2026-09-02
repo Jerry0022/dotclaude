@@ -111,9 +111,17 @@ Notes:
 - **CI does not exist** → `ci: { status: "no-run" }`, verify still runs if
   configured. Pure-frontend repos without CI but with a deploy hook can use
   this pattern.
-- **Watcher process killed before completion** → state file stays in
-  `status: "watching"`. The SessionStart hook auto-acknowledges entries
-  older than 24h.
+- **Watcher process killed before completion** → the watcher writes
+  `overall: "inconclusive"` on graceful termination (SIGTERM/SIGINT/logoff).
+  A hard kill (machine shutdown, power loss) cannot be caught, so the state
+  file stays in `status: "watching"`; every state file therefore carries a
+  `deadlineAt` (detect window + `--max-wait` + verify timeout + 5 min grace).
+  Past that instant `ss.ship.verify` treats the entry as **abandoned**,
+  reconciles it against `gh run list --commit <merge-sha>` — restricted to
+  runs created before `deadlineAt`, so a later `/promote` tag run on the same
+  commit is not misreported as the ship's CI — and writes a terminal state.
+  It is surfaced **once** (`⚠` when GitHub could not be reached) and never
+  nags again.
 
 ## Example: SPA on Vercel
 
