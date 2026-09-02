@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.138.0] — 2026-09-02
+
+### Added
+
+- **The concept skill asks, up front, what kind of concept it is building.** A concept page can be a pure decision round (non-visual alternatives with their trade-offs), a pure design round (mockups and click-dummies), or both — and until now the skill inferred that silently from the prompt and got it wrong in both directions: a decision-only page that hid the visual consequences, or a design-only page that hid the trade-offs behind the visuals. Before the first iteration is built, the skill now settles the mode. When the request makes it obvious — "design me the settings page", "which auth library", a caller skill that pins the template — it proceeds without asking; otherwise it asks exactly once, as a chat choice, with the mixed concept offered first and recommended, and it leans towards mixed whenever a prompt reads two ways. The mode is decided once per concept, not per iteration: later rounds still pick their own template, and feedback that pulls a concept the other way widens the mode without a second question.
+
+### Changed
+
+- **Decision rounds aim for seven alternatives, design rounds for three clearly different directions.** Both are documented as Claude's defaults, not as instructions: an explicit count from the user always wins, and the skill may deviate when the content genuinely demands it. Seven keeps a comparison rich without padding it with near-duplicates; three designs — each deliberately, even excessively, distinct from the other two, shown in their relevant states — keep a design round scannable, with fine-tuning inside one direction left to a later iteration rather than spent on designs four to seven. In a pure design concept, decision views and decision iterations are out of scope until the user widens the mode.
+
 ## [0.137.1] — 2026-09-02
 
 ### Fixed
