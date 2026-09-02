@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.138.1] — 2026-09-02
+
+### Fixed
+
+- **A post-merge watcher that died took its result with it, and announced itself as still running for a day afterwards.** The watcher is spawned detached, so a machine shutdown or a killed session ends it without any of its terminal writes ever happening, and its state file stays on `status: "watching"` with `finishedAt: null` forever. The only defence was a flat twenty-four hour staleness constant in the SessionStart reader — a number with no relationship to the watcher's own lifetime, which is at most five minutes of run detection plus `--max-wait` plus the deploy probe. For the whole of that day the reader greeted every session with "Ship verify still running", counting up: the reported figure had reached 1205 minutes for a process that had been dead since minute forty. Then, on expiry, it set `acknowledged: true` while leaving `status: "watching"` — so the entry was never reported at all, the outcome of that ship was silently lost, and because the status never changed the branch was re-entered at every subsequent session, re-stamping `staleAt` with a fresh timestamp each time. Eight entries were sitting in that state here, the oldest since 2026-08-17, all carrying the same current-day `staleAt`.
+
+  Every state file now carries `maxWaitSec` and `deadlineAt`, so a reader decides "working" or "died" from the run's own numbers rather than a constant. Past that instant the entry is treated as abandoned and reconciled against `gh run list --commit <merge-sha>`, which answers the counterfactual the watcher can no longer answer itself; the result is written as a terminal state, surfaced exactly once, and cannot re-enter the watching branch. Reconciliation trusts only the per-commit query — the branch-scoped fallback misses tag-triggered runs entirely, so an empty result there yields `inconclusive` with a `gh pr checks` hint rather than a fabricated "no workflow ran". Matches are further restricted to runs created before the deadline, because in this repo the Release workflow fires on the bare `vX.Y.Z` tag that `/promote` later adds to the already-merged commit: without that restriction a promotion's CI would be reported as the ship's own. The watcher additionally writes a terminal `inconclusive` when it is terminated gracefully; a hard kill remains the reader's problem, which is what the deadline is for.
+
 ## [0.138.0] — 2026-09-02
 
 ### Added
