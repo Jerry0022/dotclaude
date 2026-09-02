@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script post-merge-watcher
- * @version 0.1.1
+ * @version 0.2.0
  * @plugin devops
  * @description Background watcher that runs after ship_release succeeds.
  *   Waits for the GitHub Actions run on the merge commit, optionally probes
@@ -22,10 +22,17 @@
  * State file: <state-dir>/<merge-sha>.json
  *   { status: "watching" | "complete",
  *     pr, base, mergeSha, startedAt, finishedAt,
+ *     maxWaitSec, deadlineAt,        // latest instant this watcher can still be alive
  *     ci: { status, runId, runUrl, workflowName, conclusion },
  *     verify: { status, mode, target, attempts, lastError } | null,
- *     overall: "pending" | "success" | "failed" | "timeout",
+ *     overall: "pending" | "success" | "failed" | "timeout" | "inconclusive",
  *     acknowledged: false }
+ *
+ * `deadlineAt` is what lets ss.ship.verify tell "still working" from
+ * "abandoned": this process is spawned detached, so a machine shutdown or a
+ * killed session ends it without any of the terminal writes below ever
+ * running. The signal/exit handlers cover graceful termination; `deadlineAt`
+ * covers the rest.
  */
 
 const { spawnSync, execFileSync } = require("node:child_process");
@@ -35,6 +42,8 @@ const { join, dirname } = require("node:path");
 const POLL_INITIAL_RUN_DETECT_MS = 5_000;
 const POLL_INITIAL_RUN_DETECT_MAX_MS = 5 * 60_000;
 const DEFAULT_MAX_WAIT_SEC = 1800;
+const VERIFY_DEFAULT_TIMEOUT_SEC = 600;
+const ABANDON_GRACE_MS = 5 * 60_000;
 
 function parseArgs(argv) {
   const out = {};
@@ -276,6 +285,40 @@ function notifyToast(title, message) {
 let activeState = null;
 let activeStateFile = null;
 
+/**
+ * Flip an in-flight state file to a terminal "inconclusive" result. Terminal
+ * writes always set `status: "complete"`, so that doubles as the guard: a run
+ * that already reached a verdict is never overwritten.
+ *
+ * @param {string} reason
+ */
+function markAbandoned(reason) {
+  if (!activeState || !activeStateFile) return;
+  if (activeState.status === "complete") return;
+  try {
+    activeState.status = "complete";
+    activeState.overall = "inconclusive";
+    activeState.resolution = "watcher-terminated";
+    activeState.finishedAt = new Date().toISOString();
+    activeState.abandonedAt = activeState.finishedAt;
+    activeState.abandonReason = reason;
+    writeState(activeStateFile, activeState);
+  } catch { /* best-effort */ }
+}
+
+// Graceful termination (session teardown, Ctrl-C, logoff) still gets a verdict
+// on disk. A hard kill or power loss cannot be caught here — that is what
+// `deadlineAt` plus the reader's reconciliation are for.
+for (const sig of ["SIGTERM", "SIGINT", "SIGHUP", "SIGBREAK"]) {
+  try {
+    process.on(sig, () => {
+      markAbandoned(`received ${sig}`);
+      process.exit(143);
+    });
+  } catch { /* signal not supported on this platform */ }
+}
+process.on("exit", () => markAbandoned("process exited before reaching a verdict"));
+
 async function main() {
   const args = parseArgs(process.argv);
   const cwd = args.cwd;
@@ -296,13 +339,30 @@ async function main() {
   const stateFile = join(stateDir, `${mergeSha}.json`);
   const verifyConfig = parseVerifyConfig(verifyConfigPath);
 
+  // Publish the watcher's own outside-limit so a reader can decide whether a
+  // still-"watching" file means "working" or "died"; without it the reader is
+  // left guessing with a constant that has nothing to do with this run.
+  const startedAt = new Date();
+  const verifyTimeoutSec = verifyConfig
+    ? Number(verifyConfig.timeout_seconds) || VERIFY_DEFAULT_TIMEOUT_SEC
+    : 0;
+  const deadlineAt = new Date(
+    startedAt.getTime() +
+      POLL_INITIAL_RUN_DETECT_MAX_MS +
+      maxWaitSec * 1000 +
+      verifyTimeoutSec * 1000 +
+      ABANDON_GRACE_MS,
+  ).toISOString();
+
   const state = {
     status: "watching",
     pr,
     base,
     mergeSha,
-    startedAt: new Date().toISOString(),
+    startedAt: startedAt.toISOString(),
     finishedAt: null,
+    maxWaitSec,
+    deadlineAt,
     ci: null,
     verify: null,
     overall: "pending",
