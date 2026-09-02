@@ -43,6 +43,7 @@ const fs = require('fs');
 const path = require('path');
 const { t } = require('../lib/locale');
 const { latestVisible, readChannelPin } = require('../lib/channels');
+const { prunableEntries } = require('../lib/cache-inuse');
 
 // Translations for user-facing output. SessionStart fires before any user
 // prompt — there is no detected locale yet and no session_id in hook input
@@ -203,37 +204,35 @@ function copyDir(src, dst) {
   return fs.existsSync(path.join(dst, '.claude-plugin', 'plugin.json'));
 }
 
-function rebuildCache(marketplace, pluginName, pluginDir, version, sha, { versionChanged = true, channel = 'stable' } = {}) {
+function rebuildCache(marketplace, pluginName, pluginDir, version, sha, { channel = 'stable' } = {}) {
   const pluginCache = path.join(cacheDir, marketplace, pluginName);
   const newCache = path.join(pluginCache, version);
 
-  // Same-version cache REPAIR on an existing dir → overwrite IN PLACE.
+  // Prune old version dirs — but only the ones nothing is standing on.
   //
-  // A version UPGRADE gets a brand-new installPath, so deleting the old version
-  // dirs is correct (registry is repointed, a restart is needed anyway). But a
-  // cache REPAIR keeps the same version dir — and that dir is exactly what Claude
-  // Code's already-loaded skill/slash-command registry points at. Deleting and
-  // recreating it mid-session (rm + mkdir) changes the dir's identity and
-  // de-registers every skill/slash-command for the rest of the session, leaving
-  // /devops-* as "Unknown command" (issue #219). MCP tools (live in RAM) and
-  // agent types (separate registry) survive — only skills/commands break.
-  // Overwriting files in place keeps the dir, so the registry stays valid and no
-  // restart is needed. (Stale files removed upstream at the SAME version — rare —
-  // are not pruned this way; that trade-off is far cheaper than nuking the
-  // skill registry.)
-  const inPlace = !versionChanged && fs.existsSync(newCache);
-
-  if (inPlace) {
-    // Keep the current version dir (the registry points at it), but still prune
-    // any OTHER (old) version dirs so the cache holds only `version`.
-    for (const entry of fs.readdirSync(pluginCache)) {
-      if (entry !== version) {
-        fs.rmSync(path.join(pluginCache, entry), { recursive: true, force: true });
-      }
-    }
-  } else if (fs.existsSync(pluginCache)) {
-    // Version change / first build: clean ALL old version dirs.
-    fs.rmSync(pluginCache, { recursive: true, force: true });
+  // Two dirs must survive a rebuild:
+  //
+  //   1. The version dir being (re)built. On a same-version cache REPAIR that
+  //      dir is exactly what Claude Code's already-loaded skill/slash-command
+  //      registry points at; deleting and recreating it mid-session (rm + mkdir)
+  //      changes the dir's identity and de-registers every skill/slash-command
+  //      for the rest of the session, leaving /devops-* as "Unknown command"
+  //      (issue #219). Overwriting files in place keeps the dir, so the registry
+  //      stays valid and no restart is needed. (Stale files removed upstream at
+  //      the SAME version — rare — are not pruned this way; far cheaper than
+  //      nuking the skill registry.)
+  //
+  //   2. Any OLDER version dir another live Claude session still claims. Claude
+  //      Code reference-counts every loaded version dir via `<dir>/.in_use/<pid>`
+  //      markers, and those dirs are the CLAUDE_PLUGIN_ROOT — the `cwd` and the
+  //      require() root — of that session's MCP servers. Deleting them because
+  //      THIS session upgraded pulled the working directory out from under every
+  //      other open session, which is what made them report "MCP server
+  //      disconnected". prunableEntries() fails safe: anything claimed, or whose
+  //      claim cannot be read, is left alone and collected later by Claude Code's
+  //      own sweeper.
+  for (const entry of prunableEntries(pluginCache, version)) {
+    fs.rmSync(path.join(pluginCache, entry), { recursive: true, force: true });
   }
 
   // Create (or keep) the version dir
@@ -443,7 +442,7 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
     } catch { /* registry unreadable — rebuild to be safe */ cacheMissing = true; }
 
     if (versionChanged || cacheMissing || cacheStale) {
-      const result = rebuildCache(marketplace, name, dir, after, newSha, { versionChanged, channel });
+      const result = rebuildCache(marketplace, name, dir, after, newSha, { channel });
       updated.push({
         name,
         from: beforeVersions[name] || '?',

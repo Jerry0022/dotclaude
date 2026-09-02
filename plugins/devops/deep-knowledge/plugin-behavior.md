@@ -119,6 +119,29 @@ belongs in that project's own `.claude/` instructions. Inside the plugin source
 repo, direct implementation is the correct route and no issue is needed.
 Full hierarchy, detection, and exceptions: `plugin-scope-routing.md`.
 
+## Plugin Cache — Shared State Across Live Sessions
+
+`~/.claude/plugins/cache/**` is shared by every Claude session running at the
+same time. A cached version dir is the `CLAUDE_PLUGIN_ROOT` of that session's
+MCP servers — their `cwd` **and** their `require()` root — so deleting one pulls
+the working directory out from under sessions still running on it, and they
+report **"MCP server disconnected"**.
+
+Claude Code reference-counts this itself: each session drops a marker at
+`<versionDir>/.in_use/<pid>`, and its own sweeper collects a dir only once no
+live marker remains. That is why two versions of the same plugin legitimately
+coexist in the cache while an older session is still open — the official
+plugins do exactly this.
+
+**Rule: no hook may delete anything under the plugin cache without first
+checking the `.in_use` markers.** Prune via `hooks/lib/cache-inuse.js`
+(`prunableEntries` / `isVersionDirInUse`), which fails safe — an unreadable or
+unparsable claim counts as in use. Over-retention is harmless (Claude Code's
+sweeper collects it later); under-retention breaks every other open session.
+`ss.plugin.update`'s `rebuildCache` is the only caller today, and a version bump
+is **not** a licence to prune a claimed dir: "this session upgraded" says
+nothing about what the other eight are running.
+
 ## Issue Creation — Always Delegate
 
 When a skill or hook needs to create a GitHub issue, it MUST delegate to

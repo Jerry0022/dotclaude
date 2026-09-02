@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.137.1] — 2026-09-02
+
+### Fixed
+
+- **Upgrading the plugin in one session disconnected the MCP servers of every other session that was open.** The cache rebuild treated `~/.claude/plugins/cache/**` as if it belonged to the session doing the rebuild, and deleted every version directory except the one it was building. Those directories are the `CLAUDE_PLUGIN_ROOT` of the MCP servers that are already running — their working directory and their `require()` root — so a version bump in one window pulled the ground out from under all the others; measured here as nine live sessions serving MCP out of `0.136.0` and `0.136.1` while only `0.137.0` still existed on disk. The guard that already existed for this (issue #219, which keeps a same-version repair from de-registering the current session's own skills) protected the session doing the work and no other. Claude Code reference-counts these directories itself: every session writes a `<versionDir>/.in_use/<pid>` marker and its own sweeper collects a directory only once no live marker remains, which is why two versions of the official plugins legitimately sit in the cache side by side. The rebuild now prunes through that contract and fails safe — an unreadable marker directory, an unparsable marker, or a half-written `.tmp` marker all count as in use, because over-retention costs one stale folder that the sweeper collects later, while under-retention breaks every other open session. `versionChanged` is no longer a pruning criterion; one rule now covers the same-version repair and a version upgrade alike.
+
 ## [0.137.0] — 2026-09-01
 
 ### Fixed
