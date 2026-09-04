@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.team.changelog
- * @version 0.2.0
+ * @version 0.3.0
  * @event SessionStart
  * @plugin devops
  * @description Show a summary of changes made by other contributors on remote main
@@ -24,6 +24,26 @@ function run(cmd, cwd, timeout = 15000) {
     return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout }).trim();
   } catch {
     return '';
+  }
+}
+
+/**
+ * Run a command for its EXIT STATUS, not its output.
+ *
+ * `run()` cannot express "succeeded silently": it returns '' for both a clean
+ * `--quiet` success and a hard failure. The fetch below used to be written as
+ * `!run('git fetch … --quiet') && run('git fetch …')`, so the first (always
+ * empty) result made the second fetch unconditional — every session paid for
+ * two network round trips inside the MCP connect window (#324).
+ *
+ * @returns {boolean} true when the command exited 0
+ */
+function runOk(cmd, cwd, timeout = 15000) {
+  try {
+    execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout });
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -59,9 +79,11 @@ const mainBranch = (
     .replace('refs/remotes/origin/', '') || 'main'
 );
 
-// Fetch latest remote state (only the main branch, quiet)
-if (!run(`git fetch origin ${mainBranch} --quiet`, cwd) && run(`git fetch origin ${mainBranch}`, cwd) === '') {
-  // fetch may return empty on success — continue regardless
+// Fetch latest remote state (only the main branch, quiet). Exactly ONE attempt:
+// a failed fetch just means the log below reads slightly stale refs, which is a
+// far better trade than a second network round trip at session start.
+if (!runOk(`git fetch origin ${mainBranch} --quiet`, cwd)) {
+  process.stderr.write('[ss.team.changelog] fetch failed — reading possibly stale remote refs\n');
 }
 
 // Get local user identity

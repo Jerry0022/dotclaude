@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-ship-mcp
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description MCP server with five ship pipeline tools:
  *   - ship_preflight    — pre-flight safety checks
@@ -9,6 +9,7 @@
  *   - ship_version_bump — bump + verify all version files
  *   - ship_release      — commit, push, PR, merge, tag, release
  *   - ship_cleanup      — delete branch, prune worktrees
+ *   - health_check      — boot diagnostics (#324)
  *
  *   Registered in plugin.json → started automatically by Claude Code.
  *   Stdout is the JSON-RPC wire — all logging goes to stderr.
@@ -16,6 +17,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
 import { register as registerHeartbeat } from "../lib/heartbeat.js";
 
 import { schema as preflightSchema, handler as preflightHandler } from "./tools/preflight.js";
@@ -25,10 +27,16 @@ import { schema as releaseSchema, handler as releaseHandler } from "./tools/rele
 import { schema as promoteSchema, handler as promoteHandler } from "./tools/promote.js";
 import { schema as cleanupSchema, handler as cleanupHandler } from "./tools/cleanup.js";
 
+const SERVER_NAME = "dotclaude-ship";
+const SERVER_VERSION = "0.2.0";
+
 const server = new McpServer({
-  name: "dotclaude-ship",
-  version: "0.1.0",
+  name: SERVER_NAME,
+  version: SERVER_VERSION,
 });
+
+// Set once the stdio transport is live — see the boot block at the bottom.
+let bootMs = null;
 
 function registerTool(name, title, description, schema, handler) {
   server.registerTool(
@@ -49,6 +57,23 @@ function registerTool(name, title, description, schema, handler) {
     }
   );
 }
+
+registerTool(
+  "health_check",
+  "Health Check",
+  "Boot diagnostics for this MCP server: which build answered, from which working directory, " +
+  "and how long it took from process start to a live stdio transport. " +
+  "Use when diagnosing MCP CONNECT_TIMEOUT at session start.",
+  z.object({}),
+  async () => ({
+    server: SERVER_NAME,
+    version: SERVER_VERSION,
+    cwd: process.cwd(),
+    bootMs,
+    node: process.version,
+    depsResolved: true,
+  }),
+);
 
 registerTool(
   "ship_preflight",
@@ -108,8 +133,19 @@ registerTool(
   cleanupHandler,
 );
 
-// Connect and start
+// ---------------------------------------------------------------------------
+// Start — connect FIRST, then everything else (#324 boot discipline)
+// ---------------------------------------------------------------------------
+
 const transport = new StdioServerTransport();
-await server.connect(transport);
-registerHeartbeat("dotclaude-ship");
-console.error("[dotclaude-ship-mcp] Server started on stdio");
+try {
+  await server.connect(transport);
+} catch (e) {
+  // A hung server is worse than an absent one: Claude Code waits out the full
+  // connect window before it gives up. Fail loud and fast instead.
+  console.error(`[${SERVER_NAME}-mcp] connect failed:`, e && e.message);
+  process.exit(1);
+}
+bootMs = Math.round(process.uptime() * 1000);
+registerHeartbeat(SERVER_NAME);
+console.error(`[${SERVER_NAME}-mcp] Server started on stdio (boot ${bootMs}ms)`);
