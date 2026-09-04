@@ -155,6 +155,7 @@
   var fabButton = mk("button", "fab");
   fabButton.type = "button";
   fabButton.setAttribute("aria-label", "Claude Guide");
+  fabButton.title = "Claude Guide – Schritt anzeigen";
   fabButton.setAttribute("aria-expanded", "false");
   var badge = mk("span", "badge");
   fabButton.appendChild(badge);
