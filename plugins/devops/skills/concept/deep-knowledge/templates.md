@@ -67,6 +67,8 @@ must see their own language. The locale hint is authoritative.
 | `panel.frozen`                 | Frozen iteration               | Eingefrorene Iteration |
 | `panel.frozen_hint`            | You are reading an earlier round. It is read-only — its decisions were already submitted. | Du liest eine frühere Runde. Sie ist schreibgeschützt — ihre Entscheidungen wurden bereits übermittelt. |
 | `panel.frozen_back`            | Back to the current round      | Zurück zur aktuellen Runde |
+| `frozen.bar_hint`              | · earlier round, read-only     | · frühere Runde, schreibgeschützt |
+| `frozen.bar_back`              | Go to current round            | Zur aktuellen Runde |
 | `panel.connecting_title`       | Claude is connecting           | Claude verbindet sich |
 | `panel.connected_title`        | Claude connected               | Claude verbunden |
 | `panel.disconnected_title`     | Claude not connected           | Claude nicht verbunden |
@@ -519,17 +521,33 @@ the `[ui-locale: ...]` hint produced.
     </aside>
   </div>
 
-  <!-- Submitted-state content dimmer (all templates).
-       After a submit, body.content-dimmed flips this on. The dimmer covers
-       the content area and directs focus to the decision panel / FAB. The
-       panel + FABs are above z-index 50 so they paint over the dimmer and
-       stay visually clear and clickable. The dimmer itself is click-to-
-       dismiss; otherwise it auto-clears on the next page reload (new
-       iteration / final report) because `content-dimmed` is not persisted. -->
+  <!-- Content dimmer (all templates) — two jobs, one element.
+       (1) Submitted-state focus shifter: after a submit, body.content-dimmed
+       flips this on so the user's focus lands on the decision panel / FAB.
+       (2) Frozen veil: showIteration() re-arms it on EVERY entry into a
+       non-live tab, locking the past round behind the same overlay. In both
+       roles the panel + FABs sit above z-index 50 and stay clickable, and the
+       dimmer is click/Escape-to-dismiss. The submit role auto-clears on the
+       next reload (`content-dimmed` is not persisted); the veil role comes
+       back on the next tab switch, so at most the one past round on screen is
+       ever unlocked. -->
   <div class="content-dimmer" id="content-dimmer"
        role="button" tabindex="-1"
        aria-label="{{panel.dim_dismiss}}"
        title="{{panel.dim_dismiss}}" hidden></div>
+
+  <!-- Frozen-iteration floating bar (all templates). Page-level chrome, so it
+       lives OUTSIDE section[data-iteration], next to the dimmer. showIteration()
+       unhides it on every non-live tab and fills [data-frozen-bar-title] with
+       that tab's chip label. It exists because the veil is lifted by reflex:
+       once the dimmer is clicked away, nothing on the page says "this is an
+       earlier round" except the small chip highlight in the panel — and the
+       live chip is not always the last one. Its button is the second way back
+       to the live round (#back-to-live-btn in #panel-frozen is the first). -->
+  <div class="frozen-bar" id="frozen-bar" role="status" hidden>
+    <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>Iteration 1</strong> {{frozen.bar_hint}}</span>
+    <button type="button" id="frozen-bar-back">{{frozen.bar_back}}</button>
+  </div>
 
   <script type="application/json" id="concept-decisions">
     {"submitted": false, "decisions": [], "comments": []}
@@ -1907,11 +1925,17 @@ it today.
     </aside>
   </div>
 
-  <!-- Shared content dimmer — see Common Structure for behavior + CSS. -->
+  <!-- Shared content dimmer + frozen bar — see Common Structure for
+       behavior + CSS. Both are page-level chrome and MUST be copied verbatim:
+       showIteration() drives them regardless of template. -->
   <div class="content-dimmer" id="content-dimmer"
        role="button" tabindex="-1"
        aria-label="{{panel.dim_dismiss}}"
        title="{{panel.dim_dismiss}}" hidden></div>
+  <div class="frozen-bar" id="frozen-bar" role="status" hidden>
+    <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>Iteration 1</strong> {{frozen.bar_hint}}</span>
+    <button type="button" id="frozen-bar-back">{{frozen.bar_back}}</button>
+  </div>
 </body>
 </html>
 ```
@@ -5175,11 +5199,17 @@ bi-state. Claude chooses the structure that fits the content.
     </aside>
   </div>
 
-  <!-- Shared content dimmer — see Common Structure for behavior + CSS. -->
+  <!-- Shared content dimmer + frozen bar — see Common Structure for
+       behavior + CSS. Both are page-level chrome and MUST be copied verbatim:
+       showIteration() drives them regardless of template. -->
   <div class="content-dimmer" id="content-dimmer"
        role="button" tabindex="-1"
        aria-label="{{panel.dim_dismiss}}"
        title="{{panel.dim_dismiss}}" hidden></div>
+  <div class="frozen-bar" id="frozen-bar" role="status" hidden>
+    <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>Iteration 1</strong> {{frozen.bar_hint}}</span>
+    <button type="button" id="frozen-bar-back">{{frozen.bar_back}}</button>
+  </div>
 </body>
 </html>
 ```
@@ -5581,6 +5611,58 @@ body.content-dimmed .content-dimmer:not([hidden]) {
 .content-dimmer:focus-visible {
   outline: 2px solid var(--accent-color, #58a6ff);
   outline-offset: -4px;
+}
+
+/* Frozen-iteration floating bar — shown by showIteration() on every non-live
+   tab, together with the re-armed dimmer (the "veil"). The veil is what gets
+   clicked away by reflex; the bar is what still says "you are in history"
+   afterwards, so it deliberately uses the WARNING tint rather than the muted
+   history colour of .frozen-indicator — being overlooked is the failure mode
+   it exists to fix. Sits above the dimmer (50) and the design chrome sharing
+   its band (switcher 95, anno pill 96), below the FABs (100), the panel
+   backdrop (150) and the panel itself. */
+.frozen-bar {
+  position: fixed; top: 0.75rem; left: 50%; transform: translateX(-50%);
+  z-index: 97;
+  box-sizing: border-box;
+  display: flex; align-items: center; gap: 0.6rem;
+  max-width: min(560px, calc(100vw - 2rem));
+  padding: 0.4rem 0.45rem 0.4rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--warning-color, #d29922);
+  background: color-mix(in srgb, var(--warning-color, #d29922) 16%, var(--panel-bg, #161b22));
+  color: var(--text-color, #c9d1d9);
+  font-size: 0.82rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.frozen-bar[hidden] { display: none; }
+.frozen-bar-text {
+  min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.frozen-bar-text strong { color: var(--text-color, #c9d1d9); }
+.frozen-bar button {
+  flex-shrink: 0;
+  padding: 0.3rem 0.75rem; border-radius: 999px; border: none;
+  background: var(--accent-color, #58a6ff); color: #fff;
+  font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.frozen-bar button:hover { filter: brightness(1.12); }
+.frozen-bar button:focus-visible {
+  outline: 2px solid var(--accent-color, #58a6ff);
+  outline-offset: 2px;
+}
+/* Design template: the top-centre band at 0.75rem belongs to .design-switcher.
+   Drop into the row below it (same 3.75rem derivation as .anno-toggle-fab)
+   and stay inside the switcher's 34vw width band, so the bar can never run
+   into the screen-indicator column on the left or the ☰ FAB on the right —
+   the same geometry contract every other piece of design chrome follows. */
+html[data-template="design"] .frozen-bar {
+  top: 3.75rem;
+  max-width: min(34vw, 560px);
 }
 
 /* Submitted state */
@@ -7374,6 +7456,16 @@ function hideContentDimmer() {
   if (dim) dim.hidden = true;
   document.body.classList.remove('content-dimmed');
 }
+// Frozen veil — the same overlay doubles as the lock over a past iteration.
+// showIteration() calls this on EVERY entry into a non-live tab, so a veil the
+// user lifted (click / Escape) comes back the moment they switch tabs: at most
+// the one past round currently on screen is ever unlocked, and switching to
+// the live tab hides the dimmer instead (see showIteration), so from the live
+// round every past round is locked again.
+function lockFrozenView() {
+  document.body.classList.add('content-dimmed');
+  showContentDimmer();
+}
 document.getElementById('content-dimmer')
   ?.addEventListener('click', hideContentDimmer);
 // Keyboard escape — keyboard-only users can't click the dimmer, so let
@@ -8322,6 +8414,21 @@ function showIteration(n) {
   }
   if (panelFinal) panelFinal.style.display = isFinal ? 'block' : 'none';
   if (panelFrozen) panelFrozen.style.display = isLive ? 'none' : 'block';
+  // Frozen veil + floating bar. Every entry into a non-live tab RE-LOCKS the
+  // round behind the shared content dimmer (lockFrozenView), so at most the
+  // one past round on screen can be unlocked and any tab switch — to another
+  // past round or back to the live one — relocks it. The bar stays up after
+  // the user lifts the veil: the veil is clicked away by reflex, the bar is
+  // what still tells them they are in history. On the live tab the dimmer is
+  // hidden (a veil lifted on a past round must not reappear over the live one).
+  const frozenBar = document.getElementById('frozen-bar');
+  if (frozenBar) {
+    frozenBar.hidden = !!isLive;
+    const title = frozenBar.querySelector('[data-frozen-bar-title]');
+    const tab = document.querySelector('.iteration-tab[data-iteration="' + n + '"]');
+    if (title) title.textContent = tab ? tab.textContent.trim() : String(n);
+  }
+  if (isLive) hideContentDimmer(); else lockFrozenView();
   if (typeof buildSectionNav === 'function') buildSectionNav();
   if (typeof refreshFinalizeWizard === 'function') refreshFinalizeWizard({ reset: true });
   document.dispatchEvent(new CustomEvent('iteration:changed'));
@@ -8331,13 +8438,18 @@ document.querySelectorAll('.iteration-tab').forEach(tab => {
   tab.addEventListener('click', () => showIteration(tab.dataset.iteration));
 });
 
-// The frozen panel's way back. Without it the only exit from a past tab is to
-// spot which chip is the live one — and the live tab is not always the last
-// chip (the final report is), so guessing is a real failure mode.
-document.getElementById('back-to-live-btn')?.addEventListener('click', () => {
+// The way back to the live round. Without it the only exit from a past tab is
+// to spot which chip is the live one — and the live tab is not always the last
+// chip (the final report is), so guessing is a real failure mode. Two entry
+// points, one target: the panel's #back-to-live-btn and the floating
+// #frozen-bar-back (the bar sits over the content, where the user's eyes are
+// after they lift the veil — the panel link alone was too easy to miss).
+function goToLiveIteration() {
   const live = document.querySelector('section[data-iteration][data-active]');
   if (live) showIteration(live.dataset.iteration);
-});
+}
+document.getElementById('back-to-live-btn')?.addEventListener('click', goToLiveIteration);
+document.getElementById('frozen-bar-back')?.addEventListener('click', goToLiveIteration);
 
 document.addEventListener('DOMContentLoaded', () => {
   const active = document.querySelector('section[data-iteration][data-active]');

@@ -25,6 +25,20 @@ selections, read-only comments).
   which state the user submitted, read-only comment fields with the text
   the user entered. Users can click back to earlier tabs to review their
   own past feedback at any time.
+- **Veil + floating bar on every past tab (all templates).** Entering a
+  non-live tab locks it behind the shared `#content-dimmer` (the "veil";
+  `showIteration()` → `lockFrozenView()`) and unhides `#frozen-bar`, a fixed
+  top-centre pill reading "🕘 Iteration N · frühere Runde, schreibgeschützt"
+  with a `#frozen-bar-back` button to the live round. The veil is
+  click/Escape-to-lift so the round can be read in full; the bar stays up
+  after the lift — it is the signal that survives the reflex click. Lock
+  discipline: **every** tab switch relocks (another past round → that one is
+  veiled, the previous one is veiled again the next time it is opened; the
+  live round → the dimmer is hidden and every past round is locked). So at
+  most ONE past round is unlocked at any time, and zero while the live round
+  is shown. The bar is page-level chrome outside `section[data-iteration]`
+  and must be copied verbatim into every template skeleton (see templates.md
+  § Common Structure; gate entry 30b).
   - **Exemption for `design` iterations:** freezing must NOT disable
     navigation — the user still has to be able to revisit the mockups. The
     `disabled`-everything sweep MUST skip `.design-switch-item`,
