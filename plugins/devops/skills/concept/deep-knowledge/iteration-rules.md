@@ -201,3 +201,17 @@ This gate exists because hand-listed selectors written for iteration N
 will not pick up new fields introduced in iteration N+1, and the failure
 is silent: the user sees the panel turn green, but Claude receives a
 truncated payload.
+
+**2.6. Engine drift check.** Run `validation-gate.md` over the existing
+page before appending. The page's shared engine — Attachments JS/CSS,
+§ Layout CSS chrome rules, tab-switch JS — is a copy of whatever
+templates.md said on generation day, and every later round re-uses it
+unchanged. If any engine entry fails (44 attachments, 46 / 47 design-mode
+chrome, 48 scroll boxes, tab-switch), re-sync that whole block verbatim
+from templates.md FIRST, then append.
+
+Same shape of failure as 2.5, one level down: the defect is not in the
+iteration being added, it is in the machinery the iteration is being added
+to. Left alone it survives every update to the plugin, because nothing
+re-reads templates.md for an existing page unless this step does. See
+`validation-gate.md` § Engine drift on iteration append.

@@ -123,8 +123,20 @@ describe("concept templates reference — embedded code integrity", () => {
     while ((m = re.exec(md))) used.add(m[1]);
     expect(used.size).toBeGreaterThan(0);
 
+    // Ids the JS CREATES are exempt, and derived rather than listed: a
+    // `getElementById(x)` paired with a `node.id = x` in the same reference is
+    // an idempotence guard ("inject this once"), not a lookup of a mount the
+    // markup owes. Deriving it keeps the exemption honest — delete the
+    // creating assignment and the id lands back in `undeclared`.
+    const created = new Set();
+    const jsSource = jsBlocks.map((b) => b.code).join("\n");
+    const idRe = /\.id\s*=\s*['"]([A-Za-z0-9_-]+)['"]/g;
+    let c;
+    while ((c = idRe.exec(jsSource))) created.add(c[1]);
+
     const undeclared = [...used]
       .filter((id) => !(id in OPTIONAL_IDS))
+      .filter((id) => !created.has(id))
       .filter((id) => !htmlSource.includes(`id="${id}"`));
 
     // A missing mount point does not throw — the JS null-guards its lookups —

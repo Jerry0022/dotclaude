@@ -570,6 +570,15 @@ Rules:
 - The `<html data-template>` value written at generation time MUST already
   equal the active iteration's (normalised) template — otherwise the first
   paint shows the wrong layout.
+- **A page that started as `decision` or `free` keeps its document header**
+  (`<h1>`, subtitle, `#theme-toggle` inside `.concept-content > header`) and
+  its per-iteration `<header class="iteration-intro">` for the rest of its
+  life — a later `design` iteration must never delete them, or switching
+  back to an earlier round loses its own title. Design mode is
+  `position: absolute; inset: 0` and would paint straight over both, so it
+  HIDES them in CSS instead: see § Layout CSS → "Document chrome vs. the
+  fullscreen canvas" and the frozen-opacity exemption next to it. Both rules
+  are mandatory on any page that mixes design with decision/free.
 
 ---
 
@@ -1910,6 +1919,38 @@ it today.
 ## Layout CSS
 
 ```css
+/* ── Scroll boxes ───────────────────────────────────────────────────────
+   Deliberately UNSCOPED (the only rules in this section that are): these
+   three are the page's scrolling surfaces in EVERY template, and a
+   scrollbar skin changes no geometry, so scoping it to design mode would
+   only mean the decision/free iterations of the same page keep the raw
+   platform bar. The boxes need `overflow-y: auto` for legitimate reasons
+   (a dock taller than its max-height, a long panel TOC, a screen taller
+   than the safe area), but the default Windows/Chromium bar is an opaque
+   16px slab against a dark panel — measured on a real page as the single
+   loudest piece of chrome in a 430px dock. Thin + border-coloured thumb on
+   a transparent track reads as part of the panel instead. Both syntaxes:
+   `scrollbar-*` covers Firefox and modern Chromium, the `::-webkit-*`
+   pseudo-elements cover the older Chromium/WebKit that ignore it. */
+.feedback-dock,
+.concept-decision-panel,
+section[data-screen] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color, #30363d) transparent;
+}
+.feedback-dock::-webkit-scrollbar,
+.concept-decision-panel::-webkit-scrollbar,
+section[data-screen]::-webkit-scrollbar { width: 8px; }
+.feedback-dock::-webkit-scrollbar-thumb,
+.concept-decision-panel::-webkit-scrollbar-thumb,
+section[data-screen]::-webkit-scrollbar-thumb {
+  background: var(--border-color, #30363d);
+  border-radius: 4px;
+}
+.feedback-dock::-webkit-scrollbar-track,
+.concept-decision-panel::-webkit-scrollbar-track,
+section[data-screen]::-webkit-scrollbar-track { background: transparent; }
+
 /* EVERY rule below is scoped to html[data-template="design"]. That attribute
    is a projection of the ACTIVE iteration (see § Per-Iteration Templates), so
    flipping it flips the whole layout: a decision/free iteration on the same
@@ -1922,6 +1963,38 @@ html[data-template="design"],
 html[data-template="design"] body { height: 100%; overflow: hidden; }
 [data-template="design"] .concept-layout.design.fullscreen { display: block; width: 100vw; height: 100vh; overflow: hidden; }
 [data-template="design"] .concept-layout.design .concept-content { position: absolute; inset: 0; overflow: hidden; }
+
+/* ── Document chrome vs. the fullscreen canvas ──────────────────────────
+   A page may START as decision or free (§ Per-Iteration Templates), and
+   those templates put a `<header>` with the <h1>, the subtitle and the
+   #theme-toggle directly inside .concept-content, plus a
+   `<header class="iteration-intro">` at the top of every iteration section.
+   Both stay in NORMAL FLOW. Design mode then makes the iteration section
+   `position: absolute; inset: 0` — it paints OVER them instead of pushing
+   them aside, and the frozen-iteration opacity below let the h1 and the
+   intro shine through the mockup right under the fixed screen indicator
+   (measured at 1280x720: h1 at y=32, intro at y=0, indicator top-left, all
+   three overlapping and the page reading as "empty" after a ☰ switch).
+   Design mode owns the whole viewport, so the document header and the
+   per-iteration intro are hidden while it is active; flipping
+   `<html data-template>` back to decision/free brings both back, unchanged.
+   The theme toggle lives only in that header and is therefore gone in
+   design mode — accepted: the design template never had one of its own,
+   and the theme is a page-level preference set from any non-design
+   iteration (and persisted). Do NOT "solve" this by re-homing the toggle
+   into the design chrome: that reopens the FAB geometry rules (P13). */
+html[data-template="design"] .concept-content > header,
+html[data-template="design"] section[data-iteration] > .iteration-intro { display: none; }
+
+/* Frozen design iterations stay FULLY opaque. The generic
+   `section[data-iteration]:not([data-active]) { opacity: 0.85 }`
+   (§ Tab Bar CSS) is a legible "this round is history" cue for a sidebar
+   iteration in normal flow. On an absolute/inset:0 design section it is a
+   bleed-through instead: whatever is behind the canvas — the document
+   header, a sibling iteration's intro — shows through the mockup. Frozen
+   state is already communicated here by the panel's frozen state and the
+   read-only dock (applyDockFreezeState), so the opacity buys nothing. */
+html[data-template="design"] section[data-iteration]:not([data-active]) { opacity: 1; }
 
 /* ── Chrome safe area ───────────────────────────────────────────────────
    Every fixed control in design mode sits on the viewport's top or bottom
@@ -6368,7 +6441,21 @@ emitted directly after the textarea it belongs to. **Emit it that way** — a
 mount separated from its field, or one nested somewhere else in the row,
 silently reintroduces the stack. The same rule names `.attach-bar` for the
 mountless path, where `_mountAttachmentBar()` inserts the bar itself
-`afterend` of the textarea for exactly this reason. Hiding the bar is deliberately CSS-only:
+`afterend` of the textarea for exactly this reason.
+`ta.parentElement.appendChild(bar)` is the **forbidden legacy shape**: it
+drops the bar after everything else in the row, so it is no longer an
+adjacent sibling and no rule reaches it. A page that still contains it is
+stacking bars today and must have this whole block re-synced (§ Engine drift
+on iteration append in `validation-gate.md`).
+
+**The engine carries its own visibility CSS.** `initCommentAttachments()`
+calls `_ensureAttachStyles()` once, which injects
+`<style id="attach-visibility-styles">` with the two `textarea[hidden] + …`
+rules and `.attach-slot:empty` if that element is not on the page yet. The
+§ Layout CSS copy stays as well — belt and braces, the same argument as the
+`var()` fallbacks around `--chrome-safe-top`: this file is a REFERENCE that
+is copied in PIECES, and a page that took the JS without the Layout CSS rule
+would mount bars nothing ever hides. Hiding the bar is deliberately CSS-only:
 `showScreen()`/`showDesign()`/`showView()` must stay free to toggle nothing
 but `ta.hidden`, and the bar has to keep existing (and stay wired) while
 hidden so the attachments already on an inactive field are still there when
@@ -6591,6 +6678,24 @@ function _barFor(slotKey) {
   return document.querySelector('.attach-bar[data-attach-for="' + CSS.escape(slotKey) + '"]');
 }
 
+// The engine ships its own visibility CSS. § Layout CSS declares the same two
+// rules, and that copy stays — but this file is a REFERENCE that gets copied
+// in PIECES (same argument as the `var()` fallbacks on --chrome-safe-top): a
+// page that took the Attachments JS without the Layout CSS rule mounts bars
+// that nothing ever hides, and the dock renders one 📎 row per hidden field
+// stacked under the single visible textarea. Injected once, idempotent by id,
+// so an iteration append that re-runs the engine adds nothing.
+function _ensureAttachStyles() {
+  if (document.getElementById('attach-visibility-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'attach-visibility-styles';
+  style.textContent =
+    'textarea[hidden] + .attach-slot,' +
+    'textarea[hidden] + .attach-bar { display: none; }' +
+    '.attach-slot:empty { display: none; }';
+  (document.head || document.documentElement).appendChild(style);
+}
+
 // Resolves where a slot's bar lives: a dedicated .attach-slot mount when the
 // markup declares one (annotation answers, every dock-built textarea — see
 // § Layout JS), otherwise appended straight after the textarea (decision
@@ -6603,6 +6708,8 @@ function _mountAttachmentBar(ta, slotKey) {
   const dedicated = document.querySelector('.attach-slot[data-attach-slot="' + CSS.escape(slotKey) + '"]');
   if (dedicated) dedicated.appendChild(bar);
   // `afterend`, not parentElement.appendChild: the bar belongs to ITS field,
+  // and appending the bar onto `ta.parentElement` is the FORBIDDEN legacy
+  // shape — a page still carrying it stacks bars and must be re-synced here,
   // and appending to the container drops it after whatever else the row holds
   // — far from the textarea, and out of reach of the
   // `textarea[hidden] + .attach-bar` rule that hides it with its field.
@@ -6633,6 +6740,7 @@ function attachFileIcon(mime, name) {
 }
 
 function initCommentAttachments() {
+  _ensureAttachStyles();
   document.querySelectorAll('textarea[data-attachable]').forEach(ta => {
     const slotKey = _slotKeyOf(ta);
     if (!slotKey) return;
