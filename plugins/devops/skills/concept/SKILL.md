@@ -517,7 +517,10 @@ signal Claude monitors.
    reveal `#content-dimmer` so the content area visually fades. The decision
    panel + FABs sit at higher z-index and stay clear + interactive. The
    dimmer is click-to-dismiss; otherwise it auto-clears on the next page
-   reload (next iteration / final report).
+   reload (next iteration / final report). The same dimmer doubles as the
+   **frozen veil**: `showIteration()` re-arms it on every non-live tab and
+   shows the `#frozen-bar` floating pill with a back-to-live button (see
+   `deep-knowledge/iteration-rules.md` § Rules, "Veil + floating bar").
 5. Switch the decision panel from "ready" to "submitted" state — showing a
    clear "Entscheidungen übermittelt" indicator with a hint to switch to the
    Claude chat (see `deep-knowledge/templates.md` § Submit Handler)

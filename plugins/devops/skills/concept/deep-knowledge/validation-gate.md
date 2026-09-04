@@ -37,7 +37,7 @@ no legitimate matches — do not "keep it as a convenience". The decision panel
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 52 patterns, regardless of template
+Every concept page must contain these 53 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -75,7 +75,8 @@ related one — count the rows, not the highest number):
 | 28 | `panel-final-report` | Final-report panel element. Auto-shown by `showIteration()` when the active section carries `data-final-report`; replaces `panel-ready` (no iterate/implement buttons). |
 | 28b | `panel-frozen` | Frozen panel state, shown on every non-live iteration tab. `showIteration()` switches to it unconditionally, so a page without it loses the panel's whole lower half whenever the user reviews an earlier round — no controls, no explanation, and no way back to the live tab except guessing which chip it is. Must include the `#back-to-live-btn`. |
 | 29 | `refreshFinalizeWizard({ reset: true })` — grep the CALL, not the symbol | Recomputes the close-out wizard's step list (the issues step exists only while the active section has un-routed `[data-open-questions]` checkboxes) and re-renders. The call must appear inside `showIteration()` so a tab switch restarts the flow at step 1. A page that defines the function but never calls it passes a symbol-only grep and renders a wizard that never updates. |
-| 30 | `content-dimmer` | Shared post-submit focus overlay. After a submit, `body.content-dimmed` flips it on; the decision panel + FABs sit at higher z-index and paint above it. Click-to-dismiss; auto-clears on page reload. See `templates.md` § Common Structure (HTML) and § Decision Panel State CSS for the reference implementation. |
+| 30 | `content-dimmer` | Shared post-submit focus overlay AND frozen veil. After a submit, `body.content-dimmed` flips it on; `showIteration()` re-arms it via `lockFrozenView()` on every entry into a non-live tab (so at most the one past round on screen is ever unlocked, and every tab switch relocks). The decision panel + FABs sit at higher z-index and paint above it. Click/Escape-to-dismiss; the submit role auto-clears on page reload. See `templates.md` § Common Structure (HTML) and § Decision Panel State CSS for the reference implementation. |
+| 30b | `frozen-bar` (the element) AND `lockFrozenView` (the CALL inside `showIteration()`) | Frozen-iteration floating bar + veil relock. The bar is page-level chrome (outside `section[data-iteration]`, next to the dimmer) that `showIteration()` unhides on every non-live tab with the tab's chip label in `[data-frozen-bar-title]` and a `#frozen-bar-back` button to the live round. Without it, lifting the veil leaves nothing on screen that says "this is an earlier round" — users click the veil away by reflex and then read history as the live page. Without the `lockFrozenView()` call, a lifted veil stays lifted across tab switches and several past rounds end up unlocked at once. Both halves ENGINE entries — see § Engine drift on iteration append. |
 | 31 | `ensureCommentSlots` | Auto-injects an adjacent `<textarea data-comment="$decisionId-note">` for every `[data-decision]` bi-state group that lacks one. MUST be called from `DOMContentLoaded` BEFORE `restoreState` so the restore step rehydrates the typed values onto real nodes. See templates.md § Comment Slot Injection. |
 | 32 | `panel-dispose-concept` | Disposition fieldset — the wizard's `files` step. Carries the discard / keep / gitignore radio group + optional `moveTo` input. See templates.md § Disposition Control. |
 | 33 | `renderWizard` | Renders exactly one wizard step, the `Schritt n/m` counter, and the back/next/execute button set. Missing → every step renders at once and the flow is back to the wall of buttons the wizard replaced. |
@@ -157,8 +158,9 @@ keeps the old defect through every later round, and the user reports "still
 to twice since.
 
 Before appending, run the gate over the existing HTML. When any ENGINE entry
-fails — 44 (attachments), 46 / 47 (design-mode chrome), 48 (scroll boxes),
-or the tab-switch patterns — re-sync that whole shared block **verbatim from
+fails — 30b (frozen bar + veil relock), 44 (attachments), 46 / 47
+(design-mode chrome), 48 (scroll boxes), or the tab-switch patterns —
+re-sync that whole shared block **verbatim from
 templates.md** BEFORE the new section goes in. Re-sync the block, not the one
 line the grep flagged: these blocks fail in halves, and a page missing one
 literal is a page carrying a stale copy of everything around it. Appending
