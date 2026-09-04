@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.139.1] — 2026-09-04
+
+### Fixed
+
+- **A `/concept` page still stacked one 📎 attachment bar per hidden dock field after the fix that was meant to end it, scrolled the dock behind a raw platform scrollbar, and let the page header shine through frozen design iterations.** Measured on a real four-iteration page: twelve visible attachment bars for three visible textareas, 1062px of dock content in a 430px box, and the document `<h1>` plus the iteration intro painted through the mockup right under the screen indicator after every ☰ switch. Three causes. The page's attachment engine predated the earlier fix (`parentElement.appendChild(bar)`, no `.attach-bar` half in the hiding rule) and still *passed* the validation gate, because entry 44 grepped a single literal that the page happened to contain; and an iteration append re-uses the page's existing engine forever, so the defect survived every later round of the same concept. In design mode a page that started as a decision round keeps its document header and each iteration's intro in normal flow while the design section paints over them `position: absolute; inset: 0` — and the generic frozen-iteration `opacity: 0.85` turned that into bleed-through.
+
+  The attachment engine now injects its own visibility CSS once (`#attach-visibility-styles`), so a page that copies the JavaScript without the layout rule still hides a bar with its field. Gate entry 44 requires both hiding literals, the `afterend` mount and the injected style, and rejects the legacy `parentElement.appendChild(bar)` and `attach-hint` shapes; new entries 46 and 47 pin the design-mode rules that hide the document header and intro and keep a frozen design iteration fully opaque, and entry 48 warns on a missing scrollbar skin. The three scroll boxes (`.feedback-dock`, `.concept-decision-panel`, `section[data-screen]`) carry a thin border-coloured scrollbar in every template. Step 5c of the skill gains an **engine drift check** before every append: the gate runs over the whole existing page and any failing shared block is re-synced from the reference before the new iteration lands — so a page generated before a template fix picks the fix up on its next round instead of never.
+
 ## [0.139.0] — 2026-09-04
 
 Backlog run 2026-09-03/04 (PR #325, eight issues). The plugin's own ship server was unreachable while this work was made — the very defect fixed first below — so the eight fixes landed as one integration PR and this entry versions them.
