@@ -74,6 +74,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.empty_iterate_confirm`  | Nothing was changed. Submit "Next iteration" anyway? | Du hast nichts geändert. Trotzdem "Zur nächsten Iteration" absenden? |
 | `panel.empty_implement_confirm`| Nothing was changed. Implement with feedback anyway? Claude will still write code. | Du hast nichts geändert. Trotzdem mit Feedback implementieren? Claude schreibt dann Code. |
 | `panel.toggle_open`            | Open decisions                 | Entscheidungen öffnen |
+| `panel.toggle_close`           | Close decisions                | Entscheidungen schliessen |
 | `panel.close`                  | Close                          | Schliessen |
 | `panel.minimize`               | Minimize                       | Minimieren |
 | `panel.dim_dismiss`            | Dismiss overlay                | Schimmer entfernen |
@@ -1675,13 +1676,29 @@ it today.
     </nav>
 
     <!-- Two FABs — the only floating UI besides the screen itself.
-         The 💬 FAB carries two labels: the dock toggle swaps aria-label
-         between them based on aria-expanded so screen-reader users
-         always hear the correct next action ("Open" vs "Minimize"). -->
-    <button id="panel-toggle" class="panel-fab" aria-label="{{panel.toggle_open}}">☰</button>
+         BOTH carry two labels: the toggle swaps `title` AND `aria-label`
+         together with `aria-expanded`, so pointer users get a hover tooltip
+         and screen-reader users hear the correct NEXT action ("Open" vs
+         "Minimize"). The labels are tooltip-only on purpose — an unlabelled
+         emoji circle is undiscoverable, but a visible pill would break the
+         shared 60px circle geometry the two FABs are pinned to (gate P13).
+         Every label string comes from the locale table; never bake English
+         (or "Feedback") in here.
+         `data-untouched` on the 💬 FAB drives a one-shot attention pulse
+         (§ Layout CSS) that the JS clears on the first dock open or the
+         first keystroke inside the dock — a returning user is never nagged
+         twice. -->
+    <button id="panel-toggle" class="panel-fab"
+            aria-label="{{panel.toggle_open}}"
+            title="{{panel.toggle_open}}"
+            aria-expanded="false"
+            data-label-open="{{panel.toggle_open}}"
+            data-label-close="{{panel.toggle_close}}">☰</button>
     <button id="feedback-toggle" class="feedback-fab"
             aria-label="{{proto.feedback_toggle}}"
+            title="{{proto.feedback_toggle}}"
             aria-expanded="false"
+            data-untouched="true"
             data-label-open="{{proto.feedback_toggle}}"
             data-label-close="{{panel.minimize}}">💬</button>
 
@@ -2412,6 +2429,30 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
    open so the user can toggle it back closed via the same FAB. */
 .panel-fab.hidden { opacity: 0; pointer-events: none; }
 
+/* ── One-shot attention pulse on the 💬 FAB ──
+   The dock is where every note is written, and an unlabelled emoji circle in
+   a corner is genuinely missable — so the FAB announces itself exactly three
+   times, then never again: the JS strips `data-untouched` on the first dock
+   open OR the first keystroke inside the dock, so a returning user is not
+   nagged. It is `animation`, not a class, so it costs nothing once the
+   attribute is gone.
+   Geometry is OFF LIMITS here (gate P13): box-shadow and transform ONLY, no
+   width/height/border-radius/padding — those live in the shared
+   .panel-fab/.feedback-fab rule and the two FABs must stay one component.
+   transform: scale() also composes with the :hover scale rather than
+   fighting it, since both write the same property and hover wins by
+   source order while pointing. */
+@keyframes fabPulse {
+  0%, 100% { transform: scale(1);    box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  50%      { transform: scale(1.12); box-shadow: 0 4px 12px rgba(0,0,0,0.3), 0 0 0 12px rgba(88,166,255,0.18); }
+}
+.feedback-fab[data-untouched="true"] { animation: fabPulse 2.6s ease-in-out 3; }
+@media (prefers-reduced-motion: reduce) {
+  /* No substitute cue: the tooltip is the discoverability path that does not
+     move, and it is present either way. */
+  .feedback-fab[data-untouched="true"] { animation: none; }
+}
+
 .panel-close-btn,
 .feedback-close-btn {
   align-self: flex-end;
@@ -2936,12 +2977,15 @@ built once per iteration by `buildScreenTextareas()` — never per design
 switch. Switching design or page only flips `hidden`; no node is ever
 destroyed. This is load-bearing in three ways:
 
-1. Values survive a design switch. `restoreState()` runs once on
-   `DOMContentLoaded` and is never re-invoked, so a node destroyed later is
-   never rehydrated.
-2. `saveState()` serialises only nodes present in the DOM — destroying a
-   textarea would DELETE its `text:{screen-id}` localStorage key on the next
-   input event, making the note unrecoverable rather than merely invisible.
+1. Values survive a design switch. `restoreState()` is re-invoked only at the
+   two points where the dock is (re)built — the design IIFE's own
+   `DOMContentLoaded` handler and `iteration:changed` — so a node destroyed
+   at any other moment is never rehydrated.
+2. `saveState()` serialises only nodes present in the DOM. It merges its scan
+   over the previously stored blob (see § State Persistence), so a destroyed
+   textarea no longer DELETES its `text:{screen-id}` key — but the note is
+   still invisible and unsubmittable until a node with that `data-comment`
+   exists again, and `collectDesignDecisions()` reads the DOM, not storage.
 3. `collectDesignDecisions()` scans the dock; only a dock holding all designs'
    screens produces a complete `comments.screens` payload.
 
@@ -3104,7 +3148,14 @@ change) via `harvestDockValues()`.
         btn.innerHTML = `<span><span class="screen-idx">${idx + 1}.</span>${sec.dataset.navLabel || sec.id}</span>
           <span class="has-notes" data-note-marker></span>`;
         btn.addEventListener('click', () => {
-          if (d !== active) showDesign(d.dataset.design, sec.id);
+          // Resolve the active design at CLICK time. buildDesignUI() only
+          // runs on iteration:changed / DOMContentLoaded, never on a design
+          // switch, so the build-time `active` above goes stale the moment
+          // the ghost bar is used — and a stale `d === active` sends a
+          // FOREIGN screen id into showScreen(), which then hides every
+          // screen of the design actually on the canvas (blank page).
+          const cur = activeDesign();
+          if (!cur || cur.dataset.design !== d.dataset.design) showDesign(d.dataset.design, sec.id);
           else showScreen(sec.id);
           closePanel();
         });
@@ -3751,6 +3802,13 @@ change) via `harvestDockValues()`.
     const design = activeDesign();
     if (!design) return;
     const screens = design.querySelectorAll('section[data-screen][id]');
+    // Membership guard. `hidden = s.id !== id` is a blanket hide when NO
+    // screen carries `id` — one foreign id (a nav entry of another design, a
+    // stale deep link, a restored state pointing at a deleted screen) empties
+    // the canvas with no error anywhere. Fall back to the design's first
+    // screen instead: something always paints.
+    if (!screens.length) return;
+    if (![...screens].some(s => s.id === id)) id = screens[0].id;
     let idx = 0;
     screens.forEach((s, i) => {
       const match = s.id === id;
@@ -3909,12 +3967,31 @@ change) via `harvestDockValues()`.
     panel?.classList.add('open');
     backdrop?.classList.add('visible');
     panelToggle?.classList.add('hidden');
+    // Tooltip + a11y label name the NEXT action, exactly like the 💬 FAB
+    // below. Written inline (no shared helper) because both labels are read
+    // off the button's own dataset — the locale substitution happened once,
+    // at generation time, in the markup.
+    if (panelToggle) {
+      panelToggle.setAttribute('aria-expanded', 'true');
+      const lbl = panelToggle.dataset.labelClose;
+      if (lbl) { panelToggle.setAttribute('aria-label', lbl); panelToggle.title = lbl; }
+    }
     document.body.classList.add('panel-open');
     // Only re-home focus that the dock just lost — never steal it from a
     // pointer user who was not typing anywhere.
     if (fromDock) panelCloseBtn?.focus();
   };
-  window.closePanel = () => { panel?.classList.remove('open'); backdrop?.classList.remove('visible'); panelToggle?.classList.remove('hidden'); document.body.classList.remove('panel-open'); };
+  window.closePanel = () => {
+    panel?.classList.remove('open');
+    backdrop?.classList.remove('visible');
+    panelToggle?.classList.remove('hidden');
+    if (panelToggle) {
+      panelToggle.setAttribute('aria-expanded', 'false');
+      const lbl = panelToggle.dataset.labelOpen;
+      if (lbl) { panelToggle.setAttribute('aria-label', lbl); panelToggle.title = lbl; }
+    }
+    document.body.classList.remove('panel-open');
+  };
   panelToggle?.addEventListener('click', openPanel);
   panelCloseBtn?.addEventListener('click', closePanel);
   backdrop?.addEventListener('click', closePanel);
@@ -3941,6 +4018,7 @@ change) via `harvestDockValues()`.
     dock.dataset.open = 'true';
     dockToggle.setAttribute('aria-expanded', 'true');
     dockToggle.setAttribute('aria-label', LABEL_CLOSE);
+    dockToggle.title = LABEL_CLOSE;
   }
   // `handOff` = the dock is closing because the panel is taking over. Then
   // the FAB must NOT be focused: it sits at z-index 220, above the panel
@@ -3953,13 +4031,22 @@ change) via `harvestDockValues()`.
     dock.dataset.open = 'false';
     dockToggle.setAttribute('aria-expanded', 'false');
     dockToggle.setAttribute('aria-label', LABEL_OPEN);
+    dockToggle.title = LABEL_OPEN;
     if (focusWasInside) dockToggle.focus();
   }
   window.closeDock = closeDock;
+  // The one-shot pulse (§ Layout CSS) ends the moment the user proves they
+  // found the FAB. Two independent proofs, because either can come first:
+  // opening the dock from the FAB, or typing into it (a restored session can
+  // land with the dock already open, and closeDock() is also reached by the
+  // panel hand-off, which proves nothing about the dock).
+  const stopFabPulse = () => dockToggle.removeAttribute('data-untouched');
   dockToggle.addEventListener('click', () => {
+    stopFabPulse();
     if (dock.dataset.open === 'true') closeDock();
     else openDock();
   });
+  dock.addEventListener('input', stopFabPulse);
   dockClose.addEventListener('click', closeDock);
 
   // Maximise/restore (Work package B) — a RESIZE, never a close. Distinct
@@ -4100,6 +4187,26 @@ change) via `harvestDockValues()`.
 
   document.addEventListener('DOMContentLoaded', () => {
     buildDesignUI();
+    // IMMEDIATELY after the rebuild and BEFORE showView()/showScreen(): the
+    // dock textareas exist only NOW, and buildDesignUI() created them EMPTY.
+    // showScreen() ends in saveState(), and saveState()'s merge cannot protect
+    // a key whose node IS present — it would serialise those empty textareas
+    // straight over the stored notes, and the restore further down would then
+    // read the blob it had just blanked. Measured in a browser: one reload
+    // emptied `text:{screen-id}` for good.
+    // § State Persistence's own DOMContentLoaded listener is not guaranteed to
+    // run before this one (the same unguaranteed ordering applyDockSize()
+    // already works around), so its restoreState() may have scanned a dock
+    // that did not exist yet, written nothing, and it never re-runs on its
+    // own. Re-restoring here is safe: restoreState() is idempotent (it only
+    // assigns values off the same stored blob) and no user input can have
+    // happened before DOMContentLoaded.
+    // Also deliberately BEFORE primeDock(): on a frozen tab
+    // applyDockFreezeState() stashes the live values into liveDockValues and
+    // paints the frozen blob over them, so restoring afterwards would clobber
+    // the frozen view and lose the stash.
+    if (typeof restoreState === 'function') restoreState();
+    if (typeof updateNoteMarkers === 'function') updateNoteMarkers();
     const active = document.querySelector('section[data-iteration][data-active]');
     if (active) {
       // Work package C — restore an active VIEW first. Defensive by
@@ -4133,9 +4240,9 @@ change) via `harvestDockValues()`.
     }
     updateIndicator();
     document.addEventListener('input', updateNoteMarkers);
-    // Runs last, once buildDesignUI() has set the body[data-single-*] flags
-    // applyDockSize() reads. The dock stays closed — priming only syncs its
-    // field state and its size.
+    // Runs after the restore above, once buildDesignUI() has set the
+    // body[data-single-*] flags applyDockSize() reads. The dock stays closed —
+    // priming only syncs its field state and its size.
     primeDock();
     // The stage showScreen() just built cloned the mock BEFORE restoreState()
     // ran: that listener lives in a later block and therefore fires after this
@@ -4186,6 +4293,20 @@ change) via `harvestDockValues()`.
       });
     }
     buildDesignUI();
+    // buildDesignUI() above destroyed and rebuilt the three dock containers,
+    // so the textareas below it are EMPTY again. Restore them here — before
+    // applyViewport(), showScreen() and primeDock(), every one of which ends
+    // in a saveState() that would write those empty nodes over the stored
+    // notes (the merge only protects keys whose node is ABSENT).
+    // harvestDockValues() carries what was on screen, but only that: a note
+    // belonging to a screen the OUTGOING iteration never rendered a textarea
+    // for exists in localStorage and nowhere else, and would come back blank.
+    // Skipped while a frozen tab is on screen: applyDockFreezeState() has
+    // already painted the frozen blob into the same fields and stashed the
+    // live values in liveDockValues, and writing localStorage over that would
+    // show live text under a read-only frozen iteration.
+    if (!document.body.classList.contains('viewing-frozen')
+        && typeof restoreState === 'function') restoreState();
     // BEFORE the early return below, not after: switching to a decision/free
     // iteration leaves no active design, so showScreen() — the usual route to
     // applyViewport() — never runs. Without this call the device stage of the
@@ -4206,6 +4327,9 @@ change) via `harvestDockValues()`.
     // just switched to. Never touches open/closed — a tab switch must not
     // yank the dock open over the mockup the user just navigated to.
     primeDock();
+    // Last, so the ☰ "has notes" dots describe the values primeDock() left in
+    // the fields — restored, stashed or frozen.
+    updateNoteMarkers();
   });
 
   // Keyboard: Arrow Left/Right (and Space) jump between screens (within the
@@ -5863,10 +5987,30 @@ function _guardedSetItem(key, value) {
 }
 
 function saveState() {
-  const state = {
-    _savedAt: Date.now(),
-    _pageVersion: document.documentElement.dataset.pageVersion || ''
-  };
+  const _pageVersion = document.documentElement.dataset.pageVersion || '';
+  // MERGE over the stored blob; never rebuild it from the DOM alone. The scans
+  // below only see nodes that exist RIGHT NOW, and the design template's dock
+  // is built by a different script block (§ Layout JS `buildDesignUI()`) whose
+  // DOMContentLoaded listener may not have run yet, and is torn down and
+  // rebuilt on every iteration switch. A from-scratch rebuild therefore wrote
+  // a blob with no `text:{screen-id}` keys on the first `input` event after
+  // load — deleting the user's notes rather than merely failing to show them.
+  // Keys whose node IS present are overwritten below as before, so this only
+  // ever preserves entries the current DOM has nothing to say about.
+  let state = {};
+  try {
+    const prev = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    // Same two rejections restoreState() makes. Without them a merge would
+    // resurrect an expired or foreign-version blob that the restore path
+    // would have deleted, and carry its dead keys forward for another day.
+    if (prev && typeof prev === 'object'
+        && !(prev._savedAt && (Date.now() - prev._savedAt) > STATE_TTL_MS)
+        && !(prev._pageVersion && prev._pageVersion !== _pageVersion)) {
+      state = prev;
+    }
+  } catch (e) { /* corrupt storage — start from an empty blob */ }
+  state._savedAt = Date.now();
+  state._pageVersion = _pageVersion;
   // Device-view frames are CLONES of a mockup (§ Responsive device views).
   // They carry namespaced ids, so persisting them would fill the blob with
   // dead `dv1-*` / `dv2-*` keys — and, worse, the next screen switch tears the
@@ -5885,7 +6029,18 @@ function saveState() {
   });
   document.querySelectorAll('textarea, input[type="text"], input[type="number"]').forEach(el => {
     if (!persistable(el)) return;
-    if (el.id || el.dataset.comment) state['text:' + (el.id || el.dataset.comment)] = el.value;
+    const _key = el.id || el.dataset.comment;
+    if (!_key) return;
+    // Belt-and-braces for the dock rebuild: buildDesignUI() re-creates every
+    // dock textarea EMPTY, so a saveState() that runs between the rebuild and
+    // the restore would blank a stored note (the merge above only protects
+    // keys whose node is ABSENT — these nodes are present). An empty field
+    // therefore may only overwrite a non-empty stored value once the user has
+    // actually typed into it: `data-touched` is stamped from a TRUSTED input
+    // event (see the capture-phase listener at the bottom of this block), so
+    // deliberately clearing a note — type, then delete — still persists "".
+    if (el.value === '' && state['text:' + _key] && el.dataset.touched === undefined) return;
+    state['text:' + _key] = el.value;
   });
   document.querySelectorAll('input[type="range"]').forEach(el => {
     if (!persistable(el)) return;
@@ -5922,14 +6077,24 @@ function saveState() {
   // (data-view-active), so this needs no dependency on wireDesignLayout()'s
   // closures despite living in a different script block. Absent on pages
   // with no views, or while a design (not a view) is on screen.
+  // Explicitly DELETED when no view is active — this key means "the user was
+  // reading a view when they left", and under the merge above an absent write
+  // would silently keep the last one, sending every later reload back into a
+  // view the user had already navigated away from.
   const _activeViewEl = document.querySelector('section[data-view][data-view-active="true"]:not([hidden])');
   if (_activeViewEl) state['_activeView'] = _activeViewEl.dataset.view;
+  else delete state['_activeView'];
   // Persist the user-interacted flag so a reload while the user has unsaved
   // edits does not re-arm the empty-submit confirm dialog. Restored values
   // would otherwise look like "untouched defaults" because change/input
   // events fire from restoreState() (isTrusted=false) and are ignored.
+  // Deleted rather than left alone when false, for the same reason as
+  // _activeView above: the merge would otherwise make the flag permanent
+  // once set, surviving the clearDock() that is supposed to reset it.
   if (typeof _userInteracted !== 'undefined' && _userInteracted) {
     state['_userInteracted'] = true;
+  } else {
+    delete state['_userInteracted'];
   }
   _guardedSetItem(STORAGE_KEY, JSON.stringify(state));
 }
@@ -6016,6 +6181,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // toggle's pre-restore state. See § Annotation Layer JS.
   if (typeof updateAnnoUI === 'function') updateAnnoUI();
 });
+// Stamps the field the user is actually typing in, so saveState()'s
+// empty-value guard can tell "cleared on purpose" from "not restored yet".
+// CAPTURE phase, so it runs before the bubble-phase saveState below no matter
+// what else listens. isTrusted filters out the synthetic events restoreState()
+// dispatches — a restore must never count as user input.
+document.addEventListener('input', e => {
+  if (e.isTrusted && e.target && e.target.dataset) e.target.dataset.touched = 'true';
+}, true);
 document.addEventListener('change', saveState);
 document.addEventListener('input', saveState);
 ```
@@ -6023,7 +6196,17 @@ document.addEventListener('input', saveState);
 **Rules:**
 - Use `localStorage` with a 24-hour TTL
 - Save on every `change` and `input` event — not just on submit
-- Restore runs on `DOMContentLoaded` — before the user sees the page
+- Restore runs on `DOMContentLoaded` — before the user sees the page. The
+  design template re-runs it once more from § Layout JS, IMMEDIATELY after
+  `buildDesignUI()` has created the dock textareas and before anything that can
+  call `saveState()` (`showScreen()`, `primeDock()`): the two script blocks'
+  listeners have no guaranteed order, so the restore here may have scanned a
+  dock that did not exist yet
+- An empty `text:` field never overwrites a non-empty stored value unless the
+  user has typed into it (`data-touched`) — a rebuilt, not-yet-restored dock
+  textarea must not be mistaken for a cleared note
+- `saveState()` MERGES over the stored blob and never rebuilds it from the DOM
+  alone — a key whose node is currently absent must survive the write
 - `ensureCommentSlots()` runs IMMEDIATELY before `restoreState()` — see
   § Comment Slot Injection for the rationale (must inject the slots before
   the restore step rehydrates their values)

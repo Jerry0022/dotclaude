@@ -56,15 +56,22 @@ HOOK_SCRIPT = ${PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js
 Execute the hook script directly:
 
 ```bash
-node HOOK_SCRIPT
+node HOOK_SCRIPT --force
 ```
+
+`--force` is **required here**. At SessionStart the same hook is throttled by a
+6 h cooldown so it cannot starve the MCP servers' 30 s connect window (#324);
+`--force` is the explicit path — the user asked for an update *now* — and it
+also disables the deferral of a cache repair into a detached child, so the
+result is complete by the time this step returns and can be reported.
 
 The hook handles:
 - Channel-aware update on all marketplace clones (ring model): once a
   `stable/*` tag exists, the clone is pinned to the highest version visible
   to the channel pin via a detached tag checkout; before that, a bootstrap
   fallback keeps the legacy `git pull --ff-only` behavior
-- Cache rebuild (recursive copy incl. dotfiles)
+- Cache rebuild (recursive copy incl. dotfiles, `node_modules` excluded — it is
+  linked, not copied; `ss.mcp.deps` owns dependency resolution)
 - `installed_plugins.json` registry update (incl. informational `channel`)
 - Silent verification (version alignment, cache completeness)
 

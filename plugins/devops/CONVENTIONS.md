@@ -85,6 +85,30 @@ The authoritative list of registered hooks and their matchers is
 - `process.stdout.write()` — Injected into Claude's context as instructions
 - `console.error()` — Same as stderr, shown in hook output
 
+### Boot Discipline — SessionStart hooks vs. MCP server boot
+
+Claude Code starts every SessionStart hook **concurrently** with the boot of
+every stdio MCP server and gives each server a 30 s connect window. The plugin's
+own hooks can starve its own servers: on 2026-09-03 all three plugin servers
+(and unrelated third-party ones) hit `CONNECT_TIMEOUT` in several sessions
+although each boots in < 2.5 s standalone — a `git fetch` storm, `npm install`,
+a 10k-file `cpSync` of `node_modules` into the servers' own `cwd` under
+`plugins/cache/`, a recursive repo scan and a process sweep all ran in that
+window (#324). A session that loses `dotclaude-ship` cannot ship at all.
+
+- **SessionStart hooks do no heavy work in the connect window.** Network
+  (`git fetch`, `gh`, `npm install`), bulk file copies, recursive scans and
+  process sweeps run behind a cooldown gate or are deferred to a later event —
+  never unconditionally at every start. Every `hooks.json` entry and every
+  subprocess carries an explicit timeout.
+- **The cache rebuild never rewrites a running server's `cwd` wholesale**:
+  exclude `node_modules` from the copy and link it instead.
+- **MCP servers do zero work before `server.connect(transport)`** — no
+  `execSync`, no network, no large reads at module top level; lazy-load on the
+  first tool call. Stdout stays JSON-RPC only; boot logging goes to stderr.
+- Stopgap on a slow machine: `MCP_TIMEOUT=60000` in `settings.local.json` `env`
+  (startup timeout; a per-server `timeout` in `.mcp.json` only bounds tool calls).
+
 ## Plugin-Level Deep-Knowledge
 
 Some knowledge applies across multiple skills and hooks — not owned by any single skill.

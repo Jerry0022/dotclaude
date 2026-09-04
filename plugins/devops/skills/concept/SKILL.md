@@ -189,7 +189,7 @@ into 340px variant cards, so stop trying to fit them there.
 
 | Template | Layout signature |
 |---|---|
-| **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 💬 FAB bottom right (same 60px circle as ☰; collapsed by default; general / per-design / per-screen / per-view comments), design switcher when ≥2 designs, view segments alongside it when ≥1 optional view (§ Views (optional)), device-view toggle bottom-left when ≥2 form factors |
+| **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 💬 FAB bottom right (same 60px circle as ☰; collapsed by default; general / per-design / per-screen / per-view comments), design switcher when ≥2 designs; both FABs carry a locale tooltip (`title` + `aria-label`, swapped open/close) and the 💬 FAB pulses once until first use so it is not an unlabelled circle; view segments alongside it when ≥1 optional view (§ Views (optional)), device-view toggle bottom-left when ≥2 form factors |
 | **decision** | Sidebar (~80/~20), variant cards, tri-state per variant |
 | **free** | Sidebar (~80/~20), Claude-authored freeform body, optional tri-state per section |
 
@@ -302,7 +302,7 @@ Panel layout depends on the template picked in Step 1a:
 | Template | Panel mode | Extras |
 |---|---|---|
 | **decision** | Fixed sticky sidebar (~20% screen width), always visible | — |
-| **design** | Overlay panel (360px slide-in from right), toggled by the ☰ FAB top right | **Feedback dock** as a speech bubble anchored to the 💬 FAB bottom right, with general / per-design / per-screen / per-view comments; design switcher when ≥2 designs; `#screen-nav` gains a second group below the designs group, one entry per optional view (§ Views (optional)) |
+| **design** | Overlay panel (360px slide-in from right), toggled by the ☰ FAB top right (both FABs carry a locale tooltip naming the next action) | **Feedback dock** as a speech bubble anchored to the 💬 FAB bottom right, with general / per-design / per-screen / per-view comments; design switcher when ≥2 designs; `#screen-nav` gains a second group below the designs group, one entry per optional view (§ Views (optional)) |
 | **free** | Fixed sticky sidebar (~20%), always visible | — |
 
 On narrow screens (<768px), sidebar-mode panels collapse to a sticky bottom
@@ -401,6 +401,14 @@ not an empty form, is what a concept opens on. The FAB stays visible AND
 clickable while the dock is open (clicking it toggles closed again). The
 close button is a **minimise** (`−`), not a destroy: text content stays
 intact in `localStorage` when the dock is closed.
+
+Both FABs are labelled by **tooltip only** (`title` + `aria-label` from the
+locale table, swapped between the open and close wording as the control
+toggles) — no visible text, because a label inside the button would break the
+shared circle. The 💬 FAB additionally carries `data-untouched="true"` for a
+one-shot attention pulse (box-shadow/scale only, suppressed under
+`prefers-reduced-motion`) that the JS clears on the first dock open or the
+first keystroke inside the dock.
 
 **Fixed chrome geometry — do not restyle per page.** Both FABs are one 60px
 accent circle differing only in glyph and corner, and the open dock has

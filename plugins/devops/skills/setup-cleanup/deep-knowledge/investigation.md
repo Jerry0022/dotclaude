@@ -87,6 +87,22 @@ For each Aktive Session, gather:
    ```bash
    git -C <worktree_path> log --format='%h|%s|%cr' origin/main..HEAD
    ```
+   `commits_ahead` is **display data only** — it never decides `has-changes`
+   (SKILL.md Step 2). On a squash-merge workflow a landed branch stays ahead
+   forever, so the count alone says nothing about unsaved work.
+
+3b. **Own-content check (clean sessions that are ahead):** the same
+   squash-merge counter-check Step 3 / § 5 applies to branches. Files the
+   worktree's commits added or changed that `origin/main` does not contain:
+   ```bash
+   # two-dot diff: what the branch tip has that main does not
+   git diff --name-status origin/main..<branch> | grep -c '^A'   # branch-exclusive files
+   ```
+   `own_content: true` when the count is > 0 (or the patch-id sweep from § 5
+   finds commits missing in main); `own_content: false` means the content is
+   fully in main via squash — the worktree is removable, however far ahead it
+   counts. Render as an informational badge ("N ahead · Inhalt in main"), never
+   as a lock.
 
 4. **Last activity timestamp** — newest of:
    - Last commit on branch

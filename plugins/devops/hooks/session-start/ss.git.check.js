@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.git.check
- * @version 0.5.0
+ * @version 0.6.0
  * @event SessionStart
  * @plugin devops
  * @description Check for stale changes AND workspace setup issues at session
@@ -37,9 +37,17 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-function run(cmd, cwd) {
+// CONVENTIONS: 15s for git operations. Unbounded execSync here was the single
+// worst offender in the SessionStart boot window (#324) — `git fetch` against
+// an unreachable remote (VPN off, laptop on a captive portal) blocked this hook
+// for the OS-level TCP timeout while three MCP servers were racing a 30 s
+// connect budget on the same machine. A bounded call fails fast and silently;
+// the findings it feeds are advisory, never worth stalling a session for.
+const GIT_TIMEOUT_MS = 15_000;
+
+function run(cmd, cwd, timeout = GIT_TIMEOUT_MS) {
   try {
-    return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout }).trim();
   } catch {
     return '';
   }

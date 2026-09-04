@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.8.0
+ * @version 0.9.0
  * @plugin devops
- * @description MCP server with two tools:
+ * @description MCP server with three tools:
+ *   - `health_check`           — boot diagnostics (#324)
  *   - `get_usage`              — live usage via the claude.ai internal API
  *                                (cookie-authed in-page fetch, headless Edge)
  *   - `render_completion_card` — fetches usage, computes build-ID, renders card.
@@ -1272,7 +1273,10 @@ function runRenderCardCli(source) {
     process.exit(2);
   }
 
-  process.stdout.write(buildCompletionCard(normalizeCardParams(payload)) + '\n');
+  // stdout-ok — the --render-card CLI entry point IS a stdout renderer; this
+  // branch always process.exit()s before the MCP transport is ever created,
+  // so it can never interleave with the JSON-RPC wire.
+  process.stdout.write(buildCompletionCard(normalizeCardParams(payload)) + '\n'); // stdout-ok
   process.exit(0);
 }
 
@@ -1287,10 +1291,47 @@ const { McpServer } = await import("@modelcontextprotocol/sdk/server/mcp.js");
 const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
 const { z } = await import("zod");
 
+const SERVER_NAME = "dotclaude-completion";
+const SERVER_VERSION = "0.5.0";
+
 const server = new McpServer({
-  name: "dotclaude-completion",
-  version: "0.4.0",
+  name: SERVER_NAME,
+  version: SERVER_VERSION,
 });
+
+// Set once the stdio transport is live — see the boot block at the bottom.
+let bootMs = null;
+
+// --- Tool 0: health_check ---
+//
+// Boot diagnostics (#324). Deliberately the cheapest tool in the registry: it
+// touches nothing but `process`, so a server that answers it is provably past
+// connect and its deps resolved.
+
+server.registerTool(
+  "health_check",
+  {
+    title: "Health Check",
+    description:
+      "Boot diagnostics for this MCP server: which build answered, from which " +
+      "working directory, and how long it took from process start to a live " +
+      "stdio transport. Use when diagnosing MCP CONNECT_TIMEOUT at session start.",
+    inputSchema: z.object({}),
+  },
+  async () => ({
+    content: [{
+      type: "text",
+      text: JSON.stringify({
+        server: SERVER_NAME,
+        version: SERVER_VERSION,
+        cwd: process.cwd(),
+        bootMs,
+        node: process.version,
+        depsResolved: true,
+      }, null, 2),
+    }],
+  }),
+);
 
 // --- Tool 1: get_usage ---
 
@@ -1500,7 +1541,18 @@ server.registerTool(
 // directly (column grid, bar semantics) without driving the whole card.
 export { renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard };
 
-// Connect and start
+// ---------------------------------------------------------------------------
+// Start — connect FIRST, then everything else (#324 boot discipline)
+// ---------------------------------------------------------------------------
+
 const transport = new StdioServerTransport();
-await server.connect(transport);
-console.error("[dotclaude-completion-mcp] Server started on stdio");
+try {
+  await server.connect(transport);
+} catch (e) {
+  // A hung server is worse than an absent one: Claude Code waits out the full
+  // connect window before it gives up. Fail loud and fast instead.
+  console.error(`[${SERVER_NAME}-mcp] connect failed:`, e && e.message);
+  process.exit(1);
+}
+bootMs = Math.round(process.uptime() * 1000);
+console.error(`[${SERVER_NAME}-mcp] Server started on stdio (boot ${bootMs}ms)`);

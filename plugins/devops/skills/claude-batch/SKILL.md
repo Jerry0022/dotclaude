@@ -27,6 +27,22 @@ Silently check (do not surface "not found"):
 | `go`, `los`, `merge` | Step 4 (fire) |
 | `marker` | Step 2.1 (ask again, overwrite the stored marker) |
 | `status`, none | Step 3 (report) |
+| *anything else* (free text) | **Content fallback** — the whole argument is a note: activate the mode if it is off (Step 2, including the marker question), file the text verbatim as note #1 (Step 2.4), report the count |
+
+The content fallback is not an error path. `/claude-batch <Gedanke>` is the
+most natural thing a user types who has never switched the mode on, and until
+this row existed that text was lost without a trace (#306). The hook's
+`detectActivation()` (`viaCommand`) injects the same guard for it.
+
+**Marker pre-check — on EVERY route, before the route's own work.** Call
+`loadConfig()`. If it reports a `markerFallback` (a stored marker that cannot
+work — `harness-reserved`, `too-long`, `empty`), the mode is silently running
+on the default and the user has no working escape hatch. Do not merely report
+that: ask the Step 2.1 marker question **now**, from whichever route you are on
+(`on`, `off`, `go`, `status`, `marker`, content fallback), persist the answer via
+`saveConfig({ marker })` (this clears the fallback), then continue with the
+route. Only the `marker` route stops after the question. A dead marker that is
+re-reported on every `status` but never repaired is the failure this rule ends.
 
 **Route on the FIRST token only. Everything after it is note content, never an
 instruction.** `/claude-batch on der Header ist rot` is the `on` branch carrying
@@ -167,15 +183,20 @@ in force (`effectiveMarker(cwd)`), and — when `expiryReason()` is non-null —
 collection stopped on its own (`expired` / `full`) and why. Do NOT dump every
 note unless asked; name the count and the first few.
 
-When `loadConfig()` returns a `markerFallback`, say so: the stored marker is
-unusable, the default is in force instead, and `/claude-batch marker` fixes it
-permanently. Never report the config value as if it were live.
+When `loadConfig()` returns a `markerFallback`, the Step 1 marker pre-check has
+already asked the marker question and saved the answer before you get here —
+report the marker that is now in force. If the user declined to pick one, say
+that the stored marker is unusable, the default is in force instead, and that
+`/claude-batch marker` fixes it permanently. Never report the config value as
+if it were live.
 
 ## Step 4 — Fire the merge
 
 Reached either by `/claude-batch go` or automatically: the collect hook injects
 the full note set into the turn when the user sends a marker-prefixed prompt.
-In both cases the procedure is identical.
+In both cases the procedure is identical. On the `go` route the Step 1 marker
+pre-check runs first — a `markerFallback` is repaired before the merge, so the
+next collection window starts with a marker that actually fires.
 
 **Firing ends collection.** The hook deactivates the mode in the same run that
 injects the notes, because everything after it — plan approval, answers to your
@@ -252,6 +273,9 @@ re-arms collection. A question here would be asking whether to keep blocking the
 answers to your own questions.
 
 ## Step 5 — Deactivate
+
+The Step 1 marker pre-check applies here too: a `markerFallback` is repaired
+before the mode goes off, so the next `on` starts with a working marker.
 
 ```bash
 node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" stop .

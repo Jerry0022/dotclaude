@@ -86,8 +86,14 @@ present, survives every rebuild):
 ```bash
 f="$(ls -d "$HOME/.claude/plugins/cache/dotclaude/devops"/*/hooks/session-start/ss.plugin.update.js 2>/dev/null | head -1)"
 [ -z "$f" ] && f="$HOME/.claude/plugins/marketplaces/dotclaude/plugins/devops/hooks/session-start/ss.plugin.update.js"
-node "$f"
+node "$f" --force
 ```
+
+`--force` is mandatory here: since #324 the hook sits behind a 6 h cooldown at
+SessionStart (boot discipline — it must not race the MCP servers' connect
+window). The post-ship sync is the explicit path and bypasses that cooldown,
+exactly like `/auto-update`; without the flag a ship inside the window would be
+silently skipped and the local install would stay on the previous version.
 
 If the cache/registry/marketplace already report the just-shipped version and no
 `~/.claude/plugins/.mcp-stale.json` exists, another session raced ahead and the sync

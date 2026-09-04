@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.11.0
+ * @version 0.12.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -34,6 +34,14 @@
  *   OUTPUT POLICY: only version changes and failures are printed. A successful
  *   same-version cache repair is housekeeping the user cannot act on, so it is
  *   done silently — see the `reportable` filter at the bottom.
+ *
+ *   BOOT DISCIPLINE (#324): this hook runs concurrently with the MCP servers'
+ *   30 s connect window, and the cache dir it rewrites is those servers' cwd.
+ *   Three mitigations: a 6 h cooldown gate (bypassed by /auto-update's
+ *   `--force` AND by a network-free local cache-integrity probe, so a broken
+ *   cache still self-heals next session), node_modules excluded from the copy, and a rebuild that targets
+ *   a version dir a live session already claims handed to a detached child that
+ *   sleeps past the window. The mechanics live in ../lib/cache-rebuild.js.
  */
 
 require('../lib/plugin-guard');
@@ -43,7 +51,16 @@ const fs = require('fs');
 const path = require('path');
 const { t } = require('../lib/locale');
 const { latestVisible, readChannelPin } = require('../lib/channels');
-const { prunableEntries } = require('../lib/cache-inuse');
+const { runOnce, releaseOnce } = require('../lib/run-once');
+const {
+  DEFER_DELAY_MS,
+  cacheBroken,
+  deferRebuild,
+  getVersion,
+  missingMcpFiles,
+  rebuildCache,
+  targetIsLive,
+} = require('../lib/cache-rebuild');
 
 // Translations for user-facing output. SessionStart fires before any user
 // prompt — there is no detected locale yet and no session_id in hook input
@@ -72,40 +89,6 @@ const marketplacesDir = path.join(home, '.claude', 'plugins', 'marketplaces');
 const cacheDir = path.join(home, '.claude', 'plugins', 'cache');
 const registryFile = path.join(home, '.claude', 'plugins', 'installed_plugins.json');
 const sentinelFile = path.join(home, '.claude', 'plugins', '.mcp-stale.json');
-
-// Candidate set of files whose absence means a cache is functionally broken
-// even when its version/sha look correct (issue #190 — sync dropped mcp-server
-// files and .mcp.json, so the MCP servers never registered). This is a SUPERSET
-// across plugins, NOT a list every plugin ships: missingMcpFiles() asserts only
-// the entries a given plugin's SOURCE actually has. A plugin with a smaller
-// mcp-server layout (e.g. local-llm ships just mcp-server/index.js — no
-// ship/issues/heartbeat) is therefore not falsely flagged for files it never
-// had, which previously caused a never-satisfiable rebuild loop every session.
-const MCP_CRITICAL_FILES = [
-  '.mcp.json',
-  path.join('mcp-server', 'index.js'),
-  path.join('mcp-server', 'lib', 'heartbeat.js'),
-  path.join('mcp-server', 'ship', 'index.js'),
-  path.join('mcp-server', 'issues', 'index.js'),
-];
-
-function hasMcpServer(root) {
-  return fs.existsSync(path.join(root, '.mcp.json'));
-}
-
-// Returns the MCP-critical files missing from `targetRoot`, asserted PER-PLUGIN
-// against what the SOURCE actually ships. `sourceRoot` is the marketplace plugin
-// dir (NOT the target): the gate is the source's .mcp.json — otherwise a target
-// whose own .mcp.json was dropped would report "nothing to assert" and mask the
-// very breakage we check for (issue #190). Only candidate files present in the
-// source are required in the target, so plugins with different mcp-server
-// layouts are each held to their own real file set.
-function missingMcpFiles(targetRoot, sourceRoot) {
-  if (!hasMcpServer(sourceRoot)) return [];
-  return MCP_CRITICAL_FILES.filter(
-    (rel) => fs.existsSync(path.join(sourceRoot, rel)) && !fs.existsSync(path.join(targetRoot, rel)),
-  );
-}
 
 function run(cmd, cwd) {
   try {
@@ -155,167 +138,59 @@ function notifyDesktop(title, body) {
   }
 }
 
-function getVersion(dir) {
-  const pluginJson = path.join(dir, '.claude-plugin', 'plugin.json');
-  if (!fs.existsSync(pluginJson)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(pluginJson, 'utf8')).version || null;
-  } catch {
-    return null;
-  }
-}
 
-function copyDir(src, dst) {
-  // Cross-platform recursive copy (Node 16.7+). The previous implementation
-  // shelled out to `cp -a` / `cp -r`, which silently fails on Windows: `cp` is
-  // not a cmd.exe builtin and Git's coreutils are usually not on the PATH that
-  // Node's execSync sees. A failed copy left a partial cache (missing
-  // mcp-server/*.js, .mcp.json, hooks) that crashed every MCP server — the
-  // exact breakage the #190 completeness guard was meant to prevent.
-  //
-  // Gate the shell fallback on fs.cpSync being genuinely UNAVAILABLE — not on it
-  // throwing. A throw from fs.cpSync is a REAL copy failure (e.g. Windows
-  // EBUSY/EPERM on a file Claude Code holds open mid-session), which must surface
-  // as a failed copy. Since the #219 same-version repair overwrites an EXISTING
-  // version dir IN PLACE, a pre-existing (old) .claude-plugin/plugin.json would
-  // survive a partial copy and mask the failure via the existence check below —
-  // letting rebuildCache return ok:true over a half-updated cache and advance the
-  // registry SHA, which then suppresses the self-healing retry next session.
-  // Returning false on a throw keeps that retry alive (the registry SHA is not
-  // advanced over a broken copy). The `cp` fallback never helped on Windows
-  // anyway (no-op), so reserving it for ancient Node without fs.cpSync loses
-  // nothing.
-  if (typeof fs.cpSync === 'function') {
-    try {
-      fs.cpSync(src, dst, { recursive: true, force: true });
-    } catch {
-      return false;
-    }
-  } else {
-    // Last-resort fallback for environments where fs.cpSync is unavailable.
-    run(`cp -a "${src}/." "${dst}/"`, path.dirname(src));
-    run(`cp -r "${src}/.claude-plugin" "${dst}/"`, path.dirname(src));
-    const mcpSrc = path.join(src, '.mcp.json');
-    if (fs.existsSync(mcpSrc)) {
-      try { fs.copyFileSync(mcpSrc, path.join(dst, '.mcp.json')); } catch { /* ignore */ }
-    }
-  }
-
-  return fs.existsSync(path.join(dst, '.claude-plugin', 'plugin.json'));
-}
-
-function rebuildCache(marketplace, pluginName, pluginDir, version, sha, { channel = 'stable' } = {}) {
-  const pluginCache = path.join(cacheDir, marketplace, pluginName);
-  const newCache = path.join(pluginCache, version);
-
-  // Prune old version dirs — but only the ones nothing is standing on.
-  //
-  // Two dirs must survive a rebuild:
-  //
-  //   1. The version dir being (re)built. On a same-version cache REPAIR that
-  //      dir is exactly what Claude Code's already-loaded skill/slash-command
-  //      registry points at; deleting and recreating it mid-session (rm + mkdir)
-  //      changes the dir's identity and de-registers every skill/slash-command
-  //      for the rest of the session, leaving /devops-* as "Unknown command"
-  //      (issue #219). Overwriting files in place keeps the dir, so the registry
-  //      stays valid and no restart is needed. (Stale files removed upstream at
-  //      the SAME version — rare — are not pruned this way; far cheaper than
-  //      nuking the skill registry.)
-  //
-  //   2. Any OLDER version dir another live Claude session still claims. Claude
-  //      Code reference-counts every loaded version dir via `<dir>/.in_use/<pid>`
-  //      markers, and those dirs are the CLAUDE_PLUGIN_ROOT — the `cwd` and the
-  //      require() root — of that session's MCP servers. Deleting them because
-  //      THIS session upgraded pulled the working directory out from under every
-  //      other open session, which is what made them report "MCP server
-  //      disconnected". prunableEntries() fails safe: anything claimed, or whose
-  //      claim cannot be read, is left alone and collected later by Claude Code's
-  //      own sweeper.
-  for (const entry of prunableEntries(pluginCache, version)) {
-    fs.rmSync(path.join(pluginCache, entry), { recursive: true, force: true });
-  }
-
-  // Create (or keep) the version dir
-  fs.mkdirSync(newCache, { recursive: true });
-
-  // Copy all files (force-overwrites in place; fs.cpSync handles dotfiles + nested dirs)
-  const copyOk = copyDir(pluginDir, newCache);
-  if (!copyOk) {
-    return { ok: false, missing: 'copy failed — .claude-plugin/plugin.json not found after copy' };
-  }
-
-  // Verify cache completeness — asserted PER-PLUGIN against what the SOURCE
-  // actually ships, exactly like missingMcpFiles(). Requiring both `skills/`
-  // and `hooks/` unconditionally fails every plugin that ships only one of
-  // them (claude-code-setup has no hooks/, code-simplifier no skills/). Such a
-  // plugin can never satisfy the check, so rebuildCache returns ok:false, the
-  // registry SHA is never advanced, and the next SessionStart rebuilds it
-  // again — a permanent loop that reprinted the same "⚠ …/skills [cache
-  // repair]" block in chat every single session.
-  for (const dirName of ['skills', 'hooks']) {
-    if (!fs.existsSync(path.join(pluginDir, dirName))) continue;
-    if (!fs.existsSync(path.join(newCache, dirName))) {
-      return { ok: false, missing: path.join(newCache, dirName) };
-    }
-  }
-
-  // If the source ships an MCP server, the copy must include the full
-  // mcp-server tree + .mcp.json — otherwise the servers never register
-  // (issue #190). Fail the rebuild so the registry is not pointed at a
-  // broken cache; the next session retries from the (complete) marketplace.
-  const mcpMissing = missingMcpFiles(newCache, pluginDir);
-  if (mcpMissing.length) {
-    return { ok: false, missing: `mcp-server files: ${mcpMissing.join(', ')}` };
-  }
-
-  // Verify version alignment
-  const cachedVersion = getVersion(newCache);
-  if (cachedVersion !== version) {
-    return { ok: false, mismatch: `marketplace=${version} cache=${cachedVersion}` };
-  }
-
-  // Update registry (only after verified copy)
-  try {
-    const registry = JSON.parse(fs.readFileSync(registryFile, 'utf8'));
-    const key = `${pluginName}@${marketplace}`;
-
-    if (registry.plugins[key]) {
-      const entry = registry.plugins[key][0];
-      entry.installPath = newCache.replace(/\//g, path.sep);
-      entry.version = version;
-      entry.lastUpdated = new Date().toISOString();
-      entry.gitCommitSha = sha;
-      // Informational only — the authoritative pin is ~/.claude/plugins/
-      // .channels.json (native tooling may strip unknown registry fields).
-      entry.channel = channel;
-    } else {
-      // New install — create entry
-      registry.plugins[key] = [{
-        scope: 'user',
-        installPath: newCache.replace(/\//g, path.sep),
-        version,
-        installedAt: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
-        gitCommitSha: sha,
-        channel,
-      }];
-    }
-
-    fs.writeFileSync(registryFile, JSON.stringify(registry, null, 2) + '\n');
-  } catch {
-    // Registry update failed — non-fatal, plugin still works from marketplace dir
-  }
-
-  return { ok: true, installPath: newCache };
+/**
+ * Drop a lingering MCP-stale sentinel from a previous session. Must run on
+ * EVERY early-exit path: the sentinel makes pre.mcp.health block every MCP tool
+ * call, so leaving one behind disables the plugin's own tooling for a whole
+ * session. It is only meaningful for the session that wrote it.
+ */
+function clearSentinel() {
+  if (!fs.existsSync(sentinelFile)) return;
+  try { fs.unlinkSync(sentinelFile); } catch { /* ignore */ }
 }
 
 // If the marketplaces directory is missing, there are no updates to run.
-// Still clean up any lingering sentinel from a prior session — otherwise it
-// would block every MCP tool call indefinitely.
 if (!fs.existsSync(marketplacesDir)) {
-  if (fs.existsSync(sentinelFile)) {
-    try { fs.unlinkSync(sentinelFile); } catch { /* ignore */ }
-  }
+  clearSentinel();
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
+// Cooldown gate (#324)
+//
+// Everything below is expensive and network-bound: one `git fetch --tags` per
+// marketplace, tag resolution, and potentially a full cache rebuild — all of it
+// racing three MCP servers through a 30 s connect budget on the same machine.
+// A plugin update is not time-critical to the minute, so it runs at most once
+// per COOLDOWN_MS. The sentinel is still cleared on the skip path (see above).
+//
+// Bypass: the EXPLICIT path. /auto-update runs this hook with `--force`, and
+// DEVOPS_PLUGIN_UPDATE_FORCE=1 does the same for scripted callers. A user who
+// asked for an update gets one now, cooldown or not.
+//
+// The token is handed back (releaseOnce) whenever a rebuild reported failure,
+// so a broken cache retries next session instead of waiting out the interval.
+//
+// Bypass: the IMPLICIT path. releaseOnce only covers rebuilds that were TRIED
+// and failed — it cannot cover a cache that broke while the gate was closed
+// (registry installPath deleted, cached version drifted from the clone, MCP
+// files dropped). ss.mcp.verify tells the user a restart self-heals exactly
+// that state, so the gate follows ss.mcp.deps' rule: it only applies when
+// NOTHING is broken. cacheBroken() is pure fs — no git, no network — so
+// deciding costs a fraction of the work it can unblock.
+// ---------------------------------------------------------------------------
+const COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const FORCE = process.argv.includes('--force') || process.env.DEVOPS_PLUGIN_UPDATE_FORCE === '1';
+
+const integrity = cacheBroken({ marketplacesDir, registryFile });
+if (integrity.broken) {
+  process.stderr.write(`[ss.plugin.update] cooldown bypassed: cache integrity (${integrity.reason})
+`);
+}
+
+if (!FORCE && !integrity.broken && !runOnce('ss-plugin-update', null, { cooldownMs: COOLDOWN_MS })) {
+  clearSentinel();
   process.exit(0);
 }
 
@@ -442,7 +317,40 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
     } catch { /* registry unreadable — rebuild to be safe */ cacheMissing = true; }
 
     if (versionChanged || cacheMissing || cacheStale) {
-      const result = rebuildCache(marketplace, name, dir, after, newSha, { channel });
+      const rebuildOpts = {
+        marketplace,
+        pluginName: name,
+        pluginDir: dir,
+        version: after,
+        sha: newSha,
+        channel,
+        cacheDir,
+        registryFile,
+      };
+
+      // #324: never bulk-write into a version dir a live session is standing
+      // on. `targetIsLive` is true exactly for the same-version cache REPAIR —
+      // the dir this session's MCP servers use as their cwd and require() root,
+      // while they are still inside their 30 s connect window. That case is
+      // also the one whose success is deliberately silent (see `reportable`
+      // below), so deferring it into a detached child that sleeps past the
+      // window costs no reporting fidelity at all. A rebuild into a NEW version
+      // dir is not deferred: no running server points at it, and the user is
+      // waiting for the restart notice.
+      if (!FORCE && targetIsLive(rebuildOpts)) {
+        const handoff = deferRebuild(rebuildOpts);
+        if (handoff.deferred) {
+          process.stderr.write(
+            `[ss.plugin.update] ${name}: cache repair deferred ${DEFER_DELAY_MS}ms ` +
+            `(version dir in use by a live session)\n`,
+          );
+          continue;
+        }
+        // Spawning failed — fall through and repair inline rather than leaving
+        // a known-stale cache in place.
+      }
+
+      const result = rebuildCache(rebuildOpts);
       updated.push({
         name,
         from: beforeVersions[name] || '?',
@@ -494,9 +402,16 @@ if (mcpAffected.length > 0) {
   } catch {
     // Sentinel write failed — MCP tools will still work, just without the guard
   }
-} else if (fs.existsSync(sentinelFile)) {
+} else {
   // Nothing moved this run — any lingering sentinel is from a prior session
-  try { fs.unlinkSync(sentinelFile); } catch { /* ignore */ }
+  clearSentinel();
+}
+
+// Hand the cooldown token back when anything failed: a broken cache must retry
+// at the NEXT session start, not in six hours. runOnce() takes the token before
+// the work, so this is the "written only on success" half of the contract.
+if (updated.some(u => !u.verified)) {
+  releaseOnce('ss-plugin-update', null);
 }
 
 // Report only what the user can act on. A SUCCESSFUL same-version cache repair
