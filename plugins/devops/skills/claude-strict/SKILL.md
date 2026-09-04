@@ -154,7 +154,11 @@ untouched: focus ring now overlaps the border; docs/ui.md still says 2px
   are listed here, not hidden.
 - `chosen` — every attribute you decided. No line when nothing was open.
 - `untouched` — everything you noticed and deliberately did not change:
-  doc debt, adjacent glitches, failing tests, refactor bait.
+  doc debt, adjacent glitches, failing tests, refactor bait. Before writing
+  this line, grep the repo for the OLD value you replaced (`4px`, the old
+  colour, the old name): every hit outside `done` — a doc, a test, a sibling
+  selector — is an `untouched` entry. Reading is free under strict; only
+  the diff is closed.
 
 Then render the completion card as usual (the card is output, not diff).
 
