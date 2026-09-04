@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.139.0] — 2026-09-04
+
+Backlog run 2026-09-03/04 (PR #325, eight issues). The plugin's own ship server was unreachable while this work was made — the very defect fixed first below — so the eight fixes landed as one integration PR and this entry versions them.
+
+### Fixed
+
+- **The plugin's MCP servers timed out at session start, and the plugin itself was the reason.** Claude Code starts every SessionStart hook concurrently with every stdio MCP server and gives each server thirty seconds to answer `initialize`. On 2026-09-03 all three plugin servers — and unrelated third-party ones — hit that timeout in session after session, although each of them boots in under two and a half seconds on its own. The thirty seconds were being consumed by the plugin's own start-up work: four `git fetch` calls, an `npm install`, a ten-thousand-file copy of `node_modules` into the very directory the servers use as their working directory, a recursive scan of the repository and a process sweep, all at once, all with Windows Defender inspecting every write. The issues server made it worse by running `gh issue list` synchronously before it had even created its transport. A session that loses `dotclaude-ship` cannot ship at all. (#324)
+
+  Nothing runs before `connect` in any server any more; the issues warm-up is asynchronous and happens afterwards. Every server answers a `health_check`, a stdout-discipline test keeps the JSON-RPC wire clean, and a boot probe (`scripts/mcp-boot-probe.js`) fails the suite when any server takes longer than five seconds to answer. The plugin updater and the dependency installer now sit behind cooldowns (six and twenty-four hours) that an explicit `/auto-update`, the post-ship sync, or a genuinely broken cache bypass; `node_modules` is never copied again but linked and refreshed only when the dependency manifest changes; a repair of a version directory a live session is standing on is handed to a detached child that waits out the connect window; the git check and the changelog hook lost an unbounded and a duplicated fetch; and every SessionStart hook carries an explicit timeout. The rule behind all of it is written down in `CONVENTIONS.md` under "Boot Discipline". `MCP_TIMEOUT=60000` remains the documented stopgap for a slow machine.
+
+- **`/setup-cleanup` silently dropped removable branches whose name is a prefix of a worktree branch.** The protected set was matched by substring, so `feat/x-abc123` counted as protected whenever `feat/x-abc123-def456` had a worktree — conservative, but invisible: the candidate list was simply one entry short. Membership is now exact full-ref equality, prefix and substring tests are forbidden, and a mandatory count check at the end of the classification (candidates plus protected set must equal all local branches) turns any future gap into a visible warning. (#323)
+
+- **`/setup-cleanup` locked almost every worktree on a squash-merge workflow as "work in progress".** Being ahead of `origin/main` counted as having changes, and a squash-merged branch is ahead forever. In one real repository that classified 34 of 41 worktrees as untouchable while two of them carried unsaved work. `has-changes` is now decided solely by `git status --porcelain`; commits ahead become the separate, non-blocking `commits_ahead` attribute together with an `own_content` badge from the same two-dot check the skill already used for branches. (#322)
+
+- **`/claude-batch <free text>` no longer disappears, and a dead marker repairs itself.** The routing table gains an explicit row for a free-text argument — it becomes note #1 and switches the mode on — and a marker pre-check now runs on every route: a stored marker that cannot work asks the marker question immediately instead of being re-reported on each `status` run and never fixed. (#306)
+
+- **The committed project map no longer carries a random worktree slug as its title.** `gen-project-map` resolves a stable name — `package.json` `name` of the main checkout, else the main checkout's directory, and only for non-git trees the given root — so a map regenerated from `.claude/worktrees/<slug>/` is byte-identical to one generated from the main checkout. (#303)
+
+- **A `/concept` design page could go completely blank after switching designs and using the panel.** The screen navigation compared against the design that was active when the navigation was built, never re-built on a design switch, and `showScreen()` hid every screen when handed an id that belonged to no screen of the active design. The handler now resolves the active design at click time and `showScreen()` falls back to the first screen; gate invariant P15b requires exactly one visible screen after any switch and insists on `getClientRects()` rather than `getComputedStyle().display` for the assertion. Verified with a fifty-four-click sweep across two iterations, three designs and every navigation entry. (#299)
+
+- **Feedback typed into a `/concept` design-page dock was destroyed by a reload or a design switch.** The state restore ran before the dock textareas existed, and the next save then rewrote the stored blob without them. The restore now runs immediately after the dock is built and before anything can save; `saveState()` merges over the stored blob and never blanks a note the user has not touched since load. Browser QA caught a second ordering defect in the first fix (the load handler's own `showScreen()` saved before the restore) — fixed and re-verified: a note survives a reload, three design switches, an iteration round trip and a second note. (#297)
+
+### Added
+
+- **Both floating buttons on a `/concept` design page now say what they are.** The feedback button was a bare emoji circle that users could not find. Both buttons carry locale-sourced `title` and `aria-label` that swap with `aria-expanded`, and the feedback button pulses three times until it is first used (disabled under `prefers-reduced-motion`). The shared-shape invariant is untouched — the labels are tooltips only, and the pulse rule declares nothing but `animation`. (#298)
+
 ## [0.138.1] — 2026-09-02
 
 ### Fixed
