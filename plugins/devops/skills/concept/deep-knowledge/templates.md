@@ -3104,7 +3104,14 @@ change) via `harvestDockValues()`.
         btn.innerHTML = `<span><span class="screen-idx">${idx + 1}.</span>${sec.dataset.navLabel || sec.id}</span>
           <span class="has-notes" data-note-marker></span>`;
         btn.addEventListener('click', () => {
-          if (d !== active) showDesign(d.dataset.design, sec.id);
+          // Resolve the active design at CLICK time. buildDesignUI() only
+          // runs on iteration:changed / DOMContentLoaded, never on a design
+          // switch, so the build-time `active` above goes stale the moment
+          // the ghost bar is used — and a stale `d === active` sends a
+          // FOREIGN screen id into showScreen(), which then hides every
+          // screen of the design actually on the canvas (blank page).
+          const cur = activeDesign();
+          if (!cur || cur.dataset.design !== d.dataset.design) showDesign(d.dataset.design, sec.id);
           else showScreen(sec.id);
           closePanel();
         });
@@ -3751,6 +3758,13 @@ change) via `harvestDockValues()`.
     const design = activeDesign();
     if (!design) return;
     const screens = design.querySelectorAll('section[data-screen][id]');
+    // Membership guard. `hidden = s.id !== id` is a blanket hide when NO
+    // screen carries `id` — one foreign id (a nav entry of another design, a
+    // stale deep link, a restored state pointing at a deleted screen) empties
+    // the canvas with no error anywhere. Fall back to the design's first
+    // screen instead: something always paints.
+    if (!screens.length) return;
+    if (![...screens].some(s => s.id === id)) id = screens[0].id;
     let idx = 0;
     screens.forEach((s, i) => {
       const match = s.id === id;
