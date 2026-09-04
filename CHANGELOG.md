@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.140.0] — 2026-09-04
+
+### Added
+
+- **A `/concept` page now says, on the page itself, when you are reading an earlier iteration — and relocks every past round you leave.** Switching to a past tab used to show it behind the post-submit dimmer, which is click-to-dismiss: users lifted it by reflex and then read history as the live page, because after the lift nothing on screen said "earlier round" except the chip highlight in the panel, and the live chip is not always the last one once a final report exists. The lifted veil also stayed lifted across tab switches, so several past rounds could be unlocked at the same time.
+
+  Every non-live tab now shows a fixed top-centre pill — "🕘 Iteration N · frühere Runde, schreibgeschützt" with a "Zur aktuellen Runde" button — that survives the click on the veil, and `showIteration()` re-arms the shared dimmer on every entry into a past round while hiding it on the live one: at most the one past round on screen is unlocked, none while the live round is shown. On design pages the pill drops into the row below the design switcher and keeps to its width band, so it never collides with the screen indicator or the ☰ FAB. Gate entry 30b pins the bar and the relock call as engine entries, so an existing page picks both up on its next iteration append.
+
 ## [0.139.1] — 2026-09-04
 
 ### Fixed
