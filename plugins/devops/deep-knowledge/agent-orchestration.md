@@ -104,6 +104,12 @@ Every spawned agent MUST receive:
 8. **Distinct scope boundary** — for parallel agents in the same wave, state what
    each one **owns and does NOT touch**. Vague sub-tasks are the #1 cause of
    duplicate work; two agents must never independently solve the same thing.
+9. **Scope contract** — when a `[claude-strict contract]` block is in context
+   (`/claude-strict` armed for this worktree + branch), it goes **verbatim at
+   the top** of the prompt, before item 1. The `pre.strict.agent-gate` hook
+   refuses a spawn without it. It overrides item 5's "make reasonable decisions
+   independently" on the scope axis: decisions cover unnamed attributes only,
+   never the deliverable. See `code-defaults.md` § Strict Mode.
 
 ### Interaction Directives
 

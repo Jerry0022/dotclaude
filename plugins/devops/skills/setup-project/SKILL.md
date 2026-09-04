@@ -107,6 +107,7 @@ between them, otherwise append the whole block):
 .claude/batch-mode.json
 .claude/batch-watchdog.lock
 .claude/batch.md
+.claude/strict-mode.json
 .claude/.ship-in-progress
 .claude/.ship-lockout
 .claude/.ship-watcher/
