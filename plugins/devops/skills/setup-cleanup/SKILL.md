@@ -72,6 +72,19 @@ the worktree and causes data loss.
 `branch refs/heads/` is a protected branch. Build this set FIRST and check
 it before EVERY delete operation.
 
+**Membership test — exact ref equality only.** A candidate is protected when
+its **full branch name** is an element of the set, nothing else:
+
+```bash
+printf '%s\n' "${PROTECTED[@]}" | grep -qxF -- "$candidate"   # exact line match
+```
+
+NEVER test membership by prefix or substring (`grep -q`, `[[ $set == *$name* ]]`,
+`String.includes`). Branch names in this repo's workflows form suffix chains
+(`feat/x-abc123`, `feat/x-abc123-def456`): a substring test treats the shorter
+independent branch as protected too, so it silently vanishes from every list —
+nothing is deleted wrongly, but the candidate count is short with no warning.
+
 ## Step 1 — Repo Context
 
 Gather repository identity info to display prominently on the concept page:
@@ -99,9 +112,20 @@ is excluded from ALL subsequent steps — classification, recommendations, AND c
 4. **Analyze each active worktree** (each is an „Aktive Session") for content status:
    - `git -C <worktree_path> status --porcelain` — uncommitted / untracked files
    - `git log --oneline origin/main..<branch>` — commits not yet in main
-   - Classify each Aktive Session:
-     - `has-changes` — uncommitted files OR untracked files OR commits ahead of main
-     - `clean` — no local modifications AND no commits ahead
+   - Classify each Aktive Session **solely by the working tree**:
+     - `has-changes` — `status --porcelain` is non-empty (uncommitted OR untracked files)
+     - `clean` — `status --porcelain` is empty
+   - **Commits ahead of `origin/main` are NOT a `has-changes` criterion.** They are
+     carried as the separate, non-blocking `commits_ahead` attribute
+     (`deep-knowledge/decision-schema.md`). On a squash-merge workflow every
+     worktree whose PR already landed is *by construction* ahead forever (the
+     merge-base predates the squash), so counting it locked 34 of 41 worktrees in
+     one real repo as protected work-in-progress while only 2 carried unsaved work.
+   - For a `clean` session that is ahead, additionally run the **own-content
+     check** Step 3 already prescribes for branches (two-dot diff, status `A`
+     files — `deep-knowledge/investigation.md` § Worktrees): `own_content: true`
+     when the commits carry files main does not have, else `false` (content is
+     fully in main via squash). Display it as an informational badge, never as a lock.
    - For `has-changes`: collect counts (modified, added, untracked files) and
      commit-ahead count for display
    - **clean Aktive Sessions are placed in the Löschbar group but NOT pre-checked**
@@ -114,7 +138,8 @@ Every entry is a **git branch** (a ref). The two attributes per entry are:
   "Git-Session" (plain branch without a worktree)
 - **Ort**: "lokal" / "nur-remote" / "lokal+remote"
 
-For each local branch (excluding worktree/Aktive-Session branches):
+For each local branch (excluding worktree/Aktive-Session branches — exclusion by
+**exact** protected-set membership, see SAFETY above; never by prefix):
 
 1. **Check merge status against `origin/main`:**
    - `git merge-base --is-ancestor <branch> origin/main` -> MERGED (git ancestor)
@@ -144,6 +169,19 @@ Classify each branch (Git-Session) into one of two top categories that
 
 Aktive Sessions (worktree branches) are always placed in their own dedicated
 block per c6 — never mixed into the Git-Session list.
+
+**Consistency check (mandatory, end of Step 3):** every local branch must land
+in exactly one bucket, so
+
+```
+|Löschbar| + |Untersuchen| + |protected set| == |git branch --format='%(refname:short)'|
+```
+
+If the sums differ, do NOT continue silently: print a warning naming the count
+gap and the branches that appear in no bucket (`comm -23` of all local branches
+vs. the union), and surface the same warning on the concept page header. A gap
+here is exactly how a prefix-based membership test hides a removable branch —
+this check turns that silent loss into a visible finding.
 
 ## Step 4 — Remote Branch Audit
 
@@ -265,6 +303,11 @@ Create the directory if missing: `mkdir -p ~/.claude/devops-concepts` (Unix) or 
   destructive controls. Only a read-only „?" inline detail toggle is shown.
 - Aktive Sessions without changes (clean): gray badge, delete checkbox (unchecked
   by default, i.e. keep); removes the worktree only — the branch is NOT deleted.
+- Clean Aktive Sessions that are ahead of `origin/main` keep the gray badge and
+  the checkbox; `commits_ahead` + `own_content` appear as an informational
+  secondary badge — "N ahead · Inhalt in main" (`own_content: false`, typical
+  squash-merged session) or "N ahead · eigener Inhalt" (`own_content: true`).
+  Being ahead never turns a clean session amber or removes its controls.
 - Every action option has a `title` tooltip — see Tooltip Explanations table
 - "Remote-Branches auch loeschen" as a global toggle in the Apply-Manifest sidebar
   (not per-branch) — applies to all selected branches that have a remote

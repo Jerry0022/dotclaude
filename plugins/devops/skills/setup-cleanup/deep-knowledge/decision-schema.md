@@ -53,6 +53,7 @@ cleanup decisions.
       "modified": 3,
       "untracked": 1,
       "commits_ahead": 2,
+      "own_content": true,
       "remove": false
     },
     {
