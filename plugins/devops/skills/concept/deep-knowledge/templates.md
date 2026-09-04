@@ -2936,12 +2936,15 @@ built once per iteration by `buildScreenTextareas()` — never per design
 switch. Switching design or page only flips `hidden`; no node is ever
 destroyed. This is load-bearing in three ways:
 
-1. Values survive a design switch. `restoreState()` runs once on
-   `DOMContentLoaded` and is never re-invoked, so a node destroyed later is
-   never rehydrated.
-2. `saveState()` serialises only nodes present in the DOM — destroying a
-   textarea would DELETE its `text:{screen-id}` localStorage key on the next
-   input event, making the note unrecoverable rather than merely invisible.
+1. Values survive a design switch. `restoreState()` is re-invoked only at the
+   two points where the dock is (re)built — the design IIFE's own
+   `DOMContentLoaded` handler and `iteration:changed` — so a node destroyed
+   at any other moment is never rehydrated.
+2. `saveState()` serialises only nodes present in the DOM. It merges its scan
+   over the previously stored blob (see § State Persistence), so a destroyed
+   textarea no longer DELETES its `text:{screen-id}` key — but the note is
+   still invisible and unsubmittable until a node with that `data-comment`
+   exists again, and `collectDesignDecisions()` reads the DOM, not storage.
 3. `collectDesignDecisions()` scans the dock; only a dock holding all designs'
    screens produces a complete `comments.screens` payload.
 
@@ -4147,6 +4150,21 @@ change) via `harvestDockValues()`.
     }
     updateIndicator();
     document.addEventListener('input', updateNoteMarkers);
+    // The dock textareas exist only NOW — buildDesignUI() above created them.
+    // § State Persistence's own DOMContentLoaded listener is not guaranteed to
+    // run after this one (same unguaranteed ordering applyDockSize() already
+    // works around), so its restoreState() may have scanned an empty dock and
+    // written nothing. It never re-runs on its own, and the next `input` event
+    // then persisted a blob with no `text:{screen-id}` keys at all — the notes
+    // were not merely invisible, they were deleted. Re-restoring here is safe:
+    // restoreState() is idempotent (it only assigns values off the same stored
+    // blob) and no user input can have happened before DOMContentLoaded.
+    // Deliberately BEFORE primeDock(): on a frozen tab applyDockFreezeState()
+    // stashes the live values into liveDockValues and paints the frozen blob
+    // over them, so restoring afterwards would clobber the frozen view and
+    // lose the stash.
+    if (typeof restoreState === 'function') restoreState();
+    if (typeof updateNoteMarkers === 'function') updateNoteMarkers();
     // Runs last, once buildDesignUI() has set the body[data-single-*] flags
     // applyDockSize() reads. The dock stays closed — priming only syncs its
     // field state and its size.
@@ -4216,10 +4234,24 @@ change) via `harvestDockValues()`.
       : (remembered && design.querySelector(`#${CSS.escape(remembered)}`)) ? remembered
       : first?.id;
     if (target) showScreen(target);
+    // buildDesignUI() above destroyed and rebuilt the three dock containers.
+    // harvestDockValues() carries what was on screen, but only that: a note
+    // belonging to a screen the OUTGOING iteration never rendered a textarea
+    // for exists in localStorage and nowhere else, and would come back blank.
+    // Re-restoring closes that gap for the same reason as the load path above.
+    // Skipped while a frozen tab is on screen: applyDockFreezeState() has
+    // already painted the frozen blob into the fields and stashed the live
+    // values in liveDockValues, and writing localStorage over that would show
+    // live text under a read-only frozen iteration.
+    if (!document.body.classList.contains('viewing-frozen')
+        && typeof restoreState === 'function') restoreState();
     // Re-sync frozen-vs-live fields and the dock size for the iteration we
     // just switched to. Never touches open/closed — a tab switch must not
     // yank the dock open over the mockup the user just navigated to.
     primeDock();
+    // Last, so the ☰ "has notes" dots describe the values primeDock() left in
+    // the fields — restored, stashed or frozen.
+    updateNoteMarkers();
   });
 
   // Keyboard: Arrow Left/Right (and Space) jump between screens (within the
@@ -5877,10 +5909,30 @@ function _guardedSetItem(key, value) {
 }
 
 function saveState() {
-  const state = {
-    _savedAt: Date.now(),
-    _pageVersion: document.documentElement.dataset.pageVersion || ''
-  };
+  const _pageVersion = document.documentElement.dataset.pageVersion || '';
+  // MERGE over the stored blob; never rebuild it from the DOM alone. The scans
+  // below only see nodes that exist RIGHT NOW, and the design template's dock
+  // is built by a different script block (§ Layout JS `buildDesignUI()`) whose
+  // DOMContentLoaded listener may not have run yet, and is torn down and
+  // rebuilt on every iteration switch. A from-scratch rebuild therefore wrote
+  // a blob with no `text:{screen-id}` keys on the first `input` event after
+  // load — deleting the user's notes rather than merely failing to show them.
+  // Keys whose node IS present are overwritten below as before, so this only
+  // ever preserves entries the current DOM has nothing to say about.
+  let state = {};
+  try {
+    const prev = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    // Same two rejections restoreState() makes. Without them a merge would
+    // resurrect an expired or foreign-version blob that the restore path
+    // would have deleted, and carry its dead keys forward for another day.
+    if (prev && typeof prev === 'object'
+        && !(prev._savedAt && (Date.now() - prev._savedAt) > STATE_TTL_MS)
+        && !(prev._pageVersion && prev._pageVersion !== _pageVersion)) {
+      state = prev;
+    }
+  } catch (e) { /* corrupt storage — start from an empty blob */ }
+  state._savedAt = Date.now();
+  state._pageVersion = _pageVersion;
   // Device-view frames are CLONES of a mockup (§ Responsive device views).
   // They carry namespaced ids, so persisting them would fill the blob with
   // dead `dv1-*` / `dv2-*` keys — and, worse, the next screen switch tears the
@@ -5936,14 +5988,24 @@ function saveState() {
   // (data-view-active), so this needs no dependency on wireDesignLayout()'s
   // closures despite living in a different script block. Absent on pages
   // with no views, or while a design (not a view) is on screen.
+  // Explicitly DELETED when no view is active — this key means "the user was
+  // reading a view when they left", and under the merge above an absent write
+  // would silently keep the last one, sending every later reload back into a
+  // view the user had already navigated away from.
   const _activeViewEl = document.querySelector('section[data-view][data-view-active="true"]:not([hidden])');
   if (_activeViewEl) state['_activeView'] = _activeViewEl.dataset.view;
+  else delete state['_activeView'];
   // Persist the user-interacted flag so a reload while the user has unsaved
   // edits does not re-arm the empty-submit confirm dialog. Restored values
   // would otherwise look like "untouched defaults" because change/input
   // events fire from restoreState() (isTrusted=false) and are ignored.
+  // Deleted rather than left alone when false, for the same reason as
+  // _activeView above: the merge would otherwise make the flag permanent
+  // once set, surviving the clearDock() that is supposed to reset it.
   if (typeof _userInteracted !== 'undefined' && _userInteracted) {
     state['_userInteracted'] = true;
+  } else {
+    delete state['_userInteracted'];
   }
   _guardedSetItem(STORAGE_KEY, JSON.stringify(state));
 }
@@ -6037,7 +6099,13 @@ document.addEventListener('input', saveState);
 **Rules:**
 - Use `localStorage` with a 24-hour TTL
 - Save on every `change` and `input` event — not just on submit
-- Restore runs on `DOMContentLoaded` — before the user sees the page
+- Restore runs on `DOMContentLoaded` — before the user sees the page. The
+  design template re-runs it once more from § Layout JS, right after
+  `buildDesignUI()` has created the dock textareas: the two script blocks'
+  listeners have no guaranteed order, so the restore here may have scanned a
+  dock that did not exist yet
+- `saveState()` MERGES over the stored blob and never rebuilds it from the DOM
+  alone — a key whose node is currently absent must survive the write
 - `ensureCommentSlots()` runs IMMEDIATELY before `restoreState()` — see
   § Comment Slot Injection for the rationale (must inject the slots before
   the restore step rehydrates their values)
