@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.141.0] — 2026-09-04
+
+### Added
+
+- **`/web-guide` — a live tutorial inside the user's own Edge tab for everything Claude Code cannot do on a website itself.** Logging in, generating an API key, creating an OAuth app, accepting terms, flipping an account setting: until now Claude could only describe those steps in chat while the user switched windows and guessed which button was meant. The new skill opens one tab through the Claude-in-Chrome extension (the user's real profile, so logins hold), injects a small draggable, collapsible step panel into the page, and guides one action at a time — exact live button labels, a progress badge, "Ich komme nicht weiter" for a rewritten step, "Abbrechen" with a confirm. Values the project needs come back through the panel: a token's name as text, a choice between routes, a conscious confirm, and a `secret` field for the freshly generated key, which the CLI writes straight into a dotenv file — inside the project only, never a symlink or a git-tracked file, mode 0600 — without the decoded value ever appearing in chat.
+
+  The architecture is the result of a measured spike, recorded in the skill's `protocol.md`: a local HTTP bridge (the `/concept` pattern) does not work from third-party pages because Edge's Local Network Access gate silently hangs every loopback `fetch`; the only channel is `javascript_tool` on the one tab, used in both directions — Claude pushes a step in and long-polls the next user event out with an in-page `await` that stays under the extension's 45 s limit, arms its timeout only while the tab is visible (hidden tabs throttle timers), and turns a navigation into an immediate "re-inject" signal. A page global named `__wg` turned out to wedge the extension's own content-script tools — renamed to `claudeGuide`, and documented so nobody trips over it again. The panel lives in a closed shadow root with a random host id, isolates its keystrokes from page hotkeys (GitHub's `s` used to steal characters), validates everything it restores from storage, and treats every event as untrusted data the skill re-checks against the step it last sent. Red-team review before shipping: 22 findings, all High and Medium ones fixed.
+
 ## [0.140.0] — 2026-09-04
 
 ### Added
