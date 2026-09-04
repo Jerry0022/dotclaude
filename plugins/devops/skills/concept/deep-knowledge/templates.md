@@ -74,6 +74,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.empty_iterate_confirm`  | Nothing was changed. Submit "Next iteration" anyway? | Du hast nichts geändert. Trotzdem "Zur nächsten Iteration" absenden? |
 | `panel.empty_implement_confirm`| Nothing was changed. Implement with feedback anyway? Claude will still write code. | Du hast nichts geändert. Trotzdem mit Feedback implementieren? Claude schreibt dann Code. |
 | `panel.toggle_open`            | Open decisions                 | Entscheidungen öffnen |
+| `panel.toggle_close`           | Close decisions                | Entscheidungen schliessen |
 | `panel.close`                  | Close                          | Schliessen |
 | `panel.minimize`               | Minimize                       | Minimieren |
 | `panel.dim_dismiss`            | Dismiss overlay                | Schimmer entfernen |
@@ -1675,13 +1676,29 @@ it today.
     </nav>
 
     <!-- Two FABs — the only floating UI besides the screen itself.
-         The 💬 FAB carries two labels: the dock toggle swaps aria-label
-         between them based on aria-expanded so screen-reader users
-         always hear the correct next action ("Open" vs "Minimize"). -->
-    <button id="panel-toggle" class="panel-fab" aria-label="{{panel.toggle_open}}">☰</button>
+         BOTH carry two labels: the toggle swaps `title` AND `aria-label`
+         together with `aria-expanded`, so pointer users get a hover tooltip
+         and screen-reader users hear the correct NEXT action ("Open" vs
+         "Minimize"). The labels are tooltip-only on purpose — an unlabelled
+         emoji circle is undiscoverable, but a visible pill would break the
+         shared 60px circle geometry the two FABs are pinned to (gate P13).
+         Every label string comes from the locale table; never bake English
+         (or "Feedback") in here.
+         `data-untouched` on the 💬 FAB drives a one-shot attention pulse
+         (§ Layout CSS) that the JS clears on the first dock open or the
+         first keystroke inside the dock — a returning user is never nagged
+         twice. -->
+    <button id="panel-toggle" class="panel-fab"
+            aria-label="{{panel.toggle_open}}"
+            title="{{panel.toggle_open}}"
+            aria-expanded="false"
+            data-label-open="{{panel.toggle_open}}"
+            data-label-close="{{panel.toggle_close}}">☰</button>
     <button id="feedback-toggle" class="feedback-fab"
             aria-label="{{proto.feedback_toggle}}"
+            title="{{proto.feedback_toggle}}"
             aria-expanded="false"
+            data-untouched="true"
             data-label-open="{{proto.feedback_toggle}}"
             data-label-close="{{panel.minimize}}">💬</button>
 
@@ -2411,6 +2428,30 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
    a full overlay). The 💬 feedback FAB stays visible while the dock is
    open so the user can toggle it back closed via the same FAB. */
 .panel-fab.hidden { opacity: 0; pointer-events: none; }
+
+/* ── One-shot attention pulse on the 💬 FAB ──
+   The dock is where every note is written, and an unlabelled emoji circle in
+   a corner is genuinely missable — so the FAB announces itself exactly three
+   times, then never again: the JS strips `data-untouched` on the first dock
+   open OR the first keystroke inside the dock, so a returning user is not
+   nagged. It is `animation`, not a class, so it costs nothing once the
+   attribute is gone.
+   Geometry is OFF LIMITS here (gate P13): box-shadow and transform ONLY, no
+   width/height/border-radius/padding — those live in the shared
+   .panel-fab/.feedback-fab rule and the two FABs must stay one component.
+   transform: scale() also composes with the :hover scale rather than
+   fighting it, since both write the same property and hover wins by
+   source order while pointing. */
+@keyframes fabPulse {
+  0%, 100% { transform: scale(1);    box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  50%      { transform: scale(1.12); box-shadow: 0 4px 12px rgba(0,0,0,0.3), 0 0 0 12px rgba(88,166,255,0.18); }
+}
+.feedback-fab[data-untouched="true"] { animation: fabPulse 2.6s ease-in-out 3; }
+@media (prefers-reduced-motion: reduce) {
+  /* No substitute cue: the tooltip is the discoverability path that does not
+     move, and it is present either way. */
+  .feedback-fab[data-untouched="true"] { animation: none; }
+}
 
 .panel-close-btn,
 .feedback-close-btn {
@@ -3926,12 +3967,31 @@ change) via `harvestDockValues()`.
     panel?.classList.add('open');
     backdrop?.classList.add('visible');
     panelToggle?.classList.add('hidden');
+    // Tooltip + a11y label name the NEXT action, exactly like the 💬 FAB
+    // below. Written inline (no shared helper) because both labels are read
+    // off the button's own dataset — the locale substitution happened once,
+    // at generation time, in the markup.
+    if (panelToggle) {
+      panelToggle.setAttribute('aria-expanded', 'true');
+      const lbl = panelToggle.dataset.labelClose;
+      if (lbl) { panelToggle.setAttribute('aria-label', lbl); panelToggle.title = lbl; }
+    }
     document.body.classList.add('panel-open');
     // Only re-home focus that the dock just lost — never steal it from a
     // pointer user who was not typing anywhere.
     if (fromDock) panelCloseBtn?.focus();
   };
-  window.closePanel = () => { panel?.classList.remove('open'); backdrop?.classList.remove('visible'); panelToggle?.classList.remove('hidden'); document.body.classList.remove('panel-open'); };
+  window.closePanel = () => {
+    panel?.classList.remove('open');
+    backdrop?.classList.remove('visible');
+    panelToggle?.classList.remove('hidden');
+    if (panelToggle) {
+      panelToggle.setAttribute('aria-expanded', 'false');
+      const lbl = panelToggle.dataset.labelOpen;
+      if (lbl) { panelToggle.setAttribute('aria-label', lbl); panelToggle.title = lbl; }
+    }
+    document.body.classList.remove('panel-open');
+  };
   panelToggle?.addEventListener('click', openPanel);
   panelCloseBtn?.addEventListener('click', closePanel);
   backdrop?.addEventListener('click', closePanel);
@@ -3958,6 +4018,7 @@ change) via `harvestDockValues()`.
     dock.dataset.open = 'true';
     dockToggle.setAttribute('aria-expanded', 'true');
     dockToggle.setAttribute('aria-label', LABEL_CLOSE);
+    dockToggle.title = LABEL_CLOSE;
   }
   // `handOff` = the dock is closing because the panel is taking over. Then
   // the FAB must NOT be focused: it sits at z-index 220, above the panel
@@ -3970,13 +4031,22 @@ change) via `harvestDockValues()`.
     dock.dataset.open = 'false';
     dockToggle.setAttribute('aria-expanded', 'false');
     dockToggle.setAttribute('aria-label', LABEL_OPEN);
+    dockToggle.title = LABEL_OPEN;
     if (focusWasInside) dockToggle.focus();
   }
   window.closeDock = closeDock;
+  // The one-shot pulse (§ Layout CSS) ends the moment the user proves they
+  // found the FAB. Two independent proofs, because either can come first:
+  // opening the dock from the FAB, or typing into it (a restored session can
+  // land with the dock already open, and closeDock() is also reached by the
+  // panel hand-off, which proves nothing about the dock).
+  const stopFabPulse = () => dockToggle.removeAttribute('data-untouched');
   dockToggle.addEventListener('click', () => {
+    stopFabPulse();
     if (dock.dataset.open === 'true') closeDock();
     else openDock();
   });
+  dock.addEventListener('input', stopFabPulse);
   dockClose.addEventListener('click', closeDock);
 
   // Maximise/restore (Work package B) — a RESIZE, never a close. Distinct
