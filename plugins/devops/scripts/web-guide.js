@@ -34,7 +34,7 @@ const { execFileSync } = require('child_process');
 // § General Rules (the 10s file-operation timeout targets async/child-proc I/O).
 // git invocations in gitStatusOf() are the one exception and carry their own
 // 5s timeout, per CONVENTIONS.md's child-process guidance.
-const WAIT_DEFAULT_MS = 35000;
+const WAIT_DEFAULT_MS = 30000;
 const WAIT_MIN_MS = 1000;
 const WAIT_MAX_MS = 35000;
 

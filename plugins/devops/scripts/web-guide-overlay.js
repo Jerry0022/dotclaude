@@ -15,7 +15,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.1.0";
+  var VERSION = "1.1.1";
 
   if (window.claudeGuide && window.claudeGuide.version === VERSION) return "already-injected";
   if (window.claudeGuide && typeof window.claudeGuide.destroy === "function") {
@@ -535,14 +535,34 @@
           resolve(eventQueue.shift());
           return;
         }
+        var timer = null;
+        var onVisible = null;
         var waiter = function (event) {
           clearTimeout(timer);
+          if (onVisible) document.removeEventListener("visibilitychange", onVisible);
           resolve(event);
         };
-        var timer = setTimeout(function () {
-          if (pendingWaiter === waiter) pendingWaiter = null;
-          resolve({ type: "timeout" });
-        }, ms);
+        var armTimer = function () {
+          timer = setTimeout(function () {
+            if (pendingWaiter === waiter) pendingWaiter = null;
+            resolve({ type: "timeout" });
+          }, ms);
+        };
+        // A hidden tab throttles timers to one wake-up per minute, which
+        // overruns the ~45 s CDP eval limit. Arm the timeout only while
+        // visible; while hidden the eval blocks until the user comes back
+        // (or the CDP limit ends it - the loop treats that as a timeout).
+        if (document.hidden) {
+          onVisible = function () {
+            if (document.hidden) return;
+            document.removeEventListener("visibilitychange", onVisible);
+            onVisible = null;
+            armTimer();
+          };
+          document.addEventListener("visibilitychange", onVisible);
+        } else {
+          armTimer();
+        }
         pendingWaiter = waiter;
       });
     },

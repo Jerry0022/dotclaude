@@ -21,6 +21,7 @@ in the user's Edge through the Claude-in-Chrome extension:
 | External `fetch('https://api.github.com/zen')` | 200 — only loopback is gated |
 | `find` / screenshot while the tab is not the visible foreground tab | ❌ content-script injection waits for `document_idle` and times out (45 s); sync `javascript_tool` keeps working. Verify page state via JS, not via `find`/`read_page`. |
 | Typing into the panel input | Page hotkeys fired (GitHub `s` → search); fixed by stopping key events at the overlay host. |
+| `await claudeGuide.wait(35000)` while the tab is **hidden** (user reads the chat, Edge behind the app) | ❌ Edge throttles page timers to one wake-up per minute in hidden tabs; the timeout fires late and the eval dies with `CDP … timed out after 45000ms`. Sync evals keep working. Overlay 1.1.1 arms the timeout only while visible; the loop treats that CDP error as a plain timeout when a sync `state()` still answers. |
 | A page global named `window.__wg` | ❌ **breaks the extension**: every `executeScript`-based tool (`find`, `read_page`, screenshot) then hangs on `document_idle` for 45 s. Renaming the global to `window.claudeGuide` fixes it — never use a `__`-prefixed global on the page. |
 
 Consequence: **the only channel is `javascript_tool` on the one tab**. It is
@@ -151,7 +152,11 @@ inject (idempotent)  →  setStep(n)  →  wait(35000) ─┬─ timeout  → wa
                                                               └─ tab alive  → re-inject, setStep(n) again, wait
 ```
 
-- `wait` budget is **35 000 ms** — safely under the ≈45 s CDP limit.
+- `wait` budget is **30 000 ms** — safely under the ≈45 s CDP limit even with
+  a few seconds of timer drift.
+- While the tab is hidden the overlay arms no timer (throttled timers would
+  overrun the CDP limit); the eval then ends with a CDP timeout error, which
+  the loop treats as a timeout after confirming with a sync `state()` call.
 - One `javascript_tool` call per wait; a step the user needs three minutes for
   costs ~5 tiny calls. Never poll faster than this.
 - Every event carries `url`; Claude uses it (plus sync `javascript_tool` DOM queries) to
@@ -185,5 +190,5 @@ project's `.env` without being pasted into chat. Rules:
 |---------|--------|
 | `payload inject` | The complete overlay source wrapped as an idempotent IIFE, ending with `"injected"` / `"already-injected"` — paste into `javascript_tool.text`. |
 | `payload step <step.json>` | `window.claudeGuide.setStep(<json>)` with the JSON validated against the schema above (exit 1 + reason on violation). |
-| `payload wait [ms]` | `JSON.stringify(await window.claudeGuide.wait(<ms>))` (default and maximum 35000 — the CDP limit is ≈ 45 s). |
+| `payload wait [ms]` | `JSON.stringify(await window.claudeGuide.wait(<ms>))` (default 30000, maximum 35000 — the CDP limit is ≈ 45 s). |
 | `store --file <path> --key <KEY> [--b64 <value>]` | Value from `--b64` (base64, the panel's `secret` encoding) or from stdin. Upserts `KEY=value` in a dotenv-style file (creates it, keeps other lines and comments, quotes when needed). Guards: file inside CWD, no symlink, not git-tracked, no control characters, mode 0600. Prints only `stored KEY → <path>`. |

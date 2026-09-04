@@ -407,10 +407,10 @@ describe("CLI: payload step", () => {
 // ---------------------------------------------------------------------------
 
 describe("CLI: payload wait", () => {
-  test("default 35000ms", () => {
+  test("default 30000ms", () => {
     const r = run(["payload", "wait"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).toBe("JSON.stringify(await window.claudeGuide.wait(35000))");
+    expect(r.stdout).toBe("JSON.stringify(await window.claudeGuide.wait(30000))");
   });
 
   test("custom ms within bounds", () => {

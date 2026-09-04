@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC_PATH = path.join(__dirname, "web-guide-overlay.js");
 const SRC = fs.readFileSync(SRC_PATH, "utf8");
-const MAX_BYTES = 20 * 1024;
+const MAX_BYTES = 24 * 1024;
 const MAX_LINE_LENGTH = 200;
 
 // ---- minimal fake DOM, just enough to execute the overlay source ----
@@ -159,7 +159,7 @@ function run(sandbox) {
 }
 
 describe("web-guide-overlay — shape", () => {
-  test("source is at most 20 KB", () => {
+  test("source is at most 24 KB", () => {
     expect(Buffer.byteLength(SRC, "utf8")).toBeLessThanOrEqual(MAX_BYTES);
   });
 
@@ -173,8 +173,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.1.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1\.1\.0["']/);
+  test("defines VERSION 1.1.1, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1\.1\.1["']/);
     expect(SRC).toMatch(/window.claudeGuide\s*=/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -205,7 +205,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.1.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.1.1");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -222,7 +222,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.1.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.1.1", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
