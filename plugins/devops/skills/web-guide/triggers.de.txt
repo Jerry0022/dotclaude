@@ -1,0 +1,7 @@
+# German trigger phrases for web-guide.
+führe mich durch
+führ mich durch die website
+zeig mir auf der website
+ich muss das auf der website machen
+api key anlegen
+website tutorial
