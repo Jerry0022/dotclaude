@@ -40,7 +40,7 @@ const PLUGIN_SIGNALS = [
   /(^|\s)\/setup-(issue|project|readme|cleanup)\b/,
   /(^|\s)\/run-(agents|autonomous|backlog|burn)\b/,
   /(^|\s)\/tune-(harden|polish|rethink)\b/,
-  /(^|\s)\/claude-(learn|lint|extend-skill)\b/,
+  /(^|\s)\/claude-(learn|lint|extend-skill|batch|strict)\b/,
   /(^|\s)\/auto-(update|usage|graph)\b/,
   /\bcompletion[- ]card\b/i,
   // Hook filenames: {event}.{domain}.{action}.js — action segments may be

@@ -1,0 +1,9 @@
+# German trigger phrases for claude-strict.
+strikt
+strict modus
+genau so und nicht mehr
+nur das ändern
+nichts anderes anfassen
+nur den rand
+strict an
+strict aus

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.142.0] — 2026-09-05
+
+### Added
+
+- **`/claude-strict` — the deliverable is exactly what the prompt names, and only the attributes the prompt leaves open are Claude's call.** "Make the box border thinner" used to invite a padding fix, a doc update and a tidy-up of the two neighbouring borders; nothing in the plugin held the line, and several always-on mandates (docs in the same change, pre-mortem guards, "make reasonable decisions independently") pushed the other way. The new skill fixes the scope in the **vocabulary of the request** — a visual request closes the set of visible things that may change, a technical request closes the set of symbols — while unnamed attributes (colour, pixel value, wording) are chosen and reported in a four-line strict report (`requested / done / chosen / untouched`). Grey zones are settled, not left to mood: a syntactic companion (import, export entry) is in scope, an assertion pinning the exact old value may follow, any other test failure reverts and reports, an ambiguous object is asked about interactively and assumed (and led with) autonomously.
+
+  Two modes, one state file per **worktree**: `/claude-strict <task>` binds the turn and every workflow it starts (a concept session or an autonomous run is auto-bound to its state file and released when that file disappears); `/claude-strict on|off` binds the current worktree + branch, never the whole project — a branch switch deactivates it with a single notice. Enforcement is mechanical: `prompt.strict.enforce` injects the ≤1.4 KB contract once per turn (also on cron and waker turns, so concept iterations stay strict without re-typing), `pre.strict.agent-gate` refuses an Agent spawn whose prompt lacks the block and says how to fix it (recursive — plugin hooks run inside subagents; worktree agents inherit via `<parent>-<role>`), and `stop.strict.release` binds or releases inline modes. `code-defaults.md` § Strict Mode states the precedence over doc-maintenance and pre-mortem outputs; the agent prompt template gains item 9 (forward the block verbatim). Spec: `docs/superpowers/specs/2026-09-04-claude-strict-design.md`.
+
 ## [0.141.0] — 2026-09-04
 
 ### Added
