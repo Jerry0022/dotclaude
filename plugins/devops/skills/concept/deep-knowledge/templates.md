@@ -4187,6 +4187,26 @@ change) via `harvestDockValues()`.
 
   document.addEventListener('DOMContentLoaded', () => {
     buildDesignUI();
+    // IMMEDIATELY after the rebuild and BEFORE showView()/showScreen(): the
+    // dock textareas exist only NOW, and buildDesignUI() created them EMPTY.
+    // showScreen() ends in saveState(), and saveState()'s merge cannot protect
+    // a key whose node IS present — it would serialise those empty textareas
+    // straight over the stored notes, and the restore further down would then
+    // read the blob it had just blanked. Measured in a browser: one reload
+    // emptied `text:{screen-id}` for good.
+    // § State Persistence's own DOMContentLoaded listener is not guaranteed to
+    // run before this one (the same unguaranteed ordering applyDockSize()
+    // already works around), so its restoreState() may have scanned a dock
+    // that did not exist yet, written nothing, and it never re-runs on its
+    // own. Re-restoring here is safe: restoreState() is idempotent (it only
+    // assigns values off the same stored blob) and no user input can have
+    // happened before DOMContentLoaded.
+    // Also deliberately BEFORE primeDock(): on a frozen tab
+    // applyDockFreezeState() stashes the live values into liveDockValues and
+    // paints the frozen blob over them, so restoring afterwards would clobber
+    // the frozen view and lose the stash.
+    if (typeof restoreState === 'function') restoreState();
+    if (typeof updateNoteMarkers === 'function') updateNoteMarkers();
     const active = document.querySelector('section[data-iteration][data-active]');
     if (active) {
       // Work package C — restore an active VIEW first. Defensive by
@@ -4220,24 +4240,9 @@ change) via `harvestDockValues()`.
     }
     updateIndicator();
     document.addEventListener('input', updateNoteMarkers);
-    // The dock textareas exist only NOW — buildDesignUI() above created them.
-    // § State Persistence's own DOMContentLoaded listener is not guaranteed to
-    // run after this one (same unguaranteed ordering applyDockSize() already
-    // works around), so its restoreState() may have scanned an empty dock and
-    // written nothing. It never re-runs on its own, and the next `input` event
-    // then persisted a blob with no `text:{screen-id}` keys at all — the notes
-    // were not merely invisible, they were deleted. Re-restoring here is safe:
-    // restoreState() is idempotent (it only assigns values off the same stored
-    // blob) and no user input can have happened before DOMContentLoaded.
-    // Deliberately BEFORE primeDock(): on a frozen tab applyDockFreezeState()
-    // stashes the live values into liveDockValues and paints the frozen blob
-    // over them, so restoring afterwards would clobber the frozen view and
-    // lose the stash.
-    if (typeof restoreState === 'function') restoreState();
-    if (typeof updateNoteMarkers === 'function') updateNoteMarkers();
-    // Runs last, once buildDesignUI() has set the body[data-single-*] flags
-    // applyDockSize() reads. The dock stays closed — priming only syncs its
-    // field state and its size.
+    // Runs after the restore above, once buildDesignUI() has set the
+    // body[data-single-*] flags applyDockSize() reads. The dock stays closed —
+    // priming only syncs its field state and its size.
     primeDock();
     // The stage showScreen() just built cloned the mock BEFORE restoreState()
     // ran: that listener lives in a later block and therefore fires after this
@@ -4288,6 +4293,20 @@ change) via `harvestDockValues()`.
       });
     }
     buildDesignUI();
+    // buildDesignUI() above destroyed and rebuilt the three dock containers,
+    // so the textareas below it are EMPTY again. Restore them here — before
+    // applyViewport(), showScreen() and primeDock(), every one of which ends
+    // in a saveState() that would write those empty nodes over the stored
+    // notes (the merge only protects keys whose node is ABSENT).
+    // harvestDockValues() carries what was on screen, but only that: a note
+    // belonging to a screen the OUTGOING iteration never rendered a textarea
+    // for exists in localStorage and nowhere else, and would come back blank.
+    // Skipped while a frozen tab is on screen: applyDockFreezeState() has
+    // already painted the frozen blob into the same fields and stashed the
+    // live values in liveDockValues, and writing localStorage over that would
+    // show live text under a read-only frozen iteration.
+    if (!document.body.classList.contains('viewing-frozen')
+        && typeof restoreState === 'function') restoreState();
     // BEFORE the early return below, not after: switching to a decision/free
     // iteration leaves no active design, so showScreen() — the usual route to
     // applyViewport() — never runs. Without this call the device stage of the
@@ -4304,17 +4323,6 @@ change) via `harvestDockValues()`.
       : (remembered && design.querySelector(`#${CSS.escape(remembered)}`)) ? remembered
       : first?.id;
     if (target) showScreen(target);
-    // buildDesignUI() above destroyed and rebuilt the three dock containers.
-    // harvestDockValues() carries what was on screen, but only that: a note
-    // belonging to a screen the OUTGOING iteration never rendered a textarea
-    // for exists in localStorage and nowhere else, and would come back blank.
-    // Re-restoring closes that gap for the same reason as the load path above.
-    // Skipped while a frozen tab is on screen: applyDockFreezeState() has
-    // already painted the frozen blob into the fields and stashed the live
-    // values in liveDockValues, and writing localStorage over that would show
-    // live text under a read-only frozen iteration.
-    if (!document.body.classList.contains('viewing-frozen')
-        && typeof restoreState === 'function') restoreState();
     // Re-sync frozen-vs-live fields and the dock size for the iteration we
     // just switched to. Never touches open/closed — a tab switch must not
     // yank the dock open over the mockup the user just navigated to.
@@ -6021,7 +6029,18 @@ function saveState() {
   });
   document.querySelectorAll('textarea, input[type="text"], input[type="number"]').forEach(el => {
     if (!persistable(el)) return;
-    if (el.id || el.dataset.comment) state['text:' + (el.id || el.dataset.comment)] = el.value;
+    const _key = el.id || el.dataset.comment;
+    if (!_key) return;
+    // Belt-and-braces for the dock rebuild: buildDesignUI() re-creates every
+    // dock textarea EMPTY, so a saveState() that runs between the rebuild and
+    // the restore would blank a stored note (the merge above only protects
+    // keys whose node is ABSENT — these nodes are present). An empty field
+    // therefore may only overwrite a non-empty stored value once the user has
+    // actually typed into it: `data-touched` is stamped from a TRUSTED input
+    // event (see the capture-phase listener at the bottom of this block), so
+    // deliberately clearing a note — type, then delete — still persists "".
+    if (el.value === '' && state['text:' + _key] && el.dataset.touched === undefined) return;
+    state['text:' + _key] = el.value;
   });
   document.querySelectorAll('input[type="range"]').forEach(el => {
     if (!persistable(el)) return;
@@ -6162,6 +6181,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // toggle's pre-restore state. See § Annotation Layer JS.
   if (typeof updateAnnoUI === 'function') updateAnnoUI();
 });
+// Stamps the field the user is actually typing in, so saveState()'s
+// empty-value guard can tell "cleared on purpose" from "not restored yet".
+// CAPTURE phase, so it runs before the bubble-phase saveState below no matter
+// what else listens. isTrusted filters out the synthetic events restoreState()
+// dispatches — a restore must never count as user input.
+document.addEventListener('input', e => {
+  if (e.isTrusted && e.target && e.target.dataset) e.target.dataset.touched = 'true';
+}, true);
 document.addEventListener('change', saveState);
 document.addEventListener('input', saveState);
 ```
@@ -6170,10 +6197,14 @@ document.addEventListener('input', saveState);
 - Use `localStorage` with a 24-hour TTL
 - Save on every `change` and `input` event — not just on submit
 - Restore runs on `DOMContentLoaded` — before the user sees the page. The
-  design template re-runs it once more from § Layout JS, right after
-  `buildDesignUI()` has created the dock textareas: the two script blocks'
+  design template re-runs it once more from § Layout JS, IMMEDIATELY after
+  `buildDesignUI()` has created the dock textareas and before anything that can
+  call `saveState()` (`showScreen()`, `primeDock()`): the two script blocks'
   listeners have no guaranteed order, so the restore here may have scanned a
   dock that did not exist yet
+- An empty `text:` field never overwrites a non-empty stored value unless the
+  user has typed into it (`data-touched`) — a rebuilt, not-yet-restored dock
+  textarea must not be mistaken for a cleared note
 - `saveState()` MERGES over the stored blob and never rebuilds it from the DOM
   alone — a key whose node is currently absent must survive the write
 - `ensureCommentSlots()` runs IMMEDIATELY before `restoreState()` — see

@@ -75,6 +75,14 @@ function designLoadHandler() {
   return slice(jsSource, "document.addEventListener('DOMContentLoaded'", open);
 }
 
+/** Strips line comments. The handlers are heavily commented and those comments
+ *  NAME the calls being ordered ("showScreen() ends in saveState()"), so a raw
+ *  indexOf() finds the prose, not the call, and the ordering assertions below
+ *  would pass or fail on where a sentence sits. */
+function code(src) {
+  return src.replace(/\/\/[^\r\n]*/g, "");
+}
+
 function iterationChangedHandler() {
   return slice(jsSource, "document.addEventListener('iteration:changed'");
 }
@@ -94,6 +102,23 @@ describe("the dock text restore runs after the dock is built", () => {
       .toBeGreaterThan(h.indexOf("buildDesignUI();"));
   });
 
+  test("the re-restore comes BEFORE anything that can call saveState()", () => {
+    // Measured, not deduced: with the restore merely somewhere after
+    // buildDesignUI(), the load path ran
+    //   buildDesignUI() -> showScreen() -> saveState() -> restoreState()
+    // and saveState() serialised the freshly rebuilt (EMPTY) textareas over
+    // the stored notes. The merge cannot help — those nodes are PRESENT — so
+    // the restore two lines later read a blob it had just blanked.
+    const h = code(designLoadHandler());
+    const restore = h.indexOf("restoreState()");
+    expect(restore, "restoreState() must follow buildDesignUI()")
+      .toBeGreaterThan(h.indexOf("buildDesignUI();"));
+    expect(restore, "restoreState() must precede showScreen()")
+      .toBeLessThan(h.indexOf("showScreen("));
+    expect(restore, "restoreState() must precede primeDock()")
+      .toBeLessThan(h.indexOf("primeDock()"));
+  });
+
   test("markers are refreshed with the restored values", () => {
     // Restored text with stale ☰ dots reads as "my note is gone" just the
     // same — the panel is where the user looks for it.
@@ -109,8 +134,16 @@ describe("the dock text restore runs after the dock is built", () => {
     const h = iterationChangedHandler();
     expect(h, "iteration:changed must re-restore after its buildDesignUI()")
       .toMatch(/typeof restoreState === 'function'\)\s*restoreState\(\)/);
-    expect(h.indexOf("restoreState()"), "the restore must follow the rebuild")
-      .toBeGreaterThan(h.indexOf("buildDesignUI();"));
+    const c = code(h);
+    const restore = c.indexOf("restoreState()");
+    expect(restore, "the restore must follow the rebuild")
+      .toBeGreaterThan(c.indexOf("buildDesignUI();"));
+    // Same ordering trap as the load path: showScreen() and primeDock() both
+    // end in saveState(), against a dock buildDesignUI() has just emptied.
+    expect(restore, "the restore must precede showScreen()")
+      .toBeLessThan(c.indexOf("showScreen("));
+    expect(restore, "the restore must precede primeDock()")
+      .toBeLessThan(c.indexOf("primeDock()"));
   });
 
   test("the iteration restore is skipped on a frozen tab", () => {
@@ -148,6 +181,22 @@ describe("saveState() merges instead of rebuilding from the DOM", () => {
     const b = body();
     expect(b, "the merge must re-apply the TTL check").toMatch(/STATE_TTL_MS/);
     expect(b, "and the page-version check").toMatch(/_pageVersion/);
+  });
+
+  test("an untouched empty field never blanks a stored note", () => {
+    // Belt and braces for the ordering above: ANY future saveState() that
+    // slips in between a dock rebuild and the restore would otherwise write
+    // "" over a real note. Only a field the user has actually typed into
+    // (data-touched, stamped from a TRUSTED input event) may persist "" — so
+    // deliberately clearing a note still works.
+    const b = body();
+    expect(b, "guard empty values against the stored blob")
+      .toMatch(/el\.value === ''[\s\S]{0,120}dataset\.touched === undefined/);
+    expect(jsSource, "data-touched must be stamped from a trusted input event")
+      .toMatch(/e\.isTrusted[\s\S]{0,120}dataset\.touched = 'true'/);
+    const stamp = jsSource.indexOf("dataset.touched = 'true'");
+    expect(jsSource.slice(stamp, stamp + 120), "capture phase, so it runs before saveState")
+      .toMatch(/\}, true\)/);
   });
 
   test("conditionally written keys are deleted when absent", () => {
