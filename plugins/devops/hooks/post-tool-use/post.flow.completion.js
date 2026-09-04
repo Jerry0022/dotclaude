@@ -34,7 +34,8 @@ const { getLocale, t } = require('../lib/locale');
 const {
   classifyProfile,
   carveOutsFromProfile,
-  needsLightVerification,
+  domPathsFromProfile,
+  resolveVerificationKind,
   isCodeChange,
   isBrowserTool,
   isTestRunnerTool,
@@ -55,17 +56,25 @@ const {
 function readProfileConfig(sessionId, cwd) {
   let profileClass = classifyProfile('');
   let carveOuts = [];
+  let domPaths = [];
   try {
     const p = path.join(os.homedir(), '.claude', 'cache', 'devops', `test-profile-${sessionId}.json`);
     const json = JSON.parse(fs.readFileSync(p, 'utf8'));
-    profileClass = classifyProfile(json.profile);
+    profileClass = classifyProfile(json);
     carveOuts = carveOutsFromProfile(json);
+    domPaths = domPathsFromProfile(json);
   } catch {}
   try {
     const p = path.join(cwd, '.claude', 'skills', 'devops-test-plan', 'profile.json');
-    carveOuts = carveOuts.concat(carveOutsFromProfile(JSON.parse(fs.readFileSync(p, 'utf8'))));
+    const json = JSON.parse(fs.readFileSync(p, 'utf8'));
+    carveOuts = carveOuts.concat(carveOutsFromProfile(json));
+    domPaths = domPaths.concat(domPathsFromProfile(json));
+    // The project override also declares the class when the session cache has
+    // not been written yet (detection has not run), so a consumer project is
+    // classified correctly from turn one.
+    if (profileClass === 'any') profileClass = classifyProfile(json);
   } catch {}
-  return { profileClass, carveOuts };
+  return { profileClass, carveOuts, domPaths };
 }
 
 // Bilingual strings for the desktop-test AskUserQuestion prompt.
@@ -159,7 +168,7 @@ process.stdin.on('end', () => {
   //     DOM, test runner for runner). A subagent delegation does NOT count —
   //     the main thread cannot see inside it (closed loophole, intentional).
   try {
-    const { profileClass, carveOuts } = readProfileConfig(
+    const { profileClass, carveOuts, domPaths } = readProfileConfig(
       hook.session_id,
       hook.cwd || process.cwd(),
     );
@@ -169,15 +178,17 @@ process.stdin.on('end', () => {
 
     if (isCodeEdit) {
       const editedPath = hook.tool_input && hook.tool_input.file_path;
-      // Light gate — surface-scoped (DOM profiles: web-renderable files only).
-      if (needsLightVerification(profileClass, editedPath, carveOuts)) {
+      // Light gate — scoped per FILE, not per profile: under a DOM profile a
+      // renderer file owes a browser check while a backend file owes a test run.
+      const owedKind = resolveVerificationKind(profileClass, editedPath, { carveOuts, domPaths });
+      if (owedKind !== null) {
         writeSessionFile(
           sessionFile('dotclaude-devops-light-pending', hook.session_id),
           String(editedPath),
         );
         writeSessionFile(
           sessionFile('dotclaude-devops-light-kind', hook.session_id),
-          profileClass,
+          owedKind,
         );
         // ③ order — a new qualifying edit invalidates any prior verification,
         // so the Light check must run AFTER this change.
@@ -200,10 +211,19 @@ process.stdin.on('end', () => {
     // can require a PASSING run (Kern ②). A red run sets light-red and does NOT
     // clear the pending state.
     const command = hook.tool_input && hook.tool_input.command;
+    // Match against the kind actually OWED (written per edited file above), not
+    // the profile class — otherwise a backend edit under a DOM profile could
+    // never be satisfied by the test run it legitimately requires. Falls back to
+    // the profile class when no pending kind was recorded.
+    let owedKind = profileClass;
+    const kindFlag = readSessionFile('dotclaude-devops-light-kind', hook.session_id);
+    if (kindFlag && typeof kindFlag.content === 'string' && kindFlag.content.trim()) {
+      owedKind = kindFlag.content.trim();
+    }
     const browserSatisfies =
-      (profileClass === 'dom' || profileClass === 'any') && isBrowserTool(toolName);
+      (owedKind === 'dom' || owedKind === 'any') && isBrowserTool(toolName);
     const runnerSatisfies =
-      (profileClass === 'runner' || profileClass === 'any') && isTestRunnerTool(toolName, command);
+      (owedKind === 'runner' || owedKind === 'any') && isTestRunnerTool(toolName, command);
 
     if (browserSatisfies) {
       writeSessionFile(

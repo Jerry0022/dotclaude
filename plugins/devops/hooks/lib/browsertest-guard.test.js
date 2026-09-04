@@ -6,6 +6,8 @@ import {
   classifyProfile,
   compileCarveOuts,
   carveOutsFromProfile,
+  domPathsFromProfile,
+  resolveVerificationKind,
   needsLightVerification,
   isBrowserTool,
   isTestRunnerTool,
@@ -239,9 +241,17 @@ describe("classifyProfile", () => {
 // ---------------------------------------------------------------------------
 
 describe("needsLightVerification", () => {
-  test("dom profile → only web-renderable files are pending", () => {
+  // Behaviour change: a backend file under a DOM profile used to owe NOTHING,
+  // which left the whole non-DOM half of a hybrid project (Electron/Tauri +
+  // Node backend) unverified. It now owes a verification too — just a test run
+  // rather than a browser check. Which kind is owed is resolveVerificationKind's
+  // job; this boolean only says "something is owed".
+  test("dom profile → renderable AND backend source files are pending", () => {
     expect(needsLightVerification("dom", "src/App.vue")).toBe(true);
-    expect(needsLightVerification("dom", "mcp-server/index.js")).toBe(false); // backend js, not renderable
+    expect(needsLightVerification("dom", "mcp-server/index.js")).toBe(true);
+    expect(resolveVerificationKind("dom", "src/App.vue")).toBe("dom");
+    expect(resolveVerificationKind("dom", "mcp-server/index.js")).toBe("runner");
+    expect(needsLightVerification("dom", "README.md")).toBe(false);
   });
 
   test("runner profile → any source file is pending", () => {
@@ -302,13 +312,15 @@ describe("isTestRunnerTool", () => {
       "dotnet test",
       "./gradlew test",
       "npx playwright test",
+      "node --test tests/unit/shared/*.test.js",
+      "node --test --test-reporter=spec tests/",
     ]) {
       expect(isTestRunnerTool("Bash", c)).toBe(true);
     }
   });
 
   test("non-test Bash commands do not count", () => {
-    for (const c of ["npm install", "npm run build", "git status", "node app.js", "ls"]) {
+    for (const c of ["npm install", "npm run build", "git status", "node app.js", "ls", "node --check app.js"]) {
       expect(isTestRunnerTool("Bash", c)).toBe(false);
     }
   });
@@ -507,6 +519,20 @@ describe("testRunOutcome", () => {
     expect(testRunOutcome({ exitCode: 2 })).toBe("fail");
   });
 
+  // Node's spec reporter prints counts AFTER the word ("ℹ fail 0") — without
+  // an exit code in the response, the bare \bFAIL\b signal used to flag every
+  // GREEN node --test run as red and the gate blocked on passing suites.
+  test("node spec-reporter green summary (fail 0) is a pass without exit code", () => {
+    const green = "ℹ tests 89\nℹ pass 89\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0";
+    expect(testRunOutcome({ output: green })).toBe("pass");
+    expect(testRunOutcome({ output: "ℹ pass 20\nℹ failed 0" })).toBe("pass");
+  });
+
+  test("node spec-reporter real failures still count as fail", () => {
+    expect(testRunOutcome({ output: "ℹ pass 88\nℹ fail 1\n✖ failing tests:" })).toBe("fail");
+    expect(testRunOutcome({ output: "3 failed, 12 passed" })).toBe("fail");
+  });
+
   test("interrupted run is a fail", () => {
     expect(testRunOutcome({ interrupted: true })).toBe("fail");
   });
@@ -615,5 +641,82 @@ describe("decideLightTest — escalation", () => {
     const d = decideLightTest({ pending: true, verified: true, stopHookActive: false, kind: "runner", blockCount: 1 });
     expect(d.action).toBe("pass");
     expect(d.resetFlags).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hybrid projects — a DOM profile with a non-DOM backend (#gate-misclassify)
+// ---------------------------------------------------------------------------
+
+describe("classifyProfile — explicit class field", () => {
+  test("an explicit class overrides the name heuristic", () => {
+    expect(classifyProfile({ profile: "electron-ow", class: "any" })).toBe("any");
+    expect(classifyProfile({ profile: "electron-ow", class: "runner" })).toBe("runner");
+    expect(classifyProfile({ profile: "cli-node", class: "dom" })).toBe("dom");
+  });
+
+  test("an invalid or missing class falls back to the name heuristic", () => {
+    expect(classifyProfile({ profile: "electron-ow", class: "bogus" })).toBe("dom");
+    expect(classifyProfile({ profile: "electron-ow" })).toBe("dom");
+    expect(classifyProfile({ profile: "cli-node" })).toBe("runner");
+    expect(classifyProfile({})).toBe("any");
+  });
+
+  test("plain string input keeps working", () => {
+    expect(classifyProfile("electron-ow")).toBe("dom");
+    expect(classifyProfile("cli-node")).toBe("runner");
+    expect(classifyProfile("")).toBe("any");
+  });
+});
+
+describe("resolveVerificationKind", () => {
+  test("non-code changes owe nothing", () => {
+    expect(resolveVerificationKind("dom", "README.md")).toBe(null);
+    expect(resolveVerificationKind("runner", "docs/guide.md")).toBe(null);
+    expect(resolveVerificationKind("dom", "src/App.test.tsx")).toBe(null);
+  });
+
+  test("under a DOM profile a renderer file owes a browser check", () => {
+    expect(resolveVerificationKind("dom", "src/components/Nav.tsx")).toBe("dom");
+    expect(resolveVerificationKind("dom", "renderer/main.ts")).toBe("dom");
+  });
+
+  // The regression this whole change is about: a backend file under a DOM
+  // profile used to owe a browser check that no view could ever satisfy.
+  test("under a DOM profile a backend file owes a test run, not a browser check", () => {
+    expect(resolveVerificationKind("dom", "scripts/build.js")).toBe("runner");
+    expect(resolveVerificationKind("dom", "mcp-server/index.js")).toBe("runner");
+  });
+
+  test("explicit dom_paths override the heuristic for monorepo layouts", () => {
+    const domPaths = domPathsFromProfile({ dom_paths: ["modules/*/ui-angular/**"] });
+    const kind = (p) => resolveVerificationKind("dom", p, { domPaths });
+
+    // Backend module that merely contains a generic `src/` segment.
+    expect(kind("modules/core/src/core/overlay-manager.js")).toBe("runner");
+    expect(kind("modules/shared/ipc.js")).toBe("runner");
+    // The real renderer surface still demands a browser check.
+    expect(kind("modules/desktop/ui-angular/src/app/app.component.ts")).toBe("dom");
+  });
+
+  test("runner and any profiles are unaffected by dom_paths", () => {
+    const domPaths = domPathsFromProfile({ dom_paths: ["ui/**"] });
+    expect(resolveVerificationKind("runner", "ui/index.ts", { domPaths })).toBe("runner");
+    expect(resolveVerificationKind("any", "ui/index.ts", { domPaths })).toBe("any");
+  });
+
+  test("carve-outs still win over everything", () => {
+    const carveOuts = compileCarveOuts(["ideas"]);
+    expect(resolveVerificationKind("dom", "ideas/sketch.html", { carveOuts })).toBe(null);
+  });
+});
+
+describe("needsLightVerification stays consistent with resolveVerificationKind", () => {
+  test("boolean wrapper matches the kind result", () => {
+    expect(needsLightVerification("dom", "src/App.tsx")).toBe(true);
+    expect(needsLightVerification("dom", "README.md")).toBe(false);
+    // Backend under a DOM profile now DOES owe verification (as a test run),
+    // where the old surface-scoped boolean returned false.
+    expect(needsLightVerification("dom", "scripts/build.js")).toBe(true);
   });
 });

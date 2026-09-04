@@ -154,15 +154,30 @@ function isCodeChange(filePath, carveOuts) {
 // Profile classification — which Light check does this profile require?
 // ---------------------------------------------------------------------------
 
+const VALID_CLASSES = new Set(['dom', 'runner', 'any']);
+
 /**
- * Map a $TEST_PROFILE name to the kind of Light verification it needs.
+ * Map a $TEST_PROFILE to the kind of Light verification it needs.
  *   'dom'    → browser snapshot (web / electron renderer / tauri / pwa)
  *   'runner' → test suite (cli, lib, generic, backend, language runtimes)
  *   'any'    → unknown / unpinned → either satisfies
- * @param {string} name
+ *
+ * Accepts either the profile NAME or the parsed profile OBJECT. An explicit
+ * `class` field on the object always wins over the name heuristic: the regex
+ * below matches on substrings, so a hybrid project whose profile merely
+ * CONTAINS "electron" (e.g. `electron-ow`, an Electron shell with a large Node
+ * backend) would otherwise be locked into browser-only verification.
+ *
+ * @param {string|{profile?:string, class?:string}} nameOrProfile
  * @returns {'dom'|'runner'|'any'}
  */
-function classifyProfile(name) {
+function classifyProfile(nameOrProfile) {
+  let name = nameOrProfile;
+  if (nameOrProfile && typeof nameOrProfile === 'object') {
+    const declared = String(nameOrProfile.class || '').toLowerCase();
+    if (VALID_CLASSES.has(declared)) return declared;
+    name = nameOrProfile.profile;
+  }
   const p = String(name || '').toLowerCase();
   if (!p) return 'any';
   if (/(^|[-_])?(web|angular|vite|electron|tauri|renderer|pwa|svelte|nuxt|next|capacitor|cordova|ionic)/.test(p)) {
@@ -175,15 +190,58 @@ function classifyProfile(name) {
 }
 
 /**
+ * Extract + compile a profile's explicit DOM-surface paths (field `dom_paths`),
+ * using the same pattern syntax as `no_runtime_static_paths`. When present they
+ * REPLACE the built-in web-renderable heuristic for deciding which files under a
+ * DOM profile actually need a browser check — necessary for monorepos where the
+ * heuristic's generic `src/` signal also matches backend modules
+ * (e.g. `modules/core/src/…` is not a renderer surface).
+ * @param {*} profileJson
+ * @returns {RegExp[]}
+ */
+function domPathsFromProfile(profileJson) {
+  if (!profileJson || typeof profileJson !== 'object') return [];
+  return compileCarveOuts(profileJson.dom_paths);
+}
+
+/**
+ * Which Light check does THIS file change owe, given the active profile?
+ * Returns null when the change owes nothing at all (docs/config/tests/carve-outs).
+ *
+ * A DOM profile only demands a browser check for files that are genuinely a
+ * rendered surface; every other source file under it still owes verification,
+ * but a test run satisfies it. Without this split a backend-only change in an
+ * Electron/hybrid project could never satisfy the gate, since no browser view
+ * exists that would demonstrate the change.
+ *
+ * @param {'dom'|'runner'|'any'} profileClass
+ * @param {string} filePath
+ * @param {{carveOuts?: RegExp[], domPaths?: RegExp[]}} [opts]
+ * @returns {'dom'|'runner'|'any'|null}
+ */
+function resolveVerificationKind(profileClass, filePath, opts = {}) {
+  const { carveOuts, domPaths } = opts;
+  if (!isCodeChange(filePath, carveOuts)) return null;
+  if (profileClass !== 'dom') return profileClass === 'runner' ? 'runner' : 'any';
+  const p = String(filePath).replace(/\\/g, '/');
+  if (Array.isArray(domPaths) && domPaths.length > 0) {
+    return domPaths.some(re => re.test(p)) ? 'dom' : 'runner';
+  }
+  return isWebRenderableChange(filePath, carveOuts) ? 'dom' : 'runner';
+}
+
+/**
  * Does this file change make a Light verification pending, given the profile?
+ * Thin wrapper over resolveVerificationKind, kept for callers that only need
+ * the boolean.
  * @param {'dom'|'runner'|'any'} profileClass
  * @param {string} filePath
  * @param {RegExp[]} [carveOuts] — compiled project carve-outs (compileCarveOuts)
+ * @param {RegExp[]} [domPaths] — compiled profile DOM paths (domPathsFromProfile)
  * @returns {boolean}
  */
-function needsLightVerification(profileClass, filePath, carveOuts) {
-  if (profileClass === 'dom') return isWebRenderableChange(filePath, carveOuts);
-  return isCodeChange(filePath, carveOuts); // 'runner' and 'any' → any source file
+function needsLightVerification(profileClass, filePath, carveOuts, domPaths) {
+  return resolveVerificationKind(profileClass, filePath, { carveOuts, domPaths }) !== null;
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +267,7 @@ function isBrowserTool(toolName) {
 // Test-runner invocations in a Bash command. Anchored so "npm install" etc. do
 // not match; "npm run test:unit" matches via the word boundary after "test".
 const TEST_RUNNER_RE =
-  /\b(npm|pnpm|yarn)\s+(run\s+)?test\b|\bnpm\s+t\b|\b(vitest|jest|mocha|ava|jasmine|pytest|rspec|phpunit|nose2)\b|\bpython\s+-m\s+(pytest|unittest)\b|\bgo\s+test\b|\bcargo\s+test\b|\bdotnet\s+test\b|\b(mvn|gradle|gradlew)\s+(test|verify|check)\b|\bnpx\s+(vitest|jest|mocha|playwright\s+test)\b|\bplaywright\s+test\b/i;
+  /\b(npm|pnpm|yarn)\s+(run\s+)?test\b|\bnpm\s+t\b|\b(vitest|jest|mocha|ava|jasmine|pytest|rspec|phpunit|nose2)\b|\bnode\s+--test\b|\bpython\s+-m\s+(pytest|unittest)\b|\bgo\s+test\b|\bcargo\s+test\b|\bdotnet\s+test\b|\b(mvn|gradle|gradlew)\s+(test|verify|check)\b|\bnpx\s+(vitest|jest|mocha|playwright\s+test)\b|\bplaywright\s+test\b/i;
 
 /**
  * Did a test runner run? Only shell tools count (Bash on *nix, PowerShell on
@@ -253,7 +311,9 @@ function isLightVerification(profileClass, toolName, command) {
 const FAIL_TEXT_RE =
   /\b\d+\s+fail(?:ed|ing|ures?)\b|\bFAIL\b|✗|✖|\bfailures=[1-9]\b|\bAssertionError\b|\bFAILURES!\b|\bFAILED\s*\(/i;
 // Counter-signal: "0 failed" / "0 failures" / "failures=0" must NOT count.
-const ZERO_FAIL_RE = /\b0\s+fail(?:ed|ures?)\b|\bfailures=0\b/i;
+// Node's spec reporter puts the count AFTER the word ("ℹ fail 0"), which the
+// generic \bFAIL\b signal would otherwise flag — so both orders are excused.
+const ZERO_FAIL_RE = /\b0\s+fail(?:ed|ures?)\b|\bfailures=0\b|\bfail(?:ed|ures?)?\s+0\b/i;
 
 /**
  * Pull a usable text blob + numeric exit hint out of a PostToolUse tool_response,
@@ -489,6 +549,8 @@ module.exports = {
   classifyProfile,
   compileCarveOuts,
   carveOutsFromProfile,
+  domPathsFromProfile,
+  resolveVerificationKind,
   needsLightVerification,
   isBrowserTool,
   isTestRunnerTool,
