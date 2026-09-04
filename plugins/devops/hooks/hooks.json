@@ -50,6 +50,12 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.mcp.health.js" }
         ],
         "matcher": "mcp__plugin_devops_"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.strict.agent-gate.js" }
+        ],
+        "matcher": "Agent"
       }
     ],
     "PostToolUse": [
@@ -85,6 +91,7 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.flow.browsertest.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.flow.guard.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.flow.selfcalibration.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.strict.release.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.mcp.reap.js" }
         ]
       }
@@ -99,6 +106,7 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.issue.detect.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.plugin.scope.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.skill.enforce.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.strict.enforce.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.ship.detect.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.flow.appstart.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.worktree.branch-guard.js" }
