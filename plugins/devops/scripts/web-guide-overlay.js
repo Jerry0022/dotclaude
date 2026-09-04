@@ -1,79 +1,98 @@
 /**
  * @script web-guide-overlay
- * @version 1.0.0
+ * @version 1.1.0
  * @plugin devops
- * @description In-page overlay for the /web-guide skill. Injected verbatim
- *   via the Claude-in-Chrome javascript_tool into an arbitrary third-party
- *   page. Renders a draggable FAB + guide panel inside an open Shadow DOM
- *   host, collects one user event per step (next/help/abort/timeout), and
- *   exposes the window.claudeGuide contract described in
- *   plugins/devops/skills/web-guide/deep-knowledge/protocol.md. Idempotent:
- *   re-injecting the same version is a no-op ("already-injected"); a newer
- *   version tears down and replaces the old overlay. No imports, no eval,
- *   no network — the last expression is the IIFE call itself so the
- *   Runtime.evaluate result is the plain string "injected"/"already-injected".
+ * @description In-page overlay for /web-guide. Injected verbatim via the
+ *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
+ *   draggable FAB + panel in a closed Shadow DOM host, collects one event
+ *   per step (next/help/abort/timeout), exposes window.claudeGuide per
+ *   plugins/devops/skills/web-guide/deep-knowledge/protocol.md. Idempotent
+ *   (same version -> "already-injected"; newer -> tear down + replace). No
+ *   imports/eval/network — last expression is the IIFE call, so
+ *   Runtime.evaluate returns "injected"/"already-injected".
  */
 /* global window, document */
 (function () {
   "use strict";
 
-  var VERSION = "1.0.0";
+  var VERSION = "1.1.0";
 
-  // Idempotency: same version already running -> no-op. Newer version -> tear down first.
   if (window.claudeGuide && window.claudeGuide.version === VERSION) return "already-injected";
   if (window.claudeGuide && typeof window.claudeGuide.destroy === "function") {
     try {
       window.claudeGuide.destroy();
-    } catch {
-      // previous overlay was already half-torn-down; ignore
-    }
+    } catch {}
   }
 
   var STORAGE_KEY = "__wg";
   var POS_STORAGE_KEY = "__wg.pos";
+  var STEP_TTL_MS = 30 * 60 * 1000;
+  var INPUT_TYPES = ["text", "secret", "choice", "confirm"];
 
-  var currentStep = null;
-  var collapsed = true;
-  var pos = { right: 24, bottom: 24 };
-  var eventQueue = [];
-  var pendingWaiter = null;
-  var helpOpen = false;
-  var confirmingAbort = false;
-  var abortResetTimer = null;
-  var statusEl = null;
-  var activeButtons = [];
+  var currentStep = null, collapsed = true, pos = { right: 24, bottom: 24 };
+  var eventQueue = [], pendingWaiter = null, helpOpen = false, abortConfirm = false;
+  var abortResetTimer = null, noResponseTimer = null, activeBtns = [];
+  var statusEl = null, spinnerEl = null, waitLabelEl = null;
+
+  function isNum(n) {
+    return typeof n === "number" && isFinite(n);
+  }
+
+  function sanitizeStep(step) {
+    if (!step || typeof step !== "object") return null;
+    if (typeof step.id !== "string" || !step.id) return null;
+    if (!Number.isInteger(step.index) || step.index < 1) return null;
+    if (!Number.isInteger(step.total) || step.total < 1) return null;
+    if (typeof step.title !== "string" || typeof step.text !== "string") return null;
+    if (step.done !== undefined && typeof step.done !== "boolean") return null;
+    var out = { id: step.id, index: step.index, total: step.total, title: step.title, text: step.text };
+    if (step.done !== undefined) out.done = step.done;
+    var input = step.input;
+    if (input === undefined) return out;
+    if (!input || typeof input !== "object") return null;
+    if (INPUT_TYPES.indexOf(input.type) === -1 || typeof input.name !== "string") return null;
+    if (input.label !== undefined && typeof input.label !== "string") return null;
+    if (input.placeholder !== undefined && typeof input.placeholder !== "string") return null;
+    if (input.required !== undefined && typeof input.required !== "boolean") return null;
+    var opts = null;
+    if (input.type === "choice") {
+      if (!Array.isArray(input.options) || input.options.some((o) => typeof o !== "string")) return null;
+      opts = input.options.slice();
+    } else if (input.options !== undefined) {
+      return null;
+    }
+    out.input = { type: input.type, name: input.name };
+    if (input.label !== undefined) out.input.label = input.label;
+    if (input.placeholder !== undefined) out.input.placeholder = input.placeholder;
+    if (input.required !== undefined) out.input.required = input.required;
+    if (opts) out.input.options = opts;
+    return out;
+  }
 
   function loadState() {
     try {
-      var raw = sessionStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        var saved = JSON.parse(raw);
-        if (saved && saved.step) currentStep = saved.step;
-        if (saved) collapsed = !!saved.collapsed;
-        if (saved && saved.pos) pos = saved.pos;
+      var saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "null");
+      if (saved && typeof saved === "object") {
+        if (saved.step && typeof saved.ts === "number" && Date.now() - saved.ts <= STEP_TTL_MS) {
+          var sanitized = sanitizeStep(saved.step);
+          if (sanitized) currentStep = sanitized;
+        }
+        collapsed = !!saved.collapsed;
       }
-    } catch {
-      // sessionStorage unavailable or corrupt payload; keep defaults
-    }
+    } catch {}
     try {
-      var savedPos = localStorage.getItem(POS_STORAGE_KEY);
-      if (savedPos) pos = JSON.parse(savedPos);
-    } catch {
-      // localStorage unavailable or corrupt payload; keep current pos
-    }
+      var p = JSON.parse(localStorage.getItem(POS_STORAGE_KEY) || "null");
+      if (p && isNum(p.right) && isNum(p.bottom)) pos = { right: p.right, bottom: p.bottom };
+    } catch {}
   }
 
   function saveState() {
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ step: currentStep, collapsed: collapsed, pos: pos }));
-    } catch {
-      // storage full/blocked; UI still works, just won't survive reload
-    }
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ step: currentStep, collapsed, pos, ts: Date.now() }));
+    } catch {}
     try {
       localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(pos));
-    } catch {
-      // storage full/blocked; drag position won't persist across sessions
-    }
+    } catch {}
   }
 
   function escapeHtml(value) {
@@ -82,7 +101,6 @@
     });
   }
 
-  // Step text only ever gets these three inline marks — never raw HTML.
   function formatText(value) {
     return escapeHtml(value)
       .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
@@ -90,9 +108,13 @@
       .replace(/\n/g, "<br>");
   }
 
+  function toBase64Utf8(value) {
+    return btoa(unescape(encodeURIComponent(String(value ?? ""))));
+  }
+
   var host = document.createElement("div");
-  host.id = "wg-host";
-  var shadow = host.attachShadow({ mode: "open" });
+  host.id = "wg-host-" + Math.random().toString(36).slice(2, 10);
+  var shadow = host.attachShadow({ mode: "closed" });
 
   var styleEl = document.createElement("style");
   styleEl.textContent = [
@@ -130,22 +152,18 @@
   ].join("\n");
   shadow.appendChild(styleEl);
 
-  var fabButton = document.createElement("button");
+  var fabButton = mk("button", "fab");
   fabButton.type = "button";
-  fabButton.className = "fab";
   fabButton.setAttribute("aria-label", "Claude Guide");
   fabButton.setAttribute("aria-expanded", "false");
-  var badge = document.createElement("span");
-  badge.className = "badge";
+  var badge = mk("span", "badge");
   fabButton.appendChild(badge);
   shadow.appendChild(fabButton);
 
-  var panel = document.createElement("div");
-  panel.className = "panel";
+  var panel = mk("div", "panel");
   panel.setAttribute("role", "dialog");
   panel.style.display = "none";
   shadow.appendChild(panel);
-
   document.documentElement.appendChild(host);
 
   function clampPosition() {
@@ -163,11 +181,8 @@
     panel.style.bottom = pos.bottom + 68 + "px";
   }
 
-  // Shared drag handling for the FAB and the panel header. Treats a pointer
-  // move under 4px as a click rather than a drag, so tapping still works.
   function makeDraggable(el, onClick) {
-    var dragging = false;
-    var dragged = false;
+    var dragging = false, dragged = false;
     var startX, startY, startRight, startBottom;
 
     el.addEventListener("pointerdown", function (e) {
@@ -179,16 +194,14 @@
       startBottom = pos.bottom;
       try {
         el.setPointerCapture(e.pointerId);
-      } catch {
-        // pointer capture unsupported in this environment; dragging still works
-      }
+      } catch {}
     });
 
     el.addEventListener("pointermove", function (e) {
       if (!dragging) return;
       var dx = e.clientX - startX;
       var dy = e.clientY - startY;
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragged = true; // drag threshold
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragged = true;
       pos = { right: startRight - dx, bottom: startBottom - dy };
       applyPosition();
     });
@@ -205,6 +218,23 @@
 
   window.addEventListener("resize", applyPosition);
 
+  function clearNoResponseTimer() {
+    clearTimeout(noResponseTimer);
+    noResponseTimer = null;
+  }
+
+  function armNoResponseTimer() {
+    clearNoResponseTimer();
+    noResponseTimer = setTimeout(function () {
+      noResponseTimer = null;
+      activeBtns.forEach(function (btn) {
+        btn.disabled = false;
+      });
+      if (spinnerEl) spinnerEl.style.display = "none";
+      if (waitLabelEl) waitLabelEl.textContent = "Keine Antwort — bitte noch einmal senden.";
+    }, 45000);
+  }
+
   function deliverEvent(event) {
     if (pendingWaiter) {
       var resolve = pendingWaiter;
@@ -214,29 +244,37 @@
       eventQueue.push(event);
     }
     disableActiveButtons();
+    armNoResponseTimer();
   }
 
-  // Binds emitted events to the step that was current when the UI was rendered,
-  // so a click on a stale (already-replaced) step's button is silently dropped.
   function makeEmitter(stepId) {
-    return function (type, name, value) {
+    return function (type, name, value, extra) {
       if (!currentStep || currentStep.id !== stepId) return;
-      deliverEvent({ type: type, stepId: stepId, name: name, value: value, url: window.location.href, ts: Date.now() });
+      var evt = { type: type, stepId: stepId, name: name, value: value, url: window.location.href, ts: Date.now() };
+      if (extra) {
+        for (var key in extra) evt[key] = extra[key];
+      }
+      deliverEvent(evt);
     };
   }
 
   function disableActiveButtons() {
     if (statusEl) statusEl.style.display = "flex";
-    activeButtons.forEach(function (btn) {
+    activeBtns.forEach(function (btn) {
       btn.disabled = true;
     });
   }
 
+  function mk(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
   function makeButton(label, cls, onClick) {
-    var btn = document.createElement("button");
+    var btn = mk("button", "btn " + cls, label);
     btn.type = "button";
-    btn.className = "btn " + cls;
-    btn.textContent = label;
     btn.addEventListener("click", onClick);
     return btn;
   }
@@ -246,8 +284,7 @@
     helpOpen = true;
     var wrap = document.createElement("div");
     wrap.style.marginTop = "8px";
-    var textarea = document.createElement("textarea");
-    textarea.className = "f";
+    var textarea = mk("textarea", "f");
     textarea.rows = 2;
     textarea.placeholder = "Was hakt?";
     wrap.appendChild(textarea);
@@ -260,15 +297,18 @@
     container.appendChild(wrap);
     try {
       textarea.focus();
-    } catch {
-      // focus can throw in detached/hidden elements; not fatal
-    }
+    } catch {}
   }
 
   function render(focus) {
     panel.innerHTML = "";
-    activeButtons = [];
+    activeBtns = [];
     statusEl = null;
+    spinnerEl = null;
+    waitLabelEl = null;
+    abortConfirm = false;
+    clearTimeout(abortResetTimer);
+    abortResetTimer = null;
     applyPosition();
 
     if (!currentStep) {
@@ -287,15 +327,11 @@
     var titleId = "wg-title-" + stepId;
     panel.setAttribute("aria-labelledby", titleId);
 
-    var head = document.createElement("div");
-    head.className = "head";
-    var headTitle = document.createElement("b");
-    headTitle.textContent = "Claude Guide · " + currentStep.index + "/" + currentStep.total;
+    var head = mk("div", "head");
+    var headTitle = mk("b", null, "Claude Guide · " + currentStep.index + "/" + currentStep.total);
     head.appendChild(headTitle);
-    var collapseBtn = document.createElement("button");
+    var collapseBtn = mk("button", "collapse", "–");
     collapseBtn.type = "button";
-    collapseBtn.className = "collapse";
-    collapseBtn.textContent = "–";
     collapseBtn.setAttribute("aria-label", "Einklappen");
     collapseBtn.addEventListener("click", function () {
       collapsed = true;
@@ -306,47 +342,37 @@
     makeDraggable(head);
     panel.appendChild(head);
 
-    var body = document.createElement("div");
-    body.className = "body";
+    var body = mk("div", "body");
     panel.appendChild(body);
 
     var focusTarget = null;
 
     if (currentStep.done) {
-      var doneTitle = document.createElement("p");
-      doneTitle.className = "t";
+      var doneTitle = mk("p", "t", "✅ " + (currentStep.title || "Fertig"));
       doneTitle.id = titleId;
-      doneTitle.textContent = "✅ " + (currentStep.title || "Fertig");
       body.appendChild(doneTitle);
 
-      var doneText = document.createElement("p");
-      doneText.className = "x";
+      var doneText = mk("p", "x");
       doneText.innerHTML = formatText(currentStep.text || "");
       body.appendChild(doneText);
 
-      var doneHint = document.createElement("p");
-      doneHint.className = "x";
-      doneHint.textContent = "Du kannst den Tab jetzt schließen.";
+      var doneHint = mk("p", "x", "Du kannst den Tab jetzt schließen.");
       body.appendChild(doneHint);
 
-      var doneFoot = document.createElement("div");
-      doneFoot.className = "foot";
+      var doneFoot = mk("div", "foot");
       var doneBtn = makeButton("Fertig", "primary", function () {
         emit("next");
       });
       doneFoot.appendChild(doneBtn);
-      activeButtons.push(doneBtn);
+      activeBtns.push(doneBtn);
       panel.appendChild(doneFoot);
       focusTarget = doneBtn;
     } else {
-      var titleEl = document.createElement("p");
-      titleEl.className = "t";
+      var titleEl = mk("p", "t", currentStep.title || "");
       titleEl.id = titleId;
-      titleEl.textContent = currentStep.title || "";
       body.appendChild(titleEl);
 
-      var textEl = document.createElement("p");
-      textEl.className = "x";
+      var textEl = mk("p", "x");
       textEl.innerHTML = formatText(currentStep.text || "");
       body.appendChild(textEl);
 
@@ -357,9 +383,8 @@
       var inputEl = null;
 
       if (input && (input.type === "text" || input.type === "secret")) {
-        inputEl = document.createElement("input");
-        inputEl.className = "f";
-        inputEl.type = input.type === "secret" ? "password" : "text"; // secret is masked, value still returned in the event
+        inputEl = mk("input", "f");
+        inputEl.type = input.type === "secret" ? "password" : "text";
         if (input.placeholder) inputEl.placeholder = input.placeholder;
         if (input.label) inputEl.setAttribute("aria-label", input.label);
         body.appendChild(inputEl);
@@ -369,17 +394,14 @@
         focusTarget = inputEl;
       } else if (input && input.type === "confirm") {
         var confirmLabel = document.createElement("label");
-        confirmLabel.style.display = "flex";
-        confirmLabel.style.gap = "6px";
-        confirmLabel.style.marginBottom = "8px";
+        Object.assign(confirmLabel.style, { display: "flex", gap: "6px", marginBottom: "8px" });
         var checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.addEventListener("change", function () {
           updateSubmitEnabled();
         });
         confirmLabel.appendChild(checkbox);
-        var confirmText = document.createElement("span");
-        confirmText.textContent = input.label || "Bestätigen";
+        var confirmText = mk("span", null, input.label || "Bestätigen");
         confirmLabel.appendChild(confirmText);
         body.appendChild(confirmLabel);
         readValue = function () {
@@ -388,11 +410,9 @@
         focusTarget = checkbox;
       }
 
-      var foot = document.createElement("div");
-      foot.className = "foot";
+      var foot = mk("div", "foot");
       var submitBtn = null;
 
-      // Enables/disables the primary button when the step declares a required input.
       function updateSubmitEnabled() {
         if (!submitBtn) return;
         var value = readValue();
@@ -406,15 +426,20 @@
             emit("next", input.name, option);
           });
           foot.appendChild(optBtn);
-          activeButtons.push(optBtn);
+          activeBtns.push(optBtn);
         });
         focusTarget = foot.children ? foot.children[0] : null;
       } else {
         submitBtn = makeButton(currentStep.done ? "Fertig" : "Weiter", "primary", function () {
-          emit("next", input ? input.name : undefined, readValue());
+          var value = readValue();
+          if (input && input.type === "secret") {
+            emit("next", input.name, toBase64Utf8(value), { encoding: "base64" });
+          } else {
+            emit("next", input ? input.name : undefined, value);
+          }
         });
         foot.appendChild(submitBtn);
-        activeButtons.push(submitBtn);
+        activeBtns.push(submitBtn);
         updateSubmitEnabled();
         if (inputEl) {
           inputEl.addEventListener("input", updateSubmitEnabled);
@@ -429,45 +454,40 @@
         openHelpBox(body, emit);
       });
       foot.appendChild(helpBtn);
-      activeButtons.push(helpBtn);
+      activeBtns.push(helpBtn);
 
       var abortBtn = makeButton("Abbrechen", "tertiary", function () {
-        if (confirmingAbort) {
+        if (abortConfirm) {
           clearTimeout(abortResetTimer);
-          confirmingAbort = false;
+          abortConfirm = false;
           emit("abort");
         } else {
-          confirmingAbort = true;
+          abortConfirm = true;
           abortBtn.textContent = "Wirklich abbrechen?";
           abortResetTimer = setTimeout(function () {
-            confirmingAbort = false;
+            abortConfirm = false;
             abortBtn.textContent = "Abbrechen";
           }, 4000);
         }
       });
       foot.appendChild(abortBtn);
-      activeButtons.push(abortBtn);
+      activeBtns.push(abortBtn);
 
       panel.appendChild(foot);
 
-      statusEl = document.createElement("div");
-      statusEl.className = "status";
+      statusEl = mk("div", "status");
       statusEl.style.display = "none";
-      var spinner = document.createElement("span");
-      spinner.className = "spin";
-      statusEl.appendChild(spinner);
-      var waitingLabel = document.createElement("span");
-      waitingLabel.textContent = "Warte auf Claude…";
-      statusEl.appendChild(waitingLabel);
+      spinnerEl = mk("span", "spin");
+      statusEl.appendChild(spinnerEl);
+      waitLabelEl = mk("span", null, "Warte auf Claude…");
+      statusEl.appendChild(waitLabelEl);
       panel.appendChild(statusEl);
     }
 
     if (focus && focusTarget && focusTarget.focus) {
       try {
         focusTarget.focus();
-      } catch {
-        // focus can throw in detached/hidden elements; not fatal
-      }
+      } catch {}
     }
   }
 
@@ -477,32 +497,34 @@
     saveState();
   });
 
-  // Keys typed into the panel must never reach the page: sites bind single-key
-  // hotkeys on document (GitHub "s" focuses search) and would steal characters
-  // from the input. Handle Escape here, then stop every key event at the host.
-  ["keydown", "keypress", "keyup"].forEach(function (type) {
-    host.addEventListener(type, function (e) {
-      if (type === "keydown" && e.key === "Escape" && !collapsed) {
-        collapsed = true;
-        render();
-        saveState();
-      }
-      e.stopPropagation();
-    });
+  var KEY_TYPES = ["keydown", "keypress", "keyup"];
+
+  function onHostKey(e) {
+    if (e.type === "keydown" && e.key === "Escape" && !collapsed) {
+      collapsed = true;
+      render();
+      saveState();
+    }
+    e.stopPropagation();
+  }
+  function onWinKeyCap(e) {
+    var path = typeof e.composedPath === "function" ? e.composedPath() : null;
+    if (path && path.indexOf(host) !== -1) e.stopPropagation();
+  }
+  KEY_TYPES.forEach(function (type) {
+    host.addEventListener(type, onHostKey);
+    window.addEventListener(type, onWinKeyCap, true);
   });
 
-  loadState();
-  applyPosition();
-  render();
-
-  window.claudeGuide = {
+  var api = {
     version: VERSION,
     setStep: function (step) {
       currentStep = step;
       collapsed = false;
       helpOpen = false;
-      confirmingAbort = false;
+      abortConfirm = false;
       eventQueue = [];
+      clearNoResponseTimer();
       render(true);
       saveState();
       return "ok";
@@ -513,40 +535,56 @@
           resolve(eventQueue.shift());
           return;
         }
-        var timer = setTimeout(function () {
-          pendingWaiter = null;
-          resolve({ type: "timeout" });
-        }, ms);
-        pendingWaiter = function (event) {
+        var waiter = function (event) {
           clearTimeout(timer);
           resolve(event);
         };
+        var timer = setTimeout(function () {
+          if (pendingWaiter === waiter) pendingWaiter = null;
+          resolve({ type: "timeout" });
+        }, ms);
+        pendingWaiter = waiter;
       });
     },
     state: function () {
       return {
         version: VERSION,
         stepId: currentStep ? currentStep.id : null,
-        collapsed: collapsed,
+        collapsed,
         queued: eventQueue.length,
         url: window.location.href,
       };
     },
     destroy: function () {
       if (host.parentNode) host.parentNode.removeChild(host);
+      window.removeEventListener("resize", applyPosition);
+      KEY_TYPES.forEach(function (type) {
+        window.removeEventListener(type, onWinKeyCap, true);
+      });
+      clearNoResponseTimer();
+      clearTimeout(abortResetTimer);
       try {
-        sessionStorage.removeItem(STORAGE_KEY); // secret values were never written here — see § Secrets
-      } catch {
-        // storage already gone; nothing to clean up
-      }
+        sessionStorage.removeItem(STORAGE_KEY);
+      } catch {}
       try {
         localStorage.removeItem(POS_STORAGE_KEY);
-      } catch {
-        // storage already gone; nothing to clean up
-      }
+      } catch {}
       delete window.claudeGuide;
     },
   };
+  window.claudeGuide = api;
+
+  try {
+    loadState();
+    applyPosition();
+    render();
+  } catch {
+    currentStep = null;
+    collapsed = true;
+    pos = { right: 24, bottom: 24 };
+    applyPosition();
+    render();
+  }
 
   return "injected";
 })();

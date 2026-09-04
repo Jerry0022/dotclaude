@@ -20,24 +20,32 @@
  *     default (see leanSource below); --raw prints it byte-for-byte
  *   payload step <step.json>|-        → prints window.claudeGuide.setStep(<json>)
  *   payload wait [ms]                 → prints the wait() eval snippet
- *   store --file <path> --key <KEY>   → upserts KEY=<stdin> into a dotenv file
+ *   store --file <path> --key <KEY> [--b64 <value>]
+ *                                      → upserts KEY=<value> into a dotenv
+ *     file; value is base64-decoded from --b64 or read from stdin.
  */
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 // All file operations here are synchronous and local (no network, no child
 // processes), so no explicit timeout wrapper is needed per CONVENTIONS.md
 // § General Rules (the 10s file-operation timeout targets async/child-proc I/O).
+// git invocations in gitStatusOf() are the one exception and carry their own
+// 5s timeout, per CONVENTIONS.md's child-process guidance.
 const WAIT_DEFAULT_MS = 35000;
 const WAIT_MIN_MS = 1000;
-const WAIT_MAX_MS = 40000;
+const WAIT_MAX_MS = 35000;
 
 const USAGE = `usage:
   node web-guide.js payload inject [--raw]
   node web-guide.js payload step <step.json>|-
   node web-guide.js payload wait [ms]
-  node web-guide.js store --file <path> --key <KEY>   (value read from stdin)
+  node web-guide.js store --file <path> --key <KEY> [--b64 <value>]
+                                                        (value read from
+                                                        stdin if --b64 is
+                                                        omitted)
   node web-guide.js --help
 
 payload inject prints the overlay source lean by default (strips full-line
@@ -281,6 +289,13 @@ function payloadWait(msArg) {
 // ---------------------------------------------------------------------------
 
 const KEY_RE = /^[A-Z][A-Z0-9_]{0,63}$/;
+const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+// Every char < 0x20 except tab (0x09), plus DEL-adjacent 0x00-0x08 — i.e.
+// anything that would break a single dotenv line or hide non-printable
+// payloads in the file. The control-char literals are intentional (that's
+// exactly what this regex screens for), hence the lint override below.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHAR_RE = /[\x00-\x08\x0A-\x1F]/;
 const NEEDS_QUOTE_RE = /[\s#"'\\$=]/;
 
 function quoteValue(value) {
@@ -323,6 +338,7 @@ function parseStoreArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--file') opts.file = argv[++i];
     else if (argv[i] === '--key') opts.key = argv[++i];
+    else if (argv[i] === '--b64') opts.b64 = argv[++i];
   }
   return opts;
 }
@@ -335,8 +351,37 @@ function readStdin() {
   }
 }
 
+/**
+ * Determine a file's git status relative to `cwd`, without ever throwing \u2014
+ * any git failure (not a repo, git missing, timeout) collapses to
+ * "unknown" and callers treat that the same as "untracked".
+ * @param {string} file absolute path
+ * @param {string} cwd
+ * @param {Function} [runner] injectable execFileSync-alike, for tests
+ * @returns {"tracked"|"ignored"|"untracked"|"unknown"}
+ */
+function gitStatusOf(file, cwd, runner = execFileSync) {
+  const rel = path.relative(cwd, file);
+  const opts = { cwd, stdio: 'pipe', timeout: 5000 };
+
+  try {
+    runner('git', ['ls-files', '--error-unmatch', rel], opts);
+    return 'tracked';
+  } catch (err) {
+    if (typeof err.status !== 'number') return 'unknown';
+  }
+
+  try {
+    runner('git', ['check-ignore', '-q', rel], opts);
+    return 'ignored';
+  } catch (err) {
+    if (typeof err.status !== 'number') return 'unknown';
+    return 'untracked';
+  }
+}
+
 function store(argv) {
-  const { file, key } = parseStoreArgs(argv);
+  const { file, key, b64 } = parseStoreArgs(argv);
 
   if (!file) {
     process.stderr.write('missing --file\n');
@@ -349,17 +394,57 @@ function store(argv) {
     return;
   }
 
-  let raw = readStdin();
+  let raw;
+  if (b64 !== undefined) {
+    if (!B64_RE.test(b64)) {
+      process.stderr.write('invalid base64\n');
+      process.exitCode = 1;
+      return;
+    }
+    raw = Buffer.from(b64, 'base64').toString('utf8');
+  } else {
+    raw = readStdin();
+  }
+
   if (raw.endsWith('\n')) raw = raw.slice(0, -1);
   if (raw.length === 0) {
     process.stderr.write('empty value\n');
     process.exitCode = 1;
     return;
   }
+  if (CONTROL_CHAR_RE.test(raw)) {
+    process.stderr.write('value contains control characters\n');
+    process.exitCode = 1;
+    return;
+  }
 
+  const cwd = process.cwd();
   const absFile = path.resolve(file);
-  let existing = '';
+  const rel = path.relative(cwd, absFile);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    process.stderr.write('file must be inside the current working directory\n');
+    process.exitCode = 1;
+    return;
+  }
+
   const fileExisted = fs.existsSync(absFile);
+  if (fileExisted && fs.lstatSync(absFile).isSymbolicLink()) {
+    process.stderr.write('refusing to write through a symlink\n');
+    process.exitCode = 1;
+    return;
+  }
+
+  const gitStatus = gitStatusOf(absFile, cwd);
+  if (gitStatus === 'tracked') {
+    process.stderr.write(`refusing to write a secret into a git-tracked file (${rel})\n`);
+    process.exitCode = 1;
+    return;
+  }
+  if (gitStatus === 'untracked') {
+    process.stderr.write(`warning: ${rel} is not gitignored\n`);
+  }
+
+  let existing = '';
   if (fileExisted) {
     existing = fs.readFileSync(absFile, 'utf8');
   } else {
@@ -367,11 +452,11 @@ function store(argv) {
   }
 
   const next = upsertEnv(existing, key, raw);
-
-  if (fileExisted) {
-    fs.writeFileSync(absFile, next);
-  } else {
-    fs.writeFileSync(absFile, next, { mode: 0o600 });
+  fs.writeFileSync(absFile, next);
+  try {
+    fs.chmodSync(absFile, 0o600);
+  } catch {
+    // best-effort: chmod semantics differ on Windows, never fail the store.
   }
 
   process.stdout.write(`stored ${key} \u2192 ${absFile}\n`);
@@ -413,6 +498,7 @@ module.exports = {
   quoteValue,
   overlayPath,
   leanSource,
+  gitStatusOf,
 };
 
 if (require.main === module) {

@@ -4,13 +4,18 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import vm from "vm";
-import { validateStep, upsertEnv, leanSource } from "./web-guide.js";
+import { validateStep, upsertEnv, leanSource, gitStatusOf } from "./web-guide.js";
 
 const CLI = path.join(__dirname, "web-guide.js");
 
+// `store`'s path-containment guard requires targets under process.cwd(), so
+// test fixtures live inside node_modules/ (already gitignored, so `store`'s
+// git-tracked/ignored checks stay quiet) rather than os.tmpdir().
+const TMP_ROOT = path.join(process.cwd(), "node_modules", ".web-guide-test-tmp");
 const tmpDirs = [];
 function makeTmpDir() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "web-guide-test-"));
+  fs.mkdirSync(TMP_ROOT, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(TMP_ROOT, "web-guide-test-"));
   tmpDirs.push(dir);
   return dir;
 }
@@ -20,11 +25,12 @@ afterEach(() => {
   }
 });
 
-function run(args, { input } = {}) {
+function run(args, { input, cwd } = {}) {
   try {
     const stdout = execFileSync("node", [CLI, ...args], {
       input: input ?? "",
       encoding: "utf8",
+      cwd,
     });
     return { code: 0, stdout, stderr: "" };
   } catch (err) {
@@ -373,6 +379,12 @@ describe("CLI: payload step", () => {
     expect(r.stdout.startsWith("window.claudeGuide.setStep(")).toBe(true);
   });
 
+  test("valid step via stdin with a trailing heredoc newline still parses", () => {
+    const r = run(["payload", "step", "-"], { input: `${JSON.stringify(validStep())}\n` });
+    expect(r.code).toBe(0);
+    expect(r.stdout.startsWith("window.claudeGuide.setStep(")).toBe(true);
+  });
+
   test("invalid JSON exits 1 with nothing on stdout", () => {
     const r = run(["payload", "step", "-"], { input: "{not json" });
     expect(r.code).toBe(1);
@@ -414,7 +426,7 @@ describe("CLI: payload wait", () => {
   });
 
   test("above maximum bound rejected", () => {
-    const r = run(["payload", "wait", "40001"]);
+    const r = run(["payload", "wait", "35001"]);
     expect(r.code).toBe(1);
     expect(r.stdout).toBe("");
   });
@@ -469,6 +481,187 @@ describe("CLI: store", () => {
     const file = path.join(dir, ".env");
     const r = run(["store", "--file", file, "--key", "my_token"], { input: "x\n" });
     expect(r.code).toBe(1);
+  });
+
+  test("--b64 decodes the value and ignores stdin", () => {
+    const dir = makeTmpDir();
+    const file = path.join(dir, ".env");
+    const b64 = Buffer.from("sekret-value", "utf8").toString("base64");
+    const r = run(["store", "--file", file, "--key", "MY_TOKEN", "--b64", b64], {
+      input: "ignored-stdin\n",
+    });
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain("sekret-value");
+    expect(fs.readFileSync(file, "utf8")).toBe("MY_TOKEN=sekret-value\n");
+  });
+
+  test("--b64 with an invalid base64 charset exits 1 with 'invalid base64'", () => {
+    const dir = makeTmpDir();
+    const file = path.join(dir, ".env");
+    const r = run(["store", "--file", file, "--key", "MY_TOKEN", "--b64", "not base64!"]);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("invalid base64");
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  test("a value containing an embedded control character is rejected", () => {
+    const dir = makeTmpDir();
+    const file = path.join(dir, ".env");
+    const r = run(["store", "--file", file, "--key", "MY_TOKEN"], { input: "a\nb\n" });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("value contains control characters");
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  test("a --b64 value that decodes to a control character is rejected", () => {
+    const dir = makeTmpDir();
+    const file = path.join(dir, ".env");
+    const b64 = Buffer.from("a\x01b", "utf8").toString("base64");
+    const r = run(["store", "--file", file, "--key", "MY_TOKEN", "--b64", b64]);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("value contains control characters");
+  });
+
+  test("a tab in the value is accepted (not a rejected control character)", () => {
+    const dir = makeTmpDir();
+    const file = path.join(dir, ".env");
+    const r = run(["store", "--file", file, "--key", "MY_TOKEN"], { input: "a\tb\n" });
+    expect(r.code).toBe(0);
+  });
+
+  test("a relative --file that escapes the current working directory is rejected", () => {
+    const outside = path.join("..", "..", "..", "..", "..", "escaped.env");
+    const r = run(["store", "--file", outside, "--key", "MY_TOKEN"], { input: "x\n" });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("file must be inside the current working directory");
+  });
+
+  test("an absolute --file outside the cwd is rejected", () => {
+    const outside = path.join(os.tmpdir(), "web-guide-outside.env");
+    const r = run(["store", "--file", outside, "--key", "MY_TOKEN"], { input: "x\n" });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("file must be inside the current working directory");
+  });
+
+  test("refuses to write through an existing symlink", () => {
+    const dir = makeTmpDir();
+    const real = path.join(dir, "real.env");
+    const link = path.join(dir, "link.env");
+    fs.writeFileSync(real, "A=1\n");
+    try {
+      fs.symlinkSync(real, link, "file");
+    } catch {
+      return; // symlink creation needs elevated perms on some Windows setups — skip
+    }
+    const r = run(["store", "--file", link, "--key", "MY_TOKEN"], { input: "x\n" });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("refusing to write through a symlink");
+  });
+
+  test("sets file mode to 0600 after writing (skipped on Windows, no POSIX modes)", () => {
+    if (process.platform === "win32") return;
+    const dir = makeTmpDir();
+    const file = path.join(dir, ".env");
+    run(["store", "--file", file, "--key", "MY_TOKEN"], { input: "x\n" });
+    const mode = fs.statSync(file).mode & 0o777;
+    expect(mode).toBe(0o600);
+  });
+
+  test("integration: refuses to write into a git-tracked file (skipped if git is unavailable)", () => {
+    let gitAvailable = true;
+    try {
+      execFileSync("git", ["--version"], { stdio: "pipe" });
+    } catch {
+      gitAvailable = false;
+    }
+    if (!gitAvailable) return;
+
+    const dir = makeTmpDir();
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["config", "user.email", "t@example.com"], { cwd: dir });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: dir });
+    const file = path.join(dir, "tracked.env");
+    fs.writeFileSync(file, "A=1\n");
+    execFileSync("git", ["add", "tracked.env"], { cwd: dir });
+    execFileSync("git", ["commit", "-q", "-m", "init"], { cwd: dir });
+
+    const r = run(["store", "--file", file, "--key", "MY_TOKEN"], {
+      input: "x\n",
+      cwd: dir,
+    });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("refusing to write a secret into a git-tracked file");
+    expect(fs.readFileSync(file, "utf8")).toBe("A=1\n");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// gitStatusOf
+// ---------------------------------------------------------------------------
+
+describe("gitStatusOf", () => {
+  function fakeRunner(script) {
+    // script: array of { throws?: Error } consumed in call order
+    let i = 0;
+    return (...callArgs) => {
+      const step = script[i++];
+      if (step && step.throws) throw step.throws;
+      return "";
+    };
+  }
+
+  test("returns 'tracked' when ls-files succeeds", () => {
+    const runner = fakeRunner([{}]);
+    expect(gitStatusOf("/repo/file.env", "/repo", runner)).toBe("tracked");
+  });
+
+  test("returns 'ignored' when ls-files fails (exit 1) but check-ignore succeeds", () => {
+    const err = Object.assign(new Error("not tracked"), { status: 1 });
+    const runner = fakeRunner([{ throws: err }, {}]);
+    expect(gitStatusOf("/repo/file.env", "/repo", runner)).toBe("ignored");
+  });
+
+  test("returns 'untracked' when both ls-files and check-ignore exit non-zero", () => {
+    const notTracked = Object.assign(new Error("not tracked"), { status: 1 });
+    const notIgnored = Object.assign(new Error("not ignored"), { status: 1 });
+    const runner = fakeRunner([{ throws: notTracked }, { throws: notIgnored }]);
+    expect(gitStatusOf("/repo/file.env", "/repo", runner)).toBe("untracked");
+  });
+
+  test("returns 'unknown' when git itself cannot run (e.g. ENOENT, no exit status)", () => {
+    const spawnFailure = Object.assign(new Error("spawn git ENOENT"), { code: "ENOENT" });
+    const runner = fakeRunner([{ throws: spawnFailure }]);
+    expect(gitStatusOf("/repo/file.env", "/repo", runner)).toBe("unknown");
+  });
+
+  test("integration: real git repo reports tracked/ignored/untracked correctly", () => {
+    let gitAvailable = true;
+    try {
+      execFileSync("git", ["--version"], { stdio: "pipe" });
+    } catch {
+      gitAvailable = false;
+    }
+    if (!gitAvailable) return;
+
+    const dir = makeTmpDir();
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["config", "user.email", "t@example.com"], { cwd: dir });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: dir });
+
+    const tracked = path.join(dir, "tracked.env");
+    fs.writeFileSync(tracked, "A=1\n");
+    execFileSync("git", ["add", "tracked.env"], { cwd: dir });
+    execFileSync("git", ["commit", "-q", "-m", "init"], { cwd: dir });
+    expect(gitStatusOf(tracked, dir)).toBe("tracked");
+
+    fs.writeFileSync(path.join(dir, ".gitignore"), "ignored.env\n");
+    const ignored = path.join(dir, "ignored.env");
+    fs.writeFileSync(ignored, "A=1\n");
+    expect(gitStatusOf(ignored, dir)).toBe("ignored");
+
+    const untracked = path.join(dir, "untracked.env");
+    fs.writeFileSync(untracked, "A=1\n");
+    expect(gitStatusOf(untracked, dir)).toBe("untracked");
   });
 });
 
