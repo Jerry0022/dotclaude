@@ -37,7 +37,7 @@ no legitimate matches — do not "keep it as a convenience". The decision panel
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 49 patterns, regardless of template
+Every concept page must contain these 52 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -90,7 +90,10 @@ related one — count the rows, not the highest number):
 | 41 | `data-attachable` | The ONE marker `initCommentAttachments()` matches to decide which fields get an attachment bar. MUST NOT be `data-comment` — several fields carry `data-comment` without being attachable (plain text-only comments), and several carry both (annotation answers, decision notes); matching on `data-comment` wires a bar onto every one of those a second time or onto fields that were never meant to take a file. See templates.md § Attachments. |
 | 42 | `initCommentAttachments` | Wires the 📎 button, drag & drop, and Ctrl/Cmd+V paste onto every `textarea[data-attachable]`. Missing → attachment bars render (if emitted inline) but do nothing. |
 | 43 | `_guardedSetItem` | Every `localStorage.setItem` call site (state persistence + both `-pending` submit-queue writes) MUST go through this wrapper, never a bare `localStorage.setItem`. A `QuotaExceededError` thrown out of an unguarded call kills ALL further persistence for the rest of the page with nothing telling the user — see templates.md § State Persistence. |
-| 44 | `textarea[hidden] + .attach-slot` | The CSS rule that takes an inactive field's 📎 bar off the page. The dock builds one textarea per screen / design / view and hides all but the active one, but a `.attach-slot` mount is that textarea's SIBLING — and `.attach-slot:empty` stops covering it the moment `initCommentAttachments()` mounts a bar into it. Missing → the page renders one 📎 row per hidden field, stacked under the single visible textarea. See templates.md § Attachments. |
+| 44 | ALL FOUR of `textarea[hidden] + .attach-slot`, `textarea[hidden] + .attach-bar`, `insertAdjacentElement('afterend', bar)` (inside `_mountAttachmentBar`), `attach-visibility-styles` — AND NEITHER of `parentElement.appendChild(bar)` NOR `attach-hint` | The attachment engine's four halves; any one missing puts the 📎 stack back. The dock builds one textarea per screen / design / view and hides all but the active one, but a `.attach-slot` mount is that textarea's SIBLING — and `.attach-slot:empty` stops covering it the moment `initCommentAttachments()` mounts a bar into it. `.attach-bar` covers the mountless path, `afterend` is what makes that path an adjacent sibling at all, and `attach-visibility-styles` is the JS-injected copy of both rules (`_ensureAttachStyles()`) for a page that took the engine without the Layout CSS. The two negatives are the legacy shapes: `parentElement.appendChild(bar)` mounts the bar out of reach of every rule above, `attach-hint` is the removed per-field shortcut label. See templates.md § Attachments. |
+| 46 | `html[data-template="design"] .concept-content > header` AND `.iteration-intro { display: none` in the same rule | Design mode's iteration sections are `position: absolute; inset: 0`, but a page that started as `decision` or `free` keeps a `<header>` (h1 + subtitle + `#theme-toggle`) in `.concept-content` and an `<header class="iteration-intro">` per iteration, both in normal flow. Without this rule the canvas paints straight over them and their text bleeds through the mockup under the fixed screen indicator (measured at 1280x720: h1 at y=32, intro at y=0, both overlapping the artefact). Mandatory on every page that mixes `design` with `decision`/`free`. See templates.md § Layout CSS → "Document chrome vs. the fullscreen canvas". |
+| 47 | `html[data-template="design"] section[data-iteration]:not([data-active])` with `opacity: 1` | The exemption from § Tab Bar CSS's generic `opacity: 0.85` frozen-iteration cue. On an absolute/inset:0 design section that cue is not a dim, it is a see-through: the document header and sibling content show through the mockup, which is what makes a ☰ switch to a frozen design round look like an empty, doubled-up page. Frozen state is already carried by the panel's frozen state and the read-only dock (`applyDockFreezeState`). Missing → hard fail, same as 46: the two defects only ever appear together. |
+| 48 | `scrollbar-width: thin` + `::-webkit-scrollbar` covering `.feedback-dock`, `.concept-decision-panel`, `section[data-screen]` | **Warning, not a hard fail** — the page is usable without it. All three legitimately carry `overflow-y: auto`, and the default Chromium/Windows bar is an opaque 16px slab inside a 430px dark dock. Skinned thin with a `var(--border-color)` thumb on a transparent track. Both syntaxes required (`scrollbar-*` for Firefox/modern Chromium, `::-webkit-scrollbar*` for older WebKit). See templates.md § Layout CSS → "Scroll boxes". |
 | 45 | `section[data-design]:not([data-design-active="true"])` | The CSS backstop for "exactly one design and one screen paint". Designs and screens are `position:absolute; inset:0`, so a single inactive section that ships without `hidden` does not sit somewhere wrong — it paints on top of the active one. Measured on a real page: three designs, five screens, all stacked on the same square, headings and mockups interleaved. `hidden` cannot be the only guard because the markup is merely ASKED to emit it. Must be `:has()`-guarded, together with the matching `section[data-screen]:not([data-screen-active="true"])` rule and `body:not([data-view-active="true"]) section[data-view]`. See templates.md § Layout CSS. |
 
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
@@ -127,6 +130,40 @@ presence is only half the check — every `.attach-slot` in the page must also
 sit directly after the textarea it belongs to. Grep the mounts: any one
 separated from its field by another element is hidden by nothing and puts a
 duplicate bar back on screen.
+
+The four-literal form of 44 is deliberate. The entry used to grep for
+`textarea[hidden] + .attach-slot` alone, and a real page with 18 attachable
+fields PASSED it while rendering 12 stacked 📎 bars for 3 visible textareas
+(dock content 1062px inside a 430px box): it had the `.attach-slot` half of
+the CSS but not the `.attach-bar` half, its `_mountAttachmentBar()` still did
+`ta.parentElement.appendChild(bar)`, and its bars still carried
+`.attach-hint`. One literal out of an engine with four moving parts is not a
+check, it is a coincidence — a page can satisfy it and be maximally broken.
+Grep for all four positives and both negatives, every time.
+
+**Failure for 46 / 47:** both are hard fails, and they are one defect —
+patch both rules together. 48 is a warning: note it, add the rule, but do
+not block on it.
+
+## Engine drift on iteration append
+
+**This gate runs against the WHOLE existing file on every append, not only
+on first generation.** A concept page carries its shared engine — the
+Attachments JS + CSS, the § Layout CSS chrome rules, the tab-switch JS —
+from the day it was generated, and an iteration append (SKILL.md Step 5c)
+re-uses that engine forever. So a page generated before a templates.md fix
+keeps the old defect through every later round, and the user reports "still
+4 attachment bars" *after* updating the plugin, on a page that was appended
+to twice since.
+
+Before appending, run the gate over the existing HTML. When any ENGINE entry
+fails — 44 (attachments), 46 / 47 (design-mode chrome), 48 (scroll boxes),
+or the tab-switch patterns — re-sync that whole shared block **verbatim from
+templates.md** BEFORE the new section goes in. Re-sync the block, not the one
+line the grep flagged: these blocks fail in halves, and a page missing one
+literal is a page carrying a stale copy of everything around it. Appending
+first and patching after leaves the freshly appended iteration wired to the
+old engine.
 
 ## Generic Form Collection (mandatory for all templates)
 

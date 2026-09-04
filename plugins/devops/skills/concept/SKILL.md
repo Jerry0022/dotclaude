@@ -1064,6 +1064,16 @@ iteration must be live in the browser BEFORE the server signals "processed".
    `deep-knowledge/iteration-rules.md` § Procedure on every iteration —
    coverage gate and `deep-knowledge/validation-gate.md` § Generic Form
    Collection for the required pattern.
+2.6. **Engine drift check.** Run `deep-knowledge/validation-gate.md` over
+   the EXISTING page — the gate applies to the whole file on every append,
+   not only at first generation. The page's shared engine (Attachments
+   JS/CSS, § Layout CSS chrome rules, tab-switch JS) is whatever
+   templates.md said on the day it was generated, and every later round
+   re-uses it. If any engine entry fails (44, 46, 47, 48, tab-switch),
+   re-sync that whole block **verbatim from templates.md NOW**, before
+   appending — otherwise the new iteration inherits the old defect and the
+   user sees the same bug after updating the plugin. See
+   `deep-knowledge/validation-gate.md` § Engine drift on iteration append.
 3. Append a new `<section data-iteration="{N+1}" data-active>` with the
    updated / next-round content (new variants, refined options, whatever
    the feedback produced). Set `submitted: false` in `#concept-decisions`,
