@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.144.0] — 2026-09-06
+
+### Changed
+
+- **`/run-burn` now spends the budget on depth per task before breadth, and lands every task on its own.** The skill maximised spend *rate*: `composite-prompt.md` instructed "IMMER die maximale Agent-Anzahl nutzen (full devops roster)" and "Nie idle sein", overriding the very rules `agent-orchestration.md` states beside it — "include an agent only if it adds concrete value, not for coverage" and "reserve large fan-out for genuinely breadth-parallel work; most coding tasks do not need it (15× token overhead)". Tests were deferred to one closing QA wave and everything merged at the end, so until that tail ran no task was finished. When the weekly limit landed, N agents were in flight, nothing had landed, and the whole spend was gone.
+
+  Burn now separates the two ways a budget can be consumed and prefers the one that does not multiply loss. **Depth** — stronger models, `effort: high`, higher tool-call ceilings, redteam/QA/po passes per task — raises the cost of a task without raising how many tasks can be lost; burn overrides the model defaults **upward only** and never downgrades for cost, which is the lever the skill lacked entirely (Step 6 previously spoke only of downgrading for cost). **Breadth** — parallel lanes — became a throughput filler, derived from `(remaining% − reserve) / hours-until-reset` and capped at four rather than "the full roster, always". An **uplift floor** of 1.5× against a normal `/run-agents` run gates the whole thing: a burn indistinguishable from a normal run refuses to start and says so, because that is a burn nobody needed.
+
+  Every queue item must now be independently landable, and lands on its own — commit, targeted tests for the changed modules, merge into `burn/<slug>`, push. The full QA run became an ordinary queue task instead of the gate everything waited on, so a mid-run limit costs one task instead of the run. A 5 % reserve stops new spawns and drains what is in flight; `BURN-STATE.json` and a new Step 0.5 resume recover a run that was cut off anyway, re-deriving profile and lanes from *current* usage instead of the dead window's numbers. Mechanical tasks (lint, rename, dependency bump) stay on `standard` whatever the profile — opus on a lint fix is spend without quality. Spec: `docs/superpowers/specs/2026-09-06-run-burn-depth-vs-breadth-design.md`.
+
+### Fixed
+
+- **Two documents `/run-autonomous` loads gave opposite orders about pushing.** `autonomous-execution.md` banned `git push (any branch)` and stated that all changes stay local; `agent-orchestration.md` required `git push -u origin <integration-branch>` after every wave, on the grounds that a local-only commit does not survive a worktree re-sync, a CI reset, or a session killed by the token limit. Both are read in the same run, and the durability half is what a burn depends on. The ban is now scoped to what it was actually protecting — shared branches and force-push — and the exception (the run's **own** integration or sub-branch, non-force, no PR, no ship, `main` never touched) is stated in both files as well as in the Step 5 summary that repeated the blanket version.
+
 ## [0.143.0] — 2026-09-05
 
 ### Fixed
