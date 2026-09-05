@@ -58,15 +58,34 @@ Do NOT proceed. End the skill.
 ## SAFETY: Worktree Branch Protection
 
 **HARD RULE — no exceptions:**
-Branches attached to active worktrees (Aktive Sessions) are UNTOUCHABLE. You MUST NOT:
+Branches attached to active worktrees (Aktive Sessions) are UNTOUCHABLE, and so
+is **everything else belonging to that session** — its worktree directory, the
+repo it lives in, and any process running inside it. The examples below are
+examples, not the boundary:
 - Delete them locally (`git branch -D`)
 - Delete them remotely (`git push origin --delete`)
 - Checkout/switch away from them in their worktree
+- Remove or prune their worktree (`git worktree remove`, directory deletion)
+- Kill a process whose cwd or argv points into their worktree
+- Write files into them (including `.gitignore` hygiene fixes)
 - Recommend them for deletion
 - Include them in any cleanup batch
 
 These branches represent active Claude Code sessions. Deleting them breaks
 the worktree and causes data loss.
+
+**The protected set is a set of subjects, not a list of verbs.** A guard that
+enumerates forbidden commands permits every command it forgot to name — the
+failure mode that let a sweep correctly refuse `branch -D` on a live session
+and then remove that session's worktree anyway. Scope rules and the four
+operation classes a guard must cover:
+`{PLUGIN_ROOT}/deep-knowledge/git-hygiene.md` § Protection scope covers every
+operation class.
+
+**Re-check before every destructive action.** A sweep over many repos runs long
+enough for sessions to start, stop, or switch branches. Rebuild the protected
+set immediately before each delete/remove/kill — never once at classification
+time and then trust it for the rest of the run.
 
 **Detection:** `git worktree list --porcelain` -> every line starting with
 `branch refs/heads/` is a protected branch. Build this set FIRST and check
