@@ -12,7 +12,11 @@
  *   blocked stop cycle (stop_hook_active=false):
  *     1. no card rendered AND (tool calls happened OR substantial prose), OR
  *     2. a card exists but a code change owes validation
- *        (validation-pending set, validation-attested not).
+ *        (validation-pending set, validation-attested not), OR
+ *     3. a card exists but background subagents / tasks are still running and
+ *        the card did not declare them (`pending` field, pending-attested not).
+ *        Open work is read from the transcript, not from a flag — completions
+ *        arrive as task-notifications, which no tool hook ever sees.
  *
  *   Pass (silent exit 0) otherwise — flags are reset so the next turn is
  *   evaluated independently.
@@ -28,7 +32,9 @@ const {
   isSubstantialAnswer,
   lastAssistantContainsCard,
   safeReadTranscript,
+  PENDING_TAIL_BYTES,
 } = require('../lib/card-guard');
+const { scanOpenTasks, openTaskNames } = require('../lib/pending-tasks');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -49,22 +55,26 @@ process.stdin.on('end', () => {
   const silentResult = readSessionFile('dotclaude-devops-silent-turn', sessionId, EXACT);
   const valPendingResult = readSessionFile('dotclaude-devops-validation-pending', sessionId, EXACT);
   const valAttestedResult = readSessionFile('dotclaude-devops-validation-attested', sessionId, EXACT);
+  const pendAttestedResult = readSessionFile('dotclaude-devops-pending-attested', sessionId, EXACT);
 
   const workHappened = workResult !== null;
   const flagCardRendered = cardResult !== null;
   const silent = silentResult !== null;
   const validationPending = valPendingResult !== null;
   const validationAttested = valAttestedResult !== null;
+  const pendingAttested = pendAttestedResult !== null;
   const stopHookActive = hook.stop_hook_active === true;
 
-  // Scan transcript when the flag state alone cannot settle the decision:
-  //  - no card flag → might still have rendered the card (marker scan = backup)
-  //  - no work and no card → need substantial-answer heuristic
-  // Silent turns skip the transcript scan entirely — enforcement is off.
-  const transcript = (!flagCardRendered && !silent)
-    ? safeReadTranscript(hook.transcript_path)
-    : '';
+  // Scan the transcript unless this is a silent tick. It answers two questions:
+  //  - did the last assistant message already carry a card / substantial prose
+  //    (backup for a failed flag write, plus the chat-only heuristic), and
+  //  - is background work still running (Gate 3), which no flag can tell us —
+  //    completions arrive as task-notifications, not as tool calls.
+  // The wider PENDING slice is used so an agent launched early in a long turn
+  // is still seen; scanOpenTasks short-circuits when no launch marker is there.
+  const transcript = silent ? '' : safeReadTranscript(hook.transcript_path, PENDING_TAIL_BYTES);
   const substantial = isSubstantialAnswer(transcript);
+  const openTasks = silent ? [] : openTaskNames(scanOpenTasks(transcript));
   // Backup detection: if the last assistant text already contains the card
   // marker, treat as rendered even when the flag write failed.
   const cardRendered = flagCardRendered || lastAssistantContainsCard(transcript);
@@ -77,6 +87,8 @@ process.stdin.on('end', () => {
     silent,
     validationPending,
     validationAttested,
+    openTaskNames: openTasks,
+    pendingAttested,
     // Active install root — the block reason names the offline renderer under it
     // for the case where the MCP server never connected this session.
     pluginRoot: process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..'),
@@ -89,6 +101,9 @@ process.stdin.on('end', () => {
     // Validation flags are owned by this gate — clear them at a clean turn end.
     if (valPendingResult) try { fs.unlinkSync(valPendingResult.filePath); } catch {}
     if (valAttestedResult) try { fs.unlinkSync(valAttestedResult.filePath); } catch {}
+    // Same for the pending attestation: it attests THIS turn's card, so the next
+    // turn must re-declare any work that is still running.
+    if (pendAttestedResult) try { fs.unlinkSync(pendAttestedResult.filePath); } catch {}
   }
 
   if (decision.action === 'block') {

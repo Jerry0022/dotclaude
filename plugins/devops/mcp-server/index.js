@@ -45,6 +45,7 @@ import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
+import { hasPending, pendingWhat, renderPendingBlock } from "./lib/pending.js";
 import { clampText, clampList } from "./lib/soft-limits.js";
 import {
   assessFreshness,
@@ -309,9 +310,11 @@ const CTA = {
     'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
     test:                     '## \ud83e\uddea DONE \u2014 SHIP after your TEST?',
     'test-minimal':           '## \u25b6\ufe0f STARTED. {description} \u2014 HAVE FUN',
-    analysis:                 '## \ud83d\udccb DONE \u2014 READ through',
+    analysis:                 '## \ud83d\udccb READ through \u2014 QUESTIONS?',
     aborted:                  '## \ud83d\udeab ABORTED. {reason} \u2014 What should I TRY?',
     fallback:                 '## \ud83d\udd27 DONE \u2014 Anything ELSE?',
+    // Pending layer \u2014 overrides EVERY variant's CTA while background work runs.
+    pending:                  '## \u23f3 NOT DONE YET. {what} \u2014 I\u2019ll REPORT back',
   },
   de: {
     'ship-successful-merged':      '## \ud83d\ude80 SHIPPED{chan}. merged \u2192 origin/{merged} \u2014 Alles ERLEDIGT',
@@ -327,9 +330,11 @@ const CTA = {
     'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
     test:                     '## \ud83e\uddea DONE \u2014 SHIP nach deinem TEST?',
     'test-minimal':           '## \u25b6\ufe0f STARTED. {description} \u2014 VIEL SPASS',
-    analysis:                 '## \ud83d\udccb DONE \u2014 LIES dir durch',
+    analysis:                 '## \ud83d\udccb LIES dir durch \u2014 FRAGEN?',
     aborted:                  '## \ud83d\udeab ABORTED. {reason} \u2014 Was soll ich VERSUCHEN?',
     fallback:                 '## \ud83d\udd27 DONE \u2014 Noch was ANDERES?',
+    // Pending layer \u2014 overrides EVERY variant's CTA while background work runs.
+    pending:                  '## \u23f3 NOCH NICHT FERTIG. {what} \u2014 ich MELDE mich',
   },
 };
 
@@ -674,9 +679,22 @@ function renderDeployGate(items, lang) {
   return labels.header + '\n' + bullets.join('\n') + '\n\n_' + labels.hint + '_';
 }
 
-function renderCTA(variant, cta, lang, state, delivery) {
+function renderCTA(variant, cta, lang, state, delivery, pending) {
   const templates = CTA[lang] || CTA.de;
   cta = cta || {};
+
+  // Pending layer — background subagents / tasks the turn started are STILL
+  // running. Every other CTA on this card would ask the user to act on a result
+  // that does not exist yet ("SHIP or CHANGE?", "All DONE"), so the pending CTA
+  // replaces it on EVERY variant. Deliberately the first check: it outranks the
+  // ship / release wording, since "not finished" is the truer statement about
+  // the turn than any milestone the body reports. The body keeps its facts —
+  // only the one line that tells the user what to do is corrected.
+  if (hasPending(pending)) {
+    const tpl = templates.pending || CTA.de.pending;
+    // Always H3 — "still running" is a routine status, never a payoff moment.
+    return tpl.replace('{what}', pendingWhat(pending, lang)).replace(/^## /, '### ');
+  }
 
   let key;
   if (variant === 'ship-successful') {
@@ -916,6 +934,19 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
+  // Pending layer — background subagents / tasks still running at turn end.
+  // Variant-agnostic (like validation and deployGate): whatever the card's
+  // variant claims, this block says the turn is a snapshot taken BEFORE those
+  // results. Placed above the test/deploy blocks because it qualifies them too —
+  // any test instruction below is provisional while work is still in flight.
+  {
+    const pendingBlock = renderPendingBlock(input.pending, lang);
+    if (pendingBlock) {
+      parts.push(pendingBlock);
+      parts.push('');
+    }
+  }
+
   // User test steps (test variant)
   if (config.userTest) {
     const testBlock = renderUserTest(input.userTest, lang);
@@ -987,7 +1018,7 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
-  parts.push(renderCTA(variant, input.cta, lang, input.state, input.delivery));
+  parts.push(renderCTA(variant, input.cta, lang, input.state, input.delivery, input.pending));
   parts.push('');
 
   parts.push('---');
@@ -1135,7 +1166,7 @@ const CARD_VARIANTS = [
 /** Structured fields the MCP schema accepts as either an object or a JSON string. */
 const JSON_FIELDS = [
   'changes', 'tests', 'state', 'cta', 'userTest', 'userFinalTest',
-  'deployGate', 'validation', 'delivery', 'promotion',
+  'deployGate', 'validation', 'delivery', 'promotion', 'pending',
 ];
 
 /** Prefix that carries the relay contract with the card itself. */
@@ -1228,6 +1259,11 @@ function buildCompletionCard(params) {
     writeFileSync(join(tmpdir(), 'dotclaude-devops-card-rendered-' + key), new Date().toISOString());
     if (Array.isArray(params.validation) && params.validation.length > 0) {
       writeFileSync(join(tmpdir(), 'dotclaude-devops-validation-attested-' + key), new Date().toISOString());
+    }
+    // pending-attested satisfies the pending gate — set only when the field
+    // actually carries items (an empty array declares nothing).
+    if (hasPending(params.pending)) {
+      writeFileSync(join(tmpdir(), 'dotclaude-devops-pending-attested-' + key), new Date().toISOString());
     }
   } catch (e) {
     console.error('[dotclaude-completion-mcp] Failed to write completion flag:', e.message);
@@ -1481,6 +1517,17 @@ server.registerTool(
           }),
         ])).optional(),
       ).describe("User-final-test items — for changes where automation cannot cover the last step (packaged Electron/Tauri without desktop takeover, 3rd-party integrations). Pass strings for local final tests; pass { action, afterDeployment: true } for 3rd-party items that require deployment first. Available in all variants except test-minimal and test — in the test variant all manual steps go into userTest (single test section, no duplicate)."),
+      pending: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.array(z.union([
+          z.string(),
+          z.object({
+            name: z.string().describe("What is running, named: the agent type ('devops:frontend') or the task label ('npm test'). Shown in the CTA, so the user reads WHICH agent — never pass an internal agentId."),
+            kind: z.enum(["agent", "task"]).optional().describe("'agent' (default) = background subagent; 'task' = backgrounded Bash command."),
+            doing: z.string().optional().describe("Short description of the work it is doing, e.g. 'Farbstil auf Tokens umstellen'."),
+          }),
+        ])).optional(),
+      ).describe("Background work STILL RUNNING at turn end — subagents started with run_in_background, or backgrounded Bash tasks. MANDATORY whenever such work is in flight: it overrides the CTA of EVERY variant with '⏳ NOCH NICHT FERTIG. {what} — ich MELDE mich' and renders a block naming each item, so the card never asks the user to SHIP or act on a result that does not exist yet. The card body still reports what IS true; only the call to action is corrected. stop.flow.guard blocks the turn when open background work is detected and this field is missing."),
       deployGate: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([

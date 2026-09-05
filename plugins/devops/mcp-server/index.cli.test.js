@@ -128,6 +128,36 @@ describe("--render-card CLI fallback", () => {
     expect(out).not.toContain("dropped by the clamp");
   });
 
+  test("coerces a JSON-string `pending` and overrides the CTA with it", async () => {
+    const out = await renderCard({
+      variant: "ready",
+      summary: "Agent läuft noch",
+      lang: "de",
+      session_id: "cli-test-pending",
+      pending: JSON.stringify([{ name: "devops:frontend", doing: "Farbstil" }]),
+    });
+    expect(out).toContain("NOCH NICHT FERTIG");
+    expect(out).toContain("devops:frontend");
+    expect(out).not.toContain("READY — SHIP oder ÄNDERN");
+  });
+
+  test("writes the pending-attested flag so the Stop gate is satisfied", async () => {
+    const session = "cli-test-pending-flag";
+    const attested = join(tmpdir(), `dotclaude-devops-pending-attested-${session}`);
+    try { unlinkSync(attested); } catch { /* best effort */ }
+
+    await renderCard({
+      variant: "ready", summary: "Agent läuft", session_id: session,
+      pending: [{ name: "devops:qa" }],
+    });
+    expect(existsSync(attested)).toBe(true);
+    try { unlinkSync(attested); } catch { /* best effort */ }
+
+    // An empty array attests nothing — the flag must stay absent.
+    await renderCard({ variant: "ready", summary: "Nichts offen", session_id: session, pending: [] });
+    expect(existsSync(attested)).toBe(false);
+  });
+
   test("an unknown variant still yields a card instead of an error", async () => {
     const out = await renderCard({ variant: "not-a-variant", summary: "Unbekannte Variante", session_id: "cli-test-variant" });
     expect(out).toMatch(/✨✨✨ Unbekannte Variante ✨✨✨/);

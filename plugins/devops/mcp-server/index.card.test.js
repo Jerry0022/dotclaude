@@ -272,3 +272,102 @@ describe("render_completion_card — projects without a usable origin", () => {
     expect(text).not.toMatch(/READY — SHIP oder ÄNDERN/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Pending layer — background work still running at turn end
+// ---------------------------------------------------------------------------
+
+describe("pending layer", () => {
+  test("replaces the ready CTA so the card never asks for a SHIP mid-flight", async () => {
+    const text = await cardText({
+      variant: "ready",
+      summary: "Erste Version gepusht",
+      lang: "de",
+      session_id: "test-pending-1",
+      changes: [{ area: "concept", description: "Farbstil-Korrektur angestoßen" }],
+      pending: [{ name: "devops:frontend", doing: "Farbstil auf Tokens umstellen" }],
+    });
+    expect(text).toMatch(/### ⏳ NOCH NICHT FERTIG\. Agent `devops:frontend` arbeitet — ich MELDE mich/);
+    expect(text).not.toMatch(/READY — SHIP oder ÄNDERN/);
+  });
+
+  test("overrides the ship-successful CTA too — a merge is not 'all done' mid-flight", async () => {
+    const text = await cardText({
+      variant: "ship-successful",
+      summary: "Gemerged, Doku-Agent läuft",
+      lang: "de",
+      session_id: "test-pending-2",
+      state: { pushed: true, merged: "main", branch: "feat/x" },
+      pending: [{ name: "devops:research", doing: "Doku nachziehen" }],
+    });
+    expect(text).toMatch(/NOCH NICHT FERTIG/);
+    expect(text).not.toMatch(/Alles ERLEDIGT/);
+    // The body keeps reporting what IS true — only the CTA is corrected.
+    expect(text).toMatch(/origin\/main/);
+  });
+
+  test("renders the pending block naming what is still running", async () => {
+    const text = await cardText({
+      variant: "analysis",
+      summary: "Agenten losgeschickt",
+      lang: "de",
+      session_id: "test-pending-3",
+      pending: [
+        { name: "devops:qa", doing: "Suite läuft" },
+        { name: "npm run build", kind: "task" },
+      ],
+    });
+    expect(text).toMatch(/⏳ \*\*LÄUFT NOCH — nicht abgeschlossen:\*\*/);
+    expect(text).toMatch(/\* `devops:qa` — Suite läuft/);
+    expect(text).toMatch(/\* `npm run build`/);
+    expect(text).toMatch(/Diese Card berichtet den Stand VOR diesen Ergebnissen/);
+  });
+
+  test("English card uses the English pending wording", async () => {
+    const text = await cardText({
+      variant: "ready",
+      summary: "Pushed first version",
+      lang: "en",
+      session_id: "test-pending-5",
+      pending: [{ name: "devops:frontend" }],
+    });
+    expect(text).toMatch(/### ⏳ NOT DONE YET\. agent `devops:frontend` is working/);
+    expect(text).not.toMatch(/READY — SHIP or CHANGE/);
+  });
+
+  test("an empty pending array leaves the normal CTA alone", async () => {
+    const text = await cardText({
+      variant: "ready",
+      summary: "Nichts offen",
+      lang: "de",
+      session_id: "test-pending-6",
+      pending: [],
+    });
+    expect(text).toMatch(/READY — SHIP oder ÄNDERN/);
+    expect(text).not.toMatch(/NOCH NICHT FERTIG/);
+  });
+});
+
+describe("analysis CTA", () => {
+  test("is the call to action alone — no hollow DONE for a question answered", async () => {
+    const text = await cardText({
+      variant: "analysis",
+      summary: "Frage beantwortet",
+      lang: "de",
+      session_id: "test-analysis-cta-de",
+    });
+    expect(text).toMatch(/### 📋 LIES dir durch — FRAGEN\?/);
+    expect(text).not.toMatch(/DONE — LIES dir durch/);
+  });
+
+  test("English analysis CTA drops DONE as well", async () => {
+    const text = await cardText({
+      variant: "analysis",
+      summary: "Question answered",
+      lang: "en",
+      session_id: "test-analysis-cta-en",
+    });
+    expect(text).toMatch(/### 📋 READ through — QUESTIONS\?/);
+    expect(text).not.toMatch(/DONE — READ through/);
+  });
+});

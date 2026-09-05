@@ -7,6 +7,7 @@ import {
   decideAction,
   buildBlockReason,
   buildValidationReason,
+  buildPendingReason,
   SUBSTANTIAL_CHARS,
   CARD_MARKER,
 } from "./card-guard.js";
@@ -327,6 +328,138 @@ describe("decideAction — validation gate", () => {
       substantial: false,
     });
     expect(d.action).toBe("pass");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// decideAction — pending gate (background work still running at turn end)
+// ---------------------------------------------------------------------------
+
+describe("decideAction — pending gate", () => {
+  test("card rendered + open background work + not attested → BLOCK (pending)", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      openTaskNames: ["devops:frontend"],
+      pendingAttested: false,
+    });
+    expect(d.action).toBe("block");
+    expect(d.resetFlags).toBe(false);
+    expect(d.reason).toMatch(/STILL RUNNING/);
+    expect(d.reason).toMatch(/devops:frontend/);
+  });
+
+  test("card rendered + open background work + attested → pass", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      openTaskNames: ["devops:frontend"],
+      pendingAttested: true,
+    });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+  });
+
+  test("nothing open → a card-rendered turn passes (back-compat)", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      openTaskNames: [],
+      pendingAttested: false,
+    });
+    expect(d.action).toBe("pass");
+  });
+
+  test("no card yet → card gate wins over pending gate", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: false,
+      openTaskNames: ["devops:qa"],
+      pendingAttested: false,
+    });
+    expect(d.action).toBe("block");
+    expect(d.reason).toMatch(/render_completion_card/);
+    expect(d.reason).not.toMatch(/STILL RUNNING/);
+  });
+
+  test("validation gate is checked before the pending gate", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      validationPending: true,
+      validationAttested: false,
+      openTaskNames: ["devops:qa"],
+      pendingAttested: false,
+    });
+    expect(d.reason).toMatch(/Validation required/);
+  });
+
+  test("fires without other work — launching an agent is itself the work", () => {
+    const d = decideAction({
+      workHappened: false,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      openTaskNames: ["devops:qa"],
+      pendingAttested: false,
+    });
+    expect(d.action).toBe("block");
+    expect(d.reason).toMatch(/STILL RUNNING/);
+  });
+
+  test("stop_hook_active yields the pending gate too (one-block, never wedge)", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: true,
+      substantial: false,
+      openTaskNames: ["devops:qa"],
+      pendingAttested: false,
+    });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+  });
+
+  test("a silent turn never fires the pending gate", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      silent: true,
+      openTaskNames: ["devops:qa"],
+      pendingAttested: false,
+    });
+    expect(d.action).toBe("pass");
+  });
+});
+
+describe("buildPendingReason", () => {
+  test("names each open item and the pending field", () => {
+    const r = buildPendingReason(["devops:frontend", "npm test"]);
+    expect(r).toMatch(/devops:frontend/);
+    expect(r).toMatch(/npm test/);
+    expect(r).toMatch(/pending/);
+    expect(r).toMatch(/render_completion_card/);
+    expect(r).toMatch(/VERBATIM|LAST/);
+  });
+
+  test("forbids putting an internal agentId in the card", () => {
+    expect(buildPendingReason(["devops:qa"])).toMatch(/NEVER put an internal agentId/);
+  });
+
+  test("tells the model not to fake pending to get past the gate", () => {
+    expect(buildPendingReason(["devops:qa"])).toMatch(/do not declare it pending/);
   });
 });
 
