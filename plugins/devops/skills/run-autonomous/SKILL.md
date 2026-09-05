@@ -509,7 +509,10 @@ it to `AUTONOMOUS-RESUME.json` as a BLOCKER rather than proceeding.
 Quick summary:
 - `analyze` → read-only (Read, Glob, Grep, WebFetch, git log/blame/diff, screenshots). No Write/Edit/commit.
 - `implement` → Phase 1 analyse, Phase 2 implement+test+build+verify. No push/ship/PR.
-- **Forbidden in both modes:** push, force-push, /ship, create PRs, external comms, purchases, destructive git ops, system config changes.
+- **Forbidden in both modes:** push to `main`/`master` or any shared branch, force-push, /ship, create PRs, external comms, purchases, destructive git ops, system config changes.
+- **Allowed (durability exception):** non-force push of the run's **own**
+  integration/sub-branch to origin, so a reset or a token-limit kill cannot erase
+  the run's output. See `autonomous-execution.md` § Safety Guardrails.
 
 ### Strategy
 
