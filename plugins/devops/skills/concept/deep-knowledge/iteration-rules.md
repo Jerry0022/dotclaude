@@ -69,6 +69,22 @@ selections, read-only comments).
     See § Freezing Design Iterations below.
 - Only the active tab runs the heartbeat / submit UI ("music"). Clicking
   an older tab shows its frozen snapshot but does not re-arm submit.
+- **A tab switch never costs the user a comment.** This is a hard rule, not
+  a quality goal: switching to an older round and back is the single most
+  common way people re-read what they already said, and it used to come home
+  to an empty feedback dock. Three properties make it safe, and all three are
+  gate entries (49–53, `validation-gate.md`):
+  1. typed keys are namespaced per round (`text:i3:d1-s1`), so the shared
+     dock cannot show — or persist — one round's notes under another's;
+  2. a frozen round is never persisted (`persistable()` excludes it, and the
+     dock while `body.viewing-frozen`), so browsing history cannot overwrite
+     the live round;
+  3. the dock is **not emptied on submit** — the round stays live until the
+     next section is appended, and its comments are the only on-screen record
+     of what was sent. `markDockSubmitted()` makes it read-only, nothing more.
+  On top of that, every autosave is mirrored to the bridge's fsynced draft
+  store (`POST /draft`), which is what survives a power cut, a wiped browser
+  profile, and a Claude that has stopped answering mid-round.
 - Tab bar must stay compact — vertical chip list in the panel header.
   Falls back to horizontal scroll only when the panel collapses to the
   bottom on narrow screens.
@@ -197,6 +213,14 @@ When appending a new iteration section (Step 5c of `SKILL.md`), verify
       Every input/select/textarea in the active iteration MUST appear in
       the JSON. If any is missing → the catch-all is broken, fix BEFORE
       reload.
+5. ☐ The round being frozen carries the user's comments in its own HTML —
+      textarea values plus the `data-frozen-feedback` blob for the dock. Do
+      not rely on `localStorage` to render a frozen round: the append bumps
+      the live round, so its keys move to a new namespace and the frozen tab
+      would come back blank.
+6. ☐ Before overwriting the file, confirm the bridge holds the round's
+      comments: `GET /draft?slug={slug}` must list them under `recovered`.
+      That is the copy that survives if the rewrite goes wrong.
 
 ## Procedure on every iteration — coverage gate (Step 5c, Step 2.5)
 
