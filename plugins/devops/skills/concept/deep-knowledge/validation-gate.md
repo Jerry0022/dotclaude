@@ -37,7 +37,7 @@ no legitimate matches — do not "keep it as a convenience". The decision panel
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 53 patterns, regardless of template
+Every concept page must contain these 58 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -95,6 +95,11 @@ related one — count the rows, not the highest number):
 | 46 | `html[data-template="design"] .concept-content > header` AND `.iteration-intro { display: none` in the same rule | Design mode's iteration sections are `position: absolute; inset: 0`, but a page that started as `decision` or `free` keeps a `<header>` (h1 + subtitle + `#theme-toggle`) in `.concept-content` and an `<header class="iteration-intro">` per iteration, both in normal flow. Without this rule the canvas paints straight over them and their text bleeds through the mockup under the fixed screen indicator (measured at 1280x720: h1 at y=32, intro at y=0, both overlapping the artefact). Mandatory on every page that mixes `design` with `decision`/`free`. See templates.md § Layout CSS → "Document chrome vs. the fullscreen canvas". |
 | 47 | `html[data-template="design"] section[data-iteration]:not([data-active])` with `opacity: 1` | The exemption from § Tab Bar CSS's generic `opacity: 0.85` frozen-iteration cue. On an absolute/inset:0 design section that cue is not a dim, it is a see-through: the document header and sibling content show through the mockup, which is what makes a ☰ switch to a frozen design round look like an empty, doubled-up page. Frozen state is already carried by the panel's frozen state and the read-only dock (`applyDockFreezeState`). Missing → hard fail, same as 46: the two defects only ever appear together. |
 | 48 | `scrollbar-width: thin` + `::-webkit-scrollbar` covering `.feedback-dock`, `.concept-decision-panel`, `section[data-screen]` | **Warning, not a hard fail** — the page is usable without it. All three legitimately carry `overflow-y: auto`, and the default Chromium/Windows bar is an opaque 16px slab inside a 430px dark dock. Skinned thin with a `var(--border-color)` thumb on a transparent track. Both syntaxes required (`scrollbar-*` for Firefox/modern Chromium, `::-webkit-scrollbar*` for older WebKit). See templates.md § Layout CSS → "Scroll boxes". |
+| 49 | `_iterationPrefix` — AND every `state['text:` write going through it | Per-iteration namespace for typed keys (`text:i3:d1-s1`). Screen ids, `{decisionId}-note` keys and annotation ids all repeat across rounds, and the feedback dock is one shared overlay outside `section[data-iteration]` — so an unnamespaced key means a different note in every round. Without it, round N+1 opens pre-filled with N's text, and the workaround for THAT (emptying the dock at submit time) is what destroyed the comments the user had just sent. ENGINE entry — see § Engine drift on iteration append. |
+| 50 | `queueDraftSync` AND `hydrateDraftFromBridge` AND `flushDraftBeacon` | The durable mirror: every autosave is POSTed to the bridge's `/draft` (fsynced before the ack), flushed by `sendBeacon` on `pagehide`/`hidden`, and merged back on load. `localStorage` alone does not survive a wiped profile, a private window, a quota error or a power cut — and it is the ONLY copy of work that has not been submitted yet. All three halves required: without the flush a closed tab outruns the last write; without the hydrate the durable copy is never read back. |
+| 51 | `markDockSubmitted` AND `unmarkDockSubmitted` (the latter CALLED from `restorePanelToReady`) — AND NOT `clearDock()` anywhere on the submit path | The dock keeps every character when a round is submitted; only editing is taken away. The round stays LIVE until Claude appends the next section, so its comments are the only on-screen record of what was sent — emptying the dock at submit time meant a detour into an older tab and back came home blank on a round that had not even been answered. The un-mark is not optional: every path that hands control back on a round that did not go through (507, or the safety timeout when Claude stopped answering) re-arms the submit buttons, and a ready panel over a read-only comment surface lets the user re-submit without being able to change anything first. |
+| 52 | `_carryOverTypedWork` — AND NO `removeItem(STORAGE_KEY)` anywhere | Nothing may delete the state blob. TTL expiry and a page-version change prune it key by key (every `text:` entry is kept, the rest is dropped, the original is archived under `-archive`); the panel reset clears panel flags only. Each of those was once a one-line "clean up local state" that deleted every comment on the page — and two of them fire exactly when things are already going wrong (a bridge that answered 507; Claude stuck on a usage limit past `PROCESSED_SAFETY_MS`). |
+| 53 | `section[data-iteration]:not([data-active])` inside `saveState`'s `persistable` — AND a `viewing-frozen` guard on `#feedback-dock` | A frozen round is never persisted. Browsing an old tab is allowed and ends every `showScreen()` in a `saveState()`, and `applyDockFreezeState()` has painted that round's submitted comments into the shared dock — so without both exclusions the old round's answers are written over the live round's unsent ones, silently. ENGINE entry. |
 | 45 | `section[data-design]:not([data-design-active="true"])` | The CSS backstop for "exactly one design and one screen paint". Designs and screens are `position:absolute; inset:0`, so a single inactive section that ships without `hidden` does not sit somewhere wrong — it paints on top of the active one. Measured on a real page: three designs, five screens, all stacked on the same square, headings and mockups interleaved. `hidden` cannot be the only guard because the markup is merely ASKED to emit it. Must be `:has()`-guarded, together with the matching `section[data-screen]:not([data-screen-active="true"])` rule and `body:not([data-view-active="true"]) section[data-view]`. See templates.md § Layout CSS. |
 
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
@@ -125,6 +130,19 @@ just patched with the rule.
 rendered page; each one MUST read `_guardedSetItem(`, no exceptions. One
 unguarded call site reintroduces the exact silent-persistence-death defect
 this pattern exists to catch.
+
+**Failure for 49–53 — hard fail, always.** These five are one contract: the
+user's comments are never lost, in whatever state they are, against a power
+cut, a wiped browser store, and a Claude that has stopped answering. Any one
+of them missing means a concept page that can silently destroy hours of work,
+which is the single worst thing this system can do. Do not "note it and
+continue" — re-sync § State Persistence, § Layout JS and the submit handler
+verbatim from templates.md, then re-check.
+
+Grep for the negatives too, not just the positives: a page containing
+`removeItem(STORAGE_KEY)`, a bare `state['text:' + _key]` with no namespace,
+or `clearDock()` on the submit path is a page with the old defect in it,
+however many of the positive patterns it also has.
 
 **Failure for 44:** the rule is an ADJACENT sibling combinator, so its
 presence is only half the check — every `.attach-slot` in the page must also
@@ -159,13 +177,23 @@ to twice since.
 
 Before appending, run the gate over the existing HTML. When any ENGINE entry
 fails — 30b (frozen bar + veil relock), 44 (attachments), 46 / 47
-(design-mode chrome), 48 (scroll boxes), or the tab-switch patterns —
-re-sync that whole shared block **verbatim from
+(design-mode chrome), 48 (scroll boxes), 49–53 (comment durability), or the
+tab-switch patterns — re-sync that whole shared block **verbatim from
 templates.md** BEFORE the new section goes in. Re-sync the block, not the one
 line the grep flagged: these blocks fail in halves, and a page missing one
 literal is a page carrying a stale copy of everything around it. Appending
 first and patching after leaves the freshly appended iteration wired to the
 old engine.
+
+**49–53 come first, before any other repair, and before the append.** They
+are the only entries whose failure mode is destroying the user's work rather
+than rendering it badly, and the round being appended is exactly the moment
+they fire: the append freezes the round the user just commented on and the
+reload lands on a fresh dock. A page carrying the old § State Persistence
+block loses those comments *during your append*, so re-syncing afterwards
+recovers nothing. Re-sync § State Persistence, the § Layout JS dock block and
+the submit handler as one unit — they share the namespace contract and a
+half-updated page is worse than an untouched one.
 
 ## Generic Form Collection (mandatory for all templates)
 

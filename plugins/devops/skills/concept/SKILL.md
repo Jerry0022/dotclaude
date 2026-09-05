@@ -475,13 +475,43 @@ page. Theme preference is also persisted to prevent flash.
 The `concept-submitted` class is NOT persisted — after a reload the page is
 back to "not yet submitted" (correct behavior, the user can re-submit).
 
+### Comments are never lost — the one non-negotiable
+
+A concept round is hours of the user's thinking, typed into a page. Losing it
+is the worst thing this skill can do, and it is worse than every rendering
+defect combined, so the persistence engine is copied **verbatim** from
+`templates.md` — never abbreviated, never "simplified for this page".
+
+Four properties carry the guarantee (gate entries 49–53,
+`deep-knowledge/validation-gate.md`):
+
+1. **Nothing deletes the state blob.** No `localStorage.removeItem(STORAGE_KEY)`
+   anywhere — not on TTL expiry, not on a page-version change, not on a panel
+   reset. Stale state is pruned key by key; typed text is always kept.
+2. **Typed keys are namespaced per round** (`text:i3:d1-s1`), so the shared
+   feedback dock cannot show or overwrite one round's notes under another's.
+3. **A frozen round is never persisted**, so browsing an earlier tab — which is
+   what the tabs are for — cannot write its submitted answers over the live
+   round's unsent ones.
+4. **Every autosave is mirrored to the bridge** (`POST /draft`, fsynced before
+   the ack, append-only log). That is the copy that survives a power cut, a
+   wiped browser profile, and a Claude that has stopped answering mid-round.
+
+When a user reports missing comments, the first action is always
+`GET /draft?slug={slug}` and reading `recovered` back to them — never asking
+them to retype. See `deep-knowledge/monitoring.md` § failure table.
+
 ### Page Version Tag
 
 Set `data-page-version="{timestamp}"` on the `<html>` element (use the
 ISO timestamp of generation, e.g. `2026-04-15T14:30:00`). This value is
 stored alongside localStorage state. When the page version changes (new
-generation), old localStorage state is automatically discarded so the user
-sees a clean new version instead of stale selections from a previous page.
+generation), the stale half of the stored state (checkbox states, navigation
+positions) is dropped so the user sees a clean new version instead of stale
+selections from a previous page — but **everything the user typed is carried
+over and restored**, with a strip on the page saying so, and the original blob
+is archived under `{key}-archive`. A version bump is a reason to discard
+selections, never a reason to discard comments.
 
 **Rules:**
 - Every iteration append (Step 5c): keep the SAME `data-page-version`

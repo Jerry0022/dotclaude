@@ -129,8 +129,8 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    Claude's own polling — or an `Origin` matching the bridge's own
    host/localhost/127.0.0.1; anything else 403s), gates every endpoint that
    returns or accepts real content: `GET /decisions`, `GET /pending`,
-   `GET /recovery`, `GET /attachments/<id>`, `POST /decisions`,
-   `POST /attachments`, `POST /reload`, `POST /shutdown`. It deliberately
+   `GET /recovery`, `GET /draft`, `GET /attachments/<id>`, `POST /decisions`,
+   `POST /draft`, `POST /attachments`, `POST /reload`, `POST /shutdown`. It deliberately
    does NOT gate `GET /heartbeat` or `GET /reload` (a bare counter, nothing
    sensitive) — those stay reachable from same-origin without a check so the
    page's own poll loop never has an extra failure mode. `Access-Control-
@@ -459,8 +459,35 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
        index.json     id -> {name, mime, size, sha256, added_at} — the
                       only place the ORIGINAL filename survives; the
                       on-disk name is purely content-addressed.
+     drafts/          UNSENT work, mirrored from the page on every autosave
+       <slug>.jsonl   append-only revision log, fsynced per line
+       <slug>.json    latest revision, atomically replaced
      UNPROCESSED      present iff a submission has not been processed yet
    ```
+
+   **`drafts/` is for the half that was never submitted.** `journal.jsonl`
+   only ever sees a payload the user pressed submit on; everything typed
+   before that lived exclusively in the browser's `localStorage`, which does
+   not survive a wiped profile, a private window, a quota error, a power cut,
+   or a bug in the page's own persistence — and which nothing else had a copy
+   of. The page now POSTs its whole state blob to `/draft` on every (debounced)
+   autosave and flushes it with `sendBeacon` on `pagehide`, and the server
+   fsyncs it before acking, exactly like a submission.
+
+   The log is **append-only on purpose**. `GET /draft?slug=<slug>` returns the
+   latest revision *and* `recovered`: the per-key union of the last non-empty
+   value ever posted, minus keys the page reported as deliberately cleared. So
+   a client that posts a blank blob — the shape every past data-loss bug took —
+   cannot destroy anything, and the page merges `recovered` back on load into
+   any key it is missing or holds empty. Losing a comment now requires losing
+   the disk.
+
+   `GET /recovery` lists a one-line summary per draft (`slug`, `rev`,
+   `saved_at`, `iteration`, `recoverable_keys`, `chars`). Read it on a resumed
+   session: without it, a bridge that came back after a crash looks identical
+   whether the user had typed nothing or had typed for an hour. Never overwrite
+   or regenerate a concept HTML file while a draft holds comments you have not
+   accounted for.
 
    What this buys, concretely: `POST /decisions` fsyncs the payload BEFORE it
    acks the browser, and the server reloads `state.json` on boot. A bridge
@@ -481,8 +508,10 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    curl -s http://localhost:{port}/recovery
    ```
    It returns `{unprocessed, version, marker, progress[], last_checkpoint,
-   attachments[]}`. A non-null `marker` means the previous process was torn
-   down hard rather than exiting cleanly.
+   attachments[], drafts[]}`. A non-null `marker` means the previous process
+   was torn down hard rather than exiting cleanly; a `drafts[]` entry with
+   `recoverable_keys > 0` means the user has typed comments that were never
+   submitted — surface them, never silently discard or overwrite them.
 
    **Checkpoint as you process.** For `implement` and for each part of a
    `finalize`, POST each real artifact as it comes into existence. Namespace

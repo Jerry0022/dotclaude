@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.143.0] — 2026-09-05
+
+### Fixed
+
+- **Switching between `/concept` iteration tabs could destroy every comment on the page.** Four independent single lines caused it, and two of them fired precisely when things were already going wrong. `restorePanelToReady()` ended in `localStorage.removeItem(STORAGE_KEY)` — deleting every comment, rating and selection — and it runs both when the bridge answers 507 (nothing was persisted anywhere, so the local copy was the last one) and after the five-minute safety timeout, i.e. exactly when Claude has stopped responding because of a usage limit. The submit handler emptied the feedback dock, although the submitted round stays **live** until Claude appends the next section: a detour into an older tab came home to a blank dock on a round that had not even been answered yet. `saveState()` persisted frozen rounds and the frozen-painted dock, so browsing a past tab — which is what the tabs are for, and which ends every `showScreen()` in a `saveState()` — wrote the old round's submitted answers over the live round's unsent ones. And `restoreState()` deleted the whole blob on TTL expiry and on a page-version change.
+
+  Typed keys are now namespaced per round (`text:i3:d1-s1`) — screen ids, `{decisionId}-note` keys and annotation ids all repeat across rounds, and the dock is one shared overlay outside `section[data-iteration]` — which is what makes keeping the text both safe and unambiguous. Nothing deletes the state blob any more: TTL and version changes prune it key by key, keep every `text:` entry, archive the original, and say so on the page. The dock is marked read-only on submit instead of emptied, and re-armed by `unmarkDockSubmitted()` on every path that hands control back.
+
+### Added
+
+- **A concept page's unsent comments are now mirrored to disk, fsynced, on every autosave.** `journal.jsonl` only ever saw a payload the user pressed submit on; everything typed before that lived exclusively in `localStorage`, which does not survive a wiped profile, a private window, a quota error or a power cut — and which nothing else had a copy of. The bridge gains a draft store (`POST /draft`, `GET /draft`): an append-only revision log plus an atomically replaced snapshot per page, written with the same never-ack-what-is-not-on-disk rule as a submission. Because the log is append-only, `GET /draft` can answer `recovered` — the per-key union of the last non-empty value ever posted, minus the keys the page reported as deliberately cleared — so even a client that posts a blank blob, the shape every past data-loss bug took, cannot destroy anything. The page flushes with `sendBeacon` on `pagehide` and merges `recovered` back on load into any key it is missing or holds empty. The bridge is a plain Python process with no dependency on Claude, so it keeps accepting drafts long after a usage limit has silenced the session. `GET /recovery` lists the drafts, so a resumed session can tell "the user typed nothing" from "the user typed for an hour". Verified end to end in a browser: the bridge was SIGKILLed, `localStorage` wiped completely, the bridge restarted — every comment came back from disk. Gate entries 49–53 pin all of it as engine entries, so an existing page picks them up on its next iteration append.
+
+- Two suites that execute rather than read: `comment-durability.test.js` runs the shipped engine text in jsdom and reproduces all four losses (19 of its 20 tests fail against the previous code), and `draft-durability.test.js` SIGKILLs a real bridge, corrupts its log and restarts it. A torn final journal line — the signature of a power cut mid-append — also used to swallow the *next* record; the store now terminates it once per process, and `_durable_write` fsyncs the directory after the atomic replace.
+
+- **The ship gate stopped failing on contention.** These suites test hooks, the bridge server and git-sync by spawning them, so one vitest worker is never one process; the default (~cores-1) put 30+ runnable processes on a 12-core machine and the one that lost the scheduler was vitest's own main process, whose workers' `onTaskUpdate` RPC then timed out and exited the run 1 beside 2466 passing tests. Worker count is capped at a third of the cores.
+
 ## [0.142.0] — 2026-09-05
 
 ### Added

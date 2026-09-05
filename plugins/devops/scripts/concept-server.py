@@ -373,6 +373,45 @@ def _durable_write(path, data_bytes):
         f.flush()
         os.fsync(f.fileno())
     os.replace(_long_path(tmp), _long_path(path))
+    # fsync the DIRECTORY too, or the rename itself can still be lost to a
+    # power cut on ext4/xfs: the file's bytes are on the platter, but the
+    # directory entry pointing at them is not. POSIX-only — Windows cannot
+    # open a directory as a file, and its rename metadata is journalled by
+    # NTFS anyway. Best-effort: a failure here means the write is merely as
+    # durable as it was before this line existed.
+    if os.name != 'nt':
+        try:
+            dfd = os.open(os.path.dirname(os.path.abspath(path)) or '.', os.O_RDONLY)
+            try:
+                os.fsync(dfd)
+            finally:
+                os.close(dfd)
+        except OSError:
+            pass
+
+
+def _repair_torn_tail(path):
+    """Terminate a log whose last line was cut off mid-write.
+
+    A power cut (or SIGKILL) during an append leaves a partial JSON line with
+    no trailing newline. Readers already skip it — but the NEXT append would
+    otherwise be concatenated onto it, turning one lost record into two. One
+    newline, written once per process per file, makes the damage stop at the
+    record that was actually interrupted.
+    """
+    try:
+        if not os.path.exists(_long_path(path)) or os.path.getsize(_long_path(path)) == 0:
+            return
+        with open(_long_path(path), 'rb') as f:
+            f.seek(-1, os.SEEK_END)
+            if f.read(1) == b'\n':
+                return
+        with open(_long_path(path), 'ab') as f:
+            f.write(b'\n')
+            f.flush()
+            os.fsync(f.fileno())
+    except OSError:
+        pass
 
 
 def _store_init(store_dir):
@@ -384,10 +423,18 @@ def _store_init(store_dir):
     """
     global _store_dir, _journal_path, _state_path, _attach_dir, _marker_path
     global _store_ok, _journal_seq, _attach_total_bytes, _attach_index_path
+    global _drafts_dir
     try:
         os.makedirs(store_dir, exist_ok=True)
         _attach_dir = os.path.join(store_dir, 'attachments')
         os.makedirs(_attach_dir, exist_ok=True)
+        # Unsent comments (see § Draft store). Created up front and covered by
+        # the same writability proof as the rest of the store: a drafts
+        # directory that only turns out to be unwritable at the first autosave
+        # is a silent data-loss hole, which is the bug class this whole store
+        # exists to close.
+        _drafts_dir = os.path.join(store_dir, 'drafts')
+        os.makedirs(_drafts_dir, exist_ok=True)
         _store_dir = store_dir
         _journal_path = os.path.join(store_dir, 'journal.jsonl')
         _state_path = os.path.join(store_dir, 'state.json')
@@ -395,6 +442,7 @@ def _store_init(store_dir):
         _attach_index_path = os.path.join(_attach_dir, 'index.json')
         # Journal line count is authoritative for the sequence: records may
         # have been appended after the last state.json snapshot was written.
+        _repair_torn_tail(_journal_path)
         if os.path.exists(_journal_path):
             with open(_journal_path, 'r', encoding='utf-8') as f:
                 _journal_seq = sum(1 for line in f if line.strip())
@@ -531,6 +579,252 @@ def _store_restore():
     _picked_up_at = snap.get('picked_up_at') if isinstance(snap.get('picked_up_at'), str) else ''
     _phase = snap.get('phase') if isinstance(snap.get('phase'), str) else ''
     return snap
+
+
+# ---------------------------------------------------------------------------
+# Draft store — work the user has NOT submitted yet
+# ---------------------------------------------------------------------------
+# journal.jsonl above makes a SUBMITTED payload durable. Everything typed but
+# not yet submitted lived exclusively in the browser's localStorage, which is
+# the wrong home for work that takes hours to produce:
+#
+#   * a bug in the page's own persistence wipes it — an iteration switch that
+#     rebuilds the feedback dock empty, a panel reset that removed the whole
+#     storage key, a QuotaExceededError that stops every further write;
+#   * a browser profile reset, a private window, or "clear site data" wipes it;
+#   * localStorage is flushed to disk lazily, so a power cut takes the most
+#     recent writes with it;
+#   * and none of that is recoverable afterwards, because nothing outside the
+#     tab ever saw the text.
+#
+# The draft store mirrors the page's state blob onto disk on every autosave,
+# under the same fsync-before-rename discipline as state.json. Two files per
+# page slug:
+#
+#   <store>/drafts/<slug>.json    latest snapshot, atomically replaced
+#   <store>/drafts/<slug>.jsonl   append-only revision log, fsynced per line
+#
+# The append-only log is what makes the guarantee unconditional. Even a client
+# that posts an EMPTY blob — the exact shape every past data-loss bug took —
+# cannot destroy anything, because GET /draft also answers `recovered`: the
+# per-key union of the last non-empty value ever posted, minus the keys the
+# user deliberately cleared. Losing a comment therefore requires losing the
+# disk, not merely a bad client, a closed tab, or a rate-limited Claude.
+
+MAX_DRAFT_BYTES = 8 * 1024 * 1024
+# Compaction threshold. Autosaves are debounced client-side, but a long
+# session still appends thousands of revisions; past this size the log is
+# squashed into ONE base record carrying the same `recovered` union, so
+# compaction can never be the thing that loses a comment.
+MAX_DRAFT_JOURNAL_BYTES = 16 * 1024 * 1024
+# Only keys under this prefix take part in `recovered`. They are the typed
+# comments — the irreplaceable half of the blob. Checkboxes, theme and scroll
+# positions are cheap to redo and would only bloat the union.
+DRAFT_RECOVER_PREFIX = 'text:'
+# The slug arrives from the page and is used as a FILENAME. Same rule as the
+# attachment ids: match a strict shape BEFORE it touches the filesystem, so a
+# crafted slug can never traverse out of the drafts directory.
+_DRAFT_SLUG_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$')
+
+_drafts_dir = None
+# slug -> last revision number. Populated from the log on first touch, then
+# incremented in RAM: re-scanning a 16 MB log on every debounced autosave would
+# make the safety net the slowest thing on the page.
+_draft_revs = {}
+
+
+def _draft_paths(slug):
+    """(latest, log) paths for `slug`, or (None, None) if the slug is unsafe."""
+    if not _drafts_dir or not isinstance(slug, str) or not _DRAFT_SLUG_RE.match(slug):
+        return None, None
+    return (os.path.join(_drafts_dir, slug + '.json'),
+            os.path.join(_drafts_dir, slug + '.jsonl'))
+
+
+def _draft_scan(log_path):
+    """Replay one draft log into (rev, latest_record, recovered).
+
+    A torn final line — the signature of a power cut mid-append — is skipped
+    rather than fatal: every complete line before it is still authoritative,
+    which is the entire reason this file is appended to and never rewritten.
+    """
+    rev = 0
+    latest = None
+    recovered = {}
+    try:
+        with open(_long_path(log_path), 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(rec, dict):
+                    continue
+                # Compaction base record: carries the union of every line it
+                # replaced, so a compacted log recovers exactly as much as the
+                # full one did.
+                base = rec.get('recovered')
+                if isinstance(base, dict):
+                    for k, v in base.items():
+                        if isinstance(k, str) and isinstance(v, str) and v:
+                            recovered[k] = v
+                state = rec.get('state')
+                if not isinstance(state, dict):
+                    continue
+                latest = rec
+                rev = rec['rev'] if isinstance(rec.get('rev'), int) else rev + 1
+                for k, v in state.items():
+                    if (isinstance(k, str) and k.startswith(DRAFT_RECOVER_PREFIX)
+                            and isinstance(v, str) and v):
+                        recovered[k] = v
+                # A note the user typed and then deleted on purpose must stay
+                # deleted. Without this the union would resurrect it on every
+                # later reload, forever.
+                for k in (rec.get('cleared') or []):
+                    if isinstance(k, str):
+                        recovered.pop(k, None)
+    except OSError:
+        return 0, None, {}
+    return rev, latest, recovered
+
+
+def _draft_compact(slug, log_path, rev, latest, recovered):
+    """Squash an oversized log into one base record. Best-effort by design: a
+    compaction that fails leaves the (working, merely large) log in place."""
+    try:
+        if os.path.getsize(_long_path(log_path)) <= MAX_DRAFT_JOURNAL_BYTES:
+            return
+    except OSError:
+        return
+    base = {
+        'rev': rev,
+        'ts': _iso_now(),
+        'compacted': True,
+        'page_version': (latest or {}).get('page_version', ''),
+        'iteration': (latest or {}).get('iteration', ''),
+        'state': (latest or {}).get('state', {}),
+        'recovered': recovered,
+    }
+    try:
+        _durable_write(log_path,
+                       (json.dumps(base, ensure_ascii=False) + '\n').encode('utf-8'))
+    except OSError as exc:
+        sys.stderr.write(
+            f"[concept-server] draft compaction failed for {slug}: {exc}\n")
+
+
+def _draft_write(slug, payload):
+    """Persist one draft revision durably. Returns the new revision number.
+
+    Raises OSError so POST /draft can answer 507 and the page keeps its own
+    copy — the same never-ack-what-is-not-on-disk rule as POST /decisions.
+    """
+    latest_path, log_path = _draft_paths(slug)
+    if not latest_path:
+        raise ValueError('bad slug')
+    state = payload.get('state')
+    if not isinstance(state, dict):
+        raise ValueError('bad state')
+    cleared = [k for k in (payload.get('cleared') or []) if isinstance(k, str)]
+    with _store_lock:
+        rev = _draft_revs.get(slug)
+        first_touch = rev is None
+        if first_touch:
+            # First write of this process: the log may end mid-line from the
+            # crash that ended the last one.
+            _repair_torn_tail(log_path)
+            rev, _, _ = _draft_scan(log_path)
+        rec = {
+            'rev': rev + 1,
+            'ts': _iso_now(),
+            'page_version': str(payload.get('page_version') or ''),
+            'iteration': str(payload.get('iteration') or ''),
+            'state': state,
+            'cleared': cleared,
+        }
+        with open(_long_path(log_path), 'a', encoding='utf-8') as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+            f.flush()
+            os.fsync(f.fileno())
+        # Only after the append is on disk. The snapshot is a convenience for
+        # readers; the log is the record of truth, so it must never be ahead.
+        _durable_write(latest_path,
+                       json.dumps(rec, ensure_ascii=False).encode('utf-8'))
+        _draft_revs[slug] = rec['rev']
+        # Compaction is checked once per process per slug — on the first write
+        # after a restart — so the size check is not paid on every keystroke.
+        if first_touch:
+            r, latest, recovered = _draft_scan(log_path)
+            _draft_compact(slug, log_path, r, latest, recovered)
+            _draft_revs[slug] = r
+        return _draft_revs[slug]
+
+
+def _draft_read(slug):
+    """The full recovery view of one page: latest revision plus the union."""
+    latest_path, log_path = _draft_paths(slug)
+    if not latest_path:
+        return None
+    with _store_lock:
+        rev, latest, recovered = _draft_scan(log_path)
+        if latest is None and os.path.exists(_long_path(latest_path)):
+            # Log unreadable but the snapshot survived — serve whatever half is
+            # left rather than reporting "nothing here".
+            try:
+                with open(_long_path(latest_path), 'r', encoding='utf-8') as f:
+                    snap = json.load(f)
+                if isinstance(snap, dict):
+                    latest = snap
+                    rev = snap['rev'] if isinstance(snap.get('rev'), int) else 0
+                    for k, v in (snap.get('state') or {}).items():
+                        if (isinstance(k, str) and k.startswith(DRAFT_RECOVER_PREFIX)
+                                and isinstance(v, str) and v):
+                            recovered[k] = v
+            except (OSError, ValueError):
+                latest = None
+    if latest is None and not recovered:
+        return None
+    return {
+        'rev': rev,
+        'saved_at': (latest or {}).get('ts', ''),
+        'page_version': (latest or {}).get('page_version', ''),
+        'iteration': (latest or {}).get('iteration', ''),
+        'state': (latest or {}).get('state', {}),
+        'recovered': recovered,
+    }
+
+
+def _draft_summaries():
+    """One line per stored draft, for GET /recovery.
+
+    This is how a resumed session learns unsent notes exist at all — without
+    it, a bridge that came back after a crash looks identical whether the user
+    had typed nothing or had typed for an hour.
+    """
+    out = []
+    if not _store_ok or not _drafts_dir:
+        return out
+    try:
+        names = sorted(n for n in os.listdir(_drafts_dir) if n.endswith('.jsonl'))
+    except OSError:
+        return out
+    for name in names:
+        info = _draft_read(name[:-len('.jsonl')])
+        if not info:
+            continue
+        out.append({
+            'slug': name[:-len('.jsonl')],
+            'rev': info['rev'],
+            'saved_at': info['saved_at'],
+            'page_version': info['page_version'],
+            'iteration': info['iteration'],
+            'recoverable_keys': len(info['recovered']),
+            'chars': sum(len(v) for v in info['recovered'].values()),
+        })
+    return out
 
 
 def _read_progress():
@@ -874,6 +1168,35 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 "last_checkpoint": progress[-1] if progress else None,
                 "attachments": _attachment_meta(),
                 "journal_seq": _journal_seq,
+                # Unsent work. `unprocessed` above only ever speaks about
+                # SUBMITTED payloads, so without this a resumed session cannot
+                # tell "the user typed nothing" from "the user typed for an
+                # hour and never pressed submit".
+                "drafts": _draft_summaries(),
+            })
+        elif self.path.split('?', 1)[0] == '/draft':
+            # Recovery view of ONE page's unsent state. Same origin guard as
+            # /recovery: the response contains everything the user typed.
+            if not self._same_origin_ok():
+                self.send_error(403, "forbidden origin")
+                return
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            slug = (query.get('slug') or [''])[0]
+            if not _DRAFT_SLUG_RE.match(slug or ''):
+                self._error_response(400, {"ok": False, "reason": "bad_slug"})
+                return
+            info = _draft_read(slug) if _store_ok else None
+            self._json_response({
+                "ok": True,
+                "durable": _store_ok,
+                "slug": slug,
+                "found": info is not None,
+                "rev": (info or {}).get('rev', 0),
+                "saved_at": (info or {}).get('saved_at', ''),
+                "page_version": (info or {}).get('page_version', ''),
+                "iteration": (info or {}).get('iteration', ''),
+                "state": (info or {}).get('state', {}),
+                "recovered": (info or {}).get('recovered', {}),
             })
         elif self.path.startswith('/attachments/'):
             # Content-addressed read-back so a reloaded page can rebuild its
@@ -971,6 +1294,53 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 "durable": _store_ok,
                 "seq": seq,
             })
+        elif self.path == '/draft':
+            # Autosave of UNSENT work. Deliberately separate from /decisions:
+            # a draft carries no action, triggers nothing on Claude's side, and
+            # must keep working long after Claude has stopped answering (usage
+            # limit, closed session) — the bridge is a plain Python process and
+            # does not need Claude to be alive to keep the user's text safe.
+            if not self._same_origin_ok():
+                self.send_error(403, "forbidden origin")
+                return
+            length = self._read_content_length()
+            if length is None:
+                self._error_response(400, {"ok": False, "reason": "bad_content_length"})
+                return
+            if length > MAX_DRAFT_BYTES:
+                self.send_error(413, "draft payload too large")
+                return
+            try:
+                payload = json.loads(self.rfile.read(length).decode())
+            except (ValueError, UnicodeDecodeError):
+                self._error_response(400, {"ok": False, "reason": "bad_json"})
+                return
+            if not isinstance(payload, dict):
+                self._error_response(400, {"ok": False, "reason": "bad_json"})
+                return
+            slug = payload.get('slug')
+            if not isinstance(slug, str) or not _DRAFT_SLUG_RE.match(slug):
+                self._error_response(400, {"ok": False, "reason": "bad_slug"})
+                return
+            if not _store_ok:
+                self._error_response(507, {
+                    "ok": False, "durable": False, "reason": "store_unavailable",
+                })
+                return
+            try:
+                rev = _draft_write(slug, payload)
+            except ValueError as exc:
+                self._error_response(400, {"ok": False, "reason": str(exc)})
+                return
+            except OSError as exc:
+                # Same rule as POST /decisions: never ack what is not on disk.
+                # The page keeps its own copy and shows the durability warning.
+                self._error_response(507, {
+                    "ok": False, "durable": False,
+                    "reason": "draft_write_failed", "detail": str(exc),
+                })
+                return
+            self._json_response({"ok": True, "durable": True, "rev": rev})
         elif self.path == '/attachments':
             self._handle_attachment_upload()
         elif self.path == '/progress':

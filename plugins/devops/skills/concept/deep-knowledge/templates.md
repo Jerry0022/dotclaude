@@ -158,6 +158,10 @@ must see their own language. The locale hint is authoritative.
 | `attach.error_disk_full`       | Bridge disk is full               | Bridge-Festplatte ist voll |
 | `attach.error_offline`         | Bridge unreachable — kept locally, will retry on reconnect | Bridge nicht erreichbar — lokal gespeichert, Wiederholung bei Verbindung |
 | `state.persist_failed`         | Could not save your changes locally — storage is full. Free up space or export your work soon. | Deine Änderungen konnten lokal nicht gespeichert werden — der Speicher ist voll. Platz freigeben oder Arbeit bald exportieren. |
+| `state.recovered_found`        | Notes from an earlier version of this page were restored. | Notizen aus einer früheren Fassung dieser Seite wurden wiederhergestellt. |
+| `state.recovered_dismiss`      | Dismiss                          | Ausblenden |
+| `state.draft_local_only`       | Notes are saved in this browser only — the bridge is unreachable. | Notizen liegen nur in diesem Browser — die Bridge ist nicht erreichbar. |
+| `state.dock_submitted`         | Sent to Claude — read-only until the next round. | An Claude gesendet — schreibgeschützt bis zur nächsten Runde. |
 | `design.viewport_switch`       | View                           | Ansicht |
 | `design.viewport_desktop`      | Desktop                        | Desktop |
 | `design.viewport_tablet`       | Tablet                         | Tablet |
@@ -3292,6 +3296,12 @@ change) via `harvestDockValues()`.
     // § Attachments — rebuild bars for the freshly (re)created textareas
     // and re-render any attachments already tracked for their slot keys.
     if (typeof initCommentAttachments === 'function') initCommentAttachments();
+    // LAST: the builders above read the previous stamp to decide whether the
+    // text on screen was theirs to carry (harvestDockValues). Re-stamping
+    // before them would make every rebuild look like a same-round one.
+    const _liveNow = liveIterationId();
+    if (dock.dataset.iteration !== _liveNow) delete dock.dataset.submitted;
+    dock.dataset.iteration = _liveNow;
   }
 
   // Snapshot the dock's current values, keyed by data-comment, so the one
@@ -3300,11 +3310,25 @@ change) via `harvestDockValues()`.
   // here is lost for good — and the next saveState() would delete its
   // localStorage key too.
   function harvestDockValues() {
+    // A rebuild caused by a NEW live round must not carry the previous round's
+    // text forward: the ids repeat (`d1-s1`), so it would re-fill — and
+    // re-send — notes belonging to the round before. The stamp is written at
+    // the end of buildDesignUI(), so during a rebuild it still names the round
+    // the values on screen came from.
+    if (dock && dock.dataset.iteration && dock.dataset.iteration !== liveIterationId()) return {};
     const values = {};
     document.querySelectorAll('#feedback-dock [data-comment]').forEach(el => {
       if (el.value) values[el.dataset.comment] = el.value;
     });
     return values;
+  }
+
+  // The dock is one shared overlay, but its content always belongs to whichever
+  // round is live. Both the stamp above and § State Persistence's key
+  // namespacing derive from this one answer.
+  function liveIterationId() {
+    const live = document.querySelector('section[data-iteration][data-active]');
+    return live ? String(live.dataset.iteration) : '';
   }
 
   // Per-design textareas (💬) — one per design, only the active one shown.
@@ -4250,26 +4274,47 @@ change) via `harvestDockValues()`.
     } else {
       const stash = liveDockValues;
       liveDockValues = null;
+      // A submitted round stays read-only on the way back from a frozen tab —
+      // its text is the record of what is currently in flight, not a field to
+      // keep editing. Without this check the return trip silently re-armed
+      // editing on a round whose payload had already left.
+      const submitted = dock.dataset.submitted === 'true';
       fields.forEach(ta => {
-        ta.readOnly = false;
+        ta.readOnly = submitted;
         if (stash) ta.value = stash[ta.dataset.comment] || '';
       });
     }
   }
 
-  // Called by the submit handler once the payload is accepted. The dock is
-  // shared across iterations and its ids are per-design-index (`d1-s1`), so
-  // iteration N+1 would otherwise open pre-filled with — and re-send —
-  // iteration N's text. Clearing on submit is preferred over namespacing the
-  // keys per iteration: the values have just been persisted server-side in
-  // the payload and mirrored into the frozen section's data-frozen-feedback
-  // blob, so nothing is lost, and the localStorage keys stay stable for the
-  // ordinary reload case.
-  window.clearDock = function() {
-    document.querySelectorAll('#feedback-dock textarea').forEach(ta => { ta.value = ''; });
-    liveDockValues = null;
-    updateNoteMarkers();
+  // Called by the submit handler once the payload is captured. The dock keeps
+  // every character: the round the user just submitted is still the LIVE round
+  // until Claude appends the next section, and those comments are the only
+  // on-screen record of what was sent. Emptying the dock here — which is what
+  // this function used to do — meant a detour into an older tab and back came
+  // home to a blank dock on a round that had not even been answered yet.
+  //
+  // Nothing leaks into the next round any more: its storage keys carry the
+  // round number (§ State Persistence `_iterationPrefix`), and the reload onto
+  // iteration N+1 rebuilds the dock from that empty namespace. Only editing is
+  // taken away, so what is on screen cannot drift from what is in flight.
+  window.markDockSubmitted = function() {
+    document.querySelectorAll('#feedback-dock textarea').forEach(ta => { ta.readOnly = true; });
+    dock.dataset.submitted = 'true';
     if (typeof saveState === 'function') saveState();
+    // Push the round's final text to the bridge's durable store immediately,
+    // rather than one debounce later — a reload can land at any moment now.
+    if (typeof flushDraft === 'function') flushDraft();
+  };
+
+  // The exact inverse, for every path that hands control back on a round that
+  // did NOT go through: a 507 from the bridge, or the safety timeout when
+  // Claude stopped answering. The panel returns to ready, so the dock has to
+  // return to editable — a read-only dock under a re-armed submit button means
+  // the user can see their comments and change nothing about them.
+  window.unmarkDockSubmitted = function() {
+    if (document.body.classList.contains('viewing-frozen')) return;
+    document.querySelectorAll('#feedback-dock textarea').forEach(ta => { ta.readOnly = false; });
+    delete dock.dataset.submitted;
   };
 
   // Runs on load and after every iteration / design / screen switch: keep the
@@ -5023,8 +5068,11 @@ inlined the same way and get their own top-level map instead.
 // is what makes this scan complete: an earlier version rebuilt the container
 // per design switch, so submitting a 2-design iteration shipped only the
 // design the user happened to be looking at and silently dropped the rest.
-// The dock is emptied on submit (clearDock), so it never carries a previous
-// iteration's text into the next payload.
+// The dock's textareas are rebuilt per iteration and its storage keys carry
+// the round number (§ State Persistence `_iterationPrefix`), so it never
+// carries a previous iteration's text into the next payload — and, unlike the
+// old submit-time wipe that guaranteed the same thing, it does not destroy the
+// round's comments while the user is still waiting to read them back.
 function collectDesignDecisions() {
   const comments = { general: '', designs: {}, screens: {}, views: {} };
   document.querySelectorAll('#feedback-dock input, #feedback-dock select, #feedback-dock textarea').forEach(el => {
@@ -6141,6 +6189,172 @@ function _guardedSetItem(key, value) {
   }
 }
 
+// --- Durable draft mirror (bridge) ---------------------------------------
+// localStorage is a CACHE, never the record of truth. It is wiped by a profile
+// reset, refused in private mode, capped by quota, flushed to disk lazily (a
+// power cut takes the last writes with it) — and, as every data-loss bug this
+// block guards against showed, one wrong line of page JS can clear the whole
+// key outright. So every autosave is ALSO mirrored to the bridge, which
+// fsyncs it before acking (§ Draft store in scripts/concept-server.py).
+//
+// The bridge is a plain Python process with no dependency on Claude: it keeps
+// accepting drafts long after Claude has stopped answering, which is exactly
+// the situation — a usage limit hit mid-round — where hours of typing used to
+// sit in a single browser key with nothing behind it.
+//
+// Debounced, because `input` fires per keystroke. Flushed via sendBeacon on
+// pagehide/hidden so a closed tab, a crash or a reload cannot outrun the last
+// write.
+const DRAFT_SLUG = STORAGE_KEY.replace(/^concept-state-/, '');
+const DRAFT_DEBOUNCE_MS = 1000;
+// A page opened as a file:// URL has no bridge by construction — every POST
+// would fail and the "no durable mirror" strip would be permanent noise.
+const DRAFT_ENABLED = /^https?:$/.test(location.protocol);
+let _draftTimer = null;
+let _draftCleared = [];      // keys the user emptied on purpose since last flush
+let _draftFailures = 0;
+let _draftStripEl = null;
+
+function _readStoredState() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; }
+  catch (e) { return {}; }
+}
+
+function _draftPayload(cleared) {
+  const live = document.querySelector('section[data-iteration][data-active]');
+  return JSON.stringify({
+    slug: DRAFT_SLUG,
+    page_version: document.documentElement.dataset.pageVersion || '',
+    iteration: live ? String(live.dataset.iteration || '') : '',
+    state: _readStoredState(),
+    cleared: cleared,
+  });
+}
+
+// Handed over, not copied: a key reported as deliberately cleared must be
+// reported exactly once, or a later flush would re-clear a note the user has
+// since retyped. A FAILED flush hands them back, so a dead bridge does not
+// turn "the user deleted this" into a fact nobody ever hears about — the
+// union would then resurrect the note on the next reload.
+function _takeCleared() { return _draftCleared.splice(0); }
+function _returnCleared(keys) { if (keys.length) _draftCleared.unshift(...keys); }
+
+// Only after three consecutive failures, so a single blip does not flash a
+// warning at the user; cleared again on the next success.
+function _setDraftHealth(ok) {
+  _draftFailures = ok ? 0 : _draftFailures + 1;
+  const show = _draftFailures >= 3;
+  if (show && !_draftStripEl) {
+    _draftStripEl = document.createElement('div');
+    _draftStripEl.className = 'draft-offline-strip';
+    _draftStripEl.setAttribute('role', 'status');
+    _draftStripEl.textContent = '{{state.draft_local_only}}';
+    document.body.appendChild(_draftStripEl);
+  }
+  if (_draftStripEl) _draftStripEl.hidden = !show;
+}
+
+async function flushDraft() {
+  if (_draftTimer) { clearTimeout(_draftTimer); _draftTimer = null; }
+  if (!DRAFT_ENABLED) return;
+  const cleared = _takeCleared();
+  try {
+    const res = await fetch('/draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: _draftPayload(cleared),
+      keepalive: true,
+    });
+    // A 507 means the bridge could not reach disk. Same rule as POST
+    // /decisions: that is NOT a success, and the local copy stays the only
+    // one — so the user is told rather than left believing it is safe.
+    if (!res.ok) _returnCleared(cleared);
+    _setDraftHealth(res.ok);
+  } catch (e) {
+    _returnCleared(cleared);
+    _setDraftHealth(false);
+  }
+}
+
+function queueDraftSync() {
+  if (!DRAFT_ENABLED) return;
+  if (_draftTimer) clearTimeout(_draftTimer);
+  _draftTimer = setTimeout(flushDraft, DRAFT_DEBOUNCE_MS);
+}
+
+// Teardown path. sendBeacon is queued by the browser itself and survives the
+// document being discarded, which `fetch` — even with keepalive — does not
+// reliably do on every engine; the fetch below is the fallback for browsers
+// that refuse the beacon (payload too large).
+function flushDraftBeacon() {
+  if (_draftTimer) { clearTimeout(_draftTimer); _draftTimer = null; }
+  if (!DRAFT_ENABLED) return;
+  // No response to inspect on this path, so the cleared list is handed over
+  // unconditionally — a beacon the browser accepted is the best signal there is.
+  const body = _draftPayload(_takeCleared());
+  try {
+    if (navigator.sendBeacon &&
+        navigator.sendBeacon('/draft', new Blob([body], { type: 'application/json' }))) return;
+  } catch (e) { /* fall through to fetch */ }
+  try {
+    fetch('/draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body,
+      keepalive: true,
+    });
+  } catch (e) { /* the localStorage copy stands — nothing else left to try */ }
+}
+window.addEventListener('pagehide', flushDraftBeacon);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushDraftBeacon();
+});
+
+// Merge the bridge's durable copy into localStorage on load. Order matters:
+//   1. a key the local blob does not have at all is taken from the bridge;
+//   2. a key the local blob has EMPTY while the bridge has text is taken from
+//      the bridge — this is the shape EVERY past data-loss bug produced;
+//   3. a non-empty local value always wins: it is the newer one, and it is
+//      what the user can currently see on screen.
+// The source is `recovered` (not `state`): the union of the last non-empty
+// value ever posted per key, so even a run of blank autosaves from a broken
+// client cannot erase anything.
+async function hydrateDraftFromBridge() {
+  if (!DRAFT_ENABLED) return;
+  let data = null;
+  try {
+    const res = await fetch('/draft?slug=' + encodeURIComponent(DRAFT_SLUG), { cache: 'no-store' });
+    if (!res.ok) return;
+    data = await res.json();
+  } catch (e) { return; }
+  if (!data || !data.found) return;
+  const local = _readStoredState();
+  let changed = false;
+  Object.entries(data.recovered || {}).forEach(([k, v]) => {
+    if (typeof v !== 'string' || !v) return;
+    if (typeof local[k] === 'string' && local[k] !== '') return;
+    local[k] = v;
+    changed = true;
+  });
+  if (!changed) return;
+  local._savedAt = Date.now();
+  local._pageVersion = document.documentElement.dataset.pageVersion || '';
+  _guardedSetItem(STORAGE_KEY, JSON.stringify(local));
+  restoreState();
+  if (typeof updateNoteMarkers === 'function') updateNoteMarkers();
+}
+
+// Text keys are namespaced per iteration (`text:i3:d1-s1`). Without the
+// namespace the SAME key means different things in different rounds — screen
+// ids, `{decisionId}-note` and annotation ids all repeat — so iteration N+1
+// opened pre-filled with N's notes, and the workaround for that (emptying the
+// dock at submit time) destroyed the text the user had just sent before they
+// could read it back. See § Iteration Tabs.
+function _iterationPrefix() {
+  const live = document.querySelector('section[data-iteration][data-active]');
+  return live ? 'i' + String(live.dataset.iteration) + ':' : '';
+}
+
 function saveState() {
   const _pageVersion = document.documentElement.dataset.pageVersion || '';
   // MERGE over the stored blob; never rebuild it from the DOM alone. The scans
@@ -6172,7 +6386,17 @@ function saveState() {
   // stage down before saveState() runs, which would DELETE those keys again.
   // The authored original is still in the DOM (display:none) and is the one
   // legitimate copy, so skipping the clones loses nothing.
-  const persistable = el => !el.closest('[data-device-clone]');
+  // A FROZEN iteration's fields carry the values the user already submitted,
+  // and the shared feedback dock is painted with that same frozen text while
+  // a past tab is on screen (applyDockFreezeState, § Layout JS). Persisting
+  // either writes round N's answers over round N+1's — silently, because
+  // navigating a frozen design tab is allowed and every showScreen() ends in
+  // saveState(). Measured symptom: click an old tab, click a screen, come
+  // back, the live round's notes are the old round's notes.
+  const _frozenView = document.body.classList.contains('viewing-frozen');
+  const persistable = el => !el.closest('[data-device-clone]')
+    && !el.closest('section[data-iteration]:not([data-active])')
+    && !(_frozenView && el.closest('#feedback-dock'));
   document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
     // data-no-persist opts a control out of reload restoration. Used by the
     // close-out wizard's ship question, which must be answered fresh every
@@ -6182,6 +6406,7 @@ function saveState() {
     if (!persistable(el)) return;
     if (el.name || el.id) state['input:' + (el.name || el.id) + ':' + el.value] = el.checked;
   });
+  const _ns = _iterationPrefix();
   document.querySelectorAll('textarea, input[type="text"], input[type="number"]').forEach(el => {
     if (!persistable(el)) return;
     const _key = el.id || el.dataset.comment;
@@ -6194,8 +6419,14 @@ function saveState() {
     // actually typed into it: `data-touched` is stamped from a TRUSTED input
     // event (see the capture-phase listener at the bottom of this block), so
     // deliberately clearing a note — type, then delete — still persists "".
-    if (el.value === '' && state['text:' + _key] && el.dataset.touched === undefined) return;
-    state['text:' + _key] = el.value;
+    const _sk = 'text:' + _ns + _key;
+    if (el.value === '' && state[_sk] && el.dataset.touched === undefined) return;
+    // Report a deliberate clear to the bridge, whose `recovered` union would
+    // otherwise resurrect the note on the next reload, forever. Only a value
+    // that WAS stored and is now empty counts — never a field that was empty
+    // all along.
+    if (el.value === '' && state[_sk]) _draftCleared.push(_sk);
+    state[_sk] = el.value;
   });
   document.querySelectorAll('input[type="range"]').forEach(el => {
     if (!persistable(el)) return;
@@ -6245,29 +6476,84 @@ function saveState() {
   // events fire from restoreState() (isTrusted=false) and are ignored.
   // Deleted rather than left alone when false, for the same reason as
   // _activeView above: the merge would otherwise make the flag permanent
-  // once set, surviving the clearDock() that is supposed to reset it.
+  // once set, surviving the panel reset that is supposed to clear it.
   if (typeof _userInteracted !== 'undefined' && _userInteracted) {
     state['_userInteracted'] = true;
   } else {
     delete state['_userInteracted'];
   }
   _guardedSetItem(STORAGE_KEY, JSON.stringify(state));
+  // Mirror it to disk. Debounced, never awaited: persistence must not make
+  // typing feel slow, and a failed mirror is reported by its own strip rather
+  // than by throwing out of an input handler.
+  queueDraftSync();
+}
+
+// TTL expiry and a page-version change used to DELETE the whole blob. Those
+// were the two most expensive lines in this file: both triggers are perfectly
+// ordinary — leaving the tab open overnight, and regenerating the page — and
+// the blob they deleted was the only copy of everything the user had typed and
+// not yet submitted.
+//
+// Nothing is deleted any more. The genuinely stale half (checkbox states, nav
+// positions, theme) is dropped, every `text:` key is carried over and
+// restored, a strip says so, and the untouched original is kept one key
+// sideways in case this page turns out to be a different concept that happens
+// to share the slug. A note that comes back where the user left it is never
+// worse than a note that is gone.
+let _recoveredStripEl = null;
+function _showRecoveredStrip() {
+  if (_recoveredStripEl) return;
+  _recoveredStripEl = document.createElement('div');
+  _recoveredStripEl.className = 'recovered-notes-strip';
+  _recoveredStripEl.setAttribute('role', 'status');
+  const span = document.createElement('span');
+  span.textContent = '{{state.recovered_found}}';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = '{{state.recovered_dismiss}}';
+  btn.addEventListener('click', () => { _recoveredStripEl.hidden = true; });
+  _recoveredStripEl.appendChild(span);
+  _recoveredStripEl.appendChild(btn);
+  document.body.appendChild(_recoveredStripEl);
+}
+
+function _carryOverTypedWork(state) {
+  const typed = {};
+  Object.keys(state).forEach(k => {
+    if (k.indexOf('text:') === 0 && typeof state[k] === 'string' && state[k]) {
+      typed[k] = state[k];
+    }
+  });
+  const carried = Object.assign({
+    _savedAt: Date.now(),
+    _pageVersion: document.documentElement.dataset.pageVersion || '',
+    _carriedOver: true,
+  }, typed);
+  _guardedSetItem(STORAGE_KEY + '-archive', JSON.stringify(state));
+  _guardedSetItem(STORAGE_KEY, JSON.stringify(carried));
+  if (Object.keys(typed).length) _showRecoveredStrip();
+  return carried;
 }
 
 function restoreState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return;
   try {
-    const state = JSON.parse(raw);
-    if (state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) {
-      localStorage.removeItem(STORAGE_KEY);
-      return;
-    }
+    let state = JSON.parse(raw);
     const currentVersion = document.documentElement.dataset.pageVersion || '';
-    if (state._pageVersion && state._pageVersion !== currentVersion) {
-      localStorage.removeItem(STORAGE_KEY);
-      return;
+    if ((state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) ||
+        (state._pageVersion && state._pageVersion !== currentVersion)) {
+      state = _carryOverTypedWork(state);
     }
+    // Restore targets the LIVE round only. Frozen rounds carry their submitted
+    // values in the HTML, and their form-element names/ids repeat across
+    // rounds — a page-wide `querySelector` returns the OLDEST match (document
+    // order), so an unscoped restore wrote the live round's answers into
+    // iteration 1 and left the live round blank.
+    const _live = document.querySelector('section[data-iteration][data-active]');
+    const _ns = _live ? 'i' + String(_live.dataset.iteration) + ':' : '';
+    const _pick = sel => (_live && _live.querySelector(sel)) || document.querySelector(sel);
     if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
     // Mirror of the theme restore above — see saveState(). Only ADDS the
     // class; never removes it here, since the default (no class) already
@@ -6291,31 +6577,40 @@ function restoreState() {
       const [type, ...rest] = key.split(':');
       if (type === 'input') {
         const [name, val] = [rest.slice(0, -1).join(':'), rest[rest.length - 1]];
-        const el = document.querySelector(`input[name="${name}"][value="${val}"], input[id="${name}"][value="${val}"]`);
+        const el = _pick(`input[name="${name}"][value="${val}"], input[id="${name}"][value="${val}"]`);
         // Mirror of the saveState() guard — also covers stale entries written
         // before a control was marked data-no-persist.
         if (el && el.dataset.noPersist === undefined) el.checked = value;
       } else if (type === 'text') {
-        const id = rest.join(':');
-        // Resolve inside the LIVE iteration first. Annotation ids (`anno-a1`)
-        // and `{decisionId}-note` keys are only unique per iteration, so a
-        // page-wide first match writes the live text into iteration 1's
-        // frozen textarea and brings the live field back blank. Frozen
-        // iterations carry their submitted values in the HTML and must never
-        // be restored from localStorage. The page-wide fallback is what the
-        // feedback dock needs — it is an overlay outside section[data-iteration].
-        const live = document.querySelector('section[data-iteration][data-active]');
-        const el = (live && live.querySelector(`[data-comment="${id}"]`))
-          || document.querySelector(`[data-comment="${id}"]`)
-          || document.querySelector(`textarea#${CSS.escape(id)}, input#${CSS.escape(id)}`);
-        if (el) el.value = value;
+        let id = rest.join(':');
+        // Namespaced key (`text:i3:d1-s1`). Only the live round's own keys may
+        // be applied: screen ids, `{decisionId}-note` and annotation ids all
+        // repeat across rounds, so an unnamespaced restore filled the shared
+        // feedback dock with a previous round's notes. A legacy key with no
+        // namespace (written by pages generated before this) is treated as
+        // belonging to the live round — which is exactly what it meant then.
+        const nsMatch = /^i([^:]+):([\s\S]*)$/.exec(id);
+        if (nsMatch) {
+          if ('i' + nsMatch[1] + ':' !== _ns) return;
+          id = nsMatch[2];
+        }
+        // The page-wide fallback is what the feedback dock needs — it is an
+        // overlay that lives outside section[data-iteration].
+        const el = _pick(`[data-comment="${id}"]`)
+          || _pick(`textarea#${CSS.escape(id)}, input#${CSS.escape(id)}`);
+        // Never overwrite a field the user has already typed into during THIS
+        // page life. restoreState() is re-entrant (the design layout re-runs
+        // it after building the dock, and hydrateDraftFromBridge() runs it
+        // again when the durable copy adds anything), and a late re-run must
+        // not stamp a stored value over newer keystrokes.
+        if (el && el.dataset.touched === undefined) el.value = value;
       } else if (type === 'range') {
         const id = rest.join(':');
-        const el = document.getElementById(id) || document.querySelector(`input[name="${id}"]`);
+        const el = _pick(`input#${CSS.escape(id)}, input[name="${id}"]`);
         if (el) { el.value = value; el.dispatchEvent(new Event('input')); }
       } else if (type === 'select') {
         const id = rest.join(':');
-        const el = document.getElementById(id) || document.querySelector(`select[name="${id}"]`);
+        const el = _pick(`select#${CSS.escape(id)}, select[name="${id}"]`);
         if (el) el.value = value;
       }
     });
@@ -6328,6 +6623,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Injection for why this safety net exists.
   if (typeof ensureCommentSlots === 'function') ensureCommentSlots();
   restoreState();
+  // Then top up from the bridge's durable copy — the half that survives a
+  // wiped profile, a private window, a storage quota error and a power cut.
+  // Deliberately not awaited: the local restore has already painted the page,
+  // and this only ever ADDS keys the local blob is missing or has empty.
+  hydrateDraftFromBridge();
   // Re-sync the (optional) annotation eye pill's aria-label/aria-pressed
   // AFTER restoreState() has applied the persisted body.anno-hidden class —
   // wireAnnotationLayer()'s own DOMContentLoaded-time updateAnnoUI() call
@@ -6378,6 +6678,40 @@ document.addEventListener('input', saveState);
   throwing out of the `change`/`input` handler, and further writes keep
   being attempted (a later one may succeed once the user frees up space).
 
+**Durability rules — the ones that exist because work was actually lost:**
+
+- **Nothing in this page may ever call `localStorage.removeItem(STORAGE_KEY)`.**
+  Not on TTL expiry, not on a page-version change, not on a panel reset, not
+  on submit. Each of those was once a one-line "clean up local state" that
+  deleted every comment on the page, and two of them fired precisely when
+  things were already going wrong (a bridge that could not persist; Claude
+  stuck on a usage limit for longer than `PROCESSED_SAFETY_MS`). Stale state
+  is pruned key by key — `_carryOverTypedWork()` keeps every `text:` entry and
+  drops the rest — never by dropping the blob.
+- **Text keys are namespaced per iteration** (`text:i3:d1-s1`,
+  `_iterationPrefix()`). Screen ids, `{decisionId}-note` keys and annotation
+  ids all repeat across rounds, and the shared feedback dock lives outside
+  `section[data-iteration]` entirely, so an unnamespaced key means different
+  things in different rounds. `restoreState()` applies only the live round's
+  keys; a legacy key with no namespace is treated as the live round's.
+- **A frozen round is never persisted.** `persistable()` excludes
+  `section[data-iteration]:not([data-active])` always, and the dock while
+  `body.viewing-frozen` — otherwise browsing an old tab (which is allowed, and
+  ends every `showScreen()` in a `saveState()`) writes the old round's
+  submitted answers over the live round's unsent ones.
+- **The dock is not emptied on submit.** It is marked read-only
+  (`markDockSubmitted()`); the round stays live until Claude appends the next
+  section, and its comments are the only on-screen record of what was sent.
+- **Every save is mirrored to the bridge** (`queueDraftSync()` → `POST /draft`,
+  fsynced before the ack), flushed with `sendBeacon` on `pagehide`/`hidden`,
+  and merged back on load by `hydrateDraftFromBridge()`. `localStorage` is the
+  cache; the bridge's append-only draft log is the record that survives a
+  wiped profile, a private window, a quota error, a power cut, and a Claude
+  that has stopped answering.
+- `restoreState()` never overwrites a field carrying `data-touched` — it is
+  re-entrant (the design layout re-runs it; so does the bridge hydrate), and a
+  late re-run must not stamp a stored value over newer keystrokes.
+
 ### Persist Warning Banner CSS
 
 `_showPersistWarning()` (above) creates this element on first failure —
@@ -6391,6 +6725,26 @@ fails, so nothing needs to reserve space for it up front.
   background: var(--danger-color, #f85149); color: #fff;
   padding: .6rem 1rem; border-radius: 8px; font-size: .82rem;
   box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+
+/* Same family, lower urgency: the work is safe, the user is only being told
+   where it currently lives (`.draft-offline-strip`) or that older notes were
+   brought back (`.recovered-notes-strip`). Both sit BELOW the frozen bar's
+   z-index band so they never cover the way back to the live round. */
+.draft-offline-strip,
+.recovered-notes-strip {
+  position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
+  z-index: 9000; max-width: min(560px, calc(100vw - 2rem));
+  display: flex; align-items: center; gap: .75rem;
+  background: var(--panel-bg, #1c2128); color: var(--text-color, #e6edf3);
+  border: 1px solid var(--border-color, #30363d);
+  padding: .55rem .9rem; border-radius: 8px; font-size: .8rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+.recovered-notes-strip button {
+  background: none; border: 1px solid var(--border-color, #30363d);
+  color: inherit; border-radius: 6px; padding: .2rem .6rem;
+  font-size: .75rem; cursor: pointer; white-space: nowrap;
 }
 ```
 
@@ -7336,11 +7690,16 @@ async function submitWithAction(action) {
   const container = document.getElementById('concept-decisions');
   container.textContent = JSON.stringify(data);
   // design template only: the feedback dock is a single overlay shared by
-  // every iteration and its field ids repeat per iteration (`d1-s1`), so it
-  // must be emptied once the payload is captured — otherwise the appended
-  // iteration N+1 opens pre-filled with iteration N's notes and re-sends
-  // them. Runs AFTER collectDecisions(), never before. See § Layout JS.
-  if (typeof clearDock === 'function') clearDock();
+  // every iteration, and its field ids repeat per iteration (`d1-s1`) — so
+  // iteration N+1 must not open pre-filled with N's notes. This used to be
+  // solved by EMPTYING the dock here, at submit time, which destroyed the
+  // text the user had just sent: switch to an older tab, switch back, and the
+  // round they were still waiting on showed no comments at all. The keys are
+  // namespaced per iteration now (§ State Persistence `_iterationPrefix`), so
+  // nothing leaks forward and nothing has to be thrown away — the dock is only
+  // marked read-only, so the user can read back what they sent while Claude
+  // works. Runs AFTER collectDecisions(), never before. See § Layout JS.
+  if (typeof markDockSubmitted === 'function') markDockSubmitted();
   document.body.classList.add('concept-submitted', 'content-dimmed');
   showContentDimmer();
   _submittedAt = Date.now();
@@ -7950,12 +8309,29 @@ function restorePanelToReady() {
   }
   document.body.classList.remove('concept-submitted', 'content-dimmed');
   hideContentDimmer();
+  // Re-arm the dock together with the submit buttons. markDockSubmitted() made
+  // it read-only on the way out; a ready panel over an uneditable comment
+  // surface is worse than either state on its own.
+  if (typeof unmarkDockSubmitted === 'function') unmarkDockSubmitted();
   _submittedAt = 0;
   _submittedReloadCounter = null;
   _submitInFlight = false;
   _submittedAction = null;
-  const slug = location.pathname.split('/').pop().replace('.html', '');
-  localStorage.removeItem('concept-state-' + slug);
+  // PANEL state only. This used to end in
+  //     localStorage.removeItem('concept-state-' + slug)
+  // which deleted every comment, rating and selection on the page. Both paths
+  // into this function make that catastrophic: it also runs when the bridge
+  // answered 507 (nothing was persisted anywhere, and the local copy was the
+  // only one left), and after the five-minute safety timeout — i.e. precisely
+  // when Claude has stopped responding because of a usage limit. Losing the
+  // user's work is never part of recovering a panel.
+  try {
+    const st = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    if (st && typeof st === 'object') {
+      delete st._userInteracted;
+      _guardedSetItem(STORAGE_KEY, JSON.stringify(st));
+    }
+  } catch (e) { /* corrupt blob — leave it alone, never delete it */ }
 }
 ```
 
