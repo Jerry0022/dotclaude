@@ -53,6 +53,11 @@ frontmatter. When you override a model at invocation, show it as `default → ov
 
 **Model override rules:**
 - Override `model` at invocation for cost control: `Agent({ subagent_type: "research", model: "sonnet", ... })`
+- **`/run-burn` inverts this**: it overrides **upward only** (sonnet → opus,
+  effort → high) per its depth profile, and never downgrades for cost. Its goal
+  is to consume the remaining weekly budget as depth-per-task rather than as
+  breadth-of-unfinished-tasks. See
+  `skills/run-burn/deep-knowledge/burn-scheduler.md` § Depth profiles.
 - **Never downgrade to haiku** for agents with `effort: high` (po, research) — haiku + high effort wastes tokens without quality gain
 - Upgrading to opus is fine for any agent when task complexity warrants it
 
@@ -246,7 +251,10 @@ before a wave consumes the prior wave's handoff:
 
 1. **Push, don't just commit.** A local-only commit is not durable against a
    reset. After each wave, `git push -u origin <integration-branch>` so the work
-   survives in `origin` and is recoverable.
+   survives in `origin` and is recoverable. This is explicitly carved out of the
+   autonomous push ban — see `autonomous-execution.md` § Safety Guardrails
+   (*the durability exception*): the run's **own** branch, non-force, never
+   `main`, no PR, no ship.
 2. **Re-assert HEAD.** Confirm the expected commit is still reachable:
    ```bash
    git log --oneline -1            # is this the wave-N commit you expect?

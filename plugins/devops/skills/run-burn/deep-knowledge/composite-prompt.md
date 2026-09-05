@@ -5,16 +5,29 @@ to `/run-autonomous`. The autonomous skill handles Steps 2–8 of its
 own flow (desktop questions, permission priming, execution, reporting,
 optional shutdown).
 
+The plan values below (`profile`, `lanes`, `RESERVE`, `requiredPerHour`,
+`integrationBranch`) come from `/run-burn` Step 2. The autonomous run **applies**
+them — it does not re-derive them. It may only recalibrate per
+`skills/run-burn/deep-knowledge/burn-scheduler.md` § In-run recalibration.
+
 ```
-BURN MODE ACTIVE — Maximale Parallelisierung.
+BURN MODE ACTIVE — Tiefe vor Breite, jeder Task landet einzeln.
 
 ## Hauptauftrag
 {user's primary task from Step 3}
 
-## Zusaetzliche Tasks (nach Prioritaet)
-{P1 tasks}
-{P2 tasks}
-{P3–P5 tasks}
+## Task-Queue (nach Prioritaet, mit Size + Profil)
+{P1 tasks}   [size, profile]
+{P2 tasks}   [size, profile]
+{P3–P5 tasks} [size, profile]
+
+## Burn-Plan (abgeleitet — nicht neu herleiten)
+- Profil: {profile}          # standard | deep | max
+- Lanes: {lanes}
+- Reserve: {RESERVE}% weekly
+- requiredPerHour: {x}%/h
+- Integration-Branch: burn/{slug}
+- Uplift ggue. /run-agents: {x}x
 
 ## Burn-Guidance
 
@@ -22,31 +35,39 @@ BURN MODE ACTIVE — Maximale Parallelisierung.
 - Alle Browser-Interaktion folgt dem Edge Credo (deep-knowledge/browser-tool-strategy.md § Edge Credo)
 - Edge only, Claude Extension only, User-Context, Tab-Reuse — auch im Burn-Modus
 
-### Parallelisierung
-- IMMER die maximale Agent-Anzahl nutzen (full devops roster: core, frontend,
-  ai, windows, designer, qa, po, research — je nach Relevanz)
-- Waves wo moeglich zusammenlegen: wenn keine harte Abhaengigkeit besteht,
-  können Agents aus verschiedenen Waves parallel starten
-- Für unabhängige Tasks: separate Feature-Branches + separate Agent-Gruppen
-  die gleichzeitig laufen
-- Research-Agent im Hintergrund für alle Tasks die Kontext brauchen
+### Tiefe (der primaere Hebel)
+- Modelle gemaess Profil AUFWERTEN, nie fuer Kosten downgraden
+- Effort und Tool-Call-Ceiling gemaess Profil-Tabelle setzen
+- Extra-Passes pro Task gemaess Profil (redteam-Review, zweiter QA, po-Review)
+- Mechanische Tasks (Lint, Rename, Import-Sort, Dependency-Bump) bleiben auf
+  `standard` — opus auf einem Lint-Fix ist Verbrauch ohne Qualitaet
 
-### Durchsatz-Optimierung
-- Keine übertriebene Planung — direkt starten
-- Bei Zweifeln: implementieren statt recherchieren
-- Tests erst am Ende als QA-Wave, nicht nach jedem Einzeltask
-- Lint/Type-Fixes können ohne eigenen Agent inline passieren
-- Kleine Tasks (< 5 Minuten geschätzt) direkt inline, nicht delegieren
+### Breite (nur zum Auffuellen)
+- Genau {lanes} Lanes, nicht mehr. Lanes sind budget-abgeleitet, kein Maximum.
+- lanes == 1 → Agent im Vordergrund spawnen (vermeidet das Worktree-Resync-Fenster)
+- lanes > 1  → run_in_background, aber immer nur EIN Merge gleichzeitig
+- Agent-Auswahl folgt deep-knowledge/agent-orchestration.md § Agent Selection:
+  nur Rollen mit konkretem Beitrag, nicht der volle Roster zur Abdeckung
 
-### Task-Reihenfolge
-- P0 und P1 Tasks starten sofort in Wave 1
-- P2+ Tasks starten parallel sobald Agents frei werden
-- Wenn ein Agent früher fertig wird: nächsten Task aus der Queue ziehen
-- Nie idle sein — immer den nächsten Task starten
+### Landing-Protokoll (pro Task, in dieser Reihenfolge)
+1. Agent implementiert auf burn/{slug}-<role>-<n>
+2. Agent committet VOR der Rueckmeldung — Unfertiges als `wip:` mit Angabe was fehlt
+3. Gezielte Tests nur fuer die geaenderten Module, nicht die volle Suite
+4. Merge in burn/{slug}
+5. git push -u origin burn/{slug}   (non-force, nie main, kein PR, kein Ship)
+6. BURN-STATE.json aktualisieren
+7. Naechsten Task ziehen
 
-### Ergebnis-Konsolidierung
-- Alle Änderungen auf dem gleichen Integration-Branch sammeln
-- Sub-Branches pro Agent, sequentiell mergen
-- Ein finaler QA-Durchlauf über alle Änderungen
-- AUTONOMOUS-REPORT.html muss alle Tasks und deren Status enthalten
+### Reserve-Gate
+- Vor JEDEM neuen Spawn Usage pruefen (Snapshot <= 60s gilt als frisch)
+- remaining <= {RESERVE}% → Drain: nichts Neues spawnen, laufende Lanes zu Ende,
+  mergen, pushen, Report + Completion-Card
+- Task nie starten, dessen Size-Klasse nicht mehr in `spendable` passt
+
+### Abschluss
+- Der volle QA-Durchlauf ist ein normaler Task am Ende der Queue, KEIN Gate.
+  Kein Task wartet auf ihn, um als erledigt zu zaehlen.
+- AUTONOMOUS-REPORT.html enthaelt alle Tasks mit Status, verwendetem Profil und
+  Landing-SHA
+- Nie einen Worktree entfernen, dessen Branch unmerged Commits hat
 ```
