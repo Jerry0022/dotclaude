@@ -233,6 +233,13 @@ Scripts are NOT hooks — they are helpers invoked by hooks or skills.
 as `node {PLUGIN_ROOT}/scripts/{name}.js` (or `$CLAUDE_PLUGIN_ROOT` in bash). Never use
 `~/.claude/scripts/` — that path is not managed by the plugin installer and may not exist.
 
+**Version-glob rule**: when a script must be located through the installed cache
+(`~/.claude/plugins/cache/dotclaude/devops/<version>/scripts/…`) instead of
+`$CLAUDE_PLUGIN_ROOT`, pick the **highest** version: `ls -d … | sort -V | tail -1`.
+Several version directories coexist after updates, and `ls … | head -1` returns the
+lexically first — i.e. the OLDEST — one, so a session ran a 0.145.1 bridge server while
+its hooks were on 0.148.0. Prefer `$CLAUDE_PLUGIN_ROOT` whenever the shell has it.
+
 ### Directory Structure
 
 ```

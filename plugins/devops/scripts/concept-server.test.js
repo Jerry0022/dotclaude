@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { bridgeFile } from "./concept-port-registry.js";
@@ -34,6 +35,12 @@ function pythonCmd() {
 
 const PY = pythonCmd();
 const PORT = 18000 + (process.pid % 1000);
+
+// Every server spawned below inherits this env, so its registry entry lands in
+// a throw-away directory — never in ~/.claude/concept-bridges. The SIGKILL
+// teardowns in this file skip the server's own removal paths, and before this
+// override each run left its entries behind in the user's real registry.
+process.env.CONCEPT_BRIDGE_REGISTRY_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "concept-bridges-test-"));
 
 function startServer() {
   const proc = spawn(PY, [SERVER, String(PORT)], { stdio: ["ignore", "pipe", "pipe"] });

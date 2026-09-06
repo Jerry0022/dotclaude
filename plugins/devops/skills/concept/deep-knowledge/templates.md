@@ -82,6 +82,21 @@ must see their own language. The locale hint is authoritative.
 | `panel.close`                  | Close                          | Schliessen |
 | `panel.minimize`               | Minimize                       | Minimieren |
 | `panel.dim_dismiss`            | Dismiss overlay                | Schimmer entfernen |
+| `panel.status_saved`           | Saved · connected              | Gespeichert · verbunden |
+| `panel.status_saving`          | Saving…                        | Speichert… |
+| `panel.status_connecting`      | Saved · connecting…            | Gespeichert · verbinde… |
+| `panel.status_local_only`      | Saved locally only · disconnected | Nur lokal gespeichert · getrennt |
+| `panel.status_working`         | Submitted · Claude is working  | Übermittelt · Claude arbeitet |
+| `panel.status_frozen`          | read-only                      | nur lesen |
+| `panel.status_detail`          | Progress                       | Fortschritt |
+| `panel.submit_menu`            | More submit options            | Weitere Absende-Optionen |
+| `panel.submit_menu_hint`       | The primary button never writes code. | Kein Code beim Primär-Button. |
+| `panel.here_back`              | back to round                  | zur Runde |
+| `panel.archive_summary`        | previous rounds                | vorherige Runden |
+| `nav.summary_entries`          | entries                        | Einträge |
+| `nav.summary_discarded`        | discarded                      | verworfen |
+| `nav.group_context`            | Context                        | Kontext |
+| `nav.group_variants`           | Variants                       | Varianten |
 | `variant.include`              | Include                        | Miteinbeziehen |
 | `variant.discard`              | Discard                        | Verwerfen |
 | `decision.comment_label`       | Note / override (optional)     | Notiz / Override (optional) |
@@ -242,111 +257,167 @@ the `[ui-locale: ...]` hint produced.
       <!-- All visible strings are referenced by key in the locale table above.
            Swap to the `de` column when [ui-locale: de] is active. -->
 
-      <!-- Iteration tabs — live at the TOP of the decision panel (not in the
-           content area). Compact vertical chip list; the active tab shows
-           the current round, older tabs stay clickable but show frozen
-           snapshots when selected. Auto-populated, one entry per
-           <section data-iteration="N">. -->
-      <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}">
-        <!--
-        <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="false">Iteration 1</button>
-        <button class="iteration-tab" role="tab" data-iteration="2" aria-selected="true">Iteration 2 · active</button>
-        -->
-      </nav>
+      <!-- PANEL ANATOMY. The aside is a flex column of exactly four children
+           and only the second one scrolls (§ Decision Panel State CSS,
+           "Panel anatomy"):
+             .panel-here        pinned   "Iteration 8 · aktiv"  › active TOC entry
+             .panel-nav-scroll  flex 1   iteration tabs + section TOC
+             .panel-status      pinned   ONE status line (+ progress dots after submit)
+             .panel-cta         pinned   #panel-ready | #panel-submitted | #panel-frozen | #panel-final-report
+           The pin is structural (flex split), never position:sticky inside the
+           scroll box: the call to action is reachable without scrolling the
+           menu, however many rounds or TOC entries the page has, and the foot
+           is the same ≤120px in the smallest and the largest case. -->
 
-      <h3>{{panel.heading}}</h3>
+      <!-- "You are here" — pinned head. [data-here-round] mirrors the selected
+           tab's label (showIteration), [data-here-section] the TOC entry under
+           the reading line (scroll spy, § Section Navigation). On a frozen tab
+           the compact "↩ zur Runde N" link appears next to it. -->
+      <div class="panel-here" id="panel-here">
+        <span class="panel-here-round" data-here-round></span>
+        <span class="panel-here-section" data-here-section hidden></span>
+        <button type="button" id="panel-here-back" class="link-btn panel-here-back" hidden></button>
+      </div>
 
-      <!-- Section TOC — auto-populated from EVERY <section id="..."
-           data-nav-label="..."> inside the active iteration, not just variants.
-           Sections that carry a bi-state radio group (eval-{id}) display their
-           current state label; plain sections (Ist-Zustand, Context, Design-Notes,
-           etc.) just show the label and anchor-scroll on click. -->
-      <nav class="section-nav" id="section-nav" aria-label="{{nav.sections}}">
-        <!-- auto-populated -->
-      </nav>
+      <div class="panel-nav-scroll">
+        <!-- Iteration tabs — live at the TOP of the decision panel (not in the
+             content area). Compact vertical chip list; the active tab shows
+             the current round, older tabs stay clickable but show frozen
+             snapshots when selected. Auto-populated, one entry per
+             <section data-iteration="N">, appended by string edit
+             (iteration-rules.md § Iteration append checklist). -->
+        <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}">
+          <!--
+          <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="false">Iteration 1</button>
+          <button class="iteration-tab" role="tab" data-iteration="2" aria-selected="true">Iteration 2 · active</button>
+          -->
+        </nav>
 
-      <!-- Normal state: decision summary + two submit buttons.
-           The disconnected warning lives INSIDE #panel-ready and covers
-           the submit area as an overlay when Claude is offline. -->
-      <div id="panel-ready">
-        <!-- Connection status pill — inline, animated, non-blocking. Reflects
-             the live bridge heartbeat via [data-state]; checkClaudeConnection
-             sets the state + label. Three states:
-               connecting   — pre-first-poll window (no heartbeat response yet)
-                              OR bootstrap (claude_ts==0 while server_ts fresh).
-                              Pulsing accent dot + animated ellipsis.
-               connected    — claude_ts fresh. Steady green dot.
-               disconnected — claude_ts stale (nothing pulsing) OR server_ts stale /
-                              fetch failing (bridge down). Pulsing amber dot.
-             It NEVER overlays or disables the submit buttons and has NO
-             acknowledge button. A disconnected submit is cached and
-             auto-delivered on reconnect (see Offline Submit Queue), so the
-             pill + per-button cache hint are the only signals needed. Starting
-             in "connecting" (never "disconnected") is the fix for the
-             fresh-page connect→disconnect→connect flash. -->
-        <div id="connection-status" class="connection-pill" data-state="connecting" role="status" aria-live="polite">
-          <span class="conn-dot" aria-hidden="true"></span>
-          <span class="conn-label">{{panel.connecting_title}}</span>
+        <!-- Section TOC — auto-populated from EVERY <section id="..."
+             data-nav-label="..."> inside the active iteration, not just variants.
+             Sections that carry a bi-state radio group (eval-{id}) display their
+             current state label; plain sections (Ist-Zustand, Context, Design-Notes,
+             etc.) just show the label and anchor-scroll on click.
+             It is declared here but LIVES inside the tab bar at runtime:
+             buildSectionNav() moves it directly after the aria-selected chip,
+             so the selected round is the one open node of the tree (Kompass,
+             § Section Navigation). -->
+        <nav class="section-nav" id="section-nav" aria-label="{{nav.sections}}">
+          <!-- auto-populated -->
+        </nav>
+      </div>
+
+      <!-- Status line — pinned, ONE line, six mutually exclusive states on
+           .panel-status[data-status] (saved | saving | connecting | local-only |
+           submitted | frozen), rendered by renderPanelStatus() from three
+           inputs: the heartbeat, the draft mirror and the panel state.
+           #connection-status keeps its id and its [data-state] contract
+           (connecting | connected | disconnected, set by checkClaudeConnection
+           in EVERY panel state — it lives OUTSIDE #panel-ready now). The line
+           NEVER overlays or disables the submit buttons and has NO acknowledge
+           button: a disconnected submit is cached and auto-delivered on
+           reconnect (see Offline Submit Queue), so the line + the cache badge
+           on the button are the only signals needed. Starting in "connecting"
+           (never "disconnected") is the fix for the fresh-page
+           connect→disconnect→connect flash. -->
+      <div class="panel-status" id="panel-status" data-status="connecting">
+        <div id="connection-status" class="status-line" data-state="connecting" role="status" aria-live="polite">
+          <span class="status-glyph" aria-hidden="true">◐</span>
+          <span class="conn-label">{{panel.status_connecting}}</span>
         </div>
+        <!-- Progress after submit. The <ol> is the real list — § Submit
+             Progress Steps writes data-state on its <li>s so the user can see
+             whether the submission has only been sent (step 1), whether
+             Claude's cron has picked it up (step 2), whether the concept is
+             being re-checked against the default branch (step 3) and — for
+             implement-action submissions — whether the code change finished
+             (step 4). Step 4 is hidden for iterate-action submissions;
+             submitWithAction sets its `hidden` from the action. Step 3 stays
+             hidden until the check actually runs and reveals it. The dots in
+             the <summary> are a compact rendering of the same data-state
+             values (renderStatusDots); the list expands under the line.
+             Hidden until submit, never tooltip-only. -->
+        <details class="status-detail" id="status-detail" hidden>
+          <summary class="status-detail-row">
+            <span class="status-dots" id="status-dots" aria-hidden="true"></span>
+            <span class="status-detail-label">{{panel.status_detail}}</span>
+          </summary>
+          <ol class="status-steps" id="status-steps" aria-live="polite">
+            <li data-step="submitted" data-state="done">
+              <span class="step-icon" aria-hidden="true">✓</span>
+              <span class="step-label">{{panel.step_submitted}}</span>
+            </li>
+            <li data-step="received" data-state="active">
+              <span class="step-icon" aria-hidden="true">⏳</span>
+              <span class="step-label">{{panel.step_received}}</span>
+            </li>
+            <li data-step="reality-check" data-state="pending" hidden>
+              <span class="step-icon" aria-hidden="true">○</span>
+              <span class="step-label" data-state-label="pending">{{panel.step_reality_check}}</span>
+              <span class="step-label" data-state-label="active">{{panel.step_reality_check_active}}</span>
+              <span class="step-label" data-state-label="done">{{panel.step_reality_check}}</span>
+            </li>
+            <li data-step="implemented" data-state="pending" hidden>
+              <span class="step-icon" aria-hidden="true">○</span>
+              <span class="step-label" data-state-label="pending">{{panel.step_waiting}}</span>
+              <span class="step-label" data-state-label="active">{{panel.step_implemented_active}}</span>
+              <span class="step-label" data-state-label="done">{{panel.step_implemented}}</span>
+            </li>
+          </ol>
+        </details>
+      </div>
 
+      <!-- CTA foot — pinned, hard-capped at 120px. Exactly one of the four
+           blocks inside is visible; showIteration() / submitWithAction() /
+           restorePanelToReady() switch them. -->
+      <div class="panel-cta">
+      <!-- Normal state: decision summary + the split button. The primary
+           action fills the row; the ▾ caret opens #submit-menu, which holds
+           the implement action one level deeper. The misclick barrier is
+           colour + border + the extra click, not distance — there is no
+           .submit-gap in here any more. The two hint lines moved into
+           `title` tooltips; the cache hint stays an inline badge on the
+           primary button and a line inside the menu (both toggled by
+           _setCacheHints while disconnected). -->
+      <div id="panel-ready">
         <div id="decision-summary">
           <!-- Auto-populated summary of current selections -->
         </div>
 
-        <button id="submit-iterate-btn" class="primary submit-btn">{{panel.submit_iterate}}</button>
-        <p class="hint">{{panel.submit_iterate_hint}}</p>
-        <p class="hint hint-cache" data-cache-hint="iterate" hidden>
-          <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
-        </p>
-        <div class="submit-gap" aria-hidden="true"></div>
-        <button id="submit-implement-btn" class="implement-btn">
-          <span class="warn-icon" aria-hidden="true">⚠</span>
-          {{panel.submit_implement}}
-        </button>
-        <p class="hint hint-warn">{{panel.submit_implement_hint}}</p>
-        <p class="hint hint-cache" data-cache-hint="implement" hidden>
-          <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
-        </p>
+        <div class="submit-split">
+          <button id="submit-iterate-btn" class="primary submit-btn" title="{{panel.submit_iterate_hint}}">
+            <span class="submit-label">{{panel.submit_iterate}}</span>
+            <span class="hint-cache" data-cache-hint="iterate" hidden>
+              <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+            </span>
+          </button>
+          <button type="button" id="submit-menu-btn" class="submit-menu-btn"
+                  aria-haspopup="menu" aria-expanded="false" aria-controls="submit-menu"
+                  aria-label="{{panel.submit_menu}}" title="{{panel.submit_menu}}">
+            <span aria-hidden="true">▾</span>
+          </button>
+        </div>
+        <div id="submit-menu" class="submit-menu" role="menu" hidden>
+          <button id="submit-implement-btn" class="implement-btn" role="menuitem" title="{{panel.submit_implement_hint}}">
+            <span class="warn-icon" aria-hidden="true">⚠</span>
+            {{panel.submit_implement}}
+          </button>
+          <p class="hint hint-cache" data-cache-hint="implement" hidden>
+            <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+          </p>
+          <p class="hint submit-menu-hint">{{panel.submit_menu_hint}}</p>
+        </div>
       </div>
 
-      <!-- Post-submit state: waiting for Claude. The progress list shows
-           four steps so the user can see whether the submission has only
-           been sent (step 1), whether Claude's cron has picked it up
-           (step 2), whether the concept is being re-checked against the
-           default branch (step 3) and — for implement-action submissions —
-           whether the actual code change finished (step 4). Step 4 is
-           hidden for iterate-action submissions; submitWithAction sets its
-           `hidden` attribute from the action. Step 3 stays hidden until the
-           check actually runs and reveals it — see § Submit Progress Steps. -->
+      <!-- Post-submit state: the status line above now reads "Übermittelt ·
+           Claude arbeitet" and carries the progress dots; this block only
+           tells the user where to look next. -->
       <div id="panel-submitted" style="display: none;">
         <div class="submitted-indicator">
           <span class="check-icon">✓</span>
           <strong>{{panel.submitted}}</strong>
         </div>
-        <ol class="status-steps" id="status-steps" aria-live="polite">
-          <li data-step="submitted" data-state="done">
-            <span class="step-icon" aria-hidden="true">✓</span>
-            <span class="step-label">{{panel.step_submitted}}</span>
-          </li>
-          <li data-step="received" data-state="active">
-            <span class="step-icon" aria-hidden="true">⏳</span>
-            <span class="step-label">{{panel.step_received}}</span>
-          </li>
-          <li data-step="reality-check" data-state="pending" hidden>
-            <span class="step-icon" aria-hidden="true">○</span>
-            <span class="step-label" data-state-label="pending">{{panel.step_reality_check}}</span>
-            <span class="step-label" data-state-label="active">{{panel.step_reality_check_active}}</span>
-            <span class="step-label" data-state-label="done">{{panel.step_reality_check}}</span>
-          </li>
-          <li data-step="implemented" data-state="pending" hidden>
-            <span class="step-icon" aria-hidden="true">○</span>
-            <span class="step-label" data-state-label="pending">{{panel.step_waiting}}</span>
-            <span class="step-label" data-state-label="active">{{panel.step_implemented_active}}</span>
-            <span class="step-label" data-state-label="done">{{panel.step_implemented}}</span>
-          </li>
-        </ol>
         <p class="submitted-hint">{{panel.submitted_hint}}</p>
-        <div class="waiting-animation"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
       </div>
 
       <!-- Frozen state: shown while the user reviews a PAST iteration tab.
@@ -538,6 +609,7 @@ the `[ui-locale: ...]` hint produced.
 
         <button type="button" id="view-iterations-btn" class="link-btn">{{final.view_iterations}}</button>
       </div>
+      </div><!-- /.panel-cta -->
     </aside>
   </div>
 
@@ -648,7 +720,14 @@ structured evaluation where the user wants to see the panel at all times.
   position: sticky;
   top: 0;
   height: 100vh;
-  overflow-y: auto;
+  /* Flex split (§ Decision Panel State CSS "Panel anatomy"): the aside
+     itself never scrolls — only .panel-nav-scroll does, so .panel-status and
+     .panel-cta stay pinned at the bottom. border-box keeps 100vh honest with
+     the padding; without it the foot sits 3rem below the viewport edge. */
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 1.5rem;
   border-left: 1px solid var(--border-color);
   background: var(--panel-bg);
@@ -656,18 +735,22 @@ structured evaluation where the user wants to see the panel at all times.
      visually punches through the dimmer instead of being tinted by it. */
   z-index: 100;
 }
-/* Mobile: collapse to sticky bottom */
+/* Mobile: collapse to sticky bottom. `height: auto` + a 60vh cap keeps the
+   flex split alive on the bottom sheet — the tree scrolls, the foot stays
+   pinned — and the "you are here" head collapses into the status line. */
 @media (max-width: 768px) {
   .concept-layout { flex-direction: column; }
   .concept-decision-panel {
     width: 100%;
     max-width: none;
     height: auto;
+    max-height: 60vh;
     position: sticky;
     bottom: 0;
     border-left: none;
     border-top: 1px solid var(--border-color);
   }
+  .panel-here { display: none; }
 }
 ```
 
@@ -1799,6 +1882,14 @@ it today.
          No section-TOC here: the screen-nav replaces it for design. -->
     <aside class="concept-decision-panel overlay" id="decision-panel">
       <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
+      <!-- Same four-part anatomy as § Common Structure (here / scroll box /
+           status / foot) — only the containing aside differs. -->
+      <div class="panel-here" id="panel-here">
+        <span class="panel-here-round" data-here-round></span>
+        <span class="panel-here-section" data-here-section hidden></span>
+        <button type="button" id="panel-here-back" class="link-btn panel-here-back" hidden></button>
+      </div>
+      <div class="panel-nav-scroll">
       <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}"><!-- chips --></nav>
       <nav class="screen-nav" id="screen-nav" aria-label="Screens">
         <!-- auto-populated, two levels: one .screen-nav-group per
@@ -1817,71 +1908,91 @@ it today.
              (screen-nav-view-*) so it can be styled independently of the
              design nav items it sits below. -->
       </nav>
-      <div id="panel-ready">
-        <!-- Connection status pill — same inline, non-blocking contract as the
-             sidebar templates (see § Decision Panel State CSS + § Claude
-             Connection Heartbeat). Animated dot + label, no overlay, no
-             acknowledge button; starts in "connecting" and never flashes
-             "disconnected" before the first heartbeat response. -->
-        <div id="connection-status" class="connection-pill" data-state="connecting" role="status" aria-live="polite">
-          <span class="conn-dot" aria-hidden="true"></span>
-          <span class="conn-label">{{panel.connecting_title}}</span>
+      </div><!-- /.panel-nav-scroll -->
+      <!-- Status line — same contract as § Common Structure: #connection-status
+           keeps its [data-state] (connecting | connected | disconnected), the
+           composed line + the six-state .panel-status[data-status] are
+           rendered by renderPanelStatus(); no overlay, no acknowledge button;
+           starts in "connecting" and never flashes "disconnected" before the
+           first heartbeat response. The progress <ol> lives under the line. -->
+      <div class="panel-status" id="panel-status" data-status="connecting">
+        <div id="connection-status" class="status-line" data-state="connecting" role="status" aria-live="polite">
+          <span class="status-glyph" aria-hidden="true">◐</span>
+          <span class="conn-label">{{panel.status_connecting}}</span>
         </div>
-
-        <button id="submit-iterate-btn" class="primary submit-btn">{{panel.submit_iterate}}</button>
-        <p class="hint">{{panel.submit_iterate_hint}}</p>
-        <p class="hint hint-cache" data-cache-hint="iterate" hidden>
-          <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
-        </p>
-        <div class="submit-gap" aria-hidden="true"></div>
-        <button id="submit-implement-btn" class="implement-btn">
-          <span class="warn-icon" aria-hidden="true">⚠</span>
-          {{panel.submit_implement}}
-        </button>
-        <p class="hint hint-warn">{{panel.submit_implement_hint}}</p>
-        <p class="hint hint-cache" data-cache-hint="implement" hidden>
-          <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
-        </p>
+        <details class="status-detail" id="status-detail" hidden>
+          <summary class="status-detail-row">
+            <span class="status-dots" id="status-dots" aria-hidden="true"></span>
+            <span class="status-detail-label">{{panel.status_detail}}</span>
+          </summary>
+          <ol class="status-steps" id="status-steps" aria-live="polite">
+            <li data-step="submitted" data-state="done">
+              <span class="step-icon" aria-hidden="true">✓</span>
+              <span class="step-label">{{panel.step_submitted}}</span>
+            </li>
+            <li data-step="received" data-state="active">
+              <span class="step-icon" aria-hidden="true">⏳</span>
+              <span class="step-label">{{panel.step_received}}</span>
+            </li>
+            <li data-step="reality-check" data-state="pending" hidden>
+              <span class="step-icon" aria-hidden="true">○</span>
+              <span class="step-label" data-state-label="pending">{{panel.step_reality_check}}</span>
+              <span class="step-label" data-state-label="active">{{panel.step_reality_check_active}}</span>
+              <span class="step-label" data-state-label="done">{{panel.step_reality_check}}</span>
+            </li>
+            <li data-step="implemented" data-state="pending" hidden>
+              <span class="step-icon" aria-hidden="true">○</span>
+              <span class="step-label" data-state-label="pending">{{panel.step_waiting}}</span>
+              <span class="step-label" data-state-label="active">{{panel.step_implemented_active}}</span>
+              <span class="step-label" data-state-label="done">{{panel.step_implemented}}</span>
+            </li>
+          </ol>
+        </details>
+      </div>
+      <!-- CTA foot — pinned, ≤120px, and it reserves the 💬 FAB's row below
+           it (§ Layout CSS: padding-bottom: calc(60px + 2rem)). -->
+      <div class="panel-cta">
+      <div id="panel-ready">
+        <div class="submit-split">
+          <button id="submit-iterate-btn" class="primary submit-btn" title="{{panel.submit_iterate_hint}}">
+            <span class="submit-label">{{panel.submit_iterate}}</span>
+            <span class="hint-cache" data-cache-hint="iterate" hidden>
+              <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+            </span>
+          </button>
+          <button type="button" id="submit-menu-btn" class="submit-menu-btn"
+                  aria-haspopup="menu" aria-expanded="false" aria-controls="submit-menu"
+                  aria-label="{{panel.submit_menu}}" title="{{panel.submit_menu}}">
+            <span aria-hidden="true">▾</span>
+          </button>
+        </div>
+        <div id="submit-menu" class="submit-menu" role="menu" hidden>
+          <button id="submit-implement-btn" class="implement-btn" role="menuitem" title="{{panel.submit_implement_hint}}">
+            <span class="warn-icon" aria-hidden="true">⚠</span>
+            {{panel.submit_implement}}
+          </button>
+          <p class="hint hint-cache" data-cache-hint="implement" hidden>
+            <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+          </p>
+          <p class="hint submit-menu-hint">{{panel.submit_menu_hint}}</p>
+        </div>
       </div>
       <div id="panel-submitted" style="display: none;">
-        <!-- Same progress-list structure as the decision/free templates;
-             see § Common Structure for the full markup and locale keys. -->
         <div class="submitted-indicator">
           <span class="check-icon">✓</span>
           <strong>{{panel.submitted}}</strong>
         </div>
-        <ol class="status-steps" id="status-steps" aria-live="polite">
-          <li data-step="submitted" data-state="done">
-            <span class="step-icon" aria-hidden="true">✓</span>
-            <span class="step-label">{{panel.step_submitted}}</span>
-          </li>
-          <li data-step="received" data-state="active">
-            <span class="step-icon" aria-hidden="true">⏳</span>
-            <span class="step-label">{{panel.step_received}}</span>
-          </li>
-          <li data-step="reality-check" data-state="pending" hidden>
-            <span class="step-icon" aria-hidden="true">○</span>
-            <span class="step-label" data-state-label="pending">{{panel.step_reality_check}}</span>
-            <span class="step-label" data-state-label="active">{{panel.step_reality_check_active}}</span>
-            <span class="step-label" data-state-label="done">{{panel.step_reality_check}}</span>
-          </li>
-          <li data-step="implemented" data-state="pending" hidden>
-            <span class="step-icon" aria-hidden="true">○</span>
-            <span class="step-label" data-state-label="pending">{{panel.step_waiting}}</span>
-            <span class="step-label" data-state-label="active">{{panel.step_implemented_active}}</span>
-            <span class="step-label" data-state-label="done">{{panel.step_implemented}}</span>
-          </li>
-        </ol>
         <p class="submitted-hint">{{panel.submitted_hint}}</p>
       </div>
       <!-- The remaining two panel states — #panel-frozen and
            #panel-final-report — are IDENTICAL to § Common Structure and MUST
-           be copied verbatim from there into this aside. showIteration()
+           be copied verbatim from there into this .panel-cta. showIteration()
            switches all four states regardless of template, so a design page
            that ships only the two above loses its close-out wizard the moment
            a final report is appended, and shows an empty panel on every past
            tab. Only the containing aside differs (overlay vs sidebar), never
            the states inside it. -->
+      </div><!-- /.panel-cta -->
     </aside>
     <div class="panel-backdrop" id="panel-backdrop"></div>
 
@@ -1983,22 +2094,26 @@ it today.
    `scrollbar-*` covers Firefox and modern Chromium, the `::-webkit-*`
    pseudo-elements cover the older Chromium/WebKit that ignore it. */
 .feedback-dock,
-.concept-decision-panel,
+.panel-nav-scroll,
+.panel-cta,
 section[data-screen] {
   scrollbar-width: thin;
   scrollbar-color: var(--border-color, #30363d) transparent;
 }
 .feedback-dock::-webkit-scrollbar,
-.concept-decision-panel::-webkit-scrollbar,
+.panel-nav-scroll::-webkit-scrollbar,
+.panel-cta::-webkit-scrollbar,
 section[data-screen]::-webkit-scrollbar { width: 8px; }
 .feedback-dock::-webkit-scrollbar-thumb,
-.concept-decision-panel::-webkit-scrollbar-thumb,
+.panel-nav-scroll::-webkit-scrollbar-thumb,
+.panel-cta::-webkit-scrollbar-thumb,
 section[data-screen]::-webkit-scrollbar-thumb {
   background: var(--border-color, #30363d);
   border-radius: 4px;
 }
 .feedback-dock::-webkit-scrollbar-track,
-.concept-decision-panel::-webkit-scrollbar-track,
+.panel-nav-scroll::-webkit-scrollbar-track,
+.panel-cta::-webkit-scrollbar-track,
 section[data-screen]::-webkit-scrollbar-track { background: transparent; }
 
 /* EVERY rule below is scoped to html[data-template="design"]. That attribute
@@ -2476,15 +2591,24 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   width: 360px;
   max-width: 90vw;
   height: 100vh;
+  box-sizing: border-box;
   padding: 1.5rem;
   background: var(--panel-bg, #161b22);
   border-left: 1px solid var(--border-color, #30363d);
   z-index: 200;
-  overflow-y: auto;
+  /* The aside never scrolls; .panel-nav-scroll does (§ Decision Panel State
+     CSS "Panel anatomy") so the status line + CTA foot stay pinned. */
+  overflow: hidden;
   transition: right 0.3s ease;
 }
 [data-template="design"] .concept-layout.design .concept-decision-panel.open {
   right: 0;
+}
+/* The 💬 FAB (60px circle, bottom: 2rem — see .panel-fab/.feedback-fab) floats
+   over the panel's bottom-right corner. Reserve its row under the pinned foot
+   so the call to action never sits beneath it. */
+[data-template="design"] .concept-layout.design .panel-cta {
+  padding-bottom: calc(60px + 2rem);
 }
 
 /* ── The two FABs are ONE component with two positions ──
@@ -5360,14 +5484,39 @@ stays visible even in a long list. Without it, a 20-entry TOC forces the user
 to hunt for their own position on every scroll.
 
 ```css
+/* The TOC is the selected chip's BODY in the Kompass tree (buildSectionNav
+   moves #section-nav directly after the aria-selected .iteration-tab), so it
+   reads as a nested level: indented, with a thin accent rail. */
 .section-nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-bottom: 1.5rem;
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: 1rem;
+  margin: 2px 0 8px 0.5rem;
+  padding-left: 0.5rem;
+  border-left: 2px solid color-mix(in srgb, var(--accent-color, #58a6ff) 45%, transparent);
 }
+/* TOC groups — rendered only when ≥2 kinds meet AND the round has >12
+   entries (buildSectionNav); one open at a time. */
+.nav-group { margin: 2px 0; }
+.nav-group > summary {
+  list-style: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.74rem; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-secondary, #8b949e);
+  cursor: pointer;
+}
+.nav-group > summary::-webkit-details-marker { display: none; }
+.nav-group > summary::before { content: "▸"; margin-right: 0.35rem; }
+.nav-group[open] > summary::before { content: "▾"; }
+.nav-group > summary:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
+.nav-group-name { flex: 1 1 auto; }
+.nav-group-count { font-weight: 400; opacity: 0.8; }
+.nav-group > .section-nav-item { margin-left: 0.5rem; }
 .section-nav-item {
   display: flex;
   align-items: center;
@@ -5427,15 +5576,128 @@ Sections without `data-nav-label` are skipped by the TOC auto-populator.
 let scrollSpyEntries = [];
 let scrollSpyFrame = 0;
 
+// "Kompass" tree tunables — decided on the concept page, not tuned by feel:
+// fold previous rounds only from 4 upward; group the TOC only when ≥2 kinds
+// are present AND the round has >12 entries; honour a deliberate group close
+// for 4 s before the scroll spy may open that group again.
+const NAV_ARCHIVE_FROM = 4;
+const NAV_GROUP_MIN_KINDS = 2;
+const NAV_GROUP_OVER_ENTRIES = 12;
+const NAV_MANUAL_CLOSE_GRACE_MS = 4000;
+const _navManualClosedAt = new WeakMap();   // details.nav-group → Date.now() of a user close
+
+// The label a chip was appended with, stamped on data-tab-label the first
+// time the tree is built — BEFORE any generated summary line is added to the
+// chip, so showIteration / renderPanelStatus / the frozen bar never read the
+// summary as part of the name.
+function iterationTabLabel(tab) {
+  if (!tab.dataset.tabLabel) {
+    const stale = tab.querySelector('.iteration-tab-summary');
+    if (stale) stale.remove();
+    tab.dataset.tabLabel = tab.textContent.trim();
+  }
+  return tab.dataset.tabLabel;
+}
+
+// ONE tree: every .iteration-tab is a node header. Non-selected chips get a
+// generated one-line summary ("14 Einträge · 3 verworfen", from that round's
+// section[id][data-nav-label] and its eval-* radios; reality-check and
+// final-report chips keep their glyph labels). From NAV_ARCHIVE_FROM previous
+// rounds upward, the chips BEFORE the live one fold into
+// <details class="iteration-archive">, which auto-opens whenever the selected
+// chip is inside it; below the threshold nothing is wrapped. The chips
+// themselves are never recreated — same <button>, same click listeners, only
+// moved — which is why the append checklist can keep string-appending them
+// at the end of nav.iteration-tabs and this rebuild folds them on load.
+function buildIterationTree() {
+  const bar = document.querySelector('.iteration-tabs');
+  if (!bar) return;
+  // Unwrap a previous archive so the fold is recomputed from the chips alone.
+  bar.querySelectorAll('details.iteration-archive').forEach(archive => {
+    archive.querySelectorAll(':scope > .iteration-tab').forEach(tab => bar.insertBefore(tab, archive));
+    archive.remove();
+  });
+  const tabs = [...bar.querySelectorAll('.iteration-tab')];
+  const live = document.querySelector('section[data-iteration][data-active]');
+  const liveN = live ? String(live.dataset.iteration) : null;
+  tabs.forEach(tab => {
+    iterationTabLabel(tab);
+    const old = tab.querySelector('.iteration-tab-summary');
+    if (old) old.remove();
+    if (tab.getAttribute('aria-selected') === 'true') return;
+    if (tab.hasAttribute('data-reality-check') || tab.hasAttribute('data-final-report')) return;
+    const sec = document.querySelector('section[data-iteration="' + tab.dataset.iteration + '"]');
+    if (!sec) return;
+    const entries = sec.querySelectorAll('section[id][data-nav-label]');
+    let discarded = 0;
+    entries.forEach(s => {
+      const checked = s.querySelector('input[name="eval-' + s.id + '"]:checked');
+      if (checked && checked.value === 'discard') discarded++;
+    });
+    const summary = document.createElement('span');
+    summary.className = 'iteration-tab-summary';
+    summary.textContent = entries.length + ' {{nav.summary_entries}}'
+      + (discarded ? ' · ' + discarded + ' {{nav.summary_discarded}}' : '');
+    tab.appendChild(summary);
+  });
+  const liveIdx = tabs.findIndex(t => String(t.dataset.iteration) === liveN);
+  const previous = liveIdx > 0 ? tabs.slice(0, liveIdx) : [];
+  if (previous.length >= NAV_ARCHIVE_FROM) {
+    const archive = document.createElement('details');
+    archive.className = 'iteration-archive';
+    const summary = document.createElement('summary');
+    summary.textContent = previous.length + ' {{panel.archive_summary}}';
+    archive.appendChild(summary);
+    bar.insertBefore(archive, previous[0]);
+    previous.forEach(tab => archive.appendChild(tab));
+    archive.open = previous.some(t => t.getAttribute('aria-selected') === 'true');
+  }
+}
+
 function buildSectionNav() {
+  buildIterationTree();
   const nav = document.getElementById('section-nav');
   if (!nav) return;
   // Use :not([hidden]) so the nav reflects the VISIBLE iteration (may be
   // a frozen tab the user is reviewing), not the live/latest one.
   const activeIteration = document.querySelector('section[data-iteration]:not([hidden])');
   if (!activeIteration) return;
-  const sections = activeIteration.querySelectorAll('section[id][data-nav-label]');
+  const sections = [...activeIteration.querySelectorAll('section[id][data-nav-label]')];
   nav.innerHTML = '';
+  // TOC kinds come from the EXISTING contract — a section with an eval-{id}
+  // radio group is a variant, anything else is context — plus an optional
+  // data-nav-group="…" override on the section (its value is the group
+  // name). Grouping is the exception, not the rule: only when ≥2 kinds meet
+  // AND the round has more than NAV_GROUP_OVER_ENTRIES entries; otherwise the
+  // list stays flat, exactly as before.
+  const kindOf = sec => sec.dataset.navGroup
+    || (sec.querySelector(`input[name="eval-${sec.id}"]`) ? 'variants' : 'context');
+  const kindLabel = kind => kind === 'variants' ? '{{nav.group_variants}}'
+                          : kind === 'context'  ? '{{nav.group_context}}'
+                          : kind;
+  const kinds = [...new Set(sections.map(kindOf))];
+  const grouped = kinds.length >= NAV_GROUP_MIN_KINDS && sections.length > NAV_GROUP_OVER_ENTRIES;
+  const hosts = {};
+  if (grouped) {
+    kinds.forEach(kind => {
+      const group = document.createElement('details');
+      group.className = 'nav-group';
+      group.dataset.navGroup = kind;
+      const summary = document.createElement('summary');
+      summary.className = 'nav-group-summary';
+      const name = document.createElement('span');
+      name.className = 'nav-group-name';
+      name.textContent = kindLabel(kind);
+      const count = document.createElement('span');
+      count.className = 'nav-group-count';
+      count.textContent = String(sections.filter(s => kindOf(s) === kind).length);
+      summary.appendChild(name);
+      summary.appendChild(count);
+      group.appendChild(summary);
+      nav.appendChild(group);
+      hosts[kind] = group;
+    });
+  }
   sections.forEach(sec => {
     const id = sec.id;
     const label = sec.dataset.navLabel;
@@ -5454,10 +5716,53 @@ function buildSectionNav() {
       stateEl.className = 'section-nav-state';
       link.appendChild(stateEl);
     }
-    nav.appendChild(link);
+    (grouped ? hosts[kindOf(sec)] : nav).appendChild(link);
   });
+  // One-open among the groups, bound HERE because this DOM is rebuilt on
+  // every tab switch — a listener bound once at load would sit on detached
+  // nodes. `toggle` runs the accordion (opening one closes the others,
+  // whoever opened it: a click or the scroll spy); the summary click records
+  // a DELIBERATE close, which openNavGroupFor honours for
+  // NAV_MANUAL_CLOSE_GRACE_MS instead of reopening the group next frame.
+  nav.querySelectorAll('details.nav-group').forEach(group => {
+    group.addEventListener('toggle', () => {
+      if (!group.open) return;
+      nav.querySelectorAll('details.nav-group').forEach(other => {
+        if (other !== group && other.open) other.open = false;
+      });
+    });
+    group.querySelector('summary').addEventListener('click', () => {
+      if (group.open) _navManualClosedAt.set(group, Date.now());
+      else _navManualClosedAt.delete(group);
+    });
+  });
+  // The open node IS the selected round: the nav moves directly after the
+  // aria-selected chip (inside the archive when that chip is folded). There
+  // is no code path that closes it — switching tabs moves it.
+  const selectedTab = document.querySelector('.iteration-tab[aria-selected="true"]');
+  if (selectedTab) selectedTab.insertAdjacentElement('afterend', nav);
+  const hereSection = document.querySelector('[data-here-section]');
+  if (hereSection) hereSection.hidden = !sections.length;
   updateSectionNavState();
   installScrollSpy();   // nav DOM was replaced → rebind the spy
+  // The spy opened the active entry's group; a page whose spy found nothing
+  // must still show one open group — the tree never collapses to nothing.
+  if (grouped && !nav.querySelector('details.nav-group[open]')) {
+    nav.querySelector('details.nav-group').open = true;
+  }
+}
+
+// The scroll spy OPENS the group that holds the active entry and never
+// closes anything (the accordion listener above does the closing). A group
+// the user closed on purpose stays closed for NAV_MANUAL_CLOSE_GRACE_MS —
+// and, since setActiveNavItem returns early for an unchanged entry, until
+// the active entry actually changes.
+function openNavGroupFor(item) {
+  const group = item.closest('details.nav-group');
+  if (!group || group.open) return;
+  const closedAt = _navManualClosedAt.get(group) || 0;
+  if (Date.now() - closedAt < NAV_MANUAL_CLOSE_GRACE_MS) return;
+  group.open = true;
 }
 
 function updateSectionNavState() {
@@ -5501,6 +5806,14 @@ function setActiveNavItem(item) {
   });
   item.classList.add('is-active');
   item.setAttribute('aria-current', 'true');
+  // "You are here" breadcrumb in the pinned head (§ Common Structure).
+  const here = document.querySelector('[data-here-section]');
+  if (here) {
+    const label = item.querySelector('.section-nav-label');
+    here.textContent = '› ' + (label ? label.textContent : '');
+    here.hidden = false;
+  }
+  openNavGroupFor(item);
   revealNavItem(item);
 }
 
@@ -5518,6 +5831,10 @@ function nearestScrollBox(el) {
 // the panel's own scroll box — never the content column — and only when the
 // entry is genuinely out of view, so it can't fight the user's scrolling.
 function revealNavItem(item) {
+  // An entry inside a closed <details> (a folded group, or the archive) has
+  // no box at all; measuring its (0,0) rect would drag the scroll box to the
+  // top on every frame. Nothing to reveal → do nothing.
+  if (item.getClientRects().length === 0) return;
   const box = nearestScrollBox(item.parentElement);
   if (!box) return;
   const boxRect = box.getBoundingClientRect();
@@ -5579,70 +5896,161 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
 - Never call `installScrollSpy()` on its own — `buildSectionNav()` calls it as
   its last step. Binding it independently is how the highlight goes stale
   after a tab switch.
+- **The tree is JS-built, the chips are not.** `buildSectionNav()` moves
+  `#section-nav` after the selected chip, adds the summary lines and folds
+  the archive on every rebuild; the page author only ever appends a plain
+  `<button class="iteration-tab" …>` at the end of `nav.iteration-tabs`
+  (iteration-rules.md § Iteration append checklist). Never hand-write an
+  `.iteration-tab-summary`, an `.iteration-archive` or a `.nav-group` into
+  the HTML — they are recomputed from the sections on load.
+- **Grouping is opt-out by size, opt-in by attribute.** A round with ≤12
+  entries, or with only one kind, renders the flat list. To place a section
+  in a group of its own (or to rename its kind) add `data-nav-group="…"`
+  on the section — the value is the group name; `variants` and `context`
+  map to the locale labels.
+- One-open applies among `.nav-group` only — never between the archive,
+  the selected chip and the TOC, which are one tree with exactly one open
+  node.
 
 ## Decision Panel State CSS
 
 ```css
-/* Connection status pill — inline, animated, non-blocking indicator at the
-   top of #panel-ready. Reflects the live bridge heartbeat via [data-state]
-   (set by checkClaudeConnection) and is purely informational: it NEVER
-   overlays or disables the submit buttons and has no acknowledge button.
-   Replaces the old .panel-warning overlay + "Got it" flow. */
-.connection-pill {
-  display: flex; align-items: center; gap: 0.5rem;
-  padding: 0.4rem 0.7rem; margin: 0 0 0.85rem;
-  border-radius: 999px;
-  font-size: 0.8rem; font-weight: 600;
-  border: 1px solid var(--border-color, #30363d);
+/* ── Panel anatomy (all templates) ──
+   .concept-decision-panel is a flex column (the two layout rules set that);
+   these four children split it. `min-height: 0` on the scroll box is
+   load-bearing: a flex child refuses to shrink below its content height
+   without it, so the tree would grow past the viewport and push the pinned
+   foot off screen — exactly the "scroll the menu to find the button" defect
+   this anatomy exists to remove. */
+.panel-here {
+  flex: none;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.5rem;
+  min-height: 1.3em;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-color, #30363d);
+  font-size: 0.8rem;
   color: var(--text-secondary, #8b949e);
-  transition: color 0.25s, border-color 0.25s, background 0.25s;
 }
-.connection-pill .conn-dot {
-  width: 9px; height: 9px; border-radius: 50%; flex: none;
-  background: currentColor;
+.panel-here-round { font-weight: 600; color: var(--text-color, #c9d1d9); white-space: nowrap; }
+.panel-here-section {
+  flex: 1 1 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.connection-pill[data-state="connecting"] {
-  color: var(--accent-color, #58a6ff);
-  border-color: color-mix(in srgb, var(--accent-color, #58a6ff) 45%, transparent);
-  background: color-mix(in srgb, var(--accent-color, #58a6ff) 7%, transparent);
+.panel-here-back { margin: 0 0 0 auto; }
+.panel-here-section[hidden],
+.panel-here-back[hidden] { display: none; }
+.panel-nav-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
-.connection-pill[data-state="connected"] {
-  color: var(--success-color, #3fb950);
-  border-color: color-mix(in srgb, var(--success-color, #3fb950) 40%, transparent);
-  background: color-mix(in srgb, var(--success-color, #3fb950) 7%, transparent);
+.panel-status {
+  flex: none;
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border-color, #30363d);
 }
-.connection-pill[data-state="disconnected"] {
-  color: var(--warning-color, #d29922);
-  border-color: color-mix(in srgb, var(--warning-color, #d29922) 45%, transparent);
-  background: color-mix(in srgb, var(--warning-color, #d29922) 7%, transparent);
+/* Hard cap. The smallest case (one round, three sections) and the largest
+   (ten rounds, twenty-five entries) get the same foot; what varies is only
+   how much of the tree is on screen. position: relative anchors the submit
+   menu, which opens UPWARD over the status line. */
+.panel-cta {
+  flex: none;
+  position: relative;
+  max-height: 120px;
+  padding-top: 0.6rem;
 }
-/* connecting + disconnected pulse the dot; connected is steady. */
-.connection-pill[data-state="connecting"] .conn-dot,
-.connection-pill[data-state="disconnected"] .conn-dot {
+/* The close-out wizard is the one legitimate exception: a multi-step form,
+   not a call to action. On the final-report tab the foot may grow and scroll
+   on its own — the wizard's own submit-gap + execute button stay as they are. */
+body.viewing-final .panel-cta {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
+/* ── Status line ── one line, one glyph, six mutually exclusive states on
+   .panel-status[data-status], rendered by renderPanelStatus() (§ Claude
+   Connection Heartbeat):
+     saved       ✓ Gespeichert · verbunden           success
+     saving      … Speichert                         muted, transient
+     connecting  ◐ Gespeichert · verbinde…           accent, pulsing glyph
+     local-only  ⚠ Nur lokal gespeichert · getrennt  warning BACKGROUND — the one
+                 state that is categorically different: the work is not delivered
+     submitted   ⏳ Übermittelt · Claude arbeitet     accent (+ progress dots)
+     frozen      🕘 Iteration N · nur lesen           warning text
+   #connection-status inside it keeps the raw heartbeat on [data-state]
+   (connecting | connected | disconnected — the monitoring + gate contract).
+   Purely informational: it NEVER overlays or disables the submit buttons and
+   has no acknowledge button. Details stay in the DOM (the step list expands
+   under the line), never tooltip-only. */
+.status-line {
+  display: flex; align-items: center; gap: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.8rem; font-weight: 600; line-height: 1.3;
+  color: var(--text-secondary, #8b949e);
+  transition: color 0.25s, background 0.25s;
+}
+.status-glyph { flex: none; width: 1.15em; text-align: center; }
+.conn-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-status[data-status="saved"] .status-line { color: var(--success-color, #3fb950); }
+.panel-status[data-status="saving"] .status-line { color: var(--text-secondary, #8b949e); }
+.panel-status[data-status="connecting"] .status-line { color: var(--accent-color, #58a6ff); }
+.panel-status[data-status="submitted"] .status-line { color: var(--accent-color, #58a6ff); }
+.panel-status[data-status="frozen"] .status-line { color: var(--warning-color, #d29922); }
+.panel-status[data-status="local-only"] .status-line {
+  color: var(--text-color, #c9d1d9);
+  background: color-mix(in srgb, var(--warning-color, #d29922) 22%, transparent);
+  box-shadow: inset 3px 0 0 var(--warning-color, #d29922);
+}
+/* connecting + submitted pulse the glyph; every other state is steady. */
+.panel-status[data-status="connecting"] .status-glyph,
+.panel-status[data-status="submitted"] .status-glyph {
   animation: conn-pulse 1.2s ease-in-out infinite;
-}
-/* Animated ellipsis after the label while connecting. */
-.connection-pill[data-state="connecting"] .conn-label::after {
-  content: ""; animation: conn-ellipsis 1.4s steps(4, end) infinite;
 }
 @keyframes conn-pulse {
   0%, 100% { opacity: 0.4; transform: scale(0.82); }
   50%      { opacity: 1;   transform: scale(1); }
 }
-@keyframes conn-ellipsis {
-  0%  { content: ""; }   25% { content: "."; }
-  50% { content: ".."; } 75% { content: "..."; }
+/* Progress dots — the compact rendering of #status-steps for the pinned
+   line. One <i data-state> per visible step; the <ol> underneath is the
+   source of truth and opens on click. */
+.status-detail { margin-top: 0.25rem; }
+.status-detail[hidden] { display: none; }
+.status-detail > summary {
+  list-style: none;
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-secondary, #8b949e);
+  cursor: pointer;
 }
+.status-detail > summary::-webkit-details-marker { display: none; }
+.status-detail > summary::after { content: "▸"; margin-left: auto; }
+.status-detail[open] > summary::after { content: "▾"; }
+.status-dots { display: inline-flex; gap: 5px; }
+.status-dots i {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border-color, #30363d);
+}
+.status-dots i[data-state="active"] {
+  background: var(--accent-color, #58a6ff);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.status-dots i[data-state="done"] { background: var(--success-color, #3fb950); }
+.status-detail .status-steps { margin: 0.4rem 0 0.2rem 0.5rem; }
 @media (prefers-reduced-motion: reduce) {
-  .connection-pill .conn-dot { animation: none !important; }
-  .connection-pill[data-state="connecting"] .conn-label::after {
-    animation: none !important; content: "";
-  }
+  .status-glyph, .status-dots i { animation: none !important; }
 }
 
-/* Per-button cache hint — shown under each submit button only while Claude is
-   disconnected, so the user knows the click will be queued and auto-delivered
-   on reconnect. Toggled via [hidden] by _setCacheHints(). */
+/* Cache hint — shown only while Claude is disconnected, so the user knows
+   the click will be queued and auto-delivered on reconnect. Toggled via
+   [hidden] by _setCacheHints(): an inline badge INSIDE the primary button
+   and a line inside the submit menu. */
 .hint-cache {
   font-size: 0.78rem;
   line-height: 1.35;
@@ -5651,6 +6059,10 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
   display: flex; align-items: center; gap: 0.35rem;
 }
 .hint-cache[hidden] { display: none; }
+.submit-btn .hint-cache {
+  font-size: 0.68rem; font-weight: 500; line-height: 1.2;
+  margin: 0; color: #fff; opacity: 0.9;
+}
 
 /* Content dimmer — covers the content area after submit so the user's focus
    lands on the decision panel / FAB. Decision panel, FABs, feedback dock,
@@ -5735,45 +6147,50 @@ html[data-template="design"] .frozen-bar {
   max-width: min(34vw, 560px);
 }
 
-/* Submitted state */
+/* Submitted state — compact: it shares the ≤120px foot with the frozen block
+   and the split button, and the progress itself lives in the status line. */
 .submitted-indicator {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 1rem;
-  margin-bottom: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  margin-bottom: 0.4rem;
   border-radius: 8px;
   background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent);
   border: 1px solid var(--success-color, #3fb950);
+  font-size: 0.9rem;
 }
 .submitted-indicator .check-icon {
-  font-size: 1.3rem;
+  font-size: 1.1rem;
   color: var(--success-color, #3fb950);
 }
 .submitted-hint {
-  font-size: 0.9rem;
-  line-height: 1.5;
+  font-size: 0.8rem;
+  line-height: 1.4;
   color: var(--text-secondary);
-  margin-bottom: 1rem;
+  margin: 0;
 }
 
 /* Frozen panel state — same indicator language as the submitted panel, in the
    muted border colour rather than a status colour: a frozen tab is neither
-   good news nor a warning, it is history. */
+   good news nor a warning, it is history. Same compactness rule as above. */
 .frozen-indicator {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem;
-  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.3rem;
   border-radius: 8px;
   border: 1px solid var(--border-color, #30363d);
   background: color-mix(in srgb, var(--text-secondary, #8b949e) 10%, transparent);
   color: var(--text-secondary, #8b949e);
+  font-size: 0.9rem;
 }
-.frozen-indicator .frozen-icon { font-size: 1.2rem; }
+.frozen-indicator .frozen-icon { font-size: 1.1rem; }
+#panel-frozen .hint { font-size: 0.78rem; line-height: 1.35; margin: 0; }
+#panel-frozen .link-btn { margin-top: 0.3rem; }
 
-/* Progress steps inside the submitted panel.
+/* Progress steps under the status line.
    Three states per <li>:
      data-state="pending" → not yet started (muted, ○ icon)
      data-state="active"  → currently happening (full text color, ⏳ icon
@@ -5834,21 +6251,7 @@ html[data-template="design"] .frozen-bar {
   display: inline;
 }
 
-/* Waiting dots animation */
-.waiting-animation {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  padding: 0.5rem 0;
-}
-.waiting-animation .dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--accent-color, #58a6ff);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-.waiting-animation .dot:nth-child(2) { animation-delay: 0.2s; }
-.waiting-animation .dot:nth-child(3) { animation-delay: 0.4s; }
+/* Shared pulse (used by the active progress dot in the status line). */
 @keyframes pulse {
   0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
   40% { opacity: 1; transform: scale(1); }
@@ -6287,6 +6690,15 @@ let _draftTimer = null;
 let _draftCleared = [];      // keys the user emptied on purpose since last flush
 let _draftFailures = 0;
 let _draftStripEl = null;
+// Draft-mirror phase for the pinned status line (§ Claude Connection
+// Heartbeat, renderPanelStatus): 'saving' while a flush is queued or in
+// flight, 'saved' once the bridge acked it, 'local' after three consecutive
+// failures (the same threshold as the offline strip).
+let _draftPhase = 'saved';
+function _setDraftPhase(phase) {
+  _draftPhase = phase;
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
+}
 
 function _readStoredState() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; }
@@ -6325,6 +6737,9 @@ function _setDraftHealth(ok) {
     document.body.appendChild(_draftStripEl);
   }
   if (_draftStripEl) _draftStripEl.hidden = !show;
+  // The status line follows the same three-strike rule: a single blip stays
+  // "Gespeichert" (the local copy IS saved), three in a row read "Nur lokal".
+  _setDraftPhase(show ? 'local' : 'saved');
 }
 
 async function flushDraft() {
@@ -6352,6 +6767,7 @@ async function flushDraft() {
 function queueDraftSync() {
   if (!DRAFT_ENABLED) return;
   if (_draftTimer) clearTimeout(_draftTimer);
+  _setDraftPhase('saving');   // "… Speichert" until flushDraft's ack lands
   _draftTimer = setTimeout(flushDraft, DRAFT_DEBOUNCE_MS);
 }
 
@@ -7612,13 +8028,18 @@ function collectDecisionDecisions() {
 
 ## Two-Button Submit (iterate vs. implement)
 
-Every decision panel carries **two** submit buttons, not one. The primary
-button ("Zur nächsten Iteration") is always visible and fires
-`action: "iterate"` — a Claude turn that never touches code. The secondary
-button ("Mit Feedback implementieren") sits below a visible gap and fires
+Every decision panel carries **two** submit actions, not one, in a
+**split button**. The primary button ("Zur nächsten Iteration") fills the
+row and fires `action: "iterate"` — a Claude turn that never touches code.
+The ▾ caret next to it opens a small menu (`#submit-menu`, `role="menu"`)
+holding the secondary action ("Mit Feedback implementieren"), which fires
 `action: "implement"` — a Claude turn that DOES apply real file/code
-changes. The gap is mandatory so the user has to move the mouse
-deliberately to reach the implement button.
+changes. The misclick barrier is the extra click plus colour + border
+(warning outline, ⚠ icon), not distance: there is no `.submit-gap` in the
+ready panel any more, which is what keeps the pinned foot ≤120px. (The
+gap survives only in the final-report wizard, in front of its execute
+button.) The hint lines moved into `title` tooltips; the one line that stays
+visible is inside the menu ("Kein Code beim Primär-Button").
 
 ### HTML
 
@@ -7626,25 +8047,35 @@ deliberately to reach the implement button.
 <div id="panel-ready">
   <div id="decision-summary"><!-- auto-summary --></div>
 
-  <!-- Primary: safe, never implements -->
-  <button id="submit-iterate-btn" class="primary submit-btn">
-    Zur nächsten Iteration
-  </button>
-  <p class="hint">
-    Deine Auswahl geht an Claude für die nächste Iteration. Es wird kein Code geschrieben.
-  </p>
+  <div class="submit-split">
+    <!-- Primary: safe, never implements. The hint is its tooltip; the cache
+         badge inside it shows only while disconnected (_setCacheHints). -->
+    <button id="submit-iterate-btn" class="primary submit-btn" title="{{panel.submit_iterate_hint}}">
+      <span class="submit-label">{{panel.submit_iterate}}</span>
+      <span class="hint-cache" data-cache-hint="iterate" hidden>
+        <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+      </span>
+    </button>
+    <!-- Caret: opens the menu. aria-expanded mirrors the menu's [hidden]. -->
+    <button type="button" id="submit-menu-btn" class="submit-menu-btn"
+            aria-haspopup="menu" aria-expanded="false" aria-controls="submit-menu"
+            aria-label="{{panel.submit_menu}}" title="{{panel.submit_menu}}">
+      <span aria-hidden="true">▾</span>
+    </button>
+  </div>
 
-  <!-- Mandatory gap so the user does not misclick -->
-  <div class="submit-gap" aria-hidden="true"></div>
-
-  <!-- Secondary: explicit implementation commit -->
-  <button id="submit-implement-btn" class="implement-btn">
-    <span class="warn-icon" aria-hidden="true">⚠</span>
-    Mit Feedback implementieren
-  </button>
-  <p class="hint hint-warn">
-    Claude setzt die Auswahl jetzt in echte Änderungen um.
-  </p>
+  <!-- One level deeper: the explicit implementation commit. Opens UPWARD
+       over the status line; Escape / outside click closes it. -->
+  <div id="submit-menu" class="submit-menu" role="menu" hidden>
+    <button id="submit-implement-btn" class="implement-btn" role="menuitem" title="{{panel.submit_implement_hint}}">
+      <span class="warn-icon" aria-hidden="true">⚠</span>
+      {{panel.submit_implement}}
+    </button>
+    <p class="hint hint-cache" data-cache-hint="implement" hidden>
+      <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+    </p>
+    <p class="hint submit-menu-hint">{{panel.submit_menu_hint}}</p>
+  </div>
 </div>
 ```
 
@@ -7667,6 +8098,50 @@ deliberately to reach the implement button.
 }
 .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Split button: primary + caret share one rounded pill. */
+.submit-split { display: flex; align-items: stretch; margin-top: 0.4rem; }
+.submit-split .submit-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-top: 0;
+  padding: 0.65rem 0.9rem;
+  border-radius: 10px 0 0 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
+}
+.submit-menu-btn {
+  flex: none;
+  width: 2.5rem;
+  margin-top: 0;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, #fff 28%, transparent);
+  border-radius: 0 10px 10px 0;
+  background: var(--accent-color, #58a6ff);
+  color: white;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.submit-menu-btn:hover,
+.submit-menu-btn[aria-expanded="true"] { filter: brightness(1.15); }
+.submit-menu {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  padding: 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--warning-color, #d29922);
+  background: var(--panel-bg, #161b22);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.submit-menu[hidden] { display: none; }
+.submit-menu .implement-btn { margin-top: 0; }
+.submit-menu-hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #8b949e);
+  margin: 0.4rem 0 0;
+}
+
+/* Kept for the final-report wizard's execute button only. */
 .submit-gap { height: 2rem; }
 
 .implement-btn {
@@ -7749,12 +8224,16 @@ async function submitWithAction(action) {
 
   // Empty-submit guard: if the user clicks submit without having modified
   // any field in the active iteration, ask before sending. Avoids burning
-  // a Claude turn on accidental clicks.
+  // a Claude turn on accidental clicks. Implement ALWAYS confirms — it is the
+  // one action that writes code — but never twice: the empty-submit wording
+  // already says so when nothing was changed.
   if (!_userInteracted) {
     const msg = (action === 'implement')
       ? '{{panel.empty_implement_confirm}}'
       : '{{panel.empty_iterate_confirm}}';
     if (!window.confirm(msg)) return;
+  } else if (action === 'implement') {
+    if (!window.confirm('{{panel.submit_implement_confirm}}')) return;
   }
 
   _submitInFlight = true;
@@ -7786,6 +8265,8 @@ async function submitWithAction(action) {
 
   document.getElementById('panel-ready').style.display = 'none';
   document.getElementById('panel-submitted').style.display = 'block';
+  // The pinned status line flips to "Übermittelt · Claude arbeitet" + dots.
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
 
   // The submitted panel is already on screen, and it is a promise that the
   // payload is safe. That promise must be backed by a DURABLE ack, not by
@@ -7834,6 +8315,38 @@ async function submitWithAction(action) {
 
 wireSubmit('submit-iterate-btn', 'iterate');
 wireSubmit('submit-implement-btn', 'implement');
+
+// --- Submit menu (the implement action lives one level deeper) ---
+// ▾ toggles #submit-menu; aria-expanded mirrors [hidden]. Escape and any
+// click outside close it; choosing the item closes it before the confirm
+// dialog opens, so the menu never sits open behind a modal.
+(function wireSubmitMenu() {
+  const btn = document.getElementById('submit-menu-btn');
+  const menu = document.getElementById('submit-menu');
+  if (!btn || !menu) return;
+  const setOpen = (open) => {
+    menu.hidden = !open;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = menu.hidden;
+    setOpen(open);
+    if (open) menu.querySelector('[role="menuitem"]')?.focus();
+  });
+  menu.addEventListener('click', (e) => {
+    if (e.target.closest('[role="menuitem"]')) setOpen(false);
+  });
+  document.addEventListener('click', (e) => {
+    if (menu.hidden || menu.contains(e.target) || btn.contains(e.target)) return;
+    setOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || menu.hidden) return;
+    setOpen(false);
+    btn.focus();
+  });
+})();
 
 // --- Submit warnings ---
 // A submission that did not reach disk must SAY SO on the page. The whole
@@ -8390,6 +8903,8 @@ function restorePanelToReady() {
   _submittedReloadCounter = null;
   _submitInFlight = false;
   _submittedAction = null;
+  // Status line back from "Übermittelt · Claude arbeitet" to the draft state.
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
   // PANEL state only. This used to end in
   //     localStorage.removeItem('concept-state-' + slug)
   // which deleted every comment, rating and selection on the page. Both paths
@@ -8410,9 +8925,11 @@ function restorePanelToReady() {
 
 ## Submit Progress Steps
 
-The submitted panel renders a four-step progress list so the user can
-see exactly where the submission is in Claude's pipeline. The states the
-list tracks:
+After a submit the pinned status line reads "⏳ Übermittelt · Claude
+arbeitet" and shows one progress dot per step; the four-step `#status-steps`
+list itself sits in a `<details class="status-detail">` under the line
+(hidden until submit), so the user can see exactly where the submission is
+in Claude's pipeline. The states the list tracks:
 
 | Step | Trigger | Visible? |
 |---|---|---|
@@ -8445,6 +8962,24 @@ function _setStep(name, state, icon) {
   li.dataset.state = state;
   const iconEl = li.querySelector('.step-icon');
   if (iconEl && icon) iconEl.textContent = icon;
+  if (typeof renderStatusDots === 'function') renderStatusDots();
+}
+
+// Compact mirror of the <ol> for the pinned status line: one dot per VISIBLE
+// step, carrying that step's data-state. The <ol> stays the source of truth
+// (and stays in the DOM, expandable under the line) — the dots never hold
+// state of their own, so they cannot disagree with the list.
+function renderStatusDots() {
+  const dots = document.getElementById('status-dots');
+  const list = document.getElementById('status-steps');
+  if (!dots || !list) return;
+  dots.innerHTML = '';
+  list.querySelectorAll('li[data-step]').forEach(li => {
+    if (li.hidden) return;
+    const dot = document.createElement('i');
+    dot.dataset.state = li.dataset.state || 'pending';
+    dots.appendChild(dot);
+  });
 }
 
 // Baseline shown immediately after a submit click. Step 1 done, step 2
@@ -8469,6 +9004,7 @@ function resetStatusSteps(action) {
     const iconEl = impl.querySelector('.step-icon');
     if (iconEl) iconEl.textContent = '○';
   }
+  if (typeof renderStatusDots === 'function') renderStatusDots();
 }
 
 // Called from pollProcessedState on every tick. Idempotent — re-applying
@@ -8653,6 +9189,60 @@ function _setCacheHints(visible) {
   });
 }
 
+// --- Status line (all templates) ---
+// The one renderer for the pinned .panel-status line. Inputs, in priority:
+//   frozen tab (body.viewing-frozen)        → 🕘 {tab label} · nur lesen
+//   submission in flight (_submittedAt)     → ⏳ Übermittelt · Claude arbeitet  + dots
+//   disconnected OR draft mirror failing    → ⚠ Nur lokal gespeichert · getrennt
+//   draft flush pending                     → … Speichert
+//   heartbeat still connecting              → ◐ Gespeichert · verbinde…
+//   otherwise                               → ✓ Gespeichert · verbunden
+// The raw heartbeat stays on #connection-status[data-state] (written by
+// checkClaudeConnection); the draft phase comes from § State Persistence
+// (_draftPhase). Every writer of those inputs calls this, so the line can
+// never show a stale state — and it renders in EVERY panel state, submitted
+// and frozen included.
+function renderPanelStatus() {
+  const host = document.getElementById('panel-status');
+  const line = document.getElementById('connection-status');
+  if (!host || !line) return;
+  const conn = line.dataset.state || 'connecting';
+  const draft = (typeof _draftPhase === 'string') ? _draftPhase : 'saved';
+  const submitted = (typeof _submittedAt === 'number' && _submittedAt > 0)
+    || document.body.classList.contains('concept-submitted');
+  const frozen = document.body.classList.contains('viewing-frozen');
+  let status, glyph, text;
+  if (frozen) {
+    const tab = document.querySelector('.iteration-tab[aria-selected="true"]');
+    const label = tab ? (tab.dataset.tabLabel || tab.textContent.trim()) : '';
+    status = 'frozen'; glyph = '🕘'; text = label + ' · {{panel.status_frozen}}';
+  } else if (submitted) {
+    status = 'submitted'; glyph = '⏳'; text = '{{panel.status_working}}';
+  } else if (conn === 'disconnected' || draft === 'local') {
+    status = 'local-only'; glyph = '⚠'; text = '{{panel.status_local_only}}';
+  } else if (draft === 'saving') {
+    status = 'saving'; glyph = '…'; text = '{{panel.status_saving}}';
+  } else if (conn === 'connecting') {
+    status = 'connecting'; glyph = '◐'; text = '{{panel.status_connecting}}';
+  } else {
+    status = 'saved'; glyph = '✓'; text = '{{panel.status_saved}}';
+  }
+  host.dataset.status = status;
+  const glyphEl = line.querySelector('.status-glyph');
+  const labelEl = line.querySelector('.conn-label');
+  if (glyphEl) glyphEl.textContent = glyph;
+  if (labelEl) labelEl.textContent = text;
+  // The heartbeat wording lives in the tooltip — the line itself says what
+  // the user wants to know (is my work safe / delivered), not what the
+  // bridge is doing.
+  line.title = conn === 'connected'    ? '{{panel.connected_title}}'
+             : conn === 'disconnected' ? '{{panel.disconnected_title}}'
+             :                           '{{panel.connecting_title}}';
+  const detail = document.getElementById('status-detail');
+  if (detail) detail.hidden = (status !== 'submitted');
+  if (typeof renderStatusDots === 'function') renderStatusDots();
+}
+
 function checkClaudeConnection() {
   const now = Date.now();
 
@@ -8684,21 +9274,17 @@ function checkClaudeConnection() {
     .map(id => document.getElementById(id)).filter(Boolean);
   const panelSubmitted = document.getElementById('panel-submitted');
 
-  // While the submitted panel is up, leave the ready-panel controls frozen
-  // (the pill lives inside #panel-ready, which is hidden then anyway).
-  if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
+  // Drive the status line FIRST, in every panel state: [data-state] is the
+  // raw heartbeat contract, renderPanelStatus composes the visible line from
+  // it. The line lives in .panel-status, OUTSIDE #panel-ready, so it stays
+  // on screen — and must stay truthful — while the submitted panel is up.
+  // Purely informational, never a blocker.
+  if (pill) pill.dataset.state = state;
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
 
-  // Drive the inline pill: [data-state] toggles colors + the dot/ellipsis
-  // animation, and the label matches. Purely informational — never a blocker.
-  if (pill) {
-    pill.dataset.state = state;
-    const label = pill.querySelector('.conn-label');
-    if (label) {
-      label.textContent = state === 'connected'    ? '{{panel.connected_title}}'
-                        : state === 'disconnected' ? '{{panel.disconnected_title}}'
-                        :                            '{{panel.connecting_title}}';
-    }
-  }
+  // While the submitted panel is up, leave the ready-panel BUTTONS alone —
+  // only the button handling below is skipped, never the line above.
+  if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
 
   // Submit buttons stay ENABLED in every state. A disconnected click is not a
   // black hole: the POST either lands on the live bridge (picked up when
@@ -8734,9 +9320,18 @@ curl -s -X POST http://localhost:{port}/heartbeat
 
 Iterations of a concept page are appended as `<section data-iteration="N">`
 blocks inside the same HTML file. The tab bar lives **at the top of the
-right-side decision panel** (a compact vertical chip list, rendered above
-the section TOC and submit block). All three templates support iterations —
-design and free include them identically.
+right-side decision panel** (a compact vertical chip list inside the panel's
+scroll box, above the pinned status line and submit foot). All three
+templates support iterations — design and free include them identically.
+
+**At runtime the bar is one tree ("Kompass", § Section Navigation):** every
+chip is a node header, the selected chip's body is `#section-nav` (moved
+there by `buildSectionNav()`), every other chip carries a generated
+`.iteration-tab-summary` line, and from 4 previous rounds upward the chips
+before the live one are folded into `<details class="iteration-archive">`
+(auto-open while a frozen chip is selected). None of that is written into
+the HTML — the markup below stays a flat list of `<button class="iteration-tab">`
+chips, appended by string edit, and the JS folds it on every load.
 
 ### Tab Bar HTML
 
@@ -8781,6 +9376,11 @@ design and free include them identically.
 Rules:
 - Exactly one section carries `data-active`. The matching tab has
   `aria-selected="true"`.
+- A new chip is appended as a plain `<button class="iteration-tab">` at the
+  END of `nav.iteration-tabs` — never inside an `.iteration-archive`, never
+  with a hand-written `.iteration-tab-summary`. The tree (archive fold,
+  summaries, the moved `#section-nav`) is rebuilt by `buildSectionNav()` on
+  load and on every switch; markup that pre-empts it is simply re-derived.
 - Non-active sections get the `hidden` attribute AND are frozen
   (see "Freezing Past Iterations").
 - Tabs stay clickable — switching tab reveals the chosen section and
@@ -8837,8 +9437,37 @@ a card without that evidence.
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--border-color, #30363d);
 }
+/* Generated summary line under a non-selected chip (buildIterationTree):
+   "14 Einträge · 3 verworfen". Block-level so the chip reads as a node
+   header with a subtitle, never as a longer label. */
+.iteration-tab-summary {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-secondary, #8b949e);
+}
+/* Archive fold — wraps the chips before the live one from 4 rounds upward.
+   Same chip styling inside; the summary row is the only new surface. */
+.iteration-archive { display: flex; flex-direction: column; gap: 4px; }
+.iteration-archive > summary {
+  list-style: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #8b949e);
+  cursor: pointer;
+}
+.iteration-archive > summary::-webkit-details-marker { display: none; }
+.iteration-archive > summary::before { content: "▸ "; }
+.iteration-archive[open] > summary::before { content: "▾ "; }
+.iteration-archive > summary:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
 .iteration-tab {
   flex: 0 0 auto;
+  display: block;
+  width: 100%;
   text-align: left;
   padding: 6px 10px;
   border: 1px solid var(--border-color, #30363d);
@@ -8962,9 +9591,25 @@ function showIteration(n) {
     frozenBar.hidden = !!isLive;
     const title = frozenBar.querySelector('[data-frozen-bar-title]');
     const tab = document.querySelector('.iteration-tab[data-iteration="' + n + '"]');
-    if (title) title.textContent = tab ? tab.textContent.trim() : String(n);
+    if (title) title.textContent = tab ? (tab.dataset.tabLabel || tab.textContent.trim()) : String(n);
   }
   if (isLive) hideContentDimmer(); else lockFrozenView();
+  // Pinned "you are here" head: the selected tab's label, and on a frozen
+  // tab the compact "↩ zur Runde N" link back to the live round. The label
+  // comes from data-tab-label when the summary line has been added to the
+  // chip (buildSectionNav), otherwise from the chip text itself.
+  const here = document.getElementById('panel-here');
+  if (here) {
+    const hereTab = document.querySelector('.iteration-tab[data-iteration="' + n + '"]');
+    const round = here.querySelector('[data-here-round]');
+    if (round) round.textContent = hereTab ? (hereTab.dataset.tabLabel || hereTab.textContent.trim()) : String(n);
+    const back = document.getElementById('panel-here-back');
+    if (back) {
+      back.hidden = !!isLive;
+      back.textContent = '↩ {{panel.here_back}} ' + (activeSec ? activeSec.dataset.iteration : '');
+    }
+  }
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
   if (typeof buildSectionNav === 'function') buildSectionNav();
   if (typeof refreshFinalizeWizard === 'function') refreshFinalizeWizard({ reset: true });
   document.dispatchEvent(new CustomEvent('iteration:changed'));
@@ -8986,6 +9631,7 @@ function goToLiveIteration() {
 }
 document.getElementById('back-to-live-btn')?.addEventListener('click', goToLiveIteration);
 document.getElementById('frozen-bar-back')?.addEventListener('click', goToLiveIteration);
+document.getElementById('panel-here-back')?.addEventListener('click', goToLiveIteration);
 
 document.addEventListener('DOMContentLoaded', () => {
   const active = document.querySelector('section[data-iteration][data-active]');

@@ -290,7 +290,12 @@ describe("reality check — the deadlock guard is written down, not implied", ()
   test("the validation gate covers both halves and counts them", () => {
     expect(gate).toMatch(/\| 54 \| `data-step="reality-check"`/);
     expect(gate).toMatch(/\| 55 \| `iteration-tab\[data-reality-check\]`/);
-    expect(gate).toContain("these 60 patterns");
+    // The headline count is derived from the Phase 1 table itself (numeric
+    // rows only — Phase 2 rows carry D/P prefixes), so adding an entry
+    // without bumping the sentence fails here.
+    const rows = (gate.match(/^\| \d+[a-z]? \| /gm) || []).length;
+    expect(rows).toBeGreaterThan(54);
+    expect(gate).toContain(`these ${rows} patterns`);
     // 54 is an engine entry, so a page generated before the gate existed gets
     // it re-synced on its next append instead of silently missing it forever.
     expect(gate).toMatch(/49–53 \(comment durability\), 54\s*\n?\(reality-check progress step\)/);

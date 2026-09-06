@@ -27,10 +27,21 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 > markers are read once per cycle and benefit from human-readable
 > serialization in `/decisions` payloads.
 
-1. Find the bridge server script:
+1. Find the bridge server script — the **highest** cached version, never the
+   first `ls` hit:
    ```bash
-   PLUGIN_ROOT=$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-server.py 2>/dev/null | head -1)
+   # Several version directories coexist in the cache after updates
+   # (0.145.1, 0.147.0, 0.148.0 …). `ls … | head -1` returned the LEXICALLY
+   # first one, i.e. the OLDEST server while the hooks already ran the newest.
+   # Prefer the root the hook runtime hands us; otherwise version-sort the
+   # glob (`sort -V` orders 0.9 < 0.10) and take the last entry.
+   PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/concept-server.py}"
+   [ -f "$PLUGIN_ROOT" ] || PLUGIN_ROOT=$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-server.py 2>/dev/null | sort -V | tail -1)
    ```
+   The same rule applies to every other script resolved from the cache in
+   this document (`concept-port-registry.js`, `concept-watch.js`,
+   `concept-tick.js`, `concept-drift.js`): `sort -V | tail -1`, never
+   `head -1`. See CONVENTIONS.md § Scripts → Path rule.
 
 2. Start the bridge server in the **project root** (NOT the worktree root —
    the watchdog resolves `--html` against the cwd, and concept HTML lives in
@@ -61,8 +72,15 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    task, so `server_pid` in the state file is best-effort — cleanup targets the
    server by **port** via `/shutdown`, never by PID, so the precise PID is not
    required. `concept-server.py` writes its own registry entry on bind and
-   removes it on `/shutdown`; a hard-killed server leaves a stale entry that the
-   picker ignores automatically (it gates on pid liveness, not file presence).
+   removes it on `/shutdown`, on a watchdog reap, at interpreter exit and on
+   SIGINT/SIGTERM. A hard-killed server (TerminateProcess, power loss) still
+   leaves a stale entry; `pick` therefore sweeps the registry first
+   (`pruneStale`): an entry is deleted when its port no longer accepts a TCP
+   connect — a live foreign bridge is never touched, and the recorded pid is
+   deliberately not trusted (Windows reuses pids within days).
+   `node "$REG" prune` runs the same sweep on its own. Both the server and the
+   picker honour `CONCEPT_BRIDGE_REGISTRY_DIR`, which the test suites set to a
+   temp directory so hard-killed test servers cannot silt the real registry.
 
    **Sweep the port BEFORE launching — exactly one instance must own it.**
    A prior instance that did not fully die (its listening socket lingers in
@@ -174,10 +192,11 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    a fresh `.../devops/<version>/` directory and deletes the old one, so an
    absolute path baked into the prompt dangles from that moment and every tick
    fails MODULE_NOT_FOUND — once a minute, silently, for the rest of the
-   session. In the versioned cache layout emit the same `ls -d … | head -1`
-   prefix `ss.git.sync` uses (the rebuild leaves exactly one version directory,
-   so the glob is unambiguous), with the literal path as the fallback:
-   `f="$(ls -d "{cache-root}/devops"/*/scripts/concept-tick.js 2>/dev/null | head -1)"; node "${f:-{literal}}"`.
+   session. In the versioned cache layout emit a version-sorted glob that
+   picks the HIGHEST version directory — several coexist in practice, and a
+   plain `head -1` on the lexical listing returned the oldest — with the
+   literal path as the fallback:
+   `f="$(ls -d "{cache-root}/devops"/*/scripts/concept-tick.js 2>/dev/null | sort -V | tail -1)"; node "${f:-{literal}}"`.
    A dev/marketplace checkout has no version directory and just uses the
    literal path, which is the form shown below.
 
@@ -346,7 +365,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    once at concept open; runs for the whole session so `claude_ts` stays warm
    even across a long `implement`. Exits only when the concept is truly gone:
    ```bash
-   node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | head -1)" --mode pulse --port {port} --state "{project-root}/.claude/concept-active.json"
+   node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | sort -V | tail -1)" --mode pulse --port {port} --state "{project-root}/.claude/concept-active.json"
    ```
 
    **(2) Pickup waker — wakes Claude the instant a submission lands.** Its
@@ -354,7 +373,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    the next cron tick. Re-launched after each processing round. It does NOT
    pulse the heartbeat (that is the pulser's job) — it only watches `/pending`:
    ```bash
-   node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | head -1)" --mode watch --port {port} --state "{project-root}/.claude/concept-active.json"
+   node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | sort -V | tail -1)" --mode watch --port {port} --state "{project-root}/.claude/concept-active.json"
    ```
 
    **Verify both actually started.** They are the only launches in this document

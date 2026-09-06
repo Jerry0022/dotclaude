@@ -288,18 +288,21 @@ function probe(port, pathname, timeoutMs = 1500) {
  * old one, so an absolute path baked into a cron prompt dangles from that
  * moment on and every tick fails MODULE_NOT_FOUND — once a minute, silently,
  * for the rest of the session. Same reasoning and same shape as
- * `ss.git.sync`: in the versioned cache layout, resolve from the current
- * version directory at run time (the rebuild leaves exactly one, so the glob
- * is unambiguous) and fall back to the literal path if the glob comes up
- * empty. A dev/marketplace checkout has no version directory, so it just uses
- * the literal path.
+ * `ss.git.sync`: in the versioned cache layout, resolve from the HIGHEST
+ * version directory at run time and fall back to the literal path if the
+ * glob comes up empty. Several version directories coexist in practice
+ * (0.145.1, 0.147.0, 0.148.0 were all present at once), and a plain
+ * `head -1` on the lexical listing picked the oldest — a stale tick script
+ * next to hooks already running the newest. `sort -V` orders 0.9 < 0.10.
+ * A dev/marketplace checkout has no version directory, so it just uses the
+ * literal path.
  */
 function resolveScript(name, baseDir = __dirname) {
   const literal = path.resolve(baseDir, '..', '..', 'scripts', name);
   const versionDir = path.resolve(baseDir, '..', '..');
   if (!/^\d+\.\d+\.\d+/.test(path.basename(versionDir))) return `node "${literal}"`;
   const parent = path.dirname(versionDir).replace(/\\/g, '/');
-  return `f="$(ls -d "${parent}"/*/scripts/${name} 2>/dev/null | head -1)"; node "\${f:-${literal.replace(/\\/g, '/')}}"`;
+  return `f="$(ls -d "${parent}"/*/scripts/${name} 2>/dev/null | sort -V | tail -1)"; node "\${f:-${literal.replace(/\\/g, '/')}}"`;
 }
 
 /**
