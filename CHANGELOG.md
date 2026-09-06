@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.147.0] — 2026-09-06
+
+### Added
+
+- **The completion card's pending layer knew agents and Bash tasks, so a whole `Workflow` run counted as one agent — or as nothing at all.** A workflow fans out to dozens of agents of its own, so reporting three of them as "3 Agenten" understated the work by an order of magnitude, and the Stop gate never saw a workflow launch at all: a card that forgot to declare one was not blocked, because the transcript scanner only knew two launch markers. What looked like working support was the model typing "Workflow x" into an agent item by hand. `workflow` is now its own `kind` end to end — detected from `Workflow launched in background. Task ID: <id>`, named from the script's `meta.name` (anchored to the `export const meta` literal, since a bare `name:` match happily picks up an agent label defined earlier in the same script), else the script path, else the launch summary, and closed by the matching task-notification.
+
+  The **names moved out of the CTA**. Three names plus two counts in one heading is a line that wraps, so the CTA now carries the shape — `3 Workflows + 1 Agent + 1 Task laufen` — and the names sit one row above it, in the same dim blockquote style as the version and branch rows: the first three, then a `+N` tail counting every remaining item. Both `+N` on a card cut at the same three, so the block above and the row below can never disagree about the rest. A single item is still named in the CTA itself and gets no row, because repeating one name is not information.
+
+### Fixed
+
+- **Quoted text was treated as an event: one `grep` could block every later card in the session.** The transcript scanner matched launch markers in any tool result and task-notifications in any line, so a Grep hit on the hook's own source, a Read of a transcript, or a script printing a launch line opened a phantom item that no notification would ever close — and an item that never closes blocks the Stop gate forever. This was not hypothetical: running the scanner over a live session transcript found two, both produced by ordinary work in this repo. Three guards now separate event from quotation: a launch counts only from a tool that can announce *that kind* of launch (bound per marker — Bash may announce its own task but also prints everybody else's), only when the announcement **is** the tool result rather than a line inside somebody's output, and a completion counts only when the notification is a real transcript entry rather than the payload of a `tool_result`.
+
+- **Pending labels reached three places that read text as structure, unsanitized.** A name arrives as model-authored text — a workflow's `meta.name`, an agent description — and lands inside a markdown code span, inside a JSON example, and inside the Stop hook's `reason`, which Claude reads as instructions. A backtick ended the code span early, a newline split the card's tightest row, and an unbounded name turned it into a wall of text. Labels are now stripped of structural characters and clamped at one choke point on each side.
+
 ## [0.146.0] — 2026-09-06
 
 ### Added
