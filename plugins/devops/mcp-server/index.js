@@ -45,7 +45,7 @@ import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
-import { hasPending, pendingWhat, renderPendingBlock } from "./lib/pending.js";
+import { hasPending, pendingWhat, renderPendingBlock, renderPendingLine } from "./lib/pending.js";
 import { clampText, clampList } from "./lib/soft-limits.js";
 import {
   assessFreshness,
@@ -1018,6 +1018,19 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
+  // Pending name line — names WHAT is still running, directly above the CTA and
+  // in the same dim blockquote style as the version and branch rows, so it reads
+  // as meta rather than competing with the call to action. The CTA carries only
+  // the counts once more than one thing is open; this is where the user reads
+  // WHICH workflows and agents are in flight (first three, then a "+N" tail).
+  {
+    const pendingLine = renderPendingLine(input.pending, lang);
+    if (pendingLine) {
+      parts.push(blockquote(pendingLine));
+      parts.push('');
+    }
+  }
+
   parts.push(renderCTA(variant, input.cta, lang, input.state, input.delivery, input.pending));
   parts.push('');
 
@@ -1522,12 +1535,12 @@ server.registerTool(
         z.array(z.union([
           z.string(),
           z.object({
-            name: z.string().describe("What is running, named: the agent type ('devops:frontend') or the task label ('npm test'). Shown in the CTA, so the user reads WHICH agent — never pass an internal agentId."),
-            kind: z.enum(["agent", "task"]).optional().describe("'agent' (default) = background subagent; 'task' = backgrounded Bash command."),
+            name: z.string().describe("What is running, named: the agent type ('devops:frontend'), the workflow name ('harden-pass') or the task label ('npm test'). Shown on the dim line above the CTA, so the user reads WHICH work is in flight — never pass an internal agentId."),
+            kind: z.enum(["agent", "task", "workflow"]).optional().describe("'agent' (default) = background subagent; 'task' = backgrounded Bash command; 'workflow' = a Workflow run, which fans out to agents of its own. Workflows are counted and named as their own class — never fold them into the agent count."),
             doing: z.string().optional().describe("Short description of the work it is doing, e.g. 'Farbstil auf Tokens umstellen'."),
           }),
         ])).optional(),
-      ).describe("Background work STILL RUNNING at turn end — subagents started with run_in_background, or backgrounded Bash tasks. MANDATORY whenever such work is in flight: it overrides the CTA of EVERY variant with '⏳ NOCH NICHT FERTIG. {what} — ich MELDE mich' and renders a block naming each item, so the card never asks the user to SHIP or act on a result that does not exist yet. The card body still reports what IS true; only the call to action is corrected. stop.flow.guard blocks the turn when open background work is detected and this field is missing."),
+      ).describe("Background work STILL RUNNING at turn end — subagents started with run_in_background, backgrounded Bash tasks, or Workflow runs. MANDATORY whenever such work is in flight: it overrides the CTA of EVERY variant with '⏳ NOCH NICHT FERTIG. {what} — ich MELDE mich', names the first three items on a dim line directly above that CTA, and renders a block naming each item with what it is doing, so the card never asks the user to SHIP or act on a result that does not exist yet. The card body still reports what IS true; only the call to action is corrected. stop.flow.guard blocks the turn when open background work is detected and this field is missing."),
       deployGate: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
