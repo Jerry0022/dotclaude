@@ -64,6 +64,8 @@ must see their own language. The locale hint is authoritative.
 | `panel.step_implemented_active`| Implementation in progress     | Implementierung läuft |
 | `panel.step_waiting`           | Waiting…                       | Warten… |
 | `panel.step_ready`             | Ready to ship                  | Bereit zum Shippen |
+| `panel.step_reality_check`     | Reality check                  | Realitäts-Check |
+| `panel.step_reality_check_active` | Checking against the default branch… | Prüfe gegen den Default-Branch… |
 | `panel.frozen`                 | Frozen iteration               | Eingefrorene Iteration |
 | `panel.frozen_hint`            | You are reading an earlier round. It is read-only — its decisions were already submitted. | Du liest eine frühere Runde. Sie ist schreibgeschützt — ihre Entscheidungen wurden bereits übermittelt. |
 | `panel.frozen_back`            | Back to the current round      | Zurück zur aktuellen Runde |
@@ -87,7 +89,13 @@ must see their own language. The locale hint is authoritative.
 | `iteration.label`              | Iterations                     | Iterationen |
 | `iteration.active_suffix`      | · active                       | · aktiv |
 | `iteration.final_tab`          | Final report                   | Abschlussbericht |
+| `iteration.reality_tab`        | Reality check                  | Realitäts-Check |
 | `nav.sections`                 | Sections                       | Abschnitte |
+| `reality.headline`             | The default branch moved while this concept was open | Der Default-Branch hat sich bewegt, während dieses Konzept offen war |
+| `reality.intro`                | These changes landed after this concept was written. Implementing it unchanged would produce wrong, dead or duplicate code — so this round asks you about them first. | Diese Änderungen sind gelandet, nachdem dieses Konzept geschrieben wurde. Unverändert umgesetzt würde das falschen, toten oder doppelten Code erzeugen — deshalb fragt diese Runde sie zuerst ab. |
+| `reality.reassure`             | Your implement order is not lost: submitting this round with "Implement with feedback" implements directly, with no further check. | Dein Implement-Auftrag ist nicht verloren: Wenn du diese Runde mit „Mit Feedback implementieren" abschickst, wird direkt implementiert — ohne erneute Prüfung. |
+| `reality.evidence`             | Landed on the default branch   | Auf dem Default-Branch gelandet |
+| `reality.recommendation`       | Recommendation                 | Empfehlung |
 | `final.status_heading`         | Close out concept              | Concept abschliessen |
 | `final.open_questions`         | Open questions & TODOs         | Offene Fragen & TODOs |
 | `final.create_issues_hint`     | Unchecked items are dropped — they end with the concept. | Nicht angehakte Punkte fallen weg — sie enden mit dem Concept. |
@@ -302,12 +310,14 @@ the `[ui-locale: ...]` hint produced.
       </div>
 
       <!-- Post-submit state: waiting for Claude. The progress list shows
-           three steps so the user can see whether the submission has only
+           four steps so the user can see whether the submission has only
            been sent (step 1), whether Claude's cron has picked it up
-           (step 2), and — for implement-action submissions — whether the
-           actual code change finished (step 3). The third <li> stays
-           hidden for iterate-action submissions; submitWithAction sets
-           the `hidden` attribute based on the action. -->
+           (step 2), whether the concept is being re-checked against the
+           default branch (step 3) and — for implement-action submissions —
+           whether the actual code change finished (step 4). Step 4 is
+           hidden for iterate-action submissions; submitWithAction sets its
+           `hidden` attribute from the action. Step 3 stays hidden until the
+           check actually runs and reveals it — see § Submit Progress Steps. -->
       <div id="panel-submitted" style="display: none;">
         <div class="submitted-indicator">
           <span class="check-icon">✓</span>
@@ -321,6 +331,12 @@ the `[ui-locale: ...]` hint produced.
           <li data-step="received" data-state="active">
             <span class="step-icon" aria-hidden="true">⏳</span>
             <span class="step-label">{{panel.step_received}}</span>
+          </li>
+          <li data-step="reality-check" data-state="pending" hidden>
+            <span class="step-icon" aria-hidden="true">○</span>
+            <span class="step-label" data-state-label="pending">{{panel.step_reality_check}}</span>
+            <span class="step-label" data-state-label="active">{{panel.step_reality_check_active}}</span>
+            <span class="step-label" data-state-label="done">{{panel.step_reality_check}}</span>
           </li>
           <li data-step="implemented" data-state="pending" hidden>
             <span class="step-icon" aria-hidden="true">○</span>
@@ -1842,6 +1858,12 @@ it today.
           <li data-step="received" data-state="active">
             <span class="step-icon" aria-hidden="true">⏳</span>
             <span class="step-label">{{panel.step_received}}</span>
+          </li>
+          <li data-step="reality-check" data-state="pending" hidden>
+            <span class="step-icon" aria-hidden="true">○</span>
+            <span class="step-label" data-state-label="pending">{{panel.step_reality_check}}</span>
+            <span class="step-label" data-state-label="active">{{panel.step_reality_check_active}}</span>
+            <span class="step-label" data-state-label="done">{{panel.step_reality_check}}</span>
           </li>
           <li data-step="implemented" data-state="pending" hidden>
             <span class="step-icon" aria-hidden="true">○</span>
@@ -5757,8 +5779,10 @@ html[data-template="design"] .frozen-bar {
      data-state="active"  → currently happening (full text color, ⏳ icon
                             with a slow pulse so the user sees motion)
      data-state="done"    → completed (success color, ✓ icon)
-   The third <li> (data-step="implemented") is only revealed for
-   action="implement" submissions; submitWithAction sets its `hidden`. */
+   The <li data-step="implemented"> is only revealed for action="implement"
+   submissions; submitWithAction sets its `hidden`. The <li
+   data-step="reality-check"> before it stays hidden even then, and is
+   unhidden by updateStatusSteps only if the check actually runs. */
 .status-steps {
   list-style: none;
   padding: 0;
@@ -6096,6 +6120,55 @@ html[data-template="design"] .frozen-bar {
 }
 .iteration-tab[data-final-report]:not([aria-selected="true"])::before {
   content: "";
+}
+
+/* Iteration tab styling for a reality-check round. Warning-toned, not error-
+   toned: nothing went wrong, the branch simply moved, and the round is a
+   normal iteration the user answers and moves on from. Loud enough that the
+   user understands why an implement click produced another round, quiet
+   enough that it does not read as a blocker. */
+.iteration-tab[data-reality-check] {
+  border-color: var(--warning-color, #d29922);
+  color: var(--warning-color, #d29922);
+}
+.iteration-tab[data-reality-check][aria-selected="true"] {
+  background: color-mix(in srgb, var(--warning-color, #d29922) 15%, transparent);
+  border-color: var(--warning-color, #d29922);
+  color: var(--text-color, #c9d1d9);
+}
+.iteration-tab[data-reality-check]::before {
+  content: "⟲ ";
+  color: var(--warning-color, #d29922);
+}
+
+/* The explainer that opens a reality-check section. It is the first thing the
+   user reads after clicking implement and NOT getting code, so it carries the
+   whole "why am I looking at this" load — including the reassurance that the
+   implement order still stands. */
+.reality-banner {
+  border: 1px solid var(--warning-color, #d29922);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  background: color-mix(in srgb, var(--warning-color, #d29922) 8%, transparent);
+}
+.reality-banner h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  color: var(--text-color, #c9d1d9);
+}
+.reality-banner p { margin: 0.4rem 0 0; color: var(--text-secondary, #8b949e); }
+.reality-banner .reality-reassure { color: var(--text-color, #c9d1d9); font-weight: 600; }
+.reality-evidence {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-secondary, #8b949e) 10%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #8b949e);
+  overflow-x: auto;
 }
 
 /* Open-questions section — checkbox list with optional "[Issue #NNN]"
@@ -8337,7 +8410,7 @@ function restorePanelToReady() {
 
 ## Submit Progress Steps
 
-The submitted panel renders a three-step progress list so the user can
+The submitted panel renders a four-step progress list so the user can
 see exactly where the submission is in Claude's pipeline. The states the
 list tracks:
 
@@ -8345,7 +8418,15 @@ list tracks:
 |---|---|---|
 | 1 · Übermittelt | The user just clicked submit (POST /decisions succeeded) | Always |
 | 2 · Claude verarbeitet | First `/pending=true` response on the server (the pickup waker, or the backup cron, picked up the submission) — surfaces via `_picked_up_at` in `/decisions` | Always |
-| 3 · Implementierung abgeschlossen | Claude POSTs `/status {phase: "implemented"}` after the implement branch finishes — surfaces via `_phase === "implemented"` in `/decisions` | Only for `action: "implement"` submissions |
+| 3 · Realitäts-Check | Claude POSTs `/status {phase: "reality-check"}` before re-checking the concept against the default branch (`reality-check.md` § The check) — surfaces via `_phase === "reality-check"` | Only once that POST arrives — a check that resolves instantly, or is skipped outright, never shows a step |
+| 4 · Implementierung abgeschlossen | Claude POSTs `/status {phase: "implemented"}` after the implement branch finishes — surfaces via `_phase === "implemented"` in `/decisions` | Only for `action: "implement"` submissions |
+
+**Step 3 reveals itself, it is not pre-armed.** `resetStatusSteps` leaves it
+hidden even for an implement submission, because the overwhelmingly common case
+is a remote that has not moved — and a step that appears, sits at "pending" and
+then flips straight to done would advertise work that never happened. It becomes
+visible the moment the `reality-check` phase actually lands, which is also the
+only moment its duration is worth showing.
 
 The browser only writes step state in `submitWithAction` (reset to baseline)
 and in `updateStatusSteps` (advance based on server fields). After
@@ -8367,11 +8448,20 @@ function _setStep(name, state, icon) {
 }
 
 // Baseline shown immediately after a submit click. Step 1 done, step 2
-// active (waiting for /pending pickup), step 3 either hidden (iterate)
-// or pending-and-visible (implement).
+// active (waiting for /pending pickup), the implement step either hidden
+// (iterate) or pending-and-visible (implement), and the reality-check step
+// ALWAYS hidden — it reveals itself only if the check actually runs, see
+// § Submit Progress Steps.
 function resetStatusSteps(action) {
   _setStep('submitted', 'done', '✓');
   _setStep('received', 'active', '⏳');
+  const rc = _stepEl('reality-check');
+  if (rc) {
+    rc.hidden = true;
+    rc.dataset.state = 'pending';
+    const rcIcon = rc.querySelector('.step-icon');
+    if (rcIcon) rcIcon.textContent = '○';
+  }
   const impl = _stepEl('implemented');
   if (impl) {
     impl.hidden = (action !== 'implement');
@@ -8400,6 +8490,20 @@ function updateStatusSteps(data) {
       }
     }
   }
+  if (data && data._phase === 'reality-check' && _submittedAction === 'implement') {
+    // The check is running. Reveal the step now — this is the only place that
+    // unhides it, so a skipped or instant check never advertises itself.
+    // reality-check implies received, same monotonic argument as below.
+    const recv = _stepEl('received');
+    if (recv && recv.dataset.state !== 'done') {
+      _setStep('received', 'done', '✓');
+    }
+    const rc = _stepEl('reality-check');
+    if (rc && rc.dataset.state !== 'done') {
+      rc.hidden = false;
+      _setStep('reality-check', 'active', '⏳');
+    }
+  }
   if (data && data._phase === 'implemented' && _submittedAction === 'implement') {
     // implemented implies received — if /status arrives before the cron's
     // /pending=true has stamped _picked_up_at (rare but possible: Claude
@@ -8408,6 +8512,12 @@ function updateStatusSteps(data) {
     const recv = _stepEl('received');
     if (recv && recv.dataset.state !== 'done') {
       _setStep('received', 'done', '✓');
+    }
+    // Same for the reality check, but only when it made itself visible — an
+    // invisible step must not pop into existence already ticked.
+    const rc = _stepEl('reality-check');
+    if (rc && !rc.hidden && rc.dataset.state !== 'done') {
+      _setStep('reality-check', 'done', '✓');
     }
     const impl = _stepEl('implemented');
     if (impl && !impl.hidden && impl.dataset.state !== 'done') {
@@ -8636,9 +8746,16 @@ design and free include them identically.
           data-iteration="1" aria-selected="false" aria-controls="iter-1">
     Iteration 1
   </button>
-  <button class="iteration-tab" role="tab"
+  <!-- Reality-check tab: a NORMAL iteration in every mechanical respect —
+       it keeps the running data-iteration counter, both submit buttons, and
+       the ordinary freeze behaviour. Only the label and the
+       data-reality-check flag differ, so the user can see at a glance why an
+       implement click produced another round. Appended only by the implement
+       path when the default branch drifted; never two in a row. See
+       reality-check.md. -->
+  <button class="iteration-tab" role="tab" data-reality-check
           data-iteration="2" aria-selected="false" aria-controls="iter-2">
-    Iteration 2
+    {{iteration.reality_tab}}
   </button>
   <!-- Final-report tab: same DOM contract (data-iteration carries the
        running counter), distinct labelling + the data-final-report
@@ -8654,7 +8771,7 @@ design and free include them identically.
 
 <main>
   <section id="iter-1" data-iteration="1" hidden>…frozen round 1…</section>
-  <section id="iter-2" data-iteration="2" hidden>…frozen round 2…</section>
+  <section id="iter-2" data-iteration="2" data-reality-check hidden>…frozen reality check…</section>
   <section id="iter-3" data-iteration="3" data-final-report data-active>
     …final report (Abschlussbericht)…
   </section>
@@ -8672,6 +8789,42 @@ Rules:
   Once it exists, no further iterate/implement submissions are
   accepted (the panel-final-report has no such buttons). The only
   submission the final-report tab can produce is `action: "finalize"`.
+- `data-reality-check` marks a round the implement path inserted because the
+  default branch drifted. It goes on **both** the section and its tab, and it
+  is load-bearing, not decorative: submitting implement from a section that
+  carries it skips the check and implements immediately, which is what stops
+  two forced rounds in a row. The section additionally carries
+  `data-reality-head="<sha>"` — the commit that check examined, which the
+  baseline advances to once the round is answered. A concept may contain several over its life —
+  but never two adjacent ones, because the round after a reality check is
+  always either the implementation or an ordinary iterate round. See
+  `reality-check.md`.
+
+### Reality-check section explainer
+
+The first child of a `data-reality-check` section, before any decision card.
+It answers the only question the user has at that moment — "I clicked
+implement, why am I reading this?" — and it is copied with the wording from
+the locale table, never improvised:
+
+```html
+<section id="iter-2" data-iteration="2" data-reality-check
+         data-reality-head="9be03d1f4c22" data-active>
+  <div class="reality-banner" role="note">
+    <h2>{{reality.headline}}</h2>
+    <p>{{reality.intro}}</p>
+    <p class="reality-evidence">4f2a1c9 · feat(hooks): rename pre.x → pre.y<br>
+       9be03d1 · refactor(bridge): /status payload now requires version</p>
+    <p class="reality-reassure">{{reality.reassure}}</p>
+  </div>
+  <!-- …one flat, independently answerable decision card per drift item… -->
+</section>
+```
+
+`.reality-evidence` carries the actual commits — short SHA + subject, one per
+line. It is not optional: a drift claim the user cannot verify is a claim they
+have to take on trust, and `reality-check.md` § Force classes forbids showing
+a card without that evidence.
 
 ### Tab Bar CSS
 
@@ -8727,6 +8880,13 @@ section[data-iteration]:not([data-active]) select {
 When appending iteration N+1, Claude must freeze the previous section:
 
 1. Remove `data-active`, add `hidden` to the previous `<section>`.
+   **`data-active` is the ONLY attribute a freeze removes from the section
+   element.** Every other `data-*` on it — `data-iteration`,
+   `data-iteration-template`, `data-final-report`, `data-reality-check` —
+   survives verbatim. This is not cosmetic bookkeeping: `data-reality-check`
+   is what tells the implement path that this round was already the forced
+   one, and dropping it while rewriting the file re-arms a check that has
+   already been answered.
 2. On every `input`, `textarea`, `select`, `button` inside it: set `disabled`.
 3. On every `textarea`, `input[type="text"]`: set `readonly`.
 4. For bi-state buttons: keep the `aria-pressed`/selected class exactly as

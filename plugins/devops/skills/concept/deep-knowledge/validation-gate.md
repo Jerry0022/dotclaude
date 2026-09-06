@@ -37,7 +37,7 @@ no legitimate matches — do not "keep it as a convenience". The decision panel
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 58 patterns, regardless of template
+Every concept page must contain these 60 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -67,7 +67,7 @@ related one — count the rows, not the highest number):
 | 20 | `submit-implement-btn` | Secondary submit: implement action (real changes) |
 | 21 | `querySelectorAll('input, select, textarea')` inside `collectDecisions` | Generic form catch-all (no hand-listed selectors per field) |
 | 22 | `data-active]` selector inside `collectDecisions` | Catch-all is scoped to the active iteration only |
-| 23 | `status-steps` | Submit-panel progress list (Übermittelt → Verarbeitet → Implementiert) — see templates.md § Submit Progress Steps |
+| 23 | `status-steps` | Submit-panel progress list (Übermittelt → Verarbeitet → Realitäts-Check → Implementiert) — see templates.md § Submit Progress Steps |
 | 24 | `updateStatusSteps` | Wires `_picked_up_at` / `_phase` from `/decisions` polling into the progress list |
 | 25 | `data.claude_ts` inside `pollHeartbeat` | The poller MUST read JSON and assign `claude_ts` (not `server_ts`, not the raw response object). HTTP-200 alone is not enough — the daemon self-pulse keeps `server_ts` fresh forever, so an HTTP-only check leaves the indicator green while Claude's cron is dead. |
 | 26 | `_setCacheHints(` inside `checkClaudeConnection` | The checker MUST wire the per-button cache hint to the disconnected state, so a click made while Claude is offline reads as visibly queued (then auto-delivered by the Offline Submit Queue) rather than lost. Submit buttons stay enabled in every state — the queue, not a disabled button, is what prevents a black hole. |
@@ -100,6 +100,8 @@ related one — count the rows, not the highest number):
 | 51 | `markDockSubmitted` AND `unmarkDockSubmitted` (the latter CALLED from `restorePanelToReady`) — AND NOT `clearDock()` anywhere on the submit path | The dock keeps every character when a round is submitted; only editing is taken away. The round stays LIVE until Claude appends the next section, so its comments are the only on-screen record of what was sent — emptying the dock at submit time meant a detour into an older tab and back came home blank on a round that had not even been answered. The un-mark is not optional: every path that hands control back on a round that did not go through (507, or the safety timeout when Claude stopped answering) re-arms the submit buttons, and a ready panel over a read-only comment surface lets the user re-submit without being able to change anything first. |
 | 52 | `_carryOverTypedWork` — AND NO `removeItem(STORAGE_KEY)` anywhere | Nothing may delete the state blob. TTL expiry and a page-version change prune it key by key (every `text:` entry is kept, the rest is dropped, the original is archived under `-archive`); the panel reset clears panel flags only. Each of those was once a one-line "clean up local state" that deleted every comment on the page — and two of them fire exactly when things are already going wrong (a bridge that answered 507; Claude stuck on a usage limit past `PROCESSED_SAFETY_MS`). |
 | 53 | `section[data-iteration]:not([data-active])` inside `saveState`'s `persistable` — AND a `viewing-frozen` guard on `#feedback-dock` | A frozen round is never persisted. Browsing an old tab is allowed and ends every `showScreen()` in a `saveState()`, and `applyDockFreezeState()` has painted that round's submitted comments into the shared dock — so without both exclusions the old round's answers are written over the live round's unsent ones, silently. ENGINE entry. |
+| 54 | `data-step="reality-check"` in the `#status-steps` list — AND a `_phase === 'reality-check'` branch in `updateStatusSteps` | The implement gate's progress step. The reality check sits between the pickup and the first code write, so without it a minutes-long check reads as a stalled submission and the user re-clicks implement — which is one of the few ways to reach a second forced round. The `<li>` must ship `hidden` and be unhidden ONLY by that branch: pre-arming it would advertise a check on every implement, and the overwhelmingly common case is a branch that has not moved. See templates.md § Submit Progress Steps. ENGINE entry — see § Engine drift on iteration append. |
+| 55 | `iteration-tab[data-reality-check]` (the CSS) — required on any page that already contains a `section[data-iteration][data-reality-check]` | The reality-check round's tab marker. `data-reality-check` on the section is what tells the implement path "this round WAS the check, implement straight through"; the chip styling is how the user understands why an implement click produced another round instead of code. A page carrying the section without the styling still behaves correctly but looks like an unexplained extra iteration. Both the section and its chip carry the attribute — see reality-check.md § The forced round. |
 | 45 | `section[data-design]:not([data-design-active="true"])` | The CSS backstop for "exactly one design and one screen paint". Designs and screens are `position:absolute; inset:0`, so a single inactive section that ships without `hidden` does not sit somewhere wrong — it paints on top of the active one. Measured on a real page: three designs, five screens, all stacked on the same square, headings and mockups interleaved. `hidden` cannot be the only guard because the markup is merely ASKED to emit it. Must be `:has()`-guarded, together with the matching `section[data-screen]:not([data-screen-active="true"])` rule and `body:not([data-view-active="true"]) section[data-view]`. See templates.md § Layout CSS. |
 
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
@@ -177,13 +179,20 @@ to twice since.
 
 Before appending, run the gate over the existing HTML. When any ENGINE entry
 fails — 30b (frozen bar + veil relock), 44 (attachments), 46 / 47
-(design-mode chrome), 48 (scroll boxes), 49–53 (comment durability), or the
-tab-switch patterns — re-sync that whole shared block **verbatim from
-templates.md** BEFORE the new section goes in. Re-sync the block, not the one
-line the grep flagged: these blocks fail in halves, and a page missing one
-literal is a page carrying a stale copy of everything around it. Appending
-first and patching after leaves the freshly appended iteration wired to the
-old engine.
+(design-mode chrome), 48 (scroll boxes), 49–53 (comment durability), 54
+(reality-check progress step), or the tab-switch patterns — re-sync that whole
+shared block **verbatim from templates.md** BEFORE the new section goes in.
+Re-sync the block, not the one line the grep flagged: these blocks fail in
+halves, and a page missing one literal is a page carrying a stale copy of
+everything around it. Appending first and patching after leaves the freshly
+appended iteration wired to the old engine.
+
+**Re-syncing must never touch `section[data-iteration]` attributes.** Entry 54
+lives in the panel skeleton and the status-step JS, both of which the re-sync
+replaces wholesale; `data-reality-check` lives on the iteration sections and
+their chips, which it does not. Keep it that way — a re-sync that rewrote a
+section's attributes would erase the marker that stops an already-answered
+reality check from being asked again.
 
 **49–53 come first, before any other repair, and before the append.** They
 are the only entries whose failure mode is destroying the user's work rather

@@ -419,7 +419,10 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      "slug": "auth-middleware-redesign",
      "server_pid": 12345,
      "cron_id": "ab12cd34",
-     "started_at": "2026-04-12T14:30:00.000Z"
+     "started_at": "2026-04-12T14:30:00.000Z",
+     "baseline_ref": "main",
+     "baseline_sha": "4f2a1c9e77b3",
+     "baseline_captured_at": "2026-04-12T14:30:02.000Z"
    }
    ```
 
@@ -433,6 +436,14 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      session-only cron died with the prior session and cannot be reaped).
    - `started_at` — ISO-8601 UTC. Lets the hook age-out stale state after
      ~24 h even if cleanup did not run.
+   - `baseline_ref` / `baseline_sha` / `baseline_captured_at` — the reality
+     check's anchor: the default branch and the **remote** tip this concept was
+     written against, written by `scripts/concept-drift.js --capture` right
+     after this file is created and advanced after every check. Remote rather
+     than local, so it stays meaningful when the session runs inside a worktree
+     while this file lives at the project root. Absent in a repo with no remote
+     (and on pages generated before the gate existed) — the implement gate then
+     skips silently rather than blocking. See `reality-check.md` § Baseline.
 
    Path: ALWAYS `<project-cwd>/.claude/concept-active.json` (NOT a worktree
    subpath, NOT under `docs/`). The hook reads this exact path and silently

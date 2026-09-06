@@ -719,8 +719,23 @@ not always the project root the state file lives in — both then exited
 prevent. They also tolerate the state file not existing yet (60 s grace), so
 launching them here, before step 4 writes it, is safe.
 
+**Capture the reality-check baseline right after writing the state file:**
+
+```bash
+node "{plugin-root}/scripts/concept-drift.js" --capture \
+     --state "{project-root}/.claude/concept-active.json"
+```
+
+It records the default branch's current remote tip into the state file, which is
+what the implement gate later diffs against (Step 5b step 0). Capture it at
+concept open, not at first implement — a baseline taken minutes before the
+implement click would show no drift at all, which is precisely the failure this
+gate exists to prevent. In a repo with no remote the call is a silent no-op and
+the gate stays disabled for the session; that is intended.
+
 The state file (`port`, `html_path`, `slug`, `server_pid`, `cron_id`,
-`started_at`) is what makes the concept survivable across Claude restarts:
+`started_at`, plus `baseline_ref` / `baseline_sha` / `baseline_captured_at`)
+is what makes the concept survivable across Claude restarts:
 the `ss.concept.resume` SessionStart hook reads it, verifies the bridge
 is still running via `GET /heartbeat`, and tells the new session whether
 to re-arm the polling cron or pick up an unprocessed submission. Without
@@ -869,10 +884,44 @@ never re-run a completed step. The checkpoint records what the previous run
 1. **Summarize** what was selected/rejected/commented
 2. **Do NOT modify code, files, or external systems** — iterate ONLY updates
    the concept page
-3. Proceed to Step 5c (append next iteration with refined options that
+3. **If the submitted section carries `data-reality-check`, advance the
+   baseline** before appending — the user has just answered that drift, and a
+   decision they made is never asked again:
+   ```bash
+   node "{plugin-root}/scripts/concept-drift.js" --capture \
+        --state "{project-root}/.claude/concept-active.json" --sha <section's data-reality-head>
+   ```
+   The commit to pin is the one that round was generated from, and the round
+   carries it itself in `data-reality-head` — so this works from a resumed
+   session that never saw the check run.
+   Skipping this is the one way the gate can feel like a loop: iterate once more
+   after a reality check, click implement, and the same already-answered cards
+   come back. The state file is not code and not an external system — this stays
+   inside the iterate guarantee.
+4. Proceed to Step 5c (append next iteration with refined options that
    reflect the Miteinbeziehen/Verwerfen choices)
 
 **`action: "implement"` ("Mit Feedback implementieren" button):**
+
+0. **Reality check — run this BEFORE writing anything.** The default branch may
+   have moved since this concept was written, which would make the approved plan
+   produce wrong, dead or duplicate code. Full procedure, force classes and
+   resume semantics: `deep-knowledge/reality-check.md`. In short:
+   - **Skip the check entirely** when the just-submitted section carries
+     `data-reality-check` — that round WAS the check, and implementing from it
+     goes straight through. This is what makes a second forced round impossible.
+   - Otherwise `POST /status {"phase":"reality-check","version":$NOTED_VERSION}`
+     (before the fetch, so the longer wait stays legible), then run
+     `node "{plugin-root}/scripts/concept-drift.js" --state "{project-root}/.claude/concept-active.json" --paths "<paths the concept names>"`.
+   - `verdict: "skip"` or `"clear"` → advance the baseline (`--capture --sha
+     <advanceTo>`) and continue with step 1 below. Every unresolvable condition
+     — no remote, offline, force-pushed baseline — lands here: the check never
+     blocks an implement order.
+   - `verdict: "candidates"` → apply the force classes. Nothing that must force
+     → continue with step 1, mentioning the drift in the final report. Something
+     must force → checkpoint `reality-check-forced`, then append ONE
+     reality-check round instead of implementing (Step 5c) and stop. Do NOT post
+     `phase: "implemented"` — no code was written.
 1. **Summarize** what was selected/rejected/commented
 2. **Execute** the decisions as real changes — "Execute" means Claude acts:
    - For plans: implement the approved steps
@@ -1068,6 +1117,15 @@ separate "in-place edit" vs. "new file" distinction anymore.
 For `action: "iterate"` → append a regular iteration section.
 For `action: "implement"` → append a **final-report section** (one-time,
 see § "Final-report append (implement only)" below).
+For `action: "implement"` that Step 5b step 0 diverted → append a **regular
+iteration section carrying `data-reality-check` and
+`data-reality-head="<examined sha>"`** instead, with the
+`{{iteration.reality_tab}}` label on its tab and the `.reality-banner`
+explainer as its first child. Everything else about the append is identical to
+a normal iteration, including the append checklist and the `/reset` ordering.
+**Read the file back and confirm both attributes landed before `/reload`** — a
+marker that silently failed to write re-arms a check the user already answered.
+See `deep-knowledge/reality-check.md` § The forced round.
 For `action: "finalize"` → no new section; rewrite the existing final-report
 HTML in place (linked `[Issue #NNN]` labels for routed items, a shipped note
 when part B ran) and POST `/reload`.
@@ -1224,6 +1282,13 @@ re-launch the waker and carry on. If it is `true`, compare `_version` against
 the one you last processed: **equal means the previous round's `/reset` never
 landed**, not that the user resubmitted. Retry the reset instead of running the
 same payload again.
+
+**One exception, and check it before applying that shortcut: `GET /recovery`.**
+If a `reality-check-*` checkpoint sits on that same `_version`, the previous run
+did not finish and simply fail to reset — it died mid-round, and the reset was
+never due. Resetting there discards the user's implement click with no code, no
+round and no error. Resume from the recorded verdict instead
+(`deep-knowledge/reality-check.md` § Checkpoints and resume).
 
 Skipping it is how a concept silently stops responding after iteration 1: the
 page still shows a green indicator (the pulser keeps `claude_ts` warm), the user
