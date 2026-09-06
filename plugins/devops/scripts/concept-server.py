@@ -2243,10 +2243,45 @@ class ConceptBridgeServer(http.server.ThreadingHTTPServer):
 _registry_port = None  # set in __main__ after a successful bind
 
 
-def _registry_path(port):
-    return os.path.join(
-        os.path.expanduser('~'), '.claude', 'concept-bridges', f'{port}.json'
+def _registry_dir():
+    # Same override concept-port-registry.js honours, so a test suite can point
+    # both the writer and the reader at a throw-away directory. Test servers
+    # are hard-killed (SIGKILL / TerminateProcess), which skips every graceful
+    # removal below — without this, each `npm test` run leaves dozens of
+    # entries in the user's real registry.
+    return os.environ.get('CONCEPT_BRIDGE_REGISTRY_DIR') or os.path.join(
+        os.path.expanduser('~'), '.claude', 'concept-bridges'
     )
+
+
+def _registry_path(port):
+    return os.path.join(_registry_dir(), f'{port}.json')
+
+
+def _install_signal_cleanup():
+    """Drop the registry entry on SIGINT / SIGTERM (and SIGBREAK on Windows).
+
+    Python's default action for SIGTERM ends the process WITHOUT running
+    atexit handlers, so a plain `kill <pid>` left the entry behind. The
+    handler removes it explicitly and then raises SystemExit, which also lets
+    the remaining atexit hooks run. A hard TerminateProcess / SIGKILL cannot be
+    caught — that residue is what `concept-port-registry.js prune` sweeps on
+    the reader side.
+    """
+    import signal
+
+    def _bye(signum, _frame):
+        _remove_registry()
+        sys.exit(0)
+
+    for name in ('SIGINT', 'SIGTERM', 'SIGBREAK'):
+        sig = getattr(signal, name, None)
+        if sig is None:
+            continue
+        try:
+            signal.signal(sig, _bye)
+        except (ValueError, OSError):
+            pass  # not the main thread / unsupported on this platform
 
 
 def _write_registry(port, html_path):
@@ -2415,6 +2450,7 @@ if __name__ == '__main__':
     _registry_port = port
     _write_registry(port, args.html)
     atexit.register(_remove_registry, port)
+    _install_signal_cleanup()
 
     with httpd:
         print(f"Concept bridge server on http://localhost:{port}/")

@@ -18,6 +18,9 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.join(__dirname, "..", "..", "scripts", "concept-server.py");
+// Spawned bridges inherit this: their port-registry entries go to a temp dir,
+// not ~/.claude/concept-bridges — the kills below skip the server's own cleanup.
+process.env.CONCEPT_BRIDGE_REGISTRY_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "concept-bridges-test-"));
 
 function pythonBin() {
   for (const bin of ["python", "python3", "py"]) {

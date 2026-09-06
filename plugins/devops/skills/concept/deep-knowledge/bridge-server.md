@@ -61,8 +61,15 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    task, so `server_pid` in the state file is best-effort — cleanup targets the
    server by **port** via `/shutdown`, never by PID, so the precise PID is not
    required. `concept-server.py` writes its own registry entry on bind and
-   removes it on `/shutdown`; a hard-killed server leaves a stale entry that the
-   picker ignores automatically (it gates on pid liveness, not file presence).
+   removes it on `/shutdown`, on a watchdog reap, at interpreter exit and on
+   SIGINT/SIGTERM. A hard-killed server (TerminateProcess, power loss) still
+   leaves a stale entry; `pick` therefore sweeps the registry first
+   (`pruneStale`): an entry is deleted when its port no longer accepts a TCP
+   connect — a live foreign bridge is never touched, and the recorded pid is
+   deliberately not trusted (Windows reuses pids within days).
+   `node "$REG" prune` runs the same sweep on its own. Both the server and the
+   picker honour `CONCEPT_BRIDGE_REGISTRY_DIR`, which the test suites set to a
+   temp directory so hard-killed test servers cannot silt the real registry.
 
    **Sweep the port BEFORE launching — exactly one instance must own it.**
    A prior instance that did not fully die (its listening socket lingers in
