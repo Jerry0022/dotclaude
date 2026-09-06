@@ -88,8 +88,15 @@ set immediately before each delete/remove/kill — never once at classification
 time and then trust it for the rest of the run.
 
 **Detection:** `git worktree list --porcelain` -> every line starting with
-`branch refs/heads/` is a protected branch. Build this set FIRST and check
-it before EVERY delete operation.
+`branch refs/heads/` is a protected branch, and every `worktree ` line is a
+protected **path** — including the detached ones, which have no `branch` line
+at all and would otherwise look unprotected. Rebuild this set immediately
+before each destructive action, not once at the start.
+
+A worktree registration is not the only evidence of a live session. Also treat
+as protected: any path a running process names in its cwd or argv, and any
+worktree outside `.claude/worktrees/` (`git worktree list` reports those too —
+a path-prefix scan of that directory alone misses them).
 
 **Membership test — exact ref equality only.** A candidate is protected when
 its **full branch name** is an element of the set, nothing else:

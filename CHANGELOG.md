@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.145.1] — 2026-09-06
+
+### Fixed
+
+- **`/setup-cleanup`'s "active sessions are UNTOUCHABLE" rule protected branches but not the sessions themselves.** The rule was written as a list of forbidden commands — `git branch -D`, `git push origin --delete`, checkout — and a list of verbs silently permits every verb it forgot to name. A cross-repo sweep obeyed it exactly: it refused to delete a live session's branch, then removed that session's worktree anyway, because `git worktree remove` was not on the list. The session kept running and lost nothing, but only because the branch it had already committed to survived elsewhere.
+
+  The protected set is now a set of **subjects** — the branch, its worktree directory, the repo it lives in, and any process running inside it — with the commands demoted to examples, and it must be rebuilt immediately before each destructive action rather than once at classification time, because a sweep across many repos outlives the session state it was classified against. `deep-knowledge/git-hygiene.md` gains the general rule and the four operation classes a guard has to cover (ref, worktree, file, and process mutation), plus the reason a partial guard is worse than none: it reads as coverage. Detection was widened in the same pass — a `git worktree list --porcelain` scan that only collects `branch refs/heads/` lines misses **detached** worktrees entirely, and scanning the `.claude/worktrees/` directory misses worktrees registered outside it; both were live blind spots, not hypotheticals.
+
 ## [0.145.0] — 2026-09-06
 
 ### Fixed
