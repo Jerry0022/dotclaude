@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.145.0] — 2026-09-06
+
+### Fixed
+
+- **A completion card rendered while background agents were still working ended on "SHIP oder ÄNDERN?".** A turn hands back the moment the assistant stops writing, but a subagent started with `run_in_background` — or a backgrounded Bash task — keeps going, and its result arrives later as a task-notification. The card was rendered at that moment and had no way to say so: every variant's CTA is written for a finished turn, so the last line of the card asked the user to act on a result that did not exist yet. `ship-successful` was the worst of them — "Alles ERLEDIGT" while an agent was mid-edit — but `ready`, `test`, `analysis` and `fallback` all made the same claim in their own words.
+
+  The fix is a **layer, not a variant**. `pending: [{ name, kind, doing }]` sits on top of whichever variant the turn earned: the body still reports what is true — changes, tests, delivery, repo state — and only the CTA is replaced, with `⏳ NOCH NICHT FERTIG. Agent \`devops:frontend\` arbeitet — ich MELDE mich`, plus a block naming each open item and stating that the card predates its results. A dedicated variant was the obvious move and the wrong one: "still running" is orthogonal to what a card reports, so a `pending` variant would have cost a shipped-but-not-finished turn its delivery track and version footer. The precedent was already in the codebase — `state.deployPending` flips the ship CTA the same way for merged-but-undeployed infra. The CTA **names** what is running rather than counting it (`2 Agenten (\`a\`, \`b\`) arbeiten`, capped at two names plus a `+N` tail), because "1 agent is working" does not tell you whether to wait ten seconds or ten minutes.
+
+  It is enforced, not self-reported. `stop.flow.guard` gained a third gate that reads the open work out of the transcript itself: the launch markers (`Async agent launched successfully` with its `agentId`, `Command running in background with ID:`) open a task, a `<task-notification>` closes it, and a `SendMessage` resume re-opens one — a chronological state machine, so the set at the end is the true state. It reads a 1 MB tail rather than the 200 KB the card gate needs, since an agent launched early in a long turn is exactly the one that would be missed, and short-circuits when no launch marker is present at all. A card that omits `pending` while work is in flight is blocked once and re-requested. `post.flow.completion` injects the instruction the moment a background job starts, so that block stays rare. Internal agent ids never reach the card or the hook reason — only the agent type or the task label.
+
+### Changed
+
+- **The `analysis` CTA no longer opens with a hollow "DONE".** `## 📋 DONE — LIES dir durch` was the card for a question answered, where nothing was completed and nothing is on disk; the status word carried no information and the actual call to action was already the second half. It is now `## 📋 LIES dir durch — FRAGEN?` (`## 📋 READ through — QUESTIONS?`), which also states what the variant is for: a question-and-answer round the user can continue.
+
 ## [0.144.0] — 2026-09-06
 
 ### Changed
