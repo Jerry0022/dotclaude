@@ -37,7 +37,7 @@ no legitimate matches — do not "keep it as a convenience". The decision panel
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 63 patterns, regardless of template
+Every concept page must contain these 66 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -87,7 +87,7 @@ related one — count the rows, not the highest number):
 | 38 | `addEventListener('click', submitFinalize)` — grep the WIRING, not the symbol | The handler behind `#wizard-execute`. POSTs the single `action: "finalize"` payload (`issues` + `ship` + `disposition` + `submission_id`) and requires the bridge's durable ack. A defined-but-unwired handler leaves the execute button visible and completely inert — no console error, no network request — which is exactly the silent class this gate exists for. |
 | 38b | `submission_id` inside `submitFinalize` | Client-side replay guard. `POST /decisions` has no version guard, so a payload the bridge fsynced before the response was lost sits in the offline queue too; without the id, `retryPendingSubmission()` re-delivers it and the close-out creates its issues and runs its release a second time. |
 | 39 | `installScrollSpy` called from **inside** `buildSectionNav` | Scroll-position marker for the panel TOC. `buildSectionNav()` replaces the nav DOM on every iteration switch, so the spy MUST be rebound as its last step. Binding it once from `DOMContentLoaded` instead leaves the highlight dead on every tab except the initially loaded one. See templates.md § Section Navigation. |
-| 40 | `revealNavItem` | Auto-scrolls the TOC's own scroll box so the active entry stays visible in long lists. Must scroll only `nearestScrollBox(item.parentElement)` — never `scrollIntoView()` on the item, which drags the content column along and fights the user's scrolling. |
+| 40 | `revealNavItem` — AND `getClientRects().length === 0` as its first guard | Auto-scrolls the TOC's own scroll box so the active entry stays visible in long lists. Must scroll only `nearestScrollBox(item.parentElement)` — never `scrollIntoView()` on the item, which drags the content column along and fights the user's scrolling. The zero-rect guard returns early for an entry inside a closed `<details>` (folded group or archive): measuring its (0,0) rect would drag the scroll box to the top on every frame. |
 | 41 | `data-attachable` | The ONE marker `initCommentAttachments()` matches to decide which fields get an attachment bar. MUST NOT be `data-comment` — several fields carry `data-comment` without being attachable (plain text-only comments), and several carry both (annotation answers, decision notes); matching on `data-comment` wires a bar onto every one of those a second time or onto fields that were never meant to take a file. See templates.md § Attachments. |
 | 42 | `initCommentAttachments` | Wires the 📎 button, drag & drop, and Ctrl/Cmd+V paste onto every `textarea[data-attachable]`. Missing → attachment bars render (if emitted inline) but do nothing. |
 | 43 | `_guardedSetItem` | Every `localStorage.setItem` call site (state persistence + both `-pending` submit-queue writes) MUST go through this wrapper, never a bare `localStorage.setItem`. A `QuotaExceededError` thrown out of an unguarded call kills ALL further persistence for the rest of the page with nothing telling the user — see templates.md § State Persistence. |
@@ -108,9 +108,19 @@ related one — count the rows, not the highest number):
 | 57 | `submit-menu-btn` AND `submit-menu` (with `role="menu"`) — and `submit-implement-btn` INSIDE it | The split button. The implement action lives one level deeper behind the ▾ caret (`aria-haspopup="menu"`, `aria-expanded` mirrors the menu's `[hidden]`; Escape / outside click close it). The misclick barrier is colour + border + the extra click, not distance — no `.submit-gap` in `#panel-ready`, which is what keeps the foot ≤120px (`max-height: 120px` on `.panel-cta`). The two hint paragraphs are gone (they are `title` tooltips now); `[data-cache-hint]` stays, twice, still toggled by `_setCacheHints`. |
 | 58 | `panel-status` (the element) AND `renderPanelStatus` (the function, CALLED from `checkClaudeConnection`, `_setDraftPhase`, `submitWithAction`, `restorePanelToReady` and `showIteration`) | The pinned status line: one line, six mutually exclusive states on `data-status` (saved / saving / connecting / local-only / submitted / frozen), composed from the heartbeat, the draft mirror (`_draftPhase`) and the panel state. `checkClaudeConnection` MUST write `#connection-status[data-state]` and call the renderer BEFORE its `#panel-submitted` early return — the old pill went stale the moment the submitted panel came up. "Nur lokal gespeichert" is the one state with a background: it is the only line that means "your work is not delivered". |
 
+| 59 | `buildIterationTree` (CALLED from `buildSectionNav`) AND `insertAdjacentElement('afterend', nav)` inside `buildSectionNav` | The Kompass tree. `#section-nav` is moved directly after the `aria-selected` chip on every rebuild, so the selected round is the one open node; every other chip gets a generated `.iteration-tab-summary`; from `NAV_ARCHIVE_FROM` (4) previous rounds upward the chips before the live one fold into `details.iteration-archive` (auto-open on a frozen tab). The chips stay plain string-appended `<button class="iteration-tab">`s — a page with hand-written summaries, archive or groups in its HTML is re-derived on load, a page whose JS lacks this is the old flat column. ENGINE entry — see § Engine drift on iteration append. See templates.md § Section Navigation. |
+| 60 | `NAV_GROUP_OVER_ENTRIES` AND `nav-group` AND `dataset.navGroup` inside `buildSectionNav` | TOC grouping, and its two thresholds: `details.nav-group` renders only when ≥2 kinds are present AND the round has >12 entries; kinds derive from the existing `eval-{id}` contract (variant vs. context) plus the optional `data-nav-group="…"` override on the section. Grouping from any attribute that does not exist in the markup, or unconditional grouping, is a failure. The one-open `toggle` listener and the summary-click "manual close" stamp MUST be bound inside `buildSectionNav` (the nav DOM is rebuilt on every tab switch), and the scroll spy (`openNavGroupFor`) may OPEN a group but never close one. |
+| 61 | `data-here-section` (the element) AND `openNavGroupFor` (CALLED from `setActiveNavItem`) | The pinned "you are here" breadcrumb is written by the scroll spy (`setActiveNavItem`), and the same call opens the group that holds the active entry, honouring a deliberate close for `NAV_MANUAL_CLOSE_GRACE_MS` (4 s). Missing → the head never names the section under the reading line and a folded group hides the active entry. |
+
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
 at the post-generation gate. See § Generic Form Collection below for the
 required pattern.
+
+**Failure for 59 / 60 / 61:** re-sync § Section Navigation (CSS + JS) and
+§ Iteration Tabs → Tab Bar CSS verbatim from templates.md. Check the
+negatives too: any `.iteration-tab-summary`, `.iteration-archive` or
+`.nav-group` literal in the page's MARKUP (not its JS) means a hand-built
+tree that will be thrown away on load — remove it and let the JS derive it.
 
 **Failure for 56 / 57 / 58:** these three are one anatomy — a page with the
 old scrolling aside and the stacked buttons has the CTA below the fold on
@@ -193,8 +203,8 @@ to twice since.
 Before appending, run the gate over the existing HTML. When any ENGINE entry
 fails — 30b (frozen bar + veil relock), 44 (attachments), 46 / 47
 (design-mode chrome), 48 (scroll boxes), 49–53 (comment durability), 54
-(reality-check progress step), 56 (panel anatomy), or the tab-switch
-patterns — re-sync that whole
+(reality-check progress step), 56 (panel anatomy), 59 (Kompass tree), or
+the tab-switch patterns — re-sync that whole
 shared block **verbatim from templates.md** BEFORE the new section goes in.
 Re-sync the block, not the one line the grep flagged: these blocks fail in
 halves, and a page missing one literal is a page carrying a stale copy of

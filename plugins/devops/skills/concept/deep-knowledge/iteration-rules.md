@@ -101,6 +101,37 @@ selections, read-only comments).
 
 See `templates.md` § Iteration Tabs for the reference HTML/CSS/JS.
 
+## The panel tree ("Kompass")
+
+The bar and the section TOC are ONE tree at runtime, built by
+`buildSectionNav()` (templates.md § Section Navigation) from the flat chip
+list and the sections — never by hand:
+
+- **Every chip is a node header.** The selected chip's body is `#section-nav`
+  (moved directly after it). There is exactly one open node and no code path
+  closes it — switching tabs moves it. On a frozen tab the TOC therefore
+  lists that round's sections, with the submitted bi-states next to them.
+- **Other chips carry a generated summary** (`.iteration-tab-summary`,
+  "14 Einträge · 3 verworfen") computed from that round's
+  `section[id][data-nav-label]` and its `eval-*` radios. Reality-check and
+  final-report chips keep their glyph labels and get no summary. The chip's
+  original label is stamped on `data-tab-label` first — the frozen bar, the
+  "you are here" head and the status line read it from there.
+- **Archive from 4 previous rounds.** When ≥4 chips precede the live one they
+  are wrapped in `<details class="iteration-archive"><summary>N vorherige
+  Runden</summary>…</details>`; the archive auto-opens whenever a frozen chip
+  is selected and stays closed on the live round. Below the threshold nothing
+  is wrapped — the smallest case (one round) is one open node.
+- **TOC groups** (`details.nav-group`) appear only when the round has ≥2
+  kinds (variant = has an `eval-{id}` group, context = everything else, or
+  a `data-nav-group="…"` override on the section) AND more than 12 entries.
+  One-open applies among the groups only; the scroll spy opens the group of
+  the entry under the reading line and never closes one; a group the user
+  closed stays closed for 4 s and until the active entry changes.
+
+The append checklist above is unchanged by all of this: the page author
+appends one chip string and one section, and the tree is re-derived.
+
 ## Freezing Design Iterations
 
 A frozen `design` iteration (`data-iteration-template="design"`, legacy
@@ -231,6 +262,12 @@ When appending a new iteration section (Step 5c of `SKILL.md`), verify
 6. ☐ Before overwriting the file, confirm the bridge holds the round's
       comments: `GET /draft?slug={slug}` must list them under `recovered`.
       That is the copy that survives if the rewrite goes wrong.
+7. ☐ The new chip is ONE plain `<button class="iteration-tab" role="tab"
+      data-iteration="N+1" aria-selected="true">` string-appended at the end
+      of `nav.iteration-tabs` (previous chip → `aria-selected="false"`).
+      Nothing else changes in the bar: no `.iteration-tab-summary`, no
+      `.iteration-archive`, no `.nav-group` — the Kompass tree is rebuilt by
+      `buildSectionNav()` on load (see § The panel tree below).
 
 ## Procedure on every iteration — coverage gate (Step 5c, Step 2.5)
 

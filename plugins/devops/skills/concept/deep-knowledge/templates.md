@@ -92,6 +92,11 @@ must see their own language. The locale hint is authoritative.
 | `panel.submit_menu`            | More submit options            | Weitere Absende-Optionen |
 | `panel.submit_menu_hint`       | The primary button never writes code. | Kein Code beim Primär-Button. |
 | `panel.here_back`              | back to round                  | zur Runde |
+| `panel.archive_summary`        | previous rounds                | vorherige Runden |
+| `nav.summary_entries`          | entries                        | Einträge |
+| `nav.summary_discarded`        | discarded                      | verworfen |
+| `nav.group_context`            | Context                        | Kontext |
+| `nav.group_variants`           | Variants                       | Varianten |
 | `variant.include`              | Include                        | Miteinbeziehen |
 | `variant.discard`              | Discard                        | Verwerfen |
 | `decision.comment_label`       | Note / override (optional)     | Notiz / Override (optional) |
@@ -288,13 +293,15 @@ the `[ui-locale: ...]` hint produced.
           -->
         </nav>
 
-        <h3>{{panel.heading}}</h3>
-
         <!-- Section TOC — auto-populated from EVERY <section id="..."
              data-nav-label="..."> inside the active iteration, not just variants.
              Sections that carry a bi-state radio group (eval-{id}) display their
              current state label; plain sections (Ist-Zustand, Context, Design-Notes,
-             etc.) just show the label and anchor-scroll on click. -->
+             etc.) just show the label and anchor-scroll on click.
+             It is declared here but LIVES inside the tab bar at runtime:
+             buildSectionNav() moves it directly after the aria-selected chip,
+             so the selected round is the one open node of the tree (Kompass,
+             § Section Navigation). -->
         <nav class="section-nav" id="section-nav" aria-label="{{nav.sections}}">
           <!-- auto-populated -->
         </nav>
@@ -5477,14 +5484,39 @@ stays visible even in a long list. Without it, a 20-entry TOC forces the user
 to hunt for their own position on every scroll.
 
 ```css
+/* The TOC is the selected chip's BODY in the Kompass tree (buildSectionNav
+   moves #section-nav directly after the aria-selected .iteration-tab), so it
+   reads as a nested level: indented, with a thin accent rail. */
 .section-nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-bottom: 1.5rem;
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: 1rem;
+  margin: 2px 0 8px 0.5rem;
+  padding-left: 0.5rem;
+  border-left: 2px solid color-mix(in srgb, var(--accent-color, #58a6ff) 45%, transparent);
 }
+/* TOC groups — rendered only when ≥2 kinds meet AND the round has >12
+   entries (buildSectionNav); one open at a time. */
+.nav-group { margin: 2px 0; }
+.nav-group > summary {
+  list-style: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.74rem; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-secondary, #8b949e);
+  cursor: pointer;
+}
+.nav-group > summary::-webkit-details-marker { display: none; }
+.nav-group > summary::before { content: "▸"; margin-right: 0.35rem; }
+.nav-group[open] > summary::before { content: "▾"; }
+.nav-group > summary:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
+.nav-group-name { flex: 1 1 auto; }
+.nav-group-count { font-weight: 400; opacity: 0.8; }
+.nav-group > .section-nav-item { margin-left: 0.5rem; }
 .section-nav-item {
   display: flex;
   align-items: center;
@@ -5544,15 +5576,128 @@ Sections without `data-nav-label` are skipped by the TOC auto-populator.
 let scrollSpyEntries = [];
 let scrollSpyFrame = 0;
 
+// "Kompass" tree tunables — decided on the concept page, not tuned by feel:
+// fold previous rounds only from 4 upward; group the TOC only when ≥2 kinds
+// are present AND the round has >12 entries; honour a deliberate group close
+// for 4 s before the scroll spy may open that group again.
+const NAV_ARCHIVE_FROM = 4;
+const NAV_GROUP_MIN_KINDS = 2;
+const NAV_GROUP_OVER_ENTRIES = 12;
+const NAV_MANUAL_CLOSE_GRACE_MS = 4000;
+const _navManualClosedAt = new WeakMap();   // details.nav-group → Date.now() of a user close
+
+// The label a chip was appended with, stamped on data-tab-label the first
+// time the tree is built — BEFORE any generated summary line is added to the
+// chip, so showIteration / renderPanelStatus / the frozen bar never read the
+// summary as part of the name.
+function iterationTabLabel(tab) {
+  if (!tab.dataset.tabLabel) {
+    const stale = tab.querySelector('.iteration-tab-summary');
+    if (stale) stale.remove();
+    tab.dataset.tabLabel = tab.textContent.trim();
+  }
+  return tab.dataset.tabLabel;
+}
+
+// ONE tree: every .iteration-tab is a node header. Non-selected chips get a
+// generated one-line summary ("14 Einträge · 3 verworfen", from that round's
+// section[id][data-nav-label] and its eval-* radios; reality-check and
+// final-report chips keep their glyph labels). From NAV_ARCHIVE_FROM previous
+// rounds upward, the chips BEFORE the live one fold into
+// <details class="iteration-archive">, which auto-opens whenever the selected
+// chip is inside it; below the threshold nothing is wrapped. The chips
+// themselves are never recreated — same <button>, same click listeners, only
+// moved — which is why the append checklist can keep string-appending them
+// at the end of nav.iteration-tabs and this rebuild folds them on load.
+function buildIterationTree() {
+  const bar = document.querySelector('.iteration-tabs');
+  if (!bar) return;
+  // Unwrap a previous archive so the fold is recomputed from the chips alone.
+  bar.querySelectorAll('details.iteration-archive').forEach(archive => {
+    archive.querySelectorAll(':scope > .iteration-tab').forEach(tab => bar.insertBefore(tab, archive));
+    archive.remove();
+  });
+  const tabs = [...bar.querySelectorAll('.iteration-tab')];
+  const live = document.querySelector('section[data-iteration][data-active]');
+  const liveN = live ? String(live.dataset.iteration) : null;
+  tabs.forEach(tab => {
+    iterationTabLabel(tab);
+    const old = tab.querySelector('.iteration-tab-summary');
+    if (old) old.remove();
+    if (tab.getAttribute('aria-selected') === 'true') return;
+    if (tab.hasAttribute('data-reality-check') || tab.hasAttribute('data-final-report')) return;
+    const sec = document.querySelector('section[data-iteration="' + tab.dataset.iteration + '"]');
+    if (!sec) return;
+    const entries = sec.querySelectorAll('section[id][data-nav-label]');
+    let discarded = 0;
+    entries.forEach(s => {
+      const checked = s.querySelector('input[name="eval-' + s.id + '"]:checked');
+      if (checked && checked.value === 'discard') discarded++;
+    });
+    const summary = document.createElement('span');
+    summary.className = 'iteration-tab-summary';
+    summary.textContent = entries.length + ' {{nav.summary_entries}}'
+      + (discarded ? ' · ' + discarded + ' {{nav.summary_discarded}}' : '');
+    tab.appendChild(summary);
+  });
+  const liveIdx = tabs.findIndex(t => String(t.dataset.iteration) === liveN);
+  const previous = liveIdx > 0 ? tabs.slice(0, liveIdx) : [];
+  if (previous.length >= NAV_ARCHIVE_FROM) {
+    const archive = document.createElement('details');
+    archive.className = 'iteration-archive';
+    const summary = document.createElement('summary');
+    summary.textContent = previous.length + ' {{panel.archive_summary}}';
+    archive.appendChild(summary);
+    bar.insertBefore(archive, previous[0]);
+    previous.forEach(tab => archive.appendChild(tab));
+    archive.open = previous.some(t => t.getAttribute('aria-selected') === 'true');
+  }
+}
+
 function buildSectionNav() {
+  buildIterationTree();
   const nav = document.getElementById('section-nav');
   if (!nav) return;
   // Use :not([hidden]) so the nav reflects the VISIBLE iteration (may be
   // a frozen tab the user is reviewing), not the live/latest one.
   const activeIteration = document.querySelector('section[data-iteration]:not([hidden])');
   if (!activeIteration) return;
-  const sections = activeIteration.querySelectorAll('section[id][data-nav-label]');
+  const sections = [...activeIteration.querySelectorAll('section[id][data-nav-label]')];
   nav.innerHTML = '';
+  // TOC kinds come from the EXISTING contract — a section with an eval-{id}
+  // radio group is a variant, anything else is context — plus an optional
+  // data-nav-group="…" override on the section (its value is the group
+  // name). Grouping is the exception, not the rule: only when ≥2 kinds meet
+  // AND the round has more than NAV_GROUP_OVER_ENTRIES entries; otherwise the
+  // list stays flat, exactly as before.
+  const kindOf = sec => sec.dataset.navGroup
+    || (sec.querySelector(`input[name="eval-${sec.id}"]`) ? 'variants' : 'context');
+  const kindLabel = kind => kind === 'variants' ? '{{nav.group_variants}}'
+                          : kind === 'context'  ? '{{nav.group_context}}'
+                          : kind;
+  const kinds = [...new Set(sections.map(kindOf))];
+  const grouped = kinds.length >= NAV_GROUP_MIN_KINDS && sections.length > NAV_GROUP_OVER_ENTRIES;
+  const hosts = {};
+  if (grouped) {
+    kinds.forEach(kind => {
+      const group = document.createElement('details');
+      group.className = 'nav-group';
+      group.dataset.navGroup = kind;
+      const summary = document.createElement('summary');
+      summary.className = 'nav-group-summary';
+      const name = document.createElement('span');
+      name.className = 'nav-group-name';
+      name.textContent = kindLabel(kind);
+      const count = document.createElement('span');
+      count.className = 'nav-group-count';
+      count.textContent = String(sections.filter(s => kindOf(s) === kind).length);
+      summary.appendChild(name);
+      summary.appendChild(count);
+      group.appendChild(summary);
+      nav.appendChild(group);
+      hosts[kind] = group;
+    });
+  }
   sections.forEach(sec => {
     const id = sec.id;
     const label = sec.dataset.navLabel;
@@ -5571,10 +5716,53 @@ function buildSectionNav() {
       stateEl.className = 'section-nav-state';
       link.appendChild(stateEl);
     }
-    nav.appendChild(link);
+    (grouped ? hosts[kindOf(sec)] : nav).appendChild(link);
   });
+  // One-open among the groups, bound HERE because this DOM is rebuilt on
+  // every tab switch — a listener bound once at load would sit on detached
+  // nodes. `toggle` runs the accordion (opening one closes the others,
+  // whoever opened it: a click or the scroll spy); the summary click records
+  // a DELIBERATE close, which openNavGroupFor honours for
+  // NAV_MANUAL_CLOSE_GRACE_MS instead of reopening the group next frame.
+  nav.querySelectorAll('details.nav-group').forEach(group => {
+    group.addEventListener('toggle', () => {
+      if (!group.open) return;
+      nav.querySelectorAll('details.nav-group').forEach(other => {
+        if (other !== group && other.open) other.open = false;
+      });
+    });
+    group.querySelector('summary').addEventListener('click', () => {
+      if (group.open) _navManualClosedAt.set(group, Date.now());
+      else _navManualClosedAt.delete(group);
+    });
+  });
+  // The open node IS the selected round: the nav moves directly after the
+  // aria-selected chip (inside the archive when that chip is folded). There
+  // is no code path that closes it — switching tabs moves it.
+  const selectedTab = document.querySelector('.iteration-tab[aria-selected="true"]');
+  if (selectedTab) selectedTab.insertAdjacentElement('afterend', nav);
+  const hereSection = document.querySelector('[data-here-section]');
+  if (hereSection) hereSection.hidden = !sections.length;
   updateSectionNavState();
   installScrollSpy();   // nav DOM was replaced → rebind the spy
+  // The spy opened the active entry's group; a page whose spy found nothing
+  // must still show one open group — the tree never collapses to nothing.
+  if (grouped && !nav.querySelector('details.nav-group[open]')) {
+    nav.querySelector('details.nav-group').open = true;
+  }
+}
+
+// The scroll spy OPENS the group that holds the active entry and never
+// closes anything (the accordion listener above does the closing). A group
+// the user closed on purpose stays closed for NAV_MANUAL_CLOSE_GRACE_MS —
+// and, since setActiveNavItem returns early for an unchanged entry, until
+// the active entry actually changes.
+function openNavGroupFor(item) {
+  const group = item.closest('details.nav-group');
+  if (!group || group.open) return;
+  const closedAt = _navManualClosedAt.get(group) || 0;
+  if (Date.now() - closedAt < NAV_MANUAL_CLOSE_GRACE_MS) return;
+  group.open = true;
 }
 
 function updateSectionNavState() {
@@ -5618,6 +5806,14 @@ function setActiveNavItem(item) {
   });
   item.classList.add('is-active');
   item.setAttribute('aria-current', 'true');
+  // "You are here" breadcrumb in the pinned head (§ Common Structure).
+  const here = document.querySelector('[data-here-section]');
+  if (here) {
+    const label = item.querySelector('.section-nav-label');
+    here.textContent = '› ' + (label ? label.textContent : '');
+    here.hidden = false;
+  }
+  openNavGroupFor(item);
   revealNavItem(item);
 }
 
@@ -5635,6 +5831,10 @@ function nearestScrollBox(el) {
 // the panel's own scroll box — never the content column — and only when the
 // entry is genuinely out of view, so it can't fight the user's scrolling.
 function revealNavItem(item) {
+  // An entry inside a closed <details> (a folded group, or the archive) has
+  // no box at all; measuring its (0,0) rect would drag the scroll box to the
+  // top on every frame. Nothing to reveal → do nothing.
+  if (item.getClientRects().length === 0) return;
   const box = nearestScrollBox(item.parentElement);
   if (!box) return;
   const boxRect = box.getBoundingClientRect();
@@ -5696,6 +5896,21 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
 - Never call `installScrollSpy()` on its own — `buildSectionNav()` calls it as
   its last step. Binding it independently is how the highlight goes stale
   after a tab switch.
+- **The tree is JS-built, the chips are not.** `buildSectionNav()` moves
+  `#section-nav` after the selected chip, adds the summary lines and folds
+  the archive on every rebuild; the page author only ever appends a plain
+  `<button class="iteration-tab" …>` at the end of `nav.iteration-tabs`
+  (iteration-rules.md § Iteration append checklist). Never hand-write an
+  `.iteration-tab-summary`, an `.iteration-archive` or a `.nav-group` into
+  the HTML — they are recomputed from the sections on load.
+- **Grouping is opt-out by size, opt-in by attribute.** A round with ≤12
+  entries, or with only one kind, renders the flat list. To place a section
+  in a group of its own (or to rename its kind) add `data-nav-group="…"`
+  on the section — the value is the group name; `variants` and `context`
+  map to the locale labels.
+- One-open applies among `.nav-group` only — never between the archive,
+  the selected chip and the TOC, which are one tree with exactly one open
+  node.
 
 ## Decision Panel State CSS
 
@@ -9105,9 +9320,18 @@ curl -s -X POST http://localhost:{port}/heartbeat
 
 Iterations of a concept page are appended as `<section data-iteration="N">`
 blocks inside the same HTML file. The tab bar lives **at the top of the
-right-side decision panel** (a compact vertical chip list, rendered above
-the section TOC and submit block). All three templates support iterations —
-design and free include them identically.
+right-side decision panel** (a compact vertical chip list inside the panel's
+scroll box, above the pinned status line and submit foot). All three
+templates support iterations — design and free include them identically.
+
+**At runtime the bar is one tree ("Kompass", § Section Navigation):** every
+chip is a node header, the selected chip's body is `#section-nav` (moved
+there by `buildSectionNav()`), every other chip carries a generated
+`.iteration-tab-summary` line, and from 4 previous rounds upward the chips
+before the live one are folded into `<details class="iteration-archive">`
+(auto-open while a frozen chip is selected). None of that is written into
+the HTML — the markup below stays a flat list of `<button class="iteration-tab">`
+chips, appended by string edit, and the JS folds it on every load.
 
 ### Tab Bar HTML
 
@@ -9152,6 +9376,11 @@ design and free include them identically.
 Rules:
 - Exactly one section carries `data-active`. The matching tab has
   `aria-selected="true"`.
+- A new chip is appended as a plain `<button class="iteration-tab">` at the
+  END of `nav.iteration-tabs` — never inside an `.iteration-archive`, never
+  with a hand-written `.iteration-tab-summary`. The tree (archive fold,
+  summaries, the moved `#section-nav`) is rebuilt by `buildSectionNav()` on
+  load and on every switch; markup that pre-empts it is simply re-derived.
 - Non-active sections get the `hidden` attribute AND are frozen
   (see "Freezing Past Iterations").
 - Tabs stay clickable — switching tab reveals the chosen section and
@@ -9208,8 +9437,37 @@ a card without that evidence.
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--border-color, #30363d);
 }
+/* Generated summary line under a non-selected chip (buildIterationTree):
+   "14 Einträge · 3 verworfen". Block-level so the chip reads as a node
+   header with a subtitle, never as a longer label. */
+.iteration-tab-summary {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-secondary, #8b949e);
+}
+/* Archive fold — wraps the chips before the live one from 4 rounds upward.
+   Same chip styling inside; the summary row is the only new surface. */
+.iteration-archive { display: flex; flex-direction: column; gap: 4px; }
+.iteration-archive > summary {
+  list-style: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #8b949e);
+  cursor: pointer;
+}
+.iteration-archive > summary::-webkit-details-marker { display: none; }
+.iteration-archive > summary::before { content: "▸ "; }
+.iteration-archive[open] > summary::before { content: "▾ "; }
+.iteration-archive > summary:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
 .iteration-tab {
   flex: 0 0 auto;
+  display: block;
+  width: 100%;
   text-align: left;
   padding: 6px 10px;
   border: 1px solid var(--border-color, #30363d);
@@ -9333,7 +9591,7 @@ function showIteration(n) {
     frozenBar.hidden = !!isLive;
     const title = frozenBar.querySelector('[data-frozen-bar-title]');
     const tab = document.querySelector('.iteration-tab[data-iteration="' + n + '"]');
-    if (title) title.textContent = tab ? tab.textContent.trim() : String(n);
+    if (title) title.textContent = tab ? (tab.dataset.tabLabel || tab.textContent.trim()) : String(n);
   }
   if (isLive) hideContentDimmer(); else lockFrozenView();
   // Pinned "you are here" head: the selected tab's label, and on a frozen

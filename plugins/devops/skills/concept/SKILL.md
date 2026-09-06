@@ -320,7 +320,14 @@ column of four parts; only part 2 scrolls, parts 1, 3 and 4 are pinned):**
    (`.section-nav`) — auto-populated from EVERY `<section id="…"
    data-nav-label="…">` inside the active iteration. Not limited to
    variants: Ist-Zustand, context blocks, design notes, mockups — anything
-   with a nav label gets a scroll anchor here.
+   with a nav label gets a scroll anchor here. At runtime the two are ONE
+   tree ("Kompass"): `buildSectionNav()` moves `#section-nav` under the
+   selected chip, writes a summary line ("14 Einträge · 3 verworfen") on
+   every other chip, folds the chips before the live one into an archive
+   from 4 previous rounds upward, and groups the TOC (Kontext / Varianten
+   or `data-nav-group`) only when ≥2 kinds meet AND the round has >12
+   entries. The HTML stays a flat chip list — see
+   `deep-knowledge/iteration-rules.md` § The panel tree.
 3. **Status line** (`.panel-status`) — ONE line, one glyph, six mutually
    exclusive states (saved / saving / connecting / local-only / submitted /
    frozen); the progress steps expand under it after a submit. See
