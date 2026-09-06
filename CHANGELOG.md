@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.146.0] — 2026-09-06
+
+### Added
+
+- **`/concept` now re-checks an approved plan against the default branch before implementing it.** A concept session lives for hours or days while `main` keeps moving — other sessions, other PRs, other ships. Clicking "Mit Feedback implementieren" implemented the plan as approved, so a renamed file, a changed contract or work somebody had already done reached the diff unremarked and was found in review, if at all. The implement path now runs a reality check before writing a single line: on material drift it does not implement, it appends **one** extra round — mechanically an ordinary iteration, marked `data-reality-check`, with its own "Realitäts-Check" tab and an explainer naming the commits that landed — carrying every decision the drift raises. Submitting that round with implement writes the code.
+
+  The hard requirement was that this must never become a trap, so it has **two independent guards**. The marker on the section short-circuits the check, which is exact: implementing from a reality-check round always implements. And the baseline advances on *every* submission of such a round — iterate as well as implement — so the same drift cannot force a second one even if the marker were lost to a bad rewrite, a legacy page or a resumed session working from a page it did not write. Both would have to fail on the same round to produce two forced rounds in a row. An ordinary iterate round re-arms the check, which is the user opting back in rather than a deadlock: the next implement is measured against the advanced baseline, so only drift that landed since can raise it again.
+
+  The split between code and judgment is deliberate. `scripts/concept-drift.js` produces facts only — the commits, the changed paths (a rename contributes *both* sides, which is the drift class that matters most), and their intersection with the paths the concept names — while the force classes stay with the model: a file deleted or renamed, a contract changed, the functionality already built, a user decision that lost its basis. Version bumps, CHANGELOG, docs, tests-only changes and formatting never force a round, and no drift card may be shown without the SHA and path it comes from. **Every unresolvable condition fails safe** — no repo, no remote, a default branch that is not called `main`, a detached HEAD, an offline or slow fetch, a shallow clone, a baseline erased by a force-push — and lets the implement through; a network hiccup must never block an implement order. The check announces itself as its own progress step before the fetch, so the added wait cannot read as a stalled submission, and it never reports `phase: "implemented"` on that path — a panel showing "Implementierung abgeschlossen" over an empty diff would be worse than the problem being solved.
+
 ## [0.145.1] — 2026-09-06
 
 ### Fixed

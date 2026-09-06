@@ -13,6 +13,7 @@ selections, read-only comments).
 | First generation | Write the file with `<section data-iteration="1" data-active>` and one tab "Iteration 1" | Tab 1 active |
 | Feedback loop iteration (Step 5c) | Append `<section data-iteration="N+1" data-active>` to the same file, remove `data-active` from the previous section, freeze it, add a new tab and make it active | New tab "Iteration N+1" auto-active, old tab selectable and read-only |
 | Fundamental rework ("nochmal neu") | Same as a feedback iteration — just another tab. The full history stays visible. | Another tab appended |
+| Implement submission diverted by the reality check (Step 5b step 0) | Append `<section data-iteration="N+1" data-reality-check data-reality-head="{sha}" data-active>` — an ordinary iteration in every mechanical respect, with the `.reality-banner` explainer first and one flat decision card per drift item. Tab label `{{iteration.reality_tab}}` ("Realitäts-Check" / "Reality check") with `data-reality-check` on the chip, NEVER "Iteration N+1". Freeze the previous section as usual. NO `phase: "implemented"` — no code was written. | New tab "Realitäts-Check" auto-active, both submit buttons live. Implementing from it skips the check and writes code, so two forced rounds can never follow each other. See `reality-check.md` |
 | Implementation finished (Step 5b implement branch) | Append `<section data-iteration="N+1" data-final-report data-active>` with the Abschlussbericht structure. Add a new tab carrying `data-final-report` and label `{{iteration.final_tab}}` ("Abschlussbericht" / "Final report") — NEVER "Iteration N+1". Freeze the previous section the same way. | New tab "Abschlussbericht" auto-active. Right panel switches to `panel-final-report` (no iterate/implement buttons). At most one final-report section per concept session. |
 | Close-out from final report (`action: "finalize"`) | Do NOT append a new section. Rewrite the existing final-report HTML in place: for routed issues add `disabled` to the `[data-open-questions]` checkboxes and append an `.oq-issue-link` `<a>` with the GitHub issue URL; for a successful ship add the version note to the Zusammenfassung. Keep `data-active` on the final-report section. | Same final-report tab stays active; routed items become read-only audit entries. `refreshFinalizeWizard()` drops the wizard's issues step once every checkbox in the section is disabled. |
 
@@ -21,6 +22,12 @@ selections, read-only comments).
   append a section to the existing file and POST `/reload` (see Step 5c).
 - The active iteration is the only one that accepts input. Submit sends
   decisions for the active iteration only.
+- **A freeze removes `data-active` from the section and nothing else.** Every
+  other `data-*` — `data-iteration`, `data-iteration-template`,
+  `data-final-report`, `data-reality-check` — survives verbatim into the frozen
+  round. `data-reality-check` in particular is read back by the implement gate
+  to decide that this round already WAS the check; dropping it during a rewrite
+  re-arms a question the user has already answered.
 - Freeze previous iterations visually: disabled tri-state buttons showing
   which state the user submitted, read-only comment fields with the text
   the user entered. Users can click back to earlier tabs to review their
