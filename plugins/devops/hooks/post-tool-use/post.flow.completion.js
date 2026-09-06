@@ -37,7 +37,7 @@ const path = require('path');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { getLocale, t } = require('../lib/locale');
 const {
-  AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER, labelFor,
+  AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER, labelFor, isConceptInfra,
 } = require('../lib/pending-tasks');
 const {
   classifyProfile,
@@ -116,8 +116,13 @@ const DESKTOP_TEST_DICT = {
  * Reads the same launch markers the Stop gate scans for (lib/pending-tasks.js),
  * but from the live tool_response, so the reminder can fire immediately.
  *
+ * A backgrounded Bash task that is concept-bridge plumbing (server, keepalive
+ * pulser, pickup waker) is reported as kind 'concept-infra': it runs for the
+ * whole concept and never yields a result, so it must NOT end up in `pending` —
+ * the Stop gate ignores it, and the card carries `concept` instead.
+ *
  * @param {object} hook — PostToolUse payload
- * @returns {{ kind: 'agent'|'task'|'workflow', name: string }|null}
+ * @returns {{ kind: 'agent'|'task'|'workflow'|'concept-infra', name: string }|null}
  */
 /** How the reminder names each kind of launched work. */
 const LAUNCH_NOUN = {
@@ -137,7 +142,8 @@ function detectBackgroundLaunch(hook) {
     return { kind: 'workflow', name: labelFor(hook.tool_input, 'workflow', text) };
   }
   if (text.includes(BASH_LAUNCH_MARKER)) {
-    return { kind: 'task', name: labelFor(hook.tool_input, 'task') };
+    const kind = isConceptInfra(hook.tool_input) ? 'concept-infra' : 'task';
+    return { kind, name: labelFor(hook.tool_input, 'task') };
   }
   return null;
 }
@@ -317,7 +323,21 @@ process.stdin.on('end', () => {
   // so the card carries `pending` on the first try instead of being bounced by
   // the Stop gate — a block costs a whole extra turn.
   const launched = detectBackgroundLaunch(hook);
-  if (launched) {
+  if (launched && launched.kind === 'concept-infra') {
+    lines.push(
+      '',
+      `[concept] Bridge infrastructure started: ${launched.name}`,
+      'This is plumbing for the open concept page, NOT pending work — it never yields',
+      'a result. Do NOT list it (nor the bridge server / keepalive pulser / pickup',
+      'waker) under `pending`; stop.flow.guard ignores these tasks. While the concept',
+      'stays open, render every completion card with the `concept` field instead:',
+      '  concept: { phase: "waiting" | "iterating" | "implementing" }',
+      'That sets the CTA to "🧭 CONCEPT läuft. Warte auf deine Entscheidungen /',
+      'Arbeite an der nächsten Iteration / Arbeite an der Implementierung — ich MELDE',
+      'mich". Real content agents or workflows still go into `pending` and are folded',
+      'into that line ("… mit 2 Agenten").',
+    );
+  } else if (launched) {
     lines.push(
       '',
       `[pending] ${LAUNCH_NOUN[launched.kind] || 'Background task'} started: ${launched.name}`,

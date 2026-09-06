@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.148.0] — 2026-09-06
+
+### Added
+
+- **A concept card no longer counts its own plumbing as unfinished work.** While a `/concept` page is open, three detached Bash tasks run for the whole session — the bridge server, the keepalive pulser and the pickup waker. They never yield a result; they *are* the waiting. The pending gate counted them anyway, so every card rendered mid-concept read "⏳ NOCH NICHT FERTIG. 3 Tasks (Start the concept bridge server on port 8840, Launch the keepalive pulser …) laufen — ich MELDE mich", naming infrastructure where the only true statement was "waiting for your decisions". The transcript scanner now recognizes those tasks — by the script they run or the role their launch description names — and never opens them, so `stop.flow.guard` ignores them; a real agent or `npm test` launched alongside is still reported. The PostToolUse reminder that fires on a background launch says `[concept]` for these instead of `[pending]`, so the model is not steered into listing them.
+
+  **The card gained a `concept` field for the state a concept can actually be in.** `concept: { phase }` — `waiting` (default), `iterating` or `implementing` — replaces the CTA of every variant, and outranks `pending`, with "🧭 CONCEPT läuft. Warte auf deine Entscheidungen auf der Seite / Arbeite an der nächsten Iteration / Arbeite an der Implementierung — ich MELDE mich". Real content work still goes into `pending` and is folded into that line rather than replacing it — `Arbeite an der Implementierung mit Agent \`devops:frontend\``, `… mit 1 Workflow + 2 Agenten` — while the pending block and the dim name row keep naming each item. A JSON string, a bare phase string and an object are all accepted; an open concept with an unknown phase reads as waiting, because the only wrong card here is one that asks for a SHIP. The concept skill documents the mid-concept cards and that the final card, rendered after cleanup, carries no `concept` at all.
+
 ## [0.147.0] — 2026-09-06
 
 ### Added

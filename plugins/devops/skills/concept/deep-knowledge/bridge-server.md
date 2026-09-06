@@ -406,6 +406,15 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    processing round the REPL is busy. That window is closed by re-launching
    early, not by the cron.
 
+   **None of the three is pending work.** The server, the pulser and the waker
+   run for the whole concept and never yield a result — they are the waiting
+   itself. `stop.flow.guard` recognizes them (by `concept-server.py` /
+   `concept-watch.js` in the command, or by the role the launch description
+   names) and ignores them; a completion card must never list them under
+   `pending`. A card rendered while the concept is open carries
+   `concept: { phase }` instead (SKILL.md § Completion cards while the concept
+   is open).
+
 4. **Persist active-concept state.** Write `.claude/concept-active.json` in
    the project root with the metadata the SessionStart resume hook
    (`ss.concept.resume`) needs to recover this concept after a Claude

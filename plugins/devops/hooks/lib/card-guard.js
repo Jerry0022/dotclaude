@@ -16,7 +16,9 @@
  *        are still running and the card did not declare them (`pending`). Open
  *        work is proven from the transcript (lib/pending-tasks.js), so the card
  *        cannot end a turn with a CTA that asks the user to act on results that
- *        do not exist yet.
+ *        do not exist yet. The concept bridge's own tasks (server, keepalive
+ *        pulser, pickup waker) are infrastructure and never count — a concept
+ *        that is merely open renders `concept: { phase }`, not `pending`.
  *
  *   Inputs: flag state (work/card/validation/pending) + transcript + stop_hook_active.
  *   Output: { action: 'block' | 'pass', reason?, resetFlags }.
@@ -193,6 +195,12 @@ function buildBlockReason(pluginRoot) {
     'the CTA with "⏳ NOCH NICHT FERTIG … ich MELDE mich", so the card never asks',
     'the user to act on a result that does not exist yet. Never put an internal',
     'agentId in the card; use the agent type / workflow name / task label.',
+    'CONCEPT (outranks pending): if a /concept page is OPEN, pass `concept` —',
+    '{ phase: "waiting" | "iterating" | "implementing" } — and the CTA becomes',
+    '"🧭 CONCEPT läuft. Warte auf deine Entscheidungen / Arbeite an der nächsten',
+    'Iteration / Arbeite an der Implementierung — ich MELDE mich". The bridge',
+    'server, keepalive pulser and pickup waker are infrastructure, NOT pending —',
+    'never list them; this gate ignores them.',
     '',
     'IMPORTANT: The MCP result is hidden in a collapsed UI block.',
     'Copy the returned markdown and output it VERBATIM as your own text —',
@@ -243,6 +251,9 @@ function buildPendingReason(names) {
     '"⏳ NOCH NICHT FERTIG. … — ich MELDE mich".',
     '',
     'Use the names listed above. NEVER put an internal agentId in the card.',
+    'If a /concept page is open, ALSO pass `concept: { phase }` — the concept CTA',
+    'then folds this work into its own line ("… mit 2 Agenten") instead of the',
+    'generic "NOCH NICHT FERTIG".',
     '',
     'If the work has in fact already finished, collect the results first and then',
     'render the real completion card — do not declare it pending to get past this.',

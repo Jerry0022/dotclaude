@@ -478,6 +478,39 @@ a real transcript entry rather than the payload of a `tool_result`. Without thos
 guards one grep opens an item nothing will ever close, and every later card in
 the session is blocked.
 
+### Concept override — a /concept page is open
+
+`concept` is the sibling of `pending` for the one situation where "still
+running" is the wrong statement: a `/concept` page is open, and the turn ends
+because the loop continues **on the page**, not in chat. The bridge server, the
+keepalive pulser and the pickup waker are background Bash tasks that run for the
+whole concept and never yield a result — they are not work, they ARE the
+waiting. Counting them produced `3 Tasks laufen — ich MELDE mich` on every
+concept card, naming plumbing instead of the one true state. So:
+
+- `stop.flow.guard` ignores those three tasks (recognized by the script they
+  run — `concept-server.py`, `concept-watch.js` — or the role their launch
+  description names). Never list them under `pending`.
+- Every card rendered while the concept is open carries
+  `concept: { phase }`, and that **outranks `pending`** for the CTA:
+
+| Phase | DE | EN |
+|-------|----|----|
+| `waiting` (default) | `### 🧭 CONCEPT läuft. Warte auf deine Entscheidungen auf der Seite — ich MELDE mich` | `### 🧭 CONCEPT open. Waiting for your decisions on the page — I'll REPORT back` |
+| `iterating` | `### 🧭 CONCEPT läuft. Arbeite an der nächsten Iteration — ich MELDE mich` | `### 🧭 CONCEPT open. Working on the next iteration — I'll REPORT back` |
+| `implementing` | `### 🧭 CONCEPT läuft. Arbeite an der Implementierung — ich MELDE mich` | `### 🧭 CONCEPT open. Working on the implementation — I'll REPORT back` |
+
+Real content work — a frontend agent implementing the submission, a research
+workflow preparing the next iteration — still goes into `pending` and is folded
+into that line rather than replacing it: `Arbeite an der Implementierung mit
+Agent \`devops:frontend\`` · `… mit 1 Workflow + 2 Agenten`. The pending block
+and the dim name line render as usual, so the user still reads WHICH agents run.
+While `waiting`, open work is appended as its own clause
+(`Warte auf deine Entscheidungen auf der Seite · Agent \`x\` arbeitet`).
+
+The final card of a concept (Step 6b of the skill, after cleanup) carries no
+`concept` field — the concept is closed, and the variant's own CTA applies.
+
 ### Footer line
 
 `📌 {{version-bump}} · {{build-id}}`
