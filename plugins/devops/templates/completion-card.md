@@ -386,7 +386,7 @@ Format: `## {icon} {STATUS}. {context} — {sentence with VERB}`
 | 3 | ship-blocked | `## ⛔ BLOCKED. {{reason}} — FIX or SKIP?` |
 | 4 | test | `## 🧪 DONE — SHIP after your TEST?` |
 | 5 | test-minimal | `## ▶️ STARTED. {{user-facing-description}} — HAVE FUN` |
-| 6 | analysis | `## 📋 DONE — READ through` |
+| 6 | analysis | `## 📋 READ through — QUESTIONS?` |
 | 7 | aborted | `## 🚫 ABORTED. {{reason}} — What should I TRY?` |
 | 8 | fallback | `## 🔧 DONE — Anything ELSE?` |
 
@@ -400,9 +400,49 @@ Format: `## {icon} {STATUS}. {context} — {sentence with VERB}`
 | 3 | ship-blocked | `## ⛔ BLOCKED. {{reason}} — FIX oder SKIP?` |
 | 4 | test | `## 🧪 DONE — SHIP nach deinem TEST?` |
 | 5 | test-minimal | `## ▶️ STARTED. {{user-facing-description}} — VIEL SPASS` |
-| 6 | analysis | `## 📋 DONE — LIES dir durch` |
+| 6 | analysis | `## 📋 LIES dir durch — FRAGEN?` |
 | 7 | aborted | `## 🚫 ABORTED. {{reason}} — Was soll ich VERSUCHEN?` |
 | 8 | fallback | `## 🔧 DONE — Noch was ANDERES?` |
+
+### Pending override — background work still running
+
+`pending` is **not a variant**. It is a layer that applies on top of whichever
+variant the turn earned, for the case where the turn ends while work it started
+is still running: a subagent launched with `run_in_background`, or a backgrounded
+Bash task. Their results arrive later, as a task-notification.
+
+Without it every CTA above lies about the same thing — it asks the user to act
+("SHIP or CHANGE?", "All DONE") on a result that does not exist yet. So when
+`pending` carries items, it **replaces the CTA of every variant**, always as `###`
+(still-running is a status, never a payoff moment):
+
+| Lang | CTA |
+|------|-----|
+| EN | `### ⏳ NOT DONE YET. {{what}} — I'll REPORT back` |
+| DE | `### ⏳ NOCH NICHT FERTIG. {{what}} — ich MELDE mich` |
+
+`{{what}}` **names** what is running, so the line says which agent — not merely
+that something is busy: `Agent \`devops:frontend\` arbeitet` · `2 Agenten
+(\`a\`, \`b\`) arbeiten` · `Task \`npm test\` läuft`. Names are capped at two,
+with a `+N` tail. Never put an internal agentId in a card — use the agent type or
+task label.
+
+A block above the footer lists the open items, and states that the card predates
+their results:
+
+```markdown
+⏳ **LÄUFT NOCH — nicht abgeschlossen:**
+* `devops:frontend` — Farbstil auf Tokens umstellen
+
+_Diese Card berichtet den Stand VOR diesen Ergebnissen._
+```
+
+The rest of the card is untouched: changes, tests, delivery and state still
+report what IS true. Only the call to action is corrected.
+
+Enforced, not self-reported: `stop.flow.guard` reads the open work out of the
+transcript (`hooks/lib/pending-tasks.js` — launch markers in, task-notifications
+out) and blocks a card that omits `pending` while work is still in flight.
 
 ### Footer line
 

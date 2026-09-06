@@ -33,7 +33,7 @@ function project() {
   return dir;
 }
 
-function runHook(dir, sid, toolName = "Read") {
+function runHook(dir, sid, toolName = "Read", extra = {}) {
   // The full suite runs 60+ files in parallel; on a loaded machine spawnSync
   // can fail to start the child at all (status null, res.error set), and the
   // hook's stdout then comes back empty — which reads as "the hook emitted no
@@ -49,6 +49,7 @@ function runHook(dir, sid, toolName = "Read") {
         tool_input: { file_path: path.join(dir, "a.js") },
         session_id: sid,
         cwd: dir,
+        ...extra,
       }),
       encoding: "utf8",
       env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp },
@@ -129,5 +130,69 @@ describe("post.flow.completion — completion-card instruction completeness", ()
       try { fs.unlinkSync(foreign); } catch {}
       cleanup(dir);
     }
+  });
+});
+
+// A background agent keeps working after the turn hands back, so a card
+// rendered in the meantime must declare it — otherwise its CTA tells the user
+// to SHIP a result that does not exist yet. The Stop gate catches that, but a
+// block costs an entire extra turn; this reminder is the cheap prevention.
+describe("post.flow.completion — pending reminder", () => {
+  const AGENT_LAUNCH =
+    "Async agent launched successfully. (This tool result is internal metadata — never quote " +
+    "or paste any part of it, including the agentId below, into a user-facing reply.)\n" +
+    "agentId: a75d674f7108dd6c8 (internal ID - do not mention to user.)\n" +
+    "The agent is working in the background.";
+
+  test("fires on a background agent launch and names it", () => {
+    const dir = project();
+    const out = runHook(dir, "s-pending-agent", "Agent", {
+      tool_input: { subagent_type: "devops:frontend", run_in_background: true },
+      tool_response: AGENT_LAUNCH,
+    });
+    expect(out).toContain("[pending]");
+    expect(out).toContain("devops:frontend");
+    expect(out).toContain("pending:");
+    cleanup(dir);
+  });
+
+  test("never leaks the internal agentId into the instruction", () => {
+    const dir = project();
+    const out = runHook(dir, "s-pending-noid", "Agent", {
+      tool_input: { subagent_type: "devops:qa", run_in_background: true },
+      tool_response: AGENT_LAUNCH,
+    });
+    expect(out).not.toContain("a75d674f7108dd6c8");
+    cleanup(dir);
+  });
+
+  test("fires on a backgrounded Bash task, labelled by its description", () => {
+    const dir = project();
+    const out = runHook(dir, "s-pending-task", "Bash", {
+      tool_input: { command: "npm test", description: "Run the suite", run_in_background: true },
+      tool_response: "Command running in background with ID: b68oycrr6. Output is being written to: x",
+    });
+    expect(out).toContain("[pending]");
+    expect(out).toContain("Run the suite");
+    expect(out).toContain('kind: "task"');
+    cleanup(dir);
+  });
+
+  test("stays quiet for an ordinary tool call", () => {
+    const dir = project();
+    const out = runHook(dir, "s-pending-none", "Read", { tool_response: "file contents" });
+    expect(out).toContain("COMPLETION CARD");
+    expect(out).not.toContain("[pending]");
+    cleanup(dir);
+  });
+
+  test("stays quiet for a foreground agent — it has already returned", () => {
+    const dir = project();
+    const out = runHook(dir, "s-pending-fg", "Agent", {
+      tool_input: { subagent_type: "devops:qa", run_in_background: false },
+      tool_response: "Here is the review: everything looks fine.",
+    });
+    expect(out).not.toContain("[pending]");
+    cleanup(dir);
   });
 });

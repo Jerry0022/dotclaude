@@ -5,15 +5,20 @@
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
  *
- *   Two stacked gates, both one-block (stop_hook_active yields):
+ *   Three stacked gates, all one-block (stop_hook_active yields):
  *     1. Completion card — block when work happened but no card was rendered.
  *     2. Validation — once a card exists, block when a code change owes a
  *        validation attestation (validationPending && !validationAttested). The
  *        `validation` field rides on the card; the MCP sets the attested flag
  *        when it is populated. This is the "did we build the RIGHT thing" half;
  *        the test gate (stop.flow.browsertest) is the "did we build it right".
+ *     3. Pending — once a card exists, block when background subagents / tasks
+ *        are still running and the card did not declare them (`pending`). Open
+ *        work is proven from the transcript (lib/pending-tasks.js), so the card
+ *        cannot end a turn with a CTA that asks the user to act on results that
+ *        do not exist yet.
  *
- *   Inputs: flag state (work/card/validation) + transcript + stop_hook_active.
+ *   Inputs: flag state (work/card/validation/pending) + transcript + stop_hook_active.
  *   Output: { action: 'block' | 'pass', reason?, resetFlags }.
  */
 
@@ -83,13 +88,16 @@ function lastAssistantContainsCard(transcriptContent) {
  *                                     not the user. Never enforce the card.
  * @param {boolean} [s.validationPending]  — a code change owes a validation attestation
  * @param {boolean} [s.validationAttested] — the card was rendered with a `validation` field
+ * @param {string[]} [s.openTaskNames] — background subagents / tasks still running at
+ *                                     turn end (names only — ids stay internal)
+ * @param {boolean} [s.pendingAttested] — the card was rendered with a `pending` field
  * @param {string}  [s.pluginRoot]   — active install root, so the block reason can name
  *                                     the offline renderer path for this install
  * @returns {{ action: 'block' | 'pass', resetFlags: boolean, reason?: string }}
  */
 function decideAction({
   workHappened, cardRendered, stopHookActive, substantial, silent,
-  validationPending, validationAttested, pluginRoot,
+  validationPending, validationAttested, openTaskNames, pendingAttested, pluginRoot,
 }) {
   if (silent) {
     // Background tick (cron git-sync, concept bridge poll, autonomous loop).
@@ -123,6 +131,20 @@ function decideAction({
       action: 'block',
       resetFlags: false,
       reason: buildValidationReason(),
+    };
+  }
+
+  // Gate 3 — a card rendered while background subagents / tasks are STILL
+  // running must declare them. Without `pending`, the card's CTA asks the user
+  // to act ("SHIP or CHANGE?", "All DONE") on results that do not exist yet.
+  // Detected from the transcript, not self-reported, so the gate cannot be
+  // talked out of. Independent of `active`: launching an agent is itself work.
+  const open = openTaskNames || [];
+  if (cardRendered && open.length > 0 && !pendingAttested) {
+    return {
+      action: 'block',
+      resetFlags: false,
+      reason: buildPendingReason(open),
     };
   }
 
@@ -165,6 +187,12 @@ function buildBlockReason(pluginRoot) {
     '  zero file changes (analysis/explain/audit) → analysis',
     '  unsure → fallback',
     '',
+    'PENDING (orthogonal to the variant): if background subagents or tasks you',
+    'started are STILL running, also pass `pending` — [{ name, kind, doing }] —',
+    'naming each. It replaces the CTA with "⏳ NOCH NICHT FERTIG … ich MELDE mich",',
+    'so the card never asks the user to act on a result that does not exist yet.',
+    'Never put an internal agentId in the card; use the agent type / task label.',
+    '',
     'IMPORTANT: The MCP result is hidden in a collapsed UI block.',
     'Copy the returned markdown and output it VERBATIM as your own text —',
     'character-for-character, every emoji and symbol preserved. The card is',
@@ -191,8 +219,46 @@ function buildValidationReason() {
   ].join('\n');
 }
 
+function buildPendingReason(names) {
+  const list = names.map(n => `  - ${n}`).join('\n');
+  return [
+    '[stop.flow.guard] Background work is STILL RUNNING — the completion card has no `pending` field.',
+    '',
+    'Started this session and not finished yet:',
+    list,
+    '',
+    'The card was rendered as if the turn were over. Its CTA therefore asks the',
+    'user to act ("SHIP or CHANGE?", "All DONE") on a result that does not exist',
+    'yet — exactly the wrong call to action while agents are still working.',
+    '',
+    'Re-render `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW',
+    'with `pending` populated, then relay the card VERBATIM as the LAST output:',
+    '  pending: [{ name: "<agent type or task label>", kind: "agent" | "task",',
+    '              doing: "<what it is working on>" }]',
+    '',
+    'Keep the variant and every other field as they were — the body still reports',
+    'what IS true. `pending` only corrects the last line, to',
+    '"⏳ NOCH NICHT FERTIG. … — ich MELDE mich".',
+    '',
+    'Use the names listed above. NEVER put an internal agentId in the card.',
+    '',
+    'If the work has in fact already finished, collect the results first and then',
+    'render the real completion card — do not declare it pending to get past this.',
+  ].join('\n');
+}
+
 /** Cap transcript bytes read into memory — we only need the last assistant message. */
 const TRANSCRIPT_TAIL_BYTES = 200 * 1024; // 200 KB
+
+/**
+ * Wider slice used when the pending gate also has to scan the transcript. A
+ * background agent can be launched many tool calls before the turn ends, so the
+ * 200 KB tail that suffices for "last assistant message" can miss its launch
+ * marker — and a missed launch is a false "all done", the exact bug the gate
+ * exists to prevent. scanOpenTasks short-circuits when no marker is present, so
+ * the wider read costs a file read and nothing else on ordinary turns.
+ */
+const PENDING_TAIL_BYTES = 1024 * 1024; // 1 MB
 
 /**
  * Safely read a transcript file — returns '' on any error so decideAction
@@ -203,12 +269,12 @@ const TRANSCRIPT_TAIL_BYTES = 200 * 1024; // 200 KB
  * a truncated first line at the buffer boundary is harmless — malformed
  * JSON lines are already skipped by lastAssistantText.
  */
-function safeReadTranscript(transcriptPath) {
+function safeReadTranscript(transcriptPath, tailBytes = TRANSCRIPT_TAIL_BYTES) {
   if (!transcriptPath) return '';
   let fd;
   try {
     const size = fs.statSync(transcriptPath).size;
-    const start = Math.max(0, size - TRANSCRIPT_TAIL_BYTES);
+    const start = Math.max(0, size - tailBytes);
     const length = size - start;
     fd = fs.openSync(transcriptPath, 'r');
     const buf = Buffer.alloc(length);
@@ -225,6 +291,7 @@ module.exports = {
   SUBSTANTIAL_CHARS,
   CARD_MARKER,
   TRANSCRIPT_TAIL_BYTES,
+  PENDING_TAIL_BYTES,
   lastAssistantText,
   lastAssistantTextLength,
   isSubstantialAnswer,
@@ -232,5 +299,6 @@ module.exports = {
   decideAction,
   buildBlockReason,
   buildValidationReason,
+  buildPendingReason,
   safeReadTranscript,
 };

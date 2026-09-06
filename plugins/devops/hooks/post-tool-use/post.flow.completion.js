@@ -22,6 +22,11 @@
  *     - validation-pending — any source change owes a validation attestation in
  *       the completion card; a new edit clears a prior validation-attested flag.
  *   Subagent delegation does not satisfy any of these gates.
+ *
+ *   Also detects background work started by the current call (a run_in_background
+ *   Agent, a backgrounded Bash task) and injects the `pending` instruction right
+ *   away, so a card rendered before those results arrive declares them instead of
+ *   being bounced by stop.flow.guard's pending gate.
  */
 
 require('../lib/plugin-guard');
@@ -31,6 +36,7 @@ const os = require('os');
 const path = require('path');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { getLocale, t } = require('../lib/locale');
+const { AGENT_LAUNCH_MARKER, labelFor } = require('../lib/pending-tasks');
 const {
   classifyProfile,
   carveOutsFromProfile,
@@ -102,6 +108,27 @@ const DESKTOP_TEST_DICT = {
     optNo: 'Nein, manuell testen',
   },
 };
+
+/**
+ * Did THIS tool call start background work that outlives the turn?
+ * Reads the same launch markers the Stop gate scans for (lib/pending-tasks.js),
+ * but from the live tool_response, so the reminder can fire immediately.
+ *
+ * @param {object} hook — PostToolUse payload
+ * @returns {{ kind: 'agent'|'task', name: string }|null}
+ */
+function detectBackgroundLaunch(hook) {
+  const r = hook && hook.tool_response;
+  const text = typeof r === 'string' ? r : (r ? JSON.stringify(r) : '');
+  if (!text) return null;
+  if (text.includes(AGENT_LAUNCH_MARKER)) {
+    return { kind: 'agent', name: labelFor(hook.tool_input, 'agent') };
+  }
+  if (text.includes('Command running in background with ID:')) {
+    return { kind: 'task', name: labelFor(hook.tool_input, 'task') };
+  }
+  return null;
+}
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -273,6 +300,24 @@ process.stdin.on('end', () => {
     'once and re-requested (see deep-knowledge/test-autonomy.md).',
     'Card LAST, nothing after the closing ---.',
   );
+
+  // Background work started by THIS tool call. Injected loudly and immediately,
+  // so the card carries `pending` on the first try instead of being bounced by
+  // the Stop gate — a block costs a whole extra turn.
+  const launched = detectBackgroundLaunch(hook);
+  if (launched) {
+    lines.push(
+      '',
+      `[pending] ${launched.kind === 'agent' ? 'Background agent' : 'Background task'} started: ${launched.name}`,
+      'It keeps running after you hand the turn back. If you finish this turn before',
+      'its result arrives, the completion card MUST carry the `pending` field:',
+      `  pending: [{ name: "${launched.name}", kind: "${launched.kind}", doing: "<what it is working on>" }]`,
+      'That replaces the CTA of every variant with "⏳ NOCH NICHT FERTIG. … — ich MELDE',
+      'mich" — without it the card would tell the user to SHIP or act on a result that',
+      'does not exist yet. stop.flow.guard detects open background work and blocks a',
+      'card that omits it. Name the agent/task; NEVER put an internal agentId in the card.',
+    );
+  }
 
   if (editCount === 1) {
     lines.push(

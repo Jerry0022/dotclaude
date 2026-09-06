@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.144.0**
+**Version: 0.145.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -427,7 +427,7 @@ Wk  ━━━─╏─────────   18% +2%   · 5d 3h left
 ````
 
 <details>
-<summary><strong>See all other variants</strong> — ready, ship-blocked, test, test-minimal, analysis, aborted, fallback, ship-successful (direct push)</summary>
+<summary><strong>See all other variants</strong> — ready, ship-blocked, test, test-minimal, analysis, aborted, fallback, ship-successful (direct push), pending</summary>
 
 ### test — code edits + app running, user must verify
 
@@ -604,7 +604,7 @@ Wk  ━━━─╏─────────   19% +2%   · 5d 6h left
 
 📌 `a3f9b21`
 
-## 📋 DONE — READ through
+## 📋 READ through — QUESTIONS?
 
 ---
 ````
@@ -689,9 +689,43 @@ Wk  ━━──╏─────────   15% +1%   · 4d 22h left
 ---
 ````
 
+### pending — a background agent is still working
+
+Not a variant but a layer: when the turn ends while a background subagent or task
+is still running, `pending` names it and replaces the CTA of **whichever** variant
+the card carries — so it never asks you to SHIP or act on a result that does not
+exist yet. The rest of the card still reports what is true.
+
+````
+---
+
+## ✨✨✨ First version verified and pushed ✨✨✨
+
+**Changes**
+* Concept → color-style correction handed to a background agent
+
+⏳ **STILL RUNNING — not finished:**
+* `devops:frontend` — switch color style to design tokens
+
+_This card reports the state BEFORE those results._
+
+```
+5h  ━━╏───────────   14% +1%   · 4h 20m left
+Wk  ━━──╏─────────   16% +1%   · 5d 2h left
+```
+
+---
+
+📌 `c41a21a`
+
+### ⏳ NOT DONE YET. agent `devops:frontend` is working — I'll REPORT back
+
+---
+````
+
 </details>
 
-8 variants total. The card always fires — see [completion-card.md](plugins/devops/templates/completion-card.md) for the full template spec.
+8 variants total, plus the `pending` layer. The card always fires — see [completion-card.md](plugins/devops/templates/completion-card.md) for the full template spec.
 
 ## Project Structure
 
