@@ -36,7 +36,9 @@ const os = require('os');
 const path = require('path');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { getLocale, t } = require('../lib/locale');
-const { AGENT_LAUNCH_MARKER, labelFor } = require('../lib/pending-tasks');
+const {
+  AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER, labelFor,
+} = require('../lib/pending-tasks');
 const {
   classifyProfile,
   carveOutsFromProfile,
@@ -115,8 +117,15 @@ const DESKTOP_TEST_DICT = {
  * but from the live tool_response, so the reminder can fire immediately.
  *
  * @param {object} hook — PostToolUse payload
- * @returns {{ kind: 'agent'|'task', name: string }|null}
+ * @returns {{ kind: 'agent'|'task'|'workflow', name: string }|null}
  */
+/** How the reminder names each kind of launched work. */
+const LAUNCH_NOUN = {
+  agent: 'Background agent',
+  task: 'Background task',
+  workflow: 'Background workflow',
+};
+
 function detectBackgroundLaunch(hook) {
   const r = hook && hook.tool_response;
   const text = typeof r === 'string' ? r : (r ? JSON.stringify(r) : '');
@@ -124,7 +133,10 @@ function detectBackgroundLaunch(hook) {
   if (text.includes(AGENT_LAUNCH_MARKER)) {
     return { kind: 'agent', name: labelFor(hook.tool_input, 'agent') };
   }
-  if (text.includes('Command running in background with ID:')) {
+  if (text.includes(WORKFLOW_LAUNCH_MARKER)) {
+    return { kind: 'workflow', name: labelFor(hook.tool_input, 'workflow', text) };
+  }
+  if (text.includes(BASH_LAUNCH_MARKER)) {
     return { kind: 'task', name: labelFor(hook.tool_input, 'task') };
   }
   return null;
@@ -308,14 +320,14 @@ process.stdin.on('end', () => {
   if (launched) {
     lines.push(
       '',
-      `[pending] ${launched.kind === 'agent' ? 'Background agent' : 'Background task'} started: ${launched.name}`,
+      `[pending] ${LAUNCH_NOUN[launched.kind] || 'Background task'} started: ${launched.name}`,
       'It keeps running after you hand the turn back. If you finish this turn before',
       'its result arrives, the completion card MUST carry the `pending` field:',
       `  pending: [{ name: "${launched.name}", kind: "${launched.kind}", doing: "<what it is working on>" }]`,
       'That replaces the CTA of every variant with "⏳ NOCH NICHT FERTIG. … — ich MELDE',
       'mich" — without it the card would tell the user to SHIP or act on a result that',
       'does not exist yet. stop.flow.guard detects open background work and blocks a',
-      'card that omits it. Name the agent/task; NEVER put an internal agentId in the card.',
+      'card that omits it. Name the agent/workflow/task; NEVER put an internal agentId in the card.',
     );
   }
 

@@ -371,3 +371,80 @@ describe("analysis CTA", () => {
     expect(text).not.toMatch(/DONE — READ through/);
   });
 });
+
+describe("pending layer — workflows and the name line", () => {
+  const WF_MIX = [
+    { name: "eve-panel-and-tutorial", kind: "workflow", doing: "Balken über dem Gesicht" },
+    { name: "turn-handover-and-panel-polish", kind: "workflow", doing: "Übergangs-Animation" },
+    { name: "owner-prompt-audit", kind: "workflow", doing: "Anweisungen gegen Code prüfen" },
+    { name: "devops:qa", kind: "agent", doing: "Suite läuft" },
+    { name: "npm run build", kind: "task" },
+  ];
+
+  test("counts workflows as their own class instead of calling them agents", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Workflows laufen", lang: "de",
+      session_id: "test-pending-wf-1", pending: WF_MIX,
+    });
+    expect(text).toMatch(/### ⏳ NOCH NICHT FERTIG\. 3 Workflows \+ 1 Agent \+ 1 Task laufen — ich MELDE mich/);
+    expect(text).not.toMatch(/5 Agenten/);
+  });
+
+  test("names the first three on a dim line DIRECTLY above the CTA", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Workflows laufen", lang: "de",
+      session_id: "test-pending-wf-2", pending: WF_MIX,
+    });
+    const lines = text.split("\n").filter(l => l.trim());
+    const ctaAt = lines.findIndex(l => l.startsWith("### ⏳ NOCH NICHT FERTIG."));
+    expect(ctaAt).toBeGreaterThan(0);
+    // The row immediately before the CTA, in the same blockquote style as the
+    // version and branch rows above it.
+    expect(lines[ctaAt - 1]).toBe(
+      "> ⏳ `eve-panel-and-tutorial`, `turn-handover-and-panel-polish`, `owner-prompt-audit` +2",
+    );
+  });
+
+  test("a single workflow is named in the CTA and gets no duplicate line", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Ein Workflow", lang: "de",
+      session_id: "test-pending-wf-3",
+      pending: [{ name: "harden-pass", kind: "workflow", doing: "Testsuite + Lint" }],
+    });
+    expect(text).toMatch(/### ⏳ NOCH NICHT FERTIG\. Workflow `harden-pass` läuft — ich MELDE mich/);
+    expect(text).not.toMatch(/^> ⏳ /m);
+  });
+
+  test("the block above names each item with what it is doing", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Workflows laufen", lang: "de",
+      session_id: "test-pending-wf-4", pending: WF_MIX,
+    });
+    expect(text).toMatch(/\* `eve-panel-and-tutorial` — Balken über dem Gesicht/);
+    expect(text).toMatch(/\* `owner-prompt-audit` — Anweisungen gegen Code prüfen/);
+    // Block and line cut at the same three, so both tails report the same rest.
+    expect(text).toMatch(/\* \+2/);
+    expect(text).toMatch(/^> ⏳ .* \+2$/m);
+  });
+
+  test("English card names the workflows too", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Workflows running", lang: "en",
+      session_id: "test-pending-wf-5", pending: WF_MIX.slice(0, 2),
+    });
+    expect(text).toMatch(/### ⏳ NOT DONE YET\. 2 workflows are running — I’ll REPORT back/);
+    expect(text).toMatch(/^> ⏳ `eve-panel-and-tutorial`, `turn-handover-and-panel-polish`$/m);
+  });
+
+  test("a name that would break the card's markdown is neutralised", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Boeser Name", lang: "de",
+      session_id: "test-pending-wf-6",
+      pending: [
+        { name: "a`b|c<d>", kind: "workflow" },
+        { name: "devops:qa", kind: "agent" },
+      ],
+    });
+    expect(text).toMatch(/^> ⏳ `abcd`, `devops:qa`$/m);
+  });
+});

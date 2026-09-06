@@ -408,8 +408,9 @@ Format: `## {icon} {STATUS}. {context} — {sentence with VERB}`
 
 `pending` is **not a variant**. It is a layer that applies on top of whichever
 variant the turn earned, for the case where the turn ends while work it started
-is still running: a subagent launched with `run_in_background`, or a backgrounded
-Bash task. Their results arrive later, as a task-notification.
+is still running: a subagent launched with `run_in_background`, a backgrounded
+Bash task, or a whole `Workflow` run. Their results arrive later, as a
+task-notification.
 
 Without it every CTA above lies about the same thing — it asks the user to act
 ("SHIP or CHANGE?", "All DONE") on a result that does not exist yet. So when
@@ -421,11 +422,35 @@ Without it every CTA above lies about the same thing — it asks the user to act
 | EN | `### ⏳ NOT DONE YET. {{what}} — I'll REPORT back` |
 | DE | `### ⏳ NOCH NICHT FERTIG. {{what}} — ich MELDE mich` |
 
-`{{what}}` **names** what is running, so the line says which agent — not merely
-that something is busy: `Agent \`devops:frontend\` arbeitet` · `2 Agenten
-(\`a\`, \`b\`) arbeiten` · `Task \`npm test\` läuft`. Names are capped at two,
-with a `+N` tail. Never put an internal agentId in a card — use the agent type or
-task label.
+`{{what}}` says what SHAPE the open work has. A single item is named right in
+it — `Workflow \`harden-pass\` läuft` · `Agent \`devops:frontend\` arbeitet` ·
+`Task \`npm test\` läuft`. From two items on it carries counts per class, biggest
+unit of work first, because three names plus two counts is a heading that wraps:
+`3 Workflows + 1 Agent + 1 Task laufen`.
+
+A **workflow is its own class**, never folded into the agent count — it fans out
+to agents of its own, so calling three workflows "3 Agenten" understates the
+work by an order of magnitude. `kind` is `"agent"` (default) · `"task"` ·
+`"workflow"`.
+
+The **names** live one line above the CTA, in the same dim blockquote style as
+the version and branch rows — small enough not to compete with the call to
+action, close enough to be read with it. First three, then a `+N` tail that
+counts every remaining item:
+
+```markdown
+> 📌 v0.14.2 · `build-a3f`
+
+> 🌿 `feature/x` → merged into `main` · PR #338
+
+> ⏳ `eve-panel-and-tutorial`, `turn-handover-and-panel-polish`, `owner-prompt-audit` +2
+
+### ⏳ NOCH NICHT FERTIG. 3 Workflows + 1 Agent + 1 Task laufen — ich MELDE mich
+```
+
+A single item gets no such line: the CTA already names it, and repeating one
+name would be pure duplication. Never put an internal agentId in a card — use
+the agent type, workflow name or task label.
 
 A block above the footer lists the open items, and states that the card predates
 their results:
@@ -443,6 +468,15 @@ report what IS true. Only the call to action is corrected.
 Enforced, not self-reported: `stop.flow.guard` reads the open work out of the
 transcript (`hooks/lib/pending-tasks.js` — launch markers in, task-notifications
 out) and blocks a card that omits `pending` while work is still in flight.
+
+Quoted text is not an event. A grep hit on the hook's own source, a Read of a
+transcript, a script printing a launch line — all put the marker shapes into the
+slice verbatim. So a launch counts only from a tool that can announce that kind
+of launch, and only when the announcement is the whole tool result rather than a
+line inside somebody's output; a completion counts only when the notification is
+a real transcript entry rather than the payload of a `tool_result`. Without those
+guards one grep opens an item nothing will ever close, and every later card in
+the session is blocked.
 
 ### Footer line
 

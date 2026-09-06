@@ -179,3 +179,232 @@ describe('labelFor', () => {
     expect(labelFor({ command: 'npm  run\n  build' }, 'task')).toBe('npm run build');
   });
 });
+
+/**
+ * Workflow launches, and the two directions in which QUOTED text must not be
+ * mistaken for an event. Strings below are copied from real transcripts.
+ */
+const WORKFLOW_LAUNCH_TEXT =
+  'Workflow launched in background. Task ID: w5rketv6j\n' +
+  'Summary: Research how a quest binds to the island it was started on\n' +
+  'Transcript dir: C:\\Users\\x\\.claude\\projects\\p\\s\\subagents\\workflows\\wf_c6511141-adc\n' +
+  'Script file: C:\\Users\\x\\.claude\\projects\\p\\s\\workflows\\scripts\\quest-island-scope-wf_c6511141-adc.js';
+
+const WF_SCRIPT =
+  "export const meta = {\n  name: 'quest-island-scope',\n" +
+  "  description: 'Research the quest/island binding',\n};\n" +
+  "const DIMENSIONS = [{ name: 'not-the-workflow-name' }];\n";
+
+describe('scanOpenTasks — workflows', () => {
+  test('reports a launched workflow as open, named from its meta literal', () => {
+    const open = scanOpenTasks([
+      toolUse('toolu_w', 'Workflow', { script: WF_SCRIPT }),
+      toolResult('toolu_w', WORKFLOW_LAUNCH_TEXT),
+    ].join('\n'));
+    expect(open).toEqual([{ id: 'w5rketv6j', kind: 'workflow', name: 'quest-island-scope' }]);
+  });
+
+  test('prefers meta.name over an agent label defined earlier in the script', () => {
+    const script = "const AGENTS = [{ name: 'reviewer' }];\n" + WF_SCRIPT;
+    const open = scanOpenTasks([
+      toolUse('toolu_w', 'Workflow', { script }),
+      toolResult('toolu_w', WORKFLOW_LAUNCH_TEXT),
+    ].join('\n'));
+    expect(open[0].name).toBe('quest-island-scope');
+  });
+
+  test('accepts double and backtick quotes in the meta literal', () => {
+    for (const q of ['"', '`']) {
+      const script = 'export const meta = {\n  name: ' + q + 'harden-pass' + q + ',\n};';
+      const open = scanOpenTasks([
+        toolUse('toolu_w', 'Workflow', { script }),
+        toolResult('toolu_w', WORKFLOW_LAUNCH_TEXT),
+      ].join('\n'));
+      expect(open[0].name).toBe('harden-pass');
+    }
+  });
+
+  test('falls back to the script path, stripped of extension and run id', () => {
+    const open = scanOpenTasks([
+      toolUse('toolu_w', 'Workflow', {
+        scriptPath: 'C:\\Users\\x\\.claude\\projects\\p\\workflows\\scripts\\quest-island-scope-wf_c6511141-adc.js',
+      }),
+      toolResult('toolu_w', WORKFLOW_LAUNCH_TEXT),
+    ].join('\n'));
+    expect(open[0].name).toBe('quest-island-scope');
+  });
+
+  test('falls back to a saved workflow name, then to the Summary line', () => {
+    const saved = scanOpenTasks([
+      toolUse('toolu_w', 'Workflow', { name: 'code-review' }),
+      toolResult('toolu_w', WORKFLOW_LAUNCH_TEXT),
+    ].join('\n'));
+    expect(saved[0].name).toBe('code-review');
+
+    const summary = scanOpenTasks([
+      toolUse('toolu_w', 'Workflow', {}),
+      toolResult('toolu_w', WORKFLOW_LAUNCH_TEXT),
+    ].join('\n'));
+    expect(summary[0].name)
+      .toBe('Research how a quest binds to the island it was');
+  });
+
+  test('a notification with the launch task id closes the workflow', () => {
+    for (const status of ['completed', 'failed', 'stopped']) {
+      const open = scanOpenTasks([
+        toolUse('toolu_w', 'Workflow', { script: WF_SCRIPT }),
+        toolResult('toolu_w', WORKFLOW_LAUNCH_TEXT),
+        notification('w5rketv6j', status),
+      ].join('\n'));
+      expect(open).toEqual([]);
+    }
+  });
+
+  test('workflows, agents and tasks are reported side by side', () => {
+    const open = scanOpenTasks([
+      ...AGENT_START,
+      toolUse('toolu_w', 'Workflow', { script: WF_SCRIPT }),
+      toolResult('toolu_w', WORKFLOW_LAUNCH_TEXT),
+    ].join('\n'));
+    expect(open.map(o => o.kind)).toEqual(['agent', 'workflow']);
+  });
+});
+
+describe('scanOpenTasks — quoted text is not an event', () => {
+  test('a Grep result quoting the workflow marker opens nothing', () => {
+    const open = scanOpenTasks([
+      toolUse('toolu_g', 'Grep', { pattern: 'Workflow launched' }),
+      toolResult('toolu_g', WORKFLOW_LAUNCH_TEXT),
+    ].join('\n'));
+    expect(open).toEqual([]);
+  });
+
+  test('a Read result quoting the agent marker opens nothing', () => {
+    const open = scanOpenTasks([
+      toolUse('toolu_r', 'Read', { file_path: 'pending-tasks.test.js' }),
+      toolResult('toolu_r', AGENT_LAUNCH_TEXT),
+    ].join('\n'));
+    expect(open).toEqual([]);
+  });
+
+  test('a tool_result quoting a notification does NOT close running work', () => {
+    const quoted = JSON.stringify({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'toolu_g',
+          content: '<task-notification>\n<task-id>a75d674f7108dd6c8</task-id>\n</task-notification>',
+        }],
+      },
+    });
+    const open = scanOpenTasks([...AGENT_START, quoted].join('\n'));
+    expect(open.length).toBe(1);
+  });
+
+  test('an assistant message quoting a notification does NOT close running work', () => {
+    const quoted = JSON.stringify({
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{
+          type: 'text',
+          text: 'It reported <task-notification>\n<task-id>a75d674f7108dd6c8</task-id>\n</task-notification>',
+        }],
+      },
+    });
+    expect(scanOpenTasks([...AGENT_START, quoted].join('\n')).length).toBe(1);
+  });
+
+  test('the real orphan-summary notification closes every id it names', () => {
+    const orphan = JSON.stringify({
+      type: 'queue-operation',
+      operation: 'enqueue',
+      content:
+        '<task-notification>\n<task-id>a75d674f7108dd6c8</task-id>' +
+        '<task-id>w5rketv6j</task-id><task-id>__orphan_summary__:shell</task-id>' +
+        '\n<status>stopped</status>\n</task-notification>',
+    });
+    const open = scanOpenTasks([
+      ...AGENT_START,
+      toolUse('toolu_w', 'Workflow', { script: WF_SCRIPT }),
+      toolResult('toolu_w', WORKFLOW_LAUNCH_TEXT),
+      orphan,
+    ].join('\n'));
+    expect(open).toEqual([]);
+  });
+});
+
+describe('labelFor — sanitization', () => {
+  test('strips what would break a code span, a hook reason or a JSON example', () => {
+    const raw = 'a' + String.fromCharCode(96) + 'b"c|d<e>f\ng\\h';
+    expect(labelFor({ subagent_type: raw }, 'agent')).toBe('abcdef gh');
+  });
+
+  test('clamps an overlong workflow name', () => {
+    const script = "export const meta = {\n  name: '" + 'w'.repeat(120) + "',\n};";
+    expect(labelFor({ script }, 'workflow').length).toBeLessThanOrEqual(48);
+  });
+
+  test('never returns an empty label', () => {
+    expect(labelFor({}, 'workflow')).toBe('workflow');
+    expect(labelFor({}, 'agent')).toBe('agent');
+    expect(labelFor({}, 'task')).toBe('task');
+  });
+});
+
+/**
+ * The two guards a synthetic fixture cannot motivate — both were found by
+ * running the scanner over a real session transcript, where routine work
+ * (a `sed` of this very test file, a node script printing a launch line) had
+ * opened phantom items that no notification could ever close.
+ */
+describe('scanOpenTasks — Bash output is not a launch announcement', () => {
+  /** stdout of a command that printed the fixture above, not a real launch. */
+  function bashStdout(body) {
+    return 'const AGENT_LAUNCH_TEXT =\n' + body + '\nShell cwd was reset to C:\\repo';
+  }
+
+  test('a Bash result quoting the AGENT marker opens nothing', () => {
+    const open = scanOpenTasks([
+      toolUse('toolu_b', 'Bash', { description: 'Read pending-tasks test helpers' }),
+      toolResult('toolu_b', bashStdout(AGENT_LAUNCH_TEXT)),
+    ].join('\n'));
+    expect(open).toEqual([]);
+  });
+
+  test('a Bash result quoting the WORKFLOW marker opens nothing', () => {
+    const open = scanOpenTasks([
+      toolUse('toolu_b', 'Bash', { description: 'Scan transcripts for workflow launches' }),
+      toolResult('toolu_b', bashStdout(WORKFLOW_LAUNCH_TEXT)),
+    ].join('\n'));
+    expect(open).toEqual([]);
+  });
+
+  test('a Bash result quoting the BASH marker mid-output opens nothing', () => {
+    // Only the launcher binding would let this through: Bash may announce its
+    // own task, so the marker's POSITION is what separates event from quote.
+    const open = scanOpenTasks([
+      toolUse('toolu_b', 'Bash', { description: 'Print the test fixture' }),
+      toolResult('toolu_b', bashStdout(BASH_BG_TEXT)),
+    ].join('\n'));
+    expect(open).toEqual([]);
+  });
+
+  test('a real backgrounded Bash task — marker first — is still reported', () => {
+    const open = scanOpenTasks([
+      toolUse('toolu_b', 'Bash', { description: 'Baseline test run' }),
+      toolResult('toolu_b', BASH_BG_TEXT),
+    ].join('\n'));
+    expect(open).toEqual([{ id: 'b68oycrr6', kind: 'task', name: 'Baseline test run' }]);
+  });
+
+  test('an Agent launch reported by a non-launching tool opens nothing', () => {
+    const open = scanOpenTasks([
+      toolUse('toolu_e', 'Edit', { file_path: 'pending-tasks.test.js' }),
+      toolResult('toolu_e', AGENT_LAUNCH_TEXT),
+    ].join('\n'));
+    expect(open).toEqual([]);
+  });
+});

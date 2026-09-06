@@ -101,7 +101,7 @@ Subagents inherit all output contracts:
 - Visual verification for UI changes
 - If a subagent can't render a card, the main context must render it
 - **A turn that ends while a background subagent is still running must render its
-  card with `pending`** — naming each open agent/task. That replaces the CTA of
+  card with `pending`** — naming each open agent, workflow or task. That replaces the CTA of
   every variant with "⏳ NOCH NICHT FERTIG … ich MELDE mich", so the card never
   asks the user to SHIP or act on a result that has not arrived. `stop.flow.guard`
   reads the open work out of the transcript and blocks a card that omits it.
