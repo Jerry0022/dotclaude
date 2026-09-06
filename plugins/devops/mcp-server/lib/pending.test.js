@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizePending, hasPending, pendingWhat, renderPendingLine, renderPendingBlock,
-  NAME_MAX,
+  NAME_MAX, normalizeConcept, hasConcept, conceptWhat,
 } from "./pending.js";
 
 describe("normalizePending", () => {
@@ -179,5 +179,61 @@ describe("renderPendingBlock", () => {
   it("is empty when nothing is pending", () => {
     expect(renderPendingBlock([], "de")).toBe("");
     expect(renderPendingBlock(undefined, "de")).toBe("");
+  });
+});
+
+describe("concept layer", () => {
+  it("normalizes a phase string and a { phase } object alike", () => {
+    expect(normalizeConcept("implementing")).toEqual({ phase: "implementing" });
+    expect(normalizeConcept({ phase: "iterating" })).toEqual({ phase: "iterating" });
+    expect(normalizeConcept({ phase: " Waiting " })).toEqual({ phase: "waiting" });
+  });
+
+  it("an open concept with an unknown or missing phase defaults to waiting", () => {
+    expect(normalizeConcept({})).toEqual({ phase: "waiting" });
+    expect(normalizeConcept({ phase: "done" })).toEqual({ phase: "waiting" });
+    expect(normalizeConcept(true)).toEqual({ phase: "waiting" });
+  });
+
+  it("nothing open → null, and hasConcept follows", () => {
+    expect(normalizeConcept(undefined)).toBeNull();
+    expect(normalizeConcept(null)).toBeNull();
+    expect(normalizeConcept("")).toBeNull();
+    expect(hasConcept(undefined)).toBe(false);
+    expect(hasConcept("waiting")).toBe(true);
+  });
+
+  it("states the phase alone when no content work is running", () => {
+    expect(conceptWhat("waiting", [], "de")).toBe("Warte auf deine Entscheidungen auf der Seite");
+    expect(conceptWhat("iterating", undefined, "de")).toBe("Arbeite an der nächsten Iteration");
+    expect(conceptWhat("implementing", [], "de")).toBe("Arbeite an der Implementierung");
+    expect(conceptWhat("implementing", [], "en")).toBe("Working on the implementation");
+  });
+
+  it("folds a single content agent into the implementing sentence by name", () => {
+    expect(conceptWhat("implementing", [{ name: "devops:frontend" }], "de"))
+      .toBe("Arbeite an der Implementierung mit Agent `devops:frontend`");
+    expect(conceptWhat("implementing", [{ name: "devops:frontend" }], "en"))
+      .toBe("Working on the implementation with agent `devops:frontend`");
+  });
+
+  it("folds several items in as counts per class, biggest unit first", () => {
+    const mix = [
+      { name: "devops:frontend" }, { name: "devops:core" },
+      { name: "harden-pass", kind: "workflow" }, { name: "npm test", kind: "task" },
+    ];
+    expect(conceptWhat("iterating", mix, "de"))
+      .toBe("Arbeite an der nächsten Iteration mit 1 Workflow + 2 Agenten + 1 Task");
+    expect(conceptWhat("iterating", mix, "en"))
+      .toBe("Working on the next iteration with 1 workflow + 2 agents + 1 task");
+  });
+
+  it("while waiting, open work is its own clause rather than 'with'", () => {
+    expect(conceptWhat("waiting", [{ name: "devops:research" }], "de"))
+      .toBe("Warte auf deine Entscheidungen auf der Seite · Agent `devops:research` arbeitet");
+  });
+
+  it("returns nothing when no concept is open", () => {
+    expect(conceptWhat(undefined, [{ name: "x" }], "de")).toBe("");
   });
 });

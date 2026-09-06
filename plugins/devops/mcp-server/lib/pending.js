@@ -244,4 +244,102 @@ export function renderPendingBlock(pending, lang) {
   return L.header + '\n' + bullets.join('\n') + '\n\n_' + L.hint + '_';
 }
 
-export { PENDING_LABEL, CTA_NAME_LIMIT, LINE_NAME_LIMIT, BLOCK_ITEM_LIMIT, NAME_MAX };
+/**
+ * The `{what}` slot shape WITHOUT a verb — "Agent `x`" or "2 Agenten + 1 Task".
+ * Used where the sentence already has its verb (the concept CTA: "Arbeite an
+ * der Implementierung mit …"), so pendingWhat's "arbeiten" would double it.
+ */
+function pendingShape(pending, lang) {
+  const L = PENDING_LABEL[lang] || PENDING_LABEL.de;
+  const items = normalizePending(pending);
+  if (items.length === 0) return '';
+  if (items.length === 1) {
+    const names = nameList(items, CTA_NAME_LIMIT);
+    return names ? noun(L, items[0].kind, 1) + ' ' + names : '1 ' + noun(L, items[0].kind, 1);
+  }
+  return groupsOf(items)
+    .map(g => g.items.length + ' ' + noun(L, g.kind, g.items.length))
+    .join(' + ');
+}
+
+// ---------------------------------------------------------------------------
+// Concept layer — a concept page is open, so the turn is a checkpoint
+// ---------------------------------------------------------------------------
+//
+// While a concept page is open, the turn always ends in one of three states,
+// and none of them is "background work is running": the bridge server, the
+// keepalive pulser and the pickup waker are plumbing that stays up for the
+// whole concept — they never produce a result, they ARE the waiting. So the
+// concept CTA replaces the pending CTA and states the one thing that is true:
+// waiting for decisions, working on the next iteration, or implementing. Real
+// content agents (a frontend agent, a research workflow) still count and are
+// folded into the sentence — "Arbeite an der Implementierung mit 2 Agenten".
+
+/** Phases a concept session can be in when a turn hands back. */
+export const CONCEPT_PHASES = ['waiting', 'iterating', 'implementing'];
+
+const CONCEPT_LABEL = {
+  de: {
+    waiting: 'Warte auf deine Entscheidungen auf der Seite',
+    iterating: 'Arbeite an der nächsten Iteration',
+    implementing: 'Arbeite an der Implementierung',
+    with: 'mit',
+  },
+  en: {
+    waiting: 'Waiting for your decisions on the page',
+    iterating: 'Working on the next iteration',
+    implementing: 'Working on the implementation',
+    with: 'with',
+  },
+};
+
+/**
+ * Coerce the accepted `concept` shapes — a phase string or `{ phase }` — into
+ * `{ phase }`, or null when no concept is open. A truthy value with an unknown
+ * or missing phase still means "a concept is open" and defaults to waiting:
+ * the safe reading, since the only wrong card here is one that asks for a SHIP.
+ *
+ * @param {string|object|undefined} concept
+ * @returns {{ phase: 'waiting'|'iterating'|'implementing' }|null}
+ */
+export function normalizeConcept(concept) {
+  if (!concept) return null;
+  // A JSON-encoded object arrives as a string through the CLI fallback and any
+  // caller that skipped the schema's preprocess — parse it rather than reading
+  // the whole blob as an unknown phase.
+  if (typeof concept === 'string' && concept.trim().startsWith('{')) {
+    try { concept = JSON.parse(concept); } catch { /* keep the string */ }
+  }
+  const raw = typeof concept === 'string' ? concept : (typeof concept === 'object' ? concept.phase : '');
+  const phase = String(raw == null ? '' : raw).trim().toLowerCase();
+  return { phase: CONCEPT_PHASES.includes(phase) ? phase : 'waiting' };
+}
+
+/** True when the card must switch to the concept CTA. */
+export function hasConcept(concept) {
+  return normalizeConcept(concept) !== null;
+}
+
+/**
+ * The `{what}` slot of the concept CTA — the phase sentence, with any real
+ * background work folded in: "Arbeite an der Implementierung mit Agent
+ * `devops:frontend`". While waiting, open work is unusual, so it is appended
+ * as its own clause instead of pretending the wait is done "with" it.
+ *
+ * @param {string|object} concept
+ * @param {Array} [pending] — raw or normalized items (content work only; the
+ *   bridge's own tasks never belong here)
+ * @param {'de'|'en'} lang
+ * @returns {string} '' when no concept is open
+ */
+export function conceptWhat(concept, pending, lang) {
+  const c = normalizeConcept(concept);
+  if (!c) return '';
+  const L = CONCEPT_LABEL[lang] || CONCEPT_LABEL.de;
+  const shape = pendingShape(pending, lang);
+  if (!shape) return L[c.phase];
+  if (c.phase === 'waiting') return L[c.phase] + ' · ' + pendingWhat(pending, lang);
+  return L[c.phase] + ' ' + L.with + ' ' + shape;
+}
+
+export { PENDING_LABEL, CONCEPT_LABEL, CTA_NAME_LIMIT, LINE_NAME_LIMIT, BLOCK_ITEM_LIMIT, NAME_MAX };

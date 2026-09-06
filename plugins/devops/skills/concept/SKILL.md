@@ -712,6 +712,11 @@ is idle and has multi-minute gaps in practice (observed: 638 s with the cron
 registered and the session idle). It stays armed as the backup pickup path,
 never as the primary one.
 
+**Neither task — nor the bridge server — is pending work.** They run for the
+whole concept and never yield a result; they are the waiting itself.
+`stop.flow.guard` ignores them, and they must NEVER appear in a completion
+card's `pending` field. See § Completion cards while the concept is open.
+
 Pass the state file's **absolute** path via `--state`. The watchers used to
 test a relative `.claude/concept-active.json` against their own cwd, which is
 not always the project root the state file lives in — both then exited
@@ -758,6 +763,28 @@ Pick the wording that matches the `[ui-locale: ...]` hint injected by
 **de:**
 > Concept geöffnet. Triff deine Entscheidungen auf der Seite und klick
 > "Entscheidungen abschicken" wenn du fertig bist — ich übernehme dann.
+
+### Completion cards while the concept is open
+
+Every turn that ends with the concept still open — right after opening the
+page, after each processing round, after a stale wake — renders its completion
+card with the `concept` field. That replaces the CTA of whatever variant the
+turn earned (and outranks `pending`) with the one statement that is true:
+
+| `concept.phase` | When | CTA (DE) |
+|---|---|---|
+| `waiting` (default) | Page is open, next step is the user's submission | `🧭 CONCEPT läuft. Warte auf deine Entscheidungen auf der Seite — ich MELDE mich` |
+| `iterating` | A submission was processed and the next iteration is still being produced (e.g. by background agents) | `🧭 CONCEPT läuft. Arbeite an der nächsten Iteration — ich MELDE mich` |
+| `implementing` | An `implement` submission is being executed and the turn hands back before it lands | `🧭 CONCEPT läuft. Arbeite an der Implementierung — ich MELDE mich` |
+
+Real content work still goes into `pending` — a feature agent implementing the
+submission, a research workflow preparing the next round — and the card folds
+it into that line (`… mit 2 Agenten`) and names each item in the pending block.
+The bridge server, keepalive pulser and pickup waker are **not** content work:
+never list them there. A card that names them is the bug this field fixes.
+
+The final card (Step 6b) carries no `concept` field: by then the bridge is
+down and the concept is closed.
 
 ## Step 4 — Monitor via HTTP Bridge
 
@@ -1487,7 +1514,9 @@ Call `mcp__plugin_devops_dotclaude-completion__render_completion_card`:
 
 Pass: `variant`, `summary` (e.g. "Concept auth-middleware-redesign finalized"),
 `lang`, `session_id`, `changes` (what the concept covered and which decisions
-were acted on), and `state` when files changed.
+were acted on), and `state` when files changed. Do **not** pass `concept` here —
+the concept is closed; that field belongs to the mid-concept cards only (Step 3
+§ Completion cards while the concept is open).
 
 Output the returned markdown VERBATIM as the LAST thing in the response —
 nothing after the closing `---`.

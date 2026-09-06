@@ -45,7 +45,7 @@ import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
-import { hasPending, pendingWhat, renderPendingBlock, renderPendingLine } from "./lib/pending.js";
+import { hasPending, pendingWhat, renderPendingBlock, renderPendingLine, hasConcept, conceptWhat } from "./lib/pending.js";
 import { clampText, clampList } from "./lib/soft-limits.js";
 import {
   assessFreshness,
@@ -315,6 +315,9 @@ const CTA = {
     fallback:                 '## \ud83d\udd27 DONE \u2014 Anything ELSE?',
     // Pending layer \u2014 overrides EVERY variant's CTA while background work runs.
     pending:                  '## \u23f3 NOT DONE YET. {what} \u2014 I\u2019ll REPORT back',
+    // Concept layer — a concept page is open; outranks pending (the bridge's own
+    // tasks are plumbing, and any real work is folded into {what}).
+    concept:                  '## 🧭 CONCEPT open. {what} — I’ll REPORT back',
   },
   de: {
     'ship-successful-merged':      '## \ud83d\ude80 SHIPPED{chan}. merged \u2192 origin/{merged} \u2014 Alles ERLEDIGT',
@@ -335,6 +338,9 @@ const CTA = {
     fallback:                 '## \ud83d\udd27 DONE \u2014 Noch was ANDERES?',
     // Pending layer \u2014 overrides EVERY variant's CTA while background work runs.
     pending:                  '## \u23f3 NOCH NICHT FERTIG. {what} \u2014 ich MELDE mich',
+    // Concept layer — a concept page is open; outranks pending (the bridge's own
+    // tasks are plumbing, and any real work is folded into {what}).
+    concept:                  '## 🧭 CONCEPT läuft. {what} — ich MELDE mich',
   },
 };
 
@@ -679,9 +685,22 @@ function renderDeployGate(items, lang) {
   return labels.header + '\n' + bullets.join('\n') + '\n\n_' + labels.hint + '_';
 }
 
-function renderCTA(variant, cta, lang, state, delivery, pending) {
+function renderCTA(variant, cta, lang, state, delivery, pending, concept) {
   const templates = CTA[lang] || CTA.de;
   cta = cta || {};
+
+  // Concept layer — a concept page is open, so this turn is a checkpoint in a
+  // loop that ends on the page, not in chat. The bridge server, keepalive
+  // pulser and pickup waker run for the whole concept and are NOT pending work
+  // (stop.flow.guard ignores them), so the CTA must not say "3 Tasks laufen";
+  // it says which of the three true states the concept is in — waiting for
+  // decisions, working on the next iteration, implementing — and folds any REAL
+  // background work (content agents, a workflow) into that sentence. Outranks
+  // the pending layer for exactly that reason.
+  if (hasConcept(concept)) {
+    const tpl = templates.concept || CTA.de.concept;
+    return tpl.replace('{what}', conceptWhat(concept, pending, lang)).replace(/^## /, '### ');
+  }
 
   // Pending layer — background subagents / tasks the turn started are STILL
   // running. Every other CTA on this card would ask the user to act on a result
@@ -1031,7 +1050,7 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
-  parts.push(renderCTA(variant, input.cta, lang, input.state, input.delivery, input.pending));
+  parts.push(renderCTA(variant, input.cta, lang, input.state, input.delivery, input.pending, input.concept));
   parts.push('');
 
   parts.push('---');
@@ -1179,7 +1198,7 @@ const CARD_VARIANTS = [
 /** Structured fields the MCP schema accepts as either an object or a JSON string. */
 const JSON_FIELDS = [
   'changes', 'tests', 'state', 'cta', 'userTest', 'userFinalTest',
-  'deployGate', 'validation', 'delivery', 'promotion', 'pending',
+  'deployGate', 'validation', 'delivery', 'promotion', 'pending', 'concept',
 ];
 
 /** Prefix that carries the relay contract with the card itself. */
@@ -1541,6 +1560,15 @@ server.registerTool(
           }),
         ])).optional(),
       ).describe("Background work STILL RUNNING at turn end — subagents started with run_in_background, backgrounded Bash tasks, or Workflow runs. MANDATORY whenever such work is in flight: it overrides the CTA of EVERY variant with '⏳ NOCH NICHT FERTIG. {what} — ich MELDE mich', names the first three items on a dim line directly above that CTA, and renders a block naming each item with what it is doing, so the card never asks the user to SHIP or act on a result that does not exist yet. The card body still reports what IS true; only the call to action is corrected. stop.flow.guard blocks the turn when open background work is detected and this field is missing."),
+      concept: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.union([
+          z.enum(["waiting", "iterating", "implementing"]),
+          z.object({
+            phase: z.enum(["waiting", "iterating", "implementing"]).optional().describe("'waiting' (default) = the page is open and the next step is the user's submission; 'iterating' = a submission was processed and the next iteration is being produced; 'implementing' = an implement submission is being executed."),
+          }),
+        ]).optional(),
+      ).describe("A /concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT läuft. {phase} — ich MELDE mich', where {phase} is one of: Warte auf deine Entscheidungen · Arbeite an der nächsten Iteration · Arbeite an der Implementierung. Real background work (content agents, a workflow) still goes into `pending` and is folded into that sentence ('… mit 2 Agenten'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them."),
       deployGate: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([

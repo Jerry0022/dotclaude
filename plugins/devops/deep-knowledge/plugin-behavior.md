@@ -106,6 +106,13 @@ Subagents inherit all output contracts:
   asks the user to SHIP or act on a result that has not arrived. `stop.flow.guard`
   reads the open work out of the transcript and blocks a card that omits it.
   Never put an internal agentId in a card — use the agent type or task label.
+- **A turn that ends with a `/concept` page open renders its card with
+  `concept: { phase }`** (`waiting` · `iterating` · `implementing`) — the CTA
+  becomes "🧭 CONCEPT läuft. Warte auf deine Entscheidungen / Arbeite an der
+  nächsten Iteration / Arbeite an der Implementierung — ich MELDE mich" and
+  outranks `pending`. The concept bridge's own tasks (server, keepalive pulser,
+  pickup waker) are infrastructure, never `pending`; the guard ignores them.
+  Real content agents still go into `pending` and are folded into that line.
 
 ## Extension Model
 

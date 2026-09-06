@@ -4,7 +4,7 @@
  * call, and the task-notification that reports either one stopping.
  */
 import { describe, test, expect } from 'vitest';
-import { scanOpenTasks, openTaskNames, labelFor } from './pending-tasks.js';
+import { scanOpenTasks, openTaskNames, labelFor, isConceptInfra } from './pending-tasks.js';
 
 const AGENT_LAUNCH_TEXT =
   'Async agent launched successfully. (This tool result is internal metadata — never quote or ' +
@@ -406,5 +406,88 @@ describe('scanOpenTasks — Bash output is not a launch announcement', () => {
       toolResult('toolu_e', AGENT_LAUNCH_TEXT),
     ].join('\n'));
     expect(open).toEqual([]);
+  });
+});
+
+describe('scanOpenTasks — concept bridge infrastructure is not work', () => {
+  const SERVER_CMD =
+    'PLUGIN_ROOT=$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-server.py | head -1); ' +
+    'python "$PLUGIN_ROOT" 8840 "C:/repo" --html "docs/concepts/2026-09-06-eve.html"';
+  const PULSER_CMD =
+    'node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js | head -1)" ' +
+    '--mode pulse --port 8840 --state "C:/repo/.claude/concept-active.json"';
+  const WAKER_CMD = PULSER_CMD.replace('--mode pulse', '--mode watch');
+
+  function bgLaunch(id, taskId, input) {
+    return [
+      toolUse(id, 'Bash', input),
+      toolResult(id, BASH_BG_TEXT.replace('b68oycrr6', taskId)),
+    ];
+  }
+
+  test('the bridge server, pulser and waker open nothing', () => {
+    const open = scanOpenTasks([
+      ...bgLaunch('toolu_s', 'srv1', { command: SERVER_CMD, description: 'Start the concept bridge server on port 8840' }),
+      ...bgLaunch('toolu_p', 'pls1', { command: PULSER_CMD, description: 'Launch the keepalive pulser for the concept bridge' }),
+      ...bgLaunch('toolu_w', 'wkr1', { command: WAKER_CMD, description: 'Launch the pickup waker' }),
+    ].join('\n'));
+    expect(open).toEqual([]);
+  });
+
+  test('recognized by the script alone when the description says nothing', () => {
+    const open = scanOpenTasks(
+      bgLaunch('toolu_p', 'pls1', { command: PULSER_CMD, description: 'Background poller' }).join('\n'),
+    );
+    expect(open).toEqual([]);
+  });
+
+  test('recognized by the role alone when the script path is resolved in a variable', () => {
+    const open = scanOpenTasks(
+      bgLaunch('toolu_s', 'srv1', {
+        command: 'python "$SERVER" 8840 "C:/repo" --html "docs/concepts/x.html"',
+        description: 'Start the concept bridge server on port 8840',
+      }).join('\n'),
+    );
+    expect(open).toEqual([]);
+  });
+
+  test('real work launched alongside the plumbing is still reported', () => {
+    const open = scanOpenTasks([
+      ...bgLaunch('toolu_s', 'srv1', { command: SERVER_CMD, description: 'Start the concept bridge server' }),
+      ...bgLaunch('toolu_w', 'wkr1', { command: WAKER_CMD, description: 'Launch the pickup waker' }),
+      ...AGENT_START,
+      ...bgLaunch('toolu_t', 'tst1', { command: 'npm test', description: 'Baseline test run' }),
+    ].join('\n'));
+    expect(open).toEqual([
+      { id: 'a75d674f7108dd6c8', kind: 'agent', name: 'devops:frontend' },
+      { id: 'tst1', kind: 'task', name: 'Baseline test run' },
+    ]);
+  });
+
+  test('an ordinary task whose command merely mentions a concept page is still work', () => {
+    const open = scanOpenTasks(
+      bgLaunch('toolu_t', 'tst1', {
+        command: 'node scripts/concept-gate.js docs/concepts/x.html',
+        description: 'Validate the concept page',
+      }).join('\n'),
+    );
+    expect(open).toEqual([{ id: 'tst1', kind: 'task', name: 'Validate the concept page' }]);
+  });
+});
+
+describe('isConceptInfra', () => {
+  test('matches the three bridge scripts and their role names', () => {
+    expect(isConceptInfra({ command: 'python x/concept-server.py 8840 .' })).toBe(true);
+    expect(isConceptInfra({ command: 'node x/concept-watch.js --mode pulse' })).toBe(true);
+    expect(isConceptInfra({ description: 'Launch the keepalive pulser' })).toBe(true);
+    expect(isConceptInfra({ description: 'Re-launch the pickup waker' })).toBe(true);
+    expect(isConceptInfra({ description: 'Restart the concept bridge on the same port' })).toBe(true);
+  });
+
+  test('does not match unrelated work or empty input', () => {
+    expect(isConceptInfra({ command: 'npm test', description: 'Run the suite' })).toBe(false);
+    expect(isConceptInfra({ command: 'node scripts/concept-drift.js --capture' })).toBe(false);
+    expect(isConceptInfra({})).toBe(false);
+    expect(isConceptInfra(undefined)).toBe(false);
   });
 });

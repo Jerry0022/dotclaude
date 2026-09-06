@@ -1,9 +1,18 @@
 /**
  * @module pending-tasks
- * @version 0.2.0
+ * @version 0.3.0
  * @description Detects background work that is STILL RUNNING when a turn ends —
  *   subagents launched with run_in_background, backgrounded Bash tasks, and
  *   whole Workflow runs (which fan out to agents of their own).
+ *
+ *   INFRASTRUCTURE IS NOT WORK. The concept skill keeps three detached Bash
+ *   tasks alive for as long as a concept page is open — the bridge server, the
+ *   keepalive pulser and the pickup waker. They produce no result the user is
+ *   waiting for; they ARE the waiting. Counting them turned every concept card
+ *   into "3 Tasks laufen — ich MELDE mich", which names plumbing instead of the
+ *   one true statement (waiting for decisions / working on the next iteration /
+ *   implementing). isConceptInfra() recognizes them by the script they run or
+ *   the role their description names, and scanOpenTasks never opens them.
  *
  *   The card is rendered at the moment the turn hands back, so without this the
  *   CTA of every variant ("SHIP or CHANGE?", "All DONE") asks the user to act on
@@ -93,6 +102,25 @@ function canLaunch(launcher, kind) {
  */
 function announces(text, marker) {
   return text.trimStart().startsWith(marker);
+}
+
+/**
+ * The concept bridge's own background tasks — matched on the script the command
+ * runs (the durable signal) or on the role the launch description names (the
+ * shape the skill prescribes when the script path is resolved inside the
+ * command through a shell variable and never appears literally).
+ */
+const CONCEPT_INFRA_RE =
+  /concept-server\.py|concept-watch\.js|concept[- ]bridge|keepalive pulser|pickup waker|concept[- ]watch/i;
+
+/**
+ * True when a Bash launch is concept-bridge infrastructure rather than work.
+ * @param {object} input — the Bash tool_use input ({ command, description })
+ */
+function isConceptInfra(input) {
+  const i = input || {};
+  return CONCEPT_INFRA_RE.test(String(i.command || ''))
+    || CONCEPT_INFRA_RE.test(String(i.description || ''));
 }
 
 /** Max characters of a Bash command used as a fallback label. */
@@ -302,6 +330,9 @@ function scanOpenTasks(transcriptContent) {
       const bg = canLaunch(launcher, 'task')
         && announces(text, BASH_LAUNCH_MARKER) && text.match(BASH_BG_RE);
       if (bg) {
+        // Concept bridge plumbing (server / pulser / waker) runs for the whole
+        // concept session and yields no result — it is never "still running work".
+        if (isConceptInfra(input)) continue;
         const name = labelFor(input, 'task');
         known.set(bg[1], name);
         open.set(bg[1], { kind: 'task', name });
@@ -337,6 +368,7 @@ module.exports = {
   LAUNCH_TOOLS,
   canLaunch,
   announces,
+  isConceptInfra,
   scanOpenTasks,
   openTaskNames,
   labelFor,

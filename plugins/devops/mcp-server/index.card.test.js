@@ -448,3 +448,84 @@ describe("pending layer — workflows and the name line", () => {
     expect(text).toMatch(/^> ⏳ `abcd`, `devops:qa`$/m);
   });
 });
+
+// A /concept page open at turn end is a checkpoint in a loop that ends on the
+// page, not in chat. The bridge's own background tasks are plumbing, so the
+// card must not say "3 Tasks laufen"; it says which of the three true states
+// the concept is in, and folds any REAL content work into that line.
+describe("concept layer", () => {
+  test("waiting: replaces the ready CTA with the concept wait line", async () => {
+    const text = await cardText({
+      variant: "ready",
+      summary: "Concept eve-panel iteration 3 geöffnet",
+      lang: "de",
+      session_id: "test-concept-1",
+      changes: [{ area: "concept", description: "Iteration 3 angehängt" }],
+      concept: { phase: "waiting" },
+    });
+    expect(text).toContain("### 🧭 CONCEPT läuft. Warte auf deine Entscheidungen auf der Seite — ich MELDE mich");
+    expect(text).not.toContain("READY — SHIP oder ÄNDERN");
+    expect(text).not.toContain("NOCH NICHT FERTIG");
+  });
+
+  test("a bare phase string is accepted", async () => {
+    const text = await cardText({
+      variant: "analysis", summary: "Concept offen", lang: "de",
+      session_id: "test-concept-2", concept: "iterating",
+    });
+    expect(text).toContain("### 🧭 CONCEPT läuft. Arbeite an der nächsten Iteration — ich MELDE mich");
+  });
+
+  test("implementing with content agents folds them into the line and keeps the block", async () => {
+    const text = await cardText({
+      variant: "ready",
+      summary: "Implement-Runde gestartet",
+      lang: "de",
+      session_id: "test-concept-3",
+      concept: { phase: "implementing" },
+      pending: [
+        { name: "devops:frontend", doing: "Panel-Layout umbauen" },
+        { name: "devops:core", doing: "Bridge-Endpunkt ergänzen" },
+      ],
+    });
+    expect(text).toContain("### 🧭 CONCEPT läuft. Arbeite an der Implementierung mit 2 Agenten — ich MELDE mich");
+    // The pending block and the dim name line still name the agents.
+    expect(text).toContain("LÄUFT NOCH — nicht abgeschlossen");
+    expect(text).toContain("> ⏳ `devops:frontend`, `devops:core`");
+    expect(text).not.toContain("NOCH NICHT FERTIG");
+  });
+
+  test("English wording", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Concept open", lang: "en",
+      session_id: "test-concept-4",
+      concept: { phase: "implementing" }, pending: [{ name: "devops:frontend" }],
+    });
+    expect(text).toContain("### 🧭 CONCEPT open. Working on the implementation with agent `devops:frontend` — I’ll REPORT back");
+  });
+
+  test("outranks the pending CTA — the concept phase is the truer statement", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-concept-5",
+      concept: "waiting", pending: [{ name: "devops:research", doing: "Doku" }],
+    });
+    expect(text).toContain("### 🧭 CONCEPT läuft. Warte auf deine Entscheidungen auf der Seite · Agent `devops:research` arbeitet — ich MELDE mich");
+    expect(text).not.toContain("NOCH NICHT FERTIG");
+  });
+
+  test("a JSON-string concept field is coerced like the other structured fields", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-concept-6",
+      concept: '{"phase":"iterating"}',
+    });
+    expect(text).toContain("Arbeite an der nächsten Iteration");
+  });
+
+  test("no concept field leaves the normal CTA alone", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-concept-7",
+    });
+    expect(text).toContain("READY — SHIP oder ÄNDERN");
+    expect(text).not.toContain("CONCEPT läuft");
+  });
+});

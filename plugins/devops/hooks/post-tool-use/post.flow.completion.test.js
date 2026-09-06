@@ -196,3 +196,54 @@ describe("post.flow.completion — pending reminder", () => {
     cleanup(dir);
   });
 });
+
+// The concept bridge's own background tasks (server, keepalive pulser, pickup
+// waker) run for the whole concept and never yield a result. Flagging them as
+// `pending` produced cards that said "3 Tasks laufen — ich MELDE mich" while the
+// only true statement was "waiting for your decisions". The hook now routes
+// them to the `concept` field instead.
+describe("post.flow.completion — concept bridge infrastructure is not pending", () => {
+  const BG = "Command running in background with ID: b68oycrr6. Output is being written to: x";
+
+  test("the bridge server launch asks for `concept`, not `pending`", () => {
+    const dir = project();
+    const out = runHook(dir, "s-concept-server", "Bash", {
+      tool_input: {
+        command: 'python "$PLUGIN_ROOT" 8840 "C:/repo" --html "docs/concepts/x.html"',
+        description: "Start the concept bridge server on port 8840",
+        run_in_background: true,
+      },
+      tool_response: BG,
+    });
+    expect(out).toContain("[concept]");
+    expect(out).toContain("concept: { phase:");
+    expect(out).not.toContain("[pending]");
+    cleanup(dir);
+  });
+
+  test("the keepalive pulser is recognized by its script even with a bland description", () => {
+    const dir = project();
+    const out = runHook(dir, "s-concept-pulser", "Bash", {
+      tool_input: {
+        command: 'node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js | head -1)" --mode pulse --port 8840 --state "C:/repo/.claude/concept-active.json"',
+        description: "Background poller",
+        run_in_background: true,
+      },
+      tool_response: BG,
+    });
+    expect(out).toContain("[concept]");
+    expect(out).not.toContain("[pending]");
+    cleanup(dir);
+  });
+
+  test("an ordinary background task still gets the pending reminder", () => {
+    const dir = project();
+    const out = runHook(dir, "s-concept-other", "Bash", {
+      tool_input: { command: "npm test", description: "Run the suite", run_in_background: true },
+      tool_response: BG,
+    });
+    expect(out).toContain("[pending]");
+    expect(out).not.toContain("[concept]");
+    cleanup(dir);
+  });
+});
