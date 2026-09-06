@@ -101,3 +101,32 @@ Enforced by the parallel-agent guard introduced in #193. See also
   changes after merge.
 - **Pre-tool-use guard** — warns when a git-mutating command is issued from the
   main repo root while a worktree for the current session is active.
+
+### Protection scope covers every operation class
+
+A "protected" or "live session" set protects the **subject**, not one verb. Once
+a repo, worktree, branch, or path is in that set, it is off-limits to *every*
+destructive operation class in the sweep:
+
+| Class | Examples |
+|-------|----------|
+| Ref mutation | `branch -D`, `push --delete`, `checkout`, `reset --hard` |
+| Worktree mutation | `worktree remove`, `worktree prune`, directory deletion |
+| File mutation | writing `.gitignore`, committing, staging |
+| Process mutation | killing a process whose cwd or argv points into the path |
+
+- **Never enumerate the covered verbs.** A rule written as a list of forbidden
+  commands silently permits every command absent from the list — which is how a
+  guard that correctly refused to delete a branch still removed the worktree
+  holding it. State the scope by subject and treat the list as examples.
+- **Re-check immediately before each destructive action, not once at
+  classification time.** A sweep across many repos runs for minutes; sessions
+  start, stop, and switch branches inside that window, so a set built at the
+  start is already stale by the time the last repo is reached.
+- **Derive liveness from the running system**, not from a hand-maintained
+  constant: registered worktrees (`git worktree list --porcelain`), session
+  metadata, and live process cwd/argv. A hard-coded path list drifts the moment
+  a session moves.
+- **A partial guard is worse than none** — it reads as coverage. If a sweep
+  cannot protect a subject across all four classes, it must skip that subject
+  entirely and report it, not protect it in some classes only.
