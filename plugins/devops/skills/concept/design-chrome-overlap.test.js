@@ -199,7 +199,9 @@ describe("design mode hides the document chrome it would paint over", () => {
 });
 
 describe("scroll boxes are skinned, not raw", () => {
-  const BOXES = [".feedback-dock", ".concept-decision-panel", "section[data-screen]"];
+  // The panel aside itself no longer scrolls (flex split, § Panel anatomy);
+  // its tree box .panel-nav-scroll is the scroll container now.
+  const BOXES = [".feedback-dock", ".panel-nav-scroll", "section[data-screen]"];
 
   test.each(BOXES)("%s declares the thin scrollbar", (box) => {
     const hit = RULES.find((r) => r.selectors.some((s) => norm(s) === box)
@@ -333,7 +335,7 @@ describe("the gate can no longer pass a stacking page", () => {
     const e = entry(48);
     expect(e).toContain("scrollbar-width: thin");
     expect(e).toContain("::-webkit-scrollbar");
-    for (const box of [".feedback-dock", ".concept-decision-panel", "section[data-screen]"]) {
+    for (const box of [".feedback-dock", ".panel-nav-scroll", "section[data-screen]"]) {
       expect(e, "entry 48 must name " + box).toContain(box);
     }
     expect(e, "explicitly a warning, unlike 46/47").toMatch(/[Ww]arning, not a hard fail/);

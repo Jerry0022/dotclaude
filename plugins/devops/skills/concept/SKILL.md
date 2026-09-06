@@ -308,16 +308,27 @@ Panel layout depends on the template picked in Step 1a:
 On narrow screens (<768px), sidebar-mode panels collapse to a sticky bottom
 bar. Overlay panels already work on mobile via the FAB.
 
-**Panel top-to-bottom order (identical across all templates):**
-1. **Iteration tabs** (`.iteration-tabs`) — compact vertical chip list,
-   one per iteration. Active chip = current round; older chips stay
-   clickable to review frozen snapshots.
-2. **Section TOC** (`.section-nav`) — auto-populated from EVERY
-   `<section id="…" data-nav-label="…">` inside the active iteration.
-   Not limited to variants: Ist-Zustand, context blocks, design notes,
-   mockups — anything with a nav label gets a scroll anchor here.
-3. Decision summary + submit button.
-4. Connection warning + post-submit state.
+**Panel anatomy, top-to-bottom (identical across all templates — a flex
+column of four parts; only part 2 scrolls, parts 1, 3 and 4 are pinned):**
+1. **"You are here"** (`.panel-here`) — pinned head: the selected round's
+   label ("Iteration 8 · aktiv"), the TOC entry under the reading line, and
+   on a frozen tab a compact "↩ zur Runde N" link.
+2. **The tree** (`.panel-nav-scroll`, `flex: 1; min-height: 0;
+   overflow-y: auto`) — **iteration tabs** (`.iteration-tabs`, compact
+   vertical chip list, one per iteration; active chip = current round, older
+   chips stay clickable to review frozen snapshots) and the **section TOC**
+   (`.section-nav`) — auto-populated from EVERY `<section id="…"
+   data-nav-label="…">` inside the active iteration. Not limited to
+   variants: Ist-Zustand, context blocks, design notes, mockups — anything
+   with a nav label gets a scroll anchor here.
+3. **Status line** (`.panel-status`) — ONE line, one glyph, six mutually
+   exclusive states (saved / saving / connecting / local-only / submitted /
+   frozen); the progress steps expand under it after a submit. See
+   `deep-knowledge/templates.md` § Decision Panel State CSS.
+4. **CTA foot** (`.panel-cta`, ≤120px) — the split button (primary +
+   ▾ menu with the implement action), or the submitted / frozen /
+   final-report block. Reachable without scrolling the panel, however many
+   rounds or TOC entries the page has.
 
 The iteration tab bar must NEVER live inside the left-hand content area.
 The content area is reserved for the actual concept.
@@ -365,18 +376,22 @@ Variant/section evaluation uses a **bi-state selector** (not tri-state):
 
 ### Submit actions — iterate vs. implement
 
-The decision panel always shows **two submit buttons**, never one. A
-decision-panel submit by itself MUST NEVER trigger code changes — that only
-happens when the user explicitly clicks the implement button.
+The decision panel always offers **two submit actions**, never one, as a
+**split button**. A decision-panel submit by itself MUST NEVER trigger code
+changes — that only happens when the user explicitly picks the implement
+action from the menu and confirms.
 
 | Button | Label (de / en) | Action | Style |
 |---|---|---|---|
-| Primary | "Zur nächsten Iteration" / "Next iteration" | `action: "iterate"` — Claude processes the feedback and appends a new iteration section (no code changes) | Full-width, accent color |
-| Secondary | "Mit Feedback implementieren" / "Implement with feedback" | `action: "implement"` — Claude applies the selections as actual code/file changes | Warning-colored border, extra top margin (~2rem) so the user cannot misclick, ⚠ icon |
+| Primary (`#submit-iterate-btn`) | "Zur nächsten Iteration" / "Next iteration" | `action: "iterate"` — Claude processes the feedback and appends a new iteration section (no code changes) | Fills the row, accent color; its hint is the `title` tooltip |
+| Caret (`#submit-menu-btn`) | ▾ | Opens `#submit-menu` (`role="menu"`, `aria-expanded`); Escape / outside click closes it | Same accent pill, right end |
+| Secondary (`#submit-implement-btn`, inside the menu) | "Mit Feedback implementieren" / "Implement with feedback" | `action: "implement"` — Claude applies the selections as actual code/file changes, after the `panel.submit_implement_confirm` dialog | Warning-colored border + ⚠ icon, one level deeper behind the caret |
 
 The click-away handler in the feedback dock does NOT apply to these buttons
-— they are explicit commits. The extra gap before the implement button is
-mandatory: the user must move the mouse deliberately to reach it.
+— they are explicit commits. The misclick barrier is colour + border + the
+extra click, **not distance**: there is no gap in the ready panel, which is
+what keeps the pinned foot at ≤120px (the `.submit-gap` survives only in the
+final-report wizard).
 
 `collectDecisions()` adds `action: "iterate" | "implement"` to the payload
 based on which button was clicked. Claude reads that field and either runs
@@ -555,11 +570,21 @@ signal Claude monitors.
    clear "Entscheidungen übermittelt" indicator with a hint to switch to the
    Claude chat (see `deep-knowledge/templates.md` § Submit Handler)
 
-**Decision panel states:**
-- **Ready**: Submit button active, decision summary visible
-- **Disconnected**: Submit button disabled, warning banner visible (Claude
-  heartbeat stale — see `deep-knowledge/templates.md` § Claude Connection Heartbeat)
-- **Submitted**: Waiting indicator, "Wechsle zum Claude Chat" hint
+**Decision panel states** (the foot + the pinned status line above it):
+- **Ready**: split button active, decision summary visible; the status line
+  reads "✓ Gespeichert · verbunden" (or "… Speichert" while the draft mirror
+  flushes, "◐ Gespeichert · verbinde…" before the first heartbeat)
+- **Disconnected**: the buttons stay ENABLED (a click is cached and delivered
+  on reconnect, the cache badge on the button says so); the status line flips
+  to the one categorically different state, "⚠ Nur lokal gespeichert ·
+  getrennt" on a warning background (Claude heartbeat stale or three failed
+  draft flushes — see `deep-knowledge/templates.md` § Claude Connection
+  Heartbeat)
+- **Submitted**: "Entscheidungen übermittelt" + "Wechsle zum Claude Chat"
+  hint in the foot; the status line reads "⏳ Übermittelt · Claude arbeitet"
+  with one progress dot per step (the step list expands under it)
+- **Frozen** (any non-live tab): `#panel-frozen` with the back-link; the
+  status line reads "🕘 Iteration N · nur lesen"
 - After Claude processes and resets the page → back to **Ready**
 
 ### File Location
@@ -1187,7 +1212,7 @@ iteration must be live in the browser BEFORE the server signals "processed".
    not only at first generation. The page's shared engine (Attachments
    JS/CSS, § Layout CSS chrome rules, tab-switch JS) is whatever
    templates.md said on the day it was generated, and every later round
-   re-uses it. If any engine entry fails (44, 46, 47, 48, tab-switch),
+   re-uses it. If any engine entry fails (44, 46, 47, 48, 56, tab-switch),
    re-sync that whole block **verbatim from templates.md NOW**, before
    appending — otherwise the new iteration inherits the old defect and the
    user sees the same bug after updating the plugin. See

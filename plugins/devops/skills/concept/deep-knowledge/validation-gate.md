@@ -37,7 +37,7 @@ no legitimate matches — do not "keep it as a convenience". The decision panel
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 60 patterns, regardless of template
+Every concept page must contain these 63 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -45,7 +45,7 @@ related one — count the rows, not the highest number):
 |---|----------------|---------|
 | 1 | `concept-decisions` | Decision data JSON container |
 | 2 | `concept-submitted` | CSS class for monitoring detection signal |
-| 3 | `connection-status` | Inline connection status pill in #panel-ready (animated dot + label; state via `data-state`, driven by `checkClaudeConnection`). NOT an overlay, NO acknowledge button. |
+| 3 | `connection-status` | The status line inside `.panel-status` — OUTSIDE `#panel-ready`, pinned above the CTA foot (glyph + label; the raw heartbeat on `data-state` = connecting / connected / disconnected, written by `checkClaudeConnection` in EVERY panel state, the visible line composed by `renderPanelStatus`). NOT an overlay, NO acknowledge button. |
 | 3b | `_everPolled` | Pre-first-poll guard: the connection checker treats the window before the first `/heartbeat` response as "connecting", never "disconnected". Missing → the fresh-page connect→disconnect→connect flash returns. |
 | 4 | `checkClaudeConnection` | Heartbeat checker function |
 | 5 | `HEARTBEAT_STALE_MS` | Heartbeat staleness threshold |
@@ -67,7 +67,7 @@ related one — count the rows, not the highest number):
 | 20 | `submit-implement-btn` | Secondary submit: implement action (real changes) |
 | 21 | `querySelectorAll('input, select, textarea')` inside `collectDecisions` | Generic form catch-all (no hand-listed selectors per field) |
 | 22 | `data-active]` selector inside `collectDecisions` | Catch-all is scoped to the active iteration only |
-| 23 | `status-steps` | Submit-panel progress list (Übermittelt → Verarbeitet → Realitäts-Check → Implementiert) — see templates.md § Submit Progress Steps |
+| 23 | `status-steps` | Progress list (Übermittelt → Verarbeitet → Realitäts-Check → Implementiert) — a real `<ol>` inside `.panel-status` under the status line, in a `<details class="status-detail">` hidden until submit; the dots on the line (`renderStatusDots`) only mirror its `data-state`s — see templates.md § Submit Progress Steps |
 | 24 | `updateStatusSteps` | Wires `_picked_up_at` / `_phase` from `/decisions` polling into the progress list |
 | 25 | `data.claude_ts` inside `pollHeartbeat` | The poller MUST read JSON and assign `claude_ts` (not `server_ts`, not the raw response object). HTTP-200 alone is not enough — the daemon self-pulse keeps `server_ts` fresh forever, so an HTTP-only check leaves the indicator green while Claude's cron is dead. |
 | 26 | `_setCacheHints(` inside `checkClaudeConnection` | The checker MUST wire the per-button cache hint to the disconnected state, so a click made while Claude is offline reads as visibly queued (then auto-delivered by the Offline Submit Queue) rather than lost. Submit buttons stay enabled in every state — the queue, not a disabled button, is what prevents a black hole. |
@@ -94,7 +94,7 @@ related one — count the rows, not the highest number):
 | 44 | ALL FOUR of `textarea[hidden] + .attach-slot`, `textarea[hidden] + .attach-bar`, `insertAdjacentElement('afterend', bar)` (inside `_mountAttachmentBar`), `attach-visibility-styles` — AND NEITHER of `parentElement.appendChild(bar)` NOR `attach-hint` | The attachment engine's four halves; any one missing puts the 📎 stack back. The dock builds one textarea per screen / design / view and hides all but the active one, but a `.attach-slot` mount is that textarea's SIBLING — and `.attach-slot:empty` stops covering it the moment `initCommentAttachments()` mounts a bar into it. `.attach-bar` covers the mountless path, `afterend` is what makes that path an adjacent sibling at all, and `attach-visibility-styles` is the JS-injected copy of both rules (`_ensureAttachStyles()`) for a page that took the engine without the Layout CSS. The two negatives are the legacy shapes: `parentElement.appendChild(bar)` mounts the bar out of reach of every rule above, `attach-hint` is the removed per-field shortcut label. See templates.md § Attachments. |
 | 46 | `html[data-template="design"] .concept-content > header` AND `.iteration-intro { display: none` in the same rule | Design mode's iteration sections are `position: absolute; inset: 0`, but a page that started as `decision` or `free` keeps a `<header>` (h1 + subtitle + `#theme-toggle`) in `.concept-content` and an `<header class="iteration-intro">` per iteration, both in normal flow. Without this rule the canvas paints straight over them and their text bleeds through the mockup under the fixed screen indicator (measured at 1280x720: h1 at y=32, intro at y=0, both overlapping the artefact). Mandatory on every page that mixes `design` with `decision`/`free`. See templates.md § Layout CSS → "Document chrome vs. the fullscreen canvas". |
 | 47 | `html[data-template="design"] section[data-iteration]:not([data-active])` with `opacity: 1` | The exemption from § Tab Bar CSS's generic `opacity: 0.85` frozen-iteration cue. On an absolute/inset:0 design section that cue is not a dim, it is a see-through: the document header and sibling content show through the mockup, which is what makes a ☰ switch to a frozen design round look like an empty, doubled-up page. Frozen state is already carried by the panel's frozen state and the read-only dock (`applyDockFreezeState`). Missing → hard fail, same as 46: the two defects only ever appear together. |
-| 48 | `scrollbar-width: thin` + `::-webkit-scrollbar` covering `.feedback-dock`, `.concept-decision-panel`, `section[data-screen]` | **Warning, not a hard fail** — the page is usable without it. All three legitimately carry `overflow-y: auto`, and the default Chromium/Windows bar is an opaque 16px slab inside a 430px dark dock. Skinned thin with a `var(--border-color)` thumb on a transparent track. Both syntaxes required (`scrollbar-*` for Firefox/modern Chromium, `::-webkit-scrollbar*` for older WebKit). See templates.md § Layout CSS → "Scroll boxes". |
+| 48 | `scrollbar-width: thin` + `::-webkit-scrollbar` covering `.feedback-dock`, `.panel-nav-scroll`, `section[data-screen]` | **Warning, not a hard fail** — the page is usable without it. All three legitimately carry `overflow-y: auto` (the panel aside itself no longer scrolls — its tree box does, see entry 56), and the default Chromium/Windows bar is an opaque 16px slab inside a 430px dark dock. Skinned thin with a `var(--border-color)` thumb on a transparent track. Both syntaxes required (`scrollbar-*` for Firefox/modern Chromium, `::-webkit-scrollbar*` for older WebKit). See templates.md § Layout CSS → "Scroll boxes". |
 | 49 | `_iterationPrefix` — AND every `state['text:` write going through it | Per-iteration namespace for typed keys (`text:i3:d1-s1`). Screen ids, `{decisionId}-note` keys and annotation ids all repeat across rounds, and the feedback dock is one shared overlay outside `section[data-iteration]` — so an unnamespaced key means a different note in every round. Without it, round N+1 opens pre-filled with N's text, and the workaround for THAT (emptying the dock at submit time) is what destroyed the comments the user had just sent. ENGINE entry — see § Engine drift on iteration append. |
 | 50 | `queueDraftSync` AND `hydrateDraftFromBridge` AND `flushDraftBeacon` | The durable mirror: every autosave is POSTed to the bridge's `/draft` (fsynced before the ack), flushed by `sendBeacon` on `pagehide`/`hidden`, and merged back on load. `localStorage` alone does not survive a wiped profile, a private window, a quota error or a power cut — and it is the ONLY copy of work that has not been submitted yet. All three halves required: without the flush a closed tab outruns the last write; without the hydrate the durable copy is never read back. |
 | 51 | `markDockSubmitted` AND `unmarkDockSubmitted` (the latter CALLED from `restorePanelToReady`) — AND NOT `clearDock()` anywhere on the submit path | The dock keeps every character when a round is submitted; only editing is taken away. The round stays LIVE until Claude appends the next section, so its comments are the only on-screen record of what was sent — emptying the dock at submit time meant a detour into an older tab and back came home blank on a round that had not even been answered. The un-mark is not optional: every path that hands control back on a round that did not go through (507, or the safety timeout when Claude stopped answering) re-arms the submit buttons, and a ready panel over a read-only comment surface lets the user re-submit without being able to change anything first. |
@@ -104,9 +104,22 @@ related one — count the rows, not the highest number):
 | 55 | `iteration-tab[data-reality-check]` (the CSS) — required on any page that already contains a `section[data-iteration][data-reality-check]` | The reality-check round's tab marker. `data-reality-check` on the section is what tells the implement path "this round WAS the check, implement straight through"; the chip styling is how the user understands why an implement click produced another round instead of code. A page carrying the section without the styling still behaves correctly but looks like an unexplained extra iteration. Both the section and its chip carry the attribute — see reality-check.md § The forced round. |
 | 45 | `section[data-design]:not([data-design-active="true"])` | The CSS backstop for "exactly one design and one screen paint". Designs and screens are `position:absolute; inset:0`, so a single inactive section that ships without `hidden` does not sit somewhere wrong — it paints on top of the active one. Measured on a real page: three designs, five screens, all stacked on the same square, headings and mockups interleaved. `hidden` cannot be the only guard because the markup is merely ASKED to emit it. Must be `:has()`-guarded, together with the matching `section[data-screen]:not([data-screen-active="true"])` rule and `body:not([data-view-active="true"]) section[data-view]`. See templates.md § Layout CSS. |
 
+| 56 | `panel-nav-scroll` (the element) AND `min-height: 0` inside its CSS rule | The panel's flex split. `.concept-decision-panel` is a flex column that never scrolls itself; `.panel-nav-scroll` (`flex: 1 1 auto; min-height: 0; overflow-y: auto`) holds the iteration tabs + TOC, so `.panel-status` and `.panel-cta` stay pinned at the bottom. `min-height: 0` is load-bearing: without it the flex child refuses to shrink, the tree grows past the viewport and the call to action leaves the screen — the exact "scroll the menu to find the button" defect the anatomy removes. Design pages additionally need `padding-bottom: calc(60px + 2rem)` on `.panel-cta` (the 💬 FAB's row). ENGINE entry — see § Engine drift on iteration append. See templates.md § Decision Panel State CSS "Panel anatomy". |
+| 57 | `submit-menu-btn` AND `submit-menu` (with `role="menu"`) — and `submit-implement-btn` INSIDE it | The split button. The implement action lives one level deeper behind the ▾ caret (`aria-haspopup="menu"`, `aria-expanded` mirrors the menu's `[hidden]`; Escape / outside click close it). The misclick barrier is colour + border + the extra click, not distance — no `.submit-gap` in `#panel-ready`, which is what keeps the foot ≤120px (`max-height: 120px` on `.panel-cta`). The two hint paragraphs are gone (they are `title` tooltips now); `[data-cache-hint]` stays, twice, still toggled by `_setCacheHints`. |
+| 58 | `panel-status` (the element) AND `renderPanelStatus` (the function, CALLED from `checkClaudeConnection`, `_setDraftPhase`, `submitWithAction`, `restorePanelToReady` and `showIteration`) | The pinned status line: one line, six mutually exclusive states on `data-status` (saved / saving / connecting / local-only / submitted / frozen), composed from the heartbeat, the draft mirror (`_draftPhase`) and the panel state. `checkClaudeConnection` MUST write `#connection-status[data-state]` and call the renderer BEFORE its `#panel-submitted` early return — the old pill went stale the moment the submitted panel came up. "Nur lokal gespeichert" is the one state with a background: it is the only line that means "your work is not delivered". |
+
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
 at the post-generation gate. See § Generic Form Collection below for the
 required pattern.
+
+**Failure for 56 / 57 / 58:** these three are one anatomy — a page with the
+old scrolling aside and the stacked buttons has the CTA below the fold on
+every long concept. Re-sync § Common Structure (both skeletons), § Layout —
+Sidebar / the design overlay rule, § Decision Panel State CSS "Panel
+anatomy", § Two-Button Submit and § Claude Connection Heartbeat verbatim from
+templates.md. A `checkClaudeConnection` that returns before writing
+`data-state` is a hard fail even if every element is present: the line
+would freeze on whatever it said at submit time.
 
 **Failure for 31:** if the page renders bi-state cards without comment slots
 AND `ensureCommentSlots` is missing, the user has nowhere to attach
@@ -180,7 +193,8 @@ to twice since.
 Before appending, run the gate over the existing HTML. When any ENGINE entry
 fails — 30b (frozen bar + veil relock), 44 (attachments), 46 / 47
 (design-mode chrome), 48 (scroll boxes), 49–53 (comment durability), 54
-(reality-check progress step), or the tab-switch patterns — re-sync that whole
+(reality-check progress step), 56 (panel anatomy), or the tab-switch
+patterns — re-sync that whole
 shared block **verbatim from templates.md** BEFORE the new section goes in.
 Re-sync the block, not the one line the grep flagged: these blocks fail in
 halves, and a page missing one literal is a page carrying a stale copy of
@@ -421,7 +435,7 @@ enforces the same on write.
   the user is told to copy a JSON by hand, defeating the whole monitoring loop
 - Decision panel omitted entirely → no submit buttons, nothing to monitor
 - Heartbeat system omitted → submit button stays clickable without monitoring
-- Connection status pill missing → user gets no feedback on connecting / connected / disconnected state
+- Status line (`.panel-status` / `#connection-status`) missing → user gets no feedback on saved / connecting / disconnected / submitted state
 - Panel states missing → no visual transition on submit/reset cycle
 - localStorage missing → user selections lost on reload or tab close
 - `data-template` missing → `collectDecisions` can't pick the right branch

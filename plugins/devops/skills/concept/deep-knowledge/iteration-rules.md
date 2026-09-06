@@ -1,9 +1,12 @@
 # Iteration Tabs (single file, many iterations)
 
 Every concept page is a stack of iteration tabs. The **tab bar lives at the
-top of the right-side decision panel** (a compact vertical chip list, above
-the section TOC and submit block). It must NEVER render inside the left-hand
-content area — the content area is reserved for the actual concept. Each
+top of the right-side decision panel** (a compact vertical chip list inside
+the panel's scroll box `.panel-nav-scroll`, together with the section TOC;
+the status line and the submit foot below it are pinned and never scroll
+away — templates.md § Common Structure "Panel anatomy"). It must NEVER
+render inside the left-hand content area — the content area is reserved for
+the actual concept. Each
 chip represents exactly one iteration; the active one is interactive, all
 earlier ones are frozen (disabled inputs showing the user's submitted
 selections, read-only comments).
@@ -252,7 +255,7 @@ page before appending. The page's shared engine — Attachments JS/CSS,
 § Layout CSS chrome rules, tab-switch JS — is a copy of whatever
 templates.md said on generation day, and every later round re-uses it
 unchanged. If any engine entry fails (44 attachments, 46 / 47 design-mode
-chrome, 48 scroll boxes, tab-switch), re-sync that whole block verbatim
+chrome, 48 scroll boxes, 56 panel anatomy, tab-switch), re-sync that whole block verbatim
 from templates.md FIRST, then append.
 
 Same shape of failure as 2.5, one level down: the defect is not in the
