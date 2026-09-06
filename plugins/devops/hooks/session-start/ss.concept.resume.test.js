@@ -90,7 +90,10 @@ describe("buildCronBody", () => {
     const out = resolveScript("concept-tick.js", cache);
     expect(out).toContain("ls -d");
     expect(out).toContain("/*/scripts/concept-tick.js");
-    expect(out).toContain("head -1");
+    // Highest version wins: several version dirs coexist in the cache, and a
+    // `head -1` on the lexical listing used to pick the OLDEST one.
+    expect(out).toContain("sort -V | tail -1");
+    expect(out).not.toContain("head -1");
     // …and still runs SOMETHING if the glob comes up empty.
     expect(out).toMatch(/node "\$\{f:-[^}]*concept-tick\.js\}"/);
   });

@@ -411,10 +411,10 @@ describe('scanOpenTasks — Bash output is not a launch announcement', () => {
 
 describe('scanOpenTasks — concept bridge infrastructure is not work', () => {
   const SERVER_CMD =
-    'PLUGIN_ROOT=$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-server.py | head -1); ' +
+    'PLUGIN_ROOT=$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-server.py | sort -V | tail -1); ' +
     'python "$PLUGIN_ROOT" 8840 "C:/repo" --html "docs/concepts/2026-09-06-eve.html"';
   const PULSER_CMD =
-    'node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js | head -1)" ' +
+    'node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js | sort -V | tail -1)" ' +
     '--mode pulse --port 8840 --state "C:/repo/.claude/concept-active.json"';
   const WAKER_CMD = PULSER_CMD.replace('--mode pulse', '--mode watch');
 

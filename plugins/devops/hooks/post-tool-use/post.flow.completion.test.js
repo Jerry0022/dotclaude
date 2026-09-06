@@ -225,7 +225,7 @@ describe("post.flow.completion — concept bridge infrastructure is not pending"
     const dir = project();
     const out = runHook(dir, "s-concept-pulser", "Bash", {
       tool_input: {
-        command: 'node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js | head -1)" --mode pulse --port 8840 --state "C:/repo/.claude/concept-active.json"',
+        command: 'node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js | sort -V | tail -1)" --mode pulse --port 8840 --state "C:/repo/.claude/concept-active.json"',
         description: "Background poller",
         run_in_background: true,
       },
