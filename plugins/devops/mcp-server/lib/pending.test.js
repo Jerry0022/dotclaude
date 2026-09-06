@@ -167,10 +167,13 @@ describe("renderPendingBlock", () => {
     expect(renderPendingBlock(["a"], "en")).toContain("_This card reports the state BEFORE those results._");
   });
 
-  it("caps the bullets and reports the remainder", () => {
-    const block = renderPendingBlock(["a", "b", "c", "d", "e", "f"], "de");
-    expect(block).toContain("* +2");
-    expect(block.split("\n").filter(l => l.startsWith("* ")).length).toBe(5);
+  it("caps the bullets at the same three as the line, so the tails agree", () => {
+    const items = ["a", "b", "c", "d", "e", "f"];
+    const block = renderPendingBlock(items, "de");
+    expect(block).toContain("* +3");
+    expect(block.split("\n").filter(l => l.startsWith("* ")).length).toBe(4);
+    // Both "+N" on the card count the same remainder.
+    expect(renderPendingLine(items, "de")).toContain("+3");
   });
 
   it("is empty when nothing is pending", () => {

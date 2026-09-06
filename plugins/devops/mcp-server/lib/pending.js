@@ -32,8 +32,9 @@ const CTA_NAME_LIMIT = 2;
 /** Names shown on the dim line next to the CTA before it collapses into "+N". */
 const LINE_NAME_LIMIT = 3;
 
-/** Bullets rendered in the pending block. */
-const BLOCK_ITEM_LIMIT = 4;
+/** Bullets rendered in the pending block — same cap as the line, so the two
+ *  "+N" tails on one card always agree. */
+const BLOCK_ITEM_LIMIT = LINE_NAME_LIMIT;
 
 /**
  * Hard cap for a single name. Names arrive as model-authored text (a workflow's

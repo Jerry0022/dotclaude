@@ -415,14 +415,16 @@ describe("pending layer — workflows and the name line", () => {
     expect(text).not.toMatch(/^> ⏳ /m);
   });
 
-  test("the block above still names every item with what it is doing", async () => {
+  test("the block above names each item with what it is doing", async () => {
     const text = await cardText({
       variant: "ready", summary: "Workflows laufen", lang: "de",
       session_id: "test-pending-wf-4", pending: WF_MIX,
     });
     expect(text).toMatch(/\* `eve-panel-and-tutorial` — Balken über dem Gesicht/);
-    expect(text).toMatch(/\* `devops:qa` — Suite läuft/);
-    expect(text).toMatch(/\* \+1/);
+    expect(text).toMatch(/\* `owner-prompt-audit` — Anweisungen gegen Code prüfen/);
+    // Block and line cut at the same three, so both tails report the same rest.
+    expect(text).toMatch(/\* \+2/);
+    expect(text).toMatch(/^> ⏳ .* \+2$/m);
   });
 
   test("English card names the workflows too", async () => {
