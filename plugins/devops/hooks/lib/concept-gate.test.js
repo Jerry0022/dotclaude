@@ -91,6 +91,30 @@ describe("findForbidden", () => {
     expect(findForbidden("<button onclick='navigator.clipboard.writeText(x)'>copy</button>").length)
       .toBeGreaterThan(0);
   });
+
+  test("catches a detached clipboard.writeText / 'copy to clipboard' UI", () => {
+    expect(findForbidden("<script>const c = navigator.clipboard; c.writeText(md);</script>").length)
+      .toBeGreaterThan(0);
+    expect(findForbidden("<script>clip.writeText(md)</script><button>Copy to clipboard</button>").length)
+      .toBeGreaterThan(0);
+  });
+
+  // #330 — the templates' own Ctrl/Cmd+V attachment handler reads
+  // ev.clipboardData. That is a paste INTO the page, not a copy OUT of it, and
+  // a page generated verbatim from the reference must pass its own gate.
+  test("does NOT flag the sanctioned ev.clipboardData paste handler (#330)", () => {
+    const PASTE_HANDLER = `<script>
+      function initCommentAttachments(ta) {
+        ta.addEventListener('paste', function (ev) {
+          const dt = ev.clipboardData || {};
+          const files = Array.from(dt.files || []);
+          if (files.length) { ev.preventDefault(); files.forEach(f => uploadAttachment(f)); }
+        });
+      }
+    </script>`;
+    expect(findForbidden(PASTE_HANDLER)).toEqual([]);
+    expect(findForbidden(VALID + PASTE_HANDLER)).toEqual([]);
+  });
 });
 
 describe("evaluate", () => {

@@ -27,13 +27,22 @@ and regenerate with the live submit, exactly like a missing required pattern.
 
 | Forbidden grep (case-insensitive) | Why it's banned |
 |---|---|
-| `clipboard` (`navigator.clipboard`, "copy to clipboard") | A "copy the decisions JSON" button is the regression this gate exists to kill — the live bridge already delivers decisions. |
+| `navigator.clipboard` / `clipboard.writeText` / `clipboard.readText` / "copy to clipboard" | A "copy the decisions JSON" button is the regression this gate exists to kill — the live bridge already delivers decisions. |
 | `zwischenablage` | German variant of the same clipboard-copy fallback. |
 | `in den chat ein` / "paste … into chat" | Instructing the user to paste anything into chat means the live submit was never wired. |
 
-A valid live-bridge page never copies anything to the clipboard, so there are
-no legitimate matches — do not "keep it as a convenience". The decision panel
-+ live submit is the only sanctioned mechanism, and it may never be omitted.
+A valid live-bridge page never copies anything **out** to the clipboard, so
+there are no legitimate matches for the copy-out API or wording — do not "keep
+it as a convenience". The decision panel + live submit is the only sanctioned
+mechanism, and it may never be omitted.
+
+**Not forbidden — the bare word is not the pattern (#330).** The attachment
+engine (`templates.md` § Attachments, `initCommentAttachments()`) reads
+`ev.clipboardData` in its Ctrl/Cmd+V paste handler. That is a paste *into* the
+page, the opposite direction, and every page generated verbatim from the
+reference contains it. Grep for the copy-out forms above, never for a bare
+`clipboard`; `post.concept.gate` (`hooks/lib/concept-gate.js`) uses the same
+narrowed pattern.
 
 ## Phase 1 — Shared patterns (ALL templates)
 
