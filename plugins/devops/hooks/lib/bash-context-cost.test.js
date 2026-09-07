@@ -82,6 +82,57 @@ describe("classifySegment", () => {
     expect(classifySegment("timeout 30")).toBe("reader");
     expect(classifySegment("sudo -u root cat f")).toBe("reader");
   });
+
+  // #349 — the quiet / count / list forms of grep print nothing of the file.
+  describe("grep family — content-free forms are passers (#349)", () => {
+    test.each([
+      "grep -q x f", "grep --quiet x f", "grep --silent x f",
+      "grep -c x f", "grep --count x f",
+      "grep -l x dir", "grep -rl x dir", "grep -ril x dir", "grep -L x f",
+      "grep -qxF '/BACKLOG-*' f",
+      "rg -q x f", "rg -l x .", "rg --files-with-matches x .", "rg --count-matches x f", "rg --files",
+      "ag -l x .", "ack -c x f", "egrep -q x f", "fgrep -c x f",
+    ])("%s → passer", seg => expect(classifySegment(seg)).toBe("passer"));
+
+    test.each([
+      "grep x f", "grep -n x f", "grep -i x f", "grep -o x f", "grep -A3 x f", "grep -rn x dir",
+      "rg x f", "rg -n x f",
+      "grep -ecat f",          // -e takes the rest of the bundle: pattern "cat", not -c
+      "grep -e -q f",          // -e takes the next token: pattern "-q"
+      "grep -f -l f",          // -f takes the next token: pattern file "-l"
+      "grep -- -q f",          // after -- everything is an operand
+      "rg -L x f",             // rg -L is --follow, not files-without-match
+      "grep -m1 x f",          // value flag without quiet
+    ])("%s → reader", seg => expect(classifySegment(seg)).toBe("reader"));
+  });
+
+  // #349 — curl brings the body into context unless it goes to a file.
+  describe("curl — file output is a passer, stdout is a reader (#349)", () => {
+    test.each([
+      'curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://localhost:8/docs/concepts/big.html',
+      "curl -so/dev/null http://x/big.html",
+      "curl -sSLo out.html http://x/big.html",
+      "curl --output out.html http://x/big.html",
+      "curl --output=out.html http://x/big.html",
+      "curl -O http://x/big.html",
+      "curl --remote-name http://x/big.html",
+    ])("%s → passer", seg => expect(classifySegment(seg)).toBe("passer"));
+
+    test.each([
+      "curl http://x/big.html",
+      "curl -s http://x/big.html",
+      "curl -sL http://x/big.html",
+      "curl -X POST -d @big.html http://x/",
+      "curl -dfoo http://x/big.html",      // -d takes the rest of the bundle
+      "curl -Hfoo http://x/big.html",
+      "curl -s -o /dev/stdout http://x/big.html",   // stdout sink upgrade
+    ])("%s → reader", seg => expect(classifySegment(seg)).toBe("reader"));
+  });
+
+  test("wc never prints content (#349)", () => {
+    expect(classifySegment("wc -c f")).toBe("passer");
+    expect(classifySegment("wc -l f")).toBe("passer");
+  });
 });
 
 describe("isFreeOfContextCost", () => {
@@ -108,6 +159,26 @@ describe("matchCostlyFiles", () => {
     expect(hits("ls -la docs/concepts/big.html")).toEqual([]);
     expect(hits('echo "wrote docs/concepts/big.html"')).toEqual([]);
     expect(hits("mv docs/concepts/big.html docs/concepts/old.html")).toEqual([]);
+  });
+
+  // #349 — the commands a concept session runs against its own 800 KB page.
+  test("quiet greps, curl -o and wc referencing the big page are free", () => {
+    expect(hits("grep -q 'panel-ready' docs/concepts/big.html")).toEqual([]);
+    expect(hits("grep -c '<style' docs/concepts/big.html")).toEqual([]);
+    expect(hits("grep -l concept-decisions docs/concepts/big.html")).toEqual([]);
+    expect(hits('curl -s -o /dev/null -w "%{http_code}" http://localhost:8840/docs/concepts/big.html')).toEqual([]);
+    expect(hits("wc -c docs/concepts/big.html")).toEqual([]);
+    expect(hits("cp docs/concepts/big.html docs/concepts/preview.html")).toEqual([]);
+    expect(hits("ls -la docs/concepts/big.html")).toEqual([]);
+  });
+
+  test("…but the content-printing forms of the same heads still cost (#349)", () => {
+    expect(hits("grep -n 'panel-ready' docs/concepts/big.html")).toEqual(["docs/concepts/big.html"]);
+    expect(hits("grep -q x other.txt; grep panel docs/concepts/big.html")).toEqual(["docs/concepts/big.html"]);
+    expect(hits("curl http://localhost:8840/docs/concepts/big.html")).toEqual(["docs/concepts/big.html"]);
+    expect(hits("curl -o /dev/stdout http://localhost:8840/docs/concepts/big.html")).toEqual(["docs/concepts/big.html"]);
+    expect(hits("grep -q x docs/concepts/big.html", { runInBackground: true })).toEqual([]);
+    expect(hits("grep x docs/concepts/big.html", { runInBackground: true })).toEqual(["docs/concepts/big.html"]);
   });
 
   test("a detached non-reader (server start) is free — the reported bug", () => {

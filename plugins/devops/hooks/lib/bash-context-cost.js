@@ -5,8 +5,9 @@
  * @description Decide which large-file references inside a Bash command
  *   actually cost Claude context. Used by pre.tokens.guard to stop blocking
  *   commands that merely PASS a big file's path as an argument (server start,
- *   `ls`, `mv`, `echo`) while still blocking commands that READ the file into
- *   context (`cat`, `grep`, `jq`, `python -c`).
+ *   `ls`, `mv`, `echo`, `wc`, `grep -q`, `curl -o`) while still blocking
+ *   commands that READ the file into context (`cat`, `grep -n`, `jq`,
+ *   `python -c`, bare `curl`).
  *
  *   Three verdicts, and the difference between two of them carries the whole
  *   safety argument:
@@ -57,17 +58,39 @@ const OVERFLOW_HEAD = '__unparsed__';
 const READER_HEADS = new Set([
   OVERFLOW_HEAD,
   'cat', 'bat', 'tac', 'head', 'tail', 'less', 'more', 'nl', 'fold',
-  'grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack', 'select-string', 'sls',
+  'select-string', 'sls',
   'jq', 'yq', 'xmllint', 'awk', 'gawk', 'mawk', 'sed', 'cut', 'paste',
   'sort', 'uniq', 'tr', 'column', 'diff', 'comm', 'join',
   'strings', 'od', 'xxd', 'hexdump', 'base64', 'zcat', 'gunzip',
   'type', 'get-content', 'gc', 'import-csv', 'convertfrom-json',
 ]);
 
+// The grep family prints matching LINES by default — a reader — but its
+// quiet / count / list forms print nothing of the file: `grep -q` (exit code
+// only), `-c` (a number), `-l` / `-L` (file names). Those are the gate greps
+// and 200-checks a concept session runs against its own 800 KB page, and
+// blocking them made the guard fight harmless commands (#349). Classified by
+// flag in `grepIsQuiet()`; the default stays `reader`.
+const GREP_HEADS = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack']);
+const GREP_QUIET_LONG = /^--(quiet|silent|count|count-matches|files-with-matches|files-without-match|files)$/;
+// Short flags that take a value — the rest of a bundled token, or the next
+// token, is that value and must not be read as more flags (`grep -ecat f`
+// searches for "cat"; `grep -e -q f` searches for "-q").
+const GREP_VALUE_FLAG = /^(-e|-f|-m|-g|-t|-A|-B|-C|-d|-D|--regexp|--file|--max-count|--glob|--type|--context|--after-context|--before-context)$/;
+const GREP_VALUE_SHORT = 'efmgtABCdD';
+
+// curl prints the response body to stdout unless it is sent to a file:
+// `-o <file>` / `--output`, `-O` / `--remote-name`. The 200-gate form
+// (`curl -s -o /dev/null -w "%{http_code}" <url-with-big-path>`) never brings
+// the page into context; a bare `curl <url>` does. A `/dev/stdout` target is
+// caught by STDOUT_SINK in classifySegment (monotone upgrade to reader).
+const CURL_OUTPUT_LONG = /^--(output|remote-name|remote-name-all|output-dir)(=|$)/;
+const CURL_VALUE_SHORT = 'dHXuAbceFTKmrwxyzEUC';
+
 // Commands that only ever take a path as an operand — their output never
 // contains the file's contents.
 const PASSER_HEADS = new Set([
-  'ls', 'dir', 'stat', 'file', 'du', 'basename', 'dirname', 'realpath',
+  'ls', 'dir', 'stat', 'file', 'du', 'wc', 'basename', 'dirname', 'realpath',
   'readlink', 'pwd', 'cd', 'pushd', 'popd',
   'touch', 'mkdir', 'rmdir', 'rm', 'del', 'erase', 'cp', 'copy', 'mv',
   'move', 'ren', 'rename', 'ln', 'mklink', 'chmod', 'chown', 'attrib',
@@ -263,6 +286,53 @@ function subCommand(args) {
   return (args.find(a => !a.startsWith('-')) || '').toLowerCase();
 }
 
+/**
+ * The letters of a bundled short-flag token (`-ril` → `ril`, `-so/dev/null`
+ * → `so`), stopping at the first non-letter. `''` for anything that is not a
+ * single-dash flag.
+ */
+function shortFlagChars(token) {
+  const m = /^-([A-Za-z]+)/.exec(token);
+  return (m && !token.startsWith('--')) ? m[1] : '';
+}
+
+/**
+ * True when a grep-family command prints no file content: a quiet, count or
+ * file-list flag is present. Walks the args like the tool would — a flag
+ * that takes a value consumes the next token (or the rest of its own bundle),
+ * and `--` ends option parsing — so a pattern that merely looks like `-q`
+ * cannot free the command. `-L` lists non-matching files for grep/ag/ack but
+ * means --follow for rg, so it is quiet only outside rg.
+ */
+function grepIsQuiet(head, args) {
+  const quietShort = head === 'rg' ? 'qcl' : 'qclL';
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--') break;
+    if (GREP_VALUE_FLAG.test(a)) { i++; continue; }
+    if (GREP_QUIET_LONG.test(a)) return true;
+    for (const ch of shortFlagChars(a)) {
+      if (quietShort.includes(ch)) return true;
+      if (GREP_VALUE_SHORT.includes(ch)) break;   // `-ecat`: the rest is a value
+    }
+  }
+  return false;
+}
+
+/** True when curl writes the response to a file instead of stdout. */
+function curlWritesToFile(args) {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--') break;
+    if (CURL_OUTPUT_LONG.test(a)) return true;
+    for (const ch of shortFlagChars(a)) {
+      if (ch === 'o' || ch === 'O') return true;
+      if (CURL_VALUE_SHORT.includes(ch)) break;   // `-dfoo`: the rest is a value
+    }
+  }
+  return false;
+}
+
 // git global flags that take a SEPARATE value, so the next token is not the
 // subcommand: `git -C dir status`, `git -c user.name=x commit`.
 const GIT_GLOBAL_WITH_VALUE = /^(-C|-c|--git-dir|--work-tree|--exec-path|--namespace|--super-prefix)$/;
@@ -317,6 +387,10 @@ function baseClassify(segment) {
   // wrapper whose real command never materialised.
   if (!head) return (strippedAssignment || strippedWrapper) ? 'reader' : 'passer';
   if (READER_HEADS.has(head)) return 'reader';
+  // Known content emitters with a content-free mode (#349). Outside that mode
+  // they are `reader`, never `unknown` — same discipline as git/gh below.
+  if (GREP_HEADS.has(head)) return grepIsQuiet(head, args) ? 'passer' : 'reader';
+  if (head === 'curl') return curlWritesToFile(args) ? 'passer' : 'reader';
   if (INTERPRETER_HEADS.has(head)) {
     return args.some(a => INLINE_CODE_FLAG.test(a)) ? 'reader' : 'unknown';
   }
