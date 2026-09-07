@@ -333,6 +333,31 @@ describe("comment durability — the bridge mirror", () => {
     expect(live.value).toBe("das Neueste, gerade getippt");
   });
 
+  // #347 — the mirror exists for typed text. A second browser on the same page
+  // (Claude's screenshot-verification tab) must never be pulled onto the view
+  // the user is reading: navigation / preference keys never hydrate, even
+  // when an older bridge lets them through in `recovered`.
+  test("hydrates text: keys only — navigation state from the bridge never lands (#347)", async () => {
+    const { window, setDraft } = buildDom();
+    setDraft({
+      ok: true, found: true, rev: 9, state: {},
+      recovered: {
+        "text:i2:d-auth-note": "vom anderen Browser",
+        "_activeView": "view-b",
+        "_activeScreen:d1": "s3",
+        "_viewportMode": "phone",
+        "input:choice:yes": "on",
+      },
+    });
+    await window.hydrateDraftFromBridge();
+    const blob = readBlob(window);
+    expect(blob["text:i2:d-auth-note"]).toBe("vom anderen Browser");
+    expect(blob["_activeView"]).toBeUndefined();
+    expect(blob["_activeScreen:d1"]).toBeUndefined();
+    expect(blob["_viewportMode"]).toBeUndefined();
+    expect(blob["input:choice:yes"]).toBeUndefined();
+  });
+
   test("fills a field the local blob has EMPTY — the shape of every past bug", async () => {
     const { window, setDraft } = buildDom({
       storage: { _pageVersion: PAGE_VERSION, "text:i2:d-auth-note": "" },

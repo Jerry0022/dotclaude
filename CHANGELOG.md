@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.149.8] — 2026-09-07
+
+### Fixed
+
+- **The draft mirror can no longer steer a second browser onto the user's view.** `hydrateDraftFromBridge()` merged every string in the bridge's `recovered` draft into the local blob. The bridge has limited `recovered` to `text:` keys since 0.143.0, so on a current bridge nothing else ever arrived — but nothing on the page enforced that, and an older bridge, or a key the server lets through later, would have pulled Claude's screenshot-verification tab onto whatever screen the user was reading seconds after load. The client now skips every non-`text:` key (`_activeView`, `_activeScreen*`, `_viewportMode`, the `input:` selections) as defense in depth, and the reported symptom is named for what it is: two tabs of the same browser profile share `localStorage`, so a verification tab opened in the user's Edge profile inherits — and writes back — the user's position. The concept skill now states that verification tabs run in their own profile (Playwright, the Claude browser pane), never in the user's window. (#347)
+
 ## [0.149.7] — 2026-09-07
 
 ### Fixed
