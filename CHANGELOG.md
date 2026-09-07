@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.149.1] — 2026-09-07
+
+### Fixed
+
+- **The concept gate blocked every page that carried the templates' own paste handler.** `post.concept.gate` forbade the bare word `clipboard`, meant to catch the "copy the decisions JSON and paste it into chat" fallback. The attachment engine that every page inherits from the reference reads `ev.clipboardData` for Ctrl/Cmd+V file paste — a paste *into* the page, the opposite direction — so a page generated verbatim from `templates.md` failed its own gate on the next Edit, and the workaround was to obfuscate the property name and re-apply it after every engine re-sync. The gate (and the Phase 0 grep in `validation-gate.md`) now match the copy-out forms only: `navigator.clipboard`, `clipboard.writeText` / `readText`, "copy to clipboard"; `Zwischenablage` and the paste-into-chat wording are unchanged. (#330)
+
 ## [0.149.0] — 2026-09-06
 
 ### Added
