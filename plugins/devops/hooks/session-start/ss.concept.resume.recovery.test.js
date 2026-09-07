@@ -7,6 +7,7 @@ import {
   readStore,
   buildVerificationMandate,
   buildDeadBridgeRecovery,
+  buildDeadBridgeRelaunch,
   buildResumeInstructions,
 } from "./ss.concept.resume.js";
 
@@ -167,6 +168,40 @@ describe("a dead bridge is relaunched, not written off", () => {
     );
     expect(text).toContain("--mode pulse");
     expect(text).toContain("--mode watch");
+  });
+});
+
+// #348 — the server is a background Bash task like the watchers and dies with
+// every restart. With nothing pending the hook used to exit silently, and the
+// page stayed on "Claude nicht verbunden" until someone relaunched by hand.
+describe("a dead bridge with nothing pending is relaunched too (#348)", () => {
+  const state = { port: 8748, html_path: "docs/concepts/2026-08-16-x.html", slug: "x" };
+  const text = buildDeadBridgeRelaunch(state, "C:/p/.claude/concept-active.json");
+
+  test("relaunches the server on the SAME port with the recorded --html", () => {
+    expect(text).toContain("concept-server.py");
+    expect(text).toContain("8748");
+    expect(text).toContain('--html "docs/concepts/2026-08-16-x.html"');
+    expect(text).toMatch(/SAME port/i);
+    expect(text).toContain("run_in_background: true");
+  });
+
+  test("re-arms all three watchers — pulser, waker and the backup cron", () => {
+    expect(text).toContain("--mode pulse");
+    expect(text).toContain("--mode watch");
+    expect(text).toContain("concept-tick.js");
+    expect(text).toContain("CronCreate");
+    expect(text).toContain('"C:/p/.claude/concept-active.json"');
+  });
+
+  test("verifies the heartbeat round-trip and tolerates a port already re-bound", () => {
+    expect(text).toContain("claude_ts");
+    expect(text).toMatch(/already bound/i);
+  });
+
+  test("carries no store-verification ceremony — nothing was submitted", () => {
+    expect(text).not.toContain("VERIFY BEFORE YOU ACT");
+    expect(text).not.toContain("/recovery");
   });
 });
 

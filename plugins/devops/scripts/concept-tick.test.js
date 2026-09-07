@@ -220,6 +220,102 @@ describe("tick", () => {
     expect(spy.calls).toEqual(["/heartbeat"]);
   });
 
+  // #348 — a bridge that dies without a session restart had nobody to bring
+  // it back. The tick relaunches, edge-triggered: once, after two consecutive
+  // misses, re-armed by the next successful heartbeat.
+  describe("heartbeat failure → edge-triggered relaunch (#348)", () => {
+    const readState = () => JSON.parse(fs.readFileSync(statePath, "utf8"));
+    const run = (spy) => tick({ port: PORT, state: statePath, timeout: 8 }, { request: spy.request });
+
+    test("the first miss is stderr only and only counts", async () => {
+      writeState({ ...LIVE, baseline_sha: "abc123" });
+      writeHtml(LIVE.html_path);
+      const res = await run(spyRequest({}));
+      expect(res.stdout).toBe("");
+      expect(res.stderr).toContain("/heartbeat");
+      const st = readState();
+      expect(st.tick_heartbeat_failures).toBe(1);
+      expect(st.relaunch_requested_at).toBeUndefined();
+      expect(st.baseline_sha).toBe("abc123"); // other fields survive the rewrite
+    });
+
+    test("the second consecutive miss prints the relaunch instruction once", async () => {
+      writeState(LIVE);
+      writeHtml(LIVE.html_path);
+      await run(spyRequest({}));
+      const res = await run(spyRequest({}));
+      expect(res.stderr).toBe("");
+      expect(res.stdout).toContain("concept-server.py");
+      expect(res.stdout).toContain(`${PORT}`);
+      expect(res.stdout).toContain(`--html "${LIVE.html_path}"`);
+      expect(res.stdout).toContain(`"${root}"`); // project root, not the cron's cwd
+      expect(res.stdout).toContain("--mode pulse");
+      expect(res.stdout).toContain("--mode watch");
+      expect(res.stdout).toContain(statePath);
+      expect(res.stdout).toContain("run_in_background");
+      expect(res.stdout).toMatch(/SAME port/i);
+      const st = readState();
+      expect(st.tick_heartbeat_failures).toBe(2);
+      expect(typeof st.relaunch_requested_at).toBe("string");
+    });
+
+    test("the third and every later miss is silent again — no per-minute spam", async () => {
+      writeState(LIVE);
+      writeHtml(LIVE.html_path);
+      await run(spyRequest({}));
+      await run(spyRequest({}));
+      for (let i = 0; i < 3; i++) {
+        const res = await run(spyRequest({}));
+        expect(res.stdout).toBe("");
+        expect(res.stderr).toContain("/heartbeat");
+      }
+      expect(readState().tick_heartbeat_failures).toBe(5);
+    });
+
+    test("a successful heartbeat clears the counter and re-arms the edge", async () => {
+      writeState(LIVE);
+      writeHtml(LIVE.html_path);
+      await run(spyRequest({}));
+      await run(spyRequest({}));
+      const alive = spyRequest({ "/heartbeat": ok(""), "/pending": ok(JSON.stringify({ pending: false })) });
+      expect(await run(alive)).toEqual({ stdout: "", stderr: "" });
+      const st = readState();
+      expect(st.tick_heartbeat_failures).toBeUndefined();
+      expect(st.relaunch_requested_at).toBeUndefined();
+      // The bridge dies again later → the instruction fires again, once.
+      await run(spyRequest({}));
+      expect((await run(spyRequest({}))).stdout).toContain("concept-server.py");
+      expect((await run(spyRequest({}))).stdout).toBe("");
+    });
+
+    test("a single transient miss between good ticks never fires", async () => {
+      writeState(LIVE);
+      writeHtml(LIVE.html_path);
+      const alive = spyRequest({ "/heartbeat": ok(""), "/pending": ok(JSON.stringify({ pending: false })) });
+      for (let i = 0; i < 3; i++) {
+        expect((await run(spyRequest({}))).stdout).toBe("");
+        await run(alive);
+      }
+      expect(readState().tick_heartbeat_failures).toBeUndefined();
+    });
+
+    test("a healthy tick does not rewrite the state file at all", async () => {
+      writeState(LIVE);
+      writeHtml(LIVE.html_path);
+      const before = fs.statSync(statePath).mtimeMs;
+      const raw = fs.readFileSync(statePath, "utf8");
+      await run(spyRequest({ "/heartbeat": ok(""), "/pending": ok(JSON.stringify({ pending: false })) }));
+      expect(fs.readFileSync(statePath, "utf8")).toBe(raw);
+      expect(fs.statSync(statePath).mtimeMs).toBe(before);
+    });
+
+    test("a half-written state file is neither a dead concept nor a relaunch", async () => {
+      writeState('{"port": 8883, "html_pa');
+      const res = await run(spyRequest({}));
+      expect(res.stdout).toBe("");
+    });
+  });
+
   test("unparseable /pending JSON is a silent tick, not a guess", async () => {
     writeState(LIVE);
     writeHtml(LIVE.html_path);

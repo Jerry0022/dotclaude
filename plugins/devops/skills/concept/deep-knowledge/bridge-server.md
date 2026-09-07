@@ -245,10 +245,23 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
        unrecoverable; sweeping by-port catches the orphan even when the id is
        lost). Steps 1 and 2 are skipped.
 
-   (1) **Heartbeat POST** to `/heartbeat`. A failure here is reported on
-       stderr only, never as an instruction: bridge liveness is owned by the
-       keepalive pulser and the server-side `--html` watchdog, and a per-tick
-       complaint about a dying bridge would spam the transcript once a minute.
+   (1) **Heartbeat POST** to `/heartbeat`. A single failure is reported on
+       stderr only: bridge liveness is owned by the keepalive pulser and the
+       server-side `--html` watchdog, and a per-tick complaint about a dying
+       bridge would spam the transcript once a minute. **The second
+       consecutive failure prints the relaunch instruction — once (#348).**
+       A bridge that dies *without* a session restart (a crash, a manual
+       kill, the watchdog) had nobody to bring it back: the pulser only
+       notices while its own session is alive. The tick therefore keeps a
+       consecutive-miss counter (`tick_heartbeat_failures`) and a one-shot
+       marker (`relaunch_requested_at`) in the state file; the instruction
+       — relaunch on the SAME port with the recorded `--html`, re-arm pulser
+       and waker — fires on the tick that crosses two misses with no marker
+       set, every later miss is silent again, and the next successful
+       heartbeat clears both fields so a later death fires it again. One
+       transient miss between good ticks never fires. The instruction says
+       what to do when the port is already bound (another session brought
+       the bridge back): skip the relaunch, only re-arm the watchers.
 
    (2) **Pending check** against the deterministic `/pending` endpoint — a
        strict `{"pending": true|false, "version": N}` with no free-form
@@ -472,6 +485,24 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      while this file lives at the project root. Absent in a repo with no remote
      (and on pages generated before the gate existed) — the implement gate then
      skips silently rather than blocking. See `reality-check.md` § Baseline.
+   - `tick_heartbeat_failures` / `relaunch_requested_at` — written by
+     `concept-tick.js` only (#348): the consecutive heartbeat-miss count and
+     the one-shot marker that makes the relaunch instruction fire once. Both
+     are removed by the next successful heartbeat; nothing else reads them.
+
+   **What survives a Claude restart, and how it comes back (#348).** The
+   bridge server, the keepalive pulser and the pickup waker are all
+   background Bash tasks and die with the session — the cron too. At the next
+   SessionStart the `ss.concept.resume` hook reads this file, probes
+   `/heartbeat`, and hands the new session one of three mandates: a live
+   bridge → re-arm the three watchers (and process a pending submission
+   first); a dead bridge with an unprocessed submission on disk → the
+   recovery mandate (relaunch on the same port, verify the store, process);
+   a dead bridge with nothing pending → the relaunch mandate (same port,
+   same `--html`, verified heartbeat round-trip, all three watchers). Only a
+   state file older than 24 h is pruned instead. The page reconnects on its
+   own once the heartbeat is back; the reviewer never has to reload or wait
+   for someone to notice the red indicator.
 
    Path: ALWAYS `<project-cwd>/.claude/concept-active.json` (NOT a worktree
    subpath, NOT under `docs/`). The hook reads this exact path and silently

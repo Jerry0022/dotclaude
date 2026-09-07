@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.concept.resume
- * @version 0.4.0
+ * @version 0.5.0
  * @event SessionStart
  * @plugin devops
  * @description Recover an open concept session after a Claude restart.
@@ -13,7 +13,10 @@
  *   die with the prior session; re-arming only the cron left the resumed
  *   session watching on a path that fires just while the REPL is idle, so a
  *   submission could rot in the bridge while the page still showed a green
- *   indicator (issue #276).
+ *   indicator (issue #276). A bridge that died with the session is relaunched
+ *   on the same port whether or not a submission is pending (#348) — the
+ *   server is a background Bash task too, and it used to stay dead until
+ *   someone noticed the red indicator.
  *
  *   Trust model: `.claude/concept-active.json` is treated as a per-project
  *   state file, NOT as authenticated control input. We accept that anyone
@@ -448,6 +451,35 @@ function buildDeadBridgeRecovery(state, store) {
   ].join(' ');
 }
 
+/**
+ * A dead bridge with NOTHING pending (#348). The bridge server, the keepalive
+ * pulser and the pickup waker are all session-scoped and die with every
+ * Claude restart — observed three times in one concept. The page then shows
+ * "Claude nicht verbunden" until someone notices and relaunches all three by
+ * hand on the same port. This branch used to exit silently unless a
+ * submission was on disk; now the resumed session relaunches the bridge on
+ * the recorded port whether or not anything is pending, so the page
+ * reconnects on its own.
+ */
+function buildDeadBridgeRelaunch(state, statePath = STATE_PATH) {
+  const server = path.join(__dirname, '..', '..', 'scripts', 'concept-server.py');
+  const bg = buildBackgroundTasks(state.port, statePath);
+  return [
+    `An open /concept session was found in this project (port ${state.port}, html_path ${state.html_path}, ` +
+    `slug ${state.slug || '?'}), but the bridge does not answer /heartbeat — the previous Claude session took ` +
+    `the server and both watchers with it. Nothing is pending on disk. Relaunch the bridge now, on the SAME ` +
+    `port so the open tab and the state file stay valid: ` +
+    `\`python "${server}" ${state.port} "${cwd}" --html "${state.html_path}"\` ` +
+    `(Bash tool, run_in_background: true — no trailing &, no nohup). If it exits because the port is already ` +
+    `bound, another session brought the bridge back — skip the relaunch and only re-arm the watchers.`,
+    `Then verify the heartbeat round-trips (POST /heartbeat, then GET /heartbeat must return a non-zero ` +
+    `claude_ts), re-arm the keepalive pulser (${bg.pulser}) and the pickup waker (${bg.waker}) as background ` +
+    `Bash tasks (run_in_background: true), and re-arm the backup cron: CronCreate with cron "* * * * *" ` +
+    `(recurring: true) and prompt: '${buildCronBody(state.port, statePath)}'. The page reconnects on its own ` +
+    `once the heartbeat is back — the user does not have to reload.`,
+  ].join(' ');
+}
+
 module.exports = {
   isValidHtmlPath,
   isStale,
@@ -459,6 +491,7 @@ module.exports = {
   readStore,
   buildVerificationMandate,
   buildDeadBridgeRecovery,
+  buildDeadBridgeRelaunch,
 };
 
 if (require.main === module) {
@@ -508,9 +541,14 @@ if (require.main === module) {
         process.stdout.write(buildDeadBridgeRecovery(state, store) + '\n');
         process.exit(0);
       }
-      // Nothing pending. If the state file is also stale, prune it; otherwise
-      // leave it — the user might be restarting the server in another terminal.
-      if (isStale(state)) deleteState();
+      // Nothing pending. A stale state file (>24 h) is an abandoned concept —
+      // prune it. Otherwise the bridge died with the previous session (#348):
+      // relaunch it on the same port instead of leaving the page disconnected
+      // until someone notices the red indicator. A server the user is already
+      // restarting in another terminal makes the relaunch fail on the bound
+      // port, which the mandate treats as "already back".
+      if (isStale(state)) { deleteState(); process.exit(0); }
+      process.stdout.write(buildDeadBridgeRelaunch(state, STATE_PATH) + '\n');
       process.exit(0);
     }
 

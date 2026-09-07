@@ -38,8 +38,10 @@
  *   Exit code is 0 for every tick outcome, including an unreachable bridge:
  *   a non-zero exit would surface as a failed Bash call in the transcript on
  *   every tick of a dying bridge. Bridge liveness is owned by the pulser and
- *   the server-side `--html` watchdog, not by this script. Only invalid
- *   arguments exit 2.
+ *   the server-side `--html` watchdog, not by this script — with one
+ *   edge-triggered exception (#348): after RELAUNCH_AFTER_FAILURES consecutive
+ *   heartbeat misses the tick prints the relaunch instruction ONCE and then
+ *   stays silent until the bridge answers again. Only invalid arguments exit 2.
  */
 
 const fs = require('fs');
@@ -140,6 +142,91 @@ function request(port, pathname, method, timeoutSec) {
   });
 }
 
+// (#348) A bridge that dies WITHOUT a session restart — a crash, a manual
+// kill, the server-side watchdog — has nobody to bring it back: the pulser
+// only notices while its own session is alive, and this cron used to log the
+// failure to stderr forever. So the tick relaunches, but edge-triggered: the
+// consecutive-failure count and a one-shot marker live in the state file, the
+// instruction is printed exactly once after RELAUNCH_AFTER_FAILURES misses,
+// and the next successful heartbeat re-arms the edge. One transient miss
+// (a slow /heartbeat under load) never fires it.
+const RELAUNCH_AFTER_FAILURES = 2;
+
+function readStateJson(statePath) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+// Atomic where the platform allows it; a direct write is the fallback for the
+// Windows EPERM-on-rename case (another process holds the file open).
+function writeStateJson(statePath, obj) {
+  const data = JSON.stringify(obj, null, 2);
+  const tmp = `${statePath}.tmp-${process.pid}`;
+  try {
+    fs.writeFileSync(tmp, data);
+    fs.renameSync(tmp, statePath);
+  } catch {
+    try { fs.unlinkSync(tmp); } catch { /* never existed */ }
+    fs.writeFileSync(statePath, data);
+  }
+}
+
+/**
+ * Record one heartbeat outcome in the state file.
+ * @returns {{relaunch:boolean, failures:number}} — `relaunch` is true on the
+ *   ONE tick that crosses the threshold with no relaunch already requested.
+ */
+function noteHeartbeat(statePath, ok) {
+  const state = readStateJson(statePath);
+  if (!state) return { relaunch: false, failures: 0 };
+  if (ok) {
+    if (!state.tick_heartbeat_failures && !state.relaunch_requested_at) return { relaunch: false, failures: 0 };
+    delete state.tick_heartbeat_failures;
+    delete state.relaunch_requested_at;
+    try { writeStateJson(statePath, state); } catch { /* next success retries */ }
+    return { relaunch: false, failures: 0 };
+  }
+  const prior = Number.isInteger(state.tick_heartbeat_failures) ? state.tick_heartbeat_failures : 0;
+  const failures = prior + 1;
+  state.tick_heartbeat_failures = failures;
+  let relaunch = false;
+  if (failures >= RELAUNCH_AFTER_FAILURES && !state.relaunch_requested_at) {
+    state.relaunch_requested_at = new Date().toISOString();
+    relaunch = true;
+  }
+  // If the marker cannot be persisted, do not fire: without it every later
+  // tick would fire again, which is the per-minute spam this design avoids.
+  try { writeStateJson(statePath, state); } catch { return { relaunch: false, failures }; }
+  return { relaunch, failures };
+}
+
+/**
+ * The relaunch instruction (#348). Mirrors the SessionStart hook's dead-bridge
+ * mandate: same port, --html, both watchers — the pieces a restart or a crash
+ * takes away together.
+ */
+function relaunchInstruction(port, statePath, htmlPath) {
+  const root = path.dirname(path.dirname(statePath));
+  const server = path.join(__dirname, 'concept-server.py');
+  const watch = path.join(__dirname, 'concept-watch.js');
+  return (
+    `The concept bridge on port ${port} has not answered /heartbeat for ${RELAUNCH_AFTER_FAILURES} consecutive ` +
+    `ticks — the server process is gone (a Claude restart or a crash takes it and both watchers with it). ` +
+    `Relaunch it on the SAME port so the open tab and the state file stay valid: ` +
+    `\`python "${server}" ${port} "${root}" --html "${htmlPath}"\` ` +
+    `(Bash tool, run_in_background: true — no trailing &, no nohup). If it exits because the port is already ` +
+    `bound, another session brought the bridge back — skip the relaunch. ` +
+    `Then re-arm the keepalive pulser: node "${watch}" --mode pulse --port ${port} --state "${statePath}" ` +
+    `and the pickup waker: node "${watch}" --mode watch --port ${port} --state "${statePath}" ` +
+    `(both background Bash tasks, run_in_background: true). The page reconnects on its own once the ` +
+    `heartbeat is back. This instruction is printed once; later ticks stay silent until the bridge answers again.`
+  );
+}
+
 /**
  * The cleanup instruction. CronDelete is a tool, so this one step cannot move
  * into the script — but the *text* can, and it only ever reaches Claude on the
@@ -187,7 +274,7 @@ function pendingInstruction(port, version) {
  *   silent tick. Returned rather than written so the tests can assert on it.
  */
 async function tick(opts, deps = {}) {
-  const io = { request, inspectState, exists: fs.existsSync, ...deps };
+  const io = { request, inspectState, noteHeartbeat, exists: fs.existsSync, ...deps };
 
   // (0) Self-cleanup gate — FIRST step every tick, before any bridge traffic.
   const state = io.inspectState(opts.state, opts.port, io.exists);
@@ -197,13 +284,21 @@ async function tick(opts, deps = {}) {
   }
 
   // (1) Heartbeat POST — what keeps the page's indicator green when the pulser
-  // is gone. Its failure is not reported: the pulser and the server-side
-  // watchdog own bridge liveness, and a per-tick complaint about a dying
-  // bridge would spam the transcript once a minute.
+  // is gone. A single failure is stderr only: a per-tick complaint about a
+  // dying bridge would spam the transcript once a minute. The SECOND
+  // consecutive failure prints the relaunch instruction exactly once (#348);
+  // the state file carries the edge so later ticks stay silent until the
+  // bridge answers again.
   const beat = await io.request(opts.port, '/heartbeat', 'POST', opts.timeout);
   if (!beat.ok) {
+    const note = io.noteHeartbeat(opts.state, false);
+    if (note.relaunch) {
+      const st = readStateJson(opts.state) || {};
+      return { stdout: relaunchInstruction(opts.port, opts.state, String(st.html_path || '')), stderr: '' };
+    }
     return { stdout: '', stderr: `concept-tick: bridge on port ${opts.port} did not answer /heartbeat\n` };
   }
+  io.noteHeartbeat(opts.state, true);
 
   // (2) Pending check via /pending — a strict `{"pending": bool, "version": N}`,
   // never a substring match on /decisions.
@@ -228,10 +323,13 @@ module.exports = {
   parseArgs,
   validate,
   inspectState,
+  noteHeartbeat,
   cleanupInstruction,
   pendingInstruction,
+  relaunchInstruction,
   tick,
   DEFAULTS,
+  RELAUNCH_AFTER_FAILURES,
 };
 
 if (require.main === module) {
