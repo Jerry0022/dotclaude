@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.149.4] — 2026-09-07
+
+### Fixed
+
+- **The token guard blocked commands that only referenced a large concept page.** Any Bash command whose text contained the path of the generated concept HTML (~800 KB) was blocked with "~180,000 tokens" — the `curl -o /dev/null` 200-gate, the gate's own `grep -q` sweep, `wc -c` — although none of them bring a byte of the file into context. The grep family (`grep`, `egrep`, `fgrep`, `rg`, `ag`, `ack`) was unconditionally a reader and `curl` was unclassified, so both fell into the costly bucket. They are now classified by flag: the quiet, count and file-list forms (`-q`, `-c`, `-l`, `-L`, `--files`, `--count-matches`) are content-free, with value-taking flags and `--` honoured so a pattern that merely looks like `-q` cannot free the command (`grep -ecat f` searches for "cat"; `rg -L` is `--follow`, not a list); `curl` is content-free only with `-o`/`-O`/`--output`, and a `/dev/stdout` target still upgrades to costly; `wc` joins the passer heads. `grep -n`, bare `curl`, `cat` and `sed -n` cost exactly what they did. (#349)
+
 ## [0.149.3] — 2026-09-07
 
 ### Fixed
