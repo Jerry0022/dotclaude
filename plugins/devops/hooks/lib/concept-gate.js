@@ -33,8 +33,14 @@ const REQUIRED = [
 // Clipboard / paste-into-chat submit anti-patterns. A valid live-bridge
 // concept page never copies anything to the clipboard, so any match here is
 // the exact regression the user reported.
+//
+// The clipboard pattern matches the copy-out API and the copy-out UI wording
+// only — NOT the bare word. The templates' own attachment engine legitimately
+// reads `ev.clipboardData` for Ctrl/Cmd+V file paste (templates.md
+// § Attachments), and a bare /clipboard/ blocked every page generated verbatim
+// from the reference (#330).
 const FORBIDDEN = [
-  { re: /clipboard/i, why: 'clipboard copy (navigator.clipboard / "copy to clipboard")' },
+  { re: /navigator\.clipboard|clipboard\.(write|read)(Text)?\(|copy (to|into) (the )?clipboard/i, why: 'clipboard copy (navigator.clipboard / clipboard.writeText / "copy to clipboard")' },
   { re: /zwischenablage/i, why: '"Zwischenablage kopieren" copy UI' },
   { re: /in den chat (ein|einf)/i, why: '"in den Chat einfügen" paste instruction' },
   { re: /paste[^.\n]{0,24}chat/i, why: '"paste … into chat" instruction' },
