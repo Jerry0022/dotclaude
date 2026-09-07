@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.149.3] — 2026-09-07
+
+### Fixed
+
+- **The concept-server test suite no longer litters the worktree with `port-<n>` stores.** A bridge started without `--html` anchors its durable store at `.claude/concepts/port-<n>/` in its cwd, and `concept-server.test.js` spawned four such servers per run — fifteen leftover directories after one afternoon, sitting next to real concept sessions where the UNPROCESSED guard and the orphan sweep are supposed to mean something. Every spawn now gets a throw-away `--store` under the OS temp dir (the same pattern `CONCEPT_BRIDGE_REGISTRY_DIR` uses for the registry), and an `afterAll` asserts the run added no `port-*` store to the cwd. The `/concept` orphan sweep names `port-*` stores explicitly as sweep-eligible. (#342)
+
 ## [0.149.2] — 2026-09-07
 
 ### Fixed
