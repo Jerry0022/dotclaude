@@ -1,4 +1,4 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, afterAll } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -42,8 +42,31 @@ const PORT = 18000 + (process.pid % 1000);
 // override each run left its entries behind in the user's real registry.
 process.env.CONCEPT_BRIDGE_REGISTRY_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "concept-bridges-test-"));
 
+// Same pattern for the durable store (#342): a server started without --html
+// anchors its store at .claude/concepts/port-<n>/ in its cwd — the worktree
+// this suite runs from — and every spawn below left one behind. Point each
+// spawn at a throw-away store instead, so .claude/concepts/ only ever holds
+// real concept sessions and the UNPROCESSED guard + orphan sweep stay meaningful.
+const STORE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "concept-store-test-"));
+const storeFor = (port) => path.join(STORE_ROOT, String(port));
+
+// Snapshot of the port-* stores that already exist in the cwd before the suite
+// runs (debris from older plugin versions is not this suite's to judge) — the
+// afterAll asserts that THIS run added none.
+const CONCEPTS_DIR = path.join(process.cwd(), ".claude", "concepts");
+const listPortStores = () => {
+  try { return fs.readdirSync(CONCEPTS_DIR).filter(d => /^port-\d+$/.test(d)).sort(); }
+  catch { return []; }
+};
+const portStoresBefore = listPortStores();
+
+afterAll(() => {
+  expect(listPortStores()).toEqual(portStoresBefore);
+  try { fs.rmSync(STORE_ROOT, { recursive: true, force: true }); } catch { /* best effort */ }
+});
+
 function startServer() {
-  const proc = spawn(PY, [SERVER, String(PORT)], { stdio: ["ignore", "pipe", "pipe"] });
+  const proc = spawn(PY, [SERVER, String(PORT), "--store", storeFor(PORT)], { stdio: ["ignore", "pipe", "pipe"] });
   return proc;
 }
 
@@ -75,7 +98,7 @@ describe.skipIf(!PY)("concept-server refuses to double-bind its port (A3)", () =
   // launch must FAIL loudly (non-zero exit) instead of silently double-binding.
   test("a second instance on the same port exits non-zero instead of sharing it", async () => {
     const BIND_PORT = PORT + 1;
-    const proc1 = spawn(PY, [SERVER, String(BIND_PORT)], { stdio: ["ignore", "pipe", "pipe"] });
+    const proc1 = spawn(PY, [SERVER, String(BIND_PORT), "--store", storeFor(BIND_PORT)], { stdio: ["ignore", "pipe", "pipe"] });
     try {
       // Wait until instance 1 actually owns the port.
       const deadline = Date.now() + 10000;
@@ -90,7 +113,7 @@ describe.skipIf(!PY)("concept-server refuses to double-bind its port (A3)", () =
       expect(up).toBe(true);
 
       // Instance 2 must fail to bind rather than silently double-bind.
-      const proc2 = spawn(PY, [SERVER, String(BIND_PORT)], { stdio: ["ignore", "pipe", "pipe"] });
+      const proc2 = spawn(PY, [SERVER, String(BIND_PORT), "--store", storeFor(BIND_PORT)], { stdio: ["ignore", "pipe", "pipe"] });
       let stderr = "";
       proc2.stderr.on("data", d => { stderr += d.toString(); });
       const exitCode = await new Promise((resolve, reject) => {
@@ -145,7 +168,7 @@ describe.skipIf(!PY)("concept-server cross-session port registry (Defect B)", ()
     const REG_PORT = PORT + 2;
     const regFile = bridgeFile(REG_PORT);
     try { fs.unlinkSync(regFile); } catch { /* not there */ }
-    const proc = spawn(PY, [SERVER, String(REG_PORT), "."], { stdio: ["ignore", "pipe", "pipe"] });
+    const proc = spawn(PY, [SERVER, String(REG_PORT), ".", "--store", storeFor(REG_PORT)], { stdio: ["ignore", "pipe", "pipe"] });
     try {
       const deadline = Date.now() + 10000;
       let up = false;
