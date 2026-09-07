@@ -4,6 +4,7 @@ import {
   isConceptHtml,
   findMissing,
   findForbidden,
+  findStructural,
   evaluate,
   buildBlockReason,
 } from "./concept-gate.js";
@@ -114,6 +115,81 @@ describe("findForbidden", () => {
     </script>`;
     expect(findForbidden(PASTE_HANDLER)).toEqual([]);
     expect(findForbidden(VALID + PASTE_HANDLER)).toEqual([]);
+  });
+});
+
+// #346 — the reported regression: the opening <style> line of an older page
+// was pasted INSIDE the new style block. Every marker grep passes, the CSS
+// parser swallows the :root token block, the page renders white.
+describe("findStructural (#346)", () => {
+  const STYLED = `<!doctype html><html><head>
+<style>
+:root { --bg-color: #111; }
+body { background: var(--bg-color); }
+</style>
+</head><body>
+<script>const a = 1;</script>
+<script type="application/json" id="concept-decisions">{}</script>
+</body></html>`;
+
+  test("a page with balanced, non-nested blocks is sound", () => {
+    expect(findStructural(STYLED)).toEqual([]);
+    expect(findStructural(VALID)).toEqual([]);
+  });
+
+  test("a <style> opened inside an open <style> block is reported as nested", () => {
+    const nested = STYLED.replace(":root {", "<style>\n:root {");
+    const kinds = findStructural(nested).map(s => s.kind);
+    expect(kinds).toContain("nested-style");
+    expect(kinds).toContain("unbalanced-style");
+  });
+
+  test("an unclosed <script> is reported as unclosed and unbalanced", () => {
+    const unclosed = STYLED.replace(/<script>const a = 1;<\/script>[\s\S]*$/, "<script>const a = 1;\n");
+    const kinds = findStructural(unclosed).map(s => s.kind);
+    expect(kinds).toContain("unclosed-script");
+    expect(kinds).toContain("unbalanced-script");
+  });
+
+  test("a <script> that opens inside an open <style> block is reported", () => {
+    const kinds = findStructural("<style>:root{}<script>x()</script></style>").map(s => s.kind);
+    expect(kinds).toContain("script-in-style");
+  });
+
+  test("a stray </style> with no open block is reported", () => {
+    const kinds = findStructural("<html><body></style><p>x</p></body></html>").map(s => s.kind);
+    expect(kinds).toContain("stray-close-style");
+  });
+
+  test("'<style' inside a JS string is not a tag (no false positive)", () => {
+    const js = `<style>:root{--bg-color:#000}</style>
+<script>
+  const frame = '<style>' + css + '</style>';
+  const tpl = \`<div>\${'<script'}</div>\`;
+</script>`;
+    expect(findStructural(js)).toEqual([]);
+  });
+
+  test("the bare word 'style' in prose or attributes is not a tag", () => {
+    expect(findStructural(`<style>a{}</style><p style="color:red">style guide, restyle</p>`)).toEqual([]);
+  });
+
+  test("evaluate surfaces structural issues as their own category and fails the page", () => {
+    const nestedValid = VALID.replace("<body>", "<style>\n<style>\n:root{--bg-color:#000}\n</style>\n<body>");
+    const r = evaluate("docs/concepts/2026-09-07-broken.html", nestedValid);
+    expect(r.ok).toBe(false);
+    expect(r.missing).toEqual([]);
+    expect(r.forbidden).toEqual([]);
+    expect(r.structural.map(s => s.kind)).toContain("nested-style");
+    const reason = buildBlockReason("docs/concepts/2026-09-07-broken.html", r.missing, r.forbidden, r.structural);
+    expect(reason).toMatch(/Broken <style> \/ <script> structure/);
+    expect(reason).toMatch(/nested-style/);
+    expect(reason).toMatch(/--bg-color/);
+  });
+
+  test("buildBlockReason without the structural argument still works (older callers)", () => {
+    const r = evaluate("docs/concepts/2026-06-07-haushalt.html", CLIPBOARD_FALLBACK);
+    expect(() => buildBlockReason("x.html", r.missing, r.forbidden)).not.toThrow();
   });
 });
 

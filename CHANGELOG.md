@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.149.2] — 2026-09-07
+
+### Fixed
+
+- **The concept gate passed a page whose style block was nested and unstyled.** When the shared engine CSS was carried over from an earlier concept page, the opening `<style>` line landed *inside* the new style block; the CSS parser swallowed the whole `:root` design-token block, the page rendered white with no dark theme — and every gate grep still passed, because all marker strings were present. `post.concept.gate` now walks the `<style>`/`<script>` tag stream and blocks on a nested opener, a stray closer, an unclosed block or an open/close count mismatch, naming the offsets; a `<style` token inside an open `<script>` is treated as JS string content, so the templates' own markup-building strings do not trip it. `validation-gate.md` gained the same rule as Phase 0b, and the concept skill now evaluates `getComputedStyle(document.documentElement).getPropertyValue('--bg-color')` in a browser between the 200 gate and the `start` — an empty value means the tokens were swallowed by something only a CSS parser sees, and the tab is not opened. (#346)
+
 ## [0.149.1] — 2026-09-07
 
 ### Fixed

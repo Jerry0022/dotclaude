@@ -79,23 +79,104 @@ function findForbidden(html) {
 }
 
 /**
+ * Structural integrity of the `<style>` / `<script>` blocks (#346).
+ *
+ * Every marker grep passes on a page whose opening `<style>` line was copied
+ * INSIDE the new style block (engine CSS carried over from an older page):
+ * the CSS parser swallows the whole `:root` token block and the page renders
+ * white and unthemed — "das ganze Konzept kaputt dargestellt" — while all the
+ * required tokens are still present. So the gate walks the tag stream and
+ * reports: a `<style` or `<script` that opens while a block of that kind is
+ * already open, a closing tag with no open block, an open block that never
+ * closes, and an open/close count mismatch per kind. A `<style` token seen
+ * while a `<script>` block is open is ignored — that is a string inside JS,
+ * not markup — and only the tag-open form (`<style>` / `<style ...>`) counts,
+ * never a bare mention in prose or a comment.
+ *
+ * @returns {Array<{kind:string, why:string, at:number}>} — empty when sound.
+ */
+function findStructural(html) {
+  const body = html || '';
+  const issues = [];
+  const re = /<(\/?)(style|script)(?=[\s>])/gi;
+  const open = { style: null, script: null };
+  const counts = { style: { open: 0, close: 0 }, script: { open: 0, close: 0 } };
+  let m;
+  while ((m = re.exec(body)) !== null) {
+    const closing = m[1] === '/';
+    const kind = m[2].toLowerCase();
+    const at = m.index;
+    // Inside an open <script>, a "<style" / "<script" token is JS string
+    // content (template literals building markup), not a tag.
+    if (open.script !== null && !(closing && kind === 'script')) continue;
+    if (closing) {
+      counts[kind].close += 1;
+      if (open[kind] === null) {
+        issues.push({ kind: `stray-close-${kind}`, why: `</${kind}> at offset ${at} closes nothing — no open <${kind}> block`, at });
+      } else {
+        open[kind] = null;
+      }
+      continue;
+    }
+    counts[kind].open += 1;
+    if (open[kind] !== null) {
+      issues.push({ kind: `nested-${kind}`, why: `<${kind}> at offset ${at} opens inside the <${kind}> block that opened at offset ${open[kind]} — the parser swallows everything up to the next </${kind}>`, at });
+      continue; // keep the outer block as the open one
+    }
+    if (kind === 'script' && open.style !== null) {
+      issues.push({ kind: 'script-in-style', why: `<script> at offset ${at} opens inside the <style> block that opened at offset ${open.style}`, at });
+      continue;
+    }
+    open[kind] = at;
+  }
+  for (const kind of ['style', 'script']) {
+    if (open[kind] !== null) {
+      issues.push({ kind: `unclosed-${kind}`, why: `<${kind}> at offset ${open[kind]} is never closed`, at: open[kind] });
+    }
+    const c = counts[kind];
+    if (c.open !== c.close) {
+      issues.push({ kind: `unbalanced-${kind}`, why: `${c.open} <${kind}> vs ${c.close} </${kind}> tags`, at: -1 });
+    }
+  }
+  return issues;
+}
+
+/**
  * Full evaluation for a written file.
- * @returns {{applicable:boolean, ok:boolean, missing:Array, forbidden:Array}}
+ * @returns {{applicable:boolean, ok:boolean, missing:Array, forbidden:Array, structural:Array}}
  */
 function evaluate(filePath, html) {
   if (!isConceptHtml(filePath, html)) {
-    return { applicable: false, ok: true, missing: [], forbidden: [] };
+    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [] };
   }
   const missing = findMissing(html);
   const forbidden = findForbidden(html);
-  return { applicable: true, ok: missing.length === 0 && forbidden.length === 0, missing, forbidden };
+  const structural = findStructural(html);
+  return {
+    applicable: true,
+    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0,
+    missing,
+    forbidden,
+    structural,
+  };
 }
 
 /** Build the blocking feedback shown to Claude (stderr, exit 2). */
-function buildBlockReason(filePath, missing, forbidden) {
+function buildBlockReason(filePath, missing, forbidden, structural) {
+  missing = missing || [];
+  forbidden = forbidden || [];
+  structural = structural || [];
   const lines = [];
   lines.push(`BLOCKED: "${path.basename(filePath || 'concept.html')}" is not a valid live-bridge concept page.`);
   lines.push('');
+  if (structural.length) {
+    lines.push('Broken <style> / <script> structure — the page renders unstyled (white, no theme) even though every marker is present:');
+    structural.forEach(s => lines.push(`  - ${s.kind}: ${s.why}`));
+    lines.push('  Typical cause: the opening <style> line of an older page was pasted INSIDE the new style block.');
+    lines.push('  Fix: exactly one <style> per block, closed before the next tag; then verify in the browser that');
+    lines.push("  getComputedStyle(document.documentElement).getPropertyValue('--bg-color') is non-empty.");
+    lines.push('');
+  }
   if (forbidden.length) {
     lines.push('Forbidden clipboard / paste-into-chat submit detected:');
     forbidden.forEach(f => lines.push(`  - ${f.why}`));
@@ -127,6 +208,7 @@ module.exports = {
   isConceptHtml,
   findMissing,
   findForbidden,
+  findStructural,
   evaluate,
   buildBlockReason,
 };
