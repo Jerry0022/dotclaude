@@ -72,11 +72,13 @@ offsets. A `<style` token inside an open `<script>` block is JS string content
 
 **Then confirm the tokens actually applied — in the browser, before the page is
 shown (SKILL.md Step 3).** Evaluate
-`getComputedStyle(document.documentElement).getPropertyValue('--bg-color')` on
-the loaded page; it MUST be non-empty. An empty value means the design-token
-block was swallowed even though the file looks balanced (a stray `{`, an
-unterminated comment) — regenerate the block from `templates.md` § Layout
-before opening the tab.
+`getComputedStyle(document.documentElement).getPropertyValue('--accent-color')`
+on the loaded page; it MUST be non-empty. `--accent-color` is the one token
+every page defines and the panel chrome consumes (the reference CSS defines no
+tokens itself, and pages differ on `--bg` vs `--bg-color`, so probe the accent).
+An empty value means the design-token block was swallowed even though the file
+looks balanced (a stray `{`, an unterminated comment) — regenerate the block
+from `templates.md` § Layout before opening the tab.
 
 ## Phase 1 — Shared patterns (ALL templates)
 

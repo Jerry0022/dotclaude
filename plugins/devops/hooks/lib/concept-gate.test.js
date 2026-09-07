@@ -184,7 +184,7 @@ body { background: var(--bg-color); }
     const reason = buildBlockReason("docs/concepts/2026-09-07-broken.html", r.missing, r.forbidden, r.structural);
     expect(reason).toMatch(/Broken <style> \/ <script> structure/);
     expect(reason).toMatch(/nested-style/);
-    expect(reason).toMatch(/--bg-color/);
+    expect(reason).toMatch(/--accent-color/);
   });
 
   test("buildBlockReason without the structural argument still works (older callers)", () => {

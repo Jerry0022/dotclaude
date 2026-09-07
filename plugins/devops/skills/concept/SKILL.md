@@ -727,14 +727,19 @@ read of the rendered CSS, no bridge interaction) and evaluate:
 > ends.
 
 ```js
-getComputedStyle(document.documentElement).getPropertyValue('--bg-color').trim()
+getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim()
 ```
 
-Non-empty → proceed to `start`. Empty → do NOT open the tab; regenerate the
-`<style>` block from `templates.md` § Layout (exactly one `<style>` opener,
-closed before the next tag), re-run the gate, re-check. Skip the check only
-when no browser tool is reachable at all — then say so in the completion card's
-`userFinalTest` so the user knows the theme was not verified.
+`--accent-color` is the token every page defines and the panel's split button,
+chips and status line consume; the reference CSS itself defines no tokens, and
+pages differ on `--bg` vs `--bg-color`, so those are not reliable probes. (A
+page that uses a different accent name is one you authored — probe the token
+your `:root` block defines.) Non-empty → proceed to `start`. Empty → do NOT
+open the tab; regenerate the `<style>` block from `templates.md` § Layout
+(exactly one `<style>` opener, closed before the next tag), re-run the gate,
+re-check. Skip the check only when no browser tool is reachable at all — then
+say so in the completion card's `userFinalTest` so the user knows the theme
+was not verified.
 
 **If the `start "" msedge …` command errors** (Edge not installed, not in
 PATH), do NOT silently fall back to the preview MCP. Tell the user the

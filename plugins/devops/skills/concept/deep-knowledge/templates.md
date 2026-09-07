@@ -5945,6 +5945,14 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
 .panel-here-back { margin: 0 0 0 auto; }
 .panel-here-section[hidden],
 .panel-here-back[hidden] { display: none; }
+/* Mobile: the head folds into the status line (§ Layout — Sidebar's media
+   block says so too, but it sits EARLIER in the source than the `display:
+   flex` above, and equal specificity means the later rule wins — the first
+   live check (#341) showed the head taking 51px of a 487px bottom bar). This
+   copy comes after the layout rule, so the fold actually applies. */
+@media (max-width: 768px) {
+  .panel-here { display: none; }
+}
 .panel-nav-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -5966,6 +5974,14 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
   position: relative;
   max-height: 120px;
   padding-top: 0.6rem;
+  /* Safety net, never the plan: the cap is what keeps the call to action on
+     screen, so a foot whose content outgrows it scrolls inside the foot
+     instead of clipping — the first live check (#341) found the frozen block
+     at 157px with its "back to the live round" button cut off below the cap.
+     The scrollbar rules above already cover .panel-cta. Every foot state is
+     sized to fit WITHOUT scrolling (see #panel-frozen .hint and
+     .submitted-indicator below); this only catches the next overflow. */
+  overflow-y: auto;
 }
 /* The close-out wizard is the one legitimate exception: a multi-step form,
    not a call to action. On the final-report tab the foot may grow and scroll
@@ -6153,13 +6169,15 @@ html[data-template="design"] .frozen-bar {
 }
 
 /* Submitted state — compact: it shares the ≤120px foot with the frozen block
-   and the split button, and the progress itself lives in the status line. */
+   and the split button, and the progress itself lives in the status line.
+   Measured at panel width (#341): indicator 63px + hint 54px overran the cap
+   by 3px, so the indicator lost a little padding — 58 + 54 = 112, no scroll. */
 .submitted-indicator {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.55rem 0.75rem;
-  margin-bottom: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  margin-bottom: 0.3rem;
   border-radius: 8px;
   background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent);
   border: 1px solid var(--success-color, #3fb950);
@@ -6192,7 +6210,13 @@ html[data-template="design"] .frozen-bar {
   font-size: 0.9rem;
 }
 .frozen-indicator .frozen-icon { font-size: 1.1rem; }
-#panel-frozen .hint { font-size: 0.78rem; line-height: 1.35; margin: 0; }
+/* The hint paragraph does not render in the foot (#341): at panel width it
+   wraps to three lines (67px) and pushes the frozen block to 157px — past the
+   120px cap, with the back button clipped below it. The same sentence is
+   already on screen twice: the status line ("🕘 Iteration N · nur lesen") and
+   the frozen bar over the content. The markup stays (screen readers, older
+   pages) — the foot is indicator + back button, ≈85px. */
+#panel-frozen .hint { display: none; font-size: 0.78rem; line-height: 1.35; margin: 0; }
 #panel-frozen .link-btn { margin-top: 0.3rem; }
 
 /* Progress steps under the status line.
@@ -9106,7 +9130,11 @@ function updateStatusSteps(data) {
 ## Theme Toggle
 
 ```javascript
-document.getElementById('theme-toggle').addEventListener('click', () => {
+// Null-guarded (#341): the design skeleton carries no #theme-toggle, and an
+// unguarded dereference here threw at boot and took the rest of the script
+// with it — the tab-switch boot never ran, so the "you are here" head stayed
+// empty on every design page until the first manual tab click.
+document.getElementById('theme-toggle')?.addEventListener('click', () => {
   const html = document.documentElement;
   const current = html.getAttribute('data-theme');
   html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
@@ -9612,9 +9640,13 @@ function showIteration(n) {
   const panelSubmitted = document.getElementById('panel-submitted');
   const panelFrozen = document.getElementById('panel-frozen');
   const panelFinal = document.getElementById('panel-final-report');
-  if (panelReady) panelReady.style.display = (isLive && !isFinal) ? 'block' : 'none';
+  // ready and submitted are mutually exclusive (#341): submitWithAction hides
+  // the ready block, and a detour into a past tab and back must not bring
+  // it back under the submitted indicator — that showed both blocks at once
+  // (126px in a 120px foot) with live submit buttons under "übermittelt".
+  const submitted = document.body.classList.contains('concept-submitted');
+  if (panelReady) panelReady.style.display = (isLive && !isFinal && !submitted) ? 'block' : 'none';
   if (panelSubmitted) {
-    const submitted = document.body.classList.contains('concept-submitted');
     panelSubmitted.style.display = (isLive && !isFinal && submitted) ? 'block' : 'none';
   }
   if (panelFinal) panelFinal.style.display = isFinal ? 'block' : 'none';
