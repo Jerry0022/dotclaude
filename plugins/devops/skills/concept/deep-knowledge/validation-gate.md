@@ -254,6 +254,28 @@ halves, and a page missing one literal is a page carrying a stale copy of
 everything around it. Appending first and patching after leaves the freshly
 appended iteration wired to the old engine.
 
+**Pre-Kompass pages are converted wholesale on their next append — no
+opt-out (#344).** A page generated before the pinned-foot panel and the
+Kompass tree (0.149.0, entries 56 and 59–61) still carries the old scrolling
+decision panel. Its next append fails those entries, and the answer is the
+same as for every other engine entry: re-sync the **whole panel block** as one
+unit — the panel skeleton (`.panel-here` / `.panel-nav-scroll` /
+`.panel-status` / `.panel-cta`), § Layout (panel anatomy CSS), § Section
+Navigation (`buildSectionNav` + `buildIterationTree` + tab-bar CSS) and
+§ Two-Button Submit (split button + status line) — verbatim from templates.md,
+before the new section goes in. The anatomy spans HTML skeleton, CSS and JS
+across those sections and fails in halves; a page with the new JS on the old
+skeleton has no `.panel-cta` to pin, and a page with the new skeleton on the
+old JS never builds the tree. There is deliberately no "keep the old panel
+until this session closes" carve-out: it would need a marker nothing else
+reads, a second code path in the gate, and it would leave the one defect the
+anatomy exists to remove — the call to action below the fold — in place
+exactly on the pages that have the most rounds. A reviewer reopening an older
+concept sees the same pinned call to action as on a new one; the chips stay a
+flat `.iteration-tab` list, so the append checklist is unchanged, and the
+frozen rounds' content and answers are untouched (the re-sync never edits
+`section[data-iteration]`).
+
 **Re-syncing must never touch `section[data-iteration]` attributes.** Entry 54
 lives in the panel skeleton and the status-step JS, both of which the re-sync
 replaces wholesale; `data-reality-check` lives on the iteration sections and

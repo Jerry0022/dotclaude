@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.149.6] — 2026-09-07
+
+### Changed
+
+- **A concept page from before the Kompass panel gets the new panel on its next append — deliberately, with no opt-out.** Pages generated before 0.149.0 keep the old scrolling decision panel; their next iteration append fails engine entries 56 and 59–61, and the open question was whether the drift check should convert them or leave them alone until the session closes. Decided: convert, wholesale — the panel skeleton, § Layout, § Section Navigation and § Two-Button Submit are re-synced as one block, because the anatomy spans HTML, CSS and JS and fails in halves (new JS on the old skeleton has no foot to pin; the new skeleton on the old JS never builds the tree). A carve-out would need a marker nothing else reads and a second gate path, and it would leave the one defect the anatomy removes — the call to action below the fold — exactly on the pages with the most rounds. The re-sync never touches the frozen rounds' content or answers. `validation-gate.md` § Engine drift records the policy; SKILL.md Step 5c 2.6 now lists the current engine entries. (#344)
+
 ## [0.149.5] — 2026-09-07
 
 ### Fixed
