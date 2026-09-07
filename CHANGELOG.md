@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.149.7] — 2026-09-07
+
+### Fixed
+
+- **A failed attachment upload showed a template token instead of the reason.** The chip tooltip is the one string a concept page composes at runtime — `rec.error` is `'error_' + the bridge's reason` and only known in the browser — while every other `{{key}}` is swapped once at generation time, so `renderAttachments()` built `{{attach.<reason>}}` from parts and the reviewer read exactly that. The engine now carries `ATTACH_LOCALE`, one substituted string per bridge reason plus `uploading` and the client-side `error_offline`, and `attachStatusText()` falls back to "Upload failed" for a reason it does not know (a client-bug 400, or one the bridge grows later). The locale table gains the reasons it was missing — empty file, missing Content-Length, interrupted upload, store write failed, store unavailable — in both columns, and `error_quota` is renamed `error_quota_exceeded` to match what the bridge actually sends. Gate entry 44b pins the table and the absence of the runtime concatenation; the reference test cross-checks the table, the engine and the bridge's documented taxonomy so the three cannot drift apart again. (#343)
+
 ## [0.149.6] — 2026-09-07
 
 ### Changed
