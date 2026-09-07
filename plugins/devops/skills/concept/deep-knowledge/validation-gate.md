@@ -44,6 +44,40 @@ reference contains it. Grep for the copy-out forms above, never for a bare
 `clipboard`; `post.concept.gate` (`hooks/lib/concept-gate.js`) uses the same
 narrowed pattern.
 
+## Phase 0b — Structural integrity (hard fail, #346)
+
+Every grep in Phase 1 and 2 passes on a page whose `<style>` block is broken:
+when the shared engine CSS was carried over from an earlier concept page, the
+opening `<style>` line was copied *inside* the new style block. The CSS parser
+then swallowed the whole `:root` design-token block, the page rendered white
+and unthemed in design mode with no dark theme — and every marker string was
+still present. So before the pattern sweep, check the tag structure:
+
+| Check | Rule |
+|---|---|
+| Balance | count of `<style` equals `</style>`; count of `<script` equals `</script>` (tag-open form only — `<style>` / `<style …>` — never the bare word in prose or a `style="…"` attribute) |
+| No nesting | no `<style` opens while a `<style>` block is open; no `<script` opens while a `<script>` or `<style>` block is open |
+| No strays | no `</style>` / `</script>` without an open block; no block left open at end of file |
+
+```bash
+# quick balance check — must print two equal pairs
+grep -oiE '<style[[:space:]>]' "$HTML" | wc -l; grep -oi '</style>' "$HTML" | wc -l
+grep -oiE '<script[[:space:]>]' "$HTML" | wc -l; grep -oi '</script>' "$HTML" | wc -l
+```
+
+`post.concept.gate` runs the same walk (`findStructural()` in
+`hooks/lib/concept-gate.js`) on every write and blocks with the offending
+offsets. A `<style` token inside an open `<script>` block is JS string content
+(template literals that build markup) and is ignored.
+
+**Then confirm the tokens actually applied — in the browser, before the page is
+shown (SKILL.md Step 3).** Evaluate
+`getComputedStyle(document.documentElement).getPropertyValue('--bg-color')` on
+the loaded page; it MUST be non-empty. An empty value means the design-token
+block was swallowed even though the file looks balanced (a stray `{`, an
+unterminated comment) — regenerate the block from `templates.md` § Layout
+before opening the tab.
+
 ## Phase 1 — Shared patterns (ALL templates)
 
 Every concept page must contain these 66 patterns, regardless of template

@@ -707,6 +707,25 @@ microsoft-edge "$URL" &
 The empty `""` on Windows is required — without it, `cmd.exe` interprets
 the first quoted argument as a window title.
 
+**Computed-token check — between the 200 gate and the `start` (#346).** A
+page can pass every grep and still open white: the design-token block is
+swallowed when a `<style>` opens inside a `<style>` (engine CSS carried over
+from an older page) or a stray brace ends `:root` early. `post.concept.gate`
+and `validation-gate.md` § Phase 0b catch the tag structure; this step catches
+what only a CSS parser sees. Load `$URL` in a headless browser context (the
+Claude browser pane / Playwright — NOT the tab the user will get; this is a
+read of the rendered CSS, no bridge interaction) and evaluate:
+
+```js
+getComputedStyle(document.documentElement).getPropertyValue('--bg-color').trim()
+```
+
+Non-empty → proceed to `start`. Empty → do NOT open the tab; regenerate the
+`<style>` block from `templates.md` § Layout (exactly one `<style>` opener,
+closed before the next tag), re-run the gate, re-check. Skip the check only
+when no browser tool is reachable at all — then say so in the completion card's
+`userFinalTest` so the user knows the theme was not verified.
+
 **If the `start "" msedge …` command errors** (Edge not installed, not in
 PATH), do NOT silently fall back to the preview MCP. Tell the user the
 exact error and ask whether to try the Edge protocol handler

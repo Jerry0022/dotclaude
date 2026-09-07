@@ -7,10 +7,12 @@
  * @matcher Write|Edit|NotebookEdit
  * @description Deterministic backstop for concept pages. After a
  *   concept HTML is written, verify it carries the live decision panel +
- *   bridge-submit markers and contains NO clipboard / paste-into-chat
- *   fallback. Blocks (exit 2) with actionable feedback when the page is
- *   invalid, so the regression survives only until the next regenerate —
- *   never until the user has to copy a JSON by hand.
+ *   bridge-submit markers, contains NO clipboard / paste-into-chat
+ *   fallback, and has sound <style>/<script> structure (no nested or
+ *   unclosed block — the "white, unthemed page" regression, #346). Blocks
+ *   (exit 2) with actionable feedback when the page is invalid, so the
+ *   regression survives only until the next regenerate — never until the
+ *   user has to copy a JSON by hand.
  *
  *   Scope: only fires on concept HTML (the `docs/concepts/` path or a concept
  *   content signature). Non-concept files pass through untouched. This is a
@@ -52,9 +54,9 @@ process.stdin.on('end', () => {
 
   if (!isConceptHtml(file, html)) process.exit(0);
 
-  const { ok, missing, forbidden } = evaluate(file, html);
+  const { ok, missing, forbidden, structural } = evaluate(file, html);
   if (ok) process.exit(0);
 
-  process.stderr.write(buildBlockReason(file, missing, forbidden) + '\n');
+  process.stderr.write(buildBlockReason(file, missing, forbidden, structural) + '\n');
   process.exit(2);
 });
