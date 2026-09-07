@@ -251,6 +251,46 @@ describe("panel anatomy — CSS", () => {
     expect(media[1]).toMatch(/\.panel-here \{ display: none; \}/);
   });
 
+  // #341 — the first live check in a real browser (scripts/build-concept-fixture.js,
+  // 8 rounds, 14 entries) found three things the jsdom suites cannot see:
+  // the frozen block overran the 120px cap with its back button clipped, the
+  // submitted block overran it by 3px, and the mobile head-fold never applied
+  // because a later `.panel-here { display: flex }` won the cascade.
+  test("the foot scrolls instead of clipping when a state outgrows the cap (#341)", () => {
+    const cta = rulesFor(/^\.panel-cta$/).find((r) => /max-height/.test(r.body));
+    expect(cta.body).toMatch(/overflow-y:\s*auto/);
+  });
+
+  test("the frozen block fits the cap: its hint paragraph does not render in the foot (#341)", () => {
+    const hint = rulesFor(/^#panel-frozen \.hint$/)[0];
+    expect(hint, "#panel-frozen .hint").toBeTruthy();
+    expect(hint.body).toMatch(/display:\s*none/);
+    // The sentence stays on screen elsewhere — status line + frozen bar.
+    expect(rulesFor(/^\.panel-status\[data-status="frozen"\] \.status-line$/).length).toBeGreaterThan(0);
+    expect(cssSource).toContain(".frozen-bar");
+  });
+
+  test("the submitted block fits the cap: compact indicator padding (#341)", () => {
+    const ind = rulesFor(/^\.submitted-indicator$/)[0];
+    expect(ind, ".submitted-indicator").toBeTruthy();
+    const pad = /padding:\s*([\d.]+)rem/.exec(ind.body);
+    expect(pad, "vertical padding in rem").toBeTruthy();
+    expect(Number(pad[1])).toBeLessThanOrEqual(0.4);
+  });
+
+  test("the mobile head-fold comes AFTER the layout rule, so it wins the cascade (#341)", () => {
+    const src = stripComments(cssSource);
+    const layout = src.search(/\.panel-here \{[^}]*display:\s*flex/);
+    expect(layout, ".panel-here layout rule").toBeGreaterThan(-1);
+    const fold = src.lastIndexOf(".panel-here { display: none; }");
+    expect(fold, "mobile fold").toBeGreaterThan(-1);
+    expect(fold, "a fold before the layout rule is overridden by it").toBeGreaterThan(layout);
+    // …and it is inside a max-width media block, not unconditional.
+    const tail = src.slice(0, fold);
+    const lastMedia = tail.lastIndexOf("@media (max-width: 768px)");
+    expect(lastMedia).toBeGreaterThan(layout);
+  });
+
   test("the six states are styled and 'local-only' is the one with a background", () => {
     for (const s of ["saved", "saving", "connecting", "local-only", "submitted", "frozen"]) {
       expect(rulesFor(new RegExp(`^\\.panel-status\\[data-status="${s}"\\] \\.status-line$`)).length, s).toBeGreaterThan(0);

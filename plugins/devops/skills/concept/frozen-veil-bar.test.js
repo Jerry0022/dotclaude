@@ -173,7 +173,12 @@ function makeStub() {
   const title = mkEl();
   const bar = mkEl(); bar.hidden = true;
   bar.querySelector = (sel) => (sel === "[data-frozen-bar-title]" ? title : null);
-  const byId = { "content-dimmer": dimmer, "frozen-bar": bar };
+  // The four foot states showIteration() switches (#341 pins ready/submitted).
+  const ready = mkEl(); const submitted = mkEl(); const frozen = mkEl(); const final = mkEl();
+  const byId = {
+    "content-dimmer": dimmer, "frozen-bar": bar,
+    "panel-ready": ready, "panel-submitted": submitted, "panel-frozen": frozen, "panel-final-report": final,
+  };
   const body = mkEl();
   const documentElement = mkEl();
   const document = {
@@ -189,7 +194,7 @@ function makeStub() {
     dispatchEvent: () => true,
     addEventListener: () => {},
   };
-  return { document, sections, tabs, dimmer, bar, title, body };
+  return { document, sections, tabs, dimmer, bar, title, body, ready, submitted, frozen, final };
 }
 
 function loadRuntime() {
@@ -266,5 +271,30 @@ describe("frozen veil + floating bar — behaviour (reference JS on a DOM stub)"
     expect(r.body.classList.contains("viewing-final")).toBe(true);
     expect(veiled(r)).toBe(false);
     expect(r.bar.hidden).toBe(true);
+  });
+
+  // #341 — found in the first real-browser run: after a submit, a detour into
+  // a past tab and back re-showed #panel-ready UNDER the submitted indicator
+  // (126px in a 120px foot, live submit buttons under "übermittelt").
+  test("ready and submitted are mutually exclusive across tab switches", () => {
+    const r = loadRuntime();
+    r.showIteration("3");
+    expect(r.ready.style.display).toBe("block");
+    expect(r.submitted.style.display).toBe("none");
+    // submitWithAction() adds the class and hides ready; a round trip must keep it hidden.
+    r.body.classList.add("concept-submitted");
+    r.showIteration("1");
+    expect(r.ready.style.display).toBe("none");
+    expect(r.submitted.style.display).toBe("none");
+    expect(r.frozen.style.display).toBe("block");
+    r.showIteration("3");
+    expect(r.ready.style.display).toBe("none");
+    expect(r.submitted.style.display).toBe("block");
+    expect(r.frozen.style.display).toBe("none");
+    // restorePanelToReady() removes the class → ready is back, submitted gone.
+    r.body.classList.remove("concept-submitted");
+    r.showIteration("3");
+    expect(r.ready.style.display).toBe("block");
+    expect(r.submitted.style.display).toBe("none");
   });
 });

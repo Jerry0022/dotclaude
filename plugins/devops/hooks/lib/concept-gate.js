@@ -174,7 +174,7 @@ function buildBlockReason(filePath, missing, forbidden, structural) {
     structural.forEach(s => lines.push(`  - ${s.kind}: ${s.why}`));
     lines.push('  Typical cause: the opening <style> line of an older page was pasted INSIDE the new style block.');
     lines.push('  Fix: exactly one <style> per block, closed before the next tag; then verify in the browser that');
-    lines.push("  getComputedStyle(document.documentElement).getPropertyValue('--bg-color') is non-empty.");
+    lines.push("  getComputedStyle(document.documentElement).getPropertyValue('--accent-color') is non-empty.");
     lines.push('');
   }
   if (forbidden.length) {

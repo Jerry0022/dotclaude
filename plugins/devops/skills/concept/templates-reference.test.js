@@ -211,3 +211,42 @@ describe("attachment tooltip locale (#343)", () => {
     expect(tableKeys.has("error_quota")).toBe(false);
   });
 });
+
+// #341 — the first real-browser run of a design-template page threw at boot:
+// `getElementById('theme-toggle').addEventListener(...)` on a skeleton that
+// has no theme toggle. A top-level throw ends the whole <script>, so every
+// wiring after it (tab switch, "you are here" head, back links) never ran.
+// The undeclared-id test above accepts an id that exists in ANY html block;
+// this one holds every direct `getElementById(x).<call>` chain to the ids
+// that exist in EVERY full-page skeleton, or requires the optional chain.
+describe("boot-time dereferences survive every skeleton (#341)", () => {
+  const common = htmlBlocks.find((b) => b.code.startsWith("<!DOCTYPE html>"))?.code || "";
+  const design = htmlBlocks.find((b) => b.code.includes('class="concept-layout design fullscreen"'))?.code || "";
+  // The design skeleton deliberately omits #panel-frozen and
+  // #panel-final-report and tells the author to copy them verbatim from the
+  // Common Structure's .panel-cta — so a design page is the design skeleton
+  // PLUS that foot. Everything else (the header's #theme-toggle, say) is not
+  // part of the copy rule and must be null-guarded.
+  const commonFoot = common.slice(common.indexOf('<div class="panel-cta">'), common.indexOf("<!-- /.panel-cta -->"));
+  const skeletons = [common, design + commonFoot];
+
+  test("both full-page skeletons are found", () => {
+    expect(common.length).toBeGreaterThan(0);
+    expect(design.length).toBeGreaterThan(0);
+    expect(commonFoot).toContain('id="panel-frozen"');
+    expect(commonFoot).toContain('id="panel-final-report"');
+  });
+
+  test("no unguarded getElementById(...).call on an id a skeleton lacks", () => {
+    const js = jsBlocks.map((b) => b.code).join("\n");
+    const re = /getElementById\('([A-Za-z0-9_-]+)'\)\.(addEventListener|classList|dataset|style|textContent|hidden|value)/g;
+    const offenders = [];
+    let m;
+    while ((m = re.exec(js))) {
+      const id = m[1];
+      const missing = skeletons.filter((s) => !s.includes(`id="${id}"`));
+      if (missing.length) offenders.push(`${id} (missing in ${missing.length} skeleton${missing.length > 1 ? "s" : ""})`);
+    }
+    expect(offenders).toEqual([]);
+  });
+});
