@@ -177,9 +177,14 @@ must see their own language. The locale hint is authoritative.
 | `attach.retry`                 | Retry upload                     | Upload wiederholen |
 | `attach.error_generic`         | Upload failed                    | Upload fehlgeschlagen |
 | `attach.error_too_large`       | File too large for this bridge   | Datei zu groß für diese Bridge |
-| `attach.error_quota`           | Storage full on the bridge       | Speicher auf der Bridge voll |
+| `attach.error_quota_exceeded`  | Storage full on the bridge       | Speicher auf der Bridge voll |
 | `attach.error_disk_full`       | Bridge disk is full               | Bridge-Festplatte ist voll |
 | `attach.error_offline`         | Bridge unreachable — kept locally, will retry on reconnect | Bridge nicht erreichbar — lokal gespeichert, Wiederholung bei Verbindung |
+| `attach.error_empty`           | Empty file — nothing to upload   | Leere Datei — nichts hochzuladen |
+| `attach.error_length_required` | Upload rejected — size unknown (no Content-Length) | Upload abgelehnt — Größe unbekannt (keine Content-Length) |
+| `attach.error_client_aborted`  | Upload interrupted — retry       | Upload abgebrochen — bitte wiederholen |
+| `attach.error_store_write_failed` | Bridge could not write the file — retry | Bridge konnte die Datei nicht schreiben — bitte wiederholen |
+| `attach.error_store_unavailable` | Bridge store unavailable — restart the bridge | Bridge-Speicher nicht verfügbar — Bridge neu starten |
 | `state.persist_failed`         | Could not save your changes locally — storage is full. Free up space or export your work soon. | Deine Änderungen konnten lokal nicht gespeichert werden — der Speicher ist voll. Platz freigeben oder Arbeit bald exportieren. |
 | `state.recovered_found`        | Notes from an earlier version of this page were restored. | Notizen aus einer früheren Fassung dieser Seite wurden wiederhergestellt. |
 | `state.recovered_dismiss`      | Dismiss                          | Ausblenden |
@@ -7789,6 +7794,33 @@ function _uploadLegacyJSON(rec) {
   });
 }
 
+// Runtime locale for the chip tooltip (#343). Every other {{key}} on the page
+// is swapped at generation time; the upload-failure reason is only known in
+// the browser (`rec.error` = 'error_' + the bridge's `reason`), so the
+// substituted strings are carried here and looked up at render time. Keys
+// mirror the bridge's error taxonomy (bridge-server.md § Attachment HTTP
+// contract) plus the client-side `error_offline`; an unknown reason — a
+// client-bug 400 such as bad_json, or a reason added to the bridge later —
+// falls back to error_generic instead of showing a raw token.
+const ATTACH_LOCALE = {
+  uploading: '{{attach.uploading}}',
+  error_generic: '{{attach.error_generic}}',
+  error_too_large: '{{attach.error_too_large}}',
+  error_quota_exceeded: '{{attach.error_quota_exceeded}}',
+  error_disk_full: '{{attach.error_disk_full}}',
+  error_offline: '{{attach.error_offline}}',
+  error_empty: '{{attach.error_empty}}',
+  error_length_required: '{{attach.error_length_required}}',
+  error_client_aborted: '{{attach.error_client_aborted}}',
+  error_store_write_failed: '{{attach.error_store_write_failed}}',
+  error_store_unavailable: '{{attach.error_store_unavailable}}',
+};
+function attachStatusText(rec) {
+  if (rec.synced) return '';
+  if (rec.error) return ' — ' + (ATTACH_LOCALE[rec.error] || ATTACH_LOCALE.error_generic);
+  return ' — ' + ATTACH_LOCALE.uploading;
+}
+
 async function uploadAttachment(rec) {
   rec.error = null;
   let result;
@@ -7802,7 +7834,7 @@ async function uploadAttachment(rec) {
     try { await attachDBPut(rec); } catch { /* ignore */ }
     return true;
   }
-  rec.error = result.reason || 'error_generic';    // {{attach.<reason>}} on the chip
+  rec.error = result.reason || 'error_generic';    // ATTACH_LOCALE[reason] on the chip
   return false;
 }
 
@@ -7817,7 +7849,7 @@ function renderAttachments(slotKey) {
     wrap.className = raster ? 'attach-thumb' : 'attach-chip';
     wrap.dataset.synced = String(!!rec.synced);
     wrap.dataset.error = String(!!rec.error);
-    wrap.title = rec.name + (rec.synced ? '' : rec.error ? ' — {{attach.' + rec.error + '}}' : ' — {{attach.uploading}}');
+    wrap.title = rec.name + attachStatusText(rec);
 
     if (raster) {
       const img = document.createElement('img');
