@@ -1501,8 +1501,11 @@ Never resolve it by deleting.
 
 **Orphan sweep.** A store whose concept HTML no longer exists — the file was
 deleted manually, a worktree was wiped, an older session never ran cleanup —
-is an orphan. Sweep those whose `state.json` is older than 7 days, applying
-the same UNPROCESSED guard to each:
+is an orphan. So is a `port-<n>/` store: a bridge started without `--html`
+(older test runs did this, #342) anchors its store under that name, and no
+`docs/concepts/port-<n>.html` ever exists, so the same rule catches it. Sweep
+those whose `state.json` is older than 7 days, applying the same UNPROCESSED
+guard to each:
 
 ```bash
 for d in .claude/concepts/*/; do
