@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.150.0] — 2026-09-07
+
+### Added
+
+- **A concept page stays connected across Claude restarts — the bridge comes back on its own.** The bridge server, the keepalive pulser and the pickup waker are background Bash tasks and die with every Claude session restart (observed three times during one concept); the page then showed "Claude nicht verbunden" and, after three failed autosaves, the "Notizen liegen nur in diesem Browser" strip — which reads as "my notes are at risk" — until someone noticed and relaunched all three by hand on the same port. Two paths now do that unattended. At SessionStart, `ss.concept.resume` no longer exits silently when the bridge is dead and nothing is pending: it hands the new session a relaunch mandate — same port, same `--html`, a verified heartbeat round-trip, pulser, waker and the backup cron — and only prunes a state file older than 24 h. And the backup cron's `concept-tick` recovers a bridge that dies *without* a restart (a crash, a manual kill, the watchdog): after two consecutive heartbeat misses it prints the relaunch instruction exactly once, edge-triggered through `tick_heartbeat_failures` / `relaunch_requested_at` in the state file, and the next successful heartbeat re-arms it — a single transient miss never fires, and a dying bridge never spams the transcript once a minute. Both instructions say what to do when the port is already bound (another session brought the bridge back): skip the relaunch, re-arm the watchers. The page reconnects on its own once the heartbeat is back. (#348)
+
 ## [0.149.8] — 2026-09-07
 
 ### Fixed
