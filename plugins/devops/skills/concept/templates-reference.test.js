@@ -144,3 +144,70 @@ describe("concept templates reference — embedded code integrity", () => {
     expect(undeclared).toEqual([]);
   });
 });
+
+// #343 — the upload-failure tooltip is the one string composed at RUNTIME
+// (`rec.error` is only known in the browser), so the generation-time
+// {{attach.*}} swap cannot reach it. The engine carries a runtime table
+// instead; these tests pin that the table, the locale rows and the bridge's
+// error taxonomy agree, so a failed upload never shows a raw token.
+describe("attachment tooltip locale (#343)", () => {
+  const jsSource = jsBlocks.map((b) => b.code).join("\n");
+
+  // ATTACH_LOCALE = { key: '{{attach.key}}', ... } — parsed from the engine.
+  const objMatch = /const ATTACH_LOCALE = \{([\s\S]*?)\};/.exec(jsSource);
+  const runtimeKeys = new Map();
+  if (objMatch) {
+    const entryRe = /^\s*([a-z_]+):\s*'\{\{attach\.([a-z_]+)\}\}'/gm;
+    let e;
+    while ((e = entryRe.exec(objMatch[1]))) runtimeKeys.set(e[1], e[2]);
+  }
+
+  // The locale table rows: | `attach.<key>` | en | de |
+  const tableKeys = new Set();
+  const rowRe = /^\| `attach\.([a-z_]+)`\s+\|/gm;
+  let r;
+  while ((r = rowRe.exec(md))) tableKeys.add(r[1]);
+
+  test("ATTACH_LOCALE exists and every value is the matching {{attach.<key>}} token", () => {
+    expect(objMatch).not.toBeNull();
+    expect(runtimeKeys.size).toBeGreaterThan(0);
+    for (const [key, token] of runtimeKeys) expect(token).toBe(key);
+  });
+
+  test("no tooltip is composed from a runtime token any more", () => {
+    expect(jsSource).not.toContain("'{{attach.' +");
+    expect(jsSource).toContain("attachStatusText(rec)");
+    expect(jsSource).toContain("ATTACH_LOCALE[rec.error] || ATTACH_LOCALE.error_generic");
+  });
+
+  test("every runtime key has a locale row, and every error_/uploading row has a runtime key", () => {
+    for (const key of runtimeKeys.keys()) expect(tableKeys.has(key), `locale row for attach.${key}`).toBe(true);
+    for (const key of tableKeys) {
+      if (key === "uploading" || key.startsWith("error_")) {
+        expect(runtimeKeys.has(key), `ATTACH_LOCALE entry for ${key}`).toBe(true);
+      }
+    }
+  });
+
+  test("every reason the bridge documents maps to a runtime key (client-bug 400s excepted)", () => {
+    const bridgeMd = fs.readFileSync(path.join(__dirname, "deep-knowledge", "bridge-server.md"), "utf8");
+    // | 413    | `too_large`           | ... — the error-response table.
+    const reasonRe = /^\s*\|\s*\d{3}\s*\|\s*`([a-z_]+)`\s*\|/gm;
+    const reasons = new Set();
+    let m;
+    while ((m = reasonRe.exec(bridgeMd))) reasons.add(m[1]);
+    expect(reasons.has("too_large")).toBe(true); // the table was found
+    // A malformed request the page itself sent is a client bug, not a state
+    // the reviewer can act on — error_generic is the right text for those.
+    const clientBugs = new Set(["bad_json", "bad_base64", "bad_content_length"]);
+    for (const reason of reasons) {
+      if (clientBugs.has(reason)) continue;
+      expect(runtimeKeys.has("error_" + reason), `ATTACH_LOCALE.error_${reason}`).toBe(true);
+    }
+    // The client-side reasons the engine produces itself.
+    expect(runtimeKeys.has("error_offline")).toBe(true);
+    expect(runtimeKeys.has("error_generic")).toBe(true);
+    // The old misnamed key is gone — the bridge says quota_exceeded.
+    expect(tableKeys.has("error_quota")).toBe(false);
+  });
+});
