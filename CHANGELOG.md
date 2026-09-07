@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.149.5] — 2026-09-07
+
+### Fixed
+
+- **Rendering a completion card could close the user's own Edge window.** `refresh-usage-headless` kills its hidden scraper instance before every cold relaunch with `taskkill /F /PID <pid> /T` on the pid from `~/.claude/edge-usage-scraper.pid`. That file is written once at launch and nothing observes the child's exit — the launcher spawns Edge detached and the Node process is gone seconds later — so it goes stale the moment the scraper quits, and Windows hands the number to the next process within hours. Observed on 2026-09-04: the file was three hours old, the pid had been reused by the user's main `msedge.exe`, and `/T` took the whole tree down right after a card rendered. The kill path now asks the OS who owns the pid (`Get-CimInstance Win32_Process`) and requires both the image name and the scraper's unique profile directory on the live command line; anything else — a foreign process, a gone pid, a query that timed out — is not killed and the stale file is simply deleted. `/T` is gone; the existing reap by command line already catches children and the real singleton. The exit-hook variant the issue proposed is not possible with a detached launcher and is documented as such. (#328)
+
 ## [0.149.4] — 2026-09-07
 
 ### Fixed

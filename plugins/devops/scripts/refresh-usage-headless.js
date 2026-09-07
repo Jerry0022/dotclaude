@@ -296,20 +296,67 @@ function reapScraperInstances() {
 }
 
 /**
- * Kill the scraper instance. Fast PID-file path first (bounded by a timeout so a
- * wedged taskkill can't hang the whole refresh under the MCP's 60s budget), then
- * the reliable command-line reap that catches the real browser the stale PID
- * missed. Never touches the user's main Edge.
+ * Who owns <pid> right now? (#328)
+ *
+ * The PID file is written once at launch and nothing observes the child's
+ * exit — the launcher spawns Edge detached + unref'd and this process exits
+ * seconds later — so the file goes stale the moment the scraper quits, and
+ * Windows reuses PIDs within hours. A blind `taskkill /PID <stale> /T` then
+ * kills whatever owns that number today; observed: the user's MAIN Edge tree,
+ * right after a completion card rendered. So before any kill, ask the OS who
+ * holds the pid and require BOTH the image name and our unique profile dir on
+ * the live command line.
+ *
+ * @returns {'ours'|'foreign'|'gone'|'unknown'} — only `ours` may be killed.
+ *   `unknown` (query failed / timed out) is deliberately not killable: a
+ *   scraper we cannot verify is caught by the command-line reap anyway.
  */
-function killScraperInstance() {
+function classifyScraperPid(pid, { exec = execSync, needle = path.basename(SCRAPER_PROFILE_DIR) } = {}) {
+  if (!(pid > 0)) return 'gone';
+  const ps =
+    `$p = Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}'; ` +
+    "if ($p) { $p.Name + '|' + $p.CommandLine }";
+  let out;
   try {
-    const pid = parseInt(fs.readFileSync(SCRAPER_PID_FILE, 'utf8').trim(), 10);
-    if (pid > 0) {
-      try { execSync(`taskkill /F /PID ${pid} /T`, { stdio: 'ignore', timeout: 5000 }); } catch {}
+    out = exec(`powershell -NoProfile -NonInteractive -Command "${ps}"`, {
+      encoding: 'utf8', timeout: 8000, stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    return 'unknown';
+  }
+  const line = String(out || '').trim();
+  if (!line) return 'gone';
+  const sep = line.indexOf('|');
+  const name = (sep === -1 ? line : line.slice(0, sep)).trim().toLowerCase();
+  const cmdline = sep === -1 ? '' : line.slice(sep + 1);
+  return (name === 'msedge.exe' && cmdline.includes(needle)) ? 'ours' : 'foreign';
+}
+
+/**
+ * Kill the scraper instance. PID-file path first — but only after
+ * `classifyScraperPid()` has confirmed the pid still belongs to OUR scraper
+ * (#328); a stale file pointing at a foreign process is just deleted. No `/T`:
+ * the command-line reap below already catches children and the real singleton
+ * the short-lived launcher pid missed. Bounded by timeouts so a wedged query or
+ * taskkill can't hang the whole refresh under the MCP's 60s budget. Never
+ * touches the user's main Edge.
+ *
+ * Dependencies are injectable for the unit tests only; production callers pass
+ * nothing.
+ */
+function killScraperInstance({ exec = execSync, pidFile = SCRAPER_PID_FILE, reap = reapScraperInstances, classify = classifyScraperPid } = {}) {
+  let pid = 0;
+  try { pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10); } catch {}
+  if (pid > 0) {
+    const owner = classify(pid, { exec });
+    if (owner === 'ours') {
+      try { exec(`taskkill /F /PID ${pid}`, { stdio: 'ignore', timeout: 5000 }); } catch {}
+    } else {
+      log(`Scraper PID file is stale (pid ${pid} is ${owner}) — not killing, dropping the file`);
     }
-  } catch {}
-  try { fs.unlinkSync(SCRAPER_PID_FILE); } catch {}
-  reapScraperInstances();
+  }
+  try { fs.unlinkSync(pidFile); } catch {}
+  reap();
 }
 
 /** Age of a lock file in ms, or Infinity if absent/unreadable. */
@@ -890,6 +937,8 @@ module.exports = {
   shouldOpenLoginWindow,
   loginPending,
   reapScraperInstances,
+  classifyScraperPid,
+  killScraperInstance,
   LOGIN_RETRY_AFTER_MS,
   FRESH_CACHE_MAX_AGE_SECONDS,
 };

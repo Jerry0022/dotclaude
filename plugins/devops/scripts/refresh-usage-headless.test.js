@@ -9,8 +9,102 @@ import {
   writeJsonAtomic,
   isMarkerPending,
   shouldOpenLoginWindow,
+  classifyScraperPid,
+  killScraperInstance,
   LOGIN_RETRY_AFTER_MS,
 } from "./refresh-usage-headless.js";
+
+// #328 — a stale PID file + `taskkill /F /PID <pid> /T` killed the user's main
+// Edge tree once the OS had reused the pid. The kill path must verify ownership
+// first and never use /T.
+describe("killScraperInstance — ownership check before any kill (#328)", () => {
+  let dir;
+  afterEach(() => {
+    if (dir) { try { rmSync(dir, { recursive: true, force: true }); } catch {} dir = null; }
+  });
+
+  // A fake execSync: answers the CIM query with `cimLine`, records every call.
+  function fakeExec(cimLine, { throwOnCim = false } = {}) {
+    const calls = [];
+    const exec = vi.fn((cmd) => {
+      calls.push(cmd);
+      if (/Get-CimInstance/.test(cmd)) {
+        if (throwOnCim) throw new Error("powershell timed out");
+        return cimLine;
+      }
+      return "";
+    });
+    exec.calls = calls;
+    exec.kills = () => calls.filter(c => /^taskkill/.test(c));
+    return exec;
+  }
+
+  function pidFileWith(content) {
+    dir = mkdtempSync(join(tmpdir(), "usage-pid-test-"));
+    const pidFile = join(dir, "edge-usage-scraper.pid");
+    fs.writeFileSync(pidFile, content);
+    return pidFile;
+  }
+
+  test("classifyScraperPid: our scraper = msedge.exe + the profile dir on its command line", () => {
+    const ours = fakeExec("msedge.exe|\"C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe\" --user-data-dir=C:\\Users\\x\\.claude\\edge-usage-profile --remote-debugging-port=9223");
+    expect(classifyScraperPid(28664, { exec: ours })).toBe("ours");
+    // Same image, the USER's profile → foreign. This is the exact #328 case.
+    const mainEdge = fakeExec("msedge.exe|\"C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe\" --profile-directory=Default");
+    expect(classifyScraperPid(28664, { exec: mainEdge })).toBe("foreign");
+    expect(classifyScraperPid(28664, { exec: fakeExec("notepad.exe|notepad.exe") })).toBe("foreign");
+    expect(classifyScraperPid(28664, { exec: fakeExec("") })).toBe("gone");
+    expect(classifyScraperPid(28664, { exec: fakeExec("", { throwOnCim: true }) })).toBe("unknown");
+    expect(classifyScraperPid(0, { exec: fakeExec("x") })).toBe("gone");
+  });
+
+  test("PID file pointing at the user's main Edge → no taskkill, file removed, reap still runs", () => {
+    const pidFile = pidFileWith("28664");
+    const exec = fakeExec("msedge.exe|msedge.exe --profile-directory=Default");
+    const reap = vi.fn();
+    killScraperInstance({ exec, pidFile, reap });
+    expect(exec.kills()).toEqual([]);
+    expect(fs.existsSync(pidFile)).toBe(false);
+    expect(reap).toHaveBeenCalledTimes(1);
+  });
+
+  test("PID file pointing at a non-Edge process → no taskkill", () => {
+    const pidFile = pidFileWith("4242");
+    const exec = fakeExec("notepad.exe|notepad.exe");
+    killScraperInstance({ exec, pidFile, reap: () => {} });
+    expect(exec.kills()).toEqual([]);
+    expect(fs.existsSync(pidFile)).toBe(false);
+  });
+
+  test("PID file pointing at our scraper → taskkill on that pid, WITHOUT /T", () => {
+    const pidFile = pidFileWith("31337");
+    const exec = fakeExec("msedge.exe|msedge.exe --user-data-dir=C:\\u\\.claude\\edge-usage-profile --remote-debugging-port=9223");
+    killScraperInstance({ exec, pidFile, reap: () => {} });
+    expect(exec.kills()).toEqual(["taskkill /F /PID 31337"]);
+    expect(fs.existsSync(pidFile)).toBe(false);
+  });
+
+  test("ownership query fails (timeout) → treated as unknown, no kill", () => {
+    const pidFile = pidFileWith("777");
+    const exec = fakeExec("", { throwOnCim: true });
+    killScraperInstance({ exec, pidFile, reap: () => {} });
+    expect(exec.kills()).toEqual([]);
+    expect(fs.existsSync(pidFile)).toBe(false);
+  });
+
+  test("pid already gone → no kill; no PID file → no query at all", () => {
+    const pidFile = pidFileWith("9");
+    const exec = fakeExec("");
+    killScraperInstance({ exec, pidFile, reap: () => {} });
+    expect(exec.kills()).toEqual([]);
+
+    const exec2 = fakeExec("x");
+    const reap = vi.fn();
+    killScraperInstance({ exec: exec2, pidFile: join(dir, "missing.pid"), reap });
+    expect(exec2).not.toHaveBeenCalled();
+    expect(reap).toHaveBeenCalledTimes(1);
+  });
+});
 
 // Fixed "now" so the age math is deterministic.
 const NOW = Date.parse("2026-06-18T12:00:00.000Z");
