@@ -716,6 +716,16 @@ what only a CSS parser sees. Load `$URL` in a headless browser context (the
 Claude browser pane / Playwright — NOT the tab the user will get; this is a
 read of the rendered CSS, no bridge interaction) and evaluate:
 
+> **Verification tabs use their own browser profile — always.** Two tabs of
+> the same profile share `localStorage`, and the page keeps its navigation
+> state (`_activeView`, `_activeScreen*`, `_viewportMode`) there. A
+> verification tab opened in the user's Edge profile therefore lands on
+> whatever view the user is reading, and its own autosaves write its
+> position back over theirs (#347). Playwright and the Claude browser pane
+> run an isolated profile; a tab in the user's window does not. The bridge
+> mirror is not the leak — `recovered` carries `text:` keys only, on both
+> ends.
+
 ```js
 getComputedStyle(document.documentElement).getPropertyValue('--bg-color').trim()
 ```

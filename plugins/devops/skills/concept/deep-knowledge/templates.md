@@ -6825,6 +6825,14 @@ async function hydrateDraftFromBridge() {
   const local = _readStoredState();
   let changed = false;
   Object.entries(data.recovered || {}).forEach(([k, v]) => {
+    // Only typed text is mirrored back (#347). The bridge already limits
+    // `recovered` to `text:` keys, but an older bridge — or any future key
+    // the server lets through — must never steer THIS browser: `_activeView`,
+    // `_activeScreen*`, `_viewportMode` and every other `_`-prefixed
+    // navigation / preference key belong to the tab that wrote them. A
+    // second browser on the same page (a screenshot-verification tab) would
+    // otherwise be pulled onto whatever the user is reading.
+    if (typeof k !== 'string' || !k.startsWith('text:')) return;
     if (typeof v !== 'string' || !v) return;
     if (typeof local[k] === 'string' && local[k] !== '') return;
     local[k] = v;
