@@ -1238,10 +1238,13 @@ iteration must be live in the browser BEFORE the server signals "processed".
    not only at first generation. The page's shared engine (Attachments
    JS/CSS, § Layout CSS chrome rules, tab-switch JS) is whatever
    templates.md said on the day it was generated, and every later round
-   re-uses it. If any engine entry fails (44, 46, 47, 48, 56, tab-switch),
-   re-sync that whole block **verbatim from templates.md NOW**, before
-   appending — otherwise the new iteration inherits the old defect and the
-   user sees the same bug after updating the plugin. See
+   re-uses it. If any engine entry fails (30b, 44, 46, 47, 48, 49–53, 54,
+   56, 59–61, tab-switch), re-sync that whole block **verbatim from
+   templates.md NOW**, before appending — otherwise the new iteration
+   inherits the old defect and the user sees the same bug after updating
+   the plugin. A page from before the Kompass panel (fails 56 / 59–61) gets
+   the whole panel block — skeleton, § Layout, § Section Navigation,
+   § Two-Button Submit — on this append, no opt-out (#344). See
    `deep-knowledge/validation-gate.md` § Engine drift on iteration append.
 3. Append a new `<section data-iteration="{N+1}" data-active>` with the
    updated / next-round content (new variants, refined options, whatever
