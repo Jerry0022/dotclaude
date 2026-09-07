@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.150.1] — 2026-09-07
+
+### Fixed
+
+- **The Kompass decision panel has now been looked at in a real browser — and five things the jsdom suites could not see are fixed.** `scripts/build-concept-fixture.js` assembles a standalone page from the reference blocks in `templates.md` — N rounds, M entries, decision or design template, the design skeleton completed with the foot states it tells the author to copy — so the panel can be opened where layout and paint exist. The first run (8 rounds, 14 entries) confirmed what the tests promised: the archive folds seven earlier rounds and opens itself on a frozen tab, the table of contents groups into Kontext / Varianten past twelve entries, the split button opens its menu and closes on Escape, the six status-line states render in six colours, the mobile bottom bar caps at 60vh, the design-mode foot keeps the 💬 FAB's row free. It also found: the frozen block was 157px in a 120px foot with its "back to the live round" button clipped below the cap (its hint paragraph no longer renders in the foot — the status line and the frozen bar already say it — and `.panel-cta` scrolls as a safety net); the submitted block overran the cap by 3px (compact indicator); the mobile head-fold never applied because a later `.panel-here { display: flex }` won the cascade; a design page threw at boot on the unguarded `#theme-toggle` listener, so the tab-switch wiring never ran and the "you are here" head stayed empty; and after a submit, a detour into a past tab and back re-showed the ready block with live submit buttons under the "übermittelt" indicator. Each fix is pinned by a test, and the reference suite now holds every boot-time `getElementById(...).call` to ids that exist in every skeleton. The #346 computed-token probe moves from `--bg-color` to `--accent-color`: the reference CSS defines no tokens itself, and generated pages differ on `--bg` vs `--bg-color`. (#341)
+
 ## [0.150.0] — 2026-09-07
 
 ### Added
