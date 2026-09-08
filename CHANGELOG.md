@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.151.1] — 2026-09-08
+
+### Fixed
+
+- **A concept page missing its dock markup lost every interaction, silently.** The shared panel-chrome block names the element it cannot find and degrades; the design layout block right below it still dereferenced `dockToggle.dataset`, `dock.dataset`, `dockClose` and `panel.classList` unguarded. That block wires everything after the dock too — screen switching, click-through, the keyboard shortcuts — so one missing element threw at boot and took all of it with it, with no visible error: a mockup that ignores every click and every arrow key, which reads as "the mockup is broken" rather than "three lines of markup are missing". The keydown handler threw once per keystroke on top of it. The dock's parts are reported once by name now, in the same shape as `missingPanelParts`, and every entry point degrades — the FAB labels, all three listener registrations, `openDock`/`closeDock` (reachable from `openPanel` through `window.closeDock?.()`, so a page with a panel and no dock still opens its panel), the four functions called from outside the block, and the keyboard shortcut. Five tests pin it, one by running the dock functions against a page that has no dock at all.
+
 ## [0.151.0] — 2026-09-08
 
 ### Added

@@ -172,10 +172,10 @@ describe("the one-shot attention pulse", () => {
   test("the JS clears data-untouched on FAB click and on dock input", () => {
     const clear = /removeAttribute\('data-untouched'\)/;
     expect(jsSource, "the clear itself").toMatch(clear);
-    const click = slice(jsSource, "dockToggle.addEventListener('click'");
+    const click = slice(jsSource, "dockToggle?.addEventListener('click'");
     expect(click, "first dock open ends the pulse").toMatch(/stopFabPulse\(\)|removeAttribute\('data-untouched'\)/);
     expect(jsSource, "and so does the first keystroke inside the dock")
-      .toMatch(/dock\.addEventListener\('input',\s*stopFabPulse\)/);
+      .toMatch(/dock\?\.addEventListener\('input',\s*stopFabPulse\)/);
   });
 });
 
