@@ -4396,6 +4396,22 @@ change) via `harvestDockValues()`.
   const dock = document.getElementById('feedback-dock');
   const dockToggle = document.getElementById('feedback-toggle');
   const dockClose = document.getElementById('feedback-close');
+  // Same contract as the panel block's missingPanelParts: name what is
+  // missing ONCE, then degrade. Everything below used to dereference these
+  // three unguarded, so a page that shipped without the dock threw on
+  // `dockToggle.dataset` — and since this IIFE wires EVERYTHING after it too
+  // (screen switching, click-through, the keyboard shortcuts), the whole page
+  // went silent with it. The user then sees a mockup that ignores every
+  // click and arrow key, which reads as "the mockup is broken" rather than
+  // "the dock markup is missing".
+  const missingDockParts = [
+    ['feedback-dock', dock], ['feedback-toggle', dockToggle],
+    ['feedback-close', dockClose],
+  ].filter(([, el]) => !el).map(([id]) => id);
+  if (missingDockParts.length) {
+    console.error('[concept] feedback-dock markup incomplete, dock disabled — missing: '
+      + missingDockParts.join(', '));
+  }
   // The dock is a Speech-Bubble anchored to the 💬 FAB — the FAB stays
   // visible and clickable while the dock is open, so clicking it toggles
   // (open ↔ minimised). The X button is a *minimise*, not a destroy:
@@ -4408,9 +4424,10 @@ change) via `harvestDockValues()`.
   //   * on close, focus is restored to the FAB if it was inside the dock
   //     (the dock disappears via display:none, so leaving focus there
   //     would orphan it)
-  const LABEL_OPEN = dockToggle.dataset.labelOpen || dockToggle.getAttribute('aria-label');
-  const LABEL_CLOSE = dockToggle.dataset.labelClose || LABEL_OPEN;
+  const LABEL_OPEN = dockToggle?.dataset.labelOpen || dockToggle?.getAttribute('aria-label') || '';
+  const LABEL_CLOSE = dockToggle?.dataset.labelClose || LABEL_OPEN;
   function openDock() {
+    if (!dock || !dockToggle) return;
     window.closePanel?.();   // mutually exclusive overlays, see openPanel above
     dock.dataset.open = 'true';
     dockToggle.setAttribute('aria-expanded', 'true');
@@ -4424,6 +4441,9 @@ change) via `harvestDockValues()`.
   // panel instead. Every other close still restores the FAB, or focus would
   // be orphaned inside a display:none dock.
   function closeDock(handOff) {
+    // Reachable from openPanel() through `window.closeDock?.()`, so it must
+    // survive a page whose dock never existed.
+    if (!dock || !dockToggle) return;
     const focusWasInside = !handOff && dock.contains(document.activeElement);
     dock.dataset.open = 'false';
     dockToggle.setAttribute('aria-expanded', 'false');
@@ -4437,14 +4457,14 @@ change) via `harvestDockValues()`.
   // opening the dock from the FAB, or typing into it (a restored session can
   // land with the dock already open, and closeDock() is also reached by the
   // panel hand-off, which proves nothing about the dock).
-  const stopFabPulse = () => dockToggle.removeAttribute('data-untouched');
-  dockToggle.addEventListener('click', () => {
+  const stopFabPulse = () => dockToggle?.removeAttribute('data-untouched');
+  dockToggle?.addEventListener('click', () => {
     stopFabPulse();
-    if (dock.dataset.open === 'true') closeDock();
+    if (dock?.dataset.open === 'true') closeDock();
     else openDock();
   });
-  dock.addEventListener('input', stopFabPulse);
-  dockClose.addEventListener('click', closeDock);
+  dock?.addEventListener('input', stopFabPulse);
+  dockClose?.addEventListener('click', closeDock);
 
   // Maximise/restore (Work package B) — a RESIZE, never a close. Distinct
   // from minimise above: minimise flips data-open, this flips
@@ -4459,7 +4479,7 @@ change) via `harvestDockValues()`.
   // not: applyDockSize() only ever writes data-size.
   const dockMaximize = document.getElementById('feedback-maximize');
   function syncMaximizeButton() {
-    if (!dockMaximize) return;
+    if (!dockMaximize || !dock) return;
     const on = dock.dataset.userMaximized === 'true';
     dockMaximize.setAttribute('aria-pressed', String(on));
     const label = on ? '{{panel.restore_size}}' : '{{panel.maximize}}';
@@ -4467,6 +4487,7 @@ change) via `harvestDockValues()`.
     dockMaximize.title = label;
   }
   dockMaximize?.addEventListener('click', () => {
+    if (!dock) return;
     dock.dataset.userMaximized = dock.dataset.userMaximized === 'true' ? 'false' : 'true';
     applyDockSize();
     if (typeof saveState === 'function') saveState();
@@ -4498,6 +4519,9 @@ change) via `harvestDockValues()`.
     // replacing this value — so it also survives an iteration switch
     // untouched: primeDock() calls this on every switch but never clears
     // data-userMaximized itself.
+    // Exposed as window.applyDockSize and called from restoreState(), which
+    // runs on every page — including one with no dock.
+    if (!dock) return;
     const singleScreen = document.body.dataset.singleScreen === 'true';
     const singleDesign = document.body.dataset.singleDesign === 'true';
     dock.dataset.size = (singleScreen && singleDesign) ? 'compact' : 'wide';
@@ -4532,6 +4556,7 @@ change) via `harvestDockValues()`.
     try { return JSON.parse(node.textContent); } catch (e) { return null; }
   }
   function applyDockFreezeState() {
+    if (!dock) return;
     const frozen = document.body.classList.contains('viewing-frozen');
     const fields = [...document.querySelectorAll('#feedback-dock textarea')];
     if (frozen) {
@@ -4574,6 +4599,7 @@ change) via `harvestDockValues()`.
   // iteration N+1 rebuilds the dock from that empty namespace. Only editing is
   // taken away, so what is on screen cannot drift from what is in flight.
   window.markDockSubmitted = function() {
+    if (!dock) return;
     document.querySelectorAll('#feedback-dock textarea').forEach(ta => { ta.readOnly = true; });
     dock.dataset.submitted = 'true';
     if (typeof saveState === 'function') saveState();
@@ -4588,6 +4614,7 @@ change) via `harvestDockValues()`.
   // return to editable — a read-only dock under a re-armed submit button means
   // the user can see their comments and change nothing about them.
   window.unmarkDockSubmitted = function() {
+    if (!dock) return;
     if (document.body.classList.contains('viewing-frozen')) return;
     document.querySelectorAll('#feedback-dock textarea').forEach(ta => { ta.readOnly = false; });
     delete dock.dataset.submitted;
@@ -4753,7 +4780,12 @@ change) via `harvestDockValues()`.
   // Keyboard: Arrow Left/Right (and Space) jump between screens (within the
   // active design) when no textarea/input is focused and no overlay is open.
   document.addEventListener('keydown', e => {
-    if (dock.dataset.open === 'true' || panel.classList.contains('open')) return;
+    // Both optional: this handler is bound on every design page, and either
+    // overlay can be absent from the markup. Unguarded, a missing one threw
+    // on EVERY keypress — the arrow keys stopped working and the console
+    // filled with errors pointing at the keyboard shortcut rather than at
+    // the markup.
+    if (dock?.dataset.open === 'true' || panel?.classList.contains('open')) return;
     // Bailing out on textarea/input alone was too narrow: Space activates a
     // FOCUSED BUTTON, so pressing it on a mock's "Continue" advanced the
     // screen and swallowed the click at the same time. Device mode doubles

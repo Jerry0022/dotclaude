@@ -458,7 +458,7 @@ describe("panel and dock are mutually exclusive overlays", () => {
     expect(jsSource, "☰ bound to openPanel")
       .toMatch(/panelToggle\?\.addEventListener\('click',\s*openPanel\)/);
     expect(jsSource, "💬 toggles the dock")
-      .toMatch(/dockToggle\.addEventListener\('click',[\s\S]{0,160}?closeDock\(\)[\s\S]{0,80}?openDock\(\)/);
+      .toMatch(/dockToggle\?\.addEventListener\('click',[\s\S]{0,160}?closeDock\(\)[\s\S]{0,80}?openDock\(\)/);
   });
 
   test("a hand-off close does not park focus on the dock FAB", () => {
@@ -649,5 +649,104 @@ describe("exactly one design / screen / view paints", () => {
     expect(view, "showView writes body[data-view-active]").toMatch(/body\.dataset\.viewActive\s*=\s*'true'/);
     expect(slice(jsSource, "window.showDesign = function("), "showDesign clears it again")
       .toMatch(/body\.dataset\.viewActive\s*=\s*'false'/);
+  });
+});
+
+// The design layout IIFE wires the dock AND everything after it: screen
+// switching, click-through, the keyboard shortcuts. It used to dereference
+// #feedback-dock / #feedback-toggle / #feedback-close and #decision-panel
+// unguarded, so a page that shipped without one of them threw at boot — and
+// took every listener below the throw with it, silently. The user then sees a
+// mockup that ignores every click and arrow key and reasonably blames the
+// mockup. The shared panel-chrome block already names what is missing and
+// degrades (missingPanelParts); this pins the same contract for the dock.
+describe("the design layout JS degrades instead of dying", () => {
+  test("the missing parts are named once, the way the panel block names its own", () => {
+    const report = slice(jsSource, "const missingDockParts = [");
+    for (const id of ["feedback-dock", "feedback-toggle", "feedback-close"]) {
+      expect(report, id).toContain(`'${id}'`);
+    }
+    expect(jsSource, "one console.error, naming them")
+      .toMatch(/console\.error\('\[concept\] feedback-dock markup incomplete[^']*'\s*\n?\s*\+ missingDockParts\.join/);
+  });
+
+  test("every listener the dock registers is registered optionally", () => {
+    for (const call of [
+      /dockToggle\?\.addEventListener\('click'/,
+      /dock\?\.addEventListener\('input'/,
+      /dockClose\?\.addEventListener\('click'/,
+    ]) {
+      expect(jsSource, String(call)).toMatch(call);
+    }
+    // …and the labels the FAB swaps are read optionally too — this was the
+    // exact line that threw: `dockToggle.dataset.labelOpen`.
+    expect(jsSource).toMatch(/const LABEL_OPEN = dockToggle\?\.dataset\.labelOpen/);
+  });
+
+  test("openDock/closeDock are no-ops without a dock, and openPanel still works", () => {
+    // Executed, not pattern-matched: closeDock is reachable from openPanel
+    // through `window.closeDock?.()`, so a page with a panel and no dock must
+    // still be able to open its panel.
+    const focusLog = [];
+    const el = (name) => {
+      const cls = new Set();
+      const node = {
+        name,
+        classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c) },
+        dataset: {},
+        setAttribute() {}, getAttribute() { return null; },
+        holds: false,
+        contains() { return node.holds; },
+        focus() { focusLog.push(name); },
+      };
+      return node;
+    };
+    const src = [
+      slice(jsSource, "window.openPanel ="),
+      slice(jsSource, "window.closePanel ="),
+      slice(jsSource, "function openDock("),
+      slice(jsSource, "function closeDock("),
+      "window.closeDock = closeDock",
+    ].join(";\n");
+    const make = new Function("panel", "panelToggle", "panelCloseBtn", "backdrop",
+      "dock", "dockToggle", "document", "window", "LABEL_OPEN", "LABEL_CLOSE",
+      src + "; return { openPanel: window.openPanel, closePanel: window.closePanel,"
+          + " openDock, closeDock };");
+    const panel = el("panel"), panelToggle = el("panelToggle"),
+      panelCloseBtn = el("panelCloseBtn"), backdrop = el("backdrop");
+    const doc = { body: el("body"), activeElement: null, getElementById: () => null };
+    // The dock is simply not there.
+    const api = make(panel, panelToggle, panelCloseBtn, backdrop, null, null,
+      doc, {}, "open", "close");
+
+    expect(() => api.openDock()).not.toThrow();
+    expect(() => api.closeDock()).not.toThrow();
+    expect(() => api.openPanel()).not.toThrow();
+    expect(panel.classList.contains("open"), "the panel still opens").toBe(true);
+    expect(() => api.closePanel()).not.toThrow();
+    expect(panel.classList.contains("open")).toBe(false);
+  });
+
+  test("the keyboard shortcuts read both overlays optionally", () => {
+    // Bound on every design page and fired on EVERY keypress: unguarded, a
+    // missing overlay threw once per keystroke and killed arrow-key
+    // navigation while pointing at the wrong component.
+    expect(jsSource).toMatch(
+      /if \(dock\?\.dataset\.open === 'true' \|\| panel\?\.classList\.contains\('open'\)\) return;/
+    );
+  });
+
+  test("every dock function callable from outside checks for the dock first", () => {
+    // These four are reached from restoreState(), showIteration() and the
+    // submit path — code that runs on pages with no dock at all.
+    for (const [name, marker] of [
+      ["applyDockSize", "function applyDockSize()"],
+      ["applyDockFreezeState", "function applyDockFreezeState()"],
+      ["markDockSubmitted", "window.markDockSubmitted = function()"],
+      ["unmarkDockSubmitted", "window.unmarkDockSubmitted = function()"],
+    ]) {
+      const fn = slice(jsSource, marker);
+      expect(fn, name).toMatch(/if \(!dock\) return;/);
+    }
   });
 });
