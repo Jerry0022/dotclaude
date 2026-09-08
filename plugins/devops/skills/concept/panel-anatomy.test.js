@@ -168,10 +168,10 @@ describe("panel anatomy — markup (both skeletons)", () => {
     const sidebar = SKELETONS.find((b) => b.code.includes('id="panel-final-report"'));
     expect(sidebar).toBeDefined();
     const cta = sidebar.code.indexOf('class="panel-cta"');
-    for (const id of ["panel-frozen", "back-to-live-btn", "panel-final-report", "wizard-execute"]) {
+    for (const id of ["panel-frozen", "back-to-live-btn", "panel-final-report", "closeout-execute"]) {
       expect(sidebar.code.indexOf(`id="${id}"`), id).toBeGreaterThan(cta);
     }
-    const wizard = sidebar.code.slice(sidebar.code.indexOf('id="finalize-wizard"'));
+    const wizard = sidebar.code.slice(sidebar.code.indexOf('id="closeout-sheet"'));
     expect(wizard).toContain('class="submit-gap"');
   });
 
@@ -190,20 +190,39 @@ describe("panel anatomy — markup (both skeletons)", () => {
 });
 
 describe("panel anatomy — CSS", () => {
-  test("the aside is a flex column that never scrolls itself (sidebar AND design overlay)", () => {
-    const sidebar = rulesFor(/^\.concept-decision-panel$/).find((r) => /height:\s*100vh/.test(r.body));
-    const overlay = rulesFor(/^\[data-template="design"\] \.concept-layout\.design \.concept-decision-panel$/)
-      .find((r) => /height:\s*100vh/.test(r.body));
-    for (const [name, rule] of [["sidebar", sidebar], ["design overlay", overlay]]) {
-      expect(rule, name).toBeTruthy();
-      expect(rule.body, name).toMatch(/display:\s*flex/);
-      expect(rule.body, name).toMatch(/flex-direction:\s*column/);
-      expect(rule.body, name).toMatch(/overflow:\s*hidden/);
-      expect(rule.body, name).not.toMatch(/overflow-y:\s*auto/);
-      // 100vh + 1.5rem padding is only 100vh with border-box; otherwise the
-      // pinned foot sits 3rem below the viewport edge.
-      expect(rule.body, name).toMatch(/box-sizing:\s*border-box/);
-    }
+  test("the aside is ONE flex column that never scrolls itself, in every template", () => {
+    // There used to be two of these: a docked sidebar for decision/free and a
+    // design-scoped overlay. A concept that mixed templates therefore moved
+    // its panel — and with it the surface the user writes feedback on —
+    // between rounds. The panel is page chrome now (templates.md § Panel
+    // Chrome (all templates)), so exactly one unscoped rule may define it.
+    const rule = rulesFor(/^\.concept-decision-panel$/).find((r) => /height:\s*100vh/.test(r.body));
+    expect(rule, "unscoped .concept-decision-panel").toBeTruthy();
+    expect(rule.body).toMatch(/position:\s*fixed/);
+    expect(rule.body).toMatch(/display:\s*flex/);
+    expect(rule.body).toMatch(/flex-direction:\s*column/);
+    expect(rule.body).toMatch(/overflow:\s*hidden/);
+    expect(rule.body).not.toMatch(/overflow-y:\s*auto/);
+    // 100vh + 1.5rem padding is only 100vh with border-box; otherwise the
+    // pinned foot sits 3rem below the viewport edge.
+    expect(rule.body).toMatch(/box-sizing:\s*border-box/);
+    // The template-scoped variants must be gone, not merely outranked.
+    expect(rulesFor(/^\[data-template="design"\] \.concept-layout\.design \.concept-decision-panel$/).length,
+      "design-scoped panel rule").toBe(0);
+    expect(stripComments(cssSource), "sticky sidebar panel").not.toMatch(
+      /\.concept-decision-panel \{[^}]*position:\s*sticky/);
+  });
+
+  test("the ☰ FAB that opens it is page chrome, never design-only", () => {
+    // The FAB used to be hidden outside design mode, which is what made the
+    // docked sidebar necessary in the first place.
+    const hidden = /html:not\(\[data-template="design"\]\) ([^,{]+)[,{]/g;
+    const hiddenSelectors = [];
+    let m;
+    const css = stripComments(cssSource);
+    while ((m = hidden.exec(css))) hiddenSelectors.push(m[1].trim());
+    expect(hiddenSelectors, "design-only chrome list").toContain(".feedback-fab");
+    expect(hiddenSelectors, "☰ must stay reachable in every template").not.toContain(".panel-fab");
   });
 
   test("only .panel-nav-scroll scrolls, and min-height: 0 is on it", () => {
@@ -241,14 +260,17 @@ describe("panel anatomy — CSS", () => {
     expect(m[2], "…plus the FAB's bottom offset").toBe(fabBottom);
   });
 
-  test("mobile keeps the flex split alive: height auto + 60vh cap, head folded into the line", () => {
+  test("mobile folds the head away and needs no panel variant of its own", () => {
     const media = /@media \(max-width: 768px\) \{([\s\S]*?)\n\}/.exec(stripComments(cssSource));
     expect(media, "@media (max-width: 768px)").toBeTruthy();
-    const panel = /\.concept-decision-panel \{([\s\S]*?)\}/.exec(media[1]);
-    expect(panel, "mobile .concept-decision-panel").toBeTruthy();
-    expect(panel[1]).toMatch(/height:\s*auto/);
-    expect(panel[1]).toMatch(/max-height:\s*60vh/);
+    // The head's content is already in the status line, so it folds on narrow
+    // viewports — that part is unchanged.
     expect(media[1]).toMatch(/\.panel-here \{ display: none; \}/);
+    // What is gone is the bottom-sheet variant: the overlay is fixed,
+    // full-height and capped at 90vw, so a phone gets the same panel a
+    // desktop does. A re-docked mobile panel would bring the split-brain
+    // layout back through the back door.
+    expect(media[1], "mobile .concept-decision-panel variant").not.toMatch(/\.concept-decision-panel/);
   });
 
   // #341 — the first live check in a real browser (scripts/build-concept-fixture.js,

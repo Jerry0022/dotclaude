@@ -352,7 +352,9 @@ describe("iteration append re-syncs a drifted engine before appending", () => {
   test("SKILL.md Step 5c gains the drift check between 2.5 and 3", () => {
     const proc = skill.slice(skill.indexOf("2.5. **Verify form collection coverage"));
     const drift = proc.indexOf("2.6. **Engine drift check");
-    const append = proc.indexOf("3. Append a new `<section data-iteration=");
+    // The append step's own markup carries data-iteration-template now, so it
+    // wraps across lines — match the step, not the tag.
+    const append = proc.indexOf("3. Append a new");
     expect(drift, "step 2.6").toBeGreaterThan(-1);
     expect(append, "the append step").toBeGreaterThan(-1);
     expect(drift, "the drift check must run BEFORE the append").toBeLessThan(append);
