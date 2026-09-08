@@ -413,7 +413,14 @@ describe("panel and dock are mutually exclusive overlays", () => {
     const panel = el("panel"), dock = el("dock"), panelToggle = el("panelToggle"),
       panelCloseBtn = el("panelCloseBtn"), backdrop = el("backdrop"),
       dockToggle = el("dockToggle");
-    const doc = { body: el("body"), activeElement: null };
+    // openPanel looks the dock up by id rather than closing over it: it lives
+    // in the shared panel-chrome block now (templates.md § Panel Chrome (all
+    // templates)), which also runs on pages that have no dock at all.
+    const doc = {
+      body: el("body"),
+      activeElement: null,
+      getElementById: (id) => (id === "feedback-dock" ? dock : null),
+    };
     const api = make(panel, panelToggle, panelCloseBtn, backdrop, dock, dockToggle,
       doc, {}, "open", "close");
     return {

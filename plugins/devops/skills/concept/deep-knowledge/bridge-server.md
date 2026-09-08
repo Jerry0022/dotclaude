@@ -277,16 +277,20 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
            THREE values, each with its own SKILL.md Step 5b branch:
              - "iterate"        → next iteration on the concept page only
              - "implement"      → apply real code changes + final-report
-             - "finalize"       → the final report's close-out wizard, ONE
-                                  payload carrying issues{} + ship{} +
-                                  disposition{}. Run the selected parts in a
-                                  FIXED order: (A) issues — user-value gate
-                                  (merges combination-only items silently),
-                                  then `gh issue create` per gated item;
-                                  (B) ship — the full /ship pipeline, stop +
-                                  report on a hard gate failure and skip (C);
-                                  (C) Step 6 cleanup with the disposition
-           Legacy pages generated before the wizard still send "create-issues",
+             - "finalize"       → the final report's close-out sheet, ONE
+                                  payload carrying issues{} + implement{} +
+                                  ship{} + disposition{}. Run the selected
+                                  parts in a FIXED order: (A) issues —
+                                  user-value gate (merges combination-only
+                                  items silently), then `gh issue create` per
+                                  gated item; (B) implement — the follow-ups
+                                  routed to "jetzt umsetzen", built through
+                                  the devops role agents, then noted in the
+                                  report; (C) ship — the full /ship pipeline,
+                                  stop + report on a hard gate failure and
+                                  skip (D); (D) Step 6 cleanup with the
+                                  disposition
+           Legacy pages generated before the sheet still send "create-issues",
            "ship" or "dispose-concept" one at a time — map each onto the
            matching part above (SKILL.md § Legacy final-report actions).
            Process per Step 5 (Live Feedback Loop) — act on the user's choices
@@ -296,12 +300,13 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 
          • **Zero-prompt invariant for finalize (and its legacy variants).**
            This branch MUST complete end-to-end without asking the user
-           anything. The payload (issues.items[], ship.run, disposition{}) is
-           self-sufficient by design; any missing optional field falls back to
-           a sane default. If you catch yourself reaching for AskUserQuestion,
-           stop — the answer is in the payload, the concept HTML, or the
-           project's new-issue extension. The user signed off on the wizard's
-           review screen, which named every consequence before the click.
+           anything. The payload (issues.items[], implement.items[], ship.run,
+           disposition{}) is self-sufficient by design; any missing optional
+           field falls back to a sane default. If you catch yourself reaching
+           for AskUserQuestion, stop — the answer is in the payload, the
+           concept HTML, or the project's new-issue extension. The user signed
+           off on the sheet's live plan, which named every consequence in
+           execution order before the click.
            (Exception: the ship part MUST still stop and surface a hard
            ship-pipeline gate failure, and a force-push to main/master still
            needs explicit confirmation.)
@@ -912,7 +917,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    browser window with an active tab.
 
 7. After monitoring ends (user says "fertig"/"done", aborts, finishes the
-   final report's close-out wizard, or Step 6 of SKILL.md fires the
+   final report's close-out sheet, or Step 6 of SKILL.md fires the
    completion card), run the bridge-side cleanup:
    ```bash
    # Graceful shutdown via HTTP — survives PID recycling on Windows where

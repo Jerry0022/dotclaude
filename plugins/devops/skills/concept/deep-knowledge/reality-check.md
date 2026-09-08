@@ -146,8 +146,15 @@ marker.
 
 What differs:
 
-- `<section data-iteration="N+1" data-reality-check data-reality-head="<sha>"
-  data-active>` and a matching tab carrying `data-reality-check` with the label
+- It keeps the concept's template (`SKILL.md` § Step 1a · Template
+  continuity). In a `design` concept the collision cards go into a
+  `section[data-view] data-view-kind="decision"` next to the design the round
+  is about — never into a `decision` round, which would hide the 💬 dock and
+  move every note field into the cards halfway through a session. The
+  attribute is written explicitly on the section either way.
+- `<section data-iteration="N+1" data-iteration-template="…" data-reality-check
+  data-reality-head="<sha>" data-active>` and a matching tab carrying
+  `data-reality-check` with the label
   `{{iteration.reality_tab}}` — never "Iteration N+1". The markers go on the
   section and the tab, and nowhere else; in particular never inside a block that
   § 2.6's engine-drift re-sync copies verbatim from `templates.md`, which would
@@ -187,7 +194,7 @@ following are forbidden in a reality-check round:
 
 If Claude discovers a new question *during* the subsequent implementation, it
 does not go back to the page. It is decided, documented in the final report, and
-routed to a follow-up issue via the close-out wizard.
+routed to a follow-up issue via the close-out sheet.
 
 ## Baseline
 

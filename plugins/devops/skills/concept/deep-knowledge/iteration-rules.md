@@ -18,7 +18,7 @@ selections, read-only comments).
 | Fundamental rework ("nochmal neu") | Same as a feedback iteration — just another tab. The full history stays visible. | Another tab appended |
 | Implement submission diverted by the reality check (Step 5b step 0) | Append `<section data-iteration="N+1" data-reality-check data-reality-head="{sha}" data-active>` — an ordinary iteration in every mechanical respect, with the `.reality-banner` explainer first and one flat decision card per drift item. Tab label `{{iteration.reality_tab}}` ("Realitäts-Check" / "Reality check") with `data-reality-check` on the chip, NEVER "Iteration N+1". Freeze the previous section as usual. NO `phase: "implemented"` — no code was written. | New tab "Realitäts-Check" auto-active, both submit buttons live. Implementing from it skips the check and writes code, so two forced rounds can never follow each other. See `reality-check.md` |
 | Implementation finished (Step 5b implement branch) | Append `<section data-iteration="N+1" data-final-report data-active>` with the Abschlussbericht structure. Add a new tab carrying `data-final-report` and label `{{iteration.final_tab}}` ("Abschlussbericht" / "Final report") — NEVER "Iteration N+1". Freeze the previous section the same way. | New tab "Abschlussbericht" auto-active. Right panel switches to `panel-final-report` (no iterate/implement buttons). At most one final-report section per concept session. |
-| Close-out from final report (`action: "finalize"`) | Do NOT append a new section. Rewrite the existing final-report HTML in place: for routed issues add `disabled` to the `[data-open-questions]` checkboxes and append an `.oq-issue-link` `<a>` with the GitHub issue URL; for a successful ship add the version note to the Zusammenfassung. Keep `data-active` on the final-report section. | Same final-report tab stays active; routed items become read-only audit entries. `refreshFinalizeWizard()` drops the wizard's issues step once every checkbox in the section is disabled. |
+| Close-out from final report (`action: "finalize"`) | Do NOT append a new section. Rewrite the existing final-report HTML in place: for routed issues add `disabled` to the `[data-open-questions]` checkboxes and append an `.oq-issue-link` `<a>` with the GitHub issue URL; for a successful ship add the version note to the Zusammenfassung. Keep `data-active` on the final-report section. | Same final-report tab stays active; routed items become read-only audit entries. `refreshCloseout()` drops the follow-up block from the close-out sheet once every checkbox in the section is disabled. |
 
 **Rules:**
 - **Never create a second file** for iterations of the same concept — always
@@ -243,6 +243,11 @@ exists. See templates.md § Common Structure.
 When appending a new iteration section (Step 5c of `SKILL.md`), verify
 **before** posting `/reload`:
 
+0. ☐ The new section carries `data-iteration-template` and it is the
+      concept's template (`SKILL.md` § Step 1a · Template continuity). Never
+      omit it: the fallback is the concept's base template, so an omission
+      does not fail loudly — it just renders the round in a layout you did
+      not choose.
 1. ☐ All new form elements live inside the new
       `<section data-iteration="N">`.
 2. ☐ Each form element has either a `name`, `id`, or `data-*` attribute

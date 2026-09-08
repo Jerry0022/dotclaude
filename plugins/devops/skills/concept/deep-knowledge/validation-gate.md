@@ -82,7 +82,7 @@ from `templates.md` § Layout before opening the tab.
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 67 patterns, regardless of template
+Every concept page must contain these 69 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -101,7 +101,8 @@ related one — count the rows, not the highest number):
 | 10 | `localStorage` | Reload resilience (state persistence with TTL) |
 | 11 | `data-page-version` | Page version tag for localStorage invalidation |
 | 12 | `data-iteration` | Iteration section marker |
-| 12b | `data-iteration-template` on every `section[data-iteration]` | Authoritative per-iteration template. **Missing → warning, not a hard fail** — the legacy fallback (page-level `<html data-template>` written at generation time) still works for pages predating this attribute. New pages MUST carry it on every iteration section. |
+| 12b | `data-iteration-template` on every `section[data-iteration]` | Authoritative per-iteration template. **Hard fail on the section carrying `data-active` and on any `data-final-report` section**; a warning on older frozen sections, whose legacy fallback (the concept's base template, `resolveIterationTemplate()`) still resolves. The fallback used to be the live `<html data-template>` — a projection rewritten on every tab switch — so an undeclared section rendered as a canvas or as a document depending on which tab the reader came from. Every section you append carries the attribute. |
+| 12c | `baseIterationTemplate` AND `_pageTemplateAtLoad` inside `resolveIterationTemplate`'s fallback chain — AND NOT `document.documentElement.dataset.template` as that fallback | Deterministic template resolution. The fallback is the concept's BASE template (the first iteration section that declares one), captured independently of the live projection. Falling back to `<html data-template>` makes an undeclared section's layout depend on navigation history. ENGINE entry — see § Engine drift on iteration append. |
 | 13 | `iteration-tabs` | Tab bar container in the decision panel |
 | 14 | `pollReload` | Reload-signal poller (picks up file rewrites) |
 | 15 | `sec.hidden` | Tab-switch JS toggles the `hidden` attribute |
@@ -119,17 +120,17 @@ related one — count the rows, not the highest number):
 | 27 | `Date.now() - _lastHeartbeatTs` (millis vs. millis) | Both sides of the staleness comparison MUST be in milliseconds since the Unix epoch. Server returns `claude_ts` in ms; browser uses `Date.now()`. Never divide either side by 1000 — a millis-vs-seconds mix-up produces a giant negative age that always evaluates as "fresh" and silently hides outages. |
 | 28 | `panel-final-report` | Final-report panel element. Auto-shown by `showIteration()` when the active section carries `data-final-report`; replaces `panel-ready` (no iterate/implement buttons). |
 | 28b | `panel-frozen` | Frozen panel state, shown on every non-live iteration tab. `showIteration()` switches to it unconditionally, so a page without it loses the panel's whole lower half whenever the user reviews an earlier round — no controls, no explanation, and no way back to the live tab except guessing which chip it is. Must include the `#back-to-live-btn`. |
-| 29 | `refreshFinalizeWizard({ reset: true })` — grep the CALL, not the symbol | Recomputes the close-out wizard's step list (the issues step exists only while the active section has un-routed `[data-open-questions]` checkboxes) and re-renders. The call must appear inside `showIteration()` so a tab switch restarts the flow at step 1. A page that defines the function but never calls it passes a symbol-only grep and renders a wizard that never updates. |
+| 29 | `refreshCloseout({ reset: true })` — grep the CALL, not the symbol | Re-renders the close-out sheet (the follow-up block exists only while the active section has un-routed `[data-open-questions]` checkboxes) and rebuilds its rows from the report body. The call must appear inside `showIteration()`, or a tab switch leaves the sheet describing the previous round. A page that defines the function but never calls it passes a symbol-only grep and renders a sheet that never updates. |
 | 30 | `content-dimmer` | Shared post-submit focus overlay AND frozen veil. After a submit, `body.content-dimmed` flips it on; `showIteration()` re-arms it via `lockFrozenView()` on every entry into a non-live tab (so at most the one past round on screen is ever unlocked, and every tab switch relocks). The decision panel + FABs sit at higher z-index and paint above it. Click/Escape-to-dismiss; the submit role auto-clears on page reload. See `templates.md` § Common Structure (HTML) and § Decision Panel State CSS for the reference implementation. |
 | 30b | `frozen-bar` (the element) AND `lockFrozenView` (the CALL inside `showIteration()`) | Frozen-iteration floating bar + veil relock. The bar is page-level chrome (outside `section[data-iteration]`, next to the dimmer) that `showIteration()` unhides on every non-live tab with the tab's chip label in `[data-frozen-bar-title]` and a `#frozen-bar-back` button to the live round. Without it, lifting the veil leaves nothing on screen that says "this is an earlier round" — users click the veil away by reflex and then read history as the live page. Without the `lockFrozenView()` call, a lifted veil stays lifted across tab switches and several past rounds end up unlocked at once. Both halves ENGINE entries — see § Engine drift on iteration append. |
 | 31 | `ensureCommentSlots` | Auto-injects an adjacent `<textarea data-comment="$decisionId-note">` for every `[data-decision]` bi-state group that lacks one. MUST be called from `DOMContentLoaded` BEFORE `restoreState` so the restore step rehydrates the typed values onto real nodes. See templates.md § Comment Slot Injection. |
-| 32 | `panel-dispose-concept` | Disposition fieldset — the wizard's `files` step. Carries the discard / keep / gitignore radio group + optional `moveTo` input. See templates.md § Disposition Control. |
-| 33 | `renderWizard` | Renders exactly one wizard step, the `Schritt n/m` counter, and the back/next/execute button set. Missing → every step renders at once and the flow is back to the wall of buttons the wizard replaced. |
-| 34 | `collectIssueItems` | Reads the selected `[data-open-questions]` checkboxes into the `items[]` shape carried by `finalize.issues`. Without it the wizard ships an empty issue list and silently drops the user's follow-ups. |
+| 32 | `panel-dispose-concept` | Disposition fieldset — the sheet's `files` block. Carries the discard / keep / gitignore radio group + optional `moveTo` input. See templates.md § Disposition Control. |
+| 33 | `renderCloseout` AND `buildFollowUpList` AND `buildCloseoutPlan` | The sheet's three renderers: block visibility + the done state, one row with three routes per open point, and the live plan of consequences. Without the plan the single irreversible click is made blind; without the routes the user can only file or drop a follow-up, never ask for it to be built. |
+| 34 | `collectIssueItems` AND `collectImplementItems` | The two disjoint buckets the sheet produces from one list of open points: `finalize.issues.items[]` (file it) and `finalize.implement.items[]` (build it now). Without them the close-out ships an empty list and silently drops the user's follow-ups. |
 | 35 | `collectDisposition` | Reads the disposition fieldset (`dispose-mode` radio + optional `dispose-move-to` input) into the `{ mode, moveTo }` shape the `finalize` payload requires. Without this, submit throws. |
-| 36 | `status-channel` | Persistent status channel on the final-report panel — the always-visible pipeline recap (Übermittelt → verarbeitet → implementiert → Bereit) that hands over to the wizard. DOM-driven so it survives reload + stale heartbeat. See templates.md § Final Report Panel. |
-| 37 | `finalize-wizard` | The close-out wizard container, carrying the `data-plan-*` / `data-word-step` localised strings the review screen renders from. Its absence means the final report has no way to close out at all. |
-| 38 | `addEventListener('click', submitFinalize)` — grep the WIRING, not the symbol | The handler behind `#wizard-execute`. POSTs the single `action: "finalize"` payload (`issues` + `ship` + `disposition` + `submission_id`) and requires the bridge's durable ack. A defined-but-unwired handler leaves the execute button visible and completely inert — no console error, no network request — which is exactly the silent class this gate exists for. |
+| 36 | `status-channel` | Persistent status channel on the final-report panel — the always-visible pipeline recap (Übermittelt → verarbeitet → implementiert → Bereit) that hands over to the close-out sheet. DOM-driven so it survives reload + stale heartbeat. See templates.md § Final Report Panel. |
+| 37 | `closeout-sheet` — AND all four of `data-closeout-block="followups"`, `"ship"`, `"files"`, `"plan"` | The close-out sheet container, carrying the `data-plan-*` localised strings the plan renders from, plus its four blocks. Its absence means the final report has no way to close out at all; a missing block means a decision the user cannot express. A page still carrying `wizard-next` / `wizard-back` is the old step chain and fails this entry. |
+| 38 | `addEventListener('click', submitFinalize)` — grep the WIRING, not the symbol | The handler behind `#closeout-execute`. POSTs the single `action: "finalize"` payload (`issues` + `implement` + `ship` + `disposition` + `submission_id`) and requires the bridge's durable ack. A defined-but-unwired handler leaves the execute button visible and completely inert — no console error, no network request — which is exactly the silent class this gate exists for. |
 | 38b | `submission_id` inside `submitFinalize` | Client-side replay guard. `POST /decisions` has no version guard, so a payload the bridge fsynced before the response was lost sits in the offline queue too; without the id, `retryPendingSubmission()` re-delivers it and the close-out creates its issues and runs its release a second time. |
 | 39 | `installScrollSpy` called from **inside** `buildSectionNav` | Scroll-position marker for the panel TOC. `buildSectionNav()` replaces the nav DOM on every iteration switch, so the spy MUST be rebound as its last step. Binding it once from `DOMContentLoaded` instead leaves the highlight dead on every tab except the initially loaded one. See templates.md § Section Navigation. |
 | 40 | `revealNavItem` — AND `getClientRects().length === 0` as its first guard | Auto-scrolls the TOC's own scroll box so the active entry stays visible in long lists. Must scroll only `nearestScrollBox(item.parentElement)` — never `scrollIntoView()` on the item, which drags the content column along and fights the user's scrolling. The zero-rect guard returns early for an entry inside a closed `<details>` (folded group or archive): measuring its (0,0) rect would drag the scroll box to the top on every frame. |
@@ -148,6 +149,7 @@ related one — count the rows, not the highest number):
 | 53 | `section[data-iteration]:not([data-active])` inside `saveState`'s `persistable` — AND a `viewing-frozen` guard on `#feedback-dock` | A frozen round is never persisted. Browsing an old tab is allowed and ends every `showScreen()` in a `saveState()`, and `applyDockFreezeState()` has painted that round's submitted comments into the shared dock — so without both exclusions the old round's answers are written over the live round's unsent ones, silently. ENGINE entry. |
 | 54 | `data-step="reality-check"` in the `#status-steps` list — AND a `_phase === 'reality-check'` branch in `updateStatusSteps` | The implement gate's progress step. The reality check sits between the pickup and the first code write, so without it a minutes-long check reads as a stalled submission and the user re-clicks implement — which is one of the few ways to reach a second forced round. The `<li>` must ship `hidden` and be unhidden ONLY by that branch: pre-arming it would advertise a check on every implement, and the overwhelmingly common case is a branch that has not moved. See templates.md § Submit Progress Steps. ENGINE entry — see § Engine drift on iteration append. |
 | 55 | `iteration-tab[data-reality-check]` (the CSS) — required on any page that already contains a `section[data-iteration][data-reality-check]` | The reality-check round's tab marker. `data-reality-check` on the section is what tells the implement path "this round WAS the check, implement straight through"; the chip styling is how the user understands why an implement click produced another round instead of code. A page carrying the section without the styling still behaves correctly but looks like an unexplained extra iteration. Both the section and its chip carry the attribute — see reality-check.md § The forced round. |
+| 62 | `panel-toggle` AND `panel-backdrop` AND `panel-close` in the markup, `window.openPanel` in the JS — on EVERY page, whatever its templates — AND NEITHER `.panel-fab` inside any `html:not([data-template="design"])` rule NOR a `.concept-decision-panel` rule carrying `position: sticky` or `width: 20%` | The ☰ decision panel is page chrome. It used to be design-only, with a docked sidebar standing in for it in decision/free rounds, so a concept that mixed templates moved its panel — and the surface the user writes feedback on — from behind the FAB into the page, mid-session. The panel wiring must also live OUTSIDE the design layout IIFE, which a document-only page never runs. The residual-sidebar negative is what catches the dangerous mixed page: both `.concept-decision-panel` rules have the same specificity, so a leftover `position: sticky; width: 20%` wins on source order — the FAB then renders, `.open { right: 0 }` does nothing to a sticky element, and the backdrop (z-index 150) covers the panel. Dark screen, no way in, every literal above still present. See templates.md § Panel Chrome (all templates). ENGINE entry — see § Engine drift on iteration append. |
 | 45 | `section[data-design]:not([data-design-active="true"])` | The CSS backstop for "exactly one design and one screen paint". Designs and screens are `position:absolute; inset:0`, so a single inactive section that ships without `hidden` does not sit somewhere wrong — it paints on top of the active one. Measured on a real page: three designs, five screens, all stacked on the same square, headings and mockups interleaved. `hidden` cannot be the only guard because the markup is merely ASKED to emit it. Must be `:has()`-guarded, together with the matching `section[data-screen]:not([data-screen-active="true"])` rule and `body:not([data-view-active="true"]) section[data-view]`. See templates.md § Layout CSS. |
 
 | 56 | `panel-nav-scroll` (the element) AND `min-height: 0` inside its CSS rule | The panel's flex split. `.concept-decision-panel` is a flex column that never scrolls itself; `.panel-nav-scroll` (`flex: 1 1 auto; min-height: 0; overflow-y: auto`) holds the iteration tabs + TOC, so `.panel-status` and `.panel-cta` stay pinned at the bottom. `min-height: 0` is load-bearing: without it the flex child refuses to shrink, the tree grows past the viewport and the call to action leaves the screen — the exact "scroll the menu to find the button" defect the anatomy removes. Design pages additionally need `padding-bottom: calc(60px + 2rem)` on `.panel-cta` (the 💬 FAB's row). ENGINE entry — see § Engine drift on iteration append. See templates.md § Decision Panel State CSS "Panel anatomy". |
@@ -170,8 +172,9 @@ tree that will be thrown away on load — remove it and let the JS derive it.
 
 **Failure for 56 / 57 / 58:** these three are one anatomy — a page with the
 old scrolling aside and the stacked buttons has the CTA below the fold on
-every long concept. Re-sync § Common Structure (both skeletons), § Layout —
-Sidebar / the design overlay rule, § Decision Panel State CSS "Panel
+every long concept. Re-sync § Common Structure (both skeletons), § Panel
+Chrome (all templates), § Layout — Document rounds / the overlay panel rule,
+§ Decision Panel State CSS "Panel
 anatomy", § Two-Button Submit and § Claude Connection Heartbeat verbatim from
 templates.md. A `checkClaudeConnection` that returns before writing
 `data-state` is a hard fail even if every element is present: the line
@@ -247,9 +250,10 @@ keeps the old defect through every later round, and the user reports "still
 to twice since.
 
 Before appending, run the gate over the existing HTML. When any ENGINE entry
-fails — 30b (frozen bar + veil relock), 44 (attachments), 46 / 47
-(design-mode chrome), 48 (scroll boxes), 49–53 (comment durability), 54
-(reality-check progress step), 56 (panel anatomy), 59 (Kompass tree), or
+fails — 12c (deterministic template resolution), 30b (frozen bar + veil
+relock), 44 (attachments), 44b (attachment locale), 46 / 47 (design-mode
+chrome), 48 (scroll boxes), 49–53 (comment durability), 54 (reality-check
+progress step), 56 (panel anatomy), 59 (Kompass tree), 62 (panel chrome), or
 the tab-switch patterns — re-sync that whole
 shared block **verbatim from templates.md** BEFORE the new section goes in.
 Re-sync the block, not the one line the grep flagged: these blocks fail in
@@ -497,8 +501,8 @@ flash-of-wrong-layout on load.
 
 The free template has no mandatory body structure. Tri-state (`tri-state-group`,
 `eval-` radio names) is opt-in — include it only where a section needs
-user evaluation. The decision panel (sticky sidebar) is reused from the
-decision template with no changes.
+user evaluation. The decision panel (the ☰ overlay — § Panel Chrome (all
+templates)) is reused from the decision template with no changes.
 
 ## Failure handling
 
@@ -517,7 +521,7 @@ enforces the same on write.
 - Panel states missing → no visual transition on submit/reset cycle
 - localStorage missing → user selections lost on reload or tab close
 - `data-template` missing → `collectDecisions` can't pick the right branch
-- `data-iteration-template` missing on a section → warning; legacy fallback
+- `data-iteration-template` missing on the active or final-report section → hard fail; on an older frozen section → warning, the base-template fallback
   used, but new pages should always carry it
 - `<html data-template>` mismatched with the active section's
   `data-iteration-template` → error; `applyIterationTemplate()` not wired or
@@ -534,7 +538,7 @@ enforces the same on write.
 - Cache hint not wired to the disconnected state (`_setCacheHints` missing from `checkClaudeConnection`) → a click made while Claude is offline looks lost instead of visibly queued (the Offline Submit Queue still delivers it on reconnect, but the user gets no signal)
 - Staleness math mixes seconds and milliseconds (`Date.now() / 1000`, or `_lastHeartbeatTs * 1000`) → comparison flips negative, page renders "Claude verbunden" even when the heartbeat is hours old
 - `submitFinalize` / `collectDisposition` / `collectIssueItems` missing → the final-report panel renders correctly but "Alles ausführen" does nothing on click (silent failure — no console error, no network request), or ships a payload with the user's issue selection silently emptied
-- `renderWizard` missing or never called → all wizard steps render at once, which is exactly the undifferentiated button wall the wizard replaced
+- `renderCloseout` missing or never called → the sheet never reflects the report it belongs to: stale follow-up rows, a plan that names the wrong counts right before the one irreversible click
 - `data-anno-layer` present but `anno-toggle` / `wireAnnotationLayer` missing → pins render but never open, or open onto a bubble whose answer is never persisted
 
 The patterns in `templates.md` (§ Claude Connection Heartbeat, § Submit
