@@ -206,12 +206,74 @@ describe("final-report close-out sheet", () => {
     expect(skill).toMatch(/part C does \*\*NOT\*\* run|does NOT run/);
   });
 
+  test("the legacy actions map onto the parts that DO the same thing", () => {
+    // The letters shifted when the implement part was inserted. A `ship`
+    // mapped to "part B" would build follow-ups instead of releasing; worse,
+    // a `dispose-concept` mapped to "part C" would run the ship pipeline —
+    // a release nobody authorised, from a page whose only button said
+    // "Concept beenden".
+    const legacy = skill.slice(
+      skill.indexOf("### Legacy final-report actions"),
+      skill.indexOf("**Critical invariant:**")
+    );
+    const partOf = (name) => {
+      const m = new RegExp("\\| `" + name + "` \\| ([^|]+)\\|").exec(legacy);
+      expect(m, name).toBeTruthy();
+      return m[1];
+    };
+    expect(partOf("create-issues")).toMatch(/part A/);
+    expect(partOf("ship")).toMatch(/part C/);
+    expect(partOf("dispose-concept")).toMatch(/part D/);
+    // …and the headings those letters point at still say what the mapping
+    // claims they say.
+    expect(skill).toMatch(/### A · Issues/);
+    expect(skill).toMatch(/### C · Ship/);
+    expect(skill).toMatch(/### D · Close out/);
+    expect(partOf("dispose-concept"), "a close-out must never reach the ship pipeline")
+      .not.toMatch(/ship/i);
+  });
+
+  test("every place that names the order names the same four parts", () => {
+    // Three documents state it — SKILL.md, the reference JS's own hand-off
+    // note, and § One submission. A reader who only sees one of them must not
+    // be able to drop a part.
+    const order = [/issues/i, /implement/i, /ship/i, /clean|close/i];
+    const spots = [
+      skill.slice(skill.indexOf("**Fixed execution order"), skill.indexOf("**Checkpoint each part")),
+      md.slice(md.indexOf("- `finalize` → Step 5b finalize branch"), md.indexOf("- `create-issues` / `ship`")),
+      md.slice(md.indexOf("### One submission, four consequences"), md.indexOf("## Design System")),
+    ];
+    for (const [i, spot] of spots.entries()) {
+      expect(spot, "spot " + i).toBeTruthy();
+      let at = -1;
+      for (const re of order) {
+        const m = re.exec(spot.slice(at + 1));
+        expect(m, `spot ${i} · ${re}`).toBeTruthy();
+        at = at + 1 + m.index;
+      }
+    }
+  });
+
+  test("the resume mandate describes the same four parts the skill executes", () => {
+    const resume = fs.readFileSync(
+      path.join(__dirname, "..", "..", "hooks", "session-start", "ss.concept.resume.js"),
+      "utf8"
+    );
+    // A mandate that names three parts makes a resumed run skip the one the
+    // user explicitly asked for — the follow-ups it was told to build.
+    expect(resume).toContain("FOUR parts in fixed order");
+    for (const key of ["issues", "implement", "ship", "disposition"]) {
+      expect(resume, key).toContain("\\`" + key + "\\`");
+    }
+  });
+
   test("finalize checkpoints are namespaced per part", () => {
     // A bare `ship` checkpoint is indistinguishable from a legacy stand-alone
     // ship submission, so a resumed run verifies the release and never runs
     // the cleanup part.
-    expect(skill).toContain("finalize:issues");
-    expect(skill).toContain("finalize:ship");
+    for (const ns of ["finalize:issues", "finalize:implement", "finalize:ship", "finalize:cleanup"]) {
+      expect(skill, ns).toContain(ns);
+    }
     const resume = fs.readFileSync(
       path.join(__dirname, "..", "..", "hooks", "session-start", "ss.concept.resume.js"),
       "utf8"

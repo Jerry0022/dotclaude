@@ -298,7 +298,7 @@ describe("reality check — the deadlock guard is written down, not implied", ()
     expect(gate).toContain(`these ${rows} patterns`);
     // 54 is an engine entry, so a page generated before the gate existed gets
     // it re-synced on its next append instead of silently missing it forever.
-    expect(gate).toMatch(/49–53 \(comment durability\), 54\s*\n?\(reality-check progress step\)/);
+    expect(gate).toMatch(/49–53 \(comment durability\),\s*54\s*\(reality-check\s*\n?\s*progress step\)/);
   });
 });
 

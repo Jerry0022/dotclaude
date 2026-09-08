@@ -201,11 +201,12 @@ function buildVerificationMandate(store) {
     }
     if (store.progress.some((p) => String(p.action || '').startsWith('finalize'))) {
       lines.push(
-        `This was a close-out (\`finalize\`): it has THREE parts in fixed order — ` +
-        `issues, ship, then Step 6 cleanup. Re-read the submission payload for ` +
-        `\`issues\`/\`ship\`/\`disposition\` and finish every part the trail does not ` +
-        `already show as done. Finishing only the part the last checkpoint names is ` +
-        `the failure mode this trail exists to prevent.`
+        `This was a close-out (\`finalize\`): it has FOUR parts in fixed order — ` +
+        `issues, implement (the follow-ups routed to "jetzt umsetzen", built through ` +
+        `the devops role agents), ship, then Step 6 cleanup. Re-read the submission ` +
+        `payload for \`issues\`/\`implement\`/\`ship\`/\`disposition\` and finish every ` +
+        `part the trail does not already show as done. Finishing only the part the ` +
+        `last checkpoint names is the failure mode this trail exists to prevent.`
       );
     }
   } else {

@@ -5,9 +5,14 @@ picked **per iteration**, not per page — see § Per-Iteration Templates below:
 
 | Template | Layout | When to use |
 |---|---|---|
-| **decision** | Sidebar (~80/~20), multi-variant cards | Multi-option evaluation, trade-offs, architecture or tech decisions — the canonical "pick one" flow with bi-state (Verwerfen / Miteinbeziehen) per variant and multiple iterations |
+| **decision** | Document column + the ☰ overlay panel, multi-variant cards | Multi-option evaluation, trade-offs, architecture or tech decisions — the canonical "pick one" flow with bi-state (Verwerfen / Miteinbeziehen) per variant and multiple iterations |
 | **design** | Fullscreen content + overlay decision panel (☰ FAB top-right, collapsed by default) + speech-bubble feedback dock anchored to the 💬 FAB (bottom-right, same 60px circle as ☰, dock collapsed by default) | UI mockups, wireframes, visual design concepts, click-through flows — one artefact that needs maximum screen real estate, plus structured per-screen feedback |
-| **free** | Sidebar (~80/~20), freeform body content | Analysis, walkthrough, brainstorm, explainer, timeline — structured content without forced variant framing. Bi-state evaluation is optional (opt-in per section) |
+| **free** | Document column + the ☰ overlay panel, freeform body content | Analysis, walkthrough, brainstorm, explainer, timeline — structured content without forced variant framing. Bi-state evaluation is optional (opt-in per section) |
+
+The decision panel itself is the SAME in all three — one ☰ overlay, page
+chrome, never a sidebar and never moving between rounds (§ Panel Chrome (all
+templates)). What the table calls the layout is only what fills the page
+behind it.
 
 `prototype` is the **legacy alias** of `design`. Pages generated before the
 rename keep working — `applyIterationTemplate()` normalises it. Never emit
@@ -144,6 +149,7 @@ must see their own language. The locale hint is authoritative.
 | `final.closeout_execute`       | Run all of it                  | Alles ausführen |
 | `final.closeout_running`       | Claude is working through it … | Claude arbeitet es ab … |
 | `final.closeout_done`          | Concept closed.                | Concept abgeschlossen. |
+| `final.closeout_stalled`       | Delivered, but Claude stopped answering. Nothing more can be sent from this page — check the chat. | Übermittelt, aber Claude antwortet nicht mehr. Von dieser Seite kann nichts mehr gesendet werden — schau in den Chat. |
 | `final.plan_issues`            | create GitHub issue(s)         | GitHub-Issue(s) anlegen |
 | `final.plan_implement`         | implement now (devops agents)  | jetzt umsetzen (devops-Agents) |
 | `final.plan_ship`              | run the ship pipeline          | Ship-Pipeline starten |
@@ -250,8 +256,8 @@ the `[ui-locale: ...]` hint produced.
              Each iteration section may open with its own iteration-intro
              block (title + one paragraph) BEFORE the variant/content cards. -->
         <!--
-        <section data-iteration="1" hidden>...frozen first round...</section>
-        <section data-iteration="2" data-active>...current round (active)...</section>
+        <section data-iteration="1" data-iteration-template="decision" hidden>...frozen first round...</section>
+        <section data-iteration="2" data-iteration-template="decision" data-active>...current round (active)...</section>
         -->
       </main>
     </div>
@@ -624,6 +630,13 @@ the `[ui-locale: ...]` hint produced.
           <p class="hint hint-done" data-finalize-state="done" hidden>
             <span aria-hidden="true">✓</span> {{final.closeout_done}}
           </p>
+          <!-- Shown when the round was delivered but Claude stopped answering
+               (markCloseoutStalled). The sheet stays frozen: the payload IS
+               on the bridge, and a second execute from here would run the
+               whole close-out twice. -->
+          <p class="hint hint-warn" data-finalize-state="stalled" hidden>
+            <span aria-hidden="true">⚠</span> {{final.closeout_stalled}}
+          </p>
         </div>
 
         <button type="button" id="view-iterations-btn" class="link-btn">{{final.view_iterations}}</button>
@@ -841,6 +854,19 @@ extras (the 💬 FAB's reserved row under the panel foot, the pulse).
   z-index: 150;
 }
 .panel-backdrop.visible { display: block; }
+/* The open panel is modal: it has a backdrop, and behind that backdrop
+   nothing may scroll. Design mode already locks the body
+   (html[data-template="design"] body { overflow: hidden }); a document round
+   did not, so a wheel over the backdrop scrolled the report underneath —
+   which also drags the scroll spy and rewrites the "you are here" head the
+   user is reading. */
+html:not([data-template="design"]) body.panel-open { overflow: hidden; }
+/* The 💬 FAB sits at z-index 220 — above the panel (200) and its backdrop
+   (150). While the panel is open it is therefore a live control painted on
+   top of a modal, and clicking it would pull the panel out from under the
+   pointer (openDock() closes the panel by design). It hides with the panel
+   open, exactly like the design switcher does. */
+body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
 ```
 
 ```javascript
@@ -850,6 +876,12 @@ extras (the 💬 FAB's reserved row under the panel foot, the pulse).
 // such a page had a FAB that did nothing (which is why the panel used to be
 // hidden and docked instead).
 (() => {
+  // Deferred until the DOM is parsed. The generated page puts its inline
+  // <script> last in <body>, so this normally runs with everything present —
+  // but this block is now on EVERY page, and a page whose script block ends
+  // up higher (a re-sync, a hand edit) would otherwise log "markup
+  // incomplete" and hand the user an inert ☰ on every template at once.
+  const boot = () => {
   const panel = document.getElementById('decision-panel');
   const panelToggle = document.getElementById('panel-toggle');
   const panelCloseBtn = document.getElementById('panel-close');
@@ -913,6 +945,20 @@ extras (the 💬 FAB's reserved row under the panel foot, the pulse).
   panelToggle?.addEventListener('click', openPanel);
   panelCloseBtn?.addEventListener('click', closePanel);
   backdrop?.addEventListener('click', closePanel);
+
+  // Escape closes it. The panel is a backdropped modal on every page now, and
+  // ✕ plus the backdrop were the only ways out for a keyboard user. The
+  // content dimmer has its own Escape handler and returns early while the
+  // panel is open, so one press never lifts the frozen veil BEHIND the thing
+  // the user is dismissing.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!document.body.classList.contains('panel-open')) return;
+    window.closePanel();
+  });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
 ```
 
@@ -961,9 +1007,9 @@ Rules:
 
 # Template: decision
 
-Multi-variant evaluation with sidebar layout. This is the canonical flow:
-Claude presents 2+ options, user picks bi-state per variant, submits,
-Claude iterates.
+Multi-variant evaluation in a document column, with the ☰ overlay panel over
+it. This is the canonical flow: Claude presents 2+ options, user picks
+bi-state per variant, submits, Claude iterates.
 
 ## Layout — Document rounds (decision / free)
 
@@ -2231,8 +2277,8 @@ it today.
            switches all four states regardless of template, so a design page
            that ships only the two above loses its close-out sheet the moment
            a final report is appended, and shows an empty panel on every past
-           tab. Only the containing aside differs (overlay vs sidebar), never
-           the states inside it. -->
+           tab. The aside itself is identical everywhere (§ Panel Chrome (all
+           templates)); only what surrounds it differs. -->
       </div><!-- /.panel-cta -->
     </aside>
     <div class="panel-backdrop" id="panel-backdrop"></div>
@@ -5042,7 +5088,7 @@ its own set of pages. Each logical page inside a design is a `<section>`
 with `data-screen`:
 
 ```html
-<section data-iteration="1" data-active
+<section data-iteration="1" data-iteration-template="design" data-active
          data-viewports="desktop phone" data-viewport-default="phone">
   <header class="iteration-intro">
     <h2>Iteration 1 · Login flow mockup</h2>
@@ -5410,16 +5456,17 @@ function collectDesignDecisions() {
 
 # Template: free
 
-A sidebar layout (same as decision) but the body is Claude-authored free
+The same document layout as `decision`, but the body is Claude-authored free
 content: analysis, walkthrough, brainstorm, explainer, timeline. Tri-state
 evaluation is **opt-in** per section — Claude adds it only where it makes
 sense.
 
-## Layout — Sidebar, freeform body
+## Layout — Document, freeform body
 
-Identical to the decision layout (sticky sidebar, ~80/~20 split). The
-difference is in the body: no forced variant-card framing, no mandatory
-bi-state. Claude chooses the structure that fits the content.
+Identical to the decision layout (§ Layout — Document rounds: content column,
+☰ overlay panel). The difference is in the body: no forced variant-card
+framing, no mandatory bi-state. Claude chooses the structure that fits the
+content.
 
 ```html
 <html data-template="free">
@@ -5432,7 +5479,7 @@ bi-state. Claude chooses the structure that fits the content.
         <button id="theme-toggle">🌙/☀️</button>
       </header>
       <main>
-        <section data-iteration="1" data-active>
+        <section data-iteration="1" data-iteration-template="free" data-active>
           <header class="iteration-intro">
             <h2>Iteration 1 · {subject}</h2>
             <p>Short intro paragraph.</p>
@@ -6009,7 +6056,7 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
 
 ```css
 /* ── Panel anatomy (all templates) ──
-   .concept-decision-panel is a flex column (the two layout rules set that);
+   .concept-decision-panel is a flex column (§ Panel Chrome sets that);
    these four children split it. `min-height: 0` on the scroll box is
    load-bearing: a flex child refuses to shrink below its content height
    without it, so the tree would grow past the viewport and push the pinned
@@ -6033,14 +6080,12 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
 .panel-here-back { margin: 0 0 0 auto; }
 .panel-here-section[hidden],
 .panel-here-back[hidden] { display: none; }
-/* Mobile: the head folds into the status line (§ Layout — Sidebar's media
-   block says so too, but it sits EARLIER in the source than the `display:
-   flex` above, and equal specificity means the later rule wins — the first
-   live check (#341) showed the head taking 51px of a 487px bottom bar). This
-   copy comes after the layout rule, so the fold actually applies. */
-@media (max-width: 768px) {
-  .panel-here { display: none; }
-}
+/* The head does NOT fold on narrow viewports any more. It used to (#341):
+   the panel was a 487px bottom sheet there and the head cost 51px of it. The
+   panel is a full-height overlay in every template now, so the space argument
+   is gone — and the fold took `#panel-here-back` with it, one of the three
+   ways back to the live round from a frozen one, on exactly the viewport
+   where the other two are hardest to hit. */
 .panel-nav-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -6175,8 +6220,8 @@ body.viewing-final .panel-cta {
 
 /* Content dimmer — covers the content area after submit so the user's focus
    lands on the decision panel / FAB. Decision panel, FABs, feedback dock,
-   panel backdrop, and screen-indicator all sit at z-index ≥ 90 (and the
-   sidebar panel was bumped to z-index 100), so they paint above the dimmer
+   panel backdrop, and screen-indicator all sit at z-index ≥ 90 (the panel
+   itself at 200), so they paint above the dimmer
    and stay clear + interactive. The dimmer itself is click-to-dismiss.
    Auto-clears on page reload (next iteration / final report) because the
    body class is not persisted. */
@@ -6251,6 +6296,13 @@ body.content-dimmed .content-dimmer:not([hidden]) {
    and stay inside the switcher's 34vw width band, so the bar can never run
    into the screen-indicator column on the left or the ☰ FAB on the right —
    the same geometry contract every other piece of design chrome follows. */
+/* Document rounds: the ☰ FAB (top: 2rem; right: 2rem, a 60px circle) is new
+   here — it used to be design-only — and the bar's band runs straight through
+   it on a narrow viewport. Measured at 375px before this cap: the circle
+   covered ~44px of #frozen-bar-back, the on-content way back to the live
+   round. Ending the bar before the FAB's column costs nothing wide (the bar
+   is centred and far narrower than the cap there). */
+.frozen-bar { max-width: min(560px, calc(100vw - 184px)); }
 html[data-template="design"] .frozen-bar {
   top: 3.75rem;
   max-width: min(34vw, 560px);
@@ -7262,8 +7314,15 @@ function restoreState() {
         const [name, val] = [rest.slice(0, -1).join(':'), rest[rest.length - 1]];
         const el = _pick(`input[name="${name}"][value="${val}"], input[id="${name}"][value="${val}"]`);
         // Mirror of the saveState() guard — also covers stale entries written
-        // before a control was marked data-no-persist.
-        if (el && el.dataset.noPersist === undefined) el.checked = value;
+        // before a control was marked data-no-persist. `touched` is the same
+        // re-entrancy guard the text branch below documents: restoreState()
+        // runs again when hydrateDraftFromBridge() merges the durable copy,
+        // and a late re-run must not flip a box the user has since changed —
+        // it changes no radio the close-out sheet mirrors, so the sheet and
+        // the payload would then describe different things.
+        if (el && el.dataset.noPersist === undefined && el.dataset.touched === undefined) {
+          el.checked = value;
+        }
       } else if (type === 'text') {
         let id = rest.join(':');
         // Namespaced key (`text:i3:d1-s1`). Only the live round's own keys may
@@ -8635,12 +8694,27 @@ function lockFrozenView() {
 document.getElementById('content-dimmer')
   ?.addEventListener('click', hideContentDimmer);
 // Keyboard escape — keyboard-only users can't click the dimmer, so let
-// Escape dismiss it. Only acts while the dimmer is actually visible.
+// Escape dismiss it. Only acts while the dimmer is actually visible AND the
+// panel is closed: with the panel open the same press is the dismissal of the
+// panel (§ Panel Chrome (all templates)), and letting it through here would
+// silently unlock the frozen round behind it instead.
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
+  if (document.body.classList.contains('panel-open')) return;
   const dim = document.getElementById('content-dimmer');
   if (dim && !dim.hidden) hideContentDimmer();
 });
+
+// A user-changed checkbox/radio is `touched` from then on — the same mark
+// the text fields carry (§ State Persistence). It is what stops a late
+// restoreState() (the durable-draft merge) from silently reverting an answer
+// the close-out sheet has already mirrored into its rows and its plan.
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t && t.matches && t.matches('input[type="checkbox"], input[type="radio"]')) {
+    t.dataset.touched = '1';
+  }
+}, true);
 
 // --- Final-report close-out sheet (action: "finalize") ---
 // The final report used to hand the user four independent controls at once —
@@ -8675,15 +8749,35 @@ function openQuestionBoxes() {
     : [];
 }
 
+// The id Claude gets back in the payload: whatever the report declared.
 function followUpId(el) { return el.name || el.id || ''; }
+
+// The key the ROW's radio group is named after — which is not the same thing.
+// `name`/`id` are mandatory on an open-question checkbox and unique in
+// practice, but a hand-written report breaks both assumptions, and a radio
+// group is keyed by name document-wide: two rows sharing one make choosing a
+// route on the second silently un-choose the first, and every nameless row
+// would answer with the default no matter what the user clicked. So the key
+// is the declared id when it is usable, and a disambiguated one when it is
+// not — the payload keeps the declared value either way.
+function followUpKeys(boxes) {
+  const seen = {};
+  return boxes.map((el, i) => {
+    const raw = followUpId(el);
+    if (!raw) return 'pos-' + i;
+    seen[raw] = (seen[raw] || 0) + 1;
+    return seen[raw] === 1 ? raw : raw + '~' + seen[raw];
+  });
+}
 
 // Which of the three routes the user picked for one open point. Before the
 // radios exist (first render) — and for any row whose group somehow lost its
 // selection — the answer is the harmless default: file an issue, write no
 // code.
-function followUpRoute(id) {
-  if (!id) return CLOSEOUT_DEFAULT_ROUTE;
-  const el = document.querySelector('input[name="fu-' + CSS.escape(id) + '"]:checked');
+function followUpRoute(key) {
+  if (!key) return CLOSEOUT_DEFAULT_ROUTE;
+  const host = document.getElementById('closeout-followup-list');
+  const el = host && host.querySelector('input[name="fu-' + CSS.escape(key) + '"]:checked');
   return el ? el.value : CLOSEOUT_DEFAULT_ROUTE;
 }
 
@@ -8712,8 +8806,10 @@ function followUpItem(el) {
 }
 
 function collectFollowUps(route) {
-  return openQuestionBoxes()
-    .filter(el => el.checked && followUpRoute(followUpId(el)) === route)
+  const boxes = openQuestionBoxes();
+  const keys = followUpKeys(boxes);
+  return boxes
+    .filter((el, i) => el.checked && followUpRoute(keys[i]) === route)
     .map(followUpItem);
 }
 
@@ -8723,7 +8819,9 @@ function collectIssueItems() { return collectFollowUps('issue'); }
 function collectImplementItems() { return collectFollowUps('implement'); }
 
 function collectDisposition() {
-  const radio = document.querySelector('input[name="dispose-mode"]:checked');
+  const sheet = document.getElementById('closeout-sheet');
+  const scope = sheet || document;
+  const radio = scope.querySelector('input[name="dispose-mode"]:checked');
   const moveEl = document.getElementById('dispose-move-to');
   const mode = radio ? radio.value : 'discard';
   const moveTo = (moveEl && moveEl.value.trim()) ? moveEl.value.trim() : null;
@@ -8731,7 +8829,11 @@ function collectDisposition() {
 }
 
 function closeoutShipChoice() {
-  const el = document.querySelector('input[name="closeout-ship"]:checked');
+  // Scoped to the sheet: every one of these controls is the panel's own, and
+  // a same-named control in the report body would otherwise win by document
+  // order and answer for the user.
+  const sheet = document.getElementById('closeout-sheet');
+  const el = sheet && sheet.querySelector('input[name="closeout-ship"]:checked');
   return el ? el.value : null;
 }
 
@@ -8743,6 +8845,10 @@ function refreshCloseout(opts) {
   const sheet = document.getElementById('closeout-sheet');
   if (!sheet) return;
   if (opts && opts.reset) {
+    // Force the rows to be re-derived from the report body — the section may
+    // have been rewritten under us. The user's answers are carried over by
+    // buildFollowUpList(); "reset" is about the row SET, never about the
+    // choices made on it.
     const host = document.getElementById('closeout-followup-list');
     if (host) host.dataset.itemKey = '';
   }
@@ -8833,8 +8939,18 @@ function buildFollowUpList() {
   // same rewrite appends another, and a count-keyed fast path would then sync
   // every row to the WRONG body checkbox — the user picks a route on a row
   // labelled A and files an issue for B.
-  const ids = JSON.stringify(boxes.map(followUpId));
+  const keys = followUpKeys(boxes);
+  const ids = JSON.stringify(keys);
   if (host.dataset.itemKey === ids) return;
+  // Answers survive the rebuild. refreshCloseout({ reset: true }) runs on
+  // EVERY tab switch, so without this a detour into an earlier round to
+  // re-read something silently reset every row the user had set to "jetzt
+  // umsetzen" back to Issue — and the plan above the execute button would
+  // have agreed with the reset, not with what they chose. Keyed by the radio
+  // group name, so an id that is gone drops its answer with its row.
+  const previous = {};
+  host.querySelectorAll('.followup-routes input[type="radio"]:checked')
+      .forEach(el => { previous[el.name] = el.value; });
   host.dataset.itemKey = ids;
   host.textContent = '';
   const labels = {
@@ -8842,11 +8958,11 @@ function buildFollowUpList() {
     implement: host.dataset.labelImplement || 'Implement now',
     ignore: host.dataset.labelIgnore || 'Drop'
   };
-  boxes.forEach(src => {
-    const id = followUpId(src);
+  boxes.forEach((src, i) => {
+    const key = keys[i];
     const row = document.createElement('div');
     row.className = 'followup';
-    row.dataset.followup = id;
+    row.dataset.followup = followUpId(src) || key;
     const title = document.createElement('span');
     title.className = 'followup-title';
     const labelEl = src.closest('label')?.querySelector('.oq-label');
@@ -8867,10 +8983,16 @@ function buildFollowUpList() {
       // every named radio document-wide, and a remembered "jetzt umsetzen"
       // would sail through a later close-out and write code the user never
       // re-authorised. After a reload every row falls back to the default.
-      input.name = 'fu-' + id;
+      input.name = 'fu-' + key;
       input.value = value;
       input.dataset.noPersist = '';
-      if (value === (src.checked ? CLOSEOUT_DEFAULT_ROUTE : 'ignore')) input.checked = true;
+      // The body checkbox decides ignore-vs-not (it is the source of truth
+      // for "still open"); a preserved answer only chooses between the two
+      // routes that keep it open.
+      const prior = previous['fu-' + key];
+      const initial = !src.checked ? 'ignore'
+        : (prior === 'implement' ? 'implement' : CLOSEOUT_DEFAULT_ROUTE);
+      if (value === initial) input.checked = true;
       input.addEventListener('change', () => {
         src.checked = value !== 'ignore';
         src.dispatchEvent(new Event('change', { bubbles: true }));
@@ -9015,20 +9137,59 @@ async function submitFinalize() {
   }
 }
 
-document.getElementById('closeout-execute')?.addEventListener('click', submitFinalize);
+// A finalize takes minutes — issues, follow-ups built by agents, a release.
+// If the tab is reloaded while it runs, the sheet would come back fully
+// re-armed, and a second execute would carry a NEW submission_id that the
+// replay guard cannot recognise as a duplicate: a second `gh issue create`
+// run and a second real release. So ask the bridge what is in flight before
+// arming anything.
+async function restoreInFlightCloseout() {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet || !finalReportSection()) return;
+  try {
+    const res = await fetch('/decisions', { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.submitted || data.action !== 'finalize') return;
+    // Processed: Claude is done with it. Either this page is about to be
+    // rewritten, or the session is over — nothing to re-arm and nothing to
+    // freeze.
+    if (data._processed_at) return;
+    setCloseoutFrozen(true);
+    sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
+      el.hidden = el.dataset.finalizeState !== 'running';
+    });
+    document.body.classList.add('concept-submitted');
+    // Re-join the submit-state machine so pollProcessedState() keeps tracking
+    // the round that outlived its tab.
+    _submittedAt = Date.now();
+    _submittedReloadCounter = _bootReloadCounter;
+    _submittedAction = 'finalize';
+    if (typeof renderPanelStatus === 'function') renderPanelStatus();
+  } catch (e) { /* bridge unreachable — leave the sheet as the DOM has it */ }
+}
 
-// "Iterationen ansehen" — non-committal, client-only. Scrolls the iteration
-// tab bar into view and flashes it so the user can revisit earlier iterations
-// / the agenda without leaving the final report. The sheet stays put — the
-// whole point of the persistent panel is that there is nothing to re-open.
-document.getElementById('view-iterations-btn')?.addEventListener('click', () => {
-  const tabs = document.querySelector('.iteration-tabs');
-  if (!tabs) return;
-  tabs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  tabs.classList.remove('tabs-nudge');
-  void tabs.offsetWidth;  // force reflow so the animation restarts
-  tabs.classList.add('tabs-nudge');
-});
+// The safety net (pollProcessedState → restorePanelToReady) must NOT re-arm a
+// finalize. It was delivered durably; Claude either finishes it and rewrites
+// this page, or reports a blocker and sends /reload. Re-arming here would put
+// a live execute button on a page whose file may already be deleted (the
+// default disposition is "Seite löschen", which deliberately sends no
+// /reload) and whose bridge is shutting down — a click there queues a payload
+// nobody will ever pick up.
+function markCloseoutStalled() {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet) return;
+  setCloseoutFrozen(true);
+  sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
+    el.hidden = el.dataset.finalizeState !== 'stalled';
+  });
+}
+
+// "Iterationen ansehen" is wired in wireCloseout() below — non-committal,
+// client-only: it scrolls the iteration tab bar into view and flashes it so
+// the user can revisit earlier rounds without leaving the final report. The
+// sheet stays put; the whole point of the persistent panel is that there is
+// nothing to re-open.
 
 // Recompute whenever an input the plan summarises changes — the open-questions
 // checkboxes in the body, a follow-up route, the ship choice, the disposition
@@ -9052,9 +9213,28 @@ document.addEventListener('change', e => {
     refreshCloseout();
   }
 });
-document.addEventListener('DOMContentLoaded', () => {
+// Wired on DOM-ready, not at parse time: this block is copied verbatim into
+// generated pages, and one whose script ends up before the markup would
+// otherwise get a rendered sheet whose execute button is inert — no console
+// error, no request, nothing to see.
+function wireCloseout() {
+  document.getElementById('closeout-execute')?.addEventListener('click', submitFinalize);
+  document.getElementById('view-iterations-btn')?.addEventListener('click', () => {
+    const tabs = document.querySelector('.iteration-tabs');
+    if (!tabs) return;
+    tabs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    tabs.classList.remove('tabs-nudge');
+    void tabs.offsetWidth;  // force reflow so the animation restarts
+    tabs.classList.add('tabs-nudge');
+  });
   refreshCloseout({ reset: true });
-});
+  restoreInFlightCloseout();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', wireCloseout);
+} else {
+  wireCloseout();
+}
 
 // --- Offline Submit Queue ---
 async function retryPendingSubmission() {
@@ -9096,8 +9276,10 @@ Claude-side: on receiving the payload, branch on `action`:
 - `implement` → Step 5b implement branch: actually write code/files, then
   append the final-report section (frozen "implementiert" record)
 - `finalize` → Step 5b finalize branch: run the selected close-out parts in a
-  FIXED order — issues (`gh issue create` behind the user-value gate) → ship
-  (full `/ship` pipeline) → Step 6 cleanup with the bundled disposition
+  FIXED order — issues (`gh issue create` behind the user-value gate) →
+  implement (the follow-ups routed to "jetzt umsetzen", built through the
+  devops role agents) → ship (full `/ship` pipeline) → Step 6 cleanup with the
+  bundled disposition
 - `create-issues` / `ship` / `dispose-concept` → **legacy**, still accepted:
   pages generated before the sheet send these one at a time. Each maps onto
   the matching part of the finalize branch (see SKILL.md § Legacy final-report
@@ -9123,7 +9305,14 @@ function restorePanelToReady() {
   // which showIteration() forbids by construction.
   const active = document.querySelector('section[data-iteration][data-active]');
   if (active && active.hasAttribute('data-final-report')) {
-    if (typeof restoreCloseoutToReady === 'function') restoreCloseoutToReady();
+    // A delivered finalize is never re-armed by the safety net — see
+    // markCloseoutStalled(). Every other stuck round on a final report is
+    // handed back so the user can act.
+    if (_submittedAction === 'finalize' && typeof markCloseoutStalled === 'function') {
+      markCloseoutStalled();
+    } else if (typeof restoreCloseoutToReady === 'function') {
+      restoreCloseoutToReady();
+    }
   } else {
     document.getElementById('panel-submitted').style.display = 'none';
     document.getElementById('panel-ready').style.display = 'block';
@@ -9608,9 +9797,9 @@ chips, appended by string edit, and the JS folds it on every load.
 </nav>
 
 <main>
-  <section id="iter-1" data-iteration="1" hidden>…frozen round 1…</section>
-  <section id="iter-2" data-iteration="2" data-reality-check hidden>…frozen reality check…</section>
-  <section id="iter-3" data-iteration="3" data-final-report data-active>
+  <section id="iter-1" data-iteration="1" data-iteration-template="decision" hidden>…frozen round 1…</section>
+  <section id="iter-2" data-iteration="2" data-iteration-template="decision" data-reality-check hidden>…frozen reality check…</section>
+  <section id="iter-3" data-iteration="3" data-iteration-template="free" data-final-report data-active>
     …final report (Abschlussbericht)…
   </section>
 </main>
@@ -9651,7 +9840,7 @@ implement, why am I reading this?" — and it is copied with the wording from
 the locale table, never improvised:
 
 ```html
-<section id="iter-2" data-iteration="2" data-reality-check
+<section id="iter-2" data-iteration="2" data-iteration-template="decision" data-reality-check
          data-reality-head="9be03d1f4c22" data-active>
   <div class="reality-banner" role="note">
     <h2>{{reality.headline}}</h2>
@@ -9788,8 +9977,14 @@ const _pageTemplateAtLoad = document.documentElement.dataset.template || '';
 let _baseTemplate = null;
 function baseIterationTemplate() {
   if (_baseTemplate) return _baseTemplate;
-  const first = document.querySelector('section[data-iteration][data-iteration-template]');
-  const raw = (first && first.dataset.iterationTemplate) || _pageTemplateAtLoad || 'decision';
+  // LOWEST iteration number, not first-in-DOM: sections are appended in order
+  // today, but a re-sync or a hand edit that moves one (a reality-check round
+  // pulled up, a final report hoisted) would otherwise silently redefine the
+  // base template for every section that declares none.
+  const declared = Array.from(
+    document.querySelectorAll('section[data-iteration][data-iteration-template]')
+  ).sort((a, b) => (parseInt(a.dataset.iteration, 10) || 0) - (parseInt(b.dataset.iteration, 10) || 0));
+  const raw = (declared[0] && declared[0].dataset.iterationTemplate) || _pageTemplateAtLoad || 'decision';
   _baseTemplate = raw === 'prototype' ? 'design' : raw;
   return _baseTemplate;
 }
@@ -10094,7 +10289,7 @@ section TOC automatically. Open questions / TODOs use a dedicated
 `<section data-open-questions>` wrapper around a checkbox list.
 
 ```html
-<section id="iter-3" data-iteration="3" data-final-report data-active>
+<section id="iter-3" data-iteration="3" data-iteration-template="free" data-final-report data-active>
   <div class="iteration-intro">
     <h2>{{iteration.final_tab}}</h2>
     <p>Kurze Einleitung — was wurde umgesetzt, in welcher Form.</p>
@@ -10241,7 +10436,10 @@ was routed, and of what was built during the close-out.
 - `DOMContentLoaded`
 - `iteration:changed` (via `showIteration()`) — with `{ reset: true }`, so a
   tab switch rebuilds the follow-up rows from the report body rather than
-  trusting a stale row set
+  trusting a stale row set. `reset` is about the row SET only: the answers
+  already given are carried across the rebuild by id, because a detour into an
+  earlier round to re-read something must not silently move a row back from
+  "jetzt umsetzen" to Issue
 - any `change` on a `[data-open-questions]` checkbox, a follow-up route, the
   ship radios, or the disposition radios
 
@@ -10255,7 +10453,8 @@ bridge; it controls the follow-up block indirectly by disabling checkboxes
 when it writes the routed HTML.
 
 `buildFollowUpList()` rebuilds the rows only when the underlying item **set**
-changes, keyed by id — never by count. A rebuild driven by a route's own
+changes, keyed by id — never by count — and carries the existing answers
+across that rebuild, also by id. A rebuild driven by a route's own
 change event would tear the row out from under the user's cursor mid-click,
 and a count-keyed fast path would re-sync every row to the wrong body
 checkbox when Claude routes one item and appends another in the same rewrite.

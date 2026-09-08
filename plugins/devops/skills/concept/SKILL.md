@@ -994,7 +994,8 @@ numbers in `artifacts`) — not internal phases. A resumed session replays these
 to learn how far the dead run got.
 
 **Namespace the `action` for finalize parts:** `finalize:issues`,
-`finalize:ship`, `finalize:cleanup` — never a bare `"ship"`. A bare `"ship"`
+`finalize:implement`, `finalize:ship`, `finalize:cleanup` — never a bare
+`"ship"`. A bare `"ship"`
 checkpoint is indistinguishable from a legacy stand-alone ship submission, and
 a resumed session that reads it as one verifies the PR, calls the job done and
 never runs part C — leaving the concept files, the durable store and
@@ -1226,12 +1227,18 @@ ending.
    issue tracker free of fragments, and these items are being built, not
    filed.
 3. Checkpoint each item as its code lands (`action: "finalize:implement"`,
-   `step: "followup-implemented"`, the item id in `artifacts`). A resumed run
-   must not rebuild what already exists.
+   `step: "followup-implemented"`, the item id AND its title in `artifacts`).
+   Both, because the id comes from the report's checkbox `name` and a
+   hand-written report can leave it empty — a resumed run that can only match
+   on an empty id rebuilds what already exists.
 4. Rewrite the item's `<li>` in the report the way part A does for issues:
-   keep the checkbox, add `disabled`, append an `.oq-done` note
-   (`{{final.done_prefix}}` + what landed). Disabling is what drops the row
-   from the close-out sheet on the next render.
+   keep the checkbox, add `disabled`, append an `.oq-done` note naming what
+   landed. Write the locale's `final.done_prefix` VALUE ("umgesetzt" /
+   "implemented"), never the raw `{{final.done_prefix}}` token — placeholders
+   are substituted at generation time, and this rewrite happens long after
+   that, so a token written here stays on screen as a token. Disabling the
+   checkbox is what drops the row from the close-out sheet on the next
+   render.
 5. Add a short **Nachtrag** section to the final report naming what was built
    and where. Do NOT append a new iteration — the final report is the closing
    artefact and stays the last tab.
@@ -1282,12 +1289,21 @@ ending.
 
 ### Legacy final-report actions
 
-Pages generated before the close-out sheet submit one action at a time:
-`create-issues` (part A + Step 6 with the bundled disposition),
-`ship` (part B + Step 6), `dispose-concept` (part C only). Keep accepting
-them — a mid-session plugin update leaves such a page open in the browser —
-and map each onto the matching part above. Newly generated pages MUST emit
-`finalize` only.
+Pages generated before the close-out sheet submit one action at a time.
+Map each onto the part that does the SAME THING — never onto the letter it
+used to have, which shifted when the implement part was inserted:
+
+| Legacy action | Runs |
+|---|---|
+| `create-issues` | part A (issues) + Step 6 with the bundled disposition |
+| `ship` | part C (ship) + Step 6 |
+| `dispose-concept` | part D (close out) only |
+
+A legacy page has no way to express "jetzt umsetzen", so part B never runs
+for one. Keep accepting all three — a mid-session plugin update leaves such a
+page open in the browser — and never let a `dispose-concept` reach the ship
+pipeline: that is the one mis-mapping that would cut a release nobody
+authorised. Newly generated pages MUST emit `finalize` only.
 
 **Critical invariant:** a submit with `action: "iterate"` MUST NEVER cause
 code or file changes outside of the concept HTML file itself. The user

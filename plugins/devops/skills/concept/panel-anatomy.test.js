@@ -260,17 +260,20 @@ describe("panel anatomy — CSS", () => {
     expect(m[2], "…plus the FAB's bottom offset").toBe(fabBottom);
   });
 
-  test("mobile folds the head away and needs no panel variant of its own", () => {
-    const media = /@media \(max-width: 768px\) \{([\s\S]*?)\n\}/.exec(stripComments(cssSource));
-    expect(media, "@media (max-width: 768px)").toBeTruthy();
-    // The head's content is already in the status line, so it folds on narrow
-    // viewports — that part is unchanged.
-    expect(media[1]).toMatch(/\.panel-here \{ display: none; \}/);
-    // What is gone is the bottom-sheet variant: the overlay is fixed,
-    // full-height and capped at 90vw, so a phone gets the same panel a
-    // desktop does. A re-docked mobile panel would bring the split-brain
-    // layout back through the back door.
-    expect(media[1], "mobile .concept-decision-panel variant").not.toMatch(/\.concept-decision-panel/);
+  test("mobile needs no panel variant and no head fold of its own", () => {
+    const css = stripComments(cssSource);
+    // The bottom-sheet variant is gone: the overlay is fixed, full-height and
+    // capped at 90vw, so a phone gets the same panel a desktop does. A
+    // re-docked mobile panel would bring the split-brain layout back through
+    // the back door.
+    for (const m of css.matchAll(/@media \(max-width: 768px\) \{([\s\S]*?)\n\}/g)) {
+      expect(m[1], "mobile .concept-decision-panel variant").not.toMatch(/\.concept-decision-panel/);
+      // …and the head no longer folds: #panel-here-back is one of the three
+      // ways back to the live round, and it used to disappear on exactly the
+      // viewport where the other two are hardest to hit (#341's 487px bottom
+      // sheet is what justified the fold, and that sheet no longer exists).
+      expect(m[1], "mobile .panel-here fold").not.toMatch(/\.panel-here \{ display: none/);
+    }
   });
 
   // #341 — the first live check in a real browser (scripts/build-concept-fixture.js,
@@ -300,17 +303,18 @@ describe("panel anatomy — CSS", () => {
     expect(Number(pad[1])).toBeLessThanOrEqual(0.4);
   });
 
-  test("the mobile head-fold comes AFTER the layout rule, so it wins the cascade (#341)", () => {
+  test("the head is never folded away, on any viewport (#341 reversed)", () => {
+    // #341 folded it on ≤768px because the panel was a 487px bottom sheet
+    // there and the head cost 51px of it. The panel is a full-height overlay
+    // in every template now, so the space argument is gone — and the fold
+    // took #panel-here-back with it, one of the three routes back to the live
+    // round, on the viewport where the other two are hardest to hit.
     const src = stripComments(cssSource);
-    const layout = src.search(/\.panel-here \{[^}]*display:\s*flex/);
-    expect(layout, ".panel-here layout rule").toBeGreaterThan(-1);
-    const fold = src.lastIndexOf(".panel-here { display: none; }");
-    expect(fold, "mobile fold").toBeGreaterThan(-1);
-    expect(fold, "a fold before the layout rule is overridden by it").toBeGreaterThan(layout);
-    // …and it is inside a max-width media block, not unconditional.
-    const tail = src.slice(0, fold);
-    const lastMedia = tail.lastIndexOf("@media (max-width: 768px)");
-    expect(lastMedia).toBeGreaterThan(layout);
+    expect(src.search(/\.panel-here \{[^}]*display:\s*flex/), ".panel-here layout rule")
+      .toBeGreaterThan(-1);
+    expect(src, "no head fold").not.toContain(".panel-here { display: none; }");
+    // The back link's own [hidden] rule is a different thing and stays.
+    expect(src).toContain(".panel-here-back[hidden]");
   });
 
   test("the six states are styled and 'local-only' is the one with a background", () => {

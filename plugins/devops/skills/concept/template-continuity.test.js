@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { JSDOM } from "jsdom";
 
 // Two defects, both found on real generated pages (four labyrinth concepts,
 // 2026-09-07/08), both with the same symptom: halfway through a design
@@ -89,10 +90,12 @@ describe("template resolution is deterministic", () => {
       "const _pageTemplateAtLoad = document.documentElement.dataset.template || ''"
     );
     const fn = jsSource.slice(jsSource.indexOf("function baseIterationTemplate"));
-    const body = fn.slice(0, fn.indexOf("\n}"));
-    // First declared iteration section wins; the captured page attribute is
-    // only the legacy fallback for pages that predate the attribute.
+    const body = fn.slice(0, fn.indexOf("\n}\n"));
+    // The LOWEST-numbered declared section wins — not the first in DOM order,
+    // which a re-sync or a hand edit can reorder. The captured page attribute
+    // is only the legacy fallback for pages predating the attribute.
     expect(body).toContain("section[data-iteration][data-iteration-template]");
+    expect(body).toMatch(/sort\(\(a, b\) =>[\s\S]*?parseInt\(a\.dataset\.iteration/);
     expect(body).toContain("_pageTemplateAtLoad");
     expect(body).toContain("_baseTemplate");
   });
@@ -101,7 +104,7 @@ describe("template resolution is deterministic", () => {
     const resolve = jsSource.slice(jsSource.indexOf("function resolveIterationTemplate"));
     const base = jsSource.slice(jsSource.indexOf("function baseIterationTemplate"));
     expect(resolve.slice(0, 400)).toContain("raw === 'prototype' ? 'design' : raw");
-    expect(base.slice(0, 500)).toContain("raw === 'prototype' ? 'design' : raw");
+    expect(base.slice(0, 1200)).toContain("raw === 'prototype' ? 'design' : raw");
   });
 
   test("the gate makes the attribute mandatory where it decides the layout", () => {
@@ -196,12 +199,144 @@ describe("the ☰ panel is page chrome", () => {
     expect(row[0]).toContain("panel-toggle");
     expect(row[0]).toContain("panel-backdrop");
     expect(row[0]).toContain("window.openPanel");
+    // The negative that catches the dangerous mixed page: an old sidebar rule
+    // left behind wins on source order (same specificity), the FAB renders,
+    // and the backdrop covers a panel that never slides in.
+    expect(row[0], "residual sidebar rule").toMatch(/position: sticky/);
+    expect(row[0], "residual sidebar width").toMatch(/width: 20%/);
+  });
+
+  test("every ENGINE entry is listed where the append is told to re-run them", () => {
+    // A row that calls itself an ENGINE entry but is missing from the
+    // enumeration is never re-run on a long-lived page — which is exactly the
+    // page the entry was written for.
+    const ids = [];
+    for (const m of gate.matchAll(/^\| (\d+[a-z]?) \|([\s\S]*?)(?=\n\| |\n\n)/gm)) {
+      if (/ENGINE entry/.test(m[2])) ids.push(m[1]);
+    }
+    expect(ids.length, "ENGINE-tagged rows").toBeGreaterThan(5);
+    const enumeration = gate.slice(
+      gate.indexOf("Before appending, run the gate over the existing HTML"),
+      gate.indexOf("Re-sync the block, not the one line")
+    );
+    for (const id of ids) {
+      // 49–53 and 46 / 47 are listed as ranges/pairs.
+      const listed =
+        new RegExp("(^|[ ,(])" + id.replace(/[a-z]$/, "$&") + "([ ,)/]|$)", "m").test(enumeration) ||
+        (Number(id) >= 49 && Number(id) <= 53 && /49–53/.test(enumeration));
+      expect(listed, `entry ${id} in § Engine drift`).toBe(true);
+    }
+  });
+
+  test("no prose still promises a sidebar", () => {
+    // The picker table and the per-template intros are what an emitting Claude
+    // reads FIRST; while they described a ~80/~20 sidebar, a regenerated page
+    // rebuilt the very layout this change removes.
+    const prose = md
+      .split("\n")
+      .filter((l) => !/^\s*(\/\*|\*|\/\/|<!--)/.test(l))
+      .join("\n");
+    for (const m of prose.matchAll(/^.*~80\/~20.*$/gm)) {
+      expect(m[0], "80/20 split promised in prose").toMatch(/used to|no longer|never/i);
+    }
+    for (const m of prose.matchAll(/^\| \*\*(decision|free)\*\* \|[^\n]*/gm)) {
+      expect(m[0], "template table row").not.toMatch(/Sidebar/);
+    }
+  });
+
+  test("every iteration-section example carries its template", () => {
+    // The prose says the attribute is mandatory; the skeletons are what
+    // Claude actually copies.
+    for (const b of BLOCKS.filter((b) => b.info === "html")) {
+      for (const m of b.code.matchAll(/<section[^>]*\bdata-iteration="\d+"[^>]*>/g)) {
+        expect(m[0], `@${b.line}`).toMatch(/data-iteration-template=/);
+      }
+    }
+  });
+
+  test("the FAB actually opens the panel on a page that has no dock", () => {
+    // The regression this whole change is about: on a decision/free page the
+    // design Layout JS never runs, so while openPanel lived inside it the ☰
+    // FAB was a button that did nothing — which is why the panel used to be
+    // hidden and docked into the page instead. Executed, not grepped.
+    const skeleton = BLOCKS.find(
+      (b) => b.info === "html" && b.code.includes('id="panel-final-report"')
+    );
+    const dom = new JSDOM(skeleton.code.replace(/\{\{([a-z_.]+)\}\}/g, "$1"), {
+      runScripts: "outside-only",
+      pretendToBeVisual: true,
+    });
+    const { window } = dom;
+    const { document } = window;
+    expect(document.getElementById("feedback-dock"), "no dock on this page").toBeNull();
+
+    const shared = sectionBlocks("## Panel Chrome (all templates)")
+      .filter((b) => /^(javascript|js)$/.test(b.info))
+      .map((b) => b.code)
+      .join("\n");
+    window.eval(shared);
+    // The block defers to DOMContentLoaded while the document is still
+    // parsing — which is exactly the state an inline <script> runs in. Deliver
+    // the event the way a browser does.
+    if (document.readyState === "loading") {
+      document.dispatchEvent(new window.Event("DOMContentLoaded"));
+    }
+
+    const panel = document.getElementById("decision-panel");
+    const toggle = document.getElementById("panel-toggle");
+    const backdrop = document.getElementById("panel-backdrop");
+
+    toggle.click();
+    expect(panel.classList.contains("open"), "panel opened").toBe(true);
+    expect(backdrop.classList.contains("visible")).toBe(true);
+    expect(document.body.classList.contains("panel-open")).toBe(true);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    backdrop.click();
+    expect(panel.classList.contains("open"), "backdrop closes it").toBe(false);
+    expect(document.body.classList.contains("panel-open")).toBe(false);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    toggle.click();
+    document.getElementById("panel-close").click();
+    expect(panel.classList.contains("open"), "✕ closes it").toBe(false);
+
+    // Escape is the keyboard way out — ✕ and the backdrop were the only ones.
+    toggle.click();
+    document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
+    expect(panel.classList.contains("open"), "Escape closes it").toBe(false);
+  });
+
+  test("an open panel is modal: nothing scrolls behind it, no FAB paints over it", () => {
+    const css = cssSource;
+    expect(css, "document rounds lock the body while the panel is open").toMatch(
+      /html:not\(\[data-template="design"\]\) body\.panel-open \{[^}]*overflow:\s*hidden/
+    );
+    // The 💬 FAB outranks the panel (220 vs 200) and would otherwise sit on
+    // top of the modal, one click away from pulling it out from under the
+    // pointer.
+    expect(css, "💬 hides with the panel open").toMatch(
+      /body\.panel-open \.feedback-fab \{[^}]*pointer-events:\s*none/
+    );
+  });
+
+  test("the panel block waits for the DOM instead of logging 'markup incomplete'", () => {
+    const shared = sectionBlocks("## Panel Chrome (all templates)")
+      .filter((b) => /^(javascript|js)$/.test(b.info))
+      .map((b) => b.code)
+      .join("\n");
+    // It runs on every page now, so a page whose script block is not last in
+    // <body> must not lose its panel on every template at once.
+    expect(shared).toContain("document.readyState === 'loading'");
+    expect(shared).toContain("addEventListener('DOMContentLoaded', boot)");
   });
 
   test("only the dock side of the chrome stays design-only", () => {
     // Selectors only — the rule's own comment names .panel-fab to explain why
     // it is NOT in the list.
-    const rule = /^(html:not\(\[data-template="design"\]\)[\s\S]*?display: none !important; \})/m.exec(cssSource);
+    // Anchored on the chrome list itself — other `html:not([data-template=
+    // "design"])` rules exist now (the panel-open scroll lock among them).
+    const rule = /^(html:not\(\[data-template="design"\]\) \.screen-indicator[\s\S]*?display: none !important; \})/m.exec(cssSource);
     expect(rule, "design-only chrome rule").toBeTruthy();
     expect(rule[1]).toContain(".feedback-fab");
     expect(rule[1]).toContain(".feedback-dock");

@@ -96,9 +96,34 @@ describe("frozen veil + floating bar — CSS", () => {
     const z = (rule) => Number(/z-index:\s*(\d+)/.exec(rule[1])[1]);
     expect(bar[1]).toContain("position: fixed");
     expect(z(bar)).toBeGreaterThan(z(dimmer));
-    // FABs (100) and the panel must keep painting over the bar.
+    // FABs (100) and the panel must keep painting over the bar — which is why
+    // the bar must not RUN UNDER one. See the geometry test below: painting
+    // order was the only guard while the ☰ FAB was design-only, and it stopped
+    // being enough the moment the FAB became page chrome.
     expect(z(bar)).toBeLessThan(100);
     expect(cssSource).toContain(".frozen-bar[hidden] { display: none; }");
+  });
+
+  test("on a document round the bar ends before the ☰ FAB's column", () => {
+    // The ☰ FAB is page chrome now, so it paints over the bar on every
+    // template — and the bar is centred, so on a narrow viewport its right
+    // end used to sit underneath the circle. Measured at 375px before the
+    // cap: ~44px of #frozen-bar-back, the on-content way back to the live
+    // round, was covered by the FAB.
+    // Derived from the CSS, not from a copy of the number: moving the FAB
+    // without moving the cap fails here.
+    const css = cssSource.replace(/\/\*[\s\S]*?\*\//g, "");
+    const fab = /\.panel-fab \{([^}]*)\}/.exec(css);
+    expect(fab, ".panel-fab { top; right }").toBeTruthy();
+    const fabRight = parseFloat(/right:\s*([\d.]+)rem/.exec(fab[1])[1]) * 16;
+    const shared = /\.panel-fab,\s*\n\.feedback-fab \{([\s\S]*?)\}/.exec(css);
+    const fabWidth = parseFloat(/width:\s*(\d+)px/.exec(shared[1])[1]);
+    // The bar is centred, so half of it must fit beside the FAB's column on
+    // BOTH sides: max-width ≤ 100vw - 2 × (right + width).
+    const cap = /\n\.frozen-bar \{ max-width: min\(560px, calc\(100vw - (\d+)px\)\); \}/.exec(css);
+    expect(cap, "document-round width cap").toBeTruthy();
+    expect(Number(cap[1]), "cap must clear the FAB column on both sides")
+      .toBeGreaterThanOrEqual(2 * (fabRight + fabWidth));
   });
 
   // On design pages the 0.75rem top-centre band belongs to .design-switcher.
