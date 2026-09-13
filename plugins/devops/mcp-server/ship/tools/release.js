@@ -12,6 +12,7 @@ import { remoteTagExists } from "../lib/remote-tags.js";
 import { retryUntil } from "../lib/retry.js";
 import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
 import { clampText } from "../../lib/soft-limits.js";
+import { readVersion } from "../lib/version.js";
 
 /** Soft budget for the PR title — over-long titles are clamped, never rejected. */
 export const PR_TITLE_MAX = 70;
@@ -20,7 +21,7 @@ export const schema = z.object({
   base: z.string().default("main").describe("Base branch for PR (may be a feature branch for intermediate merges)"),
   title: z.string().describe("PR title (conventional commit format). Aim for ≤70 chars — a longer title is clamped on a word boundary, not rejected."),
   body: z.string().describe("PR body (must start with Closes #N if applicable)"),
-  tag: z.string().nullable().default(null).describe("Bare version tag (e.g. v0.18.0) — the tool publishes it as alpha/<tag> (ring model), null to skip. Ignored for intermediate merges"),
+  tag: z.string().nullable().optional().describe("Bare version tag (e.g. v0.18.0) — the tool publishes it as alpha/<tag> (ring model). OMIT it to default to v<version> from the project's version file (the value ship_version_bump just wrote); pass null explicitly to ship WITHOUT a ring tag — the result then carries tagSkipped + tagWarning, never a silent gap (#372). Ignored for intermediate merges"),
   releaseNotes: z.string().nullable().default(null).describe("CHANGELOG entry — NOT published at ship time (releases happen at promotion via ship_promote); recorded as releaseDeferred"),
   prerelease: z.boolean().default(false).describe("Deprecated — releases are created at promotion time; kept for caller compatibility"),
   commitMessage: z.string().nullable().default(null).describe("If set, stage all and commit with this message before pushing"),
@@ -33,7 +34,7 @@ export const schema = z.object({
 });
 
 export async function handler(params) {
-  const { base, body, tag, releaseNotes, commitMessage, mergeStrategy, skipChecks, checksTimeoutSec } = params;
+  const { base, body, releaseNotes, commitMessage, mergeStrategy, skipChecks, checksTimeoutSec } = params;
   // Clamp rather than reject: by the time we get here preflight, build and the
   // version bump have already committed, so failing on title length would abort
   // the pipeline with the version raised and no PR to show for it.
@@ -72,6 +73,28 @@ export async function handler(params) {
 
   const branch = currentBranch(opts);
   const intermediate = base !== "main";
+  // Ring-tag resolution (#372). Three caller shapes, three meanings:
+  //   omitted  → default to v<version> from the version file — by the time this
+  //              runs ship_version_bump has written the new version, so the tag
+  //              the skill used to thread through by hand is already on disk;
+  //   null     → deliberate opt-out; still reported (tagSkipped) below, because
+  //              main moving ahead of every ring with no trace in the result is
+  //              exactly how an automated caller shipped v0.84.5 untagged;
+  //   "vX.Y.Z" → as given.
+  // Intermediate merges never tag, whatever the caller passed.
+  let tag = params.tag;
+  let tagDefaulted = false;
+  let tagDefaultSkip = null;
+  if (!intermediate && tag === undefined) {
+    const v = readVersion(cwd);
+    if (v.version) {
+      tag = `v${v.version}`;
+      tagDefaulted = true;
+    } else {
+      tag = null;
+      tagDefaultSkip = "no version file (plugin.json / package.json / marketplace.json) to derive the tag from";
+    }
+  }
   const result = { branch, base, intermediate, mode: repoMode };
 
   try {
@@ -378,6 +401,7 @@ export async function handler(params) {
         result.tagVerified = false;
         result.tagError = e.message?.slice(0, 200);
       }
+      if (tagDefaulted) result.tagDefaulted = true;
 
       // No GitHub Release at ship time — promotion owns Releases. The notes
       // land in the stable Release when ship_promote fast-tracks/promotes.
@@ -387,6 +411,16 @@ export async function handler(params) {
     } else if (intermediate && tag) {
       result.tag = null;
       result.tagSkipped = "intermediate merge — tag/release deferred to final ship to main";
+    } else if (!intermediate) {
+      // Final merge to main with NO ring tag — main is now ahead of every ring
+      // and ship_promote has nothing to promote. Never silent: the caller's
+      // completion card must show the gap instead of an all-green ship.
+      result.tag = null;
+      result.channel = null;
+      result.tagSkipped = true;
+      result.tagWarning = tagDefaultSkip
+        ? `No ring tag created — ${tagDefaultSkip}; main is ahead of every ring and ship_promote has nothing to promote. Pass tag explicitly.`
+        : "No ring tag created (tag: null) — main is ahead of every ring and ship_promote has nothing to promote. Omit tag to default it from the version file.";
     }
 
     result.success = true;

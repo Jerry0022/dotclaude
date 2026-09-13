@@ -427,8 +427,13 @@ continuing to any step that assumes a remote.
 **Ring model (channels):** the tag is `alpha/vX.Y.Z` — every ship publishes to
 the EARLIEST channel autonomously. beta/stable tags and GitHub Releases are
 created later by `/promote` (deliberate promotion, same SHA, no rebuild).
-Pass the bare `tag: "vX.Y.Z"` as before; the tool prefixes the channel. See
-`docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`.
+Pass the bare `tag: "vX.Y.Z"` (the tool prefixes the channel) — or **omit
+`tag`** and the tool derives `v<version>` from the version file `ship_version_bump`
+just wrote (result carries `tagDefaulted: true`). Only an explicit `tag: null`
+skips the ring tag, and even then the result says so: `tagSkipped: true` +
+`tagWarning` (main is ahead of every ring, `/promote` has nothing to promote) —
+surface that warning as a `userFinalTest` item, never render an all-green card
+over it (#372). See `docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`.
 
 **Pre-merge CI gate** (default ON): after PR create, `ship_release` runs `gh pr checks --watch` (default 600s timeout). If checks fail or timeout → `success: false`, `checksBlocked: true`, PR stays open, branch not deleted. Render `ship-blocked` card with the failing check names + run URLs.
 
