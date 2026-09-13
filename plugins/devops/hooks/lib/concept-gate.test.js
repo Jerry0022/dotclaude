@@ -482,6 +482,13 @@ describe("findMappingIssues", () => {
     // id before data-mapping in the tag is fine
     const idFirst = '<section id="m1" class="x" data-mapping="m1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
     expect(kinds(live(idFirst))).toEqual([]);
+    // a co-attribute ending in `-id=` is not the id attribute (\b would have matched it)
+    const coAttr = '<section data-mapping="m1" data-foo-id="x" id="m1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    expect(kinds(live(coAttr))).toEqual([]);
+    const coAttrOnly = '<section data-mapping="m1" data-foo-id="m1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    const co = findMappingIssues(live(coAttrOnly));
+    expect(co.map(i => i.kind)).toEqual(["bad-id"]);
+    expect(co[0].why).toMatch(/no id attribute/);
   });
 
   // G2 — ≥ 1 item.

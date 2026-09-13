@@ -355,7 +355,10 @@ function findMappingIssues(html) {
   const mappings = [];
   const mapRe = /<section\b[^>]*\bdata-mapping=("|')([^"']*)\1[^>]*>/gi;
   while ((m = mapRe.exec(body)) !== null) {
-    const idAttr = /\bid=("|')([^"']*)\1/i.exec(m[0]);
+    // Anchored on whitespace, not \b: `\bid=` also matches the tail of a
+    // co-attribute such as `data-foo-id="x"` and reads it as the section id.
+    // A real attribute always follows whitespace (the tag opens with `<section`).
+    const idAttr = /(?:^|\s)id=("|')([^"']*)\1/i.exec(m[0]);
     mappings.push({ at: m.index, id: m[2], domId: idAttr ? idAttr[2] : null });
   }
 
