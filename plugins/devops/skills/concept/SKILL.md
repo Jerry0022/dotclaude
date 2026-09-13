@@ -1081,7 +1081,9 @@ Collection for the required pattern.
 Mapping (engine)) is typed and always present (`[]` when the round has
 none) — read it before `decisions[]`. Its `diff` is what changed against
 your proposal, `assigned` (keyed by matrix key) is the full truth,
-`unassigned` / `violations` are the open points; `note` is the mapping note
+`unassigned` / `violations` are what the user left open in the mapping
+(handled per branch below — they never become report open points on their
+own, § Open points admission gate); `note` is the mapping note
 (dock view note in a design round, inline textarea in a free round),
 `slotNotes` the per-target remarks, `adhocItems` the labels the user added.
 The mapping's cells are generated inputs and are not part of the coverage
@@ -1180,9 +1182,14 @@ never re-run a completed step. The checkpoint records what the previous run
      `phase: "implemented"` — no code was written.
 1. **Summarize** what was selected/rejected/commented. **Mappings:** the
    assignment IS the spec — generate the component / view / data projection
-   per target with exactly the assigned items in `order`; `unassigned` items
-   and `violations` become open questions in the final report, never quiet
-   defaults.
+   per target with exactly the assigned items in `order`, never quietly
+   defaulting what the user left open. An `unassigned` item is a decision the
+   user made in the mapping (it goes nowhere) — build without it and say so in
+   the Zusammenfassung; it enters the report's open points only when it passes
+   the § Open points admission gate as `deferred` (the user parked it — name
+   the mapping and round). A `violation` (an empty required slot, an
+   over-full one) that keeps a target from being built is a **shortfall**
+   reported with its reason, never re-labelled as a follow-up.
 2. **Execute** the decisions as real changes — **through the devops role
    agents, not inline.** An implement order is the one place in a concept
    session where code gets written, it is usually multi-domain, and the main
