@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.156.1] — 2026-09-13
+
+### Changed
+
+- **`Geprüft` instead of `Belegt`, and never more than three bullets per block.** First live use of the compact card: "Belegt" read as nothing to the person it was written for, and the evidence block could still stack seven bullets (three gates that fell back to bullets, plus four validation items), which was exactly the wall the redesign was meant to remove. The header is now `**Geprüft**` / `**Verified**`. Gates never become bullets: above 110 characters they wrap onto continuation header lines starting with `· ` (method budget raised to 50 so real gate names fit). Validation shows at most three bullets — up to three items as they are, from the fourth item on two named ones (unmet and partial first) plus one summary bullet: `✅ N weitere erfüllt`, or `⚠️ N weitere offen · M weitere erfüllt` so an open requirement never vanishes. Changes keep three bullets too — the `+N weitere` tail moved onto the header line (`**Changes** · +2 weitere`) instead of being a fourth bullet. Template and README follow.
+
 ## [0.156.0] — 2026-09-13
 
 ### Changed

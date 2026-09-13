@@ -126,7 +126,7 @@ describe("--render-card CLI fallback", () => {
     expect(out).not.toContain("x".repeat(61));
     expect(out).toContain("C → third");
     expect(out).not.toContain("dropped by the clamp");
-    expect(out).toContain("* +1 weitere");
+    expect(out).toContain("**Changes** · +1 weitere");
   });
 
   test("coerces a JSON-string `pending` and overrides the CTA with it", async () => {

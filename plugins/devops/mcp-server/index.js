@@ -75,16 +75,13 @@ const HEALTH_CRIT_THRESHOLD  = 2000;
 const SUMMARY_MAX            = 60;
 const CHANGE_AREA_MAX        = 24;
 const CHANGE_DESC_MAX        = 90;
-const GATE_METHOD_MAX        = 40;
+const GATE_METHOD_MAX        = 50;
 const GATE_RESULT_MAX        = 60;
 const GATES_LINE_MAX         = 110;
-const GATES_INLINE_MAX_COUNT = 3;
-const GATE_BULLET_LIMIT      = 5;
-const GATE_BULLET_MAX        = 100;
+const GATES_LIMIT            = 5;
 const VALIDATION_REQ_MAX     = 70;
 const VALIDATION_EV_MAX      = 100;
-const VALIDATION_NONMET_LIMIT = 4;
-const VALIDATION_SLOTS       = 3;
+const BLOCK_BULLET_LIMIT     = 3;   // no block ever shows more than 3 bullets
 const CHANGES_LIMIT          = 3;
 const PR_TITLE_MAX           = 70;
 // Pace flag: usage running more than this many points ahead of the clock. The
@@ -455,11 +452,12 @@ function renderChanges(changes, lang) {
   const tail = CHANGES_TAIL[lang] || CHANGES_TAIL.de;
   const items = changes.slice(0, CHANGES_LIMIT).map(c =>
     '* ' + clampEllipsis(String(c.area || ''), CHANGE_AREA_MAX) + ' \u2192 ' + clampEllipsis(String(c.description || ''), CHANGE_DESC_MAX));
-  // More than the budget: say so instead of dropping silently (14 % of ship
-  // cards used to lose their 4th+ change without a trace).
+  // More than the budget: say so on the header line instead of dropping
+  // silently (14 % of ship cards used to lose their 4th+ change without a
+  // trace) — and never as a 4th bullet: a block has three at most.
   const rest = changes.length - items.length;
-  if (rest > 0) items.push('* ' + tail(rest));
-  return '**Changes**\n' + items.join('\n');
+  const header = '**Changes**' + (rest > 0 ? ' \u00b7 ' + tail(rest) : '');
+  return header + '\n' + items.join('\n');
 }
 
 // ⚠ OFFEN — follow-ups that are NOT tests: decisions, cleanups, open questions.
@@ -950,58 +948,72 @@ function renderUnverifiedStamp(lang, red) {
 
 const VALIDATION_STATUS_ICON = { met: '\u2705', partial: '\u26a0\ufe0f', unmet: '\u274c' };
 const EVIDENCE_LABEL = {
-  de: { header: 'Belegt',   more: (n) => n + ' weitere Anforderungen erf\u00fcllt' },
-  en: { header: 'Verified', more: (n) => n + ' more requirements met' },
+  de: { header: 'Gepr\u00fcft',  met: (n) => n + ' weitere erf\u00fcllt', open: (n) => n + ' weitere offen' },
+  en: { header: 'Verified', met: (n) => n + ' more met',          open: (n) => n + ' more open' },
 };
 
-// Belegt / Verified — the ONE evidence block: automated gates on the header
-// line, requirement validation as bullets underneath.
-//   **Belegt** · npm test → 1460 grün · eslint → sauber · Codex-Review → skipped
-//   * ⚠️ <requirement ≤70> — <evidence ≤100>      (partial / unmet first)
+// Geprüft / Verified — the ONE evidence block: automated gates on the header
+// line(s), requirement validation as bullets underneath. Never more than three
+// bullets — that is what keeps a block scannable.
+//   **Geprüft** · npm test → 1460 grün · eslint → sauber · Codex-Review → skipped
+//   · <further gates wrap onto continuation header lines, never bullets>
+//   * ❌ <requirement ≤70> — <evidence ≤100>      (unmet, then partial, first)
 //   * ✅ …
-//   * ✅ 3 weitere Anforderungen erfüllt           (met overflow, collapsed)
+//   * ✅ 3 weitere erfüllt  /  ⚠️ 1 weitere offen · 2 weitere erfüllt   (summary bullet from the 4th item on)
 // Gates used to be three bullets whose result was "grün" 84 times out of 301;
 // validation bullets ran to 200+ characters (max 782) and were 22 % of the
 // card. Budgets are hard, ordering puts what needs attention first, and the
 // long form of the evidence belongs in the PR body.
 function renderEvidence(tests, validation, lang) {
   const L = EVIDENCE_LABEL[lang] || EVIDENCE_LABEL.de;
-  const ran = (Array.isArray(tests) ? tests : []).filter(t => t && (t.method || t.result));
-  // Inline form: tight per-part budgets so three gates share one line. Bullet
-  // form: one budget on the whole bullet — it owns the line.
-  const gates = ran.map(t => clampEllipsis(String(t.method || ''), GATE_METHOD_MAX) + ' \u2192 ' + clampEllipsis(String(t.result || ''), GATE_RESULT_MAX));
-  const bullets = ran.map(t => clampEllipsis(String(t.method || '') + ' \u2192 ' + String(t.result || ''), GATE_BULLET_MAX));
+  const gates = (Array.isArray(tests) ? tests : [])
+    .filter(t => t && (t.method || t.result))
+    .slice(0, GATES_LIMIT)
+    .map(t => clampEllipsis(String(t.method || ''), GATE_METHOD_MAX) + ' \u2192 ' + clampEllipsis(String(t.result || ''), GATE_RESULT_MAX));
   const items = (Array.isArray(validation) ? validation : []).filter(it => it && it.requirement);
   if (!gates.length && !items.length) return '';
 
-  const header = '**' + L.header + '**';
+  // Header line(s): greedy-pack the gates, ≤ GATES_LINE_MAX per line; a line
+  // always holds at least one gate, continuation lines start with "· ".
   const lines = [];
-  const inline = header + ' \u00b7 ' + gates.join(' \u00b7 ');
-  if (!gates.length) {
-    lines.push(header);
-  } else if (gates.length <= GATES_INLINE_MAX_COUNT && inline.length <= GATES_LINE_MAX) {
-    lines.push(inline);
-  } else {
-    lines.push(header);
-    for (const g of bullets.slice(0, GATE_BULLET_LIMIT)) lines.push('* ' + g);
+  let line = '**' + L.header + '**';
+  let onLine = 0;
+  for (const g of gates) {
+    const candidate = line + ' \u00b7 ' + g;
+    if (onLine > 0 && candidate.length > GATES_LINE_MAX) {
+      lines.push(line);
+      line = '\u00b7 ' + g;
+      onLine = 1;
+    } else {
+      line = candidate;
+      onLine++;
+    }
   }
+  lines.push(line);
 
-  const attention = items.filter(it => it.status === 'unmet' || it.status === 'partial');
-  const met = items.filter(it => !(it.status === 'unmet' || it.status === 'partial'));
-  // unmet before partial; met keeps the caller's order.
-  attention.sort((a, b) => (a.status === 'unmet' ? 0 : 1) - (b.status === 'unmet' ? 0 : 1));
-  const shownAttention = attention.slice(0, VALIDATION_NONMET_LIMIT);
-  const slots = Math.max(0, VALIDATION_SLOTS - shownAttention.length);
-  let shownMet = met.slice(0, slots);
-  let rest = met.length - shownMet.length;
-  // Collapsing a single item into "1 more" saves nothing — show it.
-  if (rest === 1) { shownMet = met.slice(0, slots + 1); rest = 0; }
-  for (const it of [...shownAttention, ...shownMet]) {
+  const isOpen = (it) => it.status === 'unmet' || it.status === 'partial';
+  const rank = (it) => it.status === 'unmet' ? 0 : it.status === 'partial' ? 1 : 2;
+  const sorted = items.map((it, i) => ({ it, i })).sort((a, b) => rank(a.it) - rank(b.it) || a.i - b.i).map(x => x.it);
+  const bullet = (it) => {
     const icon = VALIDATION_STATUS_ICON[it.status] || '\u2022';
     const ev = it.evidence ? ' \u2014 ' + clampEllipsis(String(it.evidence), VALIDATION_EV_MAX) : '';
-    lines.push('* ' + icon + ' ' + clampEllipsis(String(it.requirement), VALIDATION_REQ_MAX) + ev);
+    return '* ' + icon + ' ' + clampEllipsis(String(it.requirement), VALIDATION_REQ_MAX) + ev;
+  };
+  if (sorted.length <= BLOCK_BULLET_LIMIT) {
+    for (const it of sorted) lines.push(bullet(it));
+  } else {
+    // Two named items, then one summary bullet for everything else — open
+    // items are counted first so an unmet requirement never vanishes.
+    const shown = sorted.slice(0, BLOCK_BULLET_LIMIT - 1);
+    const rest = sorted.slice(BLOCK_BULLET_LIMIT - 1);
+    for (const it of shown) lines.push(bullet(it));
+    const open = rest.filter(isOpen).length;
+    const met = rest.length - open;
+    const parts = [];
+    if (open > 0) parts.push(L.open(open));
+    if (met > 0) parts.push(L.met(met));
+    lines.push('* ' + (open > 0 ? '\u26a0\ufe0f' : '\u2705') + ' ' + parts.join(' \u00b7 '));
   }
-  if (rest > 0) lines.push('* \u2705 ' + L.more(rest));
   return lines.join('\n');
 }
 
@@ -1064,7 +1076,7 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
-  // Belegt — gates + validation in ONE block. Validation is variant-agnostic
+  // Geprüft — gates + validation in ONE block. Validation is variant-agnostic
   // (the gate keys off validation-pending, not the variant; stop.flow.guard
   // blocks a code-change card that omits it); gates follow the variant table.
   {
@@ -1655,7 +1667,7 @@ server.registerTool(
           method: z.string(),
           result: z.string(),
         })).optional(),
-      ).describe("Automated gates that ran — rendered on ONE line under **Belegt** ('npm test → 1460 grün · eslint → sauber'). Keep method ≤ 40 and result ≤ 60 characters; state numbers, not prose. Non-green or skipped gates belong here too ('Codex-Review → übersprungen — Limit')."),
+      ).describe("Automated gates that ran — rendered on the header line(s) under **Geprüft** ('npm test → 1460 grün · eslint → sauber'). Keep method ≤ 40 and result ≤ 60 characters; state numbers, not prose. Non-green or skipped gates belong here too ('Codex-Review → übersprungen — Limit')."),
       state: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({

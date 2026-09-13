@@ -20,7 +20,7 @@ Sections within a block may be omitted per variant rules — but the block order
 ```
 ┌─────────────────────────────────────────────────────┐
 │  BLOCK A — What · Evidence · Your to-dos            │
-│  Title · Changes · Belegt (gates + validation)      │
+│  Title · Changes · Geprüft (gates + validation)     │
 │  Pending · User test · Deploy gate · TESTE · OFFEN  │
 ├─────────────────────────────────────────────────────┤
 │  BLOCK B — Where it landed · Budget                 │
@@ -54,16 +54,15 @@ All variables in `{{...}}`. Sections wrapped in `{{#if}}` are conditional per va
 ### **✨✨✨ {{summary ≤60}} ✨✨✨**
 
 {{#if changes}}
-> **Changes**
+> **Changes**{{#if more}} · +{{N}} weitere{{/if}}      ← the tail sits on the header, never as a 4th bullet
 > * {{3×: area ≤24 → description ≤90}}
-> * +{{N}} weitere            ← only when more than 3 were passed
 {{/if}}
 
 {{#if tests or validation}}
-> **Belegt** · {{gates: method ≤40 → result ≤60, joined by ·}}   ← or one bullet per gate when the line would exceed 110
-> * {{⚠️/❌ first}} {{requirement ≤70}} — {{evidence ≤100}}
+> **Geprüft** · {{gates: method ≤50 → result ≤60, joined by ·}}   ← wraps onto "· …" continuation lines above 110 chars, never bullets
+> * {{❌ unmet, then ⚠️ partial, first}} {{requirement ≤70}} — {{evidence ≤100}}
 > * ✅ {{requirement}} — {{evidence}}
-> * ✅ {{N}} weitere Anforderungen erfüllt                        ← met overflow beyond 3 visible
+> * ✅ {{N}} weitere erfüllt  /  ⚠️ {{N}} weitere offen · {{M}} weitere erfüllt   ← 3rd bullet summarises everything from the 4th item on
 {{/if}}
 
 {{#if user-test}}
@@ -118,10 +117,10 @@ visible as `…`.
 |-------|--------|----------|
 | summary | 60 chars | cut on word boundary, no ellipsis (it is a heading) |
 | changes[].area / .description | 24 / 90 | `…` |
-| changes | 3 items | `* +N weitere` / `* +N more` |
-| tests[].method / .result (inline) | 40 / 60 | `…`; whole line > 110 or > 3 gates → one bullet per gate (≤ 100 each, max 5) |
+| changes | 3 items | `· +N weitere` / `· +N more` on the header line |
+| tests[].method / .result | 50 / 60 | `…`; header line > 110 chars → further gates wrap onto `· …` continuation lines (max 5 gates), never bullets |
 | validation[].requirement / .evidence | 70 / 100 | `…` |
-| validation | 3 visible + all ⚠️/❌ (max 4) | `* ✅ N weitere Anforderungen erfüllt` (a single leftover is shown) |
+| validation | 3 bullets | from the 4th item on: 2 named (open first) + one summary bullet `✅ N weitere erfüllt` / `⚠️ N weitere offen · M weitere erfüllt` |
 | delivery.pr.title | 70 | `…` |
 | pending[].doing | 90 | `…` |
 | userFinalTest / open items | none | never cut — they are the user's to-do |
@@ -253,8 +252,9 @@ Warn          var.    "  ⚠ Pace!" or empty
 
 Bullet list (`*`), each bullet: `area → what happened`.
 **Max 3 bullets**, `area` ≤ 24 and description ≤ 90 characters — one visual
-line each. More than 3 renders an explicit `* +N weitere` tail instead of
-dropping silently. No nested bullets.
+line each. More than 3 renders an explicit `· +N weitere` tail on the header
+line (`**Changes** · +2 weitere`) instead of dropping silently — never as a
+fourth bullet. No nested bullets.
 
 **Both `area` AND description must be functional.** Keep the `area → description`
 pattern — it's the strength of this section. But both halves describe what the
@@ -295,25 +295,28 @@ is *about*), e.g. `Completion card`, `Ship pipeline`, `Branch cleanup`,
 | test-minimal | **Omit** |
 | aborted | **Optional** — only if work happened before abort |
 
-### Belegt — gates + validation (one block)
+### Geprüft — gates + validation (one block)
 
-`tests` and `validation` render as ONE block headed `**Belegt**` / `**Verified**`:
+`tests` and `validation` render as ONE block headed `**Geprüft**` / `**Verified**`:
 
 ```
-> **Belegt** · npm test → 1460 grün · eslint → sauber · Codex-Review → übersprungen — Limit
+> **Geprüft** · npm test → 1460 grün · eslint → sauber · Codex-Review → übersprungen — Limit
 > * ⚠️ Merge mit #365 semantisch korrekt — Konflikte komplementär gelöst, Suite grün
 > * ✅ Modus in der Sidebar sichtbar — set_session_title live geprüft, Konstante per Test gepinnt
-> * ✅ 2 weitere Anforderungen erfüllt
+> * ✅ 2 weitere erfüllt
 ```
 
 - **Gates** (`tests[]`) go on the header line, `method → result` joined by `·`.
   State numbers, not prose (`1460 grün`, `2 Flakes`), and list non-green or
-  skipped gates too. When the line would exceed 110 characters or more than 3
-  gates ran, each gate becomes its own bullet instead.
-- **Validation** (`validation[]`) follows as bullets, `⚠️ partial` and `❌ unmet`
-  **first**, then `✅ met`. Three bullets are visible (plus every ⚠️/❌, max 4);
-  further met items collapse into `✅ N weitere Anforderungen erfüllt`.
-  Requirement ≤ 70, evidence ≤ 100 characters — the long form goes in the PR.
+  skipped gates too. Above 110 characters the remaining gates wrap onto
+  continuation lines that start with `· ` — they never become bullets.
+- **Validation** (`validation[]`) follows as bullets, `❌ unmet` and `⚠️ partial`
+  **first**, then `✅ met`. **Never more than three bullets:** up to three items
+  render as three bullets; from the fourth item on, two are named and the third
+  bullet summarises the rest — `✅ N weitere erfüllt`, or
+  `⚠️ N weitere offen · M weitere erfüllt` when open items remain (so an unmet
+  requirement never vanishes). Requirement ≤ 70, evidence ≤ 100 characters —
+  the long form goes in the PR.
 
 | Variants | Gates | Validation |
 |----------|-------|------------|
@@ -763,7 +766,7 @@ else                                             → fallback (8)
 3. Section headers use **bold** (`**Changes**`), not markdown headings.
 4. CTA line uses `##` heading for visual weight.
 5. Title icon (`✨✨✨`) is fixed — variant is distinguished via CTA icon.
-6. Bullet items use `*`, plain text. Max 3 per section, one visual line each (§ Budgets).
+6. Bullet items use `*`, plain text. **Never more than 3 per block**, one visual line each (§ Budgets) — overflow goes on the header line (Changes) or into a summary bullet (Geprüft).
 7. Content in user's language. Status words (SHIPPED, READY, etc.) stay English.
 8. Factual — no commentary, praise, or filler.
 9. Omit sections that don't apply (don't render empty).
