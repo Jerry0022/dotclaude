@@ -1,6 +1,6 @@
 ---
 name: claude-batch
-version: 0.4.0
+version: 0.5.0
 description: >-
   Collect mode — batch prompts into one master plan instead of executing them one by one. While active, a UserPromptSubmit hook blocks each prompt (it never reaches the model, costing nothing) and appends it to `.claude/batch.md`; a configurable execute marker fires the merge, where the whole note set becomes ONE feasibility-checked plan. Purpose: avoid the rework of building for prompt 1 what prompt 5 supersedes, and avoid paying a full turn per observation. Triggers on "/claude-batch", "sammelmodus", "collect mode", "batch mode", "erstmal sammeln", "nicht sofort umsetzen". Do NOT trigger for normal work, for backlog execution (/run-backlog), or for issue creation (/setup-issue).
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
@@ -19,16 +19,33 @@ Silently check (do not surface "not found"):
 
 ## Step 1 — Route the invocation
 
-`$ARGUMENTS` decides the branch. No argument → **status**.
+`$ARGUMENTS` decides the branch. No argument → **activate** when the mode is
+off, **status** when it is already on.
 
 | Argument | Branch |
 |---|---|
+| none | Mode off → Step 2 (activate). Mode on → Step 3 (report). The bare invocation IS the request to collect — nobody types `/claude-batch` to be told the mode is off |
 | `on`, `an`, `start` | Step 2 (activate) |
 | `off`, `aus`, `stop` | Step 5 (deactivate) |
 | `go`, `los`, `merge` | Step 4 (fire) |
 | `marker` | Step 2.1 (ask again, overwrite the stored marker) |
-| `status`, none | Step 3 (report) |
+| `status` | Step 3 (report) |
+| `help`, `hilfe`, `?` | Step 6 (print the long-form help, nothing else) |
 | *anything else* (free text) | **Content fallback** — the whole argument is a note: activate the mode if it is off (Step 2, including the marker question), file the text verbatim as note #1 (Step 2.4), report the count |
+
+**Activation ends ON.** After Step 2 — marker question included — the mode is
+running and the user's next prompt is collected. Never end the activating turn
+with "type `/claude-batch on` to start": that is the turn they just spent, and
+it is why they invoked the skill in the first place.
+
+**While the mode is on, the hook absorbs a re-activation.** `/claude-batch`,
+`/claude-batch on`, `/claude-batch <text>` and `/claude-batch help` are blocked
+by `prompt.batch.collect.js` (`classify` → `rearm`): free text becomes a note,
+`help` prints `renderHelp`, and otherwise the user sees the mode summary
+(`renderModeSummary`) instead of paying a turn.
+You only see such an invocation when it carried an attachment — then it is the
+content fallback, filed per Step 2.6. `off`, `go`, `status` and `marker` always
+reach you.
 
 The content fallback is not an error path. `/claude-batch <Gedanke>` is the
 most natural thing a user types who has never switched the mode on, and until
@@ -77,11 +94,17 @@ marker, it does not activate the mode:
 
 > header: "Marker"
 > question: "Womit sagst du mir, dass ein Prompt NICHT gesammelt, sondern
-> bearbeitet werden soll? Alles ohne dieses Zeichen wird ab jetzt gesammelt."
-> Options (fixed order):
-> 1. `>>` am Zeilenanfang (empfohlen) — kurz, visuell eindeutig, kollidiert mit nichts
-> 2. `los:` am Zeilenanfang — ausgeschrieben, praktisch nie versehentlich getippt
-> 3. `jetzt:` am Zeilenanfang — wie ein Zuruf, mit Doppelpunkt eindeutig
+> bearbeitet werden soll? Alles ohne dieses Zeichen am Zeilenanfang wird ab
+> jetzt gesammelt. Hinter dem Marker darf Text stehen — der gilt als Anweisung
+> für die nächste Phase."
+> Options (fixed order — `MARKER_SUGGESTIONS` in `batch-state.js`):
+> 1. `>>` (empfohlen) — kurz, visuell eindeutig, kollidiert mit nichts
+> 2. `>go` — lesbar, ein Zeichen mehr, kein Doppelpunkt
+> 3. `>start` — ausgeschrieben, praktisch nie versehentlich getippt
+
+All three are English and colon-free: the marker is typed dozens of times per
+session, and a colon reads as a label rather than a switch. The user's own
+answer via "Sonstiges" may be anything `validateMarker` accepts.
 
 **`!`, `/`, `#` and `@` cannot be the first character of a marker.** The harness
 claims those before a prompt exists — `!` opens bash mode and runs the line as a
@@ -131,6 +154,12 @@ CTA while the mode is armed. Both tools exist only in the Desktop app: in a
 terminal session, an unattended run, or on any failure, skip silently — no
 retry, no note, no fallback. The rename is a courtesy, never a gate.
 
+**Re-arming keeps the queue.** `activate` only writes the mode file;
+`.claude/batch.md` is untouched. So `/claude-batch on` after an auto-end
+(expiry, note cap) or after `off` continues the same collection — say the
+existing note count in the confirmation instead of pretending it starts empty.
+The notes end only with the merge (Step 4.7, archived).
+
 **2.3 Register the notes file in the git exclude** (machine state, not a project
 decision — never `.gitignore`):
 
@@ -162,14 +191,25 @@ losing a requirement. Skip this step silently when the invocation was bare.
 If the activating prompt carried an attachment, follow Step 2.6 for it in the
 same note.
 
-**2.5 Confirm in one short block** — the marker, where notes land, both exits,
-and (when 2.4 ran) that the first note is already stored, with the count. Then
-render an `analysis` completion card **with `cwd` set to the project root**:
-the card reads `.claude/batch-mode.json` itself and swaps its CTA for
-`📥 BATCH sammelt. {n} Notizen · nächster Prompt wird Notiz #{n+1} · "{marker}"
-löst aus — ich WARTE`. Nothing else to pass; without `cwd` the card cannot see
-the mode and ends on a CTA that invites the next prompt as if it would be
-worked on.
+**2.5 Confirm with the mode summary — verbatim, nothing else.** Print it and
+relay the output unchanged as the whole confirmation:
+
+```bash
+node -e "console.log(require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').describeMode(process.cwd()))"
+```
+
+It is the same block the hook shows on every collected prompt and on an
+absorbed re-activation, so the user learns one text: what happens to a prompt
+now, how to fire (`<marker> <text>` or `/claude-batch go` — main is merged in
+first), how to only stop (`/claude-batch off`), and the auto-end bounds. When
+2.4 ran, the note count in its first line already says the first note is
+stored. Do not paraphrase it, do not add a second explanation, and do not tell
+the user to switch the mode on — it is on. Then render an `analysis` completion
+card **with `cwd` set to the project root**: the card reads
+`.claude/batch-mode.json` itself and swaps its CTA for `📥 BATCH sammelt. {n}
+Notizen · nächster Prompt wird Notiz #{n+1} · "{marker}" löst aus — ich WARTE`.
+Nothing else to pass; without `cwd` the card cannot see the mode and ends on a
+CTA that invites the next prompt as if it would be worked on.
 
 **2.6 Attachments are filed by you, because only you can see them.** This is a
 standing rule for the whole collection window, not a one-off part of activation:
@@ -230,6 +270,26 @@ injects the notes, because everything after it — plan approval, answers to you
 questions, course corrections — is the conversation *about* the implementation.
 Collecting those would block and erase exactly the prompts the work depends on.
 Treat the mode as OFF for the rest of this turn and all following ones.
+
+**4.0 Bring main into the branch BEFORE reading a single note.** The notes were
+written against the state the branch had when collection started — often hours
+ago, while main moved on. Checking feasibility against that base is how a merged
+plan rebuilds what main already has or collides with it at ship time.
+
+- Marker path: the hook already ran `scripts/git-sync.js` synchronously and
+  injected the result as "SCHRITT 0". Read it first. A `⚠` / `✗` line is a
+  conflict or failure — resolve it (merge-safety.md: never `--ours`/`--theirs`)
+  before Step 4.1. "Der Sync konnte im Hook nicht laufen" means: run it yourself
+  now.
+- `/claude-batch go` path: run it yourself, synchronously, and report the line:
+
+  ```bash
+  node "{PLUGIN_ROOT}/scripts/git-sync.js"
+  ```
+
+  Silent output = nothing to merge (or on main / no remote). Say so in one
+  clause. It merges the parent chain (`origin/main` → … → this branch); it
+  never rebases and never touches main itself.
 
 **4.1 Read every note.** `.claude/batch.md`, verbatim. Notes are the user's own
 words — never paraphrase them away before analysing. When the injected context
@@ -323,6 +383,19 @@ skip silently outside the Desktop app.
 If notes remain, say how many and that they survive in `.claude/batch.md` for a
 later `/claude-batch go`. Never discard them on deactivation.
 
+## Step 6 — Help
+
+The long form of the mode summary: A) what the user does, step by step, and
+B) what Claude does at each of those steps. Print it and relay it verbatim —
+no additions, no activation, no status:
+
+```bash
+node -e "const B=require('{PLUGIN_ROOT}/hooks/lib/batch-state.js');console.log(B.renderHelp({marker:B.effectiveMarker(process.cwd())}))"
+```
+
+While the mode is on, the hook prints the same text itself and you never see
+the invocation.
+
 ## Optional — local compaction
 
 When the `local-llm` plugin is installed AND AnythingLLM answers, the notes may
@@ -363,6 +436,12 @@ The dependency is soft. Resolve the plugin path and skip silently if absent —
   very turn that starts it, and it is how the marker dialog gets skipped.
 - **Never resolve a contradiction silently.** Name it, then decide.
 - **Never delete notes.** Archive them.
+- **Activation ends with the mode ON.** The invocation is the request; never
+  ask the user to send `/claude-batch on` afterwards. A re-activation while
+  collecting is absorbed by the hook (`rearm`), never a turn.
+- **Firing starts with main.** Step 4.0 runs before any note is judged — on the
+  marker path the hook did it, on the `go` path you do. A plan built on a stale
+  branch is not a plan.
 - **A question in the queue is a defect, not content.** If a note is clearly a
   question the user expected an answer to, answer it first, then continue with
   the merge.
