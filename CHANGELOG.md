@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.160.1] — 2026-09-13
+
+### Fixed
+
+- **The auto-graph build never crawls anything but a project.** A session whose cwd was the home directory ran the SessionStart refresh, and `graphify update .` spent hours walking the whole profile — AppData, every checkout on the machine — at 3.8 GB RSS and ~5 CPU-hours, twice in parallel, with RAM at 92 % and the disk thrashing under it. `bgWithSentinel` (the chokepoint every build spawn passes through) now refuses any cwd that is not inside a git work tree, or whose work tree root is the home directory itself (a dotfiles repo in `~` is not a project); `ss.graphify` exits before the transparency line, the install kick or any throttle token for such a cwd. The refusal is not a "decline" in the #291 sense — an ineligible cwd is never reported as starved. Manual `graphify update .` is unchanged.
+- **A long build keeps its lock.** `updateInFlight` treats a lock stamp older than 45 min as dead before it asks whether the pid is alive — the only defence against a recycled pid — so a build that legitimately ran longer lost its lock and a second `graphify update .` started on the same cwd, overwriting the lock with its own pid (that is how the two home-directory crawls stacked). The detached `--bg-run` runner now re-stamps its own lock every 5 min while the child runs (`DOTCLAUDE_GRAPH_HEARTBEAT_MS` for tests), so "stale" means "no heartbeat for 45 min" — a crashed runner or a recycled pid, never a long build. On exit it releases only a lock that still names its pid; before, a finishing runner unlinked whatever lock sat at the path, a successor's included.
+- **The test suite no longer launches the real indexer.** `pre.tokens.guard.graphgate.test.js` spawned the hook with the machine's PATH, so every "refresh kicked" case started `graphify update .` against a temp dir the test deleted moments later — 458 `fail:1` sentinels and ~7,500 orphaned fixture dirs in the temp dir, plus a Python interpreter boot per case during every `npm test` and `/ship`. The hooks now spawn `DOTCLAUDE_GRAPHIFY_BIN` when set (also the answer when uv installs the CLI off PATH), the test points it at an exit-0 stub, and the build sentinel lives beside the update locks (`DOTCLAUDE_GRAPHLOCK_DIR`), so an isolated test leaves nothing behind.
+
 ## [0.160.0] — 2026-09-13
 
 ### Fixed
