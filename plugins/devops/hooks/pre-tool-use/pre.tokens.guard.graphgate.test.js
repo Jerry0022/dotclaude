@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { describe, test, expect, beforeEach, afterEach, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -34,9 +34,28 @@ const NOW = new Date();
 const HOME_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "graphgate-home-"));
 fs.mkdirSync(path.join(HOME_DIR, ".claude"), { recursive: true });
 
+// The hook under test spawns a REAL detached `graphify update .` whenever it
+// decides to self-heal. Left on the real binary, every "refresh kicked" case
+// below launched the Python indexer against a temp dir that the test deleted
+// moments later — hundreds of `fail:1` sentinels in the machine's temp dir, and
+// a fresh interpreter boot per test. Point the hook at an exit-0 stub instead
+// (DOTCLAUDE_GRAPHIFY_BIN): the spawn path stays real, the indexer never runs.
+const STUB_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "graphgate-stub-"));
+const GRAPHIFY_STUB = process.platform === "win32"
+  ? path.join(STUB_DIR, "graphify.cmd")
+  : path.join(STUB_DIR, "graphify");
+fs.writeFileSync(GRAPHIFY_STUB, process.platform === "win32" ? "@exit /b 0\r\n" : "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+
+afterAll(() => {
+  for (const d of [STUB_DIR, HOME_DIR]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
+});
+
 // Build a temp project. graph:"fresh"|"stale"|"none", consent:true|false|null.
 function project({ consent, graph }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "graphgate-"));
+  // A git work tree — the auto-build refuses anything else (see
+  // graphify-state isProjectDir), and these tests exercise the refresh path.
+  fs.mkdirSync(path.join(dir, ".git"));
   fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
   // Enable the plugin so plugin-guard does not short-circuit.
   fs.writeFileSync(
@@ -72,7 +91,7 @@ function runGrep(dir, sid, pattern, homeDir = HOME_DIR) {
     cwd: dir,
     input: JSON.stringify({ tool_name: "Grep", tool_input: { pattern }, session_id: sid }),
     encoding: "utf8",
-    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir, DOTCLAUDE_GRAPHIFY_BIN: GRAPHIFY_STUB },
   });
   return { status: res.status, stderr: res.stderr || "" };
 }

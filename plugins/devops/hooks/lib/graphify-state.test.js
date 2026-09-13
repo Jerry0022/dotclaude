@@ -34,10 +34,31 @@ import {
   declineCountPath,
   noteDecline,
   clearDeclines,
+  isProjectDir,
+  findRepoRoot,
+  graphifyBin,
+  refreshUpdateLockFile,
+  clearUpdateLockFile,
+  lockBaseDir,
 } from "./graphify-state.js";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
+const GSTATE_JS = fileURLToPath(new URL("./graphify-state.js", import.meta.url));
+
+// A disposable PROJECT dir: bgWithSentinel refuses to build anywhere that is not
+// inside a git work tree (a session started in $HOME once crawled the whole home
+// directory for hours), so every fixture that expects a spawn carries a `.git`
+// marker. The marker is inert for the consent/flag tests that share this helper.
 function tmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "gstate-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-"));
+  fs.mkdirSync(path.join(dir, ".git"));
+  return dir;
+}
+
+/** A disposable NON-project dir (no `.git` anywhere up to the temp root). */
+function tmpBare() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "gstate-bare-"));
 }
 
 describe("consent record", () => {
@@ -629,7 +650,7 @@ describe("globalUpdatesInFlight / machine-wide cap", () => {
     process.env.DOTCLAUDE_GRAPH_MAX_BUILDS = "2";
     writeUpdateLock("/proj/a", process.pid); // 1 live < cap 2
     const okCmd = process.platform === "win32" ? "ver" : "true";
-    const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-fresh-"));
+    const fresh = tmp(); // a project (carries .git) — a bare dir is refused before the cap is even consulted
     expect(bgWithSentinel(okCmd, [], fresh)).toBe(true);
     // let it settle so the detached runner clears its own lock before teardown
     const start = Date.now();
@@ -716,5 +737,249 @@ describe("decline bookkeeping — a permanently starved project is visible", () 
     expect(globalUpdatesInFlight()).toBeGreaterThanOrEqual(updateGlobalCap());
     expect(bgWithSentinel("ver", [], d)).toBe(false);
     expect(declineCount(d)).toBe(1);
+  });
+});
+
+// ── auto-build eligibility: only ever crawl a project ────────────────────────
+// Regression guard for the home-directory crawl: a session whose cwd was $HOME
+// ran the SessionStart refresh, and `graphify update .` spent hours (3+ GB RSS,
+// ~5 CPU-hours) walking AppData, every checkout on the machine and everything
+// else under the profile. The build is only ever meaningful inside a git work
+// tree, and the home directory is never one for this purpose — even when it is
+// itself a dotfiles repo.
+describe("isProjectDir / findRepoRoot — auto-build eligibility", () => {
+  let origHome, origUserProfile, fakeHome;
+  beforeEach(() => {
+    origHome = process.env.HOME;
+    origUserProfile = process.env.USERPROFILE;
+    fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-home-"));
+    process.env.HOME = fakeHome;
+    process.env.USERPROFILE = fakeHome;
+  });
+  afterEach(() => {
+    if (origHome === undefined) delete process.env.HOME; else process.env.HOME = origHome;
+    if (origUserProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = origUserProfile;
+    try { fs.rmSync(fakeHome, { recursive: true, force: true }); } catch {}
+  });
+
+  test("a dir with no .git anywhere above it is not a project", () => {
+    const d = tmpBare();
+    expect(findRepoRoot(d)).toBeNull();
+    expect(isProjectDir(d)).toBe(false);
+  });
+
+  test("a git checkout is a project, and so is any subdirectory of it", () => {
+    const root = tmp(); // carries .git
+    const sub = path.join(root, "src", "deep");
+    fs.mkdirSync(sub, { recursive: true });
+    expect(findRepoRoot(sub)).toBe(root);
+    expect(isProjectDir(root)).toBe(true);
+    expect(isProjectDir(sub)).toBe(true);
+  });
+
+  test("a linked worktree (.git is a FILE, not a dir) is a project", () => {
+    const d = tmpBare();
+    fs.writeFileSync(path.join(d, ".git"), "gitdir: /somewhere/.git/worktrees/x\n");
+    expect(isProjectDir(d)).toBe(true);
+  });
+
+  test("the home directory is never a project — not even as a dotfiles repo", () => {
+    expect(isProjectDir(fakeHome)).toBe(false);
+    fs.mkdirSync(path.join(fakeHome, ".git"));
+    expect(isProjectDir(fakeHome)).toBe(false);
+    // A subdir whose nearest repo root IS the home dir inherits the refusal.
+    const docs = path.join(fakeHome, "Documents");
+    fs.mkdirSync(docs);
+    expect(isProjectDir(docs)).toBe(false);
+  });
+
+  test("garbage input is not a project (never throws)", () => {
+    expect(isProjectDir("")).toBe(false);
+    expect(isProjectDir(null)).toBe(false);
+    expect(isProjectDir(path.join(os.tmpdir(), "does-not-exist-" + Date.now()))).toBe(false);
+  });
+});
+
+describe("bgWithSentinel — refuses to build outside a project", () => {
+  let origLockDir, isoDir;
+  beforeEach(() => {
+    origLockDir = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    isoDir = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-proj-iso-"));
+    process.env.DOTCLAUDE_GRAPHLOCK_DIR = isoDir;
+  });
+  afterEach(() => {
+    try { fs.rmSync(isoDir, { recursive: true, force: true }); } catch {}
+    if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
+  });
+
+  test("non-project cwd → no spawn, no lock, no sentinel, and NOT a 'decline' either", () => {
+    const d = tmpBare();
+    // Pre-seed a sentinel: a real spawn unlinks it first — surviving means no spawn.
+    fs.writeFileSync(sentinelPath(d), "ok");
+    expect(bgWithSentinel("node", ["-e", "process.exit(0)"], d)).toBe(false);
+    expect(fs.existsSync(sentinelPath(d))).toBe(true);
+    expect(fs.existsSync(updateLockPath(d))).toBe(false);
+    // Ineligible is not starved: the decline streak (issue #291 reporting) must
+    // not count a cwd that can never build.
+    expect(declineCount(d)).toBe(0);
+    clearSentinel(d);
+  });
+});
+
+// ── update-lock heartbeat: a live long build must stay "in flight" ──────────
+// Regression guard for the double build: updateInFlight() treats a lock older
+// than the 45-min stale window as dead WITHOUT consulting the pid, so a build
+// that legitimately ran longer (the home-directory crawl took hours) lost its
+// lock and a second `graphify update .` started on the same cwd, overwriting
+// the lock with its own pid. The runner now refreshes its lock stamp while the
+// child runs, so "stale" means "no heartbeat for 45 min" — a crashed runner or
+// a recycled pid — never merely "a long build".
+describe("update-lock heartbeat — refreshUpdateLockFile / clearUpdateLockFile", () => {
+  let dir;
+  beforeEach(() => { dir = tmpBare(); });
+  afterEach(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  test("owned lock → stamp refreshed, pid kept, reports 'owned'", () => {
+    const lock = path.join(dir, "x.lock");
+    const old = Date.now() - 60 * 60 * 1000;
+    fs.writeFileSync(lock, JSON.stringify({ pid: 4242, ts: old }));
+    expect(refreshUpdateLockFile(lock, 4242)).toBe("owned");
+    const after = JSON.parse(fs.readFileSync(lock, "utf8"));
+    expect(after.pid).toBe(4242);
+    expect(after.ts).toBeGreaterThan(old);
+  });
+
+  test("foreign lock → untouched, reports 'foreign'", () => {
+    const lock = path.join(dir, "x.lock");
+    const body = JSON.stringify({ pid: 1, ts: 123 });
+    fs.writeFileSync(lock, body);
+    expect(refreshUpdateLockFile(lock, 4242)).toBe("foreign");
+    expect(fs.readFileSync(lock, "utf8")).toBe(body);
+  });
+
+  test("missing or corrupt lock → nothing written, reports 'missing'", () => {
+    const lock = path.join(dir, "x.lock");
+    expect(refreshUpdateLockFile(lock, 4242)).toBe("missing");
+    expect(fs.existsSync(lock)).toBe(false);
+    fs.writeFileSync(lock, "{not json");
+    expect(refreshUpdateLockFile(lock, 4242)).toBe("missing");
+  });
+
+  test("clearUpdateLockFile removes an owned lock but never a foreign one", () => {
+    const lock = path.join(dir, "x.lock");
+    fs.writeFileSync(lock, JSON.stringify({ pid: 4242, ts: Date.now() }));
+    expect(clearUpdateLockFile(lock, 4242)).toBe(true);
+    expect(fs.existsSync(lock)).toBe(false);
+    fs.writeFileSync(lock, JSON.stringify({ pid: 1, ts: Date.now() }));
+    expect(clearUpdateLockFile(lock, 4242)).toBe(false);
+    expect(fs.existsSync(lock)).toBe(true);
+    expect(clearUpdateLockFile(lock, 1)).toBe(true); // the owner may
+    expect(clearUpdateLockFile(lock, 1)).toBe(false); // absent → no-op, no throw
+  });
+});
+
+describe("update-lock heartbeat — the --bg-run runner keeps its lock fresh", () => {
+  const POLL_MS = 25;
+  const waitUntil = async (pred, timeoutMs = 30000) => {
+    const start = Date.now();
+    while (!pred()) {
+      if (Date.now() - start > timeoutMs) return false;
+      await new Promise((r) => setTimeout(r, POLL_MS));
+    }
+    return true;
+  };
+  const readLock = (p) => { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; } };
+
+  let origLockDir, origHb, isoDir;
+  beforeEach(() => {
+    origLockDir = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    origHb = process.env.DOTCLAUDE_GRAPH_HEARTBEAT_MS;
+    isoDir = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-hb-iso-"));
+    process.env.DOTCLAUDE_GRAPHLOCK_DIR = isoDir;
+    process.env.DOTCLAUDE_GRAPH_HEARTBEAT_MS = "100"; // inherited by the runner
+  });
+  afterEach(() => {
+    try { fs.rmSync(isoDir, { recursive: true, force: true }); } catch {}
+    if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
+    if (origHb === undefined) delete process.env.DOTCLAUDE_GRAPH_HEARTBEAT_MS;
+    else process.env.DOTCLAUDE_GRAPH_HEARTBEAT_MS = origHb;
+  });
+
+  test("a live build older than the stale window is back 'in flight' after one heartbeat", async () => {
+    const d = tmp();
+    const lock = updateLockPath(d);
+    // A child that outlives several heartbeats: the shape of a long build.
+    expect(bgWithSentinel("node", ["-e", "setTimeout(()=>{},2500)"], d)).toBe(true);
+    const { pid } = readLock(lock);
+    // Age the stamp past the stale window — exactly what wall-clock did to the
+    // real 3-hour build. Without a heartbeat this is where the second build slipped in.
+    fs.writeFileSync(lock, JSON.stringify({ pid, ts: Date.now() - 46 * 60 * 1000 }));
+    expect(updateInFlight(d)).toBe(false);
+    expect(await waitUntil(() => { const l = readLock(lock); return !!l && l.pid === pid && Date.now() - l.ts < 45 * 60 * 1000; })).toBe(true);
+    expect(updateInFlight(d)).toBe(true); // the live runner re-asserted its lock
+    // …and still releases it when the child exits.
+    expect(await waitUntil(() => readSentinel(d) !== null)).toBe(true);
+    expect(await waitUntil(() => !fs.existsSync(lock), 10000)).toBe(true);
+    clearSentinel(d);
+    try { fs.rmSync(d, { recursive: true, force: true }); } catch {}
+  }, 40000);
+
+  test("the runner never refreshes or removes a lock another runner owns", async () => {
+    const d = tmp();
+    const lock = updateLockPath(d);
+    const sentinel = sentinelPath(d);
+    // Seed a foreign live lock (this very process poses as the other runner),
+    // then start a runner DIRECTLY for the same cwd — bypassing bgWithSentinel,
+    // which would rightly decline. This is the shape of the overwrite bug's
+    // aftermath: two runners, one lock file.
+    const foreign = JSON.stringify({ pid: process.pid, ts: Date.now() });
+    fs.writeFileSync(lock, foreign);
+    const runner = spawn(process.execPath, [GSTATE_JS, "--bg-run", sentinel, lock, d, "node", "-e", "setTimeout(()=>{},600)"], {
+      cwd: d, stdio: "ignore", windowsHide: true,
+    });
+    const exited = new Promise((resolve) => runner.on("exit", resolve));
+    await exited;
+    expect(readSentinel(d)).toEqual({ status: "ok" }); // its own build ran fine
+    expect(fs.readFileSync(lock, "utf8")).toBe(foreign); // the foreign lock survived, byte for byte
+    clearSentinel(d);
+    fs.unlinkSync(lock);
+    try { fs.rmSync(d, { recursive: true, force: true }); } catch {}
+  }, 30000);
+});
+
+describe("state dir isolation — sentinel lives beside the locks", () => {
+  test("sentinelPath honors DOTCLAUDE_GRAPHLOCK_DIR like updateLockPath does", () => {
+    const orig = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    const iso = fs.mkdtempSync(path.join(os.tmpdir(), "gstate-sent-iso-"));
+    process.env.DOTCLAUDE_GRAPHLOCK_DIR = iso;
+    try {
+      const d = tmpBare();
+      expect(lockBaseDir()).toBe(iso);
+      expect(path.dirname(sentinelPath(d))).toBe(iso);
+      expect(path.dirname(updateLockPath(d))).toBe(iso);
+    } finally {
+      if (orig === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+      else process.env.DOTCLAUDE_GRAPHLOCK_DIR = orig;
+      try { fs.rmSync(iso, { recursive: true, force: true }); } catch {}
+    }
+  });
+});
+
+describe("graphifyBin — the build binary is overridable", () => {
+  test("defaults to the bare name; DOTCLAUDE_GRAPHIFY_BIN wins when set and non-empty", () => {
+    const orig = process.env.DOTCLAUDE_GRAPHIFY_BIN;
+    try {
+      delete process.env.DOTCLAUDE_GRAPHIFY_BIN;
+      expect(graphifyBin()).toBe("graphify");
+      process.env.DOTCLAUDE_GRAPHIFY_BIN = "";
+      expect(graphifyBin()).toBe("graphify");
+      process.env.DOTCLAUDE_GRAPHIFY_BIN = "/opt/tools/graphify-shim";
+      expect(graphifyBin()).toBe("/opt/tools/graphify-shim");
+    } finally {
+      if (orig === undefined) delete process.env.DOTCLAUDE_GRAPHIFY_BIN;
+      else process.env.DOTCLAUDE_GRAPHIFY_BIN = orig;
+    }
   });
 });

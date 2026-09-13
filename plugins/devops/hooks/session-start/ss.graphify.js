@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.graphify
- * @version 0.3.1
+ * @version 0.4.0
  * @event SessionStart
  * @plugin devops
  * @description graphify enforcement — install-check + auto-build wiring for the
@@ -10,6 +10,10 @@
  *   gstate.isEnabled/isDeclined, which read (never write) the per-project
  *   record at .claude/graphify.json and the global, machine-wide record at
  *   ~/.claude/graphify.json:
+ *     - cwd not a project (outside any git work tree, or the home directory
+ *       itself — a Desktop session with no folder, a terminal opened in `~`)
+ *       → exit 0 before anything else. `graphify update .` indexes everything
+ *       below the cwd; run from $HOME it crawled the whole profile for hours.
  *     - declined (either record has consent:false) → stay silent, exit 0.
  *     - enabled (INCLUDING no record at all — the default) →
  *         - surface any PREVIOUS background build failure as one line before
@@ -44,6 +48,7 @@
 require('../lib/plugin-guard');
 
 const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 const { runOnce, releaseOnce } = require('../lib/run-once');
@@ -90,8 +95,12 @@ function graphLooksValid() {
 
 function graphifyInstalled() {
   try {
+    const bin = gstate.graphifyBin();
+    // An explicit DOTCLAUDE_GRAPHIFY_BIN names the executable outright (PATH may
+    // not reach it — that is the point of the override); otherwise scan PATH.
+    if (path.isAbsolute(bin)) return fs.existsSync(bin);
     const { checkTool } = require('../../scripts/check-tool.js');
-    return checkTool('graphify').installed;
+    return checkTool(bin).installed;
   } catch {
     return false;
   }
@@ -115,6 +124,14 @@ function bg(cmd, args) {
   // graphify/uv process inherits no console and Windows gives it a visible one).
   // Fail-open inside the helper: a missing toolchain never degrades session start.
   gstate.bgWindowless(cmd, args, cwd);
+}
+
+// Not a project → nothing graphify-related happens here: no transparency line,
+// no install kick, no hook cleanup, no build. bgWithSentinel refuses such a cwd
+// anyway (defence in depth), but stopping here also keeps the 10-min throttle
+// token and the decline streak untouched for a cwd that can never qualify.
+if (!gstate.isProjectDir(cwd)) {
+  process.exit(0);
 }
 
 if (gstate.isDeclinedAnywhere(cwd)) {
@@ -164,7 +181,7 @@ if (!graphifyInstalled()) {
 // the uninstall is actually due — it must never gate every session (R7).
 // Guarded/fail-open: a missing toolchain here never degrades session start.
 if (runOnce('ss-graphify-hookuninstall', cwdKey) && isGitRepo()) {
-  bg('graphify', ['hook', 'uninstall']);
+  bg(gstate.graphifyBin(), ['hook', 'uninstall']);
 }
 
 // Once/24h deeper validity check (JSON.parse) beyond hasGraph()'s cheap size
@@ -182,7 +199,7 @@ const needsRebuild = !graphNudge.hasGraph(cwd)
 // concurrency at one build per project across all spawn triggers.
 if (needsRebuild && runOnce('ss-graphify-update', cwdKey, { cooldownMs: 10 * 60 * 1000 })) {
   // background, key-less, AST-only, free
-  const spawned = gstate.bgWithSentinel('graphify', ['update', '.'], cwd);
+  const spawned = gstate.bgWithSentinel(gstate.graphifyBin(), ['update', '.'], cwd);
   if (!spawned) {
     // The throttle token was consumed as a side effect of the condition above,
     // BEFORE bgWithSentinel got to decline (PID lock held, or the machine-wide
