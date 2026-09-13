@@ -102,6 +102,10 @@ must see their own language. The locale hint is authoritative.
 | `nav.summary_discarded`        | discarded                      | verworfen |
 | `nav.group_context`            | Context                        | Kontext |
 | `nav.group_variants`           | Variants                       | Varianten |
+| `nav.rounds_chip`              | Previous rounds                | Vorherige Runden |
+| `nav.archived`                 | archived                       | archiviert |
+| `nav.other_variants`           | Other variants                 | Weitere Varianten |
+| `nav.more_entries`             | more                           | weitere |
 | `variant.include`              | Include                        | Miteinbeziehen |
 | `variant.discard`              | Discard                        | Verwerfen |
 | `decision.comment_label`       | Note / override (optional)     | Notiz / Override (optional) |
@@ -146,9 +150,16 @@ must see their own language. The locale hint is authoritative.
 | `final.closeout_ship_no`       | No, leave it unreleased        | Nein, nicht releasen |
 | `final.closeout_ship_no_hint`  | The code stays as committed. You can ship later from the chat. | Der Code bleibt wie committed. Shippen geht später jederzeit im Chat. |
 | `final.closeout_choice_required` | Answer this one — it is the only step that reaches outside the repo. | Beantworte diese eine Frage — sie ist der einzige Schritt, der das Repo verlässt. |
-| `final.closeout_plan_q`        | This is what will happen:      | Das passiert dann: |
+| `final.closeout_plan_label`    | Selected:                      | Gewählt: |
 | `final.closeout_plan_warn`     | One click, all of it — including anything outward-facing. | Ein Klick, alles davon — inklusive allem was nach aussen geht. |
-| `final.closeout_execute`       | Run all of it                  | Alles ausführen |
+| `final.closeout_execute`       | Execute                        | Ausführen |
+| `final.closeout_next`          | Continue ›                     | Weiter › |
+| `final.closeout_progress`      | {n} of {total} answered        | {n} von {total} beantwortet |
+| `final.closeout_unanswered`    | unanswered                     | unbeantwortet |
+| `final.closeout_steps`         | {n} steps                      | {n} Schritte |
+| `final.closeout_label_files`   | This page                      | Diese Seite |
+| `final.closeout_summary_ship_yes` | ship                        | shippen |
+| `final.closeout_summary_ship_no` | no release                   | nicht releasen |
 | `final.closeout_running`       | Claude is working through it … | Claude arbeitet es ab … |
 | `final.closeout_done`          | Concept closed.                | Concept abgeschlossen. |
 | `final.closeout_stalled`       | Delivered, but Claude stopped answering. Nothing more can be sent from this page — check the chat. | Übermittelt, aber Claude antwortet nicht mehr. Von dieser Seite kann nichts mehr gesendet werden — schau in den Chat. |
@@ -326,8 +337,8 @@ the `[ui-locale: ...]` hint produced.
       <!-- PANEL ANATOMY. The aside is a flex column of exactly four children
            and only the second one scrolls (§ Decision Panel State CSS,
            "Panel anatomy"):
-             .panel-here        pinned   "Iteration 8 · aktiv"  › active TOC entry
-             .panel-nav-scroll  flex 1   iteration tabs + section TOC
+             .panel-here        pinned   "Iteration 8 (Variante)" · 🕘 chip+list
+             .panel-nav-scroll  flex 1   iteration tabs (hidden) + live TOC
              .panel-status      pinned   ONE status line (+ progress dots after submit)
              .panel-cta         pinned   #panel-ready | #panel-submitted | #panel-frozen | #panel-final-report
            The pin is structural (flex split), never position:sticky inside the
@@ -335,14 +346,45 @@ the `[ui-locale: ...]` hint produced.
            menu, however many rounds or TOC entries the page has, and the foot
            is the same ≤120px in the smallest and the largest case. -->
 
-      <!-- "You are here" — pinned head. [data-here-round] mirrors the selected
-           tab's label (showIteration), [data-here-section] the TOC entry under
-           the reading line (scroll spy, § Section Navigation). On a frozen tab
-           the compact "↩ zur Runde N" link appears next to it. -->
+      <!-- "You are here" — pinned head, FIRST line: [data-here-round] mirrors
+           the selected tab's label (showIteration), no "· aktiv"/"· active"
+           suffix on the live round (stripped from data-tab-label — the
+           authored chip text still carries it, see § Tab Switch JS), an
+           {{nav.archived}} marker on a frozen one, plus — ONLY when the
+           reading line sits inside a variant section — "(Variante)" appended
+           by updateHereRoundParenthesis. #panel-here-back (frozen rounds)
+           and the 🕘 rounds chip (count of PREVIOUS rounds, hidden when there
+           are none) sit at the right end of this SAME first line —
+           `margin-left: auto` on the back link is what pushes both there;
+           the chip follows it, tight against it. [data-here-section], the
+           "› TOC entry" sub-line, comes AFTER both (flex-basis 100% forces
+           it onto its own second line) — dropped entirely on the final
+           report. #panel-here-rounds-list (buildRoundsChip) forces a THIRD
+           line, only while unfolded. -->
       <div class="panel-here" id="panel-here">
         <span class="panel-here-round" data-here-round></span>
+        <!-- Right end of the FIRST line, as a group: the wrapper (not either
+             child) carries margin-left: auto, so the pair stays right-aligned
+             whether or not #panel-here-back is [hidden] (the live round has
+             no back link — the chip must not lose its right alignment then). -->
+        <span class="panel-here-right">
+          <button type="button" id="panel-here-back" class="link-btn panel-here-back" hidden></button>
+          <!-- 🕘 rounds chip — count of PREVIOUS rounds, hidden when there are
+               none (§ Section Navigation, buildRoundsChip). Click toggles
+               #panel-here-rounds-list, a plain non-persisted disclosure that
+               lists every previous round with its generated summary and an
+               "archived" tag; a row click switches to that round via the same
+               showIteration() path as an iteration tab. -->
+          <button type="button" id="panel-here-rounds" class="panel-here-rounds-btn" hidden
+                  aria-haspopup="true" aria-expanded="false" aria-controls="panel-here-rounds-list"
+                  title="{{nav.rounds_chip}}" aria-label="{{nav.rounds_chip}}">
+            <span aria-hidden="true">🕘</span> <span data-here-rounds-count></span>
+          </button>
+        </span>
         <span class="panel-here-section" data-here-section hidden></span>
-        <button type="button" id="panel-here-back" class="link-btn panel-here-back" hidden></button>
+        <div class="panel-here-rounds-list" id="panel-here-rounds-list" hidden role="list">
+          <!-- auto-populated by buildRoundsChip() -->
+        </div>
       </div>
 
       <div class="panel-nav-scroll">
@@ -355,19 +397,22 @@ the `[ui-locale: ...]` hint produced.
         <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}">
           <!--
           <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="false">Iteration 1</button>
-          <button class="iteration-tab" role="tab" data-iteration="2" aria-selected="true">Iteration 2 · active</button>
+          <button class="iteration-tab" role="tab" data-iteration="2" aria-selected="true">Iteration 2</button>
           -->
         </nav>
 
-        <!-- Section TOC — auto-populated from EVERY <section id="..."
+        <!-- Section TOC — auto-populated from EVERY top-level <section id="..."
              data-nav-label="..."> inside the active iteration, not just variants.
              Sections that carry a bi-state radio group (eval-{id}) display their
              current state label; plain sections (Ist-Zustand, Context, Design-Notes,
              etc.) just show the label and anchor-scroll on click.
-             It is declared here but LIVES inside the tab bar at runtime:
-             buildSectionNav() moves it directly after the aria-selected chip,
-             so the selected round is the one open node of the tree (Kompass,
-             § Section Navigation). -->
+             buildSectionNav() rebuilds it here — inside the scroll box, on its
+             own — on every load and every switch: it holds ONLY the live
+             round's TOC now, grouped around the selected variant when one is
+             unambiguous (its own sub-sections nested and open, every other
+             variant collapsed into one row) or the old flat/kind-grouped list
+             otherwise (Kompass, § Section Navigation). The other rounds live
+             in the pinned head's 🕘 rounds list, not here. -->
         <nav class="section-nav" id="section-nav" aria-label="{{nav.sections}}">
           <!-- auto-populated -->
         </nav>
@@ -519,46 +564,97 @@ the `[ui-locale: ...]` hint produced.
              on a live connection, which is the whole point of the persistent
              channel over a transient completion overlay). -->
         <div class="status-channel" id="status-channel">
-          <div class="status-channel__heading">{{final.status_heading}}</div>
-          <ol class="status-steps" aria-live="polite">
-            <li data-step="submitted" data-state="done">
-              <span class="step-icon" aria-hidden="true">✓</span>
-              <span class="step-label">{{panel.step_submitted}}</span>
-            </li>
-            <li data-step="received" data-state="done">
-              <span class="step-icon" aria-hidden="true">✓</span>
-              <span class="step-label">{{panel.step_received}}</span>
-            </li>
-            <li data-step="implemented" data-state="done">
-              <span class="step-icon" aria-hidden="true">✓</span>
-              <span class="step-label">{{panel.step_implemented}}</span>
-            </li>
-            <li data-step="ready" data-state="active">
-              <span class="step-icon" aria-hidden="true">●</span>
-              <span class="step-label">{{panel.step_ready}}</span>
-            </li>
-          </ol>
+          <!-- Folded to ONE line, ≤48px total (updateStatusChannelSummary()
+               fills #status-channel-summary from the SAME li's it summarises
+               — never a hard-coded string) — the full four-step recap opens
+               on click. The heading used to be its own div ABOVE the fold,
+               costing a whole extra line + margin every time; it now sits
+               INLINE at the start of the one summary line instead — a live
+               check measured the channel at 99px folded that way, well past
+               the 48px this needs to leave `.closeout-rows` (§ below) enough
+               height for its four row heads. Reuses .status-detail (§
+               Two-Button Submit) rather than a second pattern: same
+               summary/marker/steps CSS, never `hidden` here (it must always
+               be visible, just collapsed). -->
+          <details class="status-detail status-channel-detail">
+            <summary class="status-detail-row">
+              <span class="status-channel-heading">{{final.status_heading}}</span>
+              <span class="status-channel-summary-text" id="status-channel-summary"></span>
+            </summary>
+            <ol class="status-steps" aria-live="polite">
+              <li data-step="submitted" data-state="done">
+                <span class="step-icon" aria-hidden="true">✓</span>
+                <span class="step-label">{{panel.step_submitted}}</span>
+              </li>
+              <li data-step="received" data-state="done">
+                <span class="step-icon" aria-hidden="true">✓</span>
+                <span class="step-label">{{panel.step_received}}</span>
+              </li>
+              <li data-step="implemented" data-state="done">
+                <span class="step-icon" aria-hidden="true">✓</span>
+                <span class="step-label">{{panel.step_implemented}}</span>
+              </li>
+              <li data-step="ready" data-state="active">
+                <span class="step-icon" aria-hidden="true">●</span>
+                <span class="step-label">{{panel.step_ready}}</span>
+              </li>
+            </ol>
+          </details>
         </div>
 
-        <!-- Close-out sheet. Every question at once, in the order Claude
-             executes them, with the plan of consequences directly above the
-             one button that runs them. It replaced a four-step wizard
-             (Weiter/Zurück, counter, review screen): each "Weiter" looked
-             like it might already have done something, and the consequence
-             list — the thing that licenses the single irreversible click —
-             was hidden three steps deep.
-             The data-plan-* attributes carry localised strings into the
-             JS-rendered plan; the JS itself never hard-codes user-facing
-             text. -->
+        <!-- Close-out sheet: an ACCORDION of answerable rows, one open at a
+             time, plus the live plan and a single button. It replaced both
+             the original four-buttons-at-once panel AND a four-step wizard
+             (Weiter/Zurück, counter, review screen) that fixed the ordering
+             but buried the consequence list three steps deep and made every
+             "Weiter" look like it might already have committed something.
+             Each row collapses to ONE line — ○/✓ marker, icon (native title +
+             aria-label), short label, current-answer summary — and expands on
+             click; opening one row closes the others (openCloseoutRow()).
+             "Answered" means the row was opened and confirmed via the single
+             #closeout-execute button below (closeoutButtonClick() /
+             advanceCloseout()), never a per-row control: a pre-selected
+             default may stand as-is, confirming just means the user looked.
+             The button reads "Weiter ›" until every visible row is answered,
+             then transforms into the warning-coloured "⚠ Ausführen" that
+             submits `finalize` — never two buttons, never "Alles ausführen".
+             The plan sits BELOW the button (§ below) and re-renders on every
+             change. The data-plan-*/data-label-* attributes carry localised
+             strings into the JS; the JS itself never hard-codes user-facing
+             text. Row-answered state is mirrored to sessionStorage
+             (closeoutStorageKey(), keyed by STORAGE_KEY + iteration) so a
+             reload within the session does not re-ask already-answered rows —
+             never localStorage, which stays reserved for the (data-no-persist)
+             route/ship radios' deliberate reset. -->
         <div id="closeout-sheet" class="closeout-sheet"
              data-plan-issues="{{final.plan_issues}}"
              data-plan-implement="{{final.plan_implement}}"
              data-plan-ship="{{final.plan_ship}}"
-             data-plan-close="{{final.plan_close}}">
+             data-plan-close="{{final.plan_close}}"
+             data-label-progress="{{final.closeout_progress}}"
+             data-label-unanswered="{{final.closeout_unanswered}}"
+             data-label-ship-yes="{{final.closeout_summary_ship_yes}}"
+             data-label-ship-no="{{final.closeout_summary_ship_no}}"
+             data-label-steps="{{final.closeout_steps}}">
           <div class="closeout-head">
             <strong class="closeout-title">{{final.closeout_heading}}</strong>
+            <span class="closeout-progress" id="closeout-progress" aria-live="polite"></span>
           </div>
 
+          <!-- The rows region — every accordion head plus whichever ONE body
+               is open. `flex: 1 1 auto; min-height: 0` + its own overflow-y
+               (§ CSS) is what keeps #closeout-execute pinned below it: on the
+               close-out sheet's own history a hand-offs row with a full list
+               open pushed the button off a 768px/900px viewport, the exact
+               "viel Scrollen, Button nicht an der gleichen Stelle" complaint
+               this fixes. Every head inside is `position: sticky` on BOTH
+               `top` and `bottom` (offsets set per visible block by
+               layoutCloseoutRowHeads(), § JS) — a fixed pixel/percentage
+               floor on this region either squeezed the pinned foot below the
+               fold or still only fit one head at a time with a body open;
+               sticky-both-edges keeps all four heads visible regardless of
+               how little height the region actually gets. -->
+          <div class="closeout-rows" id="closeout-rows">
           <!-- Block 1 (conditional) — the still-open points, one row each,
                three routes per row. Rendered from the [data-open-questions]
                checkboxes in the report body, which stay the single source of
@@ -569,44 +665,57 @@ the `[ui-locale: ...]` hint produced.
                (Issue — nothing is built), never to a remembered
                "jetzt umsetzen" the user cannot see. -->
           <section class="closeout-block" data-closeout-block="followups" hidden>
-            <h4 class="closeout-q">
-              {{final.followups_q}}
+            <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
+              <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
+              <span class="closeout-row-icon" aria-hidden="true" title="{{final.followups_q}}" aria-label="{{final.followups_q}}">📌</span>
+              <span class="closeout-row-label">{{final.followups_q}}</span>
               <span class="closeout-count" id="closeout-followup-count" aria-live="polite"></span>
-            </h4>
-            <p class="hint">{{final.followups_hint}}</p>
-            <div class="followup-list" id="closeout-followup-list"
-                 data-label-issue="{{final.route_issue}}"
-                 data-label-implement="{{final.route_implement}}"
-                 data-label-ignore="{{final.route_ignore}}"
-                 data-label-origin-deferred="{{final.origin_deferred}}"
-                 data-label-origin-found="{{final.origin_found}}"></div>
-            <p class="hint hint-none" id="closeout-followups-none" hidden>
-              <span aria-hidden="true">⚠</span> {{final.followups_none}}
-            </p>
+              <span class="closeout-row-summary" data-closeout-summary></span>
+            </button>
+            <div class="closeout-row-body" data-closeout-row-body hidden>
+              <p class="hint">{{final.followups_hint}}</p>
+              <div class="followup-list" id="closeout-followup-list"
+                   data-label-issue="{{final.route_issue}}"
+                   data-label-implement="{{final.route_implement}}"
+                   data-label-ignore="{{final.route_ignore}}"
+                   data-label-origin-deferred="{{final.origin_deferred}}"
+                   data-label-origin-found="{{final.origin_found}}"></div>
+              <p class="hint hint-none" id="closeout-followups-none" hidden>
+                <span aria-hidden="true">⚠</span> {{final.followups_none}}
+              </p>
+            </div>
           </section>
 
-          <!-- Block 2 — ship or not. Deliberately has NO default: execute
-               refuses to run until the user picks one, so a release is never
-               the consequence of clicking through. -->
+          <!-- Block 2 — ship or not. Deliberately has NO default, so the row
+               can only be CONFIRMED once a radio is chosen: advanceCloseout()
+               refuses and shows #closeout-ship-required instead — opening and
+               looking at the row is free, answering it is not. -->
           <section class="closeout-block" data-closeout-block="ship">
-            <h4 class="closeout-q">{{final.closeout_ship_q}}</h4>
-            <label class="closeout-choice">
-              <input type="radio" name="closeout-ship" value="yes" data-no-persist>
-              <span class="closeout-choice-label">
-                <strong><span aria-hidden="true">🚀</span> {{final.closeout_ship_yes}}</strong>
-                <span class="closeout-sub">{{final.ship_hint}}</span>
-              </span>
-            </label>
-            <label class="closeout-choice">
-              <input type="radio" name="closeout-ship" value="no" data-no-persist>
-              <span class="closeout-choice-label">
-                <strong>{{final.closeout_ship_no}}</strong>
-                <span class="closeout-sub">{{final.closeout_ship_no_hint}}</span>
-              </span>
-            </label>
-            <p class="hint hint-warn" id="closeout-ship-required" role="alert" aria-live="polite" hidden>
-              <span aria-hidden="true">⚠</span> {{final.closeout_choice_required}}
-            </p>
+            <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
+              <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
+              <span class="closeout-row-icon" aria-hidden="true" title="{{final.closeout_ship_q}}" aria-label="{{final.closeout_ship_q}}">🚀</span>
+              <span class="closeout-row-label">{{final.closeout_ship_q}}</span>
+              <span class="closeout-row-summary" data-closeout-summary></span>
+            </button>
+            <div class="closeout-row-body" data-closeout-row-body hidden>
+              <label class="closeout-choice">
+                <input type="radio" name="closeout-ship" value="yes" data-no-persist>
+                <span class="closeout-choice-label">
+                  <strong><span aria-hidden="true">🚀</span> {{final.closeout_ship_yes}}</strong>
+                  <span class="closeout-sub">{{final.ship_hint}}</span>
+                </span>
+              </label>
+              <label class="closeout-choice">
+                <input type="radio" name="closeout-ship" value="no" data-no-persist>
+                <span class="closeout-choice-label">
+                  <strong>{{final.closeout_ship_no}}</strong>
+                  <span class="closeout-sub">{{final.closeout_ship_no_hint}}</span>
+                </span>
+              </label>
+              <p class="hint hint-warn" id="closeout-ship-required" role="alert" aria-live="polite" hidden>
+                <span aria-hidden="true">⚠</span> {{final.closeout_choice_required}}
+              </p>
+            </div>
           </section>
 
           <!-- Block 3 — what happens to this page. Drives Step 6 cleanup
@@ -617,80 +726,91 @@ the `[ui-locale: ...]` hint produced.
                wording read as "throw the work away" and collided with the
                bi-state Verwerfen on every variant card. -->
           <section class="closeout-block" data-closeout-block="files">
-            <fieldset id="panel-dispose-concept" class="dispose-fieldset">
-              <legend>{{final.dispose_heading}}</legend>
-              <p class="hint dispose-hint">{{final.dispose_hint}}</p>
+            <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
+              <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
+              <span class="closeout-row-icon" aria-hidden="true" title="{{final.closeout_label_files}}" aria-label="{{final.closeout_label_files}}">🗂</span>
+              <span class="closeout-row-label">{{final.closeout_label_files}}</span>
+              <span class="closeout-row-summary" data-closeout-summary></span>
+            </button>
+            <div class="closeout-row-body" data-closeout-row-body hidden>
+              <fieldset id="panel-dispose-concept" class="dispose-fieldset">
+                <legend>{{final.dispose_heading}}</legend>
+                <p class="hint dispose-hint">{{final.dispose_hint}}</p>
 
-              <label class="dispose-option">
-                <input type="radio" name="dispose-mode" value="discard" checked>
-                <span class="dispose-label">
-                  <strong>{{final.dispose_discard}}</strong>
-                  <span class="dispose-sub">{{final.dispose_discard_hint}}</span>
-                </span>
-              </label>
+                <label class="dispose-option">
+                  <input type="radio" name="dispose-mode" value="discard" checked>
+                  <span class="dispose-label">
+                    <strong>{{final.dispose_discard}}</strong>
+                    <span class="dispose-sub">{{final.dispose_discard_hint}}</span>
+                  </span>
+                </label>
 
-              <label class="dispose-option">
-                <input type="radio" name="dispose-mode" value="keep">
-                <span class="dispose-label">
-                  <strong>{{final.dispose_keep}}</strong>
-                  <span class="dispose-sub">{{final.dispose_keep_hint}}</span>
-                </span>
-              </label>
+                <label class="dispose-option">
+                  <input type="radio" name="dispose-mode" value="keep">
+                  <span class="dispose-label">
+                    <strong>{{final.dispose_keep}}</strong>
+                    <span class="dispose-sub">{{final.dispose_keep_hint}}</span>
+                  </span>
+                </label>
 
-              <label class="dispose-option">
-                <input type="radio" name="dispose-mode" value="gitignore">
-                <span class="dispose-label">
-                  <strong>{{final.dispose_gitignore}}</strong>
-                  <span class="dispose-sub">{{final.dispose_gitignore_hint}}</span>
-                </span>
-              </label>
+                <label class="dispose-option">
+                  <input type="radio" name="dispose-mode" value="gitignore">
+                  <span class="dispose-label">
+                    <strong>{{final.dispose_gitignore}}</strong>
+                    <span class="dispose-sub">{{final.dispose_gitignore_hint}}</span>
+                  </span>
+                </label>
 
-              <div class="dispose-move-row">
-                <label for="dispose-move-to">{{final.dispose_move_label}}</label>
-                <input id="dispose-move-to"
-                       name="dispose-move-to"
-                       type="text"
-                       autocomplete="off"
-                       spellcheck="false"
-                       placeholder="{{final.dispose_move_placeholder}}">
-              </div>
-            </fieldset>
+                <div class="dispose-move-row">
+                  <label for="dispose-move-to">{{final.dispose_move_label}}</label>
+                  <input id="dispose-move-to"
+                         name="dispose-move-to"
+                         type="text"
+                         autocomplete="off"
+                         spellcheck="false"
+                         placeholder="{{final.dispose_move_placeholder}}">
+                </div>
+              </fieldset>
+            </div>
           </section>
 
-          <!-- The plan — every consequence, named, in execution order, live.
-               It is not a step you pass through: it sits directly above the
-               button that runs it and re-renders on every change, so the
-               single irreversible click is always made against a current
-               list. -->
-          <section class="closeout-block closeout-plan-block" data-closeout-block="plan">
-            <h4 class="closeout-q">{{final.closeout_plan_q}}</h4>
-            <ol class="closeout-plan" id="closeout-plan"></ol>
-            <p class="hint hint-warn">{{final.closeout_plan_warn}}</p>
-          </section>
-
-          <!-- Block 4b (conditional) — what the USER has to do by hand once
+          <!-- Block 4 (conditional) — what the USER has to do by hand once
                the close-out is through. Mirrors the report's [data-handoffs]
                section (renderHandoffs) so the one thing nothing here can
                automate is the last thing on the sheet — and the only block
-               that stays visible after data-closed. Hidden when the report
-               has no such section: the normal case. -->
+               that stays visible after data-closed (renderCloseout() then
+               hides this row's own head, leaving only its read-only body).
+               Hidden when the report has no such section: the normal case.
+               "Answered" here means opened once — there is nothing to choose. -->
           <section class="closeout-block closeout-handoffs" data-closeout-block="handoffs" hidden>
-            <h4 class="closeout-q">
-              <span aria-hidden="true">⚠</span> {{final.handoffs}}
+            <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
+              <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
+              <span class="closeout-row-icon" aria-hidden="true" title="{{final.handoffs}}" aria-label="{{final.handoffs}}">⚠</span>
+              <span class="closeout-row-label">{{final.handoffs}}</span>
               <span class="closeout-count" id="closeout-handoffs-count"></span>
-            </h4>
-            <p class="hint">{{final.handoffs_hint}}</p>
-            <ol class="closeout-handoffs-list" id="closeout-handoffs-list"></ol>
+              <span class="closeout-row-summary" data-closeout-summary></span>
+            </button>
+            <div class="closeout-row-body" data-closeout-row-body hidden>
+              <p class="hint">{{final.handoffs_hint}}</p>
+              <ol class="closeout-handoffs-list" id="closeout-handoffs-list"></ol>
+            </div>
           </section>
+          </div><!-- /.closeout-rows -->
 
-          <!-- Execute sits behind the same .submit-gap the implement button
-               uses: reaching it stays a deliberate mouse move. It is always
-               visible and always enabled — an unanswered ship question is
-               explained (#closeout-ship-required), never expressed as a
-               disabled button that looks broken. -->
-          <div class="submit-gap" aria-hidden="true"></div>
-          <button type="button" id="closeout-execute" class="implement-btn">
-            <span aria-hidden="true">⚠</span> {{final.closeout_execute}}
+          <!-- The one button, fixed place. "Weiter ›" until every visible
+               row above is answered, then it becomes the warning-coloured
+               "⚠ Ausführen" that submits `finalize` — see closeoutButtonClick()
+               / updateCloseoutButton(). Both label strings are baked in at
+               generation time (data-label-*) and swapped at runtime. The icon
+               span is EMPTY in the "next" state (updateCloseoutButton() sets
+               it `hidden`) — the label string already carries its own "›"
+               (`final.closeout_next` = "Weiter ›"), so an always-visible icon
+               rendered "› Weiter ›". -->
+          <button type="button" id="closeout-execute" class="implement-btn"
+                  data-label-next="{{final.closeout_next}}"
+                  data-label-execute="{{final.closeout_execute}}">
+            <span aria-hidden="true" data-closeout-btn-icon hidden>⚠</span>
+            <span data-closeout-btn-label>{{final.closeout_next}}</span>
           </button>
 
           <p class="hint hint-running" data-finalize-state="running" hidden>
@@ -706,6 +826,29 @@ the `[ui-locale: ...]` hint produced.
           <p class="hint hint-warn" data-finalize-state="stalled" hidden>
             <span aria-hidden="true">⚠</span> {{final.closeout_stalled}}
           </p>
+
+          <!-- The plan — every consequence, named, in execution order, live,
+               ONE compact line below the button: "Gewählt: 2 × Issue ·
+               nicht releasen · Seite löschen · 2 Handgriffe" (buildCloseoutPlan()
+               still appends one .closeout-plan-item per consequence, in the
+               same execution order — the CSS join (§ below) is what turns
+               that into " · "-separated text; the DOM stays inspectable per
+               item). No heading, no <ol>: those cost the rows region the
+               height it needs (§ .closeout-rows) for the four row heads to
+               stay fully visible, which is the whole point of a foot the
+               rows can win over. Re-renders on every change, so the line is
+               never stale by the time of the one irreversible click above
+               it. The warn hint only makes sense once every row is answered
+               (before that, "ein Klick, alles davon" describes a click that
+               cannot even fire yet) — updateCloseoutButton()'s own ready
+               flag hides/shows it. -->
+          <section class="closeout-block closeout-plan-block" data-closeout-block="plan">
+            <p class="closeout-plan-line">
+              <strong class="closeout-plan-label">{{final.closeout_plan_label}}</strong>
+              <span class="closeout-plan-items" id="closeout-plan"></span>
+            </p>
+            <p class="hint hint-warn closeout-plan-warn" id="closeout-plan-warn" hidden>{{final.closeout_plan_warn}}</p>
+          </section>
         </div>
 
         <button type="button" id="view-iterations-btn" class="link-btn">{{final.view_iterations}}</button>
@@ -1650,13 +1793,23 @@ page: it is the first thing that looks broken when concepts sit side by side.
 - Open, the dock has exactly two sizes — `compact` (420px, general note only)
   and `wide` (560px, general + design + per-screen). `applyDockSize()` picks
   one from `body[data-single-screen]` / `body[data-single-design]`. Never
-  size it to its content or to a viewport fraction.
+  size it to its content or to a viewport fraction. Both sizes are tuned so
+  screen + design + general (or view + general, while a view is active) fit
+  on a ~1080px-tall viewport without scrolling or needing the maximise
+  control (§ Layout CSS `.feedback-dock` / `.feedback-section`).
 
+- The dock is ordered **specific → general, top to bottom**: the currently-
+  active screen's textarea first, then the design textarea (only when the
+  iteration has ≥2 designs), then general notes last. While a view is
+  active, the view textarea takes the design+screen rows' place, so the
+  visible order becomes view → general. General sits last because it is
+  the one field that never disappears or changes label — the specific field
+  the user is looking at gets filled in first, the catch-all note last.
 - The 💬 dock always shows **one textarea for the currently-active screen**
   (label: "Aktueller Screen: {screen-label}"). Its content is private to that
   screen.
-- Below a divider, a **second textarea for general notes** stays visible
-  regardless of the active screen — the user can append from any screen.
+- At the bottom, a **general notes textarea** stays visible regardless of
+  the active screen — the user can append from any screen.
 - When the user switches screens (via ☰ or keyboard), the screen textarea
   swaps to the new screen's notes. Previous screen's notes are preserved and
   come back when the user returns.
@@ -2332,11 +2485,31 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
            status / foot) — only the containing aside differs. -->
       <div class="panel-here" id="panel-here">
         <span class="panel-here-round" data-here-round></span>
+        <!-- Same wrapper as § Common Structure — the group (not either
+             child) carries margin-left: auto, so the chip stays right-aligned
+             on the FIRST line whether or not #panel-here-back is [hidden]. -->
+        <span class="panel-here-right">
+          <button type="button" id="panel-here-back" class="link-btn panel-here-back" hidden></button>
+          <button type="button" id="panel-here-rounds" class="panel-here-rounds-btn" hidden
+                  aria-haspopup="true" aria-expanded="false" aria-controls="panel-here-rounds-list"
+                  title="{{nav.rounds_chip}}" aria-label="{{nav.rounds_chip}}">
+            <span aria-hidden="true">🕘</span> <span data-here-rounds-count></span>
+          </button>
+        </span>
         <span class="panel-here-section" data-here-section hidden></span>
-        <button type="button" id="panel-here-back" class="link-btn panel-here-back" hidden></button>
+        <div class="panel-here-rounds-list" id="panel-here-rounds-list" hidden role="list">
+          <!-- auto-populated by buildRoundsChip() -->
+        </div>
       </div>
       <div class="panel-nav-scroll">
       <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}"><!-- chips --></nav>
+      <!-- #section-nav also lives on the design skeleton: a free/decision round
+           on a design concept (the final report is always free) renders its TOC
+           here; CSS hides it while a design round is active and #screen-nav
+           otherwise (html[data-template] mirrors the active round). Without it
+           the final report of every design concept had no TOC at all — and no
+           ⚠ Danach-von-Hand entry. -->
+      <nav class="section-nav" id="section-nav" aria-label="{{nav.sections}}"></nav>
       <nav class="screen-nav" id="screen-nav" aria-label="Screens">
         <!-- auto-populated, two levels: one .screen-nav-group per
              <section data-design>, a .screen-nav-design-heading button at
@@ -2442,10 +2615,15 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
     </aside>
     <div class="panel-backdrop" id="panel-backdrop"></div>
 
-    <!-- Feedback dock (💬) — three-level Speech-Bubble overlay, top to
-         bottom: general → design → page. General sits at the top because
-         it is the one field that never disappears or changes label as the
-         user navigates — putting it first keeps the dock from jumping.
+    <!-- Feedback dock (💬) — speech-bubble overlay, ordered specific → general,
+         top to bottom: current screen → design (when ≥2 designs) → general;
+         while a view is active, the view row takes the design+screen rows'
+         place (§ Layout CSS view-mode swap) so the visible order becomes
+         view → general. General sits LAST because it is the one field that
+         never disappears or changes label as the user navigates — the user
+         fills in the specific thing (what they're looking at) first and the
+         catch-all note last, and general's fixed position at the bottom
+         means it never jumps even though the rows above it swap content.
          Anchored to the 💬 FAB (bottom-right): the FAB stays visible and
          clickable, the dock floats above/around it like a chat bubble.
          Now that ☰ lives top-right (Wave 3), the dock no longer reserves
@@ -2467,29 +2645,22 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
         <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" title="{{panel.minimize}}">−</button>
       </div>
       <div class="feedback-section">
-        <label>{{proto.feedback_general}}</label>
-        <textarea id="design-general-feedback" data-comment="general" data-attachable
-                  placeholder="{{proto.feedback_general}}"></textarea>
-        <div class="attach-slot" data-attach-slot="general"></div>
-      </div>
-      <div class="feedback-divider"></div>
-      <!-- Design row — omitted for single-design iterations via
-           body[data-single-design="true"] (Layout CSS), no JS branching.
-           One hidden textarea per design; only the active one is shown,
-           same swap mechanism as the per-screen row below. Each carries
-           data-comment="design-{id}" AND data-design-comment="{id}". -->
-      <div class="feedback-section">
-        <label>{{design.feedback_design}}: <strong id="dock-design-label">Dispatch</strong></label>
-        <div id="design-textareas" data-placeholder="{{design.feedback_design_placeholder}}"><!-- auto-populated --></div>
-      </div>
-      <div class="feedback-divider"></div>
-      <div class="feedback-section">
         <label>{{proto.feedback_current}}: <strong id="dock-screen-label">Welcome</strong></label>
         <!-- One hidden textarea per screen. Only the active one is shown.
              Each carries data-comment="{screen-id}" AND
              data-screen-comment="{screen-id}" — so saveState/restoreState
              treats it like any comment field. -->
         <div id="screen-textareas" data-placeholder="{{proto.feedback_placeholder}}"><!-- auto-populated --></div>
+      </div>
+      <div class="feedback-divider"></div>
+      <!-- Design row — omitted for single-design iterations via
+           body[data-single-design="true"] (Layout CSS), no JS branching.
+           One hidden textarea per design; only the active one is shown,
+           same swap mechanism as the per-screen row above. Each carries
+           data-comment="design-{id}" AND data-design-comment="{id}". -->
+      <div class="feedback-section">
+        <label>{{design.feedback_design}}: <strong id="dock-design-label">Dispatch</strong></label>
+        <div id="design-textareas" data-placeholder="{{design.feedback_design_placeholder}}"><!-- auto-populated --></div>
       </div>
       <div class="feedback-divider"></div>
       <!-- View row — OPTIONAL, only present when the iteration has ≥1
@@ -2504,6 +2675,13 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
       <div class="feedback-section">
         <label>{{design.feedback_view}}: <strong id="dock-view-label">Navigation model</strong></label>
         <div id="view-textareas" data-placeholder="{{design.feedback_view_placeholder}}"><!-- auto-populated --></div>
+      </div>
+      <div class="feedback-divider"></div>
+      <div class="feedback-section">
+        <label>{{proto.feedback_general}}</label>
+        <textarea id="design-general-feedback" data-comment="general" data-attachable
+                  placeholder="{{proto.feedback_general}}"></textarea>
+        <div class="attach-slot" data-attach-slot="general"></div>
       </div>
     </aside>
   </div>
@@ -3127,7 +3305,7 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
    to the FAB's corner and has EXACTLY TWO sizes — never a viewport-
    proportional one, never shrink-to-content:
      compact  420px wide  — one general note (single design, single screen)
-     wide     560px wide  — general + design + per-screen notes
+     wide     560px wide  — screen + design + general notes, specific → general
    Both sizes are deliberate. A dock that spans the page turns every textarea
    into one 1200px line nobody ever wraps in; a dock sized to its content
    becomes a box you cannot type three lines into without scrolling. Which
@@ -3149,8 +3327,13 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   right: 2rem;
   bottom: calc(2rem + 60px - 6px);
   width: min(420px, calc(100vw - 4rem));
-  max-height: min(58vh, 460px);
-  padding: 1.25rem 1.5rem 1.5rem;
+  /* 900px, not 460px: at a ~1080px-tall viewport the compact dock must show
+     screen + design + general at once (§ Feedback behaviour) without
+     scrolling or the user reaching for maximise. The old 460px cap was
+     sized for the single-general-note case only, before the reorder made
+     three sections the compact default's normal load. */
+  max-height: min(80vh, 900px);
+  padding: 1rem 1.25rem 1.25rem;
   background: var(--panel-bg, #161b22);
   border: 1px solid var(--border-color, #30363d);
   border-radius: 18px;
@@ -3159,12 +3342,12 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   overflow-y: auto;
   display: none;
   flex-direction: column;
-  gap: 1.1rem;
+  gap: 0.85rem;
   transform-origin: 100% 100%; /* anchor: the 💬 FAB it grows out of */
 }
 .feedback-dock[data-size="wide"] {
   width: min(560px, calc(100vw - 4rem));
-  max-height: min(72vh, 620px);
+  max-height: min(84vh, 940px);
 }
 /* Work package B — user-controlled maximise. Deliberately keyed off a
    SEPARATE attribute (data-user-maximized), not a third data-size value:
@@ -3229,17 +3412,30 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
 }
 .feedback-maximize-btn[aria-pressed="true"] { color: var(--accent-color); }
 
-.feedback-section { display: flex; flex-direction: column; gap: 0.4rem; }
-.feedback-section label { font-size: 0.9rem; color: var(--text-secondary); font-weight: 500; }
+.feedback-section { display: flex; flex-direction: column; gap: 0.35rem; }
+.feedback-section label { font-size: 0.82rem; color: var(--text-secondary); font-weight: 500; }
 .feedback-section label strong { color: var(--accent-color); }
 .feedback-section textarea {
-  width: 100%; padding: 0.8rem;
+  width: 100%; padding: 0.65rem 0.7rem;
   border: 1px solid var(--border-color); border-radius: 10px;
   background: var(--input-bg, #0d1117); color: var(--text-color, #c9d1d9);
-  font-family: inherit; font-size: 0.95rem; line-height: 1.5; resize: vertical; min-height: 90px;
+  /* 80px, not 90px: with the reorder the compact dock's normal load is
+     three sections (§ Feedback behaviour), so each textarea gives up a
+     little height to the max-height budget above — 80px still clears
+     ~2-3 visible lines at this line-height/padding, it just no longer
+     eats the margin the dock needed for the two rows beside it. */
+  font-family: inherit; font-size: 0.95rem; line-height: 1.5; resize: vertical; min-height: 80px;
 }
 .feedback-section textarea:focus { outline: none; border-color: var(--accent-color); }
-.feedback-divider { height: 1px; background: var(--border-color); margin: 0.25rem 0; }
+.feedback-divider { height: 1px; background: var(--border-color); margin: 0.2rem 0; }
+/* The attach bar's own margin-top (§ Attachments CSS) is meant for contexts
+   with no flex-gap parent (decision notes, annotation bubbles). Inside the
+   dock, .feedback-section already applies that same gap between its
+   children (label / textarea / attach-slot), so the bar's margin-top would
+   double it — the bar would sit further from "its" textarea than the
+   textarea sits from its own label. Zeroing it here keeps the rhythm even
+   without touching the shared .attach-bar rule other surfaces still rely on. */
+.feedback-dock .attach-bar { margin-top: 0; }
 
 /* Narrow viewports (≤560px): the two fixed widths stop making sense below
    the compact size, so the dock spans the viewport with tight margins.
@@ -3265,9 +3461,12 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
 #view-textareas textarea[hidden] { display: none; }
 
 /* Single-screen design: hide the per-screen feedback section + its own
-   leading divider. Order is general -> design -> page, so the divider that
-   must disappear with the page row is the one immediately BEFORE it, not
-   the one before general (which is always first, no leading divider). Only
+   leading divider. Order is screen -> design -> view -> general (specific
+   to general, top to bottom — general is always last and never hides), so
+   the divider that must disappear with the screen row is the one
+   immediately AFTER it (:has(+ .feedback-section ...) targets a divider by
+   what follows it, not by index), leaving general's own leading divider
+   alone regardless of how many of the rows above it are hidden. Only
    general (and, if >=2 designs, per-design) notes remain visible.
    body[data-single-screen] is the correct scope HERE: the dock always talks
    about the screen currently on the canvas, so an active-design flag is
@@ -3339,6 +3538,17 @@ body[data-view-active="true"] .feedback-section:has(#design-textareas),
 body[data-view-active="true"] .feedback-divider:has(+ .feedback-section #design-textareas),
 body[data-view-active="true"] .feedback-section:has(#screen-textareas),
 body[data-view-active="true"] .feedback-divider:has(+ .feedback-section #screen-textareas) {
+  display: none;
+}
+
+/* General is always visible and now sits last, so it always carries a
+   leading divider — except the one case where screen, design AND view are
+   ALL hidden at once (single-design + single-screen + no view active):
+   general is then the only row left, and a divider with nothing above it
+   would float above an otherwise-empty dock. #design-general-feedback is
+   the general textarea's own id, so this targets exactly its divider. */
+body[data-single-design="true"][data-single-screen="true"]:not([data-view-active="true"])
+  .feedback-divider:has(+ .feedback-section #design-general-feedback) {
   display: none;
 }
 
@@ -5961,8 +6171,8 @@ stays visible even in a long list. Without it, a 20-entry TOC forces the user
 to hunt for their own position on every scroll.
 
 ```css
-/* The TOC is the selected chip's BODY in the Kompass tree (buildSectionNav
-   moves #section-nav directly after the aria-selected .iteration-tab), so it
+/* The TOC is the whole content of the scroll box now — the live round's
+   sections only, everything else moved to the head's 🕘 rounds list — so it
    reads as a nested level: indented, with a thin accent rail. */
 .section-nav {
   display: flex;
@@ -6042,6 +6252,35 @@ to hunt for their own position on every scroll.
   font-weight: 600;
 }
 .section-nav-item[data-handoffs] .section-nav-label::before { content: '⚠ '; }
+/* Selected-variant node — always open, its own .section-nav-item as the
+   summary, nested sub-sections indented one step further. Never gets the
+   toggle listener .nav-group does, so nothing can close it. */
+.nav-group.nav-variant-open > summary { padding: 0; background: none; cursor: default; }
+.nav-group.nav-variant-open > summary::-webkit-details-marker,
+.nav-group.nav-variant-open > summary::before { content: none; display: none; }
+.nav-group.nav-variant-open > summary:hover { background: none; }
+.nav-group.nav-variant-open > summary .section-nav-item { width: 100%; }
+.nav-group.nav-variant-open > .section-nav-item { margin-left: 0.75rem; }
+/* "Weitere Varianten · N · k verworfen" — one collapsed row for every
+   variant that is not the selected one. */
+.nav-group.nav-other-variants > .section-nav-item { margin-left: 0.5rem; opacity: 0.85; }
+/* "+N weitere" — only rendered when the TOC overflows the scroll box. */
+.nav-more-toggle {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 0.4rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent-color, #58a6ff);
+  font-size: 0.8rem; font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.nav-more-toggle:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
 @media (prefers-reduced-motion: reduce) {
   .section-nav-item { transition: none; }
 }
@@ -6067,14 +6306,37 @@ let scrollSpyEntries = [];
 let scrollSpyFrame = 0;
 
 // "Kompass" tree tunables — decided on the concept page, not tuned by feel:
-// fold previous rounds only from 4 upward; group the TOC only when ≥2 kinds
-// are present AND the round has >12 entries; honour a deliberate group close
-// for 4 s before the scroll spy may open that group again.
-const NAV_ARCHIVE_FROM = 4;
+// group the TOC only when ≥2 kinds are present AND the round has >12
+// entries; honour a deliberate group close for 4 s before the scroll spy may
+// open that group again.
 const NAV_GROUP_MIN_KINDS = 2;
 const NAV_GROUP_OVER_ENTRIES = 12;
 const NAV_MANUAL_CLOSE_GRACE_MS = 4000;
-const _navManualClosedAt = new WeakMap();   // details.nav-group → Date.now() of a user close
+let _navManualClosedAt = new WeakMap();   // details.nav-group → Date.now() of a user close — reset on every buildSectionNav() rebuild
+let _lastActiveSectionId = null;            // survives a rebuild — the "reading line" fallback below
+// Bumped once per buildSectionNav() call, captured by every 'toggle'
+// listener bound during that call. `nav` (the #section-nav element) is the
+// SAME node across every rebuild — only its children are replaced — so a
+// 'toggle' event queued by an EARLIER build's (now-detached) group, firing
+// AFTER a later build has already replaced the tree, would otherwise still
+// read that detached group's OWN `.open` (never touched again after
+// detachment, so often still `true`), pass the "am I open" guard, and close
+// groups it queries fresh off the live `nav` — i.e. the CURRENT build's
+// groups, which have nothing to do with it. The generation check below
+// makes any listener from a superseded build a no-op, unconditionally,
+// before it reads or writes anything.
+let _navGeneration = 0;
+
+// The live round's chip is authored with {{iteration.active_suffix}} on it
+// (" · aktiv" / " · active" — the fixture builder and every hand-appended
+// chip still add it; § Iteration append checklist). The head must never
+// show it ("no aktiv/active wording on the live round's head line"), so it
+// is stripped once, here, at the single source every consumer (head, frozen
+// bar, rounds list, status line) reads data-tab-label from. Also covers the
+// older "(aktiv)"/"(active)" parenthesis form.
+function stripActiveSuffix(label) {
+  return label.replace(/\s*(?:·\s*(?:aktiv|active)\b|\(\s*(?:aktiv|active)\s*\))\s*$/i, '').trim();
+}
 
 // The label a chip was appended with, stamped on data-tab-label the first
 // time the tree is built — BEFORE any generated summary line is added to the
@@ -6084,7 +6346,7 @@ function iterationTabLabel(tab) {
   if (!tab.dataset.tabLabel) {
     const stale = tab.querySelector('.iteration-tab-summary');
     if (stale) stale.remove();
-    tab.dataset.tabLabel = tab.textContent.trim();
+    tab.dataset.tabLabel = stripActiveSuffix(tab.textContent.trim());
   }
   return tab.dataset.tabLabel;
 }
@@ -6092,29 +6354,22 @@ function iterationTabLabel(tab) {
 // ONE tree: every .iteration-tab is a node header. Non-selected chips get a
 // generated one-line summary ("14 Einträge · 3 verworfen", from that round's
 // section[id][data-nav-label] and its eval-* radios; reality-check and
-// final-report chips keep their glyph labels). From NAV_ARCHIVE_FROM previous
-// rounds upward, the chips BEFORE the live one fold into
-// <details class="iteration-archive">, which auto-opens whenever the selected
-// chip is inside it; below the threshold nothing is wrapped. The chips
-// themselves are never recreated — same <button>, same click listeners, only
-// moved — which is why the append checklist can keep string-appending them
-// at the end of nav.iteration-tabs and this rebuild folds them on load.
+// final-report chips keep their glyph labels). The chips themselves are
+// never recreated — same <button>, same click listeners, only read from —
+// which is why the append checklist can keep string-appending them at the
+// end of nav.iteration-tabs. The bar itself is hidden (§ Tab Bar CSS); the
+// 🕘 rounds chip + list in the pinned head (buildRoundsChip) is what the
+// user actually sees and clicks.
 function buildIterationTree() {
   const bar = document.querySelector('.iteration-tabs');
   if (!bar) return;
-  // Unwrap a previous archive so the fold is recomputed from the chips alone.
-  bar.querySelectorAll('details.iteration-archive').forEach(archive => {
-    archive.querySelectorAll(':scope > .iteration-tab').forEach(tab => bar.insertBefore(tab, archive));
-    archive.remove();
-  });
   const tabs = [...bar.querySelectorAll('.iteration-tab')];
-  const live = document.querySelector('section[data-iteration][data-active]');
-  const liveN = live ? String(live.dataset.iteration) : null;
+  const liveTab = tabs.find(t => t.getAttribute('aria-selected') === 'true');
   tabs.forEach(tab => {
     iterationTabLabel(tab);
     const old = tab.querySelector('.iteration-tab-summary');
     if (old) old.remove();
-    if (tab.getAttribute('aria-selected') === 'true') return;
+    if (tab === liveTab) return;
     if (tab.hasAttribute('data-reality-check') || tab.hasAttribute('data-final-report')) return;
     const sec = document.querySelector('section[data-iteration="' + tab.dataset.iteration + '"]');
     if (!sec) return;
@@ -6130,18 +6385,136 @@ function buildIterationTree() {
       + (discarded ? ' · ' + discarded + ' {{nav.summary_discarded}}' : '');
     tab.appendChild(summary);
   });
-  const liveIdx = tabs.findIndex(t => String(t.dataset.iteration) === liveN);
+  buildRoundsChip(tabs, liveTab);
+}
+
+// 🕘 rounds chip + its toggled list, both inside the pinned .panel-here.
+// "Previous" = every chip before the live one, same population the archive
+// fold used to wrap — only the presentation moved. Each row reuses the
+// .iteration-tab-summary text already computed above (single source), tags
+// itself {{nav.archived}}, and clicking it drives the SAME showIteration()
+// path as clicking the (now hidden) tab would.
+function buildRoundsChip(tabs, liveTab) {
+  const chip = document.getElementById('panel-here-rounds');
+  const list = document.getElementById('panel-here-rounds-list');
+  if (!chip || !list) return;
+  const liveIdx = liveTab ? tabs.indexOf(liveTab) : -1;
   const previous = liveIdx > 0 ? tabs.slice(0, liveIdx) : [];
-  if (previous.length >= NAV_ARCHIVE_FROM) {
-    const archive = document.createElement('details');
-    archive.className = 'iteration-archive';
-    const summary = document.createElement('summary');
-    summary.textContent = previous.length + ' {{panel.archive_summary}}';
-    archive.appendChild(summary);
-    bar.insertBefore(archive, previous[0]);
-    previous.forEach(tab => archive.appendChild(tab));
-    archive.open = previous.some(t => t.getAttribute('aria-selected') === 'true');
+  chip.hidden = previous.length === 0;
+  const count = chip.querySelector('[data-here-rounds-count]');
+  if (count) count.textContent = String(previous.length);
+  list.innerHTML = '';
+  previous.forEach(tab => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'panel-here-rounds-item';
+    row.setAttribute('role', 'listitem');
+    row.dataset.iteration = tab.dataset.iteration;
+    const label = document.createElement('span');
+    label.className = 'panel-here-rounds-label';
+    label.textContent = tab.dataset.tabLabel || tab.textContent.trim();
+    row.appendChild(label);
+    const tabSummary = tab.querySelector('.iteration-tab-summary');
+    if (tabSummary) {
+      const summary = document.createElement('span');
+      summary.className = 'panel-here-rounds-summary';
+      summary.textContent = tabSummary.textContent;
+      row.appendChild(summary);
+    }
+    const tag = document.createElement('span');
+    tag.className = 'panel-here-rounds-tag';
+    tag.textContent = '{{nav.archived}}';
+    row.appendChild(tag);
+    row.addEventListener('click', () => {
+      list.hidden = true;
+      chip.setAttribute('aria-expanded', 'false');
+      showIteration(tab.dataset.iteration);
+    });
+    list.appendChild(row);
+  });
+}
+
+// Closed by default, plain toggle, no persistence: a click on the chip
+// flips the list; a click outside it (or Escape) closes it again.
+document.addEventListener('click', e => {
+  const chip = document.getElementById('panel-here-rounds');
+  const list = document.getElementById('panel-here-rounds-list');
+  if (!chip || !list) return;
+  if (chip.contains(e.target)) {
+    const willOpen = list.hidden;
+    list.hidden = !willOpen;
+    chip.setAttribute('aria-expanded', String(willOpen));
+    return;
   }
+  if (!list.hidden && !list.contains(e.target)) {
+    list.hidden = true;
+    chip.setAttribute('aria-expanded', 'false');
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const chip = document.getElementById('panel-here-rounds');
+  const list = document.getElementById('panel-here-rounds-list');
+  if (list && !list.hidden) {
+    list.hidden = true;
+    if (chip) chip.setAttribute('aria-expanded', 'false');
+  }
+});
+
+// The "selected" variant, per the TOC grouping rule: the one variant left on
+// "Miteinbeziehen" while every OTHER variant is "Verwerfen" — an unambiguous
+// signal the round has converged on one option. Below two variants there is
+// nothing to group around. Absent that unambiguous signal, fall back to
+// whichever variant was under the reading line before this rebuild (the spy
+// keeps _lastActiveSectionId current), so a mid-review round does not jump
+// its grouping on every radio click.
+function computeSelectedVariant(variantSections) {
+  if (variantSections.length < 2) return null;
+  let includeCount = 0, discardCount = 0, includeSec = null;
+  variantSections.forEach(s => {
+    const checked = s.querySelector(`input[name="eval-${s.id}"]:checked`);
+    const value = checked ? checked.value : 'include';
+    if (value === 'include') { includeCount++; includeSec = s; }
+    else if (value === 'discard') discardCount++;
+  });
+  if (includeCount === 1 && discardCount === variantSections.length - 1) return includeSec;
+  if (_lastActiveSectionId) {
+    const prev = variantSections.find(s => s.id === _lastActiveSectionId);
+    if (prev) return prev;
+  }
+  return null;
+}
+
+// "+N weitere" — only when the TOC would otherwise overflow the scroll box
+// (measured AFTER render, never a fixed cut-off). Hides the tail of the
+// direct-children list and reveals it on click.
+function applyNavOverflow(nav, scrollBox) {
+  nav.querySelectorAll('.nav-more-toggle').forEach(el => el.remove());
+  nav.querySelectorAll('[data-nav-overflow-hidden]').forEach(el => {
+    el.hidden = false;
+    el.removeAttribute('data-nav-overflow-hidden');
+  });
+  if (!scrollBox || scrollBox.scrollHeight <= scrollBox.clientHeight) return;
+  const items = [...nav.children];
+  let hiddenCount = 0;
+  for (let i = items.length - 1; i >= 0 && scrollBox.scrollHeight > scrollBox.clientHeight; i--) {
+    items[i].hidden = true;
+    items[i].setAttribute('data-nav-overflow-hidden', '');
+    hiddenCount++;
+  }
+  if (!hiddenCount) return;
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'nav-more-toggle';
+  toggle.textContent = '+' + hiddenCount + ' {{nav.more_entries}}';
+  toggle.addEventListener('click', () => {
+    nav.querySelectorAll('[data-nav-overflow-hidden]').forEach(el => {
+      el.hidden = false;
+      el.removeAttribute('data-nav-overflow-hidden');
+    });
+    toggle.remove();
+  });
+  nav.appendChild(toggle);
 }
 
 function buildSectionNav() {
@@ -6152,43 +6525,25 @@ function buildSectionNav() {
   // a frozen tab the user is reviewing), not the live/latest one.
   const activeIteration = document.querySelector('section[data-iteration]:not([hidden])');
   if (!activeIteration) return;
-  const sections = [...activeIteration.querySelectorAll('section[id][data-nav-label]')];
+  // Top-level only — nested section[id][data-nav-label] (a variant's own
+  // sub-sections) are collected separately, under the selected-variant node.
+  const sections = [...activeIteration.querySelectorAll(':scope > section[id][data-nav-label]')];
   nav.innerHTML = '';
+  // Every group + listener created from here on belongs to THIS generation;
+  // any 'toggle' event still queued from a PREVIOUS one is now stale by
+  // definition, whatever its own .open reads.
+  _navGeneration++;
+  const myGeneration = _navGeneration;
   // TOC kinds come from the EXISTING contract — a section with an eval-{id}
   // radio group is a variant, anything else is context — plus an optional
   // data-nav-group="…" override on the section (its value is the group
-  // name). Grouping is the exception, not the rule: only when ≥2 kinds meet
-  // AND the round has more than NAV_GROUP_OVER_ENTRIES entries; otherwise the
-  // list stays flat, exactly as before.
+  // name).
   const kindOf = sec => sec.dataset.navGroup
     || (sec.querySelector(`input[name="eval-${sec.id}"]`) ? 'variants' : 'context');
   const kindLabel = kind => kind === 'variants' ? '{{nav.group_variants}}'
                           : kind === 'context'  ? '{{nav.group_context}}'
                           : kind;
-  const kinds = [...new Set(sections.map(kindOf))];
-  const grouped = kinds.length >= NAV_GROUP_MIN_KINDS && sections.length > NAV_GROUP_OVER_ENTRIES;
-  const hosts = {};
-  if (grouped) {
-    kinds.forEach(kind => {
-      const group = document.createElement('details');
-      group.className = 'nav-group';
-      group.dataset.navGroup = kind;
-      const summary = document.createElement('summary');
-      summary.className = 'nav-group-summary';
-      const name = document.createElement('span');
-      name.className = 'nav-group-name';
-      name.textContent = kindLabel(kind);
-      const count = document.createElement('span');
-      count.className = 'nav-group-count';
-      count.textContent = String(sections.filter(s => kindOf(s) === kind).length);
-      summary.appendChild(name);
-      summary.appendChild(count);
-      group.appendChild(summary);
-      nav.appendChild(group);
-      hosts[kind] = group;
-    });
-  }
-  sections.forEach(sec => {
+  const makeItem = sec => {
     const id = sec.id;
     const label = sec.dataset.navLabel;
     const hasTriState = !!sec.querySelector(`input[name="eval-${id}"]`);
@@ -6212,18 +6567,116 @@ function buildSectionNav() {
       stateEl.className = 'section-nav-state';
       link.appendChild(stateEl);
     }
-    (grouped ? hosts[kindOf(sec)] : nav).appendChild(link);
-  });
+    return link;
+  };
+
+  const variantSections = sections.filter(s => s.querySelector(`input[name="eval-${s.id}"]`));
+  const selectedVariant = computeSelectedVariant(variantSections);
+
+  if (selectedVariant) {
+    // Grouped around the selected variant: it renders OPEN with its own
+    // sub-sections nested inside; every OTHER variant collapses into one
+    // accordion row; context sections stay flat, in document order.
+    const otherVariants = variantSections.filter(s => s !== selectedVariant);
+    let otherRow = null;
+    sections.forEach(sec => {
+      if (sec === selectedVariant) {
+        const open = document.createElement('details');
+        open.className = 'nav-group nav-variant-open';
+        open.dataset.navGroup = 'selected-variant';
+        open.open = true;
+        const summary = document.createElement('summary');
+        summary.className = 'nav-group-summary';
+        summary.appendChild(makeItem(sec));
+        open.appendChild(summary);
+        const subSections = [...sec.querySelectorAll('section[id][data-nav-label]')];
+        subSections.forEach(sub => open.appendChild(makeItem(sub)));
+        nav.appendChild(open);
+        return;
+      }
+      if (otherVariants.includes(sec)) {
+        if (!otherRow) {
+          otherRow = document.createElement('details');
+          otherRow.className = 'nav-group nav-other-variants';
+          otherRow.dataset.navGroup = 'other-variants';
+          const summary = document.createElement('summary');
+          summary.className = 'nav-group-summary';
+          const name = document.createElement('span');
+          name.className = 'nav-group-name';
+          name.textContent = '{{nav.other_variants}}';
+          summary.appendChild(name);
+          otherRow.appendChild(summary);
+          nav.appendChild(otherRow);
+        }
+        otherRow.appendChild(makeItem(sec));
+        return;
+      }
+      nav.appendChild(makeItem(sec));
+    });
+    if (otherRow) {
+      let discarded = 0;
+      otherVariants.forEach(s => {
+        const checked = s.querySelector(`input[name="eval-${s.id}"]:checked`);
+        if (checked && checked.value === 'discard') discarded++;
+      });
+      const name = otherRow.querySelector('.nav-group-name');
+      name.textContent = '{{nav.other_variants}} · ' + otherVariants.length
+        + (discarded ? ' · ' + discarded + ' {{nav.summary_discarded}}' : '');
+    }
+  } else {
+    // No unambiguous selection (or fewer than 2 variants) — the previous
+    // flat/kind-grouped list applies unchanged. Grouping is the exception,
+    // not the rule: only when ≥2 kinds meet AND the round has more than
+    // NAV_GROUP_OVER_ENTRIES entries.
+    const kinds = [...new Set(sections.map(kindOf))];
+    const grouped = kinds.length >= NAV_GROUP_MIN_KINDS && sections.length > NAV_GROUP_OVER_ENTRIES;
+    const hosts = {};
+    if (grouped) {
+      kinds.forEach(kind => {
+        const group = document.createElement('details');
+        group.className = 'nav-group';
+        group.dataset.navGroup = kind;
+        const summary = document.createElement('summary');
+        summary.className = 'nav-group-summary';
+        const name = document.createElement('span');
+        name.className = 'nav-group-name';
+        name.textContent = kindLabel(kind);
+        const count = document.createElement('span');
+        count.className = 'nav-group-count';
+        count.textContent = String(sections.filter(s => kindOf(s) === kind).length);
+        summary.appendChild(name);
+        summary.appendChild(count);
+        group.appendChild(summary);
+        nav.appendChild(group);
+        hosts[kind] = group;
+      });
+    }
+    sections.forEach(sec => {
+      (grouped ? hosts[kindOf(sec)] : nav).appendChild(makeItem(sec));
+    });
+  }
   // One-open among the groups, bound HERE because this DOM is rebuilt on
   // every tab switch — a listener bound once at load would sit on detached
   // nodes. `toggle` runs the accordion (opening one closes the others,
   // whoever opened it: a click or the scroll spy); the summary click records
   // a DELIBERATE close, which openNavGroupFor honours for
-  // NAV_MANUAL_CLOSE_GRACE_MS instead of reopening the group next frame.
-  nav.querySelectorAll('details.nav-group').forEach(group => {
+  // NAV_MANUAL_CLOSE_GRACE_MS instead of reopening the group next frame. The
+  // selected-variant node stays open by construction — no toggle listener on
+  // it, nothing may close it.
+  nav.querySelectorAll('details.nav-group:not(.nav-variant-open)').forEach(group => {
     group.addEventListener('toggle', () => {
+      // A 'toggle' event queued by THIS group can still fire after a LATER
+      // buildSectionNav() call has replaced the whole tree (nav.innerHTML =
+      // '' only detaches `group` — it does not, and cannot, cancel an
+      // already-queued event on it). A detached group's own `.open` is
+      // frozen at whatever it last was, so this check must come BEFORE the
+      // `!group.open` one: a stale but still-"open" `group` would otherwise
+      // pass that check and close CURRENT groups queried fresh off the
+      // shared, never-replaced `nav` element — the exact defect that left
+      // a freshly-built tree closed right after boot.
+      if (myGeneration !== _navGeneration) return;
       if (!group.open) return;
-      nav.querySelectorAll('details.nav-group').forEach(other => {
+      nav.querySelectorAll('details.nav-group:not(.nav-variant-open)').forEach(other => {
         if (other !== group && other.open) other.open = false;
       });
     });
@@ -6232,20 +6685,98 @@ function buildSectionNav() {
       else _navManualClosedAt.delete(group);
     });
   });
-  // The open node IS the selected round: the nav moves directly after the
-  // aria-selected chip (inside the archive when that chip is folded). There
-  // is no code path that closes it — switching tabs moves it.
-  const selectedTab = document.querySelector('.iteration-tab[aria-selected="true"]');
-  if (selectedTab) selectedTab.insertAdjacentElement('afterend', nav);
+  // The tree now lives inside the scroll box on its own — the live round's
+  // TOC only; the other rounds moved to the head's rounds list.
   const hereSection = document.querySelector('[data-here-section]');
   if (hereSection) hereSection.hidden = !sections.length;
   updateSectionNavState();
-  installScrollSpy();   // nav DOM was replaced → rebind the spy
-  // The spy opened the active entry's group; a page whose spy found nothing
-  // must still show one open group — the tree never collapses to nothing.
-  if (grouped && !nav.querySelector('details.nav-group[open]')) {
-    nav.querySelector('details.nav-group').open = true;
+  // Reset the manual-close grace on every rebuild. The groups themselves are
+  // brand new DOM nodes each time (nav.innerHTML = '' above), so old WeakMap
+  // entries can never match them by identity anyway — this just makes that
+  // explicit instead of relying on it, so nothing the spy does next (below)
+  // can be blocked by a stale close from a PREVIOUS build's groups.
+  _navManualClosedAt = new WeakMap();
+  // Deterministic open state — does NOT depend on the scroll spy having run,
+  // or on anything being `.is-active` yet: on a fresh page the spy may be
+  // IntersectionObserver-driven and asynchronous, or the very first
+  // getBoundingClientRect() read may simply predate layout/paint. Whichever
+  // group holds the reading line — or, if nothing can be measured at all,
+  // the FIRST group — is open the instant buildSectionNav() returns, on
+  // load, on every tab switch and on every rebuild, full stop. This is a
+  // FLOOR: openGroupExclusively() below is what the final state actually is.
+  const navItems = [...nav.querySelectorAll('.section-nav-item')];
+  const openGroupExclusively = item => {
+    const group = item && item.closest('details.nav-group');
+    if (!group) return false;
+    // Single-open, enforced HERE and now — never left for the accordion's
+    // own 'toggle' listener to sort out later. That listener only runs once
+    // its (browser-queued) 'toggle' EVENT fires, which is one more task tick
+    // than "the instant buildSectionNav() returns" allows: opening a second
+    // group via installScrollSpy() below, synchronously, right after this
+    // one was opened, would otherwise leave BOTH open until that event
+    // catches up — which is exactly the empty-looking, both-collapsed (or,
+    // depending on timing, both-open-then-one-randomly-wins) tree this whole
+    // mechanism exists to prevent.
+    //
+    // Assign ONLY on an actual transition, explicitly (never `g.open =
+    // false` on a group that is already closed, never `group.open = true`
+    // on one that is already open). A same-value assignment queues no
+    // 'toggle' event of its own, but this call runs up to twice per
+    // buildSectionNav() (the pre-spy floor, then the post-spy settle) and,
+    // across the two DOMContentLoaded-driven calls at boot, up to four
+    // times in one tick — every REAL close still queues one real 'toggle'
+    // event on THAT group, and if the two calls settle on the SAME target
+    // (the common case), being explicit keeps that count at the true
+    // minimum instead of leaving it to chance which browsers treat a
+    // same-value set as a no-op. Fewer queued events is what makes the
+    // accordion listener's own `if (!group.open) return;` guard reliable —
+    // a group that this run never actually closed can never have a stale
+    // queued close-event fire against a state some LATER call reopened.
+    nav.querySelectorAll('details.nav-group:not(.nav-variant-open)').forEach(g => {
+      if (g !== group && g.open) g.open = false;
+    });
+    if (!group.open) group.open = true;
+    return true;
+  };
+  if (!openGroupExclusively(pickInitialNavTarget(navItems))) {
+    const anyGroup = nav.querySelector('details.nav-group');
+    if (anyGroup) anyGroup.open = true;
   }
+  installScrollSpy();   // nav DOM was replaced → rebind the spy — sets
+                         // .is-active from REAL geometry once it exists,
+                         // which may or may not be the same entry the
+                         // pre-spy pick above landed on.
+  // Whatever the spy resolved to (or, if it found nothing at all, the same
+  // deterministic pick as above) is the single source of truth for which
+  // group is open, reconciled synchronously — before any queued 'toggle'
+  // event from either open() call above has a chance to race the other.
+  const settledItem = nav.querySelector('.section-nav-item.is-active') || pickInitialNavTarget(navItems);
+  openGroupExclusively(settledItem);
+  applyNavOverflow(nav, document.querySelector('.panel-nav-scroll'));
+}
+
+// Synchronous, spy-independent pick of "the entry that should be open right
+// now": an already-settled `.is-active` item wins outright; failing that, the
+// LAST item whose section is at/above the 28%-down reading line — the same
+// heuristic updateScrollSpy uses — but ONLY when at least one section
+// produced a real (non-zero) rect; if every rect reads (0, 0) — no layout to
+// read yet, real browser or jsdom alike — there is no signal to act on, so
+// this deliberately falls back to the FIRST entry rather than guessing.
+function pickInitialNavTarget(items) {
+  if (!items.length) return null;
+  const active = items.find(i => i.classList.contains('is-active'));
+  if (active) return active;
+  const line = window.innerHeight * 0.28;
+  let picked = null;
+  let measured = false;
+  for (const item of items) {
+    const sec = document.getElementById(item.dataset.sectionId);
+    if (!sec) continue;
+    const rect = sec.getBoundingClientRect();
+    if (rect.top !== 0 || rect.bottom !== 0) measured = true;
+    if (rect.top <= line) picked = item;
+  }
+  return (measured && picked) ? picked : items[0];
 }
 
 // The scroll spy OPENS the group that holds the active entry and never
@@ -6322,15 +6853,35 @@ function setActiveNavItem(item) {
   });
   item.classList.add('is-active');
   item.setAttribute('aria-current', 'true');
-  // "You are here" breadcrumb in the pinned head (§ Common Structure).
+  _lastActiveSectionId = item.dataset.sectionId || null;
+  // "You are here" breadcrumb in the pinned head (§ Common Structure) — the
+  // final report has no second head line at all (showIteration hides it).
   const here = document.querySelector('[data-here-section]');
-  if (here) {
+  if (here && !document.body.classList.contains('viewing-final')) {
     const label = item.querySelector('.section-nav-label');
     here.textContent = '› ' + (label ? label.textContent : '');
     here.hidden = false;
   }
+  updateHereRoundParenthesis(item);
   openNavGroupFor(item);
   revealNavItem(item);
+}
+
+// Head line reads "Iteration N (Variante)": the parenthesis names the
+// variant under the reading line, and ONLY when that section carries a
+// variant bi-state — general/context sections never get one.
+function updateHereRoundParenthesis(item) {
+  const round = document.querySelector('[data-here-round]');
+  if (!round) return;
+  if (round.dataset.hereRoundBase == null) round.dataset.hereRoundBase = round.textContent;
+  const base = round.dataset.hereRoundBase;
+  const isVariant = item && item.hasAttribute('data-variant');
+  if (isVariant) {
+    const label = item.querySelector('.section-nav-label');
+    round.textContent = base + ' (' + (label ? label.textContent : '') + ')';
+  } else {
+    round.textContent = base;
+  }
 }
 
 // Nearest ancestor that actually scrolls. Returns null when nothing between
@@ -6381,7 +6932,12 @@ function updateScrollSpy() {
   if (!active) active = scrollSpyEntries[0];
   const box = nearestScrollBox(scrollSpyEntries[0].section.parentElement)
     || document.documentElement;
-  if (box.scrollHeight - box.scrollTop - box.clientHeight < 4) {
+  // "User is at the bottom" requires a real, measured scroll box — a
+  // scrollHeight of exactly 0 (nothing laid out yet, or the box's own
+  // ancestor is still off-canvas/hidden) is "nothing to measure", never
+  // "already at the bottom", and must not override the reading-line pick
+  // above with the LAST entry.
+  if (box.scrollHeight > 0 && box.scrollHeight - box.scrollTop - box.clientHeight < 4) {
     active = scrollSpyEntries[scrollSpyEntries.length - 1];
   }
   setActiveNavItem(active.item);
@@ -6406,27 +6962,41 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
 ```
 
 **Important:**
-- Every navigable `<section>` needs `id` AND `data-nav-label`.
+- Every navigable `<section>` needs `id` AND `data-nav-label`. A section
+  nested INSIDE a variant (its own sub-sections) also needs both — collected
+  separately once that variant is the selected one, never as a top-level TOC
+  entry of its own.
 - If a section has a bi-state radio group, its `name` MUST be `eval-{section-id}`.
 - `buildSectionNav()` must run again after every iteration switch.
 - Never call `installScrollSpy()` on its own — `buildSectionNav()` calls it as
   its last step. Binding it independently is how the highlight goes stale
   after a tab switch.
-- **The tree is JS-built, the chips are not.** `buildSectionNav()` moves
-  `#section-nav` after the selected chip, adds the summary lines and folds
-  the archive on every rebuild; the page author only ever appends a plain
-  `<button class="iteration-tab" …>` at the end of `nav.iteration-tabs`
-  (iteration-rules.md § Iteration append checklist). Never hand-write an
-  `.iteration-tab-summary`, an `.iteration-archive` or a `.nav-group` into
-  the HTML — they are recomputed from the sections on load.
+- **The tree is JS-built, the chips are not.** `buildSectionNav()` builds
+  `#section-nav` for the live round only and `buildIterationTree()` derives
+  the 🕘 rounds chip + list in `.panel-here` from the chips; the page author
+  only ever appends a plain `<button class="iteration-tab" …>` at the end of
+  `nav.iteration-tabs` (iteration-rules.md § Iteration append checklist).
+  Never hand-write an `.iteration-tab-summary` or a `.nav-group` into the
+  HTML — they are recomputed from the sections on load.
+- **Selected-variant grouping beats size-based grouping.** When ≥2 variant
+  sections exist and exactly one is left "Miteinbeziehen" while every other
+  one is "Verwerfen" (or, absent that, whichever variant was under the
+  reading line before the rebuild), that variant renders OPEN with its own
+  nested sections, every other variant collapses into one
+  "{{nav.other_variants}}" row, and context sections stay flat. Otherwise the
+  size-based rule below applies unchanged.
 - **Grouping is opt-out by size, opt-in by attribute.** A round with ≤12
   entries, or with only one kind, renders the flat list. To place a section
   in a group of its own (or to rename its kind) add `data-nav-group="…"`
   on the section — the value is the group name; `variants` and `context`
   map to the locale labels.
-- One-open applies among `.nav-group` only — never between the archive,
-  the selected chip and the TOC, which are one tree with exactly one open
-  node.
+- One-open applies among `.nav-group` only (the selected-variant node is
+  exempt — nothing may close it) — never between the rounds list and the
+  TOC, which are two separate, independently-toggled surfaces now.
+- **"+N weitere" is overflow-only.** `applyNavOverflow()` hides the TOC's
+  tail only when `.panel-nav-scroll`'s `scrollHeight` exceeds its
+  `clientHeight` after render, and the toggle expands it in place — never a
+  fixed cut-off on a round that already fits.
 
 ## Decision Panel State CSS
 
@@ -6449,13 +7019,79 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
   color: var(--text-secondary, #8b949e);
 }
 .panel-here-round { font-weight: 600; color: var(--text-color, #c9d1d9); white-space: nowrap; }
+/* Right end of the FIRST line — #panel-here-back + the 🕘 chip as one group.
+   margin-left: auto lives HERE, not on either child: #panel-here-back is
+   [hidden] on the live round (the common case), and an auto margin on the
+   child itself would then contribute nothing, leaving the chip stranded
+   next to the round label instead of at the right edge. The wrapper is
+   always present, so the pair is always pushed right, back link or not. */
+.panel-here-right {
+  flex: none;
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  margin-left: auto;
+}
 .panel-here-section {
   flex: 1 1 100%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.panel-here-back { margin: 0 0 0 auto; }
+/* 🕘 rounds chip. */
+.panel-here-rounds-btn {
+  flex: none;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.panel-here-rounds-btn:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+  color: var(--text-color, #c9d1d9);
+}
+/* Toggled list — a plain disclosure, closed by default, no persistence.
+   Lives INSIDE .panel-here (flex-basis 100%) so it never scrolls with the
+   tree below it. */
+.panel-here-rounds-list {
+  flex: 1 1 100%;
+  display: flex; flex-direction: column; gap: 2px;
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border-color, #30363d);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.panel-here-rounds-list[hidden] { display: none; }
+.panel-here-rounds-item {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem;
+  width: 100%;
+  padding: 0.3rem 0.4rem;
+  border: none; border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.panel-here-rounds-item:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+  opacity: 1;
+}
+.panel-here-rounds-label { font-weight: 600; white-space: nowrap; }
+.panel-here-rounds-summary { flex: 1 1 auto; text-align: right; }
+.panel-here-rounds-tag {
+  flex: none;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color, #30363d);
+  font-size: 0.68rem;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
 .panel-here-section[hidden],
-.panel-here-back[hidden] { display: none; }
+.panel-here-back[hidden],
+.panel-here-rounds-btn[hidden] { display: none; }
 /* The head does NOT fold on narrow viewports any more. It used to (#341):
    the panel was a 487px bottom sheet there and the head cost 51px of it. The
    panel is a full-height overlay in every template now, so the space argument
@@ -6468,6 +7104,18 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
   overflow-y: auto;
   overflow-x: hidden;
 }
+/* On the final report the TOC is secondary — the close-out sheet is the main
+   content, and it needs most of the foot's height (§ CTA foot below). A live
+   check at 1440×768 with the rows region still floored at 220px found only
+   1–3 of the 4 row heads fitting with a body open; capping the tree tighter
+   (28vh → 18vh) is what gives `.closeout-rows` the room its 260px floor
+   (§ below) needs. `min-height: 56px` keeps a sliver of the tree reachable
+   rather than letting it collapse to nothing — it is secondary, not gone. */
+body.viewing-final .panel-nav-scroll {
+  flex: 0 1 auto;
+  max-height: 18vh;
+  min-height: 56px;
+}
 .panel-status {
   flex: none;
   margin-top: 0.75rem;
@@ -6476,11 +7124,16 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
 }
 /* Hard cap. The smallest case (one round, three sections) and the largest
    (ten rounds, twenty-five entries) get the same foot; what varies is only
-   how much of the tree is on screen. position: relative anchors the submit
-   menu, which opens UPWARD over the status line. */
+   how much of the tree is on screen. #367: this box is deliberately NOT
+   `position: relative` — #submit-menu's containing block must be
+   `.concept-decision-panel` (the overlay aside itself, already `position:
+   fixed`, see § Panel Chrome), never this one. Per CSS 2.1 § overflow, an
+   ancestor only clips an absolutely positioned descendant when it IS (or
+   contains) that descendant's containing block; skipping `position:
+   relative` here means `.panel-cta`'s own `overflow-y: auto` below cannot
+   clip the menu, however the foot is currently scrolled. */
 .panel-cta {
   flex: none;
-  position: relative;
   max-height: 120px;
   padding-top: 0.6rem;
   /* Safety net, never the plan: the cap is what keeps the call to action on
@@ -6489,17 +7142,51 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
      at 157px with its "back to the live round" button cut off below the cap.
      The scrollbar rules above already cover .panel-cta. Every foot state is
      sized to fit WITHOUT scrolling (see #panel-frozen .hint and
-     .submitted-indicator below); this only catches the next overflow. */
+     .submitted-indicator below); this only catches the next overflow.
+     #367: an EARLIER fix routed #submit-menu around this clip with
+     `position: fixed`, sampling the split button's viewport rect once at
+     open time — but on the design layout the panel is still mid slide-in
+     transition when the caret is clicked fast, so that viewport rect was
+     stale by the time the transition finished and the menu opened up to
+     400px off-screen. Never anchor the menu to the viewport; it must move
+     WITH the panel, which is what removing `position: relative` from this
+     box achieves (see .submit-menu below). */
   overflow-y: auto;
 }
 /* The close-out sheet is the one legitimate exception: a form to fill in, not
-   a call to action. On the final-report tab the foot may grow and scroll on
-   its own — the sheet's own submit-gap + execute button stay as they are. */
+   a call to action. On the final-report tab the foot grows to take the space
+   `.panel-nav-scroll` gave up above (§ .panel-nav-scroll) and becomes a flex
+   column itself — `overflow: hidden`, NOT `auto`: the foot must never scroll
+   as a whole, only `.closeout-rows` inside `#closeout-sheet` may (§ below).
+   A live check at 1440×768/900 found #closeout-execute below the fold with
+   EVERY row open before this: `.panel-cta` had a bounded height but stayed
+   `display: block` (its default from the base rule), so its child
+   `#panel-final-report` never became the flex column the sheet's own
+   internal flex/scroll needed a bounded parent height to shrink against —
+   a percentage/flex height against a `display: block` ancestor with
+   `height: auto` just resolves to the content's own natural size, i.e. no
+   cap at all. */
 body.viewing-final .panel-cta {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* `#panel-final-report` is the one child of `.panel-cta` actually shown in
+   this state (showIteration() sets its OWN inline `display: flex`, which is
+   what makes these apply at all — the other three sibling panel states stay
+   `display: none` and never become flex items). It must itself be the flex
+   column that hands `#closeout-sheet` a bounded, shrinkable height. */
+#panel-final-report {
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+#panel-final-report #status-channel,
+#panel-final-report #view-iterations-btn {
+  flex: none;
 }
 
 /* ── Status line ── one line, one glyph, six mutually exclusive states on
@@ -6811,22 +7498,54 @@ html[data-template="design"] .frozen-bar {
 /* Persistent status channel — the always-visible pipeline recap that hands
    over to the close-out sheet. Boxed so it reads as a distinct "status"
    surface. Pure DOM / connection-independent by design: the close-out
-   affordance must never disappear just because the heartbeat went stale. */
+   affordance must never disappear just because the heartbeat went stale.
+   Folded height is a budget, not a nicety: measured 99px, then 76px, against
+   a 56px target — the difference both times was the summary TEXT wrapping
+   to a second line at the panel's ~330px content width, not the box's own
+   padding/margins. `white-space: nowrap` + ellipsis below (not just tight
+   padding) is what actually caps this at one line regardless of how long
+   the two joined step labels are. That is the height the rows region
+   (§ .closeout-rows) needs back for its four heads. Do not "restore" the
+   padding/margins without re-checking that budget. */
 .status-channel {
   border: 1px solid var(--border-color, #30363d);
   border-radius: 8px;
-  padding: 0.85rem 0.95rem 0.9rem;
-  margin-bottom: 1rem;
+  padding: 0.35rem 0.55rem;
+  margin-bottom: 0.5rem;
   background: color-mix(in srgb, var(--success-color, #3fb950) 6%, transparent);
 }
-.status-channel__heading {
-  font-size: 0.75rem;
+.status-channel .status-steps { margin-bottom: 0; }
+/* Folded recap — reuses .status-detail (§ Two-Button Submit) for the
+   summary/marker/steps treatment; the only addition is the summary's own
+   heading + text run (no dots here, the final report has nothing left "in
+   progress" to animate). Never carries `hidden` — unlike the submit-progress
+   instance, this one must always be visible, just collapsed by default. The
+   heading sits INLINE at the start of the one summary line — it used to be
+   its own div above the fold. */
+.status-channel-detail { margin-top: 0; }
+.status-channel-heading {
+  flex: none;
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-secondary, #8b949e);
-  margin-bottom: 0.6rem;
+  white-space: nowrap;
 }
-.status-channel .status-steps { margin-bottom: 0; }
+/* updateStatusChannelSummary() already joins only the last TWO states (the
+   last "done" step + the "active" one, never the full four-step recap —
+   that stays in the <ol> underneath). The overflow rules here are the
+   height cap itself: without `min-width: 0` a flex child never shrinks
+   below its content's natural width, so `text-overflow: ellipsis` has
+   nothing to act on and the line wraps instead of truncating. */
+.status-channel-summary-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-color, #c9d1d9);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Close-out sheet. Every question at once inside one bounded box — the box
    is what tells the user this is a form to fill in, not a wall of
@@ -6840,13 +7559,120 @@ html[data-template="design"] .frozen-bar {
   border: 1px solid var(--border-color, #30363d);
   border-radius: 8px;
   padding: 0.9rem 0.95rem 1rem;
+  /* The sheet is its own flex column so #closeout-execute + the plan stay
+     PINNED at the bottom regardless of which row is open — only
+     .closeout-rows (§ below) scrolls. `flex: 1 1 auto; min-height: 0`, NOT
+     `height: 100%`: the sheet's parent (`#panel-final-report`) is itself a
+     flex column now (§ CTA foot), so the sheet is a flex ITEM there and
+     should size itself the normal flexbox way. A `height: 100%` here once
+     tried to resolve against `#panel-final-report`, but that element was
+     still `display: block` with an auto height at the time — a
+     percentage/flex height against a block ancestor with `height: auto`
+     just falls back to the content's own natural size, i.e. no cap at all,
+     which is why the button still sat below the fold at 1440×768/900 after
+     that first attempt. The whole chain — `.panel-cta` →
+     `#panel-final-report` → `.closeout-sheet` → `.closeout-rows` — must be
+     flex columns end to end, or the cap breaks at whichever link isn't. */
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .closeout-sheet .closeout-head {
+  flex: none;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.85rem;
+}
+/* The rows region: every accordion head + whichever ONE body is open. The
+   thing that scrolls internally so the button below it never has to.
+   `min-height: 0`, NOT a pixel floor: a fixed floor (260px, then before it
+   220px) either squeezed the plan/button off a short viewport or still only
+   fit 1 of 4 heads once a body was open. Sticky heads (§ below) are what
+   actually solve "all four heads always visible" now — the region itself is
+   free to flex to whatever height is left, however little. */
+.closeout-sheet .closeout-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* `display: contents`: a `.closeout-block` inside the rows region generates
+   NO BOX of its own — its head + body become direct flow children of
+   `.closeout-rows` instead. This is load-bearing, not cosmetic: a sticky
+   element's containing block is its nearest block-container ANCESTOR, and
+   with the block as a real box that ancestor was the (short) block itself,
+   not the scroll region — `bottom: N × H` could never pull a head above its
+   own block's top edge, so with a tall body open in an earlier row, every
+   LATER head sat below the visible region entirely (a live check measured
+   heads 2–4 at y=912/948/983 while the region's own box ended at y=711).
+   With `display: contents` the block disappears as a box and the heads'
+   containing block becomes `.closeout-rows` itself, so the offsets in
+   layoutCloseoutRowHeads() finally resolve against the region both edges
+   need to reach. `[hidden]` must keep winning (a hidden block's children
+   must not render at all) — the override two rules down is deliberately
+   MORE specific than this one so source order cannot flip it. */
+.closeout-sheet .closeout-rows > .closeout-block {
+  display: contents;
+}
+.closeout-sheet .closeout-rows > .closeout-block[hidden] {
+  display: none;
+}
+/* Sticky-both-edges row heads: each head gets `top: i × H` AND
+   `bottom: (n-1-i) × H` (H = `.closeout-row`'s own fixed `min-height`,
+   computed per visible block by layoutCloseoutRowHeads()). `top` alone
+   piles heads at the TOP as the region scrolls down, but the region is
+   almost always shorter than n × H here — a live check found only 1 of 4
+   heads fitting — so without the symmetric `bottom` constraint the later
+   heads still get pushed off the BOTTOM as the earlier ones pile at the
+   top. Both constraints together pin every head inside a fixed H-tall slot
+   regardless of scroll position, with no scroll listener and no measured
+   layout. `z-index` + an opaque `background` keep a stuck head above the
+   body content scrolling underneath it. Selector targets the head directly
+   (not `> .closeout-block > [data-closeout-row]`) because `display:
+   contents` above removes `.closeout-block` from the box tree entirely —
+   `>` through it would no longer match a rendered box to combine with. */
+.closeout-sheet .closeout-rows [data-closeout-row] {
+  position: sticky;
+  z-index: 1;
+  background: var(--panel-bg, #161b22);
+  border-bottom: 1px solid var(--border-color, #30363d);
+}
+/* A fixed, known height for the sticky math above to key off — it must
+   match CLOSEOUT_HEAD_H_REM in the JS exactly, or consecutive stuck heads
+   gap or overlap. */
+.closeout-sheet .closeout-row { min-height: 2.2rem; }
+/* No divider rule keyed off `.closeout-block + .closeout-block` inside the
+   rows region any more — with `display: contents` the block generates no
+   box for a `+` adjacent-sibling margin/border to land on regardless; the
+   divider lives entirely on the head's own border-bottom (above), which
+   travels with the sticky head and keeps every slot flush (zero gap), which
+   the offset math depends on. */
+/* Pinned foot: never inside .closeout-rows, always laid out after it, and
+   never fighting .closeout-rows for space. Button, hints AND the plan are
+   ALL `flex: none` — a live check found `flex: 0 1 auto; min-height: 0` on
+   the plan let it collapse to 7px (invisible) exactly when space was tight,
+   which is the one time "Gewählt: …" most needs to stay readable; a fixed
+   pixel floor on `.closeout-rows` (above) pushed the plan AND the
+   "Iterationen ansehen" link below the viewport instead, clipped by
+   `.panel-cta`'s own `overflow: hidden`. `min-height: 0` on the rows region
+   (this time paired with sticky heads, not a floor) is what lets the rows
+   region give ground to this pinned foot rather than the other way round. */
+.closeout-sheet #closeout-execute,
+.closeout-sheet .hint[data-finalize-state],
+.closeout-sheet .closeout-plan-block {
+  flex: none;
+}
+/* The plan's previous sibling is now the button, not another .closeout-block
+   (it moved out from under `.closeout-rows`), so the shared
+   `.closeout-block + .closeout-block` divider rule no longer reaches it —
+   give it its own, lighter than the row divider: this is a one-line readout,
+   not another section. */
+.closeout-sheet .closeout-plan-block {
+  margin-top: 0.5rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border-color, #30363d);
 }
 .closeout-sheet .closeout-title {
   font-size: 0.75rem;
@@ -6854,18 +7680,28 @@ html[data-template="design"] .frozen-bar {
   letter-spacing: 0.05em;
   color: var(--text-secondary, #8b949e);
 }
+/* "n von N beantwortet" — lives next to the title while the sheet is live;
+   renderCloseout()/updateCloseoutProgress() empties it once the section is
+   data-closed (nothing left to answer). */
+.closeout-sheet .closeout-progress {
+  font-size: 0.72rem;
+  color: var(--text-secondary, #8b949e);
+  font-variant-numeric: tabular-nums;
+}
 .closeout-sheet .closeout-count {
   font-size: 0.75rem;
   font-weight: 400;
   color: var(--text-secondary, #8b949e);
   font-variant-numeric: tabular-nums;
 }
+/* Still used by the plan's own heading below the button — the four rows
+   above it get their heading from .closeout-row-label instead (§ below). */
 .closeout-sheet .closeout-q {
   margin: 0 0 0.5rem 0;
   font-size: 0.95rem;
   font-weight: 600;
 }
-/* One rule separates the blocks, so the sheet reads as three questions rather
+/* One rule separates the blocks, so the sheet reads as separate rows rather
    than one long column of controls. */
 .closeout-sheet .closeout-block + .closeout-block {
   margin-top: 1.1rem;
@@ -6873,6 +7709,63 @@ html[data-template="design"] .frozen-bar {
   border-top: 1px solid var(--border-color, #30363d);
 }
 .closeout-sheet .closeout-block[hidden] { display: none; }
+/* Accordion row head — always visible, one line when collapsed. A real
+   <button> (not a div+click) so Enter/Space open it and it disables for free
+   under setCloseoutFrozen()'s `sheet.querySelectorAll('input, button')`. */
+.closeout-sheet .closeout-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* The done state's hand-offs row (renderCloseout()'s data-closed branch):
+   still a <button> in the DOM (so its icon+label stay in normal flow), but
+   permanently `disabled` and stripped of every answerable affordance — no
+   mark, no summary, no aria-expanded. Without this override the row still
+   LOOKS clickable: `disabled` alone does not touch our own `cursor: pointer`
+   above. */
+.closeout-sheet .closeout-row:disabled {
+  cursor: default;
+}
+.closeout-sheet .closeout-mark {
+  flex: none;
+  width: 1.1rem;
+  text-align: center;
+  color: var(--text-secondary, #8b949e);
+}
+/* ✓ — set by updateCloseoutRowSummary() from the block's own data-answered,
+   never painted from CSS alone: the glyph IS the state a screen reader has
+   nothing else to announce it by. */
+.closeout-sheet .closeout-block[data-answered="true"] .closeout-mark {
+  color: var(--success-color, #3fb950);
+}
+.closeout-sheet .closeout-row-icon { flex: none; font-size: 1rem; line-height: 1; }
+.closeout-sheet .closeout-row-label { flex: none; font-size: 0.85rem; font-weight: 600; }
+/* Right-aligned, truncated rather than wrapped — a collapsed row is one
+   line, whatever the answer reads like ("2 · Issue, Issue"). */
+.closeout-sheet .closeout-row-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.78rem;
+}
+/* The summary is what the row looks like collapsed; once it is the one open
+   row the expanded body says the same thing in full, so the one-liner would
+   just repeat it back squeezed into no space. */
+.closeout-sheet .closeout-row[aria-expanded="true"] .closeout-row-summary { display: none; }
+.closeout-sheet .closeout-row-body { margin-top: 0.6rem; }
+.closeout-sheet .closeout-row-body[hidden] { display: none; }
 .closeout-sheet .followup-list {
   display: flex;
   flex-direction: column;
@@ -6997,31 +7890,60 @@ html[data-template="design"] .frozen-bar {
   font-size: 0.78rem;
   line-height: 1.4;
 }
-/* The plan — every consequence at once, always on screen above the button
-   that runs them. */
-.closeout-sheet .closeout-plan {
-  margin: 0.6rem 0 0.8rem;
-  padding-left: 1.2rem;
-  font-size: 0.85rem;
-  line-height: 1.6;
+/* The plan — every consequence, now BELOW the button, as ONE compact line:
+   "Gewählt: 2 × Issue · nicht releasen · Seite löschen · 2 Handgriffe".
+   Still a .closeout-block for the shared row-separator rule above, but
+   never gets a .closeout-row head — it is not answered, only read. Target
+   is ≤60px total for the block (label + items line, wrap allowed, plus the
+   conditional warn line) — a heading + <ol> here once cost the rows region
+   (§ .closeout-rows) the height its four heads need to stay visible. */
+.closeout-plan-line {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.3rem;
 }
-.closeout-sheet .closeout-plan li { margin-bottom: 0.2rem; }
-.closeout-sheet .closeout-plan li[data-plan-kind="ship"],
-.closeout-sheet .closeout-plan li[data-plan-kind="implement"] {
+.closeout-plan-label {
+  flex: none;
+  color: var(--text-secondary, #8b949e);
+  font-weight: 600;
+}
+.closeout-plan-items {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* The " · " join is CSS, never baked into the text — each consequence stays
+   its own element (data-plan-kind), so it can still be read/tested one at a
+   time. */
+.closeout-plan-item + .closeout-plan-item::before {
+  content: " · ";
+  color: var(--text-secondary, #8b949e);
+}
+.closeout-plan-item[data-plan-kind="ship"],
+.closeout-plan-item[data-plan-kind="implement"] {
   color: var(--warning-color, #d29922);
   font-weight: 600;
 }
+.closeout-plan-warn {
+  margin: 0.3rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.3;
+}
+.closeout-plan-warn[hidden] { display: none; }
 /* Hand-offs — the steps only the user can take once the close-out is
    through. Warning-coloured like the routes that reach outside the page, and
    the one block renderCloseout() keeps after data-closed: the last thing on
-   the sheet is the thing still left to do. */
+   the sheet is the thing still left to do. Done state hides its own
+   .closeout-row head (no controls left) and shows the body directly. */
 .closeout-sheet .closeout-handoffs {
   border: 1px solid color-mix(in srgb, var(--warning-color, #d29922) 55%, transparent);
   background: color-mix(in srgb, var(--warning-color, #d29922) 10%, transparent);
   border-radius: 6px;
   padding: 0.6rem 0.7rem;
 }
-.closeout-sheet .closeout-handoffs .closeout-q { color: var(--warning-color, #d29922); }
+.closeout-sheet .closeout-handoffs .closeout-row-label { color: var(--warning-color, #d29922); }
 .closeout-sheet .closeout-handoffs-list {
   margin: 0.4rem 0 0;
   padding-left: 1.2rem;
@@ -7038,6 +7960,18 @@ html[data-template="design"] .frozen-bar {
   font-weight: 600;
 }
 .closeout-sheet #closeout-execute:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Two states, one button: neutral/accent "Weiter ›" while rows are still
+   unanswered, the warning-coloured "⚠ Ausführen" only once every visible row
+   is — updateCloseoutButton() sets [data-ready], never a second element.
+   `.implement-btn` (below, § Two-Button Submit) supplies the warning colours
+   as the base/default look; this override is the "not yet" state. */
+.closeout-sheet #closeout-execute:not([data-ready="true"]) {
+  color: var(--accent-color, #58a6ff);
+  border-color: var(--accent-color, #58a6ff);
+}
+.closeout-sheet #closeout-execute:not([data-ready="true"]):hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent);
+}
 .closeout-sheet .hint[data-finalize-state="running"] { color: var(--accent-color, #58a6ff); }
 .closeout-sheet .hint[data-finalize-state="done"] { color: var(--success-color, #3fb950); }
 .link-btn {
@@ -8151,11 +9085,14 @@ belongs, and the drop target itself stays advertised by the dashed
 ### CSS
 
 ```css
-.attach-bar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-top: .4rem; }
+.attach-bar { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-top: .4rem; }
 .attach-btn {
   background: var(--surface-2); border: 1px solid var(--border-color);
   color: var(--text-secondary); border-radius: 6px; cursor: pointer;
-  padding: .15rem .45rem; font-size: .95rem; line-height: 1.4;
+  /* Quieter than the field it decorates — the 📎 is the only affordance
+     (§ Attachments), so it must read as a small utility control, not a
+     button that competes with the textarea above it for attention. */
+  padding: .1rem .35rem; font-size: .85rem; line-height: 1.3;
 }
 .attach-btn:hover { border-color: var(--accent-color); color: var(--text-primary); }
 .attach-thumbs { display: flex; gap: .4rem; flex-wrap: wrap; width: 100%; }
@@ -10296,10 +11233,10 @@ The ▾ caret next to it opens a small menu (`#submit-menu`, `role="menu"`)
 holding the secondary action ("Mit Feedback implementieren"), which fires
 `action: "implement"` — a Claude turn that DOES apply real file/code
 changes. The misclick barrier is the extra click plus colour + border
-(warning outline, ⚠ icon), not distance: there is no `.submit-gap` in the
-ready panel any more, which is what keeps the pinned foot ≤120px. (The
-gap survives only in the final-report close-out sheet, in front of its
-execute button.) The hint lines moved into `title` tooltips; the one line that stays
+(warning outline, ⚠ icon), not distance: there is no `.submit-gap` anywhere
+any more — the final-report close-out sheet dropped its own copy too, in
+favour of the accordion rows in front of its single button (§ The close-out
+sheet). The hint lines moved into `title` tooltips; the one line that stays
 visible is inside the menu ("Kein Code beim Primär-Button").
 
 ### HTML
@@ -10383,10 +11320,22 @@ visible is inside the menu ("Kein Code beim Primär-Button").
 }
 .submit-menu-btn:hover,
 .submit-menu-btn[aria-expanded="true"] { filter: brightness(1.15); }
+/* position: absolute, with `.concept-decision-panel` (already `position:
+   fixed`, § Panel Chrome) as its containing block — NOT `.panel-cta`, which
+   deliberately stays un-positioned (see the comment on `.panel-cta` above)
+   so its own `overflow-y: auto` foot-safety-net cannot clip this popover.
+   #367 (two rounds): a first fix made the menu `position: fixed` anchored to
+   the VIEWPORT, sampled from the split button's rect once at open time —
+   that broke on the design layout, where the panel can still be mid
+   slide-in transition when the caret is clicked, so the sampled viewport
+   rect went stale the instant the transition finished and the menu opened
+   up to 400px off-screen. Anchoring to the panel instead means the menu
+   moves WITH the panel for free (it is laid out relative to the same
+   containing block), so no re-sampling on transition is needed — only on
+   open and on resize. wireSubmitMenu() computes left/width/bottom relative
+   to the panel from both rects sampled in the same frame (see JS). */
 .submit-menu {
   position: absolute;
-  left: 0; right: 0;
-  bottom: calc(100% + 6px);
   z-index: 5;
   padding: 0.6rem;
   border-radius: 10px;
@@ -10401,9 +11350,6 @@ visible is inside the menu ("Kein Code beim Primär-Button").
   color: var(--text-secondary, #8b949e);
   margin: 0.4rem 0 0;
 }
-
-/* Kept for the final-report sheet's execute button only. */
-.submit-gap { height: 2rem; }
 
 .implement-btn {
   background: transparent;
@@ -10581,11 +11527,36 @@ wireSubmit('submit-implement-btn', 'implement');
 // ▾ toggles #submit-menu; aria-expanded mirrors [hidden]. Escape and any
 // click outside close it; choosing the item closes it before the confirm
 // dialog opens, so the menu never sits open behind a modal.
+//
+// #367 (two rounds): .panel-cta carries `overflow-y: auto` as its ≤120px
+// foot safety net, so an `absolute` popover anchored to THAT box and opening
+// upward gets clipped/scrolled away by it — round one fixed that by making
+// the menu `position: fixed` off the split button's VIEWPORT rect sampled
+// once at open time. That broke on the design layout: the ☰ panel is still
+// sliding in (`transition: right 0.3s ease`, § Panel Chrome) when a fast
+// click reaches the caret, so the sampled rect is stale the instant the
+// transition finishes — measured 400px off-screen. Anchoring the menu to
+// `.concept-decision-panel` instead (its containing block; `.panel-cta`
+// deliberately drops `position: relative`, see its CSS comment) means the
+// menu moves WITH the panel for free — no re-sampling needed mid-transition,
+// only on open and on resize. Both rects below are read in the same frame,
+// so the panel-relative offsets are correct whether or not the slide-in has
+// finished.
 (function wireSubmitMenu() {
   const btn = document.getElementById('submit-menu-btn');
   const menu = document.getElementById('submit-menu');
   if (!btn || !menu) return;
+  const anchor = btn.closest('.submit-split') || btn;
+  const panel = menu.closest('.concept-decision-panel') || menu.parentElement;
+  const position = () => {
+    const pr = panel.getBoundingClientRect();
+    const sr = anchor.getBoundingClientRect();
+    menu.style.left = (sr.left - pr.left) + 'px';
+    menu.style.width = sr.width + 'px';
+    menu.style.bottom = (pr.bottom - sr.top + 6) + 'px';
+  };
   const setOpen = (open) => {
+    if (open) position();
     menu.hidden = !open;
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
   };
@@ -10607,6 +11578,11 @@ wireSubmit('submit-implement-btn', 'implement');
     setOpen(false);
     btn.focus();
   });
+  window.addEventListener('resize', () => { if (!menu.hidden) position(); });
+  // The panel's own slide-in/out transition (§ Panel Chrome, `right 0.3s`)
+  // bubbles here; re-measuring on its end is cheap insurance if the menu was
+  // opened while the panel was still moving.
+  panel.addEventListener('transitionend', () => { if (!menu.hidden) position(); });
 })();
 
 // --- Submit warnings ---
@@ -10705,12 +11681,15 @@ document.addEventListener('change', e => {
 // might already have done something, and the consequence list — the thing
 // that makes one irreversible click legitimate — sat three steps deep.
 //
-// This is ONE sheet: the three questions in the order Claude executes them
-// (open points → ship → this page), a live plan directly above the single
-// execute button, and nothing that commits anything before that button.
-// Claude then runs the parts in that same fixed order (SKILL.md Step 5b ·
-// finalize).
+// This is ONE sheet, an ACCORDION of rows in the order Claude executes them
+// (open points → ship → this page → hand-offs), one open at a time, a live
+// plan BELOW the single button, and nothing that commits anything before that
+// button. Claude then runs the parts in that same fixed order (SKILL.md
+// Step 5b · finalize).
 const CLOSEOUT_DEFAULT_ROUTE = 'issue';
+// The rows in accordion/execution order. 'plan' is deliberately not one of
+// them — it is the readout of the rows above, never a thing to answer.
+const CLOSEOUT_ROW_KINDS = ['followups', 'ship', 'files', 'handoffs'];
 
 function finalReportSection() {
   const active = document.querySelector('section[data-iteration][data-active]');
@@ -10818,6 +11797,219 @@ function closeoutShipChoice() {
   return el ? el.value : null;
 }
 
+// --- Accordion rows: open/answered state, one row open at a time ---
+// "Answered" survives a reload within the SAME session (sessionStorage,
+// never localStorage — the route/ship radios stay data-no-persist by design,
+// see § above, and this must not smuggle their choices back in). Keyed by
+// iteration so a later final report (a resumed/second close-out on the same
+// page) starts fresh rather than inheriting a prior round's progress.
+function closeoutStorageKey() {
+  const section = finalReportSection();
+  const iter = section ? section.dataset.iteration : '0';
+  return (typeof STORAGE_KEY !== 'undefined' ? STORAGE_KEY : 'concept') + '-closeout-answered-' + iter;
+}
+function loadCloseoutAnswered() {
+  try {
+    const raw = sessionStorage.getItem(closeoutStorageKey());
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+function saveCloseoutAnswered(map) {
+  try { sessionStorage.setItem(closeoutStorageKey(), JSON.stringify(map)); } catch (e) { /* best effort */ }
+}
+
+// The rows currently on the sheet — every non-plan block that is not hidden.
+// A block hides for a real reason (no open points, no hand-offs), so a
+// hidden block is never counted against "every row answered".
+function closeoutRows() {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet) return [];
+  return CLOSEOUT_ROW_KINDS
+    .map(kind => sheet.querySelector('.closeout-block[data-closeout-block="' + kind + '"]'))
+    .filter(el => el && !el.hidden);
+}
+function closeoutOpenRow() {
+  return closeoutRows().find(el => el.dataset.open === 'true') || null;
+}
+function closeoutAllAnswered() {
+  const rows = closeoutRows();
+  return rows.length === 0 || rows.every(el => el.dataset.answered === 'true');
+}
+// Exactly one open row at a time — opening one closes the others. Opening a
+// row never touches its answered state: re-opening an already-answered row
+// (to look again, or change the answer) keeps it answered.
+function openCloseoutRow(target) {
+  closeoutRows().forEach(el => {
+    const isTarget = el === target;
+    el.dataset.open = isTarget ? 'true' : 'false';
+    const head = el.querySelector('[data-closeout-row]');
+    const body = el.querySelector('[data-closeout-row-body]');
+    if (head) head.setAttribute('aria-expanded', isTarget ? 'true' : 'false');
+    if (body) body.hidden = !isTarget;
+  });
+}
+// The collapsed row's one-line answer, reusing the same collectors/labels the
+// plan and the payload already read from — never a second source of truth.
+function closeoutRowSummary(kind) {
+  const sheet = document.getElementById('closeout-sheet');
+  if (kind === 'followups') {
+    const boxes = openQuestionBoxes();
+    if (!boxes.length) return '';
+    const keys = followUpKeys(boxes);
+    const host = document.getElementById('closeout-followup-list');
+    const labels = {
+      issue: (host && host.dataset.labelIssue) || 'Issue',
+      implement: (host && host.dataset.labelImplement) || '',
+      ignore: (host && host.dataset.labelIgnore) || ''
+    };
+    const parts = boxes.map((b, i) => labels[followUpRoute(keys[i])] || '');
+    return boxes.length + ' · ' + parts.join(', ');
+  }
+  if (kind === 'ship') {
+    const choice = closeoutShipChoice();
+    if (!choice) return (sheet && sheet.dataset.labelUnanswered) || '';
+    return choice === 'yes'
+      ? (sheet && sheet.dataset.labelShipYes) || ''
+      : (sheet && sheet.dataset.labelShipNo) || '';
+  }
+  if (kind === 'files') {
+    const mode = document.querySelector('input[name="dispose-mode"]:checked');
+    return (mode && mode.closest('label')?.querySelector('strong')?.textContent.trim()) || '';
+  }
+  if (kind === 'handoffs') {
+    const n = document.querySelectorAll('#closeout-handoffs-list li').length;
+    return ((sheet && sheet.dataset.labelSteps) || '{n}').replace('{n}', String(n));
+  }
+  return '';
+}
+function updateCloseoutRowSummary(block) {
+  const summaryEl = block.querySelector('[data-closeout-summary]');
+  if (summaryEl) summaryEl.textContent = closeoutRowSummary(block.dataset.closeoutBlock);
+  const mark = block.querySelector('[data-closeout-mark]');
+  if (mark) mark.textContent = block.dataset.answered === 'true' ? '✓' : '○';
+}
+function updateCloseoutProgress() {
+  const sheet = document.getElementById('closeout-sheet');
+  const el = document.getElementById('closeout-progress');
+  if (!sheet || !el) return;
+  const rows = closeoutRows();
+  const done = rows.filter(r => r.dataset.answered === 'true').length;
+  const tpl = sheet.dataset.labelProgress || '{n}/{total}';
+  el.textContent = rows.length
+    ? tpl.replace('{n}', String(done)).replace('{total}', String(rows.length))
+    : '';
+}
+// The one button's two states — never two buttons. Ready = every visible row
+// answered; only then does it read as the warning-coloured execute action.
+function updateCloseoutButton() {
+  const btn = document.getElementById('closeout-execute');
+  if (!btn) return;
+  const ready = closeoutAllAnswered();
+  btn.dataset.ready = ready ? 'true' : 'false';
+  const label = btn.querySelector('[data-closeout-btn-label]');
+  const icon = btn.querySelector('[data-closeout-btn-icon]');
+  if (label) label.textContent = ready ? (btn.dataset.labelExecute || '') : (btn.dataset.labelNext || '');
+  // The icon is warning-only. "Weiter ›" already carries its own "›" inside
+  // the label string — an always-visible icon glyph next to it used to
+  // render "› Weiter ›". Hidden (not emptied) in the "next" state so no
+  // stray gap/glyph is left in the flex row either.
+  if (icon) {
+    icon.hidden = !ready;
+    icon.textContent = ready ? '⚠' : '';
+  }
+  // The plan's warn line only makes sense once the click it describes can
+  // actually fire. Set HERE, not only inside buildCloseoutPlan(): a row
+  // answered via closeoutButtonClick() re-renders through refreshCloseoutRows()
+  // (→ this function), which never calls buildCloseoutPlan() again — without
+  // this the warn line would stay hidden even once every row is answered.
+  const warn = document.getElementById('closeout-plan-warn');
+  if (warn) warn.hidden = !ready;
+}
+function refreshCloseoutRows() {
+  closeoutRows().forEach(updateCloseoutRowSummary);
+  updateCloseoutProgress();
+  updateCloseoutButton();
+}
+// Called at the end of every non-closed renderCloseout(). Row DOM nodes are
+// static (they live in the skeleton, not rebuilt per render), so
+// `dataset.answered === undefined` is true only on the very first render —
+// every later call leaves in-session progress alone and just re-derives the
+// summaries/progress/button from current answers.
+// Fixed to match the `min-height` on .closeout-row (§ CSS) — the two MUST
+// agree, or consecutive stuck heads either gap or overlap.
+const CLOSEOUT_HEAD_H_REM = 2.2;
+// Sticky-both-edges: each head gets BOTH `top: i × H` and
+// `bottom: (n-1-i) × H`. `top` alone piles heads at the TOP as the region
+// scrolls down, but once the region is shorter than n × H (routine here —
+// 4 heads is already ~9rem, and a live check found only 1 head fitting
+// inside a fixed-height rows region before this), the LAST head(s) still get
+// pushed out past the bottom of the scroll container while the earlier ones
+// pile up top. Adding the symmetric `bottom` offset gives every head a
+// second constraint pinning it from the other edge, so the browser keeps it
+// inside a fixed HxH-tall "slot" regardless of scroll position or how short
+// the region is — no scroll-listener, no measured layout, just two sticky
+// constraints per element. Indices are over VISIBLE blocks only (computed
+// fresh on every call): a hidden block (no open points, no hand-offs) must
+// not leave a gap in the stack.
+function layoutCloseoutRowHeads() {
+  const rows = closeoutRows();
+  const n = rows.length;
+  rows.forEach((block, i) => {
+    block.dataset.closeoutIndex = String(i);
+    const head = block.querySelector('[data-closeout-row]');
+    if (!head) return;
+    head.style.top = (i * CLOSEOUT_HEAD_H_REM) + 'rem';
+    head.style.bottom = ((n - 1 - i) * CLOSEOUT_HEAD_H_REM) + 'rem';
+  });
+}
+function initCloseoutRows() {
+  const rows = closeoutRows();
+  if (!rows.length) return;
+  const answered = loadCloseoutAnswered();
+  rows.forEach(r => {
+    if (r.dataset.answered === undefined) {
+      r.dataset.answered = answered[r.dataset.closeoutBlock] ? 'true' : 'false';
+    }
+  });
+  if (!closeoutOpenRow()) {
+    openCloseoutRow(rows.find(r => r.dataset.answered !== 'true') || rows[0]);
+  }
+  // Re-run on every call, not just the first: the visible SET can change
+  // (a followups/hand-offs block appearing or disappearing) and the offsets
+  // above are only valid for the current set.
+  layoutCloseoutRowHeads();
+  refreshCloseoutRows();
+}
+// The single button's click handler. Not yet all answered → confirm the open
+// row (refusing on an unanswered ship question) and open the next unanswered
+// one; all answered → this IS the execute click.
+function closeoutButtonClick() {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet || sheet.dataset.frozen === 'true') return;
+  if (closeoutAllAnswered()) {
+    submitFinalize();
+    return;
+  }
+  const rows = closeoutRows();
+  const open = closeoutOpenRow() || rows.find(r => r.dataset.answered !== 'true');
+  if (!open) return;
+  if (open.dataset.closeoutBlock === 'ship' && !closeoutShipChoice()) {
+    const req = document.getElementById('closeout-ship-required');
+    if (req) {
+      req.hidden = false;
+      req.scrollIntoView({ block: 'nearest' });
+    }
+    return;
+  }
+  open.dataset.answered = 'true';
+  const answered = loadCloseoutAnswered();
+  answered[open.dataset.closeoutBlock] = true;
+  saveCloseoutAnswered(answered);
+  const next = rows.find(r => r.dataset.answered !== 'true');
+  openCloseoutRow(next || open);
+  refreshCloseoutRows();
+}
+
 // Re-renders the sheet. Called from showIteration() with { reset: true } (a
 // tab switch re-reads the report from scratch) and from the change listener
 // without it. There are no steps to keep a position in any more — the reset
@@ -10899,8 +12091,32 @@ function renderCloseout() {
       el.hidden = el.dataset.closeoutBlock !== 'handoffs';
     });
     renderHandoffs();
+    // Done means no controls at all — the hand-offs row keeps its icon +
+    // label as a plain heading but loses every answerable affordance: no ○/✓
+    // mark, no "current answer" summary, no aria-expanded, permanently
+    // disabled so it neither opens/closes anything nor looks clickable
+    // (§ CSS ":disabled" override — the row's own cursor:pointer would
+    // otherwise survive `disabled`). Never `head.hidden`: [hidden] loses to
+    // `.closeout-row`'s own `display: flex` in the cascade, which is what
+    // left a live-looking "○ Danach von Hand" row after close in practice.
+    const handoffsBlock = sheet.querySelector('[data-closeout-block="handoffs"]');
+    if (handoffsBlock) {
+      const head = handoffsBlock.querySelector('[data-closeout-row]');
+      const body = handoffsBlock.querySelector('[data-closeout-row-body]');
+      if (head) {
+        head.disabled = true;
+        head.removeAttribute('aria-expanded');
+        const mark = head.querySelector('[data-closeout-mark]');
+        if (mark) mark.hidden = true;
+        const summary = head.querySelector('[data-closeout-summary]');
+        if (summary) { summary.hidden = true; summary.textContent = ''; }
+      }
+      if (body) body.hidden = false;
+    }
     const exec = document.getElementById('closeout-execute');
     if (exec) exec.hidden = true;
+    const progress = document.getElementById('closeout-progress');
+    if (progress) progress.textContent = '';
     sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
       el.hidden = el.dataset.finalizeState !== 'done';
     });
@@ -10931,6 +12147,11 @@ function renderCloseout() {
   // Re-apply after the rebuild above: buildFollowUpList() creates fresh
   // radios, which would otherwise come back live on a frozen sheet.
   if (sheet.dataset.frozen === 'true') setCloseoutFrozen(true);
+
+  // Accordion state — row set may have just changed (a block appeared or
+  // disappeared above), so re-derive open/answered/summaries/button every
+  // time, not just on first render.
+  initCloseoutRows();
 }
 
 // One row per still-open point: its title, then its three routes. The body
@@ -11033,18 +12254,25 @@ function buildFollowUpList() {
 }
 
 // The plan names every consequence, in the order Claude executes them. It is
-// what makes a single "Alles ausführen" click legitimate, so it re-renders on
-// every change and sits directly above the button.
+// what makes the single execute click legitimate, so it re-renders on every
+// change and sits directly BELOW the button, reading the same answers the
+// button's own row state already reflects.
+// One compact line, not a list: "Gewählt: 2 × Issue · nicht releasen ·
+// Seite löschen · 2 Handgriffe". Each consequence is still its own element
+// (data-plan-kind), in execution order — the " · " join is CSS
+// (.closeout-plan-item + .closeout-plan-item::before), never baked into the
+// text, so a test (or a future locale) can still read one item at a time.
 function buildCloseoutPlan() {
   const sheet = document.getElementById('closeout-sheet');
   const list = document.getElementById('closeout-plan');
   if (!sheet || !list) return;
   list.textContent = '';
   const add = (kind, text) => {
-    const li = document.createElement('li');
-    li.dataset.planKind = kind;
-    li.textContent = text;
-    list.appendChild(li);
+    const span = document.createElement('span');
+    span.className = 'closeout-plan-item';
+    span.dataset.planKind = kind;
+    span.textContent = text;
+    list.appendChild(span);
   };
   const issues = collectIssueItems();
   const implement = collectImplementItems();
@@ -11056,6 +12284,10 @@ function buildCloseoutPlan() {
   const moveTo = collectDisposition().moveTo;
   if (modeLabel) add('files', modeLabel + (moveTo ? ' → ' + moveTo : ''));
   add('close', sheet.dataset.planClose || '');
+  // The warn line's visibility is set by updateCloseoutButton() (called from
+  // initCloseoutRows() right after this in renderCloseout(), and again on
+  // every accordion-driven update) — a single source of truth for "is the
+  // click this warns about actually live".
 }
 
 // One submit for the whole close-out. Claude executes the parts in a fixed
@@ -11242,7 +12474,22 @@ document.addEventListener('change', e => {
 // otherwise get a rendered sheet whose execute button is inert — no console
 // error, no request, nothing to see.
 function wireCloseout() {
-  document.getElementById('closeout-execute')?.addEventListener('click', submitFinalize);
+  document.getElementById('closeout-execute')?.addEventListener('click', closeoutButtonClick);
+  // One delegated listener for every row head — the accordion body is
+  // static (never rebuilt per render), so binding once here is enough; only
+  // buildFollowUpList()'s OWN inner content is rebuilt, and its rows sit
+  // inside the already-wired followups row body.
+  document.getElementById('closeout-sheet')?.addEventListener('click', e => {
+    const head = e.target.closest('[data-closeout-row]');
+    if (!head) return;
+    const sheet = document.getElementById('closeout-sheet');
+    if (sheet && sheet.dataset.frozen === 'true') return;
+    const block = head.closest('.closeout-block');
+    if (block) {
+      openCloseoutRow(block);
+      refreshCloseoutRows();
+    }
+  });
   document.getElementById('view-iterations-btn')?.addEventListener('click', () => {
     const tabs = document.querySelector('.iteration-tabs');
     if (!tabs) return;
@@ -11251,8 +12498,28 @@ function wireCloseout() {
     void tabs.offsetWidth;  // force reflow so the animation restarts
     tabs.classList.add('tabs-nudge');
   });
+  updateStatusChannelSummary();
   refreshCloseout({ reset: true });
   restoreInFlightCloseout();
+}
+// The one-line summary for the folded #status-channel — "✓ {last done step}
+// · {active step}", built from the SAME <li data-step data-state> the full
+// recap under it renders, never a hard-coded string. The final report's own
+// pipeline is static (submitted/received/implemented are always "done", only
+// "ready" is ever "active"), so this runs once at boot rather than on every
+// change — there is nothing here that changes after the page loads.
+function updateStatusChannelSummary() {
+  const channel = document.getElementById('status-channel');
+  const summary = document.getElementById('status-channel-summary');
+  if (!channel || !summary) return;
+  const items = Array.from(channel.querySelectorAll('.status-steps li[data-step]'));
+  const label = li => li?.querySelector('.step-label')?.textContent.trim() || '';
+  const done = items.filter(li => li.dataset.state === 'done');
+  const active = items.find(li => li.dataset.state === 'active');
+  const parts = [];
+  if (done.length) parts.push('✓ ' + label(done[done.length - 1]));
+  if (active) parts.push(label(active));
+  summary.textContent = parts.join(' · ');
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', wireCloseout);
@@ -11775,19 +13042,24 @@ curl -s -X POST http://localhost:{port}/heartbeat
 ## Iteration Tabs
 
 Iterations of a concept page are appended as `<section data-iteration="N">`
-blocks inside the same HTML file. The tab bar lives **at the top of the
-right-side decision panel** (a compact vertical chip list inside the panel's
-scroll box, above the pinned status line and submit foot). All three
-templates support iterations — design and free include them identically.
+blocks inside the same HTML file. `nav.iteration-tabs` still lives at the top
+of the panel's scroll box exactly as it always has, so the append checklist
+(one plain chip, string-appended) never changes — but the bar itself is no
+longer the visible round switcher: `buildIterationTree()` hides it
+(`.iteration-tabs { display: none }`, § Tab Bar CSS) and re-derives the 🕘
+rounds chip + its list in the pinned head (`.panel-here`, § Common Structure)
+from the same chips. All three templates support iterations — design and
+free include them identically.
 
-**At runtime the bar is one tree ("Kompass", § Section Navigation):** every
-chip is a node header, the selected chip's body is `#section-nav` (moved
-there by `buildSectionNav()`), every other chip carries a generated
-`.iteration-tab-summary` line, and from 4 previous rounds upward the chips
-before the live one are folded into `<details class="iteration-archive">`
-(auto-open while a frozen chip is selected). None of that is written into
-the HTML — the markup below stays a flat list of `<button class="iteration-tab">`
-chips, appended by string edit, and the JS folds it on every load.
+**At runtime the bar is one tree ("Kompass", § Section Navigation):** the
+selected chip's TOC is `#section-nav`, built fresh by `buildSectionNav()` and
+shown alone in the scroll box (the tree no longer holds the other rounds);
+every other chip carries a generated `.iteration-tab-summary` line, consumed
+by `buildRoundsChip()` for the head's 🕘 rounds list and never rendered on
+screen itself. None of that is written into the HTML — the markup below
+stays a flat list of `<button class="iteration-tab">` chips, appended by
+string edit, and the JS re-derives the head chip/list from it on every load
+and every switch.
 
 ### Tab Bar HTML
 
@@ -11833,10 +13105,11 @@ Rules:
 - Exactly one section carries `data-active`. The matching tab has
   `aria-selected="true"`.
 - A new chip is appended as a plain `<button class="iteration-tab">` at the
-  END of `nav.iteration-tabs` — never inside an `.iteration-archive`, never
-  with a hand-written `.iteration-tab-summary`. The tree (archive fold,
-  summaries, the moved `#section-nav`) is rebuilt by `buildSectionNav()` on
-  load and on every switch; markup that pre-empts it is simply re-derived.
+  END of `nav.iteration-tabs` — never with a hand-written
+  `.iteration-tab-summary`, never a hand-built rounds chip/list. The tree
+  (summaries, the moved `#section-nav`, the head's rounds chip/list) is
+  rebuilt by `buildSectionNav()` on load and on every switch; markup that
+  pre-empts it is simply re-derived.
 - Non-active sections get the `hidden` attribute AND are frozen
   (see "Freezing Past Iterations").
 - Tabs stay clickable — switching tab reveals the chosen section and
@@ -11885,40 +13158,24 @@ a card without that evidence.
 ### Tab Bar CSS
 
 ```css
+/* The bar is no longer the round switcher — the 🕘 rounds chip + list in
+   .panel-here (§ Common Structure) took over that job. It stays in the DOM,
+   hidden, so the append checklist and the chips' click listeners never
+   change: buildIterationTree()/buildRoundsChip() read data-tab-label,
+   aria-selected and the generated .iteration-tab-summary straight off these
+   (invisible) buttons. */
 .iteration-tabs {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--border-color, #30363d);
+  display: none;
 }
-/* Generated summary line under a non-selected chip (buildIterationTree):
-   "14 Einträge · 3 verworfen". Block-level so the chip reads as a node
-   header with a subtitle, never as a longer label. */
+/* Generated summary line (buildIterationTree): "14 Einträge · 3 verworfen".
+   Computed here and consumed by buildRoundsChip() for the head's rounds
+   list — the bar itself never renders it on screen. */
 .iteration-tab-summary {
   display: block;
   margin-top: 2px;
   font-size: 0.72rem;
   font-weight: 400;
   color: var(--text-secondary, #8b949e);
-}
-/* Archive fold — wraps the chips before the live one from 4 rounds upward.
-   Same chip styling inside; the summary row is the only new surface. */
-.iteration-archive { display: flex; flex-direction: column; gap: 4px; }
-.iteration-archive > summary {
-  list-style: none;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  color: var(--text-secondary, #8b949e);
-  cursor: pointer;
-}
-.iteration-archive > summary::-webkit-details-marker { display: none; }
-.iteration-archive > summary::before { content: "▸ "; }
-.iteration-archive[open] > summary::before { content: "▾ "; }
-.iteration-archive > summary:hover {
-  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
 }
 .iteration-tab {
   flex: 0 0 auto;
@@ -12067,7 +13324,11 @@ function showIteration(n) {
   if (panelSubmitted) {
     panelSubmitted.style.display = (isLive && !isFinal && submitted) ? 'block' : 'none';
   }
-  if (panelFinal) panelFinal.style.display = isFinal ? 'block' : 'none';
+  // 'flex', not 'block': #panel-final-report is a flex column (§ CTA foot
+  // CSS) so it can hand #closeout-sheet a bounded, shrinkable height — a
+  // plain 'block' display left the sheet sizing to its own content with
+  // nothing to cap it, and #closeout-execute sat below the fold.
+  if (panelFinal) panelFinal.style.display = isFinal ? 'flex' : 'none';
   if (panelFrozen) panelFrozen.style.display = isLive ? 'none' : 'block';
   // Frozen veil + floating bar. Every entry into a non-live tab RE-LOCKS the
   // round behind the shared content dimmer (lockFrozenView), so at most the
@@ -12084,15 +13345,26 @@ function showIteration(n) {
     if (title) title.textContent = tab ? (tab.dataset.tabLabel || tab.textContent.trim()) : String(n);
   }
   if (isLive) hideContentDimmer(); else lockFrozenView();
-  // Pinned "you are here" head: the selected tab's label, and on a frozen
-  // tab the compact "↩ zur Runde N" link back to the live round. The label
-  // comes from data-tab-label when the summary line has been added to the
-  // chip (buildSectionNav), otherwise from the chip text itself.
+  // Pinned "you are here" head: the selected tab's label — no "· aktiv"
+  // suffix on the live round, an {{nav.archived}} marker on a frozen one —
+  // plus, on a frozen tab, the compact "↩ zur Runde N" link back to the live
+  // round. The label comes from data-tab-label when the summary line has
+  // been added to the chip (buildSectionNav), otherwise from the chip text
+  // itself. The reading-line parenthesis (updateHereRoundParenthesis) is
+  // re-applied by the scroll spy right after this, off the fresh base.
   const here = document.getElementById('panel-here');
   if (here) {
     const hereTab = document.querySelector('.iteration-tab[data-iteration="' + n + '"]');
     const round = here.querySelector('[data-here-round]');
-    if (round) round.textContent = hereTab ? (hereTab.dataset.tabLabel || hereTab.textContent.trim()) : String(n);
+    if (round) {
+      const label = hereTab ? (hereTab.dataset.tabLabel || stripActiveSuffix(hereTab.textContent.trim())) : String(n);
+      round.dataset.hereRoundBase = label + (isLive ? '' : ' · {{nav.archived}}');
+      round.textContent = round.dataset.hereRoundBase;
+    }
+    // The final report drops the second head line entirely — the accordion
+    // shows the selection instead.
+    const section = here.querySelector('[data-here-section]');
+    if (section && isFinal) section.hidden = true;
     const back = document.getElementById('panel-here-back');
     if (back) {
       back.hidden = !!isLive;
@@ -12222,25 +13494,46 @@ submit. Two things were wrong with that, both structural:
 
 A four-step wizard (issues → ship → files → review) fixed both and introduced
 a third problem, reported from real use: **the flow was unreadable.** "Weiter"
-between questions looked like it might already be doing something; the
+between questions looked like it might already be doing something; the old
 "Alles ausführen" button and the per-step Weiter were two different kinds of
 commitment on the same screen; and the plan of consequences — the one thing
-that licenses an irreversible click — only appeared on the last step.
+that licenses an irreversible click — only appeared on the last step. Putting
+every question on screen at once (the sheet's first cut) fixed the ordering
+and the readability, but on a full sheet (open points + ship + files +
+hand-offs) it traded that for a wall the user had to scroll past to reach the
+plan and the button — "viel Scrollen, viel Platz für wenig Interaktion".
 
-The sheet keeps what the wizard got right (one submit, fixed order) and drops
-the step chain: **every question at once, in execution order, with the live
-plan directly above a single execute button.** Nothing on the sheet commits
-anything until that button.
+The sheet is now an **accordion**: the same rows, the same fixed execution
+order, but each collapses to one line — `○`/`✓` · icon · label · current
+answer — and exactly one is open at a time (`openCloseoutRow()`). A single
+button at a fixed place reads **"Weiter ›"** while any row is unanswered
+(clicking it confirms the open row and opens the next unanswered one —
+`closeoutButtonClick()`) and turns into the warning-coloured **"⚠ Ausführen"**
+only once every row is (`updateCloseoutButton()`), which is the same click
+that submits `finalize`. Never two buttons, never "Alles ausführen". The plan
+moved BELOW that button — it is the readout of what the rows already say, not
+a step to pass through — and still re-renders on every change.
+"Answered" means the row was opened and confirmed via that one button, not a
+per-row control: a pre-selected default may stand as given, confirming just
+means the user looked. Rows can be re-opened and re-confirmed at any time;
+changing an answer keeps it answered. Progress ("n von N beantwortet",
+`#closeout-progress`) and each row's answered flag are mirrored into
+`sessionStorage` (`closeoutStorageKey()`, keyed by `STORAGE_KEY` + iteration)
+so a reload within the same session does not re-ask what was already
+answered — never `localStorage`, which the route/ship radios deliberately
+avoid (`data-no-persist`, see below).
 
-**Blocks** — top to bottom, and the same order Claude executes them in:
+**Blocks** — top to bottom, and the same order Claude executes them in. The
+first three plus `handoffs` are accordion rows (`data-closeout-row`); `plan`
+is read, not answered, and never gets one:
 
 | Block | Shown when | Default | Produces |
 |---|---|---|---|
 | `followups` | the report has a `[data-open-questions]` block with ≥1 non-disabled checkbox | every row on **Issue** | `issues: { create, items[] }` + `implement: { run, items[] }` |
 | `ship` | always | **none — the user must answer** | `ship: { run }` |
 | `files` | always | `discard` (label: "Seite löschen") | `disposition: { mode, moveTo }` |
-| `plan` | always | — | nothing; it renders the consequences of the three above |
-| `handoffs` | the report has a `[data-handoffs]` section with ≥1 `<li>` | — | nothing; mirrors the steps the user has to take by hand, and is the only block still shown after `data-closed` |
+| `handoffs` | the report has a `[data-handoffs]` section with ≥1 `<li>` | — (read-only; "answered" = opened once) | nothing; mirrors the steps the user has to take by hand, and is the only block still shown after `data-closed` |
+| `plan` | always | — | nothing; it renders the consequences of the rows above, below the button |
 
 **Three routes per open point, not a checkbox.** A follow-up is worth
 tracking, worth building now, or worth dropping — and the old checkbox could
@@ -12280,9 +13573,11 @@ broken.
 name, in execution order — "2 × GitHub-Issue anlegen", "1 × jetzt umsetzen
 (devops-Agents)", "Ship-Pipeline starten", "Seite löschen",
 "Concept-Session beenden" — and re-renders on every change, so it can never
-describe an older answer than the one on screen. `#closeout-execute` sits
-behind the same `.submit-gap` as the implement button, so reaching it is a
-deliberate mouse move.
+describe an older answer than the one on screen. `#closeout-execute` sits at
+a fixed place below the accordion rows and reads "Weiter ›" until every row
+is answered, then transforms into the warning-coloured "⚠ Ausführen" —
+reaching the irreversible click is a deliberate, staged sequence rather than
+a distance-based misclick barrier.
 
 **"Seite löschen", never "Verwerfen".** The disposition block used to be
 labelled *Verwerfen (Standard)*, one word away from the bi-state *Verwerfen*

@@ -302,8 +302,11 @@ function designRound(n, { live, mapping = false }) {
 }
 
 function tabs(rounds, live) {
+  // No locale active-suffix token on the live chip — the head strips one if
+  // present (stripActiveSuffix), but new chips should not carry it at all
+  // (iteration-rules.md § Iteration append checklist, item 7).
   return rounds.map(n =>
-    `<button class="iteration-tab" role="tab" data-iteration="${n}" aria-selected="${n === live ? 'true' : 'false'}">Iteration ${n}${n === live ? ' {{iteration.active_suffix}}' : ''}</button>`
+    `<button class="iteration-tab" role="tab" data-iteration="${n}" aria-selected="${n === live ? 'true' : 'false'}">Iteration ${n}</button>`
   ).join('\n');
 }
 

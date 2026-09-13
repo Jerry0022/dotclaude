@@ -392,7 +392,7 @@ What IS template-specific is only what the round adds around it:
 | Template | Extras |
 |---|---|
 | **decision**, **free** | Comments are written inline, next to the card or section being judged |
-| **design** | **Feedback dock** as a speech bubble anchored to the 💬 FAB bottom right, with general / per-design / per-screen / per-view comments; design switcher when ≥2 designs; `#screen-nav` gains a second group below the designs group, one entry per optional view (§ Views (optional)) |
+| **design** | **Feedback dock** as a speech bubble anchored to the 💬 FAB bottom right, ordered per-screen / per-design / per-view / general (specific → general, top to bottom); design switcher when ≥2 designs; `#screen-nav` gains a second group below the designs group, one entry per optional view (§ Views (optional)) |
 
 A concept may mix the two freely from round to round — that choice is about
 where feedback belongs, not about where the menu lives. The overlay already
@@ -402,22 +402,34 @@ below 768px.
 **Panel anatomy, top-to-bottom (identical across all templates — a flex
 column of four parts; only part 2 scrolls, parts 1, 3 and 4 are pinned):**
 1. **"You are here"** (`.panel-here`) — pinned head: the selected round's
-   label ("Iteration 8 · aktiv"), the TOC entry under the reading line, and
-   on a frozen tab a compact "↩ zur Runde N" link.
+   label — no "· aktiv" suffix on the live round, an "archiviert" marker on
+   a frozen one, and, ONLY when the reading line sits in a variant section,
+   "(Variante)" appended ("Iteration 8 (Orbital Ring)") — the TOC entry
+   under the reading line (dropped entirely on the final report), on a
+   frozen tab a compact "↩ zur Runde N" link, and a 🕘 rounds chip (count of
+   PREVIOUS rounds, hidden when none) whose click unfolds a dimmed list of
+   those rounds — each with its generated summary and an "archiviert" tag —
+   directly under the head line; a row click switches to that round via the
+   same `showIteration()` a tab click always used.
 2. **The tree** (`.panel-nav-scroll`, `flex: 1; min-height: 0;
-   overflow-y: auto`) — **iteration tabs** (`.iteration-tabs`, compact
-   vertical chip list, one per iteration; active chip = current round, older
-   chips stay clickable to review frozen snapshots) and the **section TOC**
-   (`.section-nav`) — auto-populated from EVERY `<section id="…"
+   overflow-y: auto`) — **iteration tabs** (`.iteration-tabs`, still one
+   plain chip per iteration, but hidden now — `buildIterationTree()` reads
+   them to drive the head's rounds chip/list instead) and the **section TOC**
+   (`.section-nav`) — auto-populated from EVERY top-level `<section id="…"
    data-nav-label="…">` inside the active iteration. Not limited to
    variants: Ist-Zustand, context blocks, design notes, mockups — anything
-   with a nav label gets a scroll anchor here. At runtime the two are ONE
-   tree ("Kompass"): `buildSectionNav()` moves `#section-nav` under the
-   selected chip, writes a summary line ("14 Einträge · 3 verworfen") on
-   every other chip, folds the chips before the live one into an archive
-   from 4 previous rounds upward, and groups the TOC (Kontext / Varianten
-   or `data-nav-group`) only when ≥2 kinds meet AND the round has >12
-   entries. The HTML stays a flat chip list — see
+   with a nav label gets a scroll anchor here. `buildSectionNav()` moves
+   `#section-nav` under the (hidden) selected chip and rebuilds it for the
+   live round only, writes a summary line ("14 Einträge · 3 verworfen") on
+   every other chip (consumed by the head's rounds list, never shown on the
+   bar itself), and either groups the TOC around the **selected variant**
+   (one variant left "Miteinbeziehen" while every other is "Verwerfen", or
+   the one under the reading line — rendered open with its own nested
+   sub-sections, every other variant collapsed into one "Weitere Varianten"
+   row) or, absent that, the flat/kind-grouped list (Kontext / Varianten or
+   `data-nav-group`) only when ≥2 kinds meet AND the round has >12 entries.
+   A "+N weitere" toggle appears only when the list overflows the scroll
+   box. The HTML stays a flat chip list — see
    `deep-knowledge/iteration-rules.md` § The panel tree.
 3. **Status line** (`.panel-status`) — ONE line, one glyph, six mutually
    exclusive states (saved / saving / connecting / local-only / submitted /
@@ -502,12 +514,20 @@ findings I marked Miteinbeziehen").
 ### Design Feedback Dock
 
 The design template has no tri-state. Instead, a **speech-bubble feedback
-dock** anchored to the 💬 FAB (bottom-right) holds structured feedback:
+dock** anchored to the 💬 FAB (bottom-right) holds structured feedback,
+ordered **specific → general, top to bottom**:
 
-- A top-level textarea for general notes on the concept
-- One textarea per `data-design` (only when the iteration has ≥2 designs)
 - One textarea per `<section data-screen>` inside the active design,
-  auto-populated by the dock (label = `data-nav-label` of that screen)
+  auto-populated by the dock (label = `data-nav-label` of that screen) — first
+- One textarea per `data-design` (only when the iteration has ≥2 designs) —
+  second
+- A general-notes textarea that stays visible regardless of the active
+  screen — last, because it is the one field that never disappears or
+  changes label as the user navigates
+
+While a view is active (§ Views (optional) below), the design and per-screen
+rows are replaced by a single per-view textarea, so the visible order
+becomes view → general.
 
 The dock is toggled via the 💬 FAB and starts **collapsed** — the artefact,
 not an empty form, is what a concept opens on. The FAB stays visible AND
@@ -1606,17 +1626,23 @@ The final-report JS block — `refreshCloseout`, `renderCloseout`,
 `renderHandoffs`, `openQuestionBoxes`, `followUpRoute`, `followUpItem`, `collectFollowUps`,
 `collectIssueItems`, `collectImplementItems`, `collectDisposition`,
 `closeoutShipChoice`, `buildFollowUpList`, `buildCloseoutPlan`,
-`setCloseoutFrozen`, `restoreCloseoutToReady`, `submitFinalize`, plus the
-`closeout-execute` / `view-iterations-btn` wiring, the `change` listener and
-the `DOMContentLoaded` wiring — MUST be copied verbatim from
+`setCloseoutFrozen`, `restoreCloseoutToReady`, `submitFinalize`, the accordion
+half — `closeoutStorageKey`, `loadCloseoutAnswered`, `saveCloseoutAnswered`,
+`closeoutRows`, `closeoutOpenRow`, `closeoutAllAnswered`, `openCloseoutRow`,
+`closeoutRowSummary`, `updateCloseoutRowSummary`, `updateCloseoutProgress`,
+`updateCloseoutButton`, `refreshCloseoutRows`, `initCloseoutRows`,
+`layoutCloseoutRowHeads`, `closeoutButtonClick`, `updateStatusChannelSummary` — plus the `closeout-execute` click wiring (bound to
+`closeoutButtonClick`, never directly to `submitFinalize`), the delegated
+row-head click listener, the `view-iterations-btn` wiring, the `change`
+listener and the `DOMContentLoaded` wiring — MUST be copied verbatim from
 `deep-knowledge/templates.md` (the block starting at the comment
 `// --- Final-report close-out sheet (action: "finalize") ---`). Do NOT
 inline a simplified sheet, collapse it back into separate buttons, re-introduce
-a step chain, or omit the event-listener wiring; any omission leaves a
-visible-but-inert control or a flow the user cannot finish. After writing, the
-post-generation validation gate (`deep-knowledge/validation-gate.md` Phase 1)
-MUST find the panel-state and close-out patterns (28–38b) in the generated
-file.
+a step chain, wire the button straight to `submitFinalize`, or omit the
+event-listener wiring; any omission leaves a visible-but-inert control or a
+flow the user cannot finish. After writing, the post-generation validation
+gate (`deep-knowledge/validation-gate.md` Phase 1) MUST find the panel-state
+and close-out patterns (28–38b) in the generated file.
 
 **Open points section — admission gate (default: no section):**
 

@@ -103,31 +103,50 @@ See `templates.md` § Iteration Tabs for the reference HTML/CSS/JS.
 
 ## The panel tree ("Kompass")
 
-The bar and the section TOC are ONE tree at runtime, built by
+The bar, the head's rounds list and the section TOC are built by
 `buildSectionNav()` (templates.md § Section Navigation) from the flat chip
 list and the sections — never by hand:
 
-- **Every chip is a node header.** The selected chip's body is `#section-nav`
-  (moved directly after it). There is exactly one open node and no code path
-  closes it — switching tabs moves it. On a frozen tab the TOC therefore
-  lists that round's sections, with the submitted bi-states next to them.
-- **Other chips carry a generated summary** (`.iteration-tab-summary`,
+- **The bar is hidden; the head is the round switcher.** `nav.iteration-tabs`
+  stays exactly as appended (one plain `<button class="iteration-tab">` per
+  round), but `.iteration-tabs { display: none }` hides it — the user never
+  sees it. `buildIterationTree()` reads it and calls `buildRoundsChip()`,
+  which shows a 🕘 chip in the pinned head (count of PREVIOUS rounds, hidden
+  when there are none) and, on click, a toggled list of those rounds directly
+  under the head line — each row tagged `{{nav.archived}}`, dimmed, showing
+  the round's generated summary — and clicking a row calls the same
+  `showIteration()` a tab click always did.
+- **`#section-nav` holds only the live round now.** `buildSectionNav()`
+  builds it fresh, in the scroll box, from the visible iteration's sections —
+  there is nothing else in that box to be "the one open node" against; a
+  frozen tab's TOC lists that round's own sections, with the submitted
+  bi-states next to them, same as the live one.
+- **Other chips still carry a generated summary** (`.iteration-tab-summary`,
   "14 Einträge · 3 verworfen") computed from that round's
-  `section[id][data-nav-label]` and its `eval-*` radios. Reality-check and
-  final-report chips keep their glyph labels and get no summary. The chip's
-  original label is stamped on `data-tab-label` first — the frozen bar, the
-  "you are here" head and the status line read it from there.
-- **Archive from 4 previous rounds.** When ≥4 chips precede the live one they
-  are wrapped in `<details class="iteration-archive"><summary>N vorherige
-  Runden</summary>…</details>`; the archive auto-opens whenever a frozen chip
-  is selected and stays closed on the live round. Below the threshold nothing
-  is wrapped — the smallest case (one round) is one open node.
-- **TOC groups** (`details.nav-group`) appear only when the round has ≥2
-  kinds (variant = has an `eval-{id}` group, context = everything else, or
-  a `data-nav-group="…"` override on the section) AND more than 12 entries.
-  One-open applies among the groups only; the scroll spy opens the group of
-  the entry under the reading line and never closes one; a group the user
-  closed stays closed for 4 s and until the active entry changes.
+  `section[id][data-nav-label]` and its `eval-*` radios — it is never shown
+  on the (hidden) chip itself, only read by `buildRoundsChip()` for the head
+  list. Reality-check and final-report chips keep their glyph labels and get
+  no summary. The chip's original label is stamped on `data-tab-label`
+  first — the frozen bar, the "you are here" head and the status line read
+  it from there.
+- **The TOC groups around the selected variant.** When ≥2 variant sections
+  exist and exactly one is left "Miteinbeziehen" while every other one is
+  "Verwerfen" (or, absent that signal, whichever variant was under the
+  reading line before the rebuild), that variant renders OPEN with its own
+  nested sub-sections, every other variant collapses into one "Weitere
+  Varianten · N · k verworfen" row, and context sections stay flat in
+  document order. Without an unambiguous selection, `details.nav-group`
+  appears only when the round has ≥2 kinds (variant = has an `eval-{id}`
+  group, context = everything else, or a `data-nav-group="…"` override on
+  the section) AND more than 12 entries. One-open applies among the groups
+  (never the selected-variant node, which nothing may close); the scroll spy
+  opens the group of the entry under the reading line and never closes one;
+  a group the user closed stays closed for 4 s and until the active entry
+  changes.
+- **"+N weitere" is overflow-only.** After render, `applyNavOverflow()` hides
+  the TOC's tail only if `.panel-nav-scroll`'s `scrollHeight` exceeds its
+  `clientHeight`, and the toggle expands it in place — never a fixed
+  cut-off on a round that already fits.
 
 The append checklist above is unchanged by all of this: the page author
 appends one chip string and one section, and the tree is re-derived.
@@ -306,11 +325,15 @@ When appending a new iteration section (Step 5c of `SKILL.md`), verify
       comments: `GET /draft?slug={slug}` must list them under `recovered`.
       That is the copy that survives if the rewrite goes wrong.
 7. ☐ The new chip is ONE plain `<button class="iteration-tab" role="tab"
-      data-iteration="N+1" aria-selected="true">` string-appended at the end
-      of `nav.iteration-tabs` (previous chip → `aria-selected="false"`).
-      Nothing else changes in the bar: no `.iteration-tab-summary`, no
-      `.iteration-archive`, no `.nav-group` — the Kompass tree is rebuilt by
-      `buildSectionNav()` on load (see § The panel tree below).
+      data-iteration="N+1" aria-selected="true">Iteration N+1</button>`
+      string-appended at the end of `nav.iteration-tabs` (previous chip →
+      `aria-selected="false"`) — **no `{{iteration.active_suffix}}` / "·
+      aktiv" / "· active" text on it.** The bar is hidden chrome now
+      (§ Tab Bar CSS); `stripActiveSuffix()` would strip an authored suffix
+      before it ever reached the head, but the chip should not carry one to
+      begin with. Nothing else changes in the bar: no `.iteration-tab-summary`,
+      no `.nav-group`, no hand-built rounds chip/list — the Kompass tree is
+      rebuilt by `buildSectionNav()` on load (see § The panel tree below).
 
 ## Procedure on every iteration — coverage gate (Step 5c, Step 2.5)
 
