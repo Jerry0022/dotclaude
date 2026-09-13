@@ -1,8 +1,9 @@
 ---
 name: claude-batch
-version: 0.4.0
+version: 0.5.0
 description: >-
   Collect mode — batch prompts into one master plan instead of executing them one by one. While active, a UserPromptSubmit hook blocks each prompt (it never reaches the model, costing nothing) and appends it to `.claude/batch.md`; a configurable execute marker fires the merge, where the whole note set becomes ONE feasibility-checked plan. Purpose: avoid the rework of building for prompt 1 what prompt 5 supersedes, and avoid paying a full turn per observation. Triggers on "/claude-batch", "sammelmodus", "collect mode", "batch mode", "erstmal sammeln", "nicht sofort umsetzen". Do NOT trigger for normal work, for backlog execution (/run-backlog), or for issue creation (/setup-issue).
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
 # claude-batch — Collect Prompts, Merge Once
@@ -137,6 +138,22 @@ node -e "require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').activate(process.cwd(
 node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" start .
 ```
 
+**2.2b Mark the session in the sidebar.** While collecting, the session looks
+idle from outside — the user comes back, sees the green dot, and types the next
+task straight into a mode that swallows it. Prefix the title so the sidebar
+says what is going on:
+
+1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
+2. If `title` does not already start with `📥 Batch – `:
+   `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
+   `title: "📥 Batch – {title}"`.
+
+The prefix is exactly `📥 Batch – ` (inbox tray, space, word, space, en dash,
+space) — the same emoji the completion card carries in its `📥 BATCH sammelt`
+CTA while the mode is armed. Both tools exist only in the Desktop app: in a
+terminal session, an unattended run, or on any failure, skip silently — no
+retry, no note, no fallback. The rename is a courtesy, never a gate.
+
 **Re-arming keeps the queue.** `activate` only writes the mode file;
 `.claude/batch.md` is untouched. So `/claude-batch on` after an auto-end
 (expiry, note cap) or after `off` continues the same collection — say the
@@ -188,7 +205,11 @@ first), how to only stop (`/claude-batch off`), and the auto-end bounds. When
 2.4 ran, the note count in its first line already says the first note is
 stored. Do not paraphrase it, do not add a second explanation, and do not tell
 the user to switch the mode on — it is on. Then render an `analysis` completion
-card.
+card **with `cwd` set to the project root**: the card reads
+`.claude/batch-mode.json` itself and swaps its CTA for `📥 BATCH sammelt. {n}
+Notizen · nächster Prompt wird Notiz #{n+1} · "{marker}" löst aus — ich WARTE`.
+Nothing else to pass; without `cwd` the card cannot see the mode and ends on a
+CTA that invites the next prompt as if it would be worked on.
 
 **2.6 Attachments are filed by you, because only you can see them.** This is a
 standing rule for the whole collection window, not a one-off part of activation:
@@ -223,6 +244,11 @@ Report: active or not, note count, time since the last note, the marker actually
 in force (`effectiveMarker(cwd)`), and — when `expiryReason()` is non-null — that
 collection stopped on its own (`expired` / `full`) and why. Do NOT dump every
 note unless asked; name the count and the first few.
+
+Every card rendered while the mode is armed passes `cwd` (see 2.5). When the
+mode turned out to be `expired` / `full`, the collection is over: strip the
+session-title prefix as in Step 5 in the same turn, so the sidebar stops
+promising a collection that no longer happens.
 
 When `loadConfig()` returns a `markerFallback`, the Step 1 marker pre-check has
 already asked the marker question and saved the answer before you get here —
@@ -329,6 +355,13 @@ not linger for its next poll:
 node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" stop .
 ```
 
+Then restore the session title: `mcp__ccd_session_mgmt__get_session` `self`;
+if the `title` starts with `📥 Batch – `, call
+`mcp__ccd_session_mgmt__set_session_title` `self` with that prefix removed. A
+title without the prefix is left alone — the user renamed it meanwhile, and
+that name wins. Desktop app only; skip silently elsewhere. The injected merge
+context repeats this instruction because the hook path never loads this skill.
+
 Say in one clause that follow-up prompts run normally again and `/claude-batch on`
 re-arms collection. A question here would be asking whether to keep blocking the
 answers to your own questions.
@@ -342,6 +375,10 @@ before the mode goes off, so the next `on` starts with a working marker.
 node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" stop .
 node -e "require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').deactivate(process.cwd())"
 ```
+
+Restore the session title the same way as in Step 4.8: strip a leading
+`📥 Batch – ` via `set_session_title` `self`, leave any other title untouched,
+skip silently outside the Desktop app.
 
 If notes remain, say how many and that they survive in `.claude/batch.md` for a
 later `/claude-batch go`. Never discard them on deactivation.
@@ -410,4 +447,8 @@ The dependency is soft. Resolve the plugin path and skip silently if absent —
   the merge.
 - **The mode expires on its own** (time and note cap). If collection stopped
   mid-session, say so — do not let the user believe prompts are still landing
-  in the queue.
+  in the queue — and strip the `📥 Batch – ` title prefix in that turn.
+- **The title prefix is state, not decoration.** `📥 Batch – ` goes on when the
+  mode arms (2.2b) and comes off when it ends (4.8, 5, expiry) — never by
+  re-typing a remembered title, only by stripping exactly that prefix. Missing
+  session tools (terminal, unattended) mean skip, not fail.

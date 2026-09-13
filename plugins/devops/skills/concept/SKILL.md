@@ -12,7 +12,7 @@ description: >-
   Do NOT trigger for: simple code explanations, debugging
   (use /fix), or static documentation (use /setup-readme).
 argument-hint: "[topic, analysis result, plan, or concept to visualize]"
-allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), Bash(node *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*
+allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), Bash(node *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
 # Concept
@@ -853,6 +853,28 @@ See `deep-knowledge/bridge-server.md` for the full setup — script lookup,
 launch command, cron body, state-file schema, rationale for `/pending`
 over substring checks, and cleanup ordering.
 
+### Mark the session in the sidebar
+
+A concept turns this session into a waiting room: the work continues on the
+page, not in chat. A user who comes back later sees only "Claude is idle" and
+types the next task into a session that is waiting for page decisions. So,
+right after the page is open, prefix the session title:
+
+1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
+2. If `title` does not already start with `🧭 Concept – `:
+   `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
+   `title: "🧭 Concept – {title}"`.
+
+The prefix is exactly `🧭 Concept – ` (compass, space, word, space, en dash,
+space) — the same emoji the completion card carries in its CTA, so sidebar
+and card read as one state. Step 6a strips exactly this prefix again.
+
+**Both tools exist only in the Desktop app.** In a terminal session, an
+unattended run, or when the call fails for any reason: skip silently — no
+retry, no note to the user, no fallback. The rename is a courtesy, never a
+gate. Never restore the title by re-typing a remembered value; the strip in
+Step 6a is the only restore.
+
 ### After opening, inform the user:
 
 Pick the wording that matches the `[ui-locale: ...]` hint injected by
@@ -870,8 +892,9 @@ Pick the wording that matches the `[ui-locale: ...]` hint injected by
 
 Every turn that ends with the concept still open — right after opening the
 page, after each processing round, after a stale wake — renders its completion
-card with the `concept` field. That replaces the CTA of whatever variant the
-turn earned (and outranks `pending`) with the one statement that is true:
+card with the `concept` field **and `cwd` set to the project root**. That
+replaces the CTA of whatever variant the turn earned (and outranks `pending`)
+with the one statement that is true:
 
 | `concept.phase` | When | CTA (DE) |
 |---|---|---|
@@ -884,6 +907,13 @@ submission, a research workflow preparing the next round — and the card folds
 it into that line (`… mit 2 Agenten`) and names each item in the pending block.
 The bridge server, keepalive pulser and pickup waker are **not** content work:
 never list them there. A card that names them is the bug this field fixes.
+
+With `cwd` set, the card reads `port` + `html_path` from
+`.claude/concept-active.json` and prints the page's URL
+(`> 🧭 http://localhost:{port}/docs/concepts/{date}-{slug}.html`) directly
+above that CTA — the way back to the tab for a user who lost it. Nothing else
+to pass: the link is the one the page is already open at. Without `cwd` the
+card has no line to print, which is a defect of the call, not of the card.
 
 The final card (Step 6b) carries no `concept` field: by then the bridge is
 down and the concept is closed.
@@ -1595,6 +1625,12 @@ in the sheet's files block.
 curl -s -X POST http://localhost:$PORT/shutdown > /dev/null 2>&1 || true
 rm -f .claude/concept-active.json
 ```
+
+**Restore the session title** (Desktop app only — skip silently elsewhere):
+`mcp__ccd_session_mgmt__get_session` `self`; if the `title` starts with
+`🧭 Concept – `, call `mcp__ccd_session_mgmt__set_session_title` `self` with
+that prefix removed. A title without the prefix is left untouched — the user
+renamed it meanwhile, and that name wins.
 
 Then `CronDelete <cron_id>`. `/shutdown` replaces the older `kill $SERVER_PID`:
 on Windows the PID could already be reused by an unrelated process, and

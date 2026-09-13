@@ -47,6 +47,7 @@ import { fileURLToPath } from "node:url";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { hasPending, pendingWhat, renderPendingBlock, renderPendingLine, hasConcept, conceptWhat } from "./lib/pending.js";
 import { clampText, clampList } from "./lib/soft-limits.js";
+import { conceptUrl, readBatch, batchWhat } from "./lib/mode-state.js";
 import {
   assessFreshness,
   isLiveSnapshot,
@@ -318,6 +319,9 @@ const CTA = {
     // Concept layer — a concept page is open; outranks pending (the bridge's own
     // tasks are plumbing, and any real work is folded into {what}).
     concept:                  '## 🧭 CONCEPT open. {what} — I’ll REPORT back',
+    // Batch layer — /claude-batch is collecting; the next prompt is a note, not
+    // a task. Read off the project's batch-mode.json, never off a card field.
+    batch:                    '## 📥 BATCH collecting. {what} — I’ll WAIT',
   },
   de: {
     'ship-successful-merged':      '## \ud83d\ude80 SHIPPED{chan}. merged \u2192 origin/{merged} \u2014 Alles ERLEDIGT',
@@ -341,6 +345,9 @@ const CTA = {
     // Concept layer — a concept page is open; outranks pending (the bridge's own
     // tasks are plumbing, and any real work is folded into {what}).
     concept:                  '## 🧭 CONCEPT läuft. {what} — ich MELDE mich',
+    // Batch layer — /claude-batch is collecting; the next prompt is a note, not
+    // a task. Read off the project's batch-mode.json, never off a card field.
+    batch:                    '## 📥 BATCH sammelt. {what} — ich WARTE',
   },
 };
 
@@ -685,7 +692,7 @@ function renderDeployGate(items, lang) {
   return labels.header + '\n' + bullets.join('\n') + '\n\n_' + labels.hint + '_';
 }
 
-function renderCTA(variant, cta, lang, state, delivery, pending, concept) {
+function renderCTA(variant, cta, lang, state, delivery, pending, concept, batch) {
   const templates = CTA[lang] || CTA.de;
   cta = cta || {};
 
@@ -700,6 +707,20 @@ function renderCTA(variant, cta, lang, state, delivery, pending, concept) {
   if (hasConcept(concept)) {
     const tpl = templates.concept || CTA.de.concept;
     return tpl.replace('{what}', conceptWhat(concept, pending, lang)).replace(/^## /, '### ');
+  }
+
+  // Batch layer — /claude-batch collection is armed for this project, so the
+  // user's next prompt becomes a note and never reaches the model. Every other
+  // CTA would invite exactly that prompt as if it were going to be worked on;
+  // this one says what the collect hook will do with it. Detected from the
+  // project's own batch-mode.json (same predicate as the hook), so a card in a
+  // collecting session cannot forget to say so. Real background work is
+  // appended, as in the concept wait line.
+  if (batch) {
+    const tpl = templates.batch || CTA.de.batch;
+    let what = batchWhat(batch, lang);
+    if (hasPending(pending)) what += ' · ' + pendingWhat(pending, lang);
+    return tpl.replace('{what}', what).replace(/^## /, '### ');
   }
 
   // Pending layer — background subagents / tasks the turn started are STILL
@@ -1050,7 +1071,20 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
-  parts.push(renderCTA(variant, input.cta, lang, input.state, input.delivery, input.pending, input.concept));
+  // Concept link line — the URL the open page lives at, directly above the 🧭
+  // CTA and in the same dim style, so a user who lost the tab has the way back
+  // on the last card. Resolved from the project's concept-active.json (the page
+  // is already open at exactly that URL); nothing to resolve → no line.
+  if (hasConcept(input.concept)) {
+    const url = conceptUrl(input.cwd, input.concept);
+    if (url) {
+      parts.push(blockquote('🧭 ' + url));
+      parts.push('');
+    }
+  }
+
+  const batch = hasConcept(input.concept) ? null : readBatch(input.cwd);
+  parts.push(renderCTA(variant, input.cta, lang, input.state, input.delivery, input.pending, input.concept, batch));
   parts.push('');
 
   parts.push('---');
@@ -1486,7 +1520,7 @@ server.registerTool(
       summary: z.string().transform(v => clampText(v, 80).value)
         .describe("Max ~10 words, user's language (over-long summaries are clamped, not rejected)"),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
-      cwd: z.string().optional().describe("Working directory of the target repo. STRONGLY RECOMMENDED for ship-* variants — without it, getRepoUrl falls back to the MCP server's own cwd (plugin dir) and the card cannot render clickable PR/commit/branch links."),
+      cwd: z.string().optional().describe("Working directory of the target repo. STRONGLY RECOMMENDED for ship-* variants — without it, getRepoUrl falls back to the MCP server's own cwd (plugin dir) and the card cannot render clickable PR/commit/branch links. Also what lets the card read the project's mode state: the open /concept page's URL (.claude/concept-active.json) and an armed /claude-batch collection (.claude/batch-mode.json → 📥 BATCH CTA)."),
       buildId: z.string().optional().describe("Pre-computed build-ID (from ship_build). If provided, skips internal computation. Use this when the worktree/branch state may have changed after building (e.g. post-merge)."),
       session_id: z.string().optional().describe("Session ID for flag writing"),
       changes: z.preprocess(
@@ -1566,9 +1600,10 @@ server.registerTool(
           z.enum(["waiting", "iterating", "implementing"]),
           z.object({
             phase: z.enum(["waiting", "iterating", "implementing"]).optional().describe("'waiting' (default) = the page is open and the next step is the user's submission; 'iterating' = a submission was processed and the next iteration is being produced; 'implementing' = an implement submission is being executed."),
+            url: z.string().optional().describe("Override for the page URL shown above the CTA. Normally NOT needed: pass `cwd` and the card reads port + html_path from the project's .claude/concept-active.json — the URL the page is already open at."),
           }),
         ]).optional(),
-      ).describe("A /concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT läuft. {phase} — ich MELDE mich', where {phase} is one of: Warte auf deine Entscheidungen · Arbeite an der nächsten Iteration · Arbeite an der Implementierung. Real background work (content agents, a workflow) still goes into `pending` and is folded into that sentence ('… mit 2 Agenten'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them."),
+      ).describe("A /concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT läuft. {phase} — ich MELDE mich', where {phase} is one of: Warte auf deine Entscheidungen · Arbeite an der nächsten Iteration · Arbeite an der Implementierung. Real background work (content agents, a workflow) still goes into `pending` and is folded into that sentence ('… mit 2 Agenten'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: the card then shows the page's http://localhost:{port}/… link above the CTA."),
       deployGate: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([

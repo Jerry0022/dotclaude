@@ -1,5 +1,6 @@
 import { describe, test, expect, vi, beforeAll } from "vitest";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, mkdirSync, mkdtempSync } from "node:fs";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 // index.js boots an MCP server over stdio at import time and pulls in the
@@ -527,5 +528,112 @@ describe("concept layer", () => {
     });
     expect(text).toContain("READY — SHIP oder ÄNDERN");
     expect(text).not.toContain("CONCEPT läuft");
+  });
+
+  // The page is already open at http://localhost:{port}/{html_path} — the
+  // bridge's state file holds both, so the card links there without the skill
+  // passing a URL. The line sits directly above the CTA, dim like the meta rows.
+  test("links the open page from the project's concept-active.json when cwd is passed", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "card-concept-"));
+    mkdirSync(join(cwd, ".claude"));
+    writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({
+      port: 8878, html_path: "docs/concepts/2026-09-13-feedback-routine.html", slug: "feedback-routine",
+    }));
+    const text = await cardText({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-concept-8", cwd, buildId: "t",
+      concept: "waiting",
+    });
+    const lines = text.split("\n");
+    const link = lines.findIndex((l) => l.includes("🧭 http://localhost:8878/docs/concepts/2026-09-13-feedback-routine.html"));
+    const cta = lines.findIndex((l) => l.startsWith("### 🧭 CONCEPT läuft"));
+    expect(link).toBeGreaterThan(-1);
+    expect(lines[link].startsWith(">")).toBe(true);
+    expect(cta).toBeGreaterThan(link);
+  });
+
+  test("an explicit concept.url wins over the state file", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-concept-9",
+      concept: { phase: "iterating", url: "http://localhost:9001/docs/concepts/x.html" },
+    });
+    expect(text).toContain("> 🧭 http://localhost:9001/docs/concepts/x.html");
+  });
+
+  test("no resolvable URL → no link line, CTA unchanged", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-concept-10",
+      cwd: mkdtempSync(join(tmpdir(), "card-noconcept-")), buildId: "t", concept: "waiting",
+    });
+    expect(text).toContain("### 🧭 CONCEPT läuft");
+    expect(text).not.toMatch(/> 🧭 http/);
+  });
+});
+
+// /claude-batch collection armed for the project: the user's next prompt is a
+// note the hook swallows, not a task. The card reads the same batch-mode.json
+// the hook reads (expiry and note cap included), so a collecting session can
+// never end on a CTA that invites a prompt as if it would be worked on.
+describe("batch layer", () => {
+  function batchProject(notes, mode = {}) {
+    const cwd = mkdtempSync(join(tmpdir(), "card-batch-"));
+    mkdirSync(join(cwd, ".claude"));
+    writeFileSync(join(cwd, ".claude", "batch-mode.json"), JSON.stringify({
+      active: true, startedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(), maxNotes: 50, marker: ">>", ...mode,
+    }));
+    if (notes > 0) {
+      const body = Array.from({ length: notes }, (_, i) => `\n<!-- 2026-09-13T10:0${i}:00.000Z -->\nNotiz ${i + 1}\n`).join("");
+      writeFileSync(join(cwd, ".claude", "batch.md"), "# claude-batch notes\n" + body);
+    }
+    return cwd;
+  }
+
+  test("active collection replaces the analysis CTA with the 📥 BATCH line", async () => {
+    const text = await cardText({
+      variant: "analysis", summary: "Sammelmodus an", lang: "de", session_id: "test-batch-1",
+      cwd: batchProject(3), buildId: "t",
+    });
+    expect(text).toContain('### 📥 BATCH sammelt. 3 Notizen · nächster Prompt wird Notiz #4 · ">>" löst aus — ich WARTE');
+    expect(text).not.toContain("LIES dir durch");
+  });
+
+  test("fresh activation with no notes yet", async () => {
+    const text = await cardText({
+      variant: "analysis", summary: "x", lang: "en", session_id: "test-batch-2",
+      cwd: batchProject(0, { marker: "go:" }), buildId: "t",
+    });
+    expect(text).toContain('### 📥 BATCH collecting. no notes yet · next prompt becomes note #1 · "go:" fires the merge — I’ll WAIT');
+  });
+
+  test("an expired mode file is not a collection — normal CTA", async () => {
+    const text = await cardText({
+      variant: "analysis", summary: "x", lang: "de", session_id: "test-batch-3",
+      cwd: batchProject(2, { expiresAt: new Date(Date.now() - 1000).toISOString() }), buildId: "t",
+    });
+    expect(text).toContain("LIES dir durch");
+    expect(text).not.toContain("BATCH sammelt");
+  });
+
+  test("an open concept outranks the batch line", async () => {
+    const text = await cardText({
+      variant: "analysis", summary: "x", lang: "de", session_id: "test-batch-4",
+      cwd: batchProject(1), buildId: "t", concept: "waiting",
+    });
+    expect(text).toContain("CONCEPT läuft");
+    expect(text).not.toContain("BATCH sammelt");
+  });
+
+  test("batch outranks pending and folds the running work in", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-batch-5",
+      cwd: batchProject(1), buildId: "t", pending: [{ name: "devops:research", doing: "Doku" }],
+    });
+    expect(text).toMatch(/### 📥 BATCH sammelt\. 1 Notiz · nächster Prompt wird Notiz #2 · ">>" löst aus · .*devops:research.* — ich WARTE/);
+    expect(text).not.toContain("NOCH NICHT FERTIG");
+  });
+
+  test("no cwd → no batch detection", async () => {
+    const text = await cardText({ variant: "analysis", summary: "x", lang: "de", session_id: "test-batch-6" });
+    expect(text).toContain("LIES dir durch");
   });
 });

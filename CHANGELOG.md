@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.154.0] — 2026-09-13
+
+### Added
+
+- **A running `/concept` or `/claude-batch` is visible in the sidebar.** Both modes turn a session into a waiting room — the work continues on the concept page, or the next prompt is swallowed as a note — but from the sidebar the session looked idle: green dot, "Claude is done", and the user typed the next task into a session that was waiting for page decisions or collecting. Both skills now prefix the session title while the mode runs (`🧭 Concept – …` when the page is open, `📥 Batch – …` while collecting) via `mcp__ccd_session_mgmt__set_session_title self`, and strip exactly that prefix on every way out (concept close-out; batch `go`, `off`, expiry — the marker path never loads the skill, so the hook's injected merge context repeats the restore). A title the user renamed meanwhile is left alone. Desktop-app only: without the session tools the rename is skipped silently — a courtesy, never a gate.
+- **The completion card says which mode is running, with the same emoji, and links the page.** With `cwd` passed, the card reads the project's own state files instead of a new field: an open concept's card prints `> 🧭 http://localhost:{port}/docs/concepts/{date}-{slug}.html` directly above the `🧭 CONCEPT läuft` CTA (from `.claude/concept-active.json` — the URL the page is already open at), and an armed batch collection swaps the CTA for `📥 BATCH sammelt. 3 Notizen · nächster Prompt wird Notiz #4 · ">>" löst aus — ich WARTE` (from `.claude/batch-mode.json`, using the hook's own active predicate so expiry and note cap agree). Rank: concept > batch > pending. `concept.url` overrides the lookup; no `cwd` means no line — which is a defect of the call, not of the card. Both skills pass `cwd` on every card while their mode is on.
+
 ## [0.153.0] — 2026-09-13
 
 ### Added
