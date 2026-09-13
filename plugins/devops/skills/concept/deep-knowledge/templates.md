@@ -8675,7 +8675,8 @@ contributes no `mappings[]` entry — never a silent blank.
 ### Rendered DOM contract
 
 Everything below is generated; the authored markup is the wrapper section, the spec and
-(free rounds) the note.
+(free rounds) the note. `div.map-root` (or the spec-error box) is mounted **directly after
+the spec script**, so an authored note that follows the spec stays below the mapping.
 
 | Element | Identity | Count | Purpose |
 |---|---|---|---|
@@ -9935,6 +9936,13 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     });
     wireSchema(section, model);
   }
+  // The mapping (or its error box) renders IN PLACE of the spec script: a free
+  // round's authored note follows the spec, and appending at the section's
+  // end put the note above the matrix and its tools (browser-verified).
+  function mount(section, node) {
+    const spec = section.querySelector('script[data-mapping-spec]');
+    if (spec) spec.after(node); else section.appendChild(node);
+  }
   function renderSection(section) {
     const m = section.dataset.mapping;
     let model;
@@ -9942,7 +9950,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     catch (e) {
       const banner = el('div', 'map-error', fmt(MAP_LOCALE.spec_error, { error: e.message }));
       banner.setAttribute('role', 'alert');
-      section.appendChild(banner);
+      mount(section, banner);
       section.dataset.mapRendered = 'true';
       return;
     }
@@ -10005,7 +10013,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       });
       root.appendChild(notes);
     }
-    section.appendChild(root);
+    mount(section, root);
     syncAdhoc(section, model);
     model.matrices.forEach(mx => {
       const state = stateInput(section, m, 'cells', mx.key);

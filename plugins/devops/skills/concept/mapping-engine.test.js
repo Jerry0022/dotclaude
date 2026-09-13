@@ -89,6 +89,26 @@ describe("mapping engine — model + state", () => {
     expect(p.document.querySelectorAll('[data-mapping="bad"] [data-map-matrix]').length).toBe(0);
     expect(p.window.collectMappings(p.document)).toEqual([]);
   });
+  test("the mapping renders in place of the spec — before the authored inline note, never appended after it", () => {
+    // Browser-verified (Task 8): appending .map-root at the end of the section put the free
+    // round's note textarea ABOVE the matrix and its tools — the note must follow what it annotates.
+    const p = page({ specs: [["rel", TRAINS_SPEC], ["bad", VEHICLE_SPEC]] });
+    p.document.querySelector('[data-mapping="bad"] [data-mapping-spec]').textContent = "{not json";
+    p.window.renderMappings();
+    const precedes = (a, b) => !!(a.compareDocumentPosition(b) & 4);                          // DOCUMENT_POSITION_FOLLOWING
+    const rel = p.section("rel");
+    const spec = rel.querySelector("[data-mapping-spec]"), root = rel.querySelector(".map-root"), note = rel.querySelector('[data-comment="map-rel-note"]');
+    expect(precedes(spec, root)).toBe(true);
+    expect(precedes(root, note)).toBe(true);
+    expect(spec.nextElementSibling).toBe(root);
+    const bad = p.section("bad");
+    expect(precedes(bad.querySelector(".map-error"), bad.querySelector('[data-comment="map-bad-note"]'))).toBe(true);
+    // A section without a spec script still gets its error box (appended — there is no anchor).
+    const none = p.document.createElement("section"); none.dataset.mapping = "none"; none.id = "none";
+    p.document.querySelector("section[data-iteration]").appendChild(none);
+    p.window.renderMappings();
+    expect(none.querySelector(".map-error").textContent).toBe("map.spec_error: no spec");
+  });
   test("matrix DOM contract: grouped rows, two-level header with tier band, counts, Σ column, role=grid", () => {
     const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
     const table = p.document.querySelector('[data-map-matrix="card@phone"] table.map-table');
