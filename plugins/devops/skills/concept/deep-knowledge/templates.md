@@ -8246,8 +8246,13 @@ Shared, template-independent engine for `section[data-mapping]` (§ View kind `m
 § Mapping block (optional)). Copied verbatim into every page like the annotation layer;
 `renderMappings()` early-returns on pages without a mapping. The matrix's checkboxes are
 the DOM truth; one CSS-hidden text input per matrix is the persisted form (§ State
-Persistence picks it up as `text:i{N}:map-…`). See the design spec
-`docs/superpowers/specs/2026-09-13-concept-information-mapping-design.md`.
+Persistence picks it up as `text:i{N}:map-…`). With more than one matrix a tab strip
+(`button.map-tab`) switches schematic and matrix together; the toolbar tools (⧉ copy
+context, ↺ proposal, + item) and the slot notes (`textarea[data-comment="map-{m}-note-{target}"]`)
+are generated too. Inside an iteration without `data-active` the section is frozen
+(`data-map-frozen`): it renders from `spec.submitted` read-only — no tools, no chip ×,
+view state in memory — and shows a `.map-error` banner when `submitted` is missing.
+See the design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-design.md`.
 
 ### CSS
 
@@ -8264,7 +8269,17 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
 .map-view-btn { border: 0; border-right: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); padding: 0.4rem 0.9rem; font: inherit; cursor: pointer; }
 .map-view-btn:last-child { border-right: 0; }
 .map-view-btn[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--text-color); font-weight: 600; }
-.map-tabs { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
+.map-tabs { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+.map-tabs-label { font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.25rem; }
+.map-tab { border: 1px solid var(--border-color); border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.85rem; padding: 0.2rem 0.7rem; cursor: pointer; }
+.map-tab[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--text-color); border-color: var(--accent-color); font-weight: 600; }
+.map-tab-count { font-size: 0.75rem; color: var(--warning-color); }
+.map-tab-count:empty { display: none; }
+.map-tools { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-left: auto; }
+.map-copy, .map-reset, .map-add-item { border: 1px solid var(--border-color); border-radius: 6px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.85rem; padding: 0.25rem 0.6rem; cursor: pointer; }
+.map-copy:hover, .map-reset:hover, .map-add-item:hover { color: var(--text-color); border-color: var(--accent-color); }
+.map-add-item:disabled { opacity: 0.5; cursor: default; }
+.map-tools-status:empty { display: none; }
 .map-summary { font-size: 0.9rem; color: var(--text-secondary); }
 .map-summary[data-ok="false"] { color: var(--warning-color); }
 .map-error { border: 1px solid var(--danger-color, #f85149); color: var(--danger-color, #f85149); padding: 0.75rem; border-radius: 6px; }
@@ -8295,7 +8310,16 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
 .map-slot.is-under .map-slot-count::after { content: " ⚠"; }
 .map-slot.is-over .map-slot-count { color: var(--danger-color, #f85149); }
 .map-slot-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; min-height: 1.6rem; }
-.map-slot-note-btn { border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.map-slot-note-btn { border: 0; background: transparent; color: var(--text-secondary); font: inherit; padding: 0 0.2rem; cursor: pointer; }
+.map-slot-note-btn:hover { color: var(--accent-color); }
+.map-table th .map-slot-note-btn { font-weight: 400; }
+
+/* slot notes: one textarea per target, revealed by ✎ */
+.map-slot-notes { display: flex; flex-direction: column; gap: 0.5rem; }
+.map-slot-notes:empty { display: none; }
+.map-slot-note { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--text-secondary); }
+.map-slot-note:has(> textarea[hidden]) { display: none; }
+.map-slot-note textarea { width: 100%; box-sizing: border-box; padding: 0.4rem 0.5rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--input-bg, transparent); color: var(--text-color); font: inherit; resize: vertical; }
 
 /* chips — in slots and in the palette */
 .map-chip, .map-item-chip { display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid var(--border-color); border-radius: 999px; background: var(--input-bg, transparent); color: var(--text-color); font: inherit; font-size: 0.85rem; line-height: 1.2; padding: 0.15rem 0.55rem; cursor: pointer; }
@@ -8319,6 +8343,8 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
 .map-filter { border: 1px solid var(--border-color); border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.8rem; padding: 0.15rem 0.6rem; cursor: pointer; }
 .map-filter[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--text-color); border-color: var(--accent-color); }
 .map-filter-count { opacity: 0.8; }
+.map-palette-collapse { margin-left: auto; border: 0; background: transparent; color: var(--text-secondary); font: inherit; padding: 0 0.3rem; cursor: pointer; }
+.map-groups { display: flex; flex-direction: column; gap: 0.4rem; }
 .map-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem; }
 .map-group-toggle { border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.85rem; padding: 0.1rem 0.3rem; cursor: pointer; white-space: nowrap; }
 .map-group-count { opacity: 0.8; }
@@ -8347,6 +8373,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
 .map-cell-td input:checked + .map-cell { background: var(--accent-color); border-color: var(--accent-color); }
 .map-cell-td input:focus-visible + .map-cell { outline: 2px solid var(--accent-color); outline-offset: 1px; }
 .map-cell-td[data-accepts="one"] .map-cell { border-radius: 50%; }
+.map-cell-td input:disabled, .map-cell-td input:disabled + .map-cell, .map-cell-td:has(input:disabled) label { cursor: default; }
 .map-cell-td.is-changed .map-cell { box-shadow: inset 0 0 0 2px var(--panel-bg), inset 0 0 0 4px var(--accent-color); }
 .map-cell-td.is-changed input:not(:checked) + .map-cell { border-style: dashed; border-color: var(--accent-color); }
 .map-table[data-dense="true"] tr.map-head-targets th { writing-mode: vertical-rl; transform: rotate(180deg); }
@@ -8467,15 +8494,23 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
 
   // --- the single write path -------------------------------------------------
   function setCell(sectionOrId, itemId, targetKey, ctx, on) {
-    const section = typeof sectionOrId === 'string' ? document.querySelector('[data-mapping="' + sectionOrId + '"]') : sectionOrId;
+    const section = sectionOf(sectionOrId);
     const model = section && MODELS.get(section); if (!model) return false;
-    if (section.dataset.mapFrozen === 'true') return false;
-    const matrix = matrixOf(model, targetKey, ctx); if (!matrix) return false;
+    const matrix = writeCell(section, model, itemId, targetKey, ctx, on);
+    if (!matrix) return false;
+    refreshMatrix(section, model, matrix);
+    return true;
+  }
+  // The write without the refresh (bulk callers refresh once); returns the
+  // matrix that changed, or null when nothing was written.
+  function writeCell(section, model, itemId, targetKey, ctx, on) {
+    if (isFrozen(section)) return null;
+    const matrix = matrixOf(model, targetKey, ctx); if (!matrix) return null;
     const target = matrix.targets.find(t => t.key === targetKey);
     const state = stateInput(section, model.id, 'cells', matrix.key);
     let pairs = decodeCells(state.value);
     const has = pairs.some(p => p[0] === itemId && p[1] === targetKey);
-    if (on === has) return false;
+    if (on === has) return null;
     if (on) {
       if (target.accepts === 'one') pairs = pairs.filter(p => p[1] !== targetKey);                       // slot swap
       if (matrix.src.itemTargets === 'one') pairs = pairs.filter(p => p[0] !== itemId);                  // row swap
@@ -8483,11 +8518,13 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     } else pairs = pairs.filter(p => !(p[0] === itemId && p[1] === targetKey));
     writeState(state, encodeCells(pairs));
     if (target.ordered) syncOrder(section, model, matrix, target, pairs);
+    return matrix;
+  }
+  function refreshMatrix(section, model, matrix) {
     projectMatrix(section, model, matrix);                                                              // checkboxes + counts + markers
     refreshSchema(section, model);                                                                      // slot chips + palette badges
     updateSummary(section, model);
     if (typeof updateSectionNavState === 'function') updateSectionNavState();
-    return true;
   }
   function writeState(input, value) {
     input.value = value;
@@ -8503,23 +8540,27 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     model.matrices.forEach(mx => readCells(model, mx, stateInput(section, model.id, 'cells', mx.key)).forEach(p => set.add(p[0])));
     return set;
   }
-  function violationsOf(section, model) {
+  // The violations of ONE matrix (the tab counts); `required` is mapping-wide
+  // and lives in violationsOf only.
+  function matrixViolations(section, model, mx) {
     const out = [];
-    const withCtx = (v, mx) => { if (mx.ctx) v.ctx = mx.ctx; return v; };
-    model.matrices.forEach(mx => {
-      const pairs = readCells(model, mx, stateInput(section, model.id, 'cells', mx.key));
-      mx.targets.forEach(t => {
-        const have = pairs.filter(p => p[1] === t.key).length;
-        if (t.accepts === 'one' && have > 1) out.push(withCtx({ target: t.key, kind: 'one', have, want: 1 }, mx));
-        if (t.min && have < t.min) out.push(withCtx({ target: t.key, kind: 'min', have, want: t.min }, mx));
-        if (t.max && have > t.max) out.push(withCtx({ target: t.key, kind: 'max', have, want: t.max }, mx));
-      });
-      if (mx.src.itemTargets === 'min1') {
-        model.items.forEach(it => {
-          if (!pairs.some(p => p[0] === it.id)) out.push(withCtx({ item: it.id, kind: 'min1', source: mx.src.id }, mx));
-        });
-      }
+    const withCtx = v => { if (mx.ctx) v.ctx = mx.ctx; return v; };
+    const pairs = readCells(model, mx, stateInput(section, model.id, 'cells', mx.key));
+    mx.targets.forEach(t => {
+      const have = pairs.filter(p => p[1] === t.key).length;
+      if (t.accepts === 'one' && have > 1) out.push(withCtx({ target: t.key, kind: 'one', have, want: 1 }));
+      if (t.min && have < t.min) out.push(withCtx({ target: t.key, kind: 'min', have, want: t.min }));
+      if (t.max && have > t.max) out.push(withCtx({ target: t.key, kind: 'max', have, want: t.max }));
     });
+    if (mx.src.itemTargets === 'min1') {
+      model.items.forEach(it => {
+        if (!pairs.some(p => p[0] === it.id)) out.push(withCtx({ item: it.id, kind: 'min1', source: mx.src.id }));
+      });
+    }
+    return out;
+  }
+  function violationsOf(section, model) {
+    const out = model.matrices.flatMap(mx => matrixViolations(section, model, mx));
     const anywhere = assignedAnywhere(section, model);
     model.items.forEach(it => { if (it.required && !anywhere.has(it.id)) out.push({ item: it.id, kind: 'required' }); });
     return out;
@@ -8545,15 +8586,25 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const c = ctx && (model.contexts || []).find(x => x.id === ctx);
     return c ? c.label : '';
   }
+  const ADHOC_GROUP = '__adhoc';
+  const groupLabel = group => group === ADHOC_GROUP ? MAP_LOCALE.added_group : group;
+  const isFrozen = section => section.dataset.mapFrozen === 'true';
   // Shared by the matrix's group rows and the palette's groups.
   function groupToggle(group, count) {
     const btn = el('button', 'map-group-toggle');
     btn.type = 'button';
     btn.setAttribute('aria-expanded', 'true');
     btn.appendChild(el('span', 'map-group-glyph', '▾'));
-    btn.appendChild(document.createTextNode(' ' + group + ' '));
+    btn.appendChild(document.createTextNode(' ' + groupLabel(group) + ' '));
     btn.appendChild(el('span', 'map-group-count', String(count)));
     return btn;
+  }
+  function slotNoteButton() {
+    const note = el('button', 'map-slot-note-btn', '✎');
+    note.type = 'button';
+    note.title = MAP_LOCALE.slot_note;
+    note.setAttribute('aria-label', MAP_LOCALE.slot_note);
+    return note;
   }
   function renderMatrix(section, model, matrix) {
     const targets = orderedTargets(matrix);
@@ -8591,6 +8642,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       th.appendChild(el('span', 'map-col-label', t.label));
       th.appendChild(document.createTextNode(' '));
       th.appendChild(el('span', 'map-col-count', ''));
+      if (model.slotNotes) th.appendChild(slotNoteButton());
       targetRow.appendChild(th);
     });
     thead.appendChild(targetRow);
@@ -8600,39 +8652,8 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const proposed = new Set(proposalPairs(model, matrix).map(p => p[0] + '>' + p[1]));
     model.groups.forEach(group => {
       const members = model.items.filter(i => i.group === group);
-      if (group) {
-        const gr = el('tr', 'map-group-row');
-        gr.dataset.group = group;
-        const td = el('td'); td.colSpan = targets.length + 2;
-        td.appendChild(groupToggle(group, members.length)); gr.appendChild(td); tbody.appendChild(gr);
-      }
-      members.forEach(item => {
-        const tr = el('tr', 'map-item-row');
-        tr.dataset.item = item.id;
-        tr.dataset.group = group;
-        const th = el('th', 'map-item-label');
-        th.setAttribute('scope', 'row');
-        th.appendChild(el('span', null, item.label));
-        if (item.hint) th.title = item.hint;
-        tr.appendChild(th);
-        targets.forEach(t => {
-          const td = el('td', 'map-cell-td');
-          if (t.accepts === 'one') td.dataset.accepts = 'one';
-          const label = el('label');
-          const cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.dataset.mapCell = item.id + '>' + t.key;
-          cb.dataset.proposed = proposed.has(item.id + '>' + t.key) ? '1' : '0';
-          cb.tabIndex = -1;
-          cb.setAttribute('aria-label', item.label + ' → ' + t.label);
-          label.appendChild(cb);
-          label.appendChild(el('span', 'map-cell'));
-          td.appendChild(label);
-          tr.appendChild(td);
-        });
-        tr.appendChild(el('td', 'map-sum', '0'));
-        tbody.appendChild(tr);
-      });
+      if (group) tbody.appendChild(groupRow(group, members.length, targets.length));
+      members.forEach(item => tbody.appendChild(itemRow(section, matrix, targets, item, proposed)));
     });
     table.appendChild(tbody);
     const firstBox = table.querySelector('input[data-map-cell]');
@@ -8640,6 +8661,42 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     scroll.appendChild(table);
     wrap.appendChild(scroll);
     return wrap;
+  }
+  function groupRow(group, count, nTargets) {
+    const gr = el('tr', 'map-group-row');
+    gr.dataset.group = group;
+    const td = el('td'); td.colSpan = nTargets + 2;
+    td.appendChild(groupToggle(group, count));
+    gr.appendChild(td);
+    return gr;
+  }
+  function itemRow(section, matrix, targets, item, proposed) {
+    const tr = el('tr', 'map-item-row');
+    tr.dataset.item = item.id;
+    tr.dataset.group = item.group;
+    const th = el('th', 'map-item-label');
+    th.setAttribute('scope', 'row');
+    th.appendChild(el('span', null, item.label));
+    if (item.hint) th.title = item.hint;
+    tr.appendChild(th);
+    targets.forEach(t => {
+      const td = el('td', 'map-cell-td');
+      if (t.accepts === 'one') td.dataset.accepts = 'one';
+      const label = el('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.dataset.mapCell = item.id + '>' + t.key;
+      cb.dataset.proposed = proposed.has(item.id + '>' + t.key) ? '1' : '0';
+      cb.tabIndex = -1;
+      cb.disabled = isFrozen(section);                                                              // a checkbox cannot be readonly
+      cb.setAttribute('aria-label', item.label + ' → ' + t.label);
+      label.appendChild(cb);
+      label.appendChild(el('span', 'map-cell'));
+      td.appendChild(label);
+      tr.appendChild(td);
+    });
+    tr.appendChild(el('td', 'map-sum', '0'));
+    return tr;
   }
   function matrixEl(section, key) {
     return [...section.querySelectorAll('[data-map-matrix]')].find(d => d.dataset.mapMatrix === key) || null;
@@ -8687,6 +8744,13 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     if (p.violations > 0) parts.push(fmt(MAP_LOCALE.summary_violations, { n: p.violations }));
     line.textContent = parts.length ? parts.join(' · ') : MAP_LOCALE.summary_ok;
     line.dataset.ok = String(!parts.length);
+    section.querySelectorAll('.map-tab').forEach(tab => {
+      const mx = model.matrices.find(x => x.key === tab.dataset.mapTab);
+      const n = mx ? matrixViolations(section, model, mx).length : 0;
+      // The number must be visible even when the locale string carries no {n}.
+      const text = fmt(MAP_LOCALE.tab_open, { n });
+      tab.querySelector('.map-tab-count').textContent = !n ? '' : text.includes(String(n)) ? text : n + ' ' + text;
+    });
   }
 
   // --- keyboard: arrows move, Home/End jump; Space is the native toggle -------
@@ -8718,10 +8782,77 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
   // --- view state: `mode=schema|matrix;tab=<matrixKey>` in map-{m}-ui ----------
   const encodeUi = ui => Object.keys(ui).filter(k => ui[k]).map(k => k + '=' + ui[k]).join(';');
   const uiInput = (section, model) => stateInput(section, model.id, 'ui');
+  // A frozen section keeps its view state in memory (`model.ui`): the readonly
+  // ui input is never written there.
   function readUi(section, model) {
-    const ui = parseUi(uiInput(section, model).value);
-    return { mode: model.hasElements && ui.mode !== 'matrix' ? 'schema' : 'matrix',
-             tab: model.matrices.some(mx => mx.key === ui.tab) ? ui.tab : model.matrices[0].key };
+    const ui = isFrozen(section) && model.ui ? model.ui : parseUi(uiInput(section, model).value);
+    return Object.assign({}, ui, { mode: model.hasElements && ui.mode !== 'matrix' ? 'schema' : 'matrix',
+                                   tab: model.matrices.some(mx => mx.key === ui.tab) ? ui.tab : model.matrices[0].key });
+  }
+  // What is on screen: an axis has no schematic, so its tab shows the matrix
+  // whatever `mode=` says (the stored mode survives for the element tabs).
+  function visibleMode(model, ui) {
+    const active = model.matrices.find(mx => mx.key === ui.tab);
+    return active.src.kind === 'element' ? ui.mode : 'matrix';
+  }
+  // The one write path for the ui input: merge, never drop other keys.
+  function writeUi(section, model, patch) {
+    const ui = Object.assign(readUi(section, model), patch);
+    if (isFrozen(section)) model.ui = ui;
+    else writeState(uiInput(section, model), encodeUi(ui));
+    applyView(section, model);
+  }
+  function activateTab(section, key) {
+    const model = MODELS.get(section);
+    if (!model || !model.matrices.some(mx => mx.key === key)) return;
+    writeUi(section, model, { tab: key });
+  }
+  function renderTabs(model) {
+    const strip = el('div', 'map-tabs');
+    const multiSrc = model.sources.length > 1;
+    let labelled = false;
+    model.matrices.forEach(mx => {
+      if (!labelled) {                                                                            // one group label per strip
+        strip.appendChild(el('span', 'map-tabs-label', multiSrc ? MAP_LOCALE.axis : MAP_LOCALE.context));
+        labelled = true;
+      }
+      const btn = el('button', 'map-tab');
+      btn.type = 'button';
+      btn.dataset.mapTab = mx.key;
+      btn.setAttribute('aria-pressed', 'false');
+      const parts = [];
+      if (multiSrc) parts.push(mx.src.label);
+      if (mx.ctx) parts.push(contextLabel(model, mx.ctx));
+      btn.appendChild(el('span', 'map-tab-label', parts.join(' · ') || mx.key));
+      btn.appendChild(document.createTextNode(' '));
+      btn.appendChild(el('span', 'map-tab-count', ''));
+      strip.appendChild(btn);
+    });
+    return strip;
+  }
+  function renderTools(model) {
+    const tools = el('div', 'map-tools');
+    const ctxs = model.contexts || [];
+    ctxs.forEach(from => ctxs.forEach(to => {
+      if (from === to) return;
+      const btn = el('button', 'map-copy', '⧉ ' + fmt(MAP_LOCALE.copy, { from: from.label, to: to.label }));
+      btn.type = 'button';
+      btn.dataset.from = from.id;
+      btn.dataset.to = to.id;
+      tools.appendChild(btn);
+    }));
+    const reset = el('button', 'map-reset', '↺ ' + MAP_LOCALE.reset);
+    reset.type = 'button';
+    tools.appendChild(reset);
+    if (model.adhocItems) {
+      const add = el('button', 'map-add-item', '+ ' + MAP_LOCALE.add_item);
+      add.type = 'button';
+      tools.appendChild(add);
+    }
+    const status = el('div', 'map-status map-tools-status');
+    status.setAttribute('role', 'status');
+    tools.appendChild(status);
+    return tools;
   }
   function renderViewToggle() {
     const wrap = el('div', 'map-view-toggle');
@@ -8740,9 +8871,11 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
   function applyView(section, model) {
     const ui = readUi(section, model);
     const active = model.matrices.find(mx => mx.key === ui.tab);
-    section.querySelectorAll('.map-view-btn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mapMode === ui.mode)));
-    section.querySelectorAll('.map-schema').forEach(s => { s.hidden = !(ui.mode === 'schema' && s.dataset.mapCtx === (active.ctx || '')); });
-    section.querySelectorAll('[data-map-matrix]').forEach(w => { w.hidden = !(ui.mode === 'matrix' && w.dataset.mapMatrix === ui.tab); });
+    const mode = visibleMode(model, ui);
+    section.querySelectorAll('.map-view-btn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mapMode === mode)));
+    section.querySelectorAll('.map-tab').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mapTab === ui.tab)));
+    section.querySelectorAll('.map-schema').forEach(s => { s.hidden = !(mode === 'schema' && s.dataset.mapCtx === (active.ctx || '')); });
+    section.querySelectorAll('[data-map-matrix]').forEach(w => { w.hidden = !(mode === 'matrix' && w.dataset.mapMatrix === ui.tab); });
   }
 
   // --- schematic view (§ Schematic view) --------------------------------------
@@ -8778,7 +8911,8 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     schema.appendChild(status);
     return schema;
   }
-  // Parts sharing a `row` sit side by side; a part without one gets its own row.
+  // Parts sharing a `row` sit side by side, rows in numeric order; a part
+  // without one gets its own row after the numbered ones.
   function rowsOf(targets) {
     const rows = new Map();
     targets.forEach(t => {
@@ -8786,7 +8920,8 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       if (!rows.has(key)) rows.set(key, []);
       rows.get(key).push(t);
     });
-    return [...rows.entries()];
+    const rank = ([, members]) => members[0].row === null ? Number.MAX_SAFE_INTEGER : members[0].row;
+    return [...rows.entries()].sort((a, b) => rank(a) - rank(b));
   }
   function renderSlot(model, t) {
     const slot = el('div', 'map-slot');
@@ -8799,14 +8934,34 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     label.appendChild(el('span', 'map-slot-count', ''));
     slot.appendChild(label);
     slot.appendChild(el('div', 'map-slot-chips'));
-    if (model.slotNotes) {
-      const note = el('button', 'map-slot-note-btn', '✎');
-      note.type = 'button';
-      note.title = MAP_LOCALE.slot_note;
-      note.hidden = true;                                                                            // wired by the tools
-      slot.appendChild(note);
-    }
+    if (model.slotNotes) slot.appendChild(slotNoteButton());
     return slot;
+  }
+  // One note per target (not per context), revealed by the ✎ on a slot or a
+  // column header. Plain `data-comment` textareas — no `data-attachable`.
+  function renderSlotNotes(section, model) {
+    const wrap = el('div', 'map-slot-notes');
+    model.sources.flatMap(s => s.targets).forEach(t => {
+      const label = el('label', 'map-slot-note');
+      label.appendChild(el('span', 'map-slot-note-label', t.label));
+      const ta = document.createElement('textarea');
+      ta.dataset.comment = 'map-' + model.id + '-note-' + t.key;
+      ta.rows = 2;
+      ta.hidden = true;
+      ta.readOnly = isFrozen(section);
+      label.appendChild(ta);
+      wrap.appendChild(label);
+    });
+    return wrap;
+  }
+  function slotNoteArea(section, model, key) {
+    return [...section.querySelectorAll('.map-slot-notes textarea')].find(ta => ta.dataset.comment === 'map-' + model.id + '-note-' + key) || null;
+  }
+  function toggleSlotNote(section, model, key) {
+    const ta = slotNoteArea(section, model, key);
+    if (!ta) return;
+    ta.hidden = !ta.hidden;
+    if (!ta.hidden && !isFrozen(section)) ta.focus();
   }
   function renderPalette(model) {
     const pal = el('div', 'map-palette');
@@ -8831,26 +8986,35 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       filters.appendChild(btn);
     });
     head.appendChild(filters);
+    const collapse = el('button', 'map-palette-collapse', '▴');
+    collapse.type = 'button';
+    collapse.setAttribute('aria-expanded', 'true');
+    collapse.setAttribute('aria-label', MAP_LOCALE.items);
+    head.appendChild(collapse);
     pal.appendChild(head);
-    model.groups.forEach(group => {
-      const members = model.items.filter(i => i.group === group);
-      const g = el('div', 'map-group');
-      g.dataset.group = group;
-      if (group) g.appendChild(groupToggle(group, members.length));
-      const chips = el('div', 'map-group-chips');
-      members.forEach(item => {
-        const chip = el('button', 'map-item-chip');
-        chip.type = 'button';
-        chip.dataset.item = item.id;
-        chip.setAttribute('aria-pressed', 'false');
-        chip.appendChild(el('span', 'map-item-label', item.label));
-        chip.appendChild(el('span', 'map-item-count', ''));
-        chips.appendChild(chip);
-      });
-      g.appendChild(chips);
-      pal.appendChild(g);
-    });
+    const groups = el('div', 'map-groups');
+    model.groups.forEach(group => groups.appendChild(paletteGroup(model, group)));
+    pal.appendChild(groups);
     return pal;
+  }
+  function paletteGroup(model, group) {
+    const members = model.items.filter(i => i.group === group);
+    const g = el('div', 'map-group');
+    g.dataset.group = group;
+    if (group) g.appendChild(groupToggle(group, members.length));
+    const chips = el('div', 'map-group-chips');
+    members.forEach(item => chips.appendChild(itemChip(item)));
+    g.appendChild(chips);
+    return g;
+  }
+  function itemChip(item) {
+    const chip = el('button', 'map-item-chip');
+    chip.type = 'button';
+    chip.dataset.item = item.id;
+    chip.setAttribute('aria-pressed', 'false');
+    chip.appendChild(el('span', 'map-item-label', item.label));
+    chip.appendChild(el('span', 'map-item-count', ''));
+    return chip;
   }
   // Slot chips, counts and palette badges from the state strings plus the
   // matrix's `data-proposed` stamps; the armed cue and the view last.
@@ -8892,10 +9056,12 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       chip.dataset.item = id;
       chip.classList.add(proposed.has(id) ? 'is-proposed' : 'is-changed');
       chip.appendChild(el('span', 'map-chip-label', labelOf(id)));
-      const x = el('span', 'map-chip-remove', '×');
-      x.setAttribute('aria-label', MAP_LOCALE.remove);
-      x.title = MAP_LOCALE.remove;
-      chip.appendChild(x);
+      if (!isFrozen(section)) {
+        const x = el('span', 'map-chip-remove', '×');
+        x.setAttribute('aria-label', MAP_LOCALE.remove);
+        x.title = MAP_LOCALE.remove;
+        chip.appendChild(x);
+      }
       chips.appendChild(chip);
     });
     proposed.forEach(id => {                                                                         // removed proposal → ghost
@@ -8948,11 +9114,12 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       if (n >= 2) counts.multiple++;
       if (s.changed) counts.changed++;
       const pass = filter === 'unassigned' ? n === 0 : filter === 'multiple' ? n >= 2 : filter === 'changed' ? s.changed : true;
-      const hit = !q || (item.label + ' ' + item.group).toLowerCase().includes(q);
+      const hit = !q || (item.label + ' ' + groupLabel(item.group)).toLowerCase().includes(q);
       chip.hidden = !(pass && hit);
     });
     schema.querySelectorAll('.map-filter').forEach(b => { b.querySelector('.map-filter-count').textContent = String(counts[b.dataset.filter]); });
     schema.querySelectorAll('.map-group').forEach(g => { g.hidden = ![...g.querySelectorAll('.map-item-chip')].some(c => !c.hidden); });
+    schema.querySelector('.map-palette-title').textContent = MAP_LOCALE.items + ' (' + model.items.length + ')';
   }
 
   // --- arm, then tap: one in-memory `armed` per mapping ------------------------
@@ -8972,11 +9139,13 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     section.querySelectorAll('.map-schema').forEach(schema => refreshArmed(model, schema));
   }
   function tapItem(section, model, id) {
+    if (isFrozen(section)) return;
     const a = model.armed;
     if (a && a.kind === 'slot') { toggleCell(section, model, id, a.id, a.ctx); return; }
     setArmed(section, model, a && a.id === id ? null : { kind: 'item', id });
   }
   function tapSlot(section, model, key, ctx) {
+    if (isFrozen(section)) return;
     const a = model.armed;
     if (a && a.kind === 'item') { toggleCell(section, model, a.id, key, ctx); return; }             // item stays armed
     setArmed(section, model, a && a.kind === 'slot' && a.id === key && a.ctx === ctx ? null : { kind: 'slot', id: key, ctx });
@@ -8990,13 +9159,15 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const swaps = !has && target.accepts === 'one' && pairs.some(p => p[1] === key);
     if (setCell(section, item, key, ctx, !has) && swaps) flashSlot(section, key, ctx);
   }
+  const FLASH = new WeakMap();       // slot → pending timeout
   function flashSlot(section, key, ctx) {
     section.querySelectorAll('.map-schema').forEach(schema => {
       if ((schema.dataset.mapCtx || null) !== ctx) return;
       const slot = [...schema.querySelectorAll('.map-slot')].find(s => s.dataset.mapTarget === key);
       if (!slot) return;
+      clearTimeout(FLASH.get(slot));
       slot.classList.add('is-swapped');
-      setTimeout(() => slot.classList.remove('is-swapped'), 700);
+      FLASH.set(slot, setTimeout(() => { slot.classList.remove('is-swapped'); FLASH.delete(slot); }, 700));
     });
   }
   function reorderChip(section, model, slot, ctx, id, dir) {
@@ -9013,18 +9184,39 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const chip = [...slot.querySelectorAll('button.map-chip')].find(c => c.dataset.item === id);
     if (chip) chip.focus();
   }
+  // Toolbar, tabs, ✎ and the palette collapse — true when the click was consumed.
+  function toolClick(section, model, t) {
+    const hit = sel => { const n = t.closest(sel); return n && section.contains(n) ? n : null; };
+    const viewBtn = hit('.map-view-btn');
+    if (viewBtn) { writeUi(section, model, { mode: viewBtn.dataset.mapMode }); return true; }
+    const tab = hit('.map-tab');
+    if (tab) { activateTab(section, tab.dataset.mapTab); return true; }
+    const note = hit('.map-slot-note-btn');
+    if (note) {
+      const holder = note.closest('.map-slot') || note.closest('th[data-map-target]');
+      if (holder) toggleSlotNote(section, model, holder.dataset.mapTarget);
+      return true;
+    }
+    const collapse = hit('.map-palette-collapse');
+    if (collapse) {
+      const open = collapse.getAttribute('aria-expanded') !== 'true';
+      collapse.setAttribute('aria-expanded', String(open));
+      collapse.textContent = open ? '▴' : '▾';
+      collapse.closest('.map-palette').querySelector('.map-groups').hidden = !open;
+      return true;
+    }
+    if (isFrozen(section)) return false;                                                            // no tools on a frozen section
+    const copy = hit('.map-copy');
+    if (copy) { copyContext(section, model, copy.dataset.from, copy.dataset.to); return true; }
+    if (hit('.map-reset')) { resetMatrix(section, model, readUi(section, model).tab); return true; }
+    if (hit('.map-add-item')) { addItemPrompt(section, model); return true; }
+    return false;
+  }
   function wireSchema(section, model) {
     section.addEventListener('click', e => {
       const t = e.target;
       if (!(t instanceof Element)) return;
-      const viewBtn = t.closest('.map-view-btn');
-      if (viewBtn && section.contains(viewBtn)) {
-        const ui = readUi(section, model);
-        ui.mode = viewBtn.dataset.mapMode;
-        writeState(uiInput(section, model), encodeUi(ui));
-        applyView(section, model);
-        return;
-      }
+      if (toolClick(section, model, t)) return;
       const schema = t.closest('.map-schema');
       if (!schema || !section.contains(schema)) return;
       const ctx = schema.dataset.mapCtx || null;
@@ -9065,6 +9257,117 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
         reorderChip(section, model, slot, ctx, chip.dataset.item, e.key === 'ArrowLeft' ? -1 : 1);
       }
     });
+  }
+
+  // --- tools: copy context, reset, ad-hoc items (§ Proposal, reset, ad-hoc) --
+  function refreshAll(section, model) {
+    model.matrices.forEach(mx => projectMatrix(section, model, mx));
+    refreshSchema(section, model);
+    updateSummary(section, model);
+    if (typeof updateSectionNavState === 'function') updateSectionNavState();
+  }
+  // Clears every matrix of the target context, then replays the source pairs
+  // through the cell write path in source order (so accepts:one swaps stay
+  // deterministic); order inputs follow; one refresh at the end.
+  function copyContext(section, model, from, to) {
+    if (from === to || !model.contexts) return;
+    if (!window.confirm(fmt(MAP_LOCALE.copy_confirm, { from: contextLabel(model, from), to: contextLabel(model, to) }))) return;
+    model.matrices.filter(mx => mx.ctx === to).forEach(mx => writeState(stateInput(section, model.id, 'cells', mx.key), '-'));
+    model.matrices.filter(mx => mx.ctx === from).forEach(src => {
+      const pairs = readCells(model, src, stateInput(section, model.id, 'cells', src.key));
+      pairs.forEach(p => writeCell(section, model, p[0], p[1], to, true));
+      const dst = model.matrices.find(mx => mx.ctx === to && mx.src === src.src);
+      if (dst) src.targets.filter(t => t.ordered).forEach(t => {
+        writeState(stateInput(section, model.id, 'order', orderKey(dst, t)), stateInput(section, model.id, 'order', orderKey(src, t)).value);
+      });
+    });
+    refreshAll(section, model);
+  }
+  function resetMatrix(section, model, key) {
+    const matrix = model.matrices.find(mx => mx.key === key);
+    if (!matrix || !window.confirm(MAP_LOCALE.reset_confirm)) return;
+    const pairs = proposalPairs(model, matrix);
+    writeState(stateInput(section, model.id, 'cells', matrix.key), encodeCells(pairs));
+    matrix.targets.filter(t => t.ordered).forEach(t => {
+      writeState(stateInput(section, model.id, 'order', orderKey(matrix, t)), (model.proposalOrder[orderKey(matrix, t)] || []).join(','));
+      syncOrder(section, model, matrix, t, pairs);
+    });
+    refreshMatrix(section, model, matrix);
+  }
+  const ADHOC_MAX = 20, ADHOC_LABEL_MAX = 60;
+  const adhocLabels = model => model.items.filter(i => i.adhoc).map(i => i.label);
+  function addItemPrompt(section, model) {
+    if (!model.adhocItems || adhocLabels(model).length >= ADHOC_MAX) return;
+    const status = section.querySelector('.map-tools-status');
+    const raw = window.prompt(MAP_LOCALE.add_item_prompt);
+    if (raw === null) return;
+    const label = String(raw).trim().slice(0, ADHOC_LABEL_MAX);
+    if (!label) return;
+    if (model.items.some(i => i.label.trim().toLowerCase() === label.toLowerCase())) {
+      if (status) status.textContent = MAP_LOCALE.add_item_duplicate;
+      return;
+    }
+    if (status) status.textContent = '';
+    addAdhocItem(section, model, label);
+    writeState(stateInput(section, model.id, 'adhoc'), JSON.stringify(adhocLabels(model)));
+    refreshAll(section, model);
+    const add = section.querySelector('.map-add-item');
+    if (add) add.disabled = adhocLabels(model).length >= ADHOC_MAX;
+  }
+  // Model + DOM for one ad-hoc item: a row in every matrix, a chip in every
+  // palette, both inside the implicit "Added by you" group.
+  function addAdhocItem(section, model, label) {
+    const id = 'u' + (adhocLabels(model).length + 1);
+    const item = { id, label, group: ADHOC_GROUP, hint: '', required: false, adhoc: true };
+    model.items.push(item);
+    if (!model.groups.includes(ADHOC_GROUP)) model.groups.push(ADHOC_GROUP);
+    const count = adhocLabels(model).length;
+    model.matrices.forEach(mx => {
+      const wrap = matrixEl(section, mx.key);
+      if (!wrap) return;
+      const tbody = wrap.querySelector('tbody');
+      const targets = orderedTargets(mx);
+      let gr = [...tbody.querySelectorAll('tr.map-group-row')].find(r => r.dataset.group === ADHOC_GROUP);
+      if (!gr) { gr = groupRow(ADHOC_GROUP, 0, targets.length); tbody.appendChild(gr); }
+      gr.querySelector('.map-group-count').textContent = String(count);
+      const row = itemRow(section, mx, targets, item, new Set());
+      row.hidden = gr.querySelector('.map-group-toggle').getAttribute('aria-expanded') !== 'true';
+      tbody.appendChild(row);
+      if (!wrap.querySelector('input[data-map-cell][tabindex="0"]')) setEntryPoint(wrap.querySelector('table'), row.querySelector('input[data-map-cell]'));
+    });
+    section.querySelectorAll('.map-schema .map-groups').forEach(groups => {
+      let g = [...groups.querySelectorAll('.map-group')].find(x => x.dataset.group === ADHOC_GROUP);
+      if (!g) { g = paletteGroup(model, ADHOC_GROUP); groups.appendChild(g); }
+      else {
+        g.querySelector('.map-group-count').textContent = String(count);
+        g.querySelector('.map-group-chips').appendChild(itemChip(item));
+      }
+    });
+  }
+  function removeAdhocItems(section, model) {
+    const ids = new Set(model.items.filter(i => i.adhoc).map(i => i.id));
+    if (!ids.size) return;
+    model.items = model.items.filter(i => !i.adhoc);
+    model.groups = model.groups.filter(g => g !== ADHOC_GROUP);
+    if (model.armed && model.armed.kind === 'item' && ids.has(model.armed.id)) model.armed = null;
+    section.querySelectorAll('tr.map-item-row, tr.map-group-row, .map-palette .map-group').forEach(n => {
+      if (n.dataset.group === ADHOC_GROUP) n.remove();
+    });
+  }
+  // The `map-{m}-adhoc` input is the truth for ad-hoc items (restore may
+  // overwrite it): re-create them from it before the cells are decoded.
+  function syncAdhoc(section, model) {
+    if (!model.adhocItems) return;
+    const input = stateInput(section, model.id, 'adhoc');
+    let labels = [];
+    try { labels = JSON.parse(input.value || '[]'); } catch { labels = []; }
+    labels = (Array.isArray(labels) ? labels : []).map(l => String(l).trim().slice(0, ADHOC_LABEL_MAX)).filter(Boolean).slice(0, ADHOC_MAX);
+    const current = adhocLabels(model);
+    if (labels.length === current.length && labels.every((l, i) => l === current[i])) return;
+    removeAdhocItems(section, model);
+    labels.forEach(l => addAdhocItem(section, model, l));
+    const enc = JSON.stringify(labels);
+    if (input.value !== enc) input.value = enc;
   }
 
   // --- section rendering -----------------------------------------------------
@@ -9125,24 +9428,41 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     model.id = m;
     MODELS.set(section, model);
 
+    // Frozen = inside an iteration that is not the active one: the baked
+    // `submitted` state is shown read-only; without it the proposal is shown
+    // behind a visible banner (never silently as the user's decision).
+    const iteration = section.closest('section[data-iteration]');
+    const frozen = !!iteration && !iteration.hasAttribute('data-active');
+    if (frozen) section.dataset.mapFrozen = 'true';
+    const submitted = frozen && model.submitted && typeof model.submitted === 'object' ? model.submitted : null;
+    if (frozen && !submitted) {
+      const banner = el('div', 'map-error', MAP_LOCALE.frozen_missing);
+      banner.setAttribute('role', 'alert');
+      section.prepend(banner);
+    }
+
     // State inputs first (the persistence block may overwrite them right after),
-    // initialised from the proposal — value only, no events, nothing touched.
+    // initialised from the proposal (or the submission) — value only, no
+    // events, nothing touched. Ad-hoc items before cells so their ids resolve.
+    if (model.adhocItems) stateInput(section, m, 'adhoc').value = JSON.stringify(submitted && Array.isArray(submitted.adhoc) ? submitted.adhoc : []);
     model.matrices.forEach(mx => {
       const state = stateInput(section, m, 'cells', mx.key);
-      const pairs = proposalPairs(model, mx);
+      const src = submitted && submitted.cells && Array.isArray(submitted.cells[mx.key]) ? submitted.cells[mx.key] : null;
+      const pairs = src ? src.filter(p => Array.isArray(p) && p.length === 2).map(p => [String(p[0]), String(p[1])]) : proposalPairs(model, mx);
       state.value = encodeCells(pairs);
       mx.targets.filter(t => t.ordered).forEach(t => {
         const input = stateInput(section, m, 'order', orderKey(mx, t));
-        input.value = (model.proposalOrder[orderKey(mx, t)] || []).join(',');
-        syncOrder(section, model, mx, t, pairs, true);
+        const order = submitted && submitted.order && Array.isArray(submitted.order[orderKey(mx, t)]) ? submitted.order[orderKey(mx, t)] : model.proposalOrder[orderKey(mx, t)];
+        input.value = (order || []).join(',');
       });
     });
-    if (model.adhocItems) stateInput(section, m, 'adhoc').value = '[]';
     stateInput(section, m, 'ui').value = encodeUi({ mode: model.hasElements ? 'schema' : 'matrix', tab: model.matrices[0].key });
 
     const root = el('div', 'map-root');
     const toolbar = el('div', 'map-toolbar');
     if (model.hasElements) toolbar.appendChild(renderViewToggle());
+    if (model.matrices.length > 1) toolbar.appendChild(renderTabs(model));
+    if (!frozen) toolbar.appendChild(renderTools(model));
     root.appendChild(toolbar);
     const summary = el('div', 'map-summary');
     summary.setAttribute('aria-live', 'polite');
@@ -9151,7 +9471,24 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const matrices = el('div', 'map-matrices');
     model.matrices.forEach(mx => matrices.appendChild(renderMatrix(section, model, mx)));
     root.appendChild(matrices);
+    if (model.slotNotes) {
+      const notes = renderSlotNotes(section, model);
+      const texts = submitted && submitted.slotNotes && typeof submitted.slotNotes === 'object' ? submitted.slotNotes : {};
+      notes.querySelectorAll('textarea').forEach(ta => {
+        const key = ta.dataset.comment.slice(('map-' + m + '-note-').length);
+        if (typeof texts[key] === 'string') ta.value = texts[key];
+      });
+      root.appendChild(notes);
+    }
     section.appendChild(root);
+    syncAdhoc(section, model);
+    model.matrices.forEach(mx => {
+      const state = stateInput(section, m, 'cells', mx.key);
+      const pairs = readCells(model, mx, state);
+      state.value = encodeCells(pairs);                                                             // unknown ids dropped (a stale submission)
+      mx.targets.filter(t => t.ordered).forEach(t => syncOrder(section, model, mx, t, pairs, true));
+    });
+    if (frozen) section.querySelectorAll('input.map-state').forEach(i => { i.readOnly = true; });
     model.matrices.forEach(mx => projectMatrix(section, model, mx));
     refreshSchema(section, model);
     updateSummary(section, model);
@@ -9169,6 +9506,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     scope.querySelectorAll('section[data-mapping][data-map-rendered]').forEach(section => {
       const model = MODELS.get(section);
       if (!model) return;
+      syncAdhoc(section, model);                                                                       // before the cells: `u2>…` must resolve
       model.matrices.forEach(mx => {
         const state = stateInput(section, model.id, 'cells', mx.key);
         const pairs = readCells(model, mx, state);
