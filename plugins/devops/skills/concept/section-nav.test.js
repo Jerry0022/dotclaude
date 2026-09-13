@@ -1,14 +1,15 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 
-// The "Kompass" tree: iteration chips and the section TOC are ONE tree at
-// runtime. The selected chip's body is #section-nav (moved there by
-// buildSectionNav), every other chip carries a generated summary, the chips
-// before the live one fold into an archive from 4 previous rounds upward, and
-// the TOC groups itself only when ≥2 kinds meet AND the round has >12 entries.
+// The "Kompass" tree: the section TOC is built fresh for the LIVE round only,
+// inside the panel's scroll box. The bar (`nav.iteration-tabs`) stays exactly
+// as appended but is hidden — buildIterationTree()/buildRoundsChip() re-derive
+// a 🕘 rounds chip + toggled list in the pinned head from it instead. The TOC
+// groups around the selected variant when one is unambiguous, else falls back
+// to the flat/kind-grouped list (≥2 kinds AND >12 entries).
 //
 // Everything below RUNS the reference JS out of templates.md on jsdom —
 // grouping derived from an attribute that does not exist, a spy that closes
@@ -61,26 +62,84 @@ const localeKeys = (src) => src.replace(/\{\{([a-z_.]+)\}\}/g, "$1");
 // ── Source contracts ──
 
 describe("Kompass tree — source contracts", () => {
-  test("#section-nav is inserted after the selected chip, inside buildSectionNav", () => {
+  test("buildSectionNav builds the live round's TOC in place and rebinds the spy", () => {
     const fn = slice(md, "function buildSectionNav()");
     expect(fn).toContain("buildIterationTree();");
-    expect(fn).toContain(".iteration-tab[aria-selected=\"true\"]");
-    expect(fn).toContain("insertAdjacentElement('afterend', nav)");
     expect(fn).toContain("installScrollSpy();");
+    expect(fn).toContain("computeSelectedVariant(variantSections)");
+    expect(fn).toContain("applyNavOverflow(nav, document.querySelector('.panel-nav-scroll'))");
     // One-open and the manual-close stamp are bound INSIDE the builder — the
-    // nav DOM is rebuilt on every tab switch.
+    // nav DOM is rebuilt on every tab switch. The selected-variant node is
+    // exempt from both.
     expect(fn).toContain("addEventListener('toggle'");
     expect(fn).toContain("_navManualClosedAt.set(group, Date.now())");
+    expect(fn).toContain("nav-group:not(.nav-variant-open)");
+    // deterministic, spy-independent open state — reset the manual-close
+    // grace on every rebuild, then open pickInitialNavTarget()'s group
+    // BEFORE installScrollSpy() runs at all.
+    expect(fn).toContain("_navManualClosedAt = new WeakMap();");
+    expect(fn).toContain("pickInitialNavTarget(navItems)");
+    // opened BEFORE installScrollSpy() runs at all (the floor)…
+    expect(fn.indexOf("openGroupExclusively(pickInitialNavTarget(navItems))")).toBeLessThan(fn.indexOf("installScrollSpy();"));
+    // …and reconciled to a single open group again AFTER it (the settled
+    // state) — never left for the accordion's own async 'toggle' listener.
+    expect(fn.indexOf("installScrollSpy();")).toBeLessThan(fn.indexOf("openGroupExclusively(settledItem);"));
+    expect(fn).toContain("nav.querySelectorAll('details.nav-group:not(.nav-variant-open)').forEach(g => {");
+  });
+
+  test("pickInitialNavTarget is a pure, synchronous function — no dependency on the spy having run", () => {
+    const fn = fnSource("pickInitialNavTarget");
+    expect(fn).toContain("classList.contains('is-active')");
+    expect(fn).toContain("measured && picked");
+    expect(fn).toContain("(measured && picked) ? picked : items[0];");
   });
 
   test("kinds derive from the eval-{id} contract + data-nav-group, thresholds are the decided ones", () => {
     const fn = slice(md, "function buildSectionNav()");
     expect(fn).toMatch(/sec\.dataset\.navGroup\s*\|\|\s*\(sec\.querySelector\(`input\[name="eval-\$\{sec\.id\}"\]`\)/);
-    expect(md).toMatch(/const NAV_ARCHIVE_FROM = 4;/);
     expect(md).toMatch(/const NAV_GROUP_MIN_KINDS = 2;/);
     expect(md).toMatch(/const NAV_GROUP_OVER_ENTRIES = 12;/);
     expect(md).toMatch(/const NAV_MANUAL_CLOSE_GRACE_MS = 4000;/);
     expect(fn).toContain("kinds.length >= NAV_GROUP_MIN_KINDS && sections.length > NAV_GROUP_OVER_ENTRIES");
+    // the archive fold is gone — the bar is display:none, not a wrapper
+    expect(md).not.toMatch(/const NAV_ARCHIVE_FROM/);
+    expect(md).not.toContain('class="iteration-archive"');
+  });
+
+  test("stripActiveSuffix removes the authored active-suffix from the head, nowhere else", () => {
+    const fn = fnSource("stripActiveSuffix");
+    expect(fn).toMatch(/aktiv\|active/);
+    const iterationTab = fnSource("iterationTabLabel");
+    expect(iterationTab).toContain("stripActiveSuffix(tab.textContent.trim())");
+    expect(fnSource("showIteration")).toContain("stripActiveSuffix(hereTab.textContent.trim())");
+  });
+
+  test("the bar no longer authors {{iteration.active_suffix}} onto new chips", () => {
+    const fixture = fs.readFileSync(path.join(__dirname, "..", "..", "scripts", "build-concept-fixture.js"), "utf8");
+    expect(fixture).not.toContain("{{iteration.active_suffix}}");
+  });
+
+  test("computeSelectedVariant: unambiguous include-vs-discard, else the reading-line fallback", () => {
+    const fn = fnSource("computeSelectedVariant");
+    expect(fn).toContain("if (variantSections.length < 2) return null;");
+    expect(fn).toContain("includeCount === 1 && discardCount === variantSections.length - 1");
+    expect(fn).toContain("_lastActiveSectionId");
+  });
+
+  test("buildRoundsChip renders the head's 🕘 chip + list from the (hidden) bar", () => {
+    const fn = fnSource("buildRoundsChip");
+    expect(fn).toContain("getElementById('panel-here-rounds')");
+    expect(fn).toContain("getElementById('panel-here-rounds-list')");
+    expect(fn).toContain("{{nav.archived}}");
+    expect(fn).toContain("showIteration(tab.dataset.iteration)");
+    // reuses the ALREADY computed .iteration-tab-summary — no duplicate calc
+    expect(fn).toContain("tab.querySelector('.iteration-tab-summary')");
+  });
+
+  test("applyNavOverflow only hides the tail when the scroll box actually overflows", () => {
+    const fn = fnSource("applyNavOverflow");
+    expect(fn).toContain("scrollBox.scrollHeight <= scrollBox.clientHeight");
+    expect(fn).toContain("{{nav.more_entries}}");
   });
 
   test("the spy opens, never closes; revealNavItem has the zero-rect guard first", () => {
@@ -94,6 +153,13 @@ describe("Kompass tree — source contracts", () => {
     expect(guard).toBeLessThan(reveal.indexOf("nearestScrollBox("));
     expect(fnSource("setActiveNavItem")).toContain("openNavGroupFor(item)");
     expect(fnSource("setActiveNavItem")).toContain("[data-here-section]");
+    expect(fnSource("setActiveNavItem")).toContain("updateHereRoundParenthesis(item)");
+  });
+
+  test("updateHereRoundParenthesis only appends the variant label under a data-variant reading line", () => {
+    const fn = fnSource("updateHereRoundParenthesis");
+    expect(fn).toContain("item.hasAttribute('data-variant')");
+    expect(fn).toContain("hereRoundBase");
   });
 
   test("the markup stays a flat chip list — no hand-built tree in any skeleton", () => {
@@ -106,10 +172,20 @@ describe("Kompass tree — source contracts", () => {
     // The orphaned "Entscheidungen" heading between chips and TOC is gone.
     const sidebar = HTML_BLOCKS.find((b) => b.code.includes('id="panel-final-report"'));
     expect(sidebar.code).not.toContain("<h3>{{panel.heading}}</h3>");
+    // Both panel skeletons carry the rounds chip + its list.
+    const skeletons = HTML_BLOCKS.filter((b) => b.code.includes('class="panel-cta"'));
+    for (const b of skeletons) {
+      expect(b.code, `html block at line ${b.line}`).toContain('id="panel-here-rounds"');
+      expect(b.code, `html block at line ${b.line}`).toContain('id="panel-here-rounds-list"');
+    }
   });
 
   test("locale, gate, rules and SKILL carry the tree", () => {
-    for (const key of ["panel.archive_summary", "nav.summary_entries", "nav.summary_discarded", "nav.group_context", "nav.group_variants"]) {
+    for (const key of [
+      "panel.archive_summary", "nav.summary_entries", "nav.summary_discarded",
+      "nav.group_context", "nav.group_variants", "nav.rounds_chip",
+      "nav.archived", "nav.other_variants", "nav.more_entries",
+    ]) {
       const row = md.split("\n").find((l) => l.startsWith("| `" + key + "`"));
       expect(row, key).toBeDefined();
       expect(row.split("|").map((s) => s.trim()).filter(Boolean).length, key).toBe(3);
@@ -120,7 +196,8 @@ describe("Kompass tree — source contracts", () => {
     expect(gate).toMatch(/\| 40 \| `revealNavItem` — AND `getClientRects\(\)\.length === 0`/);
     expect(iterRules).toContain("## The panel tree");
     expect(iterRules).toMatch(/7\. ☐ The new chip is ONE plain/);
-    expect(skill).toContain("`buildSectionNav()` moves `#section-nav` under the");
+    expect(skill).toContain("`buildSectionNav()` moves");
+    expect(skill).toContain("#section-nav");
   });
 });
 
@@ -175,20 +252,30 @@ function page(rounds) {
   }
   window.eval(localeKeys([
     "let scrollSpyEntries = []; let scrollSpyFrame = 0;",
-    md.match(/const NAV_ARCHIVE_FROM = 4;[\s\S]*?const _navManualClosedAt = new WeakMap\(\);/)[0],
+    md.match(/const NAV_GROUP_MIN_KINDS = 2;[\s\S]*?let _navGeneration = 0;/)[0],
+    fnSource("stripActiveSuffix"),
     fnSource("iterationTabLabel"),
     fnSource("buildIterationTree"),
+    fnSource("buildRoundsChip"),
+    fnSource("computeSelectedVariant"),
+    fnSource("applyNavOverflow"),
+    fnSource("pickInitialNavTarget"),
     slice(md, "function buildSectionNav()"),
     fnSource("openNavGroupFor"),
     fnSource("updateSectionNavState"),
     fnSource("installScrollSpy"),
     fnSource("setActiveNavItem"),
+    fnSource("updateHereRoundParenthesis"),
     fnSource("nearestScrollBox"),
     fnSource("revealNavItem"),
     fnSource("updateScrollSpy"),
+    "window.showIteration = function(n) { window.__showIterationCalledWith = String(n); };",
     // lexical declarations of an indirect eval are not window properties —
     // hand the manual-close map out for the grace-period test
-    "window.__navClosedAt = _navManualClosedAt;",
+    // _navManualClosedAt is reassigned (reset) on every buildSectionNav()
+    // rebuild — expose a live getter, not a one-time snapshot, or this goes
+    // stale the moment a test's page() build runs even once.
+    "window.__getNavClosedAt = () => _navManualClosedAt;",
   ].join("\n")));
   const select = (n) => {
     for (const s of document.querySelectorAll("section[data-iteration]")) s.hidden = s.dataset.iteration !== String(n);
@@ -201,34 +288,54 @@ function page(rounds) {
 const R = (n, o = {}) => ({ n, entries: 3, ...o });
 
 describe("Kompass tree — behaviour (reference JS on jsdom)", () => {
-  test("smallest case: one round, three sections — one open node, no summary, no archive, no groups", () => {
+  test("smallest case: one round, three sections — flat TOC, no summary, no groups", () => {
     const p = page([R(1, { live: true, selected: true })]);
     p.window.buildSectionNav();
     const tab = p.bar.querySelector(".iteration-tab");
-    expect(tab.nextElementSibling.id).toBe("section-nav");
     expect(p.document.querySelectorAll(".section-nav-item").length).toBe(3);
     expect(p.document.querySelector(".iteration-tab-summary")).toBeNull();
-    expect(p.document.querySelector(".iteration-archive")).toBeNull();
     expect(p.document.querySelector(".nav-group")).toBeNull();
     expect(tab.dataset.tabLabel).toBe("Iteration 1");
+    // no rounds chip when there are no previous rounds
+    expect(p.document.getElementById("panel-here-rounds").hidden).toBe(true);
   });
 
-  test("#section-nav follows the selected chip across switches; other chips get summaries", () => {
+  test("the TOC rebuilds for the live round only; other chips get summaries consumed by the rounds list", () => {
     const p = page([R(1, { entries: 14, kinds: 5, discard: 3 }), R(2, { live: true, selected: true })]);
     p.window.buildSectionNav();
     const [t1, t2] = p.bar.querySelectorAll(".iteration-tab");
-    expect(t2.nextElementSibling.id).toBe("section-nav");
     expect(t1.querySelector(".iteration-tab-summary").textContent).toBe("14 nav.summary_entries · 3 nav.summary_discarded");
     expect(t2.querySelector(".iteration-tab-summary")).toBeNull();
     // the label is stamped BEFORE the summary is appended
     expect(t1.dataset.tabLabel).toBe("Iteration 1");
+    // round 2 is live: only its 0 sections show — R(2) uses the default 3 entries
+    expect(p.document.querySelectorAll(".section-nav-item").length).toBe(3);
+
+    // the rounds chip shows the ONE previous round, with its summary and tag
+    const chip = p.document.getElementById("panel-here-rounds");
+    expect(chip.hidden).toBe(false);
+    expect(chip.querySelector("[data-here-rounds-count]").textContent).toBe("1");
+    const row = p.document.querySelector(".panel-here-rounds-item");
+    expect(row.querySelector(".panel-here-rounds-label").textContent).toBe("Iteration 1");
+    expect(row.querySelector(".panel-here-rounds-summary").textContent).toBe("14 nav.summary_entries · 3 nav.summary_discarded");
+    expect(row.querySelector(".panel-here-rounds-tag").textContent).toBe("nav.archived");
+
     p.select(1);
-    expect(t1.nextElementSibling.id).toBe("section-nav");
     expect(t1.querySelector(".iteration-tab-summary")).toBeNull();
     expect(t2.querySelector(".iteration-tab-summary").textContent).toBe("3 nav.summary_entries");
-    // the frozen round's TOC shows its own sections
+    // the frozen round's TOC shows its own sections now
     expect(p.document.querySelectorAll(".section-nav-item").length).toBe(14);
     expect(p.document.querySelectorAll(".section-nav-item[data-variant]").length).toBe(5);
+    // no previous rounds ahead of round 1
+    expect(p.document.getElementById("panel-here-rounds").hidden).toBe(true);
+  });
+
+  test("clicking a rounds-list row drives showIteration() with the row's round", () => {
+    const p = page([R(1, { entries: 5 }), R(2, { live: true, selected: true })]);
+    p.window.buildSectionNav();
+    const row = p.document.querySelector(".panel-here-rounds-item");
+    row.dispatchEvent(new p.window.MouseEvent("click", { bubbles: true }));
+    expect(p.window.__showIterationCalledWith).toBe("1");
   });
 
   test("reality-check and final-report chips keep their glyph labels — no summary", () => {
@@ -245,45 +352,7 @@ describe("Kompass tree — behaviour (reference JS on jsdom)", () => {
     expect(tabs[2].querySelector(".iteration-tab-summary")).toBeNull();
   });
 
-  test("archive: nothing below 4 previous rounds, a fold from 4 — closed on the live tab, open on a frozen one", () => {
-    const three = page([R(1), R(2), R(3), R(4, { live: true, selected: true })]);
-    three.window.buildSectionNav();
-    expect(three.document.querySelector(".iteration-archive")).toBeNull();
-
-    const four = page([R(1), R(2), R(3), R(4), R(5, { live: true, selected: true })]);
-    four.window.buildSectionNav();
-    const archive = four.bar.querySelector("details.iteration-archive");
-    expect(archive).not.toBeNull();
-    expect(archive.querySelector("summary").textContent).toBe("4 panel.archive_summary");
-    expect([...archive.querySelectorAll(":scope > .iteration-tab")].map((t) => t.dataset.iteration)).toEqual(["1", "2", "3", "4"]);
-    expect(archive.open).toBe(false);
-    // the live chip stays outside, first thing after the archive
-    expect(archive.nextElementSibling.dataset.iteration).toBe("5");
-    // the nav sits right after the live chip, outside the archive
-    expect(four.document.getElementById("section-nav").previousElementSibling.dataset.iteration).toBe("5");
-
-    four.select(2);
-    const archive2 = four.bar.querySelector("details.iteration-archive");
-    expect(four.bar.querySelectorAll("details.iteration-archive").length, "rebuilt, not nested").toBe(1);
-    expect(archive2.open).toBe(true);
-    const nav = four.document.getElementById("section-nav");
-    expect(nav.previousElementSibling.dataset.iteration).toBe("2");
-    expect(archive2.contains(nav)).toBe(true);
-
-    four.select(5);
-    expect(four.bar.querySelector("details.iteration-archive").open).toBe(false);
-    expect(four.bar.querySelectorAll(".iteration-tab").length).toBe(5);
-  });
-
-  test("the final report is the live chip: everything before it folds, the report itself never does", () => {
-    const p = page([R(1), R(2), R(3), R(4), R(5, { live: true, selected: true, flag: "data-final-report", label: "Final report" })]);
-    p.window.buildSectionNav();
-    const archive = p.bar.querySelector("details.iteration-archive");
-    expect(archive.querySelectorAll(":scope > .iteration-tab").length).toBe(4);
-    expect(archive.contains(p.bar.querySelector('[data-final-report]'))).toBe(false);
-  });
-
-  test("groups only when ≥2 kinds AND >12 entries", () => {
+  test("groups only when ≥2 kinds AND >12 entries — the fallback path with no unambiguous variant", () => {
     const flat12 = page([R(1, { live: true, selected: true, entries: 12, kinds: 6 })]);
     flat12.window.buildSectionNav();
     expect(flat12.document.querySelector(".nav-group"), "12 entries, 2 kinds → flat").toBeNull();
@@ -303,6 +372,119 @@ describe("Kompass tree — behaviour (reference JS on jsdom)", () => {
     expect(groups.filter((g) => g.open).length).toBe(1);
   });
 
+  test("the head strips the authored active suffix from the live round's label", () => {
+    const p = page([R(1, { live: true, selected: true, label: "Iteration 1 · aktiv" })]);
+    p.window.buildIterationTree();
+    const tab = p.bar.querySelector(".iteration-tab");
+    expect(tab.dataset.tabLabel).toBe("Iteration 1");
+    // the English form and the older parenthesis form are both covered
+    expect(p.window.stripActiveSuffix("Iteration 4 · active")).toBe("Iteration 4");
+    expect(p.window.stripActiveSuffix("Iteration 4 (aktiv)")).toBe("Iteration 4");
+    expect(p.window.stripActiveSuffix("Iteration 4")).toBe("Iteration 4");
+  });
+
+  test("the group containing the active (reading-line) entry is open right after buildSectionNav() — every rebuild, not just via the async spy", () => {
+    const p = page([R(1, { live: true, selected: true, entries: 13, kinds: 5 })]);
+    p.window.buildSectionNav();
+    const activeItem = p.document.querySelector(".section-nav-item.is-active");
+    expect(activeItem).not.toBeNull();
+    const activeGroup = activeItem.closest("details.nav-group");
+    expect(activeGroup).not.toBeNull();
+    expect(activeGroup.open, "the group holding the reading line must be open on load").toBe(true);
+    // …and it survives a synchronous re-check even before the 'toggle' event
+    // (a queued task) has had a chance to fire.
+    expect([...p.document.querySelectorAll("details.nav-group")].filter((g) => g.open).length).toBe(1);
+  });
+
+  test("a group opens even when the spy has not (yet) marked anything .is-active — buildSectionNav does not depend on it", () => {
+    const p = page([R(1, { live: true, selected: true, entries: 13, kinds: 5 })]);
+    // Simulate an async / not-yet-run spy (IntersectionObserver, or a first
+    // getBoundingClientRect() read that predates layout): stub it to a no-op
+    // so nothing gets .is-active from the spy's own pass.
+    const realSpy = p.window.installScrollSpy;
+    p.window.installScrollSpy = () => {};
+    p.window.buildSectionNav();
+    expect(p.document.querySelector(".section-nav-item.is-active"), "nothing marked active by the (stubbed) spy").toBeNull();
+    const openGroups = [...p.document.querySelectorAll("details.nav-group")].filter((g) => g.open);
+    expect(openGroups.length, "buildSectionNav() must still open exactly one group").toBe(1);
+    p.window.installScrollSpy = realSpy;
+  });
+
+  test("with every rect at (0, 0) — jsdom's default, no layout to read — the FIRST group ends up open, not an arbitrary one", () => {
+    const p = page([R(1, { live: true, selected: true, entries: 13, kinds: 5 })]);
+    const realSpy = p.window.installScrollSpy;
+    p.window.installScrollSpy = () => {};   // isolate pickInitialNavTarget from the spy's own fallback
+    p.window.buildSectionNav();
+    const groups = [...p.document.querySelectorAll("details.nav-group")];
+    // kinds appear in section order — variants (sections 0-4) before context
+    // (sections 5-12) — so the FIRST group is "variants".
+    expect(groups[0].dataset.navGroup).toBe("variants");
+    expect(groups[0].open).toBe(true);
+    expect(groups[1].open).toBe(false);
+    p.window.installScrollSpy = realSpy;
+  });
+
+  test("a stale 'toggle' event queued by an EARLIER buildSectionNav() generation, firing late, must not close the CURRENT tree's open group", async () => {
+    // Reproduces the real boot defect: nav.innerHTML = '' detaches a build's
+    // groups but cannot cancel a 'toggle' event already queued on one of
+    // them. If that group was ever set open=true during ITS OWN build (a
+    // real transition — every fresh group starts closed), the event is
+    // still pending when the NEXT buildSectionNav() call runs synchronously
+    // right after (exactly what the boot sequence does: a direct
+    // DOMContentLoaded listener, then showIteration() from a second one).
+    // Without the generation guard, that stale event's handler reads its
+    // own (frozen, still `true`) `.open`, passes the "am I open" check, and
+    // closes whatever is open in the LIVE tree via the shared `nav`
+    // reference — a group that has nothing to do with it.
+    const p = page([R(1, { live: true, selected: true, entries: 13, kinds: 5 })]);
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+
+    p.window.buildSectionNav();   // generation 1 — opens some group; a real
+                                   // false→true transition queues its 'toggle'.
+    const staleGroup = [...p.document.querySelectorAll("details.nav-group")].find((g) => g.open);
+    expect(staleGroup, "generation 1 must have opened exactly one group").not.toBeUndefined();
+
+    p.window.buildSectionNav();   // generation 2, synchronously — replaces the
+                                   // tree before generation 1's queued event fires.
+    const currentGroup = [...p.document.querySelectorAll("details.nav-group")].find((g) => g.open);
+    expect(currentGroup, "generation 2 must also have opened exactly one group").not.toBeUndefined();
+    expect(p.document.body.contains(staleGroup), "generation 1's group is now detached").toBe(false);
+
+    // Two ticks — the same margin the real-boot test now requires — for
+    // generation 1's stale event (and anything it queues) to fully drain.
+    await flush();
+    await flush();
+
+    const liveGroups = [...p.document.querySelectorAll("details.nav-group")];
+    expect(liveGroups.includes(currentGroup)).toBe(true);
+    const stillOpen = liveGroups.filter((g) => g.open);
+    expect(stillOpen.length, "groups: " + liveGroups.map((g) => g.dataset.navGroup + ":" + g.open).join(", ")).toBe(1);
+    expect(stillOpen[0] === currentGroup, "the CURRENT generation's open group must survive the stale event").toBe(true);
+  });
+
+  test("pickInitialNavTarget: .is-active wins outright; a measured rect beats the (0,0) default; otherwise the first item", () => {
+    const p = page([R(1, { live: true, selected: true, entries: 4 })]);
+    p.window.buildSectionNav();
+    const items = [...p.document.querySelectorAll(".section-nav-item")];
+    // buildSectionNav()'s own spy pass already marked one item .is-active
+    // (jsdom's zero-rect default picks the LAST entry) — clear it so this
+    // test can isolate pickInitialNavTarget's "nothing to go on" fallback.
+    items.forEach((i) => i.classList.remove("is-active"));
+    // nothing measured (jsdom default) → first item
+    expect(p.window.pickInitialNavTarget(items)).toBe(items[0]);
+    // an .is-active item, however it got there, wins outright
+    items[2].classList.add("is-active");
+    expect(p.window.pickInitialNavTarget(items)).toBe(items[2]);
+    items[2].classList.remove("is-active");
+    // a real (non-zero) rect is honoured over the "no signal" fallback — the
+    // other sections stay far below the reading line so only item[1] qualifies
+    items.forEach((it, i) => {
+      const sec = p.document.getElementById(it.dataset.sectionId);
+      sec.getBoundingClientRect = () => (i === 1 ? { top: 10, bottom: 40 } : { top: 9999, bottom: 10040 });
+    });
+    expect(p.window.pickInitialNavTarget(items)).toBe(items[1]);
+  });
+
   test("data-nav-group is an override: its value is the group name", () => {
     const p = page([R(1, { live: true, selected: true, entries: 13, kinds: 5, navGroup: "Screens" })]);
     p.window.buildSectionNav();
@@ -316,7 +498,23 @@ describe("Kompass tree — behaviour (reference JS on jsdom)", () => {
     expect(two.document.querySelectorAll("details.nav-group").length).toBe(2);
   });
 
-  test("one-open among the groups; a manual close is honoured by the spy for 4 s, then a NEW active entry reopens", async () => {
+  test("the selected variant renders open with nested sub-sections; the rest collapse into one row", () => {
+    const p = page([R(1, { live: true, selected: true, entries: 3, kinds: 3, discard: 2 })]);
+    // R(1) makes sections 0,1,2 variants; discard=2 marks 0 and 1 discard, 2 include.
+    p.window.buildSectionNav();
+    const openNode = p.document.querySelector("details.nav-variant-open");
+    expect(openNode).not.toBeNull();
+    expect(openNode.open).toBe(true);
+    const otherRow = p.document.querySelector("details.nav-other-variants");
+    expect(otherRow).not.toBeNull();
+    expect(otherRow.querySelector(".nav-group-name").textContent).toBe("nav.other_variants · 2 · 2 nav.summary_discarded");
+    // one-open never applies to the selected-variant node
+    otherRow.open = true;
+    openNode.dispatchEvent(new p.window.Event("toggle"));
+    expect(openNode.open).toBe(true);
+  });
+
+  test("one-open among the (non-variant-open) groups; a manual close is honoured by the spy for 4 s, then a NEW active entry reopens", async () => {
     const p = page([R(1, { live: true, selected: true, entries: 13, kinds: 5 })]);
     p.window.buildSectionNav();
     const [variants, context] = p.document.querySelectorAll("details.nav-group");
@@ -342,21 +540,27 @@ describe("Kompass tree — behaviour (reference JS on jsdom)", () => {
     p.window.openNavGroupFor(item);
     expect(variants.open, "closed on purpose → stays closed").toBe(false);
     // …after the grace period the same call opens it again
-    p.window.__navClosedAt.set(variants, Date.now() - 5000);
+    p.window.__getNavClosedAt().set(variants, Date.now() - 5000);
     p.window.openNavGroupFor(item);
     expect(variants.open).toBe(true);
     await flush();
     expect(context.open, "the accordion closed the other one").toBe(false);
   });
 
-  test("the spy writes the 'you are here' breadcrumb", () => {
-    const p = page([R(1, { live: true, selected: true, entries: 4 })]);
+  test("the spy writes the 'you are here' breadcrumb and the head's parenthesis, only for a variant entry", () => {
+    const p = page([R(1, { live: true, selected: true, entries: 4, kinds: 1 })]);
     p.window.buildSectionNav();
     const here = p.document.querySelector("[data-here-section]");
     expect(here.hidden).toBe(false);
-    expect(here.textContent).toBe("› Round 1 · Section 3");
-    p.window.setActiveNavItem(p.document.querySelector(".section-nav-item"));
-    expect(here.textContent).toBe("› Round 1 · Section 0");
+    const round = p.document.querySelector("[data-here-round]");
+    round.textContent = "Iteration 1";
+    delete round.dataset.hereRoundBase;
+    const contextItem = p.document.querySelector(".section-nav-item:not([data-variant])");
+    p.window.setActiveNavItem(contextItem);
+    expect(round.textContent).toBe("Iteration 1");
+    const variantItem = p.document.querySelector(".section-nav-item[data-variant]");
+    p.window.setActiveNavItem(variantItem);
+    expect(round.textContent).toBe("Iteration 1 (" + variantItem.querySelector(".section-nav-label").textContent + ")");
   });
 
   test("a hidden entry cannot drag the scroll box: revealNavItem returns before measuring", () => {
@@ -368,6 +572,27 @@ describe("Kompass tree — behaviour (reference JS on jsdom)", () => {
     item.getBoundingClientRect = () => { measured++; return { top: 0, bottom: 0 }; };
     p.window.revealNavItem(item);
     expect(measured).toBe(0);
+  });
+
+  test("+N weitere only renders when the scroll box actually overflows", () => {
+    const p = page([R(1, { live: true, selected: true, entries: 4 })]);
+    p.window.buildSectionNav();
+    // jsdom reports 0/0 for scrollHeight/clientHeight → never overflows
+    expect(p.document.querySelector(".nav-more-toggle")).toBeNull();
+
+    const nav = p.document.getElementById("section-nav");
+    const box = p.document.querySelector(".panel-nav-scroll");
+    Object.defineProperty(box, "scrollHeight", { value: 500, configurable: true });
+    Object.defineProperty(box, "clientHeight", { value: 200, configurable: true });
+    p.window.applyNavOverflow(nav, box);
+    const toggle = p.document.querySelector(".nav-more-toggle");
+    expect(toggle).not.toBeNull();
+    expect(toggle.textContent).toMatch(/^\+\d+ nav\.more_entries$/);
+    const hiddenItems = nav.querySelectorAll("[data-nav-overflow-hidden]");
+    expect(hiddenItems.length).toBeGreaterThan(0);
+    toggle.dispatchEvent(new p.window.MouseEvent("click", { bubbles: true }));
+    expect(nav.querySelectorAll("[data-nav-overflow-hidden]").length).toBe(0);
+    expect(p.document.querySelector(".nav-more-toggle")).toBeNull();
   });
 
   test("the chip's stamped label survives the summary — frozen bar and head read it, not the summary", () => {
