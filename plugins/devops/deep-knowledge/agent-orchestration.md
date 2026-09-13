@@ -60,9 +60,11 @@ show it as `default → override` with the effort repeated on both sides
 - Override `model` at invocation for cost control: `Agent({ subagent_type: "research", model: "sonnet", ... })`.
   The Agent tool accepts `sonnet`, `opus`, `haiku` and `fable` — `fable` is an
   accepted value for upward overrides, not only `opus`.
-- **`/run-burn` inverts this**: it overrides **upward only** (sonnet → opus,
-  effort → high) per its depth profile, and never downgrades for cost. Its goal
-  is to consume the remaining weekly budget as depth-per-task rather than as
+- **`/run-burn` inverts this**: it overrides **upward only** (sonnet → opus)
+  per its depth profile, and never downgrades for cost. The profile's
+  `effort: high` is a prompt directive, not a tool parameter — the frontmatter
+  value stays the effective reasoning effort. Its goal is to consume the
+  remaining weekly budget as depth-per-task rather than as
   breadth-of-unfinished-tasks. See
   `skills/run-burn/deep-knowledge/burn-scheduler.md` § Depth profiles.
 - **Never downgrade to haiku** for agents with `effort: high` (po, research) — haiku + high effort wastes tokens without quality gain
