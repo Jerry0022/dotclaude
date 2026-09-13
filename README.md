@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.154.0**
+**Version: 0.156.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -398,33 +398,40 @@ Every task ends with a completion card — a structured signal showing what happ
 ````
 ---
 
-## ✨✨✨ Filter dialog moved to settings ✨✨✨
+### **✨✨✨ Filter dialog moved to settings ✨✨✨**
 
-**Changes**
-* Settings → Filter tab as new section with drag & drop
-* Dialog → FilterDialog removed, route redirected to Settings
-* Tests → 3 unit tests added for new settings section
+> **Changes**
+> * Settings → Filter tab as new section with drag & drop
+> * Dialog → FilterDialog removed, route redirected to Settings
 
-**Tests**
-* Build → npm run build successful
-* Unit → 47/47 passed, 3 new tests
-* Preview → Filter tab rendered correctly, drag & drop functional
+> **Verified** · npm run build → ok · unit → 47/47, 3 new · preview → drag & drop works
+> * ✅ Filters reachable from Settings — tab rendered, drag & drop verified in the preview
+> * ✅ Old dialog route keeps working — redirect covered by a unit test
 
-✅ merged → origin/main · PR #42 "Filter dialog to settings" · a3f9b21 · feat/filter-settings
+🔬 **Please TEST:**
+* Open Settings → Filter on a phone-width window
+
+> **Delivery** ✅ PR [#42](…/pull/42) · Filter dialog to settings
+> ✅ `main` 0.8.2 → 0.8.3 (patch) · [a3f9b21](…/commit/a3f9b21) · `a3f9b21`
+> 🟢 alpha `v0.8.3` · ⚪ beta · ⚪ stable
 
 ```
-5h  ━━━━━╏────────   33% +2%   · 3h 12m left
-Wk  ━━━─╏─────────   18% +2%   · 5d 3h left
+5h  ━━━━━╏────────   33% +2%   · 3h 12m
+Wk  ━━━─╏─────────   18% +2%   · 5d 3h
 ```
 
 ---
 
-📌 0.8.2 → 0.8.3 (patch) · `a3f9b21`
-
-## 🚀 SHIPPED. merged → origin/main — All DONE
+## 🚀 SHIPPED → alpha — All DONE
 
 ---
 ````
+
+The card is built to fit one screen: every body field has a character budget
+(summary 60, change 24 + 90, evidence 70 + 100 …), gates share one line, and
+every pipeline fact — PR, base, version, commit, build-id — appears exactly once
+in the Delivery block. Follow-ups that are not tests go into a separate
+`⚠ OPEN` block; the promote nudge sits on the channel ladder line.
 
 <details>
 <summary><strong>See all other variants</strong> — ready, ship-blocked, test, test-minimal, analysis, aborted, fallback, ship-successful (direct push), pending</summary>

@@ -43,8 +43,17 @@ const BLOCK_ITEM_LIMIT = LINE_NAME_LIMIT;
  */
 const NAME_MAX = 48;
 
+/**
+ * Budget for the "what it is doing" text in the pending block. It used to share
+ * NAME_MAX, which cut a sentence mid-word ("… pro Modul (5") on a third of all
+ * ship cards; a description is prose, so it gets room and a word-boundary cut.
+ */
+const DOING_MAX = 90;
+
 /** Order the kinds are reported in — biggest unit of work first. */
 const KIND_ORDER = ['workflow', 'agent', 'task'];
+
+import { clampEllipsis } from './soft-limits.js';
 
 const NOUN_KEYS = {
   workflow: ['workflowOne', 'workflowMany'],
@@ -91,14 +100,14 @@ const PENDING_LABEL = {
  * row in two. Names are IDENTIFIERS (an agent type, a workflow slug), so
  * dropping those characters is lossless in every real case.
  */
-function cleanName(s) {
+function cleanName(s, max = NAME_MAX) {
   return String(s == null ? '' : s)
     .split('')
     .map(ch => (ch.codePointAt(0) < 0x20 || ch.codePointAt(0) === 0x7f ? ' ' : ch))
     .join('')
     .replace(/[`|<>]/g, '')
     .replace(/\s+/g, ' ')
-    .slice(0, NAME_MAX)
+    .slice(0, max)
     .trim();
 }
 
@@ -122,7 +131,7 @@ export function normalizePending(pending) {
     }
     if (!raw || typeof raw !== 'object') continue;
     const name = cleanName(raw.name);
-    const doing = cleanName(raw.doing);
+    const doing = clampEllipsis(cleanName(raw.doing, DOING_MAX + 1), DOING_MAX);
     if (!name && !doing) continue;
     out.push({
       kind: KIND_ORDER.includes(raw.kind) ? raw.kind : 'agent',

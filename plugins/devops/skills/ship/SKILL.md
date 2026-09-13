@@ -820,24 +820,29 @@ git ls-remote --tags origin
 - Latest stable version = highest of `stable/vX.Y.Z` ∪ bare `vX.Y.Z`.
 - No channel tags at all (pre-migration repo) → skip silently.
 
-When alpha > stable, append ONE `userFinalTest` item:
-- Gap < 3 versions AND last stable tag younger than 7 days (annotated
-  taggerdate via `git for-each-ref --format='%(taggerdate:iso)' 'refs/tags/stable/*'`):
-  `{ action: "alpha ist N Version(en) vor stable — /promote zum Promoten" }`
-- Gap ≥ 3 versions OR ≥ 7 days: escalate the wording:
-  `{ action: "⚠ stable ist N Versionen / D Tage hinter alpha — /promote ausführen" }`
+When alpha > stable, pass the gap as `delivery.promote.stableLag`:
+- `{ versions: N }` — gap < 3 versions AND last stable tag younger than 7 days
+  (annotated taggerdate via
+  `git for-each-ref --format='%(taggerdate:iso)' 'refs/tags/stable/*'`).
+- `{ versions: N, days: D }` — gap ≥ 3 versions OR ≥ 7 days.
 
+The card renders it on the channel ladder line
+(`🟢 alpha \`v0.27.0\` · ⚪ beta · ✅ stable \`v0.19.0\` · alpha 8 Versionen / 7 Tage vor stable → \`/promote\``).
+It is NOT a `userFinalTest` item — it is not a test — and NOT an `open` item.
 Visible lag is the ring model working; the nudge just keeps it visible.
 
 ```
 render_completion_card({
   variant: "ship-successful",
-  summary: "<~10 words, user's language>",
+  summary: "<≤ 8 words / 60 chars, user's language: WHAT changed for the user. No version, no 'gemergt/geshipped/live' — the Delivery block and the CTA say that.>",
   lang: "de",
   cwd: "<current working directory — same as ship_release>",
   buildId: <from ship_build.buildId>,
-  changes: [<top 3 FUNCTIONAL changes — user-perceived effect, phrased as behavior. Derive from ship_build/version_bump results but do NOT list files/modules. See completion-card template § Changes.>],
-  tests: [<from ship_build results>],
+  changes: [<top 3 FUNCTIONAL changes — user-perceived effect, phrased as behavior; area ≤ 24, description ≤ 90 chars (one line each). Derive from ship_build/version_bump results but do NOT list files/modules. See completion-card template § Changes.>],
+  tests: [<from ship_build results — the automated GATES, one line each: { method: "npm test", result: "1460 grün" }. Numbers, not prose; include skipped/non-green gates ("Codex-Review → übersprungen — Limit"). Rendered on ONE line under **Belegt**.>],
+  validation: [<requirement ≤ 70 → evidence ≤ 100 chars; partial/unmet items first. Long-form evidence belongs in the PR body.>],
+  userFinalTest: [<ONLY real manual tests the user must run>],
+  open: [<decisions, cleanups, open questions — NOT tests: "feat/x liegt 70 PRs hinter main — committen oder verwerfen?">],
   state: {
     branch: "main",
     commit: <from ship_release.commit>,
@@ -853,10 +858,16 @@ render_completion_card({
   delivery: {
     pr: { number: <ship_release.pr.number>, title: <PR title> },
     ship: { version: <ship_version_bump.vNew>, base: "main" },
-    promote: { channels: { alpha: <ship_version_bump.vNew> }, current: "alpha" }
+    promote: { channels: { alpha: <ship_version_bump.vNew>, stable: <latest stable or null> }, current: "alpha",
+               stableLag: <from the promotion-gap nudge above, omit when alpha == stable> }
   }
 })
 ```
+
+The card renders `delivery` as ONE block at the foot of the body (PR · base +
+bump · commit · build-id · channel ladder) and drops the separate 📌 footer and
+state line — every pipeline fact appears once. `ship.version` must be the
+semver from the bump, never a commit SHA.
 
 **Delivery track (`delivery`).** Populate it so the card shows WHERE in the
 pipeline this ship sits (PR → Ship → Promote). `pr` + `ship` are known
@@ -916,12 +927,14 @@ render_completion_card({
     merged: "main",
     kept: true
   },
-  cta: { vOld, vNew, bump }
+  cta: { vOld, vNew, bump },
+  delivery: { pr, ship: { version: vNew, base: "main" }, promote: { channels: { alpha: vNew }, current: "alpha" } }
 })
 ```
 
 The renderer flips the CTA from `All DONE` / `Alles ERLEDIGT` to
-`KEEP CODING in <branch>` / `WEITER in <branch>` when `state.kept: true`.
+`KEEP CODING in <branch>` / `WEITER in <branch>` when `state.kept: true`, and
+names the kept branch on the Delivery ship line (`· \`feat/x (kept locally)\``).
 
 Output the card markdown VERBATIM — card is the last **visible** output, nothing after closing `---`.
 

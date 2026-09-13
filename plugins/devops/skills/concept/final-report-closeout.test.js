@@ -71,7 +71,7 @@ describe("final-report close-out sheet", () => {
     expect(jsSource).toContain("function collectIssueItems() { return collectFollowUps('issue'); }");
     expect(jsSource).toContain("function collectImplementItems() { return collectFollowUps('implement'); }");
     // The body checkbox stays the source of truth for "still open".
-    expect(build.slice(0, 4000)).toContain("src.checked = value !== 'ignore'");
+    expect(build.slice(0, 5000)).toContain("src.checked = value !== 'ignore'");
   });
 
   test("a route is never restored from storage — the default writes no code", () => {

@@ -81,9 +81,12 @@ describe("renderUsageLine — fixed column grid", () => {
     }
   });
 
-  test("Pace warning only when usage outruns the clock by >10pp", () => {
+  test("Pace warning only when usage outruns the clock by >20pp", () => {
     expect(renderUsageLine("5h", 62, 9, 0, 273)).toContain("Pace!");
     expect(renderUsageLine("5h", 12, 9, 0, 273)).not.toContain("Pace!");
+    // 16pp ahead used to warn — on 91 of 100 ship cards, so the flag carried no signal.
+    expect(renderUsageLine("5h", 25, 9, 0, 273)).not.toContain("Pace!");
+    expect(renderUsageLine("5h", 30, 9, 0, 273)).toContain("Pace!");
   });
 });
 

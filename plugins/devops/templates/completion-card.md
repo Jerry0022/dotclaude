@@ -19,16 +19,28 @@ Sections within a block may be omitted per variant rules — but the block order
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  BLOCK A — What was done                            │
-│  Title · Changes · Tests · State · User test        │
+│  BLOCK A — What · Evidence · Your to-dos            │
+│  Title · Changes · Belegt (gates + validation)      │
+│  Pending · User test · Deploy gate · TESTE · OFFEN  │
 ├─────────────────────────────────────────────────────┤
-│  BLOCK B — Usage + Context health                   │
+│  BLOCK B — Where it landed · Budget                 │
+│  Delivery (PR · base+bump · commit · build · ladder)│
 │  Health warning · Usage meter                       │
 ├─────────────────────────────────────────────────────┤
-│  BLOCK C — Footer + CTA                             │
-│  📌 Version + Build-ID · CTA (one-liner)            │
+│  BLOCK C — CTA                                      │
+│  (📌 footer + state line only WITHOUT a delivery)   │
 ├─────────────────────────────────────────────────────┘
 ```
+
+Read order is deliberate: **what** changed, the **evidence**, what **you** still
+have to do, **where** it landed, then the call to action. The Delivery block sits
+at the foot of the body because on a ship it is nearly always the same shape
+(PR ✅ · base ✅ · alpha 🟢) — a block without variance does not lead the card.
+
+**One screen.** A ship card must fit ~28 visual lines on a normal desktop chat
+column (~100 characters). Every body field has a character budget, cut on a
+word boundary with a visible `…` (see § Budgets); the long form belongs in the
+PR body, not in the card.
 
 ---
 
@@ -39,19 +51,20 @@ All variables in `{{...}}`. Sections wrapped in `{{#if}}` are conditional per va
 ```markdown
 ---
 
-## ✨✨✨ {{summary}} ✨✨✨
+### **✨✨✨ {{summary ≤60}} ✨✨✨**
 
 {{#if changes}}
-**Changes**
-* {{max 3: area → description}}
+> **Changes**
+> * {{3×: area ≤24 → description ≤90}}
+> * +{{N}} weitere            ← only when more than 3 were passed
 {{/if}}
 
-{{#if tests}}
-**Tests**
-* {{max 3: method → result}}
+{{#if tests or validation}}
+> **Belegt** · {{gates: method ≤40 → result ≤60, joined by ·}}   ← or one bullet per gate when the line would exceed 110
+> * {{⚠️/❌ first}} {{requirement ≤70}} — {{evidence ≤100}}
+> * ✅ {{requirement}} — {{evidence}}
+> * ✅ {{N}} weitere Anforderungen erfüllt                        ← met overflow beyond 3 visible
 {{/if}}
-
-{{state-icon}} {{state-text}}
 
 {{#if user-test}}
 🔬 **Bitte testen:**
@@ -63,21 +76,59 @@ All variables in `{{...}}`. Sections wrapped in `{{#if}}` are conditional per va
 * {{each: action}}{{#if afterDeployment}} — nach Deployment{{/if}}
 {{/if}}
 
+{{#if open}}
+⚠ **OFFEN:**
+* {{each: decision / cleanup / question}}
+{{/if}}
+
+{{#if delivery}}
+> **Delivery** ✅ PR [#{{n}}](…) · {{pr-title ≤70}}
+> ✅ `{{base}}` {{vOld}} → {{vNew}} ({{bump}}) · [{{commit}}](…) · `{{build-id}}`{{#if kept}} · `{{branch}} (kept locally)`{{/if}}
+> 🟢 alpha `v{{x}}` · ⚪ beta · ⚪ stable{{#if stableLag}} · alpha {{N}} Versionen vor stable → `/promote`{{/if}}
+{{/if}}
+
 {{#if usage}}
-> {{context-health-line}}
->
-> 5h  {{bar-5h}}  {{pct-5h}}{{delta-5h}}  · {{reset-5h}} left{{pace-warn-5h}}
-> Wk  {{bar-wk}}  {{pct-wk}}{{delta-wk}}  · {{reset-wk}} left{{pace-warn-wk}}
+> {{context-health-line}}                ← only above 1000 tool calls
+
+```
+5h  {{bar-5h}}  {{pct-5h}}{{delta-5h}}  · {{reset-5h}}{{pace-warn-5h}}
+Wk  {{bar-wk}}  {{pct-wk}}{{delta-wk}}  · {{reset-wk}}{{pace-warn-wk}}
+```
 {{/if}}
 
 ---
 
-📌 {{version-bump-info}} · {{build-id}}
+{{#unless delivery}}
+> 📌 {{version-bump-info}} · {{build-id}}
+> {{state-icon}} {{state-text}}
+{{/unless}}
 
 ## {{cta-icon}} {{cta-text}}
 
 ---
 ```
+
+### Budgets
+
+Enforced by the renderer (`mcp-server/index.js`, `lib/soft-limits.js#clampEllipsis`),
+so a skill that overshoots is cut, not rejected — but aim for them, a cut is
+visible as `…`.
+
+| Field | Budget | Overflow |
+|-------|--------|----------|
+| summary | 60 chars | cut on word boundary, no ellipsis (it is a heading) |
+| changes[].area / .description | 24 / 90 | `…` |
+| changes | 3 items | `* +N weitere` / `* +N more` |
+| tests[].method / .result (inline) | 40 / 60 | `…`; whole line > 110 or > 3 gates → one bullet per gate (≤ 100 each, max 5) |
+| validation[].requirement / .evidence | 70 / 100 | `…` |
+| validation | 3 visible + all ⚠️/❌ (max 4) | `* ✅ N weitere Anforderungen erfüllt` (a single leftover is shown) |
+| delivery.pr.title | 70 | `…` |
+| pending[].doing | 90 | `…` |
+| userFinalTest / open items | none | never cut — they are the user's to-do |
+
+Measured on 100 ship cards before these budgets: median 62 visual lines, every
+card with ≥ 5 lines over 100 characters, validation bullets median 208 chars,
+version repeated 5× per card.
 
 ---
 
@@ -88,13 +139,18 @@ All variables in `{{...}}`. Sections wrapped in `{{#if}}` are conditional per va
 `## ✨✨✨ {{summary}} ✨✨✨`
 
 - `✨✨✨` before and after — "done, look here".
-- Summary only — no build-ID (moved to footer line).
-- Summary in user's language, max ~10 words, factual.
+- Summary only — no build-ID, **no version, no pipeline status**. "gemergt",
+  "geshipped", "live", "auf alpha" are said by the Delivery block and the CTA;
+  84 of 100 analysed ship headlines repeated them instead of naming the change.
+- What changed **for the user**, ≤ 8 words / 60 characters, factual. Clamped on
+  a word boundary by the renderer.
 
 | Condition | Example |
 |-----------|---------|
-| Code changes | `## ✨✨✨ Filter dialog moved to settings ✨✨✨` |
-| No code changes | `## ✨✨✨ README updated ✨✨✨` |
+| Code changes | `### ✨✨✨ Filter dialog moved to settings ✨✨✨` |
+| No code changes | `### ✨✨✨ README updated ✨✨✨` |
+| ❌ Pipeline echo | `0.18.0 gemerged: sechzehn Owner-Befunde und zwölf Issues, Mobil-Arbeit unversehrt` |
+| ✅ Same ship | `Bebaute Inseln sichtbar, Setup als Formular, kürzeres 100-Ziele-Spiel` |
 
 ### Usage meter
 
@@ -158,8 +214,12 @@ pace_delta = usage_pct - elapsed_pct
 
 | pace_delta | Display |
 |------------|---------|
-| ≤ +10pp | _(nothing)_ |
-| > +10pp | `  ⚠ Pace!` at end of affected line |
+| ≤ +20pp | _(nothing)_ |
+| > +20pp | `  ⚠ Pace!` at end of affected line |
+
+The old +10pp flagged 91 of 100 ship cards — a warning that is always on is
+not a warning. Same reasoning for the context-health note: it renders only
+above 1000 tool calls (`consider /compact`) and 2000 (`consider /clear`).
 
 - Evaluated per window individually (5h, Wk, or both).
 - Data source: `usage-live.json` (via `/auto-usage` before rendering).
@@ -192,7 +252,9 @@ Warn          var.    "  ⚠ Pace!" or empty
 ### Changes
 
 Bullet list (`*`), each bullet: `area → what happened`.
-**Max 3 bullets.** Summarize if more than 3 changes. No nested bullets.
+**Max 3 bullets**, `area` ≤ 24 and description ≤ 90 characters — one visual
+line each. More than 3 renders an explicit `* +N weitere` tail instead of
+dropping silently. No nested bullets.
 
 **Both `area` AND description must be functional.** Keep the `area → description`
 pattern — it's the strength of this section. But both halves describe what the
@@ -233,15 +295,30 @@ is *about*), e.g. `Completion card`, `Ship pipeline`, `Branch cleanup`,
 | test-minimal | **Omit** |
 | aborted | **Optional** — only if work happened before abort |
 
-### Tests
+### Belegt — gates + validation (one block)
 
-Bullet list: what was tested, method and result.
-**Max 3 bullets.** Summarize if more than 3 tests ran.
+`tests` and `validation` render as ONE block headed `**Belegt**` / `**Verified**`:
 
-| Variants | Behavior |
-|----------|----------|
-| ship-successful, ready, test, ship-blocked | **If tests/builds ran** — otherwise omit |
-| analysis, test-minimal, aborted, fallback | **Omit** |
+```
+> **Belegt** · npm test → 1460 grün · eslint → sauber · Codex-Review → übersprungen — Limit
+> * ⚠️ Merge mit #365 semantisch korrekt — Konflikte komplementär gelöst, Suite grün
+> * ✅ Modus in der Sidebar sichtbar — set_session_title live geprüft, Konstante per Test gepinnt
+> * ✅ 2 weitere Anforderungen erfüllt
+```
+
+- **Gates** (`tests[]`) go on the header line, `method → result` joined by `·`.
+  State numbers, not prose (`1460 grün`, `2 Flakes`), and list non-green or
+  skipped gates too. When the line would exceed 110 characters or more than 3
+  gates ran, each gate becomes its own bullet instead.
+- **Validation** (`validation[]`) follows as bullets, `⚠️ partial` and `❌ unmet`
+  **first**, then `✅ met`. Three bullets are visible (plus every ⚠️/❌, max 4);
+  further met items collapse into `✅ N weitere Anforderungen erfüllt`.
+  Requirement ≤ 70, evidence ≤ 100 characters — the long form goes in the PR.
+
+| Variants | Gates | Validation |
+|----------|-------|------------|
+| ship-successful, ready, test, ship-blocked | **If tests/builds ran** | whenever provided (required for code changes — V&V gate) |
+| analysis, test-minimal, aborted, fallback | **Omit** | whenever provided |
 
 ---
 
@@ -249,7 +326,10 @@ Bullet list: what was tested, method and result.
 
 ### State
 
-One-liner, no section header. Directly after Changes/Tests.
+One-liner, no section header, rendered under the 📌 footer — **only when the
+card carries no `delivery` track**. With a delivery, the Delivery block (see
+§ Delivery block) carries PR, merge base, commit, build-id and branch, and the
+state line is not rendered again.
 
 `{{state-icon}} {{state-text}}`
 
@@ -363,8 +443,50 @@ The header is always rendered once; the suffix is attached per bullet.
 | test | **Omit** — manual steps go into user-test instead (single test section) |
 | test-minimal | **Omit** (session greeting, no QA context) |
 
-Rendered between state/user-test and the usage meter so it sits in Block A's
-"what you still need to do" region, not buried in CTA.
+Rendered after the evidence and before the Delivery block so it sits in Block
+A's "what you still need to do" region, not buried in CTA.
+
+**Only real tests go here.** 95 of 198 analysed items were decisions, cleanups
+or open questions under a header that asked to *test* — those belong in `open`.
+
+### Open items
+
+`open` — follow-ups that are NOT tests: a decision the user must take, a
+cleanup, an open question. Own block, right after the 🔬 block, same
+availability as user-final-test. Items are never cut.
+
+```
+⚠ **OFFEN:**
+* feat/harden-round-1 liegt 70 PRs hinter main — committen, aufräumen oder verwerfen?
+```
+
+```
+⚠ **OPEN:**
+* feat/harden-round-1 is 70 PRs behind main — commit, clean up or drop?
+```
+
+The promote nudge is neither a test nor an open item — it lives on the Delivery
+ladder line via `delivery.promote.stableLag` (see § Delivery block).
+
+### Delivery block
+
+`delivery` — WHERE the work landed, stated once, at the foot of the body
+(after 🔬/⚠ blocks, before the usage meter). Replaces the 📌 footer and the
+state line, which are skipped when it renders.
+
+```
+> **Delivery** ✅ PR [#366](…/pull/366) · feat(concept,batch): session title prefix + mode-aware completion card
+> ✅ `main` 0.153.0 → 0.154.0 (minor) · [1ba280f](…/commit/1ba280f) · `51f918d`
+> 🟢 alpha `v0.154.0` · ⚪ beta · ⚪ stable · alpha 5 Versionen / 7 Tage vor stable → `/promote`
+```
+
+| Line | Content | Rules |
+|------|---------|-------|
+| 1 | `**Delivery** ✅ PR #n · title ≤70` | `⊘ PR — kein PR` for a direct commit |
+| 2 | `✅ \`base\` vOld → vNew (bump) · commit · \`build-id\`` | bump from `cta.vOld/vNew/bump`, else `v{ship.version}` (a non-semver value such as a SHA renders without `v`); `· \`branch (kept locally)\`` / `[\`branch (worktree)\`]` appended when the branch differs from base |
+| 2 (not shipped) | `⚪ Ship · branch · commit · \`build-id\`` | `ready` / `ship-blocked` with a delivery track |
+| 3 | `🟢 current · ✅ passed \`vX\` · ⏭️ skipped · ⚪ not reached` | only when `promote` is set — ring projects; a plain project shows no ladder and no hollow "⚪ Promote" |
+| 3 tail | `· alpha N Versionen [/ D Tage] vor stable → \`/promote\`` | from `promote.stableLag: { versions, days? }` |
 
 ### CTA (Call to Action)
 
@@ -373,15 +495,16 @@ One-liner as `##` heading.
 Format: `## {icon} {STATUS}. {context} — {sentence with VERB}`
 
 - Status word: always English, always UPPERCASE.
-- Context: merge target (shipped), reason (blocked/aborted), or empty. **No version info** — version is in the footer line.
+- Context: destination (shipped: `→ alpha` on a ring project, else `→ main`), reason (blocked/aborted), or empty. **No version info, no `merged → origin/…` echo** — both live in the Delivery block.
 - CTA sentence after `—`: translated to user's language. Action verb UPPERCASE.
 
 **CTA definitions (EN master):**
 
 | # | Variant | CTA |
 |---|---------|-----|
-| 1 | ship-successful (merged) | `## 🚀 SHIPPED. merged → {{merged}} — RELAX, all done` |
-| 1 | ship-successful (plain) | `## 🚀 SHIPPED — RELAX, all done` |
+| 1 | ship-successful | `## 🚀 SHIPPED → {{channel or base}} — All DONE` |
+| 1 | ship-successful (kept) | `## 🚀 SHIPPED → {{channel or base}} — KEEP CODING in \`{{branch}}\`` |
+| 1 | ship-successful (deploy pending) | `## 🚀 SHIPPED → {{channel or base}} — 🚨 DEPLOY REQUIRED (not live yet)` |
 | 2 | ready | `## 📦 READY — SHIP or CHANGE?` |
 | 3 | ship-blocked | `## ⛔ BLOCKED. {{reason}} — FIX or SKIP?` |
 | 4 | test | `## 🧪 DONE — SHIP after your TEST?` |
@@ -394,8 +517,9 @@ Format: `## {icon} {STATUS}. {context} — {sentence with VERB}`
 
 | # | Variant | CTA |
 |---|---------|-----|
-| 1 | ship-successful (merged) | `## 🚀 SHIPPED. merged → {{merged}} — LEHN dich zurück, alles erledigt` |
-| 1 | ship-successful (plain) | `## 🚀 SHIPPED — LEHN dich zurück, alles erledigt` |
+| 1 | ship-successful | `## 🚀 SHIPPED → {{channel or base}} — Alles ERLEDIGT` |
+| 1 | ship-successful (kept) | `## 🚀 SHIPPED → {{channel or base}} — WEITER in \`{{branch}}\`` |
+| 1 | ship-successful (deploy pending) | `## 🚀 SHIPPED → {{channel or base}} — 🚨 DEPLOY erforderlich (noch nicht live)` |
 | 2 | ready | `## 📦 READY — SHIP oder ÄNDERN?` |
 | 3 | ship-blocked | `## ⛔ BLOCKED. {{reason}} — FIX oder SKIP?` |
 | 4 | test | `## 🧪 DONE — SHIP nach deinem TEST?` |
@@ -547,7 +671,10 @@ line does it. The same 📥 is the skill's session-title prefix (`📥 Batch –
 
 `📌 {{version-bump}} · {{build-id}}`
 
-The footer line sits between the separator and the CTA. It contains:
+Rendered **only when the card carries no `delivery` track** (analysis, test,
+fallback, a `ready` without delivery …) — with one, the Delivery block already
+names bump and build-id. The footer line sits between the separator and the
+CTA. It contains:
 - **📌** — pin icon, fixed
 - **Version bump** (if available): `{{vOld}} → {{vNew}} ({{bump}})` — only for ship-successful with bump
 - **Build-ID**: always present, 7-char hash or `no build id`
@@ -636,12 +763,12 @@ else                                             → fallback (8)
 3. Section headers use **bold** (`**Changes**`), not markdown headings.
 4. CTA line uses `##` heading for visual weight.
 5. Title icon (`✨✨✨`) is fixed — variant is distinguished via CTA icon.
-6. Bullet items use `*`, plain text. Max 3 per section.
+6. Bullet items use `*`, plain text. Max 3 per section, one visual line each (§ Budgets).
 7. Content in user's language. Status words (SHIPPED, READY, etc.) stay English.
 8. Factual — no commentary, praise, or filler.
 9. Omit sections that don't apply (don't render empty).
 10. Usage meter is greyed as subinfo (blockquote), matching the Changes block — column alignment held by non-breaking spaces; only `⚠` and **Pace!** stay white.
 11. If `usage-live.json` is missing: show `⚠ Usage data unavailable — monitoring issue`.
 12. Build-ID always included — even for pure docs/config changes.
-13. State line always with all fields (merge, pr, push, commit, branch) — most important first.
+13. Every pipeline fact (PR, base, version, commit, build-id, branch) appears **once** — in the Delivery block when there is one, else footer + state line.
 14. test-minimal `{{user-facing-description}}`: Prefer user-facing descriptions ("Website opens in Edge", "Window appears") over technical details ("Dev server on :3000"). Fall back to technical only when no user-visible outcome exists.

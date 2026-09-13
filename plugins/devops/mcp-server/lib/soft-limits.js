@@ -38,6 +38,19 @@ export function clampText(value, limit) {
   return { value: cut.replace(/[\s,;:\-–—]+$/, ""), clamped: true, original: value };
 }
 
+/**
+ * Clamp a card body field to `limit` characters and mark the cut with an
+ * ellipsis. Body bullets (changes, evidence, pending work) are read, not
+ * committed, so unlike the PR-title clamp the truncation SHOULD be visible —
+ * a bullet that simply ends early reads as a complete (and wrong) statement.
+ * Non-strings render as an empty string.
+ */
+export function clampEllipsis(value, limit) {
+  if (typeof value !== "string") return "";
+  const r = clampText(value, limit);
+  return r.clamped ? r.value + "…" : value;
+}
+
 /** Clamp `value` to `limit` entries, reporting how many were dropped. */
 export function clampList(value, limit) {
   if (!Array.isArray(value) || value.length <= limit) {
