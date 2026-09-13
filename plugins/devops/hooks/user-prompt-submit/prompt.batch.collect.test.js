@@ -353,6 +353,15 @@ describe("message builders", () => {
     expect(ctx).toContain("#1 (2026-08-16T10:00:00.000Z) Notiz 0");
   });
 
+  test("the merge context tells the turn to strip the 📥 Batch title prefix", () => {
+    // The marker path never loads the skill, so the restore instruction has to
+    // ride along with the notes — otherwise the sidebar keeps saying "Batch".
+    const ctx = buildMergeContext([{ at: "2026-08-16T10:00:00.000Z", text: "x" }], "", "/tmp/p/.claude/batch.md");
+    expect(ctx).toContain('"📥 Batch – "');
+    expect(ctx).toContain("mcp__ccd_session_mgmt__set_session_title");
+    expect(ctx).toMatch(/still überspringen/);
+  });
+
   test("a truncated index says so instead of looking complete", () => {
     const notes = Array.from({ length: 400 }, (_, i) => ({
       at: "2026-08-16T10:00:00.000Z",

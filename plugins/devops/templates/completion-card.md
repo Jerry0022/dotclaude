@@ -508,8 +508,40 @@ and the dim name line render as usual, so the user still reads WHICH agents run.
 While `waiting`, open work is appended as its own clause
 (`Warte auf deine Entscheidungen auf der Seite · Agent \`x\` arbeitet`).
 
+With `cwd` set, the card also resolves the page's URL from the project's
+`.claude/concept-active.json` (`port` + `html_path`) and prints it as a dim
+line directly above the CTA — the way back to the tab:
+
+```
+> 🧭 http://localhost:8878/docs/concepts/2026-09-13-feedback-routine.html
+
+### 🧭 CONCEPT läuft. Warte auf deine Entscheidungen auf der Seite — ich MELDE mich
+```
+
+`concept.url` overrides the lookup; without `cwd` and without `url` no line is
+printed. The same 🧭 is the prefix the skill puts on the session title
+(`🧭 Concept – …`) while the page is open, so sidebar and card read as one state.
+
 The final card of a concept (Step 6b of the skill, after cleanup) carries no
 `concept` field — the concept is closed, and the variant's own CTA applies.
+
+### Batch override — /claude-batch is collecting
+
+While `/claude-batch` collection is armed, the user's next prompt is a note the
+UserPromptSubmit hook swallows — it never reaches the model. Every other CTA
+would invite that prompt as if it were going to be worked on. So the card reads
+the project's `.claude/batch-mode.json` itself (same predicate as the hook,
+expiry and note cap included) whenever `cwd` is passed, and swaps the CTA:
+
+| | DE | EN |
+|---|----|----|
+| 3 notes, marker `>>` | `### 📥 BATCH sammelt. 3 Notizen · nächster Prompt wird Notiz #4 · ">>" löst aus — ich WARTE` | `### 📥 BATCH collecting. 3 notes · next prompt becomes note #4 · ">>" fires the merge — I'll WAIT` |
+| fresh, no notes | `### 📥 BATCH sammelt. noch keine Notiz · nächster Prompt wird Notiz #1 · ">>" löst aus — ich WARTE` | `### 📥 BATCH collecting. no notes yet · next prompt becomes note #1 · ">>" fires the merge — I'll WAIT` |
+
+No card field exists for it — the state file is the truth, and a skill cannot
+forget to pass what it never had to pass. Rank: `concept` > batch > `pending`;
+open background work is appended to the batch line the way the concept wait
+line does it. The same 📥 is the skill's session-title prefix (`📥 Batch – …`).
 
 ### Footer line
 

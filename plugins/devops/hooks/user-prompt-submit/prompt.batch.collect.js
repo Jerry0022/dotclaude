@@ -148,6 +148,13 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     'Der Sammelmodus ist mit diesem Prompt automatisch BEENDET. Folgeprompts sind',
     'die Unterhaltung über die Umsetzung und laufen wieder normal — frage NICHT,',
     'ob der Modus aktiv bleiben soll. Nur ein neues /claude-batch on sammelt wieder.',
+    '',
+    // The skill's own Step 4.8 says the same, but this path never loads the
+    // skill — the marker prompt is the whole trigger. Without this line the
+    // sidebar keeps promising a collection that ended with this prompt.
+    'Session-Titel: Beginnt er mit "📥 Batch – " (mcp__ccd_session_mgmt__get_session',
+    'self), entferne genau dieses Präfix via mcp__ccd_session_mgmt__set_session_title',
+    'self. Fehlen die Tools (Terminal, unbeaufsichtigt): still überspringen.',
   );
   if (rest) {
     head.push(

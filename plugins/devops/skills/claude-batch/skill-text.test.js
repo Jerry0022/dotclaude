@@ -15,6 +15,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SESSION_PREFIX } from "../../mcp-server/lib/mode-state.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const skill = readFileSync(join(here, "SKILL.md"), "utf8");
@@ -54,5 +55,42 @@ describe("claude-batch SKILL.md routing — issue #306", () => {
   it("Step 4 and Step 5 reference the pre-check", () => {
     expect(section("## Step 4 — Fire the merge", "## Step 5 — Deactivate")).toMatch(/marker\s+pre-check/);
     expect(section("## Step 5 — Deactivate", "## Optional")).toMatch(/marker pre-check/);
+  });
+});
+
+// The mode is invisible from the sidebar — the dot says idle while the hook
+// swallows every prompt. The skill prefixes the session title while armed and
+// strips it on every way out. The prefix string is the card layer's; the hook's
+// merge context carries the same restore instruction for the marker path.
+describe("claude-batch SKILL.md — session title prefix", () => {
+  const prefix = SESSION_PREFIX.batch;
+
+  it("allows the session-mgmt tools", () => {
+    const fm = skill.slice(0, skill.indexOf("\n---", 4));
+    expect(fm).toContain("mcp__ccd_session_mgmt__get_session");
+    expect(fm).toContain("mcp__ccd_session_mgmt__set_session_title");
+  });
+
+  it("Step 2 sets exactly the card layer's prefix and skips silently without the tools", () => {
+    const step2 = section("## Step 2 — Activate", "## Step 3 — Status");
+    expect(step2).toContain("**2.2b Mark the session in the sidebar.**");
+    expect(step2).toContain("`" + prefix + "`");
+    expect(step2).toMatch(/session_id: "self"/);
+    expect(step2).toMatch(/skip silently/);
+    // The activation card must see the mode file — that is how it swaps its CTA.
+    expect(step2).toMatch(/completion card \*\*with `cwd` set to the project root\*\*/);
+    expect(step2).toContain("📥 BATCH sammelt");
+  });
+
+  it("every way out strips the prefix: go, off, expiry", () => {
+    expect(section("## Step 4 — Fire the merge", "## Step 5 — Deactivate")).toContain("`" + prefix + "`");
+    expect(section("## Step 5 — Deactivate", "## Optional")).toContain("`" + prefix + "`");
+    expect(section("## Step 3 — Status", "## Step 4 — Fire the merge")).toMatch(/strip the\s+session-title prefix/);
+    expect(section("## Rules")).toMatch(/title prefix is state, not decoration/);
+  });
+
+  it("the hook's merge context names the same prefix", () => {
+    const hook = readFileSync(join(here, "..", "..", "hooks", "user-prompt-submit", "prompt.batch.collect.js"), "utf8");
+    expect(hook).toContain('"' + prefix + '"');
   });
 });
