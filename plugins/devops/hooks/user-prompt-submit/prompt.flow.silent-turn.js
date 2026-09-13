@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.silent-turn
- * @version 0.1.0
+ * @version 0.2.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detects background/cron-injected prompts and marks the turn
@@ -20,6 +20,11 @@
  *   loop. The user only wants the card from their REAL interaction.
  *
  *   The flag is a one-shot — stop.flow.guard clears it when the turn ends.
+ *
+ *   Scheduled tasks (#371) are a SEPARATE flag, not a silent turn: the prompt
+ *   arrives wrapped in `<scheduled-task name="…" file="…">` and the routine may
+ *   do real work that owes a card. `dotclaude-devops-scheduled-task` only lets
+ *   stop.flow.guard waive the card for an idle tick (clean tree, no ship).
  */
 
 require('../lib/plugin-guard');
@@ -50,6 +55,13 @@ function isSilent(prompt) {
   return SILENT_PATTERNS.some(rx => rx.test(prompt));
 }
 
+/** The scheduler's wrapper opens the prompt; nothing a user types starts this way. */
+const SCHEDULED_TASK_PATTERN = /^\s*<scheduled-task\b/i;
+
+function isScheduledTask(prompt) {
+  return typeof prompt === 'string' && SCHEDULED_TASK_PATTERN.test(prompt);
+}
+
 let inputData = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', d => { inputData += d; });
@@ -57,7 +69,15 @@ process.stdin.on('end', () => {
   let hook;
   try { hook = JSON.parse(inputData); } catch { process.exit(0); }
 
-  if (!isSilent(hook.prompt || '')) process.exit(0);
+  const prompt = hook.prompt || '';
+
+  if (isScheduledTask(prompt)) {
+    try {
+      writeSessionFile(sessionFile('dotclaude-devops-scheduled-task', hook.session_id), '1');
+    } catch {}
+  }
+
+  if (!isSilent(prompt)) process.exit(0);
 
   try {
     const flagFile = sessionFile('dotclaude-devops-silent-turn', hook.session_id);
@@ -66,4 +86,4 @@ process.stdin.on('end', () => {
   process.exit(0);
 });
 
-module.exports = { isSilent, SILENT_PATTERNS };
+module.exports = { isSilent, isScheduledTask, SILENT_PATTERNS, SCHEDULED_TASK_PATTERN };

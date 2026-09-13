@@ -1,6 +1,6 @@
 /**
  * @module card-guard
- * @version 0.2.0
+ * @version 0.3.0
  * @description Pure decision logic for the completion-card enforcement flow,
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
@@ -19,6 +19,13 @@
  *        do not exist yet. The concept bridge's own tasks (server, keepalive
  *        pulser, pickup waker) are infrastructure and never count — a concept
  *        that is merely open renders `concept: { phase }`, not `pending`.
+ *
+ *   One narrow exemption sits in front of Gate 1 (#371): a scheduled-task
+ *   session (prompt wrapped in `<scheduled-task …>`) whose turn changed no
+ *   file and shipped nothing passes with its one-line status — the idle tick
+ *   of a gated cron routine is ~10 s of work and used to pay 4-5 turns for a
+ *   card whose only content was "nothing happened". ALL THREE conditions are
+ *   required; a scheduled task that edits or ships owes the card like any turn.
  *
  *   Inputs: flag state (work/card/validation/pending) + transcript + stop_hook_active.
  *   Output: { action: 'block' | 'pass', reason?, resetFlags }.
@@ -95,11 +102,17 @@ function lastAssistantContainsCard(transcriptContent) {
  * @param {boolean} [s.pendingAttested] — the card was rendered with a `pending` field
  * @param {string}  [s.pluginRoot]   — active install root, so the block reason can name
  *                                     the offline renderer path for this install
- * @returns {{ action: 'block' | 'pass', resetFlags: boolean, reason?: string }}
+ * @param {boolean} [s.scheduledTask] — the turn's prompt was a `<scheduled-task …>` wrapper
+ * @param {boolean} [s.treeClean]     — no file changed this turn (git status empty / zero edits)
+ * @param {boolean} [s.shipped]       — ship_release merged something this turn
+ * @param {boolean} [s.completionMcpDown] — the completion MCP heartbeat is dead, so the
+ *                                     offline renderer is the FIRST instruction, not the third
+ * @returns {{ action: 'block' | 'pass', resetFlags: boolean, reason?: string, exempt?: string }}
  */
 function decideAction({
   workHappened, cardRendered, stopHookActive, substantial, silent,
   validationPending, validationAttested, openTaskNames, pendingAttested, pluginRoot,
+  scheduledTask, treeClean, shipped, completionMcpDown,
 }) {
   if (silent) {
     // Background tick (cron git-sync, concept bridge poll, autonomous loop).
@@ -117,12 +130,19 @@ function decideAction({
 
   const active = workHappened || substantial;
 
+  // Scheduled-task idle tick (#371): no file changed, nothing shipped, the
+  // prompt was the scheduler's — the status line the routine printed IS the
+  // report. Narrow on purpose: any edit or ship falls through to Gate 1.
+  if (scheduledTask && !cardRendered && treeClean === true && !shipped) {
+    return { action: 'pass', resetFlags: true, exempt: 'scheduled-task-idle' };
+  }
+
   // Gate 1 — completion card must exist.
   if (!cardRendered && active) {
     return {
       action: 'block',
       resetFlags: false, // keep flags so the post-render stop hook sees consistent state
-      reason: buildBlockReason(pluginRoot),
+      reason: buildBlockReason(pluginRoot, { completionMcpDown }),
     };
   }
 
@@ -163,10 +183,33 @@ function offlineRendererPath(pluginRoot) {
   return `${root}/mcp-server/index.js`;
 }
 
-function buildBlockReason(pluginRoot) {
+/**
+ * The three ways to render the card, in the order the caller should try them.
+ * Default: direct MCP call → ToolSearch → offline renderer. When the completion
+ * MCP's heartbeat is dead (`completionMcpDown`), the offline renderer comes
+ * FIRST — each failed rung costs a whole turn, and a session whose server never
+ * connected used to burn two of them before reaching the one that works (#371).
+ */
+function renderLadderLines(pluginRoot, { completionMcpDown } = {}) {
+  const offline = [
+    `  node "${offlineRendererPath(pluginRoot)}" --render-card <payload.json>`,
+    'Write the exact arguments you would have passed to the tool into payload.json',
+    '(same field names, including "session_id"), then relay stdout VERBATIM. Do not',
+    'report "no card possible" — that path exists precisely for a dead MCP server.',
+  ];
+  if (completionMcpDown) {
+    return [
+      'The dotclaude-completion MCP server is NOT running (heartbeat dead) — do not',
+      'try the tool first. Render the card offline through the same renderer, via',
+      'Bash, as the FIRST action:',
+      ...offline,
+      '',
+      'Only if that node call itself fails, try the tool',
+      '`mcp__plugin_devops_dotclaude-completion__render_completion_card` directly,',
+      'then ToolSearch (select:mcp__plugin_devops_dotclaude-completion__render_completion_card).',
+    ];
+  }
   return [
-    '[stop.flow.guard] Completion card required — not yet rendered this turn.',
-    '',
     'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW as the FIRST action.',
     'If the direct call fails with "tool not found", fall back to ToolSearch:',
     '  select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
@@ -174,10 +217,15 @@ function buildBlockReason(pluginRoot) {
     'If ToolSearch ALSO cannot find it because the MCP server never connected this',
     'session (CONNECT_TIMEOUT / "failed to connect"), the card is still required —',
     'render it offline through the same renderer, via Bash:',
-    `  node "${offlineRendererPath(pluginRoot)}" --render-card <payload.json>`,
-    'Write the exact arguments you would have passed to the tool into payload.json',
-    '(same field names, including "session_id"), then relay stdout VERBATIM. Do not',
-    'report "no card possible" — that path exists precisely for a dead MCP server.',
+    ...offline,
+  ];
+}
+
+function buildBlockReason(pluginRoot, opts = {}) {
+  return [
+    '[stop.flow.guard] Completion card required — not yet rendered this turn.',
+    '',
+    ...renderLadderLines(pluginRoot, opts),
     '',
     'Variant decision (pick exactly one):',
     '  ship pipeline ran + merged → ship-successful  (ONLY after /ship + merge)',
@@ -311,6 +359,8 @@ module.exports = {
   lastAssistantContainsCard,
   decideAction,
   buildBlockReason,
+  renderLadderLines,
+  offlineRendererPath,
   buildValidationReason,
   buildPendingReason,
   safeReadTranscript,
