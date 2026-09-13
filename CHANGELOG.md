@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.158.0] — 2026-09-13
+
+### Added
+
+- **A concept round can now ask "which of these many things goes where".** The third subpage kind of the concept skill — `data-view-kind="mapping"` next to the decision and comparison views inside a design round, and a `section[data-mapping]` block inside a free round — lets Claude propose an assignment of many items (data fields, categories, requirements…) to targets and lets the reviewer correct it in two synchronized views. The **schematic view** draws each UI element as labelled slots with "Auf den ersten Blick" and "Nach Klick" side by side; items are placed by arming a chip (or a slot) and tapping — no drag & drop, keyboard and touch work the same way. The **matrix view** is items × targets with sticky headers, one matrix per context value or extra axis (tabs with open-constraint counts), a row filter (All / Unassigned / Changed) and per-column counts. Both read one state: the matrix's checkboxes are the truth, one compact string per matrix is what the page persists and the bridge mirrors — the draft store, the beacon flush and `GET /recovery` stay untouched. Cardinality is never a dead end: an "exactly one" slot swaps, minimum/maximum rules only flag. Claude's proposal stays visible as a diff (◆), `↺` resets a matrix, `⧉` copies one context onto another, the reviewer may add items ad hoc (≤ 20) and leave a note per slot. The submit payload gains a typed `mappings[]` entry (`assigned`, `diff`, `unassigned`, `violations`, `order`, `adhocItems`, `note`, `slotNotes`), always present, and Step 5b reads it before `decisions[]`: on iterate the next proposal is what the reviewer left, on implement the assignment is the spec. Claude authors nothing but a JSON spec — the engine renders every cell — and a frozen round shows the reviewer's submission read-only (Claude writes it back as `submitted`; a missing or partial submission shows a banner, never the proposal as if it were the decision). Reference: `templates.md` § Information Mapping (engine), § View kind `mapping`, § Mapping block (optional); design note `docs/superpowers/specs/2026-09-13-concept-information-mapping-design.md`.
+- **Any question view may name its variant.** `data-view-for="{designId}"` on a decision, comparison or mapping view lists it under that design in the ☰ TOC (after the design's screens) and tags its payload entries with `design`; without it a view stays variant-independent as before.
+- **The deterministic concept gate validates mapping specs.** `hooks/lib/concept-gate.js` gains `findMappingIssues`: JSON that does not parse, ids outside `^[a-z0-9_]+$` or the reserved ad-hoc prefix, duplicate ids, a section `id` that differs from `data-mapping`, proposal or submission references to unknown items, targets or contexts, empty sources, and — on a frozen round — a `submitted` that lacks a matrix key or an order key block the write. `validation-gate.md` lists the manual M-set (M1–M10) and P23 admits the third view kind.
+- **`build-concept-fixture.js --mapping [--designs N]`** builds the assembled page with a mapping subpage (design mode) or block (free mode), a frozen round with a complete submission, and — with `--designs 2` — competing designs so the top-centre switcher shows real design segments next to the mapping segment.
+
+### Fixed
+
+- **A question view survives the reload.** `_activeView` was restored on load and immediately undone: the shared boot listener's `showIteration()` fired `iteration:changed`, whose handler treated every event as a tab switch, hid the restored view, and the `showScreen()` → `saveState()` behind it deleted the key — every iteration append reloads the page, so no decision, comparison or mapping subpage ever survived a round. The handler now compares the incoming round with the one it last built and keeps a view that is on screen; a real tab switch still drops back to the design. `view-boot-restore.test.js` boots the assembled fixture twice with the storage carried over.
+- **The top-centre switcher stays visible for one design with views.** `body[data-single-design]` hid the whole switcher, leaving the ☰ panel as the only route to a question view; the collapse now applies only to a view-less single-design round.
+- **Document-round collectors read the live round only.** `collectFreeDecisions()` / `collectDecisionDecisions()` scanned `[data-comment]` and `[data-decision]` page-wide, so a frozen round's baked notes travelled in the live round's payload.
+
+### Changed
+
+- **Locale cells that land in JS literals contain no `'`, backticks or backslashes** — the mapping engine's `map.*` strings are substituted into single-quoted literals, and an apostrophe would have thrown a `SyntaxError` on every English page; `mapping-integration.test.js` parses the engine block after substituting both locale columns.
+
 ## [0.157.0] — 2026-09-13
 
 ### Added

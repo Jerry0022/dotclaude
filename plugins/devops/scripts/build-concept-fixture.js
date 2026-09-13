@@ -15,7 +15,18 @@
  *
  *   Usage:
  *     node build-concept-fixture.js --out <file.html> [--rounds 8] [--entries 14]
- *                                   [--mode decision|design] [--locale en|de]
+ *                                   [--mode decision|design] [--locale en|de] [--mapping] [--designs 1]
+ *
+ *   `--mapping` adds an information mapping (templates.md § Information
+ *   Mapping (engine)) so the schematic / matrix engine can be looked at too:
+ *   in design mode the live round gains a `data-view-kind="mapping"` view
+ *   (vehicle fields → list card, phone + desktop) under its design; in
+ *   decision mode the live round becomes a `free` round carrying the mapping
+ *   block (requirements → release trains / owners, matrix-only) with its
+ *   inline note. In both modes the round before the live one holds a FROZEN
+ *   mapping of the same kind with a complete `submitted`, so the read-only
+ *   render and the gate's rule M9 are exercised. Without the flag the output
+ *   is byte-identical to what it was.
  *
  *   No bridge is involved: the page's heartbeat / draft fetches fail and the
  *   status line settles on "local-only", which is itself one of the states to
@@ -29,10 +40,11 @@ const path = require('path');
 const TEMPLATES = path.join(__dirname, '..', 'skills', 'concept', 'deep-knowledge', 'templates.md');
 
 function parseArgs(argv) {
-  const out = { out: '', rounds: 8, entries: 14, mode: 'decision', locale: 'en' };
+  const out = { out: '', rounds: 8, entries: 14, mode: 'decision', locale: 'en', mapping: false, designs: 1 };
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i].startsWith('--') ? argv[i].slice(2) : null;
     if (!key || !Object.prototype.hasOwnProperty.call(out, key)) continue;
+    if (typeof out[key] === 'boolean') { out[key] = true; continue; }   // value-less flag
     const raw = argv[i + 1];
     if (raw === undefined || raw.startsWith('--')) continue;
     i++;
@@ -115,6 +127,135 @@ function variantSection(id, label, { discard = false, disabled = false } = {}) {
   ].join('\n');
 }
 
+// --- Information mapping (--mapping) ------------------------------------------
+// The two specs of skills/concept/mapping-harness.js (VEHICLE_SPEC, TRAINS_SPEC),
+// copied: the harness is an ES module, this script is CommonJS. Keep them in
+// step by hand — they are test data, not a contract.
+const VEHICLE_SPEC = {
+  items: [
+    { id: 'plate', label: 'Licence plate', group: 'Identity', required: true },
+    { id: 'model', label: 'Model', group: 'Identity' },
+    { id: 'vin', label: 'VIN', group: 'Identity' },
+    { id: 'status', label: 'Status', group: 'Status' },
+    { id: 'mileage', label: 'Mileage', group: 'Telemetry' },
+    { id: 'holder', label: 'Holder', group: 'Ownership' },
+  ],
+  elements: [{ id: 'card', label: 'List card', itemTargets: 'any', parts: [
+    { id: 'header', label: 'header', tier: 'first', row: 1, min: 1 },
+    { id: 'badge', label: 'badge', tier: 'first', row: 1, accepts: 'one', min: 1 },
+    { id: 'line1', label: 'line 1', tier: 'first', row: 2, min: 1, ordered: true },
+    { id: 'line2', label: 'line 2', tier: 'first', row: 3, ordered: true },
+    { id: 'footer', label: 'footer', tier: 'first', row: 4 },
+    { id: 'overview', label: 'Tab: Overview', tier: 'after', row: 1 },
+    { id: 'history', label: 'Tab: History', tier: 'after', row: 2 },
+  ] }],
+  context: { id: 'device', label: 'Context', values: [{ id: 'phone', label: 'Phone' }, { id: 'desktop', label: 'Desktop' }] },
+  proposal: [['plate', 'card.header', 'phone'], ['model', 'card.header', 'phone'], ['status', 'card.badge', 'phone'],
+             ['mileage', 'card.line1', 'phone'], ['vin', 'card.overview', 'phone'], ['plate', 'card.header', 'desktop']],
+  proposalOrder: { 'card.line1@phone': ['mileage'] },
+  slotNotes: true, adhocItems: true,
+};
+const TRAINS_SPEC = {
+  items: [{ id: 'req01', label: 'REQ-01', group: 'Requirements' }, { id: 'rsk01', label: 'RSK-01', group: 'Risks' }],
+  axes: [
+    { id: 'train', label: 'Release train', itemTargets: 'one', columns: [{ id: 'r1', label: 'R1' }, { id: 'r2', label: 'R2' }] },
+    { id: 'owner', label: 'Owner', itemTargets: 'min1', columns: [{ id: 'web', label: 'Web' }, { id: 'ops', label: 'Ops' }] },
+  ],
+  proposal: [['req01', 'train.r1'], ['req01', 'owner.web'], ['rsk01', 'train.r2']],
+};
+
+/**
+ * The `submitted` object of a frozen round (templates.md § Information
+ * Mapping (engine) → Freezing): the proposal pairs grouped by matrix key
+ * (`{src}` or `{src}@{ctx}`), an `order` entry for every ordered target key,
+ * no ad-hoc items, no slot notes. `edits` are extra `[item, target, ctx?]`
+ * pairs the "user" added on top — one visible ◆ per frozen mapping, so the
+ * read-only render is distinguishable from the proposal in the browser.
+ */
+function submittedFor(spec, edits = []) {
+  const ctxs = spec.context && spec.context.values ? spec.context.values.map(v => v.id) : [null];
+  const sources = [
+    ...(spec.elements || []).map(e => ({ id: e.id, targets: e.parts })),
+    ...(spec.axes || []).map(a => ({ id: a.id, targets: a.columns })),
+  ];
+  const cells = {}, order = {};
+  const pairs = [...(spec.proposal || []), ...edits];
+  sources.forEach(s => ctxs.forEach(c => {
+    const key = s.id + (c ? '@' + c : '');
+    const targets = new Set(s.targets.map(t => `${s.id}.${t.id}`));
+    cells[key] = pairs.filter(p => (p[2] || null) === c && targets.has(p[1])).map(p => [p[0], p[1]]);
+    s.targets.filter(t => t.ordered).forEach(t => {
+      const tk = `${s.id}.${t.id}`;
+      const ok = tk + (c ? '@' + c : '');
+      const proposed = (spec.proposalOrder || {})[ok] || [];
+      const checked = cells[key].filter(p => p[1] === tk).map(p => p[0]);
+      order[ok] = proposed.filter(id => checked.includes(id)).concat(checked.filter(id => !proposed.includes(id)));
+    });
+  }));
+  return { cells, order, adhoc: [], slotNotes: {} };
+}
+
+const specScript = spec => `<script type="application/json" data-mapping-spec>${JSON.stringify(spec)}</script>`;
+
+/**
+ * Design mode: one `data-view-kind="mapping"` view tied to the round's design
+ * (§ View kind `mapping`). No inline note — the dock's view textarea is the
+ * mapping note. Frozen rounds carry the submission in the spec.
+ */
+function mappingView(n, { live }) {
+  const id = `veh_${n}`;
+  const spec = live ? VEHICLE_SPEC : { ...VEHICLE_SPEC, submitted: submittedFor(VEHICLE_SPEC, [['holder', 'card.overview', 'phone']]) };
+  return [
+    `  <section data-view="map_d${n}" data-view-kind="mapping" data-view-for="d${n}" data-nav-label="Field mapping · Design ${n}" hidden>`,
+    '    <div class="view-frame view-mapping">',
+    `      <h2>Which vehicle fields go where on the list card of Design ${n}?</h2>`,
+    '      <p>Proposal pre-filled — correct it. Phone and desktop are separate.</p>',
+    `      <section data-mapping="${id}" id="${id}" data-nav-label="Field mapping · Design ${n}">`,
+    `        ${specScript(spec)}`,
+    '      </section>',
+    '    </div>',
+    '  </section>',
+  ].join('\n');
+}
+
+/**
+ * Free-round block (§ Mapping block (optional)): matrix-only spec (axes, no
+ * schematic, no view toggle) plus the mandatory inline note. Frozen rounds
+ * carry the submission in the spec and a frozen note, like every other
+ * comment of that round.
+ */
+function mappingBlock(n, { live }) {
+  const id = `rel_${n}`;
+  const spec = live ? TRAINS_SPEC : { ...TRAINS_SPEC, submitted: submittedFor(TRAINS_SPEC, [['rsk01', 'owner.ops']]) };
+  const dis = live ? '' : ' disabled readonly';
+  return [
+    `<section data-mapping="${id}" id="${id}" data-nav-label="Requirements → release trains">`,
+    '  <h2>Which requirement lands in which train, and who owns it?</h2>',
+    `  <p>${LOREM[0]}</p>`,
+    `  ${specScript(spec)}`,
+    '  <div class="field-row decision-comment-row">',
+    `    <label for="${id}-note">{{decision.comment_label}}</label>`,
+    `    <textarea id="${id}-note" data-comment="map-${id}-note" data-attachable rows="3" placeholder="{{decision.comment_placeholder}}"${dis}></textarea>`,
+    '  </div>',
+    '</section>',
+  ].join('\n');
+}
+
+/** A free round: intro, one context section, the mapping block, one more section. */
+function freeRound(n, { live }) {
+  return [
+    `<section id="iter-${n}" data-iteration="${n}" data-iteration-template="free"${live ? ' data-active' : ' hidden'}>`,
+    '  <header class="iteration-intro">',
+    `    <h2>Iteration ${n} · ${live ? 'live round' : 'frozen round'}</h2>`,
+    `    <p>Synthetic free round ${n} of the Kompass fixture — one mapping block between two context sections.</p>`,
+    '  </header>',
+    plainSection(`r${n}-s0`, `Context — round ${n}`),
+    mappingBlock(n, { live }),
+    plainSection(`r${n}-s2`, `Recommendation — round ${n}`),
+    '</section>',
+  ].join('\n');
+}
+
 /**
  * A decision round. `entries` sections, the first `plain` of them context
  * sections and the rest variant cards — two kinds, so the live round groups
@@ -136,8 +277,14 @@ function decisionRound(n, { live, entries, plain, discard = 0 }) {
   return parts.join('\n');
 }
 
-/** A design round: one design with three wired screens, no views. */
-function designRound(n, { live }) {
+/**
+ * A design round: `designs` designs with three wired screens each (the first
+ * active, the others `hidden` — ids `d{n}`, `d{n}b`, `d{n}c`, …), plus a
+ * mapping view under the first design with `mapping`. Two or more designs
+ * give the top-centre switcher real design segments next to the mapping
+ * segment, instead of the single-design guard being the only reason it shows.
+ */
+function designRound(n, { live, mapping = false, designs = 1 }) {
   const screen = (id, label, next, active) => [
     `<section id="${id}" data-screen data-nav-label="${esc(label)}"${active ? ' data-screen-active="true"' : ' hidden'}>`,
     '  <div class="device-frame">',
@@ -148,13 +295,18 @@ function designRound(n, { live }) {
     '  </div>',
     '</section>',
   ].join('\n');
+  const design = (id, label, active) => [
+    `  <section data-design="${id}" data-nav-label="${esc(label)}" data-design-active="${active ? 'true' : 'false'}"${active ? '' : ' hidden'}>`,
+    screen(`${id}-s1`, 'Welcome', `${id}-s2`, true),
+    screen(`${id}-s2`, 'Credentials', `${id}-s3`, false),
+    screen(`${id}-s3`, 'Success', null, false),
+    '  </section>',
+  ].join('\n');
+  const suffixes = Array.from({ length: Math.max(1, designs) }, (_, i) => (i === 0 ? '' : String.fromCharCode(97 + i)));
   return [
     `<section id="iter-${n}" data-iteration="${n}" data-iteration-template="design"${live ? ' data-active' : ' hidden'}>`,
-    `  <section data-design="d${n}" data-nav-label="Design ${n}" data-design-active="true">`,
-    screen(`d${n}-s1`, 'Welcome', `d${n}-s2`, true),
-    screen(`d${n}-s2`, 'Credentials', `d${n}-s3`, false),
-    screen(`d${n}-s3`, 'Success', null, false),
-    '  </section>',
+    ...suffixes.map((sfx, i) => design(`d${n}${sfx}`, `Design ${n}${sfx ? ' ' + sfx.toUpperCase() : ''}`, i === 0)),
+    ...(mapping ? [mappingView(n, { live })] : []),
     '</section>',
   ].join('\n');
 }
@@ -206,12 +358,17 @@ function build(opts, md = fs.readFileSync(TEMPLATES, 'utf8')) {
 
   const rounds = Array.from({ length: opts.rounds }, (_, i) => i + 1);
   const live = opts.rounds;
+  const mapping = !!opts.mapping;
   const sections = rounds.map(n => {
     if (n === live) {
-      return opts.mode === 'design'
-        ? designRound(n, { live: true })
+      if (opts.mode === 'design') return designRound(n, { live: true, mapping, designs: opts.designs });
+      return mapping
+        ? freeRound(n, { live: true })          // a mapping block never sits in a decision round
         : decisionRound(n, { live: true, entries: opts.entries, plain: Math.max(2, Math.floor(opts.entries / 3)) });
     }
+    // With --mapping the round before the live one is a frozen round of the
+    // same kind, carrying its mapping with the baked submission.
+    if (mapping && n === live - 1) return opts.mode === 'design' ? designRound(n, { live: false, mapping, designs: opts.designs }) : freeRound(n, { live: false });
     // Frozen history: varying sizes, a few discards, so the chip summaries differ.
     return decisionRound(n, { live: false, entries: 3 + (n % 4), plain: 1, discard: n % 3 });
   }).join('\n\n');
@@ -261,11 +418,11 @@ module.exports = { parseArgs, scanBlocks, localeMap, build, TEMPLATES };
 if (require.main === module) {
   const opts = parseArgs(process.argv.slice(2));
   if (!opts.out) {
-    process.stderr.write('usage: build-concept-fixture.js --out <file.html> [--rounds 8] [--entries 14] [--mode decision|design] [--locale en|de]\n');
+    process.stderr.write('usage: build-concept-fixture.js --out <file.html> [--rounds 8] [--entries 14] [--mode decision|design] [--locale en|de] [--mapping] [--designs 1]\n');
     process.exit(2);
   }
   const page = build(opts);
   fs.mkdirSync(path.dirname(path.resolve(opts.out)), { recursive: true });
   fs.writeFileSync(opts.out, page);
-  process.stdout.write(`${path.resolve(opts.out)} (${page.length} bytes, ${opts.rounds} rounds, mode ${opts.mode})\n`);
+  process.stdout.write(`${path.resolve(opts.out)} (${page.length} bytes, ${opts.rounds} rounds, mode ${opts.mode}${opts.mapping ? ', mapping' : ''})\n`);
 }

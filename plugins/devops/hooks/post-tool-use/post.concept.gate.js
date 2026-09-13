@@ -9,15 +9,20 @@
  *   concept HTML is written, verify it carries the live decision panel +
  *   bridge-submit markers, contains NO clipboard / paste-into-chat
  *   fallback, and has sound <style>/<script> structure (no nested or
- *   unclosed block — the "white, unthemed page" regression, #346). Blocks
+ *   unclosed block — the "white, unthemed page" regression, #346), and that
+ *   every information-mapping spec normalises the way the page's engine
+ *   normalises it (frozen rounds carry their `submitted` state). Blocks
  *   (exit 2) with actionable feedback when the page is invalid, so the
  *   regression survives only until the next regenerate — never until the
  *   user has to copy a JSON by hand.
  *
  *   Scope: only fires on concept HTML (the `docs/concepts/` path or a concept
  *   content signature). Non-concept files pass through untouched. This is a
- *   focused gate for the two catastrophic failure modes, not the full
- *   35-pattern validation-gate.md sweep (that stays a Step-2 task).
+ *   focused gate for four deterministic failure classes — (A) missing live
+ *   decision-panel / bridge markers, (B) a forbidden clipboard fallback,
+ *   broken <style>/<script> structure, and unsound mapping specs (ids, shapes,
+ *   references, frozen `submitted`) — not the full 35-pattern
+ *   validation-gate.md sweep (that stays a Step-2 task).
  */
 
 require('../lib/plugin-guard');
@@ -54,9 +59,9 @@ process.stdin.on('end', () => {
 
   if (!isConceptHtml(file, html)) process.exit(0);
 
-  const { ok, missing, forbidden, structural } = evaluate(file, html);
+  const { ok, missing, forbidden, structural, mapping } = evaluate(file, html);
   if (ok) process.exit(0);
 
-  process.stderr.write(buildBlockReason(file, missing, forbidden, structural) + '\n');
+  process.stderr.write(buildBlockReason(file, missing, forbidden, structural, mapping) + '\n');
   process.exit(2);
 });

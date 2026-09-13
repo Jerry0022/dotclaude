@@ -250,6 +250,44 @@ as above), and it renders correctly the moment the user reopens that pin's
 bubble on the frozen tab. No JSON blob, no JS read step, no extra freeze
 step beyond "same as every other comment textarea".
 
+**Mappings (§ Information Mapping):** a `[data-mapping]` — a
+`data-view-kind="mapping"` view in a design round or a `section[data-mapping]`
+block in a free round (templates.md § Information Mapping (engine)) — is
+rendered by the engine at load time, so the freeze sweep finds only its
+wrapper, its JSON spec and (free rounds) its note textarea in the static
+HTML. The rules:
+
+- **Its controls are `<button>`s** (view toggle, tabs, group collapse,
+  palette filters, chips), so the
+  `section[data-iteration]:not([data-active]) input { pointer-events: none }`
+  rule on frozen inputs does not kill them — like `.view-switch-item`, they
+  keep working on a frozen tab and need no entry in the exemption list
+  above. **The exemption list is unchanged.**
+- **The renderer disables the cells itself** from `submitted`: on a section
+  without `data-active` it sets `data-map-frozen="true"`, renders every cell
+  checkbox `disabled`, the slot-note textareas `readonly`, omits the tools
+  (↺ / + item / ⧉) and the chip ×, and keeps toggle, tabs, collapse, search
+  and filters browsable with their UI state in memory. Claude never
+  hand-edits a cell.
+- **Claude writes `submitted` at Step 5c** into the spec of every mapping in
+  the round being frozen — `"submitted": {cells, order, adhoc, slotNotes}`
+  taken from the payload's `mappings[]` entry (`cells` = `assigned` keyed by
+  matrix key, `order`, `adhoc` = `adhocItems`, `slotNotes`). The authored
+  note textarea goes `readonly` with its submitted text like every other
+  comment field (design rounds: the dock's `views` blob above covers the
+  view note).
+- **A frozen mapping without `submitted`** — or with a `submitted` whose
+  `cells` lacks any matrix key of the spec — shows the `map.frozen_missing`
+  banner (`div.map-error[role=alert]`) over the proposal and fails the
+  deterministic gate (validation-gate.md § Mappings, M9). Silently
+  presenting the proposal as the user's decision is the one outcome this
+  construct must never produce.
+- **State inputs never leak between rounds.** The `.map-state` inputs
+  (`map-{m}-cells-…`, `map-{m}-order-…`, `map-{m}-adhoc`, `map-{m}-ui`) are
+  `readonly` on a frozen section and their persisted keys are
+  iteration-namespaced (`text:i{N}:…`), so `restoreState()` — which applies
+  only the live round's keys — never overwrites the baked submission.
+
 **The panel itself switches to `#panel-frozen`** on any non-live tab — a short
 "this is an earlier round, it is read-only" note plus a back-link to the live
 iteration. It applies to every template, not just `design`. Without that block

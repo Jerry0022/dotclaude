@@ -7,6 +7,7 @@ import {
   findStructural,
   evaluate,
   buildBlockReason,
+  findMappingIssues,
 } from "./concept-gate.js";
 
 // A minimal but valid live-bridge concept page: contains every required
@@ -230,5 +231,380 @@ describe("buildBlockReason", () => {
     expect(reason).toMatch(/paste/i);
     expect(reason).toMatch(/validation-gate\.md/);
     expect(reason).toMatch(/decision panel may never be omitted/);
+  });
+});
+
+// Information mapping construct (templates.md § Information Mapping (engine)
+// → Spec; design spec § 11 rules M1–M4 + M9). The gate mirrors the engine's
+// normalizeSpec() and complete() checks so page and hook agree.
+describe("findMappingIssues", () => {
+  const spec = extra => JSON.stringify({
+    items: [{ id: "a", label: "A" }],
+    axes: [{ id: "x", label: "X", columns: [{ id: "c1", label: "C1" }] }],
+    proposal: [["a", "x.c1"]],
+    ...extra,
+  });
+  const wrap = (iter, body) => `<section data-iteration="${iter.n}"${iter.active ? " data-active" : " hidden"}>${body}</section>`;
+  const mapping = (id, s) => `<section data-mapping="${id}" id="${id}"><script type="application/json" data-mapping-spec>${s}</script></section>`;
+  const live = body => wrap({ n: 1, active: true }, body);
+  const frozen = body => wrap({ n: 1, active: false }, body);
+  const kinds = html => findMappingIssues(html).map(i => i.kind);
+
+  test("no mapping → no issues", () => {
+    expect(findMappingIssues(VALID)).toEqual([]);
+    expect(findMappingIssues("")).toEqual([]);
+  });
+
+  test("valid live mapping passes", () => {
+    expect(findMappingIssues(live(mapping("m1", spec())))).toEqual([]);
+  });
+
+  test("mapping section without a spec script", () => {
+    expect(kinds(live('<section data-mapping="m1" id="m1"><p>nothing</p></section>'))).toEqual(["spec-missing"]);
+  });
+
+  test("a spec belonging to the NEXT mapping does not satisfy the first", () => {
+    const html = live('<section data-mapping="m1" id="m1"></section>' + mapping("m2", spec()));
+    expect(kinds(html)).toEqual(["spec-missing"]);
+  });
+
+  test("unparseable spec", () => {
+    expect(kinds(live(mapping("m1", "{nope")))).toEqual(["spec-parse"]);
+  });
+
+  test("bad id grammar and duplicate ids", () => {
+    const s = JSON.stringify({ items: [{ id: "a-b" }, { id: "a-b" }], axes: [{ id: "x", columns: [{ id: "c1" }] }] });
+    const k = kinds(live(mapping("m1", s)));
+    expect(k).toContain("bad-id");
+    expect(k).toContain("duplicate-id");
+  });
+
+  test("bad id grammar is checked on elements, parts, axes, columns and context values", () => {
+    const s = JSON.stringify({
+      items: [{ id: "a" }],
+      elements: [{ id: "Card", parts: [{ id: "head er" }] }],
+      axes: [{ id: "x", columns: [{ id: 7 }] }],
+      context: { id: "device", values: [{ id: "Phone" }] },
+    });
+    const issues = findMappingIssues(live(mapping("m1", s)));
+    const bad = issues.filter(i => i.kind === "bad-id").map(i => i.why).join("\n");
+    expect(bad).toMatch(/Card/);
+    expect(bad).toMatch(/head er/);
+    expect(bad).toMatch(/7/);
+    expect(bad).toMatch(/Phone/);
+  });
+
+  test("item id u{n} is reserved for ad-hoc items", () => {
+    const s = spec({ items: [{ id: "u1" }], proposal: [] });
+    const issues = findMappingIssues(live(mapping("m1", s)));
+    expect(issues.map(i => i.kind)).toEqual(["bad-id"]);
+    expect(issues[0].why).toMatch(/reserved/);
+  });
+
+  test("duplicate source ids across elements + axes, part ids per element, context values", () => {
+    const s = JSON.stringify({
+      items: [{ id: "a" }],
+      elements: [{ id: "x", parts: [{ id: "p", label: "P" }, { id: "p", label: "P2" }] }],
+      axes: [{ id: "x", columns: [{ id: "c1" }] }],
+      context: { id: "d", values: [{ id: "v" }, { id: "v" }] },
+    });
+    const why = findMappingIssues(live(mapping("m1", s))).filter(i => i.kind === "duplicate-id").map(i => i.why);
+    expect(why.length).toBe(3);
+    expect(why.join("\n")).toMatch(/source id "x"/);
+    expect(why.join("\n")).toMatch(/part id "p"/);
+    expect(why.join("\n")).toMatch(/context value id "v"/);
+  });
+
+  test("two elements may each use the same part id", () => {
+    const s = JSON.stringify({
+      items: [{ id: "a" }],
+      elements: [{ id: "e1", parts: [{ id: "p" }] }, { id: "e2", parts: [{ id: "p" }] }],
+    });
+    expect(kinds(live(mapping("m1", s)))).toEqual([]);
+  });
+
+  test("mapping id reused across iterations", () => {
+    const html = frozen(mapping("m1", spec({ submitted: { cells: { x: [["a", "x.c1"]] } } })))
+      + wrap({ n: 2, active: true }, mapping("m1", spec()));
+    expect(kinds(html)).toEqual(["duplicate-mapping-id"]);
+  });
+
+  test("proposal referencing unknown ids; ctx present without context", () => {
+    expect(kinds(live(mapping("m1", spec({ proposal: [["zz", "x.c1"]] }))))).toContain("unknown-ref");
+    expect(kinds(live(mapping("m1", spec({ proposal: [["a", "x.zz"]] }))))).toContain("unknown-ref");
+    expect(kinds(live(mapping("m1", spec({ proposal: [["a", "x.c1", "phone"]] }))))).toContain("ctx-mismatch");
+  });
+
+  test("context spec: proposal must carry a known ctx value", () => {
+    const ctx = { context: { id: "device", values: [{ id: "phone" }, { id: "desktop" }] } };
+    expect(kinds(live(mapping("m1", spec({ ...ctx, proposal: [["a", "x.c1"]] }))))).toEqual(["ctx-mismatch"]);
+    expect(kinds(live(mapping("m1", spec({ ...ctx, proposal: [["a", "x.c1", "tablet"]] }))))).toEqual(["ctx-mismatch"]);
+    expect(kinds(live(mapping("m1", spec({ ...ctx, proposal: [["a", "x.c1", "phone"]] }))))).toEqual([]);
+  });
+
+  test("proposalOrder: unknown / unordered target, unknown item, ctx mismatch", () => {
+    const ordered = {
+      elements: [{ id: "card", parts: [{ id: "line", ordered: true }, { id: "plain" }] }],
+      axes: undefined,
+      proposal: [["a", "card.line"]],
+    };
+    expect(kinds(live(mapping("m1", spec({ ...ordered, proposalOrder: { "card.line": ["a"] } }))))).toEqual([]);
+    expect(kinds(live(mapping("m1", spec({ ...ordered, proposalOrder: { "card.nope": ["a"] } }))))).toEqual(["unknown-ref"]);
+    expect(kinds(live(mapping("m1", spec({ ...ordered, proposalOrder: { "card.plain": ["a"] } }))))).toEqual(["unknown-ref"]);
+    expect(kinds(live(mapping("m1", spec({ ...ordered, proposalOrder: { "card.line": ["a", "zz"] } }))))).toEqual(["unknown-ref"]);
+    expect(kinds(live(mapping("m1", spec({ ...ordered, proposalOrder: { "card.line@phone": ["a"] } }))))).toEqual(["ctx-mismatch"]);
+  });
+
+  test("empty mapping (no elements/axes)", () => {
+    expect(kinds(live(mapping("m1", JSON.stringify({ items: [{ id: "a" }] }))))).toContain("empty-mapping");
+  });
+
+  test("empty mapping: element without parts, axis without columns, context without values", () => {
+    const s = JSON.stringify({
+      items: [{ id: "a" }],
+      elements: [{ id: "e" }],
+      axes: [{ id: "x", columns: [] }],
+      context: { id: "d", values: [] },
+    });
+    const why = findMappingIssues(live(mapping("m1", s))).filter(i => i.kind === "empty-mapping").map(i => i.why);
+    expect(why.length).toBe(3);
+  });
+
+  test("frozen iteration without submitted fails; with submitted passes", () => {
+    expect(kinds(frozen(mapping("m1", spec())))).toEqual(["frozen-without-submitted"]);
+    expect(findMappingIssues(frozen(mapping("m1", spec({ submitted: { cells: { x: [["a", "x.c1"]] } } }))))).toEqual([]);
+  });
+
+  test("frozen: submitted.cells must carry EVERY matrix key (engine complete() rule)", () => {
+    const ctx = { context: { id: "device", values: [{ id: "phone" }, { id: "desktop" }] }, proposal: [["a", "x.c1", "phone"]] };
+    const partial = spec({ ...ctx, submitted: { cells: { "x@phone": [["a", "x.c1"]] } } });
+    expect(kinds(frozen(mapping("m1", partial)))).toEqual(["frozen-without-submitted"]);
+    const full = spec({ ...ctx, submitted: { cells: { "x@phone": [["a", "x.c1"]], "x@desktop": [] } } });
+    expect(kinds(frozen(mapping("m1", full)))).toEqual([]);
+    // `submitted` without a cells object counts as missing too.
+    expect(kinds(frozen(mapping("m1", spec({ submitted: {} }))))).toEqual(["frozen-without-submitted"]);
+    // A non-array cells entry is both a shape error and, for M9, a missing key.
+    const shape = kinds(frozen(mapping("m1", spec({ submitted: { cells: { x: "a>x.c1" } } }))));
+    expect(shape).toContain("unknown-ref");
+    expect(shape).toContain("frozen-without-submitted");
+  });
+
+  test("live mapping needs no submitted; a mapping outside any iteration is live", () => {
+    expect(kinds(live(mapping("m1", spec())))).toEqual([]);
+    expect(kinds(mapping("m1", spec()))).toEqual([]);
+  });
+
+  test("the enclosing iteration is the NEAREST preceding data-iteration tag", () => {
+    const html = frozen("<p>old</p>") + live(mapping("m1", spec()));
+    expect(kinds(html)).toEqual([]);
+    const html2 = live("<p>new</p>") + frozen(mapping("m1", spec()));
+    expect(kinds(html2)).toEqual(["frozen-without-submitted"]);
+  });
+
+  test("context spec whose submitted keys lack @ctx → ctx-mismatch", () => {
+    const ctx = { context: { id: "device", values: [{ id: "phone" }] }, proposal: [["a", "x.c1", "phone"]] };
+    const k = kinds(frozen(mapping("m1", spec({ ...ctx, submitted: { cells: { x: [["a", "x.c1"]] } } }))));
+    expect(k).toContain("ctx-mismatch");
+    // and the inverse: @ctx on a spec without context
+    expect(kinds(frozen(mapping("m1", spec({ submitted: { cells: { "x@phone": [["a", "x.c1"]], x: [] } } }))))).toContain("ctx-mismatch");
+    // unknown context value in a submitted key
+    expect(kinds(frozen(mapping("m1", spec({ ...ctx, submitted: { cells: { "x@phone": [], "x@tablet": [] } } }))))).toContain("ctx-mismatch");
+  });
+
+  test("submitted.cells pairs referencing unknown ids or an unknown source key", () => {
+    expect(kinds(frozen(mapping("m1", spec({ submitted: { cells: { x: [["zz", "x.c1"]] } } }))))).toEqual(["unknown-ref"]);
+    expect(kinds(frozen(mapping("m1", spec({ submitted: { cells: { x: [["a", "x.zz"]] } } }))))).toEqual(["unknown-ref"]);
+    expect(kinds(frozen(mapping("m1", spec({ submitted: { cells: { x: [], y: [] } } }))))).toEqual(["unknown-ref"]);
+    // a pair whose target belongs to another matrix
+    const two = spec({ axes: [{ id: "x", columns: [{ id: "c1" }] }, { id: "y", columns: [{ id: "c2" }] }], submitted: { cells: { x: [["a", "y.c2"]], y: [] } } });
+    expect(kinds(frozen(mapping("m1", two)))).toEqual(["unknown-ref"]);
+  });
+
+  test("submitted.cells may reference ad-hoc items u{n} declared in submitted.adhoc", () => {
+    const ok = spec({ adhocItems: true, submitted: { cells: { x: [["u1", "x.c1"]] }, adhoc: ["Next inspection"] } });
+    expect(kinds(frozen(mapping("m1", ok)))).toEqual([]);
+    const tooMany = spec({ adhocItems: true, submitted: { cells: { x: [["u2", "x.c1"]] }, adhoc: ["Next inspection"] } });
+    expect(kinds(frozen(mapping("m1", tooMany)))).toEqual(["unknown-ref"]);
+  });
+
+  test("submitted.order keys follow the proposalOrder rules", () => {
+    const ordered = { elements: [{ id: "card", parts: [{ id: "line", ordered: true }] }], axes: undefined, proposal: [["a", "card.line"]] };
+    const good = spec({ ...ordered, submitted: { cells: { card: [["a", "card.line"]] }, order: { "card.line": ["a"] } } });
+    expect(kinds(frozen(mapping("m1", good)))).toEqual([]);
+    const bad = spec({ ...ordered, submitted: { cells: { card: [["a", "card.line"]] }, order: { "card.nope": ["a"], "card.line": ["a"] } } });
+    expect(kinds(frozen(mapping("m1", bad)))).toEqual(["unknown-ref"]);
+  });
+
+  // G3 — a frozen round with ordered parts needs submitted.order for every
+  // ordered target key; otherwise the engine shows proposalOrder as decided.
+  test("frozen: ordered targets require submitted.order for every ordered target key", () => {
+    const ordered = { elements: [{ id: "card", parts: [{ id: "line", ordered: true }, { id: "plain" }] }], axes: undefined, proposal: [["a", "card.line"]] };
+    const noOrder = spec({ ...ordered, submitted: { cells: { card: [["a", "card.line"]] } } });
+    const issues = findMappingIssues(frozen(mapping("m1", noOrder)));
+    expect(issues.map(i => i.kind)).toEqual(["frozen-without-submitted"]);
+    expect(issues[0].why).toMatch(/"submitted.order" lacks ordered target key\(s\) "card.line"/);
+    // an order object that lacks the key is missing too
+    const emptyOrder = spec({ ...ordered, submitted: { cells: { card: [["a", "card.line"]] }, order: {} } });
+    expect(kinds(frozen(mapping("m1", emptyOrder)))).toEqual(["frozen-without-submitted"]);
+    // the unordered part needs no order key
+    const good = spec({ ...ordered, submitted: { cells: { card: [["a", "card.line"]] }, order: { "card.line": ["a"] } } });
+    expect(kinds(frozen(mapping("m1", good)))).toEqual([]);
+    // live rounds never need it
+    expect(kinds(live(mapping("m1", noOrder)))).toEqual([]);
+    // with a context, one order key per context value
+    const ctx = { context: { id: "device", values: [{ id: "phone" }, { id: "desktop" }] }, proposal: [["a", "card.line", "phone"]] };
+    const cells = { "card@phone": [["a", "card.line"]], "card@desktop": [] };
+    const partial = spec({ ...ordered, ...ctx, submitted: { cells, order: { "card.line@phone": ["a"] } } });
+    const pi = findMappingIssues(frozen(mapping("m1", partial)));
+    expect(pi.map(i => i.kind)).toEqual(["frozen-without-submitted"]);
+    expect(pi[0].why).toMatch(/"card.line@desktop"/);
+    const full = spec({ ...ordered, ...ctx, submitted: { cells, order: { "card.line@phone": ["a"], "card.line@desktop": [] } } });
+    expect(kinds(frozen(mapping("m1", full)))).toEqual([]);
+  });
+
+  // G1 — the data-mapping value follows the id grammar and equals the section id.
+  test("mapping id: grammar on data-mapping and equality with the section id", () => {
+    const good = '<section data-mapping="map_1" id="map_1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    expect(kinds(live(good))).toEqual([]);
+    const badGrammar = '<section data-mapping="Map-1" id="Map-1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    const bg = findMappingIssues(live(badGrammar));
+    expect(bg.map(i => i.kind)).toEqual(["bad-id"]);
+    expect(bg[0].why).toMatch(/mapping id "Map-1"/);
+    const noId = '<section data-mapping="m1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    const ni = findMappingIssues(live(noId));
+    expect(ni.map(i => i.kind)).toEqual(["bad-id"]);
+    expect(ni[0].why).toMatch(/section id must equal data-mapping/);
+    expect(ni[0].why).toMatch(/no id attribute/);
+    const otherId = '<section data-mapping="m1" id="m2"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    const oi = findMappingIssues(live(otherId));
+    expect(oi.map(i => i.kind)).toEqual(["bad-id"]);
+    expect(oi[0].why).toMatch(/id="m2"/);
+    // id before data-mapping in the tag is fine
+    const idFirst = '<section id="m1" class="x" data-mapping="m1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    expect(kinds(live(idFirst))).toEqual([]);
+    // a co-attribute ending in `-id=` is not the id attribute (\b would have matched it)
+    const coAttr = '<section data-mapping="m1" data-foo-id="x" id="m1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    expect(kinds(live(coAttr))).toEqual([]);
+    const coAttrOnly = '<section data-mapping="m1" data-foo-id="m1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    const co = findMappingIssues(live(coAttrOnly));
+    expect(co.map(i => i.kind)).toEqual(["bad-id"]);
+    expect(co[0].why).toMatch(/no id attribute/);
+  });
+
+  // G2 — ≥ 1 item.
+  test("a mapping without items is empty", () => {
+    const issues = findMappingIssues(live(mapping("m1", spec({ items: [], proposal: [] }))));
+    expect(issues.map(i => i.kind)).toEqual(["empty-mapping"]);
+    expect(issues[0].why).toMatch(/no items/);
+    const absent = JSON.stringify({ axes: [{ id: "x", columns: [{ id: "c1" }] }] });
+    expect(kinds(live(mapping("m1", absent)))).toEqual(["empty-mapping"]);
+  });
+
+  // G4 — shapes: bare strings are not entries; non-array lists are spec errors.
+  test("bare string entries are bad-id, not silently accepted", () => {
+    const s = JSON.stringify({ items: ["a"], axes: [{ id: "x", columns: ["c1"] }] });
+    const issues = findMappingIssues(live(mapping("m1", s)));
+    expect(issues.map(i => i.kind)).toEqual(["bad-id", "bad-id"]);
+    expect(issues[0].why).toMatch(/item entry "a" must be an object/);
+    expect(issues[1].why).toMatch(/column \(axis "x"\) entry "c1"/);
+    // and they are not treated as duplicates of each other
+    expect(kinds(live(mapping("m1", JSON.stringify({ items: ["a", "a"], axes: [{ id: "x", columns: [{ id: "c1" }] }] }))))).toEqual(["bad-id", "bad-id"]);
+  });
+
+  test("a present but non-array items/elements/parts/axes/columns/context.values/proposal is spec-parse", () => {
+    const cases = [
+      [{ items: { id: "a" } }, '"items" must be an array'],
+      [{ elements: "card" }, '"elements" must be an array'],
+      [{ elements: [{ id: "card", parts: { id: "p" } }] }, '"parts" must be an array (element "card")'],
+      [{ axes: {} }, '"axes" must be an array'],
+      [{ axes: [{ id: "x", columns: "c1" }] }, '"columns" must be an array (axis "x")'],
+      [{ context: { id: "d", values: "phone" } }, '"context.values" must be an array'],
+      [{ proposal: { a: "x.c1" } }, '"proposal" must be an array'],
+    ];
+    for (const [extra, why] of cases) {
+      const issues = findMappingIssues(live(mapping("m1", spec(extra))));
+      const parse = issues.filter(i => i.kind === "spec-parse");
+      expect(parse.length, why).toBe(1);
+      expect(parse[0].why).toContain(why);
+    }
+    expect(kinds(live(mapping("m1", spec({ context: "device" }))))).toContain("spec-parse");
+  });
+
+  // G5 — the spec must sit inside the wrapper section.
+  test("a spec after the wrapper's </section> does not count", () => {
+    const stray = '<section data-mapping="m1" id="m1"><p>x</p></section><script type="application/json" data-mapping-spec>' + spec() + "</script>";
+    expect(kinds(live(stray))).toEqual(["spec-missing"]);
+    // ...even when no other mapping follows on the page at all
+    const strayLast = live('<section data-mapping="m1" id="m1"></section>') + '<script data-mapping-spec>' + spec() + "</script>";
+    expect(kinds(strayLast)).toEqual(["spec-missing"]);
+    // inside the wrapper, after other content, is fine
+    const inside = '<section data-mapping="m1" id="m1"><h3>T</h3><p>intro</p><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    expect(kinds(live(inside))).toEqual([]);
+  });
+
+  // G6 — a context with zero values is no context (engine: contexts = null).
+  test("context without values: empty-mapping only, no ctx-mismatch noise", () => {
+    const s = spec({ context: { id: "d", values: [] } });
+    const k = kinds(live(mapping("m1", s)));
+    expect(k).toEqual(["empty-mapping"]);
+    expect(k).not.toContain("ctx-mismatch");
+    // a ctx-carrying proposal against such a spec IS a mismatch (no context)
+    expect(kinds(live(mapping("m1", spec({ context: { id: "d", values: [] }, proposal: [["a", "x.c1", "phone"]] }))))).toContain("ctx-mismatch");
+  });
+
+  // G7 — single-quoted attribute values.
+  test("single-quoted data-mapping / data-iteration / id attributes are read", () => {
+    const sq = "<section data-iteration='1' data-active><section data-mapping='m1' id='m1'><script type=\"application/json\" data-mapping-spec>" + spec() + "</script></section></section>";
+    expect(kinds(sq)).toEqual([]);
+    const sqFrozen = "<section data-iteration='1'><section data-mapping='m1' id='m1'><script data-mapping-spec>" + spec() + "</script></section></section>";
+    expect(kinds(sqFrozen)).toEqual(["frozen-without-submitted"]);
+    const sqBadId = "<section data-mapping='m1' id=\"m2\"><script data-mapping-spec>" + spec() + "</script></section>";
+    expect(kinds(live(sqBadId))).toEqual(["bad-id"]);
+  });
+
+  // G8 — mapping-only failures get a mapping-specific header and tail.
+  test("buildBlockReason: mapping-only problems do not claim the page is not a live-bridge page", () => {
+    const only = buildBlockReason("x.html", [], [], [], [{ kind: "bad-id", why: 'mapping "m1": x', at: 0 }]);
+    expect(only).toMatch(/^BLOCKED: mapping spec problems in "x.html"\./);
+    expect(only).not.toMatch(/not a valid live-bridge concept page/);
+    expect(only).not.toMatch(/Regenerate the HTML/);
+    expect(only).not.toMatch(/paste-into-chat/);
+    expect(only).toMatch(/Mapping spec problems/);
+    expect(only).toMatch(/bad-id: mapping "m1": x/);
+    expect(only).toMatch(/fix only the mapping sections/);
+    // combined with a missing marker the generic header and tail stay
+    const mixed = buildBlockReason("x.html", [{ token: "t", why: "w" }], [], [], [{ kind: "bad-id", why: "y", at: 0 }]);
+    expect(mixed).toMatch(/not a valid live-bridge concept page/);
+    expect(mixed).toMatch(/Mapping spec problems/);
+    expect(mixed).toMatch(/Regenerate the HTML/);
+  });
+
+  test("issues carry the offset of the mapping section and name the mapping", () => {
+    const html = "<p>x</p>" + live(mapping("m1", "{nope"));
+    const [issue] = findMappingIssues(html);
+    expect(issue.at).toBe(html.indexOf('<section data-mapping="m1"'));
+    expect(issue.why).toMatch(/m1/);
+  });
+
+  test("evaluate + buildBlockReason surface mapping issues", () => {
+    const html = VALID.replace("</body>", wrap({ n: 2, active: false }, mapping("m1", spec())) + "</body>");
+    const r = evaluate("docs/concepts/x.html", html);
+    expect(r.ok).toBe(false);
+    expect(r.missing).toEqual([]);
+    expect(r.structural).toEqual([]);
+    expect(r.mapping.map(i => i.kind)).toEqual(["frozen-without-submitted"]);
+    const reason = buildBlockReason("x.html", [], [], [], r.mapping);
+    expect(reason).toContain("frozen-without-submitted");
+    expect(reason).toMatch(/Mapping spec problems/);
+    expect(reason).toMatch(/Information Mapping/);
+    expect(reason).toMatch(/submitted/);
+    expect(reason).toMatch(/mappings\[\]/);
+  });
+
+  test("evaluate on a valid page without mappings reports mapping: []", () => {
+    const r = evaluate("docs/concepts/x.html", VALID);
+    expect(r.ok).toBe(true);
+    expect(r.mapping).toEqual([]);
+    expect(evaluate("src/app.js", "").mapping).toEqual([]);
   });
 });
