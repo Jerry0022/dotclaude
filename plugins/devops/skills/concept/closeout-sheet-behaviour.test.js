@@ -67,6 +67,10 @@ function page({ items = [], closed = false, noBlock = false } = {}) {
   const dom = new JSDOM(localeKeys(SKELETON.code), {
     runScripts: "outside-only",
     pretendToBeVisual: true,
+    // A real origin, not "about:blank": sessionStorage (the accordion's
+    // answered-state mirror) throws "not available for opaque origins"
+    // without one — a jsdom quirk, not a product bug.
+    url: "https://concept.test/",
   });
   const { window } = dom;
   const { document } = window;
@@ -164,12 +168,33 @@ function page({ items = [], closed = false, noBlock = false } = {}) {
       input.checked = true;
       input.dispatchEvent(new window.Event("change", { bubbles: true }));
     },
+    // A single click on the fixed button: confirms the open accordion row and
+    // advances while anything is unanswered, submits once everything is.
     execute: () => document.getElementById("closeout-execute").click(),
+    // Clicks through the accordion until every visible row is answered OR it
+    // gets stuck (an unanswered ship row refuses forever) — capped so a stuck
+    // sheet fails the test instead of hanging it. Deliberately stops SHORT of
+    // the submit click: closeoutAllAnswered() flips to true the moment the
+    // last row is confirmed, so the loop's own guard condition (checked
+    // BEFORE each click) exits before that same click could also submit.
+    advanceAll: () => {
+      let guard = 0;
+      while (!window.closeoutAllAnswered() && guard++ < 10) {
+        document.getElementById("closeout-execute").click();
+      }
+    },
+    row: (kind) => document.querySelector(`.closeout-block[data-closeout-block="${kind}"]`),
+    rowHead: (kind) => document.querySelector(`.closeout-block[data-closeout-block="${kind}"] [data-closeout-row]`),
+    rowMark: (kind) => document.querySelector(`.closeout-block[data-closeout-block="${kind}"] [data-closeout-mark]`)?.textContent,
+    // The plan is one compact line now (#closeout-plan holds the items as
+    // spans, joined by CSS " · "), not an <ol> — each consequence is still
+    // its own element so it can be read one at a time.
     plan: () =>
-      Array.from(document.querySelectorAll("#closeout-plan li")).map((li) => ({
-        kind: li.dataset.planKind,
-        text: li.textContent,
+      Array.from(document.querySelectorAll("#closeout-plan .closeout-plan-item")).map((el) => ({
+        kind: el.dataset.planKind,
+        text: el.textContent,
       })),
+    planWarnHidden: () => document.getElementById("closeout-plan-warn").hidden,
   };
   // The block wires itself on DOM-ready (an inline <script> runs while the
   // document is still parsing). Deliver the event the way a browser does.
@@ -329,6 +354,30 @@ describe("close-out sheet — what the user is promised", () => {
     expect(p.plan().find((l) => l.kind === "ship")).toBeUndefined();
   });
 
+  test("the plan is one compact line, items joined visually by CSS not by text", () => {
+    const p = page({ items: ITEMS });
+    p.route("oq-saml", "implement");
+    p.ship("yes");
+    // Each consequence is still its own element…
+    const items = p.document.querySelectorAll("#closeout-plan .closeout-plan-item");
+    expect(items.length).toBe(5);
+    // …none of them contain a literal " · " themselves — the join is CSS
+    // (.closeout-plan-item + .closeout-plan-item::before), not baked into
+    // buildCloseoutPlan()'s text.
+    for (const el of items) expect(el.textContent).not.toContain(" · ");
+    // No heading, no <ol> — the container is a single-line host now.
+    expect(p.sheet().querySelector('[data-closeout-block="plan"] h4')).toBeNull();
+    expect(p.sheet().querySelector('[data-closeout-block="plan"] ol')).toBeNull();
+  });
+
+  test("the plan warn hint only shows once the click it describes can fire", () => {
+    const p = page({ items: ITEMS });
+    expect(p.planWarnHidden(), "unanswered ship — nothing to warn about yet").toBe(true);
+    p.ship("no");
+    p.advanceAll();
+    expect(p.planWarnHidden(), "every row answered — the click is live").toBe(false);
+  });
+
   test("a report with no open questions hides the block instead of rendering an empty one", () => {
     const p = page({ noBlock: true });
     const block = p.sheet().querySelector('[data-closeout-block="followups"]');
@@ -338,20 +387,22 @@ describe("close-out sheet — what the user is promised", () => {
 });
 
 describe("close-out sheet — the single irreversible click", () => {
-  test("execute refuses to submit while the ship question is unanswered", () => {
+  test("the button cannot advance past an unanswered ship row", () => {
     const p = page({ items: ITEMS });
-    p.execute();
+    p.advanceAll(); // confirms followups, then stalls on the unanswered ship row
     expect(p.posted, "nothing was sent").toHaveLength(0);
     expect(p.document.getElementById("closeout-ship-required").hidden).toBe(false);
     // …and the button stays usable, rather than looking broken.
     expect(p.document.getElementById("closeout-execute").disabled).toBe(false);
+    expect(p.window.closeoutAllAnswered()).toBe(false);
   });
 
   test("answering the ship question clears the block and lets the submit through", async () => {
     const p = page({ items: ITEMS });
-    p.execute();
+    p.advanceAll(); // stalls on ship
     p.ship("no");
     expect(p.document.getElementById("closeout-ship-required").hidden).toBe(true);
+    p.advanceAll(); // confirms ship, then files (default) — now ready
     p.execute();
     await new Promise((r) => setTimeout(r, 0));
     expect(p.posted).toHaveLength(1);
@@ -361,6 +412,7 @@ describe("close-out sheet — the single irreversible click", () => {
     const p = page({ items: ITEMS });
     p.route("oq-saml", "implement");
     p.ship("yes");
+    p.advanceAll();
     p.execute();
     await new Promise((r) => setTimeout(r, 0));
     const body = p.posted[0].body;
@@ -378,6 +430,7 @@ describe("close-out sheet — the single irreversible click", () => {
   test("a submitted sheet is frozen and cannot be fired twice", async () => {
     const p = page({ items: ITEMS });
     p.ship("no");
+    p.advanceAll();
     p.execute();
     await new Promise((r) => setTimeout(r, 0));
     expect(p.sheet().dataset.frozen).toBe("true");
@@ -395,6 +448,7 @@ describe("close-out sheet — the single irreversible click", () => {
     const p = page({ items: ITEMS });
     p.window.__reply = { ok: true, body: { durable: false } };
     p.ship("no");
+    p.advanceAll();
     p.execute();
     await new Promise((r) => setTimeout(r, 0));
     expect(p.sheet().dataset.frozen).toBe("false");
@@ -408,10 +462,115 @@ describe("close-out sheet — the single irreversible click", () => {
     const p = page({ items: ITEMS });
     p.window.__reply = { throws: true };
     p.ship("no");
+    p.advanceAll();
     p.execute();
     await new Promise((r) => setTimeout(r, 0));
     expect(p.window.__stub.pending, "queued for retry").toBeTruthy();
     expect(p.sheet().dataset.frozen, "still sent, not re-armed").toBe("true");
+  });
+});
+
+describe("close-out sheet — the accordion", () => {
+  test("collapsed rows show one line each, and exactly one is open", () => {
+    const p = page({ items: ITEMS });
+    for (const kind of ["followups", "ship", "files"]) {
+      expect(p.rowHead(kind), kind).toBeTruthy();
+    }
+    const open = ["followups", "ship", "files"].filter(
+      (k) => p.rowHead(k).getAttribute("aria-expanded") === "true"
+    );
+    expect(open).toEqual(["followups"]);
+  });
+
+  test("clicking a row head opens it and closes the others", () => {
+    const p = page({ items: ITEMS });
+    p.rowHead("files").click();
+    expect(p.rowHead("files").getAttribute("aria-expanded")).toBe("true");
+    expect(p.rowHead("followups").getAttribute("aria-expanded")).toBe("false");
+    expect(p.rowHead("ship").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("the marker flips from ○ to ✓ only once a row is confirmed", () => {
+    const p = page({ items: ITEMS });
+    expect(p.rowMark("followups")).toBe("○");
+    expect(p.rowMark("ship")).toBe("○");
+    p.execute(); // confirms the open row (followups)
+    expect(p.rowMark("followups")).toBe("✓");
+    expect(p.rowMark("ship")).toBe("○");
+  });
+
+  test("Weiter confirms the open row and opens the next unanswered one", () => {
+    const p = page({ items: ITEMS });
+    expect(p.row("followups").dataset.answered).toBe("false");
+    p.execute();
+    expect(p.row("followups").dataset.answered).toBe("true");
+    expect(p.rowHead("ship").getAttribute("aria-expanded")).toBe("true");
+  });
+
+  test("the button reads Weiter until every row is answered, then Ausführen", () => {
+    const p = page({ items: ITEMS });
+    const btn = p.document.getElementById("closeout-execute");
+    expect(btn.dataset.ready).toBe("false");
+    expect(btn.textContent).toContain("closeout_next");
+    p.ship("no");
+    p.advanceAll();
+    expect(btn.dataset.ready).toBe("true");
+    expect(btn.textContent).toContain("closeout_execute");
+  });
+
+  test("the icon only appears once the button is ready — no '› Weiter ›'", () => {
+    // The label string ("Weiter ›") already carries its own "›"; an
+    // always-visible icon glyph next to it rendered "› Weiter ›".
+    const p = page({ items: ITEMS });
+    const btn = p.document.getElementById("closeout-execute");
+    const icon = btn.querySelector("[data-closeout-btn-icon]");
+    expect(icon.hidden, "icon hidden in the Weiter state").toBe(true);
+    p.ship("no");
+    p.advanceAll();
+    expect(icon.hidden, "icon shown once ready").toBe(false);
+    expect(icon.textContent).toBe("⚠");
+  });
+
+  test("re-opening an answered row does not un-answer it", () => {
+    const p = page({ items: ITEMS });
+    p.execute(); // confirm followups
+    p.rowHead("followups").click(); // look again
+    expect(p.row("followups").dataset.answered).toBe("true");
+    expect(p.rowHead("followups").getAttribute("aria-expanded")).toBe("true");
+  });
+
+  test("progress reads n of total answered while the sheet is live", () => {
+    const p = page({ items: ITEMS });
+    // The skeleton fixture does not run the real locale substitution (that
+    // happens at page-generation time, not in the browser) — supply a
+    // template here the way a generated page would.
+    p.sheet().dataset.labelProgress = "{n} of {total} answered";
+    p.window.updateCloseoutProgress();
+    const progress = () => p.document.getElementById("closeout-progress").textContent;
+    expect(progress()).toBe("0 of 3 answered");
+    p.execute();
+    expect(progress()).toBe("1 of 3 answered");
+  });
+
+  test("answered state survives a reload within the same session", () => {
+    const p = page({ items: ITEMS });
+    p.execute(); // confirm followups
+    expect(p.row("followups").dataset.answered).toBe("true");
+    // Simulate a reload: the DOM node's own dataset is fresh (as it would be
+    // on a freshly parsed page), but sessionStorage — same tab, same session
+    // — is not.
+    delete p.row("followups").dataset.answered;
+    delete p.row("followups").dataset.open;
+    p.render();
+    expect(p.row("followups").dataset.answered).toBe("true");
+  });
+
+  test("freezing the sheet disables the row heads too, not just the button", () => {
+    const p = page({ items: ITEMS });
+    p.window.setCloseoutFrozen(true);
+    for (const kind of ["followups", "ship", "files"]) {
+      expect(p.rowHead(kind).disabled, kind).toBe(true);
+    }
   });
 });
 
@@ -509,6 +668,19 @@ describe("close-out sheet — the report Claude rewrites underneath it", () => {
     expect(p.document.getElementById("closeout-execute").hidden).toBe(true);
     const done = p.sheet().querySelector('.hint[data-finalize-state="done"]');
     expect(done.hidden).toBe(false);
+  });
+
+  test("the done state's hand-offs head is permanently disabled and stripped of its mark/summary", () => {
+    // [hidden] alone loses to .closeout-row's own `display: flex` in the
+    // cascade, so a row hidden that way still LOOKED clickable (the ○ mark
+    // and label kept rendering). The done branch must disable the head and
+    // remove its answerable affordances instead of trying to hide it.
+    const p = page({ items: ITEMS, closed: true });
+    const head = p.rowHead("handoffs");
+    expect(head.disabled, "permanently disabled").toBe(true);
+    expect(head.hasAttribute("aria-expanded"), "no longer expandable").toBe(false);
+    expect(head.querySelector("[data-closeout-mark]").hidden, "no ○/✓ mark").toBe(true);
+    expect(head.querySelector("[data-closeout-summary]").hidden, "no summary").toBe(true);
   });
 
   test("an open point with no name and no id does not take the sheet down", () => {

@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.157.0] — 2026-09-13
+
+### Added
+
+- **The concept panel's head line says where you are and hides the rest behind one chip.** The pinned head reads `Iteration N (Variante)` — the parenthesis only while the reading line is inside a variant section, and no "aktiv" suffix any more (chips, the fixture builder and the append checklist stopped carrying it; the head strips it from older pages). A 🕘 chip at the right end of the same line shows how many rounds came before and unfolds them directly under the head — each with its summary ("14 Einträge · 3 verworfen") and an "archiviert" tag, dimmed; clicking one opens it read-only exactly as before. The vertical chip list and the archive fold inside the tree are gone: the scroll box holds only the live round's TOC. On the final report the second head line is dropped.
+- **The TOC groups around the variant you chose.** With one variant on Miteinbeziehen and the rest on Verwerfen — or the one under the reading line — that variant is an open node listing its nested sub-sections; the other variants collapse into a single "Weitere Varianten · N · k verworfen" accordion row; context sections stay flat. "+N weitere" appears only when the list would overflow the scroll box and expands on click. The group holding the reading line is open the moment the page loads: a stale `toggle` listener from an earlier `buildSectionNav()` generation used to close the current tree's open group a tick after boot (a queued close-toggle on a detached group ran "close the others" against the live nav), which is why the tree sometimes came up empty; a generation counter now retires those listeners, and `nav-boot.test.js` boots the assembled fixture in jsdom and asserts one open group after two macrotasks.
+- **The close-out sheet is an accordion with one button at one place.** Every block — Offene Punkte, Jetzt shippen?, Diese Seite, Danach von Hand — is one row when collapsed (○/✓ · icon · short label · current answer); exactly one is open. Every row has to be confirmed: the single `#closeout-execute` reads "Weiter ›" and confirms the open row and opens the next unanswered one (the ship question refuses without a choice), and only at n/n it becomes the warning-coloured "⚠ Ausführen" that submits `finalize` as before — never two buttons, never "Alles ausführen". "Gewählt: …" sits below the button as one line; the status channel is folded to one line; row heads are sticky inside the scrolling rows region (`display: contents` blocks, top/bottom offsets per visible row) so all four stay visible while only the open body scrolls; the done state keeps only the hand-offs. Measured in a real browser at 1440×768 and 1440×900: button, plan and "Iterationen ansehen" stay inside the viewport in every state. Answered state survives a reload within the session (sessionStorage; the routes stay `data-no-persist`).
+- **The design skeleton carries `#section-nav`.** A design concept's final report is a free round and renders its TOC there — the skeleton only had `#screen-nav`, so every final report on a design concept had no TOC and no ⚠ Danach-von-Hand entry.
+
+### Fixed
+
+- **The split-button caret (▾ → "Mit Feedback implementieren") opens again.** `.panel-cta` was the menu's containing block and carries `overflow-y: auto` (the #341 foot safety net), so the absolutely positioned `#submit-menu` that opens upward was clipped away — the caret toggled `aria-expanded` and nothing appeared, and the user could not reach the implement action. The foot is no longer a containing block; the menu is positioned relative to the panel from a same-frame pair of rects, so a still-sliding overlay panel cannot misplace it (a viewport-fixed attempt did exactly that). Verified live in both layouts; `submit-menu-clip.test.js` pins the chain.
+
+### Changed
+
+- **The feedback dock reads from specific to general.** Screen textarea first, then the design textarea (≥2 designs), then the general notes — with a view active: view, then general. Compact rhythm (padding, gaps, textarea min-height) and a quieter attach bar aligned with its textarea, so all fields and attach bars fit a ~1080 px viewport without expanding; the two widths (420/560) and both FABs are untouched.
+- **Native tooltips everywhere.** Every icon and action carries `title` + `aria-label` from the locale table; visible short labels only on the close-out rows. No custom tooltip engine, no first-use label mode.
+
 ## [0.156.1] — 2026-09-13
 
 ### Changed

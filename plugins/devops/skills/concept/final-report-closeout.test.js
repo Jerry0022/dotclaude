@@ -113,10 +113,35 @@ describe("final-report close-out sheet", () => {
     }
   });
 
+  test("the sheet is a one-open-at-a-time accordion, never 'Alles ausführen'", () => {
+    // The answerable rows each collapse to one line; the plan is read, not
+    // answered, so it never gets a row head of its own.
+    for (const kind of ["followups", "ship", "files", "handoffs"]) {
+      const block = htmlSource.slice(htmlSource.indexOf(`data-closeout-block="${kind}"`));
+      expect(block.slice(0, 400), kind).toContain("data-closeout-row");
+      expect(block.slice(0, 400), kind).toContain("data-closeout-mark");
+    }
+    const planBlock = htmlSource.slice(htmlSource.indexOf('data-closeout-block="plan"'));
+    expect(planBlock.slice(0, 300)).not.toContain("data-closeout-row");
+    // No second button, and the locale table itself no longer names the
+    // button "Alles ausführen" (a historical mention in the "why one sheet"
+    // prose, describing the old wizard, is fine — the live label is not).
+    expect((htmlSource.match(/id="closeout-execute"/g) || []).length).toBe(1);
+    const executeRow = md.split("\n").find((l) => l.startsWith("| `final.closeout_execute`"));
+    expect(executeRow, "final.closeout_execute row").toBeTruthy();
+    expect(executeRow).not.toContain("Alles ausführen");
+    // The button carries both label strings and swaps them at runtime.
+    expect(htmlSource).toMatch(/id="closeout-execute"[^>]*data-label-next="\{\{final\.closeout_next\}\}"/);
+    expect(htmlSource).toMatch(/data-label-execute="\{\{final\.closeout_execute\}\}"/);
+  });
+
   test("the sheet is actually wired, not just defined", () => {
     // A defined-but-unwired handler renders a complete sheet where every
     // click is inert: no console error, no network request, nothing to see.
-    expect(jsSource).toContain("addEventListener('click', submitFinalize)");
+    // The button is wired to the accordion's own dispatcher, never straight
+    // to submitFinalize — that would submit on the very first click.
+    expect(jsSource).toContain("addEventListener('click', closeoutButtonClick)");
+    expect(jsSource).not.toContain("addEventListener('click', submitFinalize)");
     expect(jsSource).toContain("getElementById('closeout-execute')");
     expect(jsSource).toContain("refreshCloseout({ reset: true })");
     // The ship question blocks execute from inside the handler — the button
@@ -124,6 +149,12 @@ describe("final-report close-out sheet", () => {
     const fn = jsSource.slice(jsSource.indexOf("async function submitFinalize"));
     expect(fn.slice(0, 1200)).toContain("if (!closeoutShipChoice())");
     expect(fn.slice(0, 1200)).toContain("closeout-ship-required");
+    // The accordion's own dispatcher also refuses to advance an unanswered
+    // ship row for the same reason.
+    const dispatch = jsSource.slice(jsSource.indexOf("function closeoutButtonClick"));
+    expect(dispatch.slice(0, 900)).toContain("closeoutShipChoice()");
+    expect(dispatch.slice(0, 900)).toContain("closeout-ship-required");
+    expect(dispatch.slice(0, 900)).toContain("submitFinalize()");
   });
 
   test("a finalize cannot be delivered twice", () => {
