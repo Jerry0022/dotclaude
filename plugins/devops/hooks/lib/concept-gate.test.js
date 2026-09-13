@@ -431,8 +431,145 @@ describe("findMappingIssues", () => {
     const ordered = { elements: [{ id: "card", parts: [{ id: "line", ordered: true }] }], axes: undefined, proposal: [["a", "card.line"]] };
     const good = spec({ ...ordered, submitted: { cells: { card: [["a", "card.line"]] }, order: { "card.line": ["a"] } } });
     expect(kinds(frozen(mapping("m1", good)))).toEqual([]);
-    const bad = spec({ ...ordered, submitted: { cells: { card: [["a", "card.line"]] }, order: { "card.nope": ["a"] } } });
+    const bad = spec({ ...ordered, submitted: { cells: { card: [["a", "card.line"]] }, order: { "card.nope": ["a"], "card.line": ["a"] } } });
     expect(kinds(frozen(mapping("m1", bad)))).toEqual(["unknown-ref"]);
+  });
+
+  // G3 — a frozen round with ordered parts needs submitted.order for every
+  // ordered target key; otherwise the engine shows proposalOrder as decided.
+  test("frozen: ordered targets require submitted.order for every ordered target key", () => {
+    const ordered = { elements: [{ id: "card", parts: [{ id: "line", ordered: true }, { id: "plain" }] }], axes: undefined, proposal: [["a", "card.line"]] };
+    const noOrder = spec({ ...ordered, submitted: { cells: { card: [["a", "card.line"]] } } });
+    const issues = findMappingIssues(frozen(mapping("m1", noOrder)));
+    expect(issues.map(i => i.kind)).toEqual(["frozen-without-submitted"]);
+    expect(issues[0].why).toMatch(/"submitted.order" lacks ordered target key\(s\) "card.line"/);
+    // an order object that lacks the key is missing too
+    const emptyOrder = spec({ ...ordered, submitted: { cells: { card: [["a", "card.line"]] }, order: {} } });
+    expect(kinds(frozen(mapping("m1", emptyOrder)))).toEqual(["frozen-without-submitted"]);
+    // the unordered part needs no order key
+    const good = spec({ ...ordered, submitted: { cells: { card: [["a", "card.line"]] }, order: { "card.line": ["a"] } } });
+    expect(kinds(frozen(mapping("m1", good)))).toEqual([]);
+    // live rounds never need it
+    expect(kinds(live(mapping("m1", noOrder)))).toEqual([]);
+    // with a context, one order key per context value
+    const ctx = { context: { id: "device", values: [{ id: "phone" }, { id: "desktop" }] }, proposal: [["a", "card.line", "phone"]] };
+    const cells = { "card@phone": [["a", "card.line"]], "card@desktop": [] };
+    const partial = spec({ ...ordered, ...ctx, submitted: { cells, order: { "card.line@phone": ["a"] } } });
+    const pi = findMappingIssues(frozen(mapping("m1", partial)));
+    expect(pi.map(i => i.kind)).toEqual(["frozen-without-submitted"]);
+    expect(pi[0].why).toMatch(/"card.line@desktop"/);
+    const full = spec({ ...ordered, ...ctx, submitted: { cells, order: { "card.line@phone": ["a"], "card.line@desktop": [] } } });
+    expect(kinds(frozen(mapping("m1", full)))).toEqual([]);
+  });
+
+  // G1 — the data-mapping value follows the id grammar and equals the section id.
+  test("mapping id: grammar on data-mapping and equality with the section id", () => {
+    const good = '<section data-mapping="map_1" id="map_1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    expect(kinds(live(good))).toEqual([]);
+    const badGrammar = '<section data-mapping="Map-1" id="Map-1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    const bg = findMappingIssues(live(badGrammar));
+    expect(bg.map(i => i.kind)).toEqual(["bad-id"]);
+    expect(bg[0].why).toMatch(/mapping id "Map-1"/);
+    const noId = '<section data-mapping="m1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    const ni = findMappingIssues(live(noId));
+    expect(ni.map(i => i.kind)).toEqual(["bad-id"]);
+    expect(ni[0].why).toMatch(/section id must equal data-mapping/);
+    expect(ni[0].why).toMatch(/no id attribute/);
+    const otherId = '<section data-mapping="m1" id="m2"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    const oi = findMappingIssues(live(otherId));
+    expect(oi.map(i => i.kind)).toEqual(["bad-id"]);
+    expect(oi[0].why).toMatch(/id="m2"/);
+    // id before data-mapping in the tag is fine
+    const idFirst = '<section id="m1" class="x" data-mapping="m1"><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    expect(kinds(live(idFirst))).toEqual([]);
+  });
+
+  // G2 — ≥ 1 item.
+  test("a mapping without items is empty", () => {
+    const issues = findMappingIssues(live(mapping("m1", spec({ items: [], proposal: [] }))));
+    expect(issues.map(i => i.kind)).toEqual(["empty-mapping"]);
+    expect(issues[0].why).toMatch(/no items/);
+    const absent = JSON.stringify({ axes: [{ id: "x", columns: [{ id: "c1" }] }] });
+    expect(kinds(live(mapping("m1", absent)))).toEqual(["empty-mapping"]);
+  });
+
+  // G4 — shapes: bare strings are not entries; non-array lists are spec errors.
+  test("bare string entries are bad-id, not silently accepted", () => {
+    const s = JSON.stringify({ items: ["a"], axes: [{ id: "x", columns: ["c1"] }] });
+    const issues = findMappingIssues(live(mapping("m1", s)));
+    expect(issues.map(i => i.kind)).toEqual(["bad-id", "bad-id"]);
+    expect(issues[0].why).toMatch(/item entry "a" must be an object/);
+    expect(issues[1].why).toMatch(/column \(axis "x"\) entry "c1"/);
+    // and they are not treated as duplicates of each other
+    expect(kinds(live(mapping("m1", JSON.stringify({ items: ["a", "a"], axes: [{ id: "x", columns: [{ id: "c1" }] }] }))))).toEqual(["bad-id", "bad-id"]);
+  });
+
+  test("a present but non-array items/elements/parts/axes/columns/context.values/proposal is spec-parse", () => {
+    const cases = [
+      [{ items: { id: "a" } }, '"items" must be an array'],
+      [{ elements: "card" }, '"elements" must be an array'],
+      [{ elements: [{ id: "card", parts: { id: "p" } }] }, '"parts" must be an array (element "card")'],
+      [{ axes: {} }, '"axes" must be an array'],
+      [{ axes: [{ id: "x", columns: "c1" }] }, '"columns" must be an array (axis "x")'],
+      [{ context: { id: "d", values: "phone" } }, '"context.values" must be an array'],
+      [{ proposal: { a: "x.c1" } }, '"proposal" must be an array'],
+    ];
+    for (const [extra, why] of cases) {
+      const issues = findMappingIssues(live(mapping("m1", spec(extra))));
+      const parse = issues.filter(i => i.kind === "spec-parse");
+      expect(parse.length, why).toBe(1);
+      expect(parse[0].why).toContain(why);
+    }
+    expect(kinds(live(mapping("m1", spec({ context: "device" }))))).toContain("spec-parse");
+  });
+
+  // G5 — the spec must sit inside the wrapper section.
+  test("a spec after the wrapper's </section> does not count", () => {
+    const stray = '<section data-mapping="m1" id="m1"><p>x</p></section><script type="application/json" data-mapping-spec>' + spec() + "</script>";
+    expect(kinds(live(stray))).toEqual(["spec-missing"]);
+    // ...even when no other mapping follows on the page at all
+    const strayLast = live('<section data-mapping="m1" id="m1"></section>') + '<script data-mapping-spec>' + spec() + "</script>";
+    expect(kinds(strayLast)).toEqual(["spec-missing"]);
+    // inside the wrapper, after other content, is fine
+    const inside = '<section data-mapping="m1" id="m1"><h3>T</h3><p>intro</p><script type="application/json" data-mapping-spec>' + spec() + "</script></section>";
+    expect(kinds(live(inside))).toEqual([]);
+  });
+
+  // G6 — a context with zero values is no context (engine: contexts = null).
+  test("context without values: empty-mapping only, no ctx-mismatch noise", () => {
+    const s = spec({ context: { id: "d", values: [] } });
+    const k = kinds(live(mapping("m1", s)));
+    expect(k).toEqual(["empty-mapping"]);
+    expect(k).not.toContain("ctx-mismatch");
+    // a ctx-carrying proposal against such a spec IS a mismatch (no context)
+    expect(kinds(live(mapping("m1", spec({ context: { id: "d", values: [] }, proposal: [["a", "x.c1", "phone"]] }))))).toContain("ctx-mismatch");
+  });
+
+  // G7 — single-quoted attribute values.
+  test("single-quoted data-mapping / data-iteration / id attributes are read", () => {
+    const sq = "<section data-iteration='1' data-active><section data-mapping='m1' id='m1'><script type=\"application/json\" data-mapping-spec>" + spec() + "</script></section></section>";
+    expect(kinds(sq)).toEqual([]);
+    const sqFrozen = "<section data-iteration='1'><section data-mapping='m1' id='m1'><script data-mapping-spec>" + spec() + "</script></section></section>";
+    expect(kinds(sqFrozen)).toEqual(["frozen-without-submitted"]);
+    const sqBadId = "<section data-mapping='m1' id=\"m2\"><script data-mapping-spec>" + spec() + "</script></section>";
+    expect(kinds(live(sqBadId))).toEqual(["bad-id"]);
+  });
+
+  // G8 — mapping-only failures get a mapping-specific header and tail.
+  test("buildBlockReason: mapping-only problems do not claim the page is not a live-bridge page", () => {
+    const only = buildBlockReason("x.html", [], [], [], [{ kind: "bad-id", why: 'mapping "m1": x', at: 0 }]);
+    expect(only).toMatch(/^BLOCKED: mapping spec problems in "x.html"\./);
+    expect(only).not.toMatch(/not a valid live-bridge concept page/);
+    expect(only).not.toMatch(/Regenerate the HTML/);
+    expect(only).not.toMatch(/paste-into-chat/);
+    expect(only).toMatch(/Mapping spec problems/);
+    expect(only).toMatch(/bad-id: mapping "m1": x/);
+    expect(only).toMatch(/fix only the mapping sections/);
+    // combined with a missing marker the generic header and tail stay
+    const mixed = buildBlockReason("x.html", [{ token: "t", why: "w" }], [], [], [{ kind: "bad-id", why: "y", at: 0 }]);
+    expect(mixed).toMatch(/not a valid live-bridge concept page/);
+    expect(mixed).toMatch(/Mapping spec problems/);
+    expect(mixed).toMatch(/Regenerate the HTML/);
   });
 
   test("issues carry the offset of the mapping section and name the mapping", () => {

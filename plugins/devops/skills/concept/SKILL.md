@@ -299,10 +299,12 @@ state input or a control. Field table and grammar:
 - **A proposal is mandatory.** Pre-fill `proposal` for every matrix — the
   user corrects an assignment, they do not build one from zero. In a later
   round the proposal is the user's previous `assigned` (§ 5b).
-- **Ids:** `^[a-z0-9_]+$` for every id (mapping, item, group, element, part,
-  axis, column). Item ids matching `u\d+` are reserved for ad-hoc items and
-  rejected by the engine. Mapping ids are unique page-wide (they become DOM
-  ids and TOC anchors); item / element / axis ids unique per mapping, part
+- **Ids:** `^[a-z0-9_]+$` for every id (mapping, item, element, part, axis,
+  column, context value — all engine-checked). `group` is a label, not an
+  id: group strings are rendered verbatim as headers. Item ids matching
+  `u\d+` are reserved for ad-hoc items and rejected by the engine. Mapping
+  ids are unique page-wide (they become DOM ids and TOC anchors) and equal
+  the wrapper's `id`; item / element / axis ids unique per mapping, part
   ids per element.
 - **Count preferences (recommendations, like 7 / 3 in Step 0.5):** ≤ 60
   items, ≤ 20 targets per matrix, ≤ 4 context values per mapping. Beyond
@@ -310,7 +312,7 @@ state input or a control. Field table and grammar:
 - **Tiers:** `tier: "after"` only for parts that are genuinely behind a
   click (detail sheet, expanded row); everything visible at first glance is
   `"first"`.
-- **`accepts: "one"`** for single-value slots (badge, title, header);
+- **`accepts: "one"`** for single-value slots (badge, title);
   multi-value slots use `min` / `max`.
 - **`elements`** when the targets are UI parts of a design (schematic view
   + matrix), **`axes`** when they are plain columns (matrix only); both may
@@ -1128,7 +1130,10 @@ never re-run a completed step. The checkpoint records what the previous run
    re-propose what they moved away from; acknowledge the `diff` entries in
    the round intro (what moved, what you take from it). `unassigned` items
    and open `violations` are questions for the intro, not silent
-   re-assignments.
+   re-assignments. **Ad-hoc items:** promote every `adhocItems` label to a
+   declared item with a fresh regular id in the next round's spec and
+   rewrite every `u{n}` reference in `assigned` / `order` to the new id —
+   reserved `u\d+` ids never appear in an authored spec.
 5. Proceed to Step 5c (append next iteration with refined options that
    reflect the Miteinbeziehen/Verwerfen choices)
 

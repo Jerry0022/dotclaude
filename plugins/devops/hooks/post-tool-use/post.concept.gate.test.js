@@ -1,4 +1,4 @@
-import { describe, test, expect, vi } from "vitest";
+import { describe, test, expect, vi, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -33,8 +33,14 @@ const spec = extra => JSON.stringify({
 });
 const mapping = (id, s) => `<section data-mapping="${id}" id="${id}"><script type="application/json" data-mapping-spec>${s}</script></section>`;
 
+const projects = [];
+afterAll(() => {
+  for (const dir of projects) fs.rmSync(dir, { recursive: true, force: true });
+});
+
 function project() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "concept-gate-"));
+  projects.push(dir);
   fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
   fs.writeFileSync(
     path.join(dir, ".claude", "settings.json"),

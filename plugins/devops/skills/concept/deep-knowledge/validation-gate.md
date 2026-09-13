@@ -493,26 +493,33 @@ exists, run this subset over the whole page (frozen rounds included):
 
 | # | Pattern | Purpose |
 |---|---------|---------|
-| M1 | every `[data-mapping]` has exactly one `script[type="application/json"][data-mapping-spec]` child that parses as JSON | The renderer's only input — a missing, doubled or broken spec renders a red `.map-error` instead of the mapping. |
-| M2 | every id matches `^[a-z0-9_]+$`; item / element / axis ids unique per mapping, part ids unique per element, column ids per axis; item ids never match `^u\d+$` (reserved for ad-hoc items); **mapping ids unique page-wide** and equal to the section's `id` | Name grammar — ids become DOM ids (`map-{m}-…` state inputs in `div.map-states`), matrix keys and TOC anchors; a collision silently merges two mappings' state. |
-| M3 | every `proposal` / `proposalOrder` / `submitted` reference resolves to a known item, target (`{element}.{part}` / `{axis}.{column}`) and context value; a `ctx` is present in `proposal` tuples iff the spec has `context` | Unresolvable references are dropped by the normaliser — the proposal (or the frozen submission) would show fewer cells than authored, with no error. |
-| M4 | ≥ 1 of `elements` / `axes`; every element has ≥ 1 part; every axis has ≥ 1 column; ≥ 1 item | An empty mapping renders nothing to assign. |
+| M1 | every `[data-mapping]` has ≥ 1 `script[data-mapping-spec]` inside the wrapper (before its `</section>`); the first is read; it must parse as a JSON object. Authoring MUST: exactly one, with `type="application/json"` | The renderer's only input — a missing or broken spec renders a red `.map-error` instead of the mapping; without the JSON `type` the browser would execute the block. |
+| M2 | the `data-mapping` value matches `^[a-z0-9_]+$` and equals the section's `id`; **mapping ids unique page-wide**; every item / element / part / axis / column / context-value entry is an object whose `id` matches `^[a-z0-9_]+$`; item ids unique per mapping, element + axis ids unique per mapping (one namespace), part ids per element, column ids per axis, context values per context; item ids never match `^u\d+$` (reserved for ad-hoc items) | Name grammar — ids become DOM ids (`map-{m}-…` state inputs in `div.map-states`), matrix keys and TOC anchors; a collision silently merges two mappings' state. |
+| M3 | every `proposal` / `proposalOrder` / `submitted` reference resolves to a known item, target (`{element}.{part}` / `{axis}.{column}`) and context value; `proposalOrder` / `submitted.order` keys name `ordered: true` targets; a `ctx` is present in `proposal` tuples and `@ctx` in `submitted` / order keys iff the spec has a `context` with values | Unresolvable references are dropped by the normaliser — the proposal (or the frozen submission) would show fewer cells than authored, with no error. |
+| M4 | ≥ 1 of `elements` / `axes`; every element has ≥ 1 part; every axis has ≥ 1 column; ≥ 1 item; a `context` needs ≥ 1 value; `items` / `elements` / `parts` / `axes` / `columns` / `context.values` / `proposal`, when present, are arrays | An empty mapping renders nothing to assign; a non-array list is silently ignored by the engine. |
 | M5 | free-round block: exactly one `textarea[data-comment="map-{m}-note"][data-attachable]` inside the section; design-round view (`[data-view-kind="mapping"]`): NO inline note textarea | The note channel per home — the dock's `view-{id}` textarea is the note in a design round, `collectMappings()` reads whichever applies; two channels would split the user's remark. |
 | M6 | `renderMappings`, `refreshMappings`, `setCell`, `collectMappings` present; `renderMappings()` is the FIRST statement of the persistence block's `DOMContentLoaded` handler (before `ensureCommentSlots` / `restoreState`); `refreshMappings()` is the last call of `restoreState()` | Engine + load order — the `.map-state` inputs must exist before `restoreState()` writes into them, and the cells must be re-projected after it does. |
 | M7 | `collectDesignDecisions` and `collectFreeDecisions` both contain `mappings: collectMappings(`; `collectDecisions` emits `mappings` in every branch (`[]` for decision) | Payload in both homes, uniform shape. |
 | M8 | the `.map-scroll` rule carries `overflow: auto` and `max-width: 100%`; no `100vw` anywhere in the mapping CSS; a wide free-round block uses `data-map-wide` + `.concept-content:has([data-map-wide]) { max-width: 1600px }` | The page never widens — the matrix is its own two-axis scroll box. |
-| M9 | inside every `section[data-iteration]:not([data-active])`, every `[data-mapping-spec]` carries `submitted` with `cells` keyed by EVERY matrix key of that spec (`{element\|axis}[@ctx]`), plus `order`, `adhoc`, `slotNotes` | A frozen round shows the user's submission, not the proposal — the renderer treats a `submitted` that lacks any matrix key as missing and shows the `map.frozen_missing` banner; the gate refuses the page. |
+| M9 | inside every `section[data-iteration]:not([data-active])`, every `[data-mapping-spec]` carries `submitted`: `submitted.cells` carries every matrix key of that spec (`{element\|axis}[@ctx]`) and, for ordered parts, `submitted.order` every ordered target key (`{element}.{part}[@ctx]`) — enforced; `adhoc` and `slotNotes` are the authoring contract (manual) | A frozen round shows the user's submission, not the proposal — the renderer treats a `submitted` that lacks any matrix key as missing and shows the `map.frozen_missing` banner, and falls back to `proposalOrder` for a missing order key; the gate refuses the page. |
 | M10 | every `data-view-for` value names a `section[data-design]` id inside the same iteration (**warning**) | The ☰ nav's nesting falls back to the flat views group silently otherwise. |
 
 **Failure for M1–M10:** if `data-mapping` is present anywhere on the page but
 any of these is missing (scoped to the home that requires it — M5's inline
 note applies to free-round blocks, its absence to design-round views; M9 only
 to frozen rounds), treat it the same as a missing mandatory pattern for
-that iteration. M10 is a warning. M1–M4 and M9 are enforced mechanically by
-`hooks/lib/concept-gate.js` (`findMappingIssues`) on every write of a
-concept page, so a mis-typed id, a dangling `proposal` reference or a
-forgotten `submitted` blocks the write deterministically; M5–M8 and M10 are
-part of the manual sweep, like their P-set siblings.
+that iteration. M10 is a warning. `hooks/lib/concept-gate.js`
+(`findMappingIssues`) enforces exactly this on every write of a concept
+page: M1 (a spec inside the wrapper that parses as an object), M2 (mapping
+id grammar + `id` equality + page-wide uniqueness, entry shape, id grammar,
+uniqueness, reserved `u{n}`), M3 (references, ordered-target keys, context
+presence), M4 (non-empty sets, `context` with values, array shapes) and M9
+(`submitted.cells` every matrix key, `submitted.order` every ordered target
+key on frozen rounds) — so a mis-typed id, a dangling `proposal` reference
+or a forgotten `submitted` blocks the write deterministically. Not
+mechanical: M1's `type="application/json"` / exactly-one, M9's `adhoc` /
+`slotNotes`, and M5–M8, M10 — part of the manual sweep, like their P-set
+siblings.
 
 ### Frozen/Active Mismatch
 

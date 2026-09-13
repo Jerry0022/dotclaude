@@ -18,8 +18,11 @@
  *
  *   Scope: only fires on concept HTML (the `docs/concepts/` path or a concept
  *   content signature). Non-concept files pass through untouched. This is a
- *   focused gate for the two catastrophic failure modes, not the full
- *   35-pattern validation-gate.md sweep (that stays a Step-2 task).
+ *   focused gate for four deterministic failure classes — (A) missing live
+ *   decision-panel / bridge markers, (B) a forbidden clipboard fallback,
+ *   broken <style>/<script> structure, and unsound mapping specs (ids, shapes,
+ *   references, frozen `submitted`) — not the full 35-pattern
+ *   validation-gate.md sweep (that stays a Step-2 task).
  */
 
 require('../lib/plugin-guard');
