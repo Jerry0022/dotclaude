@@ -24,6 +24,13 @@ channel tag `alpha/v0.18.0` (ring model) and defers the GitHub Release to
 promotion (`releaseDeferred: true` in the result; `/promote` owns
 beta/stable tags + Releases).
 
+`tag` may also be **omitted**: the tool then reads the version file
+(`plugin.json` / `package.json` / `marketplace.json`) and tags `alpha/v<version>`
+— `tagDefaulted: true` in the result. An explicit `tag: null` ships without a
+ring tag and returns `tagSkipped: true` + `tagWarning` instead of a silent
+all-green result (#372); an omitted tag in a project without a version file
+takes the same reported-skip path.
+
 ## Intermediate ship (sub-branch → feature branch)
 
 ```

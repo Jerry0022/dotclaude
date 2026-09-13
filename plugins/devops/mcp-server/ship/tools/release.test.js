@@ -21,6 +21,12 @@ vi.mock("../lib/repo-mode.js", () => ({
   detectRepoMode: vi.fn(() => "git"),
 }));
 
+// The tag default (#372) reads the version file; the test cwd is not a real
+// project, so pin what "the version file says" per test.
+vi.mock("../lib/version.js", () => ({
+  readVersion: vi.fn(() => ({ version: "2.3.4", type: "npm", file: "package.json" })),
+}));
+
 vi.mock("../lib/git.js", () => ({
   git: vi.fn(() => ""),
   NETWORK_TIMEOUT: 60_000,
@@ -52,6 +58,7 @@ vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
 }));
 
 import { handler, PR_TITLE_MAX } from "./release.js";
+import { readVersion } from "../lib/version.js";
 import { execFileSync } from "node:child_process";
 import { detectRepoMode } from "../lib/repo-mode.js";
 import * as gitLib from "../lib/git.js";
@@ -393,6 +400,82 @@ describe("ship_release — alpha channel tagging (ring model)", () => {
     expect(res.tag).toBeNull();
     expect(res.tagSkipped).toMatch(/intermediate/);
     expect(ghLib.createRelease).not.toHaveBeenCalled();
+  });
+});
+
+// #372 — an automated caller omitted `tag` and the tool merged silently with no
+// ring tag: main moved ahead of every ring, ship_promote had nothing to promote,
+// and the result read all-green. Omitted now defaults from the version file;
+// explicit null stays an opt-out but is reported, never silent.
+describe("ship_release — tag default from the version file (#372)", () => {
+  function untaggedRemote() {
+    // existence check → empty; post-push verify → the defaulted tag is there.
+    let lsCalls = 0;
+    gitLib.git.mockImplementation((cmd) => {
+      if (cmd.includes("ls-remote --tags")) {
+        lsCalls += 1;
+        return lsCalls === 1 ? "" : "abc	refs/tags/alpha/v2.3.4";
+      }
+      return "remoteSha";
+    });
+  }
+
+  test("tag omitted on a final merge → v<version> from the version file, flagged tagDefaulted", async () => {
+    untaggedRemote();
+    const p = params(); delete p.tag;
+    const res = await handler(p);
+    expect(res.success).toBe(true);
+    expect(readVersion).toHaveBeenCalledWith("/repo");
+    expect(res.tag).toBe("alpha/v2.3.4");
+    expect(res.channel).toBe("alpha");
+    expect(res.tagDefaulted).toBe(true);
+    expect(res.tagSkipped).toBeUndefined();
+    const { execFileSync } = await import("node:child_process");
+    const tagCall = execFileSync.mock.calls.find((c) => c[0] === "git" && c[1][0] === "tag");
+    expect(tagCall[1]).toEqual([
+      "tag", "-a", "alpha/v2.3.4", "origin/main", "-m",
+      expect.stringContaining('"version":"2.3.4"'),
+    ]);
+  });
+
+  test("explicit tag wins over the version file and is not flagged as defaulted", async () => {
+    const res = await handler(params({ tag: "v9.9.9" }));
+    expect(res.tag).toBe("alpha/v9.9.9");
+    expect(res.tagDefaulted).toBeUndefined();
+    expect(readVersion).not.toHaveBeenCalled();
+  });
+
+  test("explicit tag: null on a final merge → no tag, but tagSkipped + tagWarning name the gap", async () => {
+    const res = await handler(params({ tag: null }));
+    expect(res.success).toBe(true);
+    expect(res.merged).toBe("main");
+    expect(res.tag).toBeNull();
+    expect(res.tagSkipped).toBe(true);
+    expect(res.tagWarning).toMatch(/tag: null/);
+    expect(res.tagWarning).toMatch(/ship_promote has nothing to promote/);
+    expect(readVersion).not.toHaveBeenCalled();
+    const { execFileSync } = await import("node:child_process");
+    expect(execFileSync.mock.calls.find((c) => c[0] === "git" && c[1]?.[0] === "tag")).toBeUndefined();
+  });
+
+  test("tag omitted but no version file → merge still succeeds, tagSkipped + warning name the missing file", async () => {
+    readVersion.mockReturnValueOnce({ version: null, type: null, file: null });
+    const p = params(); delete p.tag;
+    const res = await handler(p);
+    expect(res.success).toBe(true);
+    expect(res.merged).toBe("main");
+    expect(res.tag).toBeNull();
+    expect(res.tagSkipped).toBe(true);
+    expect(res.tagWarning).toMatch(/no version file/);
+    expect(res.tagDefaulted).toBeUndefined();
+  });
+
+  test("tag omitted on an intermediate merge → no version-file read, deferred as before", async () => {
+    const p = params({ base: "feat/parent" }); delete p.tag;
+    const res = await handler(p);
+    expect(res.tag).toBeUndefined();
+    expect(res.tagSkipped).toBeUndefined();
+    expect(readVersion).not.toHaveBeenCalled();
   });
 });
 
