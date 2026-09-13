@@ -139,7 +139,6 @@ describe("render_completion_card — delivery track + released variant", () => {
     dump("ship-alpha", text);
     expect(text).toMatch(/\*\*Delivery\*\*/);
     expect(text).toMatch(/🟢 alpha/);
-    expect(text).toMatch(/← hier/);
     expect(text).toMatch(/SHIPPED → alpha/);
     expect(text).toMatch(/Alles ERLEDIGT/);
   });
@@ -158,8 +157,7 @@ describe("render_completion_card — delivery track + released variant", () => {
     });
     dump("released-beta", text);
     expect(text).toMatch(/## 🔼 PROMOTED\. v0\.117\.0 → beta/);
-    expect(text).toMatch(/🟢 beta/);
-    expect(text).toMatch(/← promotet/);
+    expect(text).toMatch(/✅ alpha `v0\.118\.0` · 🟢 beta `v0\.117\.0` · ⚪ stable/);
     expect(text).toMatch(/\*\*Promotion\*\*/);
     expect(text).toMatch(/beta\/v0\.117\.0/);
     expect(text).not.toMatch(/\*\*Changes\*\*/);
@@ -179,8 +177,7 @@ describe("render_completion_card — delivery track + released variant", () => {
     });
     dump("released-stable", text);
     expect(text).toMatch(/## 🎊 RELEASED\. v0\.117\.0 → stable — LIVE/);
-    expect(text).toMatch(/🟢 stable/);
-    expect(text).toMatch(/← LIVE/);
+    expect(text).toMatch(/✅ beta `v0\.117\.0` · 🟢 stable `v0\.117\.0`/);
     expect(text).toMatch(/GitHub Release erstellt/);
     expect(text).toMatch(/stable\/v0\.117\.0/);
   });
@@ -195,7 +192,7 @@ describe("render_completion_card — delivery track + released variant", () => {
     dump("ready", text);
     expect(text).toMatch(/✅ PR/);
     expect(text).toMatch(/⚪ Ship/);
-    expect(text).toMatch(/⚪ Promote/);
+    expect(text).not.toMatch(/⚪ Promote/);
   });
 
   test("english released → stable localizes CTA + promotion facts", async () => {
@@ -210,7 +207,7 @@ describe("render_completion_card — delivery track + released variant", () => {
     });
     dump("released-stable-en", text);
     expect(text).toMatch(/## 🎊 RELEASED\. v0\.117\.0 → stable — LIVE/);
-    expect(text).toMatch(/← here|← LIVE/);
+    expect(text).toMatch(/🟢 stable `v0\.117\.0`/);
     expect(text).toMatch(/GitHub Release created/);
   });
 });
