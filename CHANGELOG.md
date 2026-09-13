@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.153.0] — 2026-09-13
+
+### Added
+
+- **`/claude-batch help` — the long form of the mode summary.** Two lists: A) what the user does, step by step (switch on, type prompts, fire with the marker, approve the plan), B) what Claude does at each of those steps (pin the marker and write the mode file, block-and-append in the hook, merge main and build the coverage list on fire, archive and stand down afterwards). While collecting, the hook prints it itself and exits 2, so asking for help costs nothing; with the mode off the skill prints the same `renderHelp` text. `hilfe` and `?` are aliases.
+- **The merge fires with main already in the branch.** The notes in `.claude/batch.md` are written blind, against whatever the branch was when collection started — often hours earlier, while main moved on. Planning against that base is how a merged plan rebuilds what main already has or collides with it at ship time. When the marker fires, `prompt.batch.collect` now runs `scripts/git-sync.js` synchronously (45 s ceiling, well inside the hook budget) and injects the result as "SCHRITT 0" ahead of the first note: a clean merge is quoted, a `⚠`/`✗` line is flagged as resolve-first per merge-safety, a sync that could not run hands the exact command to the turn, and an empty queue triggers no sync at all. The skill's new Step 4.0 does the same on the `/claude-batch go` path.
+
+### Changed
+
+- **Activation ends with the mode ON — never with "now type `/claude-batch on`".** Observed on the first real use after 0.3.0: the user invoked the skill, answered the marker question, and was told to activate in the next prompt — a full turn to do what the invocation already asked for. The bare `/claude-batch` routes to activation now (status only when the mode is already on), and Step 2.5 ends with the mode running. While the mode is on, repeating the activation is absorbed by the hook as a new `classify` verdict, `rearm`: `/claude-batch`, `/claude-batch on` and `/claude-batch <text>` are blocked, free text becomes a note, and the answer is the mode summary — no turn spent. The exits (`off`, `go`, `status`, `marker`) and any invocation carrying an attachment still reach the skill. Re-arming after an auto-end (8 h / 100 notes) or an `off` continues the same queue; only the merge archives it.
+- **One mode summary, everywhere the user looks.** `renderModeSummary` / `describeMode` in `batch-state.js` is the activation confirmation, the body of every red "Eingabe blockiert" panel, and the answer to an absorbed re-activation. It says what happens to a prompt, how to fire (`<marker> <text>` or `/claude-batch go`, main merged first, text after the marker is the instruction for that phase), how to only stop, when the mode ends on its own, and — in one line — that `status`, `marker` (change the marker) and `help` exist. Before, the panel said only "note stored" and the explanation lived in the activation turn alone. The bounds it quotes come from the pinned mode file, not the config default.
+- **Marker suggestions are `>>`, `>go`, `>start`.** `los:` and `jetzt:` were German and carried a colon the user types dozens of times per session; the three offered markers are English and colon-free now (`MARKER_SUGGESTIONS`), the recommendation stays `>>`, and the question says explicitly that text after the marker is the instruction for the next phase. A stored custom marker keeps working; `/claude-batch marker` switches it.
+
 ## [0.152.0] — 2026-09-13
 
 ### Added
