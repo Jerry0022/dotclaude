@@ -2365,6 +2365,13 @@ it today.
       </div>
       <div class="panel-nav-scroll">
       <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}"><!-- chips --></nav>
+      <!-- #section-nav also lives on the design skeleton: a free/decision round
+           on a design concept (the final report is always free) renders its TOC
+           here; CSS hides it while a design round is active and #screen-nav
+           otherwise (html[data-template] mirrors the active round). Without it
+           the final report of every design concept had no TOC at all — and no
+           ⚠ Danach-von-Hand entry. -->
+      <nav class="section-nav" id="section-nav" aria-label="{{nav.sections}}"></nav>
       <nav class="screen-nav" id="screen-nav" aria-label="Screens">
         <!-- auto-populated, two levels: one .screen-nav-group per
              <section data-design>, a .screen-nav-design-heading button at
