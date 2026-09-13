@@ -125,8 +125,7 @@ Only then. Applied to `candidates`:
 
 **Mention, do not force:** neighbouring changes that break no contract, new
 reusable helpers the implementation could now use, convention updates. These
-belong in the final report's *Zusammenfassung* / *Nächste Schritte*, not on the
-page. Interrupting an implement order for a nicety is how a safety feature turns
+belong in the final report's *Zusammenfassung*, not on the page. Interrupting an implement order for a nicety is how a safety feature turns
 into a nuisance.
 
 **Evidence is mandatory.** Every drift card names the short SHA and the path it
@@ -193,8 +192,10 @@ following are forbidden in a reality-check round:
 - a catch-all "other open points" card.
 
 If Claude discovers a new question *during* the subsequent implementation, it
-does not go back to the page. It is decided, documented in the final report, and
-routed to a follow-up issue via the close-out sheet.
+does not go back to the page. It is decided and documented in the final
+report. It becomes an open point on the close-out sheet only if it passes the
+admission gate (`SKILL.md` § Open points admission gate) — an in-scope
+question is decided and built, never handed back as a checkbox.
 
 ## Baseline
 
