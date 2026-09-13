@@ -63,6 +63,10 @@ function stateOf(window) {
 
 describe("question views survive a reload (real boot sequence)", () => {
   const html = build({ rounds: 3, entries: 6, mode: "design", mapping: true, locale: "en" });
+  // Each test boots one or two full 540 KB pages with every inline script
+  // running; measured 5-25 s idle and past the 60 s default under a loaded
+  // full-suite run (git-sync suites hold whole workers for 30-40 s).
+  const BOOT_TIMEOUT = 180_000;
 
   test("the restored view is still the active top-level item after boot, and stays remembered", async () => {
     // First life: open the mapping subpage through its switcher segment.
@@ -91,7 +95,7 @@ describe("question views survive a reload (real boot sequence)", () => {
     expect(document.querySelector(`.screen-nav-view-item[data-view-id="${viewId}"]`).dataset.active).toBe("true");
     // The boot's own saveState() calls must not have forgotten the view.
     expect(JSON.parse(localStorage.getItem(saved.key))._activeView).toBe(viewId);
-  });
+  }, BOOT_TIMEOUT);
 
   test("a real tab switch still drops back to the design — and the way back lands on the design too", async () => {
     const a = await bootFixture(html);
@@ -114,7 +118,7 @@ describe("question views survive a reload (real boot sequence)", () => {
     expect(liveView(document).hidden).toBe(true);
     const design = document.querySelector('section[data-iteration][data-active] section[data-design][data-design-active="true"]');
     expect(design.hidden).toBe(false);
-  });
+  }, BOOT_TIMEOUT);
 
   test("a boot with no remembered view lands on the design exactly as before", async () => {
     const a = await bootFixture(html);
@@ -124,5 +128,5 @@ describe("question views survive a reload (real boot sequence)", () => {
     const design = document.querySelector('section[data-iteration][data-active] section[data-design][data-design-active="true"]');
     expect(design.hidden).toBe(false);
     expect(document.querySelector('section[data-iteration][data-active] section[data-screen][data-screen-active="true"]').hidden).toBe(false);
-  });
+  }, BOOT_TIMEOUT);
 });
