@@ -141,34 +141,280 @@ function findStructural(html) {
   return issues;
 }
 
+// --- Information mapping specs (templates.md § Information Mapping (engine)) -
+
+const MAP_ID_RE = /^[a-z0-9_]+$/;
+const MAP_RESERVED_RE = /^u\d+$/; // `u{n}` belongs to ad-hoc items
+
+/**
+ * Split a matrix / order key (`{base}` or `{base}@{ctx}`) into its parts.
+ * Only the LAST `@` separates the context: ids never contain `@`, so a
+ * key with more than one is simply reported as unknown by the caller.
+ */
+function splitCtxKey(key) {
+  const i = String(key).lastIndexOf('@');
+  return i < 0 ? { base: String(key), ctx: null } : { base: key.slice(0, i), ctx: key.slice(i + 1) };
+}
+
+/**
+ * Validate one parsed mapping spec against the engine's `normalizeSpec()`
+ * rules (M2–M4 of the design spec) plus the reference / context checks of
+ * `proposal`, `proposalOrder`, `submitted.cells` and `submitted.order`.
+ * Pushes `{kind, why, at}` issues; returns the derived model the caller
+ * needs for the frozen-round check (M9).
+ */
+function validateMappingSpec(raw, mid, at, issues) {
+  const push = (kind, why) => issues.push({ kind, why: `mapping "${mid}": ${why}`, at });
+  const arr = v => (Array.isArray(v) ? v : []);
+  const idOf = o => (o && typeof o === 'object' ? o.id : o);
+  const show = v => (typeof v === 'string' ? `"${v}"` : JSON.stringify(v));
+
+  const items = arr(raw.items);
+  const elements = arr(raw.elements);
+  const axes = arr(raw.axes);
+  const hasContext = raw.context != null && typeof raw.context === 'object';
+  const ctxValues = hasContext ? arr(raw.context.values) : [];
+
+  // M4 — an empty mapping renders nothing.
+  if (!elements.length && !axes.length) push('empty-mapping', 'no elements and no axes — at least one is required');
+  elements.forEach(el => { if (!arr(el.parts).length) push('empty-mapping', `element ${show(idOf(el))} has no parts`); });
+  axes.forEach(ax => { if (!arr(ax.columns).length) push('empty-mapping', `axis ${show(idOf(ax))} has no columns`); });
+  if (hasContext && !ctxValues.length) push('empty-mapping', 'context is present but has no values');
+
+  // M2 — id grammar over every id the engine checks.
+  const checkId = (what, id) => {
+    if (typeof id !== 'string' || !MAP_ID_RE.test(id)) push('bad-id', `${what} id ${show(id)} must match ^[a-z0-9_]+$`);
+  };
+  items.forEach(it => checkId('item', idOf(it)));
+  elements.forEach(el => { checkId('element', idOf(el)); arr(el.parts).forEach(p => checkId(`part (element ${show(idOf(el))})`, idOf(p))); });
+  axes.forEach(ax => { checkId('axis', idOf(ax)); arr(ax.columns).forEach(c => checkId(`column (axis ${show(idOf(ax))})`, idOf(c))); });
+  ctxValues.forEach(v => checkId('context value', idOf(v)));
+  items.forEach(it => {
+    const id = idOf(it);
+    if (typeof id === 'string' && MAP_RESERVED_RE.test(id)) push('bad-id', `item id "${id}" is reserved for ad-hoc items (u{n})`);
+  });
+
+  // M2 — uniqueness.
+  const dupes = (what, ids, where) => {
+    const seen = new Set();
+    ids.forEach(id => {
+      const k = typeof id === 'string' ? id : JSON.stringify(id);
+      if (seen.has(k)) push('duplicate-id', `duplicate ${what} id ${show(id)}${where || ''}`);
+      seen.add(k);
+    });
+  };
+  dupes('item', items.map(idOf));
+  dupes('source', [...elements.map(idOf), ...axes.map(idOf)], ' (element and axis ids share one namespace)');
+  elements.forEach(el => dupes('part', arr(el.parts).map(idOf), ` in element ${show(idOf(el))}`));
+  axes.forEach(ax => dupes('column', arr(ax.columns).map(idOf), ` in axis ${show(idOf(ax))}`));
+  dupes('context value', ctxValues.map(idOf));
+
+  // Derived sets for the reference checks (M3).
+  const itemIds = new Set(items.map(idOf).filter(id => typeof id === 'string'));
+  const ctxIds = new Set(ctxValues.map(idOf).filter(id => typeof id === 'string'));
+  const sources = [
+    ...elements.map(el => ({ id: idOf(el), targets: arr(el.parts).map(p => ({ key: `${idOf(el)}.${idOf(p)}`, ordered: !!(p && p.ordered) })) })),
+    ...axes.map(ax => ({ id: idOf(ax), targets: arr(ax.columns).map(c => ({ key: `${idOf(ax)}.${idOf(c)}`, ordered: false })) })),
+  ];
+  const targetKeys = new Set(sources.flatMap(s => s.targets.map(t => t.key)));
+  const orderedKeys = new Set(sources.flatMap(s => s.targets.filter(t => t.ordered).map(t => t.key)));
+  const targetsOf = new Map(sources.map(s => [s.id, new Set(s.targets.map(t => t.key))]));
+  const matrixKeys = sources.flatMap(s => (ctxIds.size ? [...ctxIds].map(c => `${s.id}@${c}`) : [s.id]));
+
+  // A context reference in a proposal triple / key must agree with the spec.
+  const checkCtx = (where, ctx) => {
+    if (ctx == null) {
+      if (hasContext) { push('ctx-mismatch', `${where} lacks the context value the spec's "context" requires`); return false; }
+      return true;
+    }
+    if (!hasContext) { push('ctx-mismatch', `${where} carries context ${show(ctx)} but the spec has no "context"`); return false; }
+    if (!ctxIds.has(ctx)) { push('ctx-mismatch', `${where} names unknown context value ${show(ctx)}`); return false; }
+    return true;
+  };
+
+  arr(raw.proposal).forEach((p, i) => {
+    const where = `proposal[${i}] ${JSON.stringify(p)}`;
+    if (!Array.isArray(p) || p.length < 2) { push('unknown-ref', `${where} is not an [item, target] pair`); return; }
+    if (!itemIds.has(p[0])) push('unknown-ref', `${where} references unknown item ${show(p[0])}`);
+    if (!targetKeys.has(p[1])) push('unknown-ref', `${where} references unknown target ${show(p[1])} (expected {element|axis}.{part|column})`);
+    checkCtx(where, p.length > 2 && p[2] != null ? p[2] : null);
+  });
+
+  // `{target}` / `{target}@{ctx}` → [itemIds]; the target must be ordered.
+  const checkOrder = (label, order, extraItem) => {
+    if (order == null) return;
+    if (typeof order !== 'object' || Array.isArray(order)) { push('unknown-ref', `${label} must be an object keyed by "{target}" or "{target}@{ctx}"`); return; }
+    Object.keys(order).forEach(key => {
+      const where = `${label}["${key}"]`;
+      const { base, ctx } = splitCtxKey(key);
+      if (!targetKeys.has(base)) push('unknown-ref', `${where} names unknown target ${show(base)}`);
+      else if (!orderedKeys.has(base)) push('unknown-ref', `${where} names target ${show(base)} which is not "ordered": true`);
+      checkCtx(where, ctx);
+      arr(order[key]).forEach(id => { if (!itemIds.has(id) && !extraItem(id)) push('unknown-ref', `${where} lists unknown item ${show(id)}`); });
+    });
+  };
+  checkOrder('proposalOrder', raw.proposalOrder, () => false);
+
+  // `submitted` — written by Claude when the round is frozen (§ Freezing).
+  const submitted = raw.submitted != null && typeof raw.submitted === 'object' && !Array.isArray(raw.submitted) ? raw.submitted : null;
+  const cells = submitted && submitted.cells != null && typeof submitted.cells === 'object' && !Array.isArray(submitted.cells) ? submitted.cells : null;
+  // Ad-hoc items `u{n}` resolve against `submitted.adhoc` (labels, 1-based).
+  const adhocCount = submitted && Array.isArray(submitted.adhoc) ? submitted.adhoc.length : 0;
+  const isAdhoc = id => {
+    const m = typeof id === 'string' && MAP_RESERVED_RE.exec(id);
+    if (!m) return false;
+    const n = Number(id.slice(1));
+    return !!raw.adhocItems && n >= 1 && n <= adhocCount;
+  };
+  if (cells) {
+    Object.keys(cells).forEach(key => {
+      const where = `submitted.cells["${key}"]`;
+      const { base, ctx } = splitCtxKey(key);
+      const known = targetsOf.has(base);
+      if (!known) push('unknown-ref', `${where} names unknown element/axis ${show(base)} (matrix keys are "{src}" or "{src}@{ctx}")`);
+      checkCtx(where, ctx);
+      const pairs = cells[key];
+      if (!Array.isArray(pairs)) { push('unknown-ref', `${where} must be an array of [item, target] pairs`); return; }
+      pairs.forEach((p, i) => {
+        const pw = `${where}[${i}] ${JSON.stringify(p)}`;
+        if (!Array.isArray(p) || p.length < 2) { push('unknown-ref', `${pw} is not an [item, target] pair`); return; }
+        if (p.length > 2 && p[2] != null) push('ctx-mismatch', `${pw} carries a third element — the context belongs in the matrix key ("${base}@{ctx}"), not in the pair`);
+        if (!itemIds.has(p[0]) && !isAdhoc(p[0])) push('unknown-ref', `${pw} references unknown item ${show(p[0])}`);
+        if (!targetKeys.has(p[1])) push('unknown-ref', `${pw} references unknown target ${show(p[1])}`);
+        else if (known && !targetsOf.get(base).has(p[1])) push('unknown-ref', `${pw} target ${show(p[1])} does not belong to "${base}"`);
+      });
+    });
+  }
+  if (submitted) checkOrder('submitted.order', submitted.order, isAdhoc);
+
+  // Mirror of the engine's complete(): every matrix key present as an array.
+  const complete = !!cells && matrixKeys.every(k => Array.isArray(cells[k]));
+  return { complete, matrixKeys, missingKeys: cells ? matrixKeys.filter(k => !Array.isArray(cells[k])) : matrixKeys };
+}
+
+/**
+ * Information-mapping specs (templates.md § Information Mapping (engine) →
+ * Spec; design spec § 11 rules M1–M4 and M9).
+ *
+ * Every `section[data-mapping]` must carry a `<script data-mapping-spec>`
+ * whose JSON normalises exactly as the page's engine normalises it: id
+ * grammar, uniqueness, resolvable `proposal` / `submitted` references, the
+ * context dimension present iff the spec has one, a non-empty target set.
+ * A mapping inside an iteration WITHOUT `data-active` is frozen and must
+ * carry a complete `submitted` (a cells entry for every matrix key) —
+ * otherwise the page silently presents Claude's proposal as the user's
+ * decision, the one outcome this construct must never produce.
+ *
+ * Regex walk over the raw HTML, like findStructural: iteration open tags
+ * give the frozen/live state (nearest preceding one wins), mapping open tags
+ * delimit where a spec script may sit.
+ *
+ * @returns {Array<{kind:string, why:string, at:number}>} — empty when sound.
+ */
+function findMappingIssues(html) {
+  const body = html || '';
+  const issues = [];
+  if (!body.includes('data-mapping')) return issues;
+
+  const iterations = [];
+  const iterRe = /<section\b[^>]*\bdata-iteration="(\d+)"[^>]*>/gi;
+  let m;
+  while ((m = iterRe.exec(body)) !== null) {
+    iterations.push({ at: m.index, n: m[1], active: /\bdata-active\b/.test(m[0]) });
+  }
+
+  const mappings = [];
+  const mapRe = /<section\b[^>]*\bdata-mapping="([^"]*)"[^>]*>/gi;
+  while ((m = mapRe.exec(body)) !== null) mappings.push({ at: m.index, id: m[1] });
+
+  const specRe = /<script\b[^>]*\bdata-mapping-spec\b[^>]*>([\s\S]*?)<\/script>/gi;
+  const seenIds = new Map();
+
+  mappings.forEach((map, i) => {
+    const end = i + 1 < mappings.length ? mappings[i + 1].at : body.length;
+    const mid = map.id;
+    const at = map.at;
+
+    if (seenIds.has(mid)) {
+      issues.push({ kind: 'duplicate-mapping-id', why: `data-mapping="${mid}" at offset ${at} repeats the mapping at offset ${seenIds.get(mid)} — mapping ids are DOM ids and must be unique page-wide`, at });
+    } else {
+      seenIds.set(mid, at);
+    }
+
+    specRe.lastIndex = at;
+    const s = specRe.exec(body);
+    if (!s || s.index >= end) {
+      issues.push({ kind: 'spec-missing', why: `mapping "${mid}" at offset ${at} has no <script type="application/json" data-mapping-spec> block`, at });
+      return;
+    }
+    let raw;
+    try { raw = JSON.parse(s[1]); }
+    catch (e) {
+      issues.push({ kind: 'spec-parse', why: `mapping "${mid}": spec JSON does not parse — ${e.message}`, at });
+      return;
+    }
+    if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
+      issues.push({ kind: 'spec-parse', why: `mapping "${mid}": spec must be a JSON object`, at });
+      return;
+    }
+
+    const model = validateMappingSpec(raw, mid, at, issues);
+
+    // M9 — nearest preceding iteration open tag decides frozen vs live.
+    let iter = null;
+    for (const it of iterations) { if (it.at < at) iter = it; else break; }
+    if (iter && !iter.active && !model.complete) {
+      const detail = raw.submitted == null
+        ? 'has no "submitted" object'
+        : `"submitted.cells" lacks matrix key(s) ${model.missingKeys.map(k => `"${k}"`).join(', ')}`;
+      issues.push({ kind: 'frozen-without-submitted', why: `mapping "${mid}" sits in frozen iteration ${iter.n} (no data-active) but ${detail} — the page would show Claude's proposal as the user's decision`, at });
+    }
+  });
+
+  return issues;
+}
+
 /**
  * Full evaluation for a written file.
- * @returns {{applicable:boolean, ok:boolean, missing:Array, forbidden:Array, structural:Array}}
+ * @returns {{applicable:boolean, ok:boolean, missing:Array, forbidden:Array, structural:Array, mapping:Array}}
  */
 function evaluate(filePath, html) {
   if (!isConceptHtml(filePath, html)) {
-    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [] };
+    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [] };
   }
   const missing = findMissing(html);
   const forbidden = findForbidden(html);
   const structural = findStructural(html);
+  const mapping = findMappingIssues(html);
   return {
     applicable: true,
-    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0,
+    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0,
     missing,
     forbidden,
     structural,
+    mapping,
   };
 }
 
 /** Build the blocking feedback shown to Claude (stderr, exit 2). */
-function buildBlockReason(filePath, missing, forbidden, structural) {
+function buildBlockReason(filePath, missing, forbidden, structural, mapping) {
   missing = missing || [];
   forbidden = forbidden || [];
   structural = structural || [];
+  mapping = mapping || [];
   const lines = [];
   lines.push(`BLOCKED: "${path.basename(filePath || 'concept.html')}" is not a valid live-bridge concept page.`);
   lines.push('');
+  if (mapping.length) {
+    lines.push('Mapping spec problems — the information-mapping engine cannot render these sections as authored:');
+    mapping.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
+    lines.push('  Fix: regenerate the spec from skills/concept/deep-knowledge/templates.md § Information Mapping (engine) → Spec');
+    lines.push('  (ids ^[a-z0-9_]+$, unique; proposal/submitted refer only to declared items and {src}.{part} targets;');
+    lines.push('  a ctx value present iff the spec has "context"). When freezing a round, write "submitted" into the');
+    lines.push("  frozen spec from the payload's mappings[] entry: {cells: assigned, order, adhoc: adhocItems, slotNotes}");
+    lines.push('  — cells must carry every matrix key ({src} or {src}@{ctx}).');
+    lines.push('');
+  }
   if (structural.length) {
     lines.push('Broken <style> / <script> structure — the page renders unstyled (white, no theme) even though every marker is present:');
     structural.forEach(s => lines.push(`  - ${s.kind}: ${s.why}`));
@@ -209,6 +455,7 @@ module.exports = {
   findMissing,
   findForbidden,
   findStructural,
+  findMappingIssues,
   evaluate,
   buildBlockReason,
 };

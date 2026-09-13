@@ -9,7 +9,9 @@
  *   concept HTML is written, verify it carries the live decision panel +
  *   bridge-submit markers, contains NO clipboard / paste-into-chat
  *   fallback, and has sound <style>/<script> structure (no nested or
- *   unclosed block — the "white, unthemed page" regression, #346). Blocks
+ *   unclosed block — the "white, unthemed page" regression, #346), and that
+ *   every information-mapping spec normalises the way the page's engine
+ *   normalises it (frozen rounds carry their `submitted` state). Blocks
  *   (exit 2) with actionable feedback when the page is invalid, so the
  *   regression survives only until the next regenerate — never until the
  *   user has to copy a JSON by hand.
@@ -54,9 +56,9 @@ process.stdin.on('end', () => {
 
   if (!isConceptHtml(file, html)) process.exit(0);
 
-  const { ok, missing, forbidden, structural } = evaluate(file, html);
+  const { ok, missing, forbidden, structural, mapping } = evaluate(file, html);
   if (ok) process.exit(0);
 
-  process.stderr.write(buildBlockReason(file, missing, forbidden, structural) + '\n');
+  process.stderr.write(buildBlockReason(file, missing, forbidden, structural, mapping) + '\n');
   process.exit(2);
 });
