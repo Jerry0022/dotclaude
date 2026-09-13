@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.9.0
+ * @version 0.9.1
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
@@ -323,7 +323,7 @@ process.stdin.on('end', () => {
             // never ran and the graph cannot converge (issue #291). The metric
             // must only record a spawn that actually issued, or the log claims
             // self-heals that never happened.
-            if (gstate.bgWithSentinel('graphify', ['update', '.'], cwd)) {
+            if (gstate.bgWithSentinel(gstate.graphifyBin(), ['update', '.'], cwd)) {
               // Infinity is JSON-null; -1 keeps "unbounded" distinguishable in the log.
               const newerCount = Number.isFinite(info.newerCount) ? info.newerCount : -1;
               metrics.record('self_heal_kicked', { newerCount, truncated: info.truncated }, { cwd, sid });
@@ -342,7 +342,7 @@ process.stdin.on('end', () => {
             // Within tolerance but still lagging by >0 files — enforce AND kick
             // a refresh in parallel so it converges toward newerCount 0.
             if (info.newerCount > 0 && gstate.markRefresh(cwd, 2 * 60 * 1000)) {
-              if (gstate.bgWithSentinel('graphify', ['update', '.'], cwd)) {
+              if (gstate.bgWithSentinel(gstate.graphifyBin(), ['update', '.'], cwd)) {
                 metrics.record('self_heal_kicked', { newerCount: info.newerCount, truncated: false }, { cwd, sid });
               } else {
                 gstate.releaseRefresh(cwd); // declined — do not spend the cooldown (#291)

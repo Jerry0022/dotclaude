@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-state
- * @version 0.7.1
+ * @version 0.8.0
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
  *   layer (auto-graph). Default-on / opt-out model: graphify enforcement is
@@ -29,6 +29,14 @@
  *   builds stack without bound — measured at 12 concurrent runs / ~29 GB commit,
  *   exhausting RAM. The per-project lock alone still let N worktrees each run a
  *   heavy build (RAM + disk saturation), which the global cap prevents.
+ *
+ *   Two further bounds, both learned from a session whose cwd was $HOME:
+ *   `bgWithSentinel` refuses any cwd that is not inside a git work tree
+ *   (`isProjectDir`) — that session crawled the whole profile (AppData, every
+ *   checkout, ...) for hours at 3+ GB RSS; and the `--bg-run` runner heartbeats
+ *   its lock stamp while the build runs, because `updateInFlight` treats a stamp
+ *   older than UPDATE_LOCK_STALE_MS as dead without asking the pid — which let a
+ *   SECOND build of the same cwd start next to the still-running first one.
  */
 
 const fs = require('node:fs');
@@ -38,6 +46,63 @@ const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 
 const CONSENT_REL = path.join('.claude', 'graphify.json');
+
+/**
+ * The `graphify` executable every build/side-task spawn uses. Overridable via
+ * DOTCLAUDE_GRAPHIFY_BIN — an absolute path when the CLI is installed somewhere
+ * PATH does not reach (uv's ~/.local/bin on a fresh Windows box), or a stub in
+ * tests so a hook under test never launches the real Python indexer.
+ */
+function graphifyBin() {
+  const v = process.env.DOTCLAUDE_GRAPHIFY_BIN;
+  return typeof v === 'string' && v.trim() ? v : 'graphify';
+}
+
+/** Path equality the way the OS sees it (win32 ignores case). */
+function samePath(a, b) {
+  const na = path.resolve(a), nb = path.resolve(b);
+  return process.platform === 'win32' ? na.toLowerCase() === nb.toLowerCase() : na === nb;
+}
+
+/**
+ * Nearest enclosing git work tree root of `cwd` — the directory holding `.git`
+ * (a dir for a primary checkout, a FILE for a linked worktree). Pure fs walk, no
+ * git spawn: this runs on hook hot paths. Never throws.
+ * @returns {string|null} absolute root, or null when no `.git` sits on the path
+ */
+function findRepoRoot(cwd) {
+  if (typeof cwd !== 'string' || !cwd) return null;
+  try {
+    let dir = path.resolve(cwd);
+    for (;;) {
+      if (fs.existsSync(path.join(dir, '.git'))) return dir;
+      const parent = path.dirname(dir);
+      if (parent === dir) return null; // filesystem root reached
+      dir = parent;
+    }
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True iff `cwd` is somewhere the graph may be built AUTOMATICALLY: inside a
+ * git work tree whose root is not the user's home directory. A session can start
+ * anywhere — a Desktop session with no folder picked, a terminal opened in `~`
+ * — and `graphify update .` in such a cwd indexes everything below it; the
+ * home directory (observed: hours of CPU, 3+ GB RSS, the whole profile walked)
+ * is the worst case, and a dotfiles repo in `~` does not make it a project.
+ * Manual `graphify update .` remains the user's call anywhere. Never throws.
+ */
+function isProjectDir(cwd) {
+  const root = findRepoRoot(cwd);
+  if (!root) return false;
+  try {
+    return !samePath(root, os.homedir());
+  } catch {
+    return false;
+  }
+}
 
 function consentPath(cwd) {
   return path.join(cwd, CONSENT_REL);
@@ -228,7 +293,10 @@ function isGraphifyQueryCommand(cmd) {
 
 function sentinelPath(cwd) {
   const key = crypto.createHash('md5').update(`sentinel:${cwd}`).digest('hex').slice(0, 12);
-  return path.join(os.tmpdir(), `dotclaude-graphbuild-${key}.sentinel`);
+  // Beside the locks (lockBaseDir), not bare os.tmpdir(): a test that isolates
+  // its lock dir gets isolated sentinels too, so hook-under-test builds never
+  // litter the real temp dir. Production resolves to os.tmpdir() either way.
+  return path.join(lockBaseDir(), `dotclaude-graphbuild-${key}.sentinel`);
 }
 
 // Sentinel argv sentinel value meaning "run windowless, but write no sentinel".
@@ -255,9 +323,24 @@ const BG_RUN_FLAG = '--bg-run';
 //      DOTCLAUDE_GRAPH_MAX_BUILDS).
 // Both layers read the same lock files; the lock dir is os.tmpdir() in production
 // and overridable via DOTCLAUDE_GRAPHLOCK_DIR for test isolation.
+//
+// "Stale" is measured against the lock's LAST HEARTBEAT, not its spawn time: the
+// runner re-stamps its own lock every UPDATE_LOCK_HEARTBEAT_MS while the build
+// runs (see the --bg-run entrypoint). Without that, a build merely longer than
+// the window lost its lock while still running — observed as two concurrent
+// `graphify update .` on one cwd — because updateInFlight() checks the stamp
+// BEFORE the pid. The stamp check still has to come first: it is the only
+// defence against a recycled pid making a dead runner's lock read as live.
 const UPDATE_LOCK_STALE_MS = 45 * 60 * 1000;
+const UPDATE_LOCK_HEARTBEAT_DEFAULT_MS = 5 * 60 * 1000;
 
-/** Directory holding the per-project update-lock files. Overridable for tests. */
+/** Heartbeat interval for the runner's lock re-stamp (env override for tests). */
+function updateLockHeartbeatMs() {
+  const n = parseInt(process.env.DOTCLAUDE_GRAPH_HEARTBEAT_MS, 10);
+  return Number.isInteger(n) && n > 0 ? n : UPDATE_LOCK_HEARTBEAT_DEFAULT_MS;
+}
+
+/** Directory holding the per-project update-lock and sentinel files. Overridable for tests. */
 function lockBaseDir() {
   return process.env.DOTCLAUDE_GRAPHLOCK_DIR || os.tmpdir();
 }
@@ -360,6 +443,47 @@ function writeUpdateLock(cwd, pid) {
 /** Remove the update lock (the runner clears it once its build exits). No-op when absent. Never throws. */
 function clearUpdateLock(cwd) {
   try { fs.unlinkSync(updateLockPath(cwd)); } catch { /* absent already */ }
+}
+
+/** Parsed lock body, or null when absent/corrupt. Never throws. */
+function readLockFile(lockPath) {
+  try {
+    const { pid, ts } = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    return { pid, ts };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Heartbeat: re-stamp the lock at `lockPath` with a fresh `ts` — but ONLY while
+ * it still names `pid` (the caller, i.e. the live runner). A lock naming another
+ * pid belongs to a newer runner that legitimately took over after this one's
+ * stamp went stale; touching it would let two builds share one lock again.
+ * Never throws.
+ * @returns {'owned'|'foreign'|'missing'} what was found — 'missing' also covers
+ *   a corrupt body (nothing to own, nothing written)
+ */
+function refreshUpdateLockFile(lockPath, pid) {
+  const cur = readLockFile(lockPath);
+  if (!cur || !Number.isInteger(cur.pid)) return 'missing';
+  if (cur.pid !== pid) return 'foreign';
+  try {
+    fs.writeFileSync(lockPath, JSON.stringify({ pid, ts: Date.now() }));
+  } catch { /* tmp unwritable — the stamp ages, updateInFlight fails open as before */ }
+  return 'owned';
+}
+
+/**
+ * Remove the lock at `lockPath` iff it names `pid` — the ownership discipline
+ * of refreshUpdateLockFile applied to release. Before this, a finishing runner
+ * unlinked whatever lock sat at the path, including a successor's. Never throws.
+ * @returns {boolean} true iff a lock owned by `pid` was removed
+ */
+function clearUpdateLockFile(lockPath, pid) {
+  const cur = readLockFile(lockPath);
+  if (!cur || cur.pid !== pid) return false;
+  try { fs.unlinkSync(lockPath); return true; } catch { return false; }
 }
 
 /**
@@ -486,10 +610,17 @@ function bgWindowless(cmd, args, cwd) {
  * let N worktrees each run a heavy build and saturate RAM + disk. The runner
  * clears the lock when its build exits (see the --bg-run entrypoint →
  * runBgEntrypointChild).
- * @returns {boolean} true iff a spawn was issued; false when skipped (this cwd
- *   already building, or global cap reached) or the spawn errored.
+ *
+ * Eligibility comes first: a cwd outside a git work tree (or whose work tree is
+ * the home directory) is never built automatically — see isProjectDir for the
+ * hours-long $HOME crawl this stops. That refusal is not a "decline" in the
+ * issue-#291 sense: nothing is starved, the cwd simply never qualifies, so the
+ * decline streak (and its SessionStart report) stays untouched.
+ * @returns {boolean} true iff a spawn was issued; false when skipped (cwd not a
+ *   project, this cwd already building, or global cap reached) or the spawn errored.
  */
 function bgWithSentinel(cmd, args, cwd) {
+  if (!isProjectDir(cwd)) return false; // never auto-index a non-project (home dir, temp dir, ...)
   // A decline is bookkept (issue #291): callers throttle themselves before
   // getting here, so a declined spawn that leaves no trace burns the caller's
   // throttle window for work that never ran.
@@ -560,6 +691,12 @@ module.exports = {
   releaseRefresh,
   writeUpdateLock,
   clearUpdateLock,
+  refreshUpdateLockFile,
+  clearUpdateLockFile,
+  updateLockHeartbeatMs,
+  graphifyBin,
+  findRepoRoot,
+  isProjectDir,
   bgWindowless,
   bgWithSentinel,
   readSentinel,
@@ -649,9 +786,10 @@ function runBgEntrypointChild(runCmd, runArgs, runCwd, writeSentinel, exitFn, cl
 // <sentinel|'-'> <lock|'-'> <cwd> <cmd> [args...]` it acts as the detached,
 // windowless wrapper spawned by spawnBgRunner: it runs the real command as a
 // NON-detached, windowsHide child (created with CREATE_NO_WINDOW → hidden
-// console, no window), waits for it, writes the ok/fail sentinel, and clears the
-// concurrency lock. Guarded by require.main so a normal `require()` of this
-// module never triggers it.
+// console, no window), waits for it, heartbeats the concurrency lock while it
+// runs, writes the ok/fail sentinel, and releases the lock — its own lock only.
+// Guarded by require.main so a normal `require()` of this module never
+// triggers it.
 if (require.main === module && process.argv[2] === BG_RUN_FLAG) {
   const sentinelArg = process.argv[3];
   const lockArg = process.argv[4];
@@ -676,9 +814,28 @@ if (require.main === module && process.argv[2] === BG_RUN_FLAG) {
       try { fs.unlinkSync(stage); } catch { /* nothing staged */ }
     }
   };
+  // Heartbeat: keep this runner's lock stamp fresh for as long as the build
+  // runs, so updateInFlight() (stamp-first, then pid) keeps reading it as live
+  // past UPDATE_LOCK_STALE_MS — a 3-hour build must not look "stale" at minute
+  // 46 and invite a second build onto the same cwd. Stops on 'foreign' (a
+  // successor legitimately owns the path now); a 'missing' lock keeps ticking
+  // because bgWithSentinel writes the lock right AFTER the spawn returns, so an
+  // early tick may simply precede it. unref(): the interval alone must never
+  // hold the runner open once the child is gone.
+  let heartbeat = null;
+  if (lockArg !== NO_SENTINEL) {
+    heartbeat = setInterval(() => {
+      if (refreshUpdateLockFile(lockArg, process.pid) === 'foreign') {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
+    }, updateLockHeartbeatMs());
+    heartbeat.unref();
+  }
   const clearLock = () => {
+    if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
     if (lockArg === NO_SENTINEL) return;
-    try { fs.unlinkSync(lockArg); } catch { /* absent already — nothing to clear */ }
+    clearUpdateLockFile(lockArg, process.pid); // owned only — never a successor's lock
   };
   runBgEntrypointChild(runCmd, runArgs, runCwd, writeSentinel, undefined, clearLock);
 }
