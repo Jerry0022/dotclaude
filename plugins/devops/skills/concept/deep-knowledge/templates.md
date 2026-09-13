@@ -208,6 +208,49 @@ must see their own language. The locale hint is authoritative.
 | `design.viewport_phone`        | Phone                          | Handy |
 | `design.orientation_portrait`  | Portrait                       | Hochkant |
 | `design.orientation_landscape` | Landscape                      | Querformat |
+| `map.view_schema`              | Schema                         | Schema |
+| `map.view_matrix`              | Matrix                         | Matrix |
+| `map.tier_first`               | At first glance                | Auf den ersten Blick |
+| `map.tier_after`               | After click                    | Nach Klick |
+| `map.items`                    | Items                          | Einträge |
+| `map.search`                   | Search…                        | Suchen… |
+| `map.filter_all`               | All                            | Alle |
+| `map.filter_unassigned`        | Unassigned                     | Nicht zugeordnet |
+| `map.filter_multiple`          | Multiple                       | Mehrfach |
+| `map.filter_changed`           | Changed                        | Geändert |
+| `map.reset`                    | Reset to proposal              | Auf Vorschlag zurücksetzen |
+| `map.reset_confirm`            | Reset this matrix to Claude's proposal? | Diese Matrix auf Claudes Vorschlag zurücksetzen? |
+| `map.copy`                     | Copy {from} → {to}             | {from} → {to} kopieren |
+| `map.copy_confirm`             | Overwrite {to} with {from}?    | {to} mit {from} überschreiben? |
+| `map.add_item`                 | item                           | Eintrag |
+| `map.add_item_prompt`          | Label of the new item          | Bezeichnung des neuen Eintrags |
+| `map.add_item_duplicate`       | An item with this label already exists | Ein Eintrag mit dieser Bezeichnung existiert bereits |
+| `map.added_group`              | Added by you                   | Von dir ergänzt |
+| `map.armed_item`               | {label}: tap a slot — Esc ends | {label}: Slot antippen — Esc beendet |
+| `map.armed_slot`               | {label}: tap items — Esc ends  | {label}: Einträge antippen — Esc beendet |
+| `map.summary_unassigned`       | {n} unassigned                 | {n} nicht zugeordnet |
+| `map.summary_violations`       | {n} constraint(s) open         | {n} Regel(n) offen |
+| `map.summary_ok`               | all assigned                   | alles zugeordnet |
+| `map.slot_empty_min`           | empty – min. {n}               | leer – mind. {n} |
+| `map.slot_over_max`            | over max {n}                   | über Maximum {n} |
+| `map.item_required`            | required, unassigned           | Pflicht, nicht zugeordnet |
+| `map.remove`                   | Remove                         | Entfernen |
+| `map.slot_note`                | Note for this slot             | Notiz zu diesem Slot |
+| `map.context`                  | Context                        | Kontext |
+| `map.axis`                     | Axis                           | Achse |
+| `map.tab_open`                 | {n} open                       | {n} offen |
+| `map.frozen_missing`           | Submitted state missing — showing Claude's proposal | Übermittelter Stand fehlt — zeigt Claudes Vorschlag |
+| `map.spec_error`               | Mapping spec could not be read: {error} | Mapping-Spezifikation nicht lesbar: {error} |
+
+**`map.*` strings are rendered by the mapping engine** (§ Information
+Mapping (engine)), not authored: Claude substitutes the `{{map.*}}` tokens
+inside the engine's `MAP_LOCALE` table when copying the block. `{n}`,
+`{label}`, `{from}`, `{to}` and `{error}` are runtime placeholders the engine
+fills (`fmt()`) — keep them in every translation. `map.items` doubles as the
+palette title ("Items (40)") and the aria-label of the palette collapse
+button; `map.reset` / `map.add_item` / `map.copy` get their `↺` / `+` / `⧉`
+glyph prefixed by the engine (the button reads "+ item"), so the strings
+carry none.
 
 **`design.position_iteration` and `design.position_page` are label words,
 not full sentences** — the numbers (`N`, `total`) are live spans the JS
@@ -1744,12 +1787,28 @@ its own entry in the switcher and the panel TOC.
   flip back to a screen to answer sensibly — if yes, it is a view.
 - **Navigation.** `#screen-nav` gains a second `.screen-nav-group` below the
   designs group, headed by a plain (non-interactive) `.screen-nav-views-heading`
-  label, then one `.screen-nav-view-item` button per view. The top-centre
-  switcher (`#design-switcher`) lists designs and views in one row: design
-  segments (`.design-switch-item`), a thin `.switcher-divider`, then view
-  segments (`.view-switch-item`) — one click from anywhere, no detour through
-  the ☰ panel. Both are auto-populated by `buildDesignUI()`, exactly like the
-  design-only case.
+  label, then one `.screen-nav-view-item` button per view **that names no
+  design** (see `data-view-for` below — a view tied to a design is listed
+  under that design instead, and the views group is skipped entirely when
+  every view is tied). The top-centre switcher (`#design-switcher`) lists
+  designs and views in one row: design segments (`.design-switch-item`), a
+  thin `.switcher-divider`, then view segments (`.view-switch-item`) — one
+  click from anywhere, no detour through the ☰ panel. Both are
+  auto-populated by `buildDesignUI()`, exactly like the design-only case.
+- **`data-view-for="{designId}"` (optional, all view kinds).** A view that
+  is *about one variant* names it: `buildDesignUI()` then nests the view's
+  `.screen-nav-view-item` inside that design's `.screen-nav-group`, after
+  its screens (`allViews.filter(v => v.dataset.viewFor === d.dataset.design)`);
+  the views group lists only the views without a (valid) `data-view-for`
+  and is not rendered when that list is empty. The top-centre switcher
+  stays one flat row — carry the variant name in the `data-nav-label`
+  ("Field mapping · Card A"). `collectDesignDecisions()` adds
+  `"design": "{designId}"` to every `decisions[]` and `mappings[]` entry
+  from such a view (§ Decision schema); the key is absent otherwise. A
+  `data-view-for` that names no `data-design` of the same iteration is a
+  gate warning (rule M10, design spec § 11) and falls back to the views group —
+  nothing breaks, the grouping is just lost. Absent → variant-independent,
+  exactly as before.
 - **Screen indicator.** While a view is active, `#screen-indicator` shows the
   view's `data-nav-label` instead of the screen counter — the "Page N/total"
   segment (`#indicator-screen-info`) hides, `#indicator-view` shows. Every
@@ -1986,6 +2045,79 @@ it today.
 - The "favourite" radio group, when present, carries no `data-decision` and
   is picked up by the generic form catch-all (`el.name`/`el.id` key) like any
   other named input — it augments, never replaces, the per-option verdicts.
+
+### View kind `mapping`
+
+For the question *"which of these many items goes where"* — an
+**assignment** of items to targets, not a choice between alternatives. A
+`data-view-kind="mapping"` view is a fullscreen frame around one
+`section[data-mapping]` whose content is a declarative JSON spec; the shared
+engine (§ Information Mapping (engine)) renders the schematic view, the
+matrix view, the tabs, the palette and every input from it. Claude authors
+**nothing but the wrapper, the heading/intro and the spec** — never a cell.
+The same block, with an inline note, lives in `free` rounds (§ Template:
+free → Mapping block (optional)); a design concept uses this view instead.
+
+```html
+<section data-iteration="3" data-iteration-template="design" data-active>
+  <section data-design="card_a" data-nav-label="Card A" data-design-active="true">…</section>
+  <section data-design="card_b" data-nav-label="Card B" hidden>…</section>
+
+  <section data-view="fields_a" data-view-kind="mapping" data-view-for="card_a"
+           data-nav-label="Field mapping · Card A" hidden>
+    <div class="view-frame view-mapping">
+      <h2>Which vehicle fields go where on Card A?</h2>
+      <p>Proposal pre-filled — correct it. Phone and desktop are separate.</p>
+      <section data-mapping="veh_a" id="veh_a" data-nav-label="Field mapping · Card A">
+        <script type="application/json" data-mapping-spec>{ … }</script>
+      </section>
+    </div>
+  </section>
+</section>
+```
+
+The spec's fields (`items`, `elements` / `axes`, `context`, `proposal`,
+`proposalOrder`, `slotNotes`, `adhocItems`, `submitted`) are tabled in
+§ Information Mapping (engine) → Spec; two complete examples are in the
+design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-design.md`
+§ 3.
+
+**Rules:**
+- **No inline note textarea inside a view.** The dock's view-level
+  textarea (`data-comment="view-{viewId}"`, built by `buildViewTextareas()`
+  like for every view) IS the mapping note — `collectMappings()` reads it
+  into the entry's `note` whenever the mapping section sits inside a
+  `section[data-view]`. Two note fields for one question is the rejected
+  alternative (gate rule M5 flags an inline `map-{m}-note` in a view).
+  Per-slot notes (`slotNotes: true`) are generated inline in both homes.
+- `data-view-for="{designId}"` is optional (rules in § Views (optional));
+  a mapping about one variant names it, and the payload entry then carries
+  `design`.
+- `.view-mapping` lifts the frame's width (`max-width: none; padding: 1rem
+  1.5rem`) — the two tier columns and a 30-column matrix need it. The matrix
+  is its own two-axis scroll box; the page never widens.
+- **≥ 1 `data-design` stays mandatory** — a mapping view is a view like any
+  other and never the only top-level content.
+- Ids: `data-mapping`, item, element, part, axis, column and context ids
+  match `^[a-z0-9_]+$` (no `-`, `.`, `@`, `:`, `>` — the state encodings
+  split on them). Item / element / axis ids are unique within a mapping,
+  part ids within their element; **mapping ids are unique page-wide** (they
+  are DOM ids: the section's `id`, the TOC anchor). `data-mapping` and `id`
+  carry the same value.
+- A view is never cloned into device frames (`renderDeviceStage` clones
+  active screens only), so the section id and the JSON block are safe here.
+  `<script type="application/json">` is inert; gate P18 forbids it only
+  inside `section[data-screen]`.
+- Switcher segment, `.screen-nav-view-item`, screen indicator label, dock
+  (general + view-level textarea), `_activeView` restore and view switching
+  on frozen tabs all behave exactly as for every other view. The progress
+  (`n unassigned · n constraint(s) open`) is the mapping's own summary line
+  and the per-tab counts; the panel TOC's progress mirror is a free-round
+  affordance (`#section-nav` is hidden in design mode).
+- Freezing: when the round is frozen Claude writes the payload's
+  `mappings[]` entry back into the spec as `submitted` (§ Information
+  Mapping (engine) → Freezing) — the frozen view then shows the user's
+  submission read-only, never the proposal.
 
 ## Layout — Fullscreen single-screen + Overlay Panel + Feedback Dock
 
@@ -5315,7 +5447,8 @@ to learn the design nesting to read page feedback. `decisions` was always
 `[]` for a design iteration with no views — it is now populated whenever the
 iteration has ≥1 `data-view-kind="decision"` or `"comparison"` view, one
 entry per `[data-decision]` group across every view, each tagged with the
-owning `view` id (§ Views (optional)):
+owning `view` id (§ Views (optional)). A `data-view-kind="mapping"` view
+contributes no `decisions[]` entry; its result is one `mappings[]` entry:
 
 ```json
 {
@@ -5325,7 +5458,7 @@ owning `view` id (§ Views (optional)):
   "decisions": [
     { "id": "nav-tabs", "label": "Tabs", "evaluation": "include", "view": "nav-model", "note": "only for the desktop layout" },
     { "id": "nav-drawer", "label": "Drawer", "evaluation": "discard", "view": "nav-model", "note": "" },
-    { "id": "compact", "label": "Compact", "evaluation": "include", "view": "card-density", "note": "" }
+    { "id": "compact", "label": "Compact", "evaluation": "include", "view": "card-density", "design": "dispatch", "note": "" }
   ],
   "comments": {
     "general": "...",
@@ -5350,14 +5483,50 @@ owning `view` id (§ Views (optional)):
     "anno-a1": [],
     "nav-tabs-note": []
   },
-  "mappings": []
+  "mappings": [
+    {
+      "id": "veh_a", "label": "Field mapping · Card A", "view": "fields_a", "design": "card_a",
+      "mode": "schema",
+      "assigned":   { "card@phone": [["plate","card.header"], ["status","card.badge"]],
+                      "card@desktop": [["plate","card.header"]] },
+      "order":      { "card.line1@phone": ["mileage","location"] },
+      "diff":       [ {"item":"colour","target":"card.overview","ctx":"phone","proposed":false,"now":true},
+                      {"item":"fuel","target":"card.line2","ctx":"phone","proposed":true,"now":false} ],
+      "unassigned": ["chassis","battery"],
+      "violations": [ {"target":"card.line2","ctx":"phone","kind":"min","have":0,"want":1},
+                      {"item":"plate","kind":"required"} ],
+      "adhocItems": ["Next inspection"],
+      "note": "…",
+      "slotNotes":  { "card.badge": "…" }
+    }
+  ]
 }
 ```
 
 `mappings` is always present — `[]` without a mapping view, otherwise one
-entry per live `section[data-mapping]` in the shape `collectMappings()`
-documents (§ Information Mapping (engine)). A `decisions[]` or `mappings[]`
-entry from a view carrying `data-view-for="{designId}"` additionally has
+entry per live `section[data-mapping]` (frozen rounds and sections with a
+`.map-error` never contribute), produced by `collectMappings()`
+(§ Information Mapping (engine)). Inside an entry, `view` / `design` / `ctx`
+are present **only when applicable** — `view` when the section sits inside a
+`section[data-view]`, `design` when that view carries `data-view-for`,
+`ctx` on `diff[]` / `violations[]` entries only when the spec has a
+`context`; every other key is always present (empty-array / empty-object
+convention). `mode` is the view the user last had open (`"matrix"` for an
+axes-only spec). `assigned` is keyed by **matrix key**
+(`{elementId|axisId}` or `{elementId|axisId}@{ctx}`) and holds the checked
+`[item, target]` pairs of that matrix; `order` is keyed `{target}[@ctx]` for
+ordered parts only. `unassigned` means *assigned nowhere across ALL matrices
+of the mapping* (the `Σ` column in the UI is per matrix). `violations[]`
+kinds: `one` / `min` / `max` (per target, with `have` / `want`), `min1`
+(per item and `source`, an element / axis with `itemTargets: "min1"`),
+`required` (per item, mapping-wide). `note` is the dock's view-level text
+in a design round and the inline `map-{m}-note` text in a free round;
+`slotNotes` holds only the non-empty ones, keyed by target key. **`diff` is
+what Claude reads first, `assigned` is the full truth**, and `allFields`
+carries the compact state strings (`map-{m}-cells-…`, `-order-…`, `-adhoc`,
+`-ui`) — never the checkboxes, which are unnamed on purpose (§ Information
+Mapping (engine) → State). A `decisions[]` or `mappings[]` entry from a view
+carrying `data-view-for="{designId}"` additionally has
 `"design": "{designId}"`; the key is absent for a variant-independent view.
 
 `decisions[]` entries use the **same shape as the decision template's own
@@ -5630,6 +5799,68 @@ content.
 </html>
 ```
 
+## Mapping block (optional)
+
+A `free` round whose question is *"which of these many items goes where"* —
+an assignment, not a choice between alternatives — carries ≥ 1
+`section[data-mapping]` in its body. It is the same construct as the design
+template's `data-view-kind="mapping"` view (§ View kind `mapping`), rendered
+by the same engine (§ Information Mapping (engine)) from the same JSON spec;
+the only authored difference is the **inline note textarea**, which a view
+does not have because the dock provides it there.
+
+```html
+<section data-iteration="2" data-iteration-template="free" data-active>
+  <header class="iteration-intro">…</header>
+  <section id="context" data-nav-label="Context">…</section>
+
+  <section data-mapping="req_trains" id="req_trains" data-nav-label="Requirements → release trains">
+    <h2>Which requirement lands in which train?</h2>
+    <script type="application/json" data-mapping-spec>{ … }</script>
+    <div class="field-row decision-comment-row">
+      <label for="req_trains-note">{{decision.comment_label}}</label>
+      <textarea id="req_trains-note" data-comment="map-req_trains-note" data-attachable rows="3"
+                placeholder="{{decision.comment_placeholder}}"></textarea>
+    </div>
+  </section>
+</section>
+```
+
+**Rules:**
+- **The inline note is mandatory** in a free-round block:
+  `textarea[data-comment="map-{m}-note"][data-attachable]` inside the
+  section (gate rule M5). `collectMappings()` reads it into the
+  entry's `note`; it also arrives in `comments[]` like every other
+  `[data-comment]` of the live round, and attachments ride the existing
+  `data-attachable` path. Per-slot notes (`slotNotes: true`) are generated
+  by the engine, not authored.
+- **Panel TOC entry** like any `section[id][data-nav-label]`, plus a
+  **progress mirror** where a bi-state section shows its verdict:
+  `31/40 · 2 ⚠` (assigned items / items · open constraints), refreshed
+  after every cell write and every restore (§ Section Navigation,
+  `updateSectionNavState()` → `mappingProgress()`).
+- **Width.** The block keeps the 1100 px column: the matrix is its own
+  two-axis scroll box (`max-height: 80vh` in the document column) and the
+  two tier columns fit side by side (chips wrap). `data-map-wide` on the
+  section widens the whole column via
+  `.concept-content:has([data-map-wide]) { max-width: 1600px }` — never
+  `100vw`, the column is `overflow-y: auto` and would grow a horizontal
+  bar. Set it only for ≥ 20 columns.
+- Ids and uniqueness as in § View kind `mapping`: `^[a-z0-9_]+$`, mapping
+  ids unique page-wide, `data-mapping` = `id`.
+- **Never inside a `decision` round** (layout collision with the 340 px
+  variant cards) **and never in the final report.** A round that needs
+  both an assignment and verdicts becomes a `free` round with opt-in
+  bi-state sections, or two rounds.
+- The block is a section with content, not a bi-state section: it carries
+  no `eval-{id}` radios and produces no `decisions[]` entry — its result is
+  the `mappings[]` entry (§ Decision schema below).
+- Freezing (Step 5c): Claude writes the payload's `mappings[]` entry back
+  into the spec as `submitted` (§ Information Mapping (engine) →
+  Freezing); the frozen block then shows the submission read-only. The
+  note textarea is frozen like every other comment of that round
+  (`iteration-rules.md` § Freezing).
+
 ## Optional bi-state auto-detection
 
 The section nav auto-detects whether a `<section data-nav-label>` contains an
@@ -5651,12 +5882,17 @@ radios**, plus whatever comments the user typed:
   "comments": [
     { "id": "finding-1", "text": "..." },
     { "id": "recommendation", "text": "..." }
-  ]
+  ],
+  "mappings": []
 }
 ```
 
 If no section has bi-state markers, `decisions` is an empty array and the
-submit payload is effectively a general-notes post.
+submit payload is effectively a general-notes post. `mappings` is always
+present — `[]` without a mapping block, otherwise one entry per live
+`section[data-mapping]` in the shape documented under § Template: design →
+Decision schema (`note` = the inline `map-{m}-note` text here; no `view` /
+`design` keys in a free round).
 
 ## collectDecisions (free branch)
 
@@ -8402,6 +8638,116 @@ are generated too. Inside an iteration without `data-active` the section is froz
 (`data-map-frozen`): it renders from `spec.submitted` read-only — no tools, no chip ×,
 view state in memory — and shows a `.map-error` banner when `submitted` is missing.
 See the design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-design.md`.
+
+### Spec
+
+The `<script type="application/json" data-mapping-spec>` inside the section:
+
+| Field | Shape | Meaning |
+|---|---|---|
+| `items[]` | `{id, label, group?, hint?, required?}` | the units to place; `group` (order of first appearance) is collapsible in both views; `required: true` flags an item that is assigned nowhere |
+| `elements[]` | `{id, label, itemTargets?, parts[]}` | a schematic UI element (list card, detail page, form…) made of parts; `itemTargets`: `"one"` (an item goes to exactly one part here — checking another swaps along the row), `"min1"` (flag an item unassigned on this element) or `"any"` (default) |
+| `parts[]` | `{id, label, tier?, row?, accepts?, min?, max?, ordered?}` | a slot inside an element. `tier`: `"first"` (at first glance, default) or `"after"` (after click) — an attribute of the target, not a dimension; `row`: parts sharing a row sit side by side inside their tier column, rows stack (numeric, parts without one come last); `accepts`: `"one"` (exactly one item, another swaps) or `"many"` (default); `min` / `max` soft, flagged; `ordered: true` keeps an order input |
+| `axes[]` | `{id, label, itemTargets?, columns[]: {id, label, accepts?, min?, max?}}` | an abstract target axis for non-UI mappings (release trains, roles): named columns, no schematic |
+| `context` | `{id, label, values[]: {id, label}}` | optional extra dimension (device, role…): every value yields a full copy of the target set → one matrix per value; the tab strip switches them |
+| `proposal` | `[[item, target, ctx?], …]` | Claude's pre-filled assignment — **mandatory** (empty only when Claude honestly has none); `ctx` present iff the spec has `context` |
+| `proposalOrder` | `{"target[@ctx]": [itemIds]}` | initial order for ordered parts |
+| `slotNotes` | `true` | one per-target note textarea, revealed by ✎ |
+| `adhocItems` | `true` | the user may add ≤ 20 label-only items ("+ item"), group "Added by you", ids `u1…` |
+| `submitted` | `{cells: {"matrixKey": [[item, target]…]}, order, adhoc, slotNotes}` | the user's submission, written by Claude when the round is frozen (see Freezing) |
+
+Target key = `{elementId}.{partId}` or `{axisId}.{columnId}`; matrix key =
+`{elementId|axisId}` or `{elementId|axisId}@{ctx}`. `elements` and `axes` may coexist,
+at least one is required; a spec without `elements` renders the matrix only and no view
+toggle. Cardinality is **never blocked, always flagged** (amber / red counts, ⚠, the
+summary line) — an item assigned nowhere is reported as `unassigned`, not an error,
+unless it is `required` or its element / axis says `min1`. A spec that does not parse
+or does not normalise (unknown id in `proposal`, bad id, duplicate item id, reserved id)
+renders a red `div.map-error[role=alert]` with the error in place of the mapping and
+contributes no `mappings[]` entry — never a silent blank.
+
+### Rendered DOM contract
+
+Everything below is generated; the authored markup is the wrapper section, the spec and
+(free rounds) the note.
+
+| Element | Identity | Count | Purpose |
+|---|---|---|---|
+| `input[type=checkbox]` | **no name / id**; `data-map-cell="{item}>{target}"`, `data-proposed="1|0"`; inside `td.map-cell-td[data-accepts=one]?` > `label` > input + `span.map-cell` | items × targets × contexts | DOM truth, keyboard + label semantics; `disabled` when frozen |
+| `input[type=text].map-state` | `map-{m}-cells-{matrixKey}`, `map-{m}-order-{target}[@ctx]` (ordered parts), `map-{m}-adhoc` (with `adhocItems`), `map-{m}-ui`; all in one `div.map-states` directly under the section, `tabindex="-1"`, `aria-hidden` | 1 per matrix + ordered parts + adhoc + ui | persisted form (§ State), `allFields`; `readonly` when frozen |
+| `div.map-root` > `div.map-toolbar`, `div.map-summary[aria-live]`, `div.map-schema[data-map-ctx]` ×n, `div.map-matrices`, `div.map-slot-notes`? | | 1 | section layout; `.map-root [hidden]` wins over every display rule |
+| `button.map-view-btn[data-map-mode][aria-pressed]` × 2 in `.map-view-toggle[role=group]` | | with `elements` only | Schema \| Matrix |
+| `button.map-tab[data-map-tab="{matrixKey}"][aria-pressed]` in `div.map-tabs`, with `span.map-tabs-label` (Context / Axis) and `span.map-tab-count` | | > 1 matrix | active matrix / context; the count reads `{n} open` per matrix |
+| `div.map-tools` > `button.map-copy[data-from][data-to]` per ordered context pair, `button.map-reset`, `button.map-add-item` (with `adhocItems`), `div.map-status.map-tools-status[role=status]` | | live sections only | ⧉ copy context, ↺ proposal, + item, duplicate hint |
+| `div.map-element[data-map-element]` > caption > `div.map-tiers` > `div.map-tier[data-tier]` > `div.map-row[data-row]` > `div.map-slot[data-map-target][data-accepts]` > `button.map-slot-label` (+ `.map-slot-count`), `.map-slot-chips` > `button.map-chip[data-item]`, `button.map-slot-note-btn` | | per element / context | schematic view, arm-then-tap |
+| `div.map-palette` > `input[type=search].map-search` (unnamed), `button.map-filter[data-filter][aria-pressed]` × 4, `button.map-palette-collapse[aria-expanded]`, `div.map-groups` > `div.map-group[data-group]` > `button.map-group-toggle[aria-expanded]` + `button.map-item-chip[data-item][aria-pressed]` | | per schematic | palette, search, filters |
+| `div.map-matrix[data-map-matrix="{matrixKey}"]` > `div.map-scroll` > `table.map-table[role=grid]` — `thead` rows `tr.map-head-src` (element / axis label, colspan = its columns), `tr.map-head-tier` (`th[data-tier]`, only when both tiers occur), `tr.map-head-targets` (`th[data-map-target][data-col-tier]` + `.map-col-count`), `tr.map-group-row` (with `button.map-group-toggle`), `tr.map-item-row` (`th[scope=row].map-item-label`, cells, `td.map-sum`); `data-dense="true"` above 18 columns | | per matrix, `hidden` when inactive | matrix view; inputs exist regardless of what is on screen |
+| `textarea[data-comment="map-{m}-note"][data-attachable]` | **authored**, free rounds only | 1 | mapping note (design rounds: the dock's `view-{id}`) |
+| `textarea[data-comment="map-{m}-note-{target}"]` in `label.map-slot-note` (hidden until ✎) | generated when `slotNotes` | per target (not per context) | per-slot note; `readonly` when frozen |
+| `div.map-error[role=alert]` | | on failure | spec error (in place of the mapping) or frozen-without-`submitted` banner (prepended above it) |
+
+Controls are `<button>`s, never radios: freezing is Claude's hand-edit of the HTML plus
+`section[data-iteration]:not([data-active]) input { pointer-events: none }` — buttons are
+untouched by that rule (like `.view-switch-item`), so a frozen mapping keeps its view
+toggle, tabs, group collapse, search and filters. The renderer **measures nothing** (it
+runs while its view is `hidden`): `data-dense` is derived from the column count.
+
+### State and load order
+
+The checkboxes are unnamed, so `saveState()` and `collectAllFormFields()` ignore them;
+the persisted form is one compact string per matrix in the `.map-state` text inputs:
+cells = space-separated `item>target` pairs (a deliberately empty matrix is the sentinel
+`-`, never `""`), order = comma-separated item ids, adhoc = a JSON array of labels, ui =
+`mode=schema;tab=card@phone`. They ride the existing `text:` path unchanged
+(`text:i{N}:{id}`, iteration-namespaced), so the draft mirror, `_carryOverTypedWork()`
+and `allFields` all cover them.
+
+Script order across the page's IIFEs is not guaranteed, so `renderMappings()` is the
+**first statement of § State Persistence's `DOMContentLoaded` handler** (before
+`ensureCommentSlots()` and `restoreState()`, `typeof`-guarded): it creates the state
+inputs (from `submitted` on a frozen section, else from `proposal`), renders the
+checkboxes from them and projects the schematic. `restoreState()` may then overwrite a
+live state input's value — and it **runs three times** (load, every `iteration:changed`,
+after `hydrateDraftFromBridge()`), setting values without events — so it ends with
+`refreshMappings()` (precedent: `updateNoteMarkers()`), which re-reads every state
+input, normalises it, re-sets the checkboxes, re-projects and re-mirrors the TOC. A
+restore never touches an input the user changed in this page life (`data-touched`) and
+never applies another round's keys (the `i{N}:` namespace), so a frozen round's baked
+`submitted` cannot be overwritten by a stale local key. Unknown item / target ids in a
+state string are dropped. `setCell()` is the only cell write path (schematic, matrix,
+keyboard, reset, copy): it applies the `accepts: "one"` / `itemTargets: "one"` swaps,
+rewrites the affected state inputs, stamps `data-touched`, sets `_userInteracted`,
+dispatches bubbling `input` + `change` events and re-projects. Search, filters,
+collapsed groups and the armed item / slot are in-memory only.
+
+### Freezing
+
+At Step 5c, when the next round is appended, Claude writes the payload's `mappings[]`
+entry into the frozen round's spec as `"submitted": {cells, order, adhoc, slotNotes}` —
+`cells` is the entry's `assigned` verbatim (keyed by matrix key), `order` its `order`,
+`adhoc` its `adhocItems`, `slotNotes` its `slotNotes`. On a section inside an iteration
+without `data-active` the renderer sets `data-map-frozen="true"` and initialises from
+`submitted`, keeps `data-proposed` from `proposal` so the ◆ markers stay visible, renders
+every checkbox `disabled`, the state inputs and slot-note textareas `readonly`, omits the
+tools and the chip ×, and keeps toggle, tabs, collapse, search and filters browsable
+(their state lives in memory on a frozen section; the `readonly` ui input is never
+written). A `submitted` that is missing **or incomplete** (no `cells`, or a matrix key
+missing) is treated as missing: the proposal is shown behind a prepended
+`div.map-error[role=alert]` (`map.frozen_missing`) and gate rule M9 fails the
+page — silently presenting the proposal as the user's decision is the one outcome this
+construct must never produce. Frozen sections contribute no `mappings[]` entry.
+
+### Authoring rule
+
+Claude writes **only** the wrapper `section[data-mapping][id][data-nav-label]`, the JSON
+spec and — in free rounds — the note textarea; never a cell, a state input or a control.
+Ids match `^[a-z0-9_]+$`; mapping ids are unique page-wide; item ids matching `u\d+` are
+reserved for ad-hoc items and rejected by the engine. Labels are content, not UI strings
+— no `{{…}}` locale tokens inside a spec — and must not contain `</script>` (the HTML
+parser would end the JSON block early; the parse then fails visibly). Keep ≤ 60 items, ≤ 20
+targets per matrix, ≤ 4 context values per mapping; split beyond that.
+
+### Wiring
 
 Wiring into the shared systems (all of it lives in those systems, not here):
 `renderMappings()` is the **first** statement of § State Persistence's `DOMContentLoaded`

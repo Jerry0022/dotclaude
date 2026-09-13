@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { md, page, mappingSection, VEHICLE_SPEC } from "./mapping-harness.js";
+import { md, scanBlocks, page, mappingSection, VEHICLE_SPEC } from "./mapping-harness.js";
 
 // The information-mapping engine (templates.md § Information Mapping (engine))
 // is wired into the page's shared systems: persistence renders it before
@@ -166,5 +166,31 @@ describe("mapping integration — engine hooks in the shared systems", () => {
     p.window.updateSectionNavState();
     expect(stray.querySelector(".section-nav-state").textContent).toBe("untouched");
     expect(state.textContent).toBe(mirror(live));
+  });
+});
+
+describe("mapping reference docs", () => {
+  const jsSource = scanBlocks(md).filter(b => /^(javascript|js)$/.test(b.info)).map(b => b.code).join("\n");
+  test("every MAP_LOCALE key has a locale row and every map.* row has a MAP_LOCALE entry", () => {
+    const obj = /const MAP_LOCALE = \{([\s\S]*?)\};/.exec(jsSource); expect(obj).not.toBeNull();
+    const runtime = new Map(); const entryRe = /([a-z_]+):\s*'\{\{map\.([a-z_]+)\}\}'/g; let e;
+    while ((e = entryRe.exec(obj[1]))) runtime.set(e[1], e[2]);
+    expect(runtime.size).toBeGreaterThan(20);
+    for (const [k, tok] of runtime) expect(tok).toBe(k);
+    const rows = new Set(); const rowRe = /^\| `map\.([a-z_]+)`\s+\|/gm; let r;
+    while ((r = rowRe.exec(md))) rows.add(r[1]);
+    for (const k of runtime.keys()) expect(rows.has(k), `locale row for map.${k}`).toBe(true);
+    for (const k of rows) expect(runtime.has(k), `MAP_LOCALE entry for ${k}`).toBe(true);
+  });
+  test("view kind mapping, free-round block, schema and data-view-for are documented", () => {
+    expect(md).toContain("### View kind `mapping`");
+    expect(md).toContain("## Mapping block (optional)");
+    expect(md).toContain('data-view-kind="mapping"');
+    expect(md).toContain('data-view-for="');
+    const schema = md.slice(md.indexOf("## Decision schema\n\nThe design submit payload"), md.indexOf("## collectDecisions (design branch)"));
+    expect(schema).toContain('"mappings": [');
+    expect(schema).toContain('"design"');
+    const free = md.slice(md.indexOf("# Template: free"), md.indexOf("# Shared Systems (all templates)"));
+    expect(free).toContain('"mappings"');
   });
 });
