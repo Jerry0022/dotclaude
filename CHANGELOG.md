@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.158.2] — 2026-09-13
+
+### Fixed
+
+- **The concept validation gate's lead sentence counts its rows again.** v0.158.1 added ENGINE entry 63 without bumping "these N patterns" (71 → 72); `reality-check.test.js` pins the two together and was red on `main`.
+
 ## [0.158.1] — 2026-09-13
 
 ### Fixed
