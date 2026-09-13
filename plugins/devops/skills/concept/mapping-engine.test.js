@@ -168,3 +168,129 @@ describe("mapping engine — model + state", () => {
     expect(table.dataset.dense).toBeUndefined();
   });
 });
+
+describe("mapping engine — matrix interaction (review additions)", () => {
+  test("a real click on a cell writes exactly one pair; a refused write leaves box and state untouched", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    const cb = box(p.document, "vin", "card.footer", "phone");
+    expect(cb.checked).toBe(false);
+    cb.checked = true;                                                                       // what the browser does before `change`
+    cb.dispatchEvent(new p.window.Event("change", { bubbles: true }));
+    expect(cells(p.document, "veh", "card@phone")).toContain("vin>card.footer");
+    expect(cb.checked).toBe(true);                                                           // no double toggle
+    const before = p.document.getElementById("map-veh-cells-card@phone").value;
+    expect(p.window.setCell("veh", "vin", "card.nowhere", "phone", true)).toBe(false);
+    expect(p.document.getElementById("map-veh-cells-card@phone").value).toBe(before);
+    expect(cb.checked).toBe(true);
+  });
+  test("arrow keys, Home and End move focus between cells and keep exactly one tabindex=0 per table", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    const table = p.document.querySelector('[data-map-matrix="card@phone"] table');
+    const key = (target, k) => target.dispatchEvent(new p.window.KeyboardEvent("keydown", { key: k, bubbles: true }));
+    const entry = box(p.document, "plate", "card.header", "phone");
+    expect(entry.tabIndex).toBe(0);
+    key(entry, "ArrowRight");
+    expect(p.document.activeElement).toBe(box(p.document, "plate", "card.badge", "phone"));
+    key(p.document.activeElement, "ArrowDown");
+    expect(p.document.activeElement).toBe(box(p.document, "model", "card.badge", "phone"));
+    key(p.document.activeElement, "End");
+    expect(p.document.activeElement).toBe(box(p.document, "model", "card.history", "phone"));
+    key(p.document.activeElement, "Home");
+    expect(p.document.activeElement).toBe(box(p.document, "model", "card.header", "phone"));
+    expect(table.querySelectorAll('input[data-map-cell][tabindex="0"]').length).toBe(1);
+    expect(p.document.activeElement.tabIndex).toBe(0);
+    const toggle = table.querySelector('tr.map-group-row[data-group="Identity"] .map-group-toggle');
+    toggle.click();                                                                          // collapses the group holding the entry point
+    expect(toggle.querySelector('.map-group-glyph').textContent).toBe("▸");
+    expect(table.querySelectorAll('input[data-map-cell][tabindex="0"]').length).toBe(1);
+    expect(table.querySelector('input[data-map-cell][tabindex="0"]').closest("tr").hidden).toBe(false);
+  });
+});
+
+describe("mapping engine — schematic view", () => {
+  test("renders both tier columns side by side with row-grouped slots and chips in order", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    const schema = p.document.querySelector('[data-mapping="veh"] .map-schema[data-map-ctx="phone"]');
+    expect(schema.hidden).toBe(false);
+    expect(schema.querySelectorAll('.map-tier[data-tier="first"] .map-slot').length).toBe(5);
+    expect(schema.querySelectorAll('.map-tier[data-tier="after"] .map-slot').length).toBe(2);
+    const row1 = schema.querySelector('.map-tier[data-tier="first"] .map-row[data-row="1"]');
+    expect([...row1.querySelectorAll(".map-slot")].map(s => s.dataset.mapTarget)).toEqual(["card.header", "card.badge"]);
+    expect([...schema.querySelectorAll('.map-slot[data-map-target="card.header"] .map-chip')].map(c => c.dataset.item)).toEqual(["plate", "model"]);
+    expect(p.document.querySelector('[data-mapping="rel"]')).toBeNull();
+  });
+  test("no elements → no schematic, no toggle; elements → toggle defaults to schema and persists in the ui input", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC], ["rel", TRAINS_SPEC]] }); p.window.renderMappings();
+    expect(p.document.querySelector('[data-mapping="rel"] .map-schema')).toBeNull();
+    expect(p.document.querySelector('[data-mapping="rel"] .map-view-toggle')).toBeNull();
+    expect(p.document.querySelector('[data-mapping="rel"] [data-map-matrix="train"]').hidden).toBe(false);
+    const btnMatrix = p.document.querySelector('[data-mapping="veh"] .map-view-btn[data-map-mode="matrix"]');
+    expect(btnMatrix.tagName).toBe("BUTTON"); expect(btnMatrix.getAttribute("aria-pressed")).toBe("false");
+    btnMatrix.click();
+    expect(p.document.getElementById("map-veh-ui").value).toMatch(/mode=matrix/);
+    expect(p.document.querySelector('[data-mapping="veh"] [data-map-matrix="card@phone"]').hidden).toBe(false);
+    expect(p.document.querySelector('[data-mapping="veh"] .map-schema[data-map-ctx="phone"]').hidden).toBe(true);
+  });
+  test("arm-then-tap: item stays armed across slots; slot-first toggles items; × removes; Esc disarms", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    const chip = p.document.querySelector('.map-item-chip[data-item="holder"]');
+    chip.click(); expect(chip.getAttribute("aria-pressed")).toBe("true");
+    p.document.querySelector('.map-slot[data-map-target="card.footer"] .map-slot-label').click();
+    p.document.querySelector('.map-slot[data-map-target="card.line2"] .map-slot-label').click();
+    expect(box(p.document, "holder", "card.footer", "phone").checked).toBe(true);
+    expect(box(p.document, "holder", "card.line2", "phone").checked).toBe(true);
+    expect(chip.getAttribute("aria-pressed")).toBe("true");                                 // still armed
+    p.document.querySelector('[data-mapping="veh"]').dispatchEvent(new p.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(chip.getAttribute("aria-pressed")).toBe("false");
+    p.document.querySelector('.map-slot[data-map-target="card.footer"] .map-slot-label').click();   // nothing armed → arms the slot
+    p.document.querySelector('.map-item-chip[data-item="vin"]').click();                              // toggles vin into footer
+    expect(box(p.document, "vin", "card.footer", "phone").checked).toBe(true);
+    p.document.querySelector('.map-slot[data-map-target="card.footer"] .map-chip[data-item="vin"] .map-chip-remove').click();
+    expect(box(p.document, "vin", "card.footer", "phone").checked).toBe(false);
+  });
+  test("status line names the armed item / slot; Esc stops propagation only when it disarmed something", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    const section = p.document.querySelector('[data-mapping="veh"]');
+    const status = section.querySelector('.map-schema[data-map-ctx="phone"] .map-status');
+    const esc = () => {                                                                      // true when the key reached the document
+      let reached = false; const spy = () => { reached = true; };
+      p.document.addEventListener("keydown", spy);
+      section.dispatchEvent(new p.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      p.document.removeEventListener("keydown", spy);
+      return reached;
+    };
+    expect(status.textContent).toBe("");
+    expect(esc()).toBe(true);
+    p.document.querySelector('.map-item-chip[data-item="mileage"]').click();
+    expect(status.textContent).toBe("map.armed_item");                                       // token, {label} substituted by fmt at runtime
+    expect(esc()).toBe(false);
+    expect(status.textContent).toBe("");
+    p.document.querySelector('.map-slot[data-map-target="card.badge"] .map-slot-label').click();
+    expect(p.document.querySelector('.map-slot[data-map-target="card.badge"]').classList.contains("is-armed")).toBe(true);
+    expect(status.textContent).toBe("map.armed_slot");
+  });
+  test("palette: count badges, unassigned/multiple/changed filters, group collapse", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    const badge = item => p.document.querySelector(`.map-item-chip[data-item="${item}"] .map-item-count`).textContent;
+    expect(badge("plate")).toBe("2×"); expect(badge("holder")).toBe("○");
+    p.window.setCell("veh", "holder", "card.overview", "phone", true);
+    expect(badge("holder")).toBe("1×");
+    p.document.querySelector('.map-filter[data-filter="changed"]').click();
+    expect(p.document.querySelector('.map-item-chip[data-item="holder"]').hidden).toBe(false);
+    expect(p.document.querySelector('.map-item-chip[data-item="plate"]').hidden).toBe(true);
+    p.document.querySelector('.map-filter[data-filter="all"]').click();
+    const toggle = p.document.querySelector('.map-palette .map-group[data-group="Identity"] .map-group-toggle');
+    toggle.click(); expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(p.document.querySelector('.map-palette .map-group[data-group="Identity"] .map-group-chips').hidden).toBe(true);
+  });
+  test("markers: proposal dot, changed ◆, empty required slot ⚠, over-full accepts:one impossible (swap)", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    p.window.setCell("veh", "plate", "card.header", "phone", false); p.window.setCell("veh", "model", "card.header", "phone", false);
+    const header = p.document.querySelector('.map-schema[data-map-ctx="phone"] .map-slot[data-map-target="card.header"]');
+    expect(header.classList.contains("is-under")).toBe(true);
+    expect(header.querySelectorAll(".map-chip.is-removed").length).toBe(2);                  // ghost strike-through chips
+    p.window.setCell("veh", "vin", "card.header", "phone", true);
+    expect(header.querySelector('.map-chip[data-item="vin"]').classList.contains("is-changed")).toBe(true);
+    expect(p.document.querySelector('.map-schema[data-map-ctx="phone"] .map-slot[data-map-target="card.badge"] .map-chip').classList.contains("is-proposed")).toBe(true);
+  });
+});

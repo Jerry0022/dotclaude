@@ -8252,8 +8252,109 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
 ### CSS
 
 ```css
-/* mapping engine CSS — Task 2 fills this block */
+/* Information mapping — persisted form (hidden text inputs) */
 .map-state { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+
+/* layout: toolbar, summary, one schematic per context, one matrix per key */
+.map-root { display: flex; flex-direction: column; gap: 0.75rem; }
+.map-root [hidden] { display: none !important; }   /* the flex/grid rules below must not beat the hidden attribute */
+.map-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.map-toolbar:empty { display: none; }
+.map-view-toggle { display: inline-flex; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+.map-view-btn { border: 0; border-right: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); padding: 0.4rem 0.9rem; font: inherit; cursor: pointer; }
+.map-view-btn:last-child { border-right: 0; }
+.map-view-btn[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--text-color); font-weight: 600; }
+.map-tabs { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
+.map-summary { font-size: 0.9rem; color: var(--text-secondary); }
+.map-summary[data-ok="false"] { color: var(--warning-color); }
+.map-error { border: 1px solid var(--danger-color, #f85149); color: var(--danger-color, #f85149); padding: 0.75rem; border-radius: 6px; }
+.view-mapping { max-width: none; padding: 1rem 1.5rem; }
+.concept-content:has([data-map-wide]) { max-width: 1600px; }
+
+/* schematic: element → tiers side by side → rows → slots */
+.map-schema { display: flex; flex-direction: column; gap: 1rem; }
+.map-element { border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; }
+.map-element-caption { font-weight: 600; margin-bottom: 0.5rem; }
+.map-tiers { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.map-tiers:has(> .map-tier:only-child) { grid-template-columns: 1fr; }
+@media (max-width: 700px) { .map-tiers { grid-template-columns: 1fr; } }
+.map-tier { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem; border-radius: 6px; background: color-mix(in srgb, var(--text-secondary) 6%, transparent); }
+.map-tier[data-tier="first"] { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.map-tier-label { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.map-row { display: flex; gap: 0.5rem; }
+.map-slot { flex: 1; min-width: 0; border: 1px dashed var(--border-color); border-radius: 6px; padding: 0.4rem; background: var(--panel-bg); }
+.map-slot.is-armed { border-style: solid; border-color: var(--accent-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 25%, transparent); }
+.map-slot.is-under { border-color: var(--warning-color); }
+.map-slot.is-over { border-color: var(--danger-color, #f85149); }
+.map-slot.is-swapped { animation: map-swap 0.7s ease-out; }
+@keyframes map-swap { from { background: color-mix(in srgb, var(--warning-color) 35%, transparent); } to { background: var(--panel-bg); } }
+.map-schema[data-armed="item"] .map-slot { cursor: copy; }
+.map-slot-label { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; width: 100%; border: 0; background: transparent; color: var(--text-color); font: inherit; font-weight: 600; text-align: left; padding: 0 0 0.3rem; cursor: pointer; }
+.map-slot-count { font-weight: 400; font-size: 0.8rem; color: var(--text-secondary); }
+.map-slot.is-under .map-slot-count { color: var(--warning-color); }
+.map-slot.is-under .map-slot-count::after { content: " ⚠"; }
+.map-slot.is-over .map-slot-count { color: var(--danger-color, #f85149); }
+.map-slot-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; min-height: 1.6rem; }
+.map-slot-note-btn { border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; }
+
+/* chips — in slots and in the palette */
+.map-chip, .map-item-chip { display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid var(--border-color); border-radius: 999px; background: var(--input-bg, transparent); color: var(--text-color); font: inherit; font-size: 0.85rem; line-height: 1.2; padding: 0.15rem 0.55rem; cursor: pointer; }
+.map-chip.is-proposed::before { content: "·"; color: var(--text-secondary); }
+.map-chip.is-changed, .map-item-chip.is-changed { text-decoration: underline var(--accent-color); text-underline-offset: 3px; }
+.map-chip.is-changed::before, .map-item-chip.is-changed .map-item-label::after { content: "◆"; color: var(--accent-color); font-size: 0.7em; }
+.map-item-chip.is-changed .map-item-label::after { margin-left: 0.25rem; }
+.map-chip.is-removed { opacity: 0.5; text-decoration: line-through; cursor: default; }
+.map-chip-remove { color: var(--text-secondary); padding-left: 0.15rem; }
+.map-chip:hover .map-chip-remove, .map-chip:focus-visible .map-chip-remove { color: var(--danger-color, #f85149); }
+.map-item-chip[aria-pressed="true"] { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+.map-item-count { font-size: 0.75rem; color: var(--text-secondary); }
+.map-item-chip.is-unassigned .map-item-count { color: var(--warning-color); }
+
+/* palette: sticky tray at the bottom of the mapping's scroll box */
+.map-palette { position: sticky; bottom: 0; background: var(--panel-bg); border-top: 1px solid var(--border-color); padding: 0.5rem 0; display: flex; flex-direction: column; gap: 0.4rem; z-index: 1; }
+.map-palette-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.map-palette-title { font-weight: 600; }
+.map-search { flex: 1; min-width: 8rem; padding: 0.3rem 0.5rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--input-bg, transparent); color: var(--text-color); font: inherit; }
+.map-filters { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
+.map-filter { border: 1px solid var(--border-color); border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.8rem; padding: 0.15rem 0.6rem; cursor: pointer; }
+.map-filter[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--text-color); border-color: var(--accent-color); }
+.map-filter-count { opacity: 0.8; }
+.map-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem; }
+.map-group-toggle { border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.85rem; padding: 0.1rem 0.3rem; cursor: pointer; white-space: nowrap; }
+.map-group-count { opacity: 0.8; }
+.map-group-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.map-status { min-height: 1.2rem; font-size: 0.85rem; color: var(--accent-color); }
+
+/* matrix: one scroll box per table so sticky headers and the sticky first column work together */
+.map-scroll { overflow: auto; width: max-content; max-width: 100%; max-height: calc(100vh - var(--map-chrome, 220px)); scroll-padding: 2.5rem 0 0 230px; border: 1px solid var(--border-color); border-radius: 6px; }
+html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
+.map-table { border-collapse: separate; border-spacing: 0; width: max-content; font-size: 0.85rem; }
+.map-table th, .map-table td { border-bottom: 1px solid var(--border-color); border-right: 1px solid var(--border-color); padding: 0.2rem 0.4rem; white-space: nowrap; }
+.map-table thead th { position: sticky; top: 0; z-index: 2; background: var(--panel-bg); text-align: center; font-weight: 600; }
+.map-table tr.map-head-tier th { top: 2rem; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.map-table tr.map-head-tier th[data-tier="first"] { background: color-mix(in srgb, var(--accent-color) 12%, var(--panel-bg)); }
+.map-table tr.map-head-targets th { top: 4rem; font-weight: 500; }
+.map-table tr.map-head-targets th[data-col-tier="first"] { background: color-mix(in srgb, var(--accent-color) 6%, var(--panel-bg)); }
+.map-table th.map-item-label, .map-table th.map-corner { position: sticky; left: 0; z-index: 3; background: var(--panel-bg); min-width: 220px; text-align: left; font-weight: 400; }
+.map-table thead th.map-corner { z-index: 4; }
+.map-table tr.map-group-row td { background: color-mix(in srgb, var(--text-secondary) 8%, var(--panel-bg)); position: sticky; left: 0; z-index: 1; text-align: left; }
+.map-table tr.map-item-row { height: 28px; }
+.map-table td.map-sum { text-align: center; color: var(--text-secondary); }
+.map-cell-td { padding: 0; text-align: center; position: relative; }
+.map-cell-td label { display: block; width: 28px; height: 28px; margin: auto; cursor: pointer; }
+.map-cell-td input { position: absolute; opacity: 0; width: 28px; height: 28px; margin: 0; cursor: pointer; }
+.map-cell { display: block; width: 18px; height: 18px; margin: 5px; border: 1px solid var(--border-color); border-radius: 4px; box-sizing: border-box; }
+.map-cell-td input:checked + .map-cell { background: var(--accent-color); border-color: var(--accent-color); }
+.map-cell-td input:focus-visible + .map-cell { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+.map-cell-td[data-accepts="one"] .map-cell { border-radius: 50%; }
+.map-cell-td.is-changed .map-cell { box-shadow: inset 0 0 0 2px var(--panel-bg), inset 0 0 0 4px var(--accent-color); }
+.map-cell-td.is-changed input:not(:checked) + .map-cell { border-style: dashed; border-color: var(--accent-color); }
+.map-table[data-dense="true"] tr.map-head-targets th { writing-mode: vertical-rl; transform: rotate(180deg); }
+.map-col-count { color: var(--text-secondary); font-weight: 400; }
+.map-col-count.is-under, .map-sum.is-under { color: var(--warning-color); }
+.map-col-count.is-over { color: var(--danger-color, #f85149); }
+.map-table th.is-under .map-col-count { color: var(--warning-color); }
+.map-table th.is-over .map-col-count { color: var(--danger-color, #f85149); }
 ```
 
 ### JS
@@ -8299,7 +8400,7 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
     const contexts = raw.context && Array.isArray(raw.context.values) && raw.context.values.length
       ? raw.context.values.map(v => ({ id: v.id, label: v.label || v.id })) : null;
     const all = [...items.map(i => i.id), ...sources.map(s => s.id), ...sources.flatMap(s => s.targets.map(t => t.id)), ...(contexts || []).map(c => c.id)];
-    all.forEach(id => { if (!ID_RE.test(String(id))) err('bad id: ' + id); });
+    all.forEach(id => { if (typeof id !== 'string' || !ID_RE.test(id)) err('bad id: ' + id); });
     const seen = new Set(); items.forEach(i => { if (seen.has(i.id)) err('duplicate item id: ' + i.id); seen.add(i.id); });
     const matrices = [];
     sources.forEach(s => (contexts || [null]).forEach(c => matrices.push({ key: s.id + (c ? '@' + c.id : ''), src: s, ctx: c ? c.id : null, targets: s.targets })));
@@ -8383,7 +8484,7 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
     writeState(state, encodeCells(pairs));
     if (target.ordered) syncOrder(section, model, matrix, target, pairs);
     projectMatrix(section, model, matrix);                                                              // checkboxes + counts + markers
-    if (typeof refreshSchema === 'function') refreshSchema(section, model);                             // Task 2
+    refreshSchema(section, model);                                                                      // slot chips + palette badges
     updateSummary(section, model);
     if (typeof updateSectionNavState === 'function') updateSectionNavState();
     return true;
@@ -8444,6 +8545,16 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
     const c = ctx && (model.contexts || []).find(x => x.id === ctx);
     return c ? c.label : '';
   }
+  // Shared by the matrix's group rows and the palette's groups.
+  function groupToggle(group, count) {
+    const btn = el('button', 'map-group-toggle');
+    btn.type = 'button';
+    btn.setAttribute('aria-expanded', 'true');
+    btn.appendChild(el('span', 'map-group-glyph', '▾'));
+    btn.appendChild(document.createTextNode(' ' + group + ' '));
+    btn.appendChild(el('span', 'map-group-count', String(count)));
+    return btn;
+  }
   function renderMatrix(section, model, matrix) {
     const targets = orderedTargets(matrix);
     const nFirst = targets.filter(t => t.tier === 'first').length;
@@ -8493,12 +8604,7 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
         const gr = el('tr', 'map-group-row');
         gr.dataset.group = group;
         const td = el('td'); td.colSpan = targets.length + 2;
-        const btn = el('button', 'map-group-toggle');
-        btn.type = 'button';
-        btn.setAttribute('aria-expanded', 'true');
-        btn.appendChild(document.createTextNode('▾ ' + group + ' '));
-        btn.appendChild(el('span', 'map-group-count', String(members.length)));
-        td.appendChild(btn); gr.appendChild(td); tbody.appendChild(gr);
+        td.appendChild(groupToggle(group, members.length)); gr.appendChild(td); tbody.appendChild(gr);
       }
       members.forEach(item => {
         const tr = el('tr', 'map-item-row');
@@ -8573,7 +8679,7 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
     });
   }
   function updateSummary(section, model) {
-    const line = section.querySelector(':scope > .map-summary');
+    const line = section.querySelector('.map-root > .map-summary');
     if (!line) return;
     const p = mappingProgress(section);
     const parts = [];
@@ -8598,12 +8704,368 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
     c = Math.max(0, Math.min(boxes(rows[r]).length - 1, c));
     const next = boxes(rows[r])[c];
     if (!next || next === cb) return;
-    cb.tabIndex = -1;
-    next.tabIndex = 0;
+    setEntryPoint(table, next);
     next.focus();
     if (typeof next.scrollIntoView === 'function') next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
+  // Exactly one box per table carries tabindex 0 — reset all before promoting.
+  function setEntryPoint(table, box) {
+    table.querySelectorAll('input[data-map-cell]').forEach(b => { b.tabIndex = -1; });
+    if (box) box.tabIndex = 0;
+  }
   const KEYS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+  // --- view state: `mode=schema|matrix;tab=<matrixKey>` in map-{m}-ui ----------
+  const encodeUi = ui => Object.keys(ui).filter(k => ui[k]).map(k => k + '=' + ui[k]).join(';');
+  const uiInput = (section, model) => stateInput(section, model.id, 'ui');
+  function readUi(section, model) {
+    const ui = parseUi(uiInput(section, model).value);
+    return { mode: model.hasElements && ui.mode !== 'matrix' ? 'schema' : 'matrix',
+             tab: model.matrices.some(mx => mx.key === ui.tab) ? ui.tab : model.matrices[0].key };
+  }
+  function renderViewToggle() {
+    const wrap = el('div', 'map-view-toggle');
+    wrap.setAttribute('role', 'group');
+    [['schema', MAP_LOCALE.view_schema], ['matrix', MAP_LOCALE.view_matrix]].forEach(([mode, label]) => {
+      const btn = el('button', 'map-view-btn', label);
+      btn.type = 'button';
+      btn.dataset.mapMode = mode;
+      btn.setAttribute('aria-pressed', 'false');
+      wrap.appendChild(btn);
+    });
+    return wrap;
+  }
+  // The schematic of the active tab's context or the active matrix is on
+  // screen; everything else stays in the DOM, hidden.
+  function applyView(section, model) {
+    const ui = readUi(section, model);
+    const active = model.matrices.find(mx => mx.key === ui.tab);
+    section.querySelectorAll('.map-view-btn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mapMode === ui.mode)));
+    section.querySelectorAll('.map-schema').forEach(s => { s.hidden = !(ui.mode === 'schema' && s.dataset.mapCtx === (active.ctx || '')); });
+    section.querySelectorAll('[data-map-matrix]').forEach(w => { w.hidden = !(ui.mode === 'matrix' && w.dataset.mapMatrix === ui.tab); });
+  }
+
+  // --- schematic view (§ Schematic view) --------------------------------------
+  function renderSchema(section, model, ctx) {
+    const schema = el('div', 'map-schema');
+    schema.dataset.mapCtx = ctx || '';
+    if (ctx) schema.setAttribute('aria-label', contextLabel(model, ctx));
+    model.sources.filter(s => s.kind === 'element').forEach(src => {
+      const element = el('div', 'map-element');
+      element.dataset.mapElement = src.id;
+      element.appendChild(el('div', 'map-element-caption', src.label));
+      const tiers = el('div', 'map-tiers');
+      ['first', 'after'].forEach(tier => {
+        const targets = src.targets.filter(t => t.tier === tier);
+        if (!targets.length) return;
+        const col = el('div', 'map-tier');
+        col.dataset.tier = tier;
+        col.appendChild(el('div', 'map-tier-label', tier === 'first' ? MAP_LOCALE.tier_first : MAP_LOCALE.tier_after));
+        rowsOf(targets).forEach(([row, members]) => {
+          const r = el('div', 'map-row');
+          r.dataset.row = row;
+          members.forEach(t => r.appendChild(renderSlot(model, t)));
+          col.appendChild(r);
+        });
+        tiers.appendChild(col);
+      });
+      element.appendChild(tiers);
+      schema.appendChild(element);
+    });
+    schema.appendChild(renderPalette(model));
+    const status = el('div', 'map-status');
+    status.setAttribute('role', 'status');
+    schema.appendChild(status);
+    return schema;
+  }
+  // Parts sharing a `row` sit side by side; a part without one gets its own row.
+  function rowsOf(targets) {
+    const rows = new Map();
+    targets.forEach(t => {
+      const key = t.row === null ? t.id : String(t.row);
+      if (!rows.has(key)) rows.set(key, []);
+      rows.get(key).push(t);
+    });
+    return [...rows.entries()];
+  }
+  function renderSlot(model, t) {
+    const slot = el('div', 'map-slot');
+    slot.dataset.mapTarget = t.key;
+    slot.dataset.accepts = t.accepts;
+    const label = el('button', 'map-slot-label');
+    label.type = 'button';
+    label.appendChild(el('span', null, t.label));
+    label.appendChild(document.createTextNode(' '));
+    label.appendChild(el('span', 'map-slot-count', ''));
+    slot.appendChild(label);
+    slot.appendChild(el('div', 'map-slot-chips'));
+    if (model.slotNotes) {
+      const note = el('button', 'map-slot-note-btn', '✎');
+      note.type = 'button';
+      note.title = MAP_LOCALE.slot_note;
+      note.hidden = true;                                                                            // wired by the tools
+      slot.appendChild(note);
+    }
+    return slot;
+  }
+  function renderPalette(model) {
+    const pal = el('div', 'map-palette');
+    const head = el('div', 'map-palette-head');
+    head.appendChild(el('span', 'map-palette-title', MAP_LOCALE.items + ' (' + model.items.length + ')'));
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.className = 'map-search';
+    search.placeholder = MAP_LOCALE.search;
+    search.setAttribute('aria-label', MAP_LOCALE.search);
+    head.appendChild(search);
+    const filters = el('div', 'map-filters');
+    [['all', MAP_LOCALE.filter_all], ['unassigned', MAP_LOCALE.filter_unassigned],
+     ['multiple', MAP_LOCALE.filter_multiple], ['changed', MAP_LOCALE.filter_changed]].forEach(([f, label]) => {
+      const btn = el('button', 'map-filter');
+      btn.type = 'button';
+      btn.dataset.filter = f;
+      btn.setAttribute('aria-pressed', String(f === 'all'));
+      btn.appendChild(el('span', null, label));
+      btn.appendChild(document.createTextNode(' '));
+      btn.appendChild(el('span', 'map-filter-count', ''));
+      filters.appendChild(btn);
+    });
+    head.appendChild(filters);
+    pal.appendChild(head);
+    model.groups.forEach(group => {
+      const members = model.items.filter(i => i.group === group);
+      const g = el('div', 'map-group');
+      g.dataset.group = group;
+      if (group) g.appendChild(groupToggle(group, members.length));
+      const chips = el('div', 'map-group-chips');
+      members.forEach(item => {
+        const chip = el('button', 'map-item-chip');
+        chip.type = 'button';
+        chip.dataset.item = item.id;
+        chip.setAttribute('aria-pressed', 'false');
+        chip.appendChild(el('span', 'map-item-label', item.label));
+        chip.appendChild(el('span', 'map-item-count', ''));
+        chips.appendChild(chip);
+      });
+      g.appendChild(chips);
+      pal.appendChild(g);
+    });
+    return pal;
+  }
+  // Slot chips, counts and palette badges from the state strings plus the
+  // matrix's `data-proposed` stamps; the armed cue and the view last.
+  function refreshSchema(section, model) {
+    if (model.hasElements) {
+      const stats = itemStats(section, model);
+      section.querySelectorAll('.map-schema').forEach(schema => {
+        const ctx = schema.dataset.mapCtx || null;
+        schema.querySelectorAll('.map-slot').forEach(slot => refreshSlot(section, model, slot, ctx));
+        refreshPalette(model, schema, stats);
+        refreshArmed(model, schema);
+      });
+    }
+    applyView(section, model);
+  }
+  function refreshSlot(section, model, slot, ctx) {
+    const key = slot.dataset.mapTarget;
+    const matrix = matrixOf(model, key, ctx);
+    if (!matrix) return;
+    const target = matrix.targets.find(t => t.key === key);
+    const pairs = readCells(model, matrix, stateInput(section, model.id, 'cells', matrix.key));
+    let items = pairs.filter(p => p[1] === key).map(p => p[0]);
+    if (target.ordered) {
+      const ord = splitOrder(stateInput(section, model.id, 'order', orderKey(matrix, target)).value).filter(id => items.includes(id));
+      items = ord.concat(items.filter(id => !ord.includes(id)));
+    }
+    const proposed = new Set();
+    const wrap = matrixEl(section, matrix.key);
+    if (wrap) wrap.querySelectorAll('input[data-map-cell][data-proposed="1"]').forEach(cb => {
+      const p = cb.dataset.mapCell.split('>');
+      if (p[1] === key) proposed.add(p[0]);
+    });
+    const chips = slot.querySelector('.map-slot-chips');
+    chips.textContent = '';
+    const labelOf = id => (model.items.find(i => i.id === id) || { label: id }).label;
+    items.forEach(id => {
+      const chip = el('button', 'map-chip');
+      chip.type = 'button';
+      chip.dataset.item = id;
+      chip.classList.add(proposed.has(id) ? 'is-proposed' : 'is-changed');
+      chip.appendChild(el('span', 'map-chip-label', labelOf(id)));
+      const x = el('span', 'map-chip-remove', '×');
+      x.setAttribute('aria-label', MAP_LOCALE.remove);
+      x.title = MAP_LOCALE.remove;
+      chip.appendChild(x);
+      chips.appendChild(chip);
+    });
+    proposed.forEach(id => {                                                                         // removed proposal → ghost
+      if (items.includes(id)) return;
+      const ghost = el('span', 'map-chip is-removed');
+      ghost.dataset.item = id;
+      ghost.appendChild(el('span', 'map-chip-label', labelOf(id)));
+      chips.appendChild(ghost);
+    });
+    const n = items.length;
+    const count = slot.querySelector('.map-slot-count');
+    count.textContent = target.accepts === 'one' ? n + '/1' : String(n);
+    const under = !!target.min && n < target.min;
+    const over = (!!target.max && n > target.max) || (target.accepts === 'one' && n > 1);
+    slot.classList.toggle('is-under', under);
+    slot.classList.toggle('is-over', over);
+    count.title = under ? fmt(MAP_LOCALE.slot_empty_min, { n: target.min }) : over ? fmt(MAP_LOCALE.slot_over_max, { n: target.max || 1 }) : '';
+  }
+  // Per item across ALL matrices: where it sits and whether any cell differs
+  // from the proposal.
+  function itemStats(section, model) {
+    const stats = new Map(model.items.map(i => [i.id, { places: [], changed: false }]));
+    model.matrices.forEach(mx => {
+      readCells(model, mx, stateInput(section, model.id, 'cells', mx.key)).forEach(p => {
+        const t = mx.targets.find(x => x.key === p[1]);
+        stats.get(p[0]).places.push(t.label + (mx.ctx ? ' (' + contextLabel(model, mx.ctx) + ')' : ''));
+      });
+      const wrap = matrixEl(section, mx.key);
+      if (wrap) wrap.querySelectorAll('input[data-map-cell]').forEach(cb => {
+        if (cb.checked !== (cb.dataset.proposed === '1')) stats.get(cb.dataset.mapCell.split('>')[0]).changed = true;
+      });
+    });
+    return stats;
+  }
+  function refreshPalette(model, schema, stats) {
+    const active = schema.querySelector('.map-filter[aria-pressed="true"]');
+    const filter = active ? active.dataset.filter : 'all';
+    const q = schema.querySelector('.map-search').value.trim().toLowerCase();
+    const counts = { all: 0, unassigned: 0, multiple: 0, changed: 0 };
+    schema.querySelectorAll('.map-item-chip').forEach(chip => {
+      const item = model.items.find(i => i.id === chip.dataset.item);
+      const s = stats.get(item.id);
+      const n = s.places.length;
+      chip.querySelector('.map-item-count').textContent = n ? n + '×' : '○';
+      chip.title = s.places.join(', ');
+      chip.classList.toggle('is-changed', s.changed);
+      chip.classList.toggle('is-unassigned', n === 0);
+      counts.all++;
+      if (!n) counts.unassigned++;
+      if (n >= 2) counts.multiple++;
+      if (s.changed) counts.changed++;
+      const pass = filter === 'unassigned' ? n === 0 : filter === 'multiple' ? n >= 2 : filter === 'changed' ? s.changed : true;
+      const hit = !q || (item.label + ' ' + item.group).toLowerCase().includes(q);
+      chip.hidden = !(pass && hit);
+    });
+    schema.querySelectorAll('.map-filter').forEach(b => { b.querySelector('.map-filter-count').textContent = String(counts[b.dataset.filter]); });
+    schema.querySelectorAll('.map-group').forEach(g => { g.hidden = ![...g.querySelectorAll('.map-item-chip')].some(c => !c.hidden); });
+  }
+
+  // --- arm, then tap: one in-memory `armed` per mapping ------------------------
+  function refreshArmed(model, schema) {
+    const a = model.armed || null;
+    const ctx = schema.dataset.mapCtx || null;
+    schema.querySelectorAll('.map-item-chip').forEach(c => c.setAttribute('aria-pressed', String(!!a && a.kind === 'item' && a.id === c.dataset.item)));
+    schema.querySelectorAll('.map-slot').forEach(s => s.classList.toggle('is-armed', !!a && a.kind === 'slot' && a.id === s.dataset.mapTarget && a.ctx === ctx));
+    schema.dataset.armed = a ? a.kind : '';
+    let text = '';
+    if (a && a.kind === 'item') text = fmt(MAP_LOCALE.armed_item, { label: (model.items.find(i => i.id === a.id) || { label: a.id }).label });
+    if (a && a.kind === 'slot') text = fmt(MAP_LOCALE.armed_slot, { label: (model.sources.flatMap(s => s.targets).find(t => t.key === a.id) || { label: a.id }).label });
+    schema.querySelector('.map-status').textContent = text;
+  }
+  function setArmed(section, model, armed) {
+    model.armed = armed;
+    section.querySelectorAll('.map-schema').forEach(schema => refreshArmed(model, schema));
+  }
+  function tapItem(section, model, id) {
+    const a = model.armed;
+    if (a && a.kind === 'slot') { toggleCell(section, model, id, a.id, a.ctx); return; }
+    setArmed(section, model, a && a.id === id ? null : { kind: 'item', id });
+  }
+  function tapSlot(section, model, key, ctx) {
+    const a = model.armed;
+    if (a && a.kind === 'item') { toggleCell(section, model, a.id, key, ctx); return; }             // item stays armed
+    setArmed(section, model, a && a.kind === 'slot' && a.id === key && a.ctx === ctx ? null : { kind: 'slot', id: key, ctx });
+  }
+  function toggleCell(section, model, item, key, ctx) {
+    const matrix = matrixOf(model, key, ctx);
+    if (!matrix) return;
+    const pairs = readCells(model, matrix, stateInput(section, model.id, 'cells', matrix.key));
+    const has = pairs.some(p => p[0] === item && p[1] === key);
+    const target = matrix.targets.find(t => t.key === key);
+    const swaps = !has && target.accepts === 'one' && pairs.some(p => p[1] === key);
+    if (setCell(section, item, key, ctx, !has) && swaps) flashSlot(section, key, ctx);
+  }
+  function flashSlot(section, key, ctx) {
+    section.querySelectorAll('.map-schema').forEach(schema => {
+      if ((schema.dataset.mapCtx || null) !== ctx) return;
+      const slot = [...schema.querySelectorAll('.map-slot')].find(s => s.dataset.mapTarget === key);
+      if (!slot) return;
+      slot.classList.add('is-swapped');
+      setTimeout(() => slot.classList.remove('is-swapped'), 700);
+    });
+  }
+  function reorderChip(section, model, slot, ctx, id, dir) {
+    const key = slot.dataset.mapTarget;
+    const matrix = matrixOf(model, key, ctx);
+    const target = matrix && matrix.targets.find(t => t.key === key);
+    if (!target || !target.ordered || section.dataset.mapFrozen === 'true') return;
+    const ids = [...slot.querySelectorAll('button.map-chip')].map(c => c.dataset.item);
+    const i = ids.indexOf(id); const j = i + dir;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    ids.splice(i, 1); ids.splice(j, 0, id);
+    writeState(stateInput(section, model.id, 'order', orderKey(matrix, target)), ids.join(','));
+    refreshSchema(section, model);
+    const chip = [...slot.querySelectorAll('button.map-chip')].find(c => c.dataset.item === id);
+    if (chip) chip.focus();
+  }
+  function wireSchema(section, model) {
+    section.addEventListener('click', e => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      const viewBtn = t.closest('.map-view-btn');
+      if (viewBtn && section.contains(viewBtn)) {
+        const ui = readUi(section, model);
+        ui.mode = viewBtn.dataset.mapMode;
+        writeState(uiInput(section, model), encodeUi(ui));
+        applyView(section, model);
+        return;
+      }
+      const schema = t.closest('.map-schema');
+      if (!schema || !section.contains(schema)) return;
+      const ctx = schema.dataset.mapCtx || null;
+      const remove = t.closest('.map-chip-remove');
+      if (remove) { setCell(section, remove.closest('.map-chip').dataset.item, remove.closest('.map-slot').dataset.mapTarget, ctx, false); return; }
+      const itemChip = t.closest('.map-item-chip');
+      if (itemChip) { tapItem(section, model, itemChip.dataset.item); return; }
+      const slot = t.closest('.map-slot');
+      if (slot) { tapSlot(section, model, slot.dataset.mapTarget, ctx); return; }
+      const filter = t.closest('.map-filter');
+      if (filter) {
+        schema.querySelectorAll('.map-filter').forEach(b => b.setAttribute('aria-pressed', String(b === filter)));
+        refreshPalette(model, schema, itemStats(section, model));
+        return;
+      }
+      if (t.closest('button, input, label')) return;
+      if (model.armed) setArmed(section, model, null);                                              // empty space disarms
+    });
+    section.addEventListener('input', e => {
+      const s = e.target;
+      if (s instanceof HTMLInputElement && s.classList.contains('map-search')) refreshPalette(model, s.closest('.map-schema'), itemStats(section, model));
+    });
+    section.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (model.armed) { setArmed(section, model, null); e.stopPropagation(); }
+        return;
+      }
+      const chip = e.target instanceof Element ? e.target.closest('button.map-chip') : null;
+      if (!chip || !section.contains(chip)) return;
+      const slot = chip.closest('.map-slot');
+      const ctx = chip.closest('.map-schema').dataset.mapCtx || null;
+      if (e.key === 'Delete') {
+        e.preventDefault();
+        setCell(section, chip.dataset.item, slot.dataset.mapTarget, ctx, false);
+        slot.querySelector('.map-slot-label').focus();
+      } else if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        reorderChip(section, model, slot, ctx, chip.dataset.item, e.key === 'ArrowLeft' ? -1 : 1);
+      }
+    });
+  }
 
   // --- section rendering -----------------------------------------------------
   function readSpec(section) {
@@ -8627,11 +9089,19 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
       if (!btn || !section.contains(btn)) return;
       const open = btn.getAttribute('aria-expanded') !== 'true';
       btn.setAttribute('aria-expanded', String(open));
+      btn.querySelector('.map-group-glyph').textContent = open ? '▾' : '▸';
       const row = btn.closest('tr.map-group-row');
-      btn.firstChild.nodeValue = (open ? '▾ ' : '▸ ') + row.dataset.group + ' ';
+      if (!row) {                                                                                   // palette group
+        btn.closest('.map-group').querySelector('.map-group-chips').hidden = !open;
+        return;
+      }
       row.parentNode.querySelectorAll('tr.map-item-row').forEach(tr => {
         if (tr.dataset.group === row.dataset.group) tr.hidden = !open;
       });
+      // A collapsed group must not swallow the keyboard entry point.
+      const table = row.closest('table');
+      const entry = table.querySelector('input[data-map-cell][tabindex="0"]');
+      if (!entry || entry.closest('tr').hidden) setEntryPoint(table, table.querySelector('tr.map-item-row:not([hidden]) input[data-map-cell]'));
     });
     section.addEventListener('keydown', e => {
       const cb = e.target;
@@ -8639,6 +9109,7 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
       if (KEYS[e.key]) { e.preventDefault(); moveFocus(cb, KEYS[e.key][0], KEYS[e.key][1]); }
       else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); moveFocus(cb, 0, 0, e.key.toLowerCase()); }
     });
+    wireSchema(section, model);
   }
   function renderSection(section) {
     const m = section.dataset.mapping;
@@ -8667,18 +9138,22 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
       });
     });
     if (model.adhocItems) stateInput(section, m, 'adhoc').value = '[]';
+    stateInput(section, m, 'ui').value = encodeUi({ mode: model.hasElements ? 'schema' : 'matrix', tab: model.matrices[0].key });
 
+    const root = el('div', 'map-root');
+    const toolbar = el('div', 'map-toolbar');
+    if (model.hasElements) toolbar.appendChild(renderViewToggle());
+    root.appendChild(toolbar);
     const summary = el('div', 'map-summary');
     summary.setAttribute('aria-live', 'polite');
-    section.appendChild(summary);
+    root.appendChild(summary);
+    if (model.hasElements) (model.contexts || [null]).forEach(c => root.appendChild(renderSchema(section, model, c ? c.id : null)));
     const matrices = el('div', 'map-matrices');
-    model.matrices.forEach((mx, i) => {
-      const wrap = renderMatrix(section, model, mx);
-      if (i > 0) wrap.hidden = true;                     // first matrix visible; tabs come with the tools
-      matrices.appendChild(wrap);
-    });
-    section.appendChild(matrices);
+    model.matrices.forEach(mx => matrices.appendChild(renderMatrix(section, model, mx)));
+    root.appendChild(matrices);
+    section.appendChild(root);
     model.matrices.forEach(mx => projectMatrix(section, model, mx));
+    refreshSchema(section, model);
     updateSummary(section, model);
     wireSection(section, model);
     section.dataset.mapRendered = 'true';
@@ -8702,7 +9177,7 @@ Persistence picks it up as `text:i{N}:map-…`). See the design spec
         mx.targets.filter(t => t.ordered).forEach(t => syncOrder(section, model, mx, t, pairs, true));
         projectMatrix(section, model, mx);
       });
-      if (typeof refreshSchema === 'function') refreshSchema(section, model);                           // Task 2
+      refreshSchema(section, model);                                                                    // re-applies the restored ui mode too
       updateSummary(section, model);
     });
   }
