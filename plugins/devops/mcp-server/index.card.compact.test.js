@@ -83,13 +83,15 @@ describe("compact card — character budgets", () => {
     const de = await cardText({ variant: "ready", summary: "Tail", lang: "de", session_id: "compact-tail", changes });
     expect(de).toMatch(/^> \* A3 → d3$/m);
     expect(de).not.toMatch(/A4 → d4/);
-    expect(de).toMatch(/^> \* \+2 weitere$/m);
+    // The tail lives on the header line — a block never has more than 3 bullets.
+    expect(de).toMatch(/^> \*\*Changes\*\* · \+2 weitere$/m);
+    expect(de.split("\n").filter((l) => /^> \* A\d/.test(l)).length).toBe(3);
     const en = await cardText({ variant: "ready", summary: "Tail", lang: "en", session_id: "compact-tail-en", changes });
-    expect(en).toMatch(/^> \* \+2 more$/m);
+    expect(en).toMatch(/^> \*\*Changes\*\* · \+2 more$/m);
   });
 });
 
-describe("compact card — Belegt block (gates + validation)", () => {
+describe("compact card — Geprüft block (gates + validation)", () => {
   const tests = [
     { method: "npm test", result: "1460 grün" },
     { method: "eslint", result: "sauber" },
@@ -98,30 +100,34 @@ describe("compact card — Belegt block (gates + validation)", () => {
 
   test("tests collapse to one header line; no separate Tests or Validierung headers", async () => {
     const text = await cardText({
-      variant: "ready", summary: "Belegt", lang: "de", session_id: "compact-belegt", tests,
+      variant: "ready", summary: "Geprüft", lang: "de", session_id: "compact-geprueft", tests,
       validation: [{ requirement: "Modus in der Sidebar sichtbar", status: "met", evidence: "set_session_title live geprüft" }],
     });
-    expect(text).toMatch(/^> \*\*Belegt\*\* · npm test → 1460 grün · eslint → sauber · Codex-Review → übersprungen — Limit$/m);
+    expect(text).toMatch(/^> \*\*Geprüft\*\* · npm test → 1460 grün · eslint → sauber · Codex-Review → übersprungen — Limit$/m);
     expect(text).toMatch(/^> \* ✅ Modus in der Sidebar sichtbar — set_session_title live geprüft$/m);
     expect(text).not.toMatch(/\*\*Tests\*\*/);
     expect(text).not.toMatch(/\*\*Validierung\*\*/);
+    expect(text).not.toMatch(/\*\*Belegt\*\*/);
   });
 
   test("English header reads Verified", async () => {
-    const text = await cardText({ variant: "ready", summary: "Verified", lang: "en", session_id: "compact-belegt-en", tests });
+    const text = await cardText({ variant: "ready", summary: "Verified", lang: "en", session_id: "compact-verified-en", tests });
     expect(text).toMatch(/^> \*\*Verified\*\* · npm test → 1460 grün/m);
   });
 
-  test("an over-long gates line falls back to one bullet per test", async () => {
+  test("over-long gates wrap onto continuation header lines — never bullets", async () => {
     const text = await cardText({
       variant: "ready", summary: "Overflow", lang: "de", session_id: "compact-overflow",
       tests: [
         { method: "npm run typecheck + Production-Build + npm test", result: "GATE_EXIT=0 · 2589 SUCCESS auf dem gemergten Stand" },
         { method: "Baseline auf main (Gegenprobe)", result: "2584 SUCCESS — beide Fehler gehörten zur geretteten Arbeit" },
       ],
+      validation: [{ requirement: "r", status: "met", evidence: "e" }],
     });
-    expect(text).toMatch(/^> \*\*Belegt\*\*$/m);
-    expect(text).toMatch(/^> \* npm run typecheck \+ Production-Build \+ npm test → GATE_EXIT=0 · 2589 SUCCESS auf dem gemergten Stand$/m);
+    expect(text).toMatch(/^> \*\*Geprüft\*\* · npm run typecheck \+ Production-Build \+ npm test → GATE_EXIT=0 · 2589 SUCCESS auf dem gemergten Stand$/m);
+    expect(text).toMatch(/^> · Baseline auf main \(Gegenprobe\) → 2584 SUCCESS — beide Fehler gehörten zur geretteten Arbeit$/m);
+    expect(text).not.toMatch(/^> \* npm run/m);
+    expect(text.split("\n").filter((l) => /^> \* /.test(l)).length).toBe(1);
   });
 
   test("validation: partial/unmet first, budgets on requirement and evidence, met overflow collapsed", async () => {
@@ -141,16 +147,33 @@ describe("compact card — Belegt block (gates + validation)", () => {
     expect(req.length).toBeLessThanOrEqual(71);
     expect(ev.length).toBeLessThanOrEqual(101);
     expect(bullets[1]).toBe("> * ✅ erfüllt 1 — e1");
-    expect(bullets[2]).toBe("> * ✅ erfüllt 2 — e2");
-    expect(bullets[3]).toBe("> * ✅ 3 weitere Anforderungen erfüllt");
-    expect(bullets.length).toBe(4);
+    expect(bullets[2]).toBe("> * ✅ 4 weitere erfüllt");
+    expect(bullets.length).toBe(3);
   });
 
-  test("a single leftover met item is shown, not collapsed", async () => {
-    const validation = [1, 2, 3, 4].map((i) => ({ requirement: "r" + i, status: "met", evidence: "e" + i }));
-    const text = await cardText({ variant: "ready", summary: "V4", lang: "de", session_id: "compact-val4", validation });
-    expect(text).toMatch(/^> \* ✅ r4 — e4$/m);
-    expect(text).not.toMatch(/weitere Anforderungen/);
+  test("three items render as three bullets, four items as two plus a summary", async () => {
+    const three = [1, 2, 3].map((i) => ({ requirement: "r" + i, status: "met", evidence: "e" + i }));
+    const t3 = await cardText({ variant: "ready", summary: "V3", lang: "de", session_id: "compact-val3", validation: three });
+    expect(t3).toMatch(/^> \* ✅ r3 — e3$/m);
+    expect(t3).not.toMatch(/weitere/);
+    const four = [...three, { requirement: "r4", status: "met", evidence: "e4" }];
+    const t4 = await cardText({ variant: "ready", summary: "V4", lang: "de", session_id: "compact-val4", validation: four });
+    expect(t4).toMatch(/^> \* ✅ r2 — e2\n> \* ✅ 2 weitere erfüllt$/m);
+    expect(t4.split("\n").filter((l) => /^> \* /.test(l)).length).toBe(3);
+  });
+
+  test("more than two open items: the summary bullet counts open and met", async () => {
+    const validation = [
+      { requirement: "u1", status: "unmet", evidence: "x" },
+      { requirement: "p1", status: "partial", evidence: "x" },
+      { requirement: "p2", status: "partial", evidence: "x" },
+      { requirement: "m1", status: "met", evidence: "x" },
+      { requirement: "m2", status: "met", evidence: "x" },
+    ];
+    const text = await cardText({ variant: "ready", summary: "V5", lang: "de", session_id: "compact-val5", validation });
+    expect(text).toMatch(/^> \* ❌ u1 — x\n> \* ⚠️ p1 — x\n> \* ⚠️ 1 weitere offen · 2 weitere erfüllt$/m);
+    const en = await cardText({ variant: "ready", summary: "V5", lang: "en", session_id: "compact-val5-en", validation });
+    expect(en).toMatch(/^> \* ⚠️ 1 more open · 2 more met$/m);
   });
 });
 
