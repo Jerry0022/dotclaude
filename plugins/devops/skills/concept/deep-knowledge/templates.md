@@ -3294,11 +3294,12 @@ body[data-single-screen="true"] .feedback-divider:has(+ .feedback-section #scree
    border-bottom and paints a stray divider under the iteration tabs.
    The :has() guard is load-bearing, not defensive: the views group lives
    inside THIS container, and the only other route to a view is the
-   .view-switch-item row inside .design-switcher — which
-   body[data-single-design="true"] hides two rules down. Drop the guard and a
-   single-design, single-screen iteration with views has no route to any of
-   them at all, in either surface. "Nothing left to navigate" has to mean
-   nothing, views included. */
+   .view-switch-item row inside .design-switcher — which stays visible
+   whenever view segments exist (see the :not(:has(.view-switch-item))
+   guard two rules down), so it is available as long as views exist. Drop
+   the guard here and a single-design, single-screen iteration with views
+   has no route to any of them at all, in either surface. "Nothing left to
+   navigate" has to mean nothing, views included. */
 body[data-single-design="true"][data-single-screen="true"]
   #screen-nav:not(:has(.screen-nav-view-item)) {
   display: none;
@@ -3309,8 +3310,11 @@ body[data-single-design="true"][data-single-screen="true"]
    per-design feedback row via CSS only — no JS branching needed at the call
    site, matching how single-screen already collapses. The design heading
    level of #screen-nav also collapses back to a flat list since there is
-   nothing to group. */
-body[data-single-design="true"] .design-switcher,
+   nothing to group. The :not(:has(.view-switch-item)) guard on the switcher
+   selector keeps the switcher visible when the iteration has views: with a
+   single design plus views the switcher is the one-click route to the view
+   segments, so only a genuinely single-design, view-less switcher collapses. */
+body[data-single-design="true"] .design-switcher:not(:has(.view-switch-item)),
 body[data-single-design="true"] .screen-nav-design-heading,
 body[data-single-design="true"] .feedback-section:has([data-design-comment]),
 body[data-single-design="true"] .feedback-divider:has(+ .feedback-section [data-design-comment]) {

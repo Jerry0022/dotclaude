@@ -145,6 +145,15 @@ describe("mapping integration — engine hooks in the shared systems", () => {
     expect(restored.assigned).not.toBe(after.assigned);
     expect(state.textContent).toBe(mirror(restored));
   });
+  test("the single-design collapse keeps the switcher visible when view segments exist", () => {
+    const at = md.indexOf('body[data-single-design="true"] .design-switcher');
+    expect(at).toBeGreaterThan(-1);
+    const rule = md.slice(at, md.indexOf("{", at));
+    expect(rule).toContain('.design-switcher:not(:has(.view-switch-item))');
+    expect(rule).toContain('body[data-single-design="true"] .screen-nav-design-heading');
+    expect(rule).toContain('body[data-single-design="true"] .feedback-section:has([data-design-comment])');
+    expect(rule).toContain('body[data-single-design="true"] .feedback-divider:has(+ .feedback-section [data-design-comment])');
+  });
   test("jsdom: buildSectionNav + the mirror resolve the mapping in the VISIBLE round, never a hidden one", () => {
     const p = page({ specs: [["veh", VEHICLE_SPEC]] });
     p.window.eval([

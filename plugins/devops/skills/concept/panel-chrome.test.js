@@ -157,8 +157,8 @@ describe("panel TOC — a design switch must not blank #screen-nav", () => {
 
   test("views keep a route when everything else collapses", () => {
     // The views group lives INSIDE #screen-nav, and the only other route to a
-    // view is .view-switch-item inside .design-switcher — which
-    // body[data-single-design="true"] hides. Collapsing the container on a
+    // view is .view-switch-item inside .design-switcher — which stays visible
+    // whenever view segments exist. Collapsing the container on a
     // single-design, single-screen iteration that HAS views therefore strands
     // them with no reachable surface at all.
     const container = hidden.filter((r) => r.selectors.some((s) =>
@@ -170,10 +170,12 @@ describe("panel TOC — a design switch must not blank #screen-nav", () => {
           .toMatch(/#screen-nav:not\(:has\(\.screen-nav-view-item\)\)/);
       }
     }
-    // and the switcher half of the claim — the reason the guard is needed
+    // and the switcher half of the claim — the switcher only collapses for a
+    // genuinely single-design, view-less iteration; it stays visible when
+    // view segments exist so it remains the route to them.
     const switcherHidden = hidden.some((r) => r.selectors.some((s) =>
-      /^body\[data-single-design="true"\]\s+\.design-switcher$/.test(s.trim())));
-    expect(switcherHidden, "body[data-single-design] .design-switcher").toBe(true);
+      /^body\[data-single-design="true"\]\s+\.design-switcher:not\(:has\(\.view-switch-item\)\)$/.test(s.trim())));
+    expect(switcherHidden, "body[data-single-design] .design-switcher:not(:has(.view-switch-item))").toBe(true);
     expect(jsSource, "view segments live in the design switcher")
       .toMatch(/btn\.className = 'view-switch-item'/);
   });
