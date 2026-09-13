@@ -3573,6 +3573,18 @@ change) via `harvestDockValues()`.
     // design, a heading button, then nested .screen-nav-item per page.
     const nav = document.getElementById('screen-nav');
     nav.innerHTML = '';
+    // One nav row per view — the same markup whether it sits under its
+    // design (`data-view-for`) or in the views group below.
+    const viewNavItem = v => {
+      const btn = document.createElement('button');
+      btn.className = 'screen-nav-view-item';
+      btn.type = 'button';
+      btn.dataset.viewId = v.dataset.view;
+      btn.innerHTML = `<span>${v.dataset.navLabel || v.dataset.view}</span>
+        <span class="has-notes" data-view-note-marker="${v.dataset.view}"></span>`;
+      btn.addEventListener('click', () => { showView(v.dataset.view); closePanel(); });
+      return btn;
+    };
     allDesigns.forEach(d => {
       const group = document.createElement('div');
       group.className = 'screen-nav-group';
@@ -3616,30 +3628,29 @@ change) via `harvestDockValues()`.
         });
         group.appendChild(btn);
       });
+      // Views tied to THIS design (`data-view-for`, § Views (optional)) sit
+      // under its screens; the top-centre switcher stays one flat row.
+      allViews.filter(v => v.dataset.viewFor === d.dataset.design)
+        .forEach(v => group.appendChild(viewNavItem(v)));
       nav.appendChild(group);
     });
 
-    // Second nav group, below the designs — only when the iteration has
-    // ≥1 view. Heading is a plain label (no click handler): there is
-    // nothing to "switch to" at the group level, only the individual views
-    // nested under it.
-    if (allViews.length) {
+    // Second nav group, below the designs — only for the views that belong
+    // to no design of this round: `data-view-for` absent, or naming a design
+    // that does not exist here (a gate warning; the TOC falls back silently).
+    // Heading is a plain label (no click handler): there is nothing to
+    // "switch to" at the group level, only the individual views nested
+    // under it. Skipped entirely when every view sits under a design.
+    const freeViews = allViews.filter(v => !v.dataset.viewFor
+      || !allDesigns.some(d => d.dataset.design === v.dataset.viewFor));
+    if (freeViews.length) {
       const viewGroup = document.createElement('div');
       viewGroup.className = 'screen-nav-group screen-nav-views-group';
       const heading = document.createElement('div');
       heading.className = 'screen-nav-views-heading';
       heading.textContent = '{{design.nav_views_heading}}';
       viewGroup.appendChild(heading);
-      allViews.forEach(v => {
-        const btn = document.createElement('button');
-        btn.className = 'screen-nav-view-item';
-        btn.type = 'button';
-        btn.dataset.viewId = v.dataset.view;
-        btn.innerHTML = `<span>${v.dataset.navLabel || v.dataset.view}</span>
-          <span class="has-notes" data-view-note-marker="${v.dataset.view}"></span>`;
-        btn.addEventListener('click', () => { showView(v.dataset.view); closePanel(); });
-        viewGroup.appendChild(btn);
-      });
+      freeViews.forEach(v => viewGroup.appendChild(viewNavItem(v)));
       nav.appendChild(viewGroup);
     }
 
@@ -5338,9 +5349,16 @@ owning `view` id (§ Views (optional)):
     "view-nav-model": [],
     "anno-a1": [],
     "nav-tabs-note": []
-  }
+  },
+  "mappings": []
 }
 ```
+
+`mappings` is always present — `[]` without a mapping view, otherwise one
+entry per live `section[data-mapping]` in the shape `collectMappings()`
+documents (§ Information Mapping (engine)). A `decisions[]` or `mappings[]`
+entry from a view carrying `data-view-for="{designId}"` additionally has
+`"design": "{designId}"`; the key is absent for a variant-independent view.
 
 `decisions[]` entries use the **same shape as the decision template's own
 schema** (`{id, label, evaluation}` — § Bi-State Variant Evaluation →
@@ -5442,16 +5460,25 @@ function collectDesignDecisions() {
         const noteEl = group.querySelector(`[data-comment="${decisionId}-note"]`)
           || (group.parentElement && group.parentElement.querySelector(`[data-comment="${decisionId}-note"]`))
           || view.querySelector(`[data-comment="${decisionId}-note"]`);
-        decisions.push({
+        const entry = {
           id: decisionId,
           label: group.dataset.label || decisionId,
           evaluation: checked.value,
           view: view.dataset.view,
           note: ((noteEl && noteEl.value) || '').trim()
-        });
+        };
+        // A view tied to one variant (`data-view-for`, § Views (optional))
+        // tags its decisions with that design; a variant-independent view
+        // carries no key at all rather than `design: null`.
+        if (view.dataset.viewFor) entry.design = view.dataset.viewFor;
+        decisions.push(entry);
       });
     });
   }
+  // Mappings (§ Information Mapping (engine)) — the engine's own collector,
+  // scoped to the live round like the scans above; `[]` on a page whose
+  // engine block is absent, so the key is always present (§ 9 uniform shape).
+  const collectMappings = (typeof window.collectMappings === 'function') ? window.collectMappings : () => [];
   // Annotations (§ Annotation Layer (optional)) live INSIDE
   // section[data-iteration][data-active] — unlike the dock above, which is
   // an overlay outside it — so this scan is scoped to `active` directly.
@@ -5500,7 +5527,8 @@ function collectDesignDecisions() {
     decisions,
     comments,
     annotations,
-    attachments
+    attachments,
+    mappings: collectMappings(active || document)
   };
 }
 ```
@@ -5633,8 +5661,13 @@ submit payload is effectively a general-notes post.
 
 ```javascript
 function collectFreeDecisions() {
+  // Both scans are scoped to the LIVE round: section ids, eval-{id} names and
+  // data-comment keys repeat across rounds, so a document-wide scan shipped a
+  // frozen round's verdicts and notes as this round's — and a frozen mapping
+  // section carries a `map-{m}-note` textarea of its own.
+  const active = document.querySelector('section[data-iteration][data-active]') || document;
   const decisions = [];
-  document.querySelectorAll('section[id][data-nav-label]').forEach(sec => {
+  active.querySelectorAll('section[id][data-nav-label]').forEach(sec => {
     const radio = sec.querySelector(`input[name="eval-${CSS.escape(sec.id)}"]:checked`);
     if (!radio) return;
     decisions.push({
@@ -5644,13 +5677,15 @@ function collectFreeDecisions() {
     });
   });
   const comments = [];
-  document.querySelectorAll('[data-comment]').forEach(el => {
+  active.querySelectorAll('[data-comment]').forEach(el => {
     const text = el.value.trim();
     const attachments = (typeof attachmentsFor === 'function')
       ? attachmentsFor(el.dataset.comment) : [];
     if (text || attachments.length) comments.push({ id: el.dataset.comment, text, attachments });
   });
-  return { submitted: true, template: 'free', decisions, comments };
+  // Mappings (§ Information Mapping (engine)); `[]` without the engine block.
+  const collectMappings = (typeof window.collectMappings === 'function') ? window.collectMappings : () => [];
+  return { submitted: true, template: 'free', decisions, comments, mappings: collectMappings(active) };
 }
 ```
 
@@ -5916,7 +5951,10 @@ function buildSectionNav() {
     labelEl.className = 'section-nav-label';
     labelEl.textContent = label;
     link.appendChild(labelEl);
-    if (hasTriState) {
+    // A mapping section (§ Information Mapping (engine)) mirrors its progress
+    // where a variant shows its verdict: `assigned/total · violations ⚠`.
+    if (sec.hasAttribute('data-mapping')) link.setAttribute('data-mapping-nav', '');
+    if (hasTriState || sec.hasAttribute('data-mapping')) {
       const stateEl = document.createElement('span');
       stateEl.className = 'section-nav-state';
       link.appendChild(stateEl);
@@ -5981,6 +6019,17 @@ function updateSectionNavState() {
       stateEl.textContent = labels[currentState] || currentState;
       stateEl.className = 'section-nav-state state-' + currentState;
     }
+  });
+  // Mapping progress mirror (§ Information Mapping (engine)): the engine
+  // re-calls this after every cell write and every restore.
+  if (typeof mappingProgress !== 'function') return;
+  document.querySelectorAll('.section-nav-item[data-mapping-nav]').forEach(link => {
+    const sec = document.getElementById(link.dataset.sectionId);
+    const stateEl = link.querySelector('.section-nav-state');
+    if (!sec || !stateEl) return;
+    const p = mappingProgress(sec);
+    stateEl.textContent = p.assigned + '/' + p.total + (p.violations ? ' · ' + p.violations + ' ⚠' : '');
+    stateEl.className = 'section-nav-state state-mapping';
   });
 }
 
@@ -7466,9 +7515,17 @@ function restoreState() {
       }
     });
   } catch (e) { /* corrupt storage — ignore */ }
+  // The text branch above sets mapping state inputs by value, without events
+  // (§ Information Mapping (engine)) — re-project the boxes, chips and counts
+  // from them, same precedent as updateNoteMarkers() after a dock restore.
+  if (typeof refreshMappings === 'function') refreshMappings();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // FIRST: the mapping state inputs (§ Information Mapping (engine)) must
+  // exist before restoreState() can write into them — script order is not
+  // guaranteed across the page's IIFEs, so the engine is not asked to time it.
+  if (typeof renderMappings === 'function') renderMappings();
   // Inject missing per-decision comment slots BEFORE restoring state so the
   // restored textarea values land on real DOM nodes. See § Comment Slot
   // Injection for why this safety net exists.
@@ -8330,6 +8387,20 @@ are generated too. Inside an iteration without `data-active` the section is froz
 (`data-map-frozen`): it renders from `spec.submitted` read-only — no tools, no chip ×,
 view state in memory — and shows a `.map-error` banner when `submitted` is missing.
 See the design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-design.md`.
+
+Wiring into the shared systems (all of it lives in those systems, not here):
+`renderMappings()` is the **first** statement of § State Persistence's `DOMContentLoaded`
+handler (the state inputs must exist before `restoreState()` writes into them — script order
+across IIFEs is not guaranteed) and `restoreState()` ends with `refreshMappings()`, which
+re-projects the boxes from the restored values and re-mirrors the TOC.
+`collectDesignDecisions()` / `collectFreeDecisions()` emit `mappings: collectMappings(active)`
+(§ 9 shape; `collectDecisionDecisions()` emits `[]`, so the key is always present); a view with
+`data-view-for` tags its `decisions[]` and `mappings[]` entries with `design`. In the panel
+TOC (`buildSectionNav()`) a `section[data-mapping]` entry carries `data-mapping-nav` and a
+`.section-nav-state.state-mapping` reading `assigned/total · violations ⚠` from
+`mappingProgress()`, refreshed after every cell write and restore. In the design template's ☰
+nav (`buildDesignUI()`) a view with `data-view-for` is listed under that design after its
+screens; the views group holds only the views that name no design of the round.
 
 ### CSS
 
@@ -9585,6 +9656,10 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
   function renderMappings(root) {
     const scope = root || document;
     scope.querySelectorAll('section[data-mapping]:not([data-map-rendered])').forEach(renderSection);
+    // The TOC may already be built (IIFE order): mirror the fresh progress
+    // now — restoreState() returns early without a stored blob, so this is
+    // the only refresh a first visit gets.
+    if (typeof updateSectionNavState === 'function') updateSectionNavState();
   }
   // Re-reads every state input (restoreState() sets values without events),
   // normalises the string back, re-sets the boxes and recomputes the counts.
@@ -9605,6 +9680,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       refreshSchema(section, model);                                                                    // re-applies the restored ui mode too
       updateSummary(section, model);
     });
+    if (typeof updateSectionNavState === 'function') updateSectionNavState();                          // TOC progress mirror after a restore
   }
 
   // --- payload (§ Payload) ---------------------------------------------------
@@ -9752,8 +9828,11 @@ function collectDecisions(action = 'iterate') {
 function collectDecisionDecisions() {
   const decisions = [];
   const comments = [];
+  // Scoped to the LIVE round — decision ids and comment keys repeat across
+  // rounds (same reasoning as collectFreeDecisions()).
+  const active = document.querySelector('section[data-iteration][data-active]') || document;
 
-  document.querySelectorAll('[data-decision]').forEach(el => {
+  active.querySelectorAll('[data-decision]').forEach(el => {
     decisions.push({
       id: el.dataset.decision,
       label: el.dataset.label || '',
@@ -9761,7 +9840,7 @@ function collectDecisionDecisions() {
     });
   });
 
-  document.querySelectorAll('[data-comment]').forEach(el => {
+  active.querySelectorAll('[data-comment]').forEach(el => {
     const text = el.value.trim();
     const attachments = (typeof attachmentsFor === 'function')
       ? attachmentsFor(el.dataset.comment) : [];
@@ -9773,7 +9852,9 @@ function collectDecisionDecisions() {
     }
   });
 
-  return { submitted: true, template: 'decision', decisions, comments };
+  // `mappings` is always present (§ Information Mapping (engine), uniform
+  // payload shape); the decision template hosts no mapping section.
+  return { submitted: true, template: 'decision', decisions, comments, mappings: [] };
 }
 ```
 
@@ -11441,6 +11522,9 @@ a card without that evidence.
 section[data-iteration]:not([data-active]) {
   opacity: 0.85;
 }
+/* Kills every input on a frozen tab — which is exactly why the mapping view
+   toggle, tabs and collapse controls (§ Information Mapping) are <button>s:
+   a frozen mapping stays browsable while its checkboxes go inert. */
 section[data-iteration]:not([data-active]) .tri-state-btn,
 section[data-iteration]:not([data-active]) input,
 section[data-iteration]:not([data-active]) textarea,
