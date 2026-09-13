@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.152.0] — 2026-09-13
+
+### Added
+
+- **The `/run-agents` plan shows what each agent will actually run with — model *and* reasoning effort — and the tool-call budget its prompt will carry.** The plan table named only the model, so two things the orchestrator had already decided stayed invisible until the prompts went out: the effort, which is fixed by each agent's frontmatter (the Agent tool has no effort parameter, so `opus · high` for po/research/redteam, `sonnet · medium` for the code agents, `sonnet · low` for gamer is what runs, override or not), and the per-agent tool-call ceiling derived from the complexity tier. The Model column renders `model · effort` now; an override repeats the effort on both sides (`sonnet · medium → opus · medium`) so only the model ever carries an arrow. A new line under the agents table names the tier and the ceiling it implies (Medium ~5–15, Complex ~15–30 tool calls per agent) — the same number every agent prompt receives as its effort budget, visible before confirmation. The en/de labels follow (`Model · Effort` / `Modell · Effort`, `Complexity · tool-call budget` / `Komplexität · Tool-Call-Budget`). `agent-orchestration.md` § Model & Effort Defaults describes the rendering it is the source of truth for and names `fable` as an accepted upward override value. A static-text test pins the wording and checks the roster table against the agents' frontmatter, so a drifted row cannot make the plan lie. The `/run-burn` plan lists `default → override` per role rather than a table and is unchanged — but the Codex review gate caught the one contradiction the sharper wording exposed: the `/run-burn` bullet in the same section still claimed "effort → high", and the burn-scheduler's depth-profile table carried an Effort column that read like a tool parameter. Both now say what is mechanically true: a profile raises effort as a prompt directive, and the higher tool-call ceiling and the extra passes are what actually change.
+
+### Fixed
+
+- **`npm test` was red on any machine whose `/claude-batch` marker is not the default.** The strict-enforce fixture "the batch execute marker still gets the contract when strict is on" activated batch mode without pinning a marker, and `batch-state.activate()` then copies whatever marker the developer's real `~/.claude/claude-batch.json` holds (`los:` here) into the temp project — while the prompt hardcoded the default `>>`. The prompt classified as `collect`, the hook exited before injecting, and the assertion saw an empty context: a deterministic failure that only ever showed up with a custom marker, and never in CI. The fixture pins `{ marker: ">>" }` as the sibling fixtures in `prompt.batch.collect.test.js` already do. The hook was right all along — a prompt that will be collected must never receive the contract.
+
 ## [0.151.1] — 2026-09-08
 
 ### Fixed
