@@ -10,7 +10,8 @@ import {
   startsWithMarker, stripMarker, looksLikeQuestion, validateMarker,
   classify, willBeCollected, notesPath, modePath,
   loadConfig, saveConfig, configPath, effectiveMarker,
-  DEFAULTS, HARNESS_RESERVED_PREFIXES,
+  parseBatchCommand, renderModeSummary, describeMode, renderHelp,
+  DEFAULTS, HARNESS_RESERVED_PREFIXES, MARKER_SUGGESTIONS,
 } from "./batch-state.js";
 
 let cwd;
@@ -602,5 +603,180 @@ describe("detectActivation — the prompt that turns the mode on", () => {
   test("a short question ABOUT the mode does not count as carried content", () => {
     expect(detectActivation("was macht der sammelmodus?").carriesContent).toBe(false);
     expect(detectActivation("wie funktioniert collect mode?").carriesContent).toBe(false);
+  });
+});
+
+describe("parseBatchCommand — routing on the first token only", () => {
+  const expanded = (args) =>
+    `<command-name>/claude-batch</command-name><command-args>${args}</command-args>`;
+
+  test.each([
+    ["", "bare", ""],
+    ["on", "on", ""],
+    ["an", "on", ""],
+    ["start", "on", ""],
+    ["off", "off", ""],
+    ["aus", "off", ""],
+    ["go", "go", ""],
+    ["merge", "go", ""],
+    ["marker", "marker", ""],
+    ["status", "status", ""],
+  ])("args %j route to %s", (args, route, residue) => {
+    expect(parseBatchCommand(expanded(args))).toEqual({ route, residue });
+  });
+
+  test("text after the route word is residue, never an instruction", () => {
+    expect(parseBatchCommand(expanded("on der Header ist rot"))).toEqual({
+      route: "on", residue: "der Header ist rot",
+    });
+  });
+
+  test("free text is the content route with the whole argument as residue", () => {
+    expect(parseBatchCommand(expanded("der Header ist rot und die API fehlt"))).toEqual({
+      route: "content", residue: "der Header ist rot und die API fehlt",
+    });
+  });
+
+  test("the raw slash form is recognised too", () => {
+    expect(parseBatchCommand("/claude-batch on")).toEqual({ route: "on", residue: "" });
+    expect(parseBatchCommand("/devops:claude-batch")).toEqual({ route: "bare", residue: "" });
+  });
+
+  test("a namespaced expanded command still counts", () => {
+    expect(parseBatchCommand(
+      "<command-name>/devops:claude-batch</command-name><command-args>off</command-args>",
+    )).toEqual({ route: "off", residue: "" });
+  });
+
+  test("other commands and plain prose are not invocations", () => {
+    expect(parseBatchCommand("<command-name>/ship</command-name><command-args></command-args>")).toBe(null);
+    expect(parseBatchCommand("wir sollten /claude-batch dokumentieren")).toBe(null);
+    expect(parseBatchCommand("")).toBe(null);
+    expect(parseBatchCommand(null)).toBe(null);
+  });
+});
+
+describe("classify — a re-activation while collecting is absorbed", () => {
+  const expanded = (args) =>
+    `<command-name>/claude-batch</command-name><command-args>${args}</command-args>`;
+  const on = (text, hookInput) => classify({ text, hookInput, marker: ">>", modeActive: true });
+  const off = (text) => classify({ text, marker: ">>", modeActive: false });
+
+  test.each(["", "on", "an", "start", "der Header ist rot"])(
+    "args %j while active → rearm", (args) => {
+      expect(on(expanded(args))).toBe("rearm");
+    },
+  );
+
+  test.each(["off", "aus", "go", "los", "merge", "status", "marker"])(
+    "the exit %j while active → passthrough", (args) => {
+      expect(on(expanded(args))).toBe("passthrough");
+    },
+  );
+
+  test("mode off — every invocation passes through to the skill", () => {
+    expect(off(expanded(""))).toBe("passthrough");
+    expect(off(expanded("on"))).toBe("passthrough");
+    expect(off(expanded("noch eine notiz"))).toBe("passthrough");
+  });
+
+  test("an invocation carrying an attachment reaches the skill (Step 2.6)", () => {
+    expect(on(expanded("so wie hier [Image #1]"))).toBe("passthrough");
+    expect(on(expanded("on"), { images: ["shot.png"] })).toBe("passthrough");
+  });
+
+  test("willBeCollected is true for a rearm — sibling hooks must not burn state", () => {
+    activate(cwd, { marker: ">>" });
+    expect(willBeCollected({ cwd, prompt: expanded("on") })).toBe(true);
+    expect(willBeCollected({ cwd, prompt: expanded("off") })).toBe(false);
+  });
+});
+
+describe("marker suggestions", () => {
+  test("are `>>`, `>go`, `>start` — English, colon-free, recommendation first", () => {
+    expect(MARKER_SUGGESTIONS).toEqual([">>", ">go", ">start"]);
+    expect(MARKER_SUGGESTIONS[0]).toBe(DEFAULTS.marker);
+    for (const m of MARKER_SUGGESTIONS) {
+      expect(m.endsWith(":")).toBe(false);
+      expect(validateMarker(m)).toMatchObject({ ok: true, marker: m, warning: null });
+    }
+  });
+
+  test("each suggestion fires and strips cleanly", () => {
+    for (const m of MARKER_SUGGESTIONS) {
+      expect(startsWithMarker(`${m} bau das jetzt`, m)).toBe(true);
+      expect(stripMarker(`${m} bau das jetzt`, m)).toBe("bau das jetzt");
+      expect(startsWithMarker("google das mal", m)).toBe(false);
+    }
+  });
+});
+
+describe("mode summary — one block, three places", () => {
+  test("names every exit and the auto-end bounds", () => {
+    const s = renderModeSummary({ marker: ">go", count: 4, expiryHours: 8, maxNotes: 100 });
+    expect(s).toContain("Sammelmodus AKTIV · 4 Notiz(en) · Marker \">go\"");
+    expect(s).toContain(".claude/batch.md");
+    expect(s).toContain("Eingabe blockiert");
+    expect(s).toContain("\">go <text>\"");
+    expect(s).toContain("/claude-batch go");
+    expect(s).toContain("/claude-batch off");
+    expect(s).toContain("main");
+    expect(s).toContain("8 Stunden oder 100 Notizen");
+  });
+
+  test("describeMode reads the pinned bounds and the live note count", () => {
+    activate(cwd, { marker: ">start", expiryHours: 2, maxNotes: 7 });
+    appendNote(cwd, "eins");
+    appendNote(cwd, "zwei");
+    const s = describeMode(cwd);
+    expect(s).toContain("2 Notiz(en)");
+    expect(s).toContain("Marker \">start\"");
+    expect(s).toContain("2 Stunden oder 7 Notizen");
+  });
+});
+
+describe("help route and the long-form summary", () => {
+  const expanded = (args) =>
+    `<command-name>/claude-batch</command-name><command-args>${args}</command-args>`;
+
+  test.each(["help", "hilfe", "?"])("`%s` routes to help", (args) => {
+    expect(parseBatchCommand(expanded(args))).toEqual({ route: "help", residue: "" });
+  });
+
+  test("help while active is absorbed, while off it reaches the skill", () => {
+    expect(classify({ text: expanded("help"), marker: ">>", modeActive: true })).toBe("rearm");
+    expect(classify({ text: expanded("help"), marker: ">>", modeActive: false })).toBe("passthrough");
+  });
+
+  test("renderHelp has both step lists and names every command", () => {
+    const h = renderHelp({ marker: ">go", expiryHours: 8, maxNotes: 100 });
+    expect(h).toContain("A) Was DU machst");
+    expect(h).toContain("B) Was CLAUDE macht");
+    expect(h).toContain("\">go <text>\"");
+    for (const cmd of ["off", "on", "status", "marker", "help", "/claude-batch go"]) {
+      expect(h, `help does not mention ${cmd}`).toContain(cmd);
+    }
+    expect(h).toContain("8 Stunden oder 100 Notizen");
+    expect(h).toContain("main in den Branch mergen");
+    expect(h).toContain("Abdeckungsliste");
+  });
+
+  test("the short summary points at status, marker and help in one line", () => {
+    const s = renderModeSummary({ marker: ">>" });
+    const line = s.split("\n").find((l) => l.includes("Sonstiges"));
+    expect(line).toBeTruthy();
+    expect(line).toContain("status");
+    expect(line).toContain("marker (Marker ändern)");
+    expect(line).toContain("help");
+    expect(s).toContain("auch nach dem Auto-Ende");
+  });
+
+  test("re-arming after an auto-end keeps the collected notes", () => {
+    activate(cwd, { marker: ">>", startedAt: Date.now() - 9 * 3600_000, expiryHours: 8 });
+    appendNote(cwd, "eins");
+    expect(isModeActive(cwd)).toBe(false);
+    activate(cwd, { marker: ">>" });
+    expect(isModeActive(cwd)).toBe(true);
+    expect(readNotes(cwd).map(n => n.text)).toEqual(["eins"]);
   });
 });
