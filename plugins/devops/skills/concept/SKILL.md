@@ -149,11 +149,16 @@ would also fit.
    **Optional views:** alongside the ≥1 design, this same `design` iteration
    MAY also hold `section[data-view]` — fullscreen, non-visual questions
    with their own TOC entry, switched exactly like a design (see
-   `deep-knowledge/templates.md` § Views (optional)). Two kinds ship as
-   templates: `decision` (2..n named alternatives, bi-state per alternative)
-   and `comparison` (2..n concrete candidates side by side, verdict per
-   option, optional criteria matrix); count preference 7 per view (Step
-   0.5). In **design** mode (Step 0.5) views are out of scope — the
+   `deep-knowledge/templates.md` § Views (optional)).
+   Three kinds ship as templates: `decision` (2..n named alternatives, bi-state per alternative),
+   `comparison` (2..n concrete candidates side by side, verdict per
+   option, optional criteria matrix) and `mapping` (many items assigned to
+   the schematic UI elements of a design or to matrix targets — an
+   assignment, not a choice; § Views (optional) → View kind `mapping`, rules
+   in § 1c below); count preference 7 per `decision` / `comparison` view
+   (Step 0.5). Any view, whatever its kind, MAY name the design it belongs
+   to with `data-view-for="{designId}"` — the ☰ nav then nests it under that
+   design instead of the flat views group. In **design** mode (Step 0.5) views are out of scope — the
    non-visual questions belong to a later `decision` iteration only when
    the user widens the mode. **Rule of thumb — view vs. its own
    `decision` iteration:** if the question is *about the artefact in front
@@ -178,6 +183,11 @@ would also fit.
    post-mortem — structured content that has no forced variant framing.
    Tri-state is opt-in per section (Claude adds it only where a finding
    genuinely needs user evaluation).
+   An iteration whose question is "which of these many items goes where" —
+   an assignment, not a choice between alternatives — is a `free` round
+   carrying ≥ 1 `section[data-mapping]`; inside a design concept it is a
+   `data-view-kind="mapping"` subpage instead. (Authoring rules: § 1c;
+   markup: `deep-knowledge/templates.md` § Mapping block (optional).)
 
 **Entangled questions split across iterations (the mixed mode, Step 0.5).**
 If a concept's visual questions (which layout / design direction) and its
@@ -277,6 +287,43 @@ These are **recommendations, not rigid categories**. Mix elements across
 variants, create hybrid layouts, or invent new structures when the content
 calls for it.
 
+### 1c. If the iteration carries a mapping: author the spec
+
+A mapping (`section[data-mapping]` in a `free` round, or a
+`data-view-kind="mapping"` view in a `design` round) is rendered entirely by
+the engine from one JSON spec — Claude writes the wrapper, the heading /
+intro, the spec and (free rounds only) the note textarea; never a cell, a
+state input or a control. Field table and grammar:
+`deep-knowledge/templates.md` § Information Mapping (engine) → Spec. Rules:
+
+- **A proposal is mandatory.** Pre-fill `proposal` for every matrix — the
+  user corrects an assignment, they do not build one from zero. In a later
+  round the proposal is the user's previous `assigned` (§ 5b).
+- **Ids:** `^[a-z0-9_]+$` for every id (mapping, item, group, element, part,
+  axis, column). Item ids matching `u\d+` are reserved for ad-hoc items and
+  rejected by the engine. Mapping ids are unique page-wide (they become DOM
+  ids and TOC anchors); item / element / axis ids unique per mapping, part
+  ids per element.
+- **Count preferences (recommendations, like 7 / 3 in Step 0.5):** ≤ 60
+  items, ≤ 20 targets per matrix, ≤ 4 context values per mapping. Beyond
+  that, split into several mappings rather than one dense grid.
+- **Tiers:** `tier: "after"` only for parts that are genuinely behind a
+  click (detail sheet, expanded row); everything visible at first glance is
+  `"first"`.
+- **`accepts: "one"`** for single-value slots (badge, title, header);
+  multi-value slots use `min` / `max`.
+- **`elements`** when the targets are UI parts of a design (schematic view
+  + matrix), **`axes`** when they are plain columns (matrix only); both may
+  coexist in one spec, each matrix gets its own tab.
+- A mapping subpage in a design round MAY name its variant with
+  `data-view-for="{designId}"` — the ☰ nav nests it under that design.
+- **Labels are content:** no `{{…}}` locale tokens, and never the literal
+  `</script>` inside a label — the HTML parser would end the JSON block.
+- **Note channel per home:** in a design round there is NO inline note —
+  the dock's view note (`view-{id}`) is the mapping note. In a free round
+  the inline `textarea[data-comment="map-{m}-note"][data-attachable]` inside
+  the section is mandatory (gate rule M5).
+
 ## Step 2 — Generate HTML
 
 Build a single self-contained HTML file. Requirements:
@@ -289,8 +336,14 @@ are writing to Claude in THIS conversation). Then:
 
 1. Set `<html lang="{locale}">` on the generated page.
 2. Render every user-facing label (decision panel, buttons, feedback dock,
-   screen counter, warnings, confirms, placeholders) from the matching
+   screen counter, warnings, confirms, placeholders, and the mapping
+   engine's `map.*` strings — view toggle, tier labels, palette filters,
+   counts, status line, reset / copy / add item, "Added by you", violation
+   texts, the frozen-without-`submitted` banner) from the matching
    column of the UI Locale table in `deep-knowledge/templates.md` § UI Locale.
+   `map.*` cells are substituted into single-quoted JS literals
+   (`MAP_LOCALE`), so a locale cell that lands in a JS literal contains no
+   `'`, no backtick and no backslash — a new column follows the same rule.
 3. If the user's locale isn't a column in the table yet (`fr`, `hi`, `ja`,
    `pt-br`, `zh`, …), Claude MUST translate every key inline at generation
    time and also append a new column to the table in `templates.md` so the
@@ -674,7 +727,9 @@ After writing the HTML file, grep it for every mandatory interactive
 pattern listed in Phase 1 (heartbeat, all four panel states incl. the
 frozen one, iteration tabs, section TOC, reload polling, generic
 form-collection catch-all scoped to the active iteration, post-submit
-content dimmer, persistent status channel + close-out sheet, etc.).
+content dimmer, persistent status channel + close-out sheet, etc.), plus
+the conditional M-set (`deep-knowledge/validation-gate.md` § Mappings) when
+the page has `[data-mapping]`.
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
 then re-validate. See `deep-knowledge/validation-gate.md` for the full
 pattern list and common failure modes.
@@ -1000,6 +1055,17 @@ is in the DOM but missing in the payload, flag it to the user immediately
 function"). See `deep-knowledge/validation-gate.md` § Generic Form
 Collection for the required pattern.
 
+**Mappings:** `mappings[]` (`deep-knowledge/templates.md` § Information
+Mapping (engine)) is typed and always present (`[]` when the round has
+none) — read it before `decisions[]`. Its `diff` is what changed against
+your proposal, `assigned` (keyed by matrix key) is the full truth,
+`unassigned` / `violations` are the open points; `note` is the mapping note
+(dock view note in a design round, inline textarea in a free round),
+`slotNotes` the per-target remarks, `adhocItems` the labels the user added.
+The mapping's cells are generated inputs and are not part of the coverage
+check above — the jsdom suite covers them; `allFields` carries only the
+compact state strings.
+
 ### 5b. Process & Act — branch by `action`
 
 The submit payload carries an `action` field — `"iterate"` / `"implement"`
@@ -1058,7 +1124,12 @@ never re-run a completed step. The checkpoint records what the previous run
    after a reality check, click implement, and the same already-answered cards
    come back. The state file is not code and not an external system — this stays
    inside the iterate guarantee.
-4. Proceed to Step 5c (append next iteration with refined options that
+4. **Mappings:** the next round's proposal is the user's `assigned` — never
+   re-propose what they moved away from; acknowledge the `diff` entries in
+   the round intro (what moved, what you take from it). `unassigned` items
+   and open `violations` are questions for the intro, not silent
+   re-assignments.
+5. Proceed to Step 5c (append next iteration with refined options that
    reflect the Miteinbeziehen/Verwerfen choices)
 
 **`action: "implement"` ("Mit Feedback implementieren" button):**
@@ -1082,7 +1153,11 @@ never re-run a completed step. The checkpoint records what the previous run
      must force → checkpoint `reality-check-forced`, then append ONE
      reality-check round instead of implementing (Step 5c) and stop. Do NOT post
      `phase: "implemented"` — no code was written.
-1. **Summarize** what was selected/rejected/commented
+1. **Summarize** what was selected/rejected/commented. **Mappings:** the
+   assignment IS the spec — generate the component / view / data projection
+   per target with exactly the assigned items in `order`; `unassigned` items
+   and `violations` become open questions in the final report, never quiet
+   defaults.
 2. **Execute** the decisions as real changes — **through the devops role
    agents, not inline.** An implement order is the one place in a concept
    session where code gets written, it is usually multi-domain, and the main
@@ -1398,6 +1473,17 @@ iteration must be live in the browser BEFORE the server signals "processed".
    `input`/`textarea`/`select`/`button` inside the section, set `readonly`
    on text inputs and textareas, preserve the submitted values exactly
    (read them from the just-processed decisions JSON).
+   **Mappings:** for every `[data-mapping]` in the frozen section write
+   `"submitted": {cells, order, adhoc, slotNotes}` into its JSON spec from
+   the payload's `mappings[]` entry — `cells` = `assigned` (keyed by matrix
+   key, verbatim), `order` = `order`, `adhoc` = `adhocItems`, `slotNotes` =
+   `slotNotes`. The renderer disables the cells itself from `submitted`; a
+   frozen mapping without a complete `submitted` (every matrix key present
+   under `cells`) renders the red `map.frozen_missing` banner over the
+   proposal and fails the deterministic gate (M9). See
+   `deep-knowledge/iteration-rules.md` § Freezing Design Iterations →
+   Mappings and `deep-knowledge/templates.md` § Information Mapping
+   (engine) → Freezing.
 2.5. **Verify form collection coverage.** Read the existing JS for
    `collectDecisions()` (or its template-specific variant). Confirm it
    uses a generic `querySelectorAll('input, select, textarea')` scoped

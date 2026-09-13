@@ -1,5 +1,8 @@
 import { describe, test, expect } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 import vm from "node:vm";
+import { fileURLToPath } from "node:url";
 import { md, scanBlocks, page, mappingSection, VEHICLE_SPEC } from "./mapping-harness.js";
 
 // The information-mapping engine (templates.md § Information Mapping (engine))
@@ -8,6 +11,8 @@ import { md, scanBlocks, page, mappingSection, VEHICLE_SPEC } from "./mapping-ha
 // emit `mappings`, the ☰ design nav nests `data-view-for` views under their
 // design and the section TOC mirrors the mapping progress. Static contracts
 // over the reference source plus jsdom runs of the touched functions.
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const fn = name => {
   const m = md.match(new RegExp("function " + name + "\\([^)]*\\) \\{[\\s\\S]*?\\n\\}"));
@@ -207,5 +212,28 @@ describe("mapping reference docs", () => {
       const substituted = jsSource.replace(/\{\{(map\.[a-z_]+)\}\}/g, (whole, key) => table.get(key) ?? whole);
       expect(() => new vm.Script(substituted, { filename: `engine-${locale}.js` }), locale).not.toThrow();
     }
+  });
+});
+
+describe("mapping skill + gate + freeze docs", () => {
+  const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+  const gate = fs.readFileSync(path.join(__dirname, "deep-knowledge", "validation-gate.md"), "utf8");
+  const iter = fs.readFileSync(path.join(__dirname, "deep-knowledge", "iteration-rules.md"), "utf8");
+  test("SKILL.md: views list, free-round sentence, Step 1c, 5a/5b/5c handling", () => {
+    expect(skill).toMatch(/Three kinds ship as templates/);
+    expect(skill).toContain("### 1c.");
+    expect(skill).toContain("`section[data-mapping]`");
+    expect(skill).toContain("`mappings[]`");
+    const step5c = skill.slice(skill.indexOf("### 5c. Update the Page"), skill.indexOf("### Final-report append"));
+    expect(step5c).toContain("`submitted`");
+  });
+  test("validation-gate.md: P23 admits mapping, the M-set exists and names the deterministic subset", () => {
+    expect(gate).toMatch(/P23 \|[^\n]*"mapping"/);
+    for (const m of ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10"]) expect(gate).toContain(`| ${m} |`);
+    expect(gate).toContain("concept-gate.js");
+  });
+  test("iteration-rules.md documents frozen mappings", () => {
+    expect(iter).toContain("Mappings (§ Information Mapping)");
+    expect(iter).toContain("submitted");
   });
 });

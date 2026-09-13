@@ -467,7 +467,7 @@ run this subset:
 | # | Pattern | Purpose |
 |---|---------|---------|
 | P22 | `section[data-design]` — at least one, count ≥1 | **Structural assertion, always run once `data-view=` is present:** a design iteration with views MUST still carry ≥1 `data-design`. Views never stand alone — a page with `data-view` and zero `data-design` picked the wrong template; it belongs in `decision`. |
-| P23 | `data-view-kind="decision"` OR `data-view-kind="comparison"` | Every `[data-view]` MUST declare its kind — an unrecognised or missing kind means the page invented a third shape with no reference implementation. |
+| P23 | `data-view-kind="decision"` OR `data-view-kind="comparison"` OR `data-view-kind="mapping"` | Every `[data-view]` MUST declare its kind — an unrecognised or missing kind means the page invented a fourth shape with no reference implementation. |
 | P24 | `view-switch-item` | View segments in the top-centre switcher — required once any view exists, so switching to it is reachable without opening the ☰ panel. |
 | P25 | `screen-nav-view-item` | View entries in the panel's second `#screen-nav` group. |
 | P26 | `showView` | The JS that switches the active top-level item to a view — missing means the switcher/nav segments render but do nothing. |
@@ -483,6 +483,36 @@ applies to `decision`-kind views, P28/P29 only to `comparison`-kind views),
 treat it the same as a missing mandatory pattern for that iteration. P22 is
 the hardest failure of the set: it means the page should not have used the
 `design` template at all.
+
+**Mappings (conditional — only when the page contains `data-mapping=`):**
+the information-mapping construct (templates.md § Information Mapping
+(engine); § Views (optional) → View kind `mapping` for a design round,
+§ Mapping block (optional) for a free round) is optional; a page without
+`[data-mapping]` skips this set entirely. Once any `section[data-mapping]`
+exists, run this subset over the whole page (frozen rounds included):
+
+| # | Pattern | Purpose |
+|---|---------|---------|
+| M1 | every `[data-mapping]` has exactly one `script[type="application/json"][data-mapping-spec]` child that parses as JSON | The renderer's only input — a missing, doubled or broken spec renders a red `.map-error` instead of the mapping. |
+| M2 | every id matches `^[a-z0-9_]+$`; item / element / axis ids unique per mapping, part ids unique per element, column ids per axis; item ids never match `^u\d+$` (reserved for ad-hoc items); **mapping ids unique page-wide** and equal to the section's `id` | Name grammar — ids become DOM ids (`map-{m}-…` state inputs in `div.map-states`), matrix keys and TOC anchors; a collision silently merges two mappings' state. |
+| M3 | every `proposal` / `proposalOrder` / `submitted` reference resolves to a known item, target (`{element}.{part}` / `{axis}.{column}`) and context value; a `ctx` is present in `proposal` tuples iff the spec has `context` | Unresolvable references are dropped by the normaliser — the proposal (or the frozen submission) would show fewer cells than authored, with no error. |
+| M4 | ≥ 1 of `elements` / `axes`; every element has ≥ 1 part; every axis has ≥ 1 column; ≥ 1 item | An empty mapping renders nothing to assign. |
+| M5 | free-round block: exactly one `textarea[data-comment="map-{m}-note"][data-attachable]` inside the section; design-round view (`[data-view-kind="mapping"]`): NO inline note textarea | The note channel per home — the dock's `view-{id}` textarea is the note in a design round, `collectMappings()` reads whichever applies; two channels would split the user's remark. |
+| M6 | `renderMappings`, `refreshMappings`, `setCell`, `collectMappings` present; `renderMappings()` is the FIRST statement of the persistence block's `DOMContentLoaded` handler (before `ensureCommentSlots` / `restoreState`); `refreshMappings()` is the last call of `restoreState()` | Engine + load order — the `.map-state` inputs must exist before `restoreState()` writes into them, and the cells must be re-projected after it does. |
+| M7 | `collectDesignDecisions` and `collectFreeDecisions` both contain `mappings: collectMappings(`; `collectDecisions` emits `mappings` in every branch (`[]` for decision) | Payload in both homes, uniform shape. |
+| M8 | the `.map-scroll` rule carries `overflow: auto` and `max-width: 100%`; no `100vw` anywhere in the mapping CSS; a wide free-round block uses `data-map-wide` + `.concept-content:has([data-map-wide]) { max-width: 1600px }` | The page never widens — the matrix is its own two-axis scroll box. |
+| M9 | inside every `section[data-iteration]:not([data-active])`, every `[data-mapping-spec]` carries `submitted` with `cells` keyed by EVERY matrix key of that spec (`{element\|axis}[@ctx]`), plus `order`, `adhoc`, `slotNotes` | A frozen round shows the user's submission, not the proposal — the renderer treats a `submitted` that lacks any matrix key as missing and shows the `map.frozen_missing` banner; the gate refuses the page. |
+| M10 | every `data-view-for` value names a `section[data-design]` id inside the same iteration (**warning**) | The ☰ nav's nesting falls back to the flat views group silently otherwise. |
+
+**Failure for M1–M10:** if `data-mapping` is present anywhere on the page but
+any of these is missing (scoped to the home that requires it — M5's inline
+note applies to free-round blocks, its absence to design-round views; M9 only
+to frozen rounds), treat it the same as a missing mandatory pattern for
+that iteration. M10 is a warning. M1–M4 and M9 are enforced mechanically by
+`hooks/lib/concept-gate.js` (`findMappingIssues`) on every write of a
+concept page, so a mis-typed id, a dangling `proposal` reference or a
+forgotten `submitted` blocks the write deterministically; M5–M8 and M10 are
+part of the manual sweep, like their P-set siblings.
 
 ### Frozen/Active Mismatch
 
@@ -528,6 +558,10 @@ enforces the same on write.
 - `<html data-template>` mismatched with the active section's
   `data-iteration-template` → error; `applyIterationTemplate()` not wired or
   fired too late, causing a flash of the wrong layout
+- A frozen `[data-mapping]` without a complete `submitted` (M9) → the
+  frozen tab would present Claude's proposal as the user's decision behind a
+  red banner; a `proposal` naming an unknown id (M3) → cells silently
+  dropped by the normaliser
 - Design iteration without `data-screen` → feedback dock renders empty
 - Device-view clones not excluded from `saveState` / `collectAllFormFields`
   → every mock field ships two extra times in `allFields`, and the
