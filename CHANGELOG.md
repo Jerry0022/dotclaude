@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.160.0] — 2026-09-13
+
+### Fixed
+
+- **A scheduled task's idle tick no longer pays five turns for a completion card.** `stop.flow.guard` demanded a card on every turn of a scheduled-task routine — including the idle tick whose whole job is one script call ("Gate: idle, next run 17:07") — and in those sessions the completion MCP often never connected, so each tick ran the full ladder (tool → ToolSearch → block → offline renderer → relay): 4–5 turns and 1–4 minutes for ~10 s of work (#371). A prompt opening with `<scheduled-task …>` now sets a session flag, and the Stop guard waives the card when — and only when — that flag is set, `git status` is clean (falling back to the Edit/Write counter outside a repo) **and** no `ship_release` merged this turn (a new flag written from the tool's response). Any edit or ship falls through to Gate 1 unchanged; the "FIRST action = card" language is untouched for every other turn. The post-tool reminder tells the routine up front that an idle tick ends with its status line.
+- **When the completion MCP is down, the offline renderer is the first instruction, not the third.** Both the post-tool reminder and the Stop guard's block reason probe the server's heartbeat PID (`hooks/lib/mcp-heartbeat.js`, the check `pre.mcp.health` already made) and, when it is dead, name `node …/mcp-server/index.js --render-card` first — one turn instead of three. With a live heartbeat the order is unchanged.
+
 ## [0.159.0] — 2026-09-13
 
 ### Added
