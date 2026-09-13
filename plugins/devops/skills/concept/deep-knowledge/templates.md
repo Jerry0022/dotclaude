@@ -8240,6 +8240,545 @@ at the end of that function).
 the store directory name, so Claude can open the referenced file directly with
 the Read tool.
 
+## Information Mapping (engine)
+
+Shared, template-independent engine for `section[data-mapping]` (§ View kind `mapping`,
+§ Mapping block (optional)). Copied verbatim into every page like the annotation layer;
+`renderMappings()` early-returns on pages without a mapping. The matrix's checkboxes are
+the DOM truth; one CSS-hidden text input per matrix is the persisted form (§ State
+Persistence picks it up as `text:i{N}:map-…`). See the design spec
+`docs/superpowers/specs/2026-09-13-concept-information-mapping-design.md`.
+
+### CSS
+
+```css
+/* mapping engine CSS — Task 2 fills this block */
+.map-state { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+```
+
+### JS
+
+```javascript
+// --- Information mapping engine (§ Information Mapping) --------------------
+(function () {
+  const MAP_LOCALE = {
+    view_schema: '{{map.view_schema}}', view_matrix: '{{map.view_matrix}}',
+    tier_first: '{{map.tier_first}}', tier_after: '{{map.tier_after}}',
+    items: '{{map.items}}', search: '{{map.search}}',
+    filter_all: '{{map.filter_all}}', filter_unassigned: '{{map.filter_unassigned}}',
+    filter_multiple: '{{map.filter_multiple}}', filter_changed: '{{map.filter_changed}}',
+    reset: '{{map.reset}}', reset_confirm: '{{map.reset_confirm}}',
+    copy: '{{map.copy}}', copy_confirm: '{{map.copy_confirm}}',
+    add_item: '{{map.add_item}}', add_item_prompt: '{{map.add_item_prompt}}',
+    add_item_duplicate: '{{map.add_item_duplicate}}', added_group: '{{map.added_group}}',
+    armed_item: '{{map.armed_item}}', armed_slot: '{{map.armed_slot}}',
+    summary_unassigned: '{{map.summary_unassigned}}', summary_violations: '{{map.summary_violations}}',
+    summary_ok: '{{map.summary_ok}}', slot_empty_min: '{{map.slot_empty_min}}',
+    slot_over_max: '{{map.slot_over_max}}', item_required: '{{map.item_required}}',
+    remove: '{{map.remove}}', slot_note: '{{map.slot_note}}', context: '{{map.context}}',
+    axis: '{{map.axis}}', tab_open: '{{map.tab_open}}',
+    frozen_missing: '{{map.frozen_missing}}', spec_error: '{{map.spec_error}}'
+  };
+  const fmt = (s, vars) => String(s).replace(/\{(\w+)\}/g, (_, k) => (vars && k in vars) ? vars[k] : '{' + k + '}');
+  const ID_RE = /^[a-z0-9_]+$/;
+  const MODELS = new WeakMap();      // section → model
+
+  // --- spec → model ----------------------------------------------------------
+  function normalizeSpec(raw) {
+    const err = msg => { throw new Error(msg); };
+    const items = (raw.items || []).map(it => ({ id: it.id, label: it.label || it.id, group: it.group || '', hint: it.hint || '', required: !!it.required, adhoc: false }));
+    const sources = [];
+    (raw.elements || []).forEach(el => sources.push({ kind: 'element', id: el.id, label: el.label || el.id, itemTargets: el.itemTargets || 'any',
+      targets: (el.parts || []).map(p => ({ key: el.id + '.' + p.id, id: p.id, label: p.label || p.id, tier: p.tier === 'after' ? 'after' : 'first',
+        row: Number.isFinite(p.row) ? p.row : null, accepts: p.accepts === 'one' ? 'one' : 'many', min: p.min || 0, max: p.max || 0, ordered: !!p.ordered })) }));
+    (raw.axes || []).forEach(ax => sources.push({ kind: 'axis', id: ax.id, label: ax.label || ax.id, itemTargets: ax.itemTargets || 'any',
+      targets: (ax.columns || []).map(c => ({ key: ax.id + '.' + c.id, id: c.id, label: c.label || c.id, tier: 'first', row: null,
+        accepts: c.accepts === 'one' ? 'one' : 'many', min: c.min || 0, max: c.max || 0, ordered: false })) }));
+    if (!sources.length) err('no elements/axes');
+    sources.forEach(s => { if (!s.targets.length) err('source without targets: ' + s.id); });
+    const contexts = raw.context && Array.isArray(raw.context.values) && raw.context.values.length
+      ? raw.context.values.map(v => ({ id: v.id, label: v.label || v.id })) : null;
+    const all = [...items.map(i => i.id), ...sources.map(s => s.id), ...sources.flatMap(s => s.targets.map(t => t.id)), ...(contexts || []).map(c => c.id)];
+    all.forEach(id => { if (!ID_RE.test(String(id))) err('bad id: ' + id); });
+    const seen = new Set(); items.forEach(i => { if (seen.has(i.id)) err('duplicate item id: ' + i.id); seen.add(i.id); });
+    const matrices = [];
+    sources.forEach(s => (contexts || [null]).forEach(c => matrices.push({ key: s.id + (c ? '@' + c.id : ''), src: s, ctx: c ? c.id : null, targets: s.targets })));
+    const targetKeys = new Set(sources.flatMap(s => s.targets.map(t => t.key)));
+    const itemIds = new Set(items.map(i => i.id));
+    (raw.proposal || []).forEach(p => { if (!itemIds.has(p[0]) || !targetKeys.has(p[1])) err('proposal references unknown id: ' + p.join(',')); });
+    const groups = [...new Set(items.map(i => i.group))];
+    return { items, groups, sources, contexts, matrices, targetKeys, proposal: raw.proposal || [], proposalOrder: raw.proposalOrder || {},
+             submitted: raw.submitted || null, slotNotes: !!raw.slotNotes, adhocItems: !!raw.adhocItems, hasElements: sources.some(s => s.kind === 'element') };
+  }
+
+  // --- state encoding (§ State model) ----------------------------------------
+  const encodeCells = pairs => pairs.length ? pairs.map(p => p[0] + '>' + p[1]).join(' ') : '-';
+  const decodeCells = str => String(str || '').trim() === '-' ? [] : String(str || '').split(/\s+/).filter(Boolean).map(t => t.split('>')).filter(p => p.length === 2);
+  function matrixOf(model, targetKey, ctx) { return model.matrices.find(m => m.ctx === (ctx || null) && m.targets.some(t => t.key === targetKey)); }
+  function sectionOf(sectionOrId) {
+    return typeof sectionOrId === 'string' ? document.querySelector('[data-mapping="' + sectionOrId + '"]') : sectionOrId;
+  }
+  function stateInput(section, m, kind, suffix) {
+    const id = 'map-' + m + '-' + kind + (suffix ? '-' + suffix : '');
+    let input = [...section.querySelectorAll('input.map-state')].find(i => i.id === id);
+    if (input) return input;
+    let holder = section.querySelector(':scope > div.map-states');
+    if (!holder) { holder = document.createElement('div'); holder.className = 'map-states'; section.appendChild(holder); }
+    input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'map-state';
+    input.id = id;
+    input.tabIndex = -1;
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('aria-hidden', 'true');
+    holder.appendChild(input);
+    return input;
+  }
+  // Pairs of a matrix as the checkboxes should show them: decoded from the
+  // state input, unknown item / target ids dropped (a re-served round with a
+  // changed target set must not crash or resurrect cells).
+  function readCells(model, matrix, state) {
+    const keys = new Set(matrix.targets.map(t => t.key));
+    const ids = new Set(model.items.map(i => i.id));
+    const out = []; const seen = new Set();
+    decodeCells(state.value).forEach(p => {
+      const k = p[0] + '>' + p[1];
+      if (ids.has(p[0]) && keys.has(p[1]) && !seen.has(k)) { seen.add(k); out.push(p); }
+    });
+    return out;
+  }
+  function proposalPairs(model, matrix) {
+    const keys = new Set(matrix.targets.map(t => t.key));
+    return model.proposal.filter(p => (p[2] || null) === matrix.ctx && keys.has(p[1])).map(p => [p[0], p[1]]);
+  }
+  const orderKey = (matrix, target) => target.key + (matrix.ctx ? '@' + matrix.ctx : '');
+  const splitOrder = v => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
+  // Order input = the checked items of that target in their existing order,
+  // newcomers appended. `silent` skips the events (initial render, restore).
+  function syncOrder(section, model, matrix, target, pairs, silent) {
+    const input = stateInput(section, model.id, 'order', orderKey(matrix, target));
+    const checked = pairs.filter(p => p[1] === target.key).map(p => p[0]);
+    const kept = splitOrder(input.value).filter(id => checked.includes(id));
+    const next = kept.concat(checked.filter(id => !kept.includes(id))).join(',');
+    if (next === input.value) return;
+    if (silent) input.value = next; else writeState(input, next);
+  }
+
+  // --- the single write path -------------------------------------------------
+  function setCell(sectionOrId, itemId, targetKey, ctx, on) {
+    const section = typeof sectionOrId === 'string' ? document.querySelector('[data-mapping="' + sectionOrId + '"]') : sectionOrId;
+    const model = section && MODELS.get(section); if (!model) return false;
+    if (section.dataset.mapFrozen === 'true') return false;
+    const matrix = matrixOf(model, targetKey, ctx); if (!matrix) return false;
+    const target = matrix.targets.find(t => t.key === targetKey);
+    const state = stateInput(section, model.id, 'cells', matrix.key);
+    let pairs = decodeCells(state.value);
+    const has = pairs.some(p => p[0] === itemId && p[1] === targetKey);
+    if (on === has) return false;
+    if (on) {
+      if (target.accepts === 'one') pairs = pairs.filter(p => p[1] !== targetKey);                       // slot swap
+      if (matrix.src.itemTargets === 'one') pairs = pairs.filter(p => p[0] !== itemId);                  // row swap
+      pairs.push([itemId, targetKey]);
+    } else pairs = pairs.filter(p => !(p[0] === itemId && p[1] === targetKey));
+    writeState(state, encodeCells(pairs));
+    if (target.ordered) syncOrder(section, model, matrix, target, pairs);
+    projectMatrix(section, model, matrix);                                                              // checkboxes + counts + markers
+    if (typeof refreshSchema === 'function') refreshSchema(section, model);                             // Task 2
+    updateSummary(section, model);
+    if (typeof updateSectionNavState === 'function') updateSectionNavState();
+    return true;
+  }
+  function writeState(input, value) {
+    input.value = value;
+    input.dataset.touched = 'true';
+    if (typeof _userInteracted !== 'undefined') _userInteracted = true;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  // --- validation (never blocks, always flags) --------------------------------
+  function assignedAnywhere(section, model) {
+    const set = new Set();
+    model.matrices.forEach(mx => readCells(model, mx, stateInput(section, model.id, 'cells', mx.key)).forEach(p => set.add(p[0])));
+    return set;
+  }
+  function violationsOf(section, model) {
+    const out = [];
+    const withCtx = (v, mx) => { if (mx.ctx) v.ctx = mx.ctx; return v; };
+    model.matrices.forEach(mx => {
+      const pairs = readCells(model, mx, stateInput(section, model.id, 'cells', mx.key));
+      mx.targets.forEach(t => {
+        const have = pairs.filter(p => p[1] === t.key).length;
+        if (t.accepts === 'one' && have > 1) out.push(withCtx({ target: t.key, kind: 'one', have, want: 1 }, mx));
+        if (t.min && have < t.min) out.push(withCtx({ target: t.key, kind: 'min', have, want: t.min }, mx));
+        if (t.max && have > t.max) out.push(withCtx({ target: t.key, kind: 'max', have, want: t.max }, mx));
+      });
+      if (mx.src.itemTargets === 'min1') {
+        model.items.forEach(it => {
+          if (!pairs.some(p => p[0] === it.id)) out.push(withCtx({ item: it.id, kind: 'min1', source: mx.src.id }, mx));
+        });
+      }
+    });
+    const anywhere = assignedAnywhere(section, model);
+    model.items.forEach(it => { if (it.required && !anywhere.has(it.id)) out.push({ item: it.id, kind: 'required' }); });
+    return out;
+  }
+  function mappingProgress(sectionOrId) {
+    const section = sectionOf(sectionOrId);
+    const model = section && MODELS.get(section);
+    if (!model) return { assigned: 0, total: 0, violations: 0 };
+    return { assigned: assignedAnywhere(section, model).size, total: model.items.length, violations: violationsOf(section, model).length };
+  }
+
+  // --- matrix view (§ Matrix view) -------------------------------------------
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  };
+  // Column order: spec order within a tier, first tier before after tier, so
+  // the tier band spans contiguous columns.
+  const orderedTargets = matrix => matrix.targets.filter(t => t.tier === 'first').concat(matrix.targets.filter(t => t.tier === 'after'));
+  function contextLabel(model, ctx) {
+    const c = ctx && (model.contexts || []).find(x => x.id === ctx);
+    return c ? c.label : '';
+  }
+  function renderMatrix(section, model, matrix) {
+    const targets = orderedTargets(matrix);
+    const nFirst = targets.filter(t => t.tier === 'first').length;
+    const nAfter = targets.length - nFirst;
+    const bothTiers = nFirst > 0 && nAfter > 0;
+    const headRows = bothTiers ? 3 : 2;
+
+    const wrap = el('div', 'map-matrix');
+    wrap.dataset.mapMatrix = matrix.key;
+    const scroll = el('div', 'map-scroll');
+    const table = el('table', 'map-table');
+    table.setAttribute('role', 'grid');
+    table.setAttribute('aria-label', matrix.src.label + (matrix.ctx ? ' · ' + contextLabel(model, matrix.ctx) : ''));
+    if (targets.length > 18) table.dataset.dense = 'true';
+
+    const thead = el('thead');
+    const srcRow = el('tr', 'map-head-src');
+    const corner = el('th', 'map-corner'); corner.rowSpan = headRows; srcRow.appendChild(corner);
+    const srcTh = el('th', 'map-src', matrix.src.label); srcTh.colSpan = targets.length; srcRow.appendChild(srcTh);
+    const sumHead = el('th', 'map-sum-head', 'Σ'); sumHead.rowSpan = headRows; srcRow.appendChild(sumHead);
+    thead.appendChild(srcRow);
+    if (bothTiers) {
+      const tierRow = el('tr', 'map-head-tier');
+      const first = el('th', null, MAP_LOCALE.tier_first); first.colSpan = nFirst; first.dataset.tier = 'first'; tierRow.appendChild(first);
+      const after = el('th', null, MAP_LOCALE.tier_after); after.colSpan = nAfter; after.dataset.tier = 'after'; tierRow.appendChild(after);
+      thead.appendChild(tierRow);
+    }
+    const targetRow = el('tr', 'map-head-targets');
+    targets.forEach(t => {
+      const th = el('th');
+      th.dataset.mapTarget = t.key;
+      th.dataset.colTier = t.tier;
+      if (t.accepts === 'one') th.dataset.accepts = 'one';
+      th.appendChild(el('span', 'map-col-label', t.label));
+      th.appendChild(document.createTextNode(' '));
+      th.appendChild(el('span', 'map-col-count', ''));
+      targetRow.appendChild(th);
+    });
+    thead.appendChild(targetRow);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    const proposed = new Set(proposalPairs(model, matrix).map(p => p[0] + '>' + p[1]));
+    model.groups.forEach(group => {
+      const members = model.items.filter(i => i.group === group);
+      if (group) {
+        const gr = el('tr', 'map-group-row');
+        gr.dataset.group = group;
+        const td = el('td'); td.colSpan = targets.length + 2;
+        const btn = el('button', 'map-group-toggle');
+        btn.type = 'button';
+        btn.setAttribute('aria-expanded', 'true');
+        btn.appendChild(document.createTextNode('▾ ' + group + ' '));
+        btn.appendChild(el('span', 'map-group-count', String(members.length)));
+        td.appendChild(btn); gr.appendChild(td); tbody.appendChild(gr);
+      }
+      members.forEach(item => {
+        const tr = el('tr', 'map-item-row');
+        tr.dataset.item = item.id;
+        tr.dataset.group = group;
+        const th = el('th', 'map-item-label');
+        th.setAttribute('scope', 'row');
+        th.appendChild(el('span', null, item.label));
+        if (item.hint) th.title = item.hint;
+        tr.appendChild(th);
+        targets.forEach(t => {
+          const td = el('td', 'map-cell-td');
+          if (t.accepts === 'one') td.dataset.accepts = 'one';
+          const label = el('label');
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.dataset.mapCell = item.id + '>' + t.key;
+          cb.dataset.proposed = proposed.has(item.id + '>' + t.key) ? '1' : '0';
+          cb.tabIndex = -1;
+          cb.setAttribute('aria-label', item.label + ' → ' + t.label);
+          label.appendChild(cb);
+          label.appendChild(el('span', 'map-cell'));
+          td.appendChild(label);
+          tr.appendChild(td);
+        });
+        tr.appendChild(el('td', 'map-sum', '0'));
+        tbody.appendChild(tr);
+      });
+    });
+    table.appendChild(tbody);
+    const firstBox = table.querySelector('input[data-map-cell]');
+    if (firstBox) firstBox.tabIndex = 0;                 // roving tabindex entry point
+    scroll.appendChild(table);
+    wrap.appendChild(scroll);
+    return wrap;
+  }
+  function matrixEl(section, key) {
+    return [...section.querySelectorAll('[data-map-matrix]')].find(d => d.dataset.mapMatrix === key) || null;
+  }
+  // Checkboxes, per-column counts, per-row Σ and change markers from the state
+  // input — the only direction: the state string is read, never derived from
+  // the boxes.
+  function projectMatrix(section, model, matrix) {
+    const wrap = matrixEl(section, matrix.key);
+    if (!wrap) return;
+    const pairs = readCells(model, matrix, stateInput(section, model.id, 'cells', matrix.key));
+    const on = new Set(pairs.map(p => p[0] + '>' + p[1]));
+    const anywhere = assignedAnywhere(section, model);
+    wrap.querySelectorAll('input[data-map-cell]').forEach(cb => {
+      cb.checked = on.has(cb.dataset.mapCell);
+      cb.closest('td').classList.toggle('is-changed', cb.checked !== (cb.dataset.proposed === '1'));
+    });
+    wrap.querySelectorAll('th[data-map-target]').forEach(th => {
+      const t = matrix.targets.find(x => x.key === th.dataset.mapTarget);
+      const n = pairs.filter(p => p[1] === t.key).length;
+      const count = th.querySelector('.map-col-count');
+      count.textContent = t.accepts === 'one' ? n + '/1' : String(n);
+      th.classList.toggle('is-under', !!t.min && n < t.min);
+      th.classList.toggle('is-over', (!!t.max && n > t.max) || (t.accepts === 'one' && n > 1));
+      th.title = th.classList.contains('is-under') ? fmt(MAP_LOCALE.slot_empty_min, { n: t.min })
+               : th.classList.contains('is-over') ? fmt(MAP_LOCALE.slot_over_max, { n: t.max || 1 }) : '';
+    });
+    const min1 = matrix.src.itemTargets === 'min1';
+    wrap.querySelectorAll('tr.map-item-row').forEach(tr => {
+      const item = model.items.find(i => i.id === tr.dataset.item);
+      const n = pairs.filter(p => p[0] === tr.dataset.item).length;
+      const sum = tr.querySelector('.map-sum');
+      sum.textContent = String(n);
+      const flagged = (item.required && !anywhere.has(item.id)) || (min1 && n === 0);
+      sum.classList.toggle('is-under', flagged);
+      sum.title = flagged ? MAP_LOCALE.item_required : '';
+    });
+  }
+  function updateSummary(section, model) {
+    const line = section.querySelector(':scope > .map-summary');
+    if (!line) return;
+    const p = mappingProgress(section);
+    const parts = [];
+    if (p.total - p.assigned > 0) parts.push(fmt(MAP_LOCALE.summary_unassigned, { n: p.total - p.assigned }));
+    if (p.violations > 0) parts.push(fmt(MAP_LOCALE.summary_violations, { n: p.violations }));
+    line.textContent = parts.length ? parts.join(' · ') : MAP_LOCALE.summary_ok;
+    line.dataset.ok = String(!parts.length);
+  }
+
+  // --- keyboard: arrows move, Home/End jump; Space is the native toggle -------
+  function moveFocus(cb, dx, dy, edge) {
+    const row = cb.closest('tr');
+    const table = cb.closest('table');
+    const rows = [...table.querySelectorAll('tr.map-item-row:not([hidden])')];
+    const boxes = r => [...r.querySelectorAll('input[data-map-cell]')];
+    const col = boxes(row).indexOf(cb);
+    let r = rows.indexOf(row) + dy;
+    let c = col + dx;
+    if (edge === 'home') c = 0;
+    if (edge === 'end') c = boxes(row).length - 1;
+    r = Math.max(0, Math.min(rows.length - 1, r));
+    c = Math.max(0, Math.min(boxes(rows[r]).length - 1, c));
+    const next = boxes(rows[r])[c];
+    if (!next || next === cb) return;
+    cb.tabIndex = -1;
+    next.tabIndex = 0;
+    next.focus();
+    if (typeof next.scrollIntoView === 'function') next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+  const KEYS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+  // --- section rendering -----------------------------------------------------
+  function readSpec(section) {
+    const script = section.querySelector('script[data-mapping-spec]');
+    if (!script) throw new Error('no spec');
+    return normalizeSpec(JSON.parse(script.textContent));
+  }
+  function wireSection(section, model) {
+    section.addEventListener('change', e => {
+      const cb = e.target;
+      if (!(cb instanceof HTMLInputElement) || !cb.dataset.mapCell) return;
+      const parts = cb.dataset.mapCell.split('>');
+      const wrap = cb.closest('[data-map-matrix]');
+      const matrix = model.matrices.find(m => m.key === wrap.dataset.mapMatrix);
+      // The click already flipped the box; setCell reads `has` from the state
+      // string, so a refused write (frozen, unknown target) must re-project.
+      if (!setCell(section, parts[0], parts[1], matrix.ctx, cb.checked)) projectMatrix(section, model, matrix);
+    });
+    section.addEventListener('click', e => {
+      const btn = e.target.closest('button.map-group-toggle');
+      if (!btn || !section.contains(btn)) return;
+      const open = btn.getAttribute('aria-expanded') !== 'true';
+      btn.setAttribute('aria-expanded', String(open));
+      const row = btn.closest('tr.map-group-row');
+      btn.firstChild.nodeValue = (open ? '▾ ' : '▸ ') + row.dataset.group + ' ';
+      row.parentNode.querySelectorAll('tr.map-item-row').forEach(tr => {
+        if (tr.dataset.group === row.dataset.group) tr.hidden = !open;
+      });
+    });
+    section.addEventListener('keydown', e => {
+      const cb = e.target;
+      if (!(cb instanceof HTMLInputElement) || !cb.dataset.mapCell) return;
+      if (KEYS[e.key]) { e.preventDefault(); moveFocus(cb, KEYS[e.key][0], KEYS[e.key][1]); }
+      else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); moveFocus(cb, 0, 0, e.key.toLowerCase()); }
+    });
+  }
+  function renderSection(section) {
+    const m = section.dataset.mapping;
+    let model;
+    try { model = readSpec(section); }
+    catch (e) {
+      const banner = el('div', 'map-error', fmt(MAP_LOCALE.spec_error, { error: e.message }));
+      banner.setAttribute('role', 'alert');
+      section.appendChild(banner);
+      section.dataset.mapRendered = 'true';
+      return;
+    }
+    model.id = m;
+    MODELS.set(section, model);
+
+    // State inputs first (the persistence block may overwrite them right after),
+    // initialised from the proposal — value only, no events, nothing touched.
+    model.matrices.forEach(mx => {
+      const state = stateInput(section, m, 'cells', mx.key);
+      const pairs = proposalPairs(model, mx);
+      state.value = encodeCells(pairs);
+      mx.targets.filter(t => t.ordered).forEach(t => {
+        const input = stateInput(section, m, 'order', orderKey(mx, t));
+        input.value = (model.proposalOrder[orderKey(mx, t)] || []).join(',');
+        syncOrder(section, model, mx, t, pairs, true);
+      });
+    });
+    if (model.adhocItems) stateInput(section, m, 'adhoc').value = '[]';
+
+    const summary = el('div', 'map-summary');
+    summary.setAttribute('aria-live', 'polite');
+    section.appendChild(summary);
+    const matrices = el('div', 'map-matrices');
+    model.matrices.forEach((mx, i) => {
+      const wrap = renderMatrix(section, model, mx);
+      if (i > 0) wrap.hidden = true;                     // first matrix visible; tabs come with the tools
+      matrices.appendChild(wrap);
+    });
+    section.appendChild(matrices);
+    model.matrices.forEach(mx => projectMatrix(section, model, mx));
+    updateSummary(section, model);
+    wireSection(section, model);
+    section.dataset.mapRendered = 'true';
+  }
+  function renderMappings(root) {
+    const scope = root || document;
+    scope.querySelectorAll('section[data-mapping]:not([data-map-rendered])').forEach(renderSection);
+  }
+  // Re-reads every state input (restoreState() sets values without events),
+  // normalises the string back, re-sets the boxes and recomputes the counts.
+  function refreshMappings(root) {
+    const scope = root || document;
+    scope.querySelectorAll('section[data-mapping][data-map-rendered]').forEach(section => {
+      const model = MODELS.get(section);
+      if (!model) return;
+      model.matrices.forEach(mx => {
+        const state = stateInput(section, model.id, 'cells', mx.key);
+        const pairs = readCells(model, mx, state);
+        const enc = encodeCells(pairs);
+        if (state.value !== enc) state.value = enc;
+        mx.targets.filter(t => t.ordered).forEach(t => syncOrder(section, model, mx, t, pairs, true));
+        projectMatrix(section, model, mx);
+      });
+      if (typeof refreshSchema === 'function') refreshSchema(section, model);                           // Task 2
+      updateSummary(section, model);
+    });
+  }
+
+  // --- payload (§ Payload) ---------------------------------------------------
+  function parseUi(value) {
+    const out = {};
+    String(value || '').split(';').forEach(kv => { const i = kv.indexOf('='); if (i > 0) out[kv.slice(0, i)] = kv.slice(i + 1); });
+    return out;
+  }
+  function collectMappings(scope) {
+    const root = scope || document;
+    const out = [];
+    root.querySelectorAll('section[data-mapping][data-map-rendered]').forEach(section => {
+      const model = MODELS.get(section);
+      if (!model || section.querySelector('.map-error')) return;
+      const m = model.id;
+      const entry = { id: m, label: section.dataset.navLabel || m };
+      const view = section.closest('section[data-view]');
+      if (view) {
+        entry.view = view.dataset.view;
+        if (view.dataset.viewFor) entry.design = view.dataset.viewFor;
+      }
+      const ui = parseUi(([...section.querySelectorAll('input.map-state')].find(i => i.id === 'map-' + m + '-ui') || {}).value);
+      entry.mode = !model.hasElements ? 'matrix' : (ui.mode === 'matrix' ? 'matrix' : 'schema');
+      entry.assigned = {};
+      entry.order = {};
+      entry.diff = [];
+      model.matrices.forEach(mx => {
+        const pairs = readCells(model, mx, stateInput(section, m, 'cells', mx.key));
+        entry.assigned[mx.key] = pairs.map(p => [p[0], p[1]]);
+        mx.targets.filter(t => t.ordered).forEach(t => {
+          const checked = pairs.filter(p => p[1] === t.key).map(p => p[0]);
+          const input = stateInput(section, m, 'order', orderKey(mx, t));
+          entry.order[orderKey(mx, t)] = splitOrder(input.value).filter(id => checked.includes(id));
+        });
+        const wrap = matrixEl(section, mx.key);
+        if (!wrap) return;
+        wrap.querySelectorAll('input[data-map-cell]').forEach(cb => {
+          const proposed = cb.dataset.proposed === '1';
+          if (cb.checked === proposed) return;
+          const parts = cb.dataset.mapCell.split('>');
+          const d = { item: parts[0], target: parts[1] };
+          if (mx.ctx) d.ctx = mx.ctx;
+          d.proposed = proposed; d.now = cb.checked;
+          entry.diff.push(d);
+        });
+      });
+      const anywhere = assignedAnywhere(section, model);
+      entry.unassigned = model.items.filter(i => !anywhere.has(i.id)).map(i => i.id);
+      entry.violations = violationsOf(section, model);
+      let adhoc = [];
+      const adhocInput = [...section.querySelectorAll('input.map-state')].find(i => i.id === 'map-' + m + '-adhoc');
+      if (adhocInput) { try { adhoc = JSON.parse(adhocInput.value || '[]'); } catch { adhoc = []; } }
+      entry.adhocItems = Array.isArray(adhoc) ? adhoc : [];
+      const noteEl = view ? document.querySelector('[data-comment="view-' + view.dataset.view + '"]')
+                          : section.querySelector('[data-comment="map-' + m + '-note"]');
+      entry.note = noteEl ? String(noteEl.value || '').trim() : '';
+      entry.slotNotes = {};
+      section.querySelectorAll('[data-comment^="map-' + m + '-note-"]').forEach(ta => {
+        const text = String(ta.value || '').trim();
+        if (text) entry.slotNotes[ta.dataset.comment.slice(('map-' + m + '-note-').length)] = text;
+      });
+      out.push(entry);
+    });
+    return out;
+  }
+
+  window.renderMappings = renderMappings;
+  window.refreshMappings = refreshMappings;
+  window.setCell = setCell;
+  window.collectMappings = collectMappings;
+  window.mappingProgress = mappingProgress;
+})();
+```
+
 ## collectDecisions (dispatcher)
 
 The submit handler picks the branch from the **active iteration's**
