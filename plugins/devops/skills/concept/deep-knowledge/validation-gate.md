@@ -82,7 +82,7 @@ from `templates.md` § Layout before opening the tab.
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 71 patterns, regardless of template
+Every concept page must contain these 72 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
