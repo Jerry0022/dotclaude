@@ -116,6 +116,16 @@ Subagents inherit all output contracts:
   outranks `pending`. The concept bridge's own tasks (server, keepalive pulser,
   pickup waker) are infrastructure, never `pending`; the guard ignores them.
   Real content agents still go into `pending` and are folded into that line.
+  Pass `cwd` too — the card then prints the page's `http://localhost:{port}/…`
+  link above the CTA, read from `.claude/concept-active.json`.
+- **A card rendered while `/claude-batch` is collecting says so by itself**:
+  with `cwd` passed, the card reads `.claude/batch-mode.json` and swaps its CTA
+  for "📥 BATCH sammelt. {n} Notizen · nächster Prompt wird Notiz #{n+1} ·
+  "{marker}" löst aus — ich WARTE". No card field — the state file is the truth.
+- **Modes mark the session title.** `/concept` prefixes it with `🧭 Concept – `
+  while the page is open, `/claude-batch` with `📥 Batch – ` while collecting;
+  each strips exactly its prefix on the way out. Desktop-app only
+  (`mcp__ccd_session_mgmt__set_session_title` `self`) — elsewhere skip silently.
 
 ## Extension Model
 

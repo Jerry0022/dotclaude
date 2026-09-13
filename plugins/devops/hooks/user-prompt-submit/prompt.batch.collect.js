@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.3.0
+ * @version 0.4.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/claude-batch`: while active, blocks the user
@@ -26,6 +26,19 @@
  *   to is gone by merge time, and the note reads as "make it like the image"
  *   with no image anywhere.
  *
+ *   A re-activation while already collecting (`/claude-batch`, `/claude-batch
+ *   on`, or `/claude-batch <text>`) is absorbed here: any residue is stored as a
+ *   note and the user gets the mode summary — the same block the activation
+ *   ends with — instead of paying a turn for "already active". The exits
+ *   (`off`, `go`, `status`, `marker`) always pass through.
+ *
+ *   Firing the merge first merges the default branch into the current branch
+ *   (`scripts/git-sync.js`, synchronous): the notes were written against the
+ *   state the branch had when collection started, and planning against a
+ *   stale base is how a merged plan silently rebuilds what main already has.
+ *   The result is injected with the notes; a sync that could not run is named
+ *   so the turn runs it itself before the feasibility check.
+ *
  *   The marker can never start with `!`, `/`, `#` or `@`: the harness claims
  *   those before a prompt exists (bash mode, slash command, memory capture, file
  *   mention), so this hook would never see the escape at all.
@@ -42,11 +55,20 @@ require('../lib/plugin-guard');
 
 const fs   = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const B = require('../lib/batch-state');
 
 /** Absolute path to the state module, so injected guidance can quote a command
  *  that actually runs — a relative require resolves against the wrong cwd. */
 const STATE_MODULE = path.resolve(__dirname, '..', 'lib', 'batch-state.js');
+
+/** The parent-chain sync the merge runs before anything is planned. */
+const GIT_SYNC_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'git-sync.js');
+
+/** Upper bound for the synchronous main-sync inside the hook. The harness gives
+ *  a UserPromptSubmit hook 60 s by default; a fetch that takes longer than this
+ *  is reported and handed to the turn, never allowed to kill the hook. */
+const SYNC_TIMEOUT_MS = 45_000;
 
 /**
  * Inline the full note text up to this size.
@@ -70,11 +92,16 @@ const EXCERPT_CHARS = 200;
  * mechanism the mode runs on. So the first line has to carry the all-clear:
  * the note landed, nothing failed.
  *
+ * The body is the shared mode summary (`renderModeSummary`): the same block
+ * the activation ends with, so the panel always says what is happening, how to
+ * keep collecting, how to fire, and how to only stop.
+ *
  * @param {number} count total notes after this one
  * @param {string} marker configured execute marker
  * @param {boolean} question whether the note reads like a question
+ * @param {{expiryHours?:number,maxNotes?:number}} [bounds] pinned mode bounds
  */
-function buildAck(count, marker, question) {
+function buildAck(count, marker, question, bounds = {}) {
   const lines = [
     `[claude-batch] ✓ Notiz #${count} gespeichert — alles korrekt, kein Fehler.`,
     'Der Sammelmodus stoppt den Prompt absichtlich, statt ihn zu bearbeiten.',
@@ -87,8 +114,74 @@ function buildAck(count, marker, question) {
       'wenn du jetzt eine Antwort willst.',
     );
   }
-  lines.push(`"${marker} <text>" startet die Umsetzung aller ${count} Notizen · /claude-batch off beendet den Modus.`);
+  lines.push('', B.renderModeSummary({ marker, count, ...bounds }));
   return lines.join('\n');
+}
+
+/**
+ * Shown when a `/claude-batch` invocation arrives that would only switch on a
+ * mode that is already on. Blocking it is the point: the user forgot the mode
+ * is running, and the answer they need is the summary — not a turn.
+ *
+ * @param {number} count notes after this prompt
+ * @param {string} marker configured execute marker
+ * @param {boolean} stored whether the invocation carried text that is now a note
+ * @param {{expiryHours?:number,maxNotes?:number}} [bounds]
+ */
+function buildRearmAck(count, marker, stored, bounds = {}) {
+  const lines = [
+    stored
+      ? `[claude-batch] Sammelmodus läuft bereits — der Text wurde als Notiz #${count} gespeichert, kein Fehler.`
+      : '[claude-batch] Sammelmodus läuft bereits — Aufruf ignoriert, kein Fehler.',
+    'Ein erneutes Einschalten ist nicht nötig; alles Weitere wird weiter gesammelt.',
+    '',
+    B.renderModeSummary({ marker, count, ...bounds }),
+  ];
+  return lines.join('\n');
+}
+
+/**
+ * "Step 0" of the merge context: where the branch stands relative to main.
+ *
+ * The notes were written blind against whatever the branch was when collection
+ * started — often hours ago. Planning against that base is how a merged plan
+ * rebuilds what main already has, or conflicts with it at ship time. So the
+ * sync result is the FIRST thing the turn reads, before any note.
+ *
+ * @param {{ran:boolean,output?:string,reason?:string,script?:string}|undefined} sync
+ */
+function renderSyncLines(sync) {
+  const lines = ['SCHRITT 0 — Stand von main im aktuellen Branch:'];
+  const script = sync?.script || GIT_SYNC_SCRIPT;
+  if (!sync) {
+    lines.push(
+      `Kein Sync gelaufen. Führe ZUERST aus: node "${script}" — und behandle das`,
+      'Ergebnis wie unten beschrieben, bevor du eine Notiz bewertest.',
+    );
+  } else if (!sync.ran) {
+    lines.push(
+      `Der Sync konnte im Hook nicht laufen (${sync.reason || 'unbekannt'}).`,
+      `Führe ZUERST aus: node "${script}" — erst danach die Notizen prüfen.`,
+    );
+  } else if (sync.output) {
+    lines.push(`Der Hook hat main gerade gemerged: ${sync.output}`);
+    if (/[⚠✗]/.test(sync.output)) {
+      lines.push(
+        'Das ist ein Konflikt oder ein Fehlschlag. Löse ihn ZUERST (merge-safety.md:',
+        'nie --ours/--theirs), bevor du eine Notiz bewertest — sonst planst du gegen',
+        'einen Stand, den es nach dem Merge nicht mehr gibt.',
+      );
+    }
+  } else {
+    lines.push(
+      'main ist bereits enthalten — nichts zu mergen (oder Branch = main, kein Remote).',
+    );
+  }
+  lines.push(
+    'Grund: die Notizen wurden gegen den alten Stand geschrieben; geprüft und',
+    'umgesetzt werden sie gegen den aktuellen.',
+  );
+  return lines;
 }
 
 /** One line per note: number, timestamp, first EXCERPT_CHARS characters. */
@@ -104,8 +197,10 @@ function noteIndexLine(note, i) {
  * @param {{at:string,text:string}[]} notes
  * @param {string} rest the user's text after the marker
  * @param {string} notesFile absolute path to the notes file
- * @param {{stale?:boolean}} [opts] stale = the mode had already ended (expired,
- *   note cap, or manually off) and the merge fires off the surviving notes
+ * @param {{stale?:boolean,sync?:{ran:boolean,output?:string,reason?:string,script?:string}}} [opts]
+ *   stale = the mode had already ended (expired, note cap, or manually off) and
+ *   the merge fires off the surviving notes; sync = result of the main-sync
+ *   the hook ran before injecting (see `syncMain`)
  */
 function buildMergeContext(notes, rest, notesFile, opts = {}) {
   const n = notes.length;
@@ -120,6 +215,7 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
       'sag das dem Nutzer in einer Zeile, statt es zu verschweigen.',
     );
   }
+  head.push('', ...renderSyncLines(opts.sync));
   head.push(
     '',
     `PFLICHT — Vollständigkeit. Es sind ${n} Notizen. Bevor du planst, schreibe eine`,
@@ -148,6 +244,13 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     'Der Sammelmodus ist mit diesem Prompt automatisch BEENDET. Folgeprompts sind',
     'die Unterhaltung über die Umsetzung und laufen wieder normal — frage NICHT,',
     'ob der Modus aktiv bleiben soll. Nur ein neues /claude-batch on sammelt wieder.',
+    '',
+    // The skill's own Step 4.8 says the same, but this path never loads the
+    // skill — the marker prompt is the whole trigger. Without this line the
+    // sidebar keeps promising a collection that ended with this prompt.
+    'Session-Titel: Beginnt er mit "📥 Batch – " (mcp__ccd_session_mgmt__get_session',
+    'self), entferne genau dieses Präfix via mcp__ccd_session_mgmt__set_session_title',
+    'self. Fehlen die Tools (Terminal, unbeaufsichtigt): still überspringen.',
   );
   if (rest) {
     head.push(
@@ -321,7 +424,46 @@ function buildActivationGuard() {
 }
 
 /**
- * Fire the merge: inject every note, then end collection.
+ * Merge the parent chain (main) into the current branch, synchronously.
+ *
+ * Runs `scripts/git-sync.js` exactly as the session-start cron does, minus the
+ * detachment: the merge turn needs the result NOW, as context, not on the next
+ * prompt. Silent output means nothing to merge (or no repo / no remote / on
+ * main) — git-sync only speaks when it did or could not do something.
+ *
+ * Never throws. A sync that cannot run is reported so the turn runs it itself;
+ * it must not cost the notes their turn.
+ *
+ * @param {string} cwd
+ * @returns {{ran:boolean,output?:string,reason?:string,script:string}}
+ */
+function syncMain(cwd) {
+  const script = GIT_SYNC_SCRIPT;
+  if (process.env.DEVOPS_BATCH_NO_SYNC) return { ran: false, reason: 'DEVOPS_BATCH_NO_SYNC gesetzt', script };
+  const env = { ...process.env };
+  // The background spawner routes output into a result file; here stdout IS
+  // the result.
+  delete env.DEVOPS_GIT_SYNC_RESULT_FILE;
+  try {
+    const out = execFileSync(process.execPath, [script], {
+      cwd,
+      env,
+      encoding: 'utf8',
+      timeout: SYNC_TIMEOUT_MS,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    return { ran: true, output: String(out || '').trim(), script };
+  } catch (err) {
+    const reason = err && err.killed
+      ? `Timeout nach ${SYNC_TIMEOUT_MS / 1000} s`
+      : String(err && err.message || err).split('\n')[0];
+    return { ran: false, reason, script };
+  }
+}
+
+/**
+ * Fire the merge: sync main, inject every note, then end collection.
  * @param {{cwd:string,text:string,marker:string,modeActive:boolean}} ctx
  */
 function fireMerge({ cwd, text, marker, modeActive }) {
@@ -337,8 +479,11 @@ function fireMerge({ cwd, text, marker, modeActive }) {
     return; // mode stays armed — the user just fired early
   }
   const rest = B.stripMarker(text, marker);
+  // Before the notes are even shown: bring main in. The plan is checked against
+  // the code as it is now, not as it was when the first note was written.
+  const sync = syncMain(cwd);
   process.stdout.write(
-    `${buildMergeContext(notes, rest, B.notesPath(cwd), { stale: !modeActive })}\n`,
+    `${buildMergeContext(notes, rest, B.notesPath(cwd), { stale: !modeActive, sync })}\n`,
   );
   // Firing the merge ENDS collection. What follows is the conversation about
   // the implementation — approvals, answers to Claude's questions, course
@@ -381,6 +526,40 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
+  // Mode bounds as pinned at activation — the summary must quote what is in
+  // force, not the config default a later edit may have changed.
+  let bounds = {};
+  try {
+    const mode = B.readMode(cwd);
+    if (mode?.startedAt && mode?.expiresAt) {
+      const h = (Date.parse(mode.expiresAt) - Date.parse(mode.startedAt)) / 3600_000;
+      if (Number.isFinite(h) && h > 0) bounds.expiryHours = Math.round(h * 10) / 10;
+    }
+    if (mode?.maxNotes) bounds.maxNotes = mode.maxNotes;
+  } catch { /* defaults */ }
+
+  if (verdict === 'rearm') {
+    // `/claude-batch`, `/claude-batch on` or `/claude-batch <text>` while the
+    // mode is already on. Store the residue (if any) and answer with the mode
+    // summary — blocked, so it costs nothing. The exits never land here.
+    try {
+      const inv = B.parseBatchCommand(text);
+      if (inv?.route === 'help') {
+        // Static text — the long form of the summary. Nothing to store.
+        process.stderr.write(`${B.renderHelp({ marker, ...bounds })}\n`);
+        process.exit(2);
+      }
+      const residue = inv?.residue || '';
+      const count = residue ? B.appendNote(cwd, residue) : B.countNotes(cwd);
+      process.stderr.write(`${buildRearmAck(count, marker, Boolean(residue), bounds)}\n`);
+      process.exit(2);
+    } catch (err) {
+      // Could not store — let the skill handle it, as before this branch existed.
+      process.stderr.write(`[claude-batch] Aufruf konnte nicht abgefangen werden (${err.message}) — Skill übernimmt.\n`);
+      process.exit(0);
+    }
+  }
+
   if (verdict === 'passthrough') {
     if (modeActive) {
       // The only user prompts that reach here while collecting carry an
@@ -404,7 +583,7 @@ process.stdin.on('end', () => {
   // verdict === 'collect' — block the prompt and store it.
   try {
     const count = B.appendNote(cwd, text);
-    process.stderr.write(`${buildAck(count, marker, B.looksLikeQuestion(text))}\n`);
+    process.stderr.write(`${buildAck(count, marker, B.looksLikeQuestion(text), bounds)}\n`);
     process.exit(2);
   } catch (err) {
     // Storing failed — blocking now would erase the prompt with nothing kept.
@@ -416,9 +595,13 @@ process.stdin.on('end', () => {
 
 module.exports = {
   buildAck,
+  buildRearmAck,
   buildMergeContext,
+  renderSyncLines,
   buildActivationGuard,
   buildAttachmentGuard,
   buildEmptyQueueNotice,
+  syncMain,
   INLINE_LIMIT,
+  GIT_SYNC_SCRIPT,
 };

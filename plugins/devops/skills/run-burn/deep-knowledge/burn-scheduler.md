@@ -52,6 +52,11 @@ burn — report:
 | `deep` | opus for core, frontend, ai, windows, qa (po/research/redteam are opus already) | high | 40–60 | redteam review + second QA | 1.8 |
 | `max` | opus for every agent | high | 60+ | redteam + second QA + po review | 2.6 |
 
+`Effort` is a **prompt directive**, not a tool parameter: the Agent tool has no
+effort parameter, so each agent's frontmatter effort stays the effective
+reasoning effort. A profile asks for more depth in the prompt text — the higher
+tool-call ceiling and the extra passes are what actually change.
+
 `depthFactor` values are **planning estimates** used for the floor check and the
 lane maths. They are not measured token ratios and must not be reported as spend
 predictions.
