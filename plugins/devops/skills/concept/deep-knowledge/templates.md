@@ -8336,6 +8336,11 @@ let _draftTimer = null;
 let _draftCleared = [];      // keys the user emptied on purpose since last flush
 let _draftFailures = 0;
 let _draftStripEl = null;
+// While the strip is up, retry the flush on a slow timer so a recovered bridge
+// clears the warning by itself — otherwise it only goes away once the user
+// types again, and a healthy bridge keeps looking dead.
+const DRAFT_RETRY_MS = 30000;
+let _draftRetryTimer = null;
 // Draft-mirror phase for the pinned status line (§ Claude Connection
 // Heartbeat, renderPanelStatus): 'saving' while a flush is queued or in
 // flight, 'saved' once the bridge acked it, 'local' after three consecutive
@@ -8386,6 +8391,12 @@ function _setDraftHealth(ok) {
   // The status line follows the same three-strike rule: a single blip stays
   // "Gespeichert" (the local copy IS saved), three in a row read "Nur lokal".
   _setDraftPhase(show ? 'local' : 'saved');
+  // Retry only while the strip is showing; a hidden strip has nothing to clear.
+  if (show && !_draftRetryTimer) {
+    _draftRetryTimer = setTimeout(() => { _draftRetryTimer = null; flushDraft(); }, DRAFT_RETRY_MS);
+  } else if (!show && _draftRetryTimer) {
+    clearTimeout(_draftRetryTimer); _draftRetryTimer = null;
+  }
 }
 
 async function flushDraft() {
@@ -8900,6 +8911,11 @@ fails, so nothing needs to reserve space for it up front.
   padding: .55rem .9rem; border-radius: 8px; font-size: .8rem;
   box-shadow: 0 4px 16px rgba(0,0,0,.35);
 }
+/* `display: flex` above outranks the UA `[hidden] { display: none }`, so the
+   attribute alone would never hide either strip once shown — same override
+   every other toggled bar carries (`.frozen-bar[hidden]`, `.hint-cache[hidden]`). */
+.draft-offline-strip[hidden],
+.recovered-notes-strip[hidden] { display: none; }
 .recovered-notes-strip button {
   background: none; border: 1px solid var(--border-color, #30363d);
   color: inherit; border-radius: 6px; padding: .2rem .6rem;
