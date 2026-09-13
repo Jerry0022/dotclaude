@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.159.0] — 2026-09-13
+
+### Added
+
+- **`ship_release` tags the alpha ring on its own when the caller forgets `tag`.** An automated caller omitted the parameter and the tool merged silently with no ring tag: `main` moved ahead of every ring, `ship_promote` had nothing to promote, and the result read all-green (#372). Omitting `tag` now derives `v<version>` from the version file `ship_version_bump` just wrote (`tagDefaulted: true` in the result); an explicit `tag: null` still ships without a ring tag but returns `tagSkipped: true` + a `tagWarning` naming the gap, and a project without a version file takes the same reported-skip path — the merge itself never fails over a missing tag. The ship skill surfaces that warning as a `userFinalTest` item instead of a green card.
+
 ## [0.158.2] — 2026-09-13
 
 ### Fixed
