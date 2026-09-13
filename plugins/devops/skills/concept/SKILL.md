@@ -1096,6 +1096,15 @@ never re-run a completed step. The checkpoint records what the previous run
    the authority on who owns what and how wide to fan out. Give every agent
    the concept file path and the decisions it must honour, not a paraphrase.
 
+   **The approved scope is built in full.** Everything the submitted round
+   carried as accepted — every Miteinbeziehen finding, every approved plan
+   step, every feedback item on a design round — is part of this order.
+   Nothing accepted may be deferred into the final report's open points
+   (§ Open points admission gate): a part that could not be built is a
+   shortfall, reported in the *Zusammenfassung* / *Tests* with its reason
+   ("nicht umgesetzt, weil …"), never re-labelled as a follow-up for the
+   user to sign off.
+
    Doing it inline is the exception and needs a reason: a change small enough
    that one dispatch costs more than it saves (a one-line fix, a copy change).
    Take that exception when it applies, and name it in the final report.
@@ -1300,7 +1309,9 @@ ending.
 1. **`keep` / `gitignore`:** add `data-closed` to the
    `<section data-final-report>` (the sheet renders its done state instead of
    re-arming — the bridge is about to be shut down, so a live execute button
-   would queue a submission nobody picks up), then POST `/reload` so the
+   would queue a submission nobody picks up; the `[data-handoffs]` block,
+   if the report has one, is the only block that stays visible — what is
+   left is left for the user), then POST `/reload` so the
    browser shows the rewritten report (issue links, implemented notes,
    shipped note), and only AFTER that POST `/reset` with the captured
    `_version` —
@@ -1472,10 +1483,21 @@ preservation) stays identical.
    - **Zusammenfassung** — what was implemented in one paragraph + commit hash
    - **Geänderte Dateien** — bulleted list with brief rationale per file
    - **Tests / Verifikation** — what was run, what passed, what was skipped
-   - **Offene Fragen & TODOs** *(optional, see below)* — checkbox list of
-     things noted during implementation that were intentionally left out,
-     bugs found but not fixed, doc gaps, future improvements
-   - **Nächste Schritte** *(optional)* — recommendations for follow-up work
+   - **Offene Punkte** *(optional — usually absent, see § Open points
+     admission gate below)* — checkbox list of the points that passed the
+     gate: either explicitly deferred by the user during this concept, or
+     found on the way and unrelated to the concept's scope
+   - **Danach von Hand** (`<section id="handoffs"
+     data-nav-label="{{final.handoffs}}" data-handoffs>`, *only when there
+     is something*) — the steps the user has to take by hand after the merge
+     (flip a cron, rotate a key, watch the first run), as a numbered list.
+     `data-handoffs` paints the section, marks its TOC entry in the warning
+     colour and mirrors the list onto the close-out sheet, where it is the
+     one block that stays visible after the close-out — as a plain paragraph
+     it vanished among the others. Omit the section when there is nothing to
+     hand over. Never a place for recommendations: work that is worth doing
+     and in scope was built; work that is out of scope goes through the gate
+     below or nowhere
 4. Append a new entry in the `.iteration-tabs` bar for the final report.
    **Tab label MUST be `iteration.final_tab`** (locale: "Abschlussbericht" /
    "Final report"), NOT "Iteration N+1". Mark it `aria-selected="true"` and
@@ -1490,7 +1512,7 @@ preservation) stays identical.
 
 **Verbatim copy directive (mandatory):**
 The final-report JS block — `refreshCloseout`, `renderCloseout`,
-`openQuestionBoxes`, `followUpRoute`, `followUpItem`, `collectFollowUps`,
+`renderHandoffs`, `openQuestionBoxes`, `followUpRoute`, `followUpItem`, `collectFollowUps`,
 `collectIssueItems`, `collectImplementItems`, `collectDisposition`,
 `closeoutShipChoice`, `buildFollowUpList`, `buildCloseoutPlan`,
 `setCloseoutFrozen`, `restoreCloseoutToReady`, `submitFinalize`, plus the
@@ -1505,20 +1527,63 @@ post-generation validation gate (`deep-knowledge/validation-gate.md` Phase 1)
 MUST find the panel-state and close-out patterns (28–38b) in the generated
 file.
 
-**Open questions / TODOs section — when to include:**
+**Open points section — admission gate (default: no section):**
 
-Include the `<section data-open-questions>` block only when there are real
-items worth carrying past the concept — things you knowingly deferred, bugs
-surfaced but out of scope, doc gaps, follow-up refactors. Each becomes one row
-on the close-out sheet, where the user routes it to a GitHub issue, to
-"jetzt umsetzen" (built during the close-out, part B), or to nothing. Write
-`data-issue-body` for every item as if it were BOTH: an issue read cold in
-three months and a brief handed to an implementing agent ten minutes later. Skip it
-entirely (do NOT render an empty stub) when the implementation is
-genuinely clean. The presence of this section is what adds the issues step to
-the close-out sheet — see `deep-knowledge/templates.md` § Final Report Panel
-for the HTML pattern. Default each `<input type="checkbox">` to `checked` so
-the user opts items OUT rather than IN.
+The `<section data-open-questions>` block is the exception, not a closing
+ritual. The normal final report has NO open points: the user approved a
+scope, the scope was built, the report says so. Every row on that list asks
+the user for a decision they did not ask to make, so a row has to earn its
+place. Do NOT go looking for candidates — keep noticing things while you
+implement, but noticing something is not the same as putting it in front of
+the user.
+
+Exactly two origins are admissible, and every item declares its origin with
+`data-oq-origin`:
+
+| Origin | `data-oq-origin` | What qualifies |
+|---|---|---|
+| Deferred by the user | `deferred` | The user explicitly parked it during THIS concept — a "später" / "nicht jetzt" comment, a variant they rejected for now but asked to keep, a decision card answered with "aufschieben". Name where (iteration + card) in `data-issue-body`. |
+| Found on the way | `found` | Surfaced during implementation, has no or at most a remote relation to the concept's scope, and would be lost otherwise — a bug in a neighbouring module, a broken script you had to work around, a stale doc for a different feature. |
+
+**Never an open point** — these are the rows that made the list a nuisance:
+
+- **Anything in the approved scope.** If the user clicked implement on a
+  round that contained it, it is scope: build it (see § `action:
+  "implement"` step 2 — the approved scope is built in full). If it could
+  not be built, that is a shortfall and belongs in the *Zusammenfassung* /
+  *Tests* as "nicht umgesetzt, weil …" — moving it to the open points
+  quietly turns a shortfall into a request for the user's signature.
+- **The no-brainer next step of the scope** — "add the tests", "update the
+  README for this change", "phase 4 of the same plan". If it is obvious, it
+  is scope (`{PLUGIN_ROOT}/deep-knowledge/documentation-maintenance.md`
+  already makes the doc update part of every change); if it is genuinely a
+  separate scope, the user decides whether to start a new concept — a
+  checkbox is not how that decision is asked.
+- **Generic best-practice nudges** nobody asked for — "consider
+  monitoring", "could use a cache", "re-evaluate on <date>".
+- **Reality-check drift** that broke no contract — that is a mention in the
+  *Zusammenfassung* (`deep-knowledge/reality-check.md`), not a row.
+
+Self-check before writing a row: *would the user be surprised to see this
+here?* A row they would expect ("of course phase 4 is next") is scope or a
+new concept, never a row. A row they would not have thought of themselves
+(the SAML bug that showed up in the smoke test) is a `found` row.
+
+When no candidate survives, omit the section entirely — do NOT render an
+empty stub, a "keine offenen Punkte" line, or a single padding row. The
+sheet handles the absence: the follow-up block simply does not appear.
+
+Each surviving item becomes one row on the close-out sheet, where the user
+routes it to a GitHub issue, to "jetzt umsetzen" (built during the close-out,
+part B), or to nothing. Write `data-issue-body` for every item as if it were
+BOTH: an issue read cold in three months and a brief handed to an
+implementing agent ten minutes later. The presence of this section is what
+adds the follow-up block to the close-out sheet — see
+`deep-knowledge/templates.md` § Final Report Panel for the HTML pattern.
+Default each `<input type="checkbox">` to `checked` so the user opts items
+OUT rather than IN. The validation gate rejects a final report whose open
+points lack `data-oq-origin` (`deep-knowledge/validation-gate.md` pattern
+33b).
 
 **No further iterations from the final report.** The panel deliberately
 omits the iterate/implement buttons. If the user wants more work after

@@ -123,6 +123,8 @@ must see their own language. The locale hint is authoritative.
 | `final.route_issue`            | Issue                          | Issue |
 | `final.route_implement`        | Implement now                  | Jetzt umsetzen |
 | `final.route_ignore`           | Drop                           | Ignorieren |
+| `final.origin_deferred`        | deferred by you                | bewusst vertagt |
+| `final.origin_found`           | found on the way               | unterwegs gefunden |
 | `final.issue_link_prefix`      | Issue                          | Issue |
 | `final.done_prefix`            | implemented                    | umgesetzt |
 | `final.dispose_heading`        | This concept page              | Diese Konzeptseite |
@@ -154,6 +156,8 @@ must see their own language. The locale hint is authoritative.
 | `final.plan_implement`         | implement now (devops agents)  | jetzt umsetzen (devops-Agents) |
 | `final.plan_ship`              | run the ship pipeline          | Ship-Pipeline starten |
 | `final.plan_close`             | end the concept session        | Concept-Session beenden |
+| `final.handoffs`               | By hand, afterwards            | Danach von Hand |
+| `final.handoffs_hint`          | Claude cannot do these — they stay with you once this is through. | Das kann Claude nicht übernehmen — das bleibt bei dir, sobald das hier durch ist. |
 | `proto.feedback_title`         | Feedback                       | Feedback |
 | `proto.feedback_toggle`        | Open feedback                  | Feedback öffnen |
 | `proto.feedback_general`       | General notes on this concept  | Allgemeine Anmerkungen zum Konzept |
@@ -525,7 +529,9 @@ the `[ui-locale: ...]` hint produced.
             <div class="followup-list" id="closeout-followup-list"
                  data-label-issue="{{final.route_issue}}"
                  data-label-implement="{{final.route_implement}}"
-                 data-label-ignore="{{final.route_ignore}}"></div>
+                 data-label-ignore="{{final.route_ignore}}"
+                 data-label-origin-deferred="{{final.origin_deferred}}"
+                 data-label-origin-found="{{final.origin_found}}"></div>
             <p class="hint hint-none" id="closeout-followups-none" hidden>
               <span aria-hidden="true">⚠</span> {{final.followups_none}}
             </p>
@@ -612,6 +618,21 @@ the `[ui-locale: ...]` hint produced.
             <h4 class="closeout-q">{{final.closeout_plan_q}}</h4>
             <ol class="closeout-plan" id="closeout-plan"></ol>
             <p class="hint hint-warn">{{final.closeout_plan_warn}}</p>
+          </section>
+
+          <!-- Block 4b (conditional) — what the USER has to do by hand once
+               the close-out is through. Mirrors the report's [data-handoffs]
+               section (renderHandoffs) so the one thing nothing here can
+               automate is the last thing on the sheet — and the only block
+               that stays visible after data-closed. Hidden when the report
+               has no such section: the normal case. -->
+          <section class="closeout-block closeout-handoffs" data-closeout-block="handoffs" hidden>
+            <h4 class="closeout-q">
+              <span aria-hidden="true">⚠</span> {{final.handoffs}}
+              <span class="closeout-count" id="closeout-handoffs-count"></span>
+            </h4>
+            <p class="hint">{{final.handoffs_hint}}</p>
+            <ol class="closeout-handoffs-list" id="closeout-handoffs-list"></ol>
           </section>
 
           <!-- Execute sits behind the same .submit-gap the implement button
@@ -5724,6 +5745,15 @@ to hunt for their own position on every scroll.
   font-weight: 600;
 }
 .section-nav-item.is-active .section-nav-label { opacity: 1; }
+/* The hand-offs entry is the one TOC item that names work still left for the
+   reader — warning colour and a marker in every scroll position, so it cannot
+   be mistaken for one more report paragraph. */
+.section-nav-item[data-handoffs] .section-nav-label {
+  opacity: 1;
+  color: var(--warning-color, #d29922);
+  font-weight: 600;
+}
+.section-nav-item[data-handoffs] .section-nav-label::before { content: '⚠ '; }
 @media (prefers-reduced-motion: reduce) {
   .section-nav-item { transition: none; }
 }
@@ -5879,6 +5909,9 @@ function buildSectionNav() {
     link.className = 'section-nav-item';
     link.dataset.sectionId = id;
     if (hasTriState) link.setAttribute('data-variant', '');
+    // The hand-offs section is the one entry that names work still left for
+    // the reader; the attribute is what the nav CSS paints.
+    if (sec.hasAttribute('data-handoffs')) link.setAttribute('data-handoffs', '');
     const labelEl = document.createElement('span');
     labelEl.className = 'section-nav-label';
     labelEl.textContent = label;
@@ -6551,6 +6584,18 @@ html[data-template="design"] .frozen-bar {
   overflow-wrap: break-word;
   margin-bottom: 0.45rem;
 }
+/* Origin tag — "bewusst vertagt" / "unterwegs gefunden". Muted on purpose:
+   it explains why the row exists, it is not a fourth choice. */
+.closeout-sheet .followup-origin {
+  display: inline-block;
+  margin: -0.2rem 0 0.45rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  line-height: 1.5;
+  color: var(--text-secondary, #8b949e);
+  background: color-mix(in srgb, var(--text-secondary, #8b949e) 12%, transparent);
+}
 .closeout-sheet .followup-routes {
   display: flex;
   gap: 0;
@@ -6655,6 +6700,24 @@ html[data-template="design"] .frozen-bar {
   color: var(--warning-color, #d29922);
   font-weight: 600;
 }
+/* Hand-offs — the steps only the user can take once the close-out is
+   through. Warning-coloured like the routes that reach outside the page, and
+   the one block renderCloseout() keeps after data-closed: the last thing on
+   the sheet is the thing still left to do. */
+.closeout-sheet .closeout-handoffs {
+  border: 1px solid color-mix(in srgb, var(--warning-color, #d29922) 55%, transparent);
+  background: color-mix(in srgb, var(--warning-color, #d29922) 10%, transparent);
+  border-radius: 6px;
+  padding: 0.6rem 0.7rem;
+}
+.closeout-sheet .closeout-handoffs .closeout-q { color: var(--warning-color, #d29922); }
+.closeout-sheet .closeout-handoffs-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.closeout-sheet .closeout-handoffs-list li { margin-bottom: 0.3rem; }
 .closeout-sheet #closeout-execute {
   width: 100%;
   display: flex;
@@ -6840,6 +6903,20 @@ html[data-template="design"] .frozen-bar {
 
 /* Open-questions section — checkbox list with optional "[Issue #NNN]"
    linked badges once items have been routed to GitHub. */
+/* Hand-offs section in the report body — what the user has to do by hand
+   after the merge. It used to be one more paragraph among the others and
+   disappeared visually; it is the one part of the report that turns into a
+   to-do for a person, so it is the one part that is painted. */
+section[data-handoffs] {
+  border-left: 4px solid var(--warning-color, #d29922);
+  background: color-mix(in srgb, var(--warning-color, #d29922) 8%, transparent);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.5rem 0;
+}
+section[data-handoffs] h3::before { content: '⚠ '; color: var(--warning-color, #d29922); }
+section[data-handoffs] ol { padding-left: 1.3rem; }
+section[data-handoffs] li { margin-bottom: 0.45rem; }
 section[data-open-questions] .open-questions-list {
   list-style: none;
   padding: 0;
@@ -8912,6 +8989,30 @@ function restoreCloseoutToReady() {
   renderCloseout();
 }
 
+// What the user has to do by hand once the close-out is through — the one
+// part of a concept nothing here can automate, so it must not disappear into
+// the report body. Mirrors the report's [data-handoffs] list onto the sheet;
+// renderCloseout() keeps this block after data-closed, when every other block
+// is gone.
+function renderHandoffs() {
+  const sheet = document.getElementById('closeout-sheet');
+  const block = sheet && sheet.querySelector('[data-closeout-block="handoffs"]');
+  const host = document.getElementById('closeout-handoffs-list');
+  if (!block || !host) return;
+  const section = finalReportSection();
+  const list = section ? section.querySelector('[data-handoffs]') : null;
+  const items = list ? Array.from(list.querySelectorAll('li')) : [];
+  host.textContent = '';
+  items.forEach(li => {
+    const el = document.createElement('li');
+    el.textContent = li.textContent.trim().replace(/\s+/g, ' ');
+    host.appendChild(el);
+  });
+  const count = document.getElementById('closeout-handoffs-count');
+  if (count) count.textContent = items.length ? '(' + items.length + ')' : '';
+  block.hidden = items.length === 0;
+}
+
 function renderCloseout() {
   const sheet = document.getElementById('closeout-sheet');
   if (!sheet) return;
@@ -8922,7 +9023,10 @@ function renderCloseout() {
   // execute button there would queue a submission nobody will ever pick up.
   const section = finalReportSection();
   if (section && section.hasAttribute('data-closed')) {
-    sheet.querySelectorAll('.closeout-block').forEach(el => { el.hidden = true; });
+    sheet.querySelectorAll('.closeout-block').forEach(el => {
+      el.hidden = el.dataset.closeoutBlock !== 'handoffs';
+    });
+    renderHandoffs();
     const exec = document.getElementById('closeout-execute');
     if (exec) exec.hidden = true;
     sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
@@ -8939,6 +9043,7 @@ function renderCloseout() {
 
   if (boxes.length) buildFollowUpList();
   buildCloseoutPlan();
+  renderHandoffs();
 
   // Every point dropped is a legitimate answer, but it is worth saying out
   // loud: nothing at all will be carried out of this concept.
@@ -8988,7 +9093,9 @@ function buildFollowUpList() {
   const labels = {
     issue: host.dataset.labelIssue || 'Issue',
     implement: host.dataset.labelImplement || 'Implement now',
-    ignore: host.dataset.labelIgnore || 'Drop'
+    ignore: host.dataset.labelIgnore || 'Drop',
+    originDeferred: host.dataset.labelOriginDeferred || 'deferred by you',
+    originFound: host.dataset.labelOriginFound || 'found on the way'
   };
   boxes.forEach((src, i) => {
     const key = keys[i];
@@ -9001,6 +9108,19 @@ function buildFollowUpList() {
     title.textContent = src.dataset.issueTitle
       || (labelEl ? labelEl.textContent.trim() : '');
     row.appendChild(title);
+    // Where a row came from is part of the decision: a point the user parked
+    // themselves reads differently from one Claude stumbled over. The
+    // admission gate (SKILL.md § Open points admission gate) allows exactly
+    // these two origins; any other value is a report that skipped the gate,
+    // and the row then carries no tag rather than a made-up one.
+    const origin = src.dataset.oqOrigin;
+    if (origin === 'deferred' || origin === 'found') {
+      const tag = document.createElement('span');
+      tag.className = 'followup-origin';
+      tag.dataset.origin = origin;
+      tag.textContent = origin === 'deferred' ? labels.originDeferred : labels.originFound;
+      row.appendChild(tag);
+    }
     const routes = document.createElement('div');
     routes.className = 'followup-routes';
     routes.setAttribute('role', 'radiogroup');
@@ -10245,6 +10365,7 @@ anything until that button.
 | `ship` | always | **none — the user must answer** | `ship: { run }` |
 | `files` | always | `discard` (label: "Seite löschen") | `disposition: { mode, moveTo }` |
 | `plan` | always | — | nothing; it renders the consequences of the three above |
+| `handoffs` | the report has a `[data-handoffs]` section with ≥1 `<li>` | — | nothing; mirrors the steps the user has to take by hand, and is the only block still shown after `data-closed` |
 
 **Three routes per open point, not a checkbox.** A follow-up is worth
 tracking, worth building now, or worth dropping — and the old checkbox could
@@ -10253,6 +10374,16 @@ three-way radio group (`Issue` / `Jetzt umsetzen` / `Ignorieren`), and the
 payload splits into two disjoint buckets. `Jetzt umsetzen` is the one route
 that writes code, so it is painted in the warning colour the implement button
 uses and it appears in the plan as its own line.
+
+**Each row names its origin.** A point is on the sheet either because the
+user parked it during the concept or because it turned up on the way and has
+nothing to do with the scope — those are the only two admissible origins
+(`SKILL.md` § Open points admission gate), declared per item as
+`data-oq-origin="deferred"` / `"found"` and rendered as a muted tag
+(`final.origin_deferred` / `final.origin_found`) under the title. The tag
+is context for the route decision, not a fourth choice; it also makes a row
+that skipped the gate visible at a glance — an in-scope leftover has no
+honest origin to declare.
 
 The `[data-open-questions]` checkboxes in the report body stay the **single
 source of truth for which points are still open**: `Ignorieren` unchecks the
@@ -10349,7 +10480,10 @@ section TOC automatically. Open questions / TODOs use a dedicated
        payload's issues.items[] directly so Claude can call
        `gh issue create` end-to-end without ever asking the user a
        follow-up question. Mandatory attrs: data-issue-title,
-       data-issue-type. Recommended: data-issue-body (richer description
+       data-issue-type, data-oq-origin ("deferred" = the user parked it
+       during this concept, "found" = surfaced on the way, unrelated to
+       the scope — nothing else is admissible, see SKILL.md § Open
+       points admission gate). Recommended: data-issue-body (richer description
        than the visible label; falls back to the .oq-label text).
        Optional project-context hints (only when Claude can infer them
        from the concept): data-issue-role, data-issue-module,
@@ -10368,6 +10502,7 @@ section TOC automatically. Open questions / TODOs use a dedicated
                  data-issue-body="During smoke test of the new middleware, SAML logins failed with 'invalid assertion'. Out of scope for the auth-middleware-redesign concept (concept covered OIDC only). Reproduce: log in via SAML IdP in staging."
                  data-issue-role="backend"
                  data-issue-module="auth"
+                 data-oq-origin="found"
                  checked>
           <span class="oq-label">Auth fails for SAML users — observed during smoke test, out of scope here</span>
         </label>
@@ -10375,30 +10510,38 @@ section TOC automatically. Open questions / TODOs use a dedicated
       <li>
         <label>
           <input type="checkbox"
-                 name="oq-docs-refresh"
-                 data-issue-title="[DOCS] Update auth README"
-                 data-issue-type="docs"
-                 data-issue-body="auth/README.md still describes the old middleware contract (session-token cookie). Update to reflect the new bearer-token flow shipped under the auth-middleware-redesign concept."
+                 name="oq-rate-limit"
+                 data-issue-title="[FEATURE] Rate-limit the token endpoint"
+                 data-issue-type="feature"
+                 data-issue-body="Parked by the user in iteration 2 (card 'Rate limiting' answered 'später'): the new bearer-token flow ships without a per-client rate limit on /auth/token. Add a sliding-window limit (suggested 60/min per client id) with a 429 + Retry-After response."
+                 data-issue-role="backend"
                  data-issue-module="auth"
+                 data-oq-origin="deferred"
                  checked>
-          <span class="oq-label">Update auth README to reflect new middleware contract</span>
+          <span class="oq-label">Rate-limit the token endpoint — parked by you in iteration 2</span>
         </label>
       </li>
     </ul>
   </section>
 
-  <section id="next-steps" data-nav-label="Nächste Schritte">
-    <h3>Nächste Schritte</h3>
-    <ul>
-      <li>Performance-Profiling unter Last (siehe offene Frage oben)</li>
-    </ul>
+  <!-- Optional — ONLY when the user has to do something by hand after the
+       merge. data-handoffs paints the section, marks its TOC entry and
+       mirrors the list onto the close-out sheet, where it is the one block
+       that stays visible after the close-out. Omit it entirely when there
+       is nothing to hand over; never use it for recommendations. -->
+  <section id="handoffs" data-nav-label="{{final.handoffs}}" data-handoffs>
+    <h3>{{final.handoffs}}</h3>
+    <ol>
+      <li>Set the scheduled task's cron to <code>0,20,40 * * * *</code> — the description is already updated.</li>
+      <li>Watch the first run's report line: a title that stays on "working" for more than 3 h is a run that died holding the lock.</li>
+    </ol>
   </section>
 </section>
 ```
 
 ### Open-questions item attributes
 
-The first three attributes are MANDATORY for the auto-issue pipeline.
+The first four attributes are MANDATORY for the auto-issue pipeline.
 Without them Claude has no way to land a complete `gh issue create` call
 and would have to fall back to interactive prompting — which is exactly
 the regression we are designing against. Generate them when you author
@@ -10409,6 +10552,7 @@ the final-report block; do not leave the user to fill them in.
 | `name` (or `id`) | yes | Stable identifier reused in the `create-issues` payload's `item.id` |
 | `data-issue-title` | yes | Verbatim title used by `gh issue create` (`[TYPE] Imperative title`). Without this the payload's `title` falls back to the visible `.oq-label` text, which usually breaks the title-format gate |
 | `data-issue-type` | yes | Maps to the issue label (`bug`, `feature`, `refactor`, `chore`, `docs`, `design`). Defaults to `chore` if omitted — set it explicitly |
+| `data-oq-origin` | yes | Why the row exists — `deferred` (the user parked it during this concept; say where in the body) or `found` (surfaced on the way, unrelated to the scope). Rendered as a muted tag under the row's title. No other value is admissible: an in-scope leftover has no honest origin and belongs in the Zusammenfassung as a shortfall, not here (`SKILL.md` § Open points admission gate; validation gate 33b) |
 | `data-issue-body` | recommended | Multi-sentence description used as the GitHub issue body. Falls back to the `.oq-label` text when missing — that is usually too terse for a tracked issue. Always populate this with the concept-context the user would need to act on the issue cold (repro steps for bugs, motivation for refactors, etc.) |
 | `data-issue-role` | optional | Project-specific role label hint (`backend`, `frontend`, `infra`, …). Picked up when the project's `setup-issue` extension defines `role:*` labels; silently ignored otherwise |
 | `data-issue-module` | optional | Project-specific module label hint (`auth`, `ingest`, `ui-core`, …). Same gating as `role` |
@@ -10431,6 +10575,7 @@ for part B. The checkbox stays in the DOM but is disabled, which keeps
            name="oq-saml-edge"
            data-issue-title="[BUG] Auth fails for SAML users"
            data-issue-type="bug"
+           data-oq-origin="found"
            checked disabled>
     <span class="oq-label">Auth fails for SAML users — observed during smoke test, out of scope here</span>
     <a class="oq-issue-link"
@@ -10448,12 +10593,13 @@ An item the user routed to "Jetzt umsetzen" gets the same treatment with an
 <li>
   <label>
     <input type="checkbox"
-           name="oq-docs-refresh"
-           data-issue-title="[DOCS] Update auth README"
-           data-issue-type="docs"
+           name="oq-rate-limit"
+           data-issue-title="[FEATURE] Rate-limit the token endpoint"
+           data-issue-type="feature"
+           data-oq-origin="deferred"
            checked disabled>
-    <span class="oq-label">Update auth README to reflect new middleware contract</span>
-    <span class="oq-done">✓ {{final.done_prefix}} — <code>auth/README.md</code></span>
+    <span class="oq-label">Rate-limit the token endpoint — parked by you in iteration 2</span>
+    <span class="oq-done">✓ {{final.done_prefix}} — <code>src/auth/rate-limit.ts</code></span>
   </label>
 </li>
 ```
@@ -10479,6 +10625,13 @@ The `followups` block renders iff all of:
 1. Active section has `data-final-report`.
 2. Active section contains a `[data-open-questions]` block.
 3. That block has at least one `:not(:disabled)` checkbox.
+
+The `handoffs` block renders iff the active final report has a
+`[data-handoffs]` section with at least one `<li>` (`renderHandoffs()`,
+called from `renderCloseout()`). It is the only block that stays visible
+once the section carries `data-closed`: the sheet's done state is "Concept
+abgeschlossen" plus whatever is left for the user to do by hand, and nothing
+else.
 
 Rendering runs client-side only — Claude never adds or removes a block via the
 bridge; it controls the follow-up block indirectly by disabling checkboxes
