@@ -175,8 +175,13 @@ describe("mapping integration — engine hooks in the shared systems", () => {
   test("jsdom: buildSectionNav + the mirror resolve the mapping in the VISIBLE round, never a hidden one", () => {
     const p = page({ specs: [["veh", VEHICLE_SPEC]] });
     p.window.eval([
-      "const NAV_GROUP_MIN_KINDS = 2, NAV_GROUP_OVER_ENTRIES = 99; const _navManualClosedAt = new Map();",
-      "function buildIterationTree() {} function installScrollSpy() {}",
+      // The Kompass nav's own constants + helpers: real pure helpers where the
+      // reference has them, no-op stubs for the tree/spy/overflow plumbing the
+      // mirror does not depend on.
+      "const NAV_GROUP_MIN_KINDS = 2, NAV_GROUP_OVER_ENTRIES = 99, NAV_MANUAL_CLOSE_GRACE_MS = 1500;",
+      "let _navManualClosedAt = new Map(); let _navGeneration = 0;",
+      "function buildIterationTree() {} function installScrollSpy() {} function applyNavOverflow() {}",
+      fn("computeSelectedVariant"), fn("pickInitialNavTarget"),
       fn("buildSectionNav"), fn("updateSectionNavState"),
     ].join("\n"));
     const nav = p.document.createElement("nav"); nav.id = "section-nav"; p.document.body.appendChild(nav);
