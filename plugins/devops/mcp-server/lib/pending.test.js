@@ -157,6 +157,19 @@ describe("renderPendingBlock", () => {
     expect(block).toContain("* `devops:frontend` — Farbstil auf Tokens umstellen");
   });
 
+  it("keeps a long work description whole up to 90 characters and cuts on a word boundary after", () => {
+    const doing = "Root-Cause: fehlende Energie-Punkte pro Modul (5 statt 6) im Codex-Dock und die Pips füllen nicht nach oben auf";
+    const block = renderPendingBlock([{ name: "devops:feature", doing }], "de");
+    const line = block.split("\n").find((l) => l.startsWith("* `devops:feature` — "));
+    const shown = line.replace("* `devops:feature` — ", "");
+    expect(shown.length).toBeLessThanOrEqual(91);
+    expect(shown.endsWith("…")).toBe(true);
+    const kept = shown.slice(0, -1);
+    expect(doing.startsWith(kept)).toBe(true);
+    expect(doing.charAt(kept.length)).toBe(" ");
+    expect(shown.startsWith("Root-Cause: fehlende Energie-Punkte pro Modul (5 statt 6) im Codex-Dock")).toBe(true);
+  });
+
   it("labels a name-less item by its kind", () => {
     expect(renderPendingBlock([{ kind: "workflow", doing: "läuft durch" }], "de"))
       .toContain("* Workflow — läuft durch");

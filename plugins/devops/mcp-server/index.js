@@ -46,7 +46,7 @@ import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { hasPending, pendingWhat, renderPendingBlock, renderPendingLine, hasConcept, conceptWhat } from "./lib/pending.js";
-import { clampText, clampList } from "./lib/soft-limits.js";
+import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { conceptUrl, readBatch, batchWhat } from "./lib/mode-state.js";
 import {
   assessFreshness,
@@ -62,8 +62,34 @@ const PLUGIN_ROOT = resolve(__dirname, '..');
 const BAR_WIDTH              = 14;
 const WINDOW_5H_MIN          = 300;
 const WINDOW_WK_MIN          = 10080;
-const HEALTH_WARN_THRESHOLD  = 120;
-const HEALTH_CRIT_THRESHOLD  = 200;
+// Context-health note thresholds. 120/200 fired on 78 % of ship cards (median
+// 561 calls) — a note that is always there is not a signal. A ship session is
+// long by nature; nudge only when the context is genuinely deep.
+const HEALTH_WARN_THRESHOLD  = 1000;
+const HEALTH_CRIT_THRESHOLD  = 2000;
+
+// Card body budgets (characters). Every blockquote bullet must stay one visual
+// line on a normal desktop chat column (~100 chars); prose beyond that wraps
+// into paragraphs and the card stops being scannable. Cut on a word boundary
+// with a visible ellipsis (see lib/soft-limits.js#clampEllipsis).
+const SUMMARY_MAX            = 60;
+const CHANGE_AREA_MAX        = 24;
+const CHANGE_DESC_MAX        = 90;
+const GATE_METHOD_MAX        = 40;
+const GATE_RESULT_MAX        = 60;
+const GATES_LINE_MAX         = 110;
+const GATES_INLINE_MAX_COUNT = 3;
+const GATE_BULLET_LIMIT      = 5;
+const GATE_BULLET_MAX        = 100;
+const VALIDATION_REQ_MAX     = 70;
+const VALIDATION_EV_MAX      = 100;
+const VALIDATION_NONMET_LIMIT = 4;
+const VALIDATION_SLOTS       = 3;
+const CHANGES_LIMIT          = 3;
+const PR_TITLE_MAX           = 70;
+// Pace flag: usage running more than this many points ahead of the clock. The
+// old +10pp flagged 91 of 100 ship cards — the warning was the normal state.
+const PACE_WARN_PP           = 20;
 
 /** Safely parse a JSON string; returns the original value on failure. */
 function tryParse(v) {
@@ -162,7 +188,7 @@ function renderUsageLine(label, pct, elapsedPct, delta, resetMinutes) {
   // space-padded inside so their digits align too.
   const resetStr = formatResetShort(resetMinutes).padEnd(6, ' ');
   const pace = pct - elapsedPct;
-  const warn = pace > 10 ? '  \u26a0 Pace!' : '';
+  const warn = pace > PACE_WARN_PP ? '  \u26a0 Pace!' : '';
   return label.padEnd(2, ' ') + '  ' + bar + ' ' + pctStr + ' ' + deltaPart + '\u00b7 ' + resetStr + warn;
 }
 
@@ -235,7 +261,10 @@ function fence(block) {
 
 function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
   if (!usageData || !usageData.session) {
-    return blockquote('\u26a0 Usage data unavailable');
+    // The context-health note is independent of the usage scrape \u2014 keep it.
+    const noteLines = ['\u26a0 Usage data unavailable'];
+    if (healthLine) noteLines.unshift(healthLine, '');
+    return blockquote(noteLines.join('\n'));
   }
 
   // Expired snapshots must not render as percent bars \u2014 show the explicit
@@ -298,12 +327,11 @@ const VARIANTS = {
 
 const CTA = {
   en: {
-    'ship-successful-merged':      '## \ud83d\ude80 SHIPPED{chan}. merged \u2192 origin/{merged} \u2014 All DONE',
-    'ship-successful-merged-kept': '## \ud83d\ude80 SHIPPED{chan}. merged \u2192 origin/{merged} \u2014 KEEP CODING in `{branch}`',
-    'ship-successful-plain':       '## \ud83d\ude80 SHIPPED{chan} \u2014 All DONE',
-    'ship-successful-plain-kept':  '## \ud83d\ude80 SHIPPED{chan} \u2014 KEEP CODING in `{branch}`',
-    'ship-successful-deploy-merged': '## \ud83d\ude80 MERGED \u2192 origin/{merged} \u2014 \ud83d\udea8 DEPLOY REQUIRED (not live yet)',
-    'ship-successful-deploy-plain':  '## \ud83d\ude80 SHIPPED \u2014 \ud83d\udea8 DEPLOY REQUIRED (not live yet)',
+    // {dest} = " \u2192 <channel>" on ring projects, " \u2192 <base>" on a plain merge.
+    // The merge target is stated ONCE here; the Delivery block carries the rest.
+    'ship-successful':        '## \ud83d\ude80 SHIPPED{dest} \u2014 All DONE',
+    'ship-successful-kept':   '## \ud83d\ude80 SHIPPED{dest} \u2014 KEEP CODING in `{branch}`',
+    'ship-successful-deploy': '## \ud83d\ude80 SHIPPED{dest} \u2014 \ud83d\udea8 DEPLOY REQUIRED (not live yet)',
     'released-beta':               '## \ud83d\udd3c PROMOTED. v{version} \u2192 beta',
     'released-stable':             '## \ud83c\udf8a RELEASED. v{version} \u2192 stable \u2014 LIVE',
     ready:                    '## \ud83d\udce6 READY \u2014 SHIP or CHANGE?',
@@ -324,12 +352,9 @@ const CTA = {
     batch:                    '## 📥 BATCH collecting. {what} — I’ll WAIT',
   },
   de: {
-    'ship-successful-merged':      '## \ud83d\ude80 SHIPPED{chan}. merged \u2192 origin/{merged} \u2014 Alles ERLEDIGT',
-    'ship-successful-merged-kept': '## \ud83d\ude80 SHIPPED{chan}. merged \u2192 origin/{merged} \u2014 WEITER in `{branch}`',
-    'ship-successful-plain':       '## \ud83d\ude80 SHIPPED{chan} \u2014 Alles ERLEDIGT',
-    'ship-successful-plain-kept':  '## \ud83d\ude80 SHIPPED{chan} \u2014 WEITER in `{branch}`',
-    'ship-successful-deploy-merged': '## \ud83d\ude80 GEMERGED \u2192 origin/{merged} \u2014 \ud83d\udea8 DEPLOY erforderlich (noch nicht live)',
-    'ship-successful-deploy-plain':  '## \ud83d\ude80 SHIPPED \u2014 \ud83d\udea8 DEPLOY erforderlich (noch nicht live)',
+    'ship-successful':        '## \ud83d\ude80 SHIPPED{dest} \u2014 Alles ERLEDIGT',
+    'ship-successful-kept':   '## \ud83d\ude80 SHIPPED{dest} \u2014 WEITER in `{branch}`',
+    'ship-successful-deploy': '## \ud83d\ude80 SHIPPED{dest} \u2014 \ud83d\udea8 DEPLOY erforderlich (noch nicht live)',
     'released-beta':               '## \ud83d\udd3c PROMOTED. v{version} \u2192 beta',
     'released-stable':             '## \ud83c\udf8a RELEASED. v{version} \u2192 stable \u2014 LIVE',
     ready:                    '## \ud83d\udce6 READY \u2014 SHIP oder ÄNDERN?',
@@ -396,7 +421,9 @@ function renderTitle(summary) {
   // without scrolling, while the \u2728\u2728\u2728 marker + bold keep the headline prominent
   // (and keep card-guard's marker detection intact). Stays OUTSIDE any
   // blockquote \u2014 it must pop, not dim.
-  return '### **\u2728\u2728\u2728 ' + summary + ' \u2728\u2728\u2728**';
+  // Clamp here, not only in the schema transform: the CLI fallback and the
+  // renderer must agree, and a 100-character headline is a paragraph.
+  return '### **\u2728\u2728\u2728 ' + clampText(String(summary), SUMMARY_MAX).value + ' \u2728\u2728\u2728**';
 }
 
 // Dim a text block to the muted blockquote color. Only the plain-text baseline
@@ -421,16 +448,34 @@ function renderFooter(buildId, cta, variant) {
   return pin + ' ' + bid;
 }
 
-function renderChanges(changes) {
+const CHANGES_TAIL = { de: (n) => '+' + n + ' weitere', en: (n) => '+' + n + ' more' };
+
+function renderChanges(changes, lang) {
   if (!changes || changes.length === 0) return '';
-  const items = changes.slice(0, 3).map(c => '* ' + c.area + ' \u2192 ' + c.description);
+  const tail = CHANGES_TAIL[lang] || CHANGES_TAIL.de;
+  const items = changes.slice(0, CHANGES_LIMIT).map(c =>
+    '* ' + clampEllipsis(String(c.area || ''), CHANGE_AREA_MAX) + ' \u2192 ' + clampEllipsis(String(c.description || ''), CHANGE_DESC_MAX));
+  // More than the budget: say so instead of dropping silently (14 % of ship
+  // cards used to lose their 4th+ change without a trace).
+  const rest = changes.length - items.length;
+  if (rest > 0) items.push('* ' + tail(rest));
   return '**Changes**\n' + items.join('\n');
 }
 
-function renderTests(tests) {
-  if (!tests || tests.length === 0) return '';
-  const items = tests.slice(0, 3).map(t => '* ' + t.method + ' \u2192 ' + t.result);
-  return '**Tests**\n' + items.join('\n');
+// ⚠ OFFEN — follow-ups that are NOT tests: decisions, cleanups, open questions.
+// They used to share the 🔬 test block (95 of 198 items on the analysed ship
+// cards were no test at all), which made the wrong header ask for the wrong
+// action. Rendered outside the blockquote like the test block: it is the
+// user's to-do, so it pops. Items are never clipped — a cut instruction is
+// worse than a long one.
+const OPEN_LABEL = { de: '\u26a0 **OFFEN:**', en: '\u26a0 **OPEN:**' };
+
+function renderOpen(items, lang) {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  const header = OPEN_LABEL[lang] || OPEN_LABEL.de;
+  const bullets = items.filter(it => typeof it === 'string' && it.trim()).map(it => '* ' + it.trim());
+  if (!bullets.length) return '';
+  return header + '\n' + bullets.join('\n');
 }
 
 function renderState(state, variant, repoUrl) {
@@ -551,68 +596,99 @@ function renderState(state, variant, repoUrl) {
 }
 
 const DELIVERY_LABEL = {
-  de: { header: 'Delivery', noPr: 'kein PR', here: { alpha: '← hier', beta: '← promotet', stable: '← LIVE' } },
-  en: { header: 'Delivery', noPr: 'no PR',   here: { alpha: '← here', beta: '← promoted', stable: '← LIVE' } },
+  de: { header: 'Delivery', noPr: 'kein PR', lag: (ch, n, d) => ch + ' ' + n + (n === 1 ? ' Version' : ' Versionen') + (d ? ' / ' + d + ' Tage' : '') + ' vor stable \u2192 `/promote`' },
+  en: { header: 'Delivery', noPr: 'no PR',   lag: (ch, n, d) => ch + ' ' + n + (n === 1 ? ' version' : ' versions') + (d ? ' / ' + d + ' days' : '') + ' ahead of stable \u2192 `/promote`' },
 };
 
-// Delivery track — the through-line of a delivery: (PR) → Ship → Promote, where
-// Promote fans out into the alpha→beta→stable channel ladder. States WHERE in
-// the pipeline this turn landed (✅ done · 🟢 current · ⚪ pending · ⏭ skipped).
-// Driven by the `delivery` field; rendered in ready / ship-successful / released.
-function renderDelivery(delivery, lang, repoUrl) {
+const SEMVER_RE = /^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+
+// `v1.2.3` for a semver, the raw value in backticks otherwise. A commit SHA
+// passed as "version" (16 of 100 analysed cards) used to render as `vb43bf60`.
+function fmtVersion(x) {
+  const raw = String(x);
+  return SEMVER_RE.test(raw) ? '`v' + raw.replace(/^v/, '') + '`' : '`' + raw + '`';
+}
+
+// Delivery block — ONE block at the foot of the body that carries every
+// pipeline fact exactly once: PR, base + version bump, commit, build-id, the
+// follow-up branch, and the channel ladder. It replaces three blocks that used
+// to say the same four things in three layouts (the vertical Delivery track at
+// the top, the 📌 footer, and the "updated origin/main · merged PR …" state
+// line — median 5 mentions of the version per card). Sits BELOW the body:
+// on 97 % of ship cards it is identical (PR ✅ · Ship ✅ · alpha 🟢), and a
+// block without variance does not belong above the changes.
+//   line 1  **Delivery** ✅ PR #366 · <title ≤70>            (or ⊘ PR — no PR)
+//   line 2  ✅ `main` 0.153.0 → 0.154.0 (minor) · <commit> · `<build-id>` [· `branch (kept locally)`]
+//           ⚪ Ship · `branch` · <commit> · `<build-id>`      (not shipped yet)
+//   line 3  🟢 alpha `v0.154.0` · ⚪ beta · ⚪ stable [· alpha N vor stable → `/promote`]
+// Line 3 only exists on ring projects — a hollow "⚪ Promote" says nothing.
+function renderDeliveryBlock(delivery, state, cta, buildId, lang, repoUrl) {
   if (!delivery) return '';
   const L = DELIVERY_LABEL[lang] || DELIVERY_LABEL.de;
-  const v = (x) => '`v' + String(x).replace(/^v/, '') + '`';
-  const lines = ['**' + L.header + '**'];
+  state = state || {};
+  cta = cta || {};
+  const lines = [];
 
-  // PR node — ✅ with number/title when a PR exists, else "⊘ no PR" (skipped).
   const pr = delivery.pr;
+  let head = '**' + L.header + '** ';
   if (pr && pr.number) {
     const num = repoUrl ? '[#' + pr.number + '](' + repoUrl + '/pull/' + pr.number + ')' : '#' + pr.number;
-    lines.push('✅ PR ' + num + (pr.title ? ' · ' + pr.title : ''));
+    head += '\u2705 PR ' + num + (pr.title ? ' \u00b7 ' + clampEllipsis(String(pr.title), PR_TITLE_MAX) : '');
   } else {
-    lines.push('⊘ PR — ' + L.noPr);
+    head += '\u2298 PR \u2014 ' + L.noPr;
   }
+  lines.push(head);
 
-  // Ship node — ✅ with base + version once shipped, else ⚪ pending.
+  const commit = state.commit
+    ? (repoUrl ? '[' + state.commit + '](' + repoUrl + '/commit/' + state.commit + ')' : state.commit)
+    : '';
+  const bid = '`' + buildId + '`';
+  const branch = state.branch || '';
+  // Kept branches were deleted on the remote by the merge — never link them.
+  const branchRef = () => {
+    const label = branch + (state.kept ? ' (kept locally)' : (state.worktree ? ' (worktree)' : ''));
+    return (repoUrl && !state.kept) ? '[`' + label + '`](' + repoUrl + '/tree/' + branch + ')' : '`' + label + '`';
+  };
+
   const ship = delivery.ship;
+  const segs = [];
   if (ship && ship.version) {
-    lines.push('✅ Ship' + (ship.base ? ' → `' + ship.base + '`' : '') + ' · ' + v(ship.version));
+    const bump = (cta.vOld && cta.vNew)
+      ? cta.vOld + ' \u2192 ' + cta.vNew + (cta.bump ? ' (' + cta.bump + ')' : '')
+      : fmtVersion(ship.version);
+    segs.push('\u2705 ' + (ship.base ? '`' + ship.base + '` ' : '') + bump);
+    if (commit) segs.push(commit);
+    segs.push(bid);
+    if (branch && branch !== ship.base) segs.push(branchRef());
   } else {
-    lines.push('⚪ Ship');
+    segs.push('\u26aa Ship');
+    if (branch) segs.push(branchRef());
+    if (commit) segs.push(commit);
+    segs.push(bid);
   }
+  lines.push(segs.join(' \u00b7 '));
 
-  // Promote node + channel ladder. No promote object → not reached yet.
   const promote = delivery.promote;
-  if (!promote) {
-    lines.push('⚪ Promote');
-    return lines.join('\n');
-  }
-  const order = ['alpha', 'beta', 'stable'];
-  const channels = promote.channels || {};
-  const current = promote.current;
-  const currentIdx = order.indexOf(current);
-  // Master node: ✅ once stable is reached (whole ring done), else ◐ in progress.
-  lines.push((current === 'stable' ? '✅' : '◐') + ' Promote');
-  for (const ch of order) {
-    const ver = channels[ch];
-    let icon, tail;
-    if (ch === current) {
-      icon = '🟢'; // 🟢 current
-      tail = (ver ? v(ver) + ' ' : '') + L.here[ch];
-    } else if (promote.fastTrack && ch === 'beta' && currentIdx > order.indexOf('beta') && !ver) {
-      icon = '⏭️'; // ⏭ fast-track skipped beta
-      tail = 'skipped';
-    } else if (ver) {
-      icon = '✅'; // ✅ already passed
-      tail = v(ver);
-    } else {
-      icon = '⚪'; // ⚪ not reached
-      tail = '—';
+  if (promote) {
+    const order = ['alpha', 'beta', 'stable'];
+    const channels = promote.channels || {};
+    const current = promote.current;
+    const currentIdx = order.indexOf(current);
+    const parts = order.map(ch => {
+      const ver = channels[ch];
+      let icon;
+      if (ch === current) icon = '\ud83d\udfe2';
+      else if (promote.fastTrack && ch === 'beta' && currentIdx > order.indexOf('beta') && !ver) icon = '\u23ed\ufe0f';
+      else if (ver) icon = '\u2705';
+      else icon = '\u26aa';
+      return icon + ' ' + ch + (ver ? ' ' + fmtVersion(ver) : '');
+    });
+    let ladder = parts.join(' \u00b7 ');
+    const lag = promote.stableLag;
+    if (lag && Number(lag.versions) > 0) {
+      ladder += ' \u00b7 ' + L.lag(current || 'alpha', Number(lag.versions), lag.days ? Number(lag.days) : 0);
     }
-    // Indent the ladder under Promote with non-breaking spaces — markdown folds
-    // regular leading spaces inside a blockquote.
-    lines.push('\u00a0\u00a0' + icon + ' ' + ch.padEnd(6, '\u00a0') + ' ' + tail);
+    lines.push(ladder);
   }
   return lines.join('\n');
 }
@@ -741,15 +817,9 @@ function renderCTA(variant, cta, lang, state, delivery, pending, concept, batch)
     // Out-of-band deploy pending (#243): the code merged but infra (migrations /
     // functions) is NOT deployed. The CTA must NOT say "All DONE" — flip it to a
     // deploy-required call to action so a merged-but-undeployed ship is never
-    // mistaken for finished. Takes precedence over merged/kept wording.
-    if (state && state.deployPending) {
-      key = (state && state.merged) ? 'ship-successful-deploy-merged' : 'ship-successful-deploy-plain';
-    } else {
-      // Show merge target in CTA if actually merged; "-kept" suffix when keep-mode
-      // kept the worktree/branch alive for follow-up work.
-      const base = (state && state.merged) ? 'ship-successful-merged' : 'ship-successful-plain';
-      key = (state && state.kept) ? `${base}-kept` : base;
-    }
+    // mistaken for finished. Takes precedence over the kept wording.
+    if (state && state.deployPending) key = 'ship-successful-deploy';
+    else key = (state && state.kept) ? 'ship-successful-kept' : 'ship-successful';
   } else if (variant === 'released') {
     // Promotion CTA keys off the channel reached: → beta is an intermediate
     // step ("PROMOTED"), → stable is the live release ("RELEASED — LIVE").
@@ -759,17 +829,22 @@ function renderCTA(variant, cta, lang, state, delivery, pending, concept, batch)
     key = variant;
   }
 
-  // ship-successful names the published channel in its CTA ("SHIPPED → alpha")
-  // when the delivery track knows it — the last line states WHERE it landed.
-  const chan = (variant === 'ship-successful' && !(state && state.deployPending)
-    && delivery && delivery.promote && delivery.promote.current)
-    ? ' → ' + delivery.promote.current : '';
+  // ship-successful states WHERE it landed exactly once: the published channel
+  // ("SHIPPED → alpha") when the delivery track knows it, else the merge base
+  // ("SHIPPED → main"). The old "merged → origin/main" echo is gone — the
+  // Delivery block already carries base, version and commit.
+  let dest = '';
+  if (variant === 'ship-successful') {
+    const chan = delivery && delivery.promote && delivery.promote.current;
+    if (chan) dest = ' → ' + chan;
+    else if (state && state.merged) dest = ' → ' + state.merged;
+  }
   // released CTA version: from the delivery ship stage, else explicit cta.version.
   const version = (delivery && delivery.ship && delivery.ship.version) || cta.version || '';
 
   let tpl = templates[key] || templates.fallback;
   // Merge state fields into cta for template substitution
-  const vars = Object.assign({}, cta, { chan, version }, state ? { merged: state.merged || '', branch: state.branch || '' } : {});
+  const vars = Object.assign({}, cta, { dest, version }, state ? { merged: state.merged || '', branch: state.branch || '' } : {});
   tpl = tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] || '');
 
   // Compact the ROUTINE CTAs to H3 so the card's two tallest lines (title + CTA)
@@ -873,19 +948,61 @@ function renderUnverifiedStamp(lang, red) {
   return red ? d.red : d.plain;
 }
 
-const VALIDATION_LABEL = { de: '\u2705 **Validierung**', en: '\u2705 **Validation**' };
 const VALIDATION_STATUS_ICON = { met: '\u2705', partial: '\u26a0\ufe0f', unmet: '\u274c' };
+const EVIDENCE_LABEL = {
+  de: { header: 'Belegt',   more: (n) => n + ' weitere Anforderungen erf\u00fcllt' },
+  en: { header: 'Verified', more: (n) => n + ' more requirements met' },
+};
 
-function renderValidation(items, lang) {
-  if (!items || items.length === 0) return '';
-  const header = VALIDATION_LABEL[lang] || VALIDATION_LABEL.de;
-  const bullets = items.slice(0, 4).map(it => {
-    const icon = VALIDATION_STATUS_ICON[it && it.status] || '\u2022';
-    const req = (it && it.requirement) || '';
-    const ev = it && it.evidence ? ' \u2014 ' + it.evidence : '';
-    return '* ' + icon + ' ' + req + ev;
-  });
-  return header + '\n' + bullets.join('\n');
+// Belegt / Verified — the ONE evidence block: automated gates on the header
+// line, requirement validation as bullets underneath.
+//   **Belegt** · npm test → 1460 grün · eslint → sauber · Codex-Review → skipped
+//   * ⚠️ <requirement ≤70> — <evidence ≤100>      (partial / unmet first)
+//   * ✅ …
+//   * ✅ 3 weitere Anforderungen erfüllt           (met overflow, collapsed)
+// Gates used to be three bullets whose result was "grün" 84 times out of 301;
+// validation bullets ran to 200+ characters (max 782) and were 22 % of the
+// card. Budgets are hard, ordering puts what needs attention first, and the
+// long form of the evidence belongs in the PR body.
+function renderEvidence(tests, validation, lang) {
+  const L = EVIDENCE_LABEL[lang] || EVIDENCE_LABEL.de;
+  const ran = (Array.isArray(tests) ? tests : []).filter(t => t && (t.method || t.result));
+  // Inline form: tight per-part budgets so three gates share one line. Bullet
+  // form: one budget on the whole bullet — it owns the line.
+  const gates = ran.map(t => clampEllipsis(String(t.method || ''), GATE_METHOD_MAX) + ' \u2192 ' + clampEllipsis(String(t.result || ''), GATE_RESULT_MAX));
+  const bullets = ran.map(t => clampEllipsis(String(t.method || '') + ' \u2192 ' + String(t.result || ''), GATE_BULLET_MAX));
+  const items = (Array.isArray(validation) ? validation : []).filter(it => it && it.requirement);
+  if (!gates.length && !items.length) return '';
+
+  const header = '**' + L.header + '**';
+  const lines = [];
+  const inline = header + ' \u00b7 ' + gates.join(' \u00b7 ');
+  if (!gates.length) {
+    lines.push(header);
+  } else if (gates.length <= GATES_INLINE_MAX_COUNT && inline.length <= GATES_LINE_MAX) {
+    lines.push(inline);
+  } else {
+    lines.push(header);
+    for (const g of bullets.slice(0, GATE_BULLET_LIMIT)) lines.push('* ' + g);
+  }
+
+  const attention = items.filter(it => it.status === 'unmet' || it.status === 'partial');
+  const met = items.filter(it => !(it.status === 'unmet' || it.status === 'partial'));
+  // unmet before partial; met keeps the caller's order.
+  attention.sort((a, b) => (a.status === 'unmet' ? 0 : 1) - (b.status === 'unmet' ? 0 : 1));
+  const shownAttention = attention.slice(0, VALIDATION_NONMET_LIMIT);
+  const slots = Math.max(0, VALIDATION_SLOTS - shownAttention.length);
+  let shownMet = met.slice(0, slots);
+  let rest = met.length - shownMet.length;
+  // Collapsing a single item into "1 more" saves nothing — show it.
+  if (rest === 1) { shownMet = met.slice(0, slots + 1); rest = 0; }
+  for (const it of [...shownAttention, ...shownMet]) {
+    const icon = VALIDATION_STATUS_ICON[it.status] || '\u2022';
+    const ev = it.evidence ? ' \u2014 ' + clampEllipsis(String(it.evidence), VALIDATION_EV_MAX) : '';
+    lines.push('* ' + icon + ' ' + clampEllipsis(String(it.requirement), VALIDATION_REQ_MAX) + ev);
+  }
+  if (rest > 0) lines.push('* \u2705 ' + L.more(rest));
+  return lines.join('\n');
 }
 
 function renderCard(input, meterText, buildId) {
@@ -925,16 +1042,7 @@ function renderCard(input, meterText, buildId) {
     parts.push('');
   }
 
-  // Delivery track — the pipeline through-line (PR → Ship → Promote channels).
-  // First block after the title/stamps: it frames WHERE this turn sits in the
-  // delivery process before the change/promotion details below.
-  if (config.delivery) {
-    const deliveryBlock = renderDelivery(input.delivery, lang, getRepoUrl(input.cwd));
-    if (deliveryBlock) {
-      parts.push(blockquote(deliveryBlock));
-      parts.push('');
-    }
-  }
+  const repoUrl = getRepoUrl(input.cwd);
 
   // Promotion facts (released) — rendered whenever provided (variant-agnostic,
   // like validation/deployGate): the tags/SHA/GitHub-release end-info.
@@ -946,30 +1054,23 @@ function renderCard(input, meterText, buildId) {
     }
   }
 
+  // Changes — WHAT changed, first. Read order of the compact card:
+  // what · evidence · your to-dos · where it landed · budget · CTA.
   if (config.changes) {
-    const changesBlock = renderChanges(input.changes);
+    const changesBlock = renderChanges(input.changes, lang);
     if (changesBlock) {
       parts.push(blockquote(changesBlock));
       parts.push('');
     }
   }
 
-  if (config.tests) {
-    const testsBlock = renderTests(input.tests);
-    if (testsBlock) {
-      parts.push(blockquote(testsBlock));
-      parts.push('');
-    }
-  }
-
-  // Validation block (V&V gate) — "did we build the RIGHT thing": maps the
-  // change to its requirements. Rendered whenever provided (variant-agnostic,
-  // mirroring the gate, which keys off validation-pending not the variant);
-  // stop.flow.guard blocks a code-change card that omits it.
+  // Belegt — gates + validation in ONE block. Validation is variant-agnostic
+  // (the gate keys off validation-pending, not the variant; stop.flow.guard
+  // blocks a code-change card that omits it); gates follow the variant table.
   {
-    const validationBlock = renderValidation(input.validation, lang);
-    if (validationBlock) {
-      parts.push(blockquote(validationBlock));
+    const evidenceBlock = renderEvidence(config.tests ? input.tests : null, input.validation, lang);
+    if (evidenceBlock) {
+      parts.push(blockquote(evidenceBlock));
       parts.push('');
     }
   }
@@ -1019,6 +1120,27 @@ function renderCard(input, meterText, buildId) {
       parts.push(finalBlock);
       parts.push('');
     }
+    // ⚠ OFFEN — decisions / cleanups that are not tests. Same availability as
+    // the test block; the test variant routes everything through userTest.
+    const openBlock = renderOpen(input.open, lang);
+    if (openBlock) {
+      parts.push(openBlock);
+      parts.push('');
+    }
+  }
+
+  // Delivery block — WHERE it landed, once, at the foot of the body. When it
+  // renders, the 📌 footer and the state line below are skipped: every fact
+  // they carried (version bump, build-id, PR, merge base, commit, branch) is
+  // in here. Variants without a delivery track keep the classic footer.
+  let deliveryRendered = false;
+  if (config.delivery && input.delivery) {
+    const deliveryBlock = renderDeliveryBlock(input.delivery, input.state, input.cta, buildId, lang, repoUrl);
+    if (deliveryBlock) {
+      parts.push(blockquote(deliveryBlock));
+      parts.push('');
+      deliveryRendered = true;
+    }
   }
 
   // Usage block: bars in a code fence, health/staleness notes as dim quotes
@@ -1034,27 +1156,27 @@ function renderCard(input, meterText, buildId) {
     parts.push('');
   }
 
-  // Footer: 📌 version bump + build ID (build ID in backticks for visibility)
-  // Greyed as meta/subinfo — the 📌 icon and `build-id` code stay colored.
-  parts.push(blockquote(renderFooter(buildId, input.cta, variant)));
-  parts.push('');
+  // Footer: 📌 version bump + build ID, then the end-state line — only when no
+  // Delivery block carried them above. Greyed as meta; the 📌 icon, the
+  // `build-id` and the merge/PR/commit links keep their colour.
+  if (!deliveryRendered) {
+    parts.push(blockquote(renderFooter(buildId, input.cta, variant)));
+    parts.push('');
 
-  // End state — placed between build ID and CTA, since the CTA often
-  // references this state (merge target / branch). Clusters status near the foot.
-  if (config.state) {
-    const repoUrl = getRepoUrl(input.cwd);
-    if (!repoUrl && input.state && (input.state.pr || input.state.merged || input.state.commit || input.state.branch)) {
-      console.warn(
-        '[dotclaude-completion-mcp] repoUrl empty — card will render without clickable links. ' +
-        'Pass cwd set to the target repo to fix.'
-      );
-    }
-    const stateLine = renderState(input.state, variant, repoUrl);
-    if (stateLine) {
-      // Greyed text baseline; the merge/PR/commit links inside keep their
-      // link color, so the merge target still pops as the user wanted.
-      parts.push(blockquote(stateLine));
-      parts.push('');
+    // End state — placed between build ID and CTA, since the CTA often
+    // references this state (merge target / branch). Clusters status near the foot.
+    if (config.state) {
+      if (!repoUrl && input.state && (input.state.pr || input.state.merged || input.state.commit || input.state.branch)) {
+        console.warn(
+          '[dotclaude-completion-mcp] repoUrl empty — card will render without clickable links. ' +
+          'Pass cwd set to the target repo to fix.'
+        );
+      }
+      const stateLine = renderState(input.state, variant, repoUrl);
+      if (stateLine) {
+        parts.push(blockquote(stateLine));
+        parts.push('');
+      }
     }
   }
 
@@ -1231,7 +1353,7 @@ const CARD_VARIANTS = [
 
 /** Structured fields the MCP schema accepts as either an object or a JSON string. */
 const JSON_FIELDS = [
-  'changes', 'tests', 'state', 'cta', 'userTest', 'userFinalTest',
+  'changes', 'tests', 'state', 'cta', 'userTest', 'userFinalTest', 'open',
   'deployGate', 'validation', 'delivery', 'promotion', 'pending', 'concept',
 ];
 
@@ -1254,15 +1376,12 @@ function normalizeCardParams(raw) {
   const params = { ...(raw && typeof raw === 'object' ? raw : {}) };
 
   params.variant = CARD_VARIANTS.includes(params.variant) ? params.variant : 'fallback';
-  params.summary = clampText(String(params.summary ?? ''), 80).value;
+  params.summary = clampText(String(params.summary ?? ''), SUMMARY_MAX).value;
   params.lang = (params.lang === 'en' || params.lang === 'de') ? params.lang : 'de';
 
   for (const key of JSON_FIELDS) {
     if (typeof params[key] === 'string') params[key] = tryParse(params[key]);
   }
-  params.changes = clampList(params.changes, 3).value;
-  params.tests = clampList(params.tests, 3).value;
-  params.validation = clampList(params.validation, 4).value;
 
   return params;
 }
@@ -1517,8 +1636,8 @@ server.registerTool(
       "after the closing ---.",
     inputSchema: z.object({
       variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (promote alpha→beta→stable) rendered by the promote skill. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report."),
-      summary: z.string().transform(v => clampText(v, 80).value)
-        .describe("Max ~10 words, user's language (over-long summaries are clamped, not rejected)"),
+      summary: z.string().transform(v => clampText(v, SUMMARY_MAX).value)
+        .describe("What changed for the user, ≤ 8 words / 60 characters (clamped on a word boundary, not rejected). No pipeline status — 'gemergt', 'geshipped', 'live', the version: the Delivery block and the CTA already say that."),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
       cwd: z.string().optional().describe("Working directory of the target repo. STRONGLY RECOMMENDED for ship-* variants — without it, getRepoUrl falls back to the MCP server's own cwd (plugin dir) and the card cannot render clickable PR/commit/branch links. Also what lets the card read the project's mode state: the open /concept page's URL (.claude/concept-active.json) and an armed /claude-batch collection (.claude/batch-mode.json → 📥 BATCH CTA)."),
       buildId: z.string().optional().describe("Pre-computed build-ID (from ship_build). If provided, skips internal computation. Use this when the worktree/branch state may have changed after building (e.g. post-merge)."),
@@ -1528,15 +1647,15 @@ server.registerTool(
         z.array(z.object({
           area: z.string().describe("Functional surface the user perceives or the change is about (e.g. 'Completion card', 'Ship pipeline', 'Branch cleanup', 'Skill fix'). NOT a file path or internal module name. Technical wording only when the topic itself is purely technical (parser, flag, protocol)."),
           description: z.string().describe("What behaves differently now, in user-domain language. Describe the functional/user-visible effect — same rule as `area`: technical phrasing only when the topic is genuinely technical."),
-        })).transform(v => clampList(v, 3).value).optional(),
+        })).optional(),
       ).describe("Top 3 FUNCTIONAL changes — both `area` AND description should describe what the user perceives or what behaves differently, not which files were edited. Keep the 'area → description' shape. Files/paths only when the file IS the deliverable (skill, keybindings.json, settings.json, CLAUDE.md, hook script). Internal helpers/renderers/libs never appear. Good: 'Completion card → Changes-Bullets jetzt funktional formuliert'. Good (purely technical topic): 'JSON parser → akzeptiert trailing commas'. Bad: 'mcp-server/index.js → renderChanges() angepasst'."),
       tests: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.object({
           method: z.string(),
           result: z.string(),
-        })).transform(v => clampList(v, 3).value).optional(),
-      ).describe("Test results (max 3)"),
+        })).optional(),
+      ).describe("Automated gates that ran — rendered on ONE line under **Belegt** ('npm test → 1460 grün · eslint → sauber'). Keep method ≤ 40 and result ≤ 60 characters; state numbers, not prose. Non-green or skipped gates belong here too ('Codex-Review → übersprungen — Limit')."),
       state: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({
@@ -1583,6 +1702,10 @@ server.registerTool(
           }),
         ])).optional(),
       ).describe("User-final-test items — for changes where automation cannot cover the last step (packaged Electron/Tauri without desktop takeover, 3rd-party integrations). Pass strings for local final tests; pass { action, afterDeployment: true } for 3rd-party items that require deployment first. Available in all variants except test-minimal and test — in the test variant all manual steps go into userTest (single test section, no duplicate)."),
+      open: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.array(z.string()).optional(),
+      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question ('feat/x liegt 70 PRs hinter main — committen oder verwerfen?'). Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
       pending: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
@@ -1621,7 +1744,7 @@ server.registerTool(
           requirement: z.string().describe("A requirement / acceptance criterion the change had to satisfy — in user-domain language."),
           status: z.enum(["met", "partial", "unmet"]).optional().describe("Whether this change satisfies the requirement."),
           evidence: z.string().optional().describe("How you CONFIRMED it (the test that proves it, the behaviour observed) — not a restatement of the requirement."),
-        })).transform(v => clampList(v, 4).value).optional(),
+        })).optional(),
       ).describe("V&V gate — validation attestation (“did we build the RIGHT thing”). REQUIRED for any turn that changed source code: map each requirement / acceptance criterion to how this change meets it and how you confirmed it. A code-change card without `validation` is blocked once by stop.flow.guard and re-requested. For a pure refactor/chore with no explicit requirement, pass one item stating the intent and how behaviour was kept equivalent. Each item: { requirement, status: met|partial|unmet, evidence }."),
       delivery: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
@@ -1632,6 +1755,7 @@ server.registerTool(
             channels: z.object({ alpha: z.string().nullable().optional(), beta: z.string().nullable().optional(), stable: z.string().nullable().optional() }).describe("Version reached per channel; null = not reached (renders as —)."),
             current: z.enum(["alpha", "beta", "stable"]).optional().describe("Channel this turn landed on — highlighted 🟢 in the ladder."),
             fastTrack: z.boolean().optional().describe("alpha→stable direct: beta renders as ⏭ skipped."),
+            stableLag: z.object({ versions: z.number(), days: z.number().optional() }).optional().describe("How far the current channel is ahead of stable (from git ls-remote --tags). Renders the promote nudge on the ladder line: '· alpha 8 Versionen / 7 Tage vor stable → `/promote`'. Replaces the old userFinalTest promote item."),
           }).nullable().optional().describe("Promote stage: alpha→beta→stable ladder. null = not promoted yet (Promote node ⚪)."),
         }).optional(),
       ).describe("Delivery track (ready / ship-successful / released) — the pipeline through-line PR → Ship → Promote(alpha→beta→stable) showing WHERE this turn sits (✅ done · 🟢 current · ⚪ pending). ship-successful also names the reached channel in its CTA. Populate the stages that happened; leave later ones null/absent."),
