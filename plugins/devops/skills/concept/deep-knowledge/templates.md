@@ -1927,7 +1927,14 @@ its own entry in the switcher and the panel TOC.
   active design, which would leave the switcher, both nav groups and all
   three dock textarea containers unbuilt. The same rule holds after a tab
   switch — the `iteration:changed` handler deliberately drops back to the
-  incoming iteration's active design (§ Layout JS).
+  incoming iteration's active design (§ Layout JS). **A reload is not a tab
+  switch:** the boot `showIteration()` fires the same event for the round the
+  layout has just restored, so the handler compares the incoming round with
+  the one it last built (`shownIterationId`) and keeps a restored view that is
+  on screen — otherwise the boot hid the view moments after the `_activeView`
+  restore and the `showScreen()` → `saveState()` behind it deleted the key, so
+  no question view ever survived the reload every iteration append triggers
+  (pinned by `view-boot-restore.test.js` on the assembled fixture).
 - `data-view` ids are unique **page-wide** — and this is the one id space
   where that matters, so do not pattern-match it off the others. Design ids
   and screen ids deliberately REPEAT across iterations (that is what lets
@@ -3834,6 +3841,15 @@ change) via `harvestDockValues()`.
   // form factors than its neighbour.
   let viewportPref = null;
   let viewportMode = 'desktop';
+  // The iteration this layout last built its chrome for. The
+  // `iteration:changed` handler compares the incoming iteration against it to
+  // tell a real tab switch (views are dropped, by design) from a re-entry into
+  // the SAME round — the boot `showIteration()` above all, which fires the same
+  // event moments after this block's own DOMContentLoaded listener restored
+  // `_activeView`. Without the distinction the boot event hid the restored
+  // view and the showScreen() → saveState() behind it deleted `_activeView`
+  // from storage, so no question view ever survived a reload.
+  let shownIterationId = null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -5038,6 +5054,10 @@ change) via `harvestDockValues()`.
     if (typeof restoreState === 'function') restoreState();
     if (typeof updateNoteMarkers === 'function') updateNoteMarkers();
     const active = document.querySelector('section[data-iteration][data-active]');
+    // Recorded BEFORE the view restore below: the boot showIteration() (§ Tab
+    // Switch JS) fires `iteration:changed` for this same round right after,
+    // and the handler keeps a restored view only when the round matches.
+    shownIterationId = active ? String(active.dataset.iteration) : null;
     if (active) {
       // Work package C — restore an active VIEW first. Defensive by
       // design: an unknown/removed view id (edited between sessions, or
@@ -5100,27 +5120,40 @@ change) via `harvestDockValues()`.
     if (document.body.classList.contains('viewing-frozen') && liveDockValues === null) {
       liveDockValues = harvestDockValues();
     }
-    // A question view never survives a tab switch. buildDesignUI() requires
-    // an active design, and a stale body[data-view-active] leaves the
-    // position indicator empty, kills arrow-key navigation and makes every
-    // data-screen-link click-dummy inert with no visible cause.
-    document.querySelectorAll('section[data-view]').forEach(v => {
-      v.dataset.viewActive = 'false';
-      v.hidden = true;
-    });
-    document.body.dataset.viewActive = 'false';
-    // ...and put the designs back on screen. showView() hides every design
-    // when a question view takes over the viewport, and nothing else undoes
-    // that: only showDesign() un-hides, and it is not on this path. Without
-    // this, a view -> other iteration tab -> back round trip lands on a
-    // design that still says data-design-active="true" while being
-    // display:none — no mockup, dead click-dummy, dead arrow keys, and no
-    // visible cause. Verified in a browser, not deduced.
+    // Same round re-entered (the boot showIteration() above all) vs. a real
+    // tab switch. A question view survives the former and never the latter:
+    // on boot this block's own DOMContentLoaded listener has just restored
+    // `_activeView` via showView(), and this event arrives moments later for
+    // the very same round — treating it as a switch hid the view again and
+    // the showScreen() → saveState() below then deleted `_activeView` from
+    // storage. Only a view that is BOTH active AND on screen is kept
+    // (activeViewVisible()); a stale data-view-active behind a design is not.
     const incoming = visibleIteration();
-    if (incoming) {
-      incoming.querySelectorAll(':scope > section[data-design]').forEach(d => {
-        d.hidden = d.dataset.designActive !== 'true';
+    const incomingId = incoming ? String(incoming.dataset.iteration) : null;
+    const keptView = (incomingId !== null && incomingId === shownIterationId) ? activeViewVisible() : null;
+    shownIterationId = incomingId;
+    if (!keptView) {
+      // A question view never survives a tab switch. buildDesignUI() requires
+      // an active design, and a stale body[data-view-active] leaves the
+      // position indicator empty, kills arrow-key navigation and makes every
+      // data-screen-link click-dummy inert with no visible cause.
+      document.querySelectorAll('section[data-view]').forEach(v => {
+        v.dataset.viewActive = 'false';
+        v.hidden = true;
       });
+      document.body.dataset.viewActive = 'false';
+      // ...and put the designs back on screen. showView() hides every design
+      // when a question view takes over the viewport, and nothing else undoes
+      // that: only showDesign() un-hides, and it is not on this path. Without
+      // this, a view -> other iteration tab -> back round trip lands on a
+      // design that still says data-design-active="true" while being
+      // display:none — no mockup, dead click-dummy, dead arrow keys, and no
+      // visible cause. Verified in a browser, not deduced.
+      if (incoming) {
+        incoming.querySelectorAll(':scope > section[data-design]').forEach(d => {
+          d.hidden = d.dataset.designActive !== 'true';
+        });
+      }
     }
     buildDesignUI();
     // buildDesignUI() above destroyed and rebuilt the three dock containers,
@@ -5143,6 +5176,17 @@ change) via `harvestDockValues()`.
     // design iteration the user just left stays in the DOM, and the toggle
     // keeps offering viewports that iteration never declared.
     applyViewport();
+    // Re-entered round with its view still up: buildDesignUI() rebuilt the
+    // switcher, the nav and the dock textareas from scratch (every segment
+    // inactive, every view textarea hidden), so re-apply the view's chrome the
+    // same way a click would — showView() also ends in saveState(), which is
+    // what keeps `_activeView` in storage across the boot.
+    if (keptView) {
+      showView(keptView.dataset.view);
+      primeDock();
+      updateNoteMarkers();
+      return;
+    }
     const design = activeDesign();
     if (!design) return;
     const prevId = document.querySelector('[data-screen][data-screen-active="true"]')?.id;
