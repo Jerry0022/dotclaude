@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.158.1] — 2026-09-13
+
+### Fixed
+
+- **The concept page's "Notizen liegen nur in diesem Browser" strip disappears again once the bridge answers.** The strip's base rule is `display: flex`, which outranks the UA `[hidden] { display: none }` — so `_setDraftHealth(true)` toggled the attribute and nothing changed on screen; after one transient blip (three debounced saves while the bridge was busy) every page carried a permanent, false "bridge unreachable" warning over a bridge answering 200 (#362). Both bottom strips now carry the `[hidden]` override every other toggled bar already had (`.frozen-bar[hidden]`, `.hint-cache[hidden]`), and while the strip is showing `flushDraft()` is retried every 30 s so a recovered bridge clears it without the user having to type again. Validation-gate ENGINE entry 63 pins the rule so donor-built pages are re-synced; `draft-strip-hidden.test.js` covers the CSS and runs the real `_setDraftHealth` against stubbed timers.
+
 ## [0.158.0] — 2026-09-13
 
 ### Added
