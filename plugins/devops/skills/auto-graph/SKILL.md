@@ -1,6 +1,6 @@
 ---
 name: auto-graph
-version: 0.4.0
+version: 0.4.1
 description: >-
   Codebase knowledge graph via the external graphify CLI, default-on and
   opt-out. Detects graphify, auto-installs it in the background if missing,
@@ -114,6 +114,17 @@ the user does:
   for every project.
 - Absent (both project and global) → **enabled** — this is the default and
   the common case.
+
+"Project" means a **git work tree** (a `.git` dir or worktree file somewhere
+above the cwd) whose root is not the home directory. A session started outside
+one — a Desktop session with no folder picked, a terminal opened in `~` — gets
+no auto-install, no transparency line and no build: `graphify update .`
+indexes everything below the cwd, and from `$HOME` that once crawled the whole
+profile for hours. Manual `graphify update .` stays available anywhere.
+
+Both automatic paths spawn the `graphify` binary by bare name; set
+`DOTCLAUDE_GRAPHIFY_BIN=<absolute path>` when the CLI lives off `PATH` (uv's
+`~/.local/bin` on a fresh Windows box), or point it at a stub in tests.
 
 The first time graphify auto-enables for a project with no record at all,
 `ss.graphify` prints a one-time (weekly-throttled), non-blocking transparency
