@@ -1,8 +1,5 @@
 import { describe, test, expect } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { page, VEHICLE_SPEC } from "./mapping-engine.test.js";
+import { md, page, mappingSection, VEHICLE_SPEC } from "./mapping-harness.js";
 
 // The information-mapping engine (templates.md § Information Mapping (engine))
 // is wired into the page's shared systems: persistence renders it before
@@ -11,17 +8,30 @@ import { page, VEHICLE_SPEC } from "./mapping-engine.test.js";
 // design and the section TOC mirrors the mapping progress. Static contracts
 // over the reference source plus jsdom runs of the touched functions.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const md = fs.readFileSync(path.join(__dirname, "deep-knowledge", "templates.md"), "utf8");
 const fn = name => {
   const m = md.match(new RegExp("function " + name + "\\([^)]*\\) \\{[\\s\\S]*?\\n\\}"));
   if (!m) throw new Error(name);
   return m[0];
 };
+const CSS_STUB = "if (typeof CSS === 'undefined') window.CSS = { escape: s => s };";   // jsdom has no CSS.escape
+const FROZEN_SUBMITTED = { cells: { "card@phone": [["vin", "card.header"], ["status", "card.badge"]], "card@desktop": [] }, order: {}, adhoc: [], slotNotes: {} };
+// A frozen, hidden earlier round holding its own (submitted) mapping — what a
+// concept page looks like once the mapping has been through one iteration.
+const prependFrozenRound = (p, extra = "") => {
+  const frozen = p.document.createElement("section");
+  frozen.dataset.iteration = "2"; frozen.hidden = true;
+  frozen.innerHTML = mappingSection("veh_old", { ...VEHICLE_SPEC, submitted: FROZEN_SUBMITTED }) + extra;
+  p.document.querySelector("main").prepend(frozen);
+  return frozen;
+};
 
 describe("mapping integration — engine hooks in the shared systems", () => {
   test("renderMappings is the first call of the persistence DOMContentLoaded handler", () => {
-    const handler = md.slice(md.indexOf("// Inject missing per-decision comment slots BEFORE restoring state") - 200);
+    const anchor = md.indexOf("// Inject missing per-decision comment slots BEFORE restoring state");
+    expect(anchor).toBeGreaterThan(-1);
+    const start = md.lastIndexOf("document.addEventListener('DOMContentLoaded', () => {", anchor);
+    expect(start).toBeGreaterThan(-1);
+    const handler = md.slice(start, anchor + 400);
     const i = handler.indexOf("renderMappings()"), j = handler.indexOf("ensureCommentSlots()"), k = handler.indexOf("restoreState()");
     expect(i).toBeGreaterThan(-1); expect(i).toBeLessThan(j); expect(j).toBeLessThan(k);
   });
@@ -40,7 +50,9 @@ describe("mapping integration — engine hooks in the shared systems", () => {
     expect(fn("collectDesignDecisions")).toContain("viewFor");
   });
   test("buildDesignUI nests data-view-for views under their design; buildSectionNav mirrors mapping progress", () => {
-    expect(fn("buildDesignUI")).toContain("dataset.viewFor");
+    const ui = fn("buildDesignUI");
+    expect(ui).toContain("allViews.filter(v => v.dataset.viewFor === d.dataset.design)");
+    expect(ui).toContain("!allDesigns.some(d => d.dataset.design === v.dataset.viewFor)");
     expect(fn("buildSectionNav")).toContain("data-mapping-nav");
     expect(fn("updateSectionNavState")).toContain("mappingProgress");
   });
@@ -54,10 +66,15 @@ describe("mapping integration — engine hooks in the shared systems", () => {
     const src = md.slice(md.indexOf("  function refreshMappings(root) {"), md.indexOf("  // --- payload (§ Payload)"));
     expect(src).toContain("if (typeof updateSectionNavState === 'function') updateSectionNavState();");
   });
+  test("the TOC mirror has a muted state-mapping rule and a warning has-violations rule", () => {
+    expect(md).toContain(".section-nav-state.state-mapping { color: var(--text-secondary); }");
+    expect(md).toContain(".section-nav-state.state-mapping.has-violations { color: var(--warning-color); }");
+    expect(fn("updateSectionNavState")).toContain("classList.toggle('has-violations', p.violations > 0)");
+  });
   test("jsdom: a free round with a mapping restores, refreshes and ships mappings[] through the free branch", () => {
-    const p = page({ specs: [["veh", VEHICLE_SPEC]] });                      // harness exported by mapping-engine.test.js
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] });
     p.window.eval([
-      "if (typeof CSS === 'undefined') window.CSS = { escape: s => s };",   // jsdom has no CSS.escape
+      CSS_STUB,
       "function resolveIterationTemplate() { return 'free'; }",
       "function attachmentsFor() { return []; }",
       fn("collectAllFormFields"), fn("collectFreeDecisions"), fn("collectDecisions"),
@@ -73,22 +90,22 @@ describe("mapping integration — engine hooks in the shared systems", () => {
     expect(Object.keys(payload.allFields).some(k => k.includes(">"))).toBe(false);                    // no checkbox leaks into allFields
     expect(payload.comments).toEqual([]);                                                               // empty note is not a comment
   });
-  test("jsdom: the free branch never ships a frozen round's mapping note or sections", () => {
+  test("jsdom: the free branch never ships a frozen round's mapping, its note or its sections", () => {
     const p = page({ specs: [["veh", VEHICLE_SPEC]] });
     p.window.eval([
-      "if (typeof CSS === 'undefined') window.CSS = { escape: s => s };",   // jsdom has no CSS.escape
+      CSS_STUB,
       "function resolveIterationTemplate() { return 'free'; }",
       "function attachmentsFor() { return []; }",
       fn("collectAllFormFields"), fn("collectFreeDecisions"), fn("collectDecisions"),
     ].join("\n"));
-    const frozen = p.document.createElement("section");
-    frozen.dataset.iteration = "2"; frozen.hidden = true;
-    frozen.innerHTML = '<section id="old" data-nav-label="Old"><input type="radio" name="eval-old" value="discard" checked>'
-      + '<textarea data-comment="map-old-note">stale</textarea></section>';
-    p.document.querySelector("main").prepend(frozen);
+    prependFrozenRound(p, '<section id="old" data-nav-label="Old"><input type="radio" name="eval-old" value="discard" checked>'
+      + '<textarea data-comment="map-old-note">stale</textarea></section>');
+    p.document.querySelector('[data-comment="map-veh_old-note"]').value = "frozen note";
     p.window.renderMappings();
+    expect(p.section("veh_old").dataset.mapRendered).toBe("true");                                    // the frozen mapping IS rendered …
+    expect(p.document.getElementById("map-veh_old-cells-card@phone").value).toBe("vin>card.header status>card.badge");
     const payload = p.window.collectDecisions("iterate");
-    expect(payload.comments).toEqual([]);
+    expect(payload.comments).toEqual([]);                                                               // … but nothing of it is collected
     expect(payload.decisions.map(d => d.id)).not.toContain("old");
     expect(payload.mappings.map(m => m.id)).toEqual(["veh"]);
   });
@@ -106,18 +123,48 @@ describe("mapping integration — engine hooks in the shared systems", () => {
     const prog = p.window.mappingProgress(p.section("veh"));
     expect(prog.total).toBe(6);
     expect(state.textContent).toBe(mirror(prog));
-    expect(state.className).toBe("section-nav-state state-mapping");
+    expect(state.classList.contains("state-mapping")).toBe(true);
+    expect(state.classList.contains("has-violations")).toBe(prog.violations > 0);
     p.window.setCell("veh", "plate", "card.header", "phone", false);           // header@phone min 1 → one more violation
     p.window.setCell("veh", "model", "card.header", "phone", false);
     const after = p.window.mappingProgress(p.section("veh"));
     expect(after.violations).toBeGreaterThan(prog.violations);
     expect(state.textContent).toBe(mirror(after));
     expect(state.textContent).toMatch(/ · \d+ ⚠$/);
+    expect(state.classList.contains("has-violations")).toBe(true);
     // a restore path (value only, then refreshMappings) re-mirrors too
     p.document.getElementById("map-veh-cells-card@phone").value = "plate>card.header status>card.badge mileage>card.line1";
     p.window.refreshMappings();
     const restored = p.window.mappingProgress(p.section("veh"));
     expect(restored.assigned).not.toBe(after.assigned);
     expect(state.textContent).toBe(mirror(restored));
+  });
+  test("jsdom: buildSectionNav + the mirror resolve the mapping in the VISIBLE round, never a hidden one", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] });
+    p.window.eval([
+      "const NAV_GROUP_MIN_KINDS = 2, NAV_GROUP_OVER_ENTRIES = 99; const _navManualClosedAt = new Map();",
+      "function buildIterationTree() {} function installScrollSpy() {}",
+      fn("buildSectionNav"), fn("updateSectionNavState"),
+    ].join("\n"));
+    const nav = p.document.createElement("nav"); nav.id = "section-nav"; p.document.body.appendChild(nav);
+    prependFrozenRound(p);
+    p.window.renderMappings();
+    p.window.buildSectionNav();
+    const links = [...nav.querySelectorAll(".section-nav-item[data-mapping-nav]")].map(a => a.dataset.sectionId);
+    expect(links).toEqual(["veh"]);                                             // nav is built from the visible round only
+    const state = nav.querySelector('.section-nav-item[data-mapping-nav] .section-nav-state');
+    const mirror = q => `${q.assigned}/${q.total}` + (q.violations ? ` · ${q.violations} ⚠` : "");
+    const live = p.window.mappingProgress(p.section("veh"));
+    const old = p.window.mappingProgress(p.section("veh_old"));
+    expect(live.assigned).not.toBe(old.assigned);                               // the two rounds are distinguishable
+    expect(state.textContent).toBe(mirror(live));
+    // the mirror resolves through the visible round: a mapping id the visible round does not hold is left alone
+    const stray = p.document.createElement("a");
+    stray.className = "section-nav-item"; stray.dataset.sectionId = "veh_old"; stray.setAttribute("data-mapping-nav", "");
+    stray.innerHTML = '<span class="section-nav-state">untouched</span>';
+    nav.appendChild(stray);
+    p.window.updateSectionNavState();
+    expect(stray.querySelector(".section-nav-state").textContent).toBe("untouched");
+    expect(state.textContent).toBe(mirror(live));
   });
 });

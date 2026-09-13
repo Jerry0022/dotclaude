@@ -5475,10 +5475,6 @@ function collectDesignDecisions() {
       });
     });
   }
-  // Mappings (§ Information Mapping (engine)) — the engine's own collector,
-  // scoped to the live round like the scans above; `[]` on a page whose
-  // engine block is absent, so the key is always present (§ 9 uniform shape).
-  const collectMappings = (typeof window.collectMappings === 'function') ? window.collectMappings : () => [];
   // Annotations (§ Annotation Layer (optional)) live INSIDE
   // section[data-iteration][data-active] — unlike the dock above, which is
   // an overlay outside it — so this scan is scoped to `active` directly.
@@ -5520,6 +5516,11 @@ function collectDesignDecisions() {
       if (list.length) attachments[slotKey] = list;
     }
   }
+  // Mappings (§ Information Mapping (engine)) — the engine's own collector,
+  // scoped to the live round like the scans above; `[]` on a page whose
+  // engine block is absent, so the key is always present (§ 9 uniform shape).
+  // `window.` on purpose: a bare `typeof collectMappings` here hits the TDZ of this very const.
+  const collectMappings = (typeof window.collectMappings === 'function') ? window.collectMappings : () => [];
   return {
     submitted: true,
     template: 'design',
@@ -5684,6 +5685,7 @@ function collectFreeDecisions() {
     if (text || attachments.length) comments.push({ id: el.dataset.comment, text, attachments });
   });
   // Mappings (§ Information Mapping (engine)); `[]` without the engine block.
+  // `window.` on purpose: a bare `typeof collectMappings` here hits the TDZ of this very const.
   const collectMappings = (typeof window.collectMappings === 'function') ? window.collectMappings : () => [];
   return { submitted: true, template: 'free', decisions, comments, mappings: collectMappings(active) };
 }
@@ -5771,6 +5773,10 @@ to hunt for their own position on every scroll.
 }
 .section-nav-state.state-discard { color: var(--danger-color, #f85149); }
 .section-nav-state.state-only { color: var(--success-color, #3fb950); }
+/* Mapping progress mirror (§ Information Mapping (engine)): muted until a
+   min/max rule is violated, then the warning colour. */
+.section-nav-state.state-mapping { color: var(--text-secondary); }
+.section-nav-state.state-mapping.has-violations { color: var(--warning-color); }
 /* "You are here" marker — driven by the scroll spy, NOT by :target or click
    alone. The accent bar is an inset box-shadow (not a border) so the entry
    never shifts horizontally when it becomes active. */
@@ -6022,15 +6028,24 @@ function updateSectionNavState() {
   });
   // Mapping progress mirror (§ Information Mapping (engine)): the engine
   // re-calls this after every cell write and every restore.
-  if (typeof mappingProgress !== 'function') return;
-  document.querySelectorAll('.section-nav-item[data-mapping-nav]').forEach(link => {
-    const sec = document.getElementById(link.dataset.sectionId);
-    const stateEl = link.querySelector('.section-nav-state');
-    if (!sec || !stateEl) return;
-    const p = mappingProgress(sec);
-    stateEl.textContent = p.assigned + '/' + p.total + (p.violations ? ' · ' + p.violations + ' ⚠' : '');
-    stateEl.className = 'section-nav-state state-mapping';
-  });
+  if (typeof mappingProgress === 'function') {
+    // buildSectionNav() lists the VISIBLE round; resolve the section inside
+    // that same round. Mapping ids are unique page-wide (gate M2), so this is
+    // defence in depth — a page-wide lookup only when no round is visible.
+    const host = document.querySelector('section[data-iteration]:not([hidden])');
+    document.querySelectorAll('.section-nav-item[data-mapping-nav]').forEach(link => {
+      const id = link.dataset.sectionId;
+      const sec = host
+        ? [...host.querySelectorAll('section[data-mapping]')].find(s => s.id === id) || null
+        : document.getElementById(id);
+      const stateEl = link.querySelector('.section-nav-state');
+      if (!sec || !stateEl) return;
+      const p = mappingProgress(sec);
+      stateEl.textContent = p.assigned + '/' + p.total + (p.violations ? ' · ' + p.violations + ' ⚠' : '');
+      stateEl.className = 'section-nav-state state-mapping';
+      stateEl.classList.toggle('has-violations', p.violations > 0);
+    });
+  }
 }
 
 document.addEventListener('click', e => {
@@ -7523,7 +7538,7 @@ function restoreState() {
 
 document.addEventListener('DOMContentLoaded', () => {
   // FIRST: the mapping state inputs (§ Information Mapping (engine)) must
-  // exist before restoreState() can write into them — script order is not
+  // exist before the restore writes into them — script order is not
   // guaranteed across the page's IIFEs, so the engine is not asked to time it.
   if (typeof renderMappings === 'function') renderMappings();
   // Inject missing per-decision comment slots BEFORE restoring state so the
