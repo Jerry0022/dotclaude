@@ -32,10 +32,15 @@ Select agents based on domains touched, complexity, and risk:
 ### Model & Effort Defaults
 
 Each agent defines `model` and optionally `effort` in its frontmatter.
-The orchestrator can override `model` at invocation time but **not** `effort`.
-This table is the **source of truth for the `Model` column** the plan tables show
-(`/run-agents` Step 3, `/run-burn` plan) — keep it in sync with the agent
-frontmatter. When you override a model at invocation, show it as `default → override`.
+The orchestrator can override `model` at invocation time but **not** `effort` —
+the Agent tool has no effort parameter, so the frontmatter value is always the
+effective one.
+This table is the **source of truth for the `Model · Effort` column** the plan
+tables show — `/run-agents` Step 3 renders each agent as `model · effort` (e.g.
+`opus · high`); the `/run-burn` plan lists `default → override` per role — keep
+it in sync with the agent frontmatter. When you override a model at invocation,
+show it as `default → override` with the effort repeated on both sides
+(`sonnet · medium → opus · medium`); the effort never carries an arrow.
 
 | Agent | model | effort | Notes |
 |-------|-------|--------|-------|
@@ -52,14 +57,16 @@ frontmatter. When you override a model at invocation, show it as `default → ov
 | **feature** | inherit | *(inherit)* | Inherits from parent session |
 
 **Model override rules:**
-- Override `model` at invocation for cost control: `Agent({ subagent_type: "research", model: "sonnet", ... })`
+- Override `model` at invocation for cost control: `Agent({ subagent_type: "research", model: "sonnet", ... })`.
+  The Agent tool accepts `sonnet`, `opus`, `haiku` and `fable` — `fable` is an
+  accepted value for upward overrides, not only `opus`.
 - **`/run-burn` inverts this**: it overrides **upward only** (sonnet → opus,
   effort → high) per its depth profile, and never downgrades for cost. Its goal
   is to consume the remaining weekly budget as depth-per-task rather than as
   breadth-of-unfinished-tasks. See
   `skills/run-burn/deep-knowledge/burn-scheduler.md` § Depth profiles.
 - **Never downgrade to haiku** for agents with `effort: high` (po, research) — haiku + high effort wastes tokens without quality gain
-- Upgrading to opus is fine for any agent when task complexity warrants it
+- Upgrading to opus or fable is fine for any agent when task complexity warrants it
 
 ### Complexity Tiers
 

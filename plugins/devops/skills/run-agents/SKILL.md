@@ -1,6 +1,6 @@
 ---
 name: run-agents
-version: 0.7.0
+version: 0.8.0
 description: >-
   Evaluate which agents are useful for a task and orchestrate their parallel or
   sequential execution. Use when the user explicitly wants orchestrated agent
@@ -88,13 +88,14 @@ Select agents using the roster, criteria, and complexity tiers from
 Present the orchestration plan to the user. Use the headings/labels for the
 active `[ui-locale: ...]` (defaults to `en`):
 
-| Key             | en               | de                  |
-|-----------------|------------------|---------------------|
-| `plan.heading`  | Orchestration plan | Orchestrierungsplan |
-| `plan.model`    | Model            | Modell              |
-| `plan.task_col` | Task             | Aufgabe             |
-| `plan.deps`     | Dependencies     | Abhängigkeiten      |
-| `plan.estimate` | Estimated agents | Geschätzte Agents   |
+| Key             | en                            | de                             |
+|-----------------|-------------------------------|--------------------------------|
+| `plan.heading`  | Orchestration plan            | Orchestrierungsplan            |
+| `plan.model`    | Model · Effort                | Modell · Effort                |
+| `plan.task_col` | Task                          | Aufgabe                        |
+| `plan.budget`   | Complexity · tool-call budget | Komplexität · Tool-Call-Budget |
+| `plan.deps`     | Dependencies                  | Abhängigkeiten                 |
+| `plan.estimate` | Estimated agents              | Geschätzte Agents              |
 
 Template (`{key}` → resolved per locale):
 
@@ -105,10 +106,12 @@ Template (`{key}` → resolved per locale):
 
 | Wave | Agent(s) | {plan.model} | {plan.task_col} |
 |------|----------|--------------|-----------------|
-| 0 | research | opus | <what they investigate> |
-| 1 | core | sonnet | <what contracts/APIs they define> |
-| 2 | frontend, windows | sonnet | <what they build, in parallel> |
-| 3 | qa | sonnet | <what they verify> |
+| 0 | research | opus · high | <what they investigate> |
+| 1 | core | sonnet · medium | <what contracts/APIs they define> |
+| 2 | frontend, windows | sonnet · medium | <what they build, in parallel> |
+| 3 | qa | sonnet · medium | <what they verify> |
+
+**{plan.budget}:** Complex → ~15–30 tool calls per agent   [de: Complex → ~15–30 Tool-Calls pro Agent]
 
 ### {plan.deps}
 - Wave 2 waits on Wave 1 (core contracts)   [de: Wave 2 wartet auf Wave 1 (Core-Contracts)]
@@ -117,13 +120,26 @@ Template (`{key}` → resolved per locale):
 ### {plan.estimate}: N
 ```
 
-**`{plan.model}` column** — the effective model each agent runs on. Take the
-default from `deep-knowledge/agent-orchestration.md` § Model & Effort Defaults
-(`opus` for po/research/redteam, `sonnet` for the rest, `inherit` for feature).
-If a wave has multiple agents on different models, list them aligned to the
-`Agent(s)` order (e.g. `opus, sonnet`); collapse to a single value when they
-match. If you override a model at invocation (§ Model override rules), show it as
-`default → override` (e.g. `opus → sonnet`) so the change is visible.
+**`{plan.model}` column** — the effective model **and** reasoning effort each
+agent runs on, rendered `model · effort` (e.g. `opus · high`). Take both from
+`deep-knowledge/agent-orchestration.md` § Model & Effort Defaults (`opus · high`
+for po/research/redteam, `sonnet · medium` for the code agents, designer and qa,
+`sonnet · low` for gamer, `inherit` for feature — model and effort both come from
+the parent session). If a wave has multiple agents on different values, list
+them aligned to the `Agent(s)` order (e.g. `opus · high, sonnet · medium`);
+collapse to a single value when they match. If you override the model at
+invocation (§ Model override rules), show it as `default → override` with the
+effort repeated on both sides (e.g. `sonnet · medium → opus · medium`) so the
+change is visible. Effort never carries an arrow: the Agent tool has no effort
+parameter, so the frontmatter value is always the effective one.
+
+**`{plan.budget}` line** — the complexity tier of the task (same doc,
+§ Complexity Tiers) and the per-agent tool-call ceiling it implies: Medium →
+`~5–15`, Complex → `~15–30`. Simple means inline work with no sub-agents; if
+agents are spawned for a Simple task anyway (the user asked for orchestration
+explicitly), apply the Medium ceiling. The same ceiling goes into every agent
+prompt as item 6 of § Agent Prompt Template — the plan shows the budget the
+prompts will carry, so it is visible before anything is spawned.
 
 Wait for user confirmation before proceeding. Accept:
 - en: "yes" / "go" / "do it" → proceed as planned
