@@ -219,7 +219,7 @@ must see their own language. The locale hint is authoritative.
 | `map.filter_multiple`          | Multiple                       | Mehrfach |
 | `map.filter_changed`           | Changed                        | Geändert |
 | `map.reset`                    | Reset to proposal              | Auf Vorschlag zurücksetzen |
-| `map.reset_confirm`            | Reset this matrix to Claude's proposal? | Diese Matrix auf Claudes Vorschlag zurücksetzen? |
+| `map.reset_confirm`            | Reset this matrix to the proposal? | Diese Matrix auf Claudes Vorschlag zurücksetzen? |
 | `map.copy`                     | Copy {from} → {to}             | {from} → {to} kopieren |
 | `map.copy_confirm`             | Overwrite {to} with {from}?    | {to} mit {from} überschreiben? |
 | `map.add_item`                 | item                           | Eintrag |
@@ -239,7 +239,7 @@ must see their own language. The locale hint is authoritative.
 | `map.context`                  | Context                        | Kontext |
 | `map.axis`                     | Axis                           | Achse |
 | `map.tab_open`                 | {n} open                       | {n} offen |
-| `map.frozen_missing`           | Submitted state missing — showing Claude's proposal | Übermittelter Stand fehlt — zeigt Claudes Vorschlag |
+| `map.frozen_missing`           | Submitted state missing — showing the proposal | Übermittelter Stand fehlt — zeigt Claudes Vorschlag |
 | `map.spec_error`               | Mapping spec could not be read: {error} | Mapping-Spezifikation nicht lesbar: {error} |
 
 **`map.*` strings are rendered by the mapping engine** (§ Information
@@ -250,7 +250,12 @@ fills (`fmt()`) — keep them in every translation. `map.items` doubles as the
 palette title ("Items (40)") and the aria-label of the palette collapse
 button; `map.reset` / `map.add_item` / `map.copy` get their `↺` / `+` / `⧉`
 glyph prefixed by the engine (the button reads "+ item"), so the strings
-carry none.
+carry none. Every `map.*` cell is substituted into a single-quoted JS string
+literal in `MAP_LOCALE`, so **no cell may contain an ASCII apostrophe (`'`),
+a backtick (`` ` ``) or a backslash (`\`)** — any of these would break the
+engine block's `<script>` fence and throw a `SyntaxError` before the page
+renders. Reword around the restriction (e.g. drop possessives) rather than
+escaping the character.
 
 **`design.position_iteration` and `design.position_page` are label words,
 not full sentences** — the numbers (`N`, `total`) are live spans the JS
@@ -1806,7 +1811,7 @@ its own entry in the switcher and the panel TOC.
   `"design": "{designId}"` to every `decisions[]` and `mappings[]` entry
   from such a view (§ Decision schema); the key is absent otherwise. A
   `data-view-for` that names no `data-design` of the same iteration is a
-  gate warning (rule M10, design spec § 11) and falls back to the views group —
+  gate warning (rule M10, validation-gate.md § Mappings) and falls back to the views group —
   nothing breaks, the grouping is just lost. Absent → variant-independent,
   exactly as before.
 - **Screen indicator.** While a view is active, `#screen-indicator` shows the
@@ -2088,7 +2093,8 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
   like for every view) IS the mapping note — `collectMappings()` reads it
   into the entry's `note` whenever the mapping section sits inside a
   `section[data-view]`. Two note fields for one question is the rejected
-  alternative (gate rule M5 flags an inline `map-{m}-note` in a view).
+  alternative (gate rule M5, validation-gate.md § Mappings, flags an inline
+  `map-{m}-note` in a view).
   Per-slot notes (`slotNotes: true`) are generated inline in both homes.
 - `data-view-for="{designId}"` is optional (rules in § Views (optional));
   a mapping about one variant names it, and the payload entry then carries
@@ -5458,7 +5464,7 @@ contributes no `decisions[]` entry; its result is one `mappings[]` entry:
   "decisions": [
     { "id": "nav-tabs", "label": "Tabs", "evaluation": "include", "view": "nav-model", "note": "only for the desktop layout" },
     { "id": "nav-drawer", "label": "Drawer", "evaluation": "discard", "view": "nav-model", "note": "" },
-    { "id": "compact", "label": "Compact", "evaluation": "include", "view": "card-density", "design": "dispatch", "note": "" }
+    { "id": "compact", "label": "Compact", "evaluation": "include", "view": "card-density", "note": "" }
   ],
   "comments": {
     "general": "...",
@@ -5829,7 +5835,7 @@ does not have because the dock provides it there.
 **Rules:**
 - **The inline note is mandatory** in a free-round block:
   `textarea[data-comment="map-{m}-note"][data-attachable]` inside the
-  section (gate rule M5). `collectMappings()` reads it into the
+  section (gate rule M5, validation-gate.md § Mappings). `collectMappings()` reads it into the
   entry's `note`; it also arrives in `comments[]` like every other
   `[data-comment]` of the live round, and attachments ride the existing
   `data-attachable` path. Per-slot notes (`slotNotes: true`) are generated
@@ -5859,7 +5865,7 @@ does not have because the dock provides it there.
   into the spec as `submitted` (§ Information Mapping (engine) →
   Freezing); the frozen block then shows the submission read-only. The
   note textarea is frozen like every other comment of that round
-  (`iteration-rules.md` § Freezing).
+  (`iteration-rules.md` § Freezing Design Iterations).
 
 ## Optional bi-state auto-detection
 
@@ -8733,8 +8739,8 @@ tools and the chip ×, and keeps toggle, tabs, collapse, search and filters brow
 (their state lives in memory on a frozen section; the `readonly` ui input is never
 written). A `submitted` that is missing **or incomplete** (no `cells`, or a matrix key
 missing) is treated as missing: the proposal is shown behind a prepended
-`div.map-error[role=alert]` (`map.frozen_missing`) and gate rule M9 fails the
-page — silently presenting the proposal as the user's decision is the one outcome this
+`div.map-error[role=alert]` (`map.frozen_missing`) and gate rule M9
+(validation-gate.md § Mappings) fails the page — silently presenting the proposal as the user's decision is the one outcome this
 construct must never produce. Frozen sections contribute no `mappings[]` entry.
 
 ### Authoring rule

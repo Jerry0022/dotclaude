@@ -1,4 +1,5 @@
 import { describe, test, expect } from "vitest";
+import vm from "node:vm";
 import { md, scanBlocks, page, mappingSection, VEHICLE_SPEC } from "./mapping-harness.js";
 
 // The information-mapping engine (templates.md § Information Mapping (engine))
@@ -177,8 +178,14 @@ describe("mapping reference docs", () => {
     while ((e = entryRe.exec(obj[1]))) runtime.set(e[1], e[2]);
     expect(runtime.size).toBeGreaterThan(20);
     for (const [k, tok] of runtime) expect(tok).toBe(k);
-    const rows = new Set(); const rowRe = /^\| `map\.([a-z_]+)`\s+\|/gm; let r;
-    while ((r = rowRe.exec(md))) rows.add(r[1]);
+    const rows = new Set(); const rowRe = /^\| `map\.([a-z_]+)`\s+\|(.*)\|(.*)\|\s*$/gm; let r;
+    while ((r = rowRe.exec(md))) {
+      rows.add(r[1]);
+      // map.* cells are substituted verbatim into single-quoted JS string
+      // literals in MAP_LOCALE — an apostrophe, backtick or backslash would
+      // break the engine block's <script> fence (see § UI Locale).
+      for (const cell of [r[2], r[3]]) expect(/['`\\]/.test(cell), `map.${r[1]} cell "${cell.trim()}" contains a forbidden character`).toBe(false);
+    }
     for (const k of runtime.keys()) expect(rows.has(k), `locale row for map.${k}`).toBe(true);
     for (const k of rows) expect(runtime.has(k), `MAP_LOCALE entry for ${k}`).toBe(true);
   });
@@ -188,9 +195,17 @@ describe("mapping reference docs", () => {
     expect(md).toContain('data-view-kind="mapping"');
     expect(md).toContain('data-view-for="');
     const schema = md.slice(md.indexOf("## Decision schema\n\nThe design submit payload"), md.indexOf("## collectDecisions (design branch)"));
-    expect(schema).toContain('"mappings": [');
-    expect(schema).toContain('"design"');
+    expect(schema).toMatch(/"mappings": \[\s*\{/);
+    expect(schema).toContain('"design": "card_a"');
     const free = md.slice(md.indexOf("# Template: free"), md.indexOf("# Shared Systems (all templates)"));
     expect(free).toContain('"mappings"');
+  });
+  test("engine block parses after en and de locale substitution", () => {
+    const rowRe = /^\| `(map\.[a-z_]+)`\s+\|(.+)\|(.+)\|\s*$/gm; const en = new Map(), de = new Map(); let r;
+    while ((r = rowRe.exec(md))) { en.set(r[1], r[2].trim()); de.set(r[1], r[3].trim()); }
+    for (const [locale, table] of [["en", en], ["de", de]]) {
+      const substituted = jsSource.replace(/\{\{(map\.[a-z_]+)\}\}/g, (whole, key) => table.get(key) ?? whole);
+      expect(() => new vm.Script(substituted, { filename: `engine-${locale}.js` }), locale).not.toThrow();
+    }
   });
 });
