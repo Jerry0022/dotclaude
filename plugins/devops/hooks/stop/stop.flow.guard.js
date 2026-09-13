@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.guard
- * @version 0.3.0
+ * @version 0.4.0
  * @event Stop
  * @plugin devops
  * @description Per-turn completion card + validation enforcement (the validation
@@ -20,6 +20,13 @@
  *
  *   Pass (silent exit 0) otherwise — flags are reset so the next turn is
  *   evaluated independently.
+ *
+ *   Scheduled-task exemption (#371): when the turn's prompt was a
+ *   `<scheduled-task …>` wrapper (flag from prompt.flow.silent-turn), the tree
+ *   is clean and ship_release merged nothing this turn (flag from
+ *   post.flow.completion), the routine's one-line status suffices — no card.
+ *   Offline-first (#371): when the completion MCP's heartbeat is dead, the
+ *   block reason lists the offline renderer FIRST instead of third.
  */
 
 require('../lib/plugin-guard');
@@ -35,6 +42,28 @@ const {
   PENDING_TAIL_BYTES,
 } = require('../lib/card-guard');
 const { scanOpenTasks, openTaskNames } = require('../lib/pending-tasks');
+const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
+const { execFileSync } = require('child_process');
+
+/**
+ * Did this turn change any file? `git status --porcelain` is the truth when
+ * the project is a repo (it also sees Bash-driven writes, which the Edit/Write
+ * counter misses); outside a repo — or when git itself fails — fall back to the
+ * session's Edit/Write counter being zero. Returns null when neither signal is
+ * available, which the guard treats as "not clean" (card required).
+ */
+function isTreeClean(cwd, sessionId) {
+  try {
+    const out = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], {
+      cwd: cwd || process.cwd(), encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return out.trim().length === 0;
+  } catch {}
+  const edits = readSessionFile('dotclaude-devops-edits', sessionId, { exact: true });
+  if (edits === null) return true;
+  const n = parseInt(String(edits.content || '').trim(), 10);
+  return Number.isFinite(n) ? n === 0 : null;
+}
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -56,6 +85,8 @@ process.stdin.on('end', () => {
   const valPendingResult = readSessionFile('dotclaude-devops-validation-pending', sessionId, EXACT);
   const valAttestedResult = readSessionFile('dotclaude-devops-validation-attested', sessionId, EXACT);
   const pendAttestedResult = readSessionFile('dotclaude-devops-pending-attested', sessionId, EXACT);
+  const scheduledResult = readSessionFile('dotclaude-devops-scheduled-task', sessionId, EXACT);
+  const shippedResult = readSessionFile('dotclaude-devops-shipped', sessionId, EXACT);
 
   const workHappened = workResult !== null;
   const flagCardRendered = cardResult !== null;
@@ -64,6 +95,12 @@ process.stdin.on('end', () => {
   const validationAttested = valAttestedResult !== null;
   const pendingAttested = pendAttestedResult !== null;
   const stopHookActive = hook.stop_hook_active === true;
+  const scheduledTask = scheduledResult !== null;
+  const shipped = shippedResult !== null;
+  // Both probes are only needed on the paths that read them: the tree check
+  // shells out to git, the heartbeat stats a PID file — skip both on silent ticks.
+  const treeClean = (!silent && scheduledTask) ? isTreeClean(hook.cwd, sessionId) : null;
+  const completionMcpDown = silent ? false : !isMcpServerAlive('dotclaude-completion');
 
   // Scan the transcript unless this is a silent tick. It answers two questions:
   //  - did the last assistant message already carry a card / substantial prose
@@ -92,6 +129,10 @@ process.stdin.on('end', () => {
     // Active install root — the block reason names the offline renderer under it
     // for the case where the MCP server never connected this session.
     pluginRoot: process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..'),
+    scheduledTask,
+    treeClean,
+    shipped,
+    completionMcpDown,
   });
 
   if (decision.resetFlags) {
@@ -104,6 +145,10 @@ process.stdin.on('end', () => {
     // Same for the pending attestation: it attests THIS turn's card, so the next
     // turn must re-declare any work that is still running.
     if (pendAttestedResult) try { fs.unlinkSync(pendAttestedResult.filePath); } catch {}
+    // Per-turn signals for the scheduled-task exemption — the next tick must
+    // prove "no ship, scheduler prompt" again on its own.
+    if (scheduledResult) try { fs.unlinkSync(scheduledResult.filePath); } catch {}
+    if (shippedResult) try { fs.unlinkSync(shippedResult.filePath); } catch {}
   }
 
   if (decision.action === 'block') {

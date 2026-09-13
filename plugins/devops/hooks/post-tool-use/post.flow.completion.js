@@ -35,6 +35,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
+const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { getLocale, t } = require('../lib/locale');
 const {
   AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER, labelFor, isConceptInfra,
@@ -131,6 +132,27 @@ const LAUNCH_NOUN = {
   workflow: 'Background workflow',
 };
 
+const SHIP_RELEASE_TOOL = 'mcp__plugin_devops_dotclaude-ship__ship_release';
+
+/**
+ * Did a ship_release response report a merge? MCP results arrive as
+ * `{ content: [{ type: 'text', text: '<json>' }] }`; tolerate a bare object or
+ * string too. `merged` is the field the ship skill itself gates on — never
+ * `success`, which the skipped shapes (file-only, no-remote) also set.
+ */
+function shipReleaseMerged(toolResponse) {
+  let r = toolResponse;
+  try {
+    if (r && Array.isArray(r.content)) {
+      const text = r.content.filter(c => c && c.type === 'text').map(c => c.text).join('');
+      r = JSON.parse(text);
+    } else if (typeof r === 'string') {
+      r = JSON.parse(r);
+    }
+  } catch { return false; }
+  return !!(r && typeof r === 'object' && r.merged);
+}
+
 function detectBackgroundLaunch(hook) {
   const r = hook && hook.tool_response;
   const text = typeof r === 'string' ? r : (r ? JSON.stringify(r) : '');
@@ -168,6 +190,15 @@ process.stdin.on('end', () => {
 
   const toolName = hook.tool_name || '';
   const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
+
+  // --- 0. Ship happened this turn? (consumed by stop.flow.guard, #371) ---
+  // ship_release reporting `merged` is the one signal that a scheduled task
+  // did more than tick — its card is owed even with a clean tree afterwards.
+  if (toolName === SHIP_RELEASE_TOOL && shipReleaseMerged(hook.tool_response)) {
+    try { writeSessionFile(sessionFile('dotclaude-devops-shipped', hook.session_id), '1'); } catch {}
+  }
+  const scheduledTask =
+    readSessionFile('dotclaude-devops-scheduled-task', hook.session_id, { exact: true }) !== null;
 
   // --- 1. Increment edit counter (only for Edit/Write) ---
   let editCount = 0;
@@ -291,12 +322,33 @@ process.stdin.on('end', () => {
     lines.push(`[completion-flow] Tool call recorded (${toolName}).`);
   }
 
+  // Offline-first when the completion MCP's heartbeat is dead (#371): each
+  // failed rung of the ladder costs a turn, so name the working one first.
+  const completionDown = !isMcpServerAlive('dotclaude-completion');
+  const ladder = completionDown
+    ? [
+        `The dotclaude-completion MCP server is NOT running (heartbeat dead) — render offline FIRST: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
+        'Only if that node call fails, try `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly, then ToolSearch (select:mcp__plugin_devops_dotclaude-completion__render_completion_card).',
+      ]
+    : [
+        'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly (already loaded MCP tool).',
+        'Only if the direct call fails with "tool not found", fall back to ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
+        `If the MCP server never connected this session (CONNECT_TIMEOUT), render offline instead — never skip the card: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
+      ];
+
+  if (scheduledTask) {
+    lines.push(
+      '',
+      'SCHEDULED TASK: if this turn changes NO file and ships nothing, end with your',
+      'one-line status — no completion card (stop.flow.guard waives it for an idle',
+      'tick). Any edit, write or ship_release merge makes the card required again.',
+    );
+  }
+
   lines.push(
     '',
     'COMPLETION CARD — when ALL work is done:',
-    'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly (already loaded MCP tool).',
-    'Only if the direct call fails with "tool not found", fall back to ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
-    `If the MCP server never connected this session (CONNECT_TIMEOUT), render offline instead — never skip the card: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
+    ...ladder,
     `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
     '  plus changes, tests, state, cta, userTest, userFinalTest as applicable.',
     `  cwd:"${hook.cwd || ''}" — without it PR/commit/branch render as dead text, not links.`,
