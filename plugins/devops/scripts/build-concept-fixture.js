@@ -15,7 +15,7 @@
  *
  *   Usage:
  *     node build-concept-fixture.js --out <file.html> [--rounds 8] [--entries 14]
- *                                   [--mode decision|design] [--locale en|de] [--mapping]
+ *                                   [--mode decision|design] [--locale en|de] [--mapping] [--designs 1]
  *
  *   `--mapping` adds an information mapping (templates.md § Information
  *   Mapping (engine)) so the schematic / matrix engine can be looked at too:
@@ -40,7 +40,7 @@ const path = require('path');
 const TEMPLATES = path.join(__dirname, '..', 'skills', 'concept', 'deep-knowledge', 'templates.md');
 
 function parseArgs(argv) {
-  const out = { out: '', rounds: 8, entries: 14, mode: 'decision', locale: 'en', mapping: false };
+  const out = { out: '', rounds: 8, entries: 14, mode: 'decision', locale: 'en', mapping: false, designs: 1 };
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i].startsWith('--') ? argv[i].slice(2) : null;
     if (!key || !Object.prototype.hasOwnProperty.call(out, key)) continue;
@@ -277,8 +277,14 @@ function decisionRound(n, { live, entries, plain, discard = 0 }) {
   return parts.join('\n');
 }
 
-/** A design round: one design with three wired screens; a mapping view with `mapping`. */
-function designRound(n, { live, mapping = false }) {
+/**
+ * A design round: `designs` designs with three wired screens each (the first
+ * active, the others `hidden` — ids `d{n}`, `d{n}b`, `d{n}c`, …), plus a
+ * mapping view under the first design with `mapping`. Two or more designs
+ * give the top-centre switcher real design segments next to the mapping
+ * segment, instead of the single-design guard being the only reason it shows.
+ */
+function designRound(n, { live, mapping = false, designs = 1 }) {
   const screen = (id, label, next, active) => [
     `<section id="${id}" data-screen data-nav-label="${esc(label)}"${active ? ' data-screen-active="true"' : ' hidden'}>`,
     '  <div class="device-frame">',
@@ -289,13 +295,17 @@ function designRound(n, { live, mapping = false }) {
     '  </div>',
     '</section>',
   ].join('\n');
+  const design = (id, label, active) => [
+    `  <section data-design="${id}" data-nav-label="${esc(label)}" data-design-active="${active ? 'true' : 'false'}"${active ? '' : ' hidden'}>`,
+    screen(`${id}-s1`, 'Welcome', `${id}-s2`, true),
+    screen(`${id}-s2`, 'Credentials', `${id}-s3`, false),
+    screen(`${id}-s3`, 'Success', null, false),
+    '  </section>',
+  ].join('\n');
+  const suffixes = Array.from({ length: Math.max(1, designs) }, (_, i) => (i === 0 ? '' : String.fromCharCode(97 + i)));
   return [
     `<section id="iter-${n}" data-iteration="${n}" data-iteration-template="design"${live ? ' data-active' : ' hidden'}>`,
-    `  <section data-design="d${n}" data-nav-label="Design ${n}" data-design-active="true">`,
-    screen(`d${n}-s1`, 'Welcome', `d${n}-s2`, true),
-    screen(`d${n}-s2`, 'Credentials', `d${n}-s3`, false),
-    screen(`d${n}-s3`, 'Success', null, false),
-    '  </section>',
+    ...suffixes.map((sfx, i) => design(`d${n}${sfx}`, `Design ${n}${sfx ? ' ' + sfx.toUpperCase() : ''}`, i === 0)),
     ...(mapping ? [mappingView(n, { live })] : []),
     '</section>',
   ].join('\n');
@@ -351,14 +361,14 @@ function build(opts, md = fs.readFileSync(TEMPLATES, 'utf8')) {
   const mapping = !!opts.mapping;
   const sections = rounds.map(n => {
     if (n === live) {
-      if (opts.mode === 'design') return designRound(n, { live: true, mapping });
+      if (opts.mode === 'design') return designRound(n, { live: true, mapping, designs: opts.designs });
       return mapping
         ? freeRound(n, { live: true })          // a mapping block never sits in a decision round
         : decisionRound(n, { live: true, entries: opts.entries, plain: Math.max(2, Math.floor(opts.entries / 3)) });
     }
     // With --mapping the round before the live one is a frozen round of the
     // same kind, carrying its mapping with the baked submission.
-    if (mapping && n === live - 1) return opts.mode === 'design' ? designRound(n, { live: false, mapping }) : freeRound(n, { live: false });
+    if (mapping && n === live - 1) return opts.mode === 'design' ? designRound(n, { live: false, mapping, designs: opts.designs }) : freeRound(n, { live: false });
     // Frozen history: varying sizes, a few discards, so the chip summaries differ.
     return decisionRound(n, { live: false, entries: 3 + (n % 4), plain: 1, discard: n % 3 });
   }).join('\n\n');
@@ -408,7 +418,7 @@ module.exports = { parseArgs, scanBlocks, localeMap, build, TEMPLATES };
 if (require.main === module) {
   const opts = parseArgs(process.argv.slice(2));
   if (!opts.out) {
-    process.stderr.write('usage: build-concept-fixture.js --out <file.html> [--rounds 8] [--entries 14] [--mode decision|design] [--locale en|de] [--mapping]\n');
+    process.stderr.write('usage: build-concept-fixture.js --out <file.html> [--rounds 8] [--entries 14] [--mode decision|design] [--locale en|de] [--mapping] [--designs 1]\n');
     process.exit(2);
   }
   const page = build(opts);

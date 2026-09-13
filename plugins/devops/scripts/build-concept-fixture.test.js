@@ -135,3 +135,40 @@ describe("build-concept-fixture --mapping", () => {
     }
   });
 });
+
+describe("build-concept-fixture --designs", () => {
+  test("parseArgs: --designs takes a number, default 1", () => {
+    expect(parseArgs([]).designs).toBe(1);
+    expect(parseArgs(['--designs', '2', '--mapping']).designs).toBe(2);
+  });
+
+  test("design mode with two designs: both designs render, only the first is active, the mapping view sits under the first", () => {
+    const page = build({ ...BASE, mode: 'design', designs: 2 });
+    expect(findStructural(page)).toEqual([]);
+    expect(findMappingIssues(page)).toEqual([]);
+    const doc = dom(page);
+    const live = doc.querySelector('section[data-iteration][data-active]');
+    const designs = [...live.querySelectorAll(':scope > section[data-design]')];
+    expect(designs.length).toBe(2);
+    expect(designs.map(d => d.dataset.design)).toEqual(['d3', 'd3b']);
+    expect(designs[0].dataset.designActive).toBe('true');
+    expect(designs[0].hasAttribute('hidden')).toBe(false);
+    expect(designs[1].dataset.designActive).toBe('false');
+    expect(designs[1].hasAttribute('hidden')).toBe(true);
+    // every screen id and nav label is unique inside the round
+    const ids = [...live.querySelectorAll('section[data-screen][id]')].map(s => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(designs[1].querySelectorAll('section[data-screen]').length).toBeGreaterThan(0);
+    expect(designs[1].querySelector('section[data-screen][data-screen-active="true"]')).not.toBeNull();
+    const view = live.querySelector('section[data-view][data-view-kind="mapping"]');
+    expect(view.dataset.viewFor).toBe('d3');
+    // the frozen round keeps the same shape
+    const frozen = doc.querySelector('section[data-iteration]:not([data-active]) section[data-view]').closest('section[data-iteration]');
+    expect(frozen.querySelectorAll(':scope > section[data-design]').length).toBe(2);
+  });
+
+  test("--designs 1 (the default) leaves the design-mode output as it was", () => {
+    expect(build({ ...BASE, mode: 'design', designs: 1 })).toBe(build({ ...BASE, mode: 'design' }));
+    expect(dom(build({ ...BASE, mode: 'design' })).querySelectorAll('section[data-iteration][data-active] > section[data-design]').length).toBe(1);
+  });
+});
