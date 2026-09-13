@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.156.0**
+**Version: 0.156.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -428,9 +428,9 @@ Wk  ━━━─╏─────────   18% +2%   · 5d 3h
 ````
 
 The card is built to fit one screen: every body field has a character budget
-(summary 60, change 24 + 90, evidence 70 + 100 …), gates share one line, and
-every pipeline fact — PR, base, version, commit, build-id — appears exactly once
-in the Delivery block. Follow-ups that are not tests go into a separate
+(summary 60, change 24 + 90, evidence 70 + 100 …), no block ever shows more than
+three bullets, gates share the header line, and every pipeline fact — PR, base,
+version, commit, build-id — appears exactly once in the Delivery block. Follow-ups that are not tests go into a separate
 `⚠ OPEN` block; the promote nudge sits on the channel ladder line.
 
 <details>
