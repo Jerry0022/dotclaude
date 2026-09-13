@@ -96,6 +96,24 @@ describe("mapping integration — engine hooks in the shared systems", () => {
     expect(Object.keys(payload.allFields).some(k => k.includes(">"))).toBe(false);                    // no checkbox leaks into allFields
     expect(payload.comments).toEqual([]);                                                               // empty note is not a comment
   });
+  test("jsdom: saveState() persists a written state input under the iteration-namespaced text: key, no checkbox leaks", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]], url: "http://localhost/fixture.html" });   // a real origin: jsdom refuses localStorage on about:blank
+    p.window.eval([
+      "const STORAGE_KEY = 'concept-state-fixture', STATE_TTL_MS = 864e5; let _draftCleared = [];",
+      "function _guardedSetItem(k, v) { localStorage.setItem(k, v); return true; }",
+      "function queueDraftSync() {}",
+      fn("_iterationPrefix"), fn("saveState"),
+    ].join("\n"));
+    p.document.addEventListener("input", () => p.window.saveState());                          // what § State Persistence wires
+    p.window.renderMappings();
+    expect(p.window.localStorage.getItem("concept-state-fixture")).toBeNull();                  // the initial render writes nothing
+    p.window.setCell("veh", "vin", "card.footer", "phone", true);
+    const blob = JSON.parse(p.window.localStorage.getItem("concept-state-fixture"));
+    expect(blob["text:i3:map-veh-cells-card@phone"].split(" ")).toContain("vin>card.footer");
+    expect(blob["text:i3:map-veh-order-card.line1@phone"]).toBe("mileage");
+    expect(blob["text:i3:map-veh-ui"]).toBe("mode=schema;tab=card@phone");
+    expect(Object.keys(blob).some(k => k.includes(">"))).toBe(false);                            // the unnamed checkboxes never reach the blob
+  });
   test("jsdom: the free branch never ships a frozen round's mapping, its note or its sections", () => {
     const p = page({ specs: [["veh", VEHICLE_SPEC]] });
     p.window.eval([

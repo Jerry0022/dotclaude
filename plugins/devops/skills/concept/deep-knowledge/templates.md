@@ -3292,14 +3292,15 @@ body[data-single-screen="true"] .feedback-divider:has(+ .feedback-section #scree
    one design holds one screen, AND the iteration has no views — may the
    container itself go. Without this the emptied flex box keeps its
    border-bottom and paints a stray divider under the iteration tabs.
-   The :has() guard is load-bearing, not defensive: the views group lives
-   inside THIS container, and the only other route to a view is the
-   .view-switch-item row inside .design-switcher — which stays visible
-   whenever view segments exist (see the :not(:has(.view-switch-item))
-   guard two rules down), so it is available as long as views exist. Drop
-   the guard here and a single-design, single-screen iteration with views
-   has no route to any of them at all, in either surface. "Nothing left to
-   navigate" has to mean nothing, views included. */
+   The :has() guard keeps the PANEL route to the views: their group lives
+   inside THIS container, and collapsing it would take that route with it.
+   The switcher route is independent — the .view-switch-item row inside
+   .design-switcher stays visible whenever view segments exist (see the
+   :not(:has(.view-switch-item)) guard two rules down) — so dropping the
+   guard here would not strand the views, it would leave them reachable
+   from the switcher only. "Nothing left to navigate" still has to mean
+   nothing, views included: the panel lists them, so it must not vanish
+   while they exist. */
 body[data-single-design="true"][data-single-screen="true"]
   #screen-nav:not(:has(.screen-nav-view-item)) {
   display: none;
@@ -8692,7 +8693,7 @@ the spec script**, so an authored note that follows the spec stays below the map
 | `div.map-tools` > `button.map-copy[data-from][data-to]` per ordered context pair, `button.map-reset`, `button.map-add-item` (with `adhocItems`), `div.map-status.map-tools-status[role=status]` | | live sections only | ⧉ copy context, ↺ proposal, + item, duplicate hint |
 | `div.map-element[data-map-element]` > caption > `div.map-tiers` > `div.map-tier[data-tier]` > `div.map-row[data-row]` > `div.map-slot[data-map-target][data-accepts]` > `button.map-slot-label` (+ `.map-slot-count`), `.map-slot-chips` > `button.map-chip[data-item]`, `button.map-slot-note-btn` | | per element / context | schematic view, arm-then-tap |
 | `div.map-palette` > `input[type=search].map-search` (unnamed), `button.map-filter[data-filter][aria-pressed]` × 4, `button.map-palette-collapse[aria-expanded]`, `div.map-groups` > `div.map-group[data-group]` > `button.map-group-toggle[aria-expanded]` + `button.map-item-chip[data-item][aria-pressed]` | | per schematic | palette, search, filters |
-| `div.map-matrix[data-map-matrix="{matrixKey}"]` > `div.map-scroll` > `table.map-table[role=grid]` — `thead` rows `tr.map-head-src` (element / axis label, colspan = its columns), `tr.map-head-tier` (`th[data-tier]`, only when both tiers occur), `tr.map-head-targets` (`th[data-map-target][data-col-tier]` + `.map-col-count`), `tr.map-group-row` (with `button.map-group-toggle`), `tr.map-item-row` (`th[scope=row].map-item-label`, cells, `td.map-sum`); `data-dense="true"` above 18 columns | | per matrix, `hidden` when inactive | matrix view; inputs exist regardless of what is on screen |
+| `div.map-matrix[data-map-matrix="{matrixKey}"]` > `div.map-scroll` > `table.map-table[role=grid]` — `thead` rows `tr.map-head-src` (element / axis label, colspan = its columns), `tr.map-head-tier` (`th[data-tier]`, only when both tiers occur), `tr.map-head-targets` (`th[data-map-target][data-col-tier]` + `.map-col-count`), `tr.map-group-row` (with `button.map-group-toggle`), `tr.map-item-row` (`th[scope=row].map-item-label`, cells, `td.map-sum`); `data-dense="true"` above 18 columns, `data-head-rows="2|3"` (header row count — the sticky offsets and the scroll padding follow it) | | per matrix, `hidden` when inactive | matrix view; inputs exist regardless of what is on screen |
 | `textarea[data-comment="map-{m}-note"][data-attachable]` | **authored**, free rounds only | 1 | mapping note (design rounds: the dock's `view-{id}`) |
 | `textarea[data-comment="map-{m}-note-{target}"]` in `label.map-slot-note` (hidden until ✎) | generated when `slotNotes` | per target (not per context) | per-slot note; `readonly` when frozen |
 | `div.map-error[role=alert]` | | on failure | spec error (in place of the mapping) or frozen-without-`submitted` banner (prepended above it) |
@@ -8700,8 +8701,12 @@ the spec script**, so an authored note that follows the spec stays below the map
 Controls are `<button>`s, never radios: freezing is Claude's hand-edit of the HTML plus
 `section[data-iteration]:not([data-active]) input { pointer-events: none }` — buttons are
 untouched by that rule (like `.view-switch-item`), so a frozen mapping keeps its view
-toggle, tabs, group collapse, search and filters. The renderer **measures nothing** (it
-runs while its view is `hidden`): `data-dense` is derived from the column count.
+toggle, tabs, group collapse and filters; the palette search is the one input the engine
+CSS re-enables there (it filters what is on screen, it writes nothing). The view toggle
+carries `aria-disabled="true"` (and ignores clicks) while the active tab is an axis — an
+axis has no schematic. The ✎ buttons carry `has-note` while their target's note has text.
+The renderer **measures nothing** (it runs while its view is `hidden`): `data-dense` and
+`data-head-rows` are derived from the column count and the tier layout.
 
 ### State and load order
 
@@ -8789,6 +8794,7 @@ screens; the views group holds only the views that name no design of the round.
 .map-view-btn { border: 0; border-right: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); padding: 0.4rem 0.9rem; font: inherit; cursor: pointer; }
 .map-view-btn:last-child { border-right: 0; }
 .map-view-btn[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--text-color); font-weight: 600; }
+.map-view-btn[aria-disabled="true"] { opacity: 0.5; cursor: default; }   /* an axis tab has no schematic: the toggle is inert there */
 .map-tabs { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
 .map-tabs-label { font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.25rem; }
 .map-tab { border: 1px solid var(--border-color); border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.85rem; padding: 0.2rem 0.7rem; cursor: pointer; }
@@ -8831,7 +8837,7 @@ screens; the views group holds only the views that name no design of the round.
 .map-slot.is-over .map-slot-count { color: var(--danger-color, #f85149); }
 .map-slot-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; min-height: 1.6rem; }
 .map-slot-note-btn { border: 0; background: transparent; color: var(--text-secondary); font: inherit; padding: 0 0.2rem; cursor: pointer; }
-.map-slot-note-btn:hover { color: var(--accent-color); }
+.map-slot-note-btn:hover, .map-slot-note-btn.has-note { color: var(--accent-color); }   /* has-note: the target's note carries text */
 .map-table th .map-slot-note-btn { font-weight: 400; }
 
 /* slot notes: one textarea per target, revealed by ✎ */
@@ -8859,6 +8865,10 @@ screens; the views group holds only the views that name no design of the round.
 .map-palette-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .map-palette-title { font-weight: 600; }
 .map-search { flex: 1; min-width: 8rem; padding: 0.3rem 0.5rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--input-bg, transparent); color: var(--text-color); font: inherit; }
+/* § Iteration Tabs CSS kills pointer events on every input of a frozen tab; the palette
+   search only filters what is on screen, so it stays live there (specificity 0,4,1 beats
+   that rule's 0,2,2 wherever the two blocks land in the page). */
+section[data-iteration]:not([data-active]) .map-root .map-search { pointer-events: auto; filter: none; }
 .map-filters { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
 .map-filter { border: 1px solid var(--border-color); border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.8rem; padding: 0.15rem 0.6rem; cursor: pointer; }
 .map-filter[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--text-color); border-color: var(--accent-color); }
@@ -8871,15 +8881,25 @@ screens; the views group holds only the views that name no design of the round.
 .map-group-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .map-status { min-height: 1.2rem; font-size: 0.85rem; color: var(--accent-color); }
 
-/* matrix: one scroll box per table so sticky headers and the sticky first column work together */
-.map-scroll { overflow: auto; width: max-content; max-width: 100%; max-height: calc(100vh - var(--map-chrome, 220px)); scroll-padding: 2.5rem 0 0 230px; border: 1px solid var(--border-color); border-radius: 6px; }
+/* matrix: one scroll box per table so sticky headers and the sticky first column work together.
+   Every header row is exactly 2rem tall (row height fixed, no vertical padding, the 1px
+   border inside it) and each row sticks at index × 2rem — by ROW INDEX, not by class: a
+   matrix without a tier row has two rows, and a class-bound `top: 4rem` on the targets
+   row left it floating one row below the source row, over the first body row
+   (browser-verified). The renderer stamps `data-head-rows="2|3"` on the table so the
+   scroll padding matches the header height exactly in both cases. */
+.map-scroll { --map-head-rows: 2; overflow: auto; width: max-content; max-width: 100%; max-height: calc(100vh - var(--map-chrome, 220px)); scroll-padding: calc(var(--map-head-rows) * 2rem) 0 0 230px; border: 1px solid var(--border-color); border-radius: 6px; }
+.map-scroll:has(> .map-table[data-head-rows="3"]) { --map-head-rows: 3; }
 html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
 .map-table { border-collapse: separate; border-spacing: 0; width: max-content; font-size: 0.85rem; }
 .map-table th, .map-table td { border-bottom: 1px solid var(--border-color); border-right: 1px solid var(--border-color); padding: 0.2rem 0.4rem; white-space: nowrap; }
-.map-table thead th { position: sticky; top: 0; z-index: 2; background: var(--panel-bg); text-align: center; font-weight: 600; }
-.map-table tr.map-head-tier th { top: 2rem; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.map-table thead tr { height: 2rem; }
+.map-table thead th { position: sticky; top: 0; z-index: 2; background: var(--panel-bg); text-align: center; font-weight: 600; padding: 0 0.5rem; }
+.map-table thead tr:nth-child(2) th { top: 2rem; }
+.map-table thead tr:nth-child(3) th { top: 4rem; }
+.map-table tr.map-head-tier th { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
 .map-table tr.map-head-tier th[data-tier="first"] { background: color-mix(in srgb, var(--accent-color) 12%, var(--panel-bg)); }
-.map-table tr.map-head-targets th { top: 4rem; font-weight: 500; }
+.map-table tr.map-head-targets th { font-weight: 500; }
 .map-table tr.map-head-targets th[data-col-tier="first"] { background: color-mix(in srgb, var(--accent-color) 6%, var(--panel-bg)); }
 .map-table th.map-item-label, .map-table th.map-corner { position: sticky; left: 0; z-index: 3; background: var(--panel-bg); min-width: 220px; text-align: left; font-weight: 400; }
 .map-table thead th.map-corner { z-index: 4; }
@@ -8896,9 +8916,9 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
 .map-cell-td input:disabled, .map-cell-td input:disabled + .map-cell, .map-cell-td:has(input:disabled) label { cursor: default; }
 .map-cell-td.is-changed .map-cell { box-shadow: inset 0 0 0 2px var(--panel-bg), inset 0 0 0 4px var(--accent-color); }
 .map-cell-td.is-changed input:not(:checked) + .map-cell { border-style: dashed; border-color: var(--accent-color); }
-.map-table[data-dense="true"] tr.map-head-targets th { writing-mode: vertical-rl; transform: rotate(180deg); }
+.map-table[data-dense="true"] tr.map-head-targets th { writing-mode: vertical-rl; transform: rotate(180deg); padding: 0.4rem 0.2rem; }
 .map-col-count { color: var(--text-secondary); font-weight: 400; }
-.map-col-count.is-under, .map-sum.is-under { color: var(--warning-color); }
+.map-col-count.is-under, .map-table td.map-sum.is-under { color: var(--warning-color); }   /* td.map-sum: must outrank the base Σ rule above */
 .map-col-count.is-over { color: var(--danger-color, #f85149); }
 .map-table th.is-under .map-col-count { color: var(--warning-color); }
 .map-table th.is-over .map-col-count { color: var(--danger-color, #f85149); }
@@ -9017,9 +9037,8 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
   function setCell(sectionOrId, itemId, targetKey, ctx, on) {
     const section = sectionOf(sectionOrId);
     const model = section && MODELS.get(section); if (!model) return false;
-    const matrix = writeCell(section, model, itemId, targetKey, ctx, on);
-    if (!matrix) return false;
-    refreshMatrix(section, model, matrix);
+    if (!writeCell(section, model, itemId, targetKey, ctx, on)) return false;
+    refreshAll(section, model);
     return true;
   }
   // The write without the refresh (bulk callers refresh once); returns the
@@ -9041,8 +9060,12 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     if (target.ordered) syncOrder(section, model, matrix, target, pairs);
     return matrix;
   }
-  function refreshMatrix(section, model, matrix) {
-    projectMatrix(section, model, matrix);                                                              // checkboxes + counts + markers
+  // After any write: EVERY matrix is re-projected, not just the one written —
+  // the Σ flag of a `required` item reads assignedAnywhere(), so unchecking
+  // its last cell in one context must flag its row in the others at once.
+  // ≤ 4 matrices × ≤ 60 items × ≤ 20 targets (§ Authoring rule): cheap.
+  function refreshAll(section, model) {
+    model.matrices.forEach(mx => projectMatrix(section, model, mx));                                   // checkboxes + counts + markers
     refreshSchema(section, model);                                                                      // slot chips + palette badges
     updateSummary(section, model);
     if (typeof updateSectionNavState === 'function') updateSectionNavState();
@@ -9141,6 +9164,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     table.setAttribute('role', 'grid');
     table.setAttribute('aria-label', matrix.src.label + (matrix.ctx ? ' · ' + contextLabel(model, matrix.ctx) : ''));
     if (targets.length > 18) table.dataset.dense = 'true';
+    table.dataset.headRows = String(headRows);                                                      // sticky offsets + scroll padding (CSS)
 
     const thead = el('thead');
     const srcRow = el('tr', 'map-head-src');
@@ -9244,6 +9268,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       th.classList.toggle('is-over', (!!t.max && n > t.max) || (t.accepts === 'one' && n > 1));
       th.title = th.classList.contains('is-under') ? fmt(MAP_LOCALE.slot_empty_min, { n: t.min })
                : th.classList.contains('is-over') ? fmt(MAP_LOCALE.slot_over_max, { n: t.max || 1 }) : '';
+      markNoteButton(section, model, th);
     });
     const min1 = matrix.src.itemTargets === 'min1';
     wrap.querySelectorAll('tr.map-item-row').forEach(tr => {
@@ -9387,12 +9412,17 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     return wrap;
   }
   // The schematic of the active tab's context or the active matrix is on
-  // screen; everything else stays in the DOM, hidden.
+  // screen; everything else stays in the DOM, hidden. On an axis tab the
+  // view toggle is marked aria-disabled (no schematic to switch to).
   function applyView(section, model) {
     const ui = readUi(section, model);
     const active = model.matrices.find(mx => mx.key === ui.tab);
     const mode = visibleMode(model, ui);
-    section.querySelectorAll('.map-view-btn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mapMode === mode)));
+    const axis = active.src.kind !== 'element';
+    section.querySelectorAll('.map-view-btn').forEach(b => {
+      b.setAttribute('aria-pressed', String(b.dataset.mapMode === mode));
+      if (axis) b.setAttribute('aria-disabled', 'true'); else b.removeAttribute('aria-disabled');
+    });
     section.querySelectorAll('.map-tab').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mapTab === ui.tab)));
     section.querySelectorAll('.map-schema').forEach(s => { s.hidden = !(mode === 'schema' && s.dataset.mapCtx === (active.ctx || '')); });
     section.querySelectorAll('[data-map-matrix]').forEach(w => { w.hidden = !(mode === 'matrix' && w.dataset.mapMatrix === ui.tab); });
@@ -9482,6 +9512,17 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     if (!ta) return;
     ta.hidden = !ta.hidden;
     if (!ta.hidden && !isFrozen(section)) ta.focus();
+  }
+  // The ✎ of a slot or a column header carries `has-note` while its target's
+  // note has text — set on every projection and on each keystroke in the note.
+  function markNoteButton(section, model, holder) {
+    const btn = holder.querySelector('.map-slot-note-btn');
+    if (!btn) return;
+    const ta = slotNoteArea(section, model, holder.dataset.mapTarget);
+    btn.classList.toggle('has-note', !!ta && ta.value.trim() !== '');
+  }
+  function markNoteHolders(section, model, key) {
+    section.querySelectorAll('.map-slot[data-map-target], th[data-map-target]').forEach(h => { if (h.dataset.mapTarget === key) markNoteButton(section, model, h); });
   }
   function renderPalette(model) {
     const pal = el('div', 'map-palette');
@@ -9599,6 +9640,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     slot.classList.toggle('is-under', under);
     slot.classList.toggle('is-over', over);
     count.title = under ? fmt(MAP_LOCALE.slot_empty_min, { n: target.min }) : over ? fmt(MAP_LOCALE.slot_over_max, { n: target.max || 1 }) : '';
+    markNoteButton(section, model, slot);
   }
   // Per item across ALL matrices: where it sits and whether any cell differs
   // from the proposal.
@@ -9708,7 +9750,10 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
   function toolClick(section, model, t) {
     const hit = sel => { const n = t.closest(sel); return n && section.contains(n) ? n : null; };
     const viewBtn = hit('.map-view-btn');
-    if (viewBtn) { writeUi(section, model, { mode: viewBtn.dataset.mapMode }); return true; }
+    if (viewBtn) {                                                                                  // inert on an axis tab (aria-disabled)
+      if (viewBtn.getAttribute('aria-disabled') !== 'true') writeUi(section, model, { mode: viewBtn.dataset.mapMode });
+      return true;
+    }
     const tab = hit('.map-tab');
     if (tab) { activateTab(section, tab.dataset.mapTab); return true; }
     const note = hit('.map-slot-note-btn');
@@ -9758,6 +9803,8 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     section.addEventListener('input', e => {
       const s = e.target;
       if (s instanceof HTMLInputElement && s.classList.contains('map-search')) refreshPalette(model, s.closest('.map-schema'), itemStats(section, model));
+      const prefix = 'map-' + model.id + '-note-';
+      if (s instanceof HTMLTextAreaElement && s.closest('.map-slot-note') && String(s.dataset.comment || '').startsWith(prefix)) markNoteHolders(section, model, s.dataset.comment.slice(prefix.length));
     });
     section.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
@@ -9780,12 +9827,6 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
   }
 
   // --- tools: copy context, reset, ad-hoc items (§ Proposal, reset, ad-hoc) --
-  function refreshAll(section, model) {
-    model.matrices.forEach(mx => projectMatrix(section, model, mx));
-    refreshSchema(section, model);
-    updateSummary(section, model);
-    if (typeof updateSectionNavState === 'function') updateSectionNavState();
-  }
   // Clears every matrix of the target context, then replays the source pairs
   // through the cell write path in source order (so accepts:one swaps stay
   // deterministic); order inputs follow; one refresh at the end.
@@ -9812,7 +9853,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       writeState(stateInput(section, model.id, 'order', orderKey(matrix, t)), (model.proposalOrder[orderKey(matrix, t)] || []).join(','));
       syncOrder(section, model, matrix, t, pairs);
     });
-    refreshMatrix(section, model, matrix);
+    refreshAll(section, model);
   }
   const ADHOC_MAX = 20, ADHOC_LABEL_MAX = 60;
   const adhocLabels = model => model.items.filter(i => i.adhoc).map(i => i.label);
@@ -9947,17 +9988,27 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const spec = section.querySelector('script[data-mapping-spec]');
     if (spec) spec.after(node); else section.appendChild(node);
   }
+  // One broken mapping must never abort renderMappings() — it is the first
+  // statement of the persistence handler, and ensureCommentSlots() plus
+  // restoreState() for the WHOLE page follow it. A spec that does not parse
+  // or normalise fails in readSpec; one that passes but breaks the builder
+  // (a malformed `proposalOrder`, say) fails inside buildSection. Both end
+  // the same way: the half-built DOM is dropped, the error box is mounted
+  // in place of the spec and the section is marked rendered.
   function renderSection(section) {
-    const m = section.dataset.mapping;
-    let model;
-    try { model = readSpec(section); }
+    try { buildSection(section, readSpec(section)); }
     catch (e) {
+      MODELS.delete(section);
+      delete section.dataset.mapFrozen;
+      section.querySelectorAll('.map-root, .map-states').forEach(n => n.remove());                   // mappings never nest
       const banner = el('div', 'map-error', fmt(MAP_LOCALE.spec_error, { error: e.message }));
       banner.setAttribute('role', 'alert');
       mount(section, banner);
-      section.dataset.mapRendered = 'true';
-      return;
     }
+    section.dataset.mapRendered = 'true';
+  }
+  function buildSection(section, model) {
+    const m = section.dataset.mapping;
     model.id = m;
     MODELS.set(section, model);
 
@@ -10030,7 +10081,6 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     refreshSchema(section, model);
     updateSummary(section, model);
     wireSection(section, model);
-    section.dataset.mapRendered = 'true';
   }
   function renderMappings(root) {
     const scope = root || document;

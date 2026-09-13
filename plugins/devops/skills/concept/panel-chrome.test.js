@@ -156,11 +156,12 @@ describe("panel TOC — a design switch must not blank #screen-nav", () => {
   });
 
   test("views keep a route when everything else collapses", () => {
-    // The views group lives INSIDE #screen-nav, and the only other route to a
-    // view is .view-switch-item inside .design-switcher — which stays visible
-    // whenever view segments exist. Collapsing the container on a
-    // single-design, single-screen iteration that HAS views therefore strands
-    // them with no reachable surface at all.
+    // The views group lives INSIDE #screen-nav: collapsing the container on a
+    // single-design, single-screen iteration that HAS views would take the
+    // panel route to them away. The switcher route is separate — the
+    // .view-switch-item row inside .design-switcher stays visible whenever
+    // view segments exist — so the #screen-nav guard is needed for the panel
+    // route alone; it is not what keeps the views reachable at all.
     const container = hidden.filter((r) => r.selectors.some((s) =>
       /#screen-nav/.test(s) && /\[data-single-screen/.test(s)));
     expect(container.length, "the container-collapse rule").toBeGreaterThan(0);

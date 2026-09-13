@@ -65,10 +65,12 @@ export const mappingSection = (id, spec) =>
   `<section data-mapping="${id}" id="${id}" data-nav-label="${id}"><script type="application/json" data-mapping-spec>${JSON.stringify(spec)}</script>
      <textarea data-comment="map-${id}-note"></textarea></section>`;
 
-export function page({ specs, active = true, frozen = false } = {}) {
+// `url` gives the document a real origin — jsdom refuses localStorage on the
+// default opaque one — for tests that run the persistence block's saveState().
+export function page({ specs, active = true, frozen = false, url } = {}) {
   const sections = specs.map(([id, spec]) => mappingSection(id, spec)).join("");
   const html = `<!doctype html><html><body><main><section data-iteration="3" data-iteration-template="free"${active && !frozen ? " data-active" : " hidden"}>${sections}</section></main></body></html>`;
-  const dom = new JSDOM(html, { runScripts: "outside-only" });
+  const dom = new JSDOM(html, { runScripts: "outside-only", ...(url ? { url } : {}) });
   const { window } = dom;
   window.eval("var _userInteracted = false;");
   window.eval(localeKeys(ENGINE.code));
