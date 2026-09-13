@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.155.0] — 2026-09-13
+
+### Added
+
+- **The final report's "Danach von Hand" list cannot vanish any more.** The steps the user has to take by hand after the merge — flip a cron, rotate a key, watch the first run — were one more paragraph among the others ("Nächste Schritte"), unmarked in the TOC and absent from the panel where the close-out happens; visually gone the moment the reader scrolled. A `<section data-handoffs>` now paints the section in the report body (warning-coloured callout, ⚠ heading), `buildSectionNav()` marks its TOC entry in the same colour with a ⚠ in every scroll position, and `renderHandoffs()` mirrors the list onto the close-out sheet directly above the execute button — as the one block that stays visible after `data-closed`: the sheet's done state is "Concept abgeschlossen" plus whatever is left for the user, nothing else. The section exists only when there is something to hand over; validation gate 37b requires the sheet block and, when the report has the section, a `data-nav-label` and at least one step.
+- **Every open point on the close-out sheet says why it is there.** Each row carries a muted origin tag between its title and the three routes — "bewusst vertagt" (the user parked it during this concept) or "unterwegs gefunden" (surfaced on the way, unrelated to the scope) — from `data-oq-origin` on the report's checkbox. It is context for the route decision, not a fourth choice; a row without an admissible origin renders no tag, and the validation gate (33b) rejects a final report whose open points lack the attribute. A report without open points passes — that is the normal case.
+
+### Changed
+
+- **Open points need to earn their row — the default is no list at all.** The "Offene Punkte" list had become a closing ritual: every report ended with follow-ups, and too many were the obvious next step of the scope the user had just approved ("Phase 4" after they clicked implement on a plan that contained phase 4) or a generic nudge nobody asked for — each one a decision the user never asked to make, and an in-scope leftover on that list turns a shortfall into a request for a signature. `SKILL.md` § "Open points section — admission gate" replaces "when to include": exactly two admissible origins (deferred by the user during this concept, or found on the way and unrelated to the scope), a "never" list (approved scope, its no-brainer next step, generic best-practice nudges, harmless reality-check drift), and the self-check "would the user be surprised to see this here?" — an expected row is scope or a new concept, never a row. The implement branch gains the matching rule: the approved scope is built in full; a part that could not be built is reported as a shortfall ("nicht umgesetzt, weil …") in the Zusammenfassung, never re-labelled as a follow-up. `reality-check.md` follows: a question found during implementation is decided and documented, and becomes an open point only through the gate.
+- **"Nächste Schritte" is gone from the report structure.** It invited recommendations; what remains is the hand-off list above, which is only ever for steps a person has to take.
+
 ## [0.154.0] — 2026-09-13
 
 ### Added
