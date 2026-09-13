@@ -8429,6 +8429,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const all = [...items.map(i => i.id), ...sources.map(s => s.id), ...sources.flatMap(s => s.targets.map(t => t.id)), ...(contexts || []).map(c => c.id)];
     all.forEach(id => { if (typeof id !== 'string' || !ID_RE.test(id)) err('bad id: ' + id); });
     const seen = new Set(); items.forEach(i => { if (seen.has(i.id)) err('duplicate item id: ' + i.id); seen.add(i.id); });
+    items.forEach(i => { if (/^u\d+$/.test(i.id)) err('reserved id: ' + i.id); });                 // `u{n}` belongs to ad-hoc items
     const matrices = [];
     sources.forEach(s => (contexts || [null]).forEach(c => matrices.push({ key: s.id + (c ? '@' + c.id : ''), src: s, ctx: c ? c.id : null, targets: s.targets })));
     const targetKeys = new Set(sources.flatMap(s => s.targets.map(t => t.key)));
@@ -8747,9 +8748,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     section.querySelectorAll('.map-tab').forEach(tab => {
       const mx = model.matrices.find(x => x.key === tab.dataset.mapTab);
       const n = mx ? matrixViolations(section, model, mx).length : 0;
-      // The number must be visible even when the locale string carries no {n}.
-      const text = fmt(MAP_LOCALE.tab_open, { n });
-      tab.querySelector('.map-tab-count').textContent = !n ? '' : text.includes(String(n)) ? text : n + ' ' + text;
+      tab.querySelector('.map-tab-count').textContent = n ? fmt(MAP_LOCALE.tab_open, { n }) : '';
     });
   }
 
@@ -8810,12 +8809,13 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
   function renderTabs(model) {
     const strip = el('div', 'map-tabs');
     const multiSrc = model.sources.length > 1;
-    let labelled = false;
+    // Group labels: "Context" once before the element tabs (only when a context
+    // exists), "Axis" once before the first axis tab. Elements without a
+    // context get no label.
+    let contextLabelled = !model.contexts, axisLabelled = false;
     model.matrices.forEach(mx => {
-      if (!labelled) {                                                                            // one group label per strip
-        strip.appendChild(el('span', 'map-tabs-label', multiSrc ? MAP_LOCALE.axis : MAP_LOCALE.context));
-        labelled = true;
-      }
+      if (mx.src.kind === 'element' && !contextLabelled) { strip.appendChild(el('span', 'map-tabs-label', MAP_LOCALE.context)); contextLabelled = true; }
+      if (mx.src.kind !== 'element' && !axisLabelled) { strip.appendChild(el('span', 'map-tabs-label', MAP_LOCALE.axis)); axisLabelled = true; }
       const btn = el('button', 'map-tab');
       btn.type = 'button';
       btn.dataset.mapTab = mx.key;
@@ -9296,12 +9296,17 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
   }
   const ADHOC_MAX = 20, ADHOC_LABEL_MAX = 60;
   const adhocLabels = model => model.items.filter(i => i.adhoc).map(i => i.label);
+  const adhocLabel = raw => String(raw).trim().slice(0, ADHOC_LABEL_MAX).trim();                 // one normalisation for prompt and restore
+  function syncAddButton(section, model) {
+    const add = section.querySelector('.map-add-item');
+    if (add) add.disabled = adhocLabels(model).length >= ADHOC_MAX;
+  }
   function addItemPrompt(section, model) {
     if (!model.adhocItems || adhocLabels(model).length >= ADHOC_MAX) return;
     const status = section.querySelector('.map-tools-status');
     const raw = window.prompt(MAP_LOCALE.add_item_prompt);
     if (raw === null) return;
-    const label = String(raw).trim().slice(0, ADHOC_LABEL_MAX);
+    const label = adhocLabel(raw);
     if (!label) return;
     if (model.items.some(i => i.label.trim().toLowerCase() === label.toLowerCase())) {
       if (status) status.textContent = MAP_LOCALE.add_item_duplicate;
@@ -9311,8 +9316,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     addAdhocItem(section, model, label);
     writeState(stateInput(section, model.id, 'adhoc'), JSON.stringify(adhocLabels(model)));
     refreshAll(section, model);
-    const add = section.querySelector('.map-add-item');
-    if (add) add.disabled = adhocLabels(model).length >= ADHOC_MAX;
+    syncAddButton(section, model);
   }
   // Model + DOM for one ad-hoc item: a row in every matrix, a chip in every
   // palette, both inside the implicit "Added by you" group.
@@ -9361,13 +9365,15 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const input = stateInput(section, model.id, 'adhoc');
     let labels = [];
     try { labels = JSON.parse(input.value || '[]'); } catch { labels = []; }
-    labels = (Array.isArray(labels) ? labels : []).map(l => String(l).trim().slice(0, ADHOC_LABEL_MAX)).filter(Boolean).slice(0, ADHOC_MAX);
+    labels = (Array.isArray(labels) ? labels : []).map(adhocLabel).filter(Boolean).slice(0, ADHOC_MAX);
     const current = adhocLabels(model);
-    if (labels.length === current.length && labels.every((l, i) => l === current[i])) return;
-    removeAdhocItems(section, model);
-    labels.forEach(l => addAdhocItem(section, model, l));
-    const enc = JSON.stringify(labels);
-    if (input.value !== enc) input.value = enc;
+    if (labels.length !== current.length || labels.some((l, i) => l !== current[i])) {
+      removeAdhocItems(section, model);
+      labels.forEach(l => addAdhocItem(section, model, l));
+      const enc = JSON.stringify(labels);
+      if (input.value !== enc) input.value = enc;
+    }
+    syncAddButton(section, model);
   }
 
   // --- section rendering -----------------------------------------------------
@@ -9434,7 +9440,11 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const iteration = section.closest('section[data-iteration]');
     const frozen = !!iteration && !iteration.hasAttribute('data-active');
     if (frozen) section.dataset.mapFrozen = 'true';
-    const submitted = frozen && model.submitted && typeof model.submitted === 'object' ? model.submitted : null;
+    // A submission is only trusted when it carries every matrix key (the
+    // payload always does) — a partial or stale one is treated as missing.
+    const complete = s => !!s && typeof s === 'object' && !!s.cells && typeof s.cells === 'object'
+      && model.matrices.every(mx => Array.isArray(s.cells[mx.key]));
+    const submitted = frozen && complete(model.submitted) ? model.submitted : null;
     if (frozen && !submitted) {
       const banner = el('div', 'map-error', MAP_LOCALE.frozen_missing);
       banner.setAttribute('role', 'alert');
@@ -9447,7 +9457,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     if (model.adhocItems) stateInput(section, m, 'adhoc').value = JSON.stringify(submitted && Array.isArray(submitted.adhoc) ? submitted.adhoc : []);
     model.matrices.forEach(mx => {
       const state = stateInput(section, m, 'cells', mx.key);
-      const src = submitted && submitted.cells && Array.isArray(submitted.cells[mx.key]) ? submitted.cells[mx.key] : null;
+      const src = submitted ? submitted.cells[mx.key] : null;
       const pairs = src ? src.filter(p => Array.isArray(p) && p.length === 2).map(p => [String(p[0]), String(p[1])]) : proposalPairs(model, mx);
       state.value = encodeCells(pairs);
       mx.targets.filter(t => t.ordered).forEach(t => {
@@ -9531,7 +9541,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const out = [];
     root.querySelectorAll('section[data-mapping][data-map-rendered]').forEach(section => {
       const model = MODELS.get(section);
-      if (!model || section.querySelector('.map-error')) return;
+      if (!model || section.querySelector('.map-error') || section.dataset.mapFrozen === 'true') return;   // a past round is never a current decision
       const m = model.id;
       const entry = { id: m, label: section.dataset.navLabel || m };
       const view = section.closest('section[data-view]');

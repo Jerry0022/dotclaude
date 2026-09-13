@@ -24,7 +24,10 @@ function scanBlocks(src) {            // same line scanner as panel-anatomy.test
   return out;
 }
 const ENGINE = scanBlocks(md).find(b => /^(javascript|js)$/.test(b.info) && b.code.includes("Information mapping engine"));
-const localeKeys = s => s.replace(/\{\{([a-z_.]+)\}\}/g, "$1");
+// Locale tokens become their key; `tab_open` / `spec_error` keep their real placeholder so the
+// rendered text carries the count / the error as in production.
+const PLACEHOLDERS = { "map.tab_open": "{n} map.tab_open", "map.spec_error": "map.spec_error: {error}" };
+const localeKeys = s => s.replace(/\{\{([a-z_.]+)\}\}/g, (_, k) => PLACEHOLDERS[k] || k);
 
 export const VEHICLE_SPEC = {
   items: [
@@ -301,7 +304,10 @@ describe("mapping engine — tabs, tools, frozen", () => {
     const tabs = [...p.document.querySelectorAll('[data-mapping="veh"] .map-tab')];
     expect(tabs.map(t => t.dataset.mapTab)).toEqual(["card@phone", "card@desktop"]);
     expect(tabs[0].getAttribute("aria-pressed")).toBe("true");
+    expect(tabs[0].querySelector(".map-tab-count").textContent).toBe("");                    // phone proposal satisfies every constraint
     expect(tabs[1].querySelector(".map-tab-count").textContent).toMatch(/\d/);             // desktop has open constraints
+    expect(tabs[1].querySelector(".map-tab-count").textContent).toBe("2 map.tab_open");    // badge + line 1 empty (min 1)
+    expect([...p.section("veh").querySelectorAll(".map-tabs-label")].map(l => l.textContent)).toEqual(["map.context"]);
     tabs[1].click();
     expect(p.document.getElementById("map-veh-ui").value).toMatch(/tab=card@desktop/);
     expect(p.document.querySelector('.map-schema[data-map-ctx="desktop"]').hidden).toBe(false);
@@ -314,6 +320,8 @@ describe("mapping engine — tabs, tools, frozen", () => {
     p.document.querySelector('[data-mapping="veh"] .map-copy[data-from="phone"][data-to="desktop"]').click();
     expect(cells(p.document, "veh", "card@desktop")).toEqual(cells(p.document, "veh", "card@phone"));
     expect(box(p.document, "holder", "card.badge", "desktop").checked).toBe(false);
+    expect(p.document.getElementById("map-veh-order-card.line1@desktop").value).toBe(p.document.getElementById("map-veh-order-card.line1@phone").value);
+    expect(p.document.getElementById("map-veh-order-card.line1@desktop").value).toBe("mileage");
   });
   test("reset restores the active matrix to the proposal after confirm; declined confirm is a no-op", () => {
     const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
@@ -353,12 +361,21 @@ describe("mapping engine — tabs, tools, frozen", () => {
     expect(p.window.collectMappings(p.document)[0].slotNotes).toEqual({ "card.badge": "one badge only" });
   });
   test("frozen section renders from submitted, disabled cells, readonly state, browsable toggle/tabs, no tools; missing submitted → banner", () => {
-    const submitted = { cells: { "card@phone": [["vin", "card.header"]], "card@desktop": [] }, order: {}, adhoc: ["Late"], slotNotes: { "card.badge": "kept" } };
+    const submitted = { cells: { "card@phone": [["vin", "card.header"], ["vin", "card.line1"], ["mileage", "card.line1"]], "card@desktop": [] },
+                        order: { "card.line1@phone": ["vin", "mileage"] }, adhoc: ["Late"], slotNotes: { "card.badge": "kept" } };
     const p = page({ specs: [["veh", { ...VEHICLE_SPEC, submitted }], ["veh2", VEHICLE_SPEC]], frozen: true }); p.window.renderMappings();
     const s = p.section("veh");
     expect(s.dataset.mapFrozen).toBe("true");
     expect(box(p.document, "vin", "card.header", "phone").checked).toBe(true);
     expect(box(p.document, "vin", "card.header", "phone").disabled).toBe(true);
+    expect(p.document.getElementById("map-veh-order-card.line1@phone").value).toBe("vin,mileage");   // submitted order wins over the proposal's
+    expect([...s.querySelectorAll('.map-schema[data-map-ctx="phone"] .map-slot[data-map-target="card.line1"] .map-chip')].map(c => c.dataset.item)).toEqual(["vin", "mileage"]);
+    const late = s.querySelector('[data-map-matrix="card@phone"] tr.map-item-row[data-group="__adhoc"]');
+    expect(late).toBeTruthy();
+    expect(late.querySelector(".map-item-label").textContent).toBe("Late");
+    expect(box(p.document, "u1", "card.header", "phone").disabled).toBe(true);
+    expect(JSON.parse(p.document.getElementById("map-veh-adhoc").value)).toEqual(["Late"]);
+    expect(p.window.collectMappings(p.document)).toEqual([]);                                 // a past round is never a current decision
     expect(box(p.document, "plate", "card.header", "phone").checked).toBe(false);
     expect(box(p.document, "plate", "card.header", "phone").dataset.proposed).toBe("1");      // ◆ markers survive
     expect(p.document.getElementById("map-veh-cells-card@phone").readOnly).toBe(true);
@@ -369,6 +386,39 @@ describe("mapping engine — tabs, tools, frozen", () => {
     expect(s.querySelector('[data-map-matrix="card@phone"]').hidden).toBe(false);
     expect(p.window.setCell("veh", "vin", "card.footer", "phone", true)).toBe(false);
     expect(p.section("veh2").querySelector(".map-error").textContent).toBe("map.frozen_missing");
+  });
+  test("frozen: a submitted without cells, or one missing a matrix key, is treated as missing → proposal + banner", () => {
+    const partial = { cells: { "card@phone": [["vin", "card.header"]] }, order: {}, adhoc: [], slotNotes: {} };
+    const p = page({ specs: [["empty", { ...VEHICLE_SPEC, submitted: {} }], ["part", { ...VEHICLE_SPEC, submitted: partial }]], frozen: true });
+    p.window.renderMappings();
+    for (const id of ["empty", "part"]) {
+      const s = p.section(id);
+      expect(s.dataset.mapFrozen).toBe("true");
+      expect(s.querySelector(".map-error").textContent).toBe("map.frozen_missing");
+      expect(s.querySelector('[data-map-matrix="card@phone"] input[data-map-cell="plate>card.header"]').checked).toBe(true);   // proposal, not the partial cells
+      expect(s.querySelector('[data-map-matrix="card@phone"] input[data-map-cell="vin>card.header"]').checked).toBe(false);
+      expect(s.querySelector('[data-map-matrix="card@phone"] input[data-map-cell="plate>card.header"]').disabled).toBe(true);
+    }
+  });
+  test("normalizeSpec rejects item ids that use the ad-hoc prefix u{n}", () => {
+    const p = page({ specs: [["bad", { ...VEHICLE_SPEC, items: [...VEHICLE_SPEC.items, { id: "u1", label: "Clash", group: "Identity" }] }]] });
+    p.window.renderMappings();
+    expect(p.section("bad").querySelector(".map-error").textContent).toBe("map.spec_error: reserved id: u1");
+    expect(p.section("bad").querySelector("[data-map-matrix]")).toBeNull();
+  });
+  test("ad-hoc restore: labels are normalised like the prompt path and the add button reflects the cap", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    const add = p.document.querySelector('[data-mapping="veh"] .map-add-item');
+    p.document.getElementById("map-veh-adhoc").value = JSON.stringify(Array.from({ length: 20 }, (_, i) => `  Item ${i + 1} ${"x".repeat(80)}`));
+    p.window.refreshMappings();
+    const labels = JSON.parse(p.document.getElementById("map-veh-adhoc").value);
+    expect(labels.length).toBe(20);
+    expect(labels[0]).toBe(("Item 1 " + "x".repeat(80)).slice(0, 60));
+    expect(add.disabled).toBe(true);
+    p.document.getElementById("map-veh-adhoc").value = JSON.stringify([" Only one "]);
+    p.window.refreshMappings();
+    expect(JSON.parse(p.document.getElementById("map-veh-adhoc").value)).toEqual(["Only one"]);
+    expect(add.disabled).toBe(false);
   });
   test("Alt+ArrowRight on a chip of an ordered slot rewrites the order input and keeps the chip focused", () => {
     const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
@@ -429,7 +479,8 @@ describe("mapping engine — tabs, tools, frozen", () => {
     const p = page({ specs: [["mix", spec]] }); p.window.renderMappings();
     const s = p.section("mix");
     expect([...s.querySelectorAll(".map-tab")].map(t => t.dataset.mapTab)).toEqual(["card", "train", "owner"]);
-    expect(s.querySelector(".map-tabs-label").textContent).toBe("map.axis");
+    const strip = [...s.querySelectorAll(".map-tabs > *")].map(n => n.classList.contains("map-tab") ? n.dataset.mapTab : n.textContent);
+    expect(strip).toEqual(["card", "map.axis", "train", "owner"]);                          // no context → element tab unlabelled, "Axis" before the first axis tab
     expect(s.querySelector(".map-copy")).toBeNull();                                        // no context → nothing to copy
     s.querySelector('.map-tab[data-map-tab="train"]').click();
     expect(s.querySelector('[data-map-matrix="train"]').hidden).toBe(false);
@@ -446,5 +497,12 @@ describe("mapping engine — tabs, tools, frozen", () => {
     s.querySelector('.map-tab[data-map-tab="train"]').click(); s.querySelector(".map-reset").click();
     expect(box(p.document, "vin", "train.r1", null).checked).toBe(false);
     expect(box(p.document, "vin", "card.overview", null).checked).toBe(true);                 // the card matrix kept its edits-free proposal
+  });
+  test("tab strip labels: 'Context' once before the element tabs, 'Axis' once before the first axis tab", () => {
+    const spec = { ...VEHICLE_SPEC, axes: TRAINS_SPEC.axes.map(a => ({ ...a, itemTargets: "any" })), proposalOrder: {} };
+    const p = page({ specs: [["mix", spec]] }); p.window.renderMappings();
+    const strip = [...p.section("mix").querySelectorAll(".map-tabs > *")].map(n => n.classList.contains("map-tab") ? n.dataset.mapTab : n.textContent);
+    expect(strip).toEqual(["map.context", "card@phone", "card@desktop", "map.axis", "train@phone", "train@desktop", "owner@phone", "owner@desktop"]);
+    expect(p.section("mix").querySelectorAll(".map-tabs-label")[0].textContent).toBe("map.context");
   });
 });
