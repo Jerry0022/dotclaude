@@ -508,6 +508,7 @@ const BATCH_ROUTES = {
   go:     /^(go|los|merge)$/i,
   marker: /^marker$/i,
   status: /^status$/i,
+  help:   /^(help|hilfe|\?)$/i,
 };
 
 /**
@@ -515,12 +516,12 @@ const BATCH_ROUTES = {
  *
  * `/claude-batch`, `/claude-batch on` and `/claude-batch <text>` while
  * collecting are not requests for a turn: the user either forgot the mode is
- * on, or is filing a note through the command. Letting them reach the model
- * costs a full turn to say "already active" — the exact cost the mode exists
- * to avoid. `off`, `go`, `status` and `marker` are the exits and stay
- * passthrough, as does anything carrying an attachment (Step 2.6).
+ * on, or is filing a note through the command. `help` is a static text.
+ * Letting any of them reach the model costs a full turn — the exact cost the
+ * mode exists to avoid. `off`, `go`, `status` and `marker` are the exits and
+ * stay passthrough, as does anything carrying an attachment (Step 2.6).
  */
-const REARM_ROUTES = new Set(['bare', 'on', 'content']);
+const REARM_ROUTES = new Set(['bare', 'on', 'content', 'help']);
 
 /**
  * Is this prompt a `/claude-batch` invocation, and which route does it take?
@@ -578,8 +579,56 @@ function renderModeSummary(p) {
     `• Umsetzen:   "${marker} <text>" oder /claude-batch go — merged zuerst main in den`,
     `              Branch, liest alle Notizen und plant EINE Umsetzung. Text nach dem`,
     `              Marker ist Anweisung für diese nächste Phase.`,
-    `• Abschalten: /claude-batch off — beendet nur das Sammeln, Notizen bleiben.`,
+    `• Abschalten: /claude-batch off — beendet nur das Sammeln, Notizen bleiben;`,
+    `              /claude-batch on sammelt später weiter (auch nach dem Auto-Ende).`,
     `• Auto-Ende:  nach ${hours} Stunden oder ${max} Notizen.`,
+    `• Sonstiges:  /claude-batch status · marker (Marker ändern) · help (Ablauf ausführlich).`,
+  ].join('\n');
+}
+
+/**
+ * The long form of the summary — `/claude-batch help`. Two lists: what the
+ * user does, step by step, and what Claude does at each of those steps. Shown
+ * by the hook while collecting (costs nothing) and by the skill otherwise.
+ *
+ * @param {{marker?:string,expiryHours?:number,maxNotes?:number}} [p]
+ */
+function renderHelp(p = {}) {
+  const marker = p.marker || DEFAULTS.marker;
+  const hours = p.expiryHours ?? DEFAULTS.expiryHours;
+  const max = p.maxNotes ?? DEFAULTS.maxNotes;
+  return [
+    'claude-batch — Sammelmodus: erst sammeln, dann EINMAL gebündelt umsetzen.',
+    '',
+    'A) Was DU machst',
+    '1. /claude-batch             Einschalten. Beim ersten Mal fragt Claude nach dem',
+    `                             Ausführungs-Marker (aktuell "${marker}"). Text hinter dem`,
+    '                             Aufruf wird sofort Notiz #1.',
+    '2. Prompts tippen            Jeder Prompt ohne Marker wird Notiz. Das rote',
+    '                             "Eingabe blockiert"-Panel ist normal, kein Fehler.',
+    '                             Screenshots und @Dateien gehen zu Claude durch, der',
+    '                             sie nur als Notiz ablegt — nicht bearbeitet.',
+    `${`3. "${marker} <text>"`.padEnd(29)}Umsetzung starten (oder /claude-batch go). Text hinter`,
+    '                             dem Marker ist Anweisung für diese Phase.',
+    '4. Plan freigeben            Claude legt EINEN Plan vor. Ab hier läuft die',
+    '                             Unterhaltung wieder normal, der Modus ist aus.',
+    '',
+    'Weitere Befehle: /claude-batch off (nur stoppen, Notizen bleiben) · on (weiter',
+    'sammeln, auch nach dem Auto-Ende) · status · marker (Ausführungs-Marker ändern)',
+    `· help. Auto-Ende nach ${hours} Stunden oder ${max} Notizen — der Marker erreicht`,
+    'die Notizen auch danach.',
+    '',
+    'B) Was CLAUDE macht',
+    '1. Einschalten     Marker sichern, Modus-Datei schreiben, .claude/batch.md aus',
+    '                   git ausschließen, Erinnerungs-Watchdog starten.',
+    '2. Sammeln         Ein Hook stoppt den Prompt VOR dem Modell (kostet nichts) und',
+    '                   hängt ihn wörtlich an .claude/batch.md an.',
+    '3. Auslösen        main in den Branch mergen (Konflikte zuerst lösen), alle',
+    '                   Notizen lesen, Abdeckungsliste #1…#N mit Disposition, Machbarkeit',
+    '                   gegen den echten Code prüfen, Widersprüche einzeln nennen, EINEN',
+    '                   Plan vorlegen — bei großen Konflikten als /concept-Seite.',
+    '4. Danach          Notizen archivieren (nie löschen), Modus aus, Watchdog stoppen.',
+    '                   Folgeprompts sind die Unterhaltung über die Umsetzung.',
   ].join('\n');
 }
 
@@ -759,7 +808,7 @@ module.exports = {
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
   touchActivity, readActivity,
   isMachinePrompt, isExpandedCommand, hasAttachment, attachmentRefs, detectActivation,
-  parseBatchCommand, REARM_ROUTES, renderModeSummary, describeMode,
+  parseBatchCommand, REARM_ROUTES, renderModeSummary, describeMode, renderHelp,
   startsWithMarker, stripMarker, looksLikeQuestion,
   validateMarker, markerMatch, effectiveMarker, MARKER_MAX_LENGTH,
   classify, willBeCollected,

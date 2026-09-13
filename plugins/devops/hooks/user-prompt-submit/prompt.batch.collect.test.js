@@ -554,3 +554,34 @@ describe("message builders — 0.4.0", () => {
     }
   });
 });
+
+describe("help — the long form, free of charge while collecting", () => {
+  const expanded = (args) =>
+    `<command-name>/claude-batch</command-name><command-args>${args}</command-args>`;
+
+  test("`/claude-batch help` while active prints both step lists and stores nothing", () => {
+    activate(cwd, { marker: ">start" });
+    const r = runHook({ prompt: expanded("help") });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("A) Was DU machst");
+    expect(r.stderr).toContain("B) Was CLAUDE macht");
+    expect(r.stderr).toContain("\">start <text>\"");
+    expect(r.stderr).not.toContain("läuft bereits");
+    expect(readNotes(cwd)).toEqual([]);
+    expect(isModeActive(cwd)).toBe(true);
+  });
+
+  test("`/claude-batch help` while off reaches the skill", () => {
+    const r = runHook({ prompt: expanded("help") });
+    expect(r.code).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  test("the collected-prompt panel names status, marker and help", () => {
+    activate(cwd, { marker: ">>" });
+    const r = runHook({ prompt: "der Rand ist zu dick" });
+    expect(r.stderr).toContain("marker (Marker ändern)");
+    expect(r.stderr).toContain("help");
+    expect(r.stderr).toContain("auch nach dem Auto-Ende");
+  });
+});

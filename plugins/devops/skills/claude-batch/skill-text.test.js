@@ -98,3 +98,22 @@ describe("claude-batch SKILL.md — 0.4.0: activation ends ON, markers, main syn
     expect(step4.indexOf("4.0 Bring main")).toBeLessThan(step4.indexOf("**4.1 Read every note"));
   });
 });
+
+describe("claude-batch SKILL.md — help route and re-arming", () => {
+  const step1 = section("## Step 1 — Route the invocation", "## Step 2 — Activate");
+  const step2 = section("## Step 2 — Activate", "## Step 3 — Status");
+
+  it("routes help to its own step", () => {
+    const tableRows = step1.split("\n").filter((l) => l.startsWith("|"));
+    const helpRow = tableRows.find((l) => /`help`/.test(l));
+    expect(helpRow).toBeTruthy();
+    expect(helpRow).toMatch(/Step 6/);
+    expect(skill).toMatch(/## Step 6 — Help/);
+    expect(section("## Step 6 — Help", "## Optional")).toMatch(/renderHelp/);
+  });
+
+  it("says re-arming keeps the queue", () => {
+    expect(step2).toMatch(/Re-arming keeps the queue/);
+    expect(step2).toMatch(/after an auto-end/);
+  });
+});

@@ -537,6 +537,11 @@ process.stdin.on('end', () => {
     // summary — blocked, so it costs nothing. The exits never land here.
     try {
       const inv = B.parseBatchCommand(text);
+      if (inv?.route === 'help') {
+        // Static text — the long form of the summary. Nothing to store.
+        process.stderr.write(`${B.renderHelp({ marker, ...bounds })}\n`);
+        process.exit(2);
+      }
       const residue = inv?.residue || '';
       const count = residue ? B.appendNote(cwd, residue) : B.countNotes(cwd);
       process.stderr.write(`${buildRearmAck(count, marker, Boolean(residue), bounds)}\n`);

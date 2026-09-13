@@ -308,3 +308,11 @@ mode explains itself once and never costs a turn to keep running.
    synchronously when the marker fires and injects the result as "SCHRITT 0";
    the skill's Step 4.0 does the same on the `go` path. Notes are written
    against the old base and must be planned against the current one.
+6. **`/claude-batch help`.** The long form of the summary (`renderHelp`): A) the
+   user's steps, B) Claude's steps at each of them. Absorbed by the hook while
+   collecting (static text, exit 2), printed by the skill otherwise. The short
+   summary names it, together with `status` and `marker`, in one line.
+7. **Re-arming keeps the queue.** `/claude-batch on` after an auto-end or an
+   `off` continues the same `.claude/batch.md`; only the merge archives it. The
+   summary says so, and Step 2 reports the existing count instead of starting
+   from zero.

@@ -29,6 +29,7 @@ off, **status** when it is already on.
 | `go`, `los`, `merge` | Step 4 (fire) |
 | `marker` | Step 2.1 (ask again, overwrite the stored marker) |
 | `status` | Step 3 (report) |
+| `help`, `hilfe`, `?` | Step 6 (print the long-form help, nothing else) |
 | *anything else* (free text) | **Content fallback** — the whole argument is a note: activate the mode if it is off (Step 2, including the marker question), file the text verbatim as note #1 (Step 2.4), report the count |
 
 **Activation ends ON.** After Step 2 — marker question included — the mode is
@@ -37,9 +38,10 @@ with "type `/claude-batch on` to start": that is the turn they just spent, and
 it is why they invoked the skill in the first place.
 
 **While the mode is on, the hook absorbs a re-activation.** `/claude-batch`,
-`/claude-batch on` and `/claude-batch <text>` are blocked by
-`prompt.batch.collect.js` (`classify` → `rearm`): free text becomes a note, and
-the user sees the mode summary (`renderModeSummary`) instead of paying a turn.
+`/claude-batch on`, `/claude-batch <text>` and `/claude-batch help` are blocked
+by `prompt.batch.collect.js` (`classify` → `rearm`): free text becomes a note,
+`help` prints `renderHelp`, and otherwise the user sees the mode summary
+(`renderModeSummary`) instead of paying a turn.
 You only see such an invocation when it carried an attachment — then it is the
 content fallback, filed per Step 2.6. `off`, `go`, `status` and `marker` always
 reach you.
@@ -134,6 +136,12 @@ Never ask again unless the stored marker is unusable — a later change is
 node -e "require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').activate(process.cwd())"
 node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" start .
 ```
+
+**Re-arming keeps the queue.** `activate` only writes the mode file;
+`.claude/batch.md` is untouched. So `/claude-batch on` after an auto-end
+(expiry, note cap) or after `off` continues the same collection — say the
+existing note count in the confirmation instead of pretending it starts empty.
+The notes end only with the merge (Step 4.7, archived).
 
 **2.3 Register the notes file in the git exclude** (machine state, not a project
 decision — never `.gitignore`):
@@ -337,6 +345,19 @@ node -e "require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').deactivate(process.cw
 
 If notes remain, say how many and that they survive in `.claude/batch.md` for a
 later `/claude-batch go`. Never discard them on deactivation.
+
+## Step 6 — Help
+
+The long form of the mode summary: A) what the user does, step by step, and
+B) what Claude does at each of those steps. Print it and relay it verbatim —
+no additions, no activation, no status:
+
+```bash
+node -e "const B=require('{PLUGIN_ROOT}/hooks/lib/batch-state.js');console.log(B.renderHelp({marker:B.effectiveMarker(process.cwd())}))"
+```
+
+While the mode is on, the hook prints the same text itself and you never see
+the invocation.
 
 ## Optional — local compaction
 
