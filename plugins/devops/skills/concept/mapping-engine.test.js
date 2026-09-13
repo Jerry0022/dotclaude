@@ -546,3 +546,97 @@ describe("mapping engine — tabs, tools, frozen", () => {
     expect(p.section("mix").querySelectorAll(".map-tabs-label")[0].textContent).toBe("map.context");
   });
 });
+
+describe("mapping engine — matrix row filter (spec § 7: Rows · All / Unassigned / Changed)", () => {
+  const pills = (section) => [...section.querySelectorAll(".map-row-filters .map-row-filter")];
+  const pill = (section, f) => section.querySelector(`.map-row-filters .map-row-filter[data-filter="${f}"]`);
+  const row = (section, key, item) => section.querySelector(`[data-map-matrix="${key}"] tr.map-item-row[data-item="${item}"]`);
+  const groupRow = (section, key, group) => section.querySelector(`[data-map-matrix="${key}"] tr.map-group-row[data-group="${group}"]`);
+  const count = (section, f) => pill(section, f).querySelector(".map-filter-count").textContent;
+
+  test("pills exist for both spec shapes; hidden behind the schematic, shown in matrix mode, always shown for axes-only", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC], ["rel", TRAINS_SPEC]] }); p.window.renderMappings();
+    const veh = p.section("veh"), rel = p.section("rel");
+    expect(pills(veh).map(b => b.dataset.filter)).toEqual(["all", "unassigned", "changed"]);
+    for (const b of pills(veh)) { expect(b.tagName).toBe("BUTTON"); expect(b.getAttribute("aria-pressed")).toBe(String(b.dataset.filter === "all")); }
+    expect(veh.querySelector(".map-row-filters").hidden).toBe(true);                                  // schema mode
+    veh.querySelector('.map-view-btn[data-map-mode="matrix"]').click();
+    expect(veh.querySelector(".map-row-filters").hidden).toBe(false);
+    expect(rel.querySelector(".map-row-filters").hidden).toBe(false);                                 // axes only: matrix is the only view
+    expect(pills(rel).map(b => b.dataset.filter)).toEqual(["all", "unassigned", "changed"]);
+    // live counts share the palette's semantics: unassigned = nowhere across ALL matrices
+    expect(count(veh, "all")).toBe("6");
+    expect(count(veh, "unassigned")).toBe(veh.querySelector('.map-filter[data-filter="unassigned"] .map-filter-count').textContent);
+    expect(count(veh, "changed")).toBe("0");
+  });
+
+  test("unassigned hides assigned rows in every matrix and shows the unassigned ones; a group with nothing left hides", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    const s = p.section("veh");
+    pill(s, "unassigned").click();
+    expect(pill(s, "unassigned").getAttribute("aria-pressed")).toBe("true");
+    expect(pill(s, "all").getAttribute("aria-pressed")).toBe("false");
+    for (const key of ["card@phone", "card@desktop"]) {                                              // both tabs, not just the visible one
+      expect(row(s, key, "holder").hidden).toBe(false);
+      expect(row(s, key, "plate").hidden).toBe(true);
+      expect(row(s, key, "model").hidden).toBe(true);
+      expect(groupRow(s, key, "Identity").hidden).toBe(true);                                        // all three members hidden
+      expect(groupRow(s, key, "Ownership").hidden).toBe(false);
+    }
+    pill(s, "all").click();
+    expect(row(s, "card@phone", "plate").hidden).toBe(false);
+    expect(groupRow(s, "card@phone", "Identity").hidden).toBe(false);
+  });
+
+  test("changed follows the diff against the proposal live", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    const s = p.section("veh");
+    pill(s, "changed").click();
+    expect([...s.querySelectorAll('[data-map-matrix="card@phone"] tr.map-item-row')].every(tr => tr.hidden)).toBe(true);
+    p.window.setCell("veh", "holder", "card.footer", "phone", true);
+    expect(row(s, "card@phone", "holder").hidden).toBe(false);
+    expect(row(s, "card@phone", "plate").hidden).toBe(true);
+    expect(count(s, "changed")).toBe("1");
+    p.window.setCell("veh", "holder", "card.footer", "phone", false);                              // back to the proposal
+    expect(row(s, "card@phone", "holder").hidden).toBe(true);
+    expect(count(s, "changed")).toBe("0");
+  });
+
+  test("the roving-tabindex entry point moves to a visible row when the filter hides the current one", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    const s = p.section("veh");
+    const table = s.querySelector('[data-map-matrix="card@phone"] table');
+    expect(table.querySelector('input[data-map-cell][tabindex="0"]').closest("tr").dataset.item).toBe("plate");
+    pill(s, "unassigned").click();
+    const entry = table.querySelector('input[data-map-cell][tabindex="0"]');
+    expect(entry.closest("tr").hidden).toBe(false);
+    expect(entry.closest("tr").dataset.item).toBe("holder");
+    expect(table.querySelectorAll('input[data-map-cell][tabindex="0"]').length).toBe(1);
+  });
+
+  test("a collapsed group stays collapsed under a filter; expanding it shows only the rows that pass", () => {
+    const p = page({ specs: [["veh", VEHICLE_SPEC]] }); p.window.renderMappings();
+    const s = p.section("veh");
+    pill(s, "unassigned").click();
+    const toggle = groupRow(s, "card@phone", "Ownership").querySelector(".map-group-toggle");
+    toggle.click();                                                                                   // collapse
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(row(s, "card@phone", "holder").hidden).toBe(true);
+    pill(s, "all").click();                                                                           // filter change must not expand it
+    expect(row(s, "card@phone", "holder").hidden).toBe(true);
+    expect(row(s, "card@phone", "plate").hidden).toBe(false);
+    toggle.click();                                                                                   // expand
+    expect(row(s, "card@phone", "holder").hidden).toBe(false);
+  });
+
+  test("frozen sections keep the filter browsable (in memory, nothing written)", () => {
+    const submitted = { cells: { "card@phone": [["vin", "card.header"]], "card@desktop": [] }, order: { "card.line1@phone": [] }, adhoc: [], slotNotes: {} };
+    const p = page({ specs: [["veh", { ...VEHICLE_SPEC, submitted }]], frozen: true }); p.window.renderMappings();
+    const s = p.section("veh");
+    s.querySelector('.map-view-btn[data-map-mode="matrix"]').click();
+    pill(s, "unassigned").click();
+    expect(row(s, "card@phone", "vin").hidden).toBe(true);
+    expect(row(s, "card@phone", "plate").hidden).toBe(false);
+    expect(p.document.getElementById("map-veh-ui").dataset.touched).toBeUndefined();
+  });
+});

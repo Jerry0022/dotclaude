@@ -2280,6 +2280,12 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
   (`n unassigned · n constraint(s) open`) is the mapping's own summary line
   and the per-tab counts; the panel TOC's progress mirror is a free-round
   affordance (`#section-nav` is hidden in design mode).
+- Filtering is per view: the palette's pills (All / Unassigned / Multiple /
+  Changed + search) narrow the schematic; the toolbar's **row filter** (All /
+  Unassigned / Changed with live counts, `button.map-row-filter`) narrows the
+  matrix rows and their groups, in every tab at once. Both share one
+  predicate and are in-memory only — nothing is persisted, a frozen section
+  keeps them usable.
 - Freezing: when the round is frozen Claude writes the payload's
   `mappings[]` entry back into the spec as `submitted` (§ Information
   Mapping (engine) → Freezing) — the frozen view then shows the user's
@@ -6113,6 +6119,11 @@ does not have because the dock provides it there.
   bar. Set it only for ≥ 20 columns.
 - Ids and uniqueness as in § View kind `mapping`: `^[a-z0-9_]+$`, mapping
   ids unique page-wide, `data-mapping` = `id`.
+- **Row filter.** A matrix-only block (`axes`, no schematic) has no palette,
+  so the toolbar's row-filter pills (All / Unassigned / Changed, with live
+  counts) are its only narrowing: they hide the rows — and whole groups —
+  that fail the pill, in every matrix tab. In-memory only; the frozen block
+  keeps them.
 - **Never inside a `decision` round** (layout collision with the 340 px
   variant cards) **and never in the final report.** A round that needs
   both an assignment and verdicts becomes a `free` round with opt-in
@@ -9671,6 +9682,7 @@ the spec script**, so an authored note that follows the spec stays below the map
 | `div.map-root` > `div.map-toolbar`, `div.map-summary[aria-live]`, `div.map-schema[data-map-ctx]` ×n, `div.map-matrices`, `div.map-slot-notes`? | | 1 | section layout; `.map-root [hidden]` wins over every display rule |
 | `button.map-view-btn[data-map-mode][aria-pressed]` × 2 in `.map-view-toggle[role=group]` | | with `elements` only | Schema \| Matrix |
 | `button.map-tab[data-map-tab="{matrixKey}"][aria-pressed]` in `div.map-tabs`, with `span.map-tabs-label` (Context / Axis) and `span.map-tab-count` | | > 1 matrix | active matrix / context; the count reads `{n} open` per matrix |
+| `button.map-row-filter[data-filter="all\|unassigned\|changed"][aria-pressed]` × 3 in `div.map-row-filters[role=group]`, each with `span.map-filter-count` | | 1 per mapping, `hidden` unless the matrix is on screen | matrix row filter (spec § 7 "Rows"): hides `tr.map-item-row`s that fail the pill and every `tr.map-group-row` with no passing member — in EVERY matrix, not just the visible tab; same predicate and counts as the palette pills (`unassigned` = nowhere across all matrices, `changed` = any diff vs `data-proposed`); in memory (`model.rowFilter`), never persisted; a frozen section keeps it |
 | `div.map-tools` > `button.map-copy[data-from][data-to]` per ordered context pair, `button.map-reset`, `button.map-add-item` (with `adhocItems`), `div.map-status.map-tools-status[role=status]` | | live sections only | ⧉ copy context, ↺ proposal, + item, duplicate hint |
 | `div.map-element[data-map-element]` > caption > `div.map-tiers` > `div.map-tier[data-tier]` > `div.map-row[data-row]` > `div.map-slot[data-map-target][data-accepts]` > `button.map-slot-label` (+ `.map-slot-count`), `.map-slot-chips` > `button.map-chip[data-item]`, `button.map-slot-note-btn` | | per element / context | schematic view, arm-then-tap |
 | `div.map-palette` > `input[type=search].map-search` (unnamed), `button.map-filter[data-filter][aria-pressed]` × 4, `button.map-palette-collapse[aria-expanded]`, `div.map-groups` > `div.map-group[data-group]` > `button.map-group-toggle[aria-expanded]` + `button.map-item-chip[data-item][aria-pressed]` | | per schematic | palette, search, filters |
@@ -9850,9 +9862,9 @@ screens; the views group holds only the views that name no design of the round.
    search only filters what is on screen, so it stays live there (specificity 0,4,1 beats
    that rule's 0,2,2 wherever the two blocks land in the page). */
 section[data-iteration]:not([data-active]) .map-root .map-search { pointer-events: auto; filter: none; }
-.map-filters { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
-.map-filter { border: 1px solid var(--border-color); border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.8rem; padding: 0.15rem 0.6rem; cursor: pointer; }
-.map-filter[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--text-color); border-color: var(--accent-color); }
+.map-filters, .map-row-filters { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
+.map-filter, .map-row-filter { border: 1px solid var(--border-color); border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.8rem; padding: 0.15rem 0.6rem; cursor: pointer; }
+.map-filter[aria-pressed="true"], .map-row-filter[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--text-color); border-color: var(--accent-color); }
 .map-filter-count { opacity: 0.8; }
 .map-palette-collapse { margin-left: auto; border: 0; background: transparent; color: var(--text-secondary); font: inherit; padding: 0 0.3rem; cursor: pointer; }
 .map-groups { display: flex; flex-direction: column; gap: 0.4rem; }
@@ -10407,6 +10419,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     section.querySelectorAll('.map-tab').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mapTab === ui.tab)));
     section.querySelectorAll('.map-schema').forEach(s => { s.hidden = !(mode === 'schema' && s.dataset.mapCtx === (active.ctx || '')); });
     section.querySelectorAll('[data-map-matrix]').forEach(w => { w.hidden = !(mode === 'matrix' && w.dataset.mapMatrix === ui.tab); });
+    section.querySelectorAll('.map-row-filters').forEach(f => { f.hidden = mode !== 'matrix'; });    // the palette filters the schematic
   }
 
   // --- schematic view (§ Schematic view) --------------------------------------
@@ -10561,8 +10574,8 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
   // Slot chips, counts and palette badges from the state strings plus the
   // matrix's `data-proposed` stamps; the armed cue and the view last.
   function refreshSchema(section, model) {
+    const stats = itemStats(section, model);                                                        // after projectMatrix: reads the boxes
     if (model.hasElements) {
-      const stats = itemStats(section, model);
       section.querySelectorAll('.map-schema').forEach(schema => {
         const ctx = schema.dataset.mapCtx || null;
         schema.querySelectorAll('.map-slot').forEach(slot => refreshSlot(section, model, slot, ctx));
@@ -10570,6 +10583,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
         refreshArmed(model, schema);
       });
     }
+    applyRowFilter(section, model, stats);                                                          // matrix rows, every tab
     applyView(section, model);
   }
   function refreshSlot(section, model, slot, ctx) {
@@ -10639,11 +10653,28 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     });
     return stats;
   }
+  // One predicate for the palette's filter pills AND the matrix row filter:
+  // unassigned = nowhere across ALL matrices, changed = any cell differs from
+  // the proposal (both straight from itemStats()).
+  const filterPass = (filter, s) => filter === 'unassigned' ? s.places.length === 0
+    : filter === 'multiple' ? s.places.length >= 2
+    : filter === 'changed' ? s.changed : true;
+  function filterCounts(model, stats) {
+    const counts = { all: 0, unassigned: 0, multiple: 0, changed: 0 };
+    model.items.forEach(item => {
+      const s = stats.get(item.id);
+      counts.all++;
+      if (filterPass('unassigned', s)) counts.unassigned++;
+      if (filterPass('multiple', s)) counts.multiple++;
+      if (filterPass('changed', s)) counts.changed++;
+    });
+    return counts;
+  }
   function refreshPalette(model, schema, stats) {
     const active = schema.querySelector('.map-filter[aria-pressed="true"]');
     const filter = active ? active.dataset.filter : 'all';
     const q = schema.querySelector('.map-search').value.trim().toLowerCase();
-    const counts = { all: 0, unassigned: 0, multiple: 0, changed: 0 };
+    const counts = filterCounts(model, stats);
     schema.querySelectorAll('.map-item-chip').forEach(chip => {
       const item = model.items.find(i => i.id === chip.dataset.item);
       const s = stats.get(item.id);
@@ -10652,17 +10683,56 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       chip.title = s.places.join(', ');
       chip.classList.toggle('is-changed', s.changed);
       chip.classList.toggle('is-unassigned', n === 0);
-      counts.all++;
-      if (!n) counts.unassigned++;
-      if (n >= 2) counts.multiple++;
-      if (s.changed) counts.changed++;
-      const pass = filter === 'unassigned' ? n === 0 : filter === 'multiple' ? n >= 2 : filter === 'changed' ? s.changed : true;
       const hit = !q || (item.label + ' ' + groupLabel(item.group)).toLowerCase().includes(q);
-      chip.hidden = !(pass && hit);
+      chip.hidden = !(filterPass(filter, s) && hit);
     });
     schema.querySelectorAll('.map-filter').forEach(b => { b.querySelector('.map-filter-count').textContent = String(counts[b.dataset.filter]); });
     schema.querySelectorAll('.map-group').forEach(g => { g.hidden = ![...g.querySelectorAll('.map-item-chip')].some(c => !c.hidden); });
     schema.querySelector('.map-palette-title').textContent = MAP_LOCALE.items + ' (' + model.items.length + ')';
+  }
+  // Matrix row filter (spec § 7 "Rows: All / Unassigned / Changed") — the
+  // toolbar pills, one set per mapping, in-memory (`model.rowFilter`), never
+  // persisted. Rows hide when they fail the filter OR their group is
+  // collapsed; a group row hides when none of its members pass. Applied to
+  // EVERY matrix, not just the visible tab, so switching tabs keeps the view.
+  function renderRowFilters() {
+    const wrap = el('div', 'map-row-filters');
+    wrap.setAttribute('role', 'group');
+    [['all', MAP_LOCALE.filter_all], ['unassigned', MAP_LOCALE.filter_unassigned], ['changed', MAP_LOCALE.filter_changed]].forEach(([f, label]) => {
+      const btn = el('button', 'map-row-filter');
+      btn.type = 'button';
+      btn.dataset.filter = f;
+      btn.setAttribute('aria-pressed', String(f === 'all'));
+      btn.appendChild(el('span', null, label));
+      btn.appendChild(document.createTextNode(' '));
+      btn.appendChild(el('span', 'map-filter-count', ''));
+      wrap.appendChild(btn);
+    });
+    return wrap;
+  }
+  function applyRowFilter(section, model, stats) {
+    const filter = model.rowFilter || 'all';
+    const counts = filterCounts(model, stats);
+    section.querySelectorAll('.map-row-filter').forEach(b => {
+      b.setAttribute('aria-pressed', String(b.dataset.filter === filter));
+      b.querySelector('.map-filter-count').textContent = String(counts[b.dataset.filter]);
+    });
+    section.querySelectorAll('[data-map-matrix] table').forEach(table => {
+      const collapsed = new Set([...table.querySelectorAll('tr.map-group-row')]
+        .filter(gr => gr.querySelector('.map-group-toggle').getAttribute('aria-expanded') !== 'true')
+        .map(gr => gr.dataset.group));
+      const passing = new Set();
+      table.querySelectorAll('tr.map-item-row').forEach(tr => {
+        const s = stats.get(tr.dataset.item);
+        const pass = !!s && filterPass(filter, s);
+        if (pass) passing.add(tr.dataset.group);
+        tr.hidden = !pass || collapsed.has(tr.dataset.group);
+      });
+      table.querySelectorAll('tr.map-group-row').forEach(gr => { gr.hidden = !passing.has(gr.dataset.group); });
+      // The keyboard entry point must sit on a visible row.
+      const entry = table.querySelector('input[data-map-cell][tabindex="0"]');
+      if (!entry || entry.closest('tr').hidden) setEntryPoint(table, table.querySelector('tr.map-item-row:not([hidden]) input[data-map-cell]'));
+    });
   }
 
   // --- arm, then tap: one in-memory `armed` per mapping ------------------------
@@ -10737,6 +10807,12 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     }
     const tab = hit('.map-tab');
     if (tab) { activateTab(section, tab.dataset.mapTab); return true; }
+    const rowFilter = hit('.map-row-filter');
+    if (rowFilter) {                                                                                // in memory, frozen or live
+      model.rowFilter = rowFilter.dataset.filter;
+      applyRowFilter(section, model, itemStats(section, model));
+      return true;
+    }
     const note = hit('.map-slot-note-btn');
     if (note) {
       const holder = note.closest('.map-slot') || note.closest('th[data-map-target]');
@@ -10946,13 +11022,9 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
         btn.closest('.map-group').querySelector('.map-group-chips').hidden = !open;
         return;
       }
-      row.parentNode.querySelectorAll('tr.map-item-row').forEach(tr => {
-        if (tr.dataset.group === row.dataset.group) tr.hidden = !open;
-      });
-      // A collapsed group must not swallow the keyboard entry point.
-      const table = row.closest('table');
-      const entry = table.querySelector('input[data-map-cell][tabindex="0"]');
-      if (!entry || entry.closest('tr').hidden) setEntryPoint(table, table.querySelector('tr.map-item-row:not([hidden]) input[data-map-cell]'));
+      // Row visibility = collapse state ∧ row filter, recomputed in one place
+      // (applyRowFilter also keeps the keyboard entry point on a visible row).
+      applyRowFilter(section, model, itemStats(section, model));
     });
     section.addEventListener('keydown', e => {
       const cb = e.target;
@@ -11031,6 +11103,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const toolbar = el('div', 'map-toolbar');
     if (model.hasElements) toolbar.appendChild(renderViewToggle());
     if (model.matrices.length > 1) toolbar.appendChild(renderTabs(model));
+    toolbar.appendChild(renderRowFilters());                                                        // browsable on a frozen section too
     if (!frozen) toolbar.appendChild(renderTools(model));
     root.appendChild(toolbar);
     const summary = el('div', 'map-summary');
