@@ -1,6 +1,6 @@
 /**
  * @module batch-state
- * @version 0.3.0
+ * @version 0.4.0
  * @description State and classification for the `/claude-batch` collect mode.
  *
  * Collect mode batches user prompts into `.claude/batch.md` instead of acting
@@ -45,6 +45,16 @@ const DEFAULTS = {
   expiryHours: 8,
   maxNotes: 100,
 };
+
+/**
+ * The three markers the skill offers on first run, in display order. The
+ * first is the recommendation. All English, no trailing colon — a colon reads
+ * as a label, and the user types the marker dozens of times per session.
+ *
+ * Suggestions, not a closed set: whatever the user types via "Other" is the
+ * marker, subject only to `validateMarker`.
+ */
+const MARKER_SUGGESTIONS = ['>>', '>go', '>start'];
 
 /**
  * Machine-prompt patterns. Prompts matching these are NEVER collected.
@@ -489,6 +499,107 @@ function effectiveMarker(cwd) {
   return pinned.ok ? pinned.marker : loadConfig().marker;
 }
 
+// ── invocation routing ─────────────────────────────────────────────────────
+
+/** First-token routes of `/claude-batch <arg>`, mirroring the skill's Step 1. */
+const BATCH_ROUTES = {
+  on:     /^(on|an|start)$/i,
+  off:    /^(off|aus|stop)$/i,
+  go:     /^(go|los|merge)$/i,
+  marker: /^marker$/i,
+  status: /^status$/i,
+};
+
+/**
+ * Routes the hook absorbs itself while the mode is already ON.
+ *
+ * `/claude-batch`, `/claude-batch on` and `/claude-batch <text>` while
+ * collecting are not requests for a turn: the user either forgot the mode is
+ * on, or is filing a note through the command. Letting them reach the model
+ * costs a full turn to say "already active" — the exact cost the mode exists
+ * to avoid. `off`, `go`, `status` and `marker` are the exits and stay
+ * passthrough, as does anything carrying an attachment (Step 2.6).
+ */
+const REARM_ROUTES = new Set(['bare', 'on', 'content']);
+
+/**
+ * Is this prompt a `/claude-batch` invocation, and which route does it take?
+ *
+ * Accepts the expanded form (`<command-name>` tag, what the harness delivers)
+ * and the raw form (`/claude-batch …` at line start) so the decision does not
+ * depend on which one a given runtime hands over. Routes on the FIRST token
+ * only; everything after it is `residue` — note content, never an instruction.
+ *
+ * @param {string} text
+ * @returns {{route:'bare'|'on'|'off'|'go'|'marker'|'status'|'content',residue:string}|null}
+ */
+function parseBatchCommand(text) {
+  const s = typeof text === 'string' ? text : '';
+  if (!s.trim()) return null;
+  let args;
+  const cmd = /<command-name>\s*\/?([\w.:-]+)\s*<\/command-name>/i.exec(s);
+  if (cmd) {
+    if (!/(?:^|[:/])claude-batch$/i.test(cmd[1])) return null;
+    const a = /<command-args>([\s\S]*?)<\/command-args>/i.exec(s);
+    args = a ? a[1] : '';
+  } else {
+    const raw = /^\s*\/(?:devops:)?claude-batch(?=\s|$)([\s\S]*)$/i.exec(s);
+    if (!raw) return null;
+    args = raw[1];
+  }
+  args = args.trim();
+  if (!args) return { route: 'bare', residue: '' };
+  const m = /^(\S+)([\s\S]*)$/.exec(args);
+  for (const [route, rx] of Object.entries(BATCH_ROUTES)) {
+    if (rx.test(m[1])) return { route, residue: m[2].trim() };
+  }
+  return { route: 'content', residue: args };
+}
+
+// ── mode summary ───────────────────────────────────────────────────────────
+
+/**
+ * The one block that explains the running mode — shown at activation, on
+ * every collected prompt, and when a re-activation is absorbed. One source so
+ * the three places can never drift apart: what happens to a prompt, how to
+ * fire the merge, how to only stop, and when the mode ends on its own.
+ *
+ * @param {{marker:string,count?:number,expiryHours?:number,maxNotes?:number}} p
+ */
+function renderModeSummary(p) {
+  const marker = p.marker || DEFAULTS.marker;
+  const hours = p.expiryHours ?? DEFAULTS.expiryHours;
+  const max = p.maxNotes ?? DEFAULTS.maxNotes;
+  const count = typeof p.count === 'number' ? ` · ${p.count} Notiz(en)` : '';
+  return [
+    `Sammelmodus AKTIV${count} · Marker "${marker}"`,
+    `• Sammeln:    jeder Prompt ohne Marker landet als Notiz in .claude/batch.md.`,
+    `              Das rote "Eingabe blockiert"-Panel ist dabei normal, kein Fehler.`,
+    `• Umsetzen:   "${marker} <text>" oder /claude-batch go — merged zuerst main in den`,
+    `              Branch, liest alle Notizen und plant EINE Umsetzung. Text nach dem`,
+    `              Marker ist Anweisung für diese nächste Phase.`,
+    `• Abschalten: /claude-batch off — beendet nur das Sammeln, Notizen bleiben.`,
+    `• Auto-Ende:  nach ${hours} Stunden oder ${max} Notizen.`,
+  ].join('\n');
+}
+
+/** `renderModeSummary` filled from the live state of `cwd`. */
+function describeMode(cwd) {
+  const mode = readMode(cwd);
+  const cfg = loadConfig();
+  let expiryHours = cfg.expiryHours;
+  if (mode?.startedAt && mode?.expiresAt) {
+    const h = (Date.parse(mode.expiresAt) - Date.parse(mode.startedAt)) / 3600_000;
+    if (Number.isFinite(h) && h > 0) expiryHours = Math.round(h * 10) / 10;
+  }
+  return renderModeSummary({
+    marker: effectiveMarker(cwd),
+    count: countNotes(cwd),
+    expiryHours,
+    maxNotes: mode?.maxNotes ?? cfg.maxNotes,
+  });
+}
+
 /**
  * Advisory only — never used to decide collect vs. execute. The hook does not
  * guess what a question is; this only enriches the acknowledgement so a
@@ -579,10 +690,21 @@ function detectActivation(text) {
  * no notes injected, and the model truthfully reporting that it sees no batch
  * while ten notes sat in the file.
  *
- * @returns {'passthrough'|'collect'|'execute'}
+ * `rearm`: a `/claude-batch` invocation that would only switch on a mode that
+ * is already on (bare, `on`, or free text = a note). The hook absorbs it —
+ * stores the residue as a note, answers with the mode summary, exit 2 — so
+ * repeating the activation never costs a turn. The exits (`off`, `go`,
+ * `status`, `marker`) and anything with an attachment stay `passthrough`.
+ *
+ * @returns {'passthrough'|'collect'|'execute'|'rearm'}
  */
 function classify({ text, hookInput, marker, modeActive }) {
   if (isMachinePrompt(text)) return 'passthrough';
+  const inv = parseBatchCommand(text);
+  if (inv) {
+    if (modeActive && REARM_ROUTES.has(inv.route) && !hasAttachment(text, hookInput)) return 'rearm';
+    return 'passthrough';
+  }
   if (isExpandedCommand(text)) return 'passthrough';
   // The marker fires the merge even with the mode already off: an expired or
   // note-capped mode must not swallow the user's only way to reach the queue.
@@ -616,7 +738,8 @@ function willBeCollected(hookInput) {
     const cwd = hookInput.cwd || process.cwd();
     if (!isModeActive(cwd)) return false;
     const text = hookInput.prompt || hookInput.user_message || hookInput.message || '';
-    return classify({ text, hookInput, marker: effectiveMarker(cwd), modeActive: true }) === 'collect';
+    const verdict = classify({ text, hookInput, marker: effectiveMarker(cwd), modeActive: true });
+    return verdict === 'collect' || verdict === 'rearm';
   } catch {
     return false;
   }
@@ -624,6 +747,7 @@ function willBeCollected(hookInput) {
 
 module.exports = {
   DEFAULTS,
+  MARKER_SUGGESTIONS,
   HARNESS_RESERVED_PREFIXES,
   MACHINE_PATTERNS,
   ATTACHMENT_PATTERNS,
@@ -635,6 +759,7 @@ module.exports = {
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
   touchActivity, readActivity,
   isMachinePrompt, isExpandedCommand, hasAttachment, attachmentRefs, detectActivation,
+  parseBatchCommand, REARM_ROUTES, renderModeSummary, describeMode,
   startsWithMarker, stripMarker, looksLikeQuestion,
   validateMarker, markerMatch, effectiveMarker, MARKER_MAX_LENGTH,
   classify, willBeCollected,

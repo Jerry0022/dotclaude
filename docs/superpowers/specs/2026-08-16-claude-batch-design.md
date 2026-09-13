@@ -34,10 +34,27 @@ consumes GitHub issues as its input. What is missing is lightweight capture
 
 ### Activation
 
-Opt-in per session. `/claude-batch on` writes a mode file; `/claude-batch off`
-removes it. On very first use the skill asks once for the **execute marker** and
-stores it user-globally in `~/.claude/claude-batch.json`. Default proposal: `>>`
-at the start of the line.
+Opt-in per session. `/claude-batch` (bare) or `/claude-batch on` writes a mode
+file; `/claude-batch off` removes it. On very first use the skill asks once for
+the **execute marker** and stores it user-globally in `~/.claude/claude-batch.json`.
+Offered markers (`MARKER_SUGGESTIONS`): `>>` (recommended), `>go`, `>start` —
+English, colon-free, at the start of the line; text after the marker is the
+instruction for the next phase. Any free-text answer is accepted subject to
+`validateMarker`.
+
+**The activating turn ends with the mode ON.** The bare invocation is the
+request to collect; the skill must never close with "now type `/claude-batch
+on`". While the mode is on, a repeated activation (`/claude-batch`,
+`/claude-batch on`, `/claude-batch <text>`) is absorbed by the hook
+(`classify` → `rearm`): free text becomes a note, the user sees the mode summary,
+and no turn is spent. The exits (`off`, `go`, `status`, `marker`) always pass
+through, as does an invocation carrying an attachment.
+
+**One mode summary, three places.** `renderModeSummary` (`batch-state.js`) is
+the block shown at activation (Step 2.5), on every collected prompt (the red
+"blocked" panel), and on an absorbed re-activation. It states what happens to a
+prompt, how to fire, how to only stop, and the auto-end bounds — so the panel
+the user reads most often is the one that explains the mode.
 
 **A marker may not start with `!`, `/`, `#` or `@`.** The harness claims those
 before a prompt exists — `!` switches the input line to bash mode and runs it as
@@ -119,7 +136,12 @@ Passthrough is unconditional for:
 
 A prompt starting with the execute marker means "work on it now", not "handle
 this one prompt normally". The hook passes it through and injects the full note
-list as context. Claude then:
+list as context — after first merging the parent chain (main) into the current
+branch via `scripts/git-sync.js`, synchronously, with the result injected as
+"SCHRITT 0". The notes were written against the branch as it was when
+collection started; feasibility is checked against the branch as it is now. A
+sync that could not run is named so the turn runs it itself; on the
+`/claude-batch go` path the skill runs it (Step 4.0). Claude then:
 
 1. reads every collected note (verbatim; summarised only when oversized),
 2. feasibility-checks the merged intent against the actual code,
@@ -260,3 +282,29 @@ mode that collected them:
 - The merge context requires a coverage list: one line per note, `#1` … `#N`,
   each with a disposition. A note without a line is a lost requirement, not a
   shorter plan.
+
+## 0.4.0 — the second turn nobody should have to spend
+
+Observed on the first real use after 0.3.0: the user invoked the skill, answered
+the marker question, and was then told to type `/claude-batch on` — a full turn
+to do what the invocation already asked for. Five changes, one principle: the
+mode explains itself once and never costs a turn to keep running.
+
+1. **Bare `/claude-batch` activates.** `status` was the wrong default: nobody
+   invokes the skill to be told the mode is off. Bare invocation → activate when
+   off, status when on. The activating turn ends with the mode ON.
+2. **Re-activation is absorbed by the hook.** `/claude-batch`, `/claude-batch
+   on` and `/claude-batch <text>` while collecting are a new `classify` verdict,
+   `rearm`: residue is stored as a note, the mode summary is shown, exit 2. The
+   exits and attachment-carrying invocations still pass through.
+3. **One mode summary.** `renderModeSummary` / `describeMode` is the activation
+   confirmation, the body of every collected-prompt panel, and the rearm
+   answer. Before, the red panel said only "note stored"; the explanation of
+   what to do next lived in the activation turn alone.
+4. **Markers: `>>`, `>go`, `>start`.** `los:` and `jetzt:` were German and
+   carried a colon the user types dozens of times. All suggestions are now
+   English and colon-free (`MARKER_SUGGESTIONS`); the recommendation stays `>>`.
+5. **Main is merged before the notes are read.** The hook runs `git-sync.js`
+   synchronously when the marker fires and injects the result as "SCHRITT 0";
+   the skill's Step 4.0 does the same on the `go` path. Notes are written
+   against the old base and must be planned against the current one.

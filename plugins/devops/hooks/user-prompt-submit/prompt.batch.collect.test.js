@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  buildAck, buildMergeContext, buildActivationGuard, buildAttachmentGuard,
-  buildEmptyQueueNotice, INLINE_LIMIT,
+  buildAck, buildRearmAck, buildMergeContext, renderSyncLines, buildActivationGuard,
+  buildAttachmentGuard, buildEmptyQueueNotice, syncMain, INLINE_LIMIT, GIT_SYNC_SCRIPT,
 } from "./prompt.batch.collect.js";
 import { activate, appendNote, readNotes, isModeActive } from "../lib/batch-state.js";
 
@@ -411,5 +411,146 @@ describe("mode off — the activating prompt gets a guard, not a turn of work", 
     expect(g).toContain("AskUserQuestion");
     expect(g).toContain("Step 2.4");
     expect(g).toContain("ignoriere diesen Hinweis");
+  });
+});
+
+describe("mode on — a re-activation is absorbed, never a turn", () => {
+  const expanded = (args) =>
+    `<command-name>/claude-batch</command-name><command-args>${args}</command-args>`;
+
+  beforeEach(() => activate(cwd, { marker: ">>" }));
+
+  test.each(["", "on", "an", "start"])("`/claude-batch %s` is blocked with the mode summary", (args) => {
+    // The user forgot the mode is on. The answer they need is the summary —
+    // paying a turn for "already active" is the cost the mode exists to avoid.
+    const r = runHook({ prompt: expanded(args) });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("läuft bereits");
+    expect(r.stderr).toContain("kein Fehler");
+    expect(r.stderr).toContain("Sammelmodus AKTIV");
+    expect(r.stderr).toContain("/claude-batch off");
+    expect(r.stderr).toContain("/claude-batch go");
+    expect(readNotes(cwd)).toEqual([]);
+    expect(isModeActive(cwd)).toBe(true);
+  });
+
+  test("free text through the command becomes a note", () => {
+    const r = runHook({ prompt: expanded("der Header ist rot") });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("Notiz #1 gespeichert");
+    expect(readNotes(cwd).map(n => n.text)).toEqual(["der Header ist rot"]);
+  });
+
+  test("text after `on` is the note, `on` itself is not", () => {
+    runHook({ prompt: expanded("on die Filter-API fehlt") });
+    expect(readNotes(cwd).map(n => n.text)).toEqual(["die Filter-API fehlt"]);
+  });
+
+  test.each(["off", "go", "status", "marker"])("the exit `%s` still reaches the skill", (args) => {
+    const r = runHook({ prompt: expanded(args) });
+    expect(r.code).toBe(0);
+    expect(r.stderr).not.toContain("läuft bereits");
+    expect(readNotes(cwd)).toEqual([]);
+  });
+
+  test("an invocation with an attachment passes through with the file-it guard", () => {
+    const r = runHook({ prompt: expanded("so wie hier [Image #1]") });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("Setze NICHTS davon um");
+    expect(readNotes(cwd)).toEqual([]);
+  });
+
+  test("mode off — the same invocation is not absorbed", () => {
+    activate(cwd, { marker: ">>", startedAt: Date.now() - 9 * 3600_000, expiryHours: 8 });
+    const r = runHook({ prompt: expanded("on") });
+    expect(r.code).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+});
+
+describe("the collected-prompt panel carries the mode summary", () => {
+  beforeEach(() => activate(cwd, { marker: ">go", expiryHours: 3, maxNotes: 50 }));
+
+  test("every blocked prompt explains the mode with the pinned bounds", () => {
+    const r = runHook({ prompt: "der Button ist verrutscht" });
+    expect(r.stderr).toContain("Notiz #1 gespeichert");
+    expect(r.stderr).toContain("Sammelmodus AKTIV · 1 Notiz(en) · Marker \">go\"");
+    expect(r.stderr).toContain("\">go <text>\"");
+    expect(r.stderr).toContain("/claude-batch off");
+    expect(r.stderr).toContain("3 Stunden oder 50 Notizen");
+  });
+});
+
+describe("firing the merge brings main in first", () => {
+  beforeEach(() => activate(cwd, { marker: ">>" }));
+
+  test("the merge context opens with the sync result (temp dir: nothing to merge)", () => {
+    appendNote(cwd, "Button verrutscht");
+    const r = runHook({ prompt: ">> leg los" });
+    expect(r.code).toBe(0);
+    const ctx = r.stdout;
+    expect(ctx).toContain("SCHRITT 0 — Stand von main");
+    expect(ctx).toContain("nichts zu mergen");
+    // Step 0 precedes the notes.
+    expect(ctx.indexOf("SCHRITT 0")).toBeLessThan(ctx.indexOf("--- Notiz #1"));
+    expect(isModeActive(cwd)).toBe(false);
+  });
+
+  test("a sync that could not run hands the command to the turn", () => {
+    appendNote(cwd, "Button verrutscht");
+    const r = runHook({ prompt: ">> leg los" }, { DEVOPS_BATCH_NO_SYNC: "1" });
+    expect(r.stdout).toContain("konnte im Hook nicht laufen");
+    expect(r.stdout).toContain("git-sync.js");
+    expect(r.stdout).toContain("Button verrutscht");
+  });
+
+  test("an empty queue does not trigger a sync", () => {
+    const r = runHook({ prompt: ">> leg los" });
+    expect(r.stdout).not.toContain("SCHRITT 0");
+    expect(r.stdout).toContain("KEINE Notiz lesen");
+  });
+});
+
+describe("message builders — 0.4.0", () => {
+  test("the rearm ack names the stored note only when there was one", () => {
+    expect(buildRearmAck(3, ">>", true)).toContain("Notiz #3 gespeichert");
+    expect(buildRearmAck(3, ">>", false)).toContain("Aufruf ignoriert");
+    expect(buildRearmAck(3, ">>", false)).toContain("Sammelmodus AKTIV · 3 Notiz(en)");
+  });
+
+  test("the ack still opens with the all-clear and names both exits", () => {
+    const ack = buildAck(2, ">start", false, { expiryHours: 8, maxNotes: 100 });
+    expect(ack.split("\n")[0]).toContain("kein Fehler");
+    expect(ack).toContain("\">start <text>\"");
+    expect(ack).toContain("/claude-batch off");
+    expect(ack).toContain("8 Stunden oder 100 Notizen");
+  });
+
+  test("a conflicting sync is flagged as resolve-first", () => {
+    const lines = renderSyncLines({ ran: true, output: "[git-sync] ⚠ origin/main → feat: 2 file(s) with ambiguous conflicts" }).join("\n");
+    expect(lines).toContain("Löse ihn ZUERST");
+    expect(lines).toContain("merge-safety.md");
+  });
+
+  test("a clean merge is reported verbatim", () => {
+    const lines = renderSyncLines({ ran: true, output: "[git-sync] ✓ origin/main → feat: 3 commit(s)" }).join("\n");
+    expect(lines).toContain("3 commit(s)");
+    expect(lines).not.toContain("Löse ihn ZUERST");
+  });
+
+  test("no sync record at all still demands the run", () => {
+    expect(renderSyncLines(undefined).join("\n")).toContain("Kein Sync gelaufen");
+  });
+
+  test("syncMain respects the opt-out and points at the real script", () => {
+    const r = syncMain(cwd);
+    expect(r.script).toBe(GIT_SYNC_SCRIPT);
+    expect(fs.existsSync(GIT_SYNC_SCRIPT)).toBe(true);
+    process.env.DEVOPS_BATCH_NO_SYNC = "1";
+    try {
+      expect(syncMain(cwd)).toMatchObject({ ran: false });
+    } finally {
+      delete process.env.DEVOPS_BATCH_NO_SYNC;
+    }
   });
 });
