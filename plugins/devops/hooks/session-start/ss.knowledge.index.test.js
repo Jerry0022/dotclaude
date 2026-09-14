@@ -37,8 +37,11 @@ describe("ss.knowledge.index — always-on policy injection", () => {
       .trim();
     expect(ctx).toContain("[deep-knowledge always-on] deep-knowledge/agent-proactivity.md");
     expect(ctx).toContain(policy);
-    // Index first, policy after — the policy is the last thing Claude reads.
+    // Index first, policy after, then the budget line — the last thing Claude reads.
     expect(ctx.indexOf("| File | Topic |")).toBeLessThan(ctx.indexOf("always-on"));
+    const last = ctx.trimEnd().split("\n").pop();
+    expect(last).toMatch(/^\[budget\] .* → (free|ask-before-parallel|sonnet-only)/);
+    expect(ctx.indexOf("always-on")).toBeLessThan(ctx.indexOf("[budget]"));
   });
 
   test("the policy stays under the preload cap", () => {
@@ -71,5 +74,25 @@ describe("ss.knowledge.index — always-on policy injection", () => {
   test("no INDEX.md → nothing to inject", () => {
     const root = tmpPlugin({ "agent-proactivity.md": "policy" });
     expect(buildContext(root)).toBeNull();
+  });
+});
+
+describe("ss.knowledge.index — compaction", () => {
+  test("a compact start re-injects even though run-once already fired for this session_id", () => {
+    const { spawnSync } = require("node:child_process");
+    const hook = path.join(PLUGIN_ROOT, "hooks", "session-start", "ss.knowledge.index.js");
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "dk-home-"));
+    fs.mkdirSync(path.join(home, ".claude"));
+    fs.writeFileSync(path.join(home, ".claude", "settings.json"), JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } }));
+    const sid = `vitest-compact-${process.pid}-${Date.now()}`;
+    const run = (source) => spawnSync(process.execPath, [hook], {
+      input: JSON.stringify({ session_id: sid, source }),
+      env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, HOME: home, USERPROFILE: home },
+      encoding: "utf8",
+    }).stdout;
+    expect(run("startup")).toContain("always-on");
+    expect(run("startup")).toBe("");        // run-once holds within the session
+    expect(run("compact")).toContain("always-on"); // compaction dropped it → inject again
+    expect(run("resume")).toBe("");
   });
 });

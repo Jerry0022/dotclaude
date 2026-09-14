@@ -44,6 +44,13 @@ tables show — `/run-agents` Step 3 renders each agent as `model · effort` (e.
 it in sync with the agent frontmatter. When you override a model at invocation,
 show it as `default → override` with the effort repeated on both sides
 (`sonnet · medium → opus · medium`); the effort never carries an arrow.
+One standing override comes from the delegation policy's budget class
+([agent-proactivity.md](agent-proactivity.md) § Budget): under
+`ask-before-parallel` and `sonnet-only` (unless the user answered "the right
+agents"), the opus roles run as `opus · high → sonnet · high` — shown exactly
+like any other override — and the prompt's tool-call ceiling (item 6 of the
+template) drops to ≤ 10 or ≤ 5: effort itself cannot be lowered at spawn, the
+ceiling is its proxy. `/run-burn` is exempt (explicit run skill).
 
 | Agent | model | effort | Notes |
 |-------|-------|--------|-------|
@@ -125,7 +132,11 @@ Every spawned agent MUST receive:
 8. **Distinct scope boundary** — for parallel agents in the same wave, state what
    each one **owns and does NOT touch**. Vague sub-tasks are the #1 cause of
    duplicate work; two agents must never independently solve the same thing.
-9. **Scope contract** — when a `[claude-strict contract]` block is in context
+9. **Budget class** — the current `[budget] … → class` line and, if given, the
+   user's answer (spare / full). An agent that itself spawns agents
+   (`feature`, `designer`) applies the same model + ceiling override; hooks
+   do not fire inside sub-agents, so the parent must pass it down.
+10. **Scope contract** — when a `[claude-strict contract]` block is in context
    (`/claude-strict` armed for this worktree + branch), it goes **verbatim at
    the top** of the prompt, before item 1. The `pre.strict.agent-gate` hook
    refuses a spawn without it. It overrides item 5's "make reasonable decisions

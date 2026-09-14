@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module plugin-guard
- * @version 0.2.0
+ * @version 0.3.0
  * @description Project isolation guard — self-executing on require().
  *   Checks whether devops plugin is enabled for the current project
  *   (project settings) or globally (user settings). If neither, exits
@@ -29,6 +29,7 @@ const PLUGIN_KEY_LEGACY_V2 = 'dotclaude-dev-ops@dotclaude-dev-ops';
 const PLUGIN_KEY = 'devops@dotclaude';
 
 const projectSettings = path.join(process.cwd(), '.claude', 'settings.json');
+const projectLocalSettings = path.join(process.cwd(), '.claude', 'settings.local.json');
 const globalSettings = path.join(os.homedir(), '.claude', 'settings.json');
 
 function isEnabledInAny(settingsPath) {
@@ -41,15 +42,25 @@ function isEnabledInAny(settingsPath) {
   }
 }
 
-/** True when the running hook was loaded from a source dir, not the install cache. */
+function realpathOr(p) {
+  try { return fs.realpathSync.native ? fs.realpathSync.native(p) : fs.realpathSync(p); }
+  catch { return path.resolve(p); }
+}
+
+/**
+ * True when the running hook was loaded from a source dir, not the install
+ * cache. Both sides go through realpath so a junction, a symlinked cache or
+ * a HOME≠USERPROFILE mismatch cannot flip the answer either way (redteam #15).
+ */
 function isAdHocLoad() {
   const root = process.env.CLAUDE_PLUGIN_ROOT;
   if (!root) return false;
-  const cacheDir = path.join(os.homedir(), '.claude', 'plugins', 'cache');
-  const rel = path.relative(path.resolve(cacheDir), path.resolve(root));
+  const cacheDir = realpathOr(path.join(os.homedir(), '.claude', 'plugins', 'cache'));
+  const rel = path.relative(cacheDir, realpathOr(root));
   return rel.startsWith('..') || path.isAbsolute(rel);
 }
 
-if (!isEnabledInAny(projectSettings) && !isEnabledInAny(globalSettings) && !isAdHocLoad()) {
+if (!isEnabledInAny(projectSettings) && !isEnabledInAny(projectLocalSettings)
+    && !isEnabledInAny(globalSettings) && !isAdHocLoad()) {
   process.exit(0);
 }

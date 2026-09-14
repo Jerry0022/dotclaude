@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.skill.enforce
- * @version 0.1.0
+ * @version 0.2.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detects inline skill commands (e.g. /fix, /ship) mentioned in a user
@@ -45,6 +45,12 @@ function detectInlineSkillMentions(message, knownSkills) {
   // Already-expanded slash command → the skill is loaded this turn; a nudge
   // would only add noise (and "invoke again" would be wrong).
   if (message.includes('<command-name>')) return [];
+  // Machine turns are not the user typing: a background agent's result or a
+  // task notification arrives through UserPromptSubmit too, and an agent
+  // report that *discusses* /run-agents must not force a ceremony (observed
+  // 2026-09-14 — a red-team report mentioning four run-* skills demanded
+  // four Skill loads).
+  if (/^\s*\[SYSTEM NOTIFICATION|<task-notification>|<channel\s+source=/i.test(message)) return [];
   const known = new Set((knownSkills || []).map(s => String(s).toLowerCase()));
   const found = [];
   for (const m of message.matchAll(MENTION_RE)) {

@@ -27,6 +27,19 @@ Two things about how the graders are written:
   `prompt.knowledge.dispatch.test.js` pins the copies to each other.
   Measured 2026-09-14: with the SessionStart policy alone the model did
   web research inline; with the nudge it spawned `devops:research` first.
+- Every case pins its budget class through `env: EVAL_DOTCLAUDE_BUDGET`
+  (the only env the runner forwards): `free` for the tier cases, so a
+  sandbox with no usage snapshot does not fall into "ask"; the
+  `[budget]` SessionStart line is real hook output either way.
+- `parallel-two-lenses-pro-budget` pins `ask-before-parallel` (what a Pro
+  plan gets from 0 %) and appends the matching nudge suffix. Expected:
+  never an opus role agent, never more than one — either the model asks
+  the budget question (the runner cannot answer, so the run ends there)
+  or it takes the 1-agent tier itself on sonnet. Measured 2026-09-14: one
+  `devops:research` with `model: sonnet`, no second agent.
+- Role-agent graders exclude spawns whose input mentions the completion
+  card: without Bash the Stop hook's offline card render is delegated to
+  whichever agent has a shell — `devops:core` was observed doing it.
 - `--scaffold` is required: each case checks out an `eval/work` branch,
   because the plugin's own `pre.edit.branch` hook refuses writes on `main`
   and the eval workspace starts as a fresh repo on `main`.

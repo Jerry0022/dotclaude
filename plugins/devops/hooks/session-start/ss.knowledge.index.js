@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.knowledge.index
- * @version 0.2.0
+ * @version 0.4.0
  * @event SessionStart
  * @plugin devops
  * @description Inject deep-knowledge INDEX.md into context at session start,
@@ -14,6 +14,7 @@
  */
 
 const { runOnce } = require('../lib/run-once');
+const { readBudget, budgetLine } = require('../lib/budget');
 const fs = require('fs');
 const path = require('path');
 
@@ -33,7 +34,7 @@ const MAX_ALWAYS_ON_BYTES = 6144;
  * is nothing to inject. Pure — no session/run-once state — so tests can
  * pin the payload shape.
  */
-function buildContext(pluginRoot) {
+function buildContext(pluginRoot, sessionId = null) {
   const dkDir = path.join(pluginRoot, 'deep-knowledge');
   const indexPath = path.join(dkDir, 'INDEX.md');
   if (!fs.existsSync(indexPath)) return null;
@@ -62,6 +63,12 @@ function buildContext(pluginRoot) {
     );
   }
 
+  // Budget class — the policy's fourth input (see lib/budget.js). One line,
+  // always present, so "unknown" is visible rather than silently comfortable.
+  try {
+    blocks.push('', budgetLine(readBudget({ sessionId })));
+  } catch { /* never let the budget probe break the index injection */ }
+
   return blocks.join('\n');
 }
 
@@ -78,12 +85,14 @@ function main() {
     const source = hook.source || hook.trigger || '';
     if (source === 'resume') process.exit(0);
 
-    // Run-once guard per session (reset on clear/compact via new session_id)
-    if (!runOnce('ss-knowledge-index', hook.session_id)) process.exit(0);
+    // Run-once guard per session. Compaction keeps the session_id but drops
+    // the earlier injection from context (redteam 2026-09-14 #3) — so a
+    // `compact` start always re-injects; startup/clear go through run-once.
+    if (source !== 'compact' && !runOnce('ss-knowledge-index', hook.session_id)) process.exit(0);
 
     const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT
       || path.resolve(__dirname, '..', '..');
-    const additionalContext = buildContext(pluginRoot);
+    const additionalContext = buildContext(pluginRoot, hook.session_id);
     if (!additionalContext) process.exit(0);
 
     // Output as additionalContext (discrete injection, not visible in transcript)
