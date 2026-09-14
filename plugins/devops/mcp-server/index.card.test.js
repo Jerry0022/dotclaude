@@ -461,7 +461,7 @@ describe("concept layer", () => {
       changes: [{ area: "concept", description: "Iteration 3 angehängt" }],
       concept: { phase: "waiting" },
     });
-    expect(text).toContain("### 🧭 CONCEPT läuft. Warte auf deine Entscheidungen auf der Seite — ich MELDE mich");
+    expect(text).toContain("### 🧭 CONCEPT wartet auf deine Entscheidungen auf der Seite — ich MELDE mich");
     expect(text).not.toContain("READY — SHIP oder ÄNDERN");
     expect(text).not.toContain("NOCH NICHT FERTIG");
   });
@@ -471,7 +471,7 @@ describe("concept layer", () => {
       variant: "analysis", summary: "Concept offen", lang: "de",
       session_id: "test-concept-2", concept: "iterating",
     });
-    expect(text).toContain("### 🧭 CONCEPT läuft. Arbeite an der nächsten Iteration — ich MELDE mich");
+    expect(text).toContain("### 🧭 CONCEPT in Iteration — ich MELDE mich");
   });
 
   test("implementing with content agents folds them into the line and keeps the block", async () => {
@@ -486,7 +486,7 @@ describe("concept layer", () => {
         { name: "devops:core", doing: "Bridge-Endpunkt ergänzen" },
       ],
     });
-    expect(text).toContain("### 🧭 CONCEPT läuft. Arbeite an der Implementierung mit 2 Agenten — ich MELDE mich");
+    expect(text).toContain("### 🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich");
     // The pending block and the dim name line still name the agents.
     expect(text).toContain("LÄUFT NOCH — nicht abgeschlossen");
     expect(text).toContain("> ⏳ `devops:frontend`, `devops:core`");
@@ -499,7 +499,7 @@ describe("concept layer", () => {
       session_id: "test-concept-4",
       concept: { phase: "implementing" }, pending: [{ name: "devops:frontend" }],
     });
-    expect(text).toContain("### 🧭 CONCEPT open. Working on the implementation with agent `devops:frontend` — I’ll REPORT back");
+    expect(text).toContain("### 🧭 CONCEPT in implementation. agent `devops:frontend` is working — I’ll REPORT back");
   });
 
   test("outranks the pending CTA — the concept phase is the truer statement", async () => {
@@ -507,7 +507,7 @@ describe("concept layer", () => {
       variant: "ready", summary: "x", lang: "de", session_id: "test-concept-5",
       concept: "waiting", pending: [{ name: "devops:research", doing: "Doku" }],
     });
-    expect(text).toContain("### 🧭 CONCEPT läuft. Warte auf deine Entscheidungen auf der Seite · Agent `devops:research` arbeitet — ich MELDE mich");
+    expect(text).toContain("### 🧭 CONCEPT wartet auf deine Entscheidungen auf der Seite · Agent `devops:research` arbeitet — ich MELDE mich");
     expect(text).not.toContain("NOCH NICHT FERTIG");
   });
 
@@ -516,7 +516,7 @@ describe("concept layer", () => {
       variant: "ready", summary: "x", lang: "de", session_id: "test-concept-6",
       concept: '{"phase":"iterating"}',
     });
-    expect(text).toContain("Arbeite an der nächsten Iteration");
+    expect(text).toContain("CONCEPT in Iteration");
   });
 
   test("no concept field leaves the normal CTA alone", async () => {
@@ -524,7 +524,7 @@ describe("concept layer", () => {
       variant: "ready", summary: "x", lang: "de", session_id: "test-concept-7",
     });
     expect(text).toContain("READY — SHIP oder ÄNDERN");
-    expect(text).not.toContain("CONCEPT läuft");
+    expect(text).not.toContain("🧭 CONCEPT");
   });
 
   // The page is already open at http://localhost:{port}/{html_path} — the
@@ -542,7 +542,7 @@ describe("concept layer", () => {
     });
     const lines = text.split("\n");
     const link = lines.findIndex((l) => l.includes("🧭 http://localhost:8878/docs/concepts/2026-09-13-feedback-routine.html"));
-    const cta = lines.findIndex((l) => l.startsWith("### 🧭 CONCEPT läuft"));
+    const cta = lines.findIndex((l) => l.startsWith("### 🧭 CONCEPT wartet"));
     expect(link).toBeGreaterThan(-1);
     expect(lines[link].startsWith(">")).toBe(true);
     expect(cta).toBeGreaterThan(link);
@@ -561,7 +561,7 @@ describe("concept layer", () => {
       variant: "ready", summary: "x", lang: "de", session_id: "test-concept-10",
       cwd: mkdtempSync(join(tmpdir(), "card-noconcept-")), buildId: "t", concept: "waiting",
     });
-    expect(text).toContain("### 🧭 CONCEPT läuft");
+    expect(text).toContain("### 🧭 CONCEPT wartet");
     expect(text).not.toMatch(/> 🧭 http/);
   });
 });
@@ -616,7 +616,7 @@ describe("batch layer", () => {
       variant: "analysis", summary: "x", lang: "de", session_id: "test-batch-4",
       cwd: batchProject(1), buildId: "t", concept: "waiting",
     });
-    expect(text).toContain("CONCEPT läuft");
+    expect(text).toContain("🧭 CONCEPT wartet");
     expect(text).not.toContain("BATCH sammelt");
   });
 

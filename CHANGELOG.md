@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.166.0] — 2026-09-15
+
+### Changed
+
+- **The concept CTA names the state right after `CONCEPT`, and running agents get their own sentence.** `🧭 CONCEPT läuft. Arbeite an der Implementierung mit 2 Agenten — ich MELDE mich` read as two half-sentences stitched together. The line is now `🧭 CONCEPT wartet auf deine Entscheidungen auf der Seite` · `🧭 CONCEPT in Iteration` · `🧭 CONCEPT in Implementierung`, and any real background work follows as a full sentence of its own — `🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich` (while waiting it still hangs off the line with a middle dot). English mirrors it (`CONCEPT in implementation. 2 agents are working — I'll REPORT back`). The `🧭 Concept – ` session-title prefix is unchanged.
+
 ## [0.165.0] — 2026-09-15
 
 ### Added

@@ -980,13 +980,13 @@ with the one statement that is true:
 
 | `concept.phase` | When | CTA (DE) |
 |---|---|---|
-| `waiting` (default) | Page is open, next step is the user's submission | `🧭 CONCEPT läuft. Warte auf deine Entscheidungen auf der Seite — ich MELDE mich` |
-| `iterating` | A submission was processed and the next iteration is still being produced (e.g. by background agents) | `🧭 CONCEPT läuft. Arbeite an der nächsten Iteration — ich MELDE mich` |
-| `implementing` | An `implement` submission is being executed and the turn hands back before it lands | `🧭 CONCEPT läuft. Arbeite an der Implementierung — ich MELDE mich` |
+| `waiting` (default) | Page is open, next step is the user's submission | `🧭 CONCEPT wartet auf deine Entscheidungen auf der Seite — ich MELDE mich` |
+| `iterating` | A submission was processed and the next iteration is still being produced (e.g. by background agents) | `🧭 CONCEPT in Iteration — ich MELDE mich` |
+| `implementing` | An `implement` submission is being executed and the turn hands back before it lands | `🧭 CONCEPT in Implementierung — ich MELDE mich` |
 
 Real content work still goes into `pending` — a feature agent implementing the
 submission, a research workflow preparing the next round — and the card folds
-it into that line (`… mit 2 Agenten`) and names each item in the pending block.
+it as its own sentence after the state (`… in Implementierung. 2 Agenten arbeiten`) and names each item in the pending block.
 The bridge server, keepalive pulser and pickup waker are **not** content work:
 never list them there. A card that names them is the bug this field fixes.
 

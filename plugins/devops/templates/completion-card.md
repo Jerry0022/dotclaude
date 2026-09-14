@@ -623,17 +623,18 @@ concept card, naming plumbing instead of the one true state. So:
 
 | Phase | DE | EN |
 |-------|----|----|
-| `waiting` (default) | `### 🧭 CONCEPT läuft. Warte auf deine Entscheidungen auf der Seite — ich MELDE mich` | `### 🧭 CONCEPT open. Waiting for your decisions on the page — I'll REPORT back` |
-| `iterating` | `### 🧭 CONCEPT läuft. Arbeite an der nächsten Iteration — ich MELDE mich` | `### 🧭 CONCEPT open. Working on the next iteration — I'll REPORT back` |
-| `implementing` | `### 🧭 CONCEPT läuft. Arbeite an der Implementierung — ich MELDE mich` | `### 🧭 CONCEPT open. Working on the implementation — I'll REPORT back` |
+| `waiting` (default) | `### 🧭 CONCEPT wartet auf deine Entscheidungen auf der Seite — ich MELDE mich` | `### 🧭 CONCEPT waiting for your decisions on the page — I'll REPORT back` |
+| `iterating` | `### 🧭 CONCEPT in Iteration — ich MELDE mich` | `### 🧭 CONCEPT in iteration — I'll REPORT back` |
+| `implementing` | `### 🧭 CONCEPT in Implementierung — ich MELDE mich` | `### 🧭 CONCEPT in implementation — I'll REPORT back` |
 
 Real content work — a frontend agent implementing the submission, a research
-workflow preparing the next iteration — still goes into `pending` and is folded
-into that line rather than replacing it: `Arbeite an der Implementierung mit
-Agent \`devops:frontend\`` · `… mit 1 Workflow + 2 Agenten`. The pending block
-and the dim name line render as usual, so the user still reads WHICH agents run.
-While `waiting`, open work is appended as its own clause
-(`Warte auf deine Entscheidungen auf der Seite · Agent \`x\` arbeitet`).
+workflow preparing the next iteration — still goes into `pending` and follows
+the state as its own sentence rather than replacing it: `CONCEPT in
+Implementierung. Agent \`devops:frontend\` arbeitet` · `CONCEPT in Iteration.
+1 Workflow + 2 Agenten laufen`. The pending block and the dim name line render
+as usual, so the user still reads WHICH agents run. While `waiting`, open work
+hangs off the wait line with a middle dot
+(`CONCEPT wartet auf deine Entscheidungen auf der Seite · Agent \`x\` arbeitet`).
 
 With `cwd` set, the card also resolves the page's URL from the project's
 `.claude/concept-active.json` (`port` + `html_path`) and prints it as a dim
@@ -642,7 +643,7 @@ line directly above the CTA — the way back to the tab:
 ```
 > 🧭 http://localhost:8878/docs/concepts/2026-09-13-feedback-routine.html
 
-### 🧭 CONCEPT läuft. Warte auf deine Entscheidungen auf der Seite — ich MELDE mich
+### 🧭 CONCEPT wartet auf deine Entscheidungen auf der Seite — ich MELDE mich
 ```
 
 `concept.url` overrides the lookup; without `cwd` and without `url` no line is

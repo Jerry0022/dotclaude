@@ -384,10 +384,10 @@ process.stdin.on('end', () => {
       'waker) under `pending`; stop.flow.guard ignores these tasks. While the concept',
       'stays open, render every completion card with the `concept` field instead:',
       '  concept: { phase: "waiting" | "iterating" | "implementing" }',
-      'That sets the CTA to "🧭 CONCEPT läuft. Warte auf deine Entscheidungen /',
-      'Arbeite an der nächsten Iteration / Arbeite an der Implementierung — ich MELDE',
-      'mich". Real content agents or workflows still go into `pending` and are folded',
-      'into that line ("… mit 2 Agenten").',
+      'That sets the CTA to "🧭 CONCEPT wartet auf deine Entscheidungen /',
+      'in Iteration / in Implementierung — ich MELDE',
+      'mich". Real content agents or workflows still go into `pending` and follow',
+      'that line as their own sentence ("… in Implementierung. 2 Agenten arbeiten").',
     );
   } else if (launched) {
     lines.push(
