@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.4.0
+ * @version 0.5.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
@@ -112,8 +112,18 @@ const DELEGATION_NUDGE =
   '[delegation-policy] Classify before the first tool call: Inline (≤~5 files, Q&A, quick fix) · ' +
   '1 background agent (web pages → devops:research; >~10-file sweep → Explore; full tests → devops:qa; ' +
   'high-stakes diff → devops:redteam; "should we X?" trade-off → devops:po, plus devops:research when facts need checking) · ' +
-  '2–3 parallel (independent domains / two lenses) · ' +
-  'Complex → offer the run-agents skill, never auto-start. Hard stop: "just/quick/nur/schnell/einfach/no agents" → Inline.';
+  '2–3 parallel only for two analysis lenses (parallel implementers → offer) · ' +
+  'Complex → offer the run-agents skill, never auto-start. Hard stop (request narrowed: "just/quick/nur/schnell/keine Agents") → Inline; hard go ("agents/full") → as designed.';
+
+const NUDGE_MIN_CHARS = 40;
+
+/** True when an AFK run has armed the lockout sentinel for this project. */
+function lockoutArmed(cwd) {
+  try {
+    const { readLockout } = require('../../scripts/autonomous-lockout');
+    return !!readLockout(cwd || process.cwd());
+  } catch { return false; }
+}
 
 // Hard limits: max 2 files and 8KB total payload per prompt
 const MAX_INJECT_PER_PROMPT = 2;
@@ -239,9 +249,21 @@ process.stdin.on('end', () => {
   //   5. Budget suffix on the nudge when the class is not comfortable — the
   //      snapshot is re-read per prompt (cheap local JSON), so a window that
   //      fills up mid-session tightens the nudge without a restart.
+  //      Inside an unattended run (AUTONOMOUS_* prompts, or the lockout
+  //      sentinel armed) the suffix is dropped: a budget question can never
+  //      be answered there, and /run-burn deliberately upgrades models — the
+  //      explicit run-* skill IS the "full" answer (redteam 2026-09-14 #2).
+  //   6. Short prompts (< NUDGE_MIN_CHARS: "ja", "weiter", "ok mach") get no
+  //      nudge at all — they can never be non-Inline, and every copy sits in
+  //      the transcript for the rest of the session (redteam #11).
+  const rawMessage = hook.user_message || hook.message || '';
+  const unattended = /^\s*AUTONOMOUS_(?:AUTOSTART|RESUME)\s*:/i.test(rawMessage) || lockoutArmed(hook.cwd);
   let budgetSuffix = '';
-  try { budgetSuffix = nudgeSuffix(readBudget()); } catch { /* never block the prompt */ }
-  const blocks = [`[ui-locale: ${lang}]`, DELEGATION_NUDGE + budgetSuffix];
+  if (!unattended) {
+    try { budgetSuffix = nudgeSuffix(readBudget({ sessionId })); } catch { /* never block the prompt */ }
+  }
+  const nudge = rawMessage.trim().length >= NUDGE_MIN_CHARS ? [DELEGATION_NUDGE + budgetSuffix] : [];
+  const blocks = [`[ui-locale: ${lang}]`, ...nudge];
 
   if (isFresh) {
     const glossary = loadTriggerGlossary(pluginRoot, lang);

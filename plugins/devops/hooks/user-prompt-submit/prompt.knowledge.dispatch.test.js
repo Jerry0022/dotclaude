@@ -58,7 +58,7 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
   });
 
   test("hook emits the nudge on every prompt, after the locale tag", () => {
-    for (const msg of ["compare vite and webpack for us", "fix the typo in the readme heading please"]) {
+    for (const msg of ["compare vite and webpack for our typescript spa, please", "fix the typo in the readme heading please, it says recieve"]) {
       const ctx = runHook(msg);
       const lines = ctx.split("\n");
       expect(lines[0]).toMatch(/^\[ui-locale: (en|de)\]$/);
@@ -66,9 +66,17 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
     }
   });
 
-  test("a Pro plan at 0 % carries the tight suffix — the parallel-tier question is asked even on a fresh window", () => {
-    const ctx = runHook("should we upgrade to postgres 17?", proHome());
-    expect(ctx.split("\n")[1]).toBe(nudge + " · budget: tight (parallel/ceremony → ask once: spare = 1 sonnet agent ≤10 calls, or full)");
+  test("a Pro plan at 0 % carries the ask-before-parallel suffix — the question is asked even on a fresh window", () => {
+    const ctx = runHook("should we upgrade to postgres 17 this quarter, for and against?", proHome());
+    expect(ctx.split("\n")[1]).toBe(nudge + " · budget: ask-before-parallel (1-agent tier → sonnet ≤10 calls; parallel/ceremony → ask once: inline / 1 sonnet agent / full)");
+  });
+
+  test("short follow-ups get no nudge at all; an AUTONOMOUS_* prompt gets the nudge without the budget suffix", () => {
+    const short = runHook("ja, weiter so", proHome());
+    expect(short.split("\n").length).toBe(1);
+    expect(short).toMatch(/^\[ui-locale: (en|de)\]$/);
+    const afk = runHook("AUTONOMOUS_AUTOSTART: continue the queued implementation of the tenant switcher", proHome());
+    expect(afk.split("\n")[1]).toBe(nudge);
   });
 
   test("every delegation eval prompt carries the identical nudge line", () => {
