@@ -8,7 +8,7 @@ description: >-
   Supports hierarchical merges (sub-branch → feature → main).
   Use when work is ready to land. Triggers on: "ship it", "push and merge".
   Do NOT trigger during coding/debugging or for commits without shipping.
-allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *), Bash(nohup *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, TaskList, TaskCreate, TaskUpdate, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*
+allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *), Bash(nohup *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, TaskList, TaskCreate, TaskUpdate, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
 # Ship
@@ -94,6 +94,27 @@ proceed to Step 0.
 
 This guard only applies to the **current chat session**, not external CI or other terminals.
 
+## Pre-Step C — Mark the session in the sidebar
+
+A ship takes minutes (CI wait, rebase loop) and a session that is mid-pipeline
+looks like any other idle session from the sidebar. Mark it the way `/concept`
+and `/claude-batch` do — the prefix strings are pinned in
+`mcp-server/lib/mode-state.js` (`SESSION_PREFIX`) next to the card emojis:
+
+1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
+2. Strip any leading devops prefix (`🧪 Test – `, `📦 Ready – `, `⛔ Blocked – `,
+   `🚀 Shipping – `, … — the `SESSION_PREFIX` values) left by an earlier card or
+   ship in this session — never stack them.
+3. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
+   `title: "🚀 Shipping – {stripped title}"`.
+
+**Both tools exist only in the Desktop app.** In a terminal session, an
+unattended run, or when the call fails for any reason: skip silently — no
+retry, no note to the user, no fallback. The rename is a courtesy, never a
+gate. The completion card's `[SESSION TITLE]` block replaces the prefix with
+the outcome (`🧪 Test – ` / `⛔ Blocked – ` / none, see Step 6); never restore a
+remembered title by re-typing it.
+
 > **Sentinel hygiene (every exit path).** `ship_preflight` writes a
 > ship-in-progress sentinel that makes the main-branch Edit guards
 > (`pre.main.guard` / `pre.edit.branch`) stand down for the ship's duration. It is
@@ -103,6 +124,8 @@ This guard only applies to the **current chat session**, not external CI or othe
 > until it ages out. **Rule:** before rendering ANY `ship-blocked` card, first call
 > `ship_cleanup({ branch, cwd, keep: true })` — keep-mode deletes no branch/worktree,
 > it only clears the sentinel so main-branch protection resumes immediately.
+> The `ship-blocked` card's `[SESSION TITLE]` block then swaps the sidebar prefix
+> to `⛔ Blocked – ` (Step 6 → *Session title on exit*).
 
 ## Step 0 — Load Extensions
 
@@ -811,6 +834,25 @@ instead of `All DONE` / `Alles ERLEDIGT`.
 Call `render_completion_card` MCP tool (dotclaude-completion server) with data from previous steps.
 
 **CRITICAL — `cwd` is required for clickable links.** Without `cwd`, `getRepoUrl` falls back to the MCP server's own working directory (plugin dir, not your target repo) and the card renders PR/commit/branch as plain text. Always pass the same `cwd` you used for the ship tools.
+
+### Session title on exit (carried by the card result)
+
+Pre-Step C put `🚀 Shipping – ` on the session title. The outcome prefix is
+**not** chosen here: `render_completion_card` returns a `[SESSION TITLE]`
+block next to the card markdown (stderr on the `--render-card` CLI path) that
+names the prefix for the variant rendered — execute it **before** outputting
+the card (the card stays the last output of the turn). What it resolves to:
+
+| Outcome | Title |
+|---------|-------|
+| `ship-successful`, `state.merged` = main (normal **or** keep-mode) | `🧪 Test – {title}` — the just-installed build is untested; the next card that ends a turn replaces the marker |
+| `ship-blocked` (any gate, build, checks, PR not merged) | `⛔ Blocked – {title}` — same emoji as the card headline |
+| `ship-successful`, `state.merged` = feature branch (intermediate ship) | `{title}` — nothing to test yet, plain title |
+
+The block also strips a stale `🚀 Shipping – ` when the title carries one. A
+title with none of the devops prefixes is left untouched — the user renamed it
+meanwhile, and that name wins. Desktop app only; skip silently elsewhere or on
+any failure.
 
 ### Promotion-gap nudge (final ship to main only — MANDATORY)
 

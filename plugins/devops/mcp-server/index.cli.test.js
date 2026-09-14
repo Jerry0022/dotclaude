@@ -30,14 +30,17 @@ const CHILD_ENV = { ...process.env, DEVOPS_COMPLETION_NO_USAGE: "1" };
 
 let workDir;
 
-async function renderCard(payload) {
+async function renderCardFull(payload) {
   const file = join(workDir, `payload-${Math.random().toString(36).slice(2)}.json`);
   writeFileSync(file, JSON.stringify(payload));
-  const { stdout } = await run(process.execPath, [ENTRY, "--render-card", file], {
+  return run(process.execPath, [ENTRY, "--render-card", file], {
     encoding: "utf8",
     env: CHILD_ENV,
   });
-  return stdout;
+}
+
+async function renderCard(payload) {
+  return (await renderCardFull(payload)).stdout;
 }
 
 function flagFile(sessionId) {
@@ -73,6 +76,13 @@ describe("--render-card CLI fallback", () => {
   test("stdout carries the card only — no relay-instruction preamble to strip", async () => {
     const out = await renderCard({ variant: "analysis", summary: "Nur die Karte", session_id: "cli-test-clean" });
     expect(out).not.toContain("DO NOT OUTPUT THIS BLOCK");
+  });
+
+  test("the session-title instruction rides on stderr, never in the card", async () => {
+    const { stdout, stderr } = await renderCardFull({ variant: "ready", summary: "Titel-Test", session_id: "cli-test-title", changes: [{ area: "x", description: "y" }] });
+    expect(stdout).not.toContain("SESSION TITLE");
+    expect(stderr).toContain("[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]");
+    expect(stderr).toContain('"📦 Ready – " + <stripped title>');
   });
 
   test("satisfies the Stop gate by writing the card-rendered flag", async () => {
