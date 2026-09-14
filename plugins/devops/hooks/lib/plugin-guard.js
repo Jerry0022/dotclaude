@@ -1,11 +1,20 @@
 #!/usr/bin/env node
 /**
  * @module plugin-guard
- * @version 0.1.0
+ * @version 0.2.0
  * @description Project isolation guard — self-executing on require().
  *   Checks whether devops plugin is enabled for the current project
  *   (project settings) or globally (user settings). If neither, exits
  *   silently with code 0 so Claude Code does not treat it as a hook failure.
+ *
+ *   A plugin loaded ad hoc — `claude --plugin-dir <src>` or the
+ *   `claude plugin eval` sandbox, which runs with a fresh HOME — is enabled
+ *   in no settings file at all, yet Claude Code only invokes its hooks
+ *   because it was explicitly loaded. Such a load runs the hook from a path
+ *   outside the installed-plugin cache, and that is the tell: hooks running
+ *   from outside `~/.claude/plugins/cache/` pass the guard. Before 0.2.0
+ *   every hook was a silent no-op in an eval run, so behavioral evals could
+ *   never see hook-injected context.
  *
  * Usage (first line in any hook script):
  *   require('../lib/plugin-guard');
@@ -32,6 +41,15 @@ function isEnabledInAny(settingsPath) {
   }
 }
 
-if (!isEnabledInAny(projectSettings) && !isEnabledInAny(globalSettings)) {
+/** True when the running hook was loaded from a source dir, not the install cache. */
+function isAdHocLoad() {
+  const root = process.env.CLAUDE_PLUGIN_ROOT;
+  if (!root) return false;
+  const cacheDir = path.join(os.homedir(), '.claude', 'plugins', 'cache');
+  const rel = path.relative(path.resolve(cacheDir), path.resolve(root));
+  return rel.startsWith('..') || path.isAbsolute(rel);
+}
+
+if (!isEnabledInAny(projectSettings) && !isEnabledInAny(globalSettings) && !isAdHocLoad()) {
   process.exit(0);
 }

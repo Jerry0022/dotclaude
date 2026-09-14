@@ -8,7 +8,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [agent-collaboration.md](agent-collaboration.md) | Agent Collaboration Protocol | How agents work together on multi-role tasks. |
 | [agent-conventions.md](agent-conventions.md) | Agent Naming & Collaboration Conventions | [role:X · Type] Task description |
 | [agent-orchestration.md](agent-orchestration.md) | Agent Orchestration | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
-| [agent-proactivity.md](agent-proactivity.md) | Proactive Agent Orchestration | Cross-cutting rule for when to involve specialized agents without explicit us... |
+| [agent-proactivity.md](agent-proactivity.md) | Agent Delegation Policy | Always-on (injected at SessionStart). This plugin instruction **is** the |
 | [autonomous-execution.md](autonomous-execution.md) | Autonomous Execution — Gate, Guardrails, Late-Permission Protocol | Detailed execution rules for `run-autonomous` Step 5. Read this at the start of |
 | [browser-file-urls.md](browser-file-urls.md) | Browser File URLs (Windows + Git-Bash) | Cross-cutting rule: whenever a skill opens a local HTML file in a browser |
 | [browser-tool-strategy.md](browser-tool-strategy.md) | Browser Tool Strategy | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |

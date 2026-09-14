@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.161.0] — 2026-09-14
+
+### Added
+
+- **The devops role agents are delegated to by default — nobody has to say "use agents" any more.** The plugin already carried an "orchestrate by default" rule in `agent-proactivity.md`, but it only reached context when a prompt happened to contain "proactive", so every session had to be told explicitly. The file is now a four-tier delegation policy — Inline (≤~5 files, Q&A, quick fix) / one background agent when the deliverable is a conclusion whose path would flood the conversation (web pages → `research`, a >10-file sweep → `Explore`, a full test run → `qa`, a high-stakes diff → `redteam`, a real trade-off → `po`) / 2–3 parallel agents for independent domains or two analysis lenses / `/run-agents` only *offered* for Complex-tier work — with an explicit precedence (hard stop "just/quick/nur/schnell/einfach/no agents" > escalation after 2+ unconverged passes > table). `ss.knowledge.index` injects it in full at every session start as an `ALWAYS_ON` doc (6 KB cap), and every agent description carries its proactive clause, which is the surface Claude Code always loads. Measured with `claude plugin eval`: the SessionStart injection alone was *not* enough — the model still fetched web pages inline and answered a trade-off from general principles — so `prompt.knowledge.dispatch` re-injects a 440-byte `[delegation-policy]` line on every prompt (the same mechanism as the locale tag); with it, a research question spawns `devops:research` as the first action and a two-lens question spawns `devops:research` + `devops:po` in parallel. `/run-agents` is now described as the explicit full-ceremony path (plan → confirm → mode → waves → gates); the lower tiers never go through it.
+- **Behavioral plugin evals.** `plugins/devops/evals/delegation/` holds six `claude plugin eval` cases that pin the policy — three inline prompts that must spawn no role agent, a web-research prompt that must spawn exactly one `devops:research`, a trade-off on a fixture project that must spawn 1–3 role agents including `po` or `research`, and a Complex-tier prompt that must *offer* `/run-agents` without invoking it. Graders match `subagent_type: devops:*` only (the Stop hook's card render spawns general-purpose agents when Bash is not grantable), regex the assistant text inside the trace (the injected policy itself mentions `/run-agents`), and each case scaffolds an `eval/work` branch because `pre.edit.branch` refuses writes on `main`. `evals/README.md` documents the run flags; all six score 1.00.
+
+### Changed
+
+- **The seven heaviest skill descriptions are 27 % smaller.** tune-rethink, auto-graph, claude-strict, run-backlog, tune-polish, web-guide and claude-batch repeated process detail that already lives in their SKILL.md bodies; they now say what the skill does and when it triggers, with every trigger phrase and every "Do NOT trigger for" carve-out kept verbatim. `claude plugin details`: those seven 2020 → 1470 tokens, the plugin's always-on preload 6.6k → 6.0k — below where it stood before the proactive clauses were added.
+
+### Fixed
+
+- **`plugin-guard` no longer silences every hook for an ad-hoc-loaded plugin.** A plugin loaded via `claude --plugin-dir` or by the `claude plugin eval` sandbox (fresh HOME) is enabled in no `settings.json`, so the guard exited every hook silently — observed as empty output from all SessionStart hooks in an eval trace. A hook running from a path outside `~/.claude/plugins/cache/` is by definition an explicit load and now passes; installed plugins are unaffected.
+- **`locale.test.js` no longer depends on the machine's other sessions.** `getLocale()` reads through the session-file glob fallback, which returns the newest locale file from *any* session — correct in production, but three tests only passed when no other Claude session had written a German locale file in the last ~2 h. The suite now runs against an isolated temp dir.
+
 ## [0.160.1] — 2026-09-13
 
 ### Fixed

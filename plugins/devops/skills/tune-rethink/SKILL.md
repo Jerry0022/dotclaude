@@ -3,20 +3,15 @@ name: tune-rethink
 version: 0.2.0
 description: >-
   Strategic reset for stuck development: iterations circle without reaching
-  the goal, or a named part of the app (or the whole app) is functionally and
-  visually not where it should be and incremental fixes stopped helping.
-  Re-derives the original goals from repo + live-app evidence, validates them
-  in a short question round (incl. jointly calibrating how much may be torn
-  down), generates genuinely fresh approaches via code-blind lens agents,
-  reconciles them against the codebase, lets the user decide on a
-  concept page, then hands the chosen approach to run-autonomous
-  for implementation with test-plan verification ({PLUGIN_ROOT}/deep-knowledge/test-plan.md).
-  Triggers on: "festgefahren", "stuck", "unstuck", "wir drehen uns im Kreis",
-  "neu denken", "rethink", "frischer Ansatz", "fresh approach",
-  "komplett neu denken", "das führt zu nichts".
-  Do NOT trigger for: debugging/errors (use /fix), incremental
-  consistency or UI passes (/tune-harden, /tune-polish), or normal
-  feature work.
+  the goal, or a part of the app is functionally and visually not where it
+  should be and incremental fixes stopped helping. Re-derives the goals from
+  repo + live-app evidence, generates fresh approaches via code-blind lens
+  agents, lets the user decide on a concept page, then hands off to
+  run-autonomous. Triggers on: "festgefahren", "stuck", "unstuck", "wir
+  drehen uns im Kreis", "neu denken", "rethink", "frischer Ansatz", "fresh
+  approach", "komplett neu denken", "das führt zu nichts". Do NOT trigger
+  for: debugging/errors (use /fix), incremental consistency or UI passes
+  (/tune-harden, /tune-polish), or normal feature work.
 argument-hint: "[app or section that is stuck, e.g. 'the onboarding flow']"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*
 ---

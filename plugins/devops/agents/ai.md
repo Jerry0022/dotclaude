@@ -3,6 +3,7 @@ name: ai
 description: >-
   AI/ML integration agent — handles AI model integration, prompt engineering,
   embeddings, vector stores, and AI-powered features.
+  Spawn proactively only alongside another domain agent (parallel tier) — single-domain AI work stays inline.
   <example>Integrate the OpenAI API for text classification</example>
   <example>Set up a vector store for semantic search</example>
 model: sonnet

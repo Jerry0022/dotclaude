@@ -6,6 +6,7 @@ See @.claude/project-map.md for directory structure.
 - `npm test` — run vitest suite
 - `npm run lint` — eslint check
 - `npm run lint:fix` — eslint autofix
+- `cd plugins/devops && claude plugin eval . --runs 1 --ablation none --trust-plugin --no-publish --scaffold --allow-tools Write,Edit,WebSearch,WebFetch` — behavioral evals (real model runs, costs usage); see `plugins/devops/evals/README.md`
 
 ## Architecture
 - Monorepo: `plugins/devops/` (core) + `plugins/local-llm/` (token saver)

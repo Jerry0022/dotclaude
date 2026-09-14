@@ -1,14 +1,15 @@
 ---
 name: run-agents
-version: 0.8.0
+version: 0.9.0
 description: >-
-  Evaluate which agents are useful for a task and orchestrate their parallel or
-  sequential execution. Use when the user explicitly wants orchestrated agent
-  work instead of inline execution, or when a task clearly benefits from
-  multi-agent collaboration. Triggers on: "agents", "run agents", "orchestrate",
-  "use agents", "parallel agents", "multi-agent", "delegate to agents",
-  "agent workflow". Do NOT trigger for: simple single-file edits, quick fixes,
-  explanations, or research-only tasks (use the deep-research skill).
+  Full-ceremony multi-agent orchestration: plan → user confirm → execution
+  mode → waves → inter-wave gates → synthesis. The EXPLICIT path for the
+  Full-ceremony tier of the always-on delegation policy (3+ domains, a feature
+  end-to-end, high-risk change); the lower tiers never go through this skill.
+  Triggers on: "run agents", "use agents", "orchestrate", "parallel agents",
+  "multi-agent", "delegate to agents", "agent workflow", or the user saying
+  yes to Claude's offer. Do NOT trigger for: simple edits, quick fixes,
+  explanations, or single-agent research.
 argument-hint: "[task description or goal]"
 allowed-tools: Agent, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_list
 ---
@@ -222,4 +223,6 @@ After all waves complete:
 - **Follow handoff protocol** — every agent-to-agent transition uses structured handoffs
 - If the user says "just do it" without agents → respect that, don't orchestrate
 - If only 1 domain is affected → consider if a single inline execution is simpler
-- The user called this skill explicitly — they WANT orchestration, so deliver it
+- The user called this skill explicitly (or said yes to the offer) — they WANT
+  the ceremony, so deliver it. The tier decision that led here lives in
+  `deep-knowledge/agent-proactivity.md`; this skill never re-litigates it

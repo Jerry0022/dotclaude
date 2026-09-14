@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.160.1**
+**Version: 0.161.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -193,7 +193,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.plugin.update` — Auto-update plugin marketplace clones, rebuild cache, and update registry.
 - `ss.permissions.ensure` — Ensure required plugin permissions exist so devops skills that write ephemeral review…
 - `ss.statusline.ensure` — Enables the native usage source.
-- `ss.knowledge.index` — Inject deep-knowledge INDEX.md into context at session start.
+- `ss.knowledge.index` — Inject deep-knowledge INDEX.md into context at session start, plus the always-on poli…
 - `ss.mcp.deps` — Auto-install MCP server dependencies into CLAUDE_PLUGIN_DATA, and self-heal partial i…
 - `ss.mcp.envcheck` — Detect enabled plugins whose .mcp.json references env vars that are not set.
 - `ss.mcp.verify` — Verify every MCP server declared in this plugin's .mcp.json has its entry file presen…
@@ -324,7 +324,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/setup-cleanup` | Explicit | Repository branch hygiene analysis and cleanup |
 | `/auto-update` | Explicit | Update the plugin to the latest version from GitHub |
 | `/concept` | Explicit | Interactive HTML page for analysis, plans, concepts, and prototypes |
-| `/run-agents` | Explicit | Evaluate agents and orchestrate parallel execution |
+| `/run-agents` | Explicit | Full-ceremony orchestration (plan → confirm → waves) for Complex-tier work; everyday delegation runs automatically via the always-on policy |
 | `/run-autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |
 | `/run-burn` | Explicit | High-throughput autonomous task runner with aggressive parallelization |
 | `/run-backlog` | Explicit | Milestone-centric backlog runner: refine, implement, test/QA, and ship selected milestones/issues unsupervised |
@@ -373,6 +373,12 @@ Something actually **broken**? That's **`/fix`** (alias `/debug`) —
 standalone root-cause analysis and repair, not a refinement pass.
 
 ### Agents (spawned for parallel work)
+
+Spawning is governed by the always-on delegation policy
+(`deep-knowledge/agent-proactivity.md`, injected at every session start): inline
+for single-domain work, one background agent when the deliverable is a conclusion
+(research, test runs, redteam), 2–3 parallel agents for independent domains, and
+`/run-agents` only offered — never auto-started — for Complex-tier work.
 
 | Agent | Role |
 |---|---|

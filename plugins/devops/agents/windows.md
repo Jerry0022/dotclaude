@@ -3,6 +3,7 @@ name: windows
 description: >-
   Windows platform agent — handles Windows-specific features: system tray,
   native APIs, installers, registry, file associations, and platform integration.
+  Spawn proactively only alongside another domain agent (parallel tier) — single-domain platform work stays inline.
   <example>Add system tray support with notifications</example>
   <example>Create the Windows installer with auto-update</example>
 model: sonnet

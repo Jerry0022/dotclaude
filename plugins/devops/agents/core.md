@@ -3,6 +3,7 @@ name: core
 description: >-
   Core/Backend agent — implements business logic, services, data models,
   APIs, and system infrastructure. The backbone that other agents build on.
+  Spawn proactively only alongside another domain agent (parallel tier, e.g. with frontend) — single-domain backend work stays inline.
   <example>Create the user service with CRUD operations</example>
   <example>Add a database migration for the new schema</example>
 model: sonnet

@@ -13,24 +13,42 @@ import {
 } from "./locale.js";
 
 const TEST_SESSION_BASE = "vitest-locale-" + process.pid + "-" + Date.now();
-// SAFETY: purge MUST only touch files this test suite created. Production
-// Claude sessions also write `dotclaude-locale-<uuid>` files; deleting them
-// here would silently reset a live user's i18n cache.
-const VITEST_PATTERN = "dotclaude-locale-vitest-locale-";
+
+// ISOLATION: readSessionFile()'s glob fallback (session-id.js, issue #10)
+// returns the newest `dotclaude-locale-*` file from ANY session when the
+// exact one is missing — that is the production behavior post.flow.completion
+// relies on, and it is right to keep. But it means the "unknown session →
+// default" tests only pass on a machine where no other Claude session wrote
+// a German locale file in the last ~2h (observed 2026-09-14: expected 'en',
+// received 'de'). session-id resolves os.tmpdir() per call, so pointing the
+// tmpdir env at a fresh directory isolates every read and write of this
+// suite without touching a live user's i18n cache.
+const ISOLATED_TMP = fs.mkdtempSync(path.join(os.tmpdir(), "locale-test-"));
+const SAVED_ENV = { TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP };
+process.env.TMPDIR = ISOLATED_TMP;
+process.env.TMP = ISOLATED_TMP;
+process.env.TEMP = ISOLATED_TMP;
 
 function purgeLocaleFiles() {
-  const tmpdir = os.tmpdir();
   try {
-    for (const f of fs.readdirSync(tmpdir)) {
-      if (f.startsWith(VITEST_PATTERN)) {
-        try { fs.unlinkSync(path.join(tmpdir, f)); } catch {}
-      }
+    for (const f of fs.readdirSync(ISOLATED_TMP)) {
+      try { fs.unlinkSync(path.join(ISOLATED_TMP, f)); } catch {}
     }
   } catch {}
 }
 
 beforeEach(purgeLocaleFiles);
-afterAll(purgeLocaleFiles);
+afterAll(() => {
+  purgeLocaleFiles();
+  for (const [k, v] of Object.entries(SAVED_ENV)) {
+    if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+  try { fs.rmSync(ISOLATED_TMP, { recursive: true, force: true }); } catch {}
+});
+
+test("suite runs against an isolated tmpdir", () => {
+  expect(os.tmpdir()).toBe(ISOLATED_TMP);
+});
 
 describe("constants", () => {
   test("DEFAULT_LOCALE is 'en'", () => {

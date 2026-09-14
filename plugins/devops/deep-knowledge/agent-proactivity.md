@@ -1,84 +1,29 @@
-# Proactive Agent Orchestration
+# Agent Delegation Policy
 
-Cross-cutting rule for when to involve specialized agents without explicit user request.
+Always-on (injected at SessionStart). This plugin instruction **is** the
+standing request to use the Agent tool for the devops role agents — no user
+prompt has to ask for it. Classify every task by the tiers below before the
+first tool call; pick the tier by signal, never by habit.
 
-## Core Rule
+## Tiers (Inline → 1 agent → 2–3 agents → Full ceremony)
 
-**Orchestrating specialized agents is the default mode of work — not the exception.**
-Involve the relevant devops agents automatically, in the background, without waiting for
-the user to say "use agents". For any task that isn't an explicit carve-out below, spin up
-the fitting agents by default; the decision is never "should I use agents?" but "which
-agents fit?". The only tasks that stay fully inline are the exceptions in
-[When NOT to Orchestrate](#when-not-to-orchestrate).
+| Tier | Signal | Do |
+|------|--------|----|
+| **Inline** | 1 domain, Q&A, quick fix, or an answer reachable by reading ~5 files or fewer | No agent — a sub-agent pays a full context bootstrap and loses the conversation. |
+| **1 agent, background** | The deliverable is a *conclusion* whose path would flood the conversation: anything that needs web pages (`research` — even one fetch, pages are huge), a sweep over more than ~10 files (`Explore`, "is our X sound?"), a full test suite or build (`qa`), a high-stakes plan or diff to attack (`redteam`), a trade-off with real stakes that no file answers (`po`) | Spawn automatically with `run_in_background: true`; keep working inline; relay the conclusion, not the transcript. |
+| **2–3 agents, parallel** | Domains that can each be built *and tested* without the other's output (`core` fixes a service while `frontend` fixes an unrelated layout; two analysis lenses: `research` + `po`, `po` + `redteam`). A UI that consumes a new endpoint is **not** independent: Inline if ~5 files or fewer, else Full ceremony | Spawn in one message, ~5–15 tool calls per agent. |
+| **Full ceremony** | 3+ domains, a feature end-to-end, or a high-risk change (migration, auth, breaking contract, destructive op) | Never auto-start. Offer `/run-agents` (`/run-autonomous` if the user will be away) in one sentence; proceed only on a yes. |
 
-## When to Orchestrate Agents
+## Precedence: hard stop > escalation > tier table
 
-### Complex or Multi-Domain Tasks
+- **Hard stop** — "just", "quick", "inline", "no agents" (de: "nur", "schnell",
+  "einfach", "keine Agents") → Inline regardless of tier. A high-risk change
+  still gets its inline pre-mortem (`pre-mortem.md`), just no agent.
+- **Escalation** — same area iterated 2+ times without converging → one tier
+  up (`qa` recurring bug, `designer` UI polish, `core` repeated refactor).
+- Never spawn for an explanation or a single-fact lookup; never spawn silently;
+  one announcement line per spawn (`→ research agent: <what>`).
+- `redteam` only after the inline pre-mortem hits a higher-stakes trigger.
 
-Spawn agents when the task touches **2+ domains** or requires **specialized expertise**:
-
-- Frontend + Backend changes → core + frontend agents
-- New feature end-to-end → feature agent (full wave orchestration)
-- UI/UX decisions needed → designer agent
-- AI/ML integration → ai agent
-- Platform-specific work → windows agent
-- Architecture or strategy questions → research agent + po agent
-
-**Signal words** (non-exhaustive): implement, build, create, design, refactor, migrate,
-end-to-end, full-stack, multi-, integrate, overhaul, rearchitect, new feature.
-
-### Repeated Bug Fixes or Polishing
-
-When the user addresses the **same area more than once** — fixing the same bug again,
-polishing the same component, or iterating on the same file cluster — this signals
-the problem space is larger than a quick fix:
-
-- **2+ passes on the same bug/area** → spawn QA agent to verify holistically
-- **Polishing iterations** (styling, copy, UX tweaks) → spawn designer agent for
-  a cohesive review rather than incremental patches
-- **Recurring test failures** → spawn QA agent with full test strategy
-- **Repeated refactoring in same module** → spawn core agent for structural analysis
-
-The pattern: if manual iteration isn't converging, an agent with fresh perspective
-and specialized focus will resolve it faster.
-
-### Research-Heavy Tasks
-
-When the task requires investigation before implementation:
-
-- Technology comparison → research agent
-- Best practices lookup → research agent
-- Competitive analysis → research agent
-- User perspective validation → gamer agent
-
-### Before Substantial Changes — Pre-Mortem
-
-Before any non-trivial implementation, apply the inline pre-mortem defined
-in [`pre-mortem.md`](pre-mortem.md). Trigger list (security paths, migrations,
-breaking contracts, refactors >3 files, concurrency, destructive ops, external
-integrations) is canonical there. For higher-stakes work, escalate to the
-`redteam` agent in Wave 0, parallel to `po`.
-
-## When NOT to Orchestrate
-
-- Single-file, single-domain edits (typo fix, add a log line, rename a variable)
-- Pure Q&A / explanations (no code changes)
-- Tasks the user explicitly wants done quickly/simply ("just fix it", "quick change")
-- When the user says "don't use agents" or similar
-
-## How to Orchestrate
-
-1. **Assess** the task against the signals above
-2. **Announce briefly** which agents you're involving and why (one line)
-3. **Launch** agents in parallel where independent, sequentially where dependent
-4. **Follow** the wave model from `agent-collaboration.md` for multi-agent features
-
-## Rules
-
-- **Orchestrate by default.** The judgment call is not *whether* to use agents but
-  *which* ones fit — and whether a carve-out applies. Skipping agents is the decision
-  that needs justification, not using them.
-- When in doubt about complexity: orchestrate. The cost of an unnecessary agent is low;
-  the cost of a missed perspective is high.
-- Never orchestrate silently — always tell the user which agents you're spinning up
-- Respect explicit user intent: "just do X" means don't over-engineer with agents
+Details: `agent-orchestration.md` (roster, waves, QA protocol),
+`agent-collaboration.md` (handoffs), `/run-agents` (explicit Full ceremony).

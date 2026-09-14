@@ -5,6 +5,7 @@ description: >-
   Tests UX as a gamer would, evaluates game-feel, performance perception,
   and fun factor. Covers PC, console, mobile, tablet, and offline games
   (board games, tabletop).
+  Not proactive — spawn on explicit request or from a skill.
   <example>Evaluate the onboarding flow from a player perspective</example>
   <example>Review the UI for controller navigation usability</example>
 model: sonnet

@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.2.0
+ * @version 0.3.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
  *   Matches user prompt against a topic keyword map and injects the relevant
  *   deep-knowledge file content as additionalContext. Each file is injected
  *   at most once per session (tracked via session-scoped temp files).
+ *   Always-on docs (ss.knowledge.index ALWAYS_ON, e.g. agent-proactivity.md)
+ *   are already in context from SessionStart — never list them in TOPIC_MAP.
  */
 
 require('../lib/plugin-guard');
@@ -33,11 +35,6 @@ const TOPIC_MAP = [
     file: 'agent-conventions.md',
     specificity: 2,
     patterns: [/\bagent.*naming/i, /\bagent.*convention/i, /\bagent.*format/i],
-  },
-  {
-    file: 'agent-proactivity.md',
-    specificity: 2,
-    patterns: [/\bproactiv/i, /\bproaktiv/i, /\bauto.*orchestrat/i],
   },
   {
     file: 'browser-tool-strategy.md',
@@ -105,6 +102,17 @@ const TOPIC_MAP = [
     patterns: [/\bvisual.*verif/i, /\bscreenshot.*check/i, /\bvisuell.*pr[uü]f/i],
   },
 ];
+
+// Per-prompt delegation nudge (see compose step 4). Mirrors the tier table in
+// deep-knowledge/agent-proactivity.md — keep the two in sync.
+// No slash-command spelling here: the same text is appended to eval prompts,
+// where prompt.skill.enforce would read "/run-agents" as a user invocation.
+const DELEGATION_NUDGE =
+  '[delegation-policy] Classify before the first tool call: Inline (≤~5 files, Q&A, quick fix) · ' +
+  '1 background agent (web pages → devops:research; >~10-file sweep → Explore; full tests → devops:qa; ' +
+  'high-stakes diff → devops:redteam; "should we X?" trade-off → devops:po, plus devops:research when facts need checking) · ' +
+  '2–3 parallel (independent domains / two lenses) · ' +
+  'Complex → offer the run-agents skill, never auto-start. Hard stop: "just/quick/nur/schnell/einfach/no agents" → Inline.';
 
 // Hard limits: max 2 files and 8KB total payload per prompt
 const MAX_INJECT_PER_PROMPT = 2;
@@ -221,7 +229,13 @@ process.stdin.on('end', () => {
   //   2. On the first prompt of a session, also inject the trigger-glossary
   //      so non-English skill aliases work without bloating preload.
   //   3. DK sections when matched (lazy, one-shot per file).
-  const blocks = [`[ui-locale: ${lang}]`];
+  //   4. Always re-inject the one-line delegation nudge — the full policy is
+  //      in context from SessionStart, but the tier decision happens at the
+  //      first tool call of THIS prompt, and a rule seen thousands of tokens
+  //      ago loses against the harness default of "no Agent tool unless
+  //      asked". ~40 tokens per prompt; measured: without it the model did
+  //      web research inline despite the injected policy.
+  const blocks = [`[ui-locale: ${lang}]`, DELEGATION_NUDGE];
 
   if (isFresh) {
     const glossary = loadTriggerGlossary(pluginRoot, lang);
