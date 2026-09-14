@@ -47,7 +47,10 @@ show it as `default → override` with the effort repeated on both sides
 One standing override comes from the delegation policy's budget class
 ([agent-proactivity.md](agent-proactivity.md) § Budget): under `critical`, and
 under `tight` when the user chose "5h-Fenster schonen", the opus roles run as
-`opus · high → sonnet · high` — shown exactly like any other override.
+`opus · high → sonnet · high` — shown exactly like any other override — and
+the prompt's tool-call ceiling (item 6 of the template) drops to ≤ 10 (tight)
+or ≤ 5 (critical): effort itself cannot be lowered at spawn, the ceiling is
+its proxy.
 
 | Agent | model | effort | Notes |
 |-------|-------|--------|-------|

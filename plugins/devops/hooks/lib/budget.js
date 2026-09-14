@@ -113,9 +113,9 @@ function budgetLine(b) {
 function nudgeSuffix(b) {
   if (b.cls === 'critical') {
     const reset = b.resetInMinutes != null ? `, 5h reset in ${b.resetInMinutes} min` : '';
-    return ` · budget: critical (1-agent tier → sonnet; parallel/ceremony → ask once${reset})`;
+    return ` · budget: critical (1-agent tier → sonnet, ≤5 tool calls; parallel/ceremony → ask once${reset})`;
   }
-  if (b.cls === 'tight') return ' · budget: tight (parallel/ceremony → ask once: spare or full)';
+  if (b.cls === 'tight') return ' · budget: tight (parallel/ceremony → ask once: spare = 1 sonnet agent ≤10 calls, or full)';
   return '';
 }
 

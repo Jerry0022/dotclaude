@@ -68,7 +68,7 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
 
   test("a Pro plan at 0 % carries the tight suffix — the parallel-tier question is asked even on a fresh window", () => {
     const ctx = runHook("should we upgrade to postgres 17?", proHome());
-    expect(ctx.split("\n")[1]).toBe(nudge + " · budget: tight (parallel/ceremony → ask once: spare or full)");
+    expect(ctx.split("\n")[1]).toBe(nudge + " · budget: tight (parallel/ceremony → ask once: spare = 1 sonnet agent ≤10 calls, or full)");
   });
 
   test("every delegation eval prompt carries the identical nudge line", () => {
