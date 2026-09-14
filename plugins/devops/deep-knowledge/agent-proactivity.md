@@ -17,7 +17,7 @@ first tool call; pick the tier by signal, never by habit.
 Announce every spawn in one line that shows the mode:
 `→ research agent (opus, ≤15 calls): <what>` / `→ research agent (sonnet, ≤10 calls, spare): <what>`.
 
-## Precedence: explicit run skill > hard stop > hard go > escalation > tier table
+## Precedence: explicit run skill > hard stop > hard go > switch > escalation > tier table
 
 - **Explicit run skill** — inside `/run-agents`, `/run-autonomous`,
   `/run-backlog`, `/run-burn` the invocation itself is the answer: never ask
@@ -30,6 +30,11 @@ Announce every spawn in one line that shows the mode:
   A high-risk change still gets its inline pre-mortem (`pre-mortem.md`).
 - **Hard go** — the user says "agents", "mit Agents", "full", "komplett
   durchziehen" → spawn as designed, no budget question.
+- **Switch** — the `[delegation] mode` line (`.claude/delegation.json`
+  `{"mode":"auto"|"ask"|"off"}`, project over `~/.claude/`): `ask` → every
+  tier above Inline is offered in one sentence and runs only on a yes;
+  `off` → Inline always, no offers. Both cap only *proactive* spawns — an
+  explicit run skill or a hard go still spawns as designed.
 - **Escalation** — same area iterated 2+ times without converging → one tier
   up (`qa` recurring bug, `designer` UI polish, `core` repeated refactor).
 - Never spawn for an explanation or a single-fact lookup; never spawn silently.

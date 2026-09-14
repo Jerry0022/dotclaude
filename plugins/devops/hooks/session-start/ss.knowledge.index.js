@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.knowledge.index
- * @version 0.4.0
+ * @version 0.5.0
  * @event SessionStart
  * @plugin devops
  * @description Inject deep-knowledge INDEX.md into context at session start,
@@ -11,10 +11,15 @@
  *   reference would never flip the harness default they override (e.g. the
  *   agent delegation tiers). Fires on startup/clear/compact, skips resume.
  *   Uses run-once to prevent duplicate injection within a session.
+ *   The delegation kill-switch (lib/delegation.js) decides whether the
+ *   policy body is injected at all: `off` replaces it with the one-line
+ *   `[delegation] off …` state (no need to preload 5 KB of tiers that must
+ *   not be applied); `ask`/`auto` inject the policy and the line.
  */
 
 const { runOnce } = require('../lib/run-once');
 const { readBudget, budgetLine } = require('../lib/budget');
+const { readDelegation, delegationLine } = require('../lib/delegation');
 const fs = require('fs');
 const path = require('path');
 
@@ -34,8 +39,9 @@ const MAX_ALWAYS_ON_BYTES = 6144;
  * is nothing to inject. Pure — no session/run-once state — so tests can
  * pin the payload shape.
  */
-function buildContext(pluginRoot, sessionId = null) {
+function buildContext(pluginRoot, sessionId = null, cwd = process.cwd()) {
   const dkDir = path.join(pluginRoot, 'deep-knowledge');
+  const delegation = readDelegation({ cwd });
   const indexPath = path.join(dkDir, 'INDEX.md');
   if (!fs.existsSync(indexPath)) return null;
 
@@ -48,6 +54,7 @@ function buildContext(pluginRoot, sessionId = null) {
 
   let bytes = 0;
   for (const file of ALWAYS_ON) {
+    if (delegation.mode === 'off') break; // the switch line below replaces the policy
     const filePath = path.join(dkDir, file);
     let content;
     try { content = fs.readFileSync(filePath, 'utf8').trim(); }
@@ -63,10 +70,12 @@ function buildContext(pluginRoot, sessionId = null) {
     );
   }
 
-  // Budget class — the policy's fourth input (see lib/budget.js). One line,
-  // always present, so "unknown" is visible rather than silently comfortable.
+  // Kill-switch state, then budget class — the policy's fourth input (see
+  // lib/budget.js). One line each, always present, so "off" and "unknown"
+  // are visible rather than silently assumed.
+  blocks.push('', delegationLine(delegation));
   try {
-    blocks.push('', budgetLine(readBudget({ sessionId })));
+    blocks.push(budgetLine(readBudget({ sessionId })));
   } catch { /* never let the budget probe break the index injection */ }
 
   return blocks.join('\n');
@@ -92,7 +101,7 @@ function main() {
 
     const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT
       || path.resolve(__dirname, '..', '..');
-    const additionalContext = buildContext(pluginRoot, hook.session_id);
+    const additionalContext = buildContext(pluginRoot, hook.session_id, hook.cwd || process.cwd());
     if (!additionalContext) process.exit(0);
 
     // Output as additionalContext (discrete injection, not visible in transcript)

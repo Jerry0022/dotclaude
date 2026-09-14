@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.168.0] — 2026-09-15
+
+### Added
+
+- **A kill-switch for proactive delegation: `.claude/delegation.json` with `{"mode":"auto"|"ask"|"off"}`.** The always-on delegation policy (0.161.0) had no off position — a consumer who never wants role agents spawned on their behalf could only fight it prompt by prompt with "nur"/"schnell". `off` means no proactive delegation and no offers: the SessionStart hook preloads a one-line `[delegation] off (…)` state *instead of* the 5 KB policy, and the per-prompt nudge plus its budget suffix are dropped. `ask` keeps the policy but every tier above Inline is offered in one sentence and runs only on a yes (the nudge switches to the ask variant). `auto` is the unchanged default. The project record wins over `~/.claude/delegation.json`, and `DOTCLAUDE_DELEGATION` (or `EVAL_DOTCLAUDE_DELEGATION` in eval runs) over both. The switch caps *proactive* spawns only — an explicit `/run-*` skill and a hard go ("mit Agents") still spawn as designed; precedence is now `explicit run skill > hard stop > hard go > switch > escalation > tier table`. A record that exists but is broken (bad JSON, unknown mode) resolves to `ask` and says so in the line: the user reached for the switch, so a typo must be neither a silent `auto` nor a silent "the agents just stopped coming". The line always names the switch file, so a user who never heard of it learns where it lives. `lib/delegation.js` (6 tests), `ss.knowledge.index` (+3), `prompt.knowledge.dispatch` (+1). New eval `evals/delegation/switch-off-research`: the research prompt with the switch pinned `off` — graders prove the off line reached context, zero role agents, research done inline; measured 1.00 over three runs.
+
 ## [0.167.0] — 2026-09-15
 
 ### Changed
