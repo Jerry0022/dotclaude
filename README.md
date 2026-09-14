@@ -412,6 +412,10 @@ A budget class (plan × 5h window × week, read from the local usage snapshot)
 keeps that honest on small plans: `free` / `ask-before-parallel` (a Pro plan
 from 0 % — single agents run on sonnet, a parallel spawn asks one question per
 session) / `sonnet-only`. Explicit `/run-*` skills are never asked or downgraded.
+Switch it off per project or machine: `.claude/delegation.json` (or
+`~/.claude/delegation.json`) with `{"mode":"off"}` — no proactive agents, no
+offers — or `{"mode":"ask"}` — every agent tier is offered first and runs only on
+a yes. Explicit `/run-*` skills and "with agents" in a prompt always still spawn.
 
 | Agent | Role |
 |---|---|

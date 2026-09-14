@@ -25,11 +25,11 @@ function nudgeFromSource() {
   return [...block[1].matchAll(/'([^']*)'/g)].map((m) => m[1]).join("");
 }
 
-function runHook(userMessage, home) {
+function runHook(userMessage, home, cwd) {
   const env = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT };
   if (home) { env.HOME = home; env.USERPROFILE = home; }
   const r = spawnSync(process.execPath, [HOOK], {
-    input: JSON.stringify({ session_id: `vitest-dispatch-${process.pid}-${Date.now()}`, user_message: userMessage }),
+    input: JSON.stringify({ session_id: `vitest-dispatch-${process.pid}-${Date.now()}`, user_message: userMessage, cwd }),
     env,
     encoding: "utf8",
   });
@@ -79,14 +79,36 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
     expect(afk.split("\n")[1]).toBe(nudge);
   });
 
-  test("every delegation eval prompt carries the identical nudge line", () => {
+  test("kill-switch: off → no nudge and no budget suffix; ask → the ask variant, suffix kept", () => {
+    const switched = (mode) => {
+      const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "dispatch-cwd-"));
+      fs.mkdirSync(path.join(cwd, ".claude"));
+      fs.writeFileSync(path.join(cwd, ".claude", "delegation.json"), JSON.stringify({ mode }));
+      return runHook("compare vite and webpack for our typescript spa, please", proHome(), cwd);
+    };
+    const off = switched("off");
+    expect(off.split("\n").length).toBe(1);
+    expect(off).not.toContain("delegation-policy");
+    expect(off).not.toContain("budget:");
+    const ask = switched("ask").split("\n")[1];
+    expect(ask.startsWith("[delegation-policy: ask] No proactive spawn")).toBe(true);
+    expect(ask).toContain("run it only on a yes");
+    expect(ask).toContain("· budget: ask-before-parallel");
+    expect(ask).not.toContain("Classify before the first tool call");
+  });
+
+  test("every delegation eval prompt carries the identical nudge line (off cases: none)", () => {
     const dir = path.join(PLUGIN_ROOT, "evals", "delegation");
     const cases = fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory());
     expect(cases.length).toBeGreaterThan(0);
     for (const c of cases) {
-      const lines = fs.readFileSync(path.join(dir, c.name, "prompt.md"), "utf8").split("\n");
+      const body = fs.readFileSync(path.join(dir, c.name, "prompt.md"), "utf8");
+      if (/EVAL_DOTCLAUDE_DELEGATION:\s*off/.test(body)) {
+        expect(body, `${c.name}/prompt.md pins off but carries a nudge`).not.toContain("[delegation-policy]");
+        continue;
+      }
       // The budget case appends the hook's suffix to the same line, so match on prefix.
-      expect(lines.some((l) => l.startsWith(nudge)), `${c.name}/prompt.md does not carry the hook's nudge`).toBe(true);
+      expect(body.split("\n").some((l) => l.startsWith(nudge)), `${c.name}/prompt.md does not carry the hook's nudge`).toBe(true);
     }
   });
 });

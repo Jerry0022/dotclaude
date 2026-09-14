@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.270",
+  "startedAt": "2026-09-14T22:14:39.337Z",
+  "durationSeconds": 77,
+  "costUsd": 0.3849895,
+  "partial": false,
+  "suite": {
+    "root": "C:\\Users\\Jerem\\IdeaProjects\\dotclaude\\.claude\\worktrees\\devops-concept-batch-naming-243075\\plugins\\devops\\evals",
+    "ablation": "none",
+    "tagFilters": [
+      "switch"
+    ],
+    "threshold": 1,
+    "concurrency": 1,
+    "plugins": []
+  },
+  "cases": [
+    {
+      "name": "switch-off-research",
+      "dir": "delegation\\switch-off-research",
+      "source": "mixed",
+      "promptMarkdown": "Check the official Vite release notes and migration guide: what are the breaking changes from Vite 6 to Vite 7 that would affect a plain TypeScript SPA? List them with the source URL for each.",
+      "runsPerCase": 3,
+      "timeoutSeconds": 540,
+      "maxTurns": 20,
+      "graders": [
+        {
+          "name": "no-role-agent",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "input_match": "(?!.*[Cc]ompletion[ -][Cc]ard)(?=.*\"subagent_type\"\\s*:\\s*\"devops:)",
+            "min": 0,
+            "max": 0,
+            "arm": "both"
+          }
+        },
+        {
+          "name": "no-run-agents",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Skill",
+            "input_match": "\"skill\"\\s*:\\s*\"(?:[\\w-]+:)?run-agents\"",
+            "min": 0,
+            "max": 0,
+            "arm": "both"
+          }
+        },
+        {
+          "name": "off-line-injected",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "\\[delegation\\] off \\(env\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "researched-inline",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "WebFetch",
+            "min": 1,
+            "arm": "with-only"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 0.75,
+            "passed": false,
+            "turns": 7,
+            "costUsd": 0.3849895,
+            "judgeCostUsd": 0,
+            "durationSeconds": 77,
+            "startedAt": "2026-09-14T22:14:39.619Z",
+            "error": null,
+            "tracePath": "C:\\Users\\Jerem\\AppData\\Local\\Temp\\claude-eval-C1SyQh\\out\\trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "no-role-agent",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-run-agents",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Skill called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "off-line-injected",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "researched-inline",
+                "passed": true,
+                "weight": 1,
+                "explanation": "WebFetch called 4x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 0.75,
+        "passRate": 0
+      }
+    }
+  ],
+  "aggregates": {
+    "casesTotal": 1,
+    "casesPassed": 0,
+    "overallScore": 0.75,
+    "overallPassRate": 0
+  }
+}

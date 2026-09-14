@@ -37,6 +37,11 @@ Two things about how the graders are written:
   the budget question (the runner cannot answer, so the run ends there)
   or it takes the 1-agent tier itself on sonnet. Measured 2026-09-14: one
   `devops:research` with `model: sonnet`, no second agent.
+- `switch-off-research` is the research prompt with the kill-switch pinned
+  through `env: EVAL_DOTCLAUDE_DELEGATION=off` (`lib/delegation.js`): the
+  SessionStart hook then preloads the `[delegation] off` line instead of the
+  policy, and the case carries NO nudge line (the hook emits none). Expected:
+  zero role agents, the answer is researched inline.
 - Role-agent graders exclude spawns whose input mentions the completion
   card: without Bash the Stop hook's offline card render is delegated to
   whichever agent has a shell — `devops:core` was observed doing it.

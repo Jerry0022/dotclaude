@@ -42,6 +42,9 @@ describe("ss.knowledge.index — always-on policy injection", () => {
     const last = ctx.trimEnd().split("\n").pop();
     expect(last).toMatch(/^\[budget\] .* → (free|ask-before-parallel|sonnet-only)/);
     expect(ctx.indexOf("always-on")).toBeLessThan(ctx.indexOf("[budget]"));
+    // The kill-switch state sits right before the budget line.
+    const lines = ctx.trimEnd().split("\n");
+    expect(lines[lines.length - 2]).toMatch(/^\[delegation\] (auto|ask|off) \(/);
   });
 
   test("the policy stays under the preload cap", () => {
@@ -74,6 +77,36 @@ describe("ss.knowledge.index — always-on policy injection", () => {
   test("no INDEX.md → nothing to inject", () => {
     const root = tmpPlugin({ "agent-proactivity.md": "policy" });
     expect(buildContext(root)).toBeNull();
+  });
+});
+
+describe("ss.knowledge.index — kill-switch", () => {
+  const withSwitch = (mode) => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "dk-cwd-"));
+    fs.mkdirSync(path.join(cwd, ".claude"));
+    fs.writeFileSync(path.join(cwd, ".claude", "delegation.json"), JSON.stringify({ mode }));
+    return buildContext(PLUGIN_ROOT, null, cwd);
+  };
+
+  test("off: the policy body is NOT preloaded, the one-line state replaces it", () => {
+    const ctx = withSwitch("off");
+    expect(ctx).toContain("| File | Topic |");
+    expect(ctx).not.toContain("always-on");
+    expect(ctx).not.toContain("## Tiers");
+    expect(ctx).toContain("[delegation] off (.claude/delegation.json) — no proactive delegation, no offers");
+    expect(ctx.trimEnd().split("\n").pop()).toMatch(/^\[budget\] /);
+  });
+
+  test("ask: policy preloaded as usual, the line says offer-then-yes", () => {
+    const ctx = withSwitch("ask");
+    expect(ctx).toContain("always-on");
+    expect(ctx).toContain("[delegation] ask (.claude/delegation.json) — no proactive spawn — offer any tier above Inline");
+  });
+
+  test("the policy itself names the switch and ranks it below hard stop/go", () => {
+    const policy = fs.readFileSync(path.join(PLUGIN_ROOT, "deep-knowledge", "agent-proactivity.md"), "utf8");
+    expect(policy).toMatch(/explicit run skill > hard stop > hard go > switch > escalation > tier table/);
+    expect(policy).toContain(".claude/delegation.json");
   });
 });
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.5.0
+ * @version 0.6.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
@@ -19,6 +19,7 @@ const path = require('path');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
 const { ensureLocale } = require('../lib/locale');
 const { readBudget, nudgeSuffix } = require('../lib/budget');
+const { readDelegation } = require('../lib/delegation');
 
 /**
  * Topic-to-file keyword map.
@@ -114,6 +115,12 @@ const DELEGATION_NUDGE =
   'high-stakes diff → devops:redteam; "should we X?" trade-off → devops:po, plus devops:research when facts need checking) · ' +
   '2–3 parallel only for two analysis lenses (parallel implementers → offer) · ' +
   'Complex → offer the run-agents skill, never auto-start. Hard stop (request narrowed: "just/quick/nur/schnell/keine Agents") → Inline; hard go ("agents/full") → as designed.';
+
+// Kill-switch variants (lib/delegation.js). `off` emits no nudge at all —
+// the SessionStart line already says so and every copy would only tempt.
+const ASK_NUDGE =
+  '[delegation-policy: ask] No proactive spawn: when a tier above Inline applies, offer it in one sentence ' +
+  '(which agent, why) and run it only on a yes. Hard go ("agents/full") spawns directly; explicit run-* skills are unaffected.';
 
 const NUDGE_MIN_CHARS = 40;
 
@@ -256,13 +263,18 @@ process.stdin.on('end', () => {
   //   6. Short prompts (< NUDGE_MIN_CHARS: "ja", "weiter", "ok mach") get no
   //      nudge at all — they can never be non-Inline, and every copy sits in
   //      the transcript for the rest of the session (redteam #11).
+  //   7. Kill-switch: `off` → no nudge, no suffix; `ask` → the ask variant
+  //      (the budget suffix still rides along — after a yes the class still
+  //      decides the model).
   const rawMessage = hook.user_message || hook.message || '';
   const unattended = /^\s*AUTONOMOUS_(?:AUTOSTART|RESUME)\s*:/i.test(rawMessage) || lockoutArmed(hook.cwd);
+  const mode = readDelegation({ cwd: hook.cwd || process.cwd() }).mode;
   let budgetSuffix = '';
-  if (!unattended) {
+  if (!unattended && mode !== 'off') {
     try { budgetSuffix = nudgeSuffix(readBudget({ sessionId })); } catch { /* never block the prompt */ }
   }
-  const nudge = rawMessage.trim().length >= NUDGE_MIN_CHARS ? [DELEGATION_NUDGE + budgetSuffix] : [];
+  const nudgeText = mode === 'off' ? null : mode === 'ask' ? ASK_NUDGE : DELEGATION_NUDGE;
+  const nudge = nudgeText && rawMessage.trim().length >= NUDGE_MIN_CHARS ? [nudgeText + budgetSuffix] : [];
   const blocks = [`[ui-locale: ${lang}]`, ...nudge];
 
   if (isFresh) {
