@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.163.0] — 2026-09-14
+
+### Changed
+
+- **The concept page's theme toggle lives in the ☰ panel, not in the content column.** It used to be the last child of the document `<header>` — a `🌙/☀️` button in the reading column of every decision/free round, and no control at all in a design round, where design mode hides that header (documented as an accepted loss). It is panel chrome now: a new `.panel-head` row at the top of the aside carries the toggle left of the ✕, greyed and dimmed at rest (`opacity .55` + `grayscale`) and full colour only under the pointer or keyboard focus — one quiet emoji in the same place on every template, design rounds included. Dark stays the default (`<html data-theme="dark">`) and is now written down as a rule in SKILL.md (a project `reference.md` may still override it). Like the ☰/💬 FABs the button names the NEXT action — ☀️ while dark, 🌙 while light — through two new locale keys (`theme.to_light`, `theme.to_dark`); the glyph switches in CSS on `html[data-theme]`, and the tooltip + aria-label follow the attribute through a `MutationObserver`, so `restoreState()`'s write after a reload updates them too. Gate row 62b pins the new home and rejects a `theme-toggle` left in the header; `design-chrome-overlap.test.js` now asserts the header carries no control at all, and `theme-toggle.test.js` carries the full contract (both skeletons, CSS glyph switch, jsdom click + observer, fixture build in both modes, docs).
+
+### Fixed
+
+- **A theme toggle click is persisted immediately.** State persistence saves on `change`/`input`, which a `<button>` click fires neither of, so the chosen theme only reached localStorage with the user's next keystroke — a reload in between reverted it. The handler now calls `saveState()` the way `showScreen()` and `applyViewport()` do.
+
 ## [0.162.0] — 2026-09-14
 
 ### Added
