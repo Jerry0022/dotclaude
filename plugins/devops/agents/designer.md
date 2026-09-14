@@ -4,6 +4,7 @@ description: >-
   UX/UI Designer agent — full-stack design from research to pixel-perfect specs.
   Wireframes, user flows, visual design, design systems, and component specs.
   Bridges design to code via Figma and design tokens.
+  Use proactively when UI polish iterates 2+ passes on the same area without converging — a cohesive review beats another incremental patch.
   <example>Design the onboarding flow with wireframes and visual specs</example>
   <example>Create a design system with tokens, components, and usage guidelines</example>
 model: sonnet

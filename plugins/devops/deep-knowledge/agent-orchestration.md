@@ -4,7 +4,10 @@
 > This file retains Agent wave model + QA testing protocol.
 
 Shared orchestration logic for agent selection, prompting, and wave execution.
-Referenced by `/run-agents` and `/run-autonomous`.
+Referenced by `/run-agents` and `/run-autonomous`. *Whether* to spawn at all —
+and how many — is decided upstream by the always-on delegation policy in
+[agent-proactivity.md](agent-proactivity.md); this file covers the *how* once
+that decision is made.
 
 ## Agent Selection
 
@@ -77,6 +80,10 @@ show it as `default → override` with the effort repeated on both sides
 | **Simple** | Single domain, < 5 files, clear scope | Work directly, no sub-agents |
 | **Medium** | 2 independent domains, no cross-deps | 2-3 parallel agents for independent domains |
 | **Complex** | 3+ domains, cross-cutting, or high risk | Full agent roster with wave model |
+
+These tiers map 1:1 onto the delegation policy: Simple → Inline, Medium → the
+automatic 1-agent / 2–3-agent tiers, Complex → `/run-agents` offered, never
+auto-started.
 
 **Effort budget per agent** (Step 4 of the prompt template — embed it, scaled to
 tier). Anthropic's multi-agent work found over-investment on simple queries to be

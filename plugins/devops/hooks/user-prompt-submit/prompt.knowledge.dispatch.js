@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.2.0
+ * @version 0.2.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
  *   Matches user prompt against a topic keyword map and injects the relevant
  *   deep-knowledge file content as additionalContext. Each file is injected
  *   at most once per session (tracked via session-scoped temp files).
+ *   Always-on docs (ss.knowledge.index ALWAYS_ON, e.g. agent-proactivity.md)
+ *   are already in context from SessionStart — never list them in TOPIC_MAP.
  */
 
 require('../lib/plugin-guard');
@@ -33,11 +35,6 @@ const TOPIC_MAP = [
     file: 'agent-conventions.md',
     specificity: 2,
     patterns: [/\bagent.*naming/i, /\bagent.*convention/i, /\bagent.*format/i],
-  },
-  {
-    file: 'agent-proactivity.md',
-    specificity: 2,
-    patterns: [/\bproactiv/i, /\bproaktiv/i, /\bauto.*orchestrat/i],
   },
   {
     file: 'browser-tool-strategy.md',

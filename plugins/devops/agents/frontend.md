@@ -3,6 +3,7 @@ name: frontend
 description: >-
   Frontend agent — implements UI components, templates, styling, and
   user-facing interactions. Framework-agnostic (Angular, React, Vue, etc.).
+  Spawn proactively only alongside another domain agent (parallel tier, e.g. with core) — single-domain UI work stays inline.
   <example>Build the settings page with dark mode toggle</example>
   <example>Fix the responsive layout on mobile viewports</example>
 model: sonnet

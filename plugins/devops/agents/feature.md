@@ -4,6 +4,7 @@ description: >-
   Feature worker agent — implements features in an isolated worktree.
   Can delegate to other role agents (frontend, core, ai, etc.) when
   the feature spans multiple domains.
+  Never spawn proactively — the full-ceremony path is /run-agents or /run-autonomous, offered to the user first.
   <example>Implement the video filter feature end-to-end</example>
   <example>Build the user settings page with backend and frontend</example>
 model: inherit

@@ -5,6 +5,7 @@ description: >-
   failure modes, blind spots, and hidden risks before implementation.
   Produces a list of concrete risks with file/line references; does NOT
   fix code.
+  Use proactively, in the background, before high-stakes changes (migrations, auth, breaking contracts, destructive ops) and on any plan the user wants challenged — no user request needed.
   <example>Red-team this migration plan for race conditions and partial-failure modes</example>
   <example>Find the ways this auth change can silently fail</example>
 model: opus
