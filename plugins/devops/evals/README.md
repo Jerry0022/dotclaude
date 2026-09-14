@@ -33,8 +33,13 @@ Two things about how the graders are written:
   `[budget]` SessionStart line is real hook output either way.
 - `parallel-two-lenses-pro-budget` pins `ask-before-parallel` (what a Pro
   plan gets from 0 %) and appends the matching nudge suffix. Expected:
-  exactly one AskUserQuestion and no role agent before it is answered —
-  the runner cannot answer, so the run ends at the question.
+  never an opus role agent, never more than one — either the model asks
+  the budget question (the runner cannot answer, so the run ends there)
+  or it takes the 1-agent tier itself on sonnet. Measured 2026-09-14: one
+  `devops:research` with `model: sonnet`, no second agent.
+- Role-agent graders exclude spawns whose input mentions the completion
+  card: without Bash the Stop hook's offline card render is delegated to
+  whichever agent has a shell — `devops:core` was observed doing it.
 - `--scaffold` is required: each case checks out an `eval/work` branch,
   because the plugin's own `pre.edit.branch` hook refuses writes on `main`
   and the eval workspace starts as a fresh repo on `main`.
