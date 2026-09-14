@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.3.0
+ * @version 0.4.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
 const { ensureLocale } = require('../lib/locale');
+const { readBudget, nudgeSuffix } = require('../lib/budget');
 
 /**
  * Topic-to-file keyword map.
@@ -235,7 +236,12 @@ process.stdin.on('end', () => {
   //      ago loses against the harness default of "no Agent tool unless
   //      asked". ~40 tokens per prompt; measured: without it the model did
   //      web research inline despite the injected policy.
-  const blocks = [`[ui-locale: ${lang}]`, DELEGATION_NUDGE];
+  //   5. Budget suffix on the nudge when the class is not comfortable — the
+  //      snapshot is re-read per prompt (cheap local JSON), so a window that
+  //      fills up mid-session tightens the nudge without a restart.
+  let budgetSuffix = '';
+  try { budgetSuffix = nudgeSuffix(readBudget()); } catch { /* never block the prompt */ }
+  const blocks = [`[ui-locale: ${lang}]`, DELEGATION_NUDGE + budgetSuffix];
 
   if (isFresh) {
     const glossary = loadTriggerGlossary(pluginRoot, lang);

@@ -25,5 +25,24 @@ first tool call; pick the tier by signal, never by habit.
   one announcement line per spawn (`→ research agent: <what>`).
 - `redteam` only after the inline pre-mortem hits a higher-stakes trigger.
 
+## Budget (the `[budget] … → class` line; plan × 5h × week)
+
+Volume goes in one place: parallel and Full-ceremony spawns of opus·high
+agents. The 1-agent tier is context isolation, not a cost — leave it alone.
+
+- **comfortable** → tiers as above.
+- **tight** (Pro from 0 %, Max 5x ≥ 80 %/90 %, Max 20x ≥ 90 %/95 %) → before
+  a **parallel** spawn or a **Full-ceremony offer**, ask ONCE per session via
+  AskUserQuestion: *"5h-Fenster schonen"* (1 agent, `model: sonnet`, the
+  primary lens only) vs. *"Richtige Agents"* (as designed, whatever the
+  window says). Remember the answer for this session only — a new session
+  asks again. Never ask on Inline or 1-agent prompts: there is no real
+  alternative there.
+- **critical** (Pro ≥ 70 %/85 %, Max 5x ≥ 95 %/98 %, Max 20x ≥ 98 %/99 %) →
+  the 1-agent tier runs on `model: sonnet`; parallel/ceremony ask as above,
+  and the offer names the reset ("5h reset in N min").
+- Unknown plan → Max 5x rules; a stale snapshot still counts (it is a gate,
+  not a meter).
+
 Details: `agent-orchestration.md` (roster, waves, QA protocol),
 `agent-collaboration.md` (handoffs), `/run-agents` (explicit Full ceremony).

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.knowledge.index
- * @version 0.2.0
+ * @version 0.3.0
  * @event SessionStart
  * @plugin devops
  * @description Inject deep-knowledge INDEX.md into context at session start,
@@ -14,6 +14,7 @@
  */
 
 const { runOnce } = require('../lib/run-once');
+const { readBudget, budgetLine } = require('../lib/budget');
 const fs = require('fs');
 const path = require('path');
 
@@ -61,6 +62,12 @@ function buildContext(pluginRoot) {
       content,
     );
   }
+
+  // Budget class — the policy's fourth input (see lib/budget.js). One line,
+  // always present, so "unknown" is visible rather than silently comfortable.
+  try {
+    blocks.push('', budgetLine(readBudget()));
+  } catch { /* never let the budget probe break the index injection */ }
 
   return blocks.join('\n');
 }

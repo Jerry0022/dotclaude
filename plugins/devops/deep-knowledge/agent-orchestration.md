@@ -44,6 +44,10 @@ tables show — `/run-agents` Step 3 renders each agent as `model · effort` (e.
 it in sync with the agent frontmatter. When you override a model at invocation,
 show it as `default → override` with the effort repeated on both sides
 (`sonnet · medium → opus · medium`); the effort never carries an arrow.
+One standing override comes from the delegation policy's budget class
+([agent-proactivity.md](agent-proactivity.md) § Budget): under `critical`, and
+under `tight` when the user chose "5h-Fenster schonen", the opus roles run as
+`opus · high → sonnet · high` — shown exactly like any other override.
 
 | Agent | model | effort | Notes |
 |-------|-------|--------|-------|

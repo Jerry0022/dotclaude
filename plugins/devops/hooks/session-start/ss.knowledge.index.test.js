@@ -37,8 +37,11 @@ describe("ss.knowledge.index — always-on policy injection", () => {
       .trim();
     expect(ctx).toContain("[deep-knowledge always-on] deep-knowledge/agent-proactivity.md");
     expect(ctx).toContain(policy);
-    // Index first, policy after — the policy is the last thing Claude reads.
+    // Index first, policy after, then the budget line — the last thing Claude reads.
     expect(ctx.indexOf("| File | Topic |")).toBeLessThan(ctx.indexOf("always-on"));
+    const last = ctx.trimEnd().split("\n").pop();
+    expect(last).toMatch(/^\[budget\] .* → (comfortable|tight|critical)/);
+    expect(ctx.indexOf("always-on")).toBeLessThan(ctx.indexOf("[budget]"));
   });
 
   test("the policy stays under the preload cap", () => {

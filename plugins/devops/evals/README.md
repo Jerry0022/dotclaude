@@ -27,6 +27,12 @@ Two things about how the graders are written:
   `prompt.knowledge.dispatch.test.js` pins the copies to each other.
   Measured 2026-09-14: with the SessionStart policy alone the model did
   web research inline; with the nudge it spawned `devops:research` first.
+- `parallel-two-lenses-pro-budget` simulates a Pro plan: the nudge carries
+  the `budget: tight` suffix and the `[budget] Pro …` line the hooks emit
+  there. Expected: never 2+ role agents — either the model asks the one
+  budget question (spare vs. full; the runner cannot answer, so the run
+  ends there) or it takes the spare path itself with a single agent.
+  Measured 2026-09-14: one `devops:research`, no question — policy-conformant.
 - `--scaffold` is required: each case checks out an `eval/work` branch,
   because the plugin's own `pre.edit.branch` hook refuses writes on `main`
   and the eval workspace starts as a fresh repo on `main`.

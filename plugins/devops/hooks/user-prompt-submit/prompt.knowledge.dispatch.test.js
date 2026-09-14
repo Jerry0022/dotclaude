@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -24,13 +25,26 @@ function nudgeFromSource() {
   return [...block[1].matchAll(/'([^']*)'/g)].map((m) => m[1]).join("");
 }
 
-function runHook(userMessage) {
+function runHook(userMessage, home) {
+  const env = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT };
+  if (home) { env.HOME = home; env.USERPROFILE = home; }
   const r = spawnSync(process.execPath, [HOOK], {
     input: JSON.stringify({ session_id: `vitest-dispatch-${process.pid}-${Date.now()}`, user_message: userMessage }),
-    env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT },
+    env,
     encoding: "utf8",
   });
   return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.additionalContext : "";
+}
+
+/** A fake HOME whose settings enable the plugin (plugin-guard) and whose usage snapshot says Pro. */
+function proHome() {
+  const h = fs.mkdtempSync(path.join(os.tmpdir(), "dispatch-home-"));
+  fs.mkdirSync(path.join(h, ".claude"));
+  fs.writeFileSync(path.join(h, ".claude", "settings.json"), JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } }));
+  fs.writeFileSync(path.join(h, ".claude", "usage-live.json"), JSON.stringify({
+    timestamp: new Date().toISOString(), session: { pct: 0, resetInMinutes: 300 }, weekly: { pct: 0 }, plan: "Pro",
+  }));
+  return h;
 }
 
 describe("prompt.knowledge.dispatch — delegation nudge", () => {
@@ -48,17 +62,23 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
       const ctx = runHook(msg);
       const lines = ctx.split("\n");
       expect(lines[0]).toMatch(/^\[ui-locale: (en|de)\]$/);
-      expect(lines[1]).toBe(nudge);
+      expect(lines[1].startsWith(nudge)).toBe(true); // a budget suffix may follow
     }
   });
 
-  test("every delegation eval prompt ends with the identical nudge", () => {
+  test("a Pro plan at 0 % carries the tight suffix — the parallel-tier question is asked even on a fresh window", () => {
+    const ctx = runHook("should we upgrade to postgres 17?", proHome());
+    expect(ctx.split("\n")[1]).toBe(nudge + " · budget: tight (parallel/ceremony → ask once: spare or full)");
+  });
+
+  test("every delegation eval prompt carries the identical nudge line", () => {
     const dir = path.join(PLUGIN_ROOT, "evals", "delegation");
     const cases = fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory());
     expect(cases.length).toBeGreaterThan(0);
     for (const c of cases) {
-      const prompt = fs.readFileSync(path.join(dir, c.name, "prompt.md"), "utf8").trimEnd();
-      expect(prompt.endsWith(nudge), `${c.name}/prompt.md does not end with the hook's nudge`).toBe(true);
+      const lines = fs.readFileSync(path.join(dir, c.name, "prompt.md"), "utf8").split("\n");
+      // The budget case appends the hook's suffix to the same line, so match on prefix.
+      expect(lines.some((l) => l.startsWith(nudge)), `${c.name}/prompt.md does not carry the hook's nudge`).toBe(true);
     }
   });
 });
