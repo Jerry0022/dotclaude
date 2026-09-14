@@ -100,6 +100,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.submit_menu_hint`       | The primary button never writes code. | Kein Code beim Primär-Button. |
 | `panel.here_back`              | back to round                  | zur Runde |
 | `panel.archive_summary`        | previous rounds                | vorherige Runden |
+| `panel.submit_collect_failed`  | Could not collect your decisions — nothing was sent. Reload the page and try again | Entscheidungen konnten nicht eingesammelt werden — nichts wurde gesendet. Seite neu laden und erneut versuchen |
 | `nav.summary_entries`          | entries                        | Einträge |
 | `nav.summary_discarded`        | discarded                      | verworfen |
 | `nav.group_context`            | Context                        | Kontext |
@@ -11394,6 +11395,23 @@ function collectDecisions(action = 'iterate') {
   return payload;
 }
 
+// Verdict + note of one bi-state group (§ Bi-State Variant Evaluation). The
+// radio ships `include` checked by default, so a group the user never touched
+// still reports `include` rather than dropping out of the payload. The
+// adjacent `{id}-note` textarea sits inside the group, or next to it when
+// ensureCommentSlots() injected it at runtime — look inside first, then one
+// level up (same lookup as the design branch's view decisions).
+function getElementState(el) {
+  const checked = el.querySelector('input[type="radio"]:checked');
+  const noteId = `${el.dataset.decision}-note`;
+  const noteEl = el.querySelector(`[data-comment="${noteId}"]`)
+    || (el.parentElement && el.parentElement.querySelector(`[data-comment="${noteId}"]`));
+  return {
+    evaluation: checked ? checked.value : 'include',
+    note: ((noteEl && noteEl.value) || '').trim()
+  };
+}
+
 function collectDecisionDecisions() {
   const decisions = [];
   const comments = [];
@@ -11648,7 +11666,17 @@ async function submitWithAction(action) {
 
   _submitInFlight = true;
 
-  const data = collectDecisions(action);
+  // A throwing collector must not wedge the button behind the in-flight
+  // guard above (#383): release the flag, say what broke, hand control back.
+  let data;
+  try {
+    data = collectDecisions(action);
+  } catch (e) {
+    _submitInFlight = false;
+    console.error('collectDecisions failed', e);
+    showSubmitWarning('{{panel.submit_collect_failed}}: ' + ((e && e.message) || e));
+    return;
+  }
   const container = document.getElementById('concept-decisions');
   container.textContent = JSON.stringify(data);
   // design template only: the feedback dock is a single overlay shared by
@@ -11804,9 +11832,17 @@ wireSubmit('submit-implement-btn', 'implement');
 //                                        liegen lokal. Bitte erneut absenden."
 //   {{panel.attachments_not_synced}}  — "Ein Bild liegt noch nur lokal vor und
 //                                        wird automatisch nachgereicht."
+//   {{panel.submit_collect_failed}}   — "Entscheidungen konnten nicht
+//                                        eingesammelt werden — nichts wurde
+//                                        gesendet. …" (+ the error message)
 function showSubmitWarning(msg) {
-  const host = document.getElementById('panel-submitted')
-            || document.getElementById('panel-ready');
+  // Host = whichever panel is ON SCREEN. Both panels exist at all times and
+  // only `display` flips between them; a warning raised while the ready
+  // panel is up (collector threw, restorePanelToReady() ran first) must not
+  // land in the hidden submitted panel where nobody sees it.
+  const submitted = document.getElementById('panel-submitted');
+  const host = (submitted && submitted.style.display !== 'none') ? submitted
+            : (document.getElementById('panel-ready') || submitted);
   if (!host) return;
   let strip = host.querySelector('.submit-warning');
   if (!strip) {

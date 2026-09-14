@@ -424,7 +424,7 @@ describe("comment durability — source-level invariants", () => {
 
   test("the submit path marks the dock instead of emptying it", () => {
     const submit = md.slice(md.indexOf("async function submitWithAction"));
-    expect(submit.slice(0, 2000)).toMatch(/markDockSubmitted/);
+    expect(submit.slice(0, 2600)).toMatch(/markDockSubmitted/);   // the collect try/catch (#383) sits before it
     expect(md).not.toMatch(/if \(typeof clearDock === 'function'\) clearDock\(\);/);
   });
 });

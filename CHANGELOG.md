@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.164.1] — 2026-09-15
+
+### Fixed
+
+- **The decision template's submit button no longer plays dead.** `collectDecisionDecisions()` spread `...getElementState(el)`, but no reference block ever defined the helper — every `decision` round threw a `ReferenceError` on submit. It looked like a dead button rather than an error because `submitWithAction()` raised `_submitInFlight` *before* collecting and never released it on a throw, so the first click did nothing visible and every later click was swallowed by the in-flight guard (#383). The helper now exists next to the collector (radio verdict, `include` by default, plus the adjacent `{id}-note` textarea — inside the group or one level up where `ensureCommentSlots()` injects it), `collectDecisions()` runs inside a try/catch that releases the flag, logs, and surfaces a new `panel.submit_collect_failed` warning with the error, and `showSubmitWarning()` targets whichever panel is on screen — it used to prefer the hidden `#panel-submitted`, so a warning raised while the ready panel was up (this path, and every `restorePanelToReady()` path before it) was invisible. `decision-collect.test.js` builds the decision fixture and collects its live round without throwing, and drives a throwing collector through two clicks to prove the second one still reaches it.
+
 ## [0.164.0] — 2026-09-14
 
 ### Added
