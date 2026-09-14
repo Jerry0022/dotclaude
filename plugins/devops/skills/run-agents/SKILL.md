@@ -3,17 +3,13 @@ name: run-agents
 version: 0.9.0
 description: >-
   Full-ceremony multi-agent orchestration: plan → user confirm → execution
-  mode → waves → inter-wave gates → synthesis. This is the EXPLICIT path for
-  Complex-tier work (3+ domains, a feature end-to-end, high-risk change); the
-  everyday delegation — 1 background agent for research/tests/redteam, 2–3
-  parallel agents for independent domains — happens automatically under the
-  always-on delegation policy (deep-knowledge/agent-proactivity.md) and never
-  goes through this skill. Triggers on: "run agents", "use agents",
-  "orchestrate", "parallel agents", "multi-agent", "delegate to agents",
-  "agent workflow", or Claude offering it for Complex-tier work and the user
-  saying yes. Do NOT trigger for: simple edits, quick fixes, explanations, or
-  single-agent research (the policy handles those inline or with one
-  background agent).
+  mode → waves → inter-wave gates → synthesis. The EXPLICIT path for the
+  Full-ceremony tier of the always-on delegation policy (3+ domains, a feature
+  end-to-end, high-risk change); the lower tiers never go through this skill.
+  Triggers on: "run agents", "use agents", "orchestrate", "parallel agents",
+  "multi-agent", "delegate to agents", "agent workflow", or the user saying
+  yes to Claude's offer. Do NOT trigger for: simple edits, quick fixes,
+  explanations, or single-agent research.
 argument-hint: "[task description or goal]"
 allowed-tools: Agent, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_list
 ---

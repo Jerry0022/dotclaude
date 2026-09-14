@@ -56,7 +56,7 @@ function buildContext(pluginRoot) {
     bytes += entryBytes;
     blocks.push(
       '',
-      `[deep-knowledge always-on] deep-knowledge/${file} — a standing rule, in effect for every prompt:`,
+      `[deep-knowledge always-on] deep-knowledge/${file} — a standing plugin instruction, in effect for every prompt (it counts as the plugin asking):`,
       '',
       content,
     );
