@@ -253,24 +253,6 @@ export function renderPendingBlock(pending, lang) {
   return L.header + '\n' + bullets.join('\n') + '\n\n_' + L.hint + '_';
 }
 
-/**
- * The `{what}` slot shape WITHOUT a verb — "Agent `x`" or "2 Agenten + 1 Task".
- * Used where the sentence already has its verb (the concept CTA: "Arbeite an
- * der Implementierung mit …"), so pendingWhat's "arbeiten" would double it.
- */
-function pendingShape(pending, lang) {
-  const L = PENDING_LABEL[lang] || PENDING_LABEL.de;
-  const items = normalizePending(pending);
-  if (items.length === 0) return '';
-  if (items.length === 1) {
-    const names = nameList(items, CTA_NAME_LIMIT);
-    return names ? noun(L, items[0].kind, 1) + ' ' + names : '1 ' + noun(L, items[0].kind, 1);
-  }
-  return groupsOf(items)
-    .map(g => g.items.length + ' ' + noun(L, g.kind, g.items.length))
-    .join(' + ');
-}
-
 // ---------------------------------------------------------------------------
 // Concept layer — a concept page is open, so the turn is a checkpoint
 // ---------------------------------------------------------------------------
@@ -280,25 +262,25 @@ function pendingShape(pending, lang) {
 // keepalive pulser and the pickup waker are plumbing that stays up for the
 // whole concept — they never produce a result, they ARE the waiting. So the
 // concept CTA replaces the pending CTA and states the one thing that is true:
-// waiting for decisions, working on the next iteration, or implementing. Real
-// content agents (a frontend agent, a research workflow) still count and are
-// folded into the sentence — "Arbeite an der Implementierung mit 2 Agenten".
+// waiting for decisions, in iteration, or in implementation. Real content
+// agents (a frontend agent, a research workflow) still count and follow the
+// state as their own sentence — "CONCEPT in Implementierung. 2 Agenten
+// arbeiten". The word CONCEPT itself is the template's; this module only
+// produces what comes after it.
 
 /** Phases a concept session can be in when a turn hands back. */
 export const CONCEPT_PHASES = ['waiting', 'iterating', 'implementing'];
 
 const CONCEPT_LABEL = {
   de: {
-    waiting: 'Warte auf deine Entscheidungen auf der Seite',
-    iterating: 'Arbeite an der nächsten Iteration',
-    implementing: 'Arbeite an der Implementierung',
-    with: 'mit',
+    waiting: 'wartet auf deine Entscheidungen auf der Seite',
+    iterating: 'in Iteration',
+    implementing: 'in Implementierung',
   },
   en: {
-    waiting: 'Waiting for your decisions on the page',
-    iterating: 'Working on the next iteration',
-    implementing: 'Working on the implementation',
-    with: 'with',
+    waiting: 'waiting for your decisions on the page',
+    iterating: 'in iteration',
+    implementing: 'in implementation',
   },
 };
 
@@ -330,10 +312,10 @@ export function hasConcept(concept) {
 }
 
 /**
- * The `{what}` slot of the concept CTA — the phase sentence, with any real
- * background work folded in: "Arbeite an der Implementierung mit Agent
- * `devops:frontend`". While waiting, open work is unusual, so it is appended
- * as its own clause instead of pretending the wait is done "with" it.
+ * The `{what}` slot of the concept CTA — the state right after "CONCEPT", with
+ * any real background work as the sentence that follows: "in Implementierung.
+ * 2 Agenten arbeiten". While waiting, open work is unusual, so it hangs off the
+ * wait line with a middle dot instead of a full stop.
  *
  * @param {string|object} concept
  * @param {Array} [pending] — raw or normalized items (content work only; the
@@ -345,10 +327,9 @@ export function conceptWhat(concept, pending, lang) {
   const c = normalizeConcept(concept);
   if (!c) return '';
   const L = CONCEPT_LABEL[lang] || CONCEPT_LABEL.de;
-  const shape = pendingShape(pending, lang);
-  if (!shape) return L[c.phase];
-  if (c.phase === 'waiting') return L[c.phase] + ' · ' + pendingWhat(pending, lang);
-  return L[c.phase] + ' ' + L.with + ' ' + shape;
+  const work = pendingWhat(pending, lang);
+  if (!work) return L[c.phase];
+  return L[c.phase] + (c.phase === 'waiting' ? ' · ' : '. ') + work;
 }
 
 export { PENDING_LABEL, CONCEPT_LABEL, CTA_NAME_LIMIT, LINE_NAME_LIMIT, BLOCK_ITEM_LIMIT, NAME_MAX };

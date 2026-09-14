@@ -217,33 +217,35 @@ describe("concept layer", () => {
   });
 
   it("states the phase alone when no content work is running", () => {
-    expect(conceptWhat("waiting", [], "de")).toBe("Warte auf deine Entscheidungen auf der Seite");
-    expect(conceptWhat("iterating", undefined, "de")).toBe("Arbeite an der nächsten Iteration");
-    expect(conceptWhat("implementing", [], "de")).toBe("Arbeite an der Implementierung");
-    expect(conceptWhat("implementing", [], "en")).toBe("Working on the implementation");
+    expect(conceptWhat("waiting", [], "de")).toBe("wartet auf deine Entscheidungen auf der Seite");
+    expect(conceptWhat("iterating", undefined, "de")).toBe("in Iteration");
+    expect(conceptWhat("implementing", [], "de")).toBe("in Implementierung");
+    expect(conceptWhat("implementing", [], "en")).toBe("in implementation");
   });
 
-  it("folds a single content agent into the implementing sentence by name", () => {
+  it("a single content agent follows the implementing state by name", () => {
     expect(conceptWhat("implementing", [{ name: "devops:frontend" }], "de"))
-      .toBe("Arbeite an der Implementierung mit Agent `devops:frontend`");
+      .toBe("in Implementierung. Agent `devops:frontend` arbeitet");
     expect(conceptWhat("implementing", [{ name: "devops:frontend" }], "en"))
-      .toBe("Working on the implementation with agent `devops:frontend`");
+      .toBe("in implementation. agent `devops:frontend` is working");
   });
 
-  it("folds several items in as counts per class, biggest unit first", () => {
+  it("several items follow as counts per class, biggest unit first", () => {
     const mix = [
       { name: "devops:frontend" }, { name: "devops:core" },
       { name: "harden-pass", kind: "workflow" }, { name: "npm test", kind: "task" },
     ];
+    expect(conceptWhat("implementing", [{ name: "a" }, { name: "b" }], "de"))
+      .toBe("in Implementierung. 2 Agenten arbeiten");
     expect(conceptWhat("iterating", mix, "de"))
-      .toBe("Arbeite an der nächsten Iteration mit 1 Workflow + 2 Agenten + 1 Task");
+      .toBe("in Iteration. 1 Workflow + 2 Agenten + 1 Task laufen");
     expect(conceptWhat("iterating", mix, "en"))
-      .toBe("Working on the next iteration with 1 workflow + 2 agents + 1 task");
+      .toBe("in iteration. 1 workflow + 2 agents + 1 task running");
   });
 
-  it("while waiting, open work is its own clause rather than 'with'", () => {
+  it("while waiting, open work hangs off the wait line with a middle dot", () => {
     expect(conceptWhat("waiting", [{ name: "devops:research" }], "de"))
-      .toBe("Warte auf deine Entscheidungen auf der Seite · Agent `devops:research` arbeitet");
+      .toBe("wartet auf deine Entscheidungen auf der Seite · Agent `devops:research` arbeitet");
   });
 
   it("returns nothing when no concept is open", () => {

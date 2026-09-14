@@ -343,7 +343,7 @@ const CTA = {
     pending:                  '## \u23f3 NOT DONE YET. {what} \u2014 I\u2019ll REPORT back',
     // Concept layer — a concept page is open; outranks pending (the bridge's own
     // tasks are plumbing, and any real work is folded into {what}).
-    concept:                  '## 🧭 CONCEPT open. {what} — I’ll REPORT back',
+    concept:                  '## 🧭 CONCEPT {what} — I’ll REPORT back',
     // Batch layer — /claude-batch is collecting; the next prompt is a note, not
     // a task. Read off the project's batch-mode.json, never off a card field.
     batch:                    '## 📥 BATCH collecting. {what} — I’ll WAIT',
@@ -366,7 +366,7 @@ const CTA = {
     pending:                  '## \u23f3 NOCH NICHT FERTIG. {what} \u2014 ich MELDE mich',
     // Concept layer — a concept page is open; outranks pending (the bridge's own
     // tasks are plumbing, and any real work is folded into {what}).
-    concept:                  '## 🧭 CONCEPT läuft. {what} — ich MELDE mich',
+    concept:                  '## 🧭 CONCEPT {what} — ich MELDE mich',
     // Batch layer — /claude-batch is collecting; the next prompt is a note, not
     // a task. Read off the project's batch-mode.json, never off a card field.
     batch:                    '## 📥 BATCH sammelt. {what} — ich WARTE',
@@ -1747,7 +1747,7 @@ server.registerTool(
             url: z.string().optional().describe("Override for the page URL shown above the CTA. Normally NOT needed: pass `cwd` and the card reads port + html_path from the project's .claude/concept-active.json — the URL the page is already open at."),
           }),
         ]).optional(),
-      ).describe("A /concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT läuft. {phase} — ich MELDE mich', where {phase} is one of: Warte auf deine Entscheidungen · Arbeite an der nächsten Iteration · Arbeite an der Implementierung. Real background work (content agents, a workflow) still goes into `pending` and is folded into that sentence ('… mit 2 Agenten'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: the card then shows the page's http://localhost:{port}/… link above the CTA."),
+      ).describe("A /concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT {phase} — ich MELDE mich', where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: the card then shows the page's http://localhost:{port}/… link above the CTA."),
       deployGate: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
