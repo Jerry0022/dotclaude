@@ -2,17 +2,16 @@
 name: claude-strict
 version: 0.1.0
 description: >-
-  Strict mode — the deliverable is exactly what the prompt names, nothing wider;
-  only the attributes the prompt leaves open (colour, size, wording) are Claude's
-  call, and every such choice is reported. Applies recursively: to every skill
-  invoked in the same turn, every agent those skills spawn, every /concept
-  iteration and every autonomous resume the turn sets in motion. Two modes:
-  `/claude-strict <task>` for one prompt (and the workflow it starts), and
-  `/claude-strict on|off` for the whole worktree + branch — never project-wide.
-  Triggers on: "/claude-strict", "strict", "strikt", "genau so und nicht mehr",
-  "nur das ändern", "nichts anderes anfassen". Do NOT trigger for: ordinary
-  requests without a literal-scope signal, /tune-harden or /tune-polish scope
-  fences (they stay as they are), or TypeScript `strict` compiler options.
+  Strict mode — the deliverable is exactly what the prompt names, nothing
+  wider; attributes the prompt leaves open are Claude's call and every such
+  choice is reported. Propagates to every skill, agent, /concept iteration
+  and autonomous resume the turn starts. `/claude-strict <task>` for one
+  prompt, `/claude-strict on|off` for the current worktree + branch — never
+  project-wide. Triggers on: "/claude-strict", "strict", "strikt", "genau so
+  und nicht mehr", "nur das ändern", "nichts anderes anfassen". Do NOT
+  trigger for: ordinary requests without a literal-scope signal, /tune-harden
+  or /tune-polish scope fences (they stay as they are), or TypeScript
+  `strict` compiler options.
 argument-hint: "<task> | on | off | status"
 allowed-tools: Bash(node *), Bash(git *), Read, Write, Edit, Glob, Grep, Skill, Agent, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

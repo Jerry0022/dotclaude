@@ -3,16 +3,13 @@ name: tune-polish
 version: 0.2.0
 description: >-
   UI refinement pass: visual consistency (spacing, tokens, typography, icons,
-  colors), state-visuals (hover/focus/disabled/loading/empty/error), UI-side
-  functionality verification (clicks react, forms validate, loading shows),
-  and small backend fixes when they are demonstrably UI-related (lag, missing
-  field, broken contract). May introduce structural UI changes (new buttons,
-  repositions, re-arrangements) but ALWAYS with user approval. Triggers on:
-  "polish", "ui polish", "ui angleichen", "design konsistenz", "feinschliff",
-  "visuell aufräumen", "design pass". Skips approval prompts when invoked
-  with --autonomous (still respects the "structural changes flagged not applied"
-  rule). Do NOT trigger for: backend-only work, feature implementation,
-  theme/style overhaul.
+  colors), state-visuals, UI-side functionality checks, and small
+  demonstrably UI-related backend fixes. Structural UI changes only with user
+  approval; `--autonomous` skips prompts but keeps the "structural changes
+  flagged not applied" rule. Triggers on: "polish", "ui polish", "ui
+  angleichen", "design konsistenz", "feinschliff", "visuell aufräumen",
+  "design pass". Do NOT trigger for: backend-only work, feature
+  implementation, theme/style overhaul.
 argument-hint: "[--autonomous] [--invoked-by=agents|autonomous] [optional scope: file/dir path]"
 allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

@@ -2,18 +2,13 @@
 name: auto-graph
 version: 0.4.1
 description: >-
-  Codebase knowledge graph via the external graphify CLI, default-on and
-  opt-out. Detects graphify, auto-installs it in the background if missing,
-  keeps the graph fresh with a key-less `graphify update .`, and answers
-  codebase questions with `graphify query`. Enabled automatically in every
-  project unless `.claude/graphify.json` (or the global `~/.claude/graphify.json`)
-  has `{"consent":false}`. Once enabled, the graph is kept fresh windowlessly
-  (SessionStart refresh + PreToolUse self-heal — graphify's own git hooks are
-  removed, not installed) and broad raw-file searches are hard-gated toward
-  the graph. Deliberately does NOT install graphify's own PreToolUse hook
-  (would collide with the devops token-guard); the enforcement is
-  devops-owned. Triggers: "knowledge graph", "graphify", "code graph",
-  "/auto-graph". Do NOT trigger for simple single-file lookups.
+  Codebase knowledge graph via the external graphify CLI — default-on,
+  opt-out via `{"consent":false}` in `.claude/graphify.json` or
+  `~/.claude/graphify.json`. Auto-installs graphify, keeps the graph fresh
+  windowlessly, answers codebase questions with `graphify query`, and
+  hard-gates broad raw-file searches toward the graph. Triggers: "knowledge
+  graph", "graphify", "code graph", "/auto-graph". Do NOT trigger for simple
+  single-file lookups.
 allowed-tools: Bash(node *), Bash(graphify *), Bash(uv *), Bash(pipx *), Read, Glob, Write
 ---
 

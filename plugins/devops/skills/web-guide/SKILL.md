@@ -2,16 +2,15 @@
 name: web-guide
 version: 0.1.0
 description: >-
-  Live tutorial inside the user's own Edge tab for anything Claude Code cannot
-  do itself on a website: log in, generate an API key, create an OAuth app,
-  accept terms, change an account setting. Claude opens the page, overlays a
-  small draggable step panel, guides one step at a time, and takes values
-  (key names, IDs, secrets) back through the panel. Triggers on:
-  "guide me through", "führe mich durch", "web guide", "zeig mir auf der
-  Website", "ich muss das auf der Website machen", "walk me through the
-  site", "API key anlegen", "help me set up on <site>". Do NOT trigger for
-  testing the project's own app (use the browser tools directly), for
-  scraping/reading a page, or for local-app tutorials.
+  Live tutorial in the user's own Edge tab for what Claude Code cannot do on a
+  website itself (log in, generate an API key, create an OAuth app, accept
+  terms, change an account setting): a step panel overlay guides one step at a
+  time and takes values back. Triggers on: "guide me through", "führe mich
+  durch", "web guide", "zeig mir auf der Website", "ich muss das auf der
+  Website machen", "walk me through the site", "API key anlegen", "help me set
+  up on <site>". Do NOT trigger for testing the project's own app (use the
+  browser tools directly), for scraping/reading a page, or for local-app
+  tutorials.
 argument-hint: "[what the user has to achieve on which website, and what must come back]"
 allowed-tools: Read, Glob, Bash(node *), AskUserQuestion, mcp__claude-in-chrome__tabs_context_mcp, mcp__claude-in-chrome__tabs_create_mcp, mcp__claude-in-chrome__navigate, mcp__claude-in-chrome__javascript_tool, mcp__plugin_devops_dotclaude-completion__*
 ---

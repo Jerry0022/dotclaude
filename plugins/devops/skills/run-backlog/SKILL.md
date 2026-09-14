@@ -2,17 +2,16 @@
 name: run-backlog
 version: 0.5.0
 description: >-
-  Milestone-centric backlog runner. Picks open GitHub milestones (or loose
-  issues when there are none), then works the selected items off end-to-end —
-  refine, implement, test/QA, and ship each one — unsupervised while the user is
-  away or asleep, closing each issue and its milestone as it lands. Use when the
-  user wants to work off the planned backlog / milestones without babysitting,
-  or "let old ideas and fixes get worked off while I'm gone". Triggers: "backlog
-  abarbeiten", "arbeite den backlog ab", "backlog runner", "run the backlog",
-  "milestones abarbeiten", "arbeite die milestones ab", "arbeite den milestone
-  ab". Do NOT trigger for maximizing token budget (that is /run-burn,
-  explicit-only), nor for a generic single ad-hoc AFK task (that is
-  /run-autonomous).
+  Milestone-centric backlog runner: picks open GitHub milestones (or loose
+  issues), then refines, implements, tests and ships each item unsupervised
+  while the user is away, closing issues and milestones as they land. Use
+  when the user wants the planned backlog worked off without babysitting, or
+  "let old ideas and fixes get worked off while I'm gone".
+  Triggers: "backlog abarbeiten", "arbeite den backlog ab", "backlog runner",
+  "run the backlog", "milestones abarbeiten", "arbeite die milestones ab",
+  "arbeite den milestone ab". Do NOT trigger for maximizing token budget
+  (that is /run-burn, explicit-only), nor for a generic single ad-hoc AFK
+  task (that is /run-autonomous).
 argument-hint: "[optional filter, e.g. 'only bugs' or a milestone name]"
 allowed-tools: >-
   Bash(*), Read, Write, Edit, Glob, Grep, Agent,

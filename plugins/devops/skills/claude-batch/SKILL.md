@@ -2,7 +2,12 @@
 name: claude-batch
 version: 0.5.0
 description: >-
-  Collect mode — batch prompts into one master plan instead of executing them one by one. While active, a UserPromptSubmit hook blocks each prompt (it never reaches the model, costing nothing) and appends it to `.claude/batch.md`; a configurable execute marker fires the merge, where the whole note set becomes ONE feasibility-checked plan. Purpose: avoid the rework of building for prompt 1 what prompt 5 supersedes, and avoid paying a full turn per observation. Triggers on "/claude-batch", "sammelmodus", "collect mode", "batch mode", "erstmal sammeln", "nicht sofort umsetzen". Do NOT trigger for normal work, for backlog execution (/run-backlog), or for issue creation (/setup-issue).
+  Collect mode — a UserPromptSubmit hook parks each prompt in
+  `.claude/batch.md` instead of executing it (no model turn), until an
+  execute marker merges the whole set into ONE feasibility-checked plan.
+  Triggers on "/claude-batch", "sammelmodus", "collect mode", "batch mode",
+  "erstmal sammeln", "nicht sofort umsetzen". Do NOT trigger for normal work,
+  for backlog execution (/run-backlog), or for issue creation (/setup-issue).
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
