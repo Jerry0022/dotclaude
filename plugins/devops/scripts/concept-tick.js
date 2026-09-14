@@ -3,8 +3,12 @@
  * @script concept-tick
  * @version 0.1.0
  * @plugin devops
- * @description One tick of the concept bridge's backup cron, as a script instead
- *   of a 1128-character prompt.
+ * @description One tick of the concept bridge's backstop cron, as a script
+ *   instead of a 1128-character prompt. Since #363 the cron is sparse (every
+ *   15 min): the token-free pickup waker (`concept-watch.js --mode watch`)
+ *   owns cleanup, liveness and pickup, and this tick only matters when both
+ *   watchers died without a session restart. Every tick — even a silent one —
+ *   is still a model turn for the cron that runs it, which is why it is rare.
  *
  *   Claude Code renders a cron's full prompt text as its card in the background
  *   tasks panel, so the old inline body — self-cleanup gate, heartbeat POST,

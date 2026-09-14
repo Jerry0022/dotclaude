@@ -14,6 +14,19 @@
  *                   submission lands. The exit IS the signal: a detached Bash
  *                   task re-invokes Claude when it finishes, so the user never
  *                   has to announce a submission in chat (issue #276).
+ *                   Since #363 it also OWNS the monitoring duties the per-minute
+ *                   cron used to carry, token-free:
+ *                     - self-cleanup gate: state file gone / foreign port /
+ *                       concept HTML gone ⇒ POST /shutdown, exit with the reason;
+ *                     - page liveness: no browser poll (GET /heartbeat or
+ *                       GET /reload, reported by the server as `browser_ts`)
+ *                       for `--liveness` seconds ⇒ re-open the page in the
+ *                       user's browser, at most once per silence window;
+ *                     - structured exit on a submission —
+ *                       `WAKER_EXIT reason=PENDING_SUBMISSION version=N action=…`
+ *                       — so the woken Claude reads one line instead of
+ *                       re-probing.
+ *                   The cron is a sparse backstop only (every 15 min).
  *
  *   Why a script and not the inline `while true; do … sleep 20; done` loops
  *   this replaces:
@@ -30,9 +43,11 @@
  *       usable prefix — the only grant that covered it was a blanket one. A
  *       `node …` invocation is already covered.
  *
- *   Exit lines are unchanged (`PULSER_EXIT reason=…` / `WAKER_EXIT reason=…`)
+ *   Exit lines keep the `PULSER_EXIT reason=…` / `WAKER_EXIT reason=…` shape
  *   so the reason→action table in the concept skill still applies verbatim,
- *   plus `STATE_NEVER_APPEARED` for a launch that outran its setup.
+ *   plus `STATE_NEVER_APPEARED` for a launch that outran its setup and
+ *   `HTML_GONE` for a concept whose page was deleted (#363). A
+ *   `PENDING_SUBMISSION` line carries `version=N action=<a>` after the reason.
  *
  *   Exit codes: 0 once it is running — the exit is a signal, not a failure, and
  *   even an internal error is reported as a reason line. Only invalid arguments
@@ -48,6 +63,7 @@ const DEFAULTS = {
   grace: 60,         // seconds to wait for the state file before giving up
   tolerate: 4,       // consecutive request failures before declaring the server dead
   timeout: 8,        // seconds per request
+  liveness: 180,     // seconds without a browser poll before the page is re-opened (watch mode; 0 = off)
 };
 
 function parseArgs(argv) {
@@ -75,14 +91,18 @@ function validate(opts) {
   if (!(opts.interval > 0) || !(opts.grace >= 0) || !(opts.tolerate > 0) || !(opts.timeout > 0)) {
     return 'interval/grace/tolerate/timeout must be positive numbers';
   }
+  if (!(opts.liveness >= 0)) return 'liveness must be 0 (off) or a positive number of seconds';
   return null;
 }
 
 /**
  * Is this watcher still the right one for the concept on disk?
- * @returns {'ok'|'gone'|'port-changed'}
+ * With `exists` given (watch mode), a state file whose `html_path` no longer
+ * resolves — relative to the project root, the state file's grandparent — is
+ * `html-gone`: the concept's page was deleted, the session is over (#363).
+ * @returns {'ok'|'gone'|'port-changed'|'html-gone'}
  */
-function checkState(statePath, port) {
+function checkState(statePath, port, exists) {
   let raw;
   try {
     raw = fs.readFileSync(statePath, 'utf8');
@@ -102,7 +122,39 @@ function checkState(statePath, port) {
   }
   if (!parsed || typeof parsed.port !== 'number') return 'gone';
   // Numeric, so no `"port": 8883` spacing dependency and no 8883-vs-88831 slip.
-  return parsed.port === port ? 'ok' : 'port-changed';
+  if (parsed.port !== port) return 'port-changed';
+  if (exists && typeof parsed.html_path === 'string' && parsed.html_path) {
+    const root = path.dirname(path.dirname(statePath));
+    if (!exists(path.join(root, parsed.html_path))) return 'html-gone';
+  }
+  return 'ok';
+}
+
+/** The state file as an object, or null while it is missing / half-written. */
+function readState(statePath) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Re-open the concept page in the user's browser (#363). Detached and
+ * fire-and-forget: a browser that refuses to start must not take the waker
+ * down with it. Windows opens Edge explicitly — the page is a localhost URL
+ * and `start` would otherwise pick whatever handles http://.
+ */
+function reopen(url) {
+  const { spawn } = require('child_process');
+  let cmd, args;
+  if (process.platform === 'win32') { cmd = 'cmd'; args = ['/c', 'start', '', 'msedge', url]; }
+  else if (process.platform === 'darwin') { cmd = 'open'; args = [url]; }
+  else { cmd = 'xdg-open'; args = [url]; }
+  try {
+    spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true }).on('error', () => {}).unref();
+  } catch { /* best effort */ }
 }
 
 function request(port, path, method, timeoutSec) {
@@ -123,20 +175,28 @@ function request(port, path, method, timeoutSec) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function finish(tag, reason) {
+function finish(tag, reason, detail = '') {
   // Synchronous write: the reason line IS the payload of the wake, and on
   // POSIX a piped stdout is async — `process.exit` right after an async write
   // can truncate it.
-  try { fs.writeSync(1, `${tag}_EXIT reason=${reason}\n`); }
-  catch { process.stdout.write(`${tag}_EXIT reason=${reason}\n`); }
+  const line = `${tag}_EXIT reason=${reason}${detail}\n`;
+  try { fs.writeSync(1, line); }
+  catch { process.stdout.write(line); }
   process.exit(0);
 }
 
 async function run(opts, deps = {}) {
-  const io = { request, sleep, checkState, exists: (p) => fs.existsSync(p), ...deps };
+  const io = { request, sleep, checkState, readState, reopen, now: Date.now, exists: (p) => fs.existsSync(p), ...deps };
   const tag = opts.mode === 'pulse' ? 'PULSER' : 'WAKER';
+  const watch = opts.mode === 'watch';
   const intervalMs = opts.interval * 1000;
-  const emit = deps.emit || ((reason) => finish(tag, reason));
+  const emit = deps.emit || ((reason, detail) => finish(tag, reason, detail));
+  // Cleanup is the waker's job (#363): it shuts the bridge down before it
+  // leaves, so a dead concept never keeps a server alive waiting for a cron.
+  const leave = async (reason) => {
+    if (watch) await io.request(opts.port, '/shutdown', 'POST', opts.timeout);
+    return emit(reason);
+  };
 
   // The launch step used to run before the state file was written, which made
   // the very first check fatal. Wait it out instead.
@@ -151,10 +211,19 @@ async function run(opts, deps = {}) {
   }
 
   let fails = 0;
+  // Page liveness (watch mode): the server reports the last browser poll as
+  // `browser_ts`. Silence longer than `liveness` re-opens the page ONCE; the
+  // flag re-arms only after a tab has polled again, so a browser that is
+  // closed on purpose gets one reopen, never a storm. Before the first poll
+  // the watcher's own start is the baseline — a page that never opened is
+  // as closed as one that was closed.
+  const startedAt = io.now();
+  let reopened = false;
   for (;;) {
-    const state = io.checkState(opts.state, opts.port);
-    if (state === 'gone') return emit('STATE_GONE');
-    if (state === 'port-changed') return emit('PORT_CHANGED');
+    const state = io.checkState(opts.state, opts.port, watch ? io.exists : undefined);
+    if (state === 'gone') return leave('STATE_GONE');
+    if (state === 'port-changed') return leave('PORT_CHANGED');
+    if (state === 'html-gone') return leave('HTML_GONE');
 
     const res = opts.mode === 'pulse'
       ? await io.request(opts.port, '/heartbeat', 'POST', opts.timeout)
@@ -162,10 +231,28 @@ async function run(opts, deps = {}) {
 
     if (res.ok) {
       fails = 0;
-      if (opts.mode === 'watch') {
-        let pending = false;
-        try { pending = !!JSON.parse(res.body).pending; } catch { /* treat as not pending */ }
-        if (pending) return emit('PENDING_SUBMISSION');
+      if (watch) {
+        let body = {};
+        try { body = JSON.parse(res.body) || {}; } catch { /* treat as not pending */ }
+        if (body.pending) {
+          const version = Number.isInteger(body.version) ? ` version=${body.version}` : '';
+          const action = typeof body.action === 'string' && /^[a-z-]+$/.test(body.action) ? ` action=${body.action}` : '';
+          return emit('PENDING_SUBMISSION', version + action);
+        }
+        if (opts.liveness > 0) {
+          const seen = Number.isFinite(body.browser_ts) && body.browser_ts > 0 ? body.browser_ts : startedAt;
+          const silentMs = io.now() - seen;
+          if (silentMs < opts.liveness * 1000) {
+            reopened = false;
+          } else if (!reopened) {
+            const st = io.readState(opts.state);
+            const html = st && typeof st.html_path === 'string' ? st.html_path : '';
+            if (html) {
+              reopened = true;
+              io.reopen(`http://localhost:${opts.port}/${html.replace(/^\/+/, '')}`);
+            }
+          }
+        }
       }
     } else if (++fails >= opts.tolerate) {
       // Tolerate transient blips — a single failed request (server busy, a
@@ -178,14 +265,14 @@ async function run(opts, deps = {}) {
   }
 }
 
-module.exports = { parseArgs, validate, checkState, run, DEFAULTS };
+module.exports = { parseArgs, validate, checkState, readState, reopen, run, DEFAULTS };
 
 if (require.main === module) {
   const opts = parseArgs(process.argv.slice(2));
   const err = validate(opts);
   if (err) {
     process.stderr.write(`concept-watch: ${err}\n`);
-    process.stderr.write('usage: concept-watch.js --mode pulse|watch --port <n> --state <abs path> [--interval 20] [--grace 60]\n');
+    process.stderr.write('usage: concept-watch.js --mode pulse|watch --port <n> --state <abs path> [--interval 20] [--grace 60] [--liveness 180]\n');
     process.exit(2);
   }
   // A crash must still announce itself as a reason line, not as a stack trace:

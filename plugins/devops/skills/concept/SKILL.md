@@ -871,8 +871,8 @@ window — there is no usable degraded mode.
 Start the bridge server (`scripts/concept-server.py`) on a port chosen via the
 cross-session registry (`node scripts/concept-port-registry.js pick "<project-root>"`
 — skips ports owned by another live concept session; see bridge-server.md
-§ port selection), arm the combined heartbeat + auto-poll cron (fires every
-minute, handles heartbeat + decision pickup + conditional reset), write
+§ port selection), arm the sparse backstop cron (fires every 15 minutes —
+each fire is a model turn, so it is a last resort, never the monitor), write
 `.claude/concept-active.json` so a future SessionStart can rediscover this
 concept, **send the first heartbeat AND verify it round-trips with a
 non-zero `claude_ts`** (see `deep-knowledge/bridge-server.md` § Step 5 —
@@ -889,12 +889,16 @@ launched via the Bash tool with `run_in_background: true` (exact invocations in
    and never exits on a pending submission, so the connection indicator stays
    green even through a long `implement`.
 2. **Pickup waker** — polls `/pending` every ~20 s and exits the instant a
-   submission lands, which wakes Claude immediately.
+   submission lands, which wakes Claude immediately. It also owns the
+   self-cleanup gate (state file gone / foreign port / page deleted ⇒
+   `/shutdown` + exit) and page liveness (no browser poll for 3 min ⇒ the
+   page is re-opened in Edge, once per silence window) — token-free, see
+   `deep-knowledge/bridge-server.md` § step 3 (#363).
 
 The cron alone is NOT sufficient for either job: it fires only while the REPL
 is idle and has multi-minute gaps in practice (observed: 638 s with the cron
-registered and the session idle). It stays armed as the backup pickup path,
-never as the primary one.
+registered and the session idle). It stays armed as a sparse backstop (every
+15 min), never as the primary path — every fire costs a model turn.
 
 **Neither task — nor the bridge server — is pending work.** They run for the
 whole concept and never yield a result; they are the waiting itself.
@@ -1026,7 +1030,7 @@ full payload from `/decisions` and process it (Step 5).
 **Polling schedule:**
 - **Primary mechanism**: the **pickup waker** from Step 3. It exits the moment
   a submission lands, which wakes Claude — no user chat message required.
-- **Backup**: the combined cron from Step 3, every minute — and only a partial
+- **Backstop**: the cron from Step 3, every 15 minutes — and only a partial
   one. It covers the window between the waker exiting and being re-launched
   ONLY while the REPL is idle, which is exactly when that window is not open:
   during a processing round the REPL is busy and the cron cannot fire. That is
@@ -1754,9 +1758,10 @@ reason has exactly one correct response:
 
 | Exit line | What happened | Do this |
 |---|---|---|
-| `WAKER_EXIT reason=PENDING_SUBMISSION` | A submission landed | Re-confirm via `/pending`, then process it (Step 5a) and re-launch the waker. A `false` here is a stale wake — re-launch and carry on |
+| `WAKER_EXIT reason=PENDING_SUBMISSION version=N action=<a>` | A submission landed — `version` is the `_version` to hand back to `/reset`, `action` its branch (`iterate` / `implement` / `finalize`) | Fetch `/decisions` and process it (Step 5a) on that branch, then re-launch the waker. If `/decisions` comes back not submitted it was a stale wake — re-launch and carry on |
 | `WAKER_EXIT reason=SERVER_DEAD` / `PULSER_EXIT reason=SERVER_DEAD` | 4 consecutive failed polls — the bridge is gone | Restart the bridge server **on the same port** (do NOT pick a new one — the state file, the open tab and both watchers are all bound to it), then re-launch **both** tasks |
-| `*_EXIT reason=STATE_GONE` | `.claude/concept-active.json` is gone — the concept ended | Nothing. Do not re-launch; the session is over |
+| `*_EXIT reason=STATE_GONE` | `.claude/concept-active.json` is gone — the concept ended (the waker already POSTed `/shutdown`) | Nothing. Do not re-launch; the session is over |
+| `WAKER_EXIT reason=HTML_GONE` | The concept page was deleted from disk — the waker shut the bridge down | Nothing to re-launch. `CronDelete` the backstop cron and remove the state file if it is still there |
 | `*_EXIT reason=STATE_NEVER_APPEARED` | The launch outran the step that writes the state file | Write it, then re-launch. NOT the same as STATE_GONE — the concept is alive |
 | `*_EXIT reason=PORT_CHANGED` | A newer concept took over | Nothing. This task belongs to a superseded session |
 | No `*_EXIT` line at all | The task died without announcing why — bad arguments, a crash, `node` missing, killed | Do NOT assume the session ended. Verify the bridge with one `curl /heartbeat`, then re-launch both tasks |

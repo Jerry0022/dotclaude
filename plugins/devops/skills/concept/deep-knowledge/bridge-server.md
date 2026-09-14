@@ -174,9 +174,17 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    coding sessions with a tighter watchdog requirement can pass a lower value
    (e.g. `--heartbeat-timeout-ms 300000` for 5 min) explicitly.
 
-3. Set up the **combined heartbeat + auto-poll cron**. This single cron keeps
-   the connection indicator green AND automatically picks up user submissions
-   — no manual trigger needed from the user.
+3. Set up the **sparse backstop cron** (every 15 minutes). It used to fire
+   every minute and was described as the pickup path; since #363 the two
+   token-free watchers below own the whole monitoring duty — heartbeat,
+   self-cleanup, page liveness, pickup — and the cron is a last-resort
+   backstop only. **Every cron fire is a model turn**: Claude must issue the
+   Bash call and read its (empty) result, two inferences over the full cached
+   context, counted against the 5-h/weekly limits. At once a minute that was
+   hundreds of near-empty turns per concept session competing with the user's
+   own work; at once per 15 min it is four an hour, and it only matters if
+   BOTH watchers died without a session restart (a restart re-arms them via
+   `ss.concept.resume`).
 
    **The prompt is two sentences — the procedure is a script.** Claude Code
    renders a cron's *entire* prompt text as its card in the background tasks
@@ -201,7 +209,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    literal path, which is the form shown below.
 
    ```
-   CronCreate(cron: "* * * * *", recurring: true, prompt: <<EOF
+   CronCreate(cron: "*/15 * * * *", recurring: true, prompt: <<EOF
    Silently run via Bash: node "{plugin-root}/scripts/concept-tick.js" --port {port} --state "{project-root}/.claude/concept-active.json" — this services the concept bridge on port {port}. No output → produce NO output (silent tick). Any output IS your instruction for this tick: follow it exactly.
    EOF)
    ```
@@ -349,8 +357,9 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    ("Implementierung abgeschlossen") lights up before the page reloads.
 
    **Why combined, not two crons?** One cron minimizes race conditions and makes
-   the contract explicit: every tick does both. Minimum cron resolution is 1 min,
-   so the max submit-to-process lag is ~60 s — acceptable for interactive flows.
+   the contract explicit: every tick does both. The waker (below) is what makes
+   the submit-to-process lag ~20 s; the cron's 15-min cadence is the lag only
+   when both watchers are gone.
 
    **The cron alone does NOT keep the indicator green — add TWO decoupled
    background tasks.** The page flips to "Claude nicht verbunden" as soon as
@@ -428,8 +437,27 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    the state file is gone, its port changed, or the server is truly
    unreachable, so neither can become a ghost (the `--html` watchdog still
    backs them up). The exit lines (`PULSER_EXIT reason=…` / `WAKER_EXIT
-   reason=…`) are unchanged, so the reason → action table in SKILL.md Step 5d
-   applies verbatim.
+   reason=…`) keep their shape, so the reason → action table in SKILL.md Step
+   5d applies verbatim.
+
+   **The waker owns the monitoring duty (#363).** Three things the per-minute
+   cron used to carry live in `--mode watch` now, token-free:
+   - **Self-cleanup gate.** Every poll re-reads the state file: gone, foreign
+     port, or `html_path` no longer on disk (resolved against the project
+     root) ⇒ the waker POSTs `/shutdown` itself and exits `STATE_GONE` /
+     `PORT_CHANGED` / `HTML_GONE`. No cron is needed for a dead concept to
+     take its server down.
+   - **Page liveness.** The server stamps `browser_ts` on every browser-only
+     poll (GET `/heartbeat`, GET `/reload`) and reports it on `/pending`. No
+     browser poll for `--liveness` seconds (default 180) ⇒ the waker re-opens
+     `http://localhost:{port}/{html_path}` in the user's Edge — once per
+     silence window, re-armed only after a tab polls again, so a tab closed
+     on purpose gets one reopen and never a storm. Before the first poll the
+     waker's own start is the baseline. `--liveness 0` switches it off.
+   - **Structured exit.** A submission exits with
+     `WAKER_EXIT reason=PENDING_SUBMISSION version=N action=iterate|implement|finalize`
+     (`/pending` carries the submission's `action`), so the woken Claude reads
+     ONE line and branches on it instead of re-probing.
 
    **Lifecycle:** launch BOTH at concept open. On `PENDING_SUBMISSION` the
    waker exits and wakes Claude; Claude processes the payload and
@@ -437,11 +465,11 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    step 7), not at the end of the round. The pulser is still running and must
    not be duplicated (a second pulser on the same port is harmless but
    wasteful; if unsure, the pulser's `STATE_GONE`/`PORT_CHANGED` guards make a
-   stale one exit on its own). Keep the cron too — but as a **partial** backup
-   only: it fires solely while the REPL is idle, so it cannot cover the window
-   between the waker exiting and being re-launched, because during a
-   processing round the REPL is busy. That window is closed by re-launching
-   early, not by the cron.
+   stale one exit on its own). Keep the cron too — but as a **sparse
+   backstop** only (every 15 min): it fires solely while the REPL is idle, so
+   it cannot cover the window between the waker exiting and being re-launched,
+   because during a processing round the REPL is busy. That window is closed
+   by re-launching early, not by the cron.
 
    **None of the three is pending work.** The server, the pulser and the waker
    run for the whole concept and never yield a result — they are the waiting

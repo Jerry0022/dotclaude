@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.167.0] — 2026-09-15
+
+### Changed
+
+- **The concept page's pickup waker owns the monitoring; the cron is a 15-minute backstop.** `concept-tick.js` documented its idle tick as "costs no tokens", which is true for the script and false for the cron that runs it: every fire is a model turn — Claude issues the Bash call and reads the empty result, two inferences over the full cached context — counted against the 5-h/weekly limits. At once a minute that was hundreds of near-empty turns per concept session competing with the user's own work (#363). The token-free `concept-watch.js --mode watch` now carries everything the cron carried: the **self-cleanup gate** (state file gone / foreign port / concept HTML gone ⇒ it POSTs `/shutdown` itself and exits `STATE_GONE` / `PORT_CHANGED` / the new `HTML_GONE`), **page liveness** (the bridge stamps `browser_ts` on the browser-only polls — GET `/heartbeat`, GET `/reload` — and reports it on `/pending`; no browser poll for `--liveness` seconds, default 180, re-opens `http://localhost:{port}/{html_path}` in Edge once per silence window, re-armed only after a tab polls again; `--liveness 0` switches it off), and a **structured exit** — `WAKER_EXIT reason=PENDING_SUBMISSION version=N action=iterate|implement|finalize`, `/pending` now carrying the submission's `action`, so the woken Claude branches on one line instead of re-probing. The cron cadence is `*/15 * * * *` in `bridge-server.md`, `SKILL.md`, `monitoring.md` and the `ss.concept.resume` hook, and the docs call it a backstop with the model-turn cost spelled out. The pulser is untouched and never shuts anything down.
+
 ## [0.166.0] — 2026-09-15
 
 ### Changed

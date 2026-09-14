@@ -385,7 +385,7 @@ function buildResumeInstructions(state, pendingState, statePath = STATE_PATH, st
     `are session-scoped just like crons. Re-arm all three now.`
   );
   lines.push(
-    `(a) BACKUP pickup path — CronCreate with cron "* * * * *" (recurring: true) and prompt: ` +
+    `(a) BACKSTOP cron (sparse — every fire is a model turn) — CronCreate with cron "*/15 * * * *" (recurring: true) and prompt: ` +
     `'${buildCronBody(state.port, statePath)}'.`
   );
   lines.push(
@@ -475,7 +475,7 @@ function buildDeadBridgeRelaunch(state, statePath = STATE_PATH) {
     `bound, another session brought the bridge back — skip the relaunch and only re-arm the watchers.`,
     `Then verify the heartbeat round-trips (POST /heartbeat, then GET /heartbeat must return a non-zero ` +
     `claude_ts), re-arm the keepalive pulser (${bg.pulser}) and the pickup waker (${bg.waker}) as background ` +
-    `Bash tasks (run_in_background: true), and re-arm the backup cron: CronCreate with cron "* * * * *" ` +
+    `Bash tasks (run_in_background: true), and re-arm the backstop cron: CronCreate with cron "*/15 * * * *" ` +
     `(recurring: true) and prompt: '${buildCronBody(state.port, statePath)}'. The page reconnects on its own ` +
     `once the heartbeat is back — the user does not have to reload.`,
   ].join(' ');

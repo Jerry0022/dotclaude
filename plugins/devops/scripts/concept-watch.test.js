@@ -263,3 +263,121 @@ describe("parseArgs — odd argv", () => {
     expect(Object.prototype.hasOwnProperty.call(o, "constructor")).toBe(false);
   });
 });
+
+// #363 — the waker owns the monitoring duty the per-minute cron used to carry.
+describe("run — waker owns cleanup, liveness and the structured exit (#363)", () => {
+  /** Like harness(), but with a clock, a reopen spy and a readable state. */
+  function watcher({ responses = [], state = "ok", liveness = 180, html = "docs/concepts/x.html", exists } = {}) {
+    const calls = [];
+    let clock = 1_000_000;
+    let exit = null;
+    const opts = { mode: "watch", port: 8883, state: "/proj/.claude/concept-active.json", ...DEFAULTS, liveness };
+    const p = run(opts, {
+      exists: exists || (() => true),
+      sleep: async (ms) => { clock += ms; },
+      now: () => clock,
+      checkState: () => (typeof state === "function" ? state() : state),
+      readState: () => ({ port: 8883, html_path: html }),
+      reopen: (url) => { calls.push({ reopen: url }); },
+      request: async (_port, reqPath, method) => {
+        calls.push({ reqPath, method });
+        return responses.shift() ?? { ok: false, body: "" };
+      },
+      emit: (reason, detail = "") => { exit = reason + detail; return reason; },
+    });
+    return { done: p.then(() => exit), calls, tick: (ms) => { clock += ms; } };
+  }
+  const idle = (browser_ts) => ({ ok: true, body: JSON.stringify({ pending: false, version: 0, action: "", browser_ts }) });
+
+  test("PENDING_SUBMISSION carries version and action on the exit line", async () => {
+    const w = watcher({ responses: [{ ok: true, body: '{"pending": true, "version": 7, "action": "implement", "browser_ts": 1}' }] });
+    await expect(w.done).resolves.toBe("PENDING_SUBMISSION version=7 action=implement");
+  });
+
+  test("an odd action value is dropped from the line rather than echoed", async () => {
+    const w = watcher({ responses: [{ ok: true, body: '{"pending": true, "version": 2, "action": "x y; rm", "browser_ts": 1}' }] });
+    await expect(w.done).resolves.toBe("PENDING_SUBMISSION version=2");
+  });
+
+  test.each([["gone", "STATE_GONE"], ["port-changed", "PORT_CHANGED"], ["html-gone", "HTML_GONE"]])(
+    "cleanup verdict %s → POST /shutdown, then exit %s",
+    async (verdict, reason) => {
+      const w = watcher({ state: verdict });
+      await expect(w.done).resolves.toBe(reason);
+      expect(w.calls).toEqual([{ reqPath: "/shutdown", method: "POST" }]);
+    }
+  );
+
+  test("the pulser never shuts the bridge down — cleanup is the waker's job", async () => {
+    const calls = [];
+    let reason = null;
+    await run({ mode: "pulse", port: 8883, state: "/proj/.claude/concept-active.json", ...DEFAULTS }, {
+      exists: () => true, sleep: async () => {}, checkState: () => "gone",
+      request: async (_p, reqPath, method) => { calls.push({ reqPath, method }); return { ok: true, body: "" }; },
+      emit: (r) => { reason = r; return r; },
+    });
+    expect(reason).toBe("STATE_GONE");
+    expect(calls).toEqual([]);
+  });
+
+  test("checkState: a state file whose html_path is gone → html-gone (watch mode only)", () => {
+    const p = stateFile({ port: 8883, html_path: "docs/concepts/gone.html" });
+    expect(checkState(p, 8883, () => false)).toBe("html-gone");
+    expect(checkState(p, 8883, () => true)).toBe("ok");
+    expect(checkState(p, 8883)).toBe("ok");                       // no exists → the pulser's old verdict
+    const root = path.dirname(path.dirname(p));
+    let asked = "";
+    checkState(p, 8883, (f) => { asked = f; return true; });
+    expect(asked).toBe(path.join(root, "docs/concepts/gone.html"));   // resolved against the project root
+  });
+
+  test("no browser poll for longer than --liveness → the page is re-opened exactly once per silence window", async () => {
+    const w = watcher({
+      responses: [
+        idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0),   // 11 polls × 20 s = 220 s of silence
+        { ok: true, body: '{"pending": true, "version": 1, "action": "iterate"}' },
+      ],
+    });
+    await w.done;
+    const reopens = w.calls.filter(c => c.reopen);
+    expect(reopens).toEqual([{ reopen: "http://localhost:8883/docs/concepts/x.html" }]);
+  });
+
+  test("a fresh browser poll re-arms the reopen; the next silence window reopens again", async () => {
+    // clock starts at 1_000_000; browser_ts values are absolute ms on that clock
+    const w = watcher({
+      responses: [
+        idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0),          // silent → reopen #1 at ~200 s
+        idle(1_000_000 + 200_000),                                                                        // the tab is back
+        idle(1_000_000 + 200_000), idle(1_000_000 + 200_000), idle(1_000_000 + 200_000), idle(1_000_000 + 200_000),
+        idle(1_000_000 + 200_000), idle(1_000_000 + 200_000), idle(1_000_000 + 200_000), idle(1_000_000 + 200_000),
+        idle(1_000_000 + 200_000), idle(1_000_000 + 200_000),                                               // silent again → reopen #2
+        { ok: true, body: '{"pending": true}' },
+      ],
+    });
+    await w.done;
+    expect(w.calls.filter(c => c.reopen)).toHaveLength(2);
+  });
+
+  test("a tab that keeps polling is never re-opened", async () => {
+    let t = 1_000_000;
+    const live = () => ({ ok: true, body: JSON.stringify({ pending: false, browser_ts: (t += 20_000) }) });
+    const w = watcher({ responses: [live(), live(), live(), live(), live(), live(), live(), live(), live(), live(), live(), live(), { ok: true, body: '{"pending": true}' }] });
+    await w.done;
+    expect(w.calls.some(c => c.reopen)).toBe(false);
+  });
+
+  test("--liveness 0 switches the reopen off", async () => {
+    const w = watcher({ liveness: 0, responses: [idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), { ok: true, body: '{"pending": true}' }] });
+    await w.done;
+    expect(w.calls.some(c => c.reopen)).toBe(false);
+  });
+
+  test("validate: liveness must be 0 or positive; parseArgs reads --liveness", () => {
+    const base = { mode: "watch", port: 8883, state: path.resolve("/x/concept-active.json"), ...DEFAULTS };
+    expect(validate({ ...base, liveness: -1 })).toMatch(/liveness/);
+    expect(validate({ ...base, liveness: 0 })).toBeNull();
+    expect(parseArgs(["--mode", "watch", "--port", "8883", "--state", "/x/s.json", "--liveness", "90"]).liveness).toBe(90);
+    expect(parseArgs([]).liveness).toBe(180);
+  });
+});
