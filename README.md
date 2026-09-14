@@ -379,6 +379,10 @@ Spawning is governed by the always-on delegation policy
 for single-domain work, one background agent when the deliverable is a conclusion
 (research, test runs, redteam), 2–3 parallel agents for independent domains, and
 `/run-agents` only offered — never auto-started — for Complex-tier work.
+A budget class (plan × 5h window × week, read from the local usage snapshot)
+keeps that honest on small plans: `free` / `ask-before-parallel` (a Pro plan
+from 0 % — single agents run on sonnet, a parallel spawn asks one question per
+session) / `sonnet-only`. Explicit `/run-*` skills are never asked or downgraded.
 
 | Agent | Role |
 |---|---|
