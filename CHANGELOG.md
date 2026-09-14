@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.162.0] — 2026-09-14
+
+### Added
+
+- **The session title names the state the last completion card left the session in.** `/concept` and `/claude-batch` already prefixed the Desktop sidebar title with their emoji; now every card does. `render_completion_card` returns a `[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]` block beside the card markdown (stderr on the `--render-card` CLI path) that tells Claude which prefix to set before it outputs the card: `🧪 Test – ` for `test` and a final `ship-successful` (the freshly installed build is what gets verified next, not the ship), `📦 Ready – ` for `ready`, `⛔ Blocked – ` for `ship-blocked` (the card headline's emoji), `🚫 Aborted – ` for `aborted`, `⏳ Working – ` while `pending` background work runs, and a plain title for analysis / test-minimal / fallback / released and for an intermediate ship (merged into a feature branch). No block while a concept page is open or a batch is armed — those modes keep owning the title. `/ship` additionally marks the session `🚀 Shipping – ` in a new Pre-Step C while the pipeline runs, stripping any earlier prefix first so titles never stack. Prefixes are pinned in `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`, `VARIANT_TITLE_PREFIX`, `stripTitlePrefix`) and the skill prose is tested against them. Desktop app only — elsewhere the instruction is skipped silently.
+
 ## [0.161.0] — 2026-09-14
 
 ### Added
