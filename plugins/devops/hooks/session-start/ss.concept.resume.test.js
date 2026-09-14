@@ -163,9 +163,10 @@ describe("buildResumeInstructions", () => {
     expect(out).toMatch(/run_in_background: true/);
   });
 
-  test("names the waker primary and the cron backup", () => {
+  test("names the waker primary and the cron a sparse backstop (#363)", () => {
     const out = buildResumeInstructions(STATE, "idle");
-    expect(out).toMatch(/BACKUP pickup path[\s\S]*CronCreate/);
+    expect(out).toMatch(/BACKSTOP cron[\s\S]*CronCreate with cron "\*\/15 \* \* \* \*"/);
+    expect(out).not.toContain('cron "* * * * *"');                 // the per-minute cadence must not come back
     expect(out).toContain("PRIMARY pickup path");
   });
 

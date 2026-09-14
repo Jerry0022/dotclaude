@@ -31,11 +31,11 @@ The loop continues until the user is done (closes page or says "fertig").
 ### Primary: HTTP Bridge (preferred)
 
 The pickup waker polls the bridge server for the deterministic pending flag
-(the backup cron does the same, once a minute):
+(the backstop cron does the same, once per 15 minutes):
 
 ```bash
 curl -s http://localhost:$PORT/pending
-# → {"pending": true|false, "version": N}
+# → {"pending": true|false, "version": N, "action": "iterate"|"implement"|"finalize"|"", "browser_ts": <ms>}
 ```
 
 `/pending` is a strict, machine-readable one-shot signal — use it instead
@@ -239,10 +239,14 @@ Three tiers, and only one of them is primary:
 - **Pickup waker — 20 s, primary.** The detached background task from
   `bridge-server.md` § step 3, task 2. 20 s is not arbitrary: it sits well
   under the 90 s `HEARTBEAT_STALE_MS` the page uses to decide the indicator.
-- **Cron — 60 s, backup only, and only a partial one.** Session-only crons fire
+- **Cron — 15 min, backstop only, and only a partial one.** Every fire is a
+  model turn against the subscription limits, and session-only crons fire
   only while the REPL is idle, so it cannot cover the window it looks like it
   covers: during a processing round the REPL is busy. Re-launch the waker at
   SKILL.md 5c step 7 instead of leaving that gap to the cron.
+- **Page liveness — the waker, 3 min.** No browser poll for 3 min re-opens
+  the page in Edge once; a tab that keeps polling is never touched
+  (`bridge-server.md` § step 3, #363).
 - **Timeout**: NONE — monitoring runs indefinitely until the user explicitly
   ends it (says "fertig"/"done", closes the page, or closes Claude). Never
   impose artificial timeouts.

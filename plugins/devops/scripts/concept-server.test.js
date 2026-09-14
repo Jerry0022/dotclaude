@@ -201,3 +201,41 @@ describe.skipIf(!PY)("concept-server cross-session port registry (Defect B)", ()
     }
   }, 30000);
 });
+
+describe.skipIf(!PY)("concept-server browser_ts — the last browser poll (#363)", () => {
+  test("GET /heartbeat and GET /reload stamp browser_ts; POST /heartbeat and GET /pending do not", async () => {
+    const proc = startServer();
+    try {
+      await waitReady();                                                        // one GET /reload already happened here
+      const t0 = (await (await fetch(`http://127.0.0.1:${PORT}/heartbeat`)).json());
+      expect(t0.browser_ts).toBeGreaterThan(0);                                 // waitReady's GET /reload counted
+      expect(t0.claude_ts).toBe(0);                                             // nobody POSTed yet
+
+      await new Promise(r => setTimeout(r, 30));
+      await fetch(`http://127.0.0.1:${PORT}/heartbeat`, { method: "POST" });    // Claude's pulser
+      const p1 = await (await fetch(`http://127.0.0.1:${PORT}/pending`)).json(); // Claude's waker
+      expect(p1).toMatchObject({ pending: false, version: 0 });
+      expect(typeof p1.browser_ts).toBe("number");
+      const seenAfterClaude = p1.browser_ts;
+      const p2 = await (await fetch(`http://127.0.0.1:${PORT}/pending`)).json();
+      expect(p2.browser_ts).toBe(seenAfterClaude);                              // neither Claude call moved it
+
+      await new Promise(r => setTimeout(r, 30));
+      await fetch(`http://127.0.0.1:${PORT}/reload`);                          // a browser tab polled
+      const p3 = await (await fetch(`http://127.0.0.1:${PORT}/pending`)).json();
+      expect(p3.browser_ts).toBeGreaterThan(seenAfterClaude);
+      expect(p3.action).toBe("");                                               // nothing pending → no action
+
+      // A submission names its action on /pending so the waker's exit line can carry it.
+      const post = await fetch(`http://127.0.0.1:${PORT}/decisions`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submitted: true, action: "implement", decisions: [], comments: [] }),
+      });
+      expect(post.ok).toBe(true);
+      const p4 = await (await fetch(`http://127.0.0.1:${PORT}/pending`)).json();
+      expect(p4).toMatchObject({ pending: true, version: 1, action: "implement" });
+    } finally {
+      await stopServer(proc);
+    }
+  });
+});

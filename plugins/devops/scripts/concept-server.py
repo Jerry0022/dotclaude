@@ -3,9 +3,12 @@ Concept Bridge Server — HTTP-based heartbeat and decision bridge.
 
 Replaces `python -m http.server` with a custom server that adds:
 - GET/POST /heartbeat — Claude signals presence via POST, page polls via GET.
-  GET response is `{ server_ts, claude_ts, ts }`:
+  GET response is `{ server_ts, claude_ts, browser_ts, ts }`:
     * `server_ts` — daemon-thread self-pulse (server alive, Claude state unknown).
     * `claude_ts` — last POST /heartbeat from Claude (Claude is actively polling).
+    * `browser_ts` — last GET /heartbeat or GET /reload, i.e. the last time a
+      browser tab polled. 0 until a tab has connected. The pickup waker reads
+      it (also on /pending) to reopen a closed tab (#363).
     * `ts` — legacy alias = `claude_ts` for backwards compat with older page JS.
   The browser MUST gate the GREEN/connected state on `claude_ts`, not `server_ts`
   (otherwise the server's own self-pulse falsely shows "Claude connected" while
@@ -21,7 +24,9 @@ Replaces `python -m http.server` with a custom server that adds:
   `_phase` (free-form string Claude sets via /status — drives the
   "Implementierung abgeschlossen" step).
 - GET /pending — Deterministic signal for Claude's cron: returns
-  `{"pending": bool, "version": int}` with no free-form content to fuzzy-match.
+  `{"pending": bool, "version": int, "action": str, "browser_ts": int}` with
+  no free-form content to fuzzy-match (`action` is the submission's own
+  action string, "" while nothing is pending).
   Side effect: first /pending=true response stamps `_picked_up_at`.
 - POST /status — Claude advertises a processing phase. Body
   `{"phase": "implemented"}` lights up the third progress step after the
@@ -136,6 +141,12 @@ from datetime import datetime, timezone
 
 _server_ts = 0
 _claude_ts = 0
+# Epoch-ms of the last poll that only a BROWSER TAB makes: GET /heartbeat and
+# GET /reload (the page's connection indicator and reload watcher). Claude's
+# pulser POSTs /heartbeat and the waker GETs /pending, so neither touches this.
+# Exposed as `browser_ts` on GET /heartbeat and GET /pending so the pickup
+# waker can tell a closed tab from a live one and reopen the page (#363).
+_browser_ts = 0
 _decisions = '{"submitted": false, "decisions": [], "comments": []}'
 # Monotonic counter — incremented on every POST /decisions. Used by /reset
 # for optimistic concurrency: Claude reads version via GET, processes, then
@@ -1031,11 +1042,13 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_GET(self):
-        global _picked_up_at
+        global _picked_up_at, _browser_ts
         if self.path == '/heartbeat':
             with _lock:
+                _browser_ts = int(time.time() * 1000)
                 server_ts = _server_ts
                 claude_ts = _claude_ts
+                browser_ts = _browser_ts
             # `ts` is a legacy alias of `claude_ts` for older page JS that
             # only knows the single-field response. Gating on `ts` then
             # transparently means "gating on Claude's heartbeat" — which is
@@ -1043,6 +1056,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             self._json_response({
                 "server_ts": server_ts,
                 "claude_ts": claude_ts,
+                "browser_ts": browser_ts,
                 "ts": claude_ts,
             })
         elif self.path == '/decisions':
@@ -1101,9 +1115,16 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             with _lock:
                 data = _decisions
                 version_seen = _version
+                browser_ts = _browser_ts
+            action = ''
             try:
                 obj = json.loads(data)
                 pending = bool(isinstance(obj, dict) and obj.get('submitted') is True)
+                # The submission's `action` (iterate / implement / finalize …)
+                # rides along so the waker's exit line can name it and the
+                # woken Claude need not re-fetch /decisions just to branch (#363).
+                if pending and isinstance(obj.get('action'), str):
+                    action = obj['action']
             except Exception:
                 pending = False
             if pending:
@@ -1118,9 +1139,12 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     # version.
                     if _version == version_seen and not _picked_up_at:
                         _picked_up_at = _iso_now()
-            self._json_response({"pending": pending, "version": version_seen})
+            # `browser_ts` rides along so the waker's liveness check costs no
+            # extra request per poll (#363).
+            self._json_response({"pending": pending, "version": version_seen, "action": action, "browser_ts": browser_ts})
         elif self.path == '/reload':
             with _lock:
+                _browser_ts = int(time.time() * 1000)
                 counter = _reload_counter
             self._json_response({"counter": counter})
         elif self.path == '/recovery':
