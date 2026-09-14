@@ -145,14 +145,20 @@ describe("design mode hides the document chrome it would paint over", () => {
       .toMatch(/<header class="iteration-intro">/);
   });
 
-  test("the theme toggle's only home is that header — hiding it is a decision, not an oversight", () => {
-    // If a future change gives design mode its own toggle, this test is the
-    // one to revisit: the rule above would then be hiding a live control.
+  test("hiding the header hides no live control — the theme toggle lives in the panel head", () => {
+    // The toggle used to be the header's last child, so this rule silently
+    // removed the page's only theme control in design rounds (accepted at the
+    // time). It is panel chrome now (theme-toggle.test.js has the full
+    // contract); what this test keeps is the pairing: the header carries
+    // nothing interactive, and the comment next to the rule says where the
+    // control went instead of calling its loss a trade-off.
     const html = BLOCKS.filter((b) => b.info === "html").map((b) => b.code).join("\n");
-    const toggles = html.match(/id="theme-toggle"/g) || [];
-    expect(toggles.length, "#theme-toggle occurrences in template markup").toBeGreaterThan(0);
-    expect(md, "the trade-off must be written down where the rule lives")
-      .toMatch(/theme toggle lives only in that header/);
+    for (const h of html.match(/<header>[\s\S]*?<\/header>/g) || []) {
+      expect(h, "no control inside .concept-content > header").not.toMatch(/<(button|input|select|textarea)\b/);
+    }
+    expect(md).not.toMatch(/theme toggle lives only in that header/);
+    const rule = md.slice(md.indexOf("Document chrome vs. the fullscreen canvas"), md.indexOf("Frozen design iterations stay FULLY opaque"));
+    expect(rule, "the comment names the toggle's new home").toMatch(/panel-head/);
   });
 
   test("a frozen DESIGN iteration stays fully opaque", () => {
