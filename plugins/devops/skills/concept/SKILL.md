@@ -358,7 +358,11 @@ language — same rule, same locale hint. Do not mix languages inside one
 page.
 
 ### Design
-- Modern, clean design with dark/light mode toggle
+- Modern, clean design, **dark by default** (`<html data-theme="dark">`; a
+  project `reference.md` may override the default).
+- The dark/light theme toggle is a quiet emoji button in the ☰ panel's head
+  row next to the ✕ (templates.md § Theme Toggle) — the same control on every
+  template, never in the content column, never a FAB.
 - Responsive layout (works on any screen size)
 - No external dependencies — all CSS/JS inline
 - Professional typography, spacing, and color palette
@@ -370,7 +374,8 @@ The `<header>` inside `.concept-content` renders the concept title ONCE.
 
 - `<h1>` with the concept title
 - Optional: one short subtitle line for session context. Omit if not needed.
-- Theme toggle button
+- Nothing else — no controls. (The dark/light switch lives in the ☰ panel
+  head, see § Design above.)
 
 **DO NOT** render the iteration title/intro in the page header — that
 duplicates context and burns vertical space before the user reaches actual

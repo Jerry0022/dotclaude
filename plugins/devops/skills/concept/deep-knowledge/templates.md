@@ -86,6 +86,8 @@ must see their own language. The locale hint is authoritative.
 | `panel.toggle_close`           | Close decisions                | Entscheidungen schliessen |
 | `panel.close`                  | Close                          | Schliessen |
 | `panel.minimize`               | Minimize                       | Minimieren |
+| `theme.to_light`               | Switch to the light theme      | Zum hellen Theme wechseln |
+| `theme.to_dark`                | Switch to the dark theme       | Zum dunklen Theme wechseln |
 | `panel.dim_dismiss`            | Dismiss overlay                | Schimmer entfernen |
 | `panel.status_saved`           | Saved · connected              | Gespeichert · verbunden |
 | `panel.status_saving`          | Saving…                        | Speichert… |
@@ -306,10 +308,12 @@ the `[ui-locale: ...]` hint produced.
              Keep to <h1> + ONE short subtitle line (or omit subtitle entirely).
              Do NOT repeat the iteration title/intro here — that belongs INSIDE
              the active <section data-iteration="N">. Double-intros (header +
-             iteration-intro) eat vertical space and duplicate context. -->
+             iteration-intro) eat vertical space and duplicate context.
+             No controls in here: the theme toggle lives in the ☰ panel's
+             head row (page chrome, every template), not in the reading
+             column. -->
         <h1>{title}</h1>
         <p class="subtitle">{optional one-line context — omit if not needed}</p>
-        <button id="theme-toggle" aria-label="Toggle theme">🌙/☀️</button>
       </header>
 
       <main>
@@ -330,13 +334,29 @@ the `[ui-locale: ...]` hint produced.
          the aside are part of the same component and are not optional on a
          decision/free page: without them the panel has no way to open. -->
     <aside class="concept-decision-panel overlay" id="decision-panel">
-      <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
+      <!-- Head row — the panel's chrome line, right-aligned: the theme toggle
+           and the ✕. The toggle is page chrome exactly like the panel itself
+           (§ Theme Toggle): one control, the same place in every template,
+           and the reading column stays content-only. It names the NEXT
+           action the way the ☰/💬 FABs do (☀️ while dark) — glyph via CSS,
+           tooltip + aria-label via the data-label-* pair (§ Theme Toggle JS).
+           Both labels come from the locale table, never baked text. -->
+      <div class="panel-head">
+        <button type="button" id="theme-toggle" class="theme-toggle-btn"
+                data-label-light="{{theme.to_light}}"
+                data-label-dark="{{theme.to_dark}}"
+                title="{{theme.to_light}}" aria-label="{{theme.to_light}}">
+          <span class="theme-glyph" data-glyph="sun" aria-hidden="true">☀️</span>
+          <span class="theme-glyph" data-glyph="moon" aria-hidden="true">🌙</span>
+        </button>
+        <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
+      </div>
       <!-- All visible strings are referenced by key in the locale table above.
            Swap to the `de` column when [ui-locale: de] is active. -->
 
-      <!-- PANEL ANATOMY. The aside is a flex column of exactly four children
-           and only the second one scrolls (§ Decision Panel State CSS,
-           "Panel anatomy"):
+      <!-- PANEL ANATOMY. Below the .panel-head chrome row the aside is a flex
+           column of exactly four children and only the second one scrolls
+           (§ Decision Panel State CSS, "Panel anatomy"):
              .panel-here        pinned   "Iteration 8 (Variante)" · 🕘 chip+list
              .panel-nav-scroll  flex 1   iteration tabs (hidden) + live TOC
              .panel-status      pinned   ONE status line (+ progress dots after submit)
@@ -943,7 +963,8 @@ what may never move is the ☰ panel.
 <div class="panel-backdrop" id="panel-backdrop"></div>
 ```
 
-plus, inside the aside, the `#panel-close` button as its first child, and the
+plus, inside the aside, the `.panel-head` row (`#theme-toggle` + `#panel-close`,
+§ Theme Toggle) as its first child, and the
 CSS below. All of it is unscoped and required even on a page that never
 renders a mockup — that is the point of this section: a `decision`- or
 `free`-only page carries its panel WITHOUT taking § Layout CSS (the design
@@ -1057,6 +1078,41 @@ extras (the 💬 FAB's reserved row under the panel foot, the pulse).
   cursor: pointer;
   padding: 0.25rem;
 }
+
+/* ── Panel head row: theme toggle + ✕ ──
+   The aside's first child. Right-aligned so the ✕ keeps its top-right
+   corner; the toggle sits to its left on the same line. The toggle is the
+   quiet one of the pair — greyed and dimmed at rest, full colour only under
+   the pointer or keyboard focus — so the row still reads as "one ✕", not as
+   two controls competing for the corner. Emoji glyphs on purpose (the user's
+   call): the grayscale filter is what keeps the full-colour platform art
+   from clashing with the dark chrome until it is actually wanted. */
+.panel-head {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+}
+.theme-toggle-btn {
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.55;
+  filter: grayscale(1);
+  transition: opacity 0.2s, filter 0.2s;
+}
+.theme-toggle-btn:hover,
+.theme-toggle-btn:focus-visible { opacity: 1; filter: none; }
+/* One glyph at a time, and it is the theme you would switch TO — the same
+   "name the next action" rule the ☰/💬 FAB labels follow. Keyed on the
+   attribute the click handler and restoreState() both write. */
+.theme-toggle-btn .theme-glyph { display: none; }
+html[data-theme="dark"] .theme-toggle-btn [data-glyph="sun"] { display: inline; }
+html:not([data-theme="dark"]) .theme-toggle-btn [data-glyph="moon"] { display: inline; }
 
 .panel-backdrop {
   display: none;
@@ -1206,7 +1262,7 @@ Rules:
   equal the active iteration's (normalised) template — otherwise the first
   paint shows the wrong layout.
 - **A page that started as `decision` or `free` keeps its document header**
-  (`<h1>`, subtitle, `#theme-toggle` inside `.concept-content > header`) and
+  (`<h1>` + subtitle inside `.concept-content > header`) and
   its per-iteration `<header class="iteration-intro">` for the rest of its
   life — a later `design` iteration must never delete them, or switching
   back to an earlier round loses its own title. Design mode is
@@ -1247,9 +1303,9 @@ page carries.
   overflow-y: auto;
 }
 /* The ☰ FAB is fixed at top: 2rem; right: 2rem and would otherwise sit on the
-   header's own controls (#theme-toggle is the last child of
-   .concept-content > header in document rounds). 92px = the FAB's 60px circle
-   plus its 2rem margin. */
+   header's right edge (a long <h1> or subtitle runs under it — the header
+   carries no controls of its own any more, the theme toggle is in the panel
+   head). 92px = the FAB's 60px circle plus its 2rem margin. */
 .concept-content > header { padding-right: 92px; }
 ```
 
@@ -2493,7 +2549,19 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
     <!-- Decision panel (☰) — contains: iteration-tabs, screen-nav, submit.
          No section-TOC here: the screen-nav replaces it for design. -->
     <aside class="concept-decision-panel overlay" id="decision-panel">
-      <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
+      <!-- Same head row as § Common Structure: theme toggle + ✕. This is the
+           design round's ONLY theme control — the document header that used
+           to carry one is hidden in design mode (§ Layout CSS). -->
+      <div class="panel-head">
+        <button type="button" id="theme-toggle" class="theme-toggle-btn"
+                data-label-light="{{theme.to_light}}"
+                data-label-dark="{{theme.to_dark}}"
+                title="{{theme.to_light}}" aria-label="{{theme.to_light}}">
+          <span class="theme-glyph" data-glyph="sun" aria-hidden="true">☀️</span>
+          <span class="theme-glyph" data-glyph="moon" aria-hidden="true">🌙</span>
+        </button>
+        <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
+      </div>
       <!-- Same four-part anatomy as § Common Structure (here / scroll box /
            status / foot) — only the containing aside differs. -->
       <div class="panel-here" id="panel-here">
@@ -2768,8 +2836,8 @@ html[data-template="design"] body { height: 100%; overflow: hidden; }
 
 /* ── Document chrome vs. the fullscreen canvas ──────────────────────────
    A page may START as decision or free (§ Per-Iteration Templates), and
-   those templates put a `<header>` with the <h1>, the subtitle and the
-   #theme-toggle directly inside .concept-content, plus a
+   those templates put a `<header>` with the <h1> and the subtitle directly
+   inside .concept-content, plus a
    `<header class="iteration-intro">` at the top of every iteration section.
    Both stay in NORMAL FLOW. Design mode then makes the iteration section
    `position: absolute; inset: 0` — it paints OVER them instead of pushing
@@ -2780,11 +2848,12 @@ html[data-template="design"] body { height: 100%; overflow: hidden; }
    Design mode owns the whole viewport, so the document header and the
    per-iteration intro are hidden while it is active; flipping
    `<html data-template>` back to decision/free brings both back, unchanged.
-   The theme toggle lives only in that header and is therefore gone in
-   design mode — accepted: the design template never had one of its own,
-   and the theme is a page-level preference set from any non-design
-   iteration (and persisted). Do NOT "solve" this by re-homing the toggle
-   into the design chrome: that reopens the FAB geometry rules (P13). */
+   Hiding the header hides no control: the theme toggle lives in the ☰
+   panel's .panel-head row (§ Theme Toggle), which is page chrome on every
+   template and stays reachable in design mode. It used to be the header's
+   last child and was simply gone in design rounds. Do NOT re-home it into
+   the design chrome as a floating control: the two FABs are a closed pair
+   (P13), and the panel head is the one place every round shares. */
 html[data-template="design"] .concept-content > header,
 html[data-template="design"] section[data-iteration] > .iteration-intro { display: none; }
 
@@ -5998,7 +6067,7 @@ content.
       <header>
         <h1>{title}</h1>
         <p class="subtitle">{optional}</p>
-        <button id="theme-toggle">🌙/☀️</button>
+        <!-- no controls here — the theme toggle sits in the ☰ panel head -->
       </header>
       <main>
         <section data-iteration="1" data-iteration-template="free" data-active>
@@ -6041,9 +6110,9 @@ content.
     </div>
 
     <aside class="concept-decision-panel overlay" id="decision-panel">
-      <!-- Same structure as decision, including the #panel-close button.
-           Panel TOC auto-detects which sections have eval-{id} radios and
-           mirrors their current state. -->
+      <!-- Same structure as decision, including the .panel-head row
+           (#theme-toggle + #panel-close). Panel TOC auto-detects which
+           sections have eval-{id} radios and mirrors their current state. -->
     </aside>
     <!-- Page chrome, not design-only — see § Panel Chrome (all templates). -->
     <button id="panel-toggle" class="panel-fab"
@@ -7058,7 +7127,8 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
 ```css
 /* ── Panel anatomy (all templates) ──
    .concept-decision-panel is a flex column (§ Panel Chrome sets that);
-   these four children split it. `min-height: 0` on the scroll box is
+   below the .panel-head chrome row (theme toggle + ✕, `flex: 0 0 auto`,
+   § Panel Chrome) these four children split it. `min-height: 0` on the scroll box is
    load-bearing: a flex child refuses to shrink below its content height
    without it, so the tree would grow past the viewport and push the pinned
    foot off screen — exactly the "scroll the menu to find the button" defect
@@ -12917,16 +12987,54 @@ function updateStatusSteps(data) {
 
 ## Theme Toggle
 
+The page defaults to **dark** (`<html data-theme="dark">`, see § Common
+Structure); a project's `reference.md` may override the default, the user's
+choice is persisted as `state['theme']` (§ State Persistence). The control is
+`#theme-toggle` in the ☰ panel's `.panel-head` row — page chrome on every
+template, never in the content column, never a FAB (the two FABs are a closed
+pair, gate P13). It flips `data-theme` and names the NEXT action: while dark
+the ☀️ glyph shows (CSS, § Panel Chrome) and the tooltip reads
+`{{theme.to_light}}`; while light, 🌙 and `{{theme.to_dark}}`.
+
 ```javascript
-// Null-guarded (#341): the design skeleton carries no #theme-toggle, and an
-// unguarded dereference here threw at boot and took the rest of the script
-// with it — the tab-switch boot never ran, so the "you are here" head stayed
-// empty on every design page until the first manual tab click.
-document.getElementById('theme-toggle')?.addEventListener('click', () => {
+// Null-guarded (#341): a page whose panel predates the head row has no
+// #theme-toggle, and an unguarded dereference here threw at boot and took the
+// rest of the script with it — the tab-switch boot never ran, so the "you are
+// here" head stayed empty until the first manual tab click.
+(() => {
   const html = document.documentElement;
-  const current = html.getAttribute('data-theme');
-  html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
-});
+  const wire = () => {
+    const btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+    // Tooltip + a11y label name the NEXT action, exactly like the ☰/💬 FABs.
+    // Read off the button's own dataset — the locale substitution happened
+    // once, at generation time, in the markup. The glyph is CSS
+    // (html[data-theme] → [data-glyph]), so nothing here touches the spans.
+    const sync = () => {
+      const next = html.getAttribute('data-theme') === 'dark' ? btn.dataset.labelLight : btn.dataset.labelDark;
+      if (!next) return;
+      btn.setAttribute('title', next);
+      btn.setAttribute('aria-label', next);
+    };
+    btn.addEventListener('click', () => {
+      const current = html.getAttribute('data-theme');
+      html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+      sync();
+      // § State Persistence saves on `change`/`input`; a <button> click fires
+      // neither, so the choice would only reach localStorage with the user's
+      // next keystroke — and a reload in between reverted the theme. Same
+      // explicit-save pattern as showScreen()/applyViewport().
+      if (typeof saveState === 'function') saveState();
+    });
+    // data-theme has more than one writer: restoreState() sets it on load
+    // (and again on the bridge draft restore), so the label follows the
+    // attribute itself rather than only this button's click.
+    new MutationObserver(sync).observe(html, { attributes: true, attributeFilter: ['data-theme'] });
+    sync();
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+  else wire();
+})();
 ```
 
 ## Claude Connection Heartbeat (HTTP Bridge)
