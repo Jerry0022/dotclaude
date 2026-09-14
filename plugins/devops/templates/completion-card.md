@@ -723,6 +723,19 @@ CTA. It contains:
 | 📋 | Info — purely informational | analysis |
 | 🔧 | Default — miscellaneous/other | fallback |
 
+### Session Title (sidebar)
+
+The tool result carries a `[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]` block
+beside the card (stderr on `--render-card`). It names the prefix the session
+title should carry after this turn — `🧪 Test – ` (test, final
+ship-successful), `📦 Ready – ` (ready), `⛔ Blocked – ` (ship-blocked),
+`🚫 Aborted – ` (aborted), `⏳ Working – ` (any `pending`), none for
+analysis / test-minimal / fallback / released / intermediate ship. No block
+while a concept page is open or a batch is armed — those modes own the title.
+Execute it (`get_session` → strip → `set_session_title`, `self`) before
+outputting the card; Desktop app only, skip silently elsewhere. Source of
+truth: `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`, `VARIANT_TITLE_PREFIX`).
+
 ### Variant Selection Rules
 
 ```

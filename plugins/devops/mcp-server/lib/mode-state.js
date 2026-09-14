@@ -21,12 +21,103 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** Session-title prefixes the skills set — one per mode, emoji first so the
- *  sidebar scans on the icon. The skills strip exactly these on restore. */
+/** Session-title prefixes — emoji first so the sidebar scans on the icon.
+ *  `concept` / `batch` are set by their skills while the mode is on and
+ *  stripped by them on the way out. `shipping` is set by /ship Pre-Step C.
+ *  The rest mirror completion-card variants: every card the session ends a
+ *  turn with tells Claude (via `titleInstruction`) which prefix the title
+ *  should carry now, so the sidebar always names the state the last card
+ *  left the session in. `stripTitlePrefix` removes any of them. */
 export const SESSION_PREFIX = Object.freeze({
   concept: "🧭 Concept – ",
   batch: "📥 Batch – ",
+  shipping: "🚀 Shipping – ",
+  test: "🧪 Test – ",
+  ready: "📦 Ready – ",
+  blocked: "⛔ Blocked – ",
+  aborted: "🚫 Aborted – ",
+  pending: "⏳ Working – ",
 });
+
+/** Card variant → session-title prefix. Absent = plain title (the turn left
+ *  nothing the sidebar needs to flag: analysis, test-minimal, fallback,
+ *  released). A final ship lands as `test` on purpose — the freshly installed
+ *  build is what the user verifies next, not the ship itself. */
+export const VARIANT_TITLE_PREFIX = Object.freeze({
+  "ship-successful": SESSION_PREFIX.test,
+  test: SESSION_PREFIX.test,
+  ready: SESSION_PREFIX.ready,
+  "ship-blocked": SESSION_PREFIX.blocked,
+  aborted: SESSION_PREFIX.aborted,
+});
+
+const ALL_PREFIXES = Object.freeze(Object.values(SESSION_PREFIX));
+
+/** `title` without any leading devops prefix (repeated prefixes included, so
+ *  a title that was stacked by an older skill version still comes out clean). */
+export function stripTitlePrefix(title) {
+  let t = String(title ?? "");
+  let hit = true;
+  while (hit) {
+    hit = false;
+    for (const p of ALL_PREFIXES) {
+      if (t.startsWith(p)) { t = t.slice(p.length); hit = true; }
+    }
+  }
+  return t;
+}
+
+/**
+ * The session-title prefix this card leaves behind, or `null` when a mode
+ * (open concept page, armed batch) owns the title and the card must not touch
+ * it. `""` means "plain title — strip ours, leave the rest".
+ *
+ * Pending background work outranks the variant: the CTA already says "ich
+ * MELDE mich", the sidebar should say the same. A ship-successful card whose
+ * merge target is not the default branch is an intermediate ship — nothing
+ * installed, nothing to test, plain title.
+ *
+ * @param {{ variant?: string, state?: object, pending?: unknown, concept?: unknown, cwd?: string }} params
+ * @param {{ hasPending: (p: unknown) => boolean, hasConcept: (c: unknown) => boolean }} deps
+ * @returns {string|null}
+ */
+export function titlePrefixFor(params, { hasPending, hasConcept }) {
+  if (hasConcept(params.concept) || conceptUrl(params.cwd, undefined)) return null;
+  if (readBatch(params.cwd)) return null;
+  if (hasPending(params.pending)) return SESSION_PREFIX.pending;
+  const variant = params.variant;
+  if (variant === "ship-successful") {
+    const merged = String((params.state && params.state.merged) || "");
+    if (merged && !/^(main|master)$/.test(merged)) return "";
+  }
+  return VARIANT_TITLE_PREFIX[variant] ?? "";
+}
+
+/**
+ * The out-of-band instruction that rides along with the card (a second MCP
+ * content block, or stderr on the CLI path) telling Claude how to rename the
+ * session before it outputs the card. Empty string when the title is owned by
+ * a mode. Never part of the card markdown.
+ *
+ * @param {string|null} prefix from `titlePrefixFor`
+ * @returns {string}
+ */
+export function titleInstruction(prefix) {
+  if (prefix === null) return "";
+  const list = ALL_PREFIXES.map((p) => `"${p}"`).join(", ");
+  const set = prefix
+    ? `set the title to "${prefix}" + <stripped title>`
+    : "set the stripped title (no prefix) — only if a prefix was actually removed";
+  return (
+    "[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]\n" +
+    "Before outputting the card, once, Desktop app only: " +
+    'mcp__ccd_session_mgmt__get_session {session_id:"self"} → ' +
+    `strip every leading prefix from [${list}] → ` +
+    `mcp__ccd_session_mgmt__set_session_title {session_id:"self"} and ${set}. ` +
+    "If either tool is unavailable or fails: skip silently — no retry, no note, no fallback. " +
+    "The card stays the last output of the turn."
+  );
+}
 
 /**
  * The URL the open concept page lives at, or '' when it cannot be resolved.

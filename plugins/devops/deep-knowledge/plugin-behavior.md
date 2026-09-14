@@ -122,9 +122,17 @@ Subagents inherit all output contracts:
   with `cwd` passed, the card reads `.claude/batch-mode.json` and swaps its CTA
   for "📥 BATCH sammelt. {n} Notizen · nächster Prompt wird Notiz #{n+1} ·
   "{marker}" löst aus — ich WARTE". No card field — the state file is the truth.
-- **Modes mark the session title.** `/concept` prefixes it with `🧭 Concept – `
-  while the page is open, `/claude-batch` with `📥 Batch – ` while collecting;
-  each strips exactly its prefix on the way out. Desktop-app only
+- **The session title names the state the last card left the session in.**
+  `render_completion_card` returns a `[SESSION TITLE]` block beside the card
+  (stderr on the CLI path): `🧪 Test – ` for `test` and a final `ship-successful`,
+  `📦 Ready – ` for `ready`, `⛔ Blocked – ` for `ship-blocked`, `🚫 Aborted – `
+  for `aborted`, `⏳ Working – ` while `pending` work runs, plain title for the
+  rest (analysis, test-minimal, fallback, an intermediate ship). Execute it
+  before outputting the card. Modes own the title instead: `/concept` sets
+  `🧭 Concept – ` while the page is open, `/claude-batch` `📥 Batch – ` while
+  collecting, `/ship` `🚀 Shipping – ` while the pipeline runs — no card block
+  while a concept or batch is active. Prefixes are pinned in
+  `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`). Desktop-app only
   (`mcp__ccd_session_mgmt__set_session_title` `self`) — elsewhere skip silently.
 
 ## Extension Model
