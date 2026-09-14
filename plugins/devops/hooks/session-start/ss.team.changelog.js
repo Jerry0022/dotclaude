@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.team.changelog
- * @version 0.3.0
+ * @version 0.3.1
  * @event SessionStart
  * @plugin devops
  * @description Show a summary of changes made by other contributors on remote main
@@ -197,7 +197,7 @@ function dateRange(list) {
 // Build output
 const overall = dateRange(otherCommits);
 const out = [
-  `Team changes landed on \`${mainBranch}\` while you were away. Show the user this summary as-is:`,
+  `Team changes landed on \`${mainBranch}\` while you were away. Show the user this summary verbatim:`,
   '',
   '---',
   `**Team changes on \`${mainBranch}\`** · ${overall}`,

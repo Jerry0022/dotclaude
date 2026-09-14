@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.164.1**
+**Version: 0.165.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -164,6 +164,35 @@ Run `/claude-extend-skill` to interactively scaffold an extension for any plugin
 It detects existing extensions and lets you adapt them.
 
 For the full extension guide with examples per skill, see `deep-knowledge/skill-extension-guide.md`.
+
+### Quiet output style (recommended)
+
+Claude narrates a lot — what it is reading, what it is about to do, a recap
+at the end. None of that is needed with this plugin: decisions arrive as
+`AskUserQuestion` dialogs, long analyses as `/concept` pages, results as the
+completion card. The rest is noise that pulls you out of your own work.
+
+The fix is Claude Code's built-in **output style** — a personal setting, not
+a plugin rule, so every consumer picks their own level of quiet. It sits in
+the system prompt, so it does not fade over a long session the way a skill or
+an injected instruction does.
+
+1. Copy [`templates/output-style-quiet.md`](plugins/devops/templates/output-style-quiet.md)
+   to `~/.claude/output-styles/quiet.md` (or `.claude/output-styles/` in a project)
+2. Activate it with `/output-style Quiet`, or set `"outputStyle": "Quiet"` in
+   `~/.claude/settings.json`
+3. Start a new session
+
+The style relays only what the plugin marks for you. Every user-facing hook
+and tool block opens with `Show the user this … verbatim` — the completion
+card, the workspace check, the update notice, the team changelog — and the
+rest of the tool output (instructions addressed to Claude) stays silent.
+Explicit questions still get a full answer; the style targets narration, not
+explanations.
+
+If the desktop app's "New output style" dialog asks you to sign in again, the
+headless CLI token behind it has expired — the file route above needs no
+generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ## Features
 

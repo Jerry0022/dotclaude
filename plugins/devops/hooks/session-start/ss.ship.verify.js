@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.ship.verify
- * @version 0.2.0
+ * @version 0.2.1
  * @event SessionStart
  * @plugin devops
  * @description Surface results from the post-merge watcher (post-ship CI +
@@ -319,7 +319,7 @@ if (require.main === module) {
   if (reports.length === 0 && inflight.length === 0) process.exit(0);
 
   const out = [];
-  out.push('Post-ship deploy verification — surface this summary AS-IS to the user as the FIRST action of this turn (Lang: user-preference):');
+  out.push('Post-ship deploy verification — show the user this summary verbatim as the FIRST action of this turn (Lang: user-preference):');
   out.push('');
 
   for (const { data } of reports) out.push(...renderReport(data));

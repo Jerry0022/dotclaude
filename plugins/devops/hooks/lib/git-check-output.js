@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module git-check-output
- * @version 0.1.0
+ * @version 0.1.1
  * @description Pure output composition for the ss.git.check SessionStart hook.
  *   Takes the already-collected findings and renders the hook's stdout lines.
  *   No git, no fs — so the decision logic is unit-testable.
@@ -53,9 +53,9 @@ function issueLine(issue) {
  */
 function header(workspace) {
   if (workspace) {
-    return 'Workspace check at session start. Show this summary AS-IS and call AskUserQuestion as the FIRST action of this turn. If this turn cannot ask (scheduled, cron or headless run), you MUST still restate the findings below verbatim in your final message, before any completion card — never drop them.';
+    return 'Workspace check at session start. Show the user this summary verbatim and call AskUserQuestion as the FIRST action of this turn. If this turn cannot ask (scheduled, cron or headless run), you MUST still restate the findings below verbatim in your final message, before any completion card — never drop them.';
   }
-  return 'Stale changes found at session start. Show this summary AS-IS. You MUST restate these findings verbatim in your final message, before any completion card — also in a scheduled, cron or headless run.';
+  return 'Stale changes found at session start. Show the user this summary verbatim. You MUST restate these findings verbatim in your final message, before any completion card — also in a scheduled, cron or headless run.';
 }
 
 function workspaceLines(workspace) {
