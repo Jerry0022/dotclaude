@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.165.0] — 2026-09-15
+
+### Added
+
+- **A Quiet output style for consumers who do not want the narration.** Claude tells you what it is reading, what it is about to do, and recaps at the end — with this plugin none of that carries information: decisions arrive as `AskUserQuestion` dialogs, long analyses as `/concept` pages, results as the completion card. `templates/output-style-quiet.md` is a ready-made Claude Code output style (copy to `~/.claude/output-styles/`, activate with `/output-style Quiet` or `"outputStyle": "Quiet"` in settings) that suppresses narration, routes every decision through `AskUserQuestion`, sends anything over ~8 lines to a page, and relays only the blocks the plugin marks for you. It is a personal setting on purpose — an output style sits in the system prompt and does not fade over a long session the way a skill or an injected instruction does — so the README explains the choice instead of the plugin enforcing one. The README also names the reason the desktop app's "New output style" dialog can ask you to sign in again (an expired headless-CLI token) and the file route that needs no generator.
+
+### Changed
+
+- **Every block a hook wants you to see opens with the same phrase: `Show the user this … verbatim`.** The workspace check said `Show this summary AS-IS`, the MCP verification `show the user this block as-is`, the update notice `as-is` / `unverändert zeigen`, the post-ship deploy summary `surface this summary AS-IS` — five wordings for one contract, which no output style could match reliably. They are one now (the German restart notice keeps the keyword: `verbatim zeigen`), written down in `CONVENTIONS.md → User-Relay Marker`, and the completion card already used the word. Everything else a hook writes is addressed to Claude and stays silent under the Quiet style.
+
 ## [0.164.1] — 2026-09-15
 
 ### Fixed
