@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.mcp.verify
- * @version 0.1.0
+ * @version 0.1.1
  * @event SessionStart
  * @plugin devops
  * @description Verify every MCP server declared in this plugin's .mcp.json has
@@ -60,7 +60,7 @@ const broken = results.filter((r) => !r.ok);
 if (broken.length === 0) process.exit(0);
 
 const out = [];
-out.push('MCP server verification (devops) — show the user this block as-is:');
+out.push('MCP server verification (devops) — show the user this block verbatim:');
 out.push('');
 out.push('⚠️  **MCP server(s) missing from this session**');
 out.push('');

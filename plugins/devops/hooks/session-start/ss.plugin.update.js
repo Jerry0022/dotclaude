@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.12.0
+ * @version 0.12.1
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -72,13 +72,13 @@ const DICT = {
     header: 'Plugin updates applied (workaround for claude-code#14061):',
     restart: '⚡ **Plugin updated ({names}) — restart Claude to activate the new version.**',
     dk_reread: 'Deep-knowledge index may have changed — re-read INDEX.md on next relevant task.',
-    show_asis: 'Show the user this restart notice as-is.',
+    show_asis: 'Show the user this restart notice verbatim.',
   },
   de: {
     header: 'Plugin-Updates angewendet (Workaround für claude-code#14061):',
     restart: '⚡ **Plugin aktualisiert ({names}) — Claude neu starten, um die neue Version zu aktivieren.**',
     dk_reread: 'Deep-Knowledge-Index hat sich evtl. geändert — INDEX.md beim nächsten relevanten Task neu lesen.',
-    show_asis: 'Diese Restart-Notice dem User unverändert zeigen.',
+    show_asis: 'Dem User diese Restart-Notice verbatim zeigen.',
   },
 };
 

@@ -85,6 +85,21 @@ The authoritative list of registered hooks and their matchers is
 - `process.stdout.write()` — Injected into Claude's context as instructions
 - `console.error()` — Same as stderr, shown in hook output
 
+### User-Relay Marker
+
+Everything a hook or MCP tool writes to stdout is addressed to Claude, not to
+the user. A block the user must see is introduced by exactly one phrase:
+
+```
+Show the user this <block|summary|notice> verbatim
+```
+
+The keyword `verbatim` is the contract (German variants keep it: `… verbatim
+zeigen`). No synonyms — no `as-is`, `AS-IS`, `unverändert`, `surface this` —
+so a consumer output style (see README → *Quiet output style*) can relay
+marked blocks 1:1 and stay silent on everything else. The completion card
+uses the same word (`output it VERBATIM`, `templates/completion-card.md`).
+
 ### Boot Discipline — SessionStart hooks vs. MCP server boot
 
 Claude Code starts every SessionStart hook **concurrently** with the boot of
@@ -259,7 +274,8 @@ templates/
 ├── buildlog-entry.md
 ├── changelog-entry.md
 ├── completion-card.md
-└── github-release.md
+├── github-release.md
+└── output-style-quiet.md   ← consumer copy target (~/.claude/output-styles/)
 ```
 
 ## Auto-Maintained Documentation
