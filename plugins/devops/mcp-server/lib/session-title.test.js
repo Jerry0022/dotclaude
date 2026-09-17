@@ -85,6 +85,38 @@ describe("titlePrefixFor", () => {
       rmSync(cwd, { recursive: true, force: true });
     }
   });
+
+  // A state file the resume hook would refuse (absolute html_path — a
+  // pre-#284 concept) or prune (>24 h old) is a corpse: it must not keep the
+  // sidebar on "🚀 Shipping –" after a ship. Observed 2026-09-17.
+  test("a dead concept-active.json does NOT own the title: invalid html_path or older than 24 h", () => {
+    const cases = [
+      { port: 8774, html_path: "C:/Users/x/.claude/devops-concepts/2026-08-16-repo-health.html", started_at: "2026-08-16T18:03:20.000Z" },
+      { port: 8774, html_path: "docs/concepts/x.html", started_at: new Date(Date.now() - 25 * 3600_000).toISOString() },
+      { port: 0, html_path: "docs/concepts/x.html" },
+    ];
+    for (const state of cases) {
+      const cwd = mkdtempSync(join(tmpdir(), "devops-title-dead-"));
+      try {
+        mkdirSync(join(cwd, ".claude"));
+        writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify(state));
+        expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps), JSON.stringify(state)).toBe(SESSION_PREFIX.test);
+      } finally {
+        rmSync(cwd, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("a fresh concept-active.json (started_at within 24 h) still owns the title", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "devops-title-live-"));
+    try {
+      mkdirSync(join(cwd, ".claude"));
+      writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: new Date().toISOString() }));
+      expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps)).toBeNull();
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("titleInstruction", () => {

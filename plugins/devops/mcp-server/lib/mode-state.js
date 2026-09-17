@@ -132,15 +132,41 @@ export function titleInstruction(prefix) {
 export function conceptUrl(cwd, concept) {
   const explicit = concept && typeof concept === "object" ? concept.url : "";
   if (typeof explicit === "string" && /^https?:\/\//.test(explicit.trim())) return explicit.trim();
-  if (!cwd) return "";
+  const state = readConceptState(cwd);
+  if (!state) return "";
+  const htmlPath = String(state.html_path).replace(/\\/g, "/").replace(/^\.?\//, "");
+  return `http://localhost:${state.port}/${htmlPath}`;
+}
+
+/**
+ * The project's `concept-active.json`, or null when there is none — or when
+ * the file could never be a live concept. The card must apply the SAME
+ * validity rules as `ss.concept.resume` (schema via its `isValidHtmlPath`,
+ * abandonment via its `isStale`): a state file the resume hook refuses to
+ * resume is a corpse, not a mode. Observed 2026-09-17: a month-old file with
+ * an absolute `html_path` (a pre-#284 concept) failed the hook's validation,
+ * so the hook never pruned it, while the card kept reading it as "a concept
+ * owns the title" — every ship in that worktree left `🚀 Shipping –` in the
+ * sidebar. Live concepts pass the card their `concept` field anyway; this
+ * fallback only has to be right about dead files.
+ *
+ * @param {string|undefined} cwd
+ * @returns {{ port: number, html_path: string }|null}
+ */
+export function readConceptState(cwd) {
+  if (!cwd) return null;
   try {
     const state = JSON.parse(readFileSync(join(cwd, ".claude", "concept-active.json"), "utf8"));
-    const port = Number(state && state.port);
-    const htmlPath = String((state && state.html_path) || "").replace(/\\/g, "/").replace(/^\.?\//, "");
-    if (!Number.isInteger(port) || port <= 0 || !htmlPath) return "";
-    return `http://localhost:${port}/${htmlPath}`;
+    if (!state || typeof state !== "object") return null;
+    const port = Number(state.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+    const require = createRequire(import.meta.url);
+    const R = require(join(here, "..", "..", "hooks", "session-start", "ss.concept.resume.js"));
+    if (!R.isValidHtmlPath(state.html_path)) return null;
+    if (R.isStale(state)) return null;
+    return { port, html_path: state.html_path };
   } catch {
-    return "";
+    return null;
   }
 }
 
