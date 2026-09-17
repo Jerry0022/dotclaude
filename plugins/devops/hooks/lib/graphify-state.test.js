@@ -36,6 +36,7 @@ import {
   clearDeclines,
   isProjectDir,
   findRepoRoot,
+  mainCheckoutRoot,
   graphifyBin,
   refreshUpdateLockFile,
   clearUpdateLockFile,
@@ -981,5 +982,54 @@ describe("graphifyBin — the build binary is overridable", () => {
       if (orig === undefined) delete process.env.DOTCLAUDE_GRAPHIFY_BIN;
       else process.env.DOTCLAUDE_GRAPHIFY_BIN = orig;
     }
+  });
+});
+
+describe("mainCheckoutRoot — linked worktree → primary checkout", () => {
+  /** A primary checkout (.git DIR) plus a linked worktree whose .git FILE points back at it. */
+  function pair({ relative = false } = {}) {
+    const main = tmp();
+    const wtGitDir = path.join(main, ".git", "worktrees", "feature-x");
+    fs.mkdirSync(wtGitDir, { recursive: true });
+    const wt = tmpBare();
+    const target = relative ? path.relative(wt, wtGitDir) : wtGitDir;
+    fs.writeFileSync(path.join(wt, ".git"), `gitdir: ${target}\n`);
+    return { main, wt };
+  }
+
+  test("resolves the primary checkout from a linked worktree, and from its subdirs", () => {
+    const { main, wt } = pair();
+    expect(mainCheckoutRoot(wt)).toBe(main);
+    const sub = path.join(wt, "plugins", "devops");
+    fs.mkdirSync(sub, { recursive: true });
+    expect(mainCheckoutRoot(sub)).toBe(main);
+  });
+
+  test("a relative gitdir resolves against the worktree root", () => {
+    const { main, wt } = pair({ relative: true });
+    expect(mainCheckoutRoot(wt)).toBe(main);
+  });
+
+  test("null for a primary checkout (.git is a directory)", () => {
+    expect(mainCheckoutRoot(tmp())).toBeNull();
+  });
+
+  test("null when the gitdir does not point into a <main>/.git/worktrees/<name> layout", () => {
+    const wt = tmpBare();
+    fs.writeFileSync(path.join(wt, ".git"), "gitdir: /somewhere/else\n");
+    expect(mainCheckoutRoot(wt)).toBeNull();
+  });
+
+  test("null when the primary .git it points at does not exist (stale worktree)", () => {
+    const wt = tmpBare();
+    const ghost = path.join(os.tmpdir(), "gstate-ghost-" + Date.now(), ".git", "worktrees", "x");
+    fs.writeFileSync(path.join(wt, ".git"), `gitdir: ${ghost}\n`);
+    expect(mainCheckoutRoot(wt)).toBeNull();
+  });
+
+  test("null outside any repo and on garbage input (never throws)", () => {
+    expect(mainCheckoutRoot(tmpBare())).toBeNull();
+    expect(mainCheckoutRoot("")).toBeNull();
+    expect(mainCheckoutRoot(null)).toBeNull();
   });
 });

@@ -2,7 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hasGraph, buildGraphNudge, graphJsonPath, graphIsStale, stalenessInfo, suggestQuery } from "./graph-nudge.js";
+import { hasGraph, hasLocalGraph, resolveGraphJson, graphFlag, buildGraphNudge, graphJsonPath, graphIsStale, stalenessInfo, suggestQuery } from "./graph-nudge.js";
 
 describe("hasGraph — graph.json detection", () => {
   let dir;
@@ -62,7 +62,8 @@ describe("graphIsStale — gate precondition", () => {
   function writeGraph(dir) {
     const gp = graphJsonPath(dir);
     fs.mkdirSync(path.dirname(gp), { recursive: true });
-    fs.writeFileSync(gp, "{}");
+    // Must clear the size floor: staleness is measured against the RESOLVED graph, and an under-floor file never resolves.
+    fs.writeFileSync(gp, JSON.stringify({ nodes: Array(50).fill({ id: "x" }) }));
     return gp;
   }
 
@@ -156,7 +157,7 @@ describe("stalenessInfo — bounded-tolerance gate precondition", () => {
   function writeGraph(dir) {
     const gp = graphJsonPath(dir);
     fs.mkdirSync(path.dirname(gp), { recursive: true });
-    fs.writeFileSync(gp, "{}");
+    fs.writeFileSync(gp, JSON.stringify({ nodes: Array(50).fill({ id: "x" }) }));
     return gp;
   }
   function newSourceFile(dir, name) {
@@ -240,5 +241,95 @@ describe("suggestQuery — Gap #3 concrete gate suggestion", () => {
     expect(suggestQuery("")).toBe('graphify query "<your question>"');
     expect(suggestQuery(undefined)).toBe('graphify query "<your question>"');
     expect(suggestQuery("...")).toBe('graphify query "<your question>"');
+  });
+
+  test("carries a --graph suffix through, on the concrete and the placeholder form", () => {
+    const flag = ' --graph "C:\\repo\\graphify-out\\graph.json"';
+    expect(suggestQuery("foo_bar", flag)).toBe(`graphify query "What defines or uses foo bar?"${flag}`);
+    expect(suggestQuery("", flag)).toBe(`graphify query "<your question>"${flag}`);
+  });
+});
+
+describe("resolveGraphJson — local → repo root → primary checkout", () => {
+  const GRAPH = JSON.stringify({ nodes: Array(50).fill({ id: "x" }) });
+  function writeGraph(root) {
+    const gp = graphJsonPath(root);
+    fs.mkdirSync(path.dirname(gp), { recursive: true });
+    fs.writeFileSync(gp, GRAPH);
+    return gp;
+  }
+  /** primary checkout + linked worktree (subdir included), no graphs yet */
+  function pair() {
+    const main = fs.mkdtempSync(path.join(os.tmpdir(), "graph-nudge-main-"));
+    fs.mkdirSync(path.join(main, ".git", "worktrees", "wt"), { recursive: true });
+    const wt = fs.mkdtempSync(path.join(os.tmpdir(), "graph-nudge-wt-"));
+    fs.writeFileSync(path.join(wt, ".git"), `gitdir: ${path.join(main, ".git", "worktrees", "wt")}\n`);
+    const sub = path.join(wt, "src");
+    fs.mkdirSync(sub);
+    fs.writeFileSync(path.join(sub, "a.js"), "const a = 1;");
+    return { main, wt, sub };
+  }
+  const dirs = [];
+  afterAll(() => { for (const d of dirs) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} } });
+
+  test("null when no candidate holds a usable graph", () => {
+    const { main, wt, sub } = pair(); dirs.push(main, wt);
+    expect(resolveGraphJson(sub)).toBeNull();
+    expect(hasGraph(sub)).toBe(false);
+    expect(graphFlag(sub)).toBe("");
+  });
+
+  test("local wins and needs no --graph flag", () => {
+    const { main, wt, sub } = pair(); dirs.push(main, wt);
+    writeGraph(main);
+    const local = writeGraph(sub);
+    expect(resolveGraphJson(sub)).toEqual({ file: local, source: "local" });
+    expect(graphFlag(sub)).toBe("");
+    expect(hasLocalGraph(sub)).toBe(true);
+  });
+
+  test("a subdirectory session resolves to the enclosing repo root's graph", () => {
+    const { main, wt, sub } = pair(); dirs.push(main, wt);
+    const rootGraph = writeGraph(wt);
+    expect(resolveGraphJson(sub)).toEqual({ file: rootGraph, source: "root" });
+    expect(hasGraph(sub)).toBe(true);
+    expect(hasLocalGraph(sub)).toBe(false);
+    expect(graphFlag(sub)).toBe(` --graph "${rootGraph}"`);
+  });
+
+  test("a graph-less worktree falls back to the primary checkout's graph", () => {
+    const { main, wt, sub } = pair(); dirs.push(main, wt);
+    const mainGraph = writeGraph(main);
+    expect(resolveGraphJson(wt)).toEqual({ file: mainGraph, source: "main" });
+    expect(resolveGraphJson(sub)).toEqual({ file: mainGraph, source: "main" });
+    expect(hasGraph(wt)).toBe(true);
+    expect(hasLocalGraph(wt)).toBe(false);
+    // The nudge names the resolved file and hands Claude the flag verbatim.
+    const nudge = buildGraphNudge(wt);
+    expect(nudge).toContain(mainGraph);
+    expect(nudge).toContain(`graphify query "<question>" --graph "${mainGraph}"`);
+  });
+
+  test("staleness is measured against the resolved (primary) graph, over THIS tree's sources", () => {
+    const { main, wt, sub } = pair(); dirs.push(main, wt);
+    const mainGraph = writeGraph(main);
+    const OLD = new Date(Date.now() - 60_000), NOW = new Date();
+    fs.utimesSync(mainGraph, NOW, NOW);
+    fs.utimesSync(path.join(sub, "a.js"), OLD, OLD);
+    expect(stalenessInfo(wt).newerCount).toBe(0);
+    // A branch edit in the worktree is exactly the lag the primary graph has.
+    const later = new Date(Date.now() + 5_000);
+    fs.writeFileSync(path.join(sub, "b.js"), "const b = 2;");
+    fs.utimesSync(path.join(sub, "b.js"), later, later);
+    expect(stalenessInfo(wt).newerCount).toBe(1);
+  });
+
+  test("an under-floor graph in the worktree does not shadow a usable primary graph", () => {
+    const { main, wt, sub } = pair(); dirs.push(main, wt);
+    const mainGraph = writeGraph(main);
+    const gp = graphJsonPath(wt);
+    fs.mkdirSync(path.dirname(gp), { recursive: true });
+    fs.writeFileSync(gp, "{}");
+    expect(resolveGraphJson(wt)).toEqual({ file: mainGraph, source: "main" });
   });
 });

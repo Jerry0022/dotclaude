@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graph-nudge
- * @version 0.3.0
+ * @version 0.4.0
  * @plugin devops
  * @description Pure helpers for the ambient graphify nudge injected by
  *   pre.tokens.guard on the first broad search of a session. Detects whether a
@@ -29,22 +29,85 @@ function graphJsonPath(cwd) {
 // to the SessionStart hook, which runs once per session (see ss.graphify.js).
 const MIN_GRAPH_BYTES = 512;
 
-/** True iff a graphify graph.json exists AND clears the size floor. Never throws. */
-function hasGraph(cwd) {
+/** statSync-only presence + size-floor check for one candidate path. Never throws. */
+function graphFileUsable(file) {
   try {
-    const st = fs.statSync(graphJsonPath(cwd));
+    const st = fs.statSync(file);
     return st.isFile() && st.size > MIN_GRAPH_BYTES;
   } catch {
     return false;
   }
 }
 
-/** The ambient hint appended to the session-start injection when a graph exists. */
-function buildGraphNudge() {
+/**
+ * Where the graph for `cwd` actually lives. Candidates, first usable wins:
+ *   1. `local`  — `<cwd>/graphify-out/graph.json` (graphify's default)
+ *   2. `root`   — the same under the enclosing git work-tree root (a session
+ *                 whose cwd is a subdirectory of the project)
+ *   3. `main`   — the PRIMARY checkout's graph when `cwd` is a linked worktree
+ *                 (graphify-state `mainCheckoutRoot`)
+ * A linked worktree starts graph-less until its own background build lands,
+ * while the primary checkout usually holds a fresh graph already; falling back
+ * to it makes the nudge/gate live from the first search instead of never
+ * (measured: 11 of 20 sessions had no graph in cwd). Callers pass `.file` to
+ * `graphify query --graph` when `.source !== 'local'`. Never throws.
+ * @returns {{file:string, source:'local'|'root'|'main'}|null}
+ */
+function resolveGraphJson(cwd) {
+  const local = graphJsonPath(cwd);
+  if (graphFileUsable(local)) return { file: local, source: 'local' };
+  let gstate;
+  try { gstate = require('./graphify-state'); } catch { return null; }
+  try {
+    const root = gstate.findRepoRoot(cwd);
+    if (root && path.resolve(root) !== path.resolve(cwd)) {
+      const f = graphJsonPath(root);
+      if (graphFileUsable(f)) return { file: f, source: 'root' };
+    }
+    const main = gstate.mainCheckoutRoot(cwd);
+    if (main) {
+      const f = graphJsonPath(main);
+      if (graphFileUsable(f)) return { file: f, source: 'main' };
+    }
+  } catch { /* fall through */ }
+  return null;
+}
+
+/**
+ * True iff a usable graph exists for `cwd` — locally, at the repo root, or in
+ * the primary checkout (see `resolveGraphJson`). Never throws.
+ */
+function hasGraph(cwd) {
+  return resolveGraphJson(cwd) !== null;
+}
+
+/** True iff `cwd` itself holds a usable graph (no fallback) — the build-side check. */
+function hasLocalGraph(cwd) {
+  return graphFileUsable(graphJsonPath(cwd));
+}
+
+/**
+ * The `--graph <path>` suffix a query needs when the resolved graph is not
+ * graphify's cwd-relative default; '' when it is (or nothing resolved).
+ */
+function graphFlag(cwd) {
+  const r = resolveGraphJson(cwd);
+  return r && r.source !== 'local' ? ` --graph "${r.file}"` : '';
+}
+
+/**
+ * The ambient hint appended to the session-start injection when a graph exists.
+ * With a `cwd`, names the resolved graph and carries the `--graph` flag so a
+ * worktree session queries the primary checkout's graph without guessing.
+ */
+function buildGraphNudge(cwd) {
+  const r = cwd ? resolveGraphJson(cwd) : null;
+  const where = r && r.source !== 'local' ? r.file : 'graphify-out/graph.json';
+  const flag = r && r.source !== 'local' ? ` --graph "${r.file}"` : '';
   return [
-    '[graphify] A knowledge graph exists at graphify-out/graph.json.',
+    `[graphify] A knowledge graph exists at ${where}.`,
     'For semantic questions (what defines/calls X, how do A and B relate, where is',
-    'Y handled), prefer `graphify query "<question>"` over grepping raw files — it',
+    `Y handled), prefer \`graphify query "<question>"${flag}\` over grepping raw files — it`,
     'reads the graph, not the code, so it is cheaper. Refresh with /auto-graph if',
     'the code changed meaningfully.',
   ].join('\n');
@@ -58,9 +121,9 @@ function buildGraphNudge() {
  * remaining words in a fixed "What defines or uses X?" template. Never
  * throws; falls back to the generic placeholder when nothing usable remains.
  */
-function suggestQuery(pattern) {
+function suggestQuery(pattern, graphFlagSuffix = '') {
   if (typeof pattern !== 'string' || !pattern.trim()) {
-    return 'graphify query "<your question>"';
+    return `graphify query "<your question>"${graphFlagSuffix}`;
   }
   const words = pattern
     .replace(/\\[a-zA-Z]/g, ' ')          // \d \w \s \b etc.
@@ -68,8 +131,8 @@ function suggestQuery(pattern) {
     .replace(/[_-]/g, ' ')                // snake/kebab separators → words
     .split(/\s+/)
     .filter(Boolean);
-  if (!words.length) return 'graphify query "<your question>"';
-  return `graphify query "What defines or uses ${words.join(' ')}?"`;
+  if (!words.length) return `graphify query "<your question>"${graphFlagSuffix}`;
+  return `graphify query "What defines or uses ${words.join(' ')}?"${graphFlagSuffix}`;
 }
 
 // Directories whose contents never count toward "newest source file": VCS,
@@ -143,8 +206,15 @@ function scanSources(cwd, opts = {}) {
  * @returns {{newerCount:number, truncated:boolean, graphMtime:number}}
  */
 function stalenessInfo(cwd, opts = {}) {
+  // Resolved graph (local → repo root → primary checkout) vs. THIS tree's
+  // sources: a worktree measured against the primary graph counts its own
+  // branch edits as "newer", which is exactly the lag that graph has.
   let graphMtime;
-  try { graphMtime = fs.statSync(graphJsonPath(cwd)).mtimeMs; } catch { return { newerCount: Infinity, truncated: false, graphMtime: 0 }; }
+  try {
+    const r = resolveGraphJson(cwd);
+    if (!r) return { newerCount: Infinity, truncated: false, graphMtime: 0 };
+    graphMtime = fs.statSync(r.file).mtimeMs;
+  } catch { return { newerCount: Infinity, truncated: false, graphMtime: 0 }; }
   const { count, truncated, newerCount } = scanSources(cwd, { ...opts, newerThan: graphMtime });
   if (truncated) return { newerCount: Infinity, truncated: true, graphMtime };
   if (count === 0) return { newerCount: Infinity, truncated: false, graphMtime }; // nothing comparable
@@ -167,7 +237,10 @@ module.exports = {
   GRAPH_JSON_REL,
   MIN_GRAPH_BYTES,
   graphJsonPath,
+  resolveGraphJson,
   hasGraph,
+  hasLocalGraph,
+  graphFlag,
   buildGraphNudge,
   suggestQuery,
   scanSources,

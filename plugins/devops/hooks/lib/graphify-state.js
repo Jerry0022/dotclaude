@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-state
- * @version 0.8.0
+ * @version 0.9.0
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
  *   layer (auto-graph). Default-on / opt-out model: graphify enforcement is
@@ -80,6 +80,40 @@ function findRepoRoot(cwd) {
       if (parent === dir) return null; // filesystem root reached
       dir = parent;
     }
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Root of the PRIMARY checkout when `cwd` sits inside a linked git worktree,
+ * else null. A linked worktree's `.git` is a one-line FILE
+ * (`gitdir: <main>/.git/worktrees/<name>`); the primary checkout's `.git` is a
+ * directory. Pure fs, no git spawn — hot-path safe. Never throws.
+ *
+ * Why this exists: the knowledge graph is built per cwd, so a fresh worktree
+ * has no `graphify-out/` until its own background build lands — measured over
+ * 20 sessions, 11 ran in a graph-less worktree while the primary checkout held
+ * a fresh multi-MB graph the whole time. The nudge/gate resolve to that graph
+ * instead (graph-nudge `resolveGraphJson`).
+ * @returns {string|null} absolute primary-checkout root, or null
+ */
+function mainCheckoutRoot(cwd) {
+  const root = findRepoRoot(cwd);
+  if (!root) return null;
+  try {
+    const dotGit = path.join(root, '.git');
+    if (!fs.statSync(dotGit).isFile()) return null; // primary checkout already
+    const m = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(dotGit, 'utf8'));
+    if (!m) return null;
+    // `<main>/.git/worktrees/<name>` — relative gitdirs resolve against the worktree root.
+    const gitdir = path.resolve(root, m[1]);
+    const parts = gitdir.split(/[\\/]/);
+    const wtIdx = parts.lastIndexOf('worktrees');
+    if (wtIdx < 2 || parts[wtIdx - 1] !== '.git') return null;
+    const main = parts.slice(0, wtIdx - 1).join(path.sep);
+    if (!main || samePath(main, root)) return null;
+    return fs.statSync(path.join(main, '.git')).isDirectory() ? main : null;
   } catch {
     return null;
   }
@@ -696,6 +730,7 @@ module.exports = {
   updateLockHeartbeatMs,
   graphifyBin,
   findRepoRoot,
+  mainCheckoutRoot,
   isProjectDir,
   bgWindowless,
   bgWithSentinel,

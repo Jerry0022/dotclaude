@@ -161,6 +161,23 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     cleanup(dir);
   });
 
+  test("graph-less linked worktree → gate fires on the PRIMARY checkout's graph and names it via --graph", () => {
+    // Primary checkout with a fresh graph; the worktree has none of its own
+    // (measured: 11 of 20 sessions ran like this and never saw the gate).
+    const main = project({ consent: null, graph: "fresh" });
+    fs.mkdirSync(path.join(main, ".git", "worktrees", "wt"), { recursive: true });
+    const wt = project({ consent: null, graph: "none" });
+    fs.rmSync(path.join(wt, ".git"), { recursive: true, force: true });
+    fs.writeFileSync(path.join(wt, ".git"), `gitdir: ${path.join(main, ".git", "worktrees", "wt")}\n`);
+    fs.utimesSync(path.join(wt, "a.js"), OLD, OLD); // no branch edits newer than the primary graph
+    const mainGraph = path.join(main, "graphify-out", "graph.json");
+    const r = runGrep(wt, "s-worktree", "theta");
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("GRAPHIFY GATE");
+    expect(r.stderr).toContain(`--graph "${mainGraph}"`);
+    cleanup(wt); cleanup(main);
+  });
+
   test("after graphify query ran this session → gate relents", () => {
     const dir = project({ consent: true, graph: "fresh" });
     markQueryDone("s-queried", dir);

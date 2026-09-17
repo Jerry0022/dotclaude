@@ -1,6 +1,6 @@
 ---
 name: auto-graph
-version: 0.4.1
+version: 0.5.0
 description: >-
   Codebase knowledge graph via the external graphify CLI — default-on,
   opt-out via `{"consent":false}` in `.claude/graphify.json` or
@@ -95,6 +95,15 @@ Answer the user's codebase question against the graph instead of grepping:
 graphify query "<the user's question>"
 ```
 
+In a **linked worktree** (or a session whose cwd is a subdirectory), the graph
+usually lives in the primary checkout, not under the cwd. The gate message and
+the session-start nudge print the resolved path — copy their `--graph` flag
+verbatim:
+
+```bash
+graphify query "<the user's question>" --graph "<primary-checkout>/graphify-out/graph.json"
+```
+
 Relay the result. For follow-up questions in the same session, reuse the
 existing graph — only re-run Step 3 if the code changed meaningfully.
 
@@ -151,8 +160,34 @@ keep this safe — both enforced in code, never optional:
 - **Escape hatch** — the gate blocks a given search at most once per session;
   *retrying the same search falls through*, so a question the graph cannot
   answer (exact string, a new/uncommitted file, a non-code asset) is never
-  wedged. Once any `graphify query` runs (tracked by `post.graphify.query`), the
-  gate relents for the rest of the session.
+  wedged. Once any `graphify query` runs (tracked by `post.graphify.query`, on
+  Bash **and** PowerShell — the Desktop app's default shell), the gate relents
+  for the rest of the session.
+- **Graph resolution** — `hasGraph`/`stalenessInfo` look for the graph in this
+  order: `<cwd>/graphify-out/graph.json` → the enclosing repo root → the
+  **primary checkout** when cwd is a linked worktree (graph-nudge
+  `resolveGraphJson`). A fresh worktree is therefore gated from its first
+  search against the main graph, with staleness counted over the worktree's
+  own files (branch edits = the lag that graph has). The build side stays
+  local: `ss.graphify` still builds a per-cwd graph once it is missing or
+  drifts, so the fallback is a bridge, not a replacement.
+
+### Measuring whether it pays off
+
+Telemetry (`~/.claude/graphify-metrics.jsonl`) records `gate_fired`,
+`gate_bypassed`, `query_ran` (with `responseChars`) and — via
+`post.graphify.search` — every Grep/Glob that ran (`search_ran`, `broad`,
+`responseChars`). The audit script reads that stream **and** the session
+transcripts, so it also covers sessions from before the telemetry existed:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/graphify-audit.js" --sessions 20 --since 2026-09-01
+```
+
+Baseline 2026-09-17 (20 sessions): 1 session with a query, 3 gate blocks
+(1 bypass), Grep/Glob output 0.03 % of new model input — the upper bound of
+what any search gate can save. Re-run after changes before arguing about the
+gate either way.
 
 This is stronger than graphify's own registration — graphify's `claude install`
 hook only emits `permissionDecision:"allow"` (a soft nudge), never a block. The

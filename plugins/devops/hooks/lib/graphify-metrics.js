@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-metrics
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Append-only usage telemetry for the graphify enforcement chain.
  *   Audit finding: 634 graphify mentions across session transcripts but only 5
@@ -66,8 +66,32 @@ function record(event, extra = {}, opts = {}) {
   } catch { /* fail-silent — telemetry must never break a hook */ }
 }
 
+/**
+ * Character length of a PostToolUse `tool_response`, whatever shape it has —
+ * the cost side of the adoption metric (what a search result or a graph
+ * answer weighs in Claude's context; tokens ≈ chars/4). Shell tools report
+ * {stdout, stderr, ...}; Grep/Glob report a string or {filenames, content,...}.
+ * Never throws.
+ */
+function responseChars(r) {
+  try {
+    if (r == null) return 0;
+    if (typeof r === 'string') return r.length;
+    if (typeof r === 'object') {
+      if (typeof r.stdout === 'string' || typeof r.stderr === 'string') {
+        return (r.stdout || '').length + (r.stderr || '').length;
+      }
+      return JSON.stringify(r).length;
+    }
+    return String(r).length;
+  } catch {
+    return 0;
+  }
+}
+
 module.exports = {
   DEFAULT_METRICS_PATH,
+  responseChars,
   MAX_BYTES,
   metricsPath,
   record,
