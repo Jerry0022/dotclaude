@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.plugin.scope
- * @version 0.1.0
+ * @version 0.1.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description Inject the scope-routing rule when a consumer project's session
@@ -34,6 +34,10 @@ const PLUGIN_SIGNALS = [
   /\bdotclaude\b/i,
   /\bdevops[- ]?plugin\b/i,
   /\bdevops\s+(skill|hook|agent|command|mcp)\b/i,
+  // "devops learn" is how /claude-learn is invoked in practice (19 of the
+  // first 23 recorded invocations, typos included); the routing note has to
+  // be in context before the capture decides where the rule goes.
+  /\bdev(o|op)s[- ]?learn\b/i,
   // Plugin slash commands, enumerated by name. A `/(setup|run|auto)-\w+`
   // wildcard would also swallow a project's own /run-tests or /setup-db.
   /(^|\s)\/(ship|promote|fix|concept)\b/,

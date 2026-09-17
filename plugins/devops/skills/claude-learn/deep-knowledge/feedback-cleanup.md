@@ -30,20 +30,25 @@ Confirm the resulting directory exists with Glob; if not, skip the whole step
 silently. For non-standard paths (UNC, network shares) where the encoding looks
 ambiguous (e.g. a leading `\\server`), skip rather than guess.
 
-## 2. List candidates
+## 2. List candidates — from the index only
 
-Glob `feedback_*.md` in that directory and read `MEMORY.md` (the index). No
-`feedback_*` files → skip silently.
+Read `MEMORY.md` (the index) — one Read, no Glob over the directory. Its
+`feedback_*` bullets carry a one-line hook each; those hooks are the candidate
+list. No `feedback_*` bullet → skip silently. (Across the first 23 runs of
+this skill no candidate ever matched; the index read is the whole cost this
+step is allowed to have in the common case.)
 
 **Only ever target `feedback_*.md`.** Never touch `user_*`, `project_*`, or
 `reference_*` memories — different lifecycles, and not what this skill replaces.
 
 ## 3. Match semantically
 
-For each candidate, read its frontmatter `description` and the first ~10 body
-lines. A match means: same intent **and** same trigger condition **and**
-non-trivial overlap with the rule just written — not merely "same broad topic".
-Be conservative; in doubt, treat as non-match and skip.
+Compare each hook line with the rule just written. Only when a hook line
+plausibly covers the same ground, open that one file and read its frontmatter
+`description` plus the first ~10 body lines. A match means: same intent
+**and** same trigger condition **and** non-trivial overlap with the rule just
+written — not merely "same broad topic". Be conservative; in doubt, treat as
+non-match and skip.
 
 ## 4. Confirm per match
 
