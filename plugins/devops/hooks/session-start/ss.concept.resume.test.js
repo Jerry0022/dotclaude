@@ -1,7 +1,11 @@
 import { describe, test, expect } from "vitest";
 import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
+import { spawnSync } from "node:child_process";
 import {
   isValidHtmlPath,
+  isValidState,
   isStale,
   resolveScript,
   buildCronBody,
@@ -27,6 +31,57 @@ describe("isValidHtmlPath — forged state files cannot steer Claude", () => {
     ["empty", ""],
     ["not a string", 42],
   ])("rejects %s", (_label, p) => expect(isValidHtmlPath(p)).toBe(false));
+});
+
+describe("readState — a corpse is pruned, a half-written file is not", () => {
+  const HOOK = path.resolve(import.meta.dirname, "ss.concept.resume.js");
+  const PLUGIN_ROOT = path.resolve(import.meta.dirname, "..", "..");
+
+  /** Run the hook as a process in a fresh project dir holding `body` as the state file. */
+  function runWith(body) {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "concept-resume-"));
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "concept-home-"));
+    fs.mkdirSync(path.join(home, ".claude"));
+    fs.writeFileSync(path.join(home, ".claude", "settings.json"), JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } }));
+    fs.mkdirSync(path.join(cwd, ".claude"));
+    const file = path.join(cwd, ".claude", "concept-active.json");
+    fs.writeFileSync(file, body);
+    const r = spawnSync(process.execPath, [HOOK], {
+      cwd,
+      input: JSON.stringify({ session_id: `vitest-resume-${process.pid}-${Date.now()}`, source: "startup" }),
+      env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, HOME: home, USERPROFILE: home },
+      encoding: "utf8",
+      timeout: 20_000,
+    });
+    return { status: r.status, stdout: r.stdout, exists: fs.existsSync(file) };
+  }
+
+  test("isValidState mirrors the schema the hook acts on", () => {
+    expect(isValidState(STATE)).toBe(true);
+    expect(isValidState({ ...STATE, html_path: "C:/Users/x/.claude/devops-concepts/2026-08-16-repo-health.html" })).toBe(false);
+    expect(isValidState({ ...STATE, port: "8883" })).toBe(false);
+    expect(isValidState({ ...STATE, slug: "bad slug!" })).toBe(false);
+    expect(isValidState(null)).toBe(false);
+  });
+
+  // The 2026-09-17 corpse: a month-old pre-#284 state file with an absolute
+  // html_path. The hook refused it and therefore never pruned it, and the
+  // completion card kept reading it as "a concept owns the session title".
+  test("a state file that parses but fails the schema is deleted", () => {
+    const r = runWith(JSON.stringify({
+      port: 8774, html_path: "C:/Users/x/.claude/devops-concepts/2026-08-16-repo-health.html",
+      slug: "repo-health", server_pid: null, started_at: "2026-08-16T18:03:20.000Z",
+    }));
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("");
+    expect(r.exists).toBe(false);
+  });
+
+  test("a file that does not parse is left alone — it may be mid-write", () => {
+    const r = runWith('{"port": 8774, "html_path": "docs/concepts/');
+    expect(r.status).toBe(0);
+    expect(r.exists).toBe(true);
+  });
 });
 
 describe("isStale", () => {

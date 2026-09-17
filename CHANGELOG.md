@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.169.1] — 2026-09-17
+
+### Fixed
+
+- **A dead `concept-active.json` no longer freezes the session title on `🚀 Shipping –`.** The completion card resolves "a concept owns the sidebar title" from the project's `.claude/concept-active.json` whenever `cwd` is passed — and it trusted any parseable file. A month-old state file from a pre-#284 concept (absolute `html_path`, bridge long gone) sat in a worktree; `ss.concept.resume` refused it at every SessionStart and, because it refused it, never pruned it. Result: every ship in that worktree rendered its card without the `[SESSION TITLE]` instruction, and the sidebar kept saying "Shipping" after the merge. Two fixes: `mode-state.readConceptState()` now applies the hook's own rules (`isValidHtmlPath`, `isStale` >24 h) before a state file counts as a mode — a live concept still passes the card its `concept` field and is unaffected; and the resume hook deletes a state file that parses but fails the schema (nothing can ever resume it), leaving a file that does not parse alone since it may be mid-write. `session-title.test.js` pins the corpse (absolute path, >24 h, port 0) to the `🧪 Test –` prefix and a fresh file to ownership; `ss.concept.resume.test.js` runs the hook as a process against the real corpse and a half-written file.
+
 ## [0.169.0] — 2026-09-17
 
 ### Changed

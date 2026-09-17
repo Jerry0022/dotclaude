@@ -66,19 +66,34 @@ function isValidHtmlPath(p) {
   return true;
 }
 
+/** True when `obj` is a state file this hook can act on. Pure. */
+function isValidState(obj) {
+  if (!obj || typeof obj.port !== 'number') return false;
+  if (!Number.isInteger(obj.port) || obj.port < 1 || obj.port > 65535) return false;
+  if (!isValidHtmlPath(obj.html_path)) return false;
+  if (obj.slug !== undefined && typeof obj.slug !== 'string') return false;
+  if (obj.slug && !/^[a-zA-Z0-9._-]{1,80}$/.test(obj.slug)) return false;
+  return true;
+}
+
+/**
+ * The state file, or null. A file that PARSES but fails the schema is
+ * deleted on the way out: nothing can ever resume it, and left alone it
+ * outlives every session — the completion card read one such corpse (an
+ * absolute `html_path` from before #284) as "a concept owns the session
+ * title" for a month. A file that does not parse is left alone: it may be
+ * mid-write by a bridge starting up right now.
+ */
 function readState() {
+  let obj;
   try {
-    const raw = fs.readFileSync(STATE_PATH, 'utf8');
-    const obj = JSON.parse(raw);
-    if (!obj || typeof obj.port !== 'number') return null;
-    if (!Number.isInteger(obj.port) || obj.port < 1 || obj.port > 65535) return null;
-    if (!isValidHtmlPath(obj.html_path)) return null;
-    if (obj.slug !== undefined && typeof obj.slug !== 'string') return null;
-    if (obj.slug && !/^[a-zA-Z0-9._-]{1,80}$/.test(obj.slug)) return null;
-    return obj;
+    obj = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
   } catch {
     return null;
   }
+  if (isValidState(obj)) return obj;
+  deleteState();
+  return null;
 }
 
 function deleteState() {
@@ -483,6 +498,7 @@ function buildDeadBridgeRelaunch(state, statePath = STATE_PATH) {
 
 module.exports = {
   isValidHtmlPath,
+  isValidState,
   isStale,
   resolveScript,
   buildCronBody,
