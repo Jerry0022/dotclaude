@@ -49,6 +49,51 @@ The result contains a `<functions>` block with one `<function>{...}</function>` 
 - Any skill that calls MCP tools from a non-completion server: load schemas upfront in the Step 0 / setup phase.
 - Guard-hook recovery: if `pre.ship.guard.js` fires and you cannot see ship tools, ToolSearch first — do NOT retry the blocked Bash command.
 
+## When the server is genuinely down: `Connection closed`
+
+The deferred-list rule above has one real exception. When the SessionStart
+reminder says a devops server **failed to connect** — `CONNECTION_CLOSED`,
+`"Connection closed"`, or `Skipping connection (recent failure cached …)` — the
+schema is not lazy, the process died at boot. ToolSearch returns nothing and a
+`reconnect_session_connector` only re-runs the same dead command.
+
+**Diagnose before reporting** — the cause is almost always the installed cache,
+not the plugin code. Run the server's own command from the cache root and read
+its first stderr lines:
+
+```bash
+cd ~/.claude/plugins/cache/dotclaude/devops/<version> && \
+  echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}' \
+  | node mcp-server/ship/index.js
+```
+
+`Cannot find module …/mcp-server/ship/index.js` means the cache lost its
+source files (2026-09-17: every `*.js` outside `node_modules` vanished from
+the cache dirs; `.md`/`.json` survived). The self-heal in `ss.plugin.update` →
+`cacheBroken()` cannot fire in that state — the healer is one of the missing
+`.js` files — so nothing repairs it across sessions. Heal it by hand:
+
+1. Marketplace clone first — it can be damaged the same way:
+   `cd ~/.claude/plugins/marketplaces/dotclaude && git status --short`;
+   any `M`/`D` under `plugins/devops/**/*.js` → `git checkout -- .`.
+2. Rebuild the cache from the restored clone — never copy files in by hand,
+   the rebuild also re-links `node_modules` and re-asserts `MCP_CRITICAL_FILES`:
+   ```bash
+   cd ~/.claude/plugins/marketplaces/dotclaude/plugins/devops && node -e '
+   const {rebuildCache}=require("./hooks/lib/cache-rebuild.js"),os=require("os"),p=require("path");
+   console.log(JSON.stringify(rebuildCache({marketplace:"dotclaude",pluginName:"devops",pluginDir:process.cwd(),
+     version:"<version>",sha:"<short sha>",channel:"alpha",
+     cacheDir:p.join(os.homedir(),".claude","plugins","cache"),
+     registryFile:p.join(os.homedir(),".claude","plugins","installed_plugins.json")})))'
+   ```
+3. Re-run the initialize probe above until it answers `Server started on stdio`,
+   then reconnect the servers (`reconnect_session_connector`, or restart the
+   session). Only after this does `/ship` Step 0.5 have anything to find.
+
+Do NOT hand-edit files into `~/.claude/plugins/cache/**` and do NOT fall back to
+`gh pr create` — the guard still blocks it, and the repaired server is minutes
+away.
+
 ## Anti-patterns
 
 - **Do NOT** conclude "server missing" from a deferred list entry. Deferred = lazy-loaded schema, not absent.

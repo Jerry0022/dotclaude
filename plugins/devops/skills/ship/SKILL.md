@@ -163,7 +163,7 @@ ToolSearch({
 })
 ```
 
-If the `ToolSearch` result contains all five `<function>` entries, proceed. If ANY are missing from the returned block, the server is genuinely not registered — STOP and report to the user (do NOT fall back to `gh pr create`; the guard hook will block it).
+If the `ToolSearch` result contains all five `<function>` entries, proceed. If ANY are missing from the returned block, the server is genuinely not registered — do NOT fall back to `gh pr create` (the guard hook blocks it). When the session reminder shows the server as **failed to connect** (`Connection closed`), run the cache diagnosis in `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md → When the server is genuinely down` before reporting: a cache that lost its `*.js` files is the usual cause and is repairable in-session.
 
 Do NOT skip this step even if you "think" the tools are available. `analysis` / `ready` / `test` cards have no ship-tool dependency and won't hit this — only the full pipeline does.
 
