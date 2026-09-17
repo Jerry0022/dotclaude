@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.169.0] — 2026-09-17
+
+### Changed
+
+- **A bare `/claude-learn` finds the learning itself.** Invoked without text it used to ask "Was soll ich langfristig lernen?" — but the bare call almost always follows the moment Claude did something the user did not expect, and that moment IS the learning. Step 1 now walks the user's prompts backwards, newest first, and stops at the first one carrying a surprise (a correction, a "warum hast du …", an unmet expectation, a reversal); most of the time that is the prompt right before the invocation, and it never skips past one surprise to an older one. The rule is derived from *what Claude did → what the user expected*, confirmed in one line ("Learning: `<rule>` — richtig?"), and only when the recent prompts are all neutral does the question fall back. Skill 0.3.0.
+- **`/ship` diagnoses a dead MCP server instead of stopping at "not registered".** `mcp-deferred-tools.md` gains *When the server is genuinely down*: a `Connection closed` / `CONNECTION_CLOSED` line in the session reminder is not a deferred schema — the process died at boot — and the cause is almost always the installed cache. 2026-09-17 every `*.js` outside `node_modules` vanished from `~/.claude/plugins/cache/dotclaude/devops/<version>` (the `.md`/`.json` survived) while the marketplace clone was reset to a v0.148 state; `ss.plugin.update`'s self-heal could not fire because the healer is one of the missing files. The section carries the stdio initialize probe that surfaces `Cannot find module …/mcp-server/ship/index.js`, the marketplace restore (`git checkout -- .`), and the `rebuildCache()` one-liner that repairs the cache in-session — never hand-copied files, never `gh pr create`. Ship Step 0.5 points there before reporting.
+
 ## [0.168.0] — 2026-09-15
 
 ### Added
