@@ -1,15 +1,19 @@
 ---
 name: claude-learn
-version: 0.3.0
+version: 0.4.0
 description: >-
   Capture a long-term learning/correction and route it to the correct project-
-  specific instructions (skill, skill-extension, deep-knowledge, or as a last
-  resort CLAUDE.md) — NOT to personal feedback memory. Also prunes now-duplicate
-  `feedback_*.md` entries with confirmation. Routing is one decision matrix
-  (Step 2); per-branch execution lives in `deep-knowledge/routing-details.md`.
-  Triggers ONLY on explicit invocation: "/claude-learn", "lerne das", "merk dir
-  das fürs Projekt", "remember this for the project", "capture learning". Do NOT
-  trigger for one-off conversational corrections or for personal feedback memory.
+  specific instructions (skill, skill-extension, deep-knowledge, scheduled-task
+  runbook, or as a last resort CLAUDE.md) — NOT to personal feedback memory.
+  Also prunes now-duplicate `feedback_*.md` entries with confirmation. Routing
+  is one decision matrix (Step 2); per-branch execution lives in
+  `deep-knowledge/routing-details.md`. Triggers ONLY on explicit invocation:
+  "/claude-learn", "devops learn" (also misspelt — "devos learn",
+  "/devops-learn" — and also when it sits at the END of a task prompt: the task
+  runs AND the capture runs, in the same turn, never dropped), "lerne das",
+  "merk dir das fürs Projekt", "remember this for the project", "capture
+  learning". Do NOT trigger for one-off conversational corrections or for
+  personal feedback memory.
 argument-hint: "[learning text — omitted: mines the last prompts for the surprise]"
 allowed-tools: Bash(git *), AskUserQuestion, Read, Write, Edit, Glob, Grep, Skill, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
@@ -34,10 +38,22 @@ nothing.
 
 ## Step 1 — Collect the learning
 
-Text passed after `/claude-learn` is the learning. Otherwise **mine the
-conversation before asking** — the bare invocation almost always follows a
-moment where Claude did something the user did not expect, and that moment is
-the learning.
+Text passed after `/claude-learn` is the learning — with two shapes that need
+work before they are a rule:
+
+- **A question or complaint** ("warum ship nicht funktioniert", "warum hast du
+  X übersehen", "fix das + learn"): the learning is the **root cause**, not the
+  sentence. Diagnose first with evidence (logs, code, the transcript), fix what
+  the prompt asked to fix, then state the rule the root cause implies.
+- **Several learnings in one call** (numbered lists, "zwei Themen", a paragraph
+  per topic — 1 in 4 invocations): split into atomic rules and run Step 2 for
+  **each**. Rules that land in the same target repo go into **one**
+  `/setup-issue` call (it takes several issues); local writes are grouped per
+  file. Never let one learning's branch decide the others'.
+
+Otherwise **mine the conversation before asking** — the bare invocation almost
+always follows a moment where Claude did something the user did not expect,
+and that moment is the learning.
 
 Walk the user's prompts backwards, newest first, and stop at the first one that
 carries a **surprise**: the user corrects a result, questions why something
@@ -57,6 +73,11 @@ The learning MUST end up a self-contained rule. Vague input ("die Farben waren
 falsch") → one clarifying question before continuing. Capture the **why** when
 the user gives it — without the reason the rule becomes superstition and future
 Claude cannot judge edge cases.
+
+**Capture, don't audit.** Persist the rule as stated; do not survey the
+codebase to size it (counting i18n keys across 30 languages to scope one i18n
+rule cost a run 17 minutes). Scope the user did not raise is settled by the
+rule's wording — at most the one clarifying question above.
 
 ## Step 2 — Route
 
@@ -84,6 +105,10 @@ only judgment call in the skill. Reach and subject together, not either alone:
   for anything naming a plugin part.
 - **a project** — build commands, architecture, business-logic conventions,
   file layout: things the plugin has no opinion about. *Which* project is Q3.
+  A **scheduled task / routine** (`~/.claude/scheduled-tasks/<name>/`) is
+  *a project's* — the one it works on — although its prompt lives under
+  `~/.claude/`; its rule goes to the runbook the task reads
+  (`routing-details.md` → C → "Scheduled-task rules"), never to a third file.
 
 A learning that names a plugin part but must **not** reach other consumers is
 neither — it is the C-override special case below.
@@ -159,6 +184,17 @@ Per-branch procedure — which file, what to hand over, how to scaffold —
 lives in `deep-knowledge/routing-details.md` (sibling of this file). Read the
 section for your branch.
 
+**First, Grep the target container for the rule's topic.** Already there and
+saying the same → report "already covered by `<file>`", write nothing. There
+but stale (an old path, an outdated step) → update that line in place; never
+append a second version below it. Says the opposite → the conflict rule below.
+
+**Defect or rule?** A learning that describes plugin code doing the wrong
+thing (branch A) is fixed **in the code, with a regression test** — a rule
+in a `.md` beside a bug leaves the bug live. A rule goes to a `.md`. Shipping
+the fix is the user's call, not this skill's: ship only when a ship was asked
+for in this session.
+
 Within whatever container you land in, prefer **deep-knowledge > skill >
 CLAUDE.md**, and re-route to the next-larger container rather than busting a
 budget. Sizing, re-route triggers, the reference-over-duplicate rule, and tone:
@@ -171,8 +207,10 @@ all three skip Step 4.
 
 The canonical file now owns this rule, so an auto-memory `feedback_*.md` entry
 covering the same ground is a stale duplicate: auto-memory is for personal
-style and tone, not project rules. Delete matched entries **with per-match
-confirmation**.
+style and tone, not project rules. **Index only**: read `MEMORY.md` once and
+compare its `feedback_*` one-liners; open a memory file only when its line
+matches, delete only **with per-match confirmation**. No matching line → done,
+no output (the case in every run so far).
 
 Mechanics — memory-dir resolution, matching criteria, the confirmation
 prompt: `deep-knowledge/feedback-cleanup.md` (sibling of this file).

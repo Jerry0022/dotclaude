@@ -16,6 +16,22 @@ describe("hasPluginSignal — plugin-topic detector", () => {
     expect(hasPluginSignal("/claude-learn schreibt in die falsche Datei")).toBe(true);
   });
 
+  test("the spoken form of /claude-learn signals, typos included", () => {
+    expect(hasPluginSignal("devops learn warum ship nicht funktioniert")).toBe(true);
+    expect(hasPluginSignal("Nur die drei Sprachen, devops learn für dieses Projekt")).toBe(true);
+    expect(hasPluginSignal("devos learn bzgl. der Routine")).toBe(true);
+    expect(hasPluginSignal("mach ein /devops-learn dazu")).toBe(true);
+    expect(hasPluginSignal("wir wollen devops-Prozesse lernen")).toBe(false);
+  });
+
+  test("the spoken form of /claude-learn signals, typos included", () => {
+    expect(hasPluginSignal("devops learn warum ship nicht funktioniert")).toBe(true);
+    expect(hasPluginSignal("Nur die drei Sprachen, devops learn für dieses Projekt")).toBe(true);
+    expect(hasPluginSignal("devos learn bzgl. der Routine")).toBe(true);
+    expect(hasPluginSignal("mach ein /devops-learn dazu")).toBe(true);
+    expect(hasPluginSignal("wir wollen devops-Prozesse lernen")).toBe(false);
+  });
+
   test("references a hook file or the completion card", () => {
     expect(hasPluginSignal("stop.flow.guard.js blockt jeden Turn")).toBe(true);
     expect(hasPluginSignal("ss.git.sync.js hängt")).toBe(true);

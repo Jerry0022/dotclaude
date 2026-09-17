@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.172.0] — 2026-09-17
+
+### Changed
+
+- **`/claude-learn` is routed from how it is actually used — an audit of all 23 invocations since 2026-07-26.** 19 of them arrived as "devops learn" (typos included, often at the end of a task prompt), a phrase that appeared neither in the skill's description nor in the plugin-scope prompt hook; four such prompts were handled as the task alone and the capture was dropped. The description, `triggers.de.txt` and `prompt.plugin.scope` (0.1.1, signal `/\bdev(o|op)s[- ]?learn\b/i`, 5 tests) now carry it, and the description states that task and capture both run in the same turn. Step 1 treats a question-shaped argument ("warum ship nicht funktioniert") as a root-cause search whose answer is the rule, splits a multi-learning call (6 of 23) into atomic rules routed one by one with issues batched per target repo, and captures without auditing (one run spent 17 minutes counting i18n keys to scope a rule). Step 3 greps the target container first — "already covered" when the rule exists, an in-place update when it is stale — and treats a plugin defect as a code fix with a regression test (all six branch-A runs ended that way), with shipping left to the user. Scheduled-task learnings now have one home, the runbook the task reads (three runs had spread one routine's rules over three files, one of them a global write with no branch-E ask). Step 4's feedback-memory pruning reads the `MEMORY.md` index only — it matched nothing in 23 runs, so per-file reads leave the common path. Skill 0.4.0.
+
 ## [0.171.0] — 2026-09-17
 
 ### Added

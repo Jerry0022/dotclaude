@@ -37,7 +37,17 @@ Conflicting hints → AskUserQuestion with the candidates plus "current project"
 
 ## A — Plugin repo, plugin rule: pick the file
 
-In order of preference:
+**Defect first.** Most learnings that reach this branch describe plugin code
+misbehaving (a hook blocking the wrong command, a cleanup script trusting a
+bad ref, an MCP server dying at boot). Those are fixed where the code lives —
+`hooks/`, `scripts/`, `mcp-server/` — with a regression test beside the
+module, exactly as any bug fix in this repo. Every one of the last six
+branch-A runs ended in a code change plus test; write the `.md` rule only
+for the *convention* the fix establishes, if there is one, and only where
+the file list below says. Do not ship from inside this skill: the fix sits on
+the branch until the user says ship (or asked for it before invoking learn).
+
+For a rule (no code at fault), in order of preference:
 
 1. **Behavioral rule for an existing skill** → `plugins/devops/skills/<skill>/SKILL.md`.
    Extend the relevant Step or append a numbered rule. Keep steps tight; if the
@@ -115,6 +125,34 @@ Prefer the largest fitting container: **deep-knowledge > skill > CLAUDE.md**.
 Append a one-line pointer to `{project}/CLAUDE.md` only as a last resort, so the
 new file gets discovered. The `post.claude.budget` hook measures the result;
 relay what it says rather than counting lines yourself.
+
+### Scheduled-task rules — the runbook is the home
+
+A learning about a Desktop scheduled task (the routine forgets pushed-but-
+unmerged branches, lets review holds rot, leaves idle-tick sessions
+un-archived) has exactly one home: **the file the task reads at the moment
+the rule applies**.
+
+1. Read `~/.claude/scheduled-tasks/<name>/SKILL.md` and find the runbook it
+   delegates to (typically `docs/<routine>.md` or `.claude/deep-knowledge/…`
+   inside the project it names). A rule for the *work path* — what to do with
+   a queue item, how to ship, what to verify — goes into that runbook, under
+   the step it changes. The runbook is repo-tracked, so the rule ships with
+   the project and survives task re-creation.
+2. Only a rule for the *tick itself* — the gate, the idle exit, session
+   hygiene, what runs before the runbook is opened — goes into the task's
+   `SKILL.md`. Edit it in place; a twin task with an identical body (a day/
+   night pair) gets the same edit.
+3. Never a third file. `.claude/deep-knowledge/scheduled-tasks.md`,
+   `docs/feedback-routine.md` *and* the task prompt each holding a slice of
+   the same routine's rules is the state three earlier runs produced; the
+   next run cannot know which one wins.
+
+The task's `SKILL.md` lives under `~/.claude/`, but it exists for one project
+only — routing treats it as that project's file (branch C, no branch-E ask).
+The commit of a runbook change goes through the project's normal ship path;
+the `pre.ship.guard` hook blocks a hand-rolled `gh pr create`/`gh pr merge`
+from here just as it does anywhere else.
 
 ### C-override — a deliberate deviation from a plugin default
 
