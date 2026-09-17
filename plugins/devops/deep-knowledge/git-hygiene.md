@@ -130,3 +130,34 @@ destructive operation class in the sweep:
 - **A partial guard is worse than none** — it reads as coverage. If a sweep
   cannot protect a subject across all four classes, it must skip that subject
   entirely and report it, not protect it in some classes only.
+
+### Deletion candidates come from the truth source, and are audited twice
+
+A branch may only be *offered* for deletion, and only *deleted*, when an
+unambiguous source confirms it exists under exactly that name and location:
+
+| Ort | Truth source | Never |
+|-----|--------------|-------|
+| lokal | `git for-each-ref refs/heads --format=%(refname)` | `git branch` output, `%(refname:short)` |
+| nur-remote / remote half | `git ls-remote --heads origin` (the server's answer) | `refs/remotes/*` — it also holds `origin/HEAD` |
+
+- **Why:** `%(refname:short)` shortens `refs/remotes/origin/HEAD` to the name
+  `origin`. A sweep that listed `refs/remotes/origin` that way filtered out
+  `HEAD` and put a "remote branch" called `origin` — the pointer to main — on
+  a repo-health page as löschbar, pre-checked, in four repos at once
+  (2026-09-17). Nothing was deleted, but only because the user read the list.
+- **Hard negative list in classification AND execution:** `main`, `master`,
+  `HEAD`, `origin`, the repo's default branch, and any name ending in
+  `/main`, `/master` or `/HEAD` never become candidates — filtered when the
+  list is built and re-checked per name right before `branch -D` /
+  `push --delete`, whatever the submitted payload says.
+- **Audit pass, run twice:** `scripts/repo-health-audit.js <repo> <candidates.json>`
+  verifies every candidate (exists as an exact ref, Ort matches both sources,
+  not protected, not a worktree branch) — once before the page renders, once
+  again before each destructive batch. A finding drops the entry and is shown
+  as a warning; the page header states the result ("N Refs geprüft, 0
+  Befunde"). A candidate set that has not passed the audit is not rendered.
+- **Same rule for every other subject class:** a worktree entry must be in
+  `git worktree list --porcelain`, a "verwaister Ordner" must *not* be, and
+  both must still be on disk — `/setup-cleanup` Step 10 re-reads both before
+  acting, exactly like the branch audit.
