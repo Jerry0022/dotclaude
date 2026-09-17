@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.171.0] — 2026-09-17
+
+### Added
+
+- **`/setup-cleanup` verifies every deletion candidate against the truth source — twice.** 2026-09-17 a repo-health page across 21 repos offered a "remote branch" named `origin` as löschbar, pre-checked, in four repos: the candidate list came from `refs/remotes/origin` rendered with `%(refname:short)`, and that shortening turns `refs/remotes/origin/HEAD` — the pointer to main — into the name `origin`. Nothing was deleted, but only because the user read the list. Candidates now come exclusively from `git for-each-ref refs/heads` (local, full refname) and `git ls-remote --heads origin` (remote — the server's answer, never `refs/remotes/*`); `main`, `master`, `HEAD`, `origin`, the default branch and any `…/main`-style name are refused in classification AND execution regardless of the payload. New `scripts/repo-health-audit.js` (`auditCandidates` pure + `readRepoState` live) checks each candidate for exact existence, an Ort that matches both sources, protected names and worktree branches; the skill runs it once before the page renders and once more on the exact set about to be deleted, drops every finding with its reason, and shows "N Refs geprüft, K Befunde" in the page header. Deletes go by full refname only. 20 tests, including a real bare remote with `origin/HEAD` set. `git-hygiene.md` § *Deletion candidates come from the truth source, and are audited twice* records the incident and the rule.
+
 ## [0.170.0] — 2026-09-17
 
 ### Added
