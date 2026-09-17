@@ -183,6 +183,18 @@ an injected instruction does.
    `~/.claude/settings.json`
 3. Start a new session
 
+**Optional — let Claude do it.** Paste this into any Claude Code session
+with the plugin installed; it copies the template, activates the style and
+tells you to restart:
+
+```text
+Set up the Quiet output style: copy the newest
+~/.claude/plugins/cache/dotclaude/devops/*/templates/output-style-quiet.md
+to ~/.claude/output-styles/quiet.md (create the directory if needed), set
+"outputStyle": "Quiet" in ~/.claude/settings.json, then tell me to start a
+new session. Do not change anything else.
+```
+
 The style relays only what the plugin marks for you. Every user-facing hook
 and tool block opens with `Show the user this … verbatim` — the completion
 card, the workspace check, the update notice, the team changelog — and the
