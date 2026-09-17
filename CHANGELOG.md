@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.169.2] — 2026-09-17
+
+### Changed
+
+- **README: the Quiet output style can be set up with one pasted prompt.** The *Quiet output style* section gains an optional block under the three manual steps: a short prompt the consumer pastes into any Claude Code session with the plugin installed. It copies the newest `~/.claude/plugins/cache/dotclaude/devops/*/templates/output-style-quiet.md` to `~/.claude/output-styles/quiet.md`, sets `"outputStyle": "Quiet"` in `~/.claude/settings.json`, and ends with a restart hint — nothing else. The manual route stays the primary one; the prompt is for consumers who would rather not touch the file system themselves.
+
 ## [0.169.1] — 2026-09-17
 
 ### Fixed
