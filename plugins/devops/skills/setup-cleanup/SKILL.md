@@ -134,7 +134,7 @@ Run in parallel:
    `git for-each-ref refs/heads --format='%(refname)'`, remote names from
    `git ls-remote --heads origin`. NEVER from `git branch -a`, `refs/remotes/*`
    or `%(refname:short)`: that shortening turns `refs/remotes/origin/HEAD` into
-   a "branch" named `origin` (`deep-knowledge/git-hygiene.md` § Deletion
+   a "branch" named `origin` (`{PLUGIN_ROOT}/deep-knowledge/git-hygiene.md` § Deletion
    candidates come from the truth source).
 
 Build the **protected branch set** from worktree output. Every branch in this set
