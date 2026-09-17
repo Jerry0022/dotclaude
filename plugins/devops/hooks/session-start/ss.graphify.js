@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.graphify
- * @version 0.4.0
+ * @version 0.4.1
  * @event SessionStart
  * @plugin devops
  * @description graphify enforcement — install-check + auto-build wiring for the
@@ -186,7 +186,9 @@ if (runOnce('ss-graphify-hookuninstall', cwdKey) && isGitRepo()) {
 
 // Once/24h deeper validity check (JSON.parse) beyond hasGraph()'s cheap size
 // floor — a present-but-empty/corrupt graph.json must trigger a rebuild too.
-const needsRebuild = !graphNudge.hasGraph(cwd)
+// Build-side check is LOCAL-only (no worktree→primary fallback): the fallback
+// serves the nudge/gate; this cwd still deserves its own graph once it drifts.
+const needsRebuild = !graphNudge.hasLocalGraph(cwd)
   || graphNudge.graphIsStale(cwd)
   || (runOnce('ss-graphify-validate', cwdKey, { cooldownMs: 24 * 60 * 60 * 1000 }) && !graphLooksValid());
 // Debounce bursts of SessionStart re-entries (multiple agents / worktrees on the

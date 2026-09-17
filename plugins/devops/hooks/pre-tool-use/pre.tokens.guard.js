@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.9.1
+ * @version 0.10.0
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
@@ -348,7 +348,7 @@ process.stdin.on('end', () => {
                 gstate.releaseRefresh(cwd); // declined — do not spend the cooldown (#291)
               }
             }
-            const suggestion = graphNudge.suggestQuery(toolInput.pattern);
+            const suggestion = graphNudge.suggestQuery(toolInput.pattern, graphNudge.graphFlag(cwd));
             console.error('\n⛔  GRAPHIFY GATE — broad search blocked (graph available)');
             console.error('─'.repeat(54));
             console.error('Query the knowledge graph instead of grepping raw files:');
@@ -362,11 +362,11 @@ process.stdin.on('end', () => {
             console.error('new/uncommitted file, or a non-code asset), retry the same');
             console.error('search to proceed.');
             console.error('─'.repeat(54));
-            metrics.record('gate_fired', { newerCount: info.newerCount }, { cwd, sid });
+            metrics.record('gate_fired', { newerCount: info.newerCount, tool: toolName, pattern: String(toolInput.pattern || '').slice(0, 120) }, { cwd, sid });
             process.exit(2);
           }
           // flag present → already gated this search; fall through (escape hatch)
-          metrics.record('gate_bypassed', {}, { cwd, sid });
+          metrics.record('gate_bypassed', { tool: toolName, pattern: String(toolInput.pattern || '').slice(0, 120) }, { cwd, sid });
         }
       }
     } catch { /* fail open — never block on gate errors */ }
@@ -406,7 +406,7 @@ process.stdin.on('end', () => {
           ].join('\n'));
         }
         if (hasGraph) {
-          sections.push(graphNudge.buildGraphNudge());
+          sections.push(graphNudge.buildGraphNudge(cwd));
           try { require('../lib/graphify-metrics').record('nudge_injected', {}, { cwd, sid }); } catch {}
         }
         fs.writeFileSync(mapFlag, Date.now().toString());

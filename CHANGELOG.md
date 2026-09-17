@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.170.0] — 2026-09-17
+
+### Added
+
+- **`scripts/graphify-audit.js` — one command answers "does the graph gate pay off?".** An audit of the 20 most recent sessions (2026-09-17) found the enforcement chain almost never engaged: 1 session with a `graphify query`, 3 gate blocks (1 bypassed by retrying the same Glob), and every Grep/Glob result together at **0.03 %** of new model input — Reads were 12× larger, the per-turn context re-read 40× larger than both. The script reproduces that measurement from the session transcripts (`~/.claude/projects/**/*.jsonl` — every tool call, every gate block, every usage count) plus the telemetry stream, and prints the per-session table, the aggregate with the search-share upper bound, and the gate → what-followed trace. `--sessions N`, `--since <date>`, `--skip <sid>` (drop the auditing session itself). Re-run before arguing about the gate either way; the baseline is pinned in the auto-graph skill.
+- **`post.graphify.search` — the cost side of the metric.** Telemetry counted blocks and bypasses but never sizes, so "does the gate save anything?" was unanswerable from the log alone. The new PostToolUse hook on `Grep|Glob` records `search_ran` with `broad` (no `path` = gate-eligible), the pattern, and `responseChars`; `gate_fired`/`gate_bypassed` carry tool + pattern; `query_ran` carries `responseChars`. `graphify-metrics.responseChars()` reads any `tool_response` shape.
+
+### Fixed
+
+- **`graphify query` in a PowerShell session now relents the gate — and is counted.** `post.graphify.query` matched `Bash` only. Desktop-app sessions run PowerShell, so their queries were never recorded and `markQueryDone` never fired: the gate kept blocking broad searches after Claude had already consulted the graph (4 of the 7 real queries since 1 Sept were invisible to the log). Matcher is `Bash|PowerShell`; the hook checks both tool names. Own test file with the real hook as a process, HOME-isolated metrics.
+- **A linked worktree no longer waits for its own graph build to get the nudge and the gate.** The graph is built per cwd, so a fresh worktree has no `graphify-out/` until its background build lands — 11 of the 20 audited sessions ran graph-less while the primary checkout held a fresh multi-MB graph the whole time. `graph-nudge.resolveGraphJson(cwd)` now resolves local → enclosing repo root → **primary checkout** (`graphify-state.mainCheckoutRoot`, which parses the worktree's `.git` file, relative gitdirs included); `hasGraph` and `stalenessInfo` use it, and staleness is counted over the worktree's own files against the resolved graph, so branch edits are exactly the lag that graph has. The gate message and the session-start nudge print the `--graph "<path>"` flag verbatim for Claude to copy. The build side stays local (`hasLocalGraph` in `ss.graphify`), so a worktree that drifts still gets its own graph. graph-nudge 0.4.0, graphify-state 0.9.0, pre.tokens.guard 0.10.0, auto-graph skill 0.5.0; 22 new tests including a worktree gate integration case.
+
 ## [0.169.2] — 2026-09-17
 
 ### Changed
