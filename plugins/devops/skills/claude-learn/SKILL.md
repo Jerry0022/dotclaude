@@ -1,6 +1,6 @@
 ---
 name: claude-learn
-version: 0.2.0
+version: 0.3.0
 description: >-
   Capture a long-term learning/correction and route it to the correct project-
   specific instructions (skill, skill-extension, deep-knowledge, or as a last
@@ -10,7 +10,7 @@ description: >-
   Triggers ONLY on explicit invocation: "/claude-learn", "lerne das", "merk dir
   das fürs Projekt", "remember this for the project", "capture learning". Do NOT
   trigger for one-off conversational corrections or for personal feedback memory.
-argument-hint: "<learning text>"
+argument-hint: "[learning text — omitted: mines the last prompts for the surprise]"
 allowed-tools: Bash(git *), AskUserQuestion, Read, Write, Edit, Glob, Grep, Skill, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
@@ -34,8 +34,24 @@ nothing.
 
 ## Step 1 — Collect the learning
 
-Text passed after `/claude-learn` is the learning. Otherwise ask once: "Was soll
-ich langfristig lernen?"
+Text passed after `/claude-learn` is the learning. Otherwise **mine the
+conversation before asking** — the bare invocation almost always follows a
+moment where Claude did something the user did not expect, and that moment is
+the learning.
+
+Walk the user's prompts backwards, newest first, and stop at the first one that
+carries a **surprise**: the user corrects a result, questions why something
+happened, states an expectation that was not met, or reverses something Claude
+did ("nein, …", "warum hast du …", "das sollte …", "ich wollte eigentlich …",
+"not what I asked", "that's wrong"). Most of the time it is the prompt
+immediately before `/claude-learn`; go further back only while the newer
+prompts are neutral (plain task requests, acknowledgements, "ok", "weiter").
+Never skip past a surprise to a different, older one.
+
+Derive the rule from the pair *what Claude did* → *what the user expected*,
+then confirm it in one line before routing: "Learning: `<rule>` — richtig?"
+The user's yes/edit is the learning. No surprise found within the recent
+prompts → ask once: "Was soll ich langfristig lernen?"
 
 The learning MUST end up a self-contained rule. Vague input ("die Farben waren
 falsch") → one clarifying question before continuing. Capture the **why** when
