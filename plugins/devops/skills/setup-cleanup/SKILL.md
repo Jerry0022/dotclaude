@@ -130,7 +130,12 @@ Run in parallel:
 
 1. `git fetch --all --prune` — sync with remote and remove stale tracking refs
 2. `git worktree list --porcelain` — list active worktrees, extract protected branches
-3. `git branch -a --no-color` — list all local and remote branches
+3. Enumerate candidates from the **truth sources only** — local names from
+   `git for-each-ref refs/heads --format='%(refname)'`, remote names from
+   `git ls-remote --heads origin`. NEVER from `git branch -a`, `refs/remotes/*`
+   or `%(refname:short)`: that shortening turns `refs/remotes/origin/HEAD` into
+   a "branch" named `origin` (`{PLUGIN_ROOT}/deep-knowledge/git-hygiene.md` § Deletion
+   candidates come from the truth source).
 
 Build the **protected branch set** from worktree output. Every branch in this set
 is excluded from ALL subsequent steps — classification, recommendations, AND cleanup.
@@ -209,11 +214,27 @@ vs. the union), and surface the same warning on the concept page header. A gap
 here is exactly how a prefix-based membership test hides a removable branch —
 this check turns that silent loss into a visible finding.
 
+**Truth-source audit (mandatory, after classification and again in Step 10):**
+write every candidate as `[{ "branch", "ort" }]` and run
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/repo-health-audit.js" <repo> candidates.json --default <default-branch>
+```
+
+It confirms each entry exists as an exact ref where the Ort says (`refs/heads`
+for lokal, `ls-remote --heads` for remote), and rejects protected names
+(`main`, `master`, `HEAD`, `origin`, the default branch) and worktree branches.
+Every finding drops the entry from the page and is listed as a warning; the
+page header shows "N Refs geprüft, K Befunde". Never render a candidate set
+that has not passed this audit.
+
 ## Step 4 — Remote Branch Audit
 
-After `fetch --prune`, check for remaining remote branches that are NOT `origin/main`:
+After `fetch --prune`, take the remote branch list from `git ls-remote --heads origin`
+(never from `refs/remotes/`), drop the default branch, and for each name not
+present in `refs/heads`:
 
-- For each: check if merged into `origin/main` or has a merged PR
+- Check if merged into `origin/main` or has a merged PR
 - Classify as Löschbar or Untersuchen
 - Track separately as remote-only branches (Ort = "nur-remote")
 
@@ -388,6 +409,10 @@ When the user submits via the concept page:
 4. **Validate** every branch marked for deletion:
    - Is it in the protected set? -> SKIP with warning, update page
    - Does it still exist? -> Skip silently if already gone
+   - Re-run `scripts/repo-health-audit.js` on the exact set about to be
+     deleted (Step 3 audit, second pass). Any finding -> SKIP that entry with
+     its reason. `main`/`master`/`HEAD`/`origin`/default branch are refused
+     here by name, regardless of what the payload says.
 
 ### Step 10a — Apply-Manifest + Dry-Run-Confirm
 
@@ -452,6 +477,9 @@ Persist results to `~/.claude/devops-concepts/{date}-repo-health-decisions.json`
   the page was generated.
 - **Never push --delete a remote branch** that is attached to a local worktree.
 - **Log every action** with branch name and result (deleted / skipped / error).
+- **Delete by full refname only** — `git branch -D <name>` with a name taken
+  from `refs/heads/`, `git push origin --delete refs/heads/<name>` with a name
+  confirmed by `ls-remote`. Never a name derived from `%(refname:short)`.
 
 ### Worktree Removal Safety
 
