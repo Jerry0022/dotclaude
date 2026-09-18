@@ -10,7 +10,7 @@ description: >-
   "auf stable heben", "promote to beta", "promote to stable". Do NOT trigger
   for shipping new work (use /ship) or plugin updates
   (/auto-update).
-allowed-tools: Bash(git *), AskUserQuestion, Read
+allowed-tools: Bash(git *), AskUserQuestion, Read, mcp__plugin_devops_dotclaude-ship__ship_promote, mcp__plugin_devops_dotclaude-completion__render_completion_card, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
 # Release — Channel Promotion
@@ -131,6 +131,11 @@ summary e.g. "vX.Y.Z auf <channel> promotet"). Populate:
 
 Do NOT use variant `ready` — its CTA reads "SHIP or CHANGE?", which is wrong for
 a *completed* promotion. `released` is the purpose-built variant.
+
+The card result carries a `[SESSION TITLE]` block that puts
+`🎊 Released <Alpha|Beta|Stable> – ` on the session title — the channel comes
+from `delivery.promote.current` (else `promotion.to`). Execute it before
+outputting the card; Desktop app only, skip silently elsewhere.
 
 ## Rollback = roll forward
 

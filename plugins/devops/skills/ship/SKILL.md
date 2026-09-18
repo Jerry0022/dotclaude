@@ -103,8 +103,8 @@ and `/claude-batch` do — the prefix strings are pinned in
 `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`) next to the card emojis:
 
 1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
-2. Strip any leading devops prefix (`🧪 Test – `, `📦 Ready – `, `⛔ Blocked – `,
-   `🚀 Shipping – `, … — the `SESSION_PREFIX` values) left by an earlier card or
+2. Strip any leading devops prefix (`🚀 Shipping – `, `🚀 Shipped – `, `🧪 Test – `,
+   `📦 Ready – `, `⛔ Blocked – `, `🔧 `, … — the `SESSION_PREFIX` values) left by an earlier card or
    ship in this session — never stack them.
 3. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
    `title: "🚀 Shipping – {stripped title}"`.
@@ -113,7 +113,7 @@ and `/claude-batch` do — the prefix strings are pinned in
 unattended run, or when the call fails for any reason: skip silently — no
 retry, no note to the user, no fallback. The rename is a courtesy, never a
 gate. The completion card's `[SESSION TITLE]` block replaces the prefix with
-the outcome (`🧪 Test – ` / `⛔ Blocked – ` / none, see Step 6); never restore a
+the outcome (`🚀 Shipped – ` / `⛔ Blocked – `, see Step 6); never restore a
 remembered title by re-typing it.
 
 > **Sentinel hygiene (every exit path).** `ship_preflight` writes a
@@ -884,9 +884,8 @@ the card (the card stays the last output of the turn). What it resolves to:
 
 | Outcome | Title |
 |---------|-------|
-| `ship-successful`, `state.merged` = main (normal **or** keep-mode) | `🧪 Test – {title}` — the just-installed build is untested; the next card that ends a turn replaces the marker |
+| `ship-successful` — final (`state.merged` = main, normal **or** keep-mode) or intermediate ship (feature branch) | `🚀 Shipped – {title}` — the finished form of `🚀 Shipping – `; the next card that ends a turn replaces the marker |
 | `ship-blocked` (any gate, build, checks, PR not merged) | `⛔ Blocked – {title}` — same emoji as the card headline |
-| `ship-successful`, `state.merged` = feature branch (intermediate ship) | `{title}` — nothing to test yet, plain title |
 
 The block also strips a stale `🚀 Shipping – ` when the title carries one. A
 title with none of the devops prefixes is left untouched — the user renamed it

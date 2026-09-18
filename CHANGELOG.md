@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.176.0] — 2026-09-18
+
+### Changed
+
+- **Every completion-card variant owns a session-title prefix — with its own CTA emoji — and the wrench marks a session's first prompt.** Until now only five variants flagged the sidebar, and a merged ship landed as `🧪 Test –` by indirection while analysis, test-minimal, fallback and released left a plain title. `mode-state.js` now maps all ten: `ship-successful` → `🚀 Shipped – ` (the finished form of `🚀 Shipping – `, final and intermediate alike — the feature-branch exception is gone), `released` → `🎊 Released <Alpha|Beta|Stable> – ` naming the channel reached (`delivery.promote.current` → `promotion.to` → `cta.to`, via the new `releasedPrefix`), `analysis` → `📋 Analysis – `, `test-minimal` → `▶️ Started – `, `ready-files` → `📦 Ready – `, `fallback` → the bare wrench `🔧 ` (icon only — the app's summary stays the title). `stripTitlePrefix` and the `[SESSION TITLE]` block know the three channel spellings and the wrench, so nothing stacks; `pending` still outranks the variant with `⏳ Working – `. New UserPromptSubmit hook **`prompt.flow.title-work`** puts that same wrench on the title when the first real prompt of a session arrives (once per session via `runOnce`; silent ticks, scheduled tasks and batch-collected prompts excluded), so a session in its first turn reads as "being worked on" until its card replaces the marker. The hook pins its own copy of the prefix (CJS vs. the ESM lib) and a test binds the two lists; `prompt.flow.silent-turn`'s stdin handler moved behind `require.main === module` so its detectors can be required without a second stdin consumer racing to `process.exit()`. `/ship` Step 6 and Pre-Step C, `/promote` Step 4 (session-mgmt tools now allowed), the card template and `plugin-behavior.md` carry the new table; README hook roster regenerated (48 hooks). Not covered by Codex review — external usage limit until 2026-10-11.
+
 ## [0.175.0] — 2026-09-18
 
 ### Changed

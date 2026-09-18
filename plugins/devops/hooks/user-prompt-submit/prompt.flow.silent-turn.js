@@ -62,28 +62,32 @@ function isScheduledTask(prompt) {
   return typeof prompt === 'string' && SCHEDULED_TASK_PATTERN.test(prompt);
 }
 
-let inputData = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', d => { inputData += d; });
-process.stdin.on('end', () => {
-  let hook;
-  try { hook = JSON.parse(inputData); } catch { process.exit(0); }
+// Guarded so prompt.flow.title-work can require the detectors without a
+// second stdin consumer racing this one to process.exit().
+if (require.main === module) {
+  let inputData = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', d => { inputData += d; });
+  process.stdin.on('end', () => {
+    let hook;
+    try { hook = JSON.parse(inputData); } catch { process.exit(0); }
 
-  const prompt = hook.prompt || '';
+    const prompt = hook.prompt || '';
 
-  if (isScheduledTask(prompt)) {
+    if (isScheduledTask(prompt)) {
+      try {
+        writeSessionFile(sessionFile('dotclaude-devops-scheduled-task', hook.session_id), '1');
+      } catch {}
+    }
+
+    if (!isSilent(prompt)) process.exit(0);
+
     try {
-      writeSessionFile(sessionFile('dotclaude-devops-scheduled-task', hook.session_id), '1');
+      const flagFile = sessionFile('dotclaude-devops-silent-turn', hook.session_id);
+      writeSessionFile(flagFile, '1');
     } catch {}
-  }
-
-  if (!isSilent(prompt)) process.exit(0);
-
-  try {
-    const flagFile = sessionFile('dotclaude-devops-silent-turn', hook.session_id);
-    writeSessionFile(flagFile, '1');
-  } catch {}
-  process.exit(0);
-});
+    process.exit(0);
+  });
+}
 
 module.exports = { isSilent, isScheduledTask, SILENT_PATTERNS, SCHEDULED_TASK_PATTERN };
