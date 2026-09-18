@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.172.1] — 2026-09-18
+
+### Fixed
+
+- **`ship_release` tells the truth about a merge that landed before a later step timed out (#398).** On 2026-09-17 a ship returned `{"success":false,"error":"spawnSync cmd.exe ETIMEDOUT"}` with no `merged`, no `mergeSha` and no tag — while the PR had in fact been squash-merged. The caller had to discover the merge with `gh pr view` and hand-tag `alpha/v0.86.5`. The cause was not the checks timeout the report suspected but `mergePR` itself: after `gh pr merge` returned it spawned a cmd.exe-based backoff sleep and shell `git fetch`/`rev-parse` children, and any of them timing out threw out of the merge — after the irreversible step, before the ring tag. `mergePR` now returns `{ sha, verified, warning }` and throws only while the merge is provably not done (merge command failed AND `gh pr view` ≠ MERGED); an unreadable state, a slow fetch or a client-side timeout on the merge command whose PR nonetheless reads MERGED are reported, never thrown. The backoff sleep is an in-process `Atomics.wait` — no shell, no spawn. `release.js` records `merged` + `mergeSha` before any follow-up read, re-fetches `origin/<base>` with backoff when the sha is unknown, refuses to tag a stale ref (`tagSkipped` + `tagWarning` naming the manual step instead), pushes the tag as its own retried step, and keeps `merged`/`mergeSha`/tag fields on any post-merge exception (`postMergeError`, the #372 contract). The ship skill documents the field order to read: `merged` present ⇒ never retry the ship. 11 new tests across `github.test.js` and `release.test.js`.
+- **Test hygiene:** the dispatch budget-suffix test runs with a hermetic cwd — an armed `AUTONOMOUS-LOCKOUT.flag` in the repo (a backlog run in progress) no longer turns it red.
+
 ## [0.172.0] — 2026-09-17
 
 ### Changed
