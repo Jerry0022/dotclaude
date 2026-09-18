@@ -314,9 +314,35 @@ export async function handler(params) {
     // Merge PR (delete branch; skip --delete-branch in worktrees
     // where gh tries to switch to base locally — cleanup handles branch deletion)
     const worktree = isWorktree(opts);
-    const mergeSha = mergePR(pr.number, base, opts, { skipDeleteBranch: worktree, strategy: mergeStrategy });
+    const merge = mergePR(pr.number, base, opts, { skipDeleteBranch: worktree, strategy: mergeStrategy });
+    // The merge is the irreversible step. From here on the result MUST carry
+    // merged + mergeSha whatever else fails (#398, #372 contract): a caller
+    // reading a bare success:false after this line would retry (double-ship)
+    // or hand-tag. mergePR only throws while the merge is provably NOT done.
     result.merged = base;
-    result.mergeSha = mergeSha;
+    result.mergeSha = merge.sha;
+    if (merge.verified === false) result.mergeVerified = false;
+    if (merge.warning) result.mergeWarning = merge.warning;
+
+    // If mergePR could not fetch origin/base, retry the fetch here with backoff
+    // and recover mergeSha. Everything below (tree check, local sync, TAG) reads
+    // origin/base — tagging a stale ref would publish alpha/<tag> on the wrong
+    // commit, which is worse than no tag. `baseFetched` gates the tag step.
+    let baseFetched = merge.sha !== null;
+    if (!baseFetched) {
+      const refetch = await retryUntil(
+        () => {
+          gitStrict(`fetch origin ${base}`, { cwd, timeout: NETWORK_TIMEOUT });
+          const sha = git(`rev-parse --short origin/${base}`, opts);
+          return sha ? sha.trim() : null;
+        },
+        { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },
+      );
+      if (refetch.ok) {
+        result.mergeSha = refetch.value;
+        baseFetched = true;
+      }
+    }
 
     // Post-merge tree verification. mergePR already fetched origin/base, so its
     // tree is current. With the pre-merge re-check holding, origin/base's tree
@@ -354,7 +380,18 @@ export async function handler(params) {
     // tags and GitHub Releases are created by ship_promote at promotion time
     // (ring model, spec §3.1). The tag is ANNOTATED so channel identity and
     // ship time live in the tag object (R4).
-    if (!intermediate && tag) {
+    if (!intermediate && tag && !baseFetched) {
+      // Merged, but origin/base never became readable — the tag target is
+      // unknown, so do NOT guess. Say so loudly; the caller creates the ring tag
+      // on the merge commit by hand (`git tag -a alpha/<tag> <mergeSha>`).
+      result.tag = `alpha/${tag}`;
+      result.channel = "alpha";
+      result.tagVerified = false;
+      result.tagSkipped = true;
+      result.tagWarning =
+        `PR merged into ${base}, but origin/${base} could not be fetched afterwards — ` +
+        `alpha/${tag} was NOT created (it would point at a stale ref). Create it manually on the merge commit.`;
+    } else if (!intermediate && tag) {
       const channelTag = `alpha/${tag}`;
       try {
         // Retry the existence read too: a single null here (transient network /
@@ -381,7 +418,15 @@ export async function handler(params) {
             "tag", "-a", channelTag, `origin/${base}`, "-m",
             JSON.stringify({ channel: "alpha", version: tag.replace(/^v/, "") }),
           ], { cwd, encoding: "utf8", timeout: 15_000, stdio: ["pipe", "pipe", "pipe"] });
-          gitStrict(`push origin ${channelTag}`, { ...opts, timeout: NETWORK_TIMEOUT });
+          // The tag push is its own retried step with its own timeout — never
+          // shared with, or capped by, the checks wait or the merge (#398). A
+          // push whose client side timed out after the ref landed is harmless
+          // to repeat: pushing an identical existing tag is a no-op success.
+          const pushed = await retryUntil(
+            () => { gitStrict(`push origin ${channelTag}`, { ...opts, timeout: NETWORK_TIMEOUT }); return true; },
+            { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },
+          );
+          if (!pushed.ok) throw new Error(`tag push failed after ${pushed.attempts} attempts: ${pushed.error?.message?.slice(0, 200) || "unknown error"}`);
           // Retry the verification: one negative read right after a push proves
           // nothing (replica lag), which is the #251 false-negative class.
           const verified = await retryUntil(
@@ -426,7 +471,21 @@ export async function handler(params) {
     result.success = true;
   } catch (e) {
     result.success = false;
-    result.error = e.message?.slice(0, 1000) || "Unknown error";
+    const msg = e.message?.slice(0, 1000) || "Unknown error";
+    if (result.merged) {
+      // The merge already landed; only a follow-up step failed. Keep merged +
+      // mergeSha, name the failed step, and make sure a tag field exists so the
+      // caller sees the ring state instead of inferring "nothing happened".
+      result.postMergeError = msg;
+      result.error = `PR merged into ${result.merged}${result.mergeSha ? ` (${result.mergeSha})` : ""} — a post-merge step failed: ${msg}`;
+      if (result.tag === undefined && result.tagSkipped === undefined) {
+        result.tagVerified = false;
+        result.tagSkipped = true;
+        result.tagWarning = "Ring tag not created — a post-merge step failed before tagging. Create alpha/<tag> on the merge commit manually.";
+      }
+    } else {
+      result.error = msg;
+    }
   }
 
   return result;

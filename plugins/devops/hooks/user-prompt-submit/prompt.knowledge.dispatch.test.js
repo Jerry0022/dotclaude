@@ -67,7 +67,11 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
   });
 
   test("a Pro plan at 0 % carries the ask-before-parallel suffix — the question is asked even on a fresh window", () => {
-    const ctx = runHook("should we upgrade to postgres 17 this quarter, for and against?", proHome());
+    // cwd = the fake home: the suffix is dropped whenever the cwd carries an
+    // AUTONOMOUS-LOCKOUT sentinel, so running from this repo while a backlog /
+    // autonomous run is armed here must not turn the test red.
+    const h = proHome();
+    const ctx = runHook("should we upgrade to postgres 17 this quarter, for and against?", h, h);
     expect(ctx.split("\n")[1]).toBe(nudge + " · budget: ask-before-parallel (1-agent tier → sonnet ≤10 calls; parallel/ceremony → ask once: inline / 1 sonnet agent / full)");
   });
 

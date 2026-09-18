@@ -44,7 +44,7 @@ vi.mock("../lib/git.js", () => ({
 
 vi.mock("../lib/github.js", () => ({
   createPR: vi.fn(() => ({ number: 42, url: "https://example.com/pull/42" })),
-  mergePR: vi.fn(() => "merge12"),
+  mergePR: vi.fn(() => ({ sha: "merge12", verified: true })),
   createRelease: vi.fn(() => undefined),
   findExistingPR: vi.fn(() => null),
   watchPRChecks: vi.fn(() => ({ status: "passed", checks: [] })),
@@ -139,7 +139,7 @@ beforeEach(() => {
   );
   ghLib.findExistingPR.mockReturnValue(null);
   ghLib.createPR.mockReturnValue({ number: 42, url: "https://example.com/pull/42" });
-  ghLib.mergePR.mockReturnValue("merge12");
+  ghLib.mergePR.mockReturnValue({ sha: "merge12", verified: true });
   ghLib.watchPRChecks.mockReturnValue({ status: "passed", checks: [] });
   scanConflictMarkers.mockReturnValue({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [], repoOffenders: [], repoScanned: 0, repoTruncated: false });
 });
@@ -643,6 +643,136 @@ describe("ship_release — #251 channel-tag verification", () => {
     const push = gitLib.gitStrict.mock.calls.find((c) => c[0] === "push origin alpha/v1.0.0");
     expect(push).toBeDefined();
     expect(push[1]).toMatchObject({ timeout: 60000 });
+  });
+});
+
+// #398 — the merge is the one irreversible step; the result must be truthful
+// about merge and tag SEPARATELY whatever fails after it.
+describe("ship_release — #398 post-merge truth contract", () => {
+  // Existence read empty → create path (tag + push + verify).
+  function createPathLsRemote() {
+    let lsCalls = 0;
+    gitLib.git.mockImplementation((cmd) => {
+      if (cmd.includes("ls-remote --tags")) {
+        lsCalls += 1;
+        return lsCalls === 1 ? "" : "abc\trefs/tags/alpha/v1.0.0";
+      }
+      return "remoteSha";
+    });
+  }
+
+  test("happy path carries mergeSha from the mergePR contract and no merge warning", async () => {
+    const res = await handler(params());
+    expect(res.success).toBe(true);
+    expect(res.merged).toBe("main");
+    expect(res.mergeSha).toBe("merge12");
+    expect(res.mergeWarning).toBeUndefined();
+    expect(res.mergeVerified).toBeUndefined();
+  });
+
+  test("REGRESSION: merged but post-merge fetch failed → merged + recovered mergeSha + tag still created", async () => {
+    // mergePR landed the merge, then its fetch/rev-parse timed out (the #398
+    // ETIMEDOUT). The handler must re-fetch, recover the sha, and still tag.
+    ghLib.mergePR.mockReturnValue({ sha: null, verified: true, warning: "merged, but origin/main could not be fetched/resolved after 3 attempts (ETIMEDOUT) — mergeSha unknown" });
+    createPathLsRemote();
+    gitLib.git.mockImplementation((cmd) => {
+      if (cmd.includes("ls-remote --tags")) return "abc\trefs/tags/alpha/v1.0.0";
+      if (cmd.startsWith("rev-parse --short origin/main")) return "rec0ver\n";
+      return "remoteSha";
+    });
+
+    const res = await handler(params());
+    expect(res.success).toBe(true);
+    expect(res.merged).toBe("main");
+    expect(res.mergeSha).toBe("rec0ver");
+    expect(res.mergeWarning).toMatch(/ETIMEDOUT/);
+    expect(res.tag).toBe("alpha/v1.0.0");
+    expect(res.tagVerified).toBe(true);
+  });
+
+  test("merged but origin/base never readable → merged reported, tag explicitly SKIPPED (never a stale-ref tag)", async () => {
+    ghLib.mergePR.mockReturnValue({ sha: null, verified: true, warning: "merged, but origin/main could not be fetched" });
+    // The pre-merge fetches also go through gitStrict — let the first two (entry
+    // gate + pre-merge re-check) succeed, fail every fetch after the merge.
+    let fetches = 0;
+    gitLib.gitStrict.mockImplementation((cmd) => {
+      if (/^fetch origin main\b/.test(cmd)) {
+        fetches += 1;
+        if (fetches > 2) throw new Error("spawnSync git ETIMEDOUT");
+      }
+      return "";
+    });
+
+    const res = await handler(params({ tagVerifyAttempts: 2 }));
+    expect(res.merged).toBe("main");
+    expect(res.mergeSha).toBeNull();
+    expect(res.tagSkipped).toBe(true);
+    expect(res.tagVerified).toBe(false);
+    expect(res.tagWarning).toMatch(/NOT created .*stale ref/);
+    // No tag object was created on a ref we could not refresh.
+    const tagCall = execFileSync.mock.calls.find((c) => c[0] === "git" && c[1][0] === "tag");
+    expect(tagCall).toBeUndefined();
+  });
+
+  test("an unverified merge (state unreadable) is surfaced as mergeVerified:false, not hidden", async () => {
+    ghLib.mergePR.mockReturnValue({ sha: "merge12", verified: false, warning: "merge command succeeded but PR state could not be verified after 3 attempts" });
+    const res = await handler(params());
+    expect(res.success).toBe(true);
+    expect(res.merged).toBe("main");
+    expect(res.mergeVerified).toBe(false);
+    expect(res.mergeWarning).toMatch(/could not be verified/);
+  });
+
+  test("a throw in a post-merge step keeps merged + mergeSha and names the failed step", async () => {
+    gitLib.syncLocalBranch.mockImplementation(() => { throw new Error("spawnSync cmd.exe ETIMEDOUT"); });
+    const res = await handler(params());
+    expect(res.success).toBe(false);
+    expect(res.merged).toBe("main");
+    expect(res.mergeSha).toBe("merge12");
+    expect(res.postMergeError).toMatch(/ETIMEDOUT/);
+    expect(res.error).toMatch(/PR merged into main \(merge12\) — a post-merge step failed/);
+    // A tag field exists so the ring gap is visible.
+    expect(res.tagSkipped).toBe(true);
+    expect(res.tagVerified).toBe(false);
+  });
+
+  test("a mergePR throw (merge provably not done) still yields NO merged field", async () => {
+    ghLib.mergePR.mockImplementation(() => { throw new Error("PR #42 merge failed: not mergeable"); });
+    const res = await handler(params());
+    expect(res.success).toBe(false);
+    expect(res.merged).toBeUndefined();
+    expect(res.postMergeError).toBeUndefined();
+    expect(res.error).toMatch(/not mergeable/);
+  });
+
+  test("the tag push is retried on its own before giving up", async () => {
+    createPathLsRemote();
+    let pushes = 0;
+    gitLib.gitStrict.mockImplementation((cmd) => {
+      if (cmd === "push origin alpha/v1.0.0") {
+        pushes += 1;
+        if (pushes === 1) throw new Error("spawnSync git ETIMEDOUT");
+      }
+      return "";
+    });
+    const res = await handler(params({ tagVerifyAttempts: 3 }));
+    expect(pushes).toBe(2);
+    expect(res.tag).toBe("alpha/v1.0.0");
+    expect(res.tagVerified).toBe(true);
+    expect(res.tagError).toBeUndefined();
+  });
+
+  test("a tag push that fails every attempt is reported as tagError with merged intact", async () => {
+    createPathLsRemote();
+    gitLib.gitStrict.mockImplementation((cmd) => {
+      if (cmd === "push origin alpha/v1.0.0") throw new Error("remote hung up");
+      return "";
+    });
+    const res = await handler(params({ tagVerifyAttempts: 2 }));
+    expect(res.success).toBe(true); // tag trouble never fails the ship
+    expect(res.merged).toBe("main");
+    expect(res.tagVerified).toBe(false);
+    expect(res.tagError).toMatch(/tag push failed after 2 attempts/);
   });
 });
 
