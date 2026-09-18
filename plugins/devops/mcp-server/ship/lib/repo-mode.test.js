@@ -5,7 +5,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { execFileSync } from "node:child_process";
-import { detectRepoMode, isGitRepo, refusesGitWrites } from "./repo-mode.js";
+import { detectRepoMode, isGitRepo, refusesGitWrites, probeTimeoutError, PROBE_TIMEOUT_MS } from "./repo-mode.js";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -93,6 +93,61 @@ describe("detectRepoMode", () => {
       expect(call[2].timeout).toBeGreaterThan(0);
     }
   });
+
+  // #411 — on a loaded machine `git rev-parse` exceeded the probe timeout and
+  // the ETIMEDOUT read as "not a git repo": ship_release returned a skipped
+  // `success: true` file-only result for a real repo.
+  describe("a timed-out probe is 'unknown', never 'none'", () => {
+    function timeoutError(code) {
+      const err = new Error("spawnSync git ETIMEDOUT");
+      if (code) err.code = code;
+      else { err.killed = true; err.signal = "SIGTERM"; }
+      return err;
+    }
+
+    test("first probe times out (ETIMEDOUT code)", () => {
+      execFileSync.mockImplementation(() => { throw timeoutError("ETIMEDOUT"); });
+      expect(detectRepoMode("/repo")).toBe("unknown");
+    });
+
+    test("first probe killed by the timeout signal", () => {
+      execFileSync.mockImplementation(() => { throw timeoutError(null); });
+      expect(detectRepoMode("/repo")).toBe("unknown");
+    });
+
+    test("toplevel probe times out after a good first probe", () => {
+      execFileSync.mockImplementation((_bin, args) => {
+        if (args.join(" ") === "rev-parse --is-inside-work-tree") return "true";
+        throw timeoutError("ETIMEDOUT");
+      });
+      expect(detectRepoMode("/repo")).toBe("unknown");
+    });
+
+    test("origin probe times out — cannot tell git from git-no-remote", () => {
+      execFileSync.mockImplementation((_bin, args) => {
+        const key = args.join(" ");
+        if (key === "rev-parse --is-inside-work-tree") return "true";
+        if (key === "rev-parse --show-toplevel") return "/repo";
+        throw timeoutError("ETIMEDOUT");
+      });
+      expect(detectRepoMode("/repo")).toBe("unknown");
+    });
+
+    test("a plain git failure is still 'none' / 'git-no-remote' (not a timeout)", () => {
+      mockGit({ insideWorkTree: undefined });
+      expect(detectRepoMode("/x")).toBe("none");
+      mockGit({ toplevel: "/repo", origin: undefined });
+      expect(detectRepoMode("/repo")).toBe("git-no-remote");
+    });
+
+    test("the probe budget is wide enough for a loaded machine and the error names it", () => {
+      expect(PROBE_TIMEOUT_MS).toBeGreaterThanOrEqual(10_000);
+      const msg = probeTimeoutError("/repo");
+      expect(msg).toMatch(/ETIMEDOUT/);
+      expect(msg).toMatch(/retry/);
+      expect(msg).toMatch(/Nothing was skipped/);
+    });
+  });
 });
 
 describe("isGitRepo", () => {
@@ -118,6 +173,11 @@ describe("isGitRepo", () => {
 });
 
 describe("refusesGitWrites", () => {
+  test("refuses on a timed-out probe — nothing is known", () => {
+    expect(refusesGitWrites("unknown")).toBe(true);
+    expect(isGitRepo("unknown")).toBe(false);
+  });
+
   test("refuses when there is no repo or the repo root is foreign", () => {
     expect(refusesGitWrites("none")).toBe(true);
     expect(refusesGitWrites("git-foreign-root")).toBe(true);

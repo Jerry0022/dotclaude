@@ -19,6 +19,7 @@ vi.mock("node:child_process", () => ({
 
 vi.mock("../lib/repo-mode.js", () => ({
   detectRepoMode: vi.fn(() => "git"),
+  probeTimeoutError: (cwd) => `git did not answer within 10 s (ETIMEDOUT) — the repo mode of ${cwd} could not be determined. Retry the call. Nothing was skipped, committed, pushed or merged.`,
 }));
 
 // The tag default (#372) reads the version file; the test cwd is not a real
@@ -871,5 +872,18 @@ describe("repo modes without a usable origin", () => {
     expect(result.reason).toBe("file-only-mode");
     expect(result.delivered).toBe("none");
     expect(result.merged).toBeUndefined();
+  });
+
+  test("timed-out probe: a loud failure, never a skipped success (#411)", async () => {
+    detectRepoMode.mockReturnValue("unknown");
+
+    const result = await handler(params());
+
+    expect(result.success).toBe(false);
+    expect(result.skipped).toBe(false);
+    expect(result.reason).toBe("git-probe-timeout");
+    expect(result.error).toMatch(/ETIMEDOUT/);
+    expect(result.merged).toBeUndefined();
+    expect(execFileSync).not.toHaveBeenCalledWith("git", ["commit", "-m", "chore(release): v1.0.0"], expect.anything());
   });
 });

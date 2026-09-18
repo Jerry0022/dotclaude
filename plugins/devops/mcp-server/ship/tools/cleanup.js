@@ -8,7 +8,7 @@ import { z } from "zod";
 import { git, gitStrict, isWorktree, getWorktreeBranches, NETWORK_TIMEOUT } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { clearSentinel } from "../lib/sentinel.js";
-import { detectRepoMode, refusesGitWrites } from "../lib/repo-mode.js";
+import { detectRepoMode, refusesGitWrites, probeTimeoutError } from "../lib/repo-mode.js";
 
 export const schema = z.object({
   branch: z.string().describe("Feature branch to delete"),
@@ -35,6 +35,21 @@ export async function handler(params) {
   //                         directory, so the checkout and pull silently
   //                         operated on a repository the user never targeted.
   const repoMode = detectRepoMode(cwd);
+  // Timed-out probe: keep the sentinel (the ship may still be in flight) and
+  // say so — never delete a branch on a guess, never report a cleanup (#411).
+  if (repoMode === "unknown") {
+    return {
+      success: false,
+      skipped: false,
+      reason: "git-probe-timeout",
+      mode: repoMode,
+      intermediate,
+      branchBeforeCleanup: null,
+      cleaned: [],
+      warnings: [],
+      error: probeTimeoutError(cwd),
+    };
+  }
   if (refusesGitWrites(repoMode)) {
     clearSentinel(cwd);
     const reason = repoMode === "none" ? "file-only-mode" : "foreign-repo-root";

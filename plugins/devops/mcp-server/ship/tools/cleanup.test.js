@@ -28,7 +28,8 @@ vi.mock("../lib/sentinel.js", () => ({
 // exercise the file-only / foreign-root refusals.
 vi.mock("../lib/repo-mode.js", () => ({
   detectRepoMode: vi.fn(() => "git"),
-  refusesGitWrites: (mode) => mode === "none" || mode === "git-foreign-root",
+  refusesGitWrites: (mode) => mode === "none" || mode === "git-foreign-root" || mode === "unknown",
+  probeTimeoutError: (cwd) => `git did not answer within 10 s (ETIMEDOUT) — the repo mode of ${cwd} could not be determined. Retry the call. Nothing was skipped, committed, pushed or merged.`,
 }));
 
 import { handler } from "./cleanup.js";
@@ -101,6 +102,17 @@ describe("ship_cleanup — session-worktree final-gate invariant", () => {
 });
 
 describe("repo-mode gate", () => {
+  test("timed-out probe: fails loudly, keeps the sentinel, deletes nothing (#411)", async () => {
+    detectRepoMode.mockReturnValue("unknown");
+    const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
+
+    expect(result.success).toBe(false);
+    expect(result.reason).toBe("git-probe-timeout");
+    expect(result.cleaned).toEqual([]);
+    expect(result.error).toMatch(/ETIMEDOUT/);
+    expect(gitStrict).not.toHaveBeenCalled();
+  });
+
   test("file-only mode: refuses every destructive git call, still clears the sentinel", async () => {
     detectRepoMode.mockReturnValue("none");
     const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });

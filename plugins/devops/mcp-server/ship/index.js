@@ -28,7 +28,7 @@ import { schema as promoteSchema, handler as promoteHandler } from "./tools/prom
 import { schema as cleanupSchema, handler as cleanupHandler } from "./tools/cleanup.js";
 
 const SERVER_NAME = "dotclaude-ship";
-const SERVER_VERSION = "0.2.0";
+const SERVER_VERSION = "0.2.1";
 
 const server = new McpServer({
   name: SERVER_NAME,
