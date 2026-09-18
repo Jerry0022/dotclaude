@@ -1,6 +1,6 @@
 /**
  * @module card-guard
- * @version 0.3.0
+ * @version 0.4.0
  * @description Pure decision logic for the completion-card enforcement flow,
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
@@ -190,12 +190,28 @@ function offlineRendererPath(pluginRoot) {
  * FIRST — each failed rung costs a whole turn, and a session whose server never
  * connected used to burn two of them before reaching the one that works (#371).
  */
+/**
+ * Field shapes for the offline path (#396). The agent reaches the CLI exactly
+ * when the tool schema is NOT in context, so "same field names" alone left
+ * the shapes to a guess — and the obvious guess for `changes` (a string per
+ * line) rendered an empty Changes block. Mirrors CARD_FIELD_REFERENCE in
+ * mcp-server/lib/card-input.js; card-input.test.js pins the two equal.
+ */
+const CARD_FIELD_REFERENCE =
+  'Shapes: changes: [{ area, description }] · tests: [{ method, result }] · ' +
+  'validation: [{ requirement, status: met|partial|unmet, evidence }] · ' +
+  'userFinalTest: [string | { action, afterDeployment }] · open: [string] · ' +
+  'pending: [{ name, kind: agent|task|workflow, doing }] · state / cta / delivery: objects.';
+
 function renderLadderLines(pluginRoot, { completionMcpDown } = {}) {
   const offline = [
     `  node "${offlineRendererPath(pluginRoot)}" --render-card <payload.json>`,
     'Write the exact arguments you would have passed to the tool into payload.json',
     '(same field names, including "session_id"), then relay stdout VERBATIM. Do not',
     'report "no card possible" — that path exists precisely for a dead MCP server.',
+    CARD_FIELD_REFERENCE,
+    'A payload off these shapes exits 2 with the issues on stderr — fix the payload',
+    'or fall back to the tool; never relay a card with an empty Changes block.',
   ];
   if (completionMcpDown) {
     return [
@@ -349,6 +365,7 @@ function safeReadTranscript(transcriptPath, tailBytes = TRANSCRIPT_TAIL_BYTES) {
 }
 
 module.exports = {
+  CARD_FIELD_REFERENCE,
   SUBSTANTIAL_CHARS,
   CARD_MARKER,
   TRANSCRIPT_TAIL_BYTES,
