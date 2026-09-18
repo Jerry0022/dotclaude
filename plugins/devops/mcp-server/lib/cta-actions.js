@@ -9,7 +9,7 @@
  * (`mcp__visualize__show_widget`), whose global `sendPrompt(text)` puts a
  * prompt into this session's chat as if the user typed it. So the card keeps
  * its markdown CTA everywhere, and on Desktop a one-row widget with the CTA's
- * verbs as buttons is rendered directly under it — the terminal never sees
+ * verbs as buttons is rendered right above it — the terminal never sees
  * the block, the card itself is byte-identical on both.
  *
  * This module decides WHICH verbs a card offers (per variant + language) and
@@ -186,8 +186,12 @@ export function ctaActionsWidget(actions, lang = "de") {
 
 /**
  * The out-of-band instruction that rides beside the card and tells Claude to
- * render the widget right AFTER the card, as the turn's last action. '' when
- * the card offers no actions or the session is not the Desktop app.
+ * render the widget right BEFORE the card markdown. Before, not after: a turn
+ * that ends on a tool call has no visible assistant text, which the harness
+ * bounces as "no visible output" — and the card must stay the last text of the
+ * turn anyway. So the widget goes out first and the card follows as the closing
+ * text, buttons sitting on top of the card they belong to. '' when the card
+ * offers no actions or the session is not the Desktop app.
  *
  * @param {object} params card params
  * @param {object} deps `{ hasPending, hasConcept }`
@@ -202,11 +206,11 @@ export function ctaActionsInstruction(params, deps, env = process.env) {
   const verbs = actions.map((a) => a.label).join(" / ");
   return (
     "[CTA ACTIONS — DO NOT OUTPUT THIS BLOCK]\n" +
-    "Desktop app only, once, as the LAST action of the turn — AFTER the card markdown " +
-    "has been output and with NO text after it: call mcp__visualize__show_widget with " +
+    "Desktop app only, once, immediately BEFORE outputting the card markdown (the card stays " +
+    "the last text of the turn; never call it after the card): call mcp__visualize__show_widget with " +
     `title "completion_card_actions", loading_messages ["Aktionen werden geladen"] and widget_code set to ` +
     "EXACTLY the HTML below (verbatim, no edits, no read_me call needed). It renders one " +
-    `button per CTA verb (${verbs}) directly under the card; a click sends that prompt into ` +
+    `button per CTA verb (${verbs}) right above the card; a click sends that prompt into ` +
     "this session. If the tool is unavailable or fails: skip silently — no retry, no note, " +
     "no fallback; the markdown CTA already carries the same verbs.\n" +
     "----- widget_code -----\n" +

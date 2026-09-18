@@ -755,9 +755,11 @@ everywhere, and **on the Desktop app** the tool result carries a
 with a ready-made one-row widget: one button per CTA verb, primary verb
 accented, a click sends the matching prompt into this session.
 
-Execute it **after** the card markdown, as the last action of the turn, with
-the HTML verbatim and no text after the call; skip silently when the tool is
-missing. The block is only emitted when `CLAUDE_CODE_ENTRYPOINT` is
+Execute it **before** the card markdown (like the session-title block), with
+the HTML verbatim; the card follows as the turn's closing text, so the buttons
+sit on top of the card they belong to. Never after the card: a turn that ends
+on a tool call has no visible text and gets bounced by the harness. Skip
+silently when the tool is missing. The block is only emitted when `CLAUDE_CODE_ENTRYPOINT` is
 `claude-desktop` and the card offers something to click — nothing on
 pending / concept / batch overrides, test-minimal, fallback, ready-files, a
 kept ship or a finished stable release.
@@ -815,7 +817,7 @@ else                                             → fallback (8)
 
 ## Rules
 
-1. Completion card is **always the last text** in the response. Nothing after closing `---` — except the Desktop-only CTA-actions widget call (§ CTA Actions), which follows the card with no text after it.
+1. Completion card is **always the last thing** in the response. Nothing after closing `---` — the Desktop-only CTA-actions widget call (§ CTA Actions) goes before the card.
 2. **No preamble.** The opening `---` starts immediately.
 3. Section headers use **bold** (`**Changes**`), not markdown headings.
 4. CTA line uses `##` heading for visual weight.

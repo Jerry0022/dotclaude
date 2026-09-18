@@ -368,8 +368,8 @@ process.stdin.on('end', () => {
     'field — map each requirement / acceptance criterion to HOW this change meets it',
     'and how you confirmed it. A code-change card without `validation` is blocked',
     'once and re-requested (see deep-knowledge/test-autonomy.md).',
-    'Card LAST, nothing after the closing --- — except the show_widget call a [CTA ACTIONS]',
-    'block beside the card asks for (Desktop app): make that call after the card, then stop.',
+    'Card LAST, nothing after the closing ---. The show_widget call a [CTA ACTIONS] block',
+    'beside the card asks for (Desktop app) goes BEFORE the card, never after.',
   );
 
   // Background work started by THIS tool call. Injected loudly and immediately,

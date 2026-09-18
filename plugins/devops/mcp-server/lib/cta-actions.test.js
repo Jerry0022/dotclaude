@@ -115,12 +115,12 @@ describe("ctaActionsInstruction", () => {
     expect(ctaActionsInstruction({ variant: "ready", pending: ["x"] }, deps, desktop)).toBe("");
   });
 
-  test("names the widget tool, the AFTER-the-card order, the silent skip and carries the HTML verbatim", () => {
+  test("names the widget tool, the BEFORE-the-card order, the silent skip and carries the HTML verbatim", () => {
     const text = ctaActionsInstruction({ variant: "test", lang: "de" }, deps, desktop);
     expect(text.startsWith("[CTA ACTIONS — DO NOT OUTPUT THIS BLOCK]")).toBe(true);
     expect(text).toContain("mcp__visualize__show_widget");
-    expect(text).toMatch(/AFTER the card markdown/);
-    expect(text).toMatch(/NO text after it/);
+    expect(text).toMatch(/BEFORE outputting the card markdown/);
+    expect(text).toMatch(/never call it after the card/);
     expect(text).toMatch(/skip silently/);
     expect(text).toContain("(Ship / Nachbessern)");
     const html = ctaActionsWidget(ctaActionsFor({ variant: "test", lang: "de" }, deps), "de");
