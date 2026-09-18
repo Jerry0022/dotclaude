@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.176.0**
+**Version: 0.177.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -360,7 +360,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
 | `/promote` | Explicit | Channel promotion (alpha→beta→stable): re-tag the same SHA, no rebuild |
 | `/fix` (alias: `/debug`) | Explicit + Hook | Root-cause analysis, diagnostics, and fix cycle |
-| `/setup-issue` | Explicit | GitHub issue creation with labels and milestones |
+| `/setup-issue` | Explicit | GitHub issue creation and refinement with labels and milestones — the single owner of every issue write |
 | `/setup-project` | Explicit | Repo hygiene audit and initialization |
 | `/setup-readme` | Explicit | Modern README generation |
 | `/auto-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
@@ -795,6 +795,8 @@ Wk  ━━──╏─────────   16% +1%   · 5d 2h left
 </details>
 
 8 variants total, plus the `pending` layer. The card always fires — see [completion-card.md](plugins/devops/templates/completion-card.md) for the full template spec.
+
+In the Claude Desktop app the CTA verbs are also clickable: a one-row widget above the card offers one button per verb (Ship / Ändern, Fix / Skip, Promote, …) and a click sends the matching prompt into the running session. Terminal sessions get the identical markdown card without the widget.
 
 ## Project Structure
 

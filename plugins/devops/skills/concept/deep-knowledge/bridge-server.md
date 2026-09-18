@@ -290,8 +290,8 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
                                   ship{} + disposition{}. Run the selected
                                   parts in a FIXED order: (A) issues —
                                   user-value gate (merges combination-only
-                                  items silently), then `gh issue create` per
-                                  gated item; (B) implement — the follow-ups
+                                  items silently), then `/setup-issue` (hand-over,
+                                  no prompt) per gated item; (B) implement — the follow-ups
                                   routed to "jetzt umsetzen", built through
                                   the devops role agents, then noted in the
                                   report; (C) ship — the full /ship pipeline,

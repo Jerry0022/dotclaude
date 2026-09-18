@@ -20,7 +20,8 @@ Merge priority: **project > global > plugin defaults** (most specific wins).
   (e.g. "any issue spanning >3 modules is oversized").
 - **Refine template**: extra sections to write back into each issue (test plan,
   rollout notes, telemetry checklist) on top of the acceptance criteria +
-  `**User value:**` line.
+  `**User value:**` line. They travel inside the `refinement` hand-over to
+  `/setup-issue` refine mode, which places them in its managed section.
 - **Ship gate**: project-specific pre-ship checks — these compose with the
   project's own `ship/` extension, which `/ship` already reads.
 - **Per-milestone strategy**: e.g. force a single hierarchical ship per milestone

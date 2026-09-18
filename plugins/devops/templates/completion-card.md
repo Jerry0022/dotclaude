@@ -743,6 +743,44 @@ Execute it (`get_session` → strip → `set_session_title`, `self`) before
 outputting the card; Desktop app only, skip silently elsewhere. Source of
 truth: `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`, `VARIANT_TITLE_PREFIX`).
 
+### CTA Actions (Desktop app — clickable verbs)
+
+No client turns a markdown link into "send this prompt into the CURRENT
+session" (`claude://` / `claude-cli://` open a new session and never
+auto-send; the terminal hands custom schemes to the OS). The Desktop app's
+inline widget (`mcp__visualize__show_widget`) does reach the running session
+through its global `sendPrompt(text)`. So the CTA line stays markdown
+everywhere, and **on the Desktop app** the tool result carries a
+`[CTA ACTIONS — DO NOT OUTPUT THIS BLOCK]` block (stderr on `--render-card`)
+with a ready-made one-row widget: one control per CTA verb (a
+`<span role="button">` — from a real `<button>` the host's `sendPrompt()`
+runs but nothing reaches the chat), primary verb accented, a click sends the
+matching prompt into this session.
+
+Execute it **before** the card markdown (like the session-title block), with
+the HTML verbatim; the card follows as the turn's closing text, so the buttons
+sit on top of the card they belong to. Never after the card: a turn that ends
+on a tool call has no visible text and gets bounced by the harness. Skip
+silently when the tool is missing. The block is only emitted when `CLAUDE_CODE_ENTRYPOINT` is
+`claude-desktop` and the card offers something to click — nothing on
+pending / concept / batch overrides, test-minimal, fallback, ready-files, a
+kept ship or a finished stable release.
+
+| Variant | Buttons → prompt |
+|---|---|
+| ready | **Ship** → `/devops:ship` · Ändern → "Ich möchte noch etwas ändern, bevor wir shippen — frag mich, was." |
+| test | **Ship** → `/devops:ship` · Nachbessern → "Beim Testen ist mir etwas aufgefallen … — frag mich, was." |
+| ship-blocked | **Fix** → `/devops:fix` · Skip → "Blocker bewusst überspringen: Ship erneut mit skipChecks …" |
+| ship-successful (ring project) | **Promote** → `/devops:promote` |
+| ship-successful (deploy pending) | **Deploy** → "Deploye jetzt die ausstehenden Out-of-band-Artefakte …" |
+| released → beta | **Nach stable** → `/devops:promote stable` |
+| analysis | **Umsetzen** → "Setz die Analyse jetzt um." · Frage → "Ich habe eine Rückfrage zur Analyse — frag mich, welche." |
+| aborted | **Nochmal** → "Versuch es nochmal mit einem anderen Ansatz — nenn mir zuerst kurz die Alternativen." |
+
+Every prompt is self-sufficient: the app may pre-fill the composer or send
+right away, so a half sentence that only works when completed is not allowed.
+Source of truth: `mcp-server/lib/cta-actions.js` (`ACTIONS`, `actionKeyFor`).
+
 ### Variant Selection Rules
 
 ```
@@ -781,7 +819,7 @@ else                                             → fallback (8)
 
 ## Rules
 
-1. Completion card is **always the last thing** in the response. Nothing after closing `---`.
+1. Completion card is **always the last thing** in the response. Nothing after closing `---` — the Desktop-only CTA-actions widget call (§ CTA Actions) goes before the card.
 2. **No preamble.** The opening `---` starts immediately.
 3. Section headers use **bold** (`**Changes**`), not markdown headings.
 4. CTA line uses `##` heading for visual weight.
