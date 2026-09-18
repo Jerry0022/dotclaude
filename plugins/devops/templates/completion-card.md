@@ -752,8 +752,10 @@ inline widget (`mcp__visualize__show_widget`) does reach the running session
 through its global `sendPrompt(text)`. So the CTA line stays markdown
 everywhere, and **on the Desktop app** the tool result carries a
 `[CTA ACTIONS — DO NOT OUTPUT THIS BLOCK]` block (stderr on `--render-card`)
-with a ready-made one-row widget: one button per CTA verb, primary verb
-accented, a click sends the matching prompt into this session.
+with a ready-made one-row widget: one control per CTA verb (a
+`<span role="button">` — from a real `<button>` the host's `sendPrompt()`
+runs but nothing reaches the chat), primary verb accented, a click sends the
+matching prompt into this session.
 
 Execute it **before** the card markdown (like the session-title block), with
 the HTML verbatim; the card follows as the turn's closing text, so the buttons

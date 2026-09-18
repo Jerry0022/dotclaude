@@ -81,14 +81,16 @@ describe("ctaActionsFor", () => {
 });
 
 describe("ctaActionsWidget", () => {
-  test("one button per action, primary accented, listener per button, script last", () => {
+  test("one span[role=button] per action — never a <button>, whose sendPrompt never reaches the chat — primary accented, listener per control, script last", () => {
     const html = ctaActionsWidget(ctaActionsFor({ variant: "ready", lang: "de" }, deps), "de");
     expect(html.startsWith('<h2 class="sr-only"')).toBe(true);
-    expect(html.match(/<button /g)).toHaveLength(2);
+    expect(html.match(/<span role="button" tabindex="0"/g)).toHaveLength(2);
+    expect(html).not.toContain("<button");
     expect(html).toContain('data-prompt="/devops:ship"');
     expect(html).toContain("var(--border-accent)");
     expect(html).toContain('class="ti ti-rocket"');
     expect(html).toContain("sendPrompt(b.getAttribute('data-prompt'))");
+    expect(html).toContain("e.key === 'Enter'");
     expect(html.trim().endsWith("</script>")).toBe(true);
     // No emoji inside the widget — the design contract uses Tabler icons.
     expect(html).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);

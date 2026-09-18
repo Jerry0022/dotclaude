@@ -149,10 +149,16 @@ function escapeHtml(s) {
 }
 
 /**
- * The one-row widget: a button per action, the primary verb accented. Follows
+ * The one-row widget: a control per action, the primary verb accented. Follows
  * the widget design contract (no emoji, Tabler outline icons, CSS variables,
- * sr-only summary, `↗` on prompt buttons, script last). Each button binds its
- * own listener so a click on any of them fires independently.
+ * sr-only summary, `↗` on prompt controls, script last). Each control binds
+ * its own listener so a click on any of them fires independently.
+ *
+ * The controls are `<span role="button">`, NOT `<button>`: verified live on
+ * 2026-09-18 — from a real `<button>` the host's `sendPrompt()` runs (returns
+ * undefined) but nothing reaches the chat, from a span the prompt lands in the
+ * composer. The spans are styled like the host's buttons and keyboard-
+ * operable (Enter / Space).
  *
  * @param {ReturnType<typeof ctaActionsFor>} actions
  * @param {string} lang
@@ -163,13 +169,12 @@ export function ctaActionsWidget(actions, lang = "de") {
   const summary = lang === "en"
     ? "Next-step actions for the completion card above; each button sends the matching prompt into this session."
     : "Nächste Schritte zur Completion Card darüber; jeder Button sendet den passenden Prompt in diese Session.";
+  const base = "display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:14px;line-height:1.2;cursor:pointer;user-select:none;background:transparent;color:var(--text-primary)";
   const buttons = actions.map((a, i) => {
-    const accent = a.primary
-      ? ' style="border-color: var(--border-accent); color: var(--text-accent);"'
-      : "";
-    return `<button type="button" id="cta-act-${i}" data-prompt="${escapeHtml(a.prompt)}"${accent}>` +
-      `<i class="ti ti-${escapeHtml(a.icon)}" aria-hidden="true" style="font-size:16px;vertical-align:-2px;margin-right:6px"></i>` +
-      `${escapeHtml(a.label)} ↗</button>`;
+    const accent = a.primary ? ";border-color:var(--border-accent);color:var(--text-accent)" : "";
+    return `<span role="button" tabindex="0" id="cta-act-${i}" data-prompt="${escapeHtml(a.prompt)}" style="${base}${accent}">` +
+      `<i class="ti ti-${escapeHtml(a.icon)}" aria-hidden="true" style="font-size:16px"></i>` +
+      `${escapeHtml(a.label)} ↗</span>`;
   }).join("\n  ");
   return [
     `<h2 class="sr-only" style="position:absolute;left:-9999px">${escapeHtml(summary)}</h2>`,
@@ -177,8 +182,10 @@ export function ctaActionsWidget(actions, lang = "de") {
     `  ${buttons}`,
     `</div>`,
     `<script>`,
-    `document.querySelectorAll('button[data-prompt]').forEach(function (b) {`,
-    `  b.addEventListener('click', function () { sendPrompt(b.getAttribute('data-prompt')); });`,
+    `document.querySelectorAll('[role="button"][data-prompt]').forEach(function (b) {`,
+    `  var go = function () { sendPrompt(b.getAttribute('data-prompt')); };`,
+    `  b.addEventListener('click', go);`,
+    `  b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });`,
     `});`,
     `</script>`,
   ].join("\n");
