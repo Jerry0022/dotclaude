@@ -36,23 +36,36 @@ describe("createPR", () => {
   });
 });
 
+// mergePR now runs every child process through execFileSync (no shell, no
+// cmd.exe — #398). The call order on the happy path is:
+//   1 gh pr merge · 2 gh pr view (state) · 3 git fetch · 4 git rev-parse
+// `sleep` is injected as a no-op so the backoff never waits on real timers.
+const noSleep = { sleep: () => {} };
+
+/** Route execFileSync by binary + first args so tests read like the call order. */
+function routeExec(routes) {
+  execFileSync.mockImplementation((bin, args) => {
+    const key = `${bin} ${args.slice(0, 2).join(" ")}`;
+    const r = routes[key];
+    if (r === undefined) throw new Error(`unexpected exec: ${key}`);
+    return typeof r === "function" ? r() : r;
+  });
+}
+
 describe("mergePR — success path", () => {
-  test("returns short sha when state goes MERGED on first attempt", () => {
-    execFileSync
-      .mockReturnValueOnce("")          // pr merge
-      .mockReturnValueOnce("MERGED");   // pr view → state
-    execSync
-      .mockReturnValueOnce("")          // git fetch
-      .mockReturnValueOnce("abc1234\n"); // git rev-parse
-    expect(mergePR(42, "main")).toBe("abc1234");
+  test("returns { sha, verified:true } when state goes MERGED on first attempt", () => {
+    routeExec({
+      "gh pr merge": "",
+      "gh pr view": "MERGED",
+      "git fetch origin": "",
+      "git rev-parse --short": "abc1234\n",
+    });
+    expect(mergePR(42, "main", undefined, noSleep)).toEqual({ sha: "abc1234", verified: true });
   });
 
   test("includes --delete-branch by default", () => {
-    execFileSync
-      .mockReturnValueOnce("")
-      .mockReturnValueOnce("MERGED");
-    execSync.mockReturnValue("");
-    mergePR(42, "main");
+    routeExec({ "gh pr merge": "", "gh pr view": "MERGED", "git fetch origin": "", "git rev-parse --short": "abc\n" });
+    mergePR(42, "main", undefined, noSleep);
     expect(execFileSync).toHaveBeenCalledWith(
       "gh",
       expect.arrayContaining(["pr", "merge", "42", "--squash", "--admin", "--delete-branch"]),
@@ -61,73 +74,105 @@ describe("mergePR — success path", () => {
   });
 
   test("skips --delete-branch when skipDeleteBranch flag set", () => {
-    execFileSync
-      .mockReturnValueOnce("")
-      .mockReturnValueOnce("MERGED");
-    execSync.mockReturnValue("");
-    mergePR(42, "main", undefined, { skipDeleteBranch: true });
+    routeExec({ "gh pr merge": "", "gh pr view": "MERGED", "git fetch origin": "", "git rev-parse --short": "abc\n" });
+    mergePR(42, "main", undefined, { skipDeleteBranch: true, ...noSleep });
     const mergeCall = execFileSync.mock.calls[0][1];
     expect(mergeCall).not.toContain("--delete-branch");
   });
 
   test("supports merge strategy override", () => {
-    execFileSync
-      .mockReturnValueOnce("")
-      .mockReturnValueOnce("MERGED");
-    execSync.mockReturnValue("");
-    mergePR(42, "main", undefined, { strategy: "merge" });
+    routeExec({ "gh pr merge": "", "gh pr view": "MERGED", "git fetch origin": "", "git rev-parse --short": "abc\n" });
+    mergePR(42, "main", undefined, { strategy: "merge", ...noSleep });
     expect(execFileSync.mock.calls[0][1]).toContain("--merge");
+  });
+
+  test("never spawns a shell — no execSync in the merge path (#398)", () => {
+    routeExec({ "gh pr merge": "", "gh pr view": "MERGED", "git fetch origin": "", "git rev-parse --short": "abc\n" });
+    mergePR(42, "main", undefined, noSleep);
+    expect(execSync).not.toHaveBeenCalled();
   });
 });
 
-describe("mergePR — failure path with stderr sanitization", () => {
-  test("throws after 3 failed verification attempts with sanitized stderr", () => {
-    execFileSync
-      .mockReturnValueOnce("")  // pr merge ok
-      .mockImplementation(() => { const err = new Error("net"); err.stderr = Buffer.from("connection refused"); throw err; });
-    execSync.mockReturnValue(""); // backoff sleep
-
-    let captured;
-    try { mergePR(42, "main"); } catch (e) { captured = e; }
-    expect(captured).toBeDefined();
-    expect(captured.message).toMatch(/merge verification failed/);
-    expect(captured.message).toMatch(/connection refused/);
+describe("mergePR — merged, but a follow-up read failed (#398)", () => {
+  // The ETIMEDOUT class: the merge landed, then a later child process timed
+  // out. The old code threw here and the ship read as failed with no merge
+  // state; the contract now is "report, never throw, once the merge landed".
+  test("post-merge fetch timing out returns sha:null + warning instead of throwing", () => {
+    routeExec({
+      "gh pr merge": "",
+      "gh pr view": "MERGED",
+      "git fetch origin": () => { const e = new Error("spawnSync git ETIMEDOUT"); e.code = "ETIMEDOUT"; throw e; },
+    });
+    const r = mergePR(42, "main", undefined, noSleep);
+    expect(r.sha).toBeNull();
+    expect(r.verified).toBe(true);
+    expect(r.warning).toMatch(/merged, but origin\/main could not be fetched/);
+    expect(r.warning).toMatch(/ETIMEDOUT/);
+    // fetch is retried before giving up
+    const fetches = execFileSync.mock.calls.filter((c) => c[0] === "git" && c[1][0] === "fetch");
+    expect(fetches.length).toBe(3);
   });
 
-  test("strips ANSI escape sequences from error stderr", () => {
-    const ansiStderr = Buffer.from(String.fromCharCode(27) + "[31merror message" + String.fromCharCode(27) + "[0m more");
-    execFileSync
-      .mockReturnValueOnce("")
-      .mockImplementation(() => { const err = new Error("e"); err.stderr = ansiStderr; throw err; });
-    execSync.mockReturnValue("");
-
-    let captured;
-    try { mergePR(42, "main"); } catch (e) { captured = e.message; }
-    expect(captured).toBeDefined();
-    expect(captured).not.toContain(String.fromCharCode(27));
-    expect(captured).toContain("error message");
+  test("merge command exit 0 + every state read throwing → verified:false with sanitized warning, no throw", () => {
+    routeExec({
+      "gh pr merge": "",
+      "gh pr view": () => { const err = new Error("net"); err.stderr = Buffer.from(String.fromCharCode(27) + "[31mconnection refused" + String.fromCharCode(27) + "[0m"); throw err; },
+      "git fetch origin": "",
+      "git rev-parse --short": "abc1234\n",
+    });
+    const r = mergePR(42, "main", undefined, noSleep);
+    expect(r).toMatchObject({ sha: "abc1234", verified: false });
+    expect(r.warning).toMatch(/could not be verified after 3 attempts/);
+    expect(r.warning).toContain("connection refused");
+    expect(r.warning).not.toContain(String.fromCharCode(27));
   });
 
-  test("caps stderr output to 500 chars", () => {
-    const longStderr = Buffer.from("x".repeat(2000));
-    execFileSync
-      .mockReturnValueOnce("")
-      .mockImplementation(() => { const err = new Error("e"); err.stderr = longStderr; throw err; });
-    execSync.mockReturnValue("");
-
-    let captured;
-    try { mergePR(42, "main"); } catch (e) { captured = e.message; }
-    const lastErrorMatch = captured.match(/last error: (x+)/);
-    expect(lastErrorMatch).toBeTruthy();
-    expect(lastErrorMatch[1].length).toBeLessThanOrEqual(500);
+  test("merge command throws (client-side timeout) but the PR reads MERGED → treated as merged with warning", () => {
+    routeExec({
+      "gh pr merge": () => { const e = new Error("spawnSync gh ETIMEDOUT"); throw e; },
+      "gh pr view": "MERGED",
+      "git fetch origin": "",
+      "git rev-parse --short": "abc1234\n",
+    });
+    const r = mergePR(42, "main", undefined, noSleep);
+    expect(r).toMatchObject({ sha: "abc1234", verified: true });
+    expect(r.warning).toMatch(/gh pr merge reported an error .* but the PR is in MERGED state/);
   });
 
+  test("caps a state-read error to 500 chars in the warning", () => {
+    routeExec({
+      "gh pr merge": "",
+      "gh pr view": () => { const err = new Error("e"); err.stderr = Buffer.from("x".repeat(2000)); throw err; },
+      "git fetch origin": "",
+      "git rev-parse --short": "abc\n",
+    });
+    const r = mergePR(42, "main", undefined, noSleep);
+    const m = r.warning.match(/last error: (x+)/);
+    expect(m).toBeTruthy();
+    expect(m[1].length).toBeLessThanOrEqual(500);
+  });
+});
+
+describe("mergePR — genuinely not merged still throws", () => {
   test("throws on non-MERGED state without exception (e.g. CLOSED)", () => {
-    execFileSync
-      .mockReturnValueOnce("")            // pr merge
-      .mockReturnValue("CLOSED");          // state lookup always returns CLOSED
-    execSync.mockReturnValue("");
-    expect(() => mergePR(42, "main")).toThrow(/CLOSED/);
+    routeExec({ "gh pr merge": "", "gh pr view": "CLOSED" });
+    expect(() => mergePR(42, "main", undefined, noSleep)).toThrow(/CLOSED/);
+  });
+
+  test("merge command fails AND state is not MERGED → throws with both errors", () => {
+    routeExec({
+      "gh pr merge": () => { const e = new Error("merge failed"); e.stderr = Buffer.from("not mergeable"); throw e; },
+      "gh pr view": "OPEN",
+    });
+    expect(() => mergePR(42, "main", undefined, noSleep)).toThrow(/merge failed: not mergeable.*state: "OPEN"/);
+  });
+
+  test("merge command fails AND state unreadable → throws (nothing proves a merge)", () => {
+    routeExec({
+      "gh pr merge": () => { throw new Error("boom"); },
+      "gh pr view": () => { throw new Error("net"); },
+    });
+    expect(() => mergePR(42, "main", undefined, noSleep)).toThrow(/merge failed: boom/);
   });
 });
 

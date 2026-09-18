@@ -430,7 +430,24 @@ the tool automatically skips tag/release creation when `base` is not `main`.
 
 The tool handles: commit (optional), rebase verification, push (explicit force-with-lease after rebase), PR create (or reuse with mergeability check), **pre-merge CI checks gate (waits for green)**, **pre-merge rebase re-check (closes the checks-window race)**, merge (squash or merge commit), **post-merge tree guard**, **alpha channel tag** (main only), GitHub release deferred to promotion.
 
-Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeStrategy, intermediate, tag, channel, tagVerified, releaseDeferred, postMergeTreeMatch, postMergeWarning, titleClamped }`.
+Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeSha, mergeVerified?, mergeWarning?, mergeStrategy, intermediate, tag, channel, tagVerified, releaseDeferred, postMergeTreeMatch, postMergeWarning, postMergeError?, titleClamped }`.
+
+**Merge and tag are reported separately (#398).** The merge is the one
+irreversible step, so once it landed the result ALWAYS carries `merged` +
+`mergeSha` — even when a later step failed. Read the fields in this order:
+
+- `merged` present → the PR IS on base. Never retry `ship_release` for the same
+  branch (double-ship) and never conclude "nothing happened" from `success: false`.
+- `mergeSha: null` + `mergeWarning` → merged, but the merge commit could not be
+  read back (slow fetch); `mergeVerified: false` → merged, but `gh pr view`
+  never confirmed it. Both are warnings for the card, not failures.
+- `success: false` **with** `merged` + `postMergeError` → a post-merge step
+  (tree guard, local sync, tagging) threw. The ring state is in the tag fields:
+  `tagSkipped: true` + `tagWarning` means `alpha/<tag>` was NOT created and must
+  be created by hand on `mergeSha` — surface it as a `userFinalTest` item.
+- `tagError` → tag creation/push failed after its own retries; the ship is still
+  `success: true` (tag trouble never fails a landed merge), but the card must
+  show the ring gap.
 
 **Two other return shapes exist and must not be mistaken for the one above.**
 Both set `success: true` — success means "the tool did what it could", NOT
