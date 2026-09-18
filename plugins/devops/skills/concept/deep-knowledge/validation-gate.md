@@ -82,7 +82,7 @@ from `templates.md` § Layout before opening the tab.
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 73 patterns, regardless of template
+Every concept page must contain these 74 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -92,6 +92,7 @@ related one — count the rows, not the highest number):
 | 2 | `concept-submitted` | CSS class for monitoring detection signal |
 | 3 | `connection-status` | The status line inside `.panel-status` — OUTSIDE `#panel-ready`, pinned above the CTA foot (glyph + label; the raw heartbeat on `data-state` = connecting / connected / disconnected, written by `checkClaudeConnection` in EVERY panel state, the visible line composed by `renderPanelStatus`). NOT an overlay, NO acknowledge button. |
 | 3b | `_everPolled` | Pre-first-poll guard: the connection checker treats the window before the first `/heartbeat` response as "connecting", never "disconnected". Missing → the fresh-page connect→disconnect→connect flash returns. |
+| 3c | `_tabId` AND `startHeartbeatWorker` AND `sendTabBye` | Tab liveness (#397): every browser poll carries `?tab=<id>`, the `/heartbeat` poll runs in a Worker so a hidden tab keeps polling under Chromium timer throttling, and `pagehide` (persisted=false) beacons `/bye`. Missing → the waker cannot tell a hidden tab from a closed one and re-opens the page every few minutes (tab storm). |
 | 4 | `checkClaudeConnection` | Heartbeat checker function |
 | 5 | `HEARTBEAT_STALE_MS` | Heartbeat staleness threshold |
 | 6 | `SERVER_STALE_MS` | Bridge-process staleness threshold (distinguishes bootstrap from dead bridge) |

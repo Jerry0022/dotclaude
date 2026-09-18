@@ -447,12 +447,21 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      root) ⇒ the waker POSTs `/shutdown` itself and exits `STATE_GONE` /
      `PORT_CHANGED` / `HTML_GONE`. No cron is needed for a dead concept to
      take its server down.
-   - **Page liveness.** The server stamps `browser_ts` on every browser-only
-     poll (GET `/heartbeat`, GET `/reload`) and reports it on `/pending`. No
-     browser poll for `--liveness` seconds (default 180) ⇒ the waker re-opens
-     `http://localhost:{port}/{html_path}` in the user's Edge — once per
-     silence window, re-armed only after a tab polls again, so a tab closed
-     on purpose gets one reopen and never a storm. Before the first poll the
+   - **Page liveness.** The server keeps a per-tab registry: every browser
+     poll (GET `/heartbeat`, GET `/reload`) carries the page's `?tab=<id>`,
+     and a real unload beacons `POST /bye` (`pagehide`, persisted=false).
+     `/pending` reports `browser_ts` (last poll from any tab),
+     `browser_tabs` (tabs registered) and `browser_bye_ts`. The waker
+     re-opens `http://localhost:{port}/{html_path}` in the user's Edge only
+     when **no tab is registered** — after the last tab's `/bye` plus a
+     60 s grace, or after every tab has been silent for `--liveness`
+     seconds (default **900**). Silence alone while a tab is registered never
+     reopens: Edge throttles a hidden tab's timers to one wake-up per minute
+     after 5 min and suspends a Sleeping Tab entirely, so 180 s of silence
+     used to open a fresh tab every few minutes (#397). The page keeps the
+     registry fresh from a Worker (exempt from that throttling). Once per
+     window, re-armed only after a tab is seen again, so a tab closed on
+     purpose gets one reopen and never a storm. Before the first poll the
      waker's own start is the baseline. `--liveness 0` switches it off.
    - **Structured exit.** A submission exits with
      `WAKER_EXIT reason=PENDING_SUBMISSION version=N action=iterate|implement|finalize`

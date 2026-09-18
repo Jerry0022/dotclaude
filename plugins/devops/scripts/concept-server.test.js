@@ -239,3 +239,54 @@ describe.skipIf(!PY)("concept-server browser_ts — the last browser poll (#363)
     }
   });
 });
+
+describe.skipIf(!PY)("concept-server per-tab registry and /bye (#397)", () => {
+  test("tabs register on ?tab= polls, leave on POST /bye; /pending reports browser_tabs + browser_bye_ts", async () => {
+    const proc = startServer();
+    try {
+      await waitReady();                                                        // a bare GET /reload — no tab id → not registered
+      const p0 = await (await fetch(`http://127.0.0.1:${PORT}/pending`)).json();
+      expect(p0).toMatchObject({ browser_tabs: 0, browser_bye_ts: 0 });
+
+      await fetch(`http://127.0.0.1:${PORT}/heartbeat?tab=tabA`);              // tab A polls the indicator
+      await fetch(`http://127.0.0.1:${PORT}/reload?tab=tabB`);                 // tab B polls the reload watcher
+      await fetch(`http://127.0.0.1:${PORT}/heartbeat?tab=<bad id>`);          // invalid id → counted as a poll, not as a tab
+      const p1 = await (await fetch(`http://127.0.0.1:${PORT}/pending`)).json();
+      expect(p1.browser_tabs).toBe(2);
+      expect(p1.browser_ts).toBeGreaterThan(0);
+
+      // Tab A unloads — the beacon carries its id; B is still known → the page is open.
+      const bye = await fetch(`http://127.0.0.1:${PORT}/bye`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tab: "tabA" }),
+      });
+      expect(bye.ok).toBe(true);
+      expect(await bye.json()).toEqual({ ok: true, tabs: 1 });
+      const p2 = await (await fetch(`http://127.0.0.1:${PORT}/pending`)).json();
+      expect(p2.browser_tabs).toBe(1);
+      expect(p2.browser_bye_ts).toBeGreaterThan(0);
+
+      // A bye for an unknown / missing id still stamps browser_bye_ts and never throws.
+      await new Promise(r => setTimeout(r, 20));
+      const bye2 = await fetch(`http://127.0.0.1:${PORT}/bye`, { method: "POST", body: "" });
+      expect(bye2.ok).toBe(true);
+      const p3 = await (await fetch(`http://127.0.0.1:${PORT}/pending`)).json();
+      expect(p3.browser_bye_ts).toBeGreaterThan(p2.browser_bye_ts);
+      expect(p3.browser_tabs).toBe(1);                                           // B untouched
+
+      // Last tab says bye → nothing registered.
+      await fetch(`http://127.0.0.1:${PORT}/bye`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tab: "tabB" }),
+      });
+      const p4 = await (await fetch(`http://127.0.0.1:${PORT}/pending`)).json();
+      expect(p4.browser_tabs).toBe(0);
+
+      // A foreign origin is refused like every other data-bearing POST.
+      const evil = await fetch(`http://127.0.0.1:${PORT}/bye`, {
+        method: "POST", headers: { "Content-Type": "application/json", Origin: "http://evil.example" }, body: JSON.stringify({ tab: "tabB" }),
+      });
+      expect(evil.status).toBe(403);
+    } finally {
+      await stopServer(proc);
+    }
+  });
+});

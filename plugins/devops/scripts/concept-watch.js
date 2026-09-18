@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script concept-watch
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description The concept bridge's two detached watchers, as a script instead
  *   of a shell loop pasted into three documents.
@@ -18,10 +18,15 @@
  *                   cron used to carry, token-free:
  *                     - self-cleanup gate: state file gone / foreign port /
  *                       concept HTML gone ⇒ POST /shutdown, exit with the reason;
- *                     - page liveness: no browser poll (GET /heartbeat or
- *                       GET /reload, reported by the server as `browser_ts`)
- *                       for `--liveness` seconds ⇒ re-open the page in the
- *                       user's browser, at most once per silence window;
+ *                     - page liveness: the page is re-opened in the user's
+ *                       browser when NO tab is known to the server any more —
+ *                       the last tab sent its unload beacon (POST /bye) and
+ *                       nothing polled since, or every tab has been silent
+ *                       for `--liveness` seconds. At most once per window.
+ *                       Silence alone while a tab is still registered never
+ *                       reopens: a hidden Edge tab is throttled to one timer
+ *                       wake-up per minute after 5 min and, with Sleeping
+ *                       Tabs, to none at all (#397);
  *                     - structured exit on a submission —
  *                       `WAKER_EXIT reason=PENDING_SUBMISSION version=N action=…`
  *                       — so the woken Claude reads one line instead of
@@ -63,8 +68,24 @@ const DEFAULTS = {
   grace: 60,         // seconds to wait for the state file before giving up
   tolerate: 4,       // consecutive request failures before declaring the server dead
   timeout: 8,        // seconds per request
-  liveness: 180,     // seconds without a browser poll before the page is re-opened (watch mode; 0 = off)
+  // Seconds every tab must be silent before the page is re-opened (watch
+  // mode; 0 = off). 900 and not 180: Edge's intensive throttling coalesces a
+  // hidden tab's timers to ONE wake-up per minute after 5 min, and Sleeping
+  // Tabs / efficiency mode suspend it completely — measured on a live bridge:
+  // browser_ts advanced once per ~60 s, then not at all. 180 s read every
+  // coffee break as "tab closed" and opened a fresh foreground tab each time,
+  // which was then backgrounded and throttled in turn — the tab storm of
+  // #397. A real close is detected by the page's /bye beacon (see
+  // BYE_GRACE_MS), so this value only has to cover the "tab vanished without
+  // saying goodbye" case (crash, kill) and can be generous.
+  liveness: 900,
 };
+
+// After the last known tab said /bye, wait this long before re-opening: a
+// reload or an in-place navigation fires pagehide too, and the fresh load
+// registers itself within seconds. A deliberate close still gets exactly one
+// reopen — just not in the same second the user hit Ctrl+W.
+const BYE_GRACE_MS = 60_000;
 
 function parseArgs(argv) {
   const out = { mode: '', port: 0, state: '', ...DEFAULTS };
@@ -211,12 +232,23 @@ async function run(opts, deps = {}) {
   }
 
   let fails = 0;
-  // Page liveness (watch mode): the server reports the last browser poll as
-  // `browser_ts`. Silence longer than `liveness` re-opens the page ONCE; the
-  // flag re-arms only after a tab has polled again, so a browser that is
-  // closed on purpose gets one reopen, never a storm. Before the first poll
-  // the watcher's own start is the baseline — a page that never opened is
-  // as closed as one that was closed.
+  // Page liveness (watch mode). The server reports on /pending:
+  //   browser_ts     — last poll from ANY tab (legacy any-tab signal),
+  //   browser_tabs   — tabs currently registered (polled within the server's
+  //                    TAB_STALE_MS and no /bye yet)          — since #397,
+  //   browser_bye_ts — last unload beacon                     — since #397.
+  // "Closed" is decided in this order:
+  //   1. a tab is registered            → open, whatever browser_ts says
+  //                                       (hidden + throttled ≠ closed);
+  //   2. none registered, a /bye landed after the last poll and BYE_GRACE_MS
+  //      have passed                    → closed (the user closed the last tab);
+  //   3. none registered, silent for `liveness` → closed (tab died without
+  //      a beacon, or an old page build without tab ids).
+  // Against a server without `browser_tabs` (older build) only rule 3 applies.
+  // A reopen fires ONCE; the flag re-arms only after a tab is seen again, so
+  // a browser closed on purpose gets one reopen, never a storm. Before the
+  // first poll the watcher's own start is the baseline — a page that never
+  // opened is as closed as one that was closed.
   const startedAt = io.now();
   let reopened = false;
   for (;;) {
@@ -240,9 +272,16 @@ async function run(opts, deps = {}) {
           return emit('PENDING_SUBMISSION', version + action);
         }
         if (opts.liveness > 0) {
+          const now = io.now();
           const seen = Number.isFinite(body.browser_ts) && body.browser_ts > 0 ? body.browser_ts : startedAt;
-          const silentMs = io.now() - seen;
-          if (silentMs < opts.liveness * 1000) {
+          const silentMs = now - seen;
+          const tabs = Number.isInteger(body.browser_tabs) ? body.browser_tabs : null;
+          const byeTs = Number.isFinite(body.browser_bye_ts) ? body.browser_bye_ts : 0;
+          const saidBye = byeTs > seen && now - byeTs >= BYE_GRACE_MS;
+          const closed = tabs === null
+            ? silentMs >= opts.liveness * 1000
+            : tabs === 0 && (saidBye || silentMs >= opts.liveness * 1000);
+          if (!closed) {
             reopened = false;
           } else if (!reopened) {
             const st = io.readState(opts.state);
@@ -265,14 +304,14 @@ async function run(opts, deps = {}) {
   }
 }
 
-module.exports = { parseArgs, validate, checkState, readState, reopen, run, DEFAULTS };
+module.exports = { parseArgs, validate, checkState, readState, reopen, run, DEFAULTS, BYE_GRACE_MS };
 
 if (require.main === module) {
   const opts = parseArgs(process.argv.slice(2));
   const err = validate(opts);
   if (err) {
     process.stderr.write(`concept-watch: ${err}\n`);
-    process.stderr.write('usage: concept-watch.js --mode pulse|watch --port <n> --state <abs path> [--interval 20] [--grace 60] [--liveness 180]\n');
+    process.stderr.write('usage: concept-watch.js --mode pulse|watch --port <n> --state <abs path> [--interval 20] [--grace 60] [--liveness 900]\n');
     process.exit(2);
   }
   // A crash must still announce itself as a reason line, not as a stack trace:
