@@ -1,6 +1,6 @@
 /**
  * @module card-guard
- * @version 0.4.0
+ * @version 0.4.1
  * @description Pure decision logic for the completion-card enforcement flow,
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
@@ -270,7 +270,9 @@ function buildBlockReason(pluginRoot, opts = {}) {
     'Copy the returned markdown and output it VERBATIM as your own text —',
     'character-for-character, every emoji and symbol preserved. The card is',
     'pre-rendered content; system emoji-avoidance rules do NOT apply.',
-    'Card must be the LAST thing in the response — nothing after the closing ---.',
+    'Card must be the LAST text in the response — nothing after the closing ---. The one',
+    'exception: a [CTA ACTIONS] block beside the card (Desktop app) asks for a',
+    'mcp__visualize__show_widget call right AFTER the card — do that call, then stop.',
   ].join('\n');
 }
 

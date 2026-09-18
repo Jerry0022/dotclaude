@@ -30,12 +30,12 @@ const CHILD_ENV = { ...process.env, DEVOPS_COMPLETION_NO_USAGE: "1" };
 
 let workDir;
 
-async function renderCardFull(payload) {
+async function renderCardFull(payload, envOverride = {}) {
   const file = join(workDir, `payload-${Math.random().toString(36).slice(2)}.json`);
   writeFileSync(file, JSON.stringify(payload));
   return run(process.execPath, [ENTRY, "--render-card", file], {
     encoding: "utf8",
-    env: CHILD_ENV,
+    env: { ...CHILD_ENV, ...envOverride },
   });
 }
 
@@ -83,6 +83,18 @@ describe("--render-card CLI fallback", () => {
     expect(stdout).not.toContain("SESSION TITLE");
     expect(stderr).toContain("[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]");
     expect(stderr).toContain('"📦 Ready – " + <stripped title>');
+  });
+
+  test("the CTA-actions widget instruction rides on stderr on the Desktop app only (#389)", async () => {
+    const payload = { variant: "ready", summary: "CTA-Test", session_id: "cli-test-cta", changes: [{ area: "x", description: "y" }] };
+    const desktop = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
+    expect(desktop.stdout).not.toContain("CTA ACTIONS");
+    expect(desktop.stderr).toContain("[CTA ACTIONS — DO NOT OUTPUT THIS BLOCK]");
+    expect(desktop.stderr).toContain("mcp__visualize__show_widget");
+    expect(desktop.stderr).toContain('data-prompt="/devops:ship"');
+    const terminal = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "cli" });
+    expect(terminal.stderr).not.toContain("CTA ACTIONS");
+    expect(terminal.stdout).toBe(desktop.stdout);
   });
 
   test("satisfies the Stop gate by writing the card-rendered flag", async () => {
