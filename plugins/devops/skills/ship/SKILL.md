@@ -1,6 +1,6 @@
 ---
 name: ship
-version: 0.8.0
+version: 0.9.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, render_completion_card,
@@ -8,7 +8,7 @@ description: >-
   Supports hierarchical merges (sub-branch → feature → main).
   Use when work is ready to land. Triggers on: "ship it", "push and merge".
   Do NOT trigger during coding/debugging or for commits without shipping.
-allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *), Bash(nohup *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, TaskList, TaskCreate, TaskUpdate, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
+allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *), Bash(nohup *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, TaskList, TaskCreate, TaskUpdate, Skill, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
 # Ship
@@ -61,6 +61,7 @@ two shapes are:
 | Pre-Step B — session activity still in progress | ask Warten/Trotzdem/Abbrechen | in-scope activity pending → **BLOCK** ("session activity active"); otherwise proceed |
 | Step 1b(e) — truly ambiguous rebase conflict | abort + ask which side wins | `git rebase --abort` → **BLOCK** ("unresolvable merge conflict — needs human decision") |
 | Step 1d — high-impact purpose-alignment conflict | ask (batched) | apply mechanical fixes as usual; high-impact items → **RECORD & CONTINUE** |
+| Step 1d — standing UI-rule finding (`/tune-polish --invoked-by=ship`) | mechanical → fix; else `userFinalTest` (never asks) | same: mechanical → fix; else **RECORD & CONTINUE** — never BLOCK |
 | Step 2 — Codex judgment-required finding | ask Fixen/Ignorieren/Abbrechen | auto-fixable → fix inline; design/logic/security → **BLOCK** (finding named) |
 | Step 3 — major version bump | always ask | **BLOCK** ("needs major-version decision — not shipped unattended") |
 
@@ -314,12 +315,33 @@ the convention (it ships with this PR). Ask via AskUserQuestion ONLY for
 high-impact conflicts (contradicting purposes, design decisions, substantial
 rework) — all batched into ONE question.
 
+**Standing UI rules (part of the Light check).** Besides the conventions
+mined from recent PRs, every project has the standing UI conventions in
+`{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` (tooltips, dropdowns, spacing,
+hotkeys — plus the project's `## UI rules` override in
+`.claude/skills/tune-polish/reference.md`). When the diff contains UI files
+(`ui-defaults.md` § UI file detection), invoke the **rules-only path** of
+tune-polish — `/tune-polish --invoked-by=ship <ui files of the diff>` (the
+Skill tool, same as every other skill composition here) — and treat what it returns exactly like the other 1d findings:
+- `applicable: false` (no UI files, no UI profile) → nothing; no card entry.
+- `mechanical: true` findings → apply the one-line fix, list under `changes`.
+- every other finding → a `userFinalTest` item naming rule, file:line and
+  what to check.
+- `disabled` / `notApplicable` ids → one `tests` line for the card
+  ("UI-Regeln: 2 Findings · R2b deaktiviert (Projekt-Override) · R4 n/a").
+The rules-only path is static, diff-only, runs no agents and no browser, and
+returns no card of its own; the runtime halves of the rules are a full
+`/tune-polish` matter and are never attempted here. **Priority:** a more
+recent project convention from the mined PRs beats a standing rule — the
+convention is a decision, the rule a default. This check never blocks a ship.
+
 **If `$SHIP_LOCKOUT` (Pre-Step A):** still apply the mechanical fixes; for the
 high-impact conflicts do not ask — **RECORD & CONTINUE** (fold each into a
 `userFinalTest` item for Step 6). This gate never blocks the ship on its own.
 
 Skip silently when: `mode: "file-only"`, no purpose sources found, or the diff
-is clearly out of scope for every gathered purpose.
+is clearly out of scope for every gathered purpose. The standing-UI-rules part
+additionally skips when the diff touches no UI file.
 
 Feed results into Step 6: fixed violations → `changes`; open/unverifiable
 items → `userFinalTest`. Silent when clean.
@@ -903,7 +925,7 @@ render_completion_card({
   cwd: "<current working directory — same as ship_release>",
   buildId: <from ship_build.buildId>,
   changes: [<top 3 FUNCTIONAL changes — user-perceived effect, phrased as behavior; area ≤ 24, description ≤ 90 chars (one line each). Derive from ship_build/version_bump results but do NOT list files/modules. See completion-card template § Changes.>],
-  tests: [<from ship_build results — the automated GATES, one line each: { method: "npm test", result: "1460 grün" }. Numbers, not prose; include skipped/non-green gates ("Codex-Review → übersprungen — Limit"). Rendered on the header line(s) under **Geprüft**.>],
+  tests: [<from ship_build results — the automated GATES, one line each: { method: "npm test", result: "1460 grün" }. Numbers, not prose; include skipped/non-green gates ("Codex-Review → übersprungen — Limit") and, when Step 1d ran the UI rules, one line { method: "UI-Regeln", result: "2 Findings · R2b deaktiviert" } — omitted entirely when the diff had no UI files. Rendered on the header line(s) under **Geprüft**.>],
   validation: [<requirement ≤ 70 → evidence ≤ 100 chars; partial/unmet items first. Long-form evidence belongs in the PR body.>],
   userFinalTest: [<ONLY real manual tests the user must run>],
   open: [<decisions, cleanups, open questions — NOT tests: "feat/x liegt 70 PRs hinter main — committen oder verwerfen?">],

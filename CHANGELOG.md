@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.173.0] — 2026-09-18
+
+### Added
+
+- **Standing UI rules — tooltips, dropdowns, spacing, hotkeys — in one file, read three ways.** The same UI defects recur in every project: icon buttons without a tooltip, a dropdown left at the native look or "themed" by one colour, two identical cards with different padding, actions only a mouse can reach. `deep-knowledge/ui-defaults.md` names the four conventions every project gets by default, each as a **static** half (checkable from the diff) and a **runtime** half (needs the rendered app), plus a detection allowlist for the common stacks and the project override format. Three readers: (1) the new `post.design.remind` hook (PostToolUse `Edit|Write`) puts the rules in context once per session the moment a UI file is written — prevention while the element is being typed, not repair after the fact; plugin source, concept pages and `.claude/` are excluded, project globs widen the detection. (2) `/tune-polish` 0.3.0 checks the rules as Step 4 #8 and gains a **rules-only path** `--invoked-by=ship`: static halves only, diff files only, no agents, no browser, no fixes, no card — a findings list for the caller; the runtime halves run in Step 11 when a browser is available. (3) `/ship` 0.9.0 Step 1d calls that path on every diff that touches UI files and treats the result like its other convention findings — mechanical → fixed under `changes`, everything else → `userFinalTest`, RECORD & CONTINUE under `$SHIP_LOCKOUT`, never a block; a more recent project convention from merged PRs beats a standing rule, and a rule disabled by the project override is named on the card's `Geprüft` line. Consumers extend or switch rules off in `.claude/skills/tune-polish/reference.md § UI rules` (documented in the extension guide); `frontend`/`designer` read the file before UI work; `tune-harden` Step 8 is the whole-scope instance of the spacing rule; `prompt.knowledge.dispatch` routes tooltip/dropdown/hotkey/design-rule prompts to it. Decided on a concept page with PO + red-team input (seven architecture variants; the rule file + narrow ship path + prevention hook won over a blocking design-check skill). 6 hook tests.
+
+### Fixed
+
+- **`graph-nudge` staleness test no longer flaky.** The test compared a graph stamped `Date.now()` against "every source file older", but the worktree's `.git` pointer is a dot-*file* the scan counts (only dot-dirs are skipped) and its sub-millisecond NTFS mtime landed above the millisecond-rounded graph stamp on about half the runs. The test now ages every scanned file explicitly; 10/10 isolated runs green, `graph-nudge.js` unchanged.
+
 ## [0.172.2] — 2026-09-18
 
 ### Fixed

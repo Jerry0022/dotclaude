@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.172.2**
+**Version: 0.173.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -208,7 +208,7 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ## Features
 
-- **<!--devops:count:hooks-->46<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:hooks-->47<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, auto-graph, claude-batch, claude-strict, web-guide
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
@@ -219,7 +219,7 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->46<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->47<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -280,6 +280,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `post.graphify.search` — Telemetry only: record every Grep/Glob that actually RAN (`search_ran`) with its resu…
 - `post.concept.gate` — Deterministic backstop for concept pages.
 - `post.claude.budget` — Deterministic context-budget gate for Claude configuration files — CLAUDE.md, SKILL.m…
+- `post.design.remind` — Once per session, when a UI file is written or edited, reminds Claude of the standing…
 
 #### Stop — runs when Claude finishes responding
 
@@ -407,7 +408,11 @@ code and UI** — no new features, no fresh scope.
 - **`/tune-harden`** — stabilization: full test suite, autonomous bug fixes,
   consistency + regression coverage. Never adds new UI structure.
 - **`/tune-polish`** — UI refinement: visual consistency, state-visuals,
-  UI-side functionality checks. Structural UI changes only with approval.
+  UI-side functionality checks and the standing UI rules from
+  `deep-knowledge/ui-defaults.md` (tooltips, dropdowns, spacing, hotkeys —
+  extendable per project). Structural UI changes only with approval. `/ship`
+  runs its rules-only path on every UI diff; the `post.design.remind` hook
+  puts the rules in context the moment a UI file is written.
 - **`/tune-rethink`** — strategic reset: code-blind fresh approaches for
   stuck development, decided on a concept page, then implemented.
 
@@ -796,7 +801,7 @@ Wk  ━━──╏─────────   16% +1%   · 5d 2h left
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->46<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── hooks/                         ← <!--devops:count:hooks-->47<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 ├── skills/                        ← <!--devops:count:skills-->23<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs

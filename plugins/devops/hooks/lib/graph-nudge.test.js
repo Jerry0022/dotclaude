@@ -315,7 +315,11 @@ describe("resolveGraphJson — local → repo root → primary checkout", () => 
     const mainGraph = writeGraph(main);
     const OLD = new Date(Date.now() - 60_000), NOW = new Date();
     fs.utimesSync(mainGraph, NOW, NOW);
-    fs.utimesSync(path.join(sub, "a.js"), OLD, OLD);
+    // Age EVERY file the scan will see, not just a.js: the worktree's `.git`
+    // pointer is a dot-FILE (scanSources skips dot-dirs only) and pair() wrote
+    // it within the same millisecond as NOW, so its sub-ms NTFS mtime landed
+    // above the graph's ms-rounded one on ~half the runs — a flaky "1".
+    for (const f of [path.join(wt, ".git"), path.join(sub, "a.js")]) fs.utimesSync(f, OLD, OLD);
     expect(stalenessInfo(wt).newerCount).toBe(0);
     // A branch edit in the worktree is exactly the lag the primary graph has.
     const later = new Date(Date.now() + 5_000);

@@ -1,16 +1,19 @@
 ---
 name: tune-polish
-version: 0.2.0
+version: 0.3.0
 description: >-
   UI refinement pass: visual consistency (spacing, tokens, typography, icons,
-  colors), state-visuals, UI-side functionality checks, and small
-  demonstrably UI-related backend fixes. Structural UI changes only with user
-  approval; `--autonomous` skips prompts but keeps the "structural changes
-  flagged not applied" rule. Triggers on: "polish", "ui polish", "ui
+  colors), state-visuals, UI-side functionality checks, the standing UI
+  rules from deep-knowledge/ui-defaults.md (tooltips, dropdowns, spacing,
+  hotkeys), and small demonstrably UI-related backend fixes. Structural UI
+  changes only with user approval; `--autonomous` skips prompts but keeps
+  the "structural changes flagged not applied" rule. `--invoked-by=ship` is
+  the narrow rules-only path /ship calls: static checks on the diff, no
+  agents, no browser, report-only. Triggers on: "polish", "ui polish", "ui
   angleichen", "design konsistenz", "feinschliff", "visuell aufräumen",
   "design pass". Do NOT trigger for: backend-only work, feature
   implementation, theme/style overhaul.
-argument-hint: "[--autonomous] [--invoked-by=agents|autonomous] [optional scope: file/dir path]"
+argument-hint: "[--autonomous] [--invoked-by=agents|autonomous|ship] [optional scope: file/dir path]"
 allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
@@ -32,6 +35,11 @@ Same three invocation paths as `/tune-harden`:
 3. **From `/run-autonomous`** — pass `--invoked-by=autonomous` (implies
    `--autonomous`). No permission priming, no user prompts. Structural
    changes always flagged for the autonomous report (never auto-applied).
+4. **From `/ship`** — pass `--invoked-by=ship` plus the diff's UI files as
+   scope. This is the **rules-only path**: it runs nothing but the static
+   halves of the UI rules (Step 4 #8) over the given files and returns a
+   findings list to the caller. No test plan, no qa/redteam agents, no
+   browser, no fixes, no completion card. See § Rules-only path (ship).
 
 The Single-Agent Shortcut from `deep-knowledge/agent-orchestration.md`
 applies: orchestrators delegate directly to this skill instead of building
@@ -50,6 +58,15 @@ Project extensions can declare:
 - Allowed design tokens (spacing scale, color tokens, typography ramp)
 - Brand rules (forbidden hardcoded colors, required icon sizes)
 - Layout conventions (button positions, form patterns)
+- **`## UI rules`** — overrides for the standing UI rules: disabled rule
+  ids, extra tooltip/hotkey/menu detection patterns, extra UI file globs and
+  free-form project rules. Format in `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md`
+  § Project override.
+
+4. Standing UI rules: read `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` and
+   merge the `## UI rules` override on top (project > global). The merged
+   set is `$UI_RULES`; a rule disabled by an override stays in the set as
+   *disabled* so the output can name it.
 
 ## Step 1 — Parse Arguments
 
@@ -58,8 +75,10 @@ Scan `$ARGUMENTS` for:
 - `--autonomous` flag → set `$AUTONOMOUS=1`. Skips ALL `AskUserQuestion`
   calls. Structural changes are STILL not auto-applied — they get flagged
   in the final report. Autonomous is mute mode, not yolo mode.
-- `--invoked-by=agents|autonomous` → set `$PARENT_SKILL`. See "Invocation
+- `--invoked-by=agents|autonomous|ship` → set `$PARENT_SKILL`. See "Invocation
   Context". `--invoked-by=autonomous` implicitly sets `$AUTONOMOUS=1`.
+  `--invoked-by=ship` sets `$RULES_ONLY=1` and jumps to § Rules-only path
+  (ship) right after Step 2 — Steps 3 and 5–12 do not run.
 - `--parent-mode=background|interactive` → only with
   `--invoked-by=agents`. Background acts like `--autonomous`.
 - Any remaining tokens → treat as scope path(s).
@@ -156,6 +175,60 @@ Spawn parallel Explore agents (single message, multiple Agent calls):
    duplicated component logic across siblings, components >300 LoC with
    no internal seams, hook-reuse opportunities (same effect logic in
    3+ components).
+
+8. **Standing UI rules (`$UI_RULES`)** — the four rules from
+   `deep-knowledge/ui-defaults.md`, each with a static and a runtime half:
+   - **R1 tooltips** — static: new/changed icon-only interactive element
+     without one of the project's tooltip mechanisms; runtime: tooltip shows
+     after 300–700 ms, hides on mouse-out/Escape.
+   - **R2a dropdowns styled** — static: bare native `<select>`/OS menu where
+     the project has a menu component, or a menu themed by one colour while
+     trigger/items ignore the app's tokens. **R2b uniform item structure** —
+     static: items of one menu differ in slot structure (icon/description on
+     some, not all); runtime: open menu matches the app's elevated surfaces.
+   - **R3 spacing** — static: same component type, different spacing than
+     its siblings in scope, no justification comment (math from
+     `harden-polish-shared.md` § 3, scope files only); runtime: 44 px touch
+     targets, no touching actions, across the viewport matrix.
+   - **R4 hotkeys** — static: new/changed interaction without a key binding
+     through a project hotkey mechanism, or with a binding that is shown
+     neither in the control nor in its tooltip, or two bindings to one key
+     in a view; runtime: tab-walk + snapshot — every flow completable by
+     keyboard, visible focus ring, Escape/Enter/arrows behave.
+   Detection uses the allowlist from `ui-defaults.md` merged with the
+   override. A rule whose mechanism class has zero matches in the whole
+   project (e.g. no tooltip mechanism anywhere) is reported once as *not
+   applicable*, never as a batch of failures. Only **new or changed**
+   elements in scope are findings on the ship path; the full pass may also
+   list pre-existing violations, marked as such. R1 and R4 are
+   **report-only** (R1: a fix may only reuse an existing label's text; R4:
+   the key choice is design). A more recent project convention from merged
+   PRs beats a generic rule — say so in the finding instead of reporting it.
+
+## Rules-only path (ship) — `$RULES_ONLY=1`
+
+Runs instead of Steps 3 and 5–12 when `--invoked-by=ship` (Step 4 is reduced
+to its item #8, run inline). It exists so /ship can
+measure the standing UI rules on every UI ship without paying for a full
+polish pass (agents, browser, viewports).
+
+1. **Scope** = the files /ship passed (its diff filtered to UI files). Empty
+   scope → return `{ applicable: false, reason: "no UI files in diff" }` and
+   stop. No UI profile (`test-autonomy.md` profiles `cli-node`, `lib`,
+   `generic`) → same, reason `"no UI profile"`.
+2. **Check** only the **static** halves of Step 4 #8 (R1, R2a, R2b, R3, R4),
+   inline — no Explore agents, no browser, no screenshots. Runtime halves
+   are never attempted here; they are listed once as
+   `skipped: runtime rules (full /tune-polish)`.
+3. **Never fix.** Return a findings list, one entry per finding:
+   `{ rule, file, line, element, detail, mechanical: true|false,
+   fix?: "<one-line change when mechanical>" }`. `mechanical: true` only when
+   the fix needs no invented content (a spacing token swap, an existing
+   label reused as tooltip text). The caller decides what to apply.
+4. **Name the overrides**: `disabled: [ids]` from the project override,
+   `notApplicable: [ids]` for mechanism classes absent from the project.
+5. **No completion card, no AskUserQuestion, no session-title change** — the
+   caller (/ship) owns the turn. Hand back the structure and return.
 
 ## Step 5 — State-Visuals + Auto-Consistency Phase
 
@@ -289,6 +362,15 @@ When `$AUTONOMOUS=1`:
 - Component library swap
 
 ## Step 11 — Re-test + Pre-Mortem
+
+Before the re-test, when a browser tool is available, run the **runtime
+halves** of the standing UI rules (Step 4 #8) over the scope: hover an
+icon-only control and time the tooltip, open each changed menu and compare
+its surface to a card/dialog of the app, measure touch targets on the phone
+viewport, and tab-walk every changed view (focus order, Escape/Enter/arrows,
+focus ring). Findings follow the same score/approval rules as every other
+polish item; R1/R4 stay report-only. Without a browser tool: list them once
+as skipped in Step 12.
 
 1. **Wait** for the background qa agent. Capture screenshots/snapshot
    diffs.

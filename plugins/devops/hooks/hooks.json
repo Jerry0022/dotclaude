@@ -93,6 +93,12 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.claude.budget.js" }
         ],
         "matcher": "Write|Edit"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.design.remind.js" }
+        ],
+        "matcher": "Edit|Write"
       }
     ],
     "Stop": [
