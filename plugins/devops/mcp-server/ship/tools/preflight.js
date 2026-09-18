@@ -12,7 +12,7 @@ import { git, currentBranch, dirtyState, commitsAhead, unpushedCommits, isWorktr
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { readVersion, verifyVersionFiles } from "../lib/version.js";
 import { writeSentinel } from "../lib/sentinel.js";
-import { detectRepoMode } from "../lib/repo-mode.js";
+import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { detectOutOfBandDeploys, DEFAULT_OUT_OF_BAND_GLOBS } from "../lib/infra-deploy.js";
 import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
 
@@ -112,6 +112,29 @@ export async function handler(params) {
   const errors = [];
 
   const repoMode = detectRepoMode(cwd)
+
+  // A timed-out probe must not masquerade as file-only (#411): preflight would
+  // declare a real repo ready in file-only mode and the pipeline would skip it.
+  if (repoMode === "unknown") {
+    return {
+      ready: false,
+      mode: "unknown",
+      branch: null,
+      base: null,
+      autoDetectedBase: null,
+      intermediate: false,
+      ahead: null,
+      unpushed: null,
+      inWorktree: false,
+      needsRebase: false,
+      version: null,
+      projectType: null,
+      outOfBandDeploys: { detected: false, globs: [], files: [], matched: [], kinds: [] },
+      checks: [{ name: "repo-mode", value: "unknown", ok: false, error: probeTimeoutError(cwd) }],
+      warnings: [],
+      errors: [probeTimeoutError(cwd)],
+    }
+  }
 
   // file-only: not a git repo — return synthetic preflight result immediately
   if (repoMode === "none") {

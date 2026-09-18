@@ -7,7 +7,7 @@ import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { git, gitStrict, gitArgs, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf, NETWORK_TIMEOUT } from "../lib/git.js";
 import { createPR, mergePR, findExistingPR, watchPRChecks } from "../lib/github.js";
-import { detectRepoMode } from "../lib/repo-mode.js";
+import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { remoteTagExists } from "../lib/remote-tags.js";
 import { retryUntil } from "../lib/retry.js";
 import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
@@ -48,6 +48,11 @@ export async function handler(params) {
   const opts = { cwd };
 
   const repoMode = detectRepoMode(cwd)
+  // A timed-out probe is NOT file-only: returning the skipped shape here made a
+  // loaded machine report `success: true` for a ship that never ran (#411).
+  if (repoMode === "unknown") {
+    return { success: false, skipped: false, reason: "git-probe-timeout", delivered: "none", error: probeTimeoutError(cwd) }
+  }
   if (repoMode === "none") {
     return { success: true, skipped: true, reason: "file-only-mode", delivered: "none" }
   }

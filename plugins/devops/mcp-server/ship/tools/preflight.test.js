@@ -38,6 +38,7 @@ vi.mock("../lib/sentinel.js", () => ({
 
 vi.mock("../lib/repo-mode.js", () => ({
   detectRepoMode: vi.fn(() => "git"),
+  probeTimeoutError: (cwd) => `git did not answer within 10 s (ETIMEDOUT) — the repo mode of ${cwd} could not be determined. Retry the call. Nothing was skipped, committed, pushed or merged.`,
 }));
 
 vi.mock("../lib/worktree.js", () => ({
@@ -55,6 +56,7 @@ import { handler } from "./preflight.js";
 import { isWorktree, fileOverlap } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { scanConflictMarkers } from "../lib/conflict-markers.js";
+import { detectRepoMode } from "../lib/repo-mode.js";
 
 const CLEAN_SCAN = { clean: true, scanned: 0, scope: "diff+worktree", offenders: [], repoOffenders: [], repoScanned: 0, repoTruncated: false };
 
@@ -102,6 +104,15 @@ describe("ship_preflight — session-worktree-clean gate", () => {
     });
     expect(result.errors.some((e) => /session worktree/i.test(e) && /uncommitted/i.test(e))).toBe(true);
     expect(result.ready).toBe(false);
+  });
+
+  test("timed-out repo probe → not ready, mode 'unknown', never file-only (#411)", async () => {
+    detectRepoMode.mockReturnValueOnce("unknown");
+    const result = await handler({ cwd: CWD });
+    expect(result.ready).toBe(false);
+    expect(result.mode).toBe("unknown");
+    expect(result.errors.some((e) => /ETIMEDOUT/.test(e))).toBe(true);
+    expect(checkByName(result, "repo-mode")).toMatchObject({ ok: false, value: "unknown" });
   });
 
   test("dirty worktree on the BASE branch → blocked (related to ship target)", async () => {

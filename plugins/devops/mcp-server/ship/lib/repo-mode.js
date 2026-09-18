@@ -6,8 +6,18 @@ import path from "node:path"
 
 // Every probe is bounded. The MCP server is long-lived and `cwd` can sit on a
 // network drive or a stale mount, where an unbounded execFileSync blocks the
-// whole server. Matches the timeout every hook-side detector already sets.
-const PROBE_TIMEOUT_MS = 4000
+// whole server. 10 s, not the hooks' 4 s: on 2026-09-18 a loaded Windows box
+// (60 node processes) let `git rev-parse` exceed 4 s, and the timeout used to
+// read as "not a git repo" — ship_release then returned
+// `{ success: true, skipped: true, reason: "file-only-mode" }` for a real repo.
+export const PROBE_TIMEOUT_MS = 10_000
+
+/** Sentinel for "git did not answer in time" — distinct from "git said no". */
+const TIMED_OUT = Symbol("git-probe-timed-out")
+
+function isTimeout(err) {
+  return Boolean(err && (err.code === "ETIMEDOUT" || err.killed === true || err.signal === "SIGTERM"))
+}
 
 function gitOut(args, cwd) {
   try {
@@ -17,9 +27,21 @@ function gitOut(args, cwd) {
       stdio: ["ignore", "pipe", "ignore"],
       timeout: PROBE_TIMEOUT_MS,
     }).trim()
-  } catch {
-    return null
+  } catch (err) {
+    return isTimeout(err) ? TIMED_OUT : null
   }
+}
+
+/**
+ * The error callers surface when a probe timed out. Names the cause and the
+ * remedy, so the ship skill retries instead of believing a skipped result.
+ */
+export function probeTimeoutError(cwd) {
+  return (
+    `git did not answer within ${PROBE_TIMEOUT_MS / 1000} s (ETIMEDOUT) — the repo mode of ` +
+    `${cwd} could not be determined. The machine is under load; retry the call. ` +
+    `Nothing was skipped, committed, pushed or merged.`
+  )
 }
 
 /** Compare two filesystem paths for identity, tolerating separator + case differences. */
@@ -35,6 +57,8 @@ function samePath(a, b) {
 /**
  * Classify how `cwd` relates to git.
  *
+ *   "unknown"          — a git probe TIMED OUT; nothing can be concluded and
+ *                        every caller must fail loudly, never skip (#411)
  *   "none"             — not inside a work tree at all
  *   "git-foreign-root" — inside a work tree whose ROOT is not `cwd`; the repo
  *                        belongs to an ancestor directory, not to this project
@@ -54,12 +78,17 @@ function samePath(a, b) {
  * an exit-code-only check misclassified both as a normal work tree.
  */
 export function detectRepoMode(cwd) {
-  if (gitOut(["rev-parse", "--is-inside-work-tree"], cwd) !== "true") return "none"
+  const inside = gitOut(["rev-parse", "--is-inside-work-tree"], cwd)
+  if (inside === TIMED_OUT) return "unknown"
+  if (inside !== "true") return "none"
 
   const toplevel = gitOut(["rev-parse", "--show-toplevel"], cwd)
+  if (toplevel === TIMED_OUT) return "unknown"
   if (!toplevel || !samePath(toplevel, cwd)) return "git-foreign-root"
 
-  return gitOut(["remote", "get-url", "origin"], cwd) === null ? "git-no-remote" : "git"
+  const origin = gitOut(["remote", "get-url", "origin"], cwd)
+  if (origin === TIMED_OUT) return "unknown"
+  return origin === null ? "git-no-remote" : "git"
 }
 
 /**
@@ -67,7 +96,8 @@ export function detectRepoMode(cwd) {
  *
  * Deliberately true for "git-foreign-root" — it IS a work tree, just one
  * rooted above `cwd`. Callers that care about the distinction (anything
- * destructive) must test `detectRepoMode` directly.
+ * destructive) must test `detectRepoMode` directly. "unknown" is false here —
+ * a timed-out probe proves nothing, and callers check it explicitly first.
  */
 export function isGitRepo(cwd) {
   const mode = detectRepoMode(cwd)
@@ -76,8 +106,9 @@ export function isGitRepo(cwd) {
 
 /**
  * Modes in which a tool must NOT run destructive git operations: there is
- * either no repo, or the repo belongs to a directory above this project.
+ * either no repo, the repo belongs to a directory above this project, or the
+ * probe timed out and nothing is known.
  */
 export function refusesGitWrites(mode) {
-  return mode === "none" || mode === "git-foreign-root"
+  return mode === "none" || mode === "git-foreign-root" || mode === "unknown"
 }

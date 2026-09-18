@@ -1,6 +1,6 @@
 ---
 name: ship
-version: 0.9.0
+version: 0.9.1
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, render_completion_card,
@@ -483,6 +483,16 @@ Both set `success: true` — success means "the tool did what it could", NOT
 In both, `merged` is absent or `null`. **Never read `success: true` alone as a
 merge.** Always check `merged` before reporting one, and check `skipped` before
 continuing to any step that assumes a remote.
+
+**A third shape is a transient failure, not a mode:**
+`{ success: false, reason: "git-probe-timeout", delivered: "none", error }` —
+the repo-mode probe (`git rev-parse`) did not answer within its budget on a
+loaded machine. `ship_preflight` reports the same case as `mode: "unknown"`,
+`ready: false`, and `ship_cleanup` as `reason: "git-probe-timeout"` with the
+sentinel kept. Nothing happened; **retry the same call once** — do not read it
+as file-only (that was the 2026-09-18 failure: a real repo got a skipped
+`success: true` and the ship silently never ran). A second timeout → BLOCK
+(`ship-blocked`, "git unresponsive — machine under load").
 
 **If `titleClamped` is set**: the PR title exceeded the 70-char budget and was cut on a word boundary — the ship proceeded, it is not an error. The field carries `{ original, applied, max }`. Aim for a shorter title next time; surface it only if the clamped subject reads badly.
 
