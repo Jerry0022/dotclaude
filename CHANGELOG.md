@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.177.1] — 2026-09-18
+
+### Fixed
+
+- **A timed-out git probe is `unknown`, never file-only (#411).** On a loaded machine (60 node processes) `git rev-parse` exceeded the 4 s repo-mode probe budget and the `ETIMEDOUT` was swallowed as "not a git repo": `ship_release` returned `{ success: true, skipped: true, reason: "file-only-mode" }` for a real repo the preflight had just called `git`, and the ship silently never ran; the retry surfaced the raw `spawnSync git ETIMEDOUT`. `detectRepoMode` now tells a timeout (`ETIMEDOUT` / killed by the timeout signal) from a git failure and returns `"unknown"`; `ship_release`, `ship_preflight` (`ready: false`, `mode: "unknown"`) and `ship_cleanup` (sentinel kept, nothing deleted) fail loudly with `reason: "git-probe-timeout"` and an error naming the remedy — never a skipped success. Probe budget 4 s → 10 s; `refusesGitWrites("unknown")` is true. `/ship` Step 4 documents the shape: retry once, a second timeout blocks. Regression tests on the lib (every probe position, signal vs. code, plain failure still `none`) and all three tools. Ship server 0.2.1, skill 0.9.1. Not covered by Codex review — external usage limit until 2026-10-11.
+
 ## [0.177.0] — 2026-09-18
 
 ### Added
