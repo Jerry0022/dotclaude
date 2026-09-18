@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.172.2] — 2026-09-18
+
+### Fixed
+
+- **A concept page in a background tab is no longer re-opened every few minutes (#397).** The pickup waker read 180 s without a browser poll as "tab closed" and re-opened the page. A hidden Edge tab is throttled to one timer wake-up per minute after 5 min and suspended entirely by Sleeping Tabs — measured on a live bridge: `browser_ts` advanced once per ~60 s, then not at all — so every coffee break opened another foreground tab, which was backgrounded and throttled in turn. Closed-vs-hidden is now decided from evidence, not silence: the page carries a per-load `_tabId` on every `GET /heartbeat` / `GET /reload` (`?tab=<id>`), runs the `/heartbeat` poll in a dedicated `Worker` (exempt from intensive timer throttling, main-thread interval as fallback) and beacons `POST /bye` on a real unload (`pagehide`, persisted=false — never on a visibility change). The bridge keeps a per-tab registry (pruned after 15 min so a tab killed without a beacon ages out) and reports `browser_tabs` + `browser_bye_ts` on `/pending`. The waker (`concept-watch.js` 0.2.0) re-opens the page only when **no tab is registered**: after the last tab's `/bye` plus a 60 s grace (a reload re-registers within seconds), or after every tab has been silent for `--liveness`, now **900 s** (was 180). Against an older bridge without `browser_tabs` the silence rule alone applies. Verified in a live Chromium: worker polls keep the registry fresh, a cross-document navigation delivers the beacon. Validation gate row 3c (`_tabId` · `startHeartbeatWorker` · `sendTabBye`, 74 patterns); concept skill 0.1.1; 7 waker scenarios + a live bridge test.
+
 ## [0.172.1] — 2026-09-18
 
 ### Fixed
