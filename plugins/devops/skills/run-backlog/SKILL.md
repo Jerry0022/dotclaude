@@ -1,6 +1,6 @@
 ---
 name: run-backlog
-version: 0.5.0
+version: 0.6.0
 description: >-
   Milestone-centric backlog runner: picks open GitHub milestones (or loose
   issues), then refines, implements, tests and ships each item unsupervised
@@ -374,7 +374,20 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
    aggregate status: `ship-successful` when ≥1 item shipped and nothing is
    BLOCKED; `ship-blocked` when items are blocked; `ready` / `analysis` when
    nothing shipped. Relay the card markdown VERBATIM as the last output.
-4. **Optional shutdown** — per the `run-autonomous` Step 8 decision matrix
+4. **Project ship-extension finalizer — once, after the final card.** Read
+   `{project}/.claude/skills/ship/SKILL.md` (if present) for a post-ship
+   self-update / finalizer step that the extension skips while a
+   `backlog-runner` lockout is active (the dotclaude plugin-source repo has one:
+   its Step 8 runs `ss.plugin.update.js --force`, which marks the MCP servers
+   stale — run per issue it would have blocked every later `ship_*` call in the
+   queue). Run that step exactly once here, only when ≥1 item shipped, and
+   **before** the lockout is cleared in item 5 (the extension's guard reads the
+   lockout owner; clearing first would not matter for this run but leaves the
+   ordering contract explicit). Capture its stdout into the tool result only —
+   the final card is the last visible output, and the restart is already
+   announced by the extension's deferred card item. No extension or no such
+   step → nothing to do.
+5. **Optional shutdown** — per the `run-autonomous` Step 8 decision matrix
    (`skills/run-autonomous/deep-knowledge/shutdown-watchdog.md`): cancel the
    fail-safe timer FIRST, clear the autonomous lockout
    (`node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" clear`), then act by

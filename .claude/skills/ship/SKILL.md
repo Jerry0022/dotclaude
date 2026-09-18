@@ -29,6 +29,10 @@ automatically sync to every ship.
 3. Add exactly one `userFinalTest` item, in the user's language:
    - **Pin is `alpha`** — the install tracks alpha, so the Step 8 finalizer moves it to vNew:
      > `{ action: "devops lokal (alpha) auf v<vNew> synchronisiert — Claude einmal neu starten, dann ist die neue Version aktiv.", afterDeployment: true }`
+   - **Pin is `alpha` AND a `backlog-runner` lockout is active** (Step 8 guard below —
+     this ship is one of several in a `/run-backlog` queue): the finalizer is deferred
+     to the runner's own Step 5, so do not claim a sync yet:
+     > `{ action: "devops lokal (alpha) wird nach dem letzten Backlog-Issue auf die geshippte Version synchronisiert — danach Claude einmal neu starten.", afterDeployment: true }`
    - **Pin is `beta`/`stable`** (the default) — an alpha-only ship does NOT reach this
      install. Do **not** claim any local sync; point to promotion:
      > `{ action: "v<vNew> ist auf alpha veröffentlicht; dein <pin>-Install bleibt auf v<installed>. /promote promoten (alpha→<pin>), danach zieht der Install v<vNew> beim nächsten Start.", afterDeployment: true }`
@@ -67,6 +71,14 @@ card — the card carries it.
   restart via `ss.plugin.update` as usual.
 - **Ship did not succeed** (`ship_release.success` falsy / `ship-blocked` card). Nothing
   was merged → nothing to sync.
+- **A `backlog-runner` lockout is active.** Run
+  `node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" check` and read `owner`:
+  `"backlog-runner"` means this ship is one of several that `/run-backlog` composes
+  from ONE session. The finalizer marks the MCP servers stale, and `pre.mcp.health`
+  would then block the `ship_*` / card calls of every issue still in the queue — on
+  2026-09-18 the deferral had to be done by hand (PRs #401/#402/#404). Skip here; the
+  runner runs this finalizer exactly once at its Step 5, after its final card. Use the
+  deferred Step 6.5 wording for the card item.
 - **devops not installed here** ("falls vorhanden"). If
   `~/.claude/plugins/marketplaces/dotclaude` does not exist, there is no install to sync.
   The hook no-ops on its own, so just running it is safe — no extra guard needed.
