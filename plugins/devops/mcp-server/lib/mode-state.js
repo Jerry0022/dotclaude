@@ -23,35 +23,67 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 /** Session-title prefixes — emoji first so the sidebar scans on the icon.
  *  `concept` / `batch` are set by their skills while the mode is on and
- *  stripped by them on the way out. `shipping` is set by /ship Pre-Step C.
- *  The rest mirror completion-card variants: every card the session ends a
- *  turn with tells Claude (via `titleInstruction`) which prefix the title
- *  should carry now, so the sidebar always names the state the last card
- *  left the session in. `stripTitlePrefix` removes any of them. */
+ *  stripped by them on the way out. `shipping` is set by /ship Pre-Step C,
+ *  `work` by prompt.flow.title-work on the first prompt of a session. The
+ *  rest mirror completion-card variants — same emoji as the card CTA: every
+ *  card the session ends a turn with tells Claude (via `titleInstruction`)
+ *  which prefix the title should carry now, so the sidebar always names the
+ *  state the last card left the session in. `released` is a base — the
+ *  channel reached is spliced in by `releasedPrefix` ("🎊 Released Stable – ").
+ *  `work` is the one prefix without a word: the wrench alone marks a session
+ *  that is being worked on, the summary stays the title. `stripTitlePrefix`
+ *  removes any of them. */
 export const SESSION_PREFIX = Object.freeze({
   concept: "🧭 Concept – ",
   batch: "📥 Batch – ",
   shipping: "🚀 Shipping – ",
+  shipped: "🚀 Shipped – ",
+  released: "🎊 Released – ",
   test: "🧪 Test – ",
+  started: "▶️ Started – ",
   ready: "📦 Ready – ",
   blocked: "⛔ Blocked – ",
   aborted: "🚫 Aborted – ",
+  analysis: "📋 Analysis – ",
   pending: "⏳ Working – ",
+  work: "🔧 ",
 });
 
-/** Card variant → session-title prefix. Absent = plain title (the turn left
- *  nothing the sidebar needs to flag: analysis, test-minimal, fallback,
- *  released). A final ship lands as `test` on purpose — the freshly installed
- *  build is what the user verifies next, not the ship itself. */
+/** Card variant → session-title prefix. Every variant flags the sidebar with
+ *  its own CTA emoji; `released` goes through `releasedPrefix` so the title
+ *  also names the channel reached. */
 export const VARIANT_TITLE_PREFIX = Object.freeze({
-  "ship-successful": SESSION_PREFIX.test,
+  "ship-successful": SESSION_PREFIX.shipped,
+  released: SESSION_PREFIX.released,
   test: SESSION_PREFIX.test,
+  "test-minimal": SESSION_PREFIX.started,
   ready: SESSION_PREFIX.ready,
+  "ready-files": SESSION_PREFIX.ready,
   "ship-blocked": SESSION_PREFIX.blocked,
   aborted: SESSION_PREFIX.aborted,
+  analysis: SESSION_PREFIX.analysis,
+  fallback: SESSION_PREFIX.work,
 });
 
 const ALL_PREFIXES = Object.freeze(Object.values(SESSION_PREFIX));
+
+const CHANNELS = Object.freeze(["Alpha", "Beta", "Stable"]);
+
+/** `🎊 Released Stable – ` — the released base with the channel reached
+ *  spliced in (capitalised); the bare base when no channel is known. */
+export function releasedPrefix(channel) {
+  const c = String(channel ?? "").trim().toLowerCase();
+  const name = CHANNELS.find((n) => n.toLowerCase() === c);
+  if (!name) return SESSION_PREFIX.released;
+  return SESSION_PREFIX.released.replace(" – ", ` ${name} – `);
+}
+
+/** Every string a title may start with: the pinned prefixes plus the released
+ *  prefix per channel. Longest first so "🚀 Shipping – " never loses to a
+ *  shorter sibling. */
+const STRIPPABLE = Object.freeze(
+  [...ALL_PREFIXES, ...CHANNELS.map(releasedPrefix)].sort((a, b) => b.length - a.length),
+);
 
 /** `title` without any leading devops prefix (repeated prefixes included, so
  *  a title that was stacked by an older skill version still comes out clean). */
@@ -60,7 +92,7 @@ export function stripTitlePrefix(title) {
   let hit = true;
   while (hit) {
     hit = false;
-    for (const p of ALL_PREFIXES) {
+    for (const p of STRIPPABLE) {
       if (t.startsWith(p)) { t = t.slice(p.length); hit = true; }
     }
   }
@@ -70,14 +102,15 @@ export function stripTitlePrefix(title) {
 /**
  * The session-title prefix this card leaves behind, or `null` when a mode
  * (open concept page, armed batch) owns the title and the card must not touch
- * it. `""` means "plain title — strip ours, leave the rest".
+ * it. `""` means "plain title — strip ours, leave the rest" (no variant does
+ * that any more; kept for an unknown variant).
  *
  * Pending background work outranks the variant: the CTA already says "ich
- * MELDE mich", the sidebar should say the same. A ship-successful card whose
- * merge target is not the default branch is an intermediate ship — nothing
- * installed, nothing to test, plain title.
+ * MELDE mich", the sidebar should say the same. A `released` card names the
+ * channel it reached (`delivery.promote.current`, else `promotion.to`, else
+ * `cta.to`) right in the prefix.
  *
- * @param {{ variant?: string, state?: object, pending?: unknown, concept?: unknown, cwd?: string }} params
+ * @param {{ variant?: string, state?: object, pending?: unknown, concept?: unknown, cwd?: string, delivery?: object, promotion?: object, cta?: object }} params
  * @param {{ hasPending: (p: unknown) => boolean, hasConcept: (c: unknown) => boolean }} deps
  * @returns {string|null}
  */
@@ -86,9 +119,11 @@ export function titlePrefixFor(params, { hasPending, hasConcept }) {
   if (readBatch(params.cwd)) return null;
   if (hasPending(params.pending)) return SESSION_PREFIX.pending;
   const variant = params.variant;
-  if (variant === "ship-successful") {
-    const merged = String((params.state && params.state.merged) || "");
-    if (merged && !/^(main|master)$/.test(merged)) return "";
+  if (variant === "released") {
+    const { delivery: d, promotion: p, cta: c } = params;
+    return releasedPrefix(
+      (d && d.promote && d.promote.current) || (p && p.to) || (c && c.to) || "",
+    );
   }
   return VARIANT_TITLE_PREFIX[variant] ?? "";
 }
@@ -104,7 +139,7 @@ export function titlePrefixFor(params, { hasPending, hasConcept }) {
  */
 export function titleInstruction(prefix) {
   if (prefix === null) return "";
-  const list = ALL_PREFIXES.map((p) => `"${p}"`).join(", ");
+  const list = STRIPPABLE.map((p) => `"${p}"`).join(", ");
   const set = prefix
     ? `set the title to "${prefix}" + <stripped title>`
     : "set the stripped title (no prefix) — only if a prefix was actually removed";

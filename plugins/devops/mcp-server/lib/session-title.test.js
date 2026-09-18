@@ -6,6 +6,7 @@ import {
   SESSION_PREFIX,
   VARIANT_TITLE_PREFIX,
   stripTitlePrefix,
+  releasedPrefix,
   titlePrefixFor,
   titleInstruction,
 } from "./mode-state.js";
@@ -20,13 +21,40 @@ const deps = {
 };
 
 describe("SESSION_PREFIX", () => {
-  test("every prefix is emoji-first and ends in ' – '", () => {
-    for (const p of Object.values(SESSION_PREFIX)) expect(p).toMatch(/^\S+ [A-Z][a-z]+ – $/u);
+  test("every worded prefix is emoji-first and ends in ' – '; work is the wrench alone", () => {
+    for (const [k, p] of Object.entries(SESSION_PREFIX)) {
+      if (k === "work") expect(p).toBe("🔧 ");
+      else expect(p, k).toMatch(/^\S+ [A-Z][a-z]+ – $/u);
+    }
   });
 
-  test("blocked carries the ship-blocked card emoji, test the test-card emoji", () => {
+  test("each prefix carries its card's CTA emoji", () => {
+    expect(SESSION_PREFIX.shipped.startsWith("🚀")).toBe(true);
+    expect(SESSION_PREFIX.shipping.startsWith("🚀")).toBe(true);
+    expect(SESSION_PREFIX.released.startsWith("🎊")).toBe(true);
     expect(SESSION_PREFIX.blocked.startsWith("⛔")).toBe(true);
     expect(SESSION_PREFIX.test.startsWith("🧪")).toBe(true);
+    expect(SESSION_PREFIX.started.startsWith("▶️")).toBe(true);
+    expect(SESSION_PREFIX.analysis.startsWith("📋")).toBe(true);
+    expect(SESSION_PREFIX.work.startsWith("🔧")).toBe(true);
+  });
+
+  test("shipped is the finished form of shipping — same rocket, no -ing", () => {
+    expect(SESSION_PREFIX.shipped).toBe("🚀 Shipped – ");
+    expect(SESSION_PREFIX.shipping).toBe("🚀 Shipping – ");
+  });
+});
+
+describe("releasedPrefix", () => {
+  test("names the channel reached, capitalised", () => {
+    expect(releasedPrefix("stable")).toBe("🎊 Released Stable – ");
+    expect(releasedPrefix("Beta")).toBe("🎊 Released Beta – ");
+    expect(releasedPrefix("alpha")).toBe("🎊 Released Alpha – ");
+  });
+
+  test("falls back to the bare base for an unknown or missing channel", () => {
+    expect(releasedPrefix(undefined)).toBe(SESSION_PREFIX.released);
+    expect(releasedPrefix("prod")).toBe(SESSION_PREFIX.released);
   });
 });
 
@@ -39,6 +67,12 @@ describe("stripTitlePrefix", () => {
     expect(stripTitlePrefix(SESSION_PREFIX.shipping + SESSION_PREFIX.test + SESSION_PREFIX.concept + "Foo")).toBe("Foo");
   });
 
+  test("removes a released prefix with channel and the bare wrench", () => {
+    expect(stripTitlePrefix("🎊 Released Stable – Foo")).toBe("Foo");
+    expect(stripTitlePrefix(SESSION_PREFIX.work + "Foo")).toBe("Foo");
+    expect(stripTitlePrefix(SESSION_PREFIX.work + SESSION_PREFIX.ready + "Foo")).toBe("Foo");
+  });
+
   test("leaves a plain title untouched", () => {
     expect(stripTitlePrefix("Foo – Bar")).toBe("Foo – Bar");
     expect(stripTitlePrefix(undefined)).toBe("");
@@ -46,25 +80,34 @@ describe("stripTitlePrefix", () => {
 });
 
 describe("titlePrefixFor", () => {
-  test("maps the flagged variants and leaves the rest plain", () => {
+  test("every card variant maps to its own prefix", () => {
     expect(titlePrefixFor({ variant: "test" }, deps)).toBe(SESSION_PREFIX.test);
+    expect(titlePrefixFor({ variant: "test-minimal" }, deps)).toBe(SESSION_PREFIX.started);
     expect(titlePrefixFor({ variant: "ready" }, deps)).toBe(SESSION_PREFIX.ready);
+    expect(titlePrefixFor({ variant: "ready-files" }, deps)).toBe(SESSION_PREFIX.ready);
     expect(titlePrefixFor({ variant: "ship-blocked" }, deps)).toBe(SESSION_PREFIX.blocked);
     expect(titlePrefixFor({ variant: "aborted" }, deps)).toBe(SESSION_PREFIX.aborted);
-    for (const v of ["analysis", "test-minimal", "fallback", "released"]) {
-      expect(titlePrefixFor({ variant: v }, deps), v).toBe("");
-    }
-    expect(Object.keys(VARIANT_TITLE_PREFIX).sort()).toEqual(["aborted", "ready", "ship-blocked", "ship-successful", "test"]);
+    expect(titlePrefixFor({ variant: "analysis" }, deps)).toBe(SESSION_PREFIX.analysis);
+    expect(titlePrefixFor({ variant: "fallback" }, deps)).toBe(SESSION_PREFIX.work);
+    expect(titlePrefixFor({ variant: "no-such-variant" }, deps)).toBe("");
+    expect(Object.keys(VARIANT_TITLE_PREFIX).sort()).toEqual([
+      "aborted", "analysis", "fallback", "ready", "ready-files", "released",
+      "ship-blocked", "ship-successful", "test", "test-minimal",
+    ]);
   });
 
-  test("a final ship lands as Test — the installed build is what gets verified next", () => {
-    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" } }, deps)).toBe(SESSION_PREFIX.test);
-    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main", kept: true } }, deps)).toBe(SESSION_PREFIX.test);
-    expect(titlePrefixFor({ variant: "ship-successful" }, deps)).toBe(SESSION_PREFIX.test);
+  test("a ship lands as Shipped — final and intermediate alike", () => {
+    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" } }, deps)).toBe(SESSION_PREFIX.shipped);
+    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main", kept: true } }, deps)).toBe(SESSION_PREFIX.shipped);
+    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "feat/video" } }, deps)).toBe(SESSION_PREFIX.shipped);
+    expect(titlePrefixFor({ variant: "ship-successful" }, deps)).toBe(SESSION_PREFIX.shipped);
   });
 
-  test("an intermediate ship (merged into a feature branch) leaves a plain title", () => {
-    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "feat/video" } }, deps)).toBe("");
+  test("a released card names the channel reached — delivery, then promotion, then cta", () => {
+    expect(titlePrefixFor({ variant: "released", delivery: { promote: { current: "stable" } } }, deps)).toBe("🎊 Released Stable – ");
+    expect(titlePrefixFor({ variant: "released", promotion: { to: "beta" } }, deps)).toBe("🎊 Released Beta – ");
+    expect(titlePrefixFor({ variant: "released", cta: { to: "stable" } }, deps)).toBe("🎊 Released Stable – ");
+    expect(titlePrefixFor({ variant: "released" }, deps)).toBe(SESSION_PREFIX.released);
   });
 
   test("pending background work outranks the variant", () => {
@@ -100,7 +143,7 @@ describe("titlePrefixFor", () => {
       try {
         mkdirSync(join(cwd, ".claude"));
         writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify(state));
-        expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps), JSON.stringify(state)).toBe(SESSION_PREFIX.test);
+        expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps), JSON.stringify(state)).toBe(SESSION_PREFIX.shipped);
       } finally {
         rmSync(cwd, { recursive: true, force: true });
       }
@@ -131,6 +174,7 @@ describe("titleInstruction", () => {
     expect(text).toContain("mcp__ccd_session_mgmt__set_session_title");
     expect(text).toContain(`"${SESSION_PREFIX.test}" + <stripped title>`);
     for (const p of Object.values(SESSION_PREFIX)) expect(text).toContain(`"${p}"`);
+    for (const c of ["Alpha", "Beta", "Stable"]) expect(text).toContain(`"🎊 Released ${c} – "`);
     expect(text).toMatch(/skip silently/);
     expect(text).toMatch(/Desktop app only/);
   });

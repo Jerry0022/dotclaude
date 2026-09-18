@@ -124,14 +124,17 @@ Subagents inherit all output contracts:
   "{marker}" löst aus — ich WARTE". No card field — the state file is the truth.
 - **The session title names the state the last card left the session in.**
   `render_completion_card` returns a `[SESSION TITLE]` block beside the card
-  (stderr on the CLI path): `🧪 Test – ` for `test` and a final `ship-successful`,
-  `📦 Ready – ` for `ready`, `⛔ Blocked – ` for `ship-blocked`, `🚫 Aborted – `
-  for `aborted`, `⏳ Working – ` while `pending` work runs, plain title for the
-  rest (analysis, test-minimal, fallback, an intermediate ship). Execute it
-  before outputting the card. Modes own the title instead: `/concept` sets
-  `🧭 Concept – ` while the page is open, `/claude-batch` `📥 Batch – ` while
-  collecting, `/ship` `🚀 Shipping – ` while the pipeline runs — no card block
-  while a concept or batch is active. Prefixes are pinned in
+  (stderr on the CLI path), one per variant with the CTA emoji: `🚀 Shipped – `
+  for `ship-successful`, `🎊 Released <Alpha|Beta|Stable> – ` for `released`,
+  `🧪 Test – ` for `test`, `▶️ Started – ` for `test-minimal`, `📦 Ready – ` for
+  `ready`, `⛔ Blocked – ` for `ship-blocked`, `🚫 Aborted – ` for `aborted`,
+  `📋 Analysis – ` for `analysis`, `🔧 ` (wrench only) for `fallback`,
+  `⏳ Working – ` while `pending` work runs. Execute it before outputting the
+  card. The first prompt of a session also puts `🔧 ` on the title
+  (`prompt.flow.title-work`) until its card replaces it. Modes own the title
+  instead: `/concept` sets `🧭 Concept – ` while the page is open,
+  `/claude-batch` `📥 Batch – ` while collecting, `/ship` `🚀 Shipping – ` while
+  the pipeline runs — no card block while a concept or batch is active. Prefixes are pinned in
   `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`). Desktop-app only
   (`mcp__ccd_session_mgmt__set_session_title` `self`) — elsewhere skip silently.
 

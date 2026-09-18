@@ -728,10 +728,16 @@ CTA. It contains:
 
 The tool result carries a `[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]` block
 beside the card (stderr on `--render-card`). It names the prefix the session
-title should carry after this turn — `🧪 Test – ` (test, final
-ship-successful), `📦 Ready – ` (ready), `⛔ Blocked – ` (ship-blocked),
-`🚫 Aborted – ` (aborted), `⏳ Working – ` (any `pending`), none for
-analysis / test-minimal / fallback / released / intermediate ship. No block
+title should carry after this turn — every variant has one, with its CTA
+emoji: `🚀 Shipped – ` (ship-successful, final and intermediate),
+`🎊 Released Stable – ` / `… Beta – ` / `… Alpha – ` (released, channel from
+`delivery.promote.current` → `promotion.to` → `cta.to`), `🧪 Test – ` (test),
+`▶️ Started – ` (test-minimal), `📦 Ready – ` (ready, ready-files),
+`⛔ Blocked – ` (ship-blocked), `🚫 Aborted – ` (aborted), `📋 Analysis – `
+(analysis), `🔧 ` (fallback — wrench only, no word), `⏳ Working – ` (any
+`pending`, outranks the variant). The same `🔧 ` goes on the title when the
+first prompt of a session arrives (`prompt.flow.title-work`), so a session in
+its first turn reads as "being worked on" until its card lands. No block
 while a concept page is open or a batch is armed — those modes own the title.
 Execute it (`get_session` → strip → `set_session_title`, `self`) before
 outputting the card; Desktop app only, skip silently elsewhere. Source of
