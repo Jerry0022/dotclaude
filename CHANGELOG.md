@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.174.0] — 2026-09-18
+
+### Added
+
+- **`/run-backlog` defers the project ship-extension finalizer to the end of the queue.** This repo's own ship extension ends every ship to main with the plugin self-sync (`ss.plugin.update.js --force`), which rebuilds the cache and marks the MCP servers stale — `pre.mcp.health` then blocks every further `ship_*` / card call in the session. The backlog runner composes `/ship` once per issue from ONE session, so on 2026-09-18 the finalizer had to be skipped by hand on the first two of three ships (PRs #401/#402/#404). Now the extension's Step 8 has a guard: an autonomous lockout owned by `backlog-runner` (`autonomous-lockout.js check` → `owner`) skips the finalizer, and Step 6.5 carries a dedicated card wording for that case ("wird nach dem letzten Backlog-Issue … synchronisiert") instead of claiming a sync that has not happened. `run-backlog` Step 5 gains item 4: read `{project}/.claude/skills/ship/SKILL.md` for such a post-ship step and run it exactly once after the final card, only when ≥1 item shipped and before the lockout is cleared. `finalizer-deferral.test.js` pins the guard text, the card wording and the Step 5 ordering. Skill 0.6.0.
+
 ## [0.173.1] — 2026-09-18
 
 ### Fixed
