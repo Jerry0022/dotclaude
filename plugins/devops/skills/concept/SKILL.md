@@ -1,6 +1,6 @@
 ---
 name: concept
-version: 0.1.1
+version: 0.1.2
 description: >-
   Generate an interactive HTML page for analysis, plans, concepts, prototypes,
   comparisons, or creative work — open it in the browser and monitor user
@@ -1325,25 +1325,26 @@ re-shipping.
    invariant — never an `AskUserQuestion`. Every resulting body carries
    a `**User value:** <effect>` line. Never emit a swarm of code-change
    tasks that only make sense together.
-4. For each gated item, create the GitHub issue **directly via
-   `gh issue create`** — do NOT invoke the `setup-issue` skill,
-   which runs an interactive `AskUserQuestion` Step 1. Build the
-   command from the payload + concept-extension labels (see § Project
-   label enrichment below):
+4. For each gated item, delegate to the `setup-issue` skill via the
+   **Skill** tool in **hand-over mode** — never `gh issue create`
+   directly (`{PLUGIN_ROOT}/deep-knowledge/plugin-behavior.md` → "Issue Creation &
+   Editing — Always Delegate"). A complete hand-over makes that skill ask
+   nothing, so the zero-prompt invariant holds. Build the hand-over from
+   the payload + concept-extension labels (see § Project label enrichment
+   below):
 
-   ```bash
-   gh issue create \
-     --title "<item.title>" \
-     --body  "<item.description>\n\n_Created from concept: docs/concepts/{date}-{slug}.html_" \
-     --label "type:<item.type><,role:R><,module:M>" \
-     [--milestone "<item.milestone>"]
+   ```text
+   create · title "<item.title>" · type <item.type>
+   body: "<item.description>" + blank line + "_Created from concept: docs/concepts/{date}-{slug}.html_"
+   labels: role:R, module:M (only when resolved) · milestone "<item.milestone>" (only when set)
+   mid-flow: return the issue number + URL, no completion card
    ```
 
-   Capture the resulting issue number + URL from stdout. On `gh` error,
-   abort this item, surface the error to the user, and continue with
-   the remaining items — partial success beats silent loss.
+   Capture the returned issue number + URL. On a `gh` error inside the
+   skill, abort this item, surface the error to the user, and continue
+   with the remaining items — partial success beats silent loss.
 
-5. **Project label enrichment (role / module).** Before calling `gh`,
+5. **Project label enrichment (role / module).** Before the hand-over,
    resolve project-specific labels in this order:
    - If `item.role` / `item.module` is set in the payload → use directly.
    - Else, check the project's `setup-issue` extension

@@ -1,6 +1,6 @@
 ---
 name: run-backlog
-version: 0.6.0
+version: 0.6.1
 description: >-
   Milestone-centric backlog runner: picks open GitHub milestones (or loose
   issues), then refines, implements, tests and ships each item unsupervised
@@ -207,10 +207,14 @@ Everything decision-shaped happens here, while the user is still around.
    - If the user leaves an item undecided, mark it `needs-decision`, **exclude it
      from the run**, and note it for the final summary.
 3. **Refine → issue** — expand each `ready` issue into an actionable spec
-   (acceptance criteria, a `**User value:** <effect>` line per
-   `setup-issue` convention, and an implementation plan) and write it
-   **back into the GitHub issue** (body update or comment). This GitHub write is
-   allowed **only here**, because the user is present.
+   (acceptance criteria, a `**User value:** <effect>` line, an
+   implementation plan, and every decision Step 2.2 resolved) and hand it to
+   `/setup-issue` **refine mode** via the Skill tool — one call per issue,
+   hand-over `{ issue, refinement }` (plus `milestone` / `labels` when the
+   triage changed them). That skill writes the managed `## Refinement`
+   section into the issue body, fixes title / `type:*` drift and returns
+   without a card. Never `gh issue edit` here. This GitHub write is allowed
+   **only in this step**, because the user is present.
 
 ## Step 3 — Gate (permission priming + ship mandate + shutdown/resume)
 

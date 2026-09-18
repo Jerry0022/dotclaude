@@ -179,13 +179,20 @@ sweeper collects it later); under-retention breaks every other open session.
 is **not** a licence to prune a claimed dir: "this session upgraded" says
 nothing about what the other eight are running.
 
-## Issue Creation — Always Delegate
+## Issue Creation & Editing — Always Delegate
 
-When a skill or hook needs to create a GitHub issue, it MUST delegate to
-`/setup-issue` via the **Skill** tool — never call `gh issue create`
-directly. That skill enforces title format, label set, milestone,
-project-board placement, **the target repository** (an issue meant for another
-repo silently lands in the current one without `--repo`), and loads
-project-specific extensions from `{project}/.claude/skills/setup-issue/`.
-Direct `gh issue create` calls bypass all of that and silently drift from the
-project's conventions.
+When a skill, agent or hook needs a GitHub issue **created or changed**, it
+MUST delegate to `/setup-issue` via the **Skill** tool — never call
+`gh issue create` or `gh issue edit` directly. That skill enforces title
+format, label set, milestone, project-board placement, **the target
+repository** (an issue meant for another repo silently lands in the current
+one without `--repo`), loads project-specific extensions from
+`{project}/.claude/skills/setup-issue/`, and in **refine mode** owns the one
+managed `## Refinement` section (markers, acceptance criteria, decisions)
+that later autonomous runs implement from. Direct `gh issue` writes bypass
+all of that and silently drift from the project's conventions.
+
+Callers hand over a self-contained prompt (title / type / body, or issue +
+refinement) — with a complete hand-over the skill asks nothing, so
+zero-prompt flows (`/concept` finalize, `/run-backlog` Step 2) delegate
+too. Invoked mid-flow it returns without its own completion card.
