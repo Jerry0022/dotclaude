@@ -85,16 +85,16 @@ describe("final-report close-out sheet", () => {
     expect(route.slice(0, 400)).toContain("return el ? el.value : CLOSEOUT_DEFAULT_ROUTE");
   });
 
-  test("the plan names the implement bucket separately, in execution order", () => {
-    const plan = jsSource.slice(jsSource.indexOf("function buildCloseoutPlan"));
-    const body = plan.slice(0, plan.indexOf("\n}"));
-    const order = ["'issues'", "'implement'", "'ship'", "'files'", "'close'"];
-    let at = -1;
-    for (const kind of order) {
-      const i = body.indexOf("add(" + kind);
-      expect(i, kind).toBeGreaterThan(at);
-      at = i;
-    }
+  test("the rows' inline summaries are the readout — there is no separate plan line", () => {
+    // Every consequence is readable on its own collapsed row (2 · Issue,
+    // Jetzt umsetzen / shippen / Seite löschen / 2 Schritte); the implement
+    // route is named there by its own label, never folded into "Issue".
+    expect(jsSource).not.toContain("function buildCloseoutPlan");
+    const summary = jsSource.slice(jsSource.indexOf("function closeoutRowSummary"));
+    const body = summary.slice(0, summary.indexOf("\n}"));
+    expect(body).toContain("labels[followUpRoute(keys[i])]");
+    expect(body).toContain("host.dataset.labelImplement");
+    for (const kind of ["'followups'", "'ship'", "'files'", "'handoffs'"]) expect(body, kind).toContain("kind === " + kind);
   });
 
   test("there is no step chain left to click through", () => {
@@ -108,21 +108,34 @@ describe("final-report close-out sheet", () => {
       expect(htmlSource, gone).not.toContain(`id="${gone}"`);
     }
     // …and all four blocks are present on the one sheet.
-    for (const block of ["followups", "ship", "files", "plan"]) {
+    for (const block of ["followups", "ship", "files", "handoffs"]) {
       expect(htmlSource, block).toContain(`data-closeout-block="${block}"`);
     }
   });
 
+  test("the accordion is sequential: later rows are locked, answered rows stay reachable", () => {
+    const lockFn = jsSource.slice(jsSource.indexOf("function isCloseoutRowLocked"));
+    expect(lockFn.slice(0, 200)).toContain("block.dataset.answered !== 'true' && block.dataset.open !== 'true'");
+    const summaryFn = jsSource.slice(jsSource.indexOf("function updateCloseoutRowSummary"));
+    expect(summaryFn.slice(0, 900)).toContain("block.dataset.locked = locked ? 'true' : 'false'");
+    expect(summaryFn.slice(0, 900)).toContain("head.disabled = locked");
+    // The row-head click goes through the guard, never straight to openCloseoutRow.
+    const wire = jsSource.slice(jsSource.indexOf("function wireCloseout"));
+    expect(wire.slice(0, 900)).toContain("closeoutRowClick(head.closest('.closeout-block'))");
+    expect(wire.slice(0, 900)).not.toContain("openCloseoutRow(block)");
+    const click = jsSource.slice(jsSource.indexOf("function closeoutRowClick"));
+    expect(click.slice(0, 400)).toContain("if (isCloseoutRowLocked(block)) return;");
+    // Unfreezing must not hand a locked head back.
+    expect(jsSource.slice(jsSource.indexOf("function setCloseoutFrozen")).slice(0, 500)).toContain("if (!frozen) closeoutRows().forEach(updateCloseoutRowSummary)");
+  });
+
   test("the sheet is a one-open-at-a-time accordion, never 'Alles ausführen'", () => {
-    // The answerable rows each collapse to one line; the plan is read, not
-    // answered, so it never gets a row head of its own.
+    // The answerable rows each collapse to one line.
     for (const kind of ["followups", "ship", "files", "handoffs"]) {
       const block = htmlSource.slice(htmlSource.indexOf(`data-closeout-block="${kind}"`));
       expect(block.slice(0, 400), kind).toContain("data-closeout-row");
       expect(block.slice(0, 400), kind).toContain("data-closeout-mark");
     }
-    const planBlock = htmlSource.slice(htmlSource.indexOf('data-closeout-block="plan"'));
-    expect(planBlock.slice(0, 300)).not.toContain("data-closeout-row");
     // No second button, and the locale table itself no longer names the
     // button "Alles ausführen" (a historical mention in the "why one sheet"
     // prose, describing the old wizard, is fine — the live label is not).

@@ -754,7 +754,7 @@ After writing the HTML file, grep it for every mandatory interactive
 pattern listed in Phase 1 (heartbeat, all four panel states incl. the
 frozen one, iteration tabs, section TOC, reload polling, generic
 form-collection catch-all scoped to the active iteration, post-submit
-content dimmer, persistent status channel + close-out sheet, etc.), plus
+content dimmer, close-out sheet, etc.), plus
 the conditional M-set (`deep-knowledge/validation-gate.md` § Mappings) when
 the page has `[data-mapping]`.
 **If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
@@ -1643,22 +1643,26 @@ preservation) stays identical.
 The final-report JS block — `refreshCloseout`, `renderCloseout`,
 `renderHandoffs`, `openQuestionBoxes`, `followUpRoute`, `followUpItem`, `collectFollowUps`,
 `collectIssueItems`, `collectImplementItems`, `collectDisposition`,
-`closeoutShipChoice`, `buildFollowUpList`, `buildCloseoutPlan`,
+`closeoutShipChoice`, `buildFollowUpList`,
 `setCloseoutFrozen`, `restoreCloseoutToReady`, `submitFinalize`, the accordion
 half — `closeoutStorageKey`, `loadCloseoutAnswered`, `saveCloseoutAnswered`,
 `closeoutRows`, `closeoutOpenRow`, `closeoutAllAnswered`, `openCloseoutRow`,
-`closeoutRowSummary`, `updateCloseoutRowSummary`, `updateCloseoutProgress`,
-`updateCloseoutButton`, `refreshCloseoutRows`, `initCloseoutRows`,
-`layoutCloseoutRowHeads`, `closeoutButtonClick`, `updateStatusChannelSummary` — plus the `closeout-execute` click wiring (bound to
-`closeoutButtonClick`, never directly to `submitFinalize`), the delegated
-row-head click listener, the `view-iterations-btn` wiring, the `change`
-listener and the `DOMContentLoaded` wiring — MUST be copied verbatim from
+`closeoutRowSummary`, `isCloseoutRowLocked`, `updateCloseoutRowSummary`,
+`updateCloseoutProgress`, `updateCloseoutButton`, `setCloseoutButtonState`,
+`refreshCloseoutRows`, `initCloseoutRows`, `layoutCloseoutRowHeads`,
+`closeoutRowClick`, `closeoutButtonClick` — plus the `closeout-execute` click
+wiring (bound to `closeoutButtonClick`, never directly to `submitFinalize`),
+the delegated row-head click listener (bound to `closeoutRowClick`, never
+straight to `openCloseoutRow` — that is what keeps the accordion sequential),
+the `view-iterations-btn` wiring, the `change` listener and the
+`DOMContentLoaded` wiring — MUST be copied verbatim from
 `deep-knowledge/templates.md` (the block starting at the comment
 `// --- Final-report close-out sheet (action: "finalize") ---`). Do NOT
 inline a simplified sheet, collapse it back into separate buttons, re-introduce
-a step chain, wire the button straight to `submitFinalize`, or omit the
-event-listener wiring; any omission leaves a visible-but-inert control or a
-flow the user cannot finish. After writing, the post-generation validation
+a step chain, a "Gewählt: …" plan line or a status paragraph under the button,
+wire the button straight to `submitFinalize`, or omit the event-listener
+wiring; any omission leaves a visible-but-inert control or a flow the user
+cannot finish. After writing, the post-generation validation
 gate (`deep-knowledge/validation-gate.md` Phase 1) MUST find the panel-state
 and close-out patterns (28–38b) in the generated file.
 

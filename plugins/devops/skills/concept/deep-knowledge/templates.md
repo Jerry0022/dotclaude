@@ -123,7 +123,6 @@ must see their own language. The locale hint is authoritative.
 | `reality.reassure`             | Your implement order is not lost: submitting this round with "Implement with feedback" implements directly, with no further check. | Dein Implement-Auftrag ist nicht verloren: Wenn du diese Runde mit „Mit Feedback implementieren" abschickst, wird direkt implementiert — ohne erneute Prüfung. |
 | `reality.evidence`             | Landed on the default branch   | Auf dem Default-Branch gelandet |
 | `reality.recommendation`       | Recommendation                 | Empfehlung |
-| `final.status_heading`         | Close out concept              | Concept abschliessen |
 | `final.open_questions`         | Open questions & TODOs         | Offene Fragen & TODOs |
 | `final.followups_hint`         | Issue = tracked for later. Implement now = built during this close-out, by the devops agents. Drop = it ends with the concept. | Issue = für später festgehalten. Jetzt umsetzen = wird in diesem Abschluss gebaut, von den devops-Agents. Ignorieren = fällt mit dem Concept weg. |
 | `final.followups_none`         | Everything dropped — no issue, no implementation. | Alles ignoriert — kein Issue, keine Umsetzung. |
@@ -153,9 +152,9 @@ must see their own language. The locale hint is authoritative.
 | `final.closeout_ship_no`       | No, leave it unreleased        | Nein, nicht releasen |
 | `final.closeout_ship_no_hint`  | The code stays as committed. You can ship later from the chat. | Der Code bleibt wie committed. Shippen geht später jederzeit im Chat. |
 | `final.closeout_choice_required` | Answer this one — it is the only step that reaches outside the repo. | Beantworte diese eine Frage — sie ist der einzige Schritt, der das Repo verlässt. |
-| `final.closeout_plan_label`    | Selected:                      | Gewählt: |
 | `final.closeout_plan_warn`     | One click, all of it — including anything outward-facing. | Ein Klick, alles davon — inklusive allem was nach aussen geht. |
 | `final.closeout_execute`       | Execute                        | Ausführen |
+| `final.closeout_execute_offline` | Execute · will be queued     | Ausführen · wird zwischengespeichert |
 | `final.closeout_next`          | Continue ›                     | Weiter › |
 | `final.closeout_progress`      | {n} of {total} answered        | {n} von {total} beantwortet |
 | `final.closeout_unanswered`    | unanswered                     | unbeantwortet |
@@ -166,10 +165,7 @@ must see their own language. The locale hint is authoritative.
 | `final.closeout_running`       | Claude is working through it … | Claude arbeitet es ab … |
 | `final.closeout_done`          | Concept closed.                | Concept abgeschlossen. |
 | `final.closeout_stalled`       | Delivered, but Claude stopped answering. Nothing more can be sent from this page — check the chat. | Übermittelt, aber Claude antwortet nicht mehr. Von dieser Seite kann nichts mehr gesendet werden — schau in den Chat. |
-| `final.plan_issues`            | create GitHub issue(s)         | GitHub-Issue(s) anlegen |
-| `final.plan_implement`         | implement now (devops agents)  | jetzt umsetzen (devops-Agents) |
-| `final.plan_ship`              | run the ship pipeline          | Ship-Pipeline starten |
-| `final.plan_close`             | end the concept session        | Concept-Session beenden |
+| `final.closeout_stalled_short` | Delivered · Claude stopped answering | Übermittelt · Claude antwortet nicht |
 | `final.handoffs`               | By hand, afterwards            | Danach von Hand |
 | `final.handoffs_hint`          | Claude cannot do these — they stay with you once this is through. | Das kann Claude nicht übernehmen — das bleibt bei dir, sobald das hier durch ist. |
 | `proto.feedback_title`         | Feedback                       | Feedback |
@@ -570,88 +566,48 @@ the `[ui-locale: ...]` hint produced.
       </div>
 
       <!-- Final-report state: shown when the active section carries
-           data-final-report. No iterate/implement submit. Instead the panel
-           holds the CLOSE-OUT SHEET: three questions on ONE screen in
-           execution order (open points → ship → this page), a live plan of
-           the consequences, and a SINGLE submit (action: "finalize") that
-           carries every decision at once. Nothing on the sheet commits
-           anything until #closeout-execute — see § Final Report Panel. -->
+           data-final-report. No iterate/implement submit, no status line, no
+           pipeline recap — the panel holds ONLY the CLOSE-OUT SHEET: the
+           questions in execution order (open points → ship → this page →
+           hand-offs) as a strictly sequential accordion, and a SINGLE button
+           (action: "finalize") that carries every decision at once and then
+           becomes the status of that submission. Nothing on the sheet
+           commits anything until #closeout-execute reads "⚠ Ausführen" —
+           see § Final Report Panel. -->
       <div id="panel-final-report" style="display: none;">
-        <!-- Persistent status channel. Renders the concept's whole pipeline
-             at a glance and hands over to the sheet. It is DOM-driven —
-             present because the active section carries data-final-report — so
-             it survives page reloads AND stays fully visible even when the
-             Claude heartbeat is stale (the close-out affordance never depends
-             on a live connection, which is the whole point of the persistent
-             channel over a transient completion overlay). -->
-        <div class="status-channel" id="status-channel">
-          <!-- Folded to ONE line, ≤48px total (updateStatusChannelSummary()
-               fills #status-channel-summary from the SAME li's it summarises
-               — never a hard-coded string) — the full four-step recap opens
-               on click. The heading used to be its own div ABOVE the fold,
-               costing a whole extra line + margin every time; it now sits
-               INLINE at the start of the one summary line instead — a live
-               check measured the channel at 99px folded that way, well past
-               the 48px this needs to leave `.closeout-rows` (§ below) enough
-               height for its four row heads. Reuses .status-detail (§
-               Two-Button Submit) rather than a second pattern: same
-               summary/marker/steps CSS, never `hidden` here (it must always
-               be visible, just collapsed). -->
-          <details class="status-detail status-channel-detail">
-            <summary class="status-detail-row">
-              <span class="status-channel-heading">{{final.status_heading}}</span>
-              <span class="status-channel-summary-text" id="status-channel-summary"></span>
-            </summary>
-            <ol class="status-steps" aria-live="polite">
-              <li data-step="submitted" data-state="done">
-                <span class="step-icon" aria-hidden="true">✓</span>
-                <span class="step-label">{{panel.step_submitted}}</span>
-              </li>
-              <li data-step="received" data-state="done">
-                <span class="step-icon" aria-hidden="true">✓</span>
-                <span class="step-label">{{panel.step_received}}</span>
-              </li>
-              <li data-step="implemented" data-state="done">
-                <span class="step-icon" aria-hidden="true">✓</span>
-                <span class="step-label">{{panel.step_implemented}}</span>
-              </li>
-              <li data-step="ready" data-state="active">
-                <span class="step-icon" aria-hidden="true">●</span>
-                <span class="step-label">{{panel.step_ready}}</span>
-              </li>
-            </ol>
-          </details>
-        </div>
-
-        <!-- Close-out sheet: an ACCORDION of answerable rows, one open at a
-             time, plus the live plan and a single button. It replaced both
-             the original four-buttons-at-once panel AND a four-step wizard
-             (Weiter/Zurück, counter, review screen) that fixed the ordering
-             but buried the consequence list three steps deep and made every
-             "Weiter" look like it might already have committed something.
-             Each row collapses to ONE line — ○/✓ marker, icon (native title +
-             aria-label), short label, current-answer summary — and expands on
-             click; opening one row closes the others (openCloseoutRow()).
-             "Answered" means the row was opened and confirmed via the single
-             #closeout-execute button below (closeoutButtonClick() /
-             advanceCloseout()), never a per-row control: a pre-selected
+        <!-- Close-out sheet: a SEQUENTIAL ACCORDION of answerable rows plus
+             one button. It replaced, in turn: four buttons at once, a
+             four-step wizard (Weiter/Zurück, counter, review screen), a
+             free-click accordion with a "Gewählt: …" plan line and three
+             status hints under the button, and a status line + pipeline
+             recap above it — every one of those cost the rows region the
+             height it needs, and the plan line only repeated what the rows'
+             own inline summaries already said.
+             Each row collapses to ONE line — ○/●/✓ marker, icon (native
+             title + aria-label), short label, current-answer summary — and
+             exactly one is open at a time (openCloseoutRow()). The order is
+             enforced: the first unanswered row opens by itself, every LATER
+             unanswered row is locked (data-locked, head `disabled`, no
+             summary) and only "Weiter ›" unlocks the next one; an ANSWERED
+             row stays clickable to go back and change the answer
+             (closeoutRowClick()). "Answered" means the row was open when the
+             single #closeout-execute button was clicked
+             (closeoutButtonClick()), never a per-row control: a pre-selected
              default may stand as-is, confirming just means the user looked.
              The button reads "Weiter ›" until every visible row is answered,
-             then transforms into the warning-coloured "⚠ Ausführen" that
-             submits `finalize` — never two buttons, never "Alles ausführen".
-             The plan sits BELOW the button (§ below) and re-renders on every
-             change. The data-plan-*/data-label-* attributes carry localised
-             strings into the JS; the JS itself never hard-codes user-facing
-             text. Row-answered state is mirrored to sessionStorage
-             (closeoutStorageKey(), keyed by STORAGE_KEY + iteration) so a
-             reload within the session does not re-ask already-answered rows —
-             never localStorage, which stays reserved for the (data-no-persist)
-             route/ship radios' deliberate reset. -->
+             then transforms into the warning-coloured "⚠ Ausführen" (the
+             consequence warning is its native title) that submits
+             `finalize`, and after that click it IS the status: "⏳ Claude
+             arbeitet es ab …", then "✓ Concept abgeschlossen." — never two
+             buttons, never a status paragraph beneath it
+             (setCloseoutButtonState()). The data-label-* attributes carry
+             localised strings into the JS; the JS itself never hard-codes
+             user-facing text. Row-answered state is mirrored to
+             sessionStorage (closeoutStorageKey(), keyed by STORAGE_KEY +
+             iteration) so a reload within the session does not re-ask
+             already-answered rows — never localStorage, which stays reserved
+             for the (data-no-persist) route/ship radios' deliberate reset. -->
         <div id="closeout-sheet" class="closeout-sheet"
-             data-plan-issues="{{final.plan_issues}}"
-             data-plan-implement="{{final.plan_implement}}"
-             data-plan-ship="{{final.plan_ship}}"
-             data-plan-close="{{final.plan_close}}"
              data-label-progress="{{final.closeout_progress}}"
              data-label-unanswered="{{final.closeout_unanswered}}"
              data-label-ship-yes="{{final.closeout_summary_ship_yes}}"
@@ -818,58 +774,42 @@ the `[ui-locale: ...]` hint produced.
           </section>
           </div><!-- /.closeout-rows -->
 
-          <!-- The one button, fixed place. "Weiter ›" until every visible
-               row above is answered, then it becomes the warning-coloured
-               "⚠ Ausführen" that submits `finalize` — see closeoutButtonClick()
-               / updateCloseoutButton(). Both label strings are baked in at
-               generation time (data-label-*) and swapped at runtime. The icon
-               span is EMPTY in the "next" state (updateCloseoutButton() sets
-               it `hidden`) — the label string already carries its own "›"
+          <!-- The one button, fixed place, five states on [data-ready] /
+               [data-finalize-state] — see updateCloseoutButton() and
+               setCloseoutButtonState():
+                 next     "Weiter ›"                      accent   (rows unanswered)
+                 execute  "⚠ Ausführen"                   warning  (all answered; title = the
+                          — or "⚠ Ausführen · wird zwischengespeichert" while the bridge
+                          is disconnected, the ONLY place the final report says so)
+                 running  "⏳ Claude arbeitet es ab …"     accent, disabled
+                 done     "✓ Concept abgeschlossen."       success, disabled
+                 stalled  "⚠ Übermittelt · Claude antwortet nicht"  warning, disabled
+                          (+ the one hint below: it carries an instruction)
+               Every label string is baked in at generation time (data-label-*)
+               and swapped at runtime. The icon span is EMPTY in the "next"
+               state — the label string already carries its own "›"
                (`final.closeout_next` = "Weiter ›"), so an always-visible icon
                rendered "› Weiter ›". -->
           <button type="button" id="closeout-execute" class="implement-btn"
                   data-label-next="{{final.closeout_next}}"
-                  data-label-execute="{{final.closeout_execute}}">
+                  data-label-execute="{{final.closeout_execute}}"
+                  data-label-execute-offline="{{final.closeout_execute_offline}}"
+                  data-label-running="{{final.closeout_running}}"
+                  data-label-done="{{final.closeout_done}}"
+                  data-label-stalled="{{final.closeout_stalled_short}}"
+                  data-title-execute="{{final.closeout_plan_warn}}">
             <span aria-hidden="true" data-closeout-btn-icon hidden>⚠</span>
             <span data-closeout-btn-label>{{final.closeout_next}}</span>
           </button>
 
-          <p class="hint hint-running" data-finalize-state="running" hidden>
-            <span aria-hidden="true">⏳</span> {{final.closeout_running}}
-          </p>
-          <p class="hint hint-done" data-finalize-state="done" hidden>
-            <span aria-hidden="true">✓</span> {{final.closeout_done}}
-          </p>
           <!-- Shown when the round was delivered but Claude stopped answering
                (markCloseoutStalled). The sheet stays frozen: the payload IS
                on the bridge, and a second execute from here would run the
-               whole close-out twice. -->
+               whole close-out twice. The one status that keeps a paragraph —
+               it tells the user where to go next. -->
           <p class="hint hint-warn" data-finalize-state="stalled" hidden>
             <span aria-hidden="true">⚠</span> {{final.closeout_stalled}}
           </p>
-
-          <!-- The plan — every consequence, named, in execution order, live,
-               ONE compact line below the button: "Gewählt: 2 × Issue ·
-               nicht releasen · Seite löschen · 2 Handgriffe" (buildCloseoutPlan()
-               still appends one .closeout-plan-item per consequence, in the
-               same execution order — the CSS join (§ below) is what turns
-               that into " · "-separated text; the DOM stays inspectable per
-               item). No heading, no <ol>: those cost the rows region the
-               height it needs (§ .closeout-rows) for the four row heads to
-               stay fully visible, which is the whole point of a foot the
-               rows can win over. Re-renders on every change, so the line is
-               never stale by the time of the one irreversible click above
-               it. The warn hint only makes sense once every row is answered
-               (before that, "ein Klick, alles davon" describes a click that
-               cannot even fire yet) — updateCloseoutButton()'s own ready
-               flag hides/shows it. -->
-          <section class="closeout-block closeout-plan-block" data-closeout-block="plan">
-            <p class="closeout-plan-line">
-              <strong class="closeout-plan-label">{{final.closeout_plan_label}}</strong>
-              <span class="closeout-plan-items" id="closeout-plan"></span>
-            </p>
-            <p class="hint hint-warn closeout-plan-warn" id="closeout-plan-warn" hidden>{{final.closeout_plan_warn}}</p>
-          </section>
         </div>
 
         <button type="button" id="view-iterations-btn" class="link-btn">{{final.view_iterations}}</button>
@@ -6613,12 +6553,20 @@ function computeSelectedVariant(variantSections) {
 // "+N weitere" — only when the TOC would otherwise overflow the scroll box
 // (measured AFTER render, never a fixed cut-off). Hides the tail of the
 // direct-children list and reveals it on click.
+// On the FINAL REPORT the rule is different (applyNavWindow()): the TOC is
+// secondary there and the close-out sheet below it needs the height, so by
+// default only the entry under the reading line plus its neighbour on each
+// side stay visible, whatever the scroll box would fit.
 function applyNavOverflow(nav, scrollBox) {
   nav.querySelectorAll('.nav-more-toggle').forEach(el => el.remove());
   nav.querySelectorAll('[data-nav-overflow-hidden]').forEach(el => {
     el.hidden = false;
     el.removeAttribute('data-nav-overflow-hidden');
   });
+  if (document.body.classList.contains('viewing-final')) {
+    applyNavWindow(nav, nav.querySelector('.section-nav-item.is-active'));
+    return;
+  }
   if (!scrollBox || scrollBox.scrollHeight <= scrollBox.clientHeight) return;
   const items = [...nav.children];
   let hiddenCount = 0;
@@ -6628,6 +6576,9 @@ function applyNavOverflow(nav, scrollBox) {
     hiddenCount++;
   }
   if (!hiddenCount) return;
+  nav.appendChild(makeNavMoreToggle(nav, hiddenCount));
+}
+function makeNavMoreToggle(nav, hiddenCount) {
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.className = 'nav-more-toggle';
@@ -6637,9 +6588,41 @@ function applyNavOverflow(nav, scrollBox) {
       el.hidden = false;
       el.removeAttribute('data-nav-overflow-hidden');
     });
+    // Expanded by hand stays expanded: the spy must not re-window the list
+    // on the next reading-line change (applyNavWindow() checks this).
+    nav.dataset.navExpanded = 'true';
     toggle.remove();
   });
-  nav.appendChild(toggle);
+  return toggle;
+}
+// Final-report TOC window: at most NAV_WINDOW_MAX top-level entries —
+// the current one, the one before it (if any) and the one after it (if
+// any); at the first entry that is two, never three-from-the-top. The rest
+// hides behind the same "+N weitere" toggle the overflow rule uses, and the
+// window FOLLOWS the reading line (setActiveNavItem() re-applies it) until
+// the user expands the list once — `nav.dataset.navExpanded` — after which
+// it stays fully open for that build. Counts over the nav's direct children
+// (a grouped TOC's <details> counts as one entry), same as the overflow
+// rule; `current` is the child that CONTAINS the active item, or the first
+// child when nothing is active yet.
+const NAV_WINDOW_MAX = 3;
+function applyNavWindow(nav, activeItem) {
+  if (nav.dataset.navExpanded === 'true') return;
+  nav.querySelectorAll('.nav-more-toggle').forEach(el => el.remove());
+  const items = [...nav.children];
+  if (items.length <= NAV_WINDOW_MAX) return;
+  let cur = activeItem ? items.findIndex(el => el === activeItem || el.contains(activeItem)) : 0;
+  if (cur < 0) cur = 0;
+  const lo = Math.max(0, cur - 1);
+  const hi = Math.min(items.length - 1, cur + 1);
+  let hiddenCount = 0;
+  items.forEach((el, i) => {
+    const hide = i < lo || i > hi;
+    el.hidden = hide;
+    if (hide) { el.setAttribute('data-nav-overflow-hidden', ''); hiddenCount++; }
+    else el.removeAttribute('data-nav-overflow-hidden');
+  });
+  if (hiddenCount) nav.appendChild(makeNavMoreToggle(nav, hiddenCount));
 }
 
 function buildSectionNav() {
@@ -6654,6 +6637,9 @@ function buildSectionNav() {
   // sub-sections) are collected separately, under the selected-variant node.
   const sections = [...activeIteration.querySelectorAll(':scope > section[id][data-nav-label]')];
   nav.innerHTML = '';
+  // A hand-expanded final-report window (applyNavWindow()) is per build —
+  // the next tab switch starts windowed again.
+  delete nav.dataset.navExpanded;
   // Every group + listener created from here on belongs to THIS generation;
   // any 'toggle' event still queued from a PREVIOUS one is now stale by
   // definition, whatever its own .open reads.
@@ -6989,6 +6975,13 @@ function setActiveNavItem(item) {
   }
   updateHereRoundParenthesis(item);
   openNavGroupFor(item);
+  // On the final report the TOC is a 3-entry window around the reading line
+  // (applyNavWindow()); it has to move with the line, or the active entry
+  // would scroll out of the window it is supposed to be the centre of.
+  if (document.body.classList.contains('viewing-final')) {
+    const nav = document.getElementById('section-nav');
+    if (nav && nav.contains(item)) applyNavWindow(nav, item);
+  }
   revealNavItem(item);
 }
 
@@ -7118,10 +7111,16 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
 - One-open applies among `.nav-group` only (the selected-variant node is
   exempt — nothing may close it) — never between the rounds list and the
   TOC, which are two separate, independently-toggled surfaces now.
-- **"+N weitere" is overflow-only.** `applyNavOverflow()` hides the TOC's
-  tail only when `.panel-nav-scroll`'s `scrollHeight` exceeds its
-  `clientHeight` after render, and the toggle expands it in place — never a
-  fixed cut-off on a round that already fits.
+- **"+N weitere" is overflow-only — except on the final report.**
+  `applyNavOverflow()` hides the TOC's tail only when `.panel-nav-scroll`'s
+  `scrollHeight` exceeds its `clientHeight` after render, and the toggle
+  expands it in place — never a fixed cut-off on a round that already fits.
+  On the final report (`body.viewing-final`) it defers to `applyNavWindow()`
+  instead: by default only the entry under the reading line plus one
+  neighbour on each side (at most `NAV_WINDOW_MAX` = 3 top-level entries)
+  stay visible, the rest sits behind the same toggle, and the window follows
+  the reading line (`setActiveNavItem()`) until the user expands it once.
+  The TOC is secondary there; the close-out sheet below it gets the height.
 
 ## Decision Panel State CSS
 
@@ -7231,12 +7230,16 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
   overflow-x: hidden;
 }
 /* On the final report the TOC is secondary — the close-out sheet is the main
-   content, and it needs most of the foot's height (§ CTA foot below). A live
-   check at 1440×768 with the rows region still floored at 220px found only
-   1–3 of the 4 row heads fitting with a body open; capping the tree tighter
-   (28vh → 18vh) is what gives `.closeout-rows` the room its 260px floor
-   (§ below) needs. `min-height: 56px` keeps a sliver of the tree reachable
-   rather than letting it collapse to nothing — it is secondary, not gone. */
+   content, and it needs most of the foot's height (§ CTA foot below). By
+   default the tree is a 3-entry window around the reading line
+   (applyNavWindow(), § Section Nav JS), so it normally fits this cap
+   without scrolling; the cap still applies once the user expands the list
+   with "+N weitere". A live check at 1440×768 with the rows region still
+   floored at 220px found only 1–3 of the 4 row heads fitting with a body
+   open; capping the tree tighter (28vh → 18vh) is what gives
+   `.closeout-rows` the room it needs. `min-height: 56px` keeps a sliver of
+   the tree reachable rather than letting it collapse to nothing — it is
+   secondary, not gone. */
 body.viewing-final .panel-nav-scroll {
   flex: 0 1 auto;
   max-height: 18vh;
@@ -7310,10 +7313,15 @@ body.viewing-final .panel-cta {
   min-height: 0;
   flex: 1 1 auto;
 }
-#panel-final-report #status-channel,
 #panel-final-report #view-iterations-btn {
   flex: none;
 }
+/* The final report has no status line: the sheet's one button carries the
+   submission state itself (running/done/stalled — setCloseoutButtonState())
+   and the disconnected case as its "wird zwischengespeichert" label
+   (updateCloseoutButton()), so a second, separate line above the sheet only
+   cost the rows region ~40px for information the button already shows. */
+body.viewing-final .panel-status { display: none; }
 
 /* ── Status line ── one line, one glyph, six mutually exclusive states on
    .panel-status[data-status], rendered by renderPanelStatus() (§ Claude
@@ -7621,58 +7629,6 @@ html[data-template="design"] .frozen-bar {
   cursor: not-allowed;
 }
 
-/* Persistent status channel — the always-visible pipeline recap that hands
-   over to the close-out sheet. Boxed so it reads as a distinct "status"
-   surface. Pure DOM / connection-independent by design: the close-out
-   affordance must never disappear just because the heartbeat went stale.
-   Folded height is a budget, not a nicety: measured 99px, then 76px, against
-   a 56px target — the difference both times was the summary TEXT wrapping
-   to a second line at the panel's ~330px content width, not the box's own
-   padding/margins. `white-space: nowrap` + ellipsis below (not just tight
-   padding) is what actually caps this at one line regardless of how long
-   the two joined step labels are. That is the height the rows region
-   (§ .closeout-rows) needs back for its four heads. Do not "restore" the
-   padding/margins without re-checking that budget. */
-.status-channel {
-  border: 1px solid var(--border-color, #30363d);
-  border-radius: 8px;
-  padding: 0.35rem 0.55rem;
-  margin-bottom: 0.5rem;
-  background: color-mix(in srgb, var(--success-color, #3fb950) 6%, transparent);
-}
-.status-channel .status-steps { margin-bottom: 0; }
-/* Folded recap — reuses .status-detail (§ Two-Button Submit) for the
-   summary/marker/steps treatment; the only addition is the summary's own
-   heading + text run (no dots here, the final report has nothing left "in
-   progress" to animate). Never carries `hidden` — unlike the submit-progress
-   instance, this one must always be visible, just collapsed by default. The
-   heading sits INLINE at the start of the one summary line — it used to be
-   its own div above the fold. */
-.status-channel-detail { margin-top: 0; }
-.status-channel-heading {
-  flex: none;
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary, #8b949e);
-  white-space: nowrap;
-}
-/* updateStatusChannelSummary() already joins only the last TWO states (the
-   last "done" step + the "active" one, never the full four-step recap —
-   that stays in the <ol> underneath). The overflow rules here are the
-   height cap itself: without `min-width: 0` a flex child never shrinks
-   below its content's natural width, so `text-overflow: ellipsis` has
-   nothing to act on and the line wraps instead of truncating. */
-.status-channel-summary-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: var(--text-color, #c9d1d9);
-  font-size: 0.8rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* Close-out sheet. Every question at once inside one bounded box — the box
    is what tells the user this is a form to fill in, not a wall of
    independent buttons.
@@ -7685,7 +7641,7 @@ html[data-template="design"] .frozen-bar {
   border: 1px solid var(--border-color, #30363d);
   border-radius: 8px;
   padding: 0.9rem 0.95rem 1rem;
-  /* The sheet is its own flex column so #closeout-execute + the plan stay
+  /* The sheet is its own flex column so #closeout-execute stays
      PINNED at the bottom regardless of which row is open — only
      .closeout-rows (§ below) scrolls. `flex: 1 1 auto; min-height: 0`, NOT
      `height: 100%`: the sheet's parent (`#panel-final-report`) is itself a
@@ -7776,29 +7732,18 @@ html[data-template="design"] .frozen-bar {
    travels with the sticky head and keeps every slot flush (zero gap), which
    the offset math depends on. */
 /* Pinned foot: never inside .closeout-rows, always laid out after it, and
-   never fighting .closeout-rows for space. Button, hints AND the plan are
-   ALL `flex: none` — a live check found `flex: 0 1 auto; min-height: 0` on
-   the plan let it collapse to 7px (invisible) exactly when space was tight,
-   which is the one time "Gewählt: …" most needs to stay readable; a fixed
-   pixel floor on `.closeout-rows` (above) pushed the plan AND the
-   "Iterationen ansehen" link below the viewport instead, clipped by
-   `.panel-cta`'s own `overflow: hidden`. `min-height: 0` on the rows region
-   (this time paired with sticky heads, not a floor) is what lets the rows
-   region give ground to this pinned foot rather than the other way round. */
+   never fighting .closeout-rows for space. The button and the one stalled
+   hint are `flex: none` — a live check found `flex: 0 1 auto; min-height:
+   0` on a foot element let it collapse to 7px (invisible) exactly when
+   space was tight; a fixed pixel floor on `.closeout-rows` (above) pushed
+   the foot AND the "Iterationen ansehen" link below the viewport instead,
+   clipped by `.panel-cta`'s own `overflow: hidden`. `min-height: 0` on the
+   rows region (this time paired with sticky heads, not a floor) is what
+   lets the rows region give ground to this pinned foot rather than the
+   other way round. */
 .closeout-sheet #closeout-execute,
-.closeout-sheet .hint[data-finalize-state],
-.closeout-sheet .closeout-plan-block {
+.closeout-sheet .hint[data-finalize-state] {
   flex: none;
-}
-/* The plan's previous sibling is now the button, not another .closeout-block
-   (it moved out from under `.closeout-rows`), so the shared
-   `.closeout-block + .closeout-block` divider rule no longer reaches it —
-   give it its own, lighter than the row divider: this is a one-line readout,
-   not another section. */
-.closeout-sheet .closeout-plan-block {
-  margin-top: 0.5rem;
-  padding-top: 0.4rem;
-  border-top: 1px solid var(--border-color, #30363d);
 }
 .closeout-sheet .closeout-title {
   font-size: 0.75rem;
@@ -7820,8 +7765,8 @@ html[data-template="design"] .frozen-bar {
   color: var(--text-secondary, #8b949e);
   font-variant-numeric: tabular-nums;
 }
-/* Still used by the plan's own heading below the button — the four rows
-   above it get their heading from .closeout-row-label instead (§ below). */
+/* Legacy heading style — the rows get their heading from .closeout-row-label
+   instead (§ below). */
 .closeout-sheet .closeout-q {
   margin: 0 0 0.5rem 0;
   font-size: 0.95rem;
@@ -7866,12 +7811,27 @@ html[data-template="design"] .frozen-bar {
   text-align: center;
   color: var(--text-secondary, #8b949e);
 }
-/* ✓ — set by updateCloseoutRowSummary() from the block's own data-answered,
-   never painted from CSS alone: the glyph IS the state a screen reader has
-   nothing else to announce it by. */
+/* ✓ / ● / ○ — set by updateCloseoutRowSummary() from the block's own
+   data-answered / data-open, never painted from CSS alone: the glyph IS the
+   state a screen reader has nothing else to announce it by. */
 .closeout-sheet .closeout-block[data-answered="true"] .closeout-mark {
   color: var(--success-color, #3fb950);
 }
+.closeout-sheet .closeout-block[data-open="true"]:not([data-answered="true"]) .closeout-mark {
+  color: var(--accent-color, #58a6ff);
+}
+/* Locked — a row AFTER the current one that has not been answered yet
+   (updateCloseoutRowSummary() sets data-locked + `disabled` on the head).
+   Dimmed as a whole and stripped of its summary: it is a preview of what is
+   still to come, not a question that can be answered out of order, and a
+   default like "Seite löschen" on a row the user has not reached yet would
+   read as already decided. `:disabled` alone would not touch our own
+   `cursor: pointer` (§ .closeout-row above). */
+.closeout-sheet .closeout-block[data-locked="true"] .closeout-row {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.closeout-sheet .closeout-block[data-locked="true"] .closeout-row-summary { display: none; }
 .closeout-sheet .closeout-row-icon { flex: none; font-size: 1rem; line-height: 1; }
 .closeout-sheet .closeout-row-label { flex: none; font-size: 0.85rem; font-weight: 600; }
 /* Right-aligned, truncated rather than wrapped — a collapsed row is one
@@ -8016,48 +7976,6 @@ html[data-template="design"] .frozen-bar {
   font-size: 0.78rem;
   line-height: 1.4;
 }
-/* The plan — every consequence, now BELOW the button, as ONE compact line:
-   "Gewählt: 2 × Issue · nicht releasen · Seite löschen · 2 Handgriffe".
-   Still a .closeout-block for the shared row-separator rule above, but
-   never gets a .closeout-row head — it is not answered, only read. Target
-   is ≤60px total for the block (label + items line, wrap allowed, plus the
-   conditional warn line) — a heading + <ol> here once cost the rows region
-   (§ .closeout-rows) the height its four heads need to stay visible. */
-.closeout-plan-line {
-  margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.4;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 0.3rem;
-}
-.closeout-plan-label {
-  flex: none;
-  color: var(--text-secondary, #8b949e);
-  font-weight: 600;
-}
-.closeout-plan-items {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-/* The " · " join is CSS, never baked into the text — each consequence stays
-   its own element (data-plan-kind), so it can still be read/tested one at a
-   time. */
-.closeout-plan-item + .closeout-plan-item::before {
-  content: " · ";
-  color: var(--text-secondary, #8b949e);
-}
-.closeout-plan-item[data-plan-kind="ship"],
-.closeout-plan-item[data-plan-kind="implement"] {
-  color: var(--warning-color, #d29922);
-  font-weight: 600;
-}
-.closeout-plan-warn {
-  margin: 0.3rem 0 0;
-  font-size: 0.74rem;
-  line-height: 1.3;
-}
-.closeout-plan-warn[hidden] { display: none; }
 /* Hand-offs — the steps only the user can take once the close-out is
    through. Warning-coloured like the routes that reach outside the page, and
    the one block renderCloseout() keeps after data-closed: the last thing on
@@ -8086,11 +8004,16 @@ html[data-template="design"] .frozen-bar {
   font-weight: 600;
 }
 .closeout-sheet #closeout-execute:disabled { opacity: 0.5; cursor: not-allowed; }
-/* Two states, one button: neutral/accent "Weiter ›" while rows are still
-   unanswered, the warning-coloured "⚠ Ausführen" only once every visible row
-   is — updateCloseoutButton() sets [data-ready], never a second element.
-   `.implement-btn` (below, § Two-Button Submit) supplies the warning colours
-   as the base/default look; this override is the "not yet" state. */
+/* One button, five states, never a second element: neutral/accent
+   "Weiter ›" while rows are still unanswered, the warning-coloured
+   "⚠ Ausführen" once every visible row is (updateCloseoutButton() sets
+   [data-ready]), then — after the click — the submission's own status on
+   [data-finalize-state] (setCloseoutButtonState()): running (accent),
+   done (success), stalled (warning). `.implement-btn` (below, § Two-Button
+   Submit) supplies the warning colours as the base/default look; the
+   overrides here are the other four. The finalize states are disabled by
+   setCloseoutFrozen() and keep full opacity: they are a status readout,
+   not a greyed-out control. */
 .closeout-sheet #closeout-execute:not([data-ready="true"]) {
   color: var(--accent-color, #58a6ff);
   border-color: var(--accent-color, #58a6ff);
@@ -8098,8 +8021,21 @@ html[data-template="design"] .frozen-bar {
 .closeout-sheet #closeout-execute:not([data-ready="true"]):hover {
   background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent);
 }
-.closeout-sheet .hint[data-finalize-state="running"] { color: var(--accent-color, #58a6ff); }
-.closeout-sheet .hint[data-finalize-state="done"] { color: var(--success-color, #3fb950); }
+.closeout-sheet #closeout-execute[data-finalize-state] { opacity: 1; cursor: default; }
+.closeout-sheet #closeout-execute[data-finalize-state="running"] {
+  color: var(--accent-color, #58a6ff);
+  border-color: var(--accent-color, #58a6ff);
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
+.closeout-sheet #closeout-execute[data-finalize-state="done"] {
+  color: var(--success-color, #3fb950);
+  border-color: var(--success-color, #3fb950);
+  background: color-mix(in srgb, var(--success-color, #3fb950) 10%, transparent);
+}
+.closeout-sheet #closeout-execute[data-finalize-state="stalled"] {
+  color: var(--warning-color, #d29922);
+  border-color: var(--warning-color, #d29922);
+}
 .link-btn {
   display: inline-block;
   margin-top: 0.6rem;
@@ -12121,11 +12057,29 @@ function closeoutRowSummary(kind) {
   }
   return '';
 }
+// Locked = not answered AND not the open row: every unanswered row after the
+// current one. The order of the sheet is the order Claude executes it in, so
+// a later row may only be reached through "Weiter ›" on the ones before it;
+// an answered row stays reachable (closeoutRowClick()) to go back and change
+// the answer. `disabled` on the head is what makes the lock real for
+// keyboard and AT, the data-locked attribute is what the CSS dims.
+function isCloseoutRowLocked(block) {
+  return block.dataset.answered !== 'true' && block.dataset.open !== 'true';
+}
 function updateCloseoutRowSummary(block) {
   const summaryEl = block.querySelector('[data-closeout-summary]');
   if (summaryEl) summaryEl.textContent = closeoutRowSummary(block.dataset.closeoutBlock);
+  const answered = block.dataset.answered === 'true';
+  const open = block.dataset.open === 'true';
   const mark = block.querySelector('[data-closeout-mark]');
-  if (mark) mark.textContent = block.dataset.answered === 'true' ? '✓' : '○';
+  if (mark) mark.textContent = answered ? '✓' : open ? '●' : '○';
+  const locked = isCloseoutRowLocked(block);
+  block.dataset.locked = locked ? 'true' : 'false';
+  const head = block.querySelector('[data-closeout-row]');
+  // A frozen sheet has already disabled every head (setCloseoutFrozen) —
+  // never re-enable one from here.
+  const sheet = document.getElementById('closeout-sheet');
+  if (head && !(sheet && sheet.dataset.frozen === 'true')) head.disabled = locked;
 }
 function updateCloseoutProgress() {
   const sheet = document.getElementById('closeout-sheet');
@@ -12138,16 +12092,31 @@ function updateCloseoutProgress() {
     ? tpl.replace('{n}', String(done)).replace('{total}', String(rows.length))
     : '';
 }
-// The one button's two states — never two buttons. Ready = every visible row
-// answered; only then does it read as the warning-coloured execute action.
+// The one button's pre-submit states — never two buttons. Ready = every
+// visible row answered; only then does it read as the warning-coloured
+// execute action, with the consequence warning as its native title. While
+// the bridge is disconnected the ready label says so ("· wird
+// zwischengespeichert"): the final report has no status line of its own
+// (§ CSS body.viewing-final .panel-status), so the button is the one place
+// left to say that the click will be queued rather than delivered.
+// checkClaudeConnection() calls this on every heartbeat for that reason.
+// Never touches a button that already carries a finalize state — after the
+// click the button is the submission's status (setCloseoutButtonState()) and
+// nothing on the sheet may repaint it as a live control again.
 function updateCloseoutButton() {
   const btn = document.getElementById('closeout-execute');
-  if (!btn) return;
+  if (!btn || btn.dataset.finalizeState) return;
   const ready = closeoutAllAnswered();
   btn.dataset.ready = ready ? 'true' : 'false';
   const label = btn.querySelector('[data-closeout-btn-label]');
   const icon = btn.querySelector('[data-closeout-btn-icon]');
-  if (label) label.textContent = ready ? (btn.dataset.labelExecute || '') : (btn.dataset.labelNext || '');
+  const conn = document.getElementById('connection-status');
+  const offline = !!conn && conn.dataset.state === 'disconnected';
+  if (label) {
+    label.textContent = !ready ? (btn.dataset.labelNext || '')
+      : offline ? (btn.dataset.labelExecuteOffline || btn.dataset.labelExecute || '')
+      : (btn.dataset.labelExecute || '');
+  }
   // The icon is warning-only. "Weiter ›" already carries its own "›" inside
   // the label string — an always-visible icon glyph next to it used to
   // render "› Weiter ›". Hidden (not emptied) in the "next" state so no
@@ -12156,13 +12125,40 @@ function updateCloseoutButton() {
     icon.hidden = !ready;
     icon.textContent = ready ? '⚠' : '';
   }
-  // The plan's warn line only makes sense once the click it describes can
-  // actually fire. Set HERE, not only inside buildCloseoutPlan(): a row
-  // answered via closeoutButtonClick() re-renders through refreshCloseoutRows()
-  // (→ this function), which never calls buildCloseoutPlan() again — without
-  // this the warn line would stay hidden even once every row is answered.
-  const warn = document.getElementById('closeout-plan-warn');
-  if (warn) warn.hidden = !ready;
+  // "Ein Klick, alles davon" only makes sense once the click it describes
+  // can actually fire.
+  if (ready) btn.title = btn.dataset.titleExecute || '';
+  else btn.removeAttribute('title');
+}
+// After the click the button IS the status: running → done, or stalled.
+// Sets [data-finalize-state] (the CSS colour), swaps the label/icon from the
+// baked-in data-label-* strings and clears the execute title; `null` clears
+// the state again (restoreCloseoutToReady) and hands the button back to
+// updateCloseoutButton(). The stalled state is the only one that also keeps
+// a paragraph under the button (`.hint[data-finalize-state="stalled"]`): it
+// carries an instruction ("schau in den Chat"), not just a state.
+function setCloseoutButtonState(state) {
+  const btn = document.getElementById('closeout-execute');
+  const sheet = document.getElementById('closeout-sheet');
+  if (sheet) {
+    sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
+      el.hidden = el.dataset.finalizeState !== state;
+    });
+  }
+  if (!btn) return;
+  if (!state) {
+    delete btn.dataset.finalizeState;
+    updateCloseoutButton();
+    return;
+  }
+  btn.dataset.finalizeState = state;
+  btn.removeAttribute('title');
+  const glyph = state === 'running' ? '⏳' : state === 'done' ? '✓' : '⚠';
+  const key = 'label' + state.charAt(0).toUpperCase() + state.slice(1);
+  const label = btn.querySelector('[data-closeout-btn-label]');
+  const icon = btn.querySelector('[data-closeout-btn-icon]');
+  if (label) label.textContent = btn.dataset[key] || '';
+  if (icon) { icon.hidden = false; icon.textContent = glyph; }
 }
 function refreshCloseoutRows() {
   closeoutRows().forEach(updateCloseoutRowSummary);
@@ -12217,6 +12213,20 @@ function initCloseoutRows() {
   // (a followups/hand-offs block appearing or disappearing) and the offsets
   // above are only valid for the current set.
   layoutCloseoutRowHeads();
+  refreshCloseoutRows();
+}
+// A row head click. Only an ANSWERED row (or the one already open) may be
+// opened by hand — going back to change an answer; a locked row's head is
+// `disabled` (updateCloseoutRowSummary()) so it never gets here from a real
+// click, but the guard stays for programmatic callers. Going back leaves the
+// rows in between exactly as they were: answered stays answered, and
+// "Weiter ›" from the re-opened row lands on the first still-unanswered one
+// again (closeoutButtonClick()).
+function closeoutRowClick(block) {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!block || !sheet || sheet.dataset.frozen === 'true') return;
+  if (isCloseoutRowLocked(block)) return;
+  openCloseoutRow(block);
   refreshCloseoutRows();
 }
 // The single button's click handler. Not yet all answered → confirm the open
@@ -12279,6 +12289,9 @@ function setCloseoutFrozen(frozen) {
   if (!sheet) return;
   sheet.dataset.frozen = frozen ? 'true' : 'false';
   sheet.querySelectorAll('input, button').forEach(el => { el.disabled = frozen; });
+  // Unfreezing re-enabled every row head above — a locked row must not come
+  // back clickable.
+  if (!frozen) closeoutRows().forEach(updateCloseoutRowSummary);
 }
 
 // Re-arm after a finalize that did not complete — a blocked ship, a stale
@@ -12287,7 +12300,7 @@ function setCloseoutFrozen(frozen) {
 function restoreCloseoutToReady() {
   const sheet = document.getElementById('closeout-sheet');
   if (!sheet) return;
-  sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => { el.hidden = true; });
+  setCloseoutButtonState(null);
   setCloseoutFrozen(false);
   renderCloseout();
 }
@@ -12352,13 +12365,14 @@ function renderCloseout() {
       }
       if (body) body.hidden = false;
     }
+    // The button stays, as the outcome: "✓ Concept abgeschlossen." — disabled
+    // (nothing left to click), never hidden (the done state must be visible
+    // where the action was).
+    setCloseoutButtonState('done');
     const exec = document.getElementById('closeout-execute');
-    if (exec) exec.hidden = true;
+    if (exec) { exec.hidden = false; exec.disabled = true; }
     const progress = document.getElementById('closeout-progress');
     if (progress) progress.textContent = '';
-    sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
-      el.hidden = el.dataset.finalizeState !== 'done';
-    });
     return;
   }
 
@@ -12369,7 +12383,6 @@ function renderCloseout() {
   if (count) count.textContent = boxes.length ? '(' + boxes.length + ')' : '';
 
   if (boxes.length) buildFollowUpList();
-  buildCloseoutPlan();
   renderHandoffs();
 
   // Every point dropped is a legitimate answer, but it is worth saying out
@@ -12492,43 +12505,6 @@ function buildFollowUpList() {
   });
 }
 
-// The plan names every consequence, in the order Claude executes them. It is
-// what makes the single execute click legitimate, so it re-renders on every
-// change and sits directly BELOW the button, reading the same answers the
-// button's own row state already reflects.
-// One compact line, not a list: "Gewählt: 2 × Issue · nicht releasen ·
-// Seite löschen · 2 Handgriffe". Each consequence is still its own element
-// (data-plan-kind), in execution order — the " · " join is CSS
-// (.closeout-plan-item + .closeout-plan-item::before), never baked into the
-// text, so a test (or a future locale) can still read one item at a time.
-function buildCloseoutPlan() {
-  const sheet = document.getElementById('closeout-sheet');
-  const list = document.getElementById('closeout-plan');
-  if (!sheet || !list) return;
-  list.textContent = '';
-  const add = (kind, text) => {
-    const span = document.createElement('span');
-    span.className = 'closeout-plan-item';
-    span.dataset.planKind = kind;
-    span.textContent = text;
-    list.appendChild(span);
-  };
-  const issues = collectIssueItems();
-  const implement = collectImplementItems();
-  if (issues.length) add('issues', issues.length + ' × ' + (sheet.dataset.planIssues || ''));
-  if (implement.length) add('implement', implement.length + ' × ' + (sheet.dataset.planImplement || ''));
-  if (closeoutShipChoice() === 'yes') add('ship', sheet.dataset.planShip || '');
-  const mode = document.querySelector('input[name="dispose-mode"]:checked');
-  const modeLabel = mode?.closest('label')?.querySelector('strong')?.textContent.trim();
-  const moveTo = collectDisposition().moveTo;
-  if (modeLabel) add('files', modeLabel + (moveTo ? ' → ' + moveTo : ''));
-  add('close', sheet.dataset.planClose || '');
-  // The warn line's visibility is set by updateCloseoutButton() (called from
-  // initCloseoutRows() right after this in renderCloseout(), and again on
-  // every accordion-driven update) — a single source of truth for "is the
-  // click this warns about actually live".
-}
-
 // One submit for the whole close-out. Claude executes the parts in a fixed
 // order (issues → implement → ship → disposition), so the user never has to
 // sequence outward-facing actions by clicking things in the right order.
@@ -12574,9 +12550,7 @@ async function submitFinalize() {
   };
 
   setCloseoutFrozen(true);
-  sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
-    el.hidden = el.dataset.finalizeState !== 'running';
-  });
+  setCloseoutButtonState('running');
 
   const container = document.getElementById('concept-decisions');
   if (container) container.textContent = JSON.stringify(payload);
@@ -12651,9 +12625,7 @@ async function restoreInFlightCloseout() {
     // freeze.
     if (data._processed_at) return;
     setCloseoutFrozen(true);
-    sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
-      el.hidden = el.dataset.finalizeState !== 'running';
-    });
+    setCloseoutButtonState('running');
     document.body.classList.add('concept-submitted');
     // Re-join the submit-state machine so pollProcessedState() keeps tracking
     // the round that outlived its tab.
@@ -12675,9 +12647,7 @@ function markCloseoutStalled() {
   const sheet = document.getElementById('closeout-sheet');
   if (!sheet) return;
   setCloseoutFrozen(true);
-  sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
-    el.hidden = el.dataset.finalizeState !== 'stalled';
-  });
+  setCloseoutButtonState('stalled');
 }
 
 // "Iterationen ansehen" is wired in wireCloseout() below — non-committal,
@@ -12721,13 +12691,7 @@ function wireCloseout() {
   document.getElementById('closeout-sheet')?.addEventListener('click', e => {
     const head = e.target.closest('[data-closeout-row]');
     if (!head) return;
-    const sheet = document.getElementById('closeout-sheet');
-    if (sheet && sheet.dataset.frozen === 'true') return;
-    const block = head.closest('.closeout-block');
-    if (block) {
-      openCloseoutRow(block);
-      refreshCloseoutRows();
-    }
+    closeoutRowClick(head.closest('.closeout-block'));
   });
   document.getElementById('view-iterations-btn')?.addEventListener('click', () => {
     const tabs = document.querySelector('.iteration-tabs');
@@ -12737,28 +12701,8 @@ function wireCloseout() {
     void tabs.offsetWidth;  // force reflow so the animation restarts
     tabs.classList.add('tabs-nudge');
   });
-  updateStatusChannelSummary();
   refreshCloseout({ reset: true });
   restoreInFlightCloseout();
-}
-// The one-line summary for the folded #status-channel — "✓ {last done step}
-// · {active step}", built from the SAME <li data-step data-state> the full
-// recap under it renders, never a hard-coded string. The final report's own
-// pipeline is static (submitted/received/implemented are always "done", only
-// "ready" is ever "active"), so this runs once at boot rather than on every
-// change — there is nothing here that changes after the page loads.
-function updateStatusChannelSummary() {
-  const channel = document.getElementById('status-channel');
-  const summary = document.getElementById('status-channel-summary');
-  if (!channel || !summary) return;
-  const items = Array.from(channel.querySelectorAll('.status-steps li[data-step]'));
-  const label = li => li?.querySelector('.step-label')?.textContent.trim() || '';
-  const done = items.filter(li => li.dataset.state === 'done');
-  const active = items.find(li => li.dataset.state === 'active');
-  const parts = [];
-  if (done.length) parts.push('✓ ' + label(done[done.length - 1]));
-  if (active) parts.push(label(active));
-  summary.textContent = parts.join(' · ');
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', wireCloseout);
@@ -13355,6 +13299,10 @@ function checkClaudeConnection() {
   // Purely informational, never a blocker.
   if (pill) pill.dataset.state = state;
   if (typeof renderPanelStatus === 'function') renderPanelStatus();
+  // The final report hides the status line (§ CSS body.viewing-final
+  // .panel-status); its execute button carries the disconnected case as its
+  // own label instead, so it has to follow the heartbeat too.
+  if (typeof updateCloseoutButton === 'function') updateCloseoutButton();
 
   // While the submitted panel is up, leave the ready-panel BUTTONS alone —
   // only the button handling below is skipped, never the line above.
@@ -13813,19 +13761,25 @@ The final-report section closes a concept session. It is appended via the
 implement-action branch of Step 5b (see `SKILL.md` § Final-report append).
 The right-side panel automatically switches to `panel-final-report` mode
 when `showIteration()` detects `data-final-report` on the active section
-— no iterate / implement buttons. It leads with the **persistent status
-channel** (`#status-channel`), the full pipeline recap (Übermittelt →
-verarbeitet → implementiert → Bereit), and hands over to the **close-out
-sheet** (`#closeout-sheet`). A non-committal "Iterationen ansehen" link
-sits below it.
+— no iterate / implement buttons, **no status line and no pipeline recap**:
+the foot is the **close-out sheet** (`#closeout-sheet`) and nothing else,
+with a non-committal "Iterationen ansehen" link below it. The panel's
+`.panel-status` line ("Gespeichert · verbunden") is hidden on this tab
+(`body.viewing-final .panel-status`), and the persistent status channel
+that used to sit above the sheet is gone — both said things the sheet's one
+button now says itself (a disconnected bridge becomes its "· wird
+zwischengespeichert" label, a running or finished close-out becomes its
+state), and each cost the accordion rows ~40–50px it needs. The TOC above
+the sheet shrinks to a 3-entry window around the reading line
+(`applyNavWindow()`, § Section Nav JS) for the same reason.
 
-The status channel is deliberately **DOM-driven, not connection-driven**: it
-is present because the section carries `data-final-report`, so it survives
-reloads and stays fully visible even when the Claude heartbeat is stale. This
-is the design reason it replaces a transient completion overlay — the close-out
-affordance must never vanish just because the connection flickered. Reviewing
-earlier iterations (via the ever-present tab bar or the "Iterationen ansehen"
-nudge) never hides it, so there is nothing to "re-open".
+The sheet is deliberately **DOM-driven, not connection-driven**: it is
+present because the section carries `data-final-report`, so it survives
+reloads and stays fully visible even when the Claude heartbeat is stale —
+the close-out affordance must never vanish just because the connection
+flickered. Reviewing earlier iterations (via the ever-present tab bar or the
+"Iterationen ansehen" nudge) never hides it, so there is nothing to
+"re-open".
 
 **A final report is a document round.** Append it with
 `data-iteration-template="free"` — never leave the attribute off (see
@@ -13857,31 +13811,48 @@ that licenses an irreversible click — only appeared on the last step. Putting
 every question on screen at once (the sheet's first cut) fixed the ordering
 and the readability, but on a full sheet (open points + ship + files +
 hand-offs) it traded that for a wall the user had to scroll past to reach the
-plan and the button — "viel Scrollen, viel Platz für wenig Interaktion".
+plan and the button — "viel Scrollen, viel Platz für wenig Interaktion". A
+free-click accordion with a "Gewählt: …" plan line under the button, three
+status hints beneath that, and a status line + pipeline recap above the
+sheet fixed the wall but spent ~180px of a 360px-wide panel repeating what
+the rows' own summaries and the button already said.
 
-The sheet is now an **accordion**: the same rows, the same fixed execution
-order, but each collapses to one line — `○`/`✓` · icon · label · current
-answer — and exactly one is open at a time (`openCloseoutRow()`). A single
-button at a fixed place reads **"Weiter ›"** while any row is unanswered
-(clicking it confirms the open row and opens the next unanswered one —
+The sheet is now a **sequential accordion**: the same rows, the same fixed
+execution order, but each collapses to one line — `○`/`●`/`✓` · icon ·
+label · current answer — and exactly one is open at a time
+(`openCloseoutRow()`). The order is enforced, not suggested: the first
+unanswered row opens by itself, every unanswered row after it is **locked**
+(`data-locked`, head `disabled`, dimmed, no summary —
+`isCloseoutRowLocked()`), and the only way forward is the single button at a
+fixed place, which reads **"Weiter ›"** while any row is unanswered (clicking
+it confirms the open row and opens the next unanswered one —
 `closeoutButtonClick()`) and turns into the warning-coloured **"⚠ Ausführen"**
 only once every row is (`updateCloseoutButton()`), which is the same click
-that submits `finalize`. Never two buttons, never "Alles ausführen". The plan
-moved BELOW that button — it is the readout of what the rows already say, not
-a step to pass through — and still re-renders on every change.
-"Answered" means the row was opened and confirmed via that one button, not a
-per-row control: a pre-selected default may stand as given, confirming just
-means the user looked. Rows can be re-opened and re-confirmed at any time;
-changing an answer keeps it answered. Progress ("n von N beantwortet",
-`#closeout-progress`) and each row's answered flag are mirrored into
-`sessionStorage` (`closeoutStorageKey()`, keyed by `STORAGE_KEY` + iteration)
-so a reload within the same session does not re-ask what was already
-answered — never `localStorage`, which the route/ship radios deliberately
-avoid (`data-no-persist`, see below).
+that submits `finalize`. Never two buttons, never "Alles ausführen". An
+**answered** row stays clickable (`closeoutRowClick()`) to go back and change
+the answer; the rows in between keep their state. "Answered" means the row
+was open when that one button was clicked, not a per-row control: a
+pre-selected default may stand as given, confirming just means the user
+looked. There is no separate plan line: each collapsed row's inline summary
+("shippen", "Seite löschen", "2 · Issue, Issue", "2 Schritte") IS the
+readout of what will happen, and the consequence warning ("Ein Klick, alles
+davon …") is the execute button's native title. Progress ("n von N
+beantwortet", `#closeout-progress`) and each row's answered flag are mirrored
+into `sessionStorage` (`closeoutStorageKey()`, keyed by `STORAGE_KEY` +
+iteration) so a reload within the same session does not re-ask what was
+already answered — never `localStorage`, which the route/ship radios
+deliberately avoid (`data-no-persist`, see below).
 
-**Blocks** — top to bottom, and the same order Claude executes them in. The
-first three plus `handoffs` are accordion rows (`data-closeout-row`); `plan`
-is read, not answered, and never gets one:
+**After the click the button is the status.** `setCloseoutButtonState()`
+swaps the same button through "⏳ Claude arbeitet es ab …" (submit and
+in-flight restore), "✓ Concept abgeschlossen." (the `data-closed` render)
+and "⚠ Übermittelt · Claude antwortet nicht" (`markCloseoutStalled()`),
+disabled and colour-coded on `[data-finalize-state]`; only the stalled
+state also keeps a paragraph under the button, because it carries an
+instruction (check the chat). No status hint ever sits under a live button.
+
+**Blocks** — top to bottom, and the same order Claude executes them in.
+Every block is an accordion row (`data-closeout-row`):
 
 | Block | Shown when | Default | Produces |
 |---|---|---|---|
@@ -13889,7 +13860,6 @@ is read, not answered, and never gets one:
 | `ship` | always | **none — the user must answer** | `ship: { run }` |
 | `files` | always | `discard` (label: "Seite löschen") | `disposition: { mode, moveTo }` |
 | `handoffs` | the report has a `[data-handoffs]` section with ≥1 `<li>` | — (read-only; "answered" = opened once) | nothing; mirrors the steps the user has to take by hand, and is the only block still shown after `data-closed` |
-| `plan` | always | — | nothing; it renders the consequences of the rows above, below the button |
 
 **Three routes per open point, not a checkbox.** A follow-up is worth
 tracking, worth building now, or worth dropping — and the old checkbox could
@@ -13897,7 +13867,7 @@ only say "file an issue" or "forget it". Each row therefore carries a
 three-way radio group (`Issue` / `Jetzt umsetzen` / `Ignorieren`), and the
 payload splits into two disjoint buckets. `Jetzt umsetzen` is the one route
 that writes code, so it is painted in the warning colour the implement button
-uses and it appears in the plan as its own line.
+uses.
 
 **Each row names its origin.** A point is on the sheet either because the
 user parked it during the concept or because it turned up on the way and has
@@ -13925,15 +13895,15 @@ one. Execute stays enabled and explains the block
 (`#closeout-ship-required`) rather than sitting there disabled and looking
 broken.
 
-**The plan is what licenses the single click.** It lists every consequence by
-name, in execution order — "2 × GitHub-Issue anlegen", "1 × jetzt umsetzen
-(devops-Agents)", "Ship-Pipeline starten", "Seite löschen",
-"Concept-Session beenden" — and re-renders on every change, so it can never
-describe an older answer than the one on screen. `#closeout-execute` sits at
-a fixed place below the accordion rows and reads "Weiter ›" until every row
-is answered, then transforms into the warning-coloured "⚠ Ausführen" —
-reaching the irreversible click is a deliberate, staged sequence rather than
-a distance-based misclick barrier.
+**The rows are what license the single click.** Every consequence is
+readable on the collapsed rows themselves, in execution order — "2 · Issue,
+Jetzt umsetzen", "shippen", "Seite löschen", "2 Schritte" — and each
+summary re-renders on every change (`updateCloseoutRowSummary()`), so it can
+never describe an older answer than the one on screen. `#closeout-execute`
+sits at a fixed place below the rows and reads "Weiter ›" until every row is
+answered, then transforms into the warning-coloured "⚠ Ausführen" — reaching
+the irreversible click is a deliberate, staged sequence rather than a
+distance-based misclick barrier.
 
 **"Seite löschen", never "Verwerfen".** The disposition block used to be
 labelled *Verwerfen (Standard)*, one word away from the bi-state *Verwerfen*
@@ -13965,10 +13935,10 @@ hands the sheet back and warns.
 
 | Moment | State |
 |---|---|
-| Submit | `setCloseoutFrozen(true)` — every control disabled, running hint up, `_submittedAt` set so `pollProcessedState()` tracks the round like any other submission |
+| Submit | `setCloseoutFrozen(true)` — every control disabled, the button reads "⏳ Claude arbeitet es ab …" (`setCloseoutButtonState('running')`), `_submittedAt` set so `pollProcessedState()` tracks the round like any other submission |
 | Non-durable answer | `restoreCloseoutToReady()` — re-armed, warning shown; the payload is in the offline queue |
 | Blocked ship / stuck round | `restorePanelToReady()` routes to `restoreCloseoutToReady()` for a final report — it must never un-hide `#panel-ready`, which would paint iterate/implement onto a closed session |
-| Successful close-out | Claude stamps `data-closed` on the section before the last `/reload`; `renderCloseout()` then shows the done hint and no controls at all |
+| Successful close-out | Claude stamps `data-closed` on the section before the last `/reload`; `renderCloseout()` then shows the button as "✓ Concept abgeschlossen." (disabled) and no other controls at all |
 
 ### Final-report section HTML
 
@@ -14155,9 +14125,9 @@ The `followups` block renders iff all of:
 The `handoffs` block renders iff the active final report has a
 `[data-handoffs]` section with at least one `<li>` (`renderHandoffs()`,
 called from `renderCloseout()`). It is the only block that stays visible
-once the section carries `data-closed`: the sheet's done state is "Concept
-abgeschlossen" plus whatever is left for the user to do by hand, and nothing
-else.
+once the section carries `data-closed`: the sheet's done state is the button
+reading "✓ Concept abgeschlossen." plus whatever is left for the user to do
+by hand, and nothing else.
 
 Rendering runs client-side only — Claude never adds or removes a block via the
 bridge; it controls the follow-up block indirectly by disabling checkboxes

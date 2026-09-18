@@ -263,8 +263,10 @@ describe("hand-offs — what the user still has to do by hand", () => {
       .filter((el) => !el.hidden)
       .map((el) => el.dataset.closeoutBlock);
     expect(visible).toEqual(["handoffs"]);
-    expect(doc.getElementById("closeout-execute").hidden).toBe(true);
-    expect(doc.querySelector('.hint[data-finalize-state="done"]').hidden).toBe(false);
+    const btn = doc.getElementById("closeout-execute");
+    expect(btn.hidden).toBe(false);
+    expect(btn.disabled).toBe(true);
+    expect(btn.dataset.finalizeState).toBe("done");
     expect(doc.querySelectorAll("#closeout-handoffs-list li").length).toBe(2);
   });
 
