@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.173.1] — 2026-09-18
+
+### Fixed
+
+- **The offline completion card reads a string-array `changes` or refuses — never three empty `*  → ` bullets (#396).** `--render-card` is reached exactly when the MCP server is down, so the agent writes `payload.json` without the tool schema in context; the obvious guess for `changes` (one string per line) rendered an empty Changes block with exit 0. New `mcp-server/lib/card-input.js`: lenient coercion — a string entry becomes `{ area, description }` split on the first ` → `, ` — `, ` -> ` or `: `, no separator → the text becomes the description — plus a structural validator that mirrors the tool's zod shapes **without zod** (`index.cli.test.js` pins that the CLI branch loads no third-party module; that is what makes it a fallback at all). `normalizeCardParams` coerces on both entry points; the CLI validates after normalization and exits 2 with the offending paths on stderr and no card-rendered flag, so the Stop gate's ladder moves on to the tool instead of relaying a card that says nothing. An area-less entry renders as plain text, not a dangling arrow. The stop-gate ladder (`hooks/lib/card-guard.js` 0.4.0) prints the field shapes for the offline path (`changes: [{ area, description }] · tests: [{ method, result }] · …`), and a test pins the reference identical to the validator's. Completion server 0.5.1; 3 CLI regression cases + 15 unit tests.
+
 ## [0.173.0] — 2026-09-18
 
 ### Added

@@ -47,6 +47,7 @@ import { fileURLToPath } from "node:url";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { hasPending, pendingWhat, renderPendingBlock, renderPendingLine, hasConcept, conceptWhat } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
+import { coerceCardInput, validateCardInput, formatIssues } from "./lib/card-input.js";
 import { conceptUrl, readBatch, batchWhat, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
 import {
   assessFreshness,
@@ -450,8 +451,13 @@ const CHANGES_TAIL = { de: (n) => '+' + n + ' weitere', en: (n) => '+' + n + ' m
 function renderChanges(changes, lang) {
   if (!changes || changes.length === 0) return '';
   const tail = CHANGES_TAIL[lang] || CHANGES_TAIL.de;
-  const items = changes.slice(0, CHANGES_LIMIT).map(c =>
-    '* ' + clampEllipsis(String(c.area || ''), CHANGE_AREA_MAX) + ' \u2192 ' + clampEllipsis(String(c.description || ''), CHANGE_DESC_MAX));
+  // An entry coerced from a bare string has no area (#396) — render the text
+  // alone rather than a dangling arrow in front of it.
+  const items = changes.slice(0, CHANGES_LIMIT).map(c => {
+    const area = clampEllipsis(String(c.area || ''), CHANGE_AREA_MAX);
+    const desc = clampEllipsis(String(c.description || ''), CHANGE_DESC_MAX);
+    return '* ' + (area ? area + ' \u2192 ' + desc : desc);
+  });
   // More than the budget: say so on the header line instead of dropping
   // silently (14 % of ship cards used to lose their 4th+ change without a
   // trace) — and never as a 4th bullet: a block has three at most.
@@ -1400,6 +1406,12 @@ function normalizeCardParams(raw) {
     if (typeof params[key] === 'string') params[key] = tryParse(params[key]);
   }
 
+  // String entries where the schema wants objects ('area → description' as
+  // one line) become those objects. On the MCP path zod has already rejected
+  // them; on the CLI path this is what turns a guessed payload into readable
+  // text instead of three empty '*  → ' bullets (#396).
+  coerceCardInput(params);
+
   return params;
 }
 
@@ -1515,6 +1527,15 @@ function runRenderCardCli(source) {
   // branch always process.exit()s before the MCP transport is ever created,
   // so it can never interleave with the JSON-RPC wire.
   const params = normalizeCardParams(payload);
+  // The tool path has zod in front of the handler; this path has nothing, and
+  // a malformed payload used to render an empty Changes block with exit 0.
+  // Same shapes, enforced dependency-free; exit 2 so the hook's ladder moves
+  // on to the tool instead of relaying a card that says nothing (#396).
+  const check = validateCardInput(params);
+  if (!check.ok) {
+    process.stderr.write('[dotclaude-completion] payload does not match the card schema:\n' + formatIssues(check.issues) + '\n');
+    process.exit(2);
+  }
   process.stdout.write(buildCompletionCard(params) + '\n'); // stdout-ok
   // The rename instruction rides on stderr so stdout stays the verbatim card.
   const titleNote = sessionTitleNote(params);
@@ -1534,7 +1555,7 @@ const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/
 const { z } = await import("zod");
 
 const SERVER_NAME = "dotclaude-completion";
-const SERVER_VERSION = "0.5.0";
+const SERVER_VERSION = "0.5.1";
 
 const server = new McpServer({
   name: SERVER_NAME,

@@ -184,3 +184,57 @@ describe("--render-card CLI fallback", () => {
     expect(err.stderr).toMatch(/cannot read payload/);
   });
 });
+
+// #396 — the CLI is reached when the tool schema is NOT in context; the payload
+// is a guess. It must either read the text or refuse — never `*  → `.
+describe("--render-card CLI — malformed payloads (#396)", () => {
+  test("REGRESSION: a string-array `changes` renders the text, never empty arrows", async () => {
+    const out = await renderCard({
+      variant: "ready",
+      summary: "Card aus dem Offline-Pfad",
+      session_id: "cli-test-396-strings",
+      changes: [
+        "Completion card → Changes-Bullets werden gelesen",
+        "Ship: merged ohne Tag",
+        "eine Zeile ganz ohne Trenner",
+      ],
+      state: { branch: "feat/x", pushed: true },
+    });
+    expect(out).toContain("* Completion card → Changes-Bullets werden gelesen");
+    expect(out).toContain("* Ship → merged ohne Tag");
+    expect(out).toContain("* eine Zeile ganz ohne Trenner");
+    expect(out).not.toMatch(/\*\s+→/);
+  });
+
+  test("a payload off the schema exits 2 with the offending path on stderr", async () => {
+    const err = await renderCardFull({
+      variant: "ready",
+      summary: "Kaputt",
+      session_id: "cli-test-396-invalid",
+      changes: [{ area: "A" }, 42],
+      pending: [{ kind: "agent" }],
+    }).then(() => null, (e) => e);
+
+    expect(err).not.toBeNull();
+    expect(err.code).toBe(2);
+    expect(err.stderr).toMatch(/payload does not match the card schema/);
+    expect(err.stderr).toMatch(/changes\[0\]: description must be a string/);
+    expect(err.stderr).toMatch(/changes\[1\]: must be \{ area, description \}/);
+    expect(err.stderr).toMatch(/pending\[0\]: name must be a string/);
+    expect(err.stdout).toBe("");                       // nothing half-rendered on stdout
+    expect(existsSync(flagFile("cli-test-396-invalid"))).toBe(false); // the Stop gate is NOT satisfied
+  });
+
+  test("string entries in `tests` and `validation` are coerced the same way", async () => {
+    const out = await renderCard({
+      variant: "ready",
+      summary: "Coercion",
+      session_id: "cli-test-396-tests",
+      tests: ["npm test → 12 grün", "eslint"],
+      validation: ["Anforderung erfüllt — Test grün"],
+      state: { branch: "feat/x", pushed: true },
+    });
+    expect(out).toContain("npm test → 12 grün");
+    expect(out).toContain("Anforderung erfüllt");
+  });
+});
