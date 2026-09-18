@@ -2,7 +2,7 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseArgs, validate, checkState, run, DEFAULTS } from "./concept-watch.js";
+import { parseArgs, validate, checkState, run, DEFAULTS, BYE_GRACE_MS } from "./concept-watch.js";
 
 function stateFile(contents) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "concept-watch-"));
@@ -378,6 +378,125 @@ describe("run — waker owns cleanup, liveness and the structured exit (#363)", 
     expect(validate({ ...base, liveness: -1 })).toMatch(/liveness/);
     expect(validate({ ...base, liveness: 0 })).toBeNull();
     expect(parseArgs(["--mode", "watch", "--port", "8883", "--state", "/x/s.json", "--liveness", "90"]).liveness).toBe(90);
-    expect(parseArgs([]).liveness).toBe(180);
+    expect(parseArgs([]).liveness).toBe(900);
+  });
+});
+
+describe("run — liveness tells a hidden tab from a closed one (#397)", () => {
+  function watcher({ responses = [], liveness = DEFAULTS.liveness, html = "docs/concepts/x.html" } = {}) {
+    const calls = [];
+    let clock = 1_000_000;
+    let exit = null;
+    const opts = { mode: "watch", port: 8883, state: "/proj/.claude/concept-active.json", ...DEFAULTS, liveness };
+    const p = run(opts, {
+      exists: () => true,
+      sleep: async (ms) => { clock += ms; },
+      now: () => clock,
+      checkState: () => "ok",
+      readState: () => ({ port: 8883, html_path: html }),
+      reopen: (url) => { calls.push({ reopen: url }); },
+      request: async (_port, reqPath, method) => {
+        calls.push({ reqPath, method });
+        const next = responses.shift();
+        return typeof next === "function" ? next(clock) : (next ?? { ok: false, body: "" });
+      },
+      emit: (reason, detail = "") => { exit = reason + detail; return reason; },
+    });
+    return { done: p.then(() => exit), calls, reopens: () => calls.filter(c => c.reopen).length };
+  }
+  const T0 = 1_000_000;
+  const pend = { ok: true, body: '{"pending": true, "version": 1}' };
+  /** A /pending body from the #397 server: tabs registered + bye stamp. */
+  const poll = (browser_ts, browser_tabs, browser_bye_ts = 0) =>
+    ({ ok: true, body: JSON.stringify({ pending: false, version: 0, action: "", browser_ts, browser_tabs, browser_bye_ts }) });
+
+  test("REGRESSION: a registered tab silent for 5+ minutes (background throttling) is NEVER re-opened", async () => {
+    // browser_ts frozen at T0 while one tab stays registered — the reported
+    // storm: 180 s of silence used to open a fresh tab every few minutes.
+    const responses = [];
+    for (let i = 0; i < 60; i++) responses.push(poll(T0, 1)); // 60 × 20 s = 20 min of silence
+    responses.push(pend);
+    const w = watcher({ responses });
+    expect(await w.done).toMatch(/PENDING_SUBMISSION/);
+    expect(w.reopens()).toBe(0);
+  });
+
+  test("the last tab says /bye → exactly one reopen, after BYE_GRACE_MS, not before", async () => {
+    // Tab polled at T0, closed at T0+10 s (bye), nothing since.
+    const bye = T0 + 10_000;
+    const responses = [
+      poll(T0, 1),                 // t=T0        tab live
+      poll(T0, 0, bye),            // t=T0+20 s   bye 10 s ago → within grace → no reopen
+      poll(T0, 0, bye),            // t=T0+40 s   30 s → still within grace
+      poll(T0, 0, bye),            // t=T0+60 s   50 s → still within grace
+      poll(T0, 0, bye),            // t=T0+80 s   70 s ≥ BYE_GRACE_MS → reopen #1
+      poll(T0, 0, bye),            // t=T0+100 s  still closed → no second reopen
+      poll(T0, 0, bye),
+      pend,
+    ];
+    const w = watcher({ responses });
+    await w.done;
+    expect(w.reopens()).toBe(1);
+    const firstReopenIdx = w.calls.findIndex(c => c.reopen);
+    const pendingPollsBefore = w.calls.slice(0, firstReopenIdx).filter(c => c.reqPath === "/pending").length;
+    expect(pendingPollsBefore).toBe(5); // fired on the 5th poll (t = T0+80 s), not the 2nd
+  });
+
+  test("a reload (bye immediately followed by the fresh load's poll) never reopens", async () => {
+    // pagehide fires on reload too; the new document registers within a
+    // second, so browser_ts advances past the bye and a tab is registered again.
+    const responses = [
+      poll(T0, 1),
+      poll(T0 + 21_000, 1, T0 + 20_500),   // bye at 20.5 s, new tab polled at 21 s
+      poll(T0 + 41_000, 1, T0 + 20_500),
+      poll(T0 + 61_000, 1, T0 + 20_500),
+      poll(T0 + 81_000, 1, T0 + 20_500),
+      poll(T0 + 101_000, 1, T0 + 20_500),
+      pend,
+    ];
+    const w = watcher({ responses });
+    await w.done;
+    expect(w.reopens()).toBe(0);
+  });
+
+  test("bye from one tab while another is still registered does not reopen", async () => {
+    const responses = [];
+    for (let i = 0; i < 12; i++) responses.push(poll(T0, 1, T0 + 5_000)); // 4 min: tab A said bye, tab B registered but throttled
+    responses.push(pend);
+    const w = watcher({ responses });
+    await w.done;
+    expect(w.reopens()).toBe(0);
+  });
+
+  test("no tab registered and no bye → the silence rule at --liveness still applies (tab died without a beacon)", async () => {
+    const responses = [];
+    for (let i = 0; i < 50; i++) responses.push(poll(T0, 0)); // 50 × 20 s = 1000 s > 900 s
+    responses.push(pend);
+    const w = watcher({ responses });
+    await w.done;
+    expect(w.reopens()).toBe(1);
+    const idx = w.calls.findIndex(c => c.reopen);
+    const pollsBefore = w.calls.slice(0, idx).filter(c => c.reqPath === "/pending").length;
+    expect(pollsBefore * 20_000).toBeGreaterThanOrEqual(DEFAULTS.liveness * 1000); // not a second earlier
+  });
+
+  test("after a reopen, a tab registering again re-arms; a later bye reopens once more", async () => {
+    // Polls land every 20 s from T0: poll n is at T0 + 20 s × (n − 1).
+    const bye1 = T0 + 1_000, bye2 = T0 + 135_000;
+    const responses = [
+      poll(T0, 0, bye1), poll(T0, 0, bye1), poll(T0, 0, bye1), poll(T0, 0, bye1), poll(T0, 0, bye1), // polls 1–5 → reopen #1 at T0+80 s (79 s after bye)
+      poll(T0 + 90_000, 1, bye1), poll(T0 + 110_000, 1, bye1),                                       // polls 6–7: the reopened tab is registered → re-arm
+      poll(T0 + 130_000, 0, bye2), poll(T0 + 130_000, 0, bye2), poll(T0 + 130_000, 0, bye2), poll(T0 + 130_000, 0, bye2), // polls 8–11: closed again (bye at 135 s) → reopen #2 at T0+200 s
+      pend,
+    ];
+    const w = watcher({ responses });
+    await w.done;
+    expect(w.reopens()).toBe(2);
+  });
+
+  test("DEFAULTS.liveness is 900 s and BYE_GRACE_MS 60 s — the Edge throttling numbers", () => {
+    expect(DEFAULTS.liveness).toBe(900);
+    expect(BYE_GRACE_MS).toBe(60_000);
+    expect(parseArgs([]).liveness).toBe(900);
   });
 });

@@ -9,6 +9,8 @@ Replaces `python -m http.server` with a custom server that adds:
     * `browser_ts` — last GET /heartbeat or GET /reload, i.e. the last time a
       browser tab polled. 0 until a tab has connected. The pickup waker reads
       it (also on /pending) to reopen a closed tab (#363).
+      Both GETs accept `?tab=<id>` — the page's per-load tab id — so the
+      server can keep a per-tab registry (#397, see /bye).
     * `ts` — legacy alias = `claude_ts` for backwards compat with older page JS.
   The browser MUST gate the GREEN/connected state on `claude_ts`, not `server_ts`
   (otherwise the server's own self-pulse falsely shows "Claude connected" while
@@ -24,10 +26,20 @@ Replaces `python -m http.server` with a custom server that adds:
   `_phase` (free-form string Claude sets via /status — drives the
   "Implementierung abgeschlossen" step).
 - GET /pending — Deterministic signal for Claude's cron: returns
-  `{"pending": bool, "version": int, "action": str, "browser_ts": int}` with
-  no free-form content to fuzzy-match (`action` is the submission's own
-  action string, "" while nothing is pending).
+  `{"pending": bool, "version": int, "action": str, "browser_ts": int,
+    "browser_tabs": int, "browser_bye_ts": int}` with no free-form content to
+  fuzzy-match (`action` is the submission's own action string, "" while
+  nothing is pending). `browser_tabs` is the number of tabs known to be
+  open (polled within TAB_STALE_MS and no /bye yet); `browser_bye_ts` the
+  last /bye. The waker reopens the page only when NO tab is known — never
+  on silence alone while a tab exists (#397).
   Side effect: first /pending=true response stamps `_picked_up_at`.
+- POST /bye — The page's unload beacon (`navigator.sendBeacon` on
+  `pagehide`, body `{"tab": "<id>"}`). Removes that tab from the registry
+  and stamps `browser_bye_ts`. Same-origin gated. This is what tells a
+  closed tab apart from a merely hidden one: a background tab in Edge is
+  throttled to one timer wake-up per minute after 5 min and, with Sleeping
+  Tabs, to none at all — so silence proves nothing (#397).
 - POST /status — Claude advertises a processing phase. Body
   `{"phase": "implemented"}` lights up the third progress step after the
   implement branch finishes.
@@ -147,6 +159,16 @@ _claude_ts = 0
 # Exposed as `browser_ts` on GET /heartbeat and GET /pending so the pickup
 # waker can tell a closed tab from a live one and reopen the page (#363).
 _browser_ts = 0
+# Per-tab registry (#397): tab id → epoch-ms of that tab's last poll. A tab
+# enters on its first GET /heartbeat|/reload?tab=<id>, leaves on POST /bye or
+# when it has not polled for TAB_STALE_MS (a tab killed without pagehide —
+# crash, task-manager kill — must not pin the page "open" forever). Sized for
+# Edge's background-tab throttling: a hidden tab wakes once a minute, a
+# Sleeping Tab not at all, so anything below many minutes is a false "closed".
+_browser_tabs = {}
+_browser_bye_ts = 0
+TAB_STALE_MS = 15 * 60 * 1000
+_TAB_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
 _decisions = '{"submitted": false, "decisions": [], "comments": []}'
 # Monotonic counter — incremented on every POST /decisions. Used by /reset
 # for optimistic concurrency: Claude reads version via GET, processes, then
@@ -638,6 +660,35 @@ DRAFT_RECOVER_PREFIX = 'text:'
 _DRAFT_SLUG_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$')
 
 _drafts_dir = None
+
+
+def _tab_from_query(query):
+    """The validated `tab` id from a raw query string, or None."""
+    if not query:
+        return None
+    for part in query.split('&'):
+        k, _, v = part.partition('=')
+        if k == 'tab' and _TAB_ID_RE.match(v):
+            return v
+    return None
+
+
+def _stamp_browser_poll(tab):
+    """Record a browser-only poll. Caller holds _lock.
+
+    Bumps `_browser_ts` (the legacy any-tab signal) and, when the page sent a
+    tab id, that tab's entry in the registry; then drops tabs silent for
+    longer than TAB_STALE_MS so a tab that died without a pagehide beacon
+    ages out instead of holding the page "open" forever (#397).
+    """
+    global _browser_ts
+    now = int(time.time() * 1000)
+    _browser_ts = now
+    if tab:
+        _browser_tabs[tab] = now
+    for stale in [k for k, v in _browser_tabs.items() if now - v > TAB_STALE_MS]:
+        del _browser_tabs[stale]
+    return now
 # slug -> last revision number. Populated from the log on first touch, then
 # incremented in RAM: re-scanning a 16 MB log on every debounced autosave would
 # make the safety net the slowest thing on the page.
@@ -1043,12 +1094,14 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         global _picked_up_at, _browser_ts
-        if self.path == '/heartbeat':
+        # Browser polls carry `?tab=<id>` since #397; the bare paths stay valid
+        # for older pages and for curl.
+        route, _, query = self.path.partition('?')
+        if route == '/heartbeat':
             with _lock:
-                _browser_ts = int(time.time() * 1000)
+                browser_ts = _stamp_browser_poll(_tab_from_query(query))
                 server_ts = _server_ts
                 claude_ts = _claude_ts
-                browser_ts = _browser_ts
             # `ts` is a legacy alias of `claude_ts` for older page JS that
             # only knows the single-field response. Gating on `ts` then
             # transparently means "gating on Claude's heartbeat" — which is
@@ -1116,6 +1169,13 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 data = _decisions
                 version_seen = _version
                 browser_ts = _browser_ts
+                browser_bye_ts = _browser_bye_ts
+                # Prune here too: a tab that stopped polling must age out of
+                # the count even when no other tab polls to trigger the prune.
+                _now = int(time.time() * 1000)
+                for _stale in [k for k, v in _browser_tabs.items() if _now - v > TAB_STALE_MS]:
+                    del _browser_tabs[_stale]
+                browser_tabs = len(_browser_tabs)
             action = ''
             try:
                 obj = json.loads(data)
@@ -1140,11 +1200,15 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     if _version == version_seen and not _picked_up_at:
                         _picked_up_at = _iso_now()
             # `browser_ts` rides along so the waker's liveness check costs no
-            # extra request per poll (#363).
-            self._json_response({"pending": pending, "version": version_seen, "action": action, "browser_ts": browser_ts})
-        elif self.path == '/reload':
+            # extra request per poll (#363); `browser_tabs` / `browser_bye_ts`
+            # let it tell a closed tab from a throttled one (#397).
+            self._json_response({
+                "pending": pending, "version": version_seen, "action": action,
+                "browser_ts": browser_ts, "browser_tabs": browser_tabs, "browser_bye_ts": browser_bye_ts,
+            })
+        elif route == '/reload':
             with _lock:
-                _browser_ts = int(time.time() * 1000)
+                _stamp_browser_poll(_tab_from_query(query))
                 counter = _reload_counter
             self._json_response({"counter": counter})
         elif self.path == '/recovery':
@@ -1248,7 +1312,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
-        global _server_ts, _claude_ts, _decisions, _version, _processed_at, _reload_counter, _picked_up_at, _phase
+        global _server_ts, _claude_ts, _decisions, _version, _processed_at, _reload_counter, _picked_up_at, _phase, _browser_bye_ts
         if self.path == '/heartbeat':
             # POST /heartbeat is reserved for Claude (curl from cron). Updates
             # ONLY `_claude_ts` — the server's own self-pulse touches `_server_ts`
@@ -1318,6 +1382,30 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 "durable": _store_ok,
                 "seq": seq,
             })
+        elif self.path == '/bye':
+            # The page's unload beacon (#397). Only a real unload sends it
+            # (pagehide with persisted=false) — never a visibility change — so
+            # this is the one signal that distinguishes "closed" from "hidden
+            # and throttled". Body: {"tab": "<id>"}; a body without a valid id
+            # still stamps browser_bye_ts (older page builds).
+            if not self._same_origin_ok():
+                self.send_error(403, "forbidden origin")
+                return
+            length = self._read_content_length()
+            tab = None
+            if length:
+                try:
+                    obj = json.loads(self.rfile.read(length).decode('utf-8') or '{}')
+                    if isinstance(obj, dict) and isinstance(obj.get('tab'), str) and _TAB_ID_RE.match(obj['tab']):
+                        tab = obj['tab']
+                except Exception:
+                    tab = None
+            with _lock:
+                _browser_bye_ts = int(time.time() * 1000)
+                if tab is not None:
+                    _browser_tabs.pop(tab, None)
+                remaining = len(_browser_tabs)
+            self._json_response({"ok": True, "tabs": remaining})
         elif self.path == '/draft':
             # Autosave of UNSENT work. Deliberately separate from /decisions:
             # a draft carries no action, triggers nothing on Claude's side, and

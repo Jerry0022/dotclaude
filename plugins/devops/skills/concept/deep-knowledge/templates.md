@@ -13095,6 +13095,27 @@ motivated the split: `_heartbeat_ts` used to be a single field that the
 self-pulse refreshed every 30s, so the page showed "Claude verbunden"
 indefinitely no matter what Claude was actually doing.
 
+**Tab liveness — three page-side duties (#397).** The pickup waker re-opens
+the page when the server no longer knows an open tab. For that verdict to be
+right the page must (a) identify itself, (b) keep polling while hidden, and
+(c) say goodbye when it really closes:
+
+- `_tabId` — a per-load random id, appended as `?tab=<id>` to every
+  `GET /heartbeat` and `GET /reload`, so the server keeps a per-tab
+  registry instead of one anonymous `browser_ts`. Two tabs are two entries;
+  a reload is a new id.
+- `startHeartbeatWorker` — the `/heartbeat` poll runs in a dedicated
+  `Worker` (blob URL). Chromium's intensive wake-up throttling coalesces a
+  hidden page's DOM timers to one wake-up per minute after 5 min; worker
+  timers are exempt, so the registry stays fresh while the tab is merely in
+  the background. Falls back to the main-thread interval when the worker
+  cannot start.
+- `sendTabBye` — on `pagehide` with `event.persisted === false` the page
+  POSTs `/bye` via `navigator.sendBeacon`. Never on `visibilitychange`:
+  hidden is not closed. This is the only signal that distinguishes a closed
+  tab from a throttled or sleeping one, and it is what lets the waker act
+  within a minute of a real close instead of guessing from silence.
+
 ```javascript
 const HEARTBEAT_STALE_MS = 90000;  // claude_ts older than this → nothing is pulsing
 const SERVER_STALE_MS    = 90000;  // server_ts older than this → bridge process down
@@ -13110,24 +13131,77 @@ let _lastServerTs    = 0;
 // old code mis-classified the unknown window as a dead bridge.
 let _everPolled      = false;
 
+// Per-load tab identity (#397). Rides on every browser-only poll as
+// `?tab=<id>` so the bridge can tell two tabs apart and notice when THIS one
+// leaves (see sendTabBye). Random per document on purpose: a reload is a new
+// tab from the server's point of view — its bye is immediately followed by
+// the fresh load's first poll, which is exactly what the waker expects.
+const _tabId = (() => {
+  try { return crypto.randomUUID().replace(/-/g, '').slice(0, 16); }
+  catch (e) { return Math.random().toString(36).slice(2, 18); }
+})();
+const _tabQuery = '?tab=' + _tabId;
+
+function applyHeartbeat(data) {
+  if (!data || typeof data !== 'object') return;
+  // Prefer `claude_ts` (post-split server); fall back to `ts` for
+  // back-compat with legacy server builds that only expose the merged field.
+  // NEVER use `server_ts` here — the daemon self-pulse would falsely
+  // light up the indicator while Claude's polling cron is dead.
+  _lastHeartbeatTs = data.claude_ts || data.ts || 0;
+  // Consumed by checkClaudeConnection to tell the bootstrap window
+  // (claude_ts==0, server alive → "connecting") apart from a dead bridge.
+  // NEVER drives the green/connected state — that still gates on claude_ts.
+  // Legacy servers without server_ts leave this 0 → serverAlive=false → the
+  // bootstrap path is inert and behavior falls back to the old timing.
+  _lastServerTs = data.server_ts || 0;
+  _everPolled = true;   // we now have real evidence of the bridge state
+}
+
 async function pollHeartbeat() {
   try {
-    const res = await fetch('/heartbeat', { cache: 'no-store' });
-    const data = await res.json();
-    // Prefer `claude_ts` (post-split server); fall back to `ts` for
-    // back-compat with legacy server builds that only expose the merged field.
-    // NEVER use `server_ts` here — the daemon self-pulse would falsely
-    // light up the indicator while Claude's polling cron is dead.
-    _lastHeartbeatTs = data.claude_ts || data.ts || 0;
-    // Consumed by checkClaudeConnection to tell the bootstrap window
-    // (claude_ts==0, server alive → "connecting") apart from a dead bridge.
-    // NEVER drives the green/connected state — that still gates on claude_ts.
-    // Legacy servers without server_ts leave this 0 → serverAlive=false → the
-    // bootstrap path is inert and behavior falls back to the old timing.
-    _lastServerTs = data.server_ts || 0;
-    _everPolled = true;   // we now have real evidence of the bridge state
+    const res = await fetch('/heartbeat' + _tabQuery, { cache: 'no-store' });
+    applyHeartbeat(await res.json());
   } catch (e) { /* server unreachable — leave _everPolled unchanged */ }
 }
+
+// The heartbeat poll lives in a dedicated Worker (#397). A hidden tab's DOM
+// timers are throttled by Chromium to ONE wake-up per minute after 5 min in
+// the background; worker timers are not. Without this the server saw a
+// backgrounded page poll once a minute (or never, with Edge Sleeping Tabs),
+// concluded "closed" and opened another tab — every few minutes, all session.
+// The worker only fetches and reports; the connection verdict stays on the
+// main thread. Absolute URL: a blob worker cannot resolve a relative path.
+let _hbWorker = null;
+function startHeartbeatWorker() {
+  try {
+    const url = JSON.stringify(location.origin + '/heartbeat' + _tabQuery);
+    const src = 'const u=' + url + ';async function p(){try{const r=await fetch(u,{cache:"no-store"});postMessage(await r.json())}catch(e){}}p();setInterval(p,5000);';
+    const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    w.onmessage = (ev) => { applyHeartbeat(ev.data); checkClaudeConnection(); };
+    w.onerror = () => { _hbWorker = null; };   // main-thread interval takes over
+    _hbWorker = w;
+    return true;
+  } catch (e) { _hbWorker = null; return false; }
+}
+
+// Unload beacon (#397). `pagehide` with `persisted === false` is the one
+// moment a document is really going away (close, navigate, reload); a
+// bfcache freeze (`persisted === true`) and a visibility change are not.
+// sendBeacon is queued by the browser and survives the document being
+// discarded. The server drops this tab from its registry; the waker reopens
+// the page only when no tab is left — so hiding the tab never reopens it,
+// closing the last one does, once.
+function sendTabBye(ev) {
+  if (ev && ev.persisted) return;
+  try {
+    const body = new Blob([JSON.stringify({ tab: _tabId })], { type: 'application/json' });
+    if (navigator.sendBeacon && navigator.sendBeacon('/bye', body)) return;
+  } catch (e) { /* fall through */ }
+  try { fetch('/bye', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tab: _tabId }), keepalive: true }); }
+  catch (e) { /* the server's TAB_STALE_MS prune is the backstop */ }
+}
+window.addEventListener('pagehide', sendTabBye);
 
 // Safety-net timeout — if Claude /reset stamped _processed_at but no
 // reload counter advance ever followed (closed tab, JS error, server
@@ -13168,7 +13242,7 @@ async function pollProcessedState() {
     // submit on the still-active old iteration.
     let reloadAdvanced = false;
     try {
-      const r2 = await fetch('/reload', { cache: 'no-store' });
+      const r2 = await fetch('/reload' + _tabQuery, { cache: 'no-store' });
       if (r2.ok) {
         const { counter } = await r2.json();
         reloadAdvanced = (_submittedReloadCounter !== null) &&
@@ -13303,9 +13377,14 @@ function checkClaudeConnection() {
 // the full 5 s interval. The shorter the connecting window, the less the user
 // notices the bootstrap at all.
 pollHeartbeat().then(checkClaudeConnection);
+startHeartbeatWorker();
 
+// Main-thread cadence. When the worker is alive it owns the /heartbeat fetch
+// (unthrottled in a hidden tab); this loop then only re-evaluates the verdict
+// and the processed-state poll. Throttling here is harmless — the indicator
+// it drives is not visible in a hidden tab anyway.
 setInterval(async () => {
-  await pollHeartbeat();
+  if (!_hbWorker) await pollHeartbeat();
   checkClaudeConnection();
   await pollProcessedState();
 }, 5000);
@@ -13698,7 +13777,7 @@ mid-session.
 let _bootReloadCounter = null;
 async function pollReload() {
   try {
-    const res = await fetch('/reload', { cache: 'no-store' });
+    const res = await fetch('/reload' + _tabQuery, { cache: 'no-store' });
     if (!res.ok) return;
     const { counter } = await res.json();
     if (_bootReloadCounter === null) { _bootReloadCounter = counter; return; }

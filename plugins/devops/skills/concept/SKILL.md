@@ -1,6 +1,6 @@
 ---
 name: concept
-version: 0.1.0
+version: 0.1.1
 description: >-
   Generate an interactive HTML page for analysis, plans, concepts, prototypes,
   comparisons, or creative work — open it in the browser and monitor user
@@ -891,8 +891,10 @@ launched via the Bash tool with `run_in_background: true` (exact invocations in
 2. **Pickup waker** — polls `/pending` every ~20 s and exits the instant a
    submission lands, which wakes Claude immediately. It also owns the
    self-cleanup gate (state file gone / foreign port / page deleted ⇒
-   `/shutdown` + exit) and page liveness (no browser poll for 3 min ⇒ the
-   page is re-opened in Edge, once per silence window) — token-free, see
+   `/shutdown` + exit) and page liveness (no tab registered any more — the
+   last tab said `/bye`, or 15 min of silence from every tab ⇒ the page is
+   re-opened in Edge, once per window; a hidden tab never counts as closed,
+   #397) — token-free, see
    `deep-knowledge/bridge-server.md` § step 3 (#363).
 
 The cron alone is NOT sufficient for either job: it fires only while the REPL
