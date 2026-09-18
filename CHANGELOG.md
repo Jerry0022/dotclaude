@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.175.0] — 2026-09-18
+
+### Changed
+
+- **The concept final-report panel is the close-out sheet alone — sequential accordion, one button that becomes the status.** On a 360px panel three blocks spent ~180px repeating what the sheet already said: the pinned "Gespeichert · verbunden" status line, the folded "Concept abschliessen ✓ Implementierung…" pipeline recap above the sheet, and the "Gewählt: …" plan line + running/done hints below the button. All three are gone from the final-report tab (`body.viewing-final .panel-status` hides the line; `#status-channel` and `.closeout-plan-*` are removed): each collapsed accordion row's inline summary ("shippen", "Seite löschen", "2 · Issue, Jetzt umsetzen", "2 Schritte") is the readout, the consequence warning is the execute button's native `title`, and a disconnected bridge becomes the button's own "⚠ Ausführen · wird zwischengespeichert" label (`checkClaudeConnection` → `updateCloseoutButton`). The accordion is now strictly sequential: the first unanswered row opens by itself, every later unanswered row is **locked** (`data-locked`, head `disabled`, dimmed, no summary; `isCloseoutRowLocked`), "Weiter ›" is the only way forward, and answered rows stay clickable to go back (`closeoutRowClick`) — marks read ○ locked / ● open / ✓ answered. After the click the same button IS the submission status (`setCloseoutButtonState`): "⏳ Claude arbeitet es ab …" → "✓ Concept abgeschlossen." (disabled, never hidden — also the `data-closed` render) or "⚠ Übermittelt · Claude antwortet nicht" (the one state that keeps a hint paragraph, because it carries an instruction). The TOC above the sheet is a 3-entry window on the final report (`applyNavWindow`: previous + current + next around the reading line, follows the scroll spy, "+N weitere" expands it for the build — `NAV_WINDOW_MAX`). Locale: `final.closeout_execute_offline`, `final.closeout_stalled_short` added; `final.status_heading`, `final.closeout_plan_label`, `final.plan_*` removed. Validation gate 33/36/37 and the SKILL.md verbatim-copy list follow; the concept suites (562) pin the new contract. Decided on a before/after mockup of the user's own final report.
+
 ## [0.174.0] — 2026-09-18
 
 ### Added

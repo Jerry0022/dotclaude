@@ -175,29 +175,42 @@ describe("panel anatomy — markup (both skeletons)", () => {
     // No misclick-gap left on the sheet — the accordion + two-state button
     // are the barrier now.
     expect(sheet).not.toContain('class="submit-gap"');
-    // Every row block (not the plan) carries an accordion head, and all four
-    // sit inside the scrollable rows region — not the button/plan below it.
+    // Every row block carries an accordion head, and all four sit inside the
+    // scrollable rows region — not the button below it.
     const rowsRegion = sheet.slice(sheet.indexOf('class="closeout-rows"'), sheet.indexOf('<!-- /.closeout-rows -->'));
     expect(rowsRegion.length, "closeout-rows region").toBeGreaterThan(0);
     for (const kind of ["followups", "ship", "files", "handoffs"]) {
       const block = rowsRegion.slice(rowsRegion.indexOf(`data-closeout-block="${kind}"`));
       expect(block.slice(0, 400), kind).toContain("data-closeout-row");
     }
-    // The plan sits AFTER the button, never before it, and never inside the
-    // scrollable rows region (it is read, not answered, and it is part of
-    // the pinned foot).
     const btn = sheet.indexOf('id="closeout-execute"');
-    const plan = sheet.indexOf('data-closeout-block="plan"');
     expect(btn, "execute button").toBeGreaterThan(-1);
-    expect(plan, "plan block").toBeGreaterThan(btn);
     expect(sheet.indexOf('<!-- /.closeout-rows -->'), "rows region closes before the button").toBeLessThan(btn);
+    // No plan line, no running/done hints under the button: the rows' inline
+    // summaries are the readout, the button is the status. Only the stalled
+    // hint (it carries an instruction) survives.
+    expect(sheet).not.toContain('data-closeout-block="plan"');
+    expect(sheet).not.toContain("closeout-plan");
+    expect(sheet).not.toMatch(/data-finalize-state="(running|done)"/);
+    expect(sheet).toMatch(/<p class="hint hint-warn" data-finalize-state="stalled" hidden>/);
+    // The button carries every one of its labels + the execute title.
+    for (const attr of ["data-label-next", "data-label-execute", "data-label-execute-offline",
+                        "data-label-running", "data-label-done", "data-label-stalled", "data-title-execute"]) {
+      expect(sheet.slice(btn, btn + 700), attr).toContain(attr + '="{{final.');
+    }
     // The button's icon is hidden in the "Weiter ›" state — the label string
     // already carries its own "›", so an always-visible icon rendered
     // "› Weiter ›".
     expect(sheet).toMatch(/data-closeout-btn-icon hidden>/);
+    // No status channel above the sheet, and the panel's status line is
+    // hidden on the final-report tab — the button says both things itself.
+    expect(sidebar.code).not.toContain('id="status-channel"');
+    const statusHidden = rulesFor(/^body\.viewing-final \.panel-status$/)[0];
+    expect(statusHidden, "body.viewing-final .panel-status").toBeTruthy();
+    expect(statusHidden.body).toMatch(/display:\s*none/);
   });
 
-  test("the close-out sheet is its own pinned foot: the rows scroll, the button + plan never do", () => {
+  test("the close-out sheet is its own pinned foot: the rows scroll, the button never does", () => {
     // The original close-out sheet (one flat column) let the whole foot
     // scroll on the final-report tab (`body.viewing-final .panel-cta`), so a
     // long open row (e.g. the hand-offs list) pushed #closeout-execute below
@@ -264,12 +277,11 @@ describe("panel anatomy — markup (both skeletons)", () => {
     const cssHeadH = headHeightRule.body.match(/min-height:\s*([\d.]+)rem/);
     expect(cssHeadH, "CSS head height in rem").toBeTruthy();
     expect(jsSource).toMatch(new RegExp("CLOSEOUT_HEAD_H_REM = " + cssHeadH[1].replace(".", "\\.")));
-    // #closeout-execute, the hints AND the plan are ALL pinned `flex: none`
-    // — a live check found `flex: 0 1 auto; min-height: 0` on the plan let
-    // it collapse to 7px (invisible) exactly when space was tight, which is
-    // the one time "Gewählt: …" most needs to stay readable.
-    const pinnedRule = cssSource.match(/\.closeout-sheet #closeout-execute,\s*\n\.closeout-sheet \.hint\[data-finalize-state\],\s*\n\.closeout-sheet \.closeout-plan-block\s*\{([^}]*)\}/);
-    expect(pinnedRule, "pinned button/hints/plan rule").toBeTruthy();
+    // #closeout-execute and the stalled hint are pinned `flex: none` — a
+    // live check found `flex: 0 1 auto; min-height: 0` on a foot element let
+    // it collapse to 7px (invisible) exactly when space was tight.
+    const pinnedRule = cssSource.match(/\.closeout-sheet #closeout-execute,\s*\n\.closeout-sheet \.hint\[data-finalize-state\]\s*\{([^}]*)\}/);
+    expect(pinnedRule, "pinned button/hint rule").toBeTruthy();
     expect(pinnedRule[1]).toMatch(/flex:\s*none/);
   });
 
@@ -290,50 +302,41 @@ describe("panel anatomy — markup (both skeletons)", () => {
   });
 
 
-  test("the plan is one compact line below the button, not a heading + list", () => {
-    // "Das passiert dann:" + <ol> + a wordy warn line once cost ~200px — the
-    // rows region needed that back (§ previous test). The user asked for
-    // "die Infos, was ausgewählt wurde, unter dem Ausführen-Button" as one
-    // line: "Gewählt: 2 × Issue · nicht releasen · Seite löschen · 2
-    // Handgriffe", items still individually inspectable, joined by CSS.
+  test("the one button carries the submission state; the sheet keeps no plan line and no status hints", () => {
+    // "Gewählt: …" under the button repeated the rows' own inline summaries,
+    // and "Claude arbeitet es ab …" beneath that was a second element for a
+    // state the button can show itself. Both cost the rows region height it
+    // needs at 360px panel width.
     const sidebar = SKELETONS.find((b) => b.code.includes('id="panel-final-report"'));
     expect(sidebar).toBeDefined();
-    expect(sidebar.code).not.toMatch(/<h4 class="closeout-q">\{\{final\.closeout_plan_q\}\}<\/h4>/);
-    expect(sidebar.code).not.toContain('<ol class="closeout-plan"');
-    expect(sidebar.code).toMatch(/<span class="closeout-plan-items" id="closeout-plan"><\/span>/);
-    expect(sidebar.code).toMatch(/class="closeout-plan-label"/);
-    // The join is CSS, not baked into buildCloseoutPlan()'s text.
-    const joinRule = rulesFor(/^\.closeout-plan-item \+ \.closeout-plan-item::before$/)[0];
-    expect(joinRule, "plan-item join rule").toBeTruthy();
-    expect(joinRule.body).toMatch(/content:\s*" · "/);
-    // The warn hint is conditional now — only once the click it describes
-    // can actually fire. Set from updateCloseoutButton() (the single place
-    // that already computes "ready"), not duplicated in buildCloseoutPlan().
-    expect(sidebar.code).toMatch(/id="closeout-plan-warn" hidden/);
+    expect(sidebar.code).not.toContain("closeout-plan");
+    expect(rulesFor(/closeout-plan/).length).toBe(0);
+    expect(rulesFor(/status-channel/).length).toBe(0);
+    expect(jsSource).not.toContain("function buildCloseoutPlan");
+    expect(jsSource).not.toContain("function updateStatusChannelSummary");
+    // The execute title is the consequence warning, set only once the click
+    // can fire; the disconnected case is the button's own label.
     const btnFn = fnSource("updateCloseoutButton");
-    expect(btnFn).toContain("warn.hidden = !ready");
-  });
-
-  test("the folded status channel caps at one line via ellipsis, not just tight padding", () => {
-    // Measured 99px, then 76px, against a 56px target — both times the
-    // overshoot was the summary TEXT wrapping to a second line at the
-    // panel's narrow content width, not the box's own padding/margins.
-    // `white-space: nowrap` + `text-overflow: ellipsis` (with `min-width: 0`
-    // so the flex child can actually shrink below its content) is what
-    // bounds the height regardless of how long the two joined step labels
-    // are — tight padding alone cannot do that.
-    const textRule = rulesFor(/^\.status-channel-summary-text$/)[0];
-    expect(textRule, ".status-channel-summary-text rule").toBeTruthy();
-    expect(textRule.body).toMatch(/white-space:\s*nowrap/);
-    expect(textRule.body).toMatch(/overflow:\s*hidden/);
-    expect(textRule.body).toMatch(/text-overflow:\s*ellipsis/);
-    expect(textRule.body).toMatch(/min-width:\s*0/);
-    // updateStatusChannelSummary() only ever joins the last "done" step +
-    // the "active" one — never the full four-step recap (that stays in the
-    // <ol> underneath) — so the one line has at most two labels to fit.
-    const fn = fnSource("updateStatusChannelSummary");
-    expect(fn).toContain("done[done.length - 1]");
-    expect(fn).not.toMatch(/done\.map|done\.forEach/);
+    expect(btnFn).toContain("if (ready) btn.title = btn.dataset.titleExecute || '';");
+    expect(btnFn).toContain("conn.dataset.state === 'disconnected'");
+    expect(btnFn).toContain("btn.dataset.labelExecuteOffline");
+    // … and never repaints a button that already shows a finalize state.
+    expect(btnFn).toMatch(/if \(!btn \|\| btn\.dataset\.finalizeState\) return;/);
+    expect(fnSource("checkClaudeConnection")).toContain("updateCloseoutButton()");
+    // One setter for the three post-click states, on [data-finalize-state]
+    // — the CSS colours each of them.
+    const stateFn = fnSource("setCloseoutButtonState");
+    expect(stateFn).toContain("btn.dataset.finalizeState = state;");
+    for (const st of ["running", "done", "stalled"]) {
+      const rule = rulesFor(new RegExp(`^\\.closeout-sheet #closeout-execute\\[data-finalize-state="${st}"\\]$`))[0];
+      expect(rule, `button ${st} rule`).toBeTruthy();
+    }
+    // Locked rows: dimmed, summary hidden — the CSS half of the sequential
+    // accordion (the JS half is `disabled` on the head).
+    const locked = rulesFor(/^\.closeout-sheet \.closeout-block\[data-locked="true"\] \.closeout-row$/)[0];
+    expect(locked, "locked row rule").toBeTruthy();
+    expect(locked.body).toMatch(/cursor:\s*not-allowed/);
+    expect(rulesFor(/^\.closeout-sheet \.closeout-block\[data-locked="true"\] \.closeout-row-summary$/)[0].body).toMatch(/display:\s*none/);
   });
 
   test("the final-report flex chain is bounded end to end, so #closeout-execute cannot leave the viewport", () => {
@@ -379,9 +382,8 @@ describe("panel anatomy — markup (both skeletons)", () => {
     expect(panelRule.body).toMatch(/min-height:\s*0/);
     expect(panelRule.body).toMatch(/flex:\s*1 1 auto/);
     expect(jsSource).toContain("panelFinal.style.display = isFinal ? 'flex' : 'none'");
-    const pinnedSiblings = rulesFor(/^#panel-final-report #status-channel$/)[0];
-    expect(pinnedSiblings, "#status-channel / #view-iterations-btn pinned").toBeTruthy();
-    expect(pinnedSiblings.selectors.some((s) => norm(s) === "#panel-final-report #view-iterations-btn")).toBe(true);
+    const pinnedSiblings = rulesFor(/^#panel-final-report #view-iterations-btn$/)[0];
+    expect(pinnedSiblings, "#view-iterations-btn pinned").toBeTruthy();
     expect(pinnedSiblings.body).toMatch(/flex:\s*none/);
 
     // 4. .closeout-sheet is a flex ITEM of #panel-final-report now (no more

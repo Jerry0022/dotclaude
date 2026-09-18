@@ -186,15 +186,9 @@ function page({ items = [], closed = false, noBlock = false } = {}) {
     row: (kind) => document.querySelector(`.closeout-block[data-closeout-block="${kind}"]`),
     rowHead: (kind) => document.querySelector(`.closeout-block[data-closeout-block="${kind}"] [data-closeout-row]`),
     rowMark: (kind) => document.querySelector(`.closeout-block[data-closeout-block="${kind}"] [data-closeout-mark]`)?.textContent,
-    // The plan is one compact line now (#closeout-plan holds the items as
-    // spans, joined by CSS " · "), not an <ol> — each consequence is still
-    // its own element so it can be read one at a time.
-    plan: () =>
-      Array.from(document.querySelectorAll("#closeout-plan .closeout-plan-item")).map((el) => ({
-        kind: el.dataset.planKind,
-        text: el.textContent,
-      })),
-    planWarnHidden: () => document.getElementById("closeout-plan-warn").hidden,
+    // The collapsed row's inline summary — the readout of what will happen.
+    rowSummary: (kind) => document.querySelector(`.closeout-block[data-closeout-block="${kind}"] [data-closeout-summary]`)?.textContent,
+    button: () => document.getElementById("closeout-execute"),
   };
   // The block wires itself on DOM-ready (an inline <script> runs while the
   // document is still parsing). Deliver the event the way a browser does.
@@ -325,64 +319,66 @@ describe("close-out sheet — the three routes", () => {
 });
 
 describe("close-out sheet — what the user is promised", () => {
-  test("the plan names every consequence, in the order Claude executes them", () => {
+  test("every consequence is readable on its own collapsed row, and re-renders on every answer", () => {
     const p = page({ items: ITEMS });
     p.route("oq-saml", "implement");
+    // "2 · Issue, Jetzt umsetzen" — count, then each item's route by label.
+    expect(p.rowSummary("followups")).toBe("2 · final.route_implement, final.route_issue");
+    expect(p.rowSummary("ship")).toBe("final.closeout_unanswered");
     p.ship("yes");
-    expect(p.plan().map((l) => l.kind)).toEqual(["issues", "implement", "ship", "files", "close"]);
-    expect(p.plan()[0].text).toContain("1 ×");
-    expect(p.plan()[1].text).toContain("1 ×");
+    expect(p.rowSummary("ship")).toBe("final.closeout_summary_ship_yes");
+    p.ship("no");
+    expect(p.rowSummary("ship")).toBe("final.closeout_summary_ship_no");
+    expect(p.rowSummary("files")).toBe("final.dispose_discard");
   });
 
-  test("a plan line appears only for work that will actually happen", () => {
+  test("dropping every point is a legitimate answer, but it is said out loud", () => {
     const p = page({ items: ITEMS });
     p.route("oq-saml", "ignore");
     p.route("oq-docs", "ignore");
-    p.ship("no");
-    // No issues, no implementation, no ship — but the page disposition and the
-    // session end still happen, so they are still named.
-    expect(p.plan().map((l) => l.kind)).toEqual(["files", "close"]);
     expect(p.document.getElementById("closeout-followups-none").hidden).toBe(false);
+    expect(p.window.collectIssueItems()).toEqual([]);
+    expect(p.window.collectImplementItems()).toEqual([]);
   });
 
-  test("the plan is live: it re-renders on every answer", () => {
+  test("there is no plan line and no status hint under a live button", () => {
     const p = page({ items: ITEMS });
-    expect(p.plan().find((l) => l.kind === "ship")).toBeUndefined();
-    p.ship("yes");
-    expect(p.plan().find((l) => l.kind === "ship")).toBeTruthy();
-    p.ship("no");
-    expect(p.plan().find((l) => l.kind === "ship")).toBeUndefined();
+    expect(p.sheet().querySelector('[data-closeout-block="plan"]')).toBeNull();
+    expect(p.document.getElementById("closeout-plan")).toBeNull();
+    expect(p.document.getElementById("closeout-plan-warn")).toBeNull();
+    expect(p.sheet().querySelector('.hint[data-finalize-state="running"]')).toBeNull();
+    expect(p.sheet().querySelector('.hint[data-finalize-state="done"]')).toBeNull();
   });
 
-  test("the plan is one compact line, items joined visually by CSS not by text", () => {
+  test("the consequence warning is the execute button's title, only once the click can fire", () => {
     const p = page({ items: ITEMS });
-    p.route("oq-saml", "implement");
-    p.ship("yes");
-    // Each consequence is still its own element…
-    const items = p.document.querySelectorAll("#closeout-plan .closeout-plan-item");
-    expect(items.length).toBe(5);
-    // …none of them contain a literal " · " themselves — the join is CSS
-    // (.closeout-plan-item + .closeout-plan-item::before), not baked into
-    // buildCloseoutPlan()'s text.
-    for (const el of items) expect(el.textContent).not.toContain(" · ");
-    // No heading, no <ol> — the container is a single-line host now.
-    expect(p.sheet().querySelector('[data-closeout-block="plan"] h4')).toBeNull();
-    expect(p.sheet().querySelector('[data-closeout-block="plan"] ol')).toBeNull();
-  });
-
-  test("the plan warn hint only shows once the click it describes can fire", () => {
-    const p = page({ items: ITEMS });
-    expect(p.planWarnHidden(), "unanswered ship — nothing to warn about yet").toBe(true);
+    expect(p.button().hasAttribute("title"), "unanswered ship — nothing to warn about yet").toBe(false);
     p.ship("no");
     p.advanceAll();
-    expect(p.planWarnHidden(), "every row answered — the click is live").toBe(false);
+    expect(p.button().title, "every row answered — the click is live").toBe("final.closeout_plan_warn");
+  });
+
+  test("a disconnected bridge shows on the button, not on a status line", () => {
+    const p = page({ items: ITEMS });
+    // The skeleton's own heartbeat element — checkClaudeConnection() writes
+    // [data-state] there and then calls updateCloseoutButton().
+    const conn = p.document.getElementById("connection-status");
+    expect(conn).toBeTruthy();
+    conn.dataset.state = "disconnected";
+    p.ship("no");
+    p.advanceAll();
+    expect(p.button().textContent).toContain("final.closeout_execute_offline");
+    conn.dataset.state = "connected";
+    p.window.updateCloseoutButton();
+    expect(p.button().textContent).not.toContain("final.closeout_execute_offline");
+    expect(p.button().textContent).toContain("final.closeout_execute");
   });
 
   test("a report with no open questions hides the block instead of rendering an empty one", () => {
     const p = page({ noBlock: true });
     const block = p.sheet().querySelector('[data-closeout-block="followups"]');
     expect(block.hidden).toBe(true);
-    expect(p.plan().map((l) => l.kind)).toEqual(["files", "close"]);
+    expect(p.rowHead("ship").getAttribute("aria-expanded")).toBe("true");
   });
 });
 
@@ -482,21 +478,45 @@ describe("close-out sheet — the accordion", () => {
     expect(open).toEqual(["followups"]);
   });
 
-  test("clicking a row head opens it and closes the others", () => {
+  test("the order is enforced: a later, unanswered row is locked and cannot be opened by hand", () => {
     const p = page({ items: ITEMS });
-    p.rowHead("files").click();
-    expect(p.rowHead("files").getAttribute("aria-expanded")).toBe("true");
-    expect(p.rowHead("followups").getAttribute("aria-expanded")).toBe("false");
-    expect(p.rowHead("ship").getAttribute("aria-expanded")).toBe("false");
+    for (const kind of ["ship", "files"]) {
+      expect(p.row(kind).dataset.locked, kind + " locked").toBe("true");
+      expect(p.rowHead(kind).disabled, kind + " head disabled").toBe(true);
+    }
+    expect(p.row("followups").dataset.locked).toBe("false");
+    // A programmatic click on a locked head is refused too.
+    p.window.closeoutRowClick(p.row("files"));
+    expect(p.rowHead("files").getAttribute("aria-expanded")).toBe("false");
+    expect(p.rowHead("followups").getAttribute("aria-expanded")).toBe("true");
   });
 
-  test("the marker flips from ○ to ✓ only once a row is confirmed", () => {
+  test("an answered row stays clickable to go back; the rows after it keep their state", () => {
     const p = page({ items: ITEMS });
-    expect(p.rowMark("followups")).toBe("○");
+    p.execute(); // followups ✓ → ship open
+    p.ship("no");
+    p.execute(); // ship ✓ → files open
+    expect(p.rowHead("files").getAttribute("aria-expanded")).toBe("true");
+    expect(p.rowHead("followups").disabled).toBe(false);
+    p.rowHead("followups").click();
+    expect(p.rowHead("followups").getAttribute("aria-expanded")).toBe("true");
+    expect(p.rowHead("files").getAttribute("aria-expanded")).toBe("false");
+    expect(p.row("ship").dataset.answered, "ship stays answered").toBe("true");
+    expect(p.row("files").dataset.answered).toBe("false");
+    expect(p.row("files").dataset.locked, "files is locked again while an earlier row is open").toBe("true");
+    // Weiter from the re-opened row lands on the first still-unanswered one.
+    p.execute();
+    expect(p.rowHead("files").getAttribute("aria-expanded")).toBe("true");
+  });
+
+  test("the marker reads ● while open, ✓ once confirmed, ○ while locked", () => {
+    const p = page({ items: ITEMS });
+    expect(p.rowMark("followups")).toBe("●");
     expect(p.rowMark("ship")).toBe("○");
     p.execute(); // confirms the open row (followups)
     expect(p.rowMark("followups")).toBe("✓");
-    expect(p.rowMark("ship")).toBe("○");
+    expect(p.rowMark("ship")).toBe("●");
+    expect(p.rowMark("files")).toBe("○");
   });
 
   test("Weiter confirms the open row and opens the next unanswered one", () => {
@@ -585,9 +605,10 @@ describe("close-out sheet — a finalize that outlives its tab", () => {
       { items: ITEMS }
     );
     expect(p.sheet().dataset.frozen).toBe("true");
-    expect(p.document.getElementById("closeout-execute").disabled).toBe(true);
-    const running = p.sheet().querySelector('.hint[data-finalize-state="running"]');
-    expect(running.hidden, "the user is told it is still running").toBe(false);
+    expect(p.button().disabled).toBe(true);
+    // The button itself says it is still running — no hint beneath it.
+    expect(p.button().dataset.finalizeState, "the user is told it is still running").toBe("running");
+    expect(p.button().textContent).toContain("final.closeout_running");
     // …and it re-joins the state machine, so the 5-minute recovery still runs.
     expect(p.window.__submitted().action).toBe("finalize");
   });
@@ -612,8 +633,31 @@ describe("close-out sheet — a finalize that outlives its tab", () => {
     const p = page({ items: ITEMS });
     p.window.markCloseoutStalled();
     expect(p.sheet().dataset.frozen).toBe("true");
+    expect(p.button().dataset.finalizeState).toBe("stalled");
+    expect(p.button().textContent).toContain("final.closeout_stalled_short");
+    // The stalled state is the one that keeps a paragraph: it tells the user
+    // where to go next.
     expect(p.sheet().querySelector('.hint[data-finalize-state="stalled"]').hidden).toBe(false);
-    expect(p.sheet().querySelector('.hint[data-finalize-state="running"]').hidden).toBe(true);
+    // A heartbeat must not repaint the frozen button as a live control.
+    p.window.updateCloseoutButton();
+    expect(p.button().dataset.finalizeState).toBe("stalled");
+    expect(p.button().textContent).toContain("final.closeout_stalled_short");
+  });
+
+  test("a submit turns the button into the running state; handing the sheet back clears it", async () => {
+    const p = page({ items: ITEMS });
+    p.ship("no");
+    p.advanceAll();
+    p.window.__reply = { ok: true, body: { durable: false } };
+    p.execute();
+    await new Promise((r) => setTimeout(r, 0));
+    // Non-durable → restoreCloseoutToReady() → the button is a live control again.
+    expect(p.sheet().dataset.frozen).toBe("false");
+    expect(p.button().dataset.finalizeState).toBeUndefined();
+    expect(p.button().dataset.ready).toBe("true");
+    expect(p.button().textContent).toContain("final.closeout_execute");
+    // Locked rows did not come back clickable with the unfreeze.
+    expect(p.rowHead("ship").disabled).toBe(false);
   });
 });
 
@@ -649,7 +693,7 @@ describe("close-out sheet — the report Claude rewrites underneath it", () => {
     p.render();
     expect(p.window.collectImplementItems().map((i) => i.id)).toEqual(["oq-saml"]);
     expect(p.window.collectIssueItems()).toEqual([]);
-    expect(p.plan().map((l) => l.kind)).toEqual(["implement", "files", "close"]);
+    expect(p.rowSummary("followups")).toBe("2 · final.route_implement, final.route_ignore");
   });
 
   test("once every item is routed the block disappears and the sheet still closes", () => {
@@ -657,7 +701,8 @@ describe("close-out sheet — the report Claude rewrites underneath it", () => {
     p.boxes().forEach((b) => { b.disabled = true; });
     p.render();
     expect(p.sheet().querySelector('[data-closeout-block="followups"]').hidden).toBe(true);
-    expect(p.plan().map((l) => l.kind)).toEqual(["files", "close"]);
+    expect(p.rowHead("ship").getAttribute("aria-expanded")).toBe("true");
+    expect(p.row("ship").dataset.locked).toBe("false");
   });
 
   test("a closed-out report shows the outcome and no controls at all", () => {
@@ -665,9 +710,12 @@ describe("close-out sheet — the report Claude rewrites underneath it", () => {
     for (const block of p.sheet().querySelectorAll(".closeout-block")) {
       expect(block.hidden).toBe(true);
     }
-    expect(p.document.getElementById("closeout-execute").hidden).toBe(true);
-    const done = p.sheet().querySelector('.hint[data-finalize-state="done"]');
-    expect(done.hidden).toBe(false);
+    // The button stays as the outcome — disabled, never hidden.
+    expect(p.button().hidden).toBe(false);
+    expect(p.button().disabled).toBe(true);
+    expect(p.button().dataset.finalizeState).toBe("done");
+    expect(p.button().textContent).toContain("final.closeout_done");
+    expect(p.sheet().querySelector('.hint[data-finalize-state="stalled"]').hidden).toBe(true);
   });
 
   test("the done state's hand-offs head is permanently disabled and stripped of its mark/summary", () => {
