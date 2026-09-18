@@ -54,6 +54,11 @@ const TOPIC_MAP = [
     patterns: [/\bcode.*default/i, /\bcoding.*convention/i, /\bstyle.*guide/i],
   },
   {
+    file: 'ui-defaults.md',
+    specificity: 2,
+    patterns: [/\bui.*(?:default|rule|convention|regel)/i, /\btooltip/i, /\bdropdown/i, /\bhotkey/i, /\bshortcut/i, /\btastenk/i, /\bkeyboard.*(?:nav|access|shortcut)/i, /\bdesign.*(?:rule|regel|check)/i],
+  },
+  {
     file: 'codex-integration.md',
     specificity: 1,
     patterns: [/\bcodex/i, /\bgpt.?5/i],

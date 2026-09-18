@@ -229,7 +229,10 @@ For every Step 4 (#2) finding + every Score < 50 OR Hard-Floor item from Step 5:
 
 ## Step 8 — Consistency Phase
 
-From Step 4 (#3 state-visuals) and (#4 consistency drift):
+From Step 4 (#3 state-visuals) and (#4 consistency drift). The spacing rule
+this phase enforces is R3 of `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` —
+same math, same thresholds; this phase is its whole-scope instance, `/ship`
+runs the diff-only instance via `/tune-polish --invoked-by=ship`.
 
 1. **State-visuals** — auto-fix every gap (add `:hover`, `:focus-visible`,
    `:disabled`, `aria-label`, missing loading/error/empty UI states using

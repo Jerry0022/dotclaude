@@ -87,6 +87,23 @@ Every plugin skill starts with Step 0:
 - electron-builder.json → `"version": "X.Y.Z"`
 ```
 
+### /tune-polish
+```markdown
+# reference.md
+## UI rules
+- disable: R2b, R4                 # standing rules to switch off (named on the ship card)
+- tooltip.mechanisms: appTooltip, <HelpHint>
+- hotkey.mechanisms: useShortcut(, data-hotkey
+- menu.components: <AppMenu>, <ContextMenu>
+- files: src/renderer/**/*.ts      # extra UI file globs for detection + the reminder hook
+- Icon-only buttons in the title bar are exempt from R1 (platform chrome).
+- All list rows use `--space-3` vertical rhythm.
+```
+The same section is read by the `post.design.remind` hook (prevention while
+writing), by `/ship` Step 1d through `/tune-polish --invoked-by=ship`
+(static check on the diff) and by a full `/tune-polish` pass (static +
+runtime). Rule ids and the default allowlists: `deep-knowledge/ui-defaults.md`.
+
 ### /run-backlog
 ```markdown
 # reference.md

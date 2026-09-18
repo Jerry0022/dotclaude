@@ -40,4 +40,5 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [test-plan.md](test-plan.md) | Test Plan — Detect Profile, Pin Tool-Chain | Cross-cutting reference for **every** skill, hook, or agent that tests, verif... |
 | [test-strategy.md](test-strategy.md) | Test Execution Strategy | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [tool-selection.md](tool-selection.md) | Tool Selection (Windows) | Preferred tool usage when operating on Windows environments. |
+| [ui-defaults.md](ui-defaults.md) | UI Defaults | Standing UI conventions every project using the devops plugin gets by default. |
 | [visual-verification.md](visual-verification.md) | Visual Verification Methods | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
