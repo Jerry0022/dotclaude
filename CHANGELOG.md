@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.178.0] — 2026-09-19
+
+### Added
+
+- **`/setup-cleanup` lands open PRs — a ship queue, each PR through `/ship`.** Repo health knew open PRs only as a "do not delete" marker on the branch and truncated the PR list at 30; the PRs themselves — from live sessions, archived ones whose worktree is gone, cloud sessions, other machines — were left open. Step 5 now inventories **every** open PR (no limit), resolves where its head lives (`session` worktree with clean/has-changes state and the owning Desktop session, `lokal`, `nur-remote`, `fremd`), and derives one shippability label from mergeable + CI + draft + author. The page gains a dedicated **🔵 Offene PRs** block with a single *Shippen* checkbox per PR (pre-checked for landable own PRs; disabled with the reason for dirty session worktrees, drafts and foreign PRs; the head branch's *Löschen* box is disabled while its PR is queued). On submit, Step 10b runs the queue **before** any cleanup, oldest first, one full `/ship` per PR — as if the user had typed `/ship` in each session: session worktrees are shipped in place (re-checked clean immediately before), branches without a worktree get a temporary `.claude/worktrees/cleanup-pr-<n>` that is removed with `-d` after the merge, blocked ships are parked not fatal, `origin/main` is re-fetched between PRs, and `gh pr merge` is never used. New `/ship` contract for composed ships — `--cwd=<path>` (target override; implies keep, never `ExitWorktree`), `--keep`, `--queued` — plus a `.claude/.ship-queue` marker (`{ owner, since }`, stale after 6 h) that project ship extensions honour to defer install-mutating finalizers to the end of the queue; the dotclaude extension guards on it next to the `backlog-runner` lockout, and `.gitignore`, the setup-project template and the artifact registry know the marker. Final card aggregates: `ship-successful` / `ship-blocked` / `ready` / `analysis`. Skill 0.6.0. Not covered by Codex review — external usage limit until 2026-10-11; full suite 3443 green (one vitest-worker RPC timeout under load, no test failure).
+
 ## [0.177.1] — 2026-09-18
 
 ### Fixed

@@ -365,7 +365,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/setup-readme` | Explicit | Modern README generation |
 | `/auto-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
 | `/claude-extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
-| `/setup-cleanup` | Explicit | Repository branch hygiene analysis and cleanup |
+| `/setup-cleanup` | Explicit | Repository branch hygiene analysis and cleanup; open PRs are landed one after another via `/ship` |
 | `/auto-update` | Explicit | Update the plugin to the latest version from GitHub |
 | `/concept` | Explicit | Interactive HTML page for analysis, plans, concepts, and prototypes |
 | `/run-agents` | Explicit | Full-ceremony orchestration (plan → confirm → waves) for Complex-tier work; everyday delegation runs automatically via the always-on policy |
