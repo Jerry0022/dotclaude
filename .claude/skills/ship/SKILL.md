@@ -33,6 +33,9 @@ automatically sync to every ship.
      this ship is one of several in a `/run-backlog` queue): the finalizer is deferred
      to the runner's own Step 5, so do not claim a sync yet:
      > `{ action: "devops lokal (alpha) wird nach dem letzten Backlog-Issue auf die geshippte Version synchronisiert — danach Claude einmal neu starten.", afterDeployment: true }`
+   - **Pin is `alpha` AND `.claude/.ship-queue` exists** (a `/setup-cleanup` PR queue):
+     same deferral, the cleanup run syncs once after its last PR:
+     > `{ action: "devops lokal (alpha) wird nach dem letzten PR der Queue auf die geshippte Version synchronisiert — danach Claude einmal neu starten.", afterDeployment: true }`
    - **Pin is `beta`/`stable`** (the default) — an alpha-only ship does NOT reach this
      install. Do **not** claim any local sync; point to promotion:
      > `{ action: "v<vNew> ist auf alpha veröffentlicht; dein <pin>-Install bleibt auf v<installed>. /promote promoten (alpha→<pin>), danach zieht der Install v<vNew> beim nächsten Start.", afterDeployment: true }`
@@ -79,6 +82,16 @@ card — the card carries it.
   2026-09-18 the deferral had to be done by hand (PRs #401/#402/#404). Skip here; the
   runner runs this finalizer exactly once at its Step 5, after its final card. Use the
   deferred Step 6.5 wording for the card item.
+- **A ship-queue marker exists.** `{project}/.claude/.ship-queue` (written by
+  `/setup-cleanup` Step 10b — or any orchestrator that lands several PRs from one
+  session, see the plugin `/ship` → *Composed ships*) means the same thing as the
+  `backlog-runner` lockout above, without an AFK lockout: the user is present, the
+  ships are interactive, but the finalizer would still strand every later `ship_*`
+  call of the queue behind `.mcp-stale`. Skip here; the orchestrator runs this
+  finalizer exactly once after its last ship and then deletes the marker. Use the
+  deferred Step 6.5 wording for the card item (replace „Backlog-Issue" with „PR").
+  A marker older than 6 h is stale (plugin `/ship` → *Composed ships*): delete it
+  and run the finalizer normally.
 - **devops not installed here** ("falls vorhanden"). If
   `~/.claude/plugins/marketplaces/dotclaude` does not exist, there is no install to sync.
   The hook no-ops on its own, so just running it is safe — no extra guard needed.

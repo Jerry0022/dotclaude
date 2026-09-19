@@ -32,7 +32,7 @@ const SCAN_DIRS = ['hooks', 'scripts', 'mcp-server'];
  * skill instructs Claude to create them rather than calling fs itself). Listed
  * explicitly so the guard stays honest about what it does and does not detect.
  */
-const PROSE_DECLARED = ['.ship-lockout'];
+const PROSE_DECLARED = ['.ship-lockout', '.ship-queue'];
 
 /**
  * Names that are configuration or authored content, never runtime state — they

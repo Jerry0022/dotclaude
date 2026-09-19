@@ -21,6 +21,22 @@ Supports two modes: **direct** (branch → main) and **intermediate** (sub-branc
 > Every `ship_*` tool call MUST include `cwd` set to the current working directory of this Claude session.
 > Omitting `cwd` will cause the tool to operate on the wrong repository.
 
+## Composed ships — `--cwd`, `--keep`, `--queued`, the queue marker
+
+`/ship` is also invoked by orchestrators that land **several** PRs from ONE
+session (`/setup-cleanup` Step 10b ships every selected open PR this way;
+`/run-backlog` ships every queued issue). Three arguments and one marker make
+that safe; a plain `/ship` with no arguments behaves exactly as before.
+
+| Signal | Effect on this run |
+|---|---|
+| `--cwd=<path>` | **Target directory override.** Every `ship_*` MCP call passes this path as `cwd`, every git/gh command runs with `git -C <path>` / inside it. The branch that ships is the one checked out THERE, not this session's own. Pre-Step B (session activity) and Pre-Step C (sidebar title) still refer to this session; `ExitWorktree` is **never** called (it would act on this session's worktree, not the target) — the orchestrator owns the target's teardown, so `--cwd` implies `--keep`. |
+| `--keep` | Keep-mode (Step 5a signal 4): no branch or worktree teardown, `ship_cleanup({ keep: true })` only clears the sentinel. |
+| `--queued` | This ship is one of several in a queue. Informational: the card `summary` gets a `(Queue n/N)` suffix when the orchestrator passes `--queued=n/N`, and a `ship-blocked` outcome is expected to be *parked* by the caller, not retried here. |
+| `.claude/.ship-queue` marker in the target repo root (`{ owner, since }`) | Written by the orchestrator before its first ship, deleted after its own finalizer. Project ship extensions MUST skip any post-ship step that mutates this install (plugin self-sync, cache rebuild, MCP restart) while it exists — the orchestrator runs that step exactly once at the end. Not a lockout: `AskUserQuestion` gates stay interactive unless Pre-Step A says otherwise. **Stale rule:** a marker whose `since` is older than 6 h belongs to a queue that died; a plain `/ship` (no `--queued`) deletes it and proceeds as if absent, so one crashed cleanup run never defers finalizers forever. |
+
+Parse these from the skill arguments first; then continue with Pre-Step A.
+
 ## Pre-Step A — Autonomous Lockout Detection
 
 `/ship` is composed by unsupervised orchestrators (`run-backlog`
@@ -779,6 +795,10 @@ what was decided and can override (`"nein, doch räum auf"` for a follow-up clea
    capturing it here makes the cleanup trail easier to log.
 
 ### Substep 2 — Exit worktree + ship_cleanup
+
+**If `--cwd` was given** (composed ship): this substep does not apply — `--cwd`
+implies keep-mode, and `ExitWorktree` would remove *this session's* worktree, not
+the target's. Go to Step 5c.
 
 **If in a worktree**: call `ExitWorktree(action: "remove")` FIRST to release the CWD lock.
 

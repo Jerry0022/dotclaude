@@ -1,15 +1,18 @@
 ---
 name: setup-cleanup
-version: 0.5.0
+version: 0.6.0
 description: >-
   Analyze repository branch hygiene: unmerged branches, stale locals with deleted
-  remotes, active sessions (worktrees), verify work landed in main. Results:
-  interactive concept page with filters, 2-state delete controls, inline detail
-  expand, and an Apply-Manifest + Dry-Run-Confirm before executing cleanup.
-  Triggers on: "repo health", "branch cleanup", "branch hygiene".
+  remotes, active sessions (worktrees), open PRs that still need to land, verify
+  work landed in main. Results: interactive concept page with filters, 2-state
+  delete controls, a ship queue for open PRs (each landed via /ship, one after
+  another, as if shipped from its own session), inline detail expand, and an
+  Apply-Manifest + Dry-Run-Confirm before executing anything.
+  Triggers on: "repo health", "branch cleanup", "branch hygiene", "offene PRs
+  landen", "open PRs shippen".
   Explicit user request only.
 argument-hint: "[optional: focus area — branches, sessions, PRs]"
-allowed-tools: Bash(git *), Bash(gh *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
+allowed-tools: Bash(git *), Bash(gh *), Bash(node *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, Skill, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card, mcp__plugin_devops_dotclaude-ship__*, mcp__ccd_session_mgmt__list_sessions, mcp__ccd_session_mgmt__get_session
 ---
 
 # Repo Health Check
@@ -238,18 +241,70 @@ present in `refs/heads`:
 - Classify as Löschbar or Untersuchen
 - Track separately as remote-only branches (Ort = "nur-remote")
 
-## Step 5 — PR Cross-Reference
+## Step 5 — PR Cross-Reference + Open-PR Inventory
 
-Fetch recent PRs to validate branch status:
+Two lists, two purposes: recent PRs of *any* state validate the branch
+classification; **every** open PR is its own entry on the page, because an
+open PR is work that still has to land — cleanup that only deletes branches
+and leaves the PRs behind is half a cleanup.
+
+### 5a — Recent PRs (classification cross-check)
 
 ```
-gh pr list --state all --limit 30 --json number,title,state,mergedAt,headRefName
+gh pr list --state all --limit 100 --json number,title,state,mergedAt,headRefName
 ```
 
 Cross-reference with local branches:
 - Every MERGED PR should have its branch cleaned up (locally and remotely)
 - Every local branch should map to a PR (open, merged, or closed)
 - Flag orphan branches with no PR (work that was never shipped)
+
+### 5b — Open PRs (complete, never truncated)
+
+```
+gh pr list --state open --limit 500 \
+  --json number,title,headRefName,baseRefName,author,isDraft,url,createdAt,updatedAt
+```
+
+Then per PR the landing facts:
+
+```
+gh pr view <n> --json mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,commits
+```
+
+Build one entry per open PR and resolve where its head branch lives:
+
+| `quelle` | Meaning | Derived from |
+|---|---|---|
+| `session` | head branch is checked out in a worktree (an Aktive Session) | worktree list from Step 2, exact ref equality |
+| `lokal` | head branch exists in `refs/heads` but has no worktree | Step 2 truth source |
+| `nur-remote` | head branch exists only on origin (cloud session, other machine, archived session whose worktree is gone) | `ls-remote --heads` |
+| `fremd` | PR author ≠ `gh api user --jq .login` | author field |
+
+For `quelle: session` also record the worktree's status from Step 2
+(`clean` / `has-changes`) and — Desktop app only, best-effort — the owning
+session: `mcp__ccd_session_mgmt__list_sessions`, match `worktreePath` /
+`branch`, keep `sessionId`, `title`, `isArchived`, `isRunning`. Missing tool
+or no match → `session: null`, never a failure.
+
+**Shippability** — exactly one label per PR, decided here, not on the page:
+
+| `shippable` | Condition | Page label |
+|---|---|---|
+| `yes` | own PR, not draft, `mergeable != CONFLICTING`, head is `lokal` / `nur-remote` / clean `session` | „bereit — via /ship landen" |
+| `session-dirty` | head worktree has uncommitted changes | „in Session <title> shippen — uncommittete Änderungen" |
+| `conflict` | `mergeable == CONFLICTING` | „Konflikt — /ship rebased, Konflikte ggf. manuell" (still selectable; `/ship` Step 1b resolves what it can and blocks the rest) |
+| `draft` | `isDraft` | „Draft — erst fertigstellen" |
+| `checks-red` | `statusCheckRollup` has a failed required check | „CI rot — /ship wartet nicht auf rot" (selectable, expected to block) |
+| `fremd` | not the viewer's PR | „fremder PR — nicht von hier shippen" (never selectable) |
+
+Pre-check on the page only `shippable: yes` AND `mergeStateStatus` in
+`CLEAN` / `BEHIND` / `UNSTABLE`(no required failure) — the user opts into the
+rest consciously. A PR is never both a delete candidate and a ship candidate:
+a head branch with an open PR is `pr-open` in Untersuchen (unchecked) and
+appears in the ship queue; if the user ships it, `/ship` removes the branch
+itself, so the delete checkbox for that branch is disabled on the page with
+tooltip „wird beim Shippen entfernt".
 
 ## Step 6 — Local vs Remote Main Sync
 
@@ -355,6 +410,16 @@ Create the directory if missing: `mkdir -p ~/.claude/devops-concepts` (Unix) or 
   secondary badge — "N ahead · Inhalt in main" (`own_content: false`, typical
   squash-merged session) or "N ahead · eigener Inhalt" (`own_content: true`).
   Being ahead never turns a clean session amber or removes its controls.
+- **Offene PRs section** (only when open PRs exist): its own block between
+  Aktive Sessions and the Git-Session list, blue-tinted, header
+  „🔵 Offene PRs (N)" with sub-labels „bereit: X / blockiert: Y / fremd: Z".
+  One card per PR: `#N title`, head → base, `quelle` badge (Session / lokal /
+  nur-remote / fremd), owning session title as a link when known, CI badge
+  (grün / rot / ausstehend), mergeable badge, review decision, age. Action is a
+  **single „Shippen" checkbox** — pre-checked per Step 5b, disabled (with the
+  reason as tooltip) for `session-dirty`, `draft`, `fremd`. Never a merge
+  button that bypasses `/ship`: the queue lands every PR through the full
+  pipeline (preflight, rebase, build, tests, version bump, CI gate).
 - Every action option has a `title` tooltip — see Tooltip Explanations table
 - "Remote-Branches auch loeschen" as a global toggle in the Apply-Manifest sidebar
   (not per-branch) — applies to all selected branches that have a remote
@@ -392,8 +457,10 @@ Inform the user:
 
 > Repo-Health geoeffnet. Löschbar-Gruppe ist vorausgefuellt — hake ab, was du
 > behalten willst. Untersuchen-Gruppe ist eingeklappt — klappe auf und hake an,
-> was du loeschen willst. Klick „?" fuer Inline-Details pro Eintrag.
-> Submit startet Dry-Run-Vorschau bevor irgendetwas passiert.
+> was du loeschen willst. Offene PRs: „Shippen" ist bei landebereiten PRs
+> vorausgewaehlt — jeder wird einzeln via /ship gelandet. Klick „?" fuer
+> Inline-Details pro Eintrag. Submit startet Dry-Run-Vorschau bevor
+> irgendetwas passiert.
 
 ## Step 10 — Execute Decisions
 
@@ -401,9 +468,12 @@ When the user submits via the concept page:
 
 1. **Read decisions** from `#concept-decisions` JSON.
 2. **Partition items by action:**
-   - Branches with `delete: true` -> Step 10a (cleanup)
-   - Aktive Sessions (clean) with `remove: true` -> Step 10a (cleanup)
+   - Open PRs with `ship: true` -> Step 10b (ship queue) — runs FIRST
+   - Branches with `delete: true` -> Step 10c (cleanup)
+   - Aktive Sessions (clean) with `remove: true` -> Step 10c (cleanup)
    - Everything else -> no-op (keep)
+   - A branch that is both the head of a `ship: true` PR and `delete: true`
+     is dropped from the delete set with a note — `/ship` removes it.
 3. **Re-check worktree branches** — run `git worktree list --porcelain` again
    and rebuild the protected set. NEVER trust cached data for deletion.
 4. **Validate** every branch marked for deletion:
@@ -424,6 +494,10 @@ of everything that will happen, shown to the user for confirmation.
 ```
 Folgende Aktionen werden ausgeführt:
 
+Shippen (P) — nacheinander, je ein voller /ship-Lauf:
+  1. #412 fix(ship): timed-out probe …  (claude/ship-probe → main, Session „🔧 Ship probe")
+  2. #409 feat(card): …                 (claude/card-cta → main, nur-remote)
+
 Lokal löschen (N):
   - branch-a
   - branch-b
@@ -440,15 +514,85 @@ Remote prunen: ja / nein
 
 Then show a **Dry-Run-Confirm** prompt before executing:
 
-> Löscht N lokal, M remote, entfernt K Worktrees.
-> Lokales Löschen und remote Löschen ist NICHT rückgängig zu machen.
+> Shippt P PRs (jeder via /ship: Rebase, Build, Tests, CI-Gate, Merge),
+> löscht N lokal, M remote, entfernt K Worktrees.
+> Merges und Löschungen sind NICHT rückgängig zu machen.
 > Fortfahren?  [Ja] [Abbrechen]
 
 Only proceed after explicit confirmation.
 
-### Step 10b — Cleanup Execution
+### Step 10b — Ship Queue (before any cleanup)
 
-Execute in order after Dry-Run-Confirm:
+Land the selected PRs **one after another**, each through the complete
+`/ship` pipeline — exactly what would happen if the user sat in P sessions
+and typed `/ship` in each, minus the tab-switching. Never `gh pr merge`
+directly: the guard hook blocks it and it would skip rebase, build, tests,
+version bump and the CI gate.
+
+**Order:** oldest PR first (`createdAt`), so a later PR rebases onto the
+earlier one's merge instead of the other way round.
+
+**Arm the queue marker once, before the first ship:**
+
+```bash
+node -e "require('fs').mkdirSync('.claude',{recursive:true});require('fs').writeFileSync('.claude/.ship-queue',JSON.stringify({owner:'setup-cleanup',since:new Date().toISOString()}))"
+```
+
+Project ship extensions read this marker and defer their post-ship
+finalizers to the end of the queue (the dotclaude plugin-source repo's
+extension would otherwise mark the MCP servers stale after PR 1 and block
+every later `ship_*` call — the same trap `/run-backlog` guards against with
+its lockout owner). The marker is NOT an autonomous lockout: the user is
+present, every `/ship` gate stays interactive.
+
+**Per PR:**
+
+1. **Resolve the working directory** the ship runs in:
+   - `quelle: session` (clean worktree) → that worktree path. Re-check
+     `git -C <path> status --porcelain` immediately before; any output → SKIP
+     this PR with „Worktree hat inzwischen Änderungen".
+   - `quelle: lokal` → `git worktree add .claude/worktrees/cleanup-pr-<n> <branch>`
+   - `quelle: nur-remote` → `git fetch origin <branch>:<branch>` then the same
+     `worktree add`.
+   Record `tempWorktree: true` for the two created cases.
+2. **Invoke the pipeline:** `Skill("devops:ship", args: "--cwd=<path> --keep --queued")`.
+   `--cwd` makes every `ship_*` call and every git/gh command target that
+   directory instead of this session's own worktree (see `/ship` → *Composed
+   ships*). `--keep` because the branch/worktree teardown is this step's job,
+   not the ship's — `/ship` must never `ExitWorktree` on a directory that is
+   not its session's own. `--queued` is informational (card wording).
+3. **Read the outcome** from the ship's `ship_release` result / card variant:
+   - `ship-successful` → record `merged: true, mergeSha, version`.
+   - `ship-blocked` → record the reason; **continue with the next PR**. One
+     blocked PR never halts the queue (COMPLETED > INTERRUPTED > BLOCKED, as
+     in `/run-backlog`).
+4. **Tear down** (merged PRs only):
+   - `tempWorktree: true` → `git worktree remove <path>` (no `--force`), then
+     `git branch -d <branch>` (lowercase `-d`: refuses if not merged — a
+     second safety net), then `git push origin --delete <branch>` when
+     `options.delete_remote` is set and the remote ref still exists.
+   - `quelle: session` → leave the worktree in place; it now classifies as a
+     clean, squash-merged Aktive Session. The owning session keeps working or
+     gets removed in a later run — never yank a directory from under a session.
+   - Blocked PRs keep their worktree so the user can resume there; list the
+     path in the summary.
+5. **Re-sync** before the next PR: `git fetch origin main` so the next ship's
+   preflight sees the merge that just landed.
+
+**After the last PR:**
+
+1. Run the project ship-extension finalizer exactly once if ≥1 PR merged —
+   read `{project}/.claude/skills/ship/SKILL.md` for the step the extension
+   deferred while `.claude/.ship-queue` existed, run it, capture its output.
+2. Delete `.claude/.ship-queue`.
+3. Update the concept page via browser eval: ✅ per merged PR (with merge
+   SHA + version), ⏸ per blocked PR (with reason), then continue with
+   Step 10c — the cleanup set was fixed at submit time and is not widened by
+   the merges.
+
+### Step 10c — Cleanup Execution
+
+Execute in order after Dry-Run-Confirm and after the ship queue (10b):
    a. Delete selected local branches: `git branch -D <branch>`
    b. If `delete_remote` is true: `git push origin --delete <branch>` for
       each selected branch that has a remote
@@ -513,14 +657,18 @@ When triggered, call `mcp__plugin_devops_dotclaude-completion__render_completion
 
 | Situation | Variant |
 |-----------|---------|
-| Branches / remotes / worktrees deleted | `ready` |
-| User reviewed but didn't delete anything | `analysis` |
+| ≥1 PR shipped via the queue and none blocked | `ship-successful` (needs `state.pushed` + `state.merged`; any doubt → `ready`) |
+| ≥1 PR blocked in the queue | `ship-blocked` (reasons listed per PR) |
+| Branches / remotes / worktrees deleted, no PRs shipped | `ready` |
+| User reviewed but didn't delete or ship anything | `analysis` |
 | User aborted mid-flow | `aborted` |
 
-Pass: `variant`, `summary` (e.g. "Repo hygiene — 4 branches cleaned"), `lang`,
-`session_id`, `changes` (counts per action: local/remote/worktrees removed),
-and `state` when git operations happened. Output the markdown VERBATIM as the
-LAST thing in the response.
+Pass: `variant`, `summary` (e.g. "Repo hygiene — 2 PRs shipped, 4 branches
+cleaned"), `lang`, `session_id`, `changes` (counts per action: PRs merged /
+blocked, local/remote/worktrees removed), and `state` when git operations
+happened. Each `/ship` in the queue rendered its own card already; this final
+card is the aggregate. Output the markdown VERBATIM as the LAST thing in the
+response.
 
 ## Rules
 

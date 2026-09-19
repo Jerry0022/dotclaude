@@ -83,6 +83,38 @@ Notes on cells:
   Card styling: subtle border, lower visual weight than Git-Session cards,
   distinct background tint (blue-gray) to avoid confusion with Git-Sessions
 
+[Offene PRs Section — DEDICATED, between Aktive Sessions and Git-Sessions]
+  Only shown if open PRs exist. Blue-tinted block, expandable, OPEN by default.
+  Header: "🔵 Offene PRs (N)"
+  Sub-labels behind header: "bereit: X / blockiert: Y / fremd: Z"
+
+  Per PR card:
+    "#412  fix(ship): a timed-out git probe is unknown" (number monospace, title prominent)
+    head → base (monospace, smaller): claude/ship-probe → main
+    Quelle badge: Session (blue) / lokal (gray) / nur-remote (gray) / fremd (red)
+    Session link (if quelle = Session and the owning session is known):
+      "Session: 🔧 Ship probe" as [title](#<sessionId>) — plus "archiviert" / "läuft"
+    CI badge: grün / rot / ausstehend / keine Checks
+    Mergeable badge: mergeable / Konflikt / unbekannt   + mergeStateStatus
+    Review: approved / changes requested / keine
+    Age: "erstellt vor 3 Tagen, letzte Änderung vor 2 Stunden"
+    Shippability label (from SKILL.md Step 5b table), e.g.
+      "bereit — via /ship landen" / "in Session <title> shippen — uncommittete Änderungen"
+    Action controls:
+      [x] Shippen  (checkbox; PRE-CHECKED only for shippable=yes with clean/behind
+                    merge state; DISABLED for session-dirty / draft / fremd — the
+                    disabled reason is the tooltip)
+      [?] inline detail toggle (PR body excerpt, commit list, files changed,
+                                failing check names, conflict files if known)
+      Optional comment field (collapsed by default)
+    Cross-link: the head branch's row in Untersuchen shows "→ Offener PR #412"
+      and its Löschen checkbox is DISABLED while the PR's Shippen box is checked
+      (tooltip "wird beim Shippen entfernt"); unchecking Shippen re-enables it.
+
+  Ship order note under the header (muted):
+    "Wird in dieser Reihenfolge gelandet (älteste zuerst) — jeder PR läuft
+     durch die volle /ship-Pipeline: Rebase, Build, Tests, Version, CI-Gate, Merge."
+
 [Filter Bar]
   Category toggles: [Löschbar] [Untersuchen] [nur-remote]
   (NO Aktive-Session toggle — Aktive Sessions have their own section above)
@@ -157,6 +189,7 @@ Notes on cells:
 
   Content:
     "Folgende Aktionen:"
+    Shippen (P): #412, #409, ...  (in Landereihenfolge)
     Lokal löschen (N): branch-a, branch-b, ...
     Remote löschen (M): branch-a (origin), ...
     Worktrees entfernen (K): claude/old-session (/path)
@@ -168,8 +201,8 @@ Notes on cells:
   Submit button label: "Aufraeumen starten"
 
   On Submit: show Dry-Run-Confirm before executing anything:
-    "Löscht N lokal, M remote, entfernt K Worktrees.
-    Lokales Löschen und remote Löschen ist NICHT rückgängig zu machen.
+    "Shippt P PRs (jeder via /ship), löscht N lokal, M remote, entfernt K Worktrees.
+    Merges und Löschungen sind NICHT rückgängig zu machen.
     Fortfahren?" [Ja] [Abbrechen]
 ```
 
@@ -182,6 +215,11 @@ Every action control and global option MUST have an explanatory tooltip
 |---------|-------------|
 | Löschen checkbox (Löschbar Git-Session) | "Branch lokal loeschen. Arbeit ist bereits in main (merged/squash-merged)." |
 | Löschen checkbox (Untersuchen Git-Session) | "Branch lokal loeschen. ACHTUNG: Aenderungen sind moeglicherweise NICHT in main!" |
+| Shippen checkbox (enabled) | "PR via /ship landen: Rebase auf main, Build, Tests, Versions-Bump, CI-Gate, Squash-Merge. Branch und ggf. temporärer Worktree werden danach entfernt." |
+| Shippen checkbox (disabled: session-dirty) | "Der Worktree dieser Session hat uncommittete Änderungen — dort /ship aufrufen, nicht von hier." |
+| Shippen checkbox (disabled: draft) | "Draft-PR — erst als bereit markieren (gh pr ready), dann shippen." |
+| Shippen checkbox (disabled: fremd) | "PR eines anderen Autors — wird von hier nie gemergt." |
+| Löschen checkbox (disabled: PR wird geshippt) | "Wird beim Shippen entfernt — Shippen abwählen, um den Branch stattdessen zu löschen." |
 | Entfernen checkbox (clean Aktive Session) | "Nur den Worktree entfernen. Der Branch bleibt erhalten und kann spaeter separat geloescht werden." |
 | „?" inline detail toggle | "Commit-Log, Diff-Statistik und Empfehlung anzeigen — keine Aktion wird ausgeloest." |
 | "Remote-Branches auch loeschen" | "Loescht die Branches auch auf GitHub/origin. Betrifft nur die oben ausgewaehlten Branches." |
@@ -208,3 +246,6 @@ Keep text concise — one sentence max, no jargon.
   never affected by bulk select.
 - Comment fields are per-card, collapsed by default; their content is included in
   the submit payload for logging purposes only.
+- Open-PR cards have exactly **one checkbox** (Shippen). There is no merge button,
+  no "close PR" control and no per-PR strategy choice — every selected PR goes
+  through `/ship` unchanged. Bulk select never touches PR checkboxes.
