@@ -34,6 +34,17 @@
  *   Unknown plan AND unknown usage → ask-before-parallel: one question is the
  *   cheap side of that error; an API-key user pays per token (PO + redteam #5).
  *
+ *   A snapshot past its window reset or older than STALE_MS (the Desktop app
+ *   never runs the statusLine writer, so the file is only as fresh as the last
+ *   completion card — typically last night's) triggers ONE detached
+ *   `refresh-usage-headless.js --quiet --no-login` (maybeRefreshUsage) —
+ *   exactly what the completion card does, minus the wait: the hook never
+ *   blocks on Edge, the per-prompt re-read picks the fresh file up. Rate-
+ *   limited by a tmp marker (REFRESH_COOLDOWN_MS) so parallel sessions and
+ *   every prompt of a session don't stack scrapers; skipped where the
+ *   scraper profile does not exist (a host that never ran /auto-usage, the
+ *   eval sandbox) or DEVOPS_COMPLETION_NO_USAGE=1 (tests, CI).
+ *
  *   The class is read at SessionStart and on every prompt (cheap JSON). The
  *   credentials tier is cached per session (`dotclaude-budget-tier-<sid>`) so
  *   the credentials file is parsed once, not per prompt (redteam #14).
@@ -46,8 +57,11 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawn } = require('child_process');
 
 const STALE_MS = 3 * 60 * 60 * 1000; // snapshot older than 3 h → flagged (still used unless its window reset)
+const REFRESH_COOLDOWN_MS = 5 * 60 * 1000; // one detached scraper per 5 min, machine-wide
+const REFRESH_MARKER = path.join(os.tmpdir(), 'dotclaude-usage-refresh');
 
 const CLASSES = ['free', 'ask-before-parallel', 'sonnet-only'];
 
@@ -176,6 +190,38 @@ function readBudget({ home = os.homedir(), nowMs = Date.now(), env = process.env
   return b;
 }
 
+/**
+ * Kick off a detached usage refresh when the snapshot can no longer classify
+ * (past its reset, or older than STALE_MS). Returns true when a scraper was
+ * started; false when nothing was needed or the refresh is not possible here.
+ * Never throws, never waits: the SessionStart hook has a 10 s budget and a
+ * cold Edge launch can take longer — the next prompt re-reads the file.
+ */
+function maybeRefreshUsage(b, { home = os.homedir(), nowMs = Date.now(), env = process.env, pluginRoot = null } = {}) {
+  if (!b || !(b.stale || b.expired)) return false;
+  if (b.override) return false;
+  if (env.DEVOPS_COMPLETION_NO_USAGE === '1') return false;
+  // Only where the scraper has run before — a host without the dedicated
+  // Edge profile (never ran /auto-usage; the eval sandbox's fresh HOME) must
+  // not start launching browsers from a hook.
+  try { if (!fs.statSync(path.join(home, '.claude', 'edge-usage-profile')).isDirectory()) return false; } catch { return false; }
+  try {
+    const last = Number(fs.readFileSync(REFRESH_MARKER, 'utf8'));
+    if (Number.isFinite(last) && nowMs - last < REFRESH_COOLDOWN_MS) return false;
+  } catch {}
+  const root = pluginRoot || env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
+  const script = path.join(root, 'scripts', 'refresh-usage-headless.js');
+  try { fs.accessSync(script); } catch { return false; }
+  try {
+    fs.writeFileSync(REFRESH_MARKER, String(nowMs), 'utf8');
+    const child = spawn(process.execPath, [script, '--quiet', '--no-login'], {
+      detached: true, stdio: 'ignore', windowsHide: true, env,
+    });
+    child.unref();
+    return true;
+  } catch { return false; }
+}
+
 /** The one line the hooks inject. Always present so "unknown" is visible, not silent. */
 function budgetLine(b) {
   const planTxt = b.plan ? b.plan : 'plan unknown';
@@ -186,6 +232,7 @@ function budgetLine(b) {
       ` · week ${b.weeklyPct == null ? '?' : b.weeklyPct + '%'}` +
       (b.weeklyResetInMinutes != null && b.binding === 'week' ? ` (reset ${Math.round(b.weeklyResetInMinutes / 60)} h)` : '');
   const parts = [`[budget] ${planTxt} · ${usage}${b.stale && b.fivePct != null ? ' · stale' : ''} → ${b.cls}`];
+  if (b.refreshing) parts.push('(snapshot refreshing — the per-prompt budget line has the live class)');
   if (b.override) parts.push('(env override)');
   else if (b.tier === 'unknown') parts.push('(no plan info — asks once before parallel)');
   return parts.join(' ');
@@ -205,4 +252,4 @@ function nudgeSuffix(b) {
   return '';
 }
 
-module.exports = { RULES, CLASSES, planTier, tierLabel, classify, bindingWindow, readBudget, budgetLine, nudgeSuffix, STALE_MS };
+module.exports = { RULES, CLASSES, planTier, tierLabel, classify, bindingWindow, readBudget, maybeRefreshUsage, budgetLine, nudgeSuffix, STALE_MS, REFRESH_COOLDOWN_MS, REFRESH_MARKER };

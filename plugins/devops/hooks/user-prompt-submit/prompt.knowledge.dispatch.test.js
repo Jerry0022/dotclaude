@@ -25,11 +25,18 @@ function nudgeFromSource() {
   return [...block[1].matchAll(/'([^']*)'/g)].map((m) => m[1]).join("");
 }
 
-function runHook(userMessage, home, cwd) {
+/**
+ * Claude Code's UserPromptSubmit payload carries the text as `prompt` — the
+ * field this helper sends. Until 2026-09-19 the hook read only the legacy
+ * `user_message`/`message` names (which these tests used to send), so every
+ * real prompt looked empty and the hook exited before emitting anything:
+ * ten consecutive Desktop sessions had no nudge, no budget suffix, no locale.
+ */
+function runHook(userMessage, home, cwd, field = "prompt") {
   const env = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT };
   if (home) { env.HOME = home; env.USERPROFILE = home; }
   const r = spawnSync(process.execPath, [HOOK], {
-    input: JSON.stringify({ session_id: `vitest-dispatch-${process.pid}-${Date.now()}`, user_message: userMessage, cwd }),
+    input: JSON.stringify({ session_id: `vitest-dispatch-${process.pid}-${Date.now()}`, [field]: userMessage, cwd }),
     env,
     encoding: "utf8",
   });
@@ -55,6 +62,14 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
     for (const needle of ["Inline", "devops:research", "devops:qa", "devops:redteam", "devops:po", "2–3 parallel", "run-agents", "Hard stop"]) {
       expect(nudge).toContain(needle);
     }
+  });
+
+  test("the real payload field is `prompt`; the legacy names still work as aliases", () => {
+    const msg = "compare vite and webpack for our typescript spa, please";
+    expect(runHook(msg, proHome(), undefined, "prompt")).toContain(nudge);
+    expect(runHook(msg, proHome(), undefined, "user_message")).toContain(nudge);
+    expect(runHook(msg, proHome(), undefined, "message")).toContain(nudge);
+    expect(runHook(msg, proHome(), undefined, "text")).toBe(""); // unknown field → nothing, not a crash
   });
 
   test("hook emits the nudge on every prompt, after the locale tag", () => {

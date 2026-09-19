@@ -5,7 +5,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { planTier, classify, readBudget, budgetLine, nudgeSuffix, STALE_MS } = require("./budget.js");
+const { planTier, classify, readBudget, maybeRefreshUsage, budgetLine, nudgeSuffix, STALE_MS, REFRESH_MARKER } = require("./budget.js");
 
 /**
  * The budget class is the delegation policy's fourth input. What must hold
@@ -167,5 +167,70 @@ describe("readBudget", () => {
     fs.unlinkSync(path.join(h, ".claude", ".credentials.json"));
     expect(read(h, { sessionId: sid }).tier).toBe("max5"); // served from the session cache
     fs.unlinkSync(path.join(os.tmpdir(), `dotclaude-budget-tier-${sid}`));
+  });
+});
+
+describe("maybeRefreshUsage — a dead snapshot starts one detached scraper", () => {
+  /**
+   * The Desktop app never runs the statusLine writer, so usage-live.json is
+   * only as fresh as the last completion card — the morning-after session
+   * classified on "week 97 %" from last night with the 5 h window unknown.
+   * The fix is what the card does, minus the wait: spawn the headless
+   * scraper (--no-login) detached and let the next prompt re-read the file.
+   */
+  const stubRoot = () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "budget-root-"));
+    fs.mkdirSync(path.join(root, "scripts"));
+    // The stub records its argv next to itself instead of launching Edge.
+    fs.writeFileSync(path.join(root, "scripts", "refresh-usage-headless.js"),
+      "require('fs').writeFileSync(__dirname + '/called.json', JSON.stringify(process.argv.slice(2)));");
+    return root;
+  };
+  const withProfile = (h) => { fs.mkdirSync(path.join(h, ".claude", "edge-usage-profile")); return h; };
+  const dead = () => withProfile(home({
+    "usage-live.json": { timestamp: iso(NOW - 10 * 3_600_000), session: { pct: 26, resetInMinutes: 148 }, weekly: { pct: 97, resetInMinutes: 2058 }, plan: "Max 20x" },
+  }));
+  const waitFor = async (file) => { for (let i = 0; i < 100 && !fs.existsSync(file); i++) await new Promise((r) => setTimeout(r, 50)); };
+  const clearMarker = () => { try { fs.unlinkSync(REFRESH_MARKER); } catch {} };
+
+  test("expired snapshot + scraper profile → spawns --quiet --no-login and says so in the line", async () => {
+    clearMarker();
+    const root = stubRoot();
+    const h = dead();
+    const b = read(h);
+    expect(b.expired).toBe(true);
+    expect(b.cls).toBe("ask-before-parallel"); // week 97 % still counts; the 5 h window is unknown
+    b.refreshing = maybeRefreshUsage(b, { home: h, nowMs: NOW, env: {}, pluginRoot: root });
+    expect(b.refreshing).toBe(true);
+    expect(budgetLine(b)).toContain("→ ask-before-parallel (snapshot refreshing");
+    await waitFor(path.join(root, "scripts", "called.json"));
+    expect(JSON.parse(fs.readFileSync(path.join(root, "scripts", "called.json"), "utf8"))).toEqual(["--quiet", "--no-login"]);
+  });
+
+  test("second call inside the cooldown does nothing — parallel sessions and every prompt must not stack scrapers", () => {
+    const root = stubRoot();
+    const h = dead();
+    const b = read(h);
+    expect(maybeRefreshUsage(b, { home: h, nowMs: NOW + 60_000, env: {}, pluginRoot: root })).toBe(false);
+    expect(fs.existsSync(path.join(root, "scripts", "called.json"))).toBe(false);
+  });
+
+  test("never spawns when: snapshot is live, no scraper profile, env override, DEVOPS_COMPLETION_NO_USAGE, or no script", () => {
+    clearMarker();
+    const root = stubRoot();
+    const live = withProfile(home({
+      "usage-live.json": { timestamp: iso(NOW - 60_000), session: { pct: 26, resetInMinutes: 148 }, weekly: { pct: 50, resetInMinutes: 2058 }, plan: "Max 20x" },
+    }));
+    expect(maybeRefreshUsage(read(live), { home: live, nowMs: NOW, env: {}, pluginRoot: root })).toBe(false);
+    const noProfile = home({
+      "usage-live.json": { timestamp: iso(NOW - 10 * 3_600_000), session: { pct: 26, resetInMinutes: 148 }, weekly: { pct: 97, resetInMinutes: 2058 }, plan: "Max 20x" },
+    });
+    expect(maybeRefreshUsage(read(noProfile), { home: noProfile, nowMs: NOW, env: {}, pluginRoot: root })).toBe(false);
+    const h = dead();
+    expect(maybeRefreshUsage(read(h, { env: { DOTCLAUDE_BUDGET: "free" } }), { home: h, nowMs: NOW, env: {}, pluginRoot: root })).toBe(false);
+    expect(maybeRefreshUsage(read(h), { home: h, nowMs: NOW, env: { DEVOPS_COMPLETION_NO_USAGE: "1" }, pluginRoot: root })).toBe(false);
+    expect(maybeRefreshUsage(read(h), { home: h, nowMs: NOW, env: {}, pluginRoot: fs.mkdtempSync(path.join(os.tmpdir(), "budget-noscript-")) })).toBe(false);
+    expect(fs.existsSync(path.join(root, "scripts", "called.json"))).toBe(false);
+    clearMarker();
   });
 });

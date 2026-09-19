@@ -31,7 +31,7 @@ process.stdin.on('end', () => {
   try { if (require('../lib/batch-state').willBeCollected(hook)) process.exit(0); }
   catch { /* fail open */ }
 
-  const message = hook.user_message || hook.message || '';
+  const message = hook.prompt || hook.user_message || hook.message || '';
   if (!message) process.exit(0);
 
   // Pattern 1: Explicit issue reference — #42, Issue #42, Issue 42, "mach Issue #42"

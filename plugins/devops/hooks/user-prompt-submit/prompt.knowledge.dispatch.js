@@ -18,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
 const { ensureLocale } = require('../lib/locale');
-const { readBudget, nudgeSuffix } = require('../lib/budget');
+const { readBudget, maybeRefreshUsage, nudgeSuffix } = require('../lib/budget');
 const { readDelegation } = require('../lib/delegation');
 
 /**
@@ -192,14 +192,19 @@ process.stdin.on('end', () => {
   try { if (require('../lib/batch-state').willBeCollected(hook)) process.exit(0); }
   catch { /* fail open */ }
 
-  const userMessage = (hook.user_message || hook.message || '').toLowerCase().trim();
+  // Claude Code delivers the prompt as `prompt`; `user_message`/`message` are
+  // the legacy names the tests and older runtimes used. Reading only the legacy
+  // pair yielded '' on every real prompt — no nudge, no budget suffix, no
+  // locale, no DK dispatch, for months (audit 2026-09-19).
+  const rawMessage = hook.prompt || hook.user_message || hook.message || '';
+  const userMessage = rawMessage.toLowerCase().trim();
   if (!userMessage || userMessage.length < 5) process.exit(0);
 
   const sessionId = hook.session_id || 'unknown';
 
   // Detect + cache UI locale once per session. First prompt sets it; later
   // prompts read the cache so all hooks/skills agree on a single language.
-  const { lang, isFresh } = ensureLocale(sessionId, hook.user_message || hook.message || '');
+  const { lang, isFresh } = ensureLocale(sessionId, rawMessage);
 
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT
     || path.resolve(__dirname, '..', '..');
@@ -271,12 +276,18 @@ process.stdin.on('end', () => {
   //   7. Kill-switch: `off` → no nudge, no suffix; `ask` → the ask variant
   //      (the budget suffix still rides along — after a yes the class still
   //      decides the model).
-  const rawMessage = hook.user_message || hook.message || '';
   const unattended = /^\s*AUTONOMOUS_(?:AUTOSTART|RESUME)\s*:/i.test(rawMessage) || lockoutArmed(hook.cwd);
   const mode = readDelegation({ cwd: hook.cwd || process.cwd() }).mode;
   let budgetSuffix = '';
+  //   8. A snapshot past its reset (a session resumed the next morning skips
+  //      SessionStart) starts one detached refresh — rate-limited in the lib,
+  //      never awaited; the next prompt re-reads the fresh file.
   if (!unattended && mode !== 'off') {
-    try { budgetSuffix = nudgeSuffix(readBudget({ sessionId })); } catch { /* never block the prompt */ }
+    try {
+      const budget = readBudget({ sessionId });
+      maybeRefreshUsage(budget, { pluginRoot });
+      budgetSuffix = nudgeSuffix(budget);
+    } catch { /* never block the prompt */ }
   }
   const nudgeText = mode === 'off' ? null : mode === 'ask' ? ASK_NUDGE : DELEGATION_NUDGE;
   const nudge = nudgeText && rawMessage.trim().length >= NUDGE_MIN_CHARS ? [nudgeText + budgetSuffix] : [];

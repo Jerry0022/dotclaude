@@ -28,7 +28,7 @@ process.stdin.on('end', () => {
   try { if (require('../lib/batch-state').willBeCollected(hook)) process.exit(0); }
   catch { /* fail open */ }
 
-  const userMessage = (hook.user_message || hook.message || '').toLowerCase().trim();
+  const userMessage = (hook.prompt || hook.user_message || hook.message || '').toLowerCase().trim();
   if (!userMessage) process.exit(0);
 
   const startKeywords = [
