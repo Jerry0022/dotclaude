@@ -39,7 +39,7 @@ process.stdin.on('end', () => {
   try { hook = JSON.parse(inputData); }
   catch { process.exit(0); }
 
-  const userMessage = (hook.user_message || hook.message || '').toLowerCase().trim();
+  const userMessage = (hook.prompt || hook.user_message || hook.message || '').toLowerCase().trim();
   if (!userMessage) process.exit(0);
 
   // --- Cache-timeout detection (5-minute prompt cache TTL) ---

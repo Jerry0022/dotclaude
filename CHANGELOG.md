@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.178.1] — 2026-09-19
+
+### Fixed
+
+- **The per-prompt delegation nudge never reached a real session — four UserPromptSubmit hooks read the wrong payload field.** Claude Code delivers the prompt as `prompt`; `prompt.knowledge.dispatch`, `prompt.ship.detect`, `prompt.issue.detect` and `prompt.flow.appstart` read only the legacy `user_message`/`message` names, saw an empty string and exited before emitting anything. An audit of the last ten Desktop sessions (2026-09-17..19) found zero `[delegation-policy]` nudges, zero `budget:` suffixes, zero `[ui-locale]` tags and zero locale markers — every proactive agent spawn ran on the SessionStart policy alone, and the delegation evals never noticed because they carry the nudge by hand (the eval runner fires no prompt hooks) while the unit tests fed `user_message`. All four hooks now read `hook.prompt || hook.user_message || hook.message` (the shape `prompt.batch.collect` and `batch-state` already used); the dispatch test helper sends `prompt` and a new test pins all three names.
+- **A usage snapshot past its window reset now refreshes itself — the way the completion card does.** The Desktop app never runs the statusLine writer, so `usage-live.json` is only as fresh as the last card; the morning-after session classified on "window ? · week 97 %". `budget.js` gains `maybeRefreshUsage`: when the snapshot is expired or older than 3 h, SessionStart (`ss.knowledge.index`) and the per-prompt hook start one detached `refresh-usage-headless.js --quiet --no-login` — never awaited, rate-limited by a 5-min tmp marker, skipped without the scraper's Edge profile (fresh hosts, the eval sandbox) or under `DEVOPS_COMPLETION_NO_USAGE=1`; the SessionStart line says `(snapshot refreshing …)` and the next prompt's `budget:` suffix carries the live class. `vitest.config` sets that escape hatch for the whole run so hook tests never launch Edge. Verified live: the detached run replaced a stale snapshot in ~4 s. `agent-proactivity.md` documents the rule. Not covered by Codex review — external usage limit until 2026-10-11; full suite 3447 green (one vitest-worker RPC timeout under load, no test failure).
+
 ## [0.178.0] — 2026-09-19
 
 ### Added

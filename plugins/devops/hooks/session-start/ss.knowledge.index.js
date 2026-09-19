@@ -18,7 +18,7 @@
  */
 
 const { runOnce } = require('../lib/run-once');
-const { readBudget, budgetLine } = require('../lib/budget');
+const { readBudget, maybeRefreshUsage, budgetLine } = require('../lib/budget');
 const { readDelegation, delegationLine } = require('../lib/delegation');
 const fs = require('fs');
 const path = require('path');
@@ -72,10 +72,14 @@ function buildContext(pluginRoot, sessionId = null, cwd = process.cwd()) {
 
   // Kill-switch state, then budget class — the policy's fourth input (see
   // lib/budget.js). One line each, always present, so "off" and "unknown"
-  // are visible rather than silently assumed.
+  // are visible rather than silently assumed. A snapshot past its reset
+  // (the morning-after Desktop session) starts a detached refresh, like the
+  // completion card would — the per-prompt line then carries the live class.
   blocks.push('', delegationLine(delegation));
   try {
-    blocks.push(budgetLine(readBudget({ sessionId })));
+    const budget = readBudget({ sessionId });
+    budget.refreshing = maybeRefreshUsage(budget, { pluginRoot });
+    blocks.push(budgetLine(budget));
   } catch { /* never let the budget probe break the index injection */ }
 
   return blocks.join('\n');

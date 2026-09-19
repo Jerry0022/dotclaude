@@ -33,5 +33,12 @@ export default defineConfig({
     // this makes the real budget the default for all of them.
     testTimeout: 60_000,
     hookTimeout: 60_000,
+    // Hook tests spawn the real SessionStart / UserPromptSubmit hooks, and the
+    // budget probe inside them starts a detached usage scraper (a real Edge
+    // instance) when the developer's own snapshot is past its reset. Workers
+    // inherit this into every child env — the same escape hatch the
+    // completion-card tests use. Suites that test the refresh itself override
+    // it per call.
+    env: { DEVOPS_COMPLETION_NO_USAGE: "1" },
   },
 });

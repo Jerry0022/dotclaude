@@ -69,6 +69,11 @@ say what they do, not how full the meter is.
   window filling up) — one question is cheaper than a wrong assumption.
   A new session asks again; nothing is persisted.
 - Never ask on Inline or 1-agent prompts: there is no real alternative there.
+- The class comes from `~/.claude/usage-live.json`. On the Desktop app that
+  file is only as fresh as the last completion card, so a snapshot past its
+  window reset (the morning-after session) starts one detached refresh —
+  the card's own scraper, `--no-login`, never awaited — and the per-prompt
+  `budget:` suffix carries the live class from the next prompt on.
 
 Details: `agent-orchestration.md` (roster, waves, QA protocol, budget item in
 the spawn template), `agent-collaboration.md` (handoffs), `/run-agents`
