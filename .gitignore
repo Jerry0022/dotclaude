@@ -42,6 +42,7 @@ node_modules/
 .claude/strict-mode.json
 .claude/.ship-in-progress
 .claude/.ship-lockout
+.claude/.ship-queue
 .claude/.ship-watcher/
 .claude/handoffs/
 .claude/devops-livebrief/

@@ -59,7 +59,7 @@ Apply rules in order, first match wins:
 | Recommendation | When | Label shown in inline detail |
 |----------------|------|------------------------------|
 | `safe-delete` | Squash-merge cross-check ≥ 80% match, OR all commits empty (`git diff` clean against main) | "Bereits in main — sicher löschbar" |
-| `pr-open` | An open PR points to this branch | "Offener PR — nicht löschen" |
+| `pr-open` | An open PR points to this branch | "Offener PR #N — nicht löschen, im Block „Offene PRs" shippen" |
 | `ship-needed` | Has substantive diff (≥ 5 lines changed outside CHANGELOG), no open PR, last commit ≤ 30 days old | "N ungeschippte Commits — ship empfohlen" |
 | `rebase-needed` | Last commit > 90 days old, AND ≥ 30 commits between branch base and current `origin/main` | "Veraltet — rebase empfohlen" |
 | `wip-keep` | WIP heuristic > 50%, last commit ≤ 14 days old | "WIP — Arbeit laeuft noch" |

@@ -110,6 +110,7 @@ between them, otherwise append the whole block):
 .claude/strict-mode.json
 .claude/.ship-in-progress
 .claude/.ship-lockout
+.claude/.ship-queue
 .claude/.ship-watcher/
 # Written by Claude Code / adjacent MCP servers, observed dirtying real repos.
 .claude/handoffs/

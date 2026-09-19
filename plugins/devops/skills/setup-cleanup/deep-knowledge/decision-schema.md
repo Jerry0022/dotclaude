@@ -68,6 +68,38 @@ cleanup decisions.
       "remove": true
     }
   ],
+  "offenePRs": [
+    {
+      "id": "pr-412",
+      "number": 412,
+      "title": "fix(ship): a timed-out git probe is unknown",
+      "branch": "claude/ship-probe-07da25",
+      "base": "main",
+      "quelle": "session",
+      "worktree": "/repo/.claude/worktrees/ship-probe-07da25",
+      "session": { "id": "local_551b…", "title": "🔧 Ship probe", "archived": false, "running": false },
+      "shippable": "yes",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "BEHIND",
+      "checks": "success",
+      "ship": true
+    },
+    {
+      "id": "pr-409",
+      "number": 409,
+      "title": "feat(card): clickable CTA verbs",
+      "branch": "claude/card-cta-11ab22",
+      "base": "main",
+      "quelle": "nur-remote",
+      "worktree": null,
+      "session": null,
+      "shippable": "checks-red",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "UNSTABLE",
+      "checks": "failure",
+      "ship": false
+    }
+  ],
   "options": {
     "delete_remote": true,
     "prune_worktrees": true,
@@ -91,6 +123,25 @@ cleanup decisions.
 
 - `decisions[].kategorie` — `"loeschbar"` or `"untersuchen"`. Combined with
   `options.delete_remote` to decide the full scope of the delete.
+
+- `offenePRs[].ship` — boolean. `true` = land this PR via `/ship` in Step 10b,
+  `false` = leave it open. Only valid when `shippable` is one of `yes`,
+  `conflict`, `checks-red`; the UI never renders an enabled control for
+  `session-dirty` / `draft` / `fremd`, and if `ship: true` arrives for one of
+  those anyway Claude skips it with a warning (safety guard — a foreign PR is
+  never merged from here, a dirty session worktree is never touched).
+
+- `offenePRs[].quelle` — `"session"`, `"lokal"`, `"nur-remote"`, `"fremd"`.
+  Decides the ship working directory: the session worktree, or a temporary
+  `.claude/worktrees/cleanup-pr-<n>` that Step 10b creates and removes.
+
+- `offenePRs[].session` — owning Desktop session when known (`null` otherwise);
+  purely informational (page link + manifest line), never a merge criterion.
+
+- A `decisions[]` entry whose `branch` is the head of an `offenePRs[]` entry with
+  `ship: true` must arrive with `delete: false` (the UI disables the box).
+  If it arrives `true`, Claude drops it from the delete set with a note — the
+  ship removes the branch.
 
 - `aktiveSessions[].remove` — boolean. `true` only valid for `status: clean`
   Aktive Sessions. Triggers `git worktree remove <path>` (never `--force`).

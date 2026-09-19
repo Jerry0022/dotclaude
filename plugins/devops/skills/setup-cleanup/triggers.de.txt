@@ -3,3 +3,6 @@
 was liegt noch rum
 git aufräumen
 branch hygiene
+offene prs landen
+offene prs shippen
+prs aufräumen
