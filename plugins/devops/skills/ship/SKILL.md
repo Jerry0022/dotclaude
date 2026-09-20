@@ -615,8 +615,13 @@ Start-Process -WindowStyle Hidden -FilePath "node" -ArgumentList @("$env:CLAUDE_
 
 The watcher writes status to `<main-repo>/.claude/.ship-watcher/<merge-sha>.json`
 (resolved from the git-common-dir, so a removed worktree cannot swallow the result)
-and the `ss.ship.verify` hook surfaces unack'd results at the next SessionStart. On
-failure, a best-effort Windows toast fires immediately.
+and the `ss.ship.verify` hook — reading the same main-repo dir from ANY worktree,
+never the worktree's seeded copy — surfaces unack'd results once at the next
+SessionStart. On failure, a best-effort Windows toast fires immediately.
+
+The watcher is a plugin `scripts/` CLI and is orphaned on purpose; the MCP reaper
+(`hooks/lib/mcp-reaper.js`) exempts that class, so a Stop/SessionStart reap never
+kills it mid-wait.
 
 **Skip the watcher entirely** when:
 - `intermediate: true` (no CI on intermediate merges typically)

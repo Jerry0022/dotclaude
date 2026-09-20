@@ -6,7 +6,10 @@ import {
   reconcile,
   renderReport,
   renderInflight,
+  resolveMainRepoRoot,
+  resolveStateDir,
 } from "./ss.ship.verify.js";
+import path from "node:path";
 
 /**
  * The bug: a watcher process that dies before writing a terminal state leaves
@@ -246,5 +249,37 @@ describe("renderInflight", () => {
     const lines = renderInflight(watching(), T0 + 5 * MIN).join("\n");
     expect(lines).toContain("still running");
     expect(lines).toContain("(5m elapsed)");
+  });
+});
+
+/**
+ * The repeat bug: Claude Desktop seeds a new worktree with a copy of the main
+ * repo's untracked `.claude/` (including `.ship-watcher/`). Reading <cwd>'s
+ * copy acknowledged the COPY, the main repo's entry stayed unack'd and was
+ * copied into the next worktree — the same "watcher process died" report in
+ * every fresh session. Reader and writer must agree on the main repo.
+ */
+describe("resolveStateDir — anchored to the MAIN repo, never the worktree cwd", () => {
+  const WT = "C:\\proj\\.claude\\worktrees\\feature-x";
+
+  test("a worktree cwd resolves to the main repo's .ship-watcher", () => {
+    const run = () => "C:/proj/.git";
+    expect(resolveMainRepoRoot(WT, run)).toBe(path.dirname("C:/proj/.git"));
+    expect(resolveStateDir(WT, run)).toBe(path.join("C:/proj", ".claude", ".ship-watcher"));
+  });
+
+  test("the main repo itself resolves to itself (common dir is its own .git)", () => {
+    const run = () => "/home/u/proj/.git";
+    expect(resolveStateDir("/home/u/proj", run)).toBe(path.join("/home/u/proj", ".claude", ".ship-watcher"));
+  });
+
+  test("git cannot answer → falls back to cwd instead of guessing", () => {
+    const run = () => { throw new Error("not a git repository"); };
+    expect(resolveStateDir(WT, run)).toBe(path.join(WT, ".claude", ".ship-watcher"));
+  });
+
+  test("a common dir that is not a `.git` directory (separate git dir) → cwd", () => {
+    const run = () => "/srv/gitdirs/proj";
+    expect(resolveStateDir("/home/u/proj", run)).toBe(path.join("/home/u/proj", ".claude", ".ship-watcher"));
   });
 });

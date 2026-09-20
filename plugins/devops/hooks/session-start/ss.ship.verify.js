@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
  * @hook ss.ship.verify
- * @version 0.2.1
+ * @version 0.3.0
  * @event SessionStart
  * @plugin devops
  * @description Surface results from the post-merge watcher (post-ship CI +
- *   optional deploy verify). Reads <cwd>/.claude/.ship-watcher/*.json and:
+ *   optional deploy verify). Reads <main-repo>/.claude/.ship-watcher/*.json
+ *   — the MAIN worktree's copy, resolved via git-common-dir exactly like the
+ *   watcher writes it — and:
  *
  *     - reports completed runs that have not yet been acknowledged
  *     - resolves ABANDONED watchers (process died without writing a terminal
@@ -17,6 +19,14 @@
  *   re-inspect history with `gh run view <id>`.
  *
  *   Silent when there are no watcher files at all.
+ *
+ *   Why the main repo and never <cwd>: Claude Desktop seeds every new worktree
+ *   with a copy of the main repo's untracked `.claude/` — including
+ *   `.ship-watcher/`. Reading and acknowledging THAT copy resolves the entry
+ *   in the worktree only; the main repo's file stays `watching`/unack'd and
+ *   is copied into the next worktree again, so the same "Ship verify — PR #N"
+ *   lines came back in every fresh session. Acknowledging in the main repo
+ *   makes the report happen exactly once, whichever worktree sees it first.
  */
 
 const fs = require('fs');
@@ -256,8 +266,35 @@ function lookupRuns({ cwd, mergeSha, base }) {
   }
 }
 
+/**
+ * The MAIN worktree root for `cwd` — parent of `git rev-parse --git-common-dir`
+ * — or `cwd` itself when git cannot answer (not a repo, unusual layout).
+ * Mirrors post-merge-watcher.js's resolveMainRepoRoot so reader and writer
+ * agree on the state dir.
+ *
+ * @param {string} cwd
+ * @param {(cmd: string, args: string[]) => string} [run] injectable for tests
+ * @returns {string}
+ */
+function resolveMainRepoRoot(cwd, run) {
+  const exec = run || ((cmd, args) =>
+    execFileSync(cmd, args, { cwd, encoding: 'utf8', timeout: GIT_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }).trim());
+  try {
+    const commonDir = exec('git', ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+    if (commonDir && /(^|[\\/])\.git$/.test(commonDir)) return path.dirname(commonDir);
+  } catch { /* not a git repo, or git too old for --path-format */ }
+  return cwd;
+}
+
+/** `<main-repo>/.claude/.ship-watcher` for the session's cwd. */
+function resolveStateDir(cwd, run) {
+  return path.join(resolveMainRepoRoot(cwd, run), '.claude', '.ship-watcher');
+}
+
 module.exports = {
   resolveDeadlineMs,
+  resolveMainRepoRoot,
+  resolveStateDir,
   isAbandoned,
   findRun,
   reconcile,
@@ -270,7 +307,7 @@ if (require.main === module) {
   require('../lib/plugin-guard');
 
   const cwd = process.cwd();
-  const watcherDir = path.join(cwd, '.claude', '.ship-watcher');
+  const watcherDir = resolveStateDir(cwd);
 
   if (!fs.existsSync(watcherDir)) process.exit(0);
 

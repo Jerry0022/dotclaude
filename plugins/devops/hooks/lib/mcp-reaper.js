@@ -1,6 +1,6 @@
 /**
  * @module mcp-reaper
- * @version 0.2.1
+ * @version 0.2.2
  * @description Reclaims orphaned Claude Desktop MCP server child processes.
  *
  *   Claude Desktop spawns per-session MCP servers (bun for the discord
@@ -22,7 +22,10 @@
  *     1. MCP-server signature (isClaudeMcpServer) — command line matches a
  *        known MCP launcher pattern: a `.claude/plugins/cache/` path, or an
  *        npx-cache marker (`_npx`/`npx-cli`) COMBINED with the token `mcp`
- *        (so a bare `npx vite`/`npx tsx` never matches).
+ *        (so a bare `npx vite`/`npx tsx` never matches). A cache path whose
+ *        script lives under the plugin's `scripts/` dir is NOT a server —
+ *        those are the plugin's own detached CLIs (post-merge watcher,
+ *        concept bridge, watchdogs) and are orphaned by design.
  *     2. Orphaned — its parent PID is NOT alive (isProcessAlive(ppid) is
  *        false).
  *     3. Outside the live-Claude census (liveClaudeExclusion) — NOT itself,
@@ -78,12 +81,19 @@ const CACHE_PATH_FRAGMENT = '.claude/plugins/cache/';
 // (`npx vite`, `npx tsx`, ...) are never flagged.
 const NPX_FRAGMENTS = ['_npx', 'npx-cli'];
 const MCP_TOKEN = 'mcp';
-// The devops-concept bridge (concept-server.py) lives under the plugin cache
-// but is NOT an MCP server — it is a long-lived local HTTP bridge that must
-// survive Stop/SessionStart reaps for the whole concept session. Matched by
-// its script filename (slashes normalized + lowercased by normalizedCommand)
-// so it is excluded from the signature below, keeping it off the reap list.
-const CONCEPT_BRIDGE_FRAGMENT = 'concept-server.py';
+// The plugin's own detached background CLIs live under the plugin cache too,
+// but are NOT MCP servers: post-merge-watcher.js (ship verify), the concept
+// bridge concept-server.py, batch-watchdog.js, autonomous-watchdog.js,
+// refresh-usage-headless.js, git-sync.js, mcp-reap.js itself. Every one of
+// them is spawned fire-and-forget (Start-Process / nohup / detached spawn),
+// so its parent dies within seconds and it is orphaned BY DESIGN — the exact
+// shape the signature below hunts. Reaping them killed the post-merge watcher
+// on nearly every ship (state file stuck at `watching`, surfaced as "watcher
+// process died" session after session). They all sit in the plugin's
+// `scripts/` directory, while MCP servers sit in `mcp-server/`, so a cache
+// path whose script lives under `scripts/` is exempt as a class.
+// Matched on the normalized (slashes + lowercase) command line.
+const PLUGIN_SCRIPT_RE = /\.claude\/plugins\/cache\/[^\s"']*?\/scripts\//;
 
 // A currently-live process is considered a "live Claude root" for census
 // purposes when its name is exactly one of these...
@@ -284,9 +294,9 @@ function listProcesses() {
 function isClaudeMcpServer(proc) {
   const cmd = normalizedCommand(proc);
   if (!cmd) return false;
-  // Never classify the devops-concept bridge as a reapable MCP server — it
-  // must outlive Stop/SessionStart reaps for the whole concept session.
-  if (cmd.includes(CONCEPT_BRIDGE_FRAGMENT)) return false;
+  // Never classify a plugin background script (scripts/*) as a reapable MCP
+  // server — they are detached on purpose and must outlive their spawner.
+  if (PLUGIN_SCRIPT_RE.test(cmd)) return false;
   if (cmd.includes(CACHE_PATH_FRAGMENT)) return true;
   const hasNpxMarker = NPX_FRAGMENTS.some((frag) => cmd.includes(frag));
   return hasNpxMarker && cmd.includes(MCP_TOKEN);
