@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.178.2] — 2026-09-20
+
+### Fixed
+
+- **"Ship verify — watcher process died" ×8 at every session start — two root causes, both fixed.** (1) The MCP reaper killed the post-merge watcher on nearly every ship: it runs from the plugin cache (the reaper's MCP-server signature) and is detached on purpose, so its parent PowerShell exits within seconds — exactly the "orphaned MCP server" shape the reaper hunts. The next Stop/SessionStart reap hard-killed it mid-wait (no exit handler runs on `TerminateProcess`), the state file stayed `watching`, and the hook reconciled it as "watcher process died". Since 2026-09-13 not one watcher finished on its own. `isClaudeMcpServer` now exempts every plugin `scripts/` CLI as a class (post-merge-watcher, concept bridge, batch/autonomous watchdogs, refresh-usage-headless, git-sync, mcp-reap) via a path regex on the script itself — an MCP server whose *arguments* mention a `scripts/` path is still flagged. (2) The same lines came back in every fresh worktree session because Claude Desktop seeds a new worktree with a copy of the main repo's untracked `.claude/` (including `.ship-watcher/`); `ss.ship.verify` read and acknowledged the *copy*, the main repo's entry stayed unack'd and was copied into the next worktree again. The hook now resolves the main repo via git-common-dir exactly like the watcher writes it, so each entry is reported once, whichever worktree sees it first. Reaper 0.2.2, hook 0.3.0, 11 new tests; `/ship` Step 4b documents the reader/reaper contract. Not covered by Codex review — external usage limit until 2026-10-11; full suite 3455 green.
+
 ## [0.178.1] — 2026-09-19
 
 ### Fixed

@@ -33,6 +33,17 @@ const REAL_CONTEXT7_NPX_DIRECT =
 // the whole concept session.
 const REAL_CONCEPT_BRIDGE =
   'C:\\Users\\jerry\\AppData\\Local\\Programs\\Python\\Python312\\python.exe C:\\Users\\jerry\\.claude\\plugins\\cache\\dotclaude\\devops\\0.121.1\\scripts\\concept-server.py 8791 C:/Users/jerry/proj --html docs/concepts/x.html';
+// The post-merge watcher (ship Step 4b) — spawned via Start-Process / nohup,
+// so its parent is gone within seconds. Under the plugin cache, NOT an MCP
+// server. Reaping it is exactly the "watcher process died" bug.
+const REAL_POST_MERGE_WATCHER_WIN =
+  '"C:\\Program Files\\nodejs\\node.exe" C:\\Users\\jerry\\.claude\\plugins\\cache\\dotclaude\\devops\\0.170.0\\scripts\\post-merge-watcher.js --cwd C:\\Users\\jerry\\proj --base main --merge-sha 48fe5a9 --pr 414 --max-wait 1800';
+const REAL_POST_MERGE_WATCHER_POSIX =
+  'node /home/jerry/.claude/plugins/cache/dotclaude/devops/0.170.0/scripts/post-merge-watcher.js --cwd /home/jerry/proj --base main --merge-sha 48fe5a9';
+// An MCP server whose ARGUMENTS mention a scripts/ directory — the exemption
+// keys on the script path itself, so this one must still be flagged.
+const CACHE_CMD_MCP_WITH_SCRIPTS_ARG =
+  'node C:/Users/jerry/.claude/plugins/cache/dotclaude/devops/0.170.0/mcp-server/index.js --root C:/Users/jerry/proj/scripts/';
 
 // A live "claude root" process — makes liveClaudeExclusion's census non-empty
 // so findReapable's fail-safe gate doesn't swallow every other test.
@@ -97,6 +108,33 @@ describe("isClaudeMcpServer", () => {
 
   test("does NOT match the devops-concept bridge server (concept-server.py is a local bridge, not an MCP server)", () => {
     expect(isClaudeMcpServer({ command: REAL_CONCEPT_BRIDGE })).toBe(false);
+  });
+
+  test("does NOT match the post-merge watcher (plugin scripts/ CLI, detached by design) — Windows and POSIX spellings", () => {
+    expect(isClaudeMcpServer({ command: REAL_POST_MERGE_WATCHER_WIN })).toBe(false);
+    expect(isClaudeMcpServer({ command: REAL_POST_MERGE_WATCHER_POSIX })).toBe(false);
+  });
+
+  test("exempts every plugin scripts/ CLI as a class (batch-watchdog, autonomous-watchdog, refresh-usage-headless, git-sync, mcp-reap)", () => {
+    for (const name of ["batch-watchdog.js", "autonomous-watchdog.js", "refresh-usage-headless.js", "git-sync.js", "mcp-reap.js"]) {
+      const command = `node C:\\Users\\jerry\\.claude\\plugins\\cache\\dotclaude\\devops\\0.170.0\\scripts\\${name} --apply`;
+      expect(isClaudeMcpServer({ command }), name).toBe(false);
+    }
+  });
+
+  test("still matches an MCP server whose arguments merely mention a scripts/ path", () => {
+    expect(isClaudeMcpServer({ command: CACHE_CMD_MCP_WITH_SCRIPTS_ARG })).toBe(true);
+  });
+
+  test("findReapable never flags an orphaned post-merge watcher (dead parent, outside census)", () => {
+    const procs = [
+      LIVE_CLAUDE_ROOT,
+      { pid: 78, ppid: 999999, name: "node.exe", command: REAL_POST_MERGE_WATCHER_WIN },
+      { pid: 79, ppid: 999999, name: "node.exe", command: REAL_DEVOPS_STDIO },
+    ];
+    const isAlive = (pid) => pid === 1;
+    const candidates = findReapable(procs, { selfPid: 5, isAlive, platform: "win32" });
+    expect(candidates.map((c) => c.pid)).toEqual([79]);
   });
 
   test("findReapable never flags an orphaned devops-concept bridge (dead parent, outside census)", () => {
