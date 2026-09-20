@@ -126,6 +126,12 @@ describe("ss.knowledge.index — compaction", () => {
     expect(run("startup")).toContain("always-on");
     expect(run("startup")).toBe("");        // run-once holds within the session
     expect(run("compact")).toContain("always-on"); // compaction dropped it → inject again
-    expect(run("resume")).toBe("");
+    // Resume: not the index (still in context) — only a fresh budget line,
+    // and on every resume (a session resumed after a limit hit must not keep
+    // last night's class). No usage file in this HOME → the honest unknown.
+    const resumed = run("resume");
+    expect(resumed).not.toContain("always-on");
+    expect(JSON.parse(resumed).hookSpecificOutput.additionalContext).toMatch(/^\[budget\] plan unknown · usage unknown → ask-before-parallel/);
+    expect(run("resume")).toContain("[budget]"); // no run-once on resume
   });
 });

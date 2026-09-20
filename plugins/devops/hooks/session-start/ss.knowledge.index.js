@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.knowledge.index
- * @version 0.5.0
+ * @version 0.6.0
  * @event SessionStart
  * @plugin devops
  * @description Inject deep-knowledge INDEX.md into context at session start,
@@ -9,7 +9,8 @@
  *   Claude awareness of all reference docs before message #1; the always-on
  *   docs are behavioral rules that must hold on every prompt — a pull-only
  *   reference would never flip the harness default they override (e.g. the
- *   agent delegation tiers). Fires on startup/clear/compact, skips resume.
+ *   agent delegation tiers). Fires on startup/clear/compact; on resume it
+ *   emits only a fresh budget line (the one part that ages).
  *   Uses run-once to prevent duplicate injection within a session.
  *   The delegation kill-switch (lib/delegation.js) decides whether the
  *   policy body is injected at all: `off` replaces it with the one-line
@@ -32,7 +33,9 @@ const ALWAYS_ON = ['agent-proactivity.md'];
 
 // Hard limit on the always-on payload so a growing policy doc cannot bloat
 // every session's preload. Files past the cap are skipped, index still goes.
-const MAX_ALWAYS_ON_BYTES = 6144;
+// 6 KB → 7 KB on 2026-09-20: the budget section gained the "newest [budget]
+// line is the class" rule (the limit-reset incident); ~1.7k tokens per session.
+const MAX_ALWAYS_ON_BYTES = 7168;
 
 /**
  * Build the additionalContext string for a plugin root, or null when there
@@ -85,6 +88,19 @@ function buildContext(pluginRoot, sessionId = null, cwd = process.cwd()) {
   return blocks.join('\n');
 }
 
+/**
+ * The resume payload: only the budget line, freshly read (plus the detached
+ * refresh when the snapshot is past its reset). Null when the probe fails —
+ * a resume must never fail on the budget.
+ */
+function buildResumeContext(pluginRoot, sessionId = null) {
+  try {
+    const budget = readBudget({ sessionId });
+    budget.refreshing = maybeRefreshUsage(budget, { pluginRoot });
+    return budgetLine(budget);
+  } catch { return null; }
+}
+
 function main() {
   let inputData = '';
   process.stdin.setEncoding('utf8');
@@ -94,18 +110,24 @@ function main() {
     try { hook = JSON.parse(inputData); }
     catch { process.exit(0); }
 
-    // Skip on resume — index + policies are still in context from startup
     const source = hook.source || hook.trigger || '';
-    if (source === 'resume') process.exit(0);
-
-    // Run-once guard per session. Compaction keeps the session_id but drops
-    // the earlier injection from context (redteam 2026-09-14 #3) — so a
-    // `compact` start always re-injects; startup/clear go through run-once.
-    if (source !== 'compact' && !runOnce('ss-knowledge-index', hook.session_id)) process.exit(0);
-
     const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT
       || path.resolve(__dirname, '..', '..');
-    const additionalContext = buildContext(pluginRoot, hook.session_id, hook.cwd || process.cwd());
+
+    // Resume — index + policies are still in context from startup, but the
+    // budget line in there is as old as that startup: a session resumed after
+    // a limit hit must not inherit "sonnet-only" from last night. Emit only
+    // the budget line (no run-once: every resume is a new reading).
+    const additionalContext = source === 'resume'
+      ? buildResumeContext(pluginRoot, hook.session_id)
+      : (
+        // Run-once guard per session. Compaction keeps the session_id but drops
+        // the earlier injection from context (redteam 2026-09-14 #3) — so a
+        // `compact` start always re-injects; startup/clear go through run-once.
+        (source !== 'compact' && !runOnce('ss-knowledge-index', hook.session_id))
+          ? null
+          : buildContext(pluginRoot, hook.session_id, hook.cwd || process.cwd())
+      );
     if (!additionalContext) process.exit(0);
 
     // Output as additionalContext (discrete injection, not visible in transcript)
@@ -125,4 +147,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { buildContext, ALWAYS_ON, MAX_ALWAYS_ON_BYTES };
+module.exports = { buildContext, buildResumeContext, ALWAYS_ON, MAX_ALWAYS_ON_BYTES };

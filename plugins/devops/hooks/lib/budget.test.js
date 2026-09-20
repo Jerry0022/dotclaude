@@ -5,7 +5,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { planTier, classify, readBudget, maybeRefreshUsage, budgetLine, nudgeSuffix, STALE_MS, REFRESH_MARKER } = require("./budget.js");
+const { planTier, classify, refreshDueMinutes, readBudget, maybeRefreshUsage, budgetLine, budgetSummary, nudgeSuffix, STALE_MS, FAILURE_BACKOFF_MS, REFRESH_MARKER } = require("./budget.js");
 
 /**
  * The budget class is the delegation policy's fourth input. What must hold
@@ -123,7 +123,8 @@ describe("readBudget", () => {
     });
     const b = read(h);
     expect(b.cls).toBe("free");
-    expect(budgetLine(b)).toBe("[budget] Max 5x · usage unknown (snapshot past its reset) → free");
+    expect(b.announce).toBe(true); // the positive signal: the previous reading no longer applies
+    expect(budgetLine(b)).toBe("[budget] Max 5x · usage unknown (snapshot past its reset) → free — earlier limit messages and usage claims in this conversation no longer apply");
   });
 
   test("weekly-driven sonnet-only names the week as the binding limit, not the 5h window", () => {
@@ -232,5 +233,199 @@ describe("maybeRefreshUsage — a dead snapshot starts one detached scraper", ()
     expect(maybeRefreshUsage(read(h), { home: h, nowMs: NOW, env: {}, pluginRoot: fs.mkdtempSync(path.join(os.tmpdir(), "budget-noscript-")) })).toBe(false);
     expect(fs.existsSync(path.join(root, "scripts", "called.json"))).toBe(false);
     clearMarker();
+  });
+});
+
+describe("the positive signal — a reset since the previous reading is announced, not silent", () => {
+  /**
+   * Incident 2026-09-20: a session that hit the weekly limit was retried after
+   * the reset with a 16-char prompt. The suffix is empty for `free` and gated
+   * on prompt length, no SessionStart fired, and the model carried "weekly
+   * limit hit" from the transcript into its own /run-agents args. `announce`
+   * is the stateless fix: the full line, naming the reset, on every prompt
+   * while a window is past its reset or reset recently (PO + redteam review).
+   */
+  test("a fresh reading right after the weekly reset announces for a day and names the reset", () => {
+    const h = home({
+      "usage-live.json": { timestamp: iso(NOW), session: { pct: 3, resetInMinutes: 150 }, weekly: { pct: 1, resetInMinutes: 10080 - 120 }, plan: "Max 20x" },
+    });
+    const b = read(h);
+    expect(b.recentReset).toBe("week");
+    expect(b.announce).toBe(true);
+    expect(budgetLine(b)).toBe("[budget] Max 20x · week reset 2 h ago · window 3% (reset 150 min) · week 1% → free — earlier limit messages and usage claims in this conversation no longer apply");
+    expect(nudgeSuffix(b)).toBe(""); // the suffix contract is untouched: free stays silent there
+  });
+
+  test("a 5 h window that reset within the hour announces; one that reset 2 h ago does not", () => {
+    const fresh = (resetInMinutes) => read(home({
+      "usage-live.json": { timestamp: iso(NOW), session: { pct: 4, resetInMinutes }, weekly: { pct: 40, resetInMinutes: 5000 }, plan: "Max 20x" },
+    }));
+    const recent = fresh(300 - 12);
+    expect(recent.recentReset).toBe("5h");
+    expect(budgetLine(recent)).toContain("5h window reset 12 min ago");
+    const older = fresh(300 - 120);
+    expect(older.recentReset).toBe(null);
+    expect(older.announce).toBe(false);
+    expect(budgetLine(older)).not.toContain("no longer apply");
+  });
+
+  test("5 h expired, week not: the week keeps its usage and drives the class (the optimism boundary)", () => {
+    const h = home({
+      "usage-live.json": { timestamp: iso(NOW - 6 * 3_600_000), session: { pct: 90, resetInMinutes: 30 }, weekly: { pct: 96, resetInMinutes: 3000 }, plan: "Max 5x" },
+    });
+    const b = read(h);
+    expect(b.fivePct).toBe(null);
+    expect(b.weeklyPct).toBe(96);
+    expect(b.cls).toBe("ask-before-parallel");
+    expect(b.binding).toBe("week");
+    expect(b.announce).toBe(true); // the 5 h reading is gone — say so
+    expect(budgetLine(b)).toContain("window ? · week 96%");
+  });
+
+  test("both windows expired on a pro tier still asks — a reset never makes Pro free", () => {
+    const h = home({
+      "usage-live.json": { timestamp: iso(NOW - 3 * 24 * 3_600_000), session: { pct: 96, resetInMinutes: 25 }, weekly: { pct: 99, resetInMinutes: 100 }, plan: "Pro" },
+    });
+    expect(read(h).cls).toBe("ask-before-parallel");
+  });
+
+  test("an env override never announces — the class is pinned, a reset changes nothing", () => {
+    const h = home({
+      "usage-live.json": { timestamp: iso(NOW), session: { pct: 3, resetInMinutes: 295 }, weekly: { pct: 1, resetInMinutes: 10000 }, plan: "Max 20x" },
+    });
+    expect(read(h, { env: { DOTCLAUDE_BUDGET: "sonnet-only" } }).announce).toBe(false);
+  });
+});
+
+describe("a failed refresh is reported, never called 'refreshing', and not retried every prompt", () => {
+  /**
+   * refresh-usage-headless.js keeps the old reading on failure and stamps
+   * `_cached` + `_failureReason` + `_failedAt` (markCached). Reading only the
+   * timestamp made the line say "refreshing" forever and relaunched a
+   * logged-out Edge every 5 min (redteam 2026-09-20 R2).
+   */
+  const stubRoot = () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "budget-root-"));
+    fs.mkdirSync(path.join(root, "scripts"));
+    fs.writeFileSync(path.join(root, "scripts", "refresh-usage-headless.js"),
+      "require('fs').writeFileSync(__dirname + '/called.json', '1');");
+    return root;
+  };
+  const failed = (failedAgoMs) => {
+    const h = home({
+      "usage-live.json": {
+        timestamp: iso(NOW - 10 * 3_600_000), session: { pct: 26, resetInMinutes: 148 }, weekly: { pct: 97, resetInMinutes: 2058 }, plan: "Max 20x",
+        _cached: true, _ageMinutes: 600, _failureReason: "not logged in", _failedAt: iso(NOW - failedAgoMs),
+      },
+    });
+    fs.mkdirSync(path.join(h, ".claude", "edge-usage-profile"));
+    return h;
+  };
+  const clearMarker = () => { try { fs.unlinkSync(REFRESH_MARKER); } catch {} };
+
+  test("the line names the failure and the fix; the refresh flag is overridden", () => {
+    const b = read(failed(60_000));
+    b.refreshing = true;
+    expect(b.refreshFailed).toBe("not logged in");
+    expect(budgetLine(b)).toContain("(refresh failed: not logged in — run /auto-usage)");
+    expect(budgetLine(b)).not.toContain("refreshing");
+  });
+
+  test("inside the backoff no scraper is started; after it, one is", () => {
+    clearMarker();
+    const root = stubRoot();
+    const recent = failed(5 * 60_000);
+    expect(maybeRefreshUsage(read(recent), { home: recent, nowMs: NOW, env: {}, pluginRoot: root })).toBe(false);
+    expect(fs.existsSync(path.join(root, "scripts", "called.json"))).toBe(false);
+    const old = failed(FAILURE_BACKOFF_MS + 60_000);
+    expect(maybeRefreshUsage(read(old), { home: old, nowMs: NOW, env: {}, pluginRoot: root })).toBe(true);
+    clearMarker();
+  });
+});
+
+describe("age-based refresh — due when the class may have tightened, plan-scaled, never at the limit", () => {
+  /**
+   * Usage is monotonic until a reset. A reading is worth refreshing only when
+   * the worst-case burn since then could have crossed the next threshold:
+   * headroom × window fill time (Pro 30 min, Max 5x 150, Max 20x 600). At
+   * 99 % nothing above can change — only the reset informs (expired path),
+   * and a reset a few minutes away makes a reading now worthless.
+   */
+  const stubRoot = () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "budget-root-"));
+    fs.mkdirSync(path.join(root, "scripts"));
+    fs.writeFileSync(path.join(root, "scripts", "refresh-usage-headless.js"),
+      "require('fs').writeFileSync(__dirname + '/called.json', '1');");
+    return root;
+  };
+  const clearMarker = () => { try { fs.unlinkSync(REFRESH_MARKER); } catch {} };
+  const snap = ({ ageMin, five, week, plan, reset = 200, weekReset = 5000 }) => {
+    const h = home({
+      "usage-live.json": { timestamp: iso(NOW - ageMin * 60_000), session: { pct: five, resetInMinutes: reset }, weekly: { pct: week, resetInMinutes: weekReset }, plan },
+    });
+    fs.mkdirSync(path.join(h, ".claude", "edge-usage-profile"));
+    return h;
+  };
+  const refreshes = (h, root) => { clearMarker(); const r = maybeRefreshUsage(read(h), { home: h, nowMs: NOW, env: {}, pluginRoot: root }); clearMarker(); return r; };
+
+  test("due time = headroom × fill time: Max 20x at 85 % → 30 min, Pro at 10 % → 18 min, Max 20x at 40 % → the 3 h cap", () => {
+    expect(refreshDueMinutes({ tier: "max20", fivePct: 85, weeklyPct: 10 })).toBe(30);   // 5 pts to askAt 90 × 600/100
+    expect(refreshDueMinutes({ tier: "pro", fivePct: 10, weeklyPct: 10 })).toBe(18);     // 60 pts to sonnetAt 70 × 30/100
+    expect(refreshDueMinutes({ tier: "max20", fivePct: 40, weeklyPct: 10 })).toBe(180);  // capped at STALE_MS
+    expect(refreshDueMinutes({ tier: "max5", fivePct: 79, weeklyPct: 10 })).toBe(5);     // 1 pt × 150/100 = 1.5 → floor 5
+  });
+
+  test("the weekly window counts too, at a slower rate: Max 20x week 93 % → 96 min", () => {
+    expect(refreshDueMinutes({ tier: "max20", fivePct: 10, weeklyPct: 93 })).toBe(96); // 2 pts to askAt 95 × 600 × 8 / 100
+  });
+
+  test("the same 31 min: Max 20x at 85 % refreshes, Max 20x at 40 % does not, Pro at 40 % does", () => {
+    const root = stubRoot();
+    expect(refreshes(snap({ ageMin: 31, five: 85, week: 10, plan: "Max 20x" }), root)).toBe(true);
+    expect(refreshes(snap({ ageMin: 31, five: 40, week: 10, plan: "Max 20x" }), root)).toBe(false);
+    expect(refreshes(snap({ ageMin: 31, five: 40, week: 10, plan: "Pro" }), root)).toBe(true);
+    expect(refreshes(snap({ ageMin: 10, five: 85, week: 10, plan: "Max 20x" }), root)).toBe(false); // not due yet
+  });
+
+  test("at the limit (99 % / sonnet-only) age never refreshes — the reset does", () => {
+    const root = stubRoot();
+    const limit = snap({ ageMin: 45, five: 99, week: 99, plan: "Max 20x", reset: 90 });
+    const b = read(limit);
+    expect(b.cls).toBe("sonnet-only");
+    expect(b.refreshDueMinutes).toBe(null);
+    expect(refreshes(limit, root)).toBe(false);
+    // The same reading once its window has passed → expired → refresh.
+    const past = snap({ ageMin: 100, five: 99, week: 99, plan: "Max 20x", reset: 90 });
+    expect(read(past).expired).toBe(true);
+    expect(refreshes(past, root)).toBe(true);
+  });
+
+  test("a reset 7 min away skips the due refresh — a reading now is obsolete in minutes", () => {
+    const root = stubRoot();
+    expect(refreshes(snap({ ageMin: 40, five: 85, week: 10, plan: "Max 20x", reset: 47 }), root)).toBe(false); // 47 − 40 = 7 min left
+    expect(refreshes(snap({ ageMin: 40, five: 85, week: 10, plan: "Max 20x", reset: 100 }), root)).toBe(true); // 60 min left → due
+  });
+});
+
+describe("budgetSummary — the block get_usage returns", () => {
+  test("carries class, binding, the reset/failure flags and the rendered line", () => {
+    const b = readBudget({
+      home: fs.mkdtempSync(path.join(os.tmpdir(), "budget-empty-")), nowMs: NOW, env: {},
+      snapshot: { timestamp: iso(NOW), session: { pct: 3, resetInMinutes: 290 }, weekly: { pct: 1, resetInMinutes: 5000 }, plan: "Max 20x" },
+    });
+    expect(budgetSummary(b)).toEqual({
+      plan: "Max 20x", tier: "max20", cls: "free", binding: "5h",
+      expired: false, recentReset: "5h", refreshFailed: null, refreshDueMinutes: 180, override: null,
+      line: budgetLine(b),
+    });
+  });
+
+  test("snapshot: null classifies without touching the disk — unknown asks", () => {
+    const h = home({
+      "usage-live.json": { timestamp: iso(NOW), session: { pct: 99, resetInMinutes: 10 }, weekly: { pct: 99, resetInMinutes: 100 }, plan: "Max 5x" },
+    });
+    const b = readBudget({ home: h, nowMs: NOW, env: {}, snapshot: null });
+    expect(b.fivePct).toBe(null);
+    expect(b.cls).toBe("ask-before-parallel"); // not the disk file's sonnet-only
   });
 });

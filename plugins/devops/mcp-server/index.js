@@ -44,6 +44,7 @@ import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { hasPending, pendingWhat, renderPendingBlock, renderPendingLine, hasConcept, conceptWhat } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
@@ -59,6 +60,21 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, '..');
+
+// The delegation policy's budget class, from the SAME checkout as this server
+// (never the newest cache version — thresholds must agree with the hooks that
+// injected the `[budget]` line). Loaded lazily and never fatal: a missing or
+// dangling lib turns the block into null, not the tool into an MCP error.
+const cjsRequire = createRequire(import.meta.url);
+function classifyBudget(snapshot) {
+  try {
+    const { readBudget, budgetSummary } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'budget.js'));
+    return budgetSummary(readBudget({ snapshot: snapshot ?? null }));
+  } catch (err) {
+    console.error('[dotclaude-completion-mcp] budget class unavailable:', err?.message || err);
+    return null;
+  }
+}
 
 // Named constants — avoid magic numbers scattered through the module
 const BAR_WIDTH              = 14;
@@ -1618,8 +1634,11 @@ server.registerTool(
       "isolated headless Edge profile (cookie-authed in-page fetch, no DOM " +
       "scraping) and NEVER opens a login window. Returns structured usage " +
       "percentages, reset times, deltas against the previous LIVE reading, " +
-      "staleness metadata (cached/ageMinutes/stale), and a pre-rendered ASCII " +
-      "usage meter. The user's main Edge is untouched.",
+      "staleness metadata (cached/ageMinutes/stale), a pre-rendered ASCII " +
+      "usage meter, and `budget` \u2014 the delegation policy's class " +
+      "(free / ask-before-parallel / sonnet-only) computed from the same " +
+      "thresholds as the hooks' [budget] line, so a skill reads one class " +
+      "instead of re-deriving it. The user's main Edge is untouched.",
     inputSchema: z.object({}),
   },
   async () => {
@@ -1635,6 +1654,10 @@ server.registerTool(
             reason,
             message: `Usage data unavailable \u2014 ${reason}`,
             renderedMeter: `\u26a0 Usage data unavailable \u2014 ${reason}`,
+            // No data is still a class: unknown usage asks once before a
+            // parallel spawn (lib/budget.js) \u2014 a skill must not fall back
+            // to transcript memory here.
+            budget: classifyBudget(null),
           }),
         }],
       };
@@ -1662,6 +1685,10 @@ server.registerTool(
           stale: freshness.expired,
           failureReason: result.data._failureReason || null,
           renderedMeter: meter,
+          // Classified from the data returned above (in memory, incl. the
+          // _cached mutation), not from a disk re-read — the class and the
+          // cached/failureReason fields in one response always agree.
+          budget: classifyBudget(result.data),
         }),
       }],
     };
@@ -1842,7 +1869,7 @@ server.registerTool(
 
 // Exported for unit tests — the usage meter is pure and worth asserting on
 // directly (column grid, bar semantics) without driving the whole card.
-export { renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard };
+export { renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget };
 
 // ---------------------------------------------------------------------------
 // Start — connect FIRST, then everything else (#324 boot discipline)

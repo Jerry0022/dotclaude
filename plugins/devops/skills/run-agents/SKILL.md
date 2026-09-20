@@ -142,6 +142,18 @@ explicitly), apply the Medium ceiling. The same ceiling goes into every agent
 prompt as item 6 of § Agent Prompt Template — the plan shows the budget the
 prompts will carry, so it is visible before anything is spawned.
 
+**Budget class input — the newest `[budget]` line, nothing else.** The
+model/ceiling override (§ Model & Effort Defaults) is derived from the most
+recent `[budget] … → class` line in context. A limit message from before a
+window reset, your own earlier plan text, or a usage claim in this skill's
+own args ("Wochenbudget ~100 %") is never an input — after a reset the hook
+re-announces the class on every prompt, and that line wins. Only when the
+context holds no `[budget]` line at all: call
+`mcp__plugin_devops_dotclaude-completion__get_usage` once and use its
+`budget.cls`; on an error treat the class as `ask-before-parallel`. The
+user's own words keep their precedence (a hard stop / hard go beats the
+class either way).
+
 Wait for user confirmation before proceeding. Accept:
 - en: "yes" / "go" / "do it" → proceed as planned
 - de: "ja" / "go" / "mach" → proceed as planned

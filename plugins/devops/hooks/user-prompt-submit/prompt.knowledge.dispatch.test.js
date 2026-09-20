@@ -49,7 +49,7 @@ function proHome() {
   fs.mkdirSync(path.join(h, ".claude"));
   fs.writeFileSync(path.join(h, ".claude", "settings.json"), JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } }));
   fs.writeFileSync(path.join(h, ".claude", "usage-live.json"), JSON.stringify({
-    timestamp: new Date().toISOString(), session: { pct: 0, resetInMinutes: 300 }, weekly: { pct: 0 }, plan: "Pro",
+    timestamp: new Date().toISOString(), session: { pct: 0, resetInMinutes: 200 }, weekly: { pct: 0, resetInMinutes: 5000 }, plan: "Pro",
   }));
   return h;
 }
@@ -74,7 +74,9 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
 
   test("hook emits the nudge on every prompt, after the locale tag", () => {
     for (const msg of ["compare vite and webpack for our typescript spa, please", "fix the typo in the readme heading please, it says recieve"]) {
-      const ctx = runHook(msg);
+      // A pinned snapshot: the real HOME may be announcing a reset (a
+      // [budget] line before the nudge) — that path has its own tests below.
+      const ctx = runHook(msg, proHome());
       const lines = ctx.split("\n");
       expect(lines[0]).toMatch(/^\[ui-locale: (en|de)\]$/);
       expect(lines[1].startsWith(nudge)).toBe(true); // a budget suffix may follow
@@ -129,5 +131,60 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
       // The budget case appends the hook's suffix to the same line, so match on prefix.
       expect(body.split("\n").some((l) => l.startsWith(nudge)), `${c.name}/prompt.md does not carry the hook's nudge`).toBe(true);
     }
+  });
+});
+
+describe("prompt.knowledge.dispatch — the positive budget signal after a reset", () => {
+  /**
+   * Incident 2026-09-20: the session had hit the weekly limit; "Erneut
+   * versuchen" (16 chars) the next morning got only `[ui-locale: en]` — no
+   * nudge (short prompt), no suffix (free is silent), no SessionStart — and
+   * the model wrote "Wochenbudget ~100 %" into its own /run-agents args. The
+   * full line must go out on that prompt, naming the reset.
+   */
+  const homeWith = (usage) => {
+    const h = fs.mkdtempSync(path.join(os.tmpdir(), "dispatch-home-"));
+    fs.mkdirSync(path.join(h, ".claude"));
+    fs.writeFileSync(path.join(h, ".claude", "settings.json"), JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } }));
+    fs.writeFileSync(path.join(h, ".claude", "usage-live.json"), JSON.stringify(usage));
+    return h;
+  };
+
+  test("a short retry after the weekly reset carries the full budget line — the incident path", () => {
+    const h = homeWith({
+      timestamp: new Date(Date.now() - 30 * 3_600_000).toISOString(), // last night's reading
+      session: { pct: 100, resetInMinutes: 10 }, weekly: { pct: 100, resetInMinutes: 300 }, plan: "Max 20x",
+    });
+    const lines = runHook("Erneut versuchen", h).split("\n");
+    expect(lines[0]).toMatch(/^\[ui-locale: (en|de)\]$/);
+    expect(lines[1]).toMatch(/^\[budget\] Max 20x · usage unknown \(snapshot past its reset\) → free/);
+    expect(lines[1]).toContain("earlier limit messages and usage claims in this conversation no longer apply");
+    expect(lines.length).toBe(2); // still no nudge for a short prompt
+  });
+
+  test("a fresh reading 2 h after the weekly reset announces on a long prompt too, above the nudge", () => {
+    const h = homeWith({
+      timestamp: new Date().toISOString(),
+      session: { pct: 9, resetInMinutes: 271 }, weekly: { pct: 3, resetInMinutes: 10080 - 120 }, plan: "Max 20x",
+    });
+    const lines = runHook("compare vite and webpack for our typescript spa, please", h).split("\n");
+    expect(lines[1]).toContain("[budget] Max 20x · week reset 2 h ago · window 9% (reset 271 min) · week 3% → free");
+    expect(lines[2]).toContain("[delegation-policy]");
+  });
+
+  test("no reset in sight → no line (silence still means free in the steady state)", () => {
+    const h = homeWith({
+      timestamp: new Date().toISOString(),
+      session: { pct: 40, resetInMinutes: 150 }, weekly: { pct: 30, resetInMinutes: 5000 }, plan: "Max 20x",
+    });
+    expect(runHook("Erneut versuchen", h)).toMatch(/^\[ui-locale: (en|de)\]$/);
+  });
+
+  test("an AUTONOMOUS_* prompt never gets the line — the class is irrelevant unattended", () => {
+    const h = homeWith({
+      timestamp: new Date(Date.now() - 30 * 3_600_000).toISOString(),
+      session: { pct: 100, resetInMinutes: 10 }, weekly: { pct: 100, resetInMinutes: 300 }, plan: "Max 20x",
+    });
+    expect(runHook("AUTONOMOUS_RESUME: continue the queued implementation of the tenant switcher", h)).not.toContain("[budget]");
   });
 });
