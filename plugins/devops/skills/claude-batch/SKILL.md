@@ -149,9 +149,13 @@ task straight into a mode that swallows it. Prefix the title so the sidebar
 says what is going on:
 
 1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
-2. If `title` does not already start with `📥 Batch – `:
-   `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
-   `title: "📥 Batch – {title}"`.
+2. If `title` already starts with `📥 Batch – `: done.
+3. Strip any leading devops prefix (`🔧 `, `📦 Ready – `, `🧪 Test – `,
+   `⏳ Working – `, … — the `SESSION_PREFIX` values in
+   `mcp-server/lib/mode-state.js`) left by the first-prompt wrench or an
+   earlier card — never stack them (`📥 Batch – 🔧 Foo` is the bug).
+4. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
+   `title: "📥 Batch – {stripped title}"`.
 
 The prefix is exactly `📥 Batch – ` (inbox tray, space, word, space, en dash,
 space) — the same emoji the completion card carries in its `📥 BATCH sammelt`

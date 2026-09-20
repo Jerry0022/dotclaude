@@ -209,6 +209,8 @@ function renderLadderLines(pluginRoot, { completionMcpDown } = {}) {
     'Write the exact arguments you would have passed to the tool into payload.json',
     '(same field names, including "session_id"), then relay stdout VERBATIM. Do not',
     'report "no card possible" — that path exists precisely for a dead MCP server.',
+    'stderr carries the [SESSION TITLE] block: follow it (rename the session) before',
+    'relaying the card, exactly as on the tool path — never relay it as output.',
     CARD_FIELD_REFERENCE,
     'A payload off these shapes exits 2 with the issues on stderr — fix the payload',
     'or fall back to the tool; never relay a card with an empty Changes block.',

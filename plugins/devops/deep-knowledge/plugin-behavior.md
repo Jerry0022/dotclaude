@@ -130,11 +130,16 @@ Subagents inherit all output contracts:
   `ready`, `⛔ Blocked – ` for `ship-blocked`, `🚫 Aborted – ` for `aborted`,
   `📋 Analysis – ` for `analysis`, `🔧 ` (wrench only) for `fallback`,
   `⏳ Working – ` while `pending` work runs. Execute it before outputting the
-  card. The first prompt of a session also puts `🔧 ` on the title
-  (`prompt.flow.title-work`) until its card replaces it. Modes own the title
-  instead: `/concept` sets `🧭 Concept – ` while the page is open,
+  card. The first prompt of a session — and the first prompt after every
+  card — puts `🔧 ` on the title (`prompt.flow.title-work`; stop.flow.guard
+  re-arms it once a card rendered), so an outcome prefix never outlives the
+  turn it described: a new prompt means new work. Modes own the title instead:
+  `/concept` sets `🧭 Concept – ` while the page waits or iterates (the card
+  re-states it per phase; an `implementing` round shows `⏳ Working – `, #416),
   `/claude-batch` `📥 Batch – ` while collecting, `/ship` `🚀 Shipping – ` while
-  the pipeline runs — no card block while a concept or batch is active. Prefixes are pinned in
+  the pipeline runs — the wrench never replaces 🧭 / 📥, and no card block
+  while a batch is armed. A mode skill strips any earlier prefix before adding
+  its own (`🧭 Concept – 🔧 Foo` is the bug). Prefixes are pinned in
   `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`). Desktop-app only
   (`mcp__ccd_session_mgmt__set_session_title` `self`) — elsewhere skip silently.
 
