@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.6.0
+ * @version 0.7.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
@@ -18,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
 const { ensureLocale } = require('../lib/locale');
-const { readBudget, maybeRefreshUsage, nudgeSuffix } = require('../lib/budget');
+const { readBudget, maybeRefreshUsage, nudgeSuffix, budgetLine } = require('../lib/budget');
 const { readDelegation } = require('../lib/delegation');
 
 /**
@@ -279,19 +279,28 @@ process.stdin.on('end', () => {
   const unattended = /^\s*AUTONOMOUS_(?:AUTOSTART|RESUME)\s*:/i.test(rawMessage) || lockoutArmed(hook.cwd);
   const mode = readDelegation({ cwd: hook.cwd || process.cwd() }).mode;
   let budgetSuffix = '';
+  const announce = [];
   //   8. A snapshot past its reset (a session resumed the next morning skips
-  //      SessionStart) starts one detached refresh — rate-limited in the lib,
-  //      never awaited; the next prompt re-reads the fresh file.
+  //      SessionStart) or old enough that the class may have tightened
+  //      (plan-scaled, lib/budget.js refreshDueMinutes) starts one detached
+  //      refresh — rate-limited in the lib, never awaited; the next prompt
+  //      re-reads the fresh file.
+  //   9. Positive signal: while a window is past its reset or reset recently
+  //      the FULL budget line goes out, on every prompt and regardless of
+  //      prompt length — "Erneut versuchen" (16 chars) after a limit hit is
+  //      exactly the prompt that starts a ceremony, and silence there reads
+  //      as "still at the limit" (incident 2026-09-20; see lib/budget.js).
   if (!unattended && mode !== 'off') {
     try {
       const budget = readBudget({ sessionId });
-      maybeRefreshUsage(budget, { pluginRoot });
+      budget.refreshing = maybeRefreshUsage(budget, { pluginRoot });
       budgetSuffix = nudgeSuffix(budget);
+      if (budget.announce) announce.push(budgetLine(budget));
     } catch { /* never block the prompt */ }
   }
   const nudgeText = mode === 'off' ? null : mode === 'ask' ? ASK_NUDGE : DELEGATION_NUDGE;
   const nudge = nudgeText && rawMessage.trim().length >= NUDGE_MIN_CHARS ? [nudgeText + budgetSuffix] : [];
-  const blocks = [`[ui-locale: ${lang}]`, ...nudge];
+  const blocks = [`[ui-locale: ${lang}]`, ...announce, ...nudge];
 
   if (isFresh) {
     const glossary = loadTriggerGlossary(pluginRoot, lang);

@@ -20,10 +20,10 @@ vi.mock("zod", () => {
   return { z };
 });
 
-let renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard;
+let renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget;
 
 beforeAll(async () => {
-  ({ renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard } =
+  ({ renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget } =
     await import("./index.js"));
 });
 
@@ -123,5 +123,42 @@ describe("renderUsageMeterForCard", () => {
   test("no trailing pad whitespace leaks into the fence", () => {
     const out = renderUsageMeterForCard(usage(), 0, 0, "");
     for (const line of out.split("\n")) expect(line).toBe(line.replace(/\s+$/, ""));
+  });
+});
+
+describe("classifyBudget — the budget block get_usage returns", () => {
+  // Same lib, same thresholds as the hooks' [budget] line: a skill reads
+  // `budget.cls` instead of re-deriving the class from percentages in prose.
+  const withOverride = (value, fn) => {
+    const prev = process.env.DOTCLAUDE_BUDGET;
+    if (value === undefined) delete process.env.DOTCLAUDE_BUDGET; else process.env.DOTCLAUDE_BUDGET = value;
+    try { return fn(); } finally {
+      if (prev === undefined) delete process.env.DOTCLAUDE_BUDGET; else process.env.DOTCLAUDE_BUDGET = prev;
+    }
+  };
+
+  test("classifies the in-memory snapshot it is handed (incl. _cached), never a disk re-read", () => {
+    const block = withOverride(undefined, () => classifyBudget({
+      timestamp: new Date(Date.now() - 10 * 3_600_000).toISOString(),
+      session: { pct: 26, resetInMinutes: 148 }, weekly: { pct: 97, resetInMinutes: 2058 }, plan: "Max 5x",
+      _cached: true, _failureReason: "not logged in", _failedAt: new Date().toISOString(),
+    }));
+    expect(["max5", "max20"]).toContain(block.tier); // the credentials tier of the host beats the label
+    expect(block.refreshFailed).toBe("not logged in");
+    expect(block.line).toContain("(refresh failed: not logged in — run /auto-usage)");
+    expect(["free", "ask-before-parallel", "sonnet-only"]).toContain(block.cls);
+  });
+
+  test("no data (the error path) is still a class — unknown asks, with the line", () => {
+    const block = withOverride(undefined, () => classifyBudget(null));
+    expect(block).not.toBe(null);
+    expect(block.line).toMatch(/^\[budget\] /);
+    expect(block.expired).toBe(false);
+  });
+
+  test("honours the DOTCLAUDE_BUDGET override like the hooks do", () => {
+    const block = withOverride("sonnet-only", () => classifyBudget(null));
+    expect(block.cls).toBe("sonnet-only");
+    expect(block.override).toBe("sonnet-only");
   });
 });

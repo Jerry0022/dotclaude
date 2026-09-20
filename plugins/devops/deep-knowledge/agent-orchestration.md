@@ -132,10 +132,13 @@ Every spawned agent MUST receive:
 8. **Distinct scope boundary** — for parallel agents in the same wave, state what
    each one **owns and does NOT touch**. Vague sub-tasks are the #1 cause of
    duplicate work; two agents must never independently solve the same thing.
-9. **Budget class** — the current `[budget] … → class` line and, if given, the
-   user's answer (spare / full). An agent that itself spawns agents
-   (`feature`, `designer`) applies the same model + ceiling override; hooks
-   do not fire inside sub-agents, so the parent must pass it down.
+9. **Budget class** — the NEWEST `[budget] … → class` line in context and, if
+   given, the user's answer (spare / full). Copy the line; never a class or
+   percentage from memory — a limit message or plan text from before a
+   window reset is not an input (`agent-proactivity.md` § Budget). An agent
+   that itself spawns agents (`feature`, `designer`) applies the same model +
+   ceiling override; hooks do not fire inside sub-agents, so the parent must
+   pass it down.
 10. **Scope contract** — when a `[claude-strict contract]` block is in context
    (`/claude-strict` armed for this worktree + branch), it goes **verbatim at
    the top** of the prompt, before item 1. The `pre.strict.agent-gate` hook
