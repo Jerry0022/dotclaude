@@ -21,9 +21,9 @@ const deps = {
 };
 
 describe("SESSION_PREFIX", () => {
-  test("every worded prefix is emoji-first and ends in ' – '; work is the wrench alone", () => {
+  test("every worded prefix is emoji-first and ends in ' – '; work is the bare hourglass", () => {
     for (const [k, p] of Object.entries(SESSION_PREFIX)) {
-      if (k === "work") expect(p).toBe("🔧 ");
+      if (k === "work") expect(p).toBe("⏳ ");
       else expect(p, k).toMatch(/^\S+ [A-Z][a-z]+ – $/u);
     }
   });
@@ -36,7 +36,8 @@ describe("SESSION_PREFIX", () => {
     expect(SESSION_PREFIX.test.startsWith("🧪")).toBe(true);
     expect(SESSION_PREFIX.started.startsWith("▶️")).toBe(true);
     expect(SESSION_PREFIX.analysis.startsWith("📋")).toBe(true);
-    expect(SESSION_PREFIX.work.startsWith("🔧")).toBe(true);
+    expect(SESSION_PREFIX.fallback.startsWith("🔧")).toBe(true);
+    expect(SESSION_PREFIX.work.startsWith("⏳")).toBe(true);
   });
 
   test("shipped is the finished form of shipping — same rocket, no -ing", () => {
@@ -88,7 +89,7 @@ describe("titlePrefixFor", () => {
     expect(titlePrefixFor({ variant: "ship-blocked" }, deps)).toBe(SESSION_PREFIX.blocked);
     expect(titlePrefixFor({ variant: "aborted" }, deps)).toBe(SESSION_PREFIX.aborted);
     expect(titlePrefixFor({ variant: "analysis" }, deps)).toBe(SESSION_PREFIX.analysis);
-    expect(titlePrefixFor({ variant: "fallback" }, deps)).toBe(SESSION_PREFIX.work);
+    expect(titlePrefixFor({ variant: "fallback" }, deps)).toBe(SESSION_PREFIX.fallback);
     expect(titlePrefixFor({ variant: "no-such-variant" }, deps)).toBe("");
     expect(Object.keys(VARIANT_TITLE_PREFIX).sort()).toEqual([
       "aborted", "analysis", "fallback", "ready", "ready-files", "released",

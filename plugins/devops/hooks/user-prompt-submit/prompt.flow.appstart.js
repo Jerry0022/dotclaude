@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.appstart
- * @version 0.1.0
+ * @version 0.2.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect app start intent in user prompts. When the user wants to
  *   start/run/dev the app, set a session flag so the Stop hook knows to enforce
- *   the completion flow with the correct test variant (6a/6b/7).
+ *   the completion flow with the correct card variant (`test-minimal` when no
+ *   code changed this session, `test` when it did).
  *
  *   Also injects a reminder that the completion card is mandatory after starting.
  */
@@ -56,9 +57,8 @@ process.stdin.on('end', () => {
     '',
     'After starting the app, you MUST render a completion card.',
     'Use the correct variant:',
-    '  - Variant 7 (no code changes in session): ## \ud83e\uddea <build-id> \u00b7 App gestartet',
-    '  - Variant 6a (code changes, app started): ## \ud83e\uddea App gestartet \u2014 Bitte TESTEN \u2014 Soll ich nach Test SHIPPEN?',
-    '  - Variant 6b (code changes, user must start): ## \ud83e\uddea Bitte App STARTEN und TESTEN \u2014 Soll ich nach Test SHIPPEN?',
+    '  - test-minimal (no code changes in session): title + one line + `\u25b6\ufe0f L\u00e4uft \u2014 viel Spa\u00df` \u2014 no evidence, budget, pipeline or widget',
+    '  - test (code changes this session, app running): `\ud83e\uddea Erst testen, dann shippen?` with the test steps as points',
     '',
     'The completion card is MANDATORY even for "just starting the app".',
   ].join('\n');

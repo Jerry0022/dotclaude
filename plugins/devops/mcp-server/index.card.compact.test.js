@@ -1,325 +1,149 @@
 import { describe, test, expect, vi, beforeAll } from "vitest";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 
-// Compact ship card (100-card analysis, 2026-09-13): character budgets on every
-// body field, one "Belegt" block for gates + validation, an OFFEN block for
-// non-test follow-ups, and a single bottom Delivery block that absorbs the 📌
-// footer and the state line — so a ship card fits one screen instead of three.
+// Density-specific assertions for the "one page, three lines, one decision"
+// card (§ 2.4 budget line, § 2.6 points cap, test-minimal's minimal form).
+// Same mock preamble as index.card.test.js.
 process.env.DEVOPS_COMPLETION_NO_USAGE = "1";
 vi.setConfig({ testTimeout: 30_000 });
 
 const captured = vi.hoisted(() => ({ handlers: {} }));
+
 vi.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
   McpServer: class {
     registerTool(name, _cfg, handler) { captured.handlers[name] = handler; }
     async connect() {}
   },
 }));
-vi.mock("@modelcontextprotocol/sdk/server/stdio.js", () => ({ StdioServerTransport: class {} }));
+vi.mock("@modelcontextprotocol/sdk/server/stdio.js", () => ({
+  StdioServerTransport: class {},
+}));
 vi.mock("zod", () => {
   const node = new Proxy(() => node, { get: () => () => node });
   const z = new Proxy({}, { get: () => () => node });
   return { z };
 });
 
-let render;
+let render, renderBudgetLineMd, buildBudgetModel;
+
 beforeAll(async () => {
-  await import("./index.js");
+  const mod = await import("./index.js");
   render = captured.handlers["render_completion_card"];
-  await render({ variant: "analysis", summary: "warmup", lang: "en", session_id: "compact-warmup" });
+  renderBudgetLineMd = mod.renderBudgetLineMd;
+  buildBudgetModel = mod.buildBudgetModel;
+  await render({ variant: "analysis", summary: "warmup", lang: "en", session_id: "test-compact-warmup" });
 }, 60_000);
 
 async function cardText(params) {
   const res = await render(params);
-  return res.content.map((c) => c.text).join("\n");
+  return res.content[res.content.length - 1].text;
 }
 
-const SHIP = {
-  variant: "ship-successful", lang: "de", buildId: "51f918d", session_id: "compact-ship",
-  summary: "Concept- und Batch-Modus im Session-Titel",
-  state: { branch: "main", pushed: true, merged: "main", commit: "1ba280f" },
-  cta: { vOld: "0.153.0", vNew: "0.154.0", bump: "minor" },
-  delivery: {
-    pr: { number: 366, title: "feat(concept,batch): session title prefix + mode-aware completion card" },
-    ship: { version: "0.154.0", base: "main" },
-    promote: { channels: { alpha: "0.154.0" }, current: "alpha" },
-  },
-};
-
-describe("compact card — character budgets", () => {
-  test("summary is clamped to 60 characters on a word boundary", async () => {
-    const long = "Forensik durch: eine falsche Standing-Correction zurückgezogen, die Bilanz-Aussage widerrufen und mehr";
-    const text = await cardText({ variant: "analysis", summary: long, lang: "de", session_id: "compact-sum" });
-    const title = text.match(/^### \*\*✨✨✨ (.*) ✨✨✨\*\*$/m)[1];
-    expect(title.length).toBeLessThanOrEqual(60);
-    expect(title).toBe("Forensik durch: eine falsche Standing-Correction");
-  });
-
-  test("changes: area ≤ 24 and description ≤ 90 characters, cut with an ellipsis", async () => {
+describe("test-minimal — title + one line + heading only", () => {
+  test("no evidence row, no budget line, no pipeline line, no points", async () => {
     const text = await cardText({
-      variant: "ready", summary: "Budgets", lang: "de", session_id: "compact-chg",
-      changes: [{
-        area: "Feedback-Panel Composer Anhänge-Zeile",
-        description: "Anhänge- und Senden-Button haben jetzt überall dieselbe Höhe (38px), auch bei Rückfragen — vorher war der Senden-Button bei Rückfragen der kurze",
-      }],
+      variant: "test-minimal", summary: "Dev-Server läuft", lang: "de", session_id: "test-compact-minimal",
+      changes: [{ area: "Dev-Server", description: "läuft auf Port 3000" }],
     });
-    const line = text.split("\n").find((l) => l.startsWith("> * Feedback-Panel"));
-    const [area, desc] = line.replace(/^> \* /, "").split(" → ");
-    expect(area.length).toBeLessThanOrEqual(25);
-    expect(area.endsWith("…")).toBe(true);
-    expect(desc.length).toBeLessThanOrEqual(91);
-    expect(desc.endsWith("…")).toBe(true);
-    // cut on a word boundary: what is shown is a prefix ending where a separator followed
-    const orig = "Anhänge- und Senden-Button haben jetzt überall dieselbe Höhe (38px), auch bei Rückfragen — vorher war der Senden-Button bei Rückfragen der kurze";
-    const kept = desc.slice(0, -1);
-    expect(orig.startsWith(kept)).toBe(true);
-    expect(orig.charAt(kept.length)).toMatch(/[\s,;:\-–—]/);
+    expect(text).toMatch(/^### \*\*✨✨✨ Dev-Server läuft ✨✨✨\*\*/m);
+    expect(text).toMatch(/^› Dev-Server läuft auf Port 3000$/m);
+    expect(text).toMatch(/^## ▶️ Läuft — viel Spaß$/m);
+    expect(text).not.toMatch(/^\d+\. /m); // no points
+    expect(text.split("\n").filter((l) => l.startsWith("›")).length).toBe(1);
   });
 
-  test("more than three changes: three bullets plus an explicit +N tail", async () => {
-    const changes = [1, 2, 3, 4, 5].map((i) => ({ area: "A" + i, description: "d" + i }));
-    const de = await cardText({ variant: "ready", summary: "Tail", lang: "de", session_id: "compact-tail", changes });
-    expect(de).toMatch(/^> \* A3 → d3$/m);
-    expect(de).not.toMatch(/A4 → d4/);
-    // The tail lives on the header line — a block never has more than 3 bullets.
-    expect(de).toMatch(/^> \*\*Changes\*\* · \+2 weitere$/m);
-    expect(de.split("\n").filter((l) => /^> \* A\d/.test(l)).length).toBe(3);
-    const en = await cardText({ variant: "ready", summary: "Tail", lang: "en", session_id: "compact-tail-en", changes });
-    expect(en).toMatch(/^> \*\*Changes\*\* · \+2 more$/m);
+  test("never calls the Desktop card widget", async () => {
+    const res = await render({ variant: "test-minimal", summary: "x", session_id: "test-compact-minimal-widget" });
+    const joined = res.content.map((c) => c.text).join("\n");
+    expect(joined).not.toContain("CARD WIDGET");
   });
 });
 
-describe("compact card — Geprüft block (gates + validation)", () => {
-  const tests = [
-    { method: "npm test", result: "1460 grün" },
-    { method: "eslint", result: "sauber" },
-    { method: "Codex-Review", result: "übersprungen — Limit" },
-  ];
-
-  test("tests collapse to one header line; no separate Tests or Validierung headers", async () => {
+describe("points cap (§ 2.6) — ≤ 3 on the card, rest folded into the heading", () => {
+  test("exactly 3 points render without a tail", async () => {
     const text = await cardText({
-      variant: "ready", summary: "Geprüft", lang: "de", session_id: "compact-geprueft", tests,
-      validation: [{ requirement: "Modus in der Sidebar sichtbar", status: "met", evidence: "set_session_title live geprüft" }],
+      variant: "ready", summary: "x", lang: "de", session_id: "test-compact-points-3",
+      open: ["A", "B", "C"],
     });
-    expect(text).toMatch(/^> \*\*Geprüft\*\* · npm test → 1460 grün · eslint → sauber · Codex-Review → übersprungen — Limit$/m);
-    expect(text).toMatch(/^> \* ✅ Modus in der Sidebar sichtbar — set_session_title live geprüft$/m);
-    expect(text).not.toMatch(/\*\*Tests\*\*/);
-    expect(text).not.toMatch(/\*\*Validierung\*\*/);
-    expect(text).not.toMatch(/\*\*Belegt\*\*/);
+    expect(text.split("\n").filter((l) => /^\d+\. /.test(l))).toHaveLength(3);
+    expect(text).not.toContain("weitere");
   });
 
-  test("English header reads Verified", async () => {
-    const text = await cardText({ variant: "ready", summary: "Verified", lang: "en", session_id: "compact-verified-en", tests });
-    expect(text).toMatch(/^> \*\*Verified\*\* · npm test → 1460 grün/m);
-  });
-
-  test("over-long gates wrap onto continuation header lines — never bullets", async () => {
+  test("5 points → 3 shown + '+2 weitere' in the heading", async () => {
     const text = await cardText({
-      variant: "ready", summary: "Overflow", lang: "de", session_id: "compact-overflow",
-      tests: [
-        { method: "npm run typecheck + Production-Build + npm test", result: "GATE_EXIT=0 · 2589 SUCCESS auf dem gemergten Stand" },
-        { method: "Baseline auf main (Gegenprobe)", result: "2584 SUCCESS — beide Fehler gehörten zur geretteten Arbeit" },
-      ],
-      validation: [{ requirement: "r", status: "met", evidence: "e" }],
+      variant: "ready", summary: "x", lang: "de", session_id: "test-compact-points-5",
+      open: ["A", "B", "C", "D", "E"],
     });
-    expect(text).toMatch(/^> \*\*Geprüft\*\* · npm run typecheck \+ Production-Build \+ npm test → GATE_EXIT=0 · 2589 SUCCESS auf dem gemergten Stand$/m);
-    expect(text).toMatch(/^> · Baseline auf main \(Gegenprobe\) → 2584 SUCCESS — beide Fehler gehörten zur geretteten Arbeit$/m);
-    expect(text).not.toMatch(/^> \* npm run/m);
-    expect(text.split("\n").filter((l) => /^> \* /.test(l)).length).toBe(1);
-  });
-
-  test("validation: partial/unmet first, budgets on requirement and evidence, met overflow collapsed", async () => {
-    const long = "x".repeat(60) + " " + "y".repeat(60);
-    const validation = [
-      { requirement: "erfüllt 1", status: "met", evidence: "e1" },
-      { requirement: "erfüllt 2", status: "met", evidence: "e2" },
-      { requirement: "teilweise " + long, status: "partial", evidence: "Beleg " + long },
-      { requirement: "erfüllt 3", status: "met", evidence: "e3" },
-      { requirement: "erfüllt 4", status: "met", evidence: "e4" },
-      { requirement: "erfüllt 5", status: "met", evidence: "e5" },
-    ];
-    const text = await cardText({ variant: "ready", summary: "V", lang: "de", session_id: "compact-val", validation });
-    const bullets = text.split("\n").filter((l) => /^> \* (✅|⚠️|❌)/.test(l));
-    expect(bullets[0]).toMatch(/^> \* ⚠️ teilweise /);
-    const [req, ev] = bullets[0].replace(/^> \* ⚠️ /, "").split(" — ");
-    expect(req.length).toBeLessThanOrEqual(71);
-    expect(ev.length).toBeLessThanOrEqual(101);
-    expect(bullets[1]).toBe("> * ✅ erfüllt 1 — e1");
-    expect(bullets[2]).toBe("> * ✅ 4 weitere erfüllt");
-    expect(bullets.length).toBe(3);
-  });
-
-  test("three items render as three bullets, four items as two plus a summary", async () => {
-    const three = [1, 2, 3].map((i) => ({ requirement: "r" + i, status: "met", evidence: "e" + i }));
-    const t3 = await cardText({ variant: "ready", summary: "V3", lang: "de", session_id: "compact-val3", validation: three });
-    expect(t3).toMatch(/^> \* ✅ r3 — e3$/m);
-    expect(t3).not.toMatch(/weitere/);
-    const four = [...three, { requirement: "r4", status: "met", evidence: "e4" }];
-    const t4 = await cardText({ variant: "ready", summary: "V4", lang: "de", session_id: "compact-val4", validation: four });
-    expect(t4).toMatch(/^> \* ✅ r2 — e2\n> \* ✅ 2 weitere erfüllt$/m);
-    expect(t4.split("\n").filter((l) => /^> \* /.test(l)).length).toBe(3);
-  });
-
-  test("more than two open items: the summary bullet counts open and met", async () => {
-    const validation = [
-      { requirement: "u1", status: "unmet", evidence: "x" },
-      { requirement: "p1", status: "partial", evidence: "x" },
-      { requirement: "p2", status: "partial", evidence: "x" },
-      { requirement: "m1", status: "met", evidence: "x" },
-      { requirement: "m2", status: "met", evidence: "x" },
-    ];
-    const text = await cardText({ variant: "ready", summary: "V5", lang: "de", session_id: "compact-val5", validation });
-    expect(text).toMatch(/^> \* ❌ u1 — x\n> \* ⚠️ p1 — x\n> \* ⚠️ 1 weitere offen · 2 weitere erfüllt$/m);
-    const en = await cardText({ variant: "ready", summary: "V5", lang: "en", session_id: "compact-val5-en", validation });
-    expect(en).toMatch(/^> \* ⚠️ 1 more open · 2 more met$/m);
+    const shown = text.split("\n").filter((l) => /^\d+\. /.test(l));
+    expect(shown).toHaveLength(3);
+    expect(text).toMatch(/^## .*\+2 weitere\?$/m);
   });
 });
 
-describe("compact card — OFFEN block", () => {
-  test("open items render in their own ⚠ OFFEN block after the 🔬 test block, not as tests", async () => {
+describe("evidence deviation-first ordering (§ 2.3)", () => {
+  test("a ✗/◐ post always sorts before dim ✓ posts, regardless of slot", async () => {
     const text = await cardText({
-      ...SHIP, session_id: "compact-open",
-      userFinalTest: ["Claude neu starten, dann /claude-batch on prüfen"],
-      open: ["feat/harden-round-1 im Hauptrepo — entscheiden: committen oder verwerfen"],
+      variant: "ready", summary: "x", lang: "de", session_id: "test-compact-devfirst",
+      validation: [{ requirement: "R1", status: "met", evidence: "ok" }],
+      tests: [{ method: "npm test", result: "2 Tests rot" }],
     });
-    expect(text).toMatch(/^⚠ \*\*OFFEN:\*\*\n\* feat\/harden-round-1 im Hauptrepo — entscheiden: committen oder verwerfen$/m);
-    expect(text.indexOf("⚠ **OFFEN:**")).toBeGreaterThan(text.indexOf("🔬 **TESTE"));
-  });
-
-  test("English header reads OPEN", async () => {
-    const text = await cardText({ ...SHIP, lang: "en", session_id: "compact-open-en", open: ["decide on the stale branch"] });
-    expect(text).toMatch(/^⚠ \*\*OPEN:\*\*\n\* decide on the stale branch$/m);
+    const evidenceLine = text.split("\n").find((l) => /^[✓✗◐]/.test(l));
+    expect(evidenceLine.indexOf("✗")).toBeGreaterThanOrEqual(0);
+    expect(evidenceLine.indexOf("✓")).toBeGreaterThan(evidenceLine.indexOf("✗"));
   });
 });
 
-describe("compact card — bottom Delivery block replaces footer + state line", () => {
-  test("PR line, ship line with bump + commit + build-id, horizontal channel ladder", async () => {
-    const text = await cardText(SHIP);
-    expect(text).toMatch(/^> \*\*Delivery\*\* ✅ PR \[#366\]\(https:\/\/github\.com\/[^)]+\/pull\/366\) · feat\(concept,batch\): session title prefix \+ mode-aware completion card$/m);
-    expect(text).toMatch(/^> ✅ `main` 0\.153\.0 → 0\.154\.0 \(minor\) · \[1ba280f\]\(https:\/\/github\.com\/[^)]+\/commit\/1ba280f\) · `51f918d`$/m);
-    expect(text).toMatch(/^> 🟢 alpha `v0\.154\.0` · ⚪ beta · ⚪ stable$/m);
-    // The old vertical ladder, 📌 footer and "updated origin" state line are gone.
-    expect(text).not.toMatch(/← hier/);
-    expect(text).not.toMatch(/^> 📌/m);
-    expect(text).not.toMatch(/updated \[origin\/main\]/);
-    expect(text).not.toMatch(/◐ Promote/);
+describe("pipeline line forms (§ 2.5)", () => {
+  test("open pipeline before any commit", async () => {
+    const text = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-compact-pipeline-open" });
+    expect(text).toMatch(/^○ commit → ○ push → ○ PR → ○ merge/m);
   });
 
-  test("sits after the body and before the CTA separator", async () => {
-    const text = await cardText({ ...SHIP, session_id: "compact-order", changes: [{ area: "A", description: "d" }] });
-    const iChanges = text.indexOf("**Changes**");
-    const iDelivery = text.indexOf("**Delivery**");
-    const iCta = text.indexOf("## 🚀 SHIPPED");
-    expect(iDelivery).toBeGreaterThan(iChanges);
-    expect(iDelivery).toBeLessThan(iCta);
-  });
-
-  test("a PR title is cut to 70 characters", async () => {
-    const title = "feat(codex): power dock — fixed order, pips fill upward, click sets the level and more words here";
-    const text = await cardText({ ...SHIP, session_id: "compact-prtitle", delivery: { ...SHIP.delivery, pr: { number: 580, title } } });
-    const line = text.split("\n").find((l) => l.startsWith("> **Delivery**"));
-    const shown = line.split(") · ")[1];
-    expect(shown.length).toBeLessThanOrEqual(71);
-    expect(shown.endsWith("…")).toBe(true);
-  });
-
-  test("a non-semver ship version renders without a v prefix", async () => {
+  test("a fully-merged ring project shows the reached channel and the base branch", async () => {
     const text = await cardText({
-      ...SHIP, session_id: "compact-sha", cta: {},
-      delivery: { ...SHIP.delivery, ship: { version: "b43bf60", base: "main" }, promote: null },
+      variant: "ship-successful", summary: "x", lang: "de", session_id: "test-compact-pipeline-ring",
+      state: { branch: "main", pushed: true, merged: "main", pr: { number: 42, title: "x" } },
+      delivery: { ship: { version: "0.2.0", base: "main" }, promote: { channels: { alpha: "0.2.0" }, current: "alpha" } },
     });
-    expect(text).toMatch(/^> ✅ `main` `b43bf60` · \[1ba280f\]/m);
-    expect(text).not.toMatch(/vb43bf60/);
+    expect(text).toMatch(/^✓ commit → ✓ push → ✓ PR #42 → ✓ merge {3}main/m);
+    expect(text).toContain("✓ alpha → ○ beta → ○ stable");
+    expect(text).toContain("v0.2.0");
   });
 
-  test("no promote stage → no ladder line and no hollow ⚪ Promote", async () => {
-    const text = await cardText({ ...SHIP, session_id: "compact-nopromote", delivery: { ...SHIP.delivery, promote: null } });
-    expect(text).not.toMatch(/Promote/);
-    expect(text).not.toMatch(/alpha/);
-  });
-
-  test("passed and skipped channels keep their icons on the horizontal ladder", async () => {
+  test("fastTrack skips beta with the skip glyph", async () => {
     const text = await cardText({
-      ...SHIP, session_id: "compact-ladder",
-      delivery: { ...SHIP.delivery, promote: { channels: { alpha: "0.82.7", beta: "0.82.0", stable: "0.82.0" }, current: "alpha" } },
+      variant: "ship-successful", summary: "x", lang: "de", session_id: "test-compact-pipeline-fasttrack",
+      state: { branch: "main", pushed: true, merged: "main" },
+      delivery: { ship: { version: "0.2.0" }, promote: { channels: { alpha: "0.2.0", stable: "0.2.0" }, current: "stable", fastTrack: true } },
     });
-    expect(text).toMatch(/^> 🟢 alpha `v0\.82\.7` · ✅ beta `v0\.82\.0` · ✅ stable `v0\.82\.0`$/m);
-  });
-
-  test("stableLag appends the promote nudge to the ladder line", async () => {
-    const text = await cardText({
-      ...SHIP, session_id: "compact-lag",
-      delivery: { ...SHIP.delivery, promote: { ...SHIP.delivery.promote, stableLag: { versions: 8, days: 7 } } },
-    });
-    expect(text).toMatch(/^> 🟢 alpha `v0\.154\.0` · ⚪ beta · ⚪ stable · alpha 8 Versionen \/ 7 Tage vor stable → `\/promote`$/m);
-    const en = await cardText({
-      ...SHIP, lang: "en", session_id: "compact-lag-en",
-      delivery: { ...SHIP.delivery, promote: { ...SHIP.delivery.promote, stableLag: { versions: 1 } } },
-    });
-    expect(en).toMatch(/· alpha 1 version ahead of stable → `\/promote`$/m);
-  });
-
-  test("kept branch is named on the ship line", async () => {
-    const text = await cardText({ ...SHIP, session_id: "compact-kept", state: { ...SHIP.state, branch: "feat/x", kept: true } });
-    expect(text).toMatch(/^> ✅ `main` 0\.153\.0 → 0\.154\.0 \(minor\) · \[1ba280f\]\([^)]+\) · `51f918d` · `feat\/x \(kept locally\)`$/m);
-  });
-
-  test("ready with delivery: ⚪ Ship line carries branch, commit and build-id", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "Bereit", lang: "de", buildId: "abc1234", session_id: "compact-ready",
-      state: { branch: "feat/video-filter", commit: "abc1234", pr: { number: 123, title: "video filter" } },
-      delivery: { pr: { number: 123, title: "video filter" }, ship: null, promote: null },
-    });
-    expect(text).toMatch(/^> \*\*Delivery\*\* ✅ PR \[#123\]\([^)]+\) · video filter$/m);
-    expect(text).toMatch(/^> ⚪ Ship · \[`feat\/video-filter`\]\([^)]+\) · \[abc1234\]\([^)]+\) · `abc1234`$/m);
-    expect(text).not.toMatch(/Promote/);
-  });
-
-  test("without a delivery track the 📌 footer and state line still render", async () => {
-    const text = await cardText({ variant: "analysis", summary: "Nur Analyse", lang: "de", buildId: "ad86c42", session_id: "compact-analysis" });
-    expect(text).toMatch(/^> 📌 `ad86c42`$/m);
-    expect(text).toMatch(/^> ➖ No changes to repo$/m);
+    expect(text).toContain("⏭️ beta");
   });
 });
 
-describe("compact card — CTA without the merge-target echo", () => {
-  test("ring project: SHIPPED → alpha — Alles ERLEDIGT", async () => {
-    const text = await cardText(SHIP);
-    expect(text).toMatch(/^## 🚀 SHIPPED → alpha — Alles ERLEDIGT$/m);
-    expect(text).not.toMatch(/merged → origin/);
+describe("budget line — omission and glyph-bar fallback (§ 2.4)", () => {
+  const fresh = () => new Date().toISOString();
+
+  test("both windows < 50% and > 1h from reset → the line is omitted entirely", () => {
+    const usage = { timestamp: fresh(), session: { pct: 20, resetInMinutes: 200 }, weekly: { pct: 10, resetInMinutes: 5000 } };
+    const model = buildBudgetModel(usage, 0, 0, "");
+    expect(model.omitted).toBe(true);
+    expect(renderBudgetLineMd(model)).toBe("");
   });
 
-  test("plain project: SHIPPED → main", async () => {
-    const text = await cardText({ ...SHIP, session_id: "compact-cta-main", delivery: { ...SHIP.delivery, promote: null } });
-    expect(text).toMatch(/^## 🚀 SHIPPED → main — Alles ERLEDIGT$/m);
+  test("one window over the threshold → only that window renders", () => {
+    const usage = { timestamp: fresh(), session: { pct: 62, resetInMinutes: 273 }, weekly: { pct: 10, resetInMinutes: 5000 } };
+    const model = buildBudgetModel(usage, 0, 0, "");
+    expect(model.omitted).toBe(false);
+    expect(model.bars.map((b) => b.label)).toEqual(["5h"]);
+    const line = renderBudgetLineMd(model);
+    expect(line).toContain("5h");
+    expect(line).toMatch(/[▰▱│]/);
   });
 
-  test("kept: SHIPPED → alpha — WEITER in branch", async () => {
-    const text = await cardText({ ...SHIP, session_id: "compact-cta-kept", state: { ...SHIP.state, branch: "feat/x", kept: true } });
-    expect(text).toMatch(/^## 🚀 SHIPPED → alpha — WEITER in `feat\/x`$/m);
-  });
-
-  test("English: SHIPPED → alpha — All DONE", async () => {
-    const text = await cardText({ ...SHIP, lang: "en", session_id: "compact-cta-en" });
-    expect(text).toMatch(/^## 🚀 SHIPPED → alpha — All DONE$/m);
-  });
-});
-
-describe("compact card — context health thresholds", () => {
-  const calls = (id, n) => writeFileSync(join(tmpdir(), "dotclaude-devops-toolcalls-" + id), String(n));
-
-  test("561 calls: no health note", async () => {
-    calls("compact-h1", 561);
-    const text = await cardText({ variant: "analysis", summary: "H", lang: "de", session_id: "compact-h1" });
-    expect(text).not.toMatch(/consider \//);
-  });
-
-  test("1001 calls: consider /compact; 2001 calls: consider /clear", async () => {
-    calls("compact-h2", 1001);
-    expect(await cardText({ variant: "analysis", summary: "H", lang: "de", session_id: "compact-h2" })).toMatch(/1001 calls · consider \/compact/);
-    calls("compact-h3", 2001);
-    expect(await cardText({ variant: "analysis", summary: "H", lang: "de", session_id: "compact-h3" })).toMatch(/2001 calls · consider \/clear/);
+  test("terminal fallback uses ▰ (elapsed) / │ (usage marker) / ▱ (left) glyphs", () => {
+    const usage = { timestamp: fresh(), session: { pct: 90, resetInMinutes: 30 }, weekly: null };
+    const model = buildBudgetModel(usage, 0, 0, "");
+    const line = renderBudgetLineMd(model);
+    expect(line).toMatch(/▰/);
+    expect(line).toMatch(/│/);
   });
 });

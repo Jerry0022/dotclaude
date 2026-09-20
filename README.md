@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.181.0**
+**Version: 0.182.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -453,350 +453,68 @@ a yes. Explicit `/run-*` skills and "with agents" in a prompt always still spawn
 
 ## Completion Cards
 
-Every task ends with a completion card — a structured signal showing what happened, the repo state, and what comes next. The card is always the last thing in the response.
+Every task ends with a completion card — one page, three result lines that
+answer the prompt, one decision. The card is always the last thing in the
+response. Full spec: [completion-card-design.md](plugins/devops/deep-knowledge/completion-card-design.md).
 
-**ship-successful** — after a successful PR merge:
+**ship-successful** (ring project, alpha) — after a successful PR merge:
 
 ````
+&nbsp;
 ---
-
 ### **✨✨✨ Filter dialog moved to settings ✨✨✨**
-
-> **Changes**
-> * Settings → Filter tab as new section with drag & drop
-> * Dialog → FilterDialog removed, route redirected to Settings
-
-> **Verified** · npm run build → ok · unit → 47/47, 3 new · preview → drag & drop works
-> * ✅ Filters reachable from Settings — tab rendered, drag & drop verified in the preview
-> * ✅ Old dialog route keeps working — redirect covered by a unit test
-
-🔬 **Please TEST:**
-* Open Settings → Filter on a phone-width window
-
-> **Delivery** ✅ PR [#42](…/pull/42) · Filter dialog to settings
-> ✅ `main` 0.8.2 → 0.8.3 (patch) · [a3f9b21](…/commit/a3f9b21) · `a3f9b21`
-> 🟢 alpha `v0.8.3` · ⚪ beta · ⚪ stable
-
-```
-5h  ━━━━━╏────────   33% +2%   · 3h 12m
-Wk  ━━━─╏─────────   18% +2%   · 5d 3h
-```
-
----
-
-## 🚀 SHIPPED → alpha — All DONE
-
+› Settings now has a Filter tab with drag & drop, replacing the old dialog
+› Old dialog route still works — redirects to the new tab
+✓ 3/3 Anforderungen  ✓ 47 Tests grün  ✓ 4 Live-Checks ok
+5h ▰▰▰▰▰▰▰│▱▱▱▱▱▱ 3 h 12 m   Wk ▰▰│▱▱▱▱▱▱ 5 d 3 h
+✓ commit → ✓ push → ✓ PR #42 → ✓ merge   main → ✓ alpha → ○ beta → ○ stable · v0.8.3 · Build a3f9b21
+## 🚀 Released v0.8.3 alpha — promote to beta?
+[Promote ↗] [—]
 ---
 ````
 
-The card is built to fit one screen: every body field has a character budget
-(summary 60, change 24 + 90, evidence 70 + 100 …), no block ever shows more than
-three bullets, gates share the header line, and every pipeline fact — PR, base,
-version, commit, build-id — appears exactly once in the Delivery block. Follow-ups that are not tests go into a separate
-`⚠ OPEN` block; the promote nudge sits on the channel ladder line.
+Two blocks, nothing between them. Block 1 ("what happened"): the title, ≤ 3
+`›` result lines naming an effect for the user (never a file or hook), the
+evidence row (requirements · tests · live check, deviations first and
+bright), the budget line, and the pipeline line. Block 2 ("what to decide"):
+a heading phrased as a question, an optional context line, ≤ 3 numbered
+points, and — Desktop app only — the `[CARD WIDGET]` buttons for the two
+verbs of the variant (`Ship` / `Ändern`, `Fix` / `Skip`, `Promote`, …); the
+terminal shows the question heading alone.
 
 <details>
-<summary><strong>See all other variants</strong> — ready, ship-blocked, test, test-minimal, analysis, aborted, fallback, ship-successful (direct push), pending</summary>
-
-### test — code edits + app running, user must verify
-
-````
----
-
-## ✨✨✨ Live search in contact book ✨✨✨
-
-**Changes**
-* ContactBook → Debounced live search with 300ms delay
-* API → New /contacts/search endpoint with fuzzy match
-* UI → Search field with clear button and loading spinner
-
-**Tests**
-* Build → successful
-* Unit → 38/38 passed
-
-🟢 not merged · no PR · not pushed · e82a0f7 · feat/contact-search · app running
-
-**Please test**
-1. Open contact book, type "Mue" in search field
-2. Verify: results filter after ~300ms, spinner visible
-3. Click clear button, verify list resets
-
-```
-5h  ━━━━━━━╏──────   50% +3%   · 2h 30m left
-Wk  ━━━━─╏────────   27% +3%   · 4d 16h left
-```
-
----
-
-📌 `e82a0f7`
-
-## 🧪 DONE — SHIP after your TEST?
-
----
-````
-
-### ready — code complete, awaiting ship decision
-
-````
----
-
-## ✨✨✨ Dark mode for dashboard implemented ✨✨✨
-
-**Changes**
-* Theme → Dark mode palette as CSS custom properties
-* Dashboard → All panels switched to theme variables
-* Settings → Dark mode toggle with localStorage persistence
-
-**Tests**
-* Build → successful
-* Unit → 52/52 passed
-
-🔀 not merged · no PR · not pushed · c91d3e8 · feat/dark-mode
-
-```
-5h  ━━━━━━━━╏─────   58% +4%   · 2h 5m left
-Wk  ━━━─╏─────────   22% +4%   · 5d 1h left
-```
-
----
-
-📌 `c91d3e8`
-
-## 📦 READY — SHIP or CHANGE?
-
----
-````
-
-### ship-blocked — ship pipeline failed
-
-````
----
-
-## ✨✨✨ API rate limiting added ✨✨✨
-
-**Changes**
-* Middleware → RateLimiter with token bucket algorithm
-* Config → Rate limits configurable per endpoint
-* Tests → Integration tests for throttling behavior
-
-**Tests**
-* Build → successful
-* Unit → 3/5 FAILED — testBurstLimit and testConcurrentRequests timeout
-
-🔀 not merged · no PR · not pushed · d44f1a2 · feat/rate-limiting
-
-```
-5h  ━━━━━━╏───────   42% +3%   · 2h 48m left
-Wk  ━━━─╏─────────   24% +3%   · 4d 19h left
-```
-
----
-
-📌 `d44f1a2`
-
-## ⛔ BLOCKED. 2 tests failed — FIX or SKIP?
-
----
-````
-
-### test — code edits + app not started
-
-````
----
-
-## ✨✨✨ Push notifications for mobile ✨✨✨
-
-**Changes**
-* Mobile → Firebase Cloud Messaging integration
-* Backend → Notification service with device token management
-* Settings → Push notification opt-in/opt-out toggle
-
-**Tests**
-* Build → successful
-* Unit → 29/29 passed
-
-🟡 not merged · no PR · not pushed · f1b3d99 · feat/push-notifications · app not started
-
-**Please test**
-1. Start app on phone, grant push permission
-2. Send a test message from another device
-3. Verify: push appears, tap opens correct view
-
-```
-5h  ━━━━━━━━━╏────   67% +5%   · 1h 40m left
-Wk  ━━━━─╏────────   30% +5%   · 4d 9h left
-```
-
----
-
-📌 `f1b3d99`
-
-## 🧪 DONE — SHIP after your TEST?
-
----
-````
-
-### test-minimal — app freshly started via user prompt
-
-````
----
-
-## ✨✨✨ Dev server started ✨✨✨
-
-📌 `a3f9b21`
-
-## ▶️ STARTED. Website opens in Edge — HAVE FUN
-
----
-````
-
-### analysis — read-only outcome (audit, plan, review)
-
-````
----
-
-## ✨✨✨ Hook lifecycle analyzed ✨✨✨
-
-**Changes**
-* Analysis → PostToolUse hooks fire only on Edit/Write, not Read
-* Analysis → Session state shared via temp files, not env vars
-* Analysis → prompt.ship.detect recognizes "ja"/"go" as ship intent
-
-➖ No changes to repo
-
-```
-5h  ━━━━╏─────────   25% +2%   · 3h 45m left
-Wk  ━━━─╏─────────   19% +2%   · 5d 6h left
-```
-
----
-
-📌 `a3f9b21`
-
-## 📋 READ through — QUESTIONS?
-
----
-````
-
-### aborted — task infeasible or rate-limited
-
-````
----
-
-## ✨✨✨ WebSocket migration aborted ✨✨✨
-
-**Changes**
-* Analysis → existing REST polling architecture incompatible with WS
-* Spike → prototype shows migration requires new session management
-
-🔀 not merged · no PR · not pushed · abc1234 · spike/websocket
-
-```
-5h  ━━━━━━━━━━━╏──   75% +6%   · 1h 15m left
-Wk  ━━━━━─╏───────   35% +6%   · 4d 2h left
-```
-
----
-
-📌 `abc1234`
-
-## 🚫 ABORTED. Architecture incompatibility — What should I TRY?
-
----
-````
-
-### fallback — miscellaneous / default
-
-````
----
-
-## ✨✨✨ Configuration verified ✨✨✨
-
-**Changes**
-* .editorconfig → settings match team standard
-* .gitattributes → LF normalization correctly configured
-
-➖ No changes to repo
-
-```
-5h  ━━╏───────────   15% +1%   · 4h 10m left
-Wk  ━━──╏─────────   16% +1%   · 5d 0h left
-```
-
----
-
-📌 `a3f9b21`
-
-## 🔧 DONE — Anything ELSE?
-
----
-````
-
-### ship-successful (direct push, no version bump)
-
-````
----
-
-## ✨✨✨ Typo in error handler fixed ✨✨✨
-
-**Changes**
-* ErrorHandler → "Unerwareter" corrected to "Unerwarteter"
-
-✅ merged → origin/main · no PR · b7e2c44
-
-```
-5h  ━╇────────────   12% +1%   · 4h 31m left
-Wk  ━━──╏─────────   15% +1%   · 4d 22h left
-```
-
----
-
-📌 `b7e2c44`
-
-## 🚀 SHIPPED. merged → origin/main — All DONE
-
----
-````
-
-### pending — a background agent is still working
-
-Not a variant but a layer: when the turn ends while a background subagent or task
-is still running, `pending` names it and replaces the CTA of **whichever** variant
-the card carries — so it never asks you to SHIP or act on a result that does not
-exist yet. The rest of the card still reports what is true.
-
-````
----
-
-## ✨✨✨ First version verified and pushed ✨✨✨
-
-**Changes**
-* Concept → color-style correction handed to a background agent
-
-⏳ **STILL RUNNING — not finished:**
-* `devops:frontend` — switch color style to design tokens
-
-_This card reports the state BEFORE those results._
-
-```
-5h  ━━╏───────────   14% +1%   · 4h 20m left
-Wk  ━━──╏─────────   16% +1%   · 5d 2h left
-```
-
----
-
-📌 `c41a21a`
-
-### ⏳ NOT DONE YET. agent `devops:frontend` is working — I'll REPORT back
-
----
-````
+<summary><strong>See all other variants</strong> — ready, ship-blocked, test, test-minimal, analysis, aborted, fallback, released, ready-files, pending, concept, batch, V&V unverified</summary>
+
+| Variant / state | Decision heading | Notes |
+|---|---|---|
+| `ready` | `📦 Shippen?` / `📦 Shippen trotz {reservation}?` | open + final tests as points |
+| `ready` + red/partial | `⚠ Trotzdem shippen mit 2 roten Tests?` | line 1 = `**Nicht erreicht:**` |
+| `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | only variant with `⛔` |
+| `ship-successful` (ring) | `🚀 Released v{v} alpha — nach beta promoten?` | context line = distance to beta |
+| `ship-successful` (plain) | `🚀 Shipped v{v} → main.` | state, no buttons |
+| `released` → beta/stable | `🎊 Promoted v{v} BETA — nach stable?` / `🎊 Released v{v} LIVE — stable.` | evidence = promotion facts |
+| `ready-files` | `📂 Fertig auf der Platte — noch etwas?` | pipeline line names the file(s) |
+| `test` | `🧪 Erst testen, dann shippen?` | points = user-test steps |
+| `test-minimal` | `▶️ Läuft — viel Spaß` | title + one line + heading only, no widget |
+| `analysis` | `📋 Analyse gelesen — umsetzen oder Fragen?` | pipeline = `➖ keine Änderungen` |
+| `aborted` | `🚫 Abgebrochen wegen {reason} — anders versuchen?` | context line = alternatives |
+| `fallback` | `🔧 Erledigt — noch etwas?` | miscellaneous / default |
+| pending override | `⏳ Noch nicht fertig — {what}` | replaces the CTA of whichever variant the card carries, so it never asks you to act on a result that has not arrived |
+| concept override | `🧭 Concept wartet auf deine Entscheidungen` | context line = the page link |
+| batch override | `📥 Batch sammelt — {n} Einträge` | — |
+| V&V unverified | `⚠ Ungeprüft shippen?` | `⚠ ungeprüft` leads the evidence row |
+
+English strings mirror these one to one (`Ship anyway despite 2 red tests?`,
+`Released v0.179.0 alpha — promote to beta?`, …) — see the design doc § 3 for
+the full mapping.
 
 </details>
 
-8 variants total, plus the `pending` layer. The card always fires — see [completion-card.md](plugins/devops/templates/completion-card.md) for the full template spec.
-
-In the Claude Desktop app the CTA verbs are also clickable: a one-row widget above the card offers one button per verb (Ship / Ändern, Fix / Skip, Promote, …) and a click sends the matching prompt into the running session. Terminal sessions get the identical markdown card without the widget.
+In the Claude Desktop app the buttons live inside the card's own widget
+(`[CARD WIDGET]`, Desktop-only, skipped silently elsewhere): one button per
+verb of the variant (Ship / Ändern, Fix / Skip, Promote, …), each with a
+tooltip explaining what it triggers. Terminal sessions get the identical
+markdown card, minus the buttons.
 
 ## Project Structure
 

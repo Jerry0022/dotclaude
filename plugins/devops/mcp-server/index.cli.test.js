@@ -60,7 +60,7 @@ afterAll(() => {
 });
 
 describe("--render-card CLI fallback", () => {
-  test("renders the same card markdown the MCP tool returns", async () => {
+  test("renders the same card markdown the MCP tool returns — new anatomy (§ 2)", async () => {
     const out = await renderCard({
       variant: "analysis",
       summary: "Karte ohne MCP-Server",
@@ -70,7 +70,8 @@ describe("--render-card CLI fallback", () => {
     });
 
     expect(out).toMatch(/^### \*\*✨✨✨ Karte ohne MCP-Server ✨✨✨\*\*/m);
-    expect(out).toContain("Completion card → Rendert auch ohne MCP");
+    expect(out).toContain("› Rendert auch ohne MCP");
+    expect(out).toMatch(/^## 📋 Analyse gelesen/m);
   });
 
   test("stdout carries the card only — no relay-instruction preamble to strip", async () => {
@@ -85,16 +86,24 @@ describe("--render-card CLI fallback", () => {
     expect(stderr).toContain('"📦 Ready – " + <stripped title>');
   });
 
-  test("the CTA-actions widget instruction rides on stderr on the Desktop app only (#389)", async () => {
+  test("the card-widget instruction rides on stderr on the Desktop app only (§ 4)", async () => {
     const payload = { variant: "ready", summary: "CTA-Test", session_id: "cli-test-cta", changes: [{ area: "x", description: "y" }] };
     const desktop = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
-    expect(desktop.stdout).not.toContain("CTA ACTIONS");
-    expect(desktop.stderr).toContain("[CTA ACTIONS — DO NOT OUTPUT THIS BLOCK]");
+    expect(desktop.stdout).not.toContain("CARD WIDGET");
+    expect(desktop.stderr).toContain("[CARD WIDGET — DO NOT OUTPUT THIS BLOCK]");
     expect(desktop.stderr).toContain("mcp__visualize__show_widget");
     expect(desktop.stderr).toContain('data-prompt="/devops:ship"');
     const terminal = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "cli" });
-    expect(terminal.stderr).not.toContain("CTA ACTIONS");
+    expect(terminal.stderr).not.toContain("CARD WIDGET");
     expect(terminal.stdout).toBe(desktop.stdout);
+  });
+
+  test("test-minimal never rides the card-widget instruction, even on Desktop", async () => {
+    const desktop = await renderCardFull(
+      { variant: "test-minimal", summary: "Dev-Server", session_id: "cli-test-minimal-widget" },
+      { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
+    );
+    expect(desktop.stderr).not.toContain("CARD WIDGET");
   });
 
   test("satisfies the Stop gate by writing the card-rendered flag", async () => {
@@ -132,7 +141,7 @@ describe("--render-card CLI fallback", () => {
 
   test("applies the schema's coercions: JSON strings, lang default, soft clamps", async () => {
     const out = await renderCard({
-      variant: "analysis",
+      variant: "ready",
       summary: "x".repeat(120),
       session_id: "cli-test-coercions",
       // The MCP schema accepts these as JSON strings; the CLI must too.
@@ -146,12 +155,11 @@ describe("--render-card CLI fallback", () => {
 
     expect(out).toContain("x".repeat(60));
     expect(out).not.toContain("x".repeat(61));
-    expect(out).toContain("C → third");
-    expect(out).not.toContain("dropped by the clamp");
-    expect(out).toContain("**Changes** · +1 weitere");
+    expect(out).toContain("third");
+    expect(out).toContain("+1 weitere");
   });
 
-  test("coerces a JSON-string `pending` and overrides the CTA with it", async () => {
+  test("coerces a JSON-string `pending` and overrides the heading with it", async () => {
     const out = await renderCard({
       variant: "ready",
       summary: "Agent läuft noch",
@@ -159,9 +167,9 @@ describe("--render-card CLI fallback", () => {
       session_id: "cli-test-pending",
       pending: JSON.stringify([{ name: "devops:frontend", doing: "Farbstil" }]),
     });
-    expect(out).toContain("NOCH NICHT FERTIG");
+    expect(out).toMatch(/^## ⏳ Noch nicht fertig/m);
     expect(out).toContain("devops:frontend");
-    expect(out).not.toContain("READY — SHIP oder ÄNDERN");
+    expect(out).not.toMatch(/^## 📦 Shippen/m);
   });
 
   test("writes the pending-attested flag so the Stop gate is satisfied", async () => {
@@ -184,6 +192,7 @@ describe("--render-card CLI fallback", () => {
   test("an unknown variant still yields a card instead of an error", async () => {
     const out = await renderCard({ variant: "not-a-variant", summary: "Unbekannte Variante", session_id: "cli-test-variant" });
     expect(out).toMatch(/✨✨✨ Unbekannte Variante ✨✨✨/);
+    expect(out).toMatch(/^## 🔧 Erledigt/m);
   });
 
   test("exits 2 with a diagnostic when the payload is unreadable", async () => {
@@ -198,9 +207,9 @@ describe("--render-card CLI fallback", () => {
 });
 
 // #396 — the CLI is reached when the tool schema is NOT in context; the payload
-// is a guess. It must either read the text or refuse — never `*  → `.
+// is a guess. It must either read the text or refuse — never a broken result line.
 describe("--render-card CLI — malformed payloads (#396)", () => {
-  test("REGRESSION: a string-array `changes` renders the text, never empty arrows", async () => {
+  test("REGRESSION: a string-array `changes` renders as result lines — never a raw arrow bullet", async () => {
     const out = await renderCard({
       variant: "ready",
       summary: "Card aus dem Offline-Pfad",
@@ -212,10 +221,14 @@ describe("--render-card CLI — malformed payloads (#396)", () => {
       ],
       state: { branch: "feat/x", pushed: true },
     });
-    expect(out).toContain("* Completion card → Changes-Bullets werden gelesen");
-    expect(out).toContain("* Ship → merged ohne Tag");
-    expect(out).toContain("* eine Zeile ganz ohne Trenner");
-    expect(out).not.toMatch(/\*\s+→/);
+    // coerceChange splits "area → description" / "area: description" on the
+    // first separator; the result line carries the DESCRIPTION half (§ 2.2 —
+    // never "area → description" as one line; area is discarded, not lost as
+    // an empty bullet).
+    expect(out).toContain("› Changes-Bullets werden gelesen");
+    expect(out).toContain("› merged ohne Tag");
+    expect(out).toContain("› eine Zeile ganz ohne Trenner");
+    expect(out).not.toMatch(/›\s*→/);
   });
 
   test("a payload off the schema exits 2 with the offending path on stderr", async () => {
@@ -237,7 +250,7 @@ describe("--render-card CLI — malformed payloads (#396)", () => {
     expect(existsSync(flagFile("cli-test-396-invalid"))).toBe(false); // the Stop gate is NOT satisfied
   });
 
-  test("string entries in `tests` and `validation` are coerced the same way", async () => {
+  test("string entries in `tests` and `validation` are coerced and folded into the evidence row", async () => {
     const out = await renderCard({
       variant: "ready",
       summary: "Coercion",
@@ -246,7 +259,8 @@ describe("--render-card CLI — malformed payloads (#396)", () => {
       validation: ["Anforderung erfüllt — Test grün"],
       state: { branch: "feat/x", pushed: true },
     });
-    expect(out).toContain("npm test → 12 grün");
-    expect(out).toContain("Anforderung erfüllt");
+    // "npm test → 12 grün" coerces to { method: "npm test", result: "12 grün" } —
+    // the evidence post is number + noun + state, not the method name (§ 2.3).
+    expect(out).toContain("✓ 12 Tests grün");
   });
 });

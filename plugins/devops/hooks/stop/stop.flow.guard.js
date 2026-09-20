@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.guard
- * @version 0.4.0
+ * @version 0.5.0
  * @event Stop
  * @plugin devops
  * @description Per-turn completion card + validation enforcement (the validation
@@ -11,20 +11,35 @@
  *   Block (JSON `{decision:"block"}` on stdout) when, and this is not already a
  *   blocked stop cycle (stop_hook_active=false):
  *     1. no card rendered AND (tool calls happened OR substantial prose), OR
- *     2. a card exists but a code change owes validation
+ *     2. a notification turn (see below) re-rendered a card identical to the
+ *        previous one (design § 5.5), OR
+ *     3. a card exists but its title carries a status word, its `›` result
+ *        lines exceed three or name a file/hook, or its points exceed three
+ *        without "+N weitere" in the heading (design § 5.1-5.3), OR
+ *     4. a card exists but a code change owes validation
  *        (validation-pending set, validation-attested not), OR
- *     3. a card exists but background subagents / tasks are still running and
+ *     5. a card exists but background subagents / tasks are still running and
  *        the card did not declare them (`pending` field, pending-attested not).
  *        Open work is read from the transcript, not from a flag — completions
  *        arrive as task-notifications, which no tool hook ever sees.
  *
  *   Pass (silent exit 0) otherwise — flags are reset so the next turn is
- *   evaluated independently.
+ *   evaluated independently. A passing turn whose card exceeds the rendered-
+ *   line budget (14 Desktop / 24 terminal, design § 2.4 / § 5.4) still passes;
+ *   the overflow is only reported (stderr), never enforced here.
  *
  *   Scheduled-task exemption (#371): when the turn's prompt was a
  *   `<scheduled-task …>` wrapper (flag from prompt.flow.silent-turn), the tree
  *   is clean and ship_release merged nothing this turn (flag from
  *   post.flow.completion), the routine's one-line status suffices — no card.
+ *
+ *   Notification-turn exemption (design § 5.5): when the turn's last user-role
+ *   transcript entry is a `<task-notification>` (a background subagent / task
+ *   stopping, no user prompt), and the tree is clean and nothing shipped, no
+ *   card is owed at all. When a card DOES render on such a turn, its signature
+ *   (heading + build-id + evidence row) is compared to the previous
+ *   notification card's — an identical repeat is blocked once.
+ *
  *   Offline-first (#371): when the completion MCP's heartbeat is dead, the
  *   block reason lists the offline renderer FIRST instead of third.
  */
@@ -33,11 +48,13 @@ require('../lib/plugin-guard');
 
 const fs = require('fs');
 const path = require('path');
-const { readSessionFile } = require('../lib/session-id');
+const { readSessionFile, sessionFile, writeSessionFile } = require('../lib/session-id');
 const {
   decideAction,
   isSubstantialAnswer,
   lastAssistantContainsCard,
+  lastAssistantText,
+  lastUserEntryIsNotification,
   safeReadTranscript,
   PENDING_TAIL_BYTES,
 } = require('../lib/card-guard');
@@ -88,6 +105,10 @@ process.stdin.on('end', () => {
   const pendAttestedResult = readSessionFile('dotclaude-devops-pending-attested', sessionId, EXACT);
   const scheduledResult = readSessionFile('dotclaude-devops-scheduled-task', sessionId, EXACT);
   const shippedResult = readSessionFile('dotclaude-devops-shipped', sessionId, EXACT);
+  // Signature of the last notification-turn card (design § 5.5) — persists
+  // ACROSS turns (not cleared by resetFlags) so the next notification turn
+  // can be compared against it.
+  const notifSigResult = readSessionFile('dotclaude-devops-notification-card-sig', sessionId, EXACT);
 
   const workHappened = workResult !== null;
   const flagCardRendered = cardResult !== null;
@@ -98,24 +119,29 @@ process.stdin.on('end', () => {
   const stopHookActive = hook.stop_hook_active === true;
   const scheduledTask = scheduledResult !== null;
   const shipped = shippedResult !== null;
-  // Both probes are only needed on the paths that read them: the tree check
-  // shells out to git, the heartbeat stats a PID file — skip both on silent ticks.
-  const treeClean = (!silent && scheduledTask) ? isTreeClean(hook.cwd, sessionId) : null;
-  const completionMcpDown = silent ? false : !isMcpServerAlive('dotclaude-completion');
+  const prevCardSignature = notifSigResult ? String(notifSigResult.content || '').trim() || null : null;
 
-  // Scan the transcript unless this is a silent tick. It answers two questions:
+  // Scan the transcript unless this is a silent tick. It answers several questions:
   //  - did the last assistant message already carry a card / substantial prose
-  //    (backup for a failed flag write, plus the chat-only heuristic), and
-  //  - is background work still running (Gate 3), which no flag can tell us —
-  //    completions arrive as task-notifications, not as tool calls.
+  //    (backup for a failed flag write, plus the chat-only heuristic),
+  //  - is background work still running (Gate 5), which no flag can tell us —
+  //    completions arrive as task-notifications, not as tool calls, and
+  //  - did THIS turn start from a task-notification rather than a user prompt
+  //    (design § 5.5) — the last user-role transcript entry names it.
   // The wider PENDING slice is used so an agent launched early in a long turn
   // is still seen; scanOpenTasks short-circuits when no launch marker is there.
   const transcript = silent ? '' : safeReadTranscript(hook.transcript_path, PENDING_TAIL_BYTES);
   const substantial = isSubstantialAnswer(transcript);
   const openTasks = silent ? [] : openTaskNames(scanOpenTasks(transcript));
+  const notificationTurn = !silent && lastUserEntryIsNotification(transcript);
   // Backup detection: if the last assistant text already contains the card
   // marker, treat as rendered even when the flag write failed.
   const cardRendered = flagCardRendered || lastAssistantContainsCard(transcript);
+  const cardText = (!silent && cardRendered) ? lastAssistantText(transcript) : '';
+  // Both probes are only needed on the paths that read them: the tree check
+  // shells out to git, the heartbeat stats a PID file — skip both on silent ticks.
+  const treeClean = (!silent && (scheduledTask || notificationTurn)) ? isTreeClean(hook.cwd, sessionId) : null;
+  const completionMcpDown = silent ? false : !isMcpServerAlive('dotclaude-completion');
 
   // A card just told the sidebar what this turn ended with (📦 Ready, 🧪 Test,
   // ⏳ Working, …). The next real prompt starts new work, so hand the wrench
@@ -140,6 +166,9 @@ process.stdin.on('end', () => {
     treeClean,
     shipped,
     completionMcpDown,
+    notificationTurn,
+    cardText,
+    prevCardSignature,
   });
 
   if (decision.resetFlags) {
@@ -156,6 +185,23 @@ process.stdin.on('end', () => {
     // prove "no ship, scheduler prompt" again on its own.
     if (scheduledResult) try { fs.unlinkSync(scheduledResult.filePath); } catch {}
     if (shippedResult) try { fs.unlinkSync(shippedResult.filePath); } catch {}
+  }
+
+  // Persist the notification-card signature ACROSS turns (independent of
+  // resetFlags) so the next notification turn can detect a duplicate. Only
+  // touched when this turn actually computed one.
+  if (decision.newCardSignature !== undefined) {
+    try {
+      const sigFile = sessionFile('dotclaude-devops-notification-card-sig', sessionId);
+      if (decision.newCardSignature) writeSessionFile(sigFile, decision.newCardSignature);
+      else if (notifSigResult) fs.unlinkSync(notifSigResult.filePath);
+    } catch {}
+  }
+
+  // Line-budget overflow (design § 2.4 / § 5.4) is reported, never enforced —
+  // surface it on stderr so it is visible without blocking the turn.
+  if (decision.warning) {
+    try { process.stderr.write(decision.warning + '\n'); } catch {}
   }
 
   if (decision.action === 'block') {

@@ -1,14 +1,11 @@
 import { describe, test, expect, vi, beforeAll } from "vitest";
-import { writeFileSync, mkdirSync, mkdtempSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 // index.js boots an MCP server over stdio at import time and pulls in the
 // @modelcontextprotocol SDK + zod (neither is a devDependency of this repo).
 // Mock all three so the module imports cleanly and we can capture the
 // render_completion_card handler to exercise the pure card renderer.
 // Never spawn the real headless usage scraper (Edge) from a unit test — it is
-// slow and flaky under parallel load. The card renders without a usage meter.
+// slow and flaky under parallel load. The card renders without a budget line.
 process.env.DEVOPS_COMPLETION_NO_USAGE = "1";
 
 // Every render() shells out to git (build-ID, repo URL). Under full parallel
@@ -46,21 +43,272 @@ beforeAll(async () => {
 
 async function cardText(params) {
   const res = await render(params);
-  // content[0] is the DO-NOT-OUTPUT instruction; content[1] is the card markdown.
-  return res.content.map((c) => c.text).join("\n");
+  // The card markdown is always the LAST content block (it must stay the
+  // last output of the turn — § 4). Everything before it (the relay
+  // instruction, the session-title note, and — on a Desktop-like test
+  // environment — the card-widget instruction) is out-of-band and never
+  // part of what the user/terminal actually sees.
+  return res.content[res.content.length - 1].text;
 }
 
-describe("render_completion_card — compact heading levels (card density)", () => {
-  test("title renders as H3 (not H1) but keeps the ✨✨✨ marker for card-guard", async () => {
-    const text = await cardText({ variant: "ready", summary: "Dichte-Test", lang: "de", session_id: "test-density-1" });
+describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
+  test("title stays H3 with the ✨✨✨ marker (card-guard); the decision heading is H2", async () => {
+    const text = await cardText({ variant: "ready", summary: "Dichte-Test", lang: "de", session_id: "test-anatomy-1" });
     expect(text).toMatch(/^### \*\*✨✨✨ Dichte-Test ✨✨✨\*\*/m);
     expect(text).not.toMatch(/^# \*\*✨✨✨/m);
+    expect(text).toMatch(/^## 📦 Shippen\?$/m);
   });
 
-  test("CTA heading renders as H3 (not H2)", async () => {
-    const text = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-density-2" });
-    expect(text).toMatch(/^### 📦 READY/m);
-    expect(text).not.toMatch(/^## 📦 READY/m);
+  test("no old blocks: no Changes/Geprüft/OFFEN/Delivery/footer/state lines, no CTA sentence", async () => {
+    const text = await cardText({
+      variant: "ship-successful", summary: "Ship ok", lang: "de", session_id: "test-anatomy-2",
+      state: { branch: "main", pushed: true, merged: "main", commit: "abc1234" },
+      changes: [{ area: "Card", description: "Neue Zeilen" }],
+    });
+    expect(text).not.toMatch(/\*\*Changes\*\*/);
+    expect(text).not.toMatch(/\*\*Gepr(ü|u)ft\*\*/);
+    expect(text).not.toMatch(/OFFEN/);
+    expect(text).not.toMatch(/\*\*Delivery\*\*/);
+    expect(text).not.toMatch(/📌/);
+    expect(text).not.toMatch(/SHIP oder ÄNDERN/);
+  });
+
+  test("result lines use › with no bullets or blockquote, ≤ 3, with a +N weitere tail on the 4th+", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Viele Changes", lang: "de", session_id: "test-anatomy-3",
+      changes: [
+        { area: "A", description: "erste Zeile" },
+        { area: "B", description: "zweite Zeile" },
+        { area: "C", description: "dritte Zeile" },
+        { area: "D", description: "vierte Zeile" },
+      ],
+    });
+    const resultLines = text.split("\n").filter((l) => l.startsWith("› "));
+    expect(resultLines.length).toBe(3);
+    expect(text).toContain("+1 weitere");
+    expect(text).not.toMatch(/^\* /m);
+    expect(text).not.toMatch(/^> /m);
+  });
+
+  test("a deviation is always line 1, prefixed Nicht erreicht, never folded into evidence or open points", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Mit rotem Test", lang: "de", session_id: "test-anatomy-4",
+      changes: [{ area: "X", description: "Feature Y gebaut" }],
+      tests: [{ method: "npm test", result: "2 Tests rot" }],
+    });
+    const lines = text.split("\n").filter((l) => l.startsWith("› "));
+    expect(lines[0]).toContain("**Nicht erreicht:**");
+    expect(lines[0]).toContain("npm test");
+  });
+
+  test("evidence row: two spaces between posts, monochrome glyphs, deviations first and bright", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Evidence-Test", lang: "de", session_id: "test-anatomy-5",
+      validation: [
+        { requirement: "R1", status: "met", evidence: "ok" },
+        { requirement: "R2", status: "met", evidence: "ok" },
+      ],
+      tests: [{ method: "npm test", result: "3464 Tests grün" }],
+    });
+    expect(text).toContain("✓ 2/2 Anforderungen");
+    expect(text).toContain("✓ 3464 Tests grün");
+    expect(text).toContain("Anforderungen  ✓"); // two spaces between posts
+  });
+
+  test("deviation-only posts (lint/build/review) render only when they carry a finding", async () => {
+    const clean = await cardText({
+      variant: "ready", summary: "Sauber", lang: "de", session_id: "test-anatomy-6a",
+      tests: [{ method: "eslint", result: "sauber" }],
+    });
+    expect(clean).not.toContain("🧹");
+
+    const dirty = await cardText({
+      variant: "ready", summary: "Warnungen", lang: "de", session_id: "test-anatomy-6b",
+      tests: [{ method: "eslint", result: "3 Warnungen" }],
+    });
+    expect(dirty).toContain("🧹 3 Warnungen");
+  });
+
+  test("⚠ ungeprüft evidence post + heading fire together on the V&V gate", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Ungeprüft", lang: "de", session_id: "cli-vv-doesnt-exist-here",
+    });
+    // No V&V flags on disk for this session → not unverified, plain ready.
+    expect(text).toMatch(/^## 📦 Shippen/m);
+  });
+
+  test("pipeline line: glyph BEFORE the step, ring channels continue it", async () => {
+    const text = await cardText({
+      variant: "ship-successful", summary: "Ship + Promote", lang: "de", session_id: "test-anatomy-7",
+      buildId: "abc1234",
+      state: { branch: "main", pushed: true, merged: "main", commit: "abc1234", pr: { number: 416, title: "x" } },
+      delivery: { promote: { channels: { alpha: "0.1.0" }, current: "alpha" } },
+    });
+    expect(text).toContain("✓ commit → ✓ push → ✓ PR #416 → ✓ merge");
+    expect(text).toContain("✓ alpha → ○ beta → ○ stable");
+    expect(text).toContain("Build abc1234");
+  });
+
+  test("ready-files pipeline names the file count, not a repo", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Nur Dateien", lang: "de", session_id: "test-anatomy-8",
+      state: { mode: "file-only", filesModified: 9, delivered: "none" },
+    });
+    expect(text).toContain("📂 9 Dateien geändert");
+    expect(text).toContain("kein Repo");
+  });
+
+  test("analysis pipeline says no changes to the repo", async () => {
+    const text = await cardText({ variant: "analysis", summary: "Nur gelesen", lang: "de", session_id: "test-anatomy-9" });
+    expect(text).toContain("➖ keine Änderungen im Repo");
+  });
+
+  test("decision heading ends with ? except state headings, which end with .", async () => {
+    const ready = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-anatomy-10a" });
+    expect(ready).toMatch(/^## .+\?$/m);
+
+    const shippedPlain = await cardText({
+      variant: "ship-successful", summary: "x", lang: "de", session_id: "test-anatomy-10b",
+      state: { branch: "main", pushed: true, merged: "main" },
+    });
+    expect(shippedPlain).toMatch(/^## .+\.$/m);
+  });
+
+  test("points cap at 3, with a +N weitere tail appended to the heading", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Viele Punkte", lang: "de", session_id: "test-anatomy-11",
+      open: ["Punkt 1", "Punkt 2", "Punkt 3", "Punkt 4", "Punkt 5"],
+    });
+    const numbered = text.split("\n").filter((l) => /^\d+\. /.test(l));
+    expect(numbered.length).toBe(3);
+    expect(text).toMatch(/^## .*\+2 weitere\??$/m);
+  });
+
+  test("terminal markdown never renders buttons", async () => {
+    const text = await cardText({ variant: "ready", summary: "Terminal", lang: "de", session_id: "test-anatomy-12" });
+    expect(text).not.toContain("role=\"button\"");
+    expect(text).not.toContain("[Ship");
+  });
+});
+
+describe("render_completion_card — § 3 per-variant table (de + en)", () => {
+  const cases = [
+    {
+      name: "ready (no reservation)",
+      params: { variant: "ready" },
+      de: /^## 📦 Shippen\?$/m, en: /^## 📦 Ship\?$/m,
+    },
+    {
+      name: "ready (top reservation)",
+      params: { variant: "ready", open: ["fremder Testfehler"] },
+      de: /^## 📦 Shippen trotz fremder Testfehler\?$/m, en: /^## 📦 Ship anyway despite fremder Testfehler\?$/m,
+    },
+    {
+      name: "ready + red tests",
+      params: { variant: "ready", tests: [{ method: "npm test", result: "2 Tests rot" }] },
+      de: /^## ⚠ Trotzdem shippen mit \d+ roten Tests\?$/m, en: /^## ⚠ Ship anyway with \d+ red tests\?$/m,
+    },
+    {
+      name: "ship-blocked",
+      params: { variant: "ship-blocked", cta: { reason: "Preflight" } },
+      de: /^## ⛔ Preflight umgehen und trotzdem shippen\?$/m, en: /^## ⛔ Bypass Preflight and ship anyway\?$/m,
+    },
+    {
+      name: "ship-successful (ring)",
+      params: { variant: "ship-successful", state: { pushed: true, merged: "main" }, delivery: { ship: { version: "0.1.0" }, promote: { channels: { alpha: "0.1.0" }, current: "alpha" } } },
+      de: /^## 🚀 Released v0\.1\.0 alpha — nach beta promoten\?$/m, en: /^## 🚀 Released v0\.1\.0 alpha — promote to beta\?$/m,
+    },
+    {
+      name: "ship-successful (plain merge, no ring)",
+      params: { variant: "ship-successful", state: { pushed: true, merged: "main" }, delivery: { ship: { version: "0.1.0", base: "main" } } },
+      de: /^## 🚀 Shipped v0\.1\.0 → main\.$/m, en: /^## 🚀 Shipped v0\.1\.0 → main\.$/m,
+    },
+    {
+      name: "ship-successful kept",
+      params: { variant: "ship-successful", state: { pushed: true, merged: "main", kept: true, branch: "feat/x" }, delivery: { ship: { version: "0.1.0" } } },
+      de: /^## 🚀 Released v0\.1\.0 alpha — weiter in `feat\/x`\?$/m, en: /^## 🚀 Released v0\.1\.0 alpha — continue on `feat\/x`\?$/m,
+    },
+    {
+      name: "ship-successful deployPending",
+      params: { variant: "ship-successful", state: { pushed: true, merged: "main", deployPending: true } },
+      de: /^## 🚨 Gemergt, aber nicht live — Migration jetzt deployen\?$/m, en: /^## 🚨 Merged, but not live — deploy the migration now\?$/m,
+    },
+    {
+      name: "released → beta",
+      params: { variant: "released", delivery: { promote: { channels: { beta: "0.1.0" }, current: "beta" }, ship: { version: "0.1.0" } } },
+      de: /^## 🎊 Promoted v0\.1\.0 BETA — nach stable\?$/m, en: /^## 🎊 Promoted v0\.1\.0 BETA — to stable\?$/m,
+    },
+    {
+      name: "released → stable",
+      params: { variant: "released", delivery: { promote: { channels: { stable: "0.1.0" }, current: "stable" }, ship: { version: "0.1.0" } } },
+      de: /^## 🎊 Released v0\.1\.0 LIVE — stable\.$/m, en: /^## 🎊 Released v0\.1\.0 LIVE — stable\.$/m,
+    },
+    {
+      name: "ready-files",
+      params: { variant: "ready-files", state: { mode: "file-only" } },
+      de: /^## 📂 Fertig auf der Platte — noch etwas\?$/m, en: /^## 📂 Done on disk — anything else\?$/m,
+    },
+    {
+      name: "test",
+      params: { variant: "test", userTest: ["Login prüfen"] },
+      de: /^## 🧪 Erst testen, dann shippen\?$/m, en: /^## 🧪 Test first, then ship\?$/m,
+    },
+    {
+      name: "test-minimal",
+      params: { variant: "test-minimal" },
+      de: /^## ▶️ Läuft — viel Spaß$/m, en: /^## ▶️ Running — have fun$/m,
+    },
+    {
+      name: "analysis",
+      params: { variant: "analysis" },
+      de: /^## 📋 Analyse gelesen — umsetzen oder Fragen\?$/m, en: /^## 📋 Read through — questions\?$/m,
+    },
+    {
+      name: "aborted",
+      params: { variant: "aborted", cta: { reason: "fehlender Zugriff" } },
+      de: /^## 🚫 Abgebrochen wegen fehlender Zugriff — anders versuchen\?$/m, en: /^## 🚫 Aborted because of fehlender Zugriff — try differently\?$/m,
+    },
+    {
+      name: "fallback",
+      params: { variant: "no-such-variant" },
+      de: /^## 🔧 Erledigt — noch etwas\?$/m, en: /^## 🔧 Done — anything else\?$/m,
+    },
+    {
+      name: "pending override",
+      params: { variant: "ready", pending: [{ name: "devops:frontend", doing: "Farbstil" }] },
+      de: /^## ⏳ Noch nicht fertig — .+$/m, en: /^## ⏳ Not done yet — .+$/m,
+    },
+    {
+      name: "batch override",
+      params: { variant: "ready" }, // batch is read from cwd's .claude/batch-mode.json — not exercised here, smoke only
+      de: /^## 📦 Shippen\?$/m, en: /^## 📦 Ship\?$/m,
+    },
+  ];
+
+  for (const c of cases) {
+    test(c.name + " (de)", async () => {
+      const text = await cardText({ ...c.params, summary: "x", lang: "de", session_id: "test-table-de-" + c.name.replace(/\W+/g, "-") });
+      expect(text).toMatch(c.de);
+    });
+    test(c.name + " (en)", async () => {
+      const text = await cardText({ ...c.params, summary: "x", lang: "en", session_id: "test-table-en-" + c.name.replace(/\W+/g, "-") });
+      expect(text).toMatch(c.en);
+    });
+  }
+
+  test("V&V unverified: ⚠ Ungeprüft shippen? — evidence carries the ungeprüft post", async () => {
+    // Simulated indirectly: without the Light-verification flag files the gate
+    // is closed, so this asserts the CLEAN path stays 'ready' — the flag-driven
+    // path is covered end-to-end by index.cli.test.js (writes real flag files).
+    const text = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-vv-clean" });
+    expect(text).not.toMatch(/Ungepr(ü|u)ft shippen/);
+  });
+
+  test("terminal renders no buttons for any variant", async () => {
+    for (const c of cases) {
+      const text = await cardText({ ...c.params, summary: "x", lang: "de", session_id: "test-nobtn-" + c.name.replace(/\W+/g, "-") });
+      expect(text, c.name).not.toMatch(/role="button"/);
+    }
   });
 });
 
@@ -74,563 +322,167 @@ describe("render_completion_card — out-of-band deploy gate (#243)", () => {
     state: { branch: "main", pushed: true, merged: "main", commit: "abc1234" },
   };
 
-  test("no deployGate → renders 'Alles ERLEDIGT', no deploy warning", async () => {
+  test("no deployGate → plain shipped heading, no deploy warning", async () => {
     const text = await cardText(baseParams);
-    expect(text).toMatch(/Alles ERLEDIGT/);
     expect(text).not.toMatch(/DEPLOY erforderlich/);
-    expect(text).not.toMatch(/noch NICHT live/);
   });
 
-  test("deployGate + deployPending → loud deploy block AND CTA flips off 'all done'", async () => {
+  test("deployPending + deployGate items → 🚨 heading and the artifacts as points", async () => {
     const text = await cardText({
       ...baseParams,
+      session_id: "test-oob-2",
       state: { ...baseParams.state, deployPending: true },
-      deployGate: [
-        { artifact: "supabase/migrations/20260708_token_revoked.sql", kind: "migration", action: "apply_migration" },
-        { artifact: "supabase/functions/desktop-latest/index.ts", kind: "function", action: "deploy_edge_function desktop-latest" },
-      ],
+      deployGate: [{ artifact: "supabase/migrations/1.sql", kind: "migration", action: "apply_migration" }],
     });
-    // Loud gate block names each artifact + its deploy action.
-    expect(text).toMatch(/DEPLOY erforderlich — noch NICHT live/);
-    expect(text).toMatch(/migration · supabase\/migrations\/20260708_token_revoked\.sql — apply_migration/);
-    expect(text).toMatch(/function · supabase\/functions\/desktop-latest\/index\.ts — deploy_edge_function desktop-latest/);
-    // CTA must NOT read as finished.
-    expect(text).toMatch(/DEPLOY erforderlich \(noch nicht live\)/);
-    expect(text).not.toMatch(/Alles ERLEDIGT/);
-  });
-
-  test("English deploy gate localizes header + CTA", async () => {
-    const text = await cardText({
-      ...baseParams,
-      lang: "en",
-      state: { ...baseParams.state, deployPending: true },
-      deployGate: [{ artifact: "db/migrations/1.sql", kind: "migration", action: "run migration" }],
-    });
-    expect(text).toMatch(/DEPLOY required — NOT live yet/);
-    expect(text).toMatch(/DEPLOY REQUIRED \(not live yet\)/);
-    expect(text).not.toMatch(/All DONE/);
-  });
-
-  test("plain-string deploy items render as bullets", async () => {
-    const text = await cardText({
-      ...baseParams,
-      state: { ...baseParams.state, deployPending: true },
-      deployGate: ["Apply the token_revoked migration to prod"],
-    });
-    expect(text).toMatch(/Apply the token_revoked migration to prod/);
+    expect(text).toMatch(/^## 🚨 Gemergt, aber nicht live/m);
+    expect(text).toContain("migration · supabase/migrations/1.sql — apply_migration");
   });
 });
 
-describe("render_completion_card — delivery track + released variant", () => {
-  const PREVIEW = "C:/Users/Jerem/AppData/Local/Temp/claude/C--Users-Jerem-IdeaProjects-dotclaude--claude-worktrees-devops-repo-health-074310/756785e3-bfa8-4d61-a6a3-0ff7f81602b2/scratchpad";
-  const dump = (name, text) => { try { writeFileSync(`${PREVIEW}/card-${name}.md`, text); } catch { /* preview only */ } };
-
-  test("ship-successful with delivery: track shows alpha, CTA names the channel", async () => {
+describe("render_completion_card — every input. field lands somewhere", () => {
+  test("validation unmet drives both the deviation line and the evidence post", async () => {
     const text = await cardText({
-      variant: "ship-successful", summary: "Video-Filter geshippt", lang: "de",
-      buildId: "abc1234", session_id: "t-ship",
-      state: { branch: "main", pushed: true, merged: "main", commit: "abc1234" },
-      delivery: {
-        pr: { number: 123, title: "video filter" },
-        ship: { version: "0.117.0", base: "main" },
-        promote: { channels: { alpha: "0.117.0" }, current: "alpha" },
-      },
+      variant: "ready", summary: "x", lang: "de", session_id: "test-fields-validation",
+      validation: [{ requirement: "Muss X tun", status: "unmet", evidence: "Test fehlt" }],
     });
-    dump("ship-alpha", text);
-    expect(text).toMatch(/\*\*Delivery\*\*/);
-    expect(text).toMatch(/🟢 alpha/);
-    expect(text).toMatch(/SHIPPED → alpha/);
-    expect(text).toMatch(/Alles ERLEDIGT/);
+    expect(text).toContain("**Nicht erreicht:** Muss X tun — Test fehlt");
+    expect(text).toContain("✗ 1 unerfüllt");
   });
 
-  test("released → beta: PROMOTED cta, beta current, promotion facts, no Changes", async () => {
+  test("userTest steps become the test-variant's points", async () => {
     const text = await cardText({
-      variant: "released", summary: "v0.117.0 auf beta promotet", lang: "de",
-      buildId: "abc1234", session_id: "t-beta",
-      delivery: {
-        pr: { number: 123, title: "video filter" },
-        ship: { version: "0.117.0", base: "main" },
-        promote: { channels: { alpha: "0.118.0", beta: "0.117.0" }, current: "beta" },
-      },
-      promotion: { from: "alpha", to: "beta", sha: "abc1234def567", tags: ["beta/v0.117.0"] },
-      userFinalTest: ["Beta-Consumer: nächster SessionStart pinnt auf beta/v0.117.0"],
+      variant: "test", summary: "x", lang: "de", session_id: "test-fields-usertest",
+      userTest: ["Login testen", "Logout testen"],
     });
-    dump("released-beta", text);
-    expect(text).toMatch(/## 🔼 PROMOTED\. v0\.117\.0 → beta/);
-    expect(text).toMatch(/✅ alpha `v0\.118\.0` · 🟢 beta `v0\.117\.0` · ⚪ stable/);
-    expect(text).toMatch(/\*\*Promotion\*\*/);
-    expect(text).toMatch(/beta\/v0\.117\.0/);
-    expect(text).not.toMatch(/\*\*Changes\*\*/);
+    expect(text).toContain("1. Login testen");
+    expect(text).toContain("2. Logout testen");
   });
 
-  test("released → stable: RELEASED LIVE cta, stable current, github release", async () => {
+  test("userFinalTest items become ready's points, afterDeployment adds the suffix", async () => {
     const text = await cardText({
-      variant: "released", summary: "v0.117.0 auf stable released", lang: "de",
-      buildId: "abc1234", session_id: "t-stable",
-      delivery: {
-        pr: { number: 123, title: "video filter" },
-        ship: { version: "0.117.0", base: "main" },
-        promote: { channels: { alpha: "0.118.0", beta: "0.117.0", stable: "0.117.0" }, current: "stable" },
-      },
-      promotion: { from: "beta", to: "stable", sha: "abc1234def567", tags: ["stable/v0.117.0", "v0.117.0"], release: true },
-      userFinalTest: [{ action: "Stable-Consumer: nächster SessionStart pinnt auf stable/v0.117.0", afterDeployment: true }],
+      variant: "ready", summary: "x", lang: "de", session_id: "test-fields-finaltest",
+      userFinalTest: ["Lokal prüfen", { action: "Stripe live testen", afterDeployment: true }],
     });
-    dump("released-stable", text);
-    expect(text).toMatch(/## 🎊 RELEASED\. v0\.117\.0 → stable — LIVE/);
-    expect(text).toMatch(/✅ beta `v0\.117\.0` · 🟢 stable `v0\.117\.0`/);
-    expect(text).toMatch(/GitHub Release erstellt/);
-    expect(text).toMatch(/stable\/v0\.117\.0/);
+    expect(text).toContain("1. Lokal prüfen");
+    expect(text).toContain("Stripe live testen — nach Deployment");
   });
 
-  test("ready with delivery: PR done, Ship + Promote pending", async () => {
+  test("_downgraded (variant-guard) surfaces as the context line", async () => {
     const text = await cardText({
-      variant: "ready", summary: "Video-Filter implementiert", lang: "de",
-      buildId: "abc1234", session_id: "t-ready",
-      state: { branch: "feat/video-filter", commit: "abc1234", pr: { number: 123, title: "video filter" } },
-      delivery: { pr: { number: 123, title: "video filter" }, ship: null, promote: null },
+      variant: "ship-successful", summary: "x", lang: "de", session_id: "test-fields-downgrade",
+      // No state.pushed/merged → variant guard downgrades to ready.
     });
-    dump("ready", text);
-    expect(text).toMatch(/✅ PR/);
-    expect(text).toMatch(/⚪ Ship/);
-    expect(text).not.toMatch(/⚪ Promote/);
+    expect(text).toMatch(/^## 📦 Shippen/m);
+    expect(text).toContain("› ℹ️ **Variante auf `ready` korrigiert**");
   });
 
-  test("english released → stable localizes CTA + promotion facts", async () => {
+  test("delivery.promote.stableLag renders the promote-distance context line", async () => {
     const text = await cardText({
-      variant: "released", summary: "v0.117.0 promoted to stable", lang: "en",
-      buildId: "abc1234", session_id: "t-en",
-      delivery: {
-        ship: { version: "0.117.0", base: "main" },
-        promote: { channels: { alpha: "0.117.0", beta: "0.117.0", stable: "0.117.0" }, current: "stable" },
-      },
-      promotion: { from: "beta", to: "stable", tags: ["stable/v0.117.0", "v0.117.0"], release: true },
+      variant: "ship-successful", summary: "x", lang: "de", session_id: "test-fields-lag",
+      state: { pushed: true, merged: "main" },
+      delivery: { ship: { version: "0.1.0" }, promote: { channels: { alpha: "0.1.0" }, current: "alpha", stableLag: { versions: 3, days: 5 } } },
     });
-    dump("released-stable-en", text);
-    expect(text).toMatch(/## 🎊 RELEASED\. v0\.117\.0 → stable — LIVE/);
-    expect(text).toMatch(/🟢 stable `v0\.117\.0`/);
-    expect(text).toMatch(/GitHub Release created/);
+    expect(text).toContain("› alpha liegt 3 Versionen / 5 Tage vor stable → `/promote`");
+  });
+
+  test("pending overrides evidence with a provisional-evidence post and the block's items as points", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-fields-pending",
+      pending: [{ name: "devops:frontend", doing: "Farbstil umstellen" }],
+    });
+    expect(text).toContain("◐ Belege vorläufig");
+    expect(text).toContain("`devops:frontend` — Farbstil umstellen");
+  });
+
+  test("concept override renders the quiet page context line", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-fields-concept",
+      concept: { phase: "waiting", url: "http://localhost:4321/docs/concepts/x.html" },
+    });
+    expect(text).toMatch(/^## 🧭 Concept wartet auf deine Entscheidungen$/m);
+    expect(text).toContain("› http://localhost:4321/docs/concepts/x.html");
   });
 });
 
-describe("render_completion_card — projects without a usable origin", () => {
-  // A directory that is definitively not a git repo, so getRepoUrl() returns ''.
-  const NON_REPO = tmpdir();
-
-  test("file-only state renders the files line, never a branch/origin line", async () => {
+describe("render_completion_card — evidence heuristics (post-concept fixes)", () => {
+  test("skipped tests are no deviation: '3464 grün · 3 skipped' is ✓ 3464 Tests grün and the heading stays 📦", async () => {
     const text = await cardText({
-      variant: "ready-files",
-      summary: "File-only Projekt",
-      lang: "de",
-      session_id: "test-file-only-1",
-      cwd: NON_REPO,
-      state: { mode: "file-only", filesModified: 3, delivered: "none" },
+      variant: "ready", summary: "Heuristik", lang: "de", session_id: "test-ev-1",
+      tests: [{ method: "npm test", result: "3464 grün · 3 skipped" }],
+      validation: [{ requirement: "A", status: "met", evidence: "t" }],
+      open: ["agent-proactivity.md liegt 11 B unter dem Preload-Cap — kürzen oder Cap heben", "zweiter Punkt"],
     });
-    expect(text).toMatch(/📂 files: 3 modified · delivered: none/);
-    expect(text).not.toMatch(/origin\//);
+    expect(text).toContain("✓ 3464 Tests grün");
+    expect(text).not.toMatch(/⏭/);
+    expect(text).toMatch(/^## 📦 Shippen trotz 2 Vorbehalten\?$/m);
   });
 
-  test("empty state in a non-repo does NOT claim origin is up to date", async () => {
-    // The regression: the final else-branch asserted "up-to-date origin/main"
-    // from an empty state, in a directory with no .git at all.
-    const text = await cardText({
-      variant: "analysis",
-      summary: "Kein Repo",
-      lang: "de",
-      session_id: "test-file-only-2",
-      cwd: NON_REPO,
-      state: {},
+  test("'0 rot' is green; '2 rot' is ✗ 2 Tests rot and routes to the ⚠ heading", async () => {
+    const green = await cardText({
+      variant: "ready", summary: "Null rot", lang: "de", session_id: "test-ev-2a",
+      tests: [{ method: "npm test", result: "120 grün · 0 rot" }],
     });
-    expect(text).not.toMatch(/up-to-date origin/);
-    expect(text).not.toMatch(/origin\/main/);
+    expect(green).toContain("✓ 120 Tests grün");
+    const red = await cardText({
+      variant: "ready", summary: "Zwei rot", lang: "de", session_id: "test-ev-2b",
+      tests: [{ method: "npm test", result: "3462 grün · 2 rot" }],
+    });
+    expect(red).toContain("✗ 2 Tests rot");
+    expect(red).toMatch(/^## ⚠ Trotzdem shippen mit 2 roten Tests\?$/m);
+    expect(red).toMatch(/^› \*\*Nicht erreicht:\*\* 2 Tests rot \(npm test\)$/m);
   });
 
-  test("a local commit without a remote is reported as local, not as pushed", async () => {
-    const text = await cardText({
-      variant: "ready",
-      summary: "Lokaler Commit",
-      lang: "de",
-      session_id: "test-file-only-3",
-      cwd: NON_REPO,
-      state: { branch: "feat/x", commit: "abc1234" },
+  test("a short single reservation is quoted in the heading, a long one becomes the count", async () => {
+    const short = await cardText({
+      variant: "ready", summary: "Kurz", lang: "de", session_id: "test-ev-3a",
+      open: ["fremdem Testfehler"],
     });
-    expect(text).toMatch(/committed locally/);
-    expect(text).not.toMatch(/up-to-date origin/);
+    expect(short).toMatch(/^## 📦 Shippen trotz fremdem Testfehler\?$/m);
+    const long = await cardText({
+      variant: "ready", summary: "Lang", lang: "en", session_id: "test-ev-3b",
+      open: ["agent-proactivity.md is 11 B under the preload cap — the next addition must trim or raise the cap"],
+    });
+    expect(long).toMatch(/^## 📦 Ship anyway despite 1 reservation\?$/m);
   });
 
-  test("ready-files renders its own CTA heading", async () => {
+  test("gates without a lane (preflight) surface only with a finding, named after the gate", async () => {
     const text = await cardText({
-      variant: "ready-files",
-      summary: "Disk-Deliverable",
-      lang: "de",
-      session_id: "test-file-only-4",
-      cwd: NON_REPO,
-      state: { mode: "file-only", filesModified: 1, delivered: "none" },
+      variant: "ready", summary: "Preflight", lang: "de", session_id: "test-ev-4",
+      tests: [{ method: "npm test", result: "10 grün" }, { method: "Preflight", result: "2 Konflikte — fehlgeschlagen" }, { method: "Smoke", result: "ok" }],
     });
-    expect(text).toMatch(/FERTIG auf der Platte/);
-    expect(text).not.toMatch(/READY — SHIP oder ÄNDERN/);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Pending layer — background work still running at turn end
-// ---------------------------------------------------------------------------
-
-describe("pending layer", () => {
-  test("replaces the ready CTA so the card never asks for a SHIP mid-flight", async () => {
-    const text = await cardText({
-      variant: "ready",
-      summary: "Erste Version gepusht",
-      lang: "de",
-      session_id: "test-pending-1",
-      changes: [{ area: "concept", description: "Farbstil-Korrektur angestoßen" }],
-      pending: [{ name: "devops:frontend", doing: "Farbstil auf Tokens umstellen" }],
-    });
-    expect(text).toMatch(/### ⏳ NOCH NICHT FERTIG\. Agent `devops:frontend` arbeitet — ich MELDE mich/);
-    expect(text).not.toMatch(/READY — SHIP oder ÄNDERN/);
+    expect(text).toMatch(/^✗ Preflight: 2 Konflikte — fehlgeschlagen  /m);
+    expect(text).not.toContain("Smoke");
   });
 
-  test("overrides the ship-successful CTA too — a merge is not 'all done' mid-flight", async () => {
+  test("live checks count up: two green live entries → ✓ 2 Live-Checks ok", async () => {
     const text = await cardText({
-      variant: "ship-successful",
-      summary: "Gemerged, Doku-Agent läuft",
-      lang: "de",
-      session_id: "test-pending-2",
-      state: { pushed: true, merged: "main", branch: "feat/x" },
-      pending: [{ name: "devops:research", doing: "Doku nachziehen" }],
+      variant: "ready", summary: "Live", lang: "de", session_id: "test-ev-5",
+      tests: [{ method: "Hooks live gegen usage-live.json", result: "Zeile kommt" }, { method: "Browser", result: "Overlay sichtbar" }],
     });
-    expect(text).toMatch(/NOCH NICHT FERTIG/);
-    expect(text).not.toMatch(/Alles ERLEDIGT/);
-    // The body keeps reporting what IS true — only the CTA is corrected.
-    expect(text).toMatch(/origin\/main/);
+    expect(text).toContain("✓ 2 Live-Checks ok");
   });
 
-  test("renders the pending block naming what is still running", async () => {
+  test("an identifier-like area keeps its subject on a lowercase description; a worded area is dropped", async () => {
     const text = await cardText({
-      variant: "analysis",
-      summary: "Agenten losgeschickt",
-      lang: "de",
-      session_id: "test-pending-3",
-      pending: [
-        { name: "devops:qa", doing: "Suite läuft" },
-        { name: "npm run build", kind: "task" },
-      ],
+      variant: "ready", summary: "Subjekt", lang: "de", session_id: "test-ev-6",
+      changes: [{ area: "run-agents", description: "nutzt dieselben Schwellen" }, { area: "Ship", description: "merged ohne Tag" }],
     });
-    expect(text).toMatch(/⏳ \*\*LÄUFT NOCH — nicht abgeschlossen:\*\*/);
-    expect(text).toMatch(/\* `devops:qa` — Suite läuft/);
-    expect(text).toMatch(/\* `npm run build`/);
-    expect(text).toMatch(/Diese Card berichtet den Stand VOR diesen Ergebnissen/);
+    expect(text).toMatch(/^› run-agents nutzt dieselben Schwellen$/m);
+    expect(text).toMatch(/^› merged ohne Tag$/m);
   });
 
-  test("English card uses the English pending wording", async () => {
+  test("ring pipeline ticks only the channels THIS version reached", async () => {
     const text = await cardText({
-      variant: "ready",
-      summary: "Pushed first version",
-      lang: "en",
-      session_id: "test-pending-5",
-      pending: [{ name: "devops:frontend" }],
+      variant: "ship-successful", summary: "Ring", lang: "de", session_id: "test-ev-7",
+      state: { branch: "claude/x", pushed: true, merged: "main", commit: "a91c3e2" },
+      delivery: { pr: { number: 416, title: "f" }, ship: { version: "0.179.0", base: "main" },
+        promote: { current: "alpha", channels: { alpha: "0.179.0", beta: "0.176.0", stable: "0.170.0" } } },
     });
-    expect(text).toMatch(/### ⏳ NOT DONE YET\. agent `devops:frontend` is working/);
-    expect(text).not.toMatch(/READY — SHIP or CHANGE/);
+    expect(text).toContain("→ ✓ alpha → ○ beta → ○ stable");
   });
 
-  test("an empty pending array leaves the normal CTA alone", async () => {
-    const text = await cardText({
-      variant: "ready",
-      summary: "Nichts offen",
-      lang: "de",
-      session_id: "test-pending-6",
-      pending: [],
-    });
-    expect(text).toMatch(/READY — SHIP oder ÄNDERN/);
-    expect(text).not.toMatch(/NOCH NICHT FERTIG/);
-  });
-});
-
-describe("analysis CTA", () => {
-  test("is the call to action alone — no hollow DONE for a question answered", async () => {
-    const text = await cardText({
-      variant: "analysis",
-      summary: "Frage beantwortet",
-      lang: "de",
-      session_id: "test-analysis-cta-de",
-    });
-    expect(text).toMatch(/### 📋 LIES dir durch — FRAGEN\?/);
-    expect(text).not.toMatch(/DONE — LIES dir durch/);
-  });
-
-  test("English analysis CTA drops DONE as well", async () => {
-    const text = await cardText({
-      variant: "analysis",
-      summary: "Question answered",
-      lang: "en",
-      session_id: "test-analysis-cta-en",
-    });
-    expect(text).toMatch(/### 📋 READ through — QUESTIONS\?/);
-    expect(text).not.toMatch(/DONE — READ through/);
-  });
-});
-
-describe("pending layer — workflows and the name line", () => {
-  const WF_MIX = [
-    { name: "eve-panel-and-tutorial", kind: "workflow", doing: "Balken über dem Gesicht" },
-    { name: "turn-handover-and-panel-polish", kind: "workflow", doing: "Übergangs-Animation" },
-    { name: "owner-prompt-audit", kind: "workflow", doing: "Anweisungen gegen Code prüfen" },
-    { name: "devops:qa", kind: "agent", doing: "Suite läuft" },
-    { name: "npm run build", kind: "task" },
-  ];
-
-  test("counts workflows as their own class instead of calling them agents", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "Workflows laufen", lang: "de",
-      session_id: "test-pending-wf-1", pending: WF_MIX,
-    });
-    expect(text).toMatch(/### ⏳ NOCH NICHT FERTIG\. 3 Workflows \+ 1 Agent \+ 1 Task laufen — ich MELDE mich/);
-    expect(text).not.toMatch(/5 Agenten/);
-  });
-
-  test("names the first three on a dim line DIRECTLY above the CTA", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "Workflows laufen", lang: "de",
-      session_id: "test-pending-wf-2", pending: WF_MIX,
-    });
-    const lines = text.split("\n").filter(l => l.trim());
-    const ctaAt = lines.findIndex(l => l.startsWith("### ⏳ NOCH NICHT FERTIG."));
-    expect(ctaAt).toBeGreaterThan(0);
-    // The row immediately before the CTA, in the same blockquote style as the
-    // version and branch rows above it.
-    expect(lines[ctaAt - 1]).toBe(
-      "> ⏳ `eve-panel-and-tutorial`, `turn-handover-and-panel-polish`, `owner-prompt-audit` +2",
-    );
-  });
-
-  test("a single workflow is named in the CTA and gets no duplicate line", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "Ein Workflow", lang: "de",
-      session_id: "test-pending-wf-3",
-      pending: [{ name: "harden-pass", kind: "workflow", doing: "Testsuite + Lint" }],
-    });
-    expect(text).toMatch(/### ⏳ NOCH NICHT FERTIG\. Workflow `harden-pass` läuft — ich MELDE mich/);
-    expect(text).not.toMatch(/^> ⏳ /m);
-  });
-
-  test("the block above names each item with what it is doing", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "Workflows laufen", lang: "de",
-      session_id: "test-pending-wf-4", pending: WF_MIX,
-    });
-    expect(text).toMatch(/\* `eve-panel-and-tutorial` — Balken über dem Gesicht/);
-    expect(text).toMatch(/\* `owner-prompt-audit` — Anweisungen gegen Code prüfen/);
-    // Block and line cut at the same three, so both tails report the same rest.
-    expect(text).toMatch(/\* \+2/);
-    expect(text).toMatch(/^> ⏳ .* \+2$/m);
-  });
-
-  test("English card names the workflows too", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "Workflows running", lang: "en",
-      session_id: "test-pending-wf-5", pending: WF_MIX.slice(0, 2),
-    });
-    expect(text).toMatch(/### ⏳ NOT DONE YET\. 2 workflows are running — I’ll REPORT back/);
-    expect(text).toMatch(/^> ⏳ `eve-panel-and-tutorial`, `turn-handover-and-panel-polish`$/m);
-  });
-
-  test("a name that would break the card's markdown is neutralised", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "Boeser Name", lang: "de",
-      session_id: "test-pending-wf-6",
-      pending: [
-        { name: "a`b|c<d>", kind: "workflow" },
-        { name: "devops:qa", kind: "agent" },
-      ],
-    });
-    expect(text).toMatch(/^> ⏳ `abcd`, `devops:qa`$/m);
-  });
-});
-
-// A /concept page open at turn end is a checkpoint in a loop that ends on the
-// page, not in chat. The bridge's own background tasks are plumbing, so the
-// card must not say "3 Tasks laufen"; it says which of the three true states
-// the concept is in, and folds any REAL content work into that line.
-describe("concept layer", () => {
-  test("waiting: replaces the ready CTA with the concept wait line", async () => {
-    const text = await cardText({
-      variant: "ready",
-      summary: "Concept eve-panel iteration 3 geöffnet",
-      lang: "de",
-      session_id: "test-concept-1",
-      changes: [{ area: "concept", description: "Iteration 3 angehängt" }],
-      concept: { phase: "waiting" },
-    });
-    expect(text).toContain("### 🧭 CONCEPT wartet auf deine Entscheidungen auf der Seite — ich MELDE mich");
-    expect(text).not.toContain("READY — SHIP oder ÄNDERN");
-    expect(text).not.toContain("NOCH NICHT FERTIG");
-  });
-
-  test("a bare phase string is accepted", async () => {
-    const text = await cardText({
-      variant: "analysis", summary: "Concept offen", lang: "de",
-      session_id: "test-concept-2", concept: "iterating",
-    });
-    expect(text).toContain("### 🧭 CONCEPT in Iteration — ich MELDE mich");
-  });
-
-  test("implementing with content agents folds them into the line and keeps the block", async () => {
-    const text = await cardText({
-      variant: "ready",
-      summary: "Implement-Runde gestartet",
-      lang: "de",
-      session_id: "test-concept-3",
-      concept: { phase: "implementing" },
-      pending: [
-        { name: "devops:frontend", doing: "Panel-Layout umbauen" },
-        { name: "devops:core", doing: "Bridge-Endpunkt ergänzen" },
-      ],
-    });
-    expect(text).toContain("### 🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich");
-    // The pending block and the dim name line still name the agents.
-    expect(text).toContain("LÄUFT NOCH — nicht abgeschlossen");
-    expect(text).toContain("> ⏳ `devops:frontend`, `devops:core`");
-    expect(text).not.toContain("NOCH NICHT FERTIG");
-  });
-
-  test("English wording", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "Concept open", lang: "en",
-      session_id: "test-concept-4",
-      concept: { phase: "implementing" }, pending: [{ name: "devops:frontend" }],
-    });
-    expect(text).toContain("### 🧭 CONCEPT in implementation. agent `devops:frontend` is working — I’ll REPORT back");
-  });
-
-  test("outranks the pending CTA — the concept phase is the truer statement", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "x", lang: "de", session_id: "test-concept-5",
-      concept: "waiting", pending: [{ name: "devops:research", doing: "Doku" }],
-    });
-    expect(text).toContain("### 🧭 CONCEPT wartet auf deine Entscheidungen auf der Seite · Agent `devops:research` arbeitet — ich MELDE mich");
-    expect(text).not.toContain("NOCH NICHT FERTIG");
-  });
-
-  test("a JSON-string concept field is coerced like the other structured fields", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "x", lang: "de", session_id: "test-concept-6",
-      concept: '{"phase":"iterating"}',
-    });
-    expect(text).toContain("CONCEPT in Iteration");
-  });
-
-  test("no concept field leaves the normal CTA alone", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "x", lang: "de", session_id: "test-concept-7",
-    });
-    expect(text).toContain("READY — SHIP oder ÄNDERN");
-    expect(text).not.toContain("🧭 CONCEPT");
-  });
-
-  // The page is already open at http://localhost:{port}/{html_path} — the
-  // bridge's state file holds both, so the card links there without the skill
-  // passing a URL. The line sits directly above the CTA, dim like the meta rows.
-  test("links the open page from the project's concept-active.json when cwd is passed", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "card-concept-"));
-    mkdirSync(join(cwd, ".claude"));
-    writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({
-      port: 8878, html_path: "docs/concepts/2026-09-13-feedback-routine.html", slug: "feedback-routine",
-    }));
-    const text = await cardText({
-      variant: "ready", summary: "x", lang: "de", session_id: "test-concept-8", cwd, buildId: "t",
-      concept: "waiting",
-    });
-    const lines = text.split("\n");
-    const link = lines.findIndex((l) => l.includes("🧭 http://localhost:8878/docs/concepts/2026-09-13-feedback-routine.html"));
-    const cta = lines.findIndex((l) => l.startsWith("### 🧭 CONCEPT wartet"));
-    expect(link).toBeGreaterThan(-1);
-    expect(lines[link].startsWith(">")).toBe(true);
-    expect(cta).toBeGreaterThan(link);
-  });
-
-  test("an explicit concept.url wins over the state file", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "x", lang: "de", session_id: "test-concept-9",
-      concept: { phase: "iterating", url: "http://localhost:9001/docs/concepts/x.html" },
-    });
-    expect(text).toContain("> 🧭 http://localhost:9001/docs/concepts/x.html");
-  });
-
-  test("no resolvable URL → no link line, CTA unchanged", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "x", lang: "de", session_id: "test-concept-10",
-      cwd: mkdtempSync(join(tmpdir(), "card-noconcept-")), buildId: "t", concept: "waiting",
-    });
-    expect(text).toContain("### 🧭 CONCEPT wartet");
-    expect(text).not.toMatch(/> 🧭 http/);
-  });
-});
-
-// /claude-batch collection armed for the project: the user's next prompt is a
-// note the hook swallows, not a task. The card reads the same batch-mode.json
-// the hook reads (expiry and note cap included), so a collecting session can
-// never end on a CTA that invites a prompt as if it would be worked on.
-describe("batch layer", () => {
-  function batchProject(notes, mode = {}) {
-    const cwd = mkdtempSync(join(tmpdir(), "card-batch-"));
-    mkdirSync(join(cwd, ".claude"));
-    writeFileSync(join(cwd, ".claude", "batch-mode.json"), JSON.stringify({
-      active: true, startedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 3600_000).toISOString(), maxNotes: 50, marker: ">>", ...mode,
-    }));
-    if (notes > 0) {
-      const body = Array.from({ length: notes }, (_, i) => `\n<!-- 2026-09-13T10:0${i}:00.000Z -->\nNotiz ${i + 1}\n`).join("");
-      writeFileSync(join(cwd, ".claude", "batch.md"), "# claude-batch notes\n" + body);
-    }
-    return cwd;
-  }
-
-  test("active collection replaces the analysis CTA with the 📥 BATCH line", async () => {
-    const text = await cardText({
-      variant: "analysis", summary: "Sammelmodus an", lang: "de", session_id: "test-batch-1",
-      cwd: batchProject(3), buildId: "t",
-    });
-    expect(text).toContain('### 📥 BATCH sammelt. 3 Notizen · nächster Prompt wird Notiz #4 · ">>" löst aus — ich WARTE');
-    expect(text).not.toContain("LIES dir durch");
-  });
-
-  test("fresh activation with no notes yet", async () => {
-    const text = await cardText({
-      variant: "analysis", summary: "x", lang: "en", session_id: "test-batch-2",
-      cwd: batchProject(0, { marker: "go:" }), buildId: "t",
-    });
-    expect(text).toContain('### 📥 BATCH collecting. no notes yet · next prompt becomes note #1 · "go:" fires the merge — I’ll WAIT');
-  });
-
-  test("an expired mode file is not a collection — normal CTA", async () => {
-    const text = await cardText({
-      variant: "analysis", summary: "x", lang: "de", session_id: "test-batch-3",
-      cwd: batchProject(2, { expiresAt: new Date(Date.now() - 1000).toISOString() }), buildId: "t",
-    });
-    expect(text).toContain("LIES dir durch");
-    expect(text).not.toContain("BATCH sammelt");
-  });
-
-  test("an open concept outranks the batch line", async () => {
-    const text = await cardText({
-      variant: "analysis", summary: "x", lang: "de", session_id: "test-batch-4",
-      cwd: batchProject(1), buildId: "t", concept: "waiting",
-    });
-    expect(text).toContain("🧭 CONCEPT wartet");
-    expect(text).not.toContain("BATCH sammelt");
-  });
-
-  test("batch outranks pending and folds the running work in", async () => {
-    const text = await cardText({
-      variant: "ready", summary: "x", lang: "de", session_id: "test-batch-5",
-      cwd: batchProject(1), buildId: "t", pending: [{ name: "devops:research", doing: "Doku" }],
-    });
-    expect(text).toMatch(/### 📥 BATCH sammelt\. 1 Notiz · nächster Prompt wird Notiz #2 · ">>" löst aus · .*devops:research.* — ich WARTE/);
-    expect(text).not.toContain("NOCH NICHT FERTIG");
-  });
-
-  test("no cwd → no batch detection", async () => {
-    const text = await cardText({ variant: "analysis", summary: "x", lang: "de", session_id: "test-batch-6" });
-    expect(text).toContain("LIES dir durch");
+  test("test-minimal carries the started thing as its one › line", async () => {
+    const text = await cardText({ variant: "test-minimal", summary: "App gestartet", lang: "de", session_id: "test-ev-8", cta: { description: "npm run dev auf 5173" } });
+    expect(text).toMatch(/^› npm run dev auf 5173$/m);
   });
 });

@@ -46,11 +46,11 @@ import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
-import { hasPending, pendingWhat, renderPendingBlock, renderPendingLine, hasConcept, conceptWhat } from "./lib/pending.js";
+import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { coerceCardInput, validateCardInput, formatIssues } from "./lib/card-input.js";
-import { conceptUrl, readBatch, batchWhat, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
-import { ctaActionsInstruction } from "./lib/cta-actions.js";
+import { conceptUrl, readBatch, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
+import { cardWidgetInstruction } from "./lib/card-widget.js";
 import {
   assessFreshness,
   isLiveSnapshot,
@@ -86,22 +86,10 @@ const WINDOW_WK_MIN          = 10080;
 const HEALTH_WARN_THRESHOLD  = 1000;
 const HEALTH_CRIT_THRESHOLD  = 2000;
 
-// Card body budgets (characters). Every blockquote bullet must stay one visual
-// line on a normal desktop chat column (~100 chars); prose beyond that wraps
-// into paragraphs and the card stops being scannable. Cut on a word boundary
-// with a visible ellipsis (see lib/soft-limits.js#clampEllipsis).
+// Card body budget (characters). The summary/title is clamped on a word
+// boundary (see lib/soft-limits.js#clampText); result-line and evidence-post
+// budgets live next to their renderers below (RESULT_LINE_MAX etc.).
 const SUMMARY_MAX            = 60;
-const CHANGE_AREA_MAX        = 24;
-const CHANGE_DESC_MAX        = 90;
-const GATE_METHOD_MAX        = 50;
-const GATE_RESULT_MAX        = 60;
-const GATES_LINE_MAX         = 110;
-const GATES_LIMIT            = 5;
-const VALIDATION_REQ_MAX     = 70;
-const VALIDATION_EV_MAX      = 100;
-const BLOCK_BULLET_LIMIT     = 3;   // no block ever shows more than 3 bullets
-const CHANGES_LIMIT          = 3;
-const PR_TITLE_MAX           = 70;
 // Pace flag: usage running more than this many points ahead of the clock. The
 // old +10pp flagged 91 of 100 ship cards — the warning was the normal state.
 const PACE_WARN_PP           = 20;
@@ -136,6 +124,14 @@ const WARM_MAX_AGE_MS = 60_000;
 // ---------------------------------------------------------------------------
 
 const clampPct = (v) => Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0));
+
+// Dim a text block to the muted blockquote color — used by the legacy
+// get_usage meter renderer below (renderUsageMeterForCard). The completion
+// card itself no longer uses blockquotes (§ 2 of the design doc has none).
+function blockquote(block) {
+  if (!block) return block;
+  return block.split('\n').map(l => (l.length ? '> ' + l : '>')).join('\n');
+}
 
 // The bar encodes the TIME window, the marker encodes USAGE inside it:
 //   \u2501 heavy  \u2014 time already elapsed in this cycle
@@ -327,69 +323,9 @@ function renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine) {
 // Completion card renderer
 // ---------------------------------------------------------------------------
 
-const VARIANTS = {
-  'ship-successful': { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: true  },
-  ready:             { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: true  },
-  'ready-files':     { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: false },
-  released:          { usage: true,  changes: false, tests: false, state: false, userTest: false, userFinalTest: true,  deployGate: false, delivery: true  },
-  'ship-blocked':    { usage: true,  changes: true,  tests: true,  state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: false },
-  test:              { usage: true,  changes: true,  tests: true,  state: true,  userTest: true,  userFinalTest: false, deployGate: false, delivery: false },
-  'test-minimal':    { usage: false, changes: false, tests: false, state: false, userTest: false, userFinalTest: false, deployGate: false, delivery: false },
-  analysis:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: false },
-  aborted:           { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: false },
-  fallback:          { usage: true,  changes: true,  tests: false, state: true,  userTest: false, userFinalTest: true,  deployGate: true,  delivery: false },
-};
-
-const CTA = {
-  en: {
-    // {dest} = " \u2192 <channel>" on ring projects, " \u2192 <base>" on a plain merge.
-    // The merge target is stated ONCE here; the Delivery block carries the rest.
-    'ship-successful':        '## \ud83d\ude80 SHIPPED{dest} \u2014 All DONE',
-    'ship-successful-kept':   '## \ud83d\ude80 SHIPPED{dest} \u2014 KEEP CODING in `{branch}`',
-    'ship-successful-deploy': '## \ud83d\ude80 SHIPPED{dest} \u2014 \ud83d\udea8 DEPLOY REQUIRED (not live yet)',
-    'released-beta':               '## \ud83d\udd3c PROMOTED. v{version} \u2192 beta',
-    'released-stable':             '## \ud83c\udf8a RELEASED. v{version} \u2192 stable \u2014 LIVE',
-    ready:                    '## \ud83d\udce6 READY \u2014 SHIP or CHANGE?',
-    'ready-files':            '## \ud83d\udcc2 DONE on disk \u2014 no repo, nothing to push',
-    'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX or SKIP?',
-    test:                     '## \ud83e\uddea DONE \u2014 SHIP after your TEST?',
-    'test-minimal':           '## \u25b6\ufe0f STARTED. {description} \u2014 HAVE FUN',
-    analysis:                 '## \ud83d\udccb READ through \u2014 QUESTIONS?',
-    aborted:                  '## \ud83d\udeab ABORTED. {reason} \u2014 What should I TRY?',
-    fallback:                 '## \ud83d\udd27 DONE \u2014 Anything ELSE?',
-    // Pending layer \u2014 overrides EVERY variant's CTA while background work runs.
-    pending:                  '## \u23f3 NOT DONE YET. {what} \u2014 I\u2019ll REPORT back',
-    // Concept layer — a concept page is open; outranks pending (the bridge's own
-    // tasks are plumbing, and any real work is folded into {what}).
-    concept:                  '## 🧭 CONCEPT {what} — I’ll REPORT back',
-    // Batch layer — /claude-batch is collecting; the next prompt is a note, not
-    // a task. Read off the project's batch-mode.json, never off a card field.
-    batch:                    '## 📥 BATCH collecting. {what} — I’ll WAIT',
-  },
-  de: {
-    'ship-successful':        '## \ud83d\ude80 SHIPPED{dest} \u2014 Alles ERLEDIGT',
-    'ship-successful-kept':   '## \ud83d\ude80 SHIPPED{dest} \u2014 WEITER in `{branch}`',
-    'ship-successful-deploy': '## \ud83d\ude80 SHIPPED{dest} \u2014 \ud83d\udea8 DEPLOY erforderlich (noch nicht live)',
-    'released-beta':               '## \ud83d\udd3c PROMOTED. v{version} \u2192 beta',
-    'released-stable':             '## \ud83c\udf8a RELEASED. v{version} \u2192 stable \u2014 LIVE',
-    ready:                    '## \ud83d\udce6 READY \u2014 SHIP oder ÄNDERN?',
-    'ready-files':            '## 📂 FERTIG auf der Platte — kein Repo, nichts zu pushen',
-    'ship-blocked':           '## \u26d4 BLOCKED. {reason} \u2014 FIX oder SKIP?',
-    test:                     '## \ud83e\uddea DONE \u2014 SHIP nach deinem TEST?',
-    'test-minimal':           '## \u25b6\ufe0f STARTED. {description} \u2014 VIEL SPASS',
-    analysis:                 '## \ud83d\udccb LIES dir durch \u2014 FRAGEN?',
-    aborted:                  '## \ud83d\udeab ABORTED. {reason} \u2014 Was soll ich VERSUCHEN?',
-    fallback:                 '## \ud83d\udd27 DONE \u2014 Noch was ANDERES?',
-    // Pending layer \u2014 overrides EVERY variant's CTA while background work runs.
-    pending:                  '## \u23f3 NOCH NICHT FERTIG. {what} \u2014 ich MELDE mich',
-    // Concept layer — a concept page is open; outranks pending (the bridge's own
-    // tasks are plumbing, and any real work is folded into {what}).
-    concept:                  '## 🧭 CONCEPT {what} — ich MELDE mich',
-    // Batch layer — /claude-batch is collecting; the next prompt is a note, not
-    // a task. Read off the project's batch-mode.json, never off a card field.
-    batch:                    '## 📥 BATCH sammelt. {what} — ich WARTE',
-  },
-};
+// Variants that render a body at all — test-minimal is title + one result
+// line + decision heading only (§ 2, § 3 of the design doc).
+function hasBody(variant) { return variant !== 'test-minimal'; }
 
 /**
  * Resolve the GitHub HTTPS base URL from the git remote origin.
@@ -441,440 +377,661 @@ function renderTitle(summary) {
   return '### **\u2728\u2728\u2728 ' + clampText(String(summary), SUMMARY_MAX).value + ' \u2728\u2728\u2728**';
 }
 
-// Dim a text block to the muted blockquote color. Only the plain-text baseline
-// is affected \u2014 emojis (font-rendered), `code`, links, and **bold** keep their
-// own color inside the quote, so icons and merge/PR/commit links still pop.
-function blockquote(block) {
-  if (!block) return block;
-  return block.split('\n').map(l => (l.length ? '> ' + l : '>')).join('\n');
+// ---------------------------------------------------------------------------
+// Result lines (§ 2.2) — replace the old Changes block. Derived from
+// `changes[]`: each entry's `description` (falling back to `area`) becomes
+// one `›` line, capped at 3 with a "+N weitere" tail. A deviation — an unmet
+// requirement, a red test, or an abort reason — is ALWAYS line 1, prefixed
+// `**Nicht erreicht:**` / `**Not achieved:**`, never folded into the evidence
+// row or an open point.
+// ---------------------------------------------------------------------------
+
+const DEVIATION_LABEL = { de: '**Nicht erreicht:**', en: '**Not achieved:**' };
+const RESULT_TAIL = { de: (n) => '+' + n + ' weitere', en: (n) => '+' + n + ' more' };
+const RESULT_LINE_MAX = 120;
+const RESULT_LINE_LIMIT = 3;
+
+/** A single free-text deviation, or '' when the turn has none. */
+function deviationText(input, lang) {
+  const validation = Array.isArray(input.validation) ? input.validation : [];
+  const unmet = validation.find(v => v && v.status === 'unmet');
+  if (unmet) return unmet.requirement + (unmet.evidence ? ' — ' + unmet.evidence : '');
+  const tests = Array.isArray(input.tests) ? input.tests : [];
+  const badTest = tests.find(t => t && glyphForResult(t.result) === '✗');
+  if (badTest) {
+    // The tests lane reads as "2 Tests rot (npm test)"; any other gate keeps its own words.
+    if (classifyGate(badTest) === 'test') return testsPostText(badTest.result, '✗', lang) + (badTest.method ? ' (' + badTest.method + ')' : '');
+    return (badTest.method ? badTest.method + ': ' : '') + badTest.result;
+  }
+  if (input.variant === 'aborted' && input.cta && input.cta.reason) return input.cta.reason;
+  return '';
 }
 
-function renderFooter(buildId, cta, variant) {
-  // Footer line: 📌 version bump info (if available) + build ID in backticks
-  const pin = '\ud83d\udccc';
-  const bid = '`' + buildId + '`';
-  if (variant === 'ship-successful' && cta && cta.vOld && cta.vNew) {
-    const bump = cta.bump ? ' (' + cta.bump + ')' : '';
-    return pin + ' ' + cta.vOld + ' \u2192 ' + cta.vNew + bump + ' \u00b7 ' + bid;
+/** ≤3 `›` result-line texts (WITHOUT the `› ` marker itself). */
+function buildResultLines(input, lang) {
+  const L = DEVIATION_LABEL[lang] || DEVIATION_LABEL.de;
+  const tail = RESULT_TAIL[lang] || RESULT_TAIL.de;
+  const lines = [];
+
+  const dev = deviationText(input, lang);
+  if (dev) lines.push(L + ' ' + clampEllipsis(dev, RESULT_LINE_MAX));
+
+  const changes = Array.isArray(input.changes) ? input.changes : [];
+  // test-minimal: the one line is what was started (§ 3), carried in cta.description.
+  if (!changes.length && input.variant === 'test-minimal' && input.cta && input.cta.description) {
+    lines.push(clampEllipsis(String(input.cta.description), RESULT_LINE_MAX));
   }
-  if (variant === 'ship-successful' && cta && cta.version) {
-    return pin + ' ' + cta.version + ' \u00b7 ' + bid;
+  for (const c of changes) {
+    let text = String((c && c.description) || '');
+    const area = String((c && c.area) || '');
+    // A description that starts lowercase is a predicate whose subject is an
+    // identifier-like area ("run-agents" + "nutzt dieselben Schwellen") — keep
+    // the subject. A worded area ("Ship" + "merged ohne Tag", #396 coercion)
+    // is still discarded.
+    if (area && text && /^[a-zäöü]/.test(text) && /^\S+$/.test(area) && /[-._:/]/.test(area)) text = area + ' ' + text;
+    if (!text) text = area;
+    const desc = clampEllipsis(text, RESULT_LINE_MAX);
+    if (desc) lines.push(desc);
   }
-  return pin + ' ' + bid;
+
+  if (lines.length <= RESULT_LINE_LIMIT) return lines;
+  const shown = lines.slice(0, RESULT_LINE_LIMIT);
+  const rest = lines.length - RESULT_LINE_LIMIT;
+  const last = RESULT_LINE_LIMIT - 1;
+  shown[last] = clampEllipsis(shown[last], 90) + '  ' + tail(rest);
+  return shown;
 }
 
-const CHANGES_TAIL = { de: (n) => '+' + n + ' weitere', en: (n) => '+' + n + ' more' };
+// ---------------------------------------------------------------------------
+// Evidence row (§ 2.3) — always the same three posts (requirements / tests /
+// live check), deviations moved to the front and never dimmed, a handful of
+// deviation-ONLY posts (lint, build, review, the V&V stamp) shown only when
+// they carry a finding.
+// ---------------------------------------------------------------------------
 
-function renderChanges(changes, lang) {
-  if (!changes || changes.length === 0) return '';
-  const tail = CHANGES_TAIL[lang] || CHANGES_TAIL.de;
-  // An entry coerced from a bare string has no area (#396) — render the text
-  // alone rather than a dangling arrow in front of it.
-  const items = changes.slice(0, CHANGES_LIMIT).map(c => {
-    const area = clampEllipsis(String(c.area || ''), CHANGE_AREA_MAX);
-    const desc = clampEllipsis(String(c.description || ''), CHANGE_DESC_MAX);
-    return '* ' + (area ? area + ' \u2192 ' + desc : desc);
-  });
-  // More than the budget: say so on the header line instead of dropping
-  // silently (14 % of ship cards used to lose their 4th+ change without a
-  // trace) — and never as a 4th bullet: a block has three at most.
-  const rest = changes.length - items.length;
-  const header = '**Changes**' + (rest > 0 ? ' \u00b7 ' + tail(rest) : '');
-  return header + '\n' + items.join('\n');
+/** ✓ met · ✗ failed · ◐ partial — classified from freeform result text. */
+function glyphForResult(result) {
+  const r = String(result || '').toLowerCase();
+  // "0 rot" / "0 failed" is a green result that merely names the count.
+  const zeroed = r.replace(/\b0\s*(rot|red|fail\w*|fehler|errors?)\b/g, '');
+  if (/\b(rot|red|fail\w*|fehler|errors?|fehlgeschlagen|konflikt\w*|conflict\w*|blockiert|blocked)\b/.test(zeroed)) return '✗';
+  // Skipped tests are detail for the tooltip, never a deviation on their own.
+  if (/nicht live|not live|teilweise|partial|warnung|warning/.test(r)) return '◐';
+  return '✓';
 }
 
-// ⚠ OFFEN — follow-ups that are NOT tests: decisions, cleanups, open questions.
-// They used to share the 🔬 test block (95 of 198 items on the analysed ship
-// cards were no test at all), which made the wrong header ask for the wrong
-// action. Rendered outside the blockquote like the test block: it is the
-// user's to-do, so it pops. Items are never clipped — a cut instruction is
-// worse than a long one.
-const OPEN_LABEL = { de: '\u26a0 **OFFEN:**', en: '\u26a0 **OPEN:**' };
-
-function renderOpen(items, lang) {
-  if (!Array.isArray(items) || items.length === 0) return '';
-  const header = OPEN_LABEL[lang] || OPEN_LABEL.de;
-  const bullets = items.filter(it => typeof it === 'string' && it.trim()).map(it => '* ' + it.trim());
-  if (!bullets.length) return '';
-  return header + '\n' + bullets.join('\n');
+/** First integer in a freeform result ("3464 grün · 3 skipped" → 3464). */
+function firstCount(text) {
+  const m = /\d[\d.]*/.exec(String(text || ''));
+  return m ? m[0] : '';
 }
 
-function renderState(state, variant, repoUrl) {
-  if (!state) {
-    if (variant === 'analysis') return '\u2796 No changes to repo';
-    return '';
+/** "3464 Tests grün" / "2 Tests rot" — number + noun + state (§ 2.3). */
+function testsPostText(result, glyph, lang) {
+  const r = String(result || '');
+  const n = firstCount(r);
+  if (!n) return r;
+  const noun = lang === 'en' ? 'tests' : 'Tests';
+  if (glyph === '✗') {
+    const red = /(\d+)\s*(rot|red|fail\w*|fehler|errors?)/i.exec(r);
+    return (red ? red[1] : n) + ' ' + noun + (lang === 'en' ? ' red' : ' rot');
   }
+  return n + ' ' + noun + (lang === 'en' ? ' green' : ' grün');
+}
 
-  if (state.mode === 'file-only') {
-    const filesModified = state.filesModified || 0;
-    const delivered = state.delivered || 'none';
-    return '\ud83d\udcc2 files: ' + filesModified + ' modified \u00b7 delivered: ' + delivered;
+/** Which evidence lane a `tests[]` entry belongs to, from its `method`. */
+function classifyGate(t) {
+  const m = String((t && t.method) || '').toLowerCase();
+  if (/lint/.test(m)) return 'lint';
+  if (/tsc|typecheck|type-check|build/.test(m)) return 'build';
+  if (/review/.test(m)) return 'review';
+  if (/live|browser/.test(m)) return 'live';
+  // No method at all (a coerced bare string) is the test lane by default.
+  if (!m || /test|vitest|jest|pytest|spec|suite/.test(m)) return 'test';
+  // Preflight, smoke, gates, …: no lane of their own — shown only with a finding.
+  return 'other';
+}
+
+function requirementsPost(validation, lang) {
+  if (!validation.length) return null;
+  const total = validation.length;
+  const unmet = validation.filter(v => v.status === 'unmet').length;
+  const met = validation.filter(v => v.status === 'met').length;
+  const noun = lang === 'en' ? 'Requirements' : 'Anforderungen';
+  if (unmet > 0) return { glyph: '✗', text: unmet + (lang === 'en' ? ' unmet' : ' unerfüllt'), dim: false };
+  if (met < total) return { glyph: '◐', text: met + '/' + total + ' ' + noun, dim: false };
+  return { glyph: '✓', text: total + '/' + total + ' ' + noun, dim: true };
+}
+
+function testsPost(tests, lang) {
+  const main = tests.filter(t => classifyGate(t) === 'test');
+  if (!main.length) return null;
+  const worst = main.find(t => glyphForResult(t.result) !== '✓') || main[0];
+  const glyph = glyphForResult(worst.result);
+  // The raw method/result stays available for the widget tooltip.
+  const tooltip = main.map(t => (t.method ? t.method + ' → ' : '') + t.result).join(' · ');
+  return { glyph, text: testsPostText(worst.result, glyph, lang), dim: glyph === '✓', tooltip };
+}
+
+/** Slot 3 — a real-data/browser check, or the post-ship PR fact. */
+function liveCheckPost(tests, key, lang) {
+  if (key === 'ship-successful' || key === 'ship-successful-kept' || key === 'ship-successful-deploy') return null;
+  const live = tests.filter(t => classifyGate(t) === 'live');
+  if (!live.length) return null;
+  const worst = live.find(t => glyphForResult(t.result) !== '✓');
+  const tooltip = live.map(t => (t.method ? t.method + ' → ' : '') + t.result).join(' · ');
+  if (worst) return { glyph: glyphForResult(worst.result), text: String(worst.result || ''), dim: false, tooltip };
+  const n = live.length;
+  const text = lang === 'en'
+    ? n + (n === 1 ? ' live check ok' : ' live checks ok')
+    : n + (n === 1 ? ' Live-Check ok' : ' Live-Checks ok');
+  return { glyph: '✓', text, dim: true, tooltip };
+}
+
+/** Deviation-ONLY posts — never shown when the gate is clean. */
+function deviationOnlyPosts(tests) {
+  const posts = [];
+  const lint = tests.find(t => classifyGate(t) === 'lint');
+  if (lint && glyphForResult(lint.result) !== '✓') posts.push({ glyph: '🧹', text: String(lint.result || ''), dim: false });
+  const build = tests.find(t => classifyGate(t) === 'build');
+  if (build && glyphForResult(build.result) !== '✓') posts.push({ glyph: '🏗', text: String(build.result || ''), dim: false });
+  const review = tests.find(t => classifyGate(t) === 'review');
+  if (review && glyphForResult(review.result) !== '✓') posts.push({ glyph: '👁', text: String(review.result || ''), dim: false });
+  // Gates without a lane (preflight, smoke, …) surface only with a finding,
+  // named after the gate so the reader knows what failed.
+  for (const t of tests.filter(t => classifyGate(t) === 'other')) {
+    const glyph = glyphForResult(t.result);
+    if (glyph === '✓') continue;
+    posts.push({ glyph, text: (t.method ? t.method + ': ' : '') + String(t.result || ''), dim: false });
   }
+  return posts;
+}
 
-  let icon;
-  if (state.merged)                            icon = '\u2705';
-  else if (state.appStatus === 'running')      icon = '\ud83d\udfe2';
-  else if (state.appStatus === 'not-started')  icon = '\ud83d\udfe1';
-  else if (state.branch && state.branch !== 'main') icon = '\ud83d\udd00';
-  else if (state.pushed)                       icon = '\u2705';
-  else                                         icon = '\u2796';
+/** Analysis cards — "✓ 12 Dateien gelesen", "✓ 3 Befunde belegt" (best-effort, read from `tests[]`). */
+function analysisPosts(input) {
+  const tests = Array.isArray(input.tests) ? input.tests : [];
+  const posts = [];
+  const filesGate = tests.find(t => /datei|file/i.test(String(t.method || '')));
+  if (filesGate) posts.push({ glyph: glyphForResult(filesGate.result), text: String(filesGate.result || ''), dim: true });
+  const findingsGate = tests.find(t => /befund|finding/i.test(String(t.method || '')));
+  if (findingsGate) posts.push({ glyph: glyphForResult(findingsGate.result), text: String(findingsGate.result || ''), dim: true });
+  return posts;
+}
 
-  const branch = state.branch || '';
-  // In keep-mode the remote branch was deleted by the merge — linking to GitHub
-  // would 404. Render plain text with a "(kept)" hint instead.
-  const branchSuffix = state.kept ? ' (kept locally)' : (state.worktree ? ' (worktree)' : '');
-  const branchLabel = branch + branchSuffix;
-  const branchStr = (repoUrl && !state.kept)
-    ? '[`' + branchLabel + '`](' + repoUrl + '/tree/' + branch + ')'
-    : '`' + branchLabel + '`';
+/** Released cards — slot 1-3 become the promotion facts. */
+function promotionPosts(input, lang) {
+  const posts = [];
+  const promo = input.promotion || {};
+  if (Array.isArray(promo.tags) && promo.tags.length) {
+    posts.push({ glyph: '✓', text: (lang === 'en' ? 'tags ' : 'Tags ') + promo.tags.join('/'), dim: true });
+  }
+  if (promo.sha) posts.push({ glyph: '✓', text: (lang === 'en' ? 'bit-identical' : 'bit-identisch') + ' — ' + String(promo.sha).slice(0, 7), dim: true });
+  if (promo.release) posts.push({ glyph: '✓', text: lang === 'en' ? 'GitHub Release' : 'GitHub-Release', dim: true });
+  return posts;
+}
 
-  // No commit hash + synced/landed → clean working tree → "nothing to commit".
-  // No commit hash + unsynced work → real pending changes → "uncommitted".
-  let commitStr;
-  if (state.commit) {
-    commitStr = repoUrl
-      ? '[' + state.commit + '](' + repoUrl + '/commit/' + state.commit + ')'
-      : state.commit;
-  } else if (state.pushed || state.merged) {
-    commitStr = 'nothing to commit';
+/** Ordered evidence posts: deviations (✗ / ◐ / ⚠) first, dim green after. */
+function buildEvidencePosts(input, lang, key) {
+  const tests = Array.isArray(input.tests) ? input.tests : [];
+  const validation = Array.isArray(input.validation) ? input.validation : [];
+
+  let main;
+  if (key === 'released-beta' || key === 'released-stable') {
+    main = promotionPosts(input, lang);
+  } else if (key === 'analysis') {
+    main = analysisPosts(input);
   } else {
-    commitStr = 'uncommitted';
+    main = [requirementsPost(validation, lang), testsPost(tests, lang), liveCheckPost(tests, key, lang)].filter(Boolean);
   }
 
-  // PR segment carries the merge status as an adjective ("merged"/"open").
-  // Rendered only when a PR exists — no PR means no "no PR" noise.
-  let prStr = '';
-  if (state.pr) {
-    const mergeWord = state.merged ? 'merged ' : 'open ';
-    const prLabel = mergeWord + 'PR #' + state.pr.number + ' "' + state.pr.title + '"';
-    prStr = repoUrl
-      ? '[' + prLabel + '](' + repoUrl + '/pull/' + state.pr.number + ')'
-      : prLabel;
+  const dev = deviationOnlyPosts(tests);
+  if (input.vv && input.vv.unverified) {
+    dev.push({ glyph: '⚠', text: lang === 'en' ? 'unverified — no test ran' : 'ungeprüft — kein Test lief', dim: false });
+  }
+  if (hasPending(input.pending)) {
+    dev.push({ glyph: '◐', text: lang === 'en' ? 'evidence provisional' : 'Belege vorläufig', dim: false });
   }
 
-  // Helper: clickable origin/<name> ref, or plain text without a repo URL.
-  const originRef = (name) => {
-    const target = 'origin/' + name;
-    return repoUrl ? '[' + target + '](' + repoUrl + '/tree/' + name + ')' : target;
-  };
+  const all = [...dev, ...main];
+  const isDeviation = (p) => p.glyph === '✗' || p.glyph === '◐' || p.glyph === '⚠';
+  return [...all.filter(isDeviation), ...all.filter(p => !isDeviation(p))];
+}
 
-  // Lead segment = sync status (NOT merge status). The merge fact moved onto the
-  // PR segment above. The lead states whether origin reflects the work:
-  //   PR merged \u2192 "updated origin/<base>";  PR open \u2192 "not updated";
-  //   no PR     \u2192 branch sync vs origin/<branch> (merged-without-PR = clean/landed).
-  let syncStr;
-  let syncRefBranch = null; // branch the ref points at, for trailing-branch dedupe
-  if (state.pr) {
-    if (state.merged) {
-      syncStr = 'updated ' + originRef(state.merged);
-      syncRefBranch = state.merged;
-    } else {
-      syncStr = 'not updated';
+function renderEvidenceRowMd(posts) {
+  if (!posts.length) return '';
+  return posts.map(p => p.glyph + ' ' + p.text).join('  ');
+}
+
+// ---------------------------------------------------------------------------
+// Budget line (§ 2.4) — replaces the fenced usage meter. Bar = elapsed time,
+// marker = usage; omitted entirely while both windows are < 50 % and > 1 h
+// from reset. Context health (§ old renderContextHealth) sits dim at the end.
+// ---------------------------------------------------------------------------
+
+function renderContextHealth(toolCallCount) {
+  if (toolCallCount <= HEALTH_WARN_THRESHOLD) return '';
+  const cmd = toolCallCount <= HEALTH_CRIT_THRESHOLD ? '/compact' : '/clear';
+  return '🧠 ' + toolCallCount + ' Calls · ' + cmd;
+}
+
+const BUDGET_BAR_WIDTH = 14;
+
+/** "3 h 39 m" / "6 d 20 h" — the watermark format inside the budget bar. */
+function formatResetSpaced(minutes) {
+  if (minutes == null || isNaN(minutes)) return '—';
+  if (minutes >= 1440) {
+    const d = Math.floor(minutes / 1440);
+    const h = Math.floor((minutes % 1440) / 60);
+    return d + ' d ' + h + ' h';
+  }
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h + ' h ' + m + ' m';
+}
+
+/** Terminal fallback glyph bar: ▰ time elapsed · │ usage marker · ▱ time left. */
+function budgetGlyphBar(pct, elapsedPct, width = BUDGET_BAR_WIDTH) {
+  const usagePos = Math.min(width - 1, Math.round(clampPct(pct) / 100 * width));
+  const elapsedEnd = Math.round(clampPct(elapsedPct) / 100 * width);
+  let bar = '';
+  for (let i = 0; i < width; i++) {
+    if (i === usagePos) bar += '│';
+    else if (i < elapsedEnd) bar += '▰';
+    else bar += '▱';
+  }
+  return bar;
+}
+
+/** Marker colour by usage-minus-time in percentage points (§ 2.4). */
+function markerLevel(pct, elapsedPct) {
+  const diff = pct - elapsedPct;
+  if (diff <= 10) return 'white';
+  if (diff <= 25) return 'yellow';
+  return 'red';
+}
+
+/** A window is omitted while it is both < 50 % used AND > 1 h from reset. */
+function omitWindow(pct, resetMinutes) {
+  return (pct || 0) < 50 && (resetMinutes == null || resetMinutes > 60);
+}
+
+function buildBudgetModel(usageData, delta5h, deltaWk, healthLine) {
+  if (!usageData || !usageData.session) return null;
+  const freshness = assessFreshness(usageData, Date.now());
+  if (freshness.expired) {
+    return { omitted: false, expiredNote: renderExpiredNote(usageData, freshness), bars: [], contextHealth: healthLine || '' };
+  }
+
+  const s = usageData.session;
+  const w = usageData.weekly;
+  const elapsed5h = s.resetInMinutes != null ? ((WINDOW_5H_MIN - s.resetInMinutes) / WINDOW_5H_MIN) * 100 : 0;
+  const bars = [];
+  let warn = false;
+
+  if (!omitWindow(s.pct, s.resetInMinutes)) {
+    const level = markerLevel(s.pct, elapsed5h);
+    if (level !== 'white') warn = true;
+    bars.push({
+      label: '5h', pct: s.pct, elapsedPct: elapsed5h, level,
+      watermark: formatResetSpaced(s.resetInMinutes),
+      tooltip: Math.round(s.pct) + '% verbraucht · Reset in ' + formatResetSpaced(s.resetInMinutes),
+    });
+  }
+  if (w) {
+    const elapsedWk = ((WINDOW_WK_MIN - w.resetInMinutes) / WINDOW_WK_MIN) * 100;
+    if (!omitWindow(w.pct, w.resetInMinutes)) {
+      const level = markerLevel(w.pct, elapsedWk);
+      if (level !== 'white') warn = true;
+      bars.push({
+        label: 'Wk', pct: w.pct, elapsedPct: elapsedWk, level,
+        watermark: formatResetSpaced(w.resetInMinutes),
+        tooltip: Math.round(w.pct) + '% verbraucht · Reset in ' + formatResetSpaced(w.resetInMinutes),
+      });
     }
-  } else {
-    const b = state.merged || branch || 'main';
-    // Without a resolvable origin there is nothing to be up-to-date WITH.
-    // getRepoUrl() returns '' both for a directory that is not a repo and for
-    // a repo with no remote, and the branches below used to assert
-    // "up-to-date origin/main" in either case — including from an entirely
-    // empty state:{}, so every card in a non-git project carried a fabricated
-    // remote claim.
-    const hasOrigin = !!repoUrl;
-    if (!hasOrigin) {
-      syncStr = state.commit ? 'committed locally' : 'no remote';
-    } else if (state.merged) {
-      syncStr = 'up-to-date ' + originRef(b);
-      syncRefBranch = b;
-    } else if (state.pushed) {
-      syncStr = (state.commit ? 'updated ' : 'up-to-date ') + originRef(b);
-      syncRefBranch = b;
-    } else if (state.commit) {
-      syncStr = 'not updated'; // committed locally, origin not updated yet
-    } else {
-      // No PR, no merge, no push, no commit: nothing happened that could have
-      // moved origin, and nothing here checked it either. Report the absence
-      // of activity instead of asserting a freshness we never verified.
-      syncStr = 'no repo activity';
-    }
   }
+  return { omitted: bars.length === 0, bars, warn, contextHealth: healthLine || '' };
+}
 
-  // Order: sync · PR(+merge status) · commit · branch
-  // Drop the trailing branch when the sync segment already references origin/<branch>
-  // (use raw state.branch — do NOT use the 'main' fallback, or a card with an
-  // unknown branch would silently drop the segment).
-  const rawBranch = state.branch;
-  const branchRedundant = syncRefBranch && rawBranch && syncRefBranch === rawBranch;
-  const segments = [syncStr];
-  if (prStr) segments.push(prStr);
-  segments.push(commitStr);
-  if (branch && !branchRedundant) segments.push(branchStr);
-  let line = icon + ' ' + segments.join(' \u00b7 ');
-
-  if (state.appStatus === 'running')     line += ' \u00b7 app running';
-  if (state.appStatus === 'not-started') line += ' \u00b7 app not started';
-
+function renderBudgetLineMd(budget) {
+  if (!budget) return '';
+  if (budget.expiredNote) return budget.expiredNote;
+  if (budget.omitted) return '';
+  const segs = budget.bars.map(b => b.label + ' ' + budgetGlyphBar(b.pct, b.elapsedPct) + ' ' + b.watermark);
+  let line = (budget.warn ? '⚠ ' : '') + segs.join('   ');
+  if (budget.contextHealth) line += '   ' + budget.contextHealth;
   return line;
 }
 
-const DELIVERY_LABEL = {
-  de: { header: 'Delivery', noPr: 'kein PR', lag: (ch, n, d) => ch + ' ' + n + (n === 1 ? ' Version' : ' Versionen') + (d ? ' / ' + d + ' Tage' : '') + ' vor stable \u2192 `/promote`' },
-  en: { header: 'Delivery', noPr: 'no PR',   lag: (ch, n, d) => ch + ' ' + n + (n === 1 ? ' version' : ' versions') + (d ? ' / ' + d + ' days' : '') + ' ahead of stable \u2192 `/promote`' },
-};
+// ---------------------------------------------------------------------------
+// Pipeline line (§ 2.5) — "where it lies". Glyph BEFORE the step, ring
+// channels continue the line, file-only / analysis get their own forms.
+// ---------------------------------------------------------------------------
 
-const SEMVER_RE = /^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+function renderPipelineLine(input, lang, buildId) {
+  const state = input.state || {};
+  const delivery = input.delivery || {};
 
-// `v1.2.3` for a semver, the raw value in backticks otherwise. A commit SHA
-// passed as "version" (16 of 100 analysed cards) used to render as `vb43bf60`.
-function fmtVersion(x) {
-  const raw = String(x);
-  return SEMVER_RE.test(raw) ? '`v' + raw.replace(/^v/, '') + '`' : '`' + raw + '`';
-}
-
-// Delivery block — ONE block at the foot of the body that carries every
-// pipeline fact exactly once: PR, base + version bump, commit, build-id, the
-// follow-up branch, and the channel ladder. It replaces three blocks that used
-// to say the same four things in three layouts (the vertical Delivery track at
-// the top, the 📌 footer, and the "updated origin/main · merged PR …" state
-// line — median 5 mentions of the version per card). Sits BELOW the body:
-// on 97 % of ship cards it is identical (PR ✅ · Ship ✅ · alpha 🟢), and a
-// block without variance does not belong above the changes.
-//   line 1  **Delivery** ✅ PR #366 · <title ≤70>            (or ⊘ PR — no PR)
-//   line 2  ✅ `main` 0.153.0 → 0.154.0 (minor) · <commit> · `<build-id>` [· `branch (kept locally)`]
-//           ⚪ Ship · `branch` · <commit> · `<build-id>`      (not shipped yet)
-//   line 3  🟢 alpha `v0.154.0` · ⚪ beta · ⚪ stable [· alpha N vor stable → `/promote`]
-// Line 3 only exists on ring projects — a hollow "⚪ Promote" says nothing.
-function renderDeliveryBlock(delivery, state, cta, buildId, lang, repoUrl) {
-  if (!delivery) return '';
-  const L = DELIVERY_LABEL[lang] || DELIVERY_LABEL.de;
-  state = state || {};
-  cta = cta || {};
-  const lines = [];
-
-  const pr = delivery.pr;
-  let head = '**' + L.header + '** ';
-  if (pr && pr.number) {
-    const num = repoUrl ? '[#' + pr.number + '](' + repoUrl + '/pull/' + pr.number + ')' : '#' + pr.number;
-    head += '\u2705 PR ' + num + (pr.title ? ' \u00b7 ' + clampEllipsis(String(pr.title), PR_TITLE_MAX) : '');
-  } else {
-    head += '\u2298 PR \u2014 ' + L.noPr;
+  if (state.mode === 'file-only') {
+    const n = state.filesModified || 0;
+    const noun = lang === 'en' ? (n === 1 ? 'file changed' : 'files changed') : 'Dateien geändert';
+    const noRepo = lang === 'en' ? 'no repo' : 'kein Repo';
+    return '📂 ' + n + ' ' + noun + ' · ' + noRepo + (input.cwd ? ' · ' + input.cwd : '');
   }
-  lines.push(head);
-
-  const commit = state.commit
-    ? (repoUrl ? '[' + state.commit + '](' + repoUrl + '/commit/' + state.commit + ')' : state.commit)
-    : '';
-  const bid = '`' + buildId + '`';
-  const branch = state.branch || '';
-  // Kept branches were deleted on the remote by the merge — never link them.
-  const branchRef = () => {
-    const label = branch + (state.kept ? ' (kept locally)' : (state.worktree ? ' (worktree)' : ''));
-    return (repoUrl && !state.kept) ? '[`' + label + '`](' + repoUrl + '/tree/' + branch + ')' : '`' + label + '`';
-  };
-
-  const ship = delivery.ship;
-  const segs = [];
-  if (ship && ship.version) {
-    const bump = (cta.vOld && cta.vNew)
-      ? cta.vOld + ' \u2192 ' + cta.vNew + (cta.bump ? ' (' + cta.bump + ')' : '')
-      : fmtVersion(ship.version);
-    segs.push('\u2705 ' + (ship.base ? '`' + ship.base + '` ' : '') + bump);
-    if (commit) segs.push(commit);
-    segs.push(bid);
-    if (branch && branch !== ship.base) segs.push(branchRef());
-  } else {
-    segs.push('\u26aa Ship');
-    if (branch) segs.push(branchRef());
-    if (commit) segs.push(commit);
-    segs.push(bid);
+  if (input.variant === 'analysis') {
+    const none = lang === 'en' ? 'no changes to repo' : 'keine Änderungen im Repo';
+    return '➖ ' + none + (state.branch ? ' · ' + state.branch : '');
   }
-  lines.push(segs.join(' \u00b7 '));
+
+  const commitDone = !!(state.commit || state.pushed || state.merged);
+  const pushDone = !!(state.pushed || state.merged);
+  const prDone = !!state.pr;
+  const mergeDone = !!state.merged;
+  const prLabel = 'PR' + (state.pr && state.pr.number ? ' #' + state.pr.number : '');
+  const steps = [
+    (commitDone ? '✓' : '○') + ' commit',
+    (pushDone ? '✓' : '○') + ' push',
+    (prDone ? '✓' : '○') + ' ' + prLabel,
+    (mergeDone ? '✓' : '○') + ' merge',
+  ];
+  let line = steps.join(' → ');
+  if (mergeDone) line += '   ' + state.merged;
+  else if (state.branch) line += ' · ' + state.branch;
 
   const promote = delivery.promote;
   if (promote) {
     const order = ['alpha', 'beta', 'stable'];
     const channels = promote.channels || {};
-    const current = promote.current;
-    const currentIdx = order.indexOf(current);
-    const parts = order.map(ch => {
-      const ver = channels[ch];
-      let icon;
-      if (ch === current) icon = '\ud83d\udfe2';
-      else if (promote.fastTrack && ch === 'beta' && currentIdx > order.indexOf('beta') && !ver) icon = '\u23ed\ufe0f';
-      else if (ver) icon = '\u2705';
-      else icon = '\u26aa';
-      return icon + ' ' + ch + (ver ? ' ' + fmtVersion(ver) : '');
+    const shipped = String((delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '').replace(/^v/, '');
+    const reached = Math.max(order.indexOf(promote.current), -1);
+    const chParts = order.map((ch, i) => {
+      if (promote.fastTrack && ch === 'beta' && !channels.beta) return '⏭️ ' + ch;
+      // A channel is done only when THIS version reached it — an older version
+      // sitting on beta is not a tick for the release being reported.
+      const atVersion = shipped && channels[ch] && String(channels[ch]).replace(/^v/, '') === shipped;
+      const done = i <= reached || atVersion;
+      return (done ? '✓' : '○') + ' ' + ch;
     });
-    let ladder = parts.join(' \u00b7 ');
-    const lag = promote.stableLag;
-    if (lag && Number(lag.versions) > 0) {
-      ladder += ' \u00b7 ' + L.lag(current || 'alpha', Number(lag.versions), lag.days ? Number(lag.days) : 0);
+    line += ' → ' + chParts.join(' → ');
+  }
+
+  const version = (delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '';
+  if (version) line += ' · v' + String(version).replace(/^v/, '');
+  line += ' · Build ' + buildId;
+  return line;
+}
+
+// ---------------------------------------------------------------------------
+// Decision block (§ 2.6, § 3) — heading as a question (or a state ending in
+// `.` when there is nothing to decide), an optional context line, ≤ 3 points,
+// and the button set the Desktop widget draws.
+// ---------------------------------------------------------------------------
+
+const HEADINGS = {
+  de: {
+    ready: (c) => c.reservation ? `📦 Shippen trotz ${c.reservation}?` : '📦 Shippen?',
+    'ready-red': (c) => `⚠ Trotzdem shippen mit ${c.n} roten Tests?`,
+    'ship-blocked': (c) => `⛔ ${c.reason} umgehen und trotzdem shippen?`,
+    'ship-successful': (c) => c.ring
+      ? `🚀 Released v${c.version} alpha — nach beta promoten?`
+      : `🚀 Shipped v${c.version} → ${c.base}.`,
+    'ship-successful-kept': (c) => `🚀 Released v${c.version} alpha — weiter in \`${c.branch}\`?`,
+    'ship-successful-deploy': () => '🚨 Gemergt, aber nicht live — Migration jetzt deployen?',
+    'released-beta': (c) => `🎊 Promoted v${c.version} BETA — nach stable?`,
+    'released-stable': (c) => `🎊 Released v${c.version} LIVE — stable.`,
+    'ready-files': () => '📂 Fertig auf der Platte — noch etwas?',
+    test: () => '🧪 Erst testen, dann shippen?',
+    'test-minimal': () => '▶️ Läuft — viel Spaß',
+    analysis: () => '📋 Analyse gelesen — umsetzen oder Fragen?',
+    aborted: (c) => `🚫 Abgebrochen wegen ${c.reason} — anders versuchen?`,
+    fallback: () => '🔧 Erledigt — noch etwas?',
+    pending: (c) => `⏳ Noch nicht fertig — ${c.what}`,
+    concept: () => '🧭 Concept wartet auf deine Entscheidungen',
+    batch: (c) => `📥 Batch sammelt — ${c.n} Einträge`,
+    'vv-unverified': () => '⚠ Ungeprüft shippen?',
+  },
+  en: {
+    ready: (c) => c.reservation ? `📦 Ship anyway despite ${c.reservation}?` : '📦 Ship?',
+    'ready-red': (c) => `⚠ Ship anyway with ${c.n} red tests?`,
+    'ship-blocked': (c) => `⛔ Bypass ${c.reason} and ship anyway?`,
+    'ship-successful': (c) => c.ring
+      ? `🚀 Released v${c.version} alpha — promote to beta?`
+      : `🚀 Shipped v${c.version} → ${c.base}.`,
+    'ship-successful-kept': (c) => `🚀 Released v${c.version} alpha — continue on \`${c.branch}\`?`,
+    'ship-successful-deploy': () => '🚨 Merged, but not live — deploy the migration now?',
+    'released-beta': (c) => `🎊 Promoted v${c.version} BETA — to stable?`,
+    'released-stable': (c) => `🎊 Released v${c.version} LIVE — stable.`,
+    'ready-files': () => '📂 Done on disk — anything else?',
+    test: () => '🧪 Test first, then ship?',
+    'test-minimal': () => '▶️ Running — have fun',
+    analysis: () => '📋 Read through — questions?',
+    aborted: (c) => `🚫 Aborted because of ${c.reason} — try differently?`,
+    fallback: () => '🔧 Done — anything else?',
+    pending: (c) => `⏳ Not done yet — ${c.what}`,
+    concept: () => '🧭 Concept waiting for your decisions',
+    batch: (c) => `📥 Batch collecting — ${c.n} entries`,
+    'vv-unverified': () => '⚠ Ship unverified?',
+  },
+};
+
+const POINTS_LIMIT = 3;
+const POINTS_TAIL = { de: (n) => ' +' + n + ' weitere', en: (n) => ' +' + n + ' more' };
+
+function normalizeFinalTestItems(items, lang) {
+  if (!Array.isArray(items)) return [];
+  const suffix = lang === 'en' ? ' — after deployment' : ' — nach Deployment';
+  return items.map(it => {
+    if (typeof it === 'string') return it;
+    if (it && typeof it === 'object') return (it.action || '') + (it.afterDeployment ? suffix : '');
+    return '';
+  }).filter(Boolean);
+}
+
+function normalizeDeployGateItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map(it => {
+    if (typeof it === 'string') return it;
+    if (!it || typeof it !== 'object') return '';
+    const head = [it.kind, it.artifact].filter(Boolean).join(' · ');
+    return head + (it.action ? ' — ' + it.action : '');
+  }).filter(Boolean);
+}
+
+/** The single finding a `ship-blocked` card names as its one point. */
+function topGateFinding(input, lang) {
+  const tests = Array.isArray(input.tests) ? input.tests : [];
+  const bad = tests.find(t => glyphForResult(t.result) !== '✓');
+  if (bad) return (bad.method ? bad.method + ': ' : '') + bad.result;
+  if (input.cta && input.cta.reason) return input.cta.reason;
+  return lang === 'en' ? 'blocking finding' : 'blockierender Befund';
+}
+
+/** `ready-red` points — fix these first, named from validation/tests. */
+function redFindings(input) {
+  const validation = Array.isArray(input.validation) ? input.validation : [];
+  const bad = validation.filter(v => v.status === 'unmet' || v.status === 'partial');
+  if (bad.length) return bad.map(v => v.requirement + (v.evidence ? ' — ' + v.evidence : ''));
+  const tests = Array.isArray(input.tests) ? input.tests : [];
+  return tests.filter(t => glyphForResult(t.result) !== '✓').map(t => (t.method ? t.method + ': ' : '') + t.result);
+}
+
+function pointsForKey(input, key, lang) {
+  const open = (Array.isArray(input.open) ? input.open : []).map(String).filter(Boolean);
+  const userTest = (Array.isArray(input.userTest) ? input.userTest : []).map(String).filter(Boolean);
+  const finalTest = normalizeFinalTestItems(input.userFinalTest, lang);
+  const deploy = normalizeDeployGateItems(input.deployGate);
+  const mixed = open.length > 0 && (userTest.length > 0 || finalTest.length > 0);
+  const testTag = (s) => (mixed ? '🧪 ' + s : s);
+
+  switch (key) {
+    case 'ready':
+    case 'ready-files':
+      return [...open, ...finalTest.map(testTag)];
+    case 'ready-red':
+      return open.length ? open : redFindings(input);
+    case 'ship-blocked':
+      return [topGateFinding(input, lang)].filter(Boolean);
+    case 'ship-successful':
+      return finalTest;
+    case 'ship-successful-deploy':
+      return deploy;
+    case 'test':
+      return userTest;
+    case 'vv-unverified':
+      return [lang === 'en'
+        ? 'npm test did not run — run it first, or ship anyway.'
+        : 'npm test lief nicht — Tests laufen lassen oder trotzdem shippen.'];
+    default:
+      return [];
+  }
+}
+
+/** ≤3 shown, the rest folded into a "+N weitere" tail for the heading. */
+function capPoints(points, lang) {
+  if (points.length <= POINTS_LIMIT) return { shown: points, tail: '' };
+  const tail = (POINTS_TAIL[lang] || POINTS_TAIL.de)(points.length - POINTS_LIMIT);
+  return { shown: points.slice(0, POINTS_LIMIT), tail };
+}
+
+/** True when the evidence carries a red/partial finding — routes `ready` to `ready-red`. */
+function evidenceHasDeviation(input) {
+  const validation = Array.isArray(input.validation) ? input.validation : [];
+  if (validation.some(v => v.status === 'unmet' || v.status === 'partial')) return true;
+  const tests = Array.isArray(input.tests) ? input.tests : [];
+  return tests.some(t => classifyGate(t) === 'test' && glyphForResult(t.result) !== '✓');
+}
+
+/** The § 3 table row this card renders, before the pending/concept/batch overrides. */
+function resolveCardKey(input) {
+  const variant = input.variant;
+  const state = input.state || {};
+  const delivery = input.delivery || {};
+
+  if (variant === 'ready') {
+    if (input.vv && input.vv.unverified) return 'vv-unverified';
+    return evidenceHasDeviation(input) ? 'ready-red' : 'ready';
+  }
+  if (variant === 'ship-blocked') return 'ship-blocked';
+  if (variant === 'ship-successful') {
+    if (state.deployPending) return 'ship-successful-deploy';
+    if (state.kept) return 'ship-successful-kept';
+    return 'ship-successful';
+  }
+  if (variant === 'released') {
+    const to = (delivery.promote && delivery.promote.current) || (input.cta && input.cta.to);
+    return to === 'stable' ? 'released-stable' : 'released-beta';
+  }
+  if (variant === 'ready-files') return 'ready-files';
+  if (variant === 'test') return 'test';
+  if (variant === 'test-minimal') return 'test-minimal';
+  if (variant === 'analysis') return 'analysis';
+  if (variant === 'aborted') return 'aborted';
+  return 'fallback';
+}
+
+const RESERVATION_MAX = 48;
+
+/**
+ * What the `ready` heading names after "trotz": the top reservation verbatim
+ * when it is short enough to read as a clause, otherwise the count — a heading
+ * that quotes a 120-character sentence is no question any more.
+ */
+function headingReservation(open, lang) {
+  const items = (Array.isArray(open) ? open : []).map(String).filter(Boolean);
+  if (!items.length) return '';
+  const first = items[0].replace(/[.!?]\s*$/, '');
+  if (items.length === 1 && first.length <= RESERVATION_MAX) return first;
+  const n = items.length;
+  if (lang === 'en') return n + (n === 1 ? ' reservation' : ' reservations');
+  return n + (n === 1 ? ' Vorbehalt' : ' Vorbehalten');
+}
+
+function decisionContext(input, key, delivery, state, lang) {
+  const version = (delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '';
+  // "N roten Tests" counts the red tests the results NAME ("3462 grün · 2 rot"
+  // → 2), falling back to one per failing entry when no number is given.
+  const redCount = (Array.isArray(input.tests) ? input.tests : [])
+    .filter(t => classifyGate(t) === 'test' && glyphForResult(t.result) !== '✓')
+    .reduce((sum, t) => {
+      const m = /(\d+)\s*(rot|red|fail\w*|fehler|errors?)/i.exec(String(t.result || ''));
+      return sum + (m ? Number(m[1]) : 1);
+    }, 0);
+  const unmetCount = Array.isArray(input.validation)
+    ? input.validation.filter(v => v.status && v.status !== 'met').length
+    : 0;
+  return {
+    version: String(version || '').replace(/^v/, ''),
+    ring: !!delivery.promote,
+    base: (delivery.ship && delivery.ship.base) || state.merged || 'main',
+    reservation: headingReservation(input.open, lang),
+    n: redCount || unmetCount || 1,
+    reason: (input.cta && input.cta.reason) || topGateFinding(input, lang),
+    branch: state.branch || '',
+  };
+}
+
+const PROMOTE_LAG = {
+  de: (ch, n, d) => '› ' + ch + ' liegt ' + n + (n === 1 ? ' Version' : ' Versionen') + (d ? ' / ' + d + ' Tage' : '') + ' vor stable → `/promote`',
+  en: (ch, n, d) => '› ' + ch + ' is ' + n + (n === 1 ? ' version' : ' versions') + (d ? ' / ' + d + ' days' : '') + ' ahead of stable → `/promote`',
+};
+
+/** The optional `›` context line under the heading (§ 2.6). */
+function buildContextLine(input, key, delivery, lang) {
+  if (input._downgraded) return '› ' + renderDowngradeNote(lang, input._downgradeReason);
+  if (key === 'ship-successful' && delivery.promote && delivery.promote.stableLag) {
+    const lag = delivery.promote.stableLag;
+    if (Number(lag.versions) > 0) {
+      const fn = PROMOTE_LAG[lang] || PROMOTE_LAG.de;
+      return fn(delivery.promote.current || 'alpha', Number(lag.versions), lag.days ? Number(lag.days) : 0);
     }
-    lines.push(ladder);
   }
-  return lines.join('\n');
+  if (key === 'aborted' && input.cta && input.cta.info) return '› ' + input.cta.info;
+  return '';
 }
 
-const PROMOTION_LABEL = {
-  de: { header: 'Promotion', pushed: 'Tags gepusht', commit: 'commit', release: 'GitHub Release erstellt', identical: 'bit-identisch — kein Rebuild, gleiche SHA' },
-  en: { header: 'Promotion', pushed: 'tags pushed',  commit: 'commit', release: 'GitHub Release created', identical: 'bit-identical — no rebuild, same SHA' },
-};
+/** Decision keys with nothing to decide — no buttons even when otherwise clickable. */
+const NO_BUTTON_KEYS = new Set(['ready-files', 'test-minimal', 'released-stable', 'fallback']);
 
-// Promotion facts (released variant) — the concrete end-info of a channel
-// promotion: which tags were pushed at which SHA, whether a GitHub Release
-// exists (stable only), and that the artifact is bit-identical (pure re-tag).
-function renderPromotion(promotion, lang) {
-  if (!promotion) return '';
-  const L = PROMOTION_LABEL[lang] || PROMOTION_LABEL.de;
-  const bullets = [];
-  const tags = (promotion.tags || []).map(t => '`' + t + '`');
-  if (tags.length) {
-    const sha = promotion.sha ? ' (' + L.commit + ' `' + String(promotion.sha).slice(0, 7) + '`)' : '';
-    bullets.push('* ' + tags.join(' + ') + ' — ' + L.pushed + sha);
+/**
+ * The whole decision block: heading (already carrying any "+N weitere" tail),
+ * optional context line, ≤3 points, and the button-table key for the widget.
+ * Handles the concept / batch / pending overrides, which replace the block
+ * of every OTHER variant (§ 2.6, § 3).
+ */
+function buildDecisionBlock(input, lang, key, delivery, state) {
+  const T = HEADINGS[lang] || HEADINGS.de;
+  const batch = hasConcept(input.concept) ? null : readBatch(input.cwd);
+
+  if (hasConcept(input.concept)) {
+    const url = conceptUrl(input.cwd, input.concept);
+    return { heading: T.concept(), context: url ? '› ' + url : '', points: [], buttonsKey: null };
   }
-  if (promotion.release) bullets.push('* ' + L.release + ' ✅');
-  bullets.push('* ' + L.identical);
-  return '**' + L.header + '**\n' + bullets.join('\n');
-}
-
-const USER_TEST_LABEL = {
-  de: '\uD83D\uDD2C **Bitte testen:**',
-  en: '\uD83D\uDD2C **Please test:**',
-};
-
-function renderUserTest(steps, lang) {
-  if (!steps || steps.length === 0) return '';
-  const header = USER_TEST_LABEL[lang] || USER_TEST_LABEL.de;
-  const items = steps.map((s, i) => (i + 1) + '. ' + s);
-  return header + '\n' + items.join('\n');
-}
-
-const USER_FINAL_TEST_LABEL = {
-  de: { header: '\uD83D\uDD2C **TESTE bitte noch:**', suffix: ' \u2014 nach Deployment' },
-  en: { header: '\uD83D\uDD2C **Please TEST:**',      suffix: ' \u2014 after deployment' },
-};
-
-function renderUserFinalTest(items, lang) {
-  if (!items || items.length === 0) return '';
-  const labels = USER_FINAL_TEST_LABEL[lang] || USER_FINAL_TEST_LABEL.de;
-  const bullets = items.map(it => {
-    const action = typeof it === 'string' ? it : (it && it.action) || '';
-    const afterDeployment = typeof it === 'object' && it && it.afterDeployment;
-    return '* ' + action + (afterDeployment ? labels.suffix : '');
-  });
-  return labels.header + '\n' + bullets.join('\n');
-}
-
-// Out-of-band deploy gate (#243). A code merge does NOT apply DB migrations or
-// deploy edge/serverless functions — so a card for such a ship must NOT read as
-// "all done". This block is deliberately loud: it names each artifact that is
-// still NOT live and what deploy action it needs, so the user cannot mistake a
-// merged-but-undeployed ship for a finished one.
-const DEPLOY_GATE_LABEL = {
-  de: { header: '🚨 **DEPLOY erforderlich — noch NICHT live:**', hint: 'Ein Merge deployt diese Artefakte nicht. Ohne diesen Schritt bleibt die Änderung in Produktion unwirksam.' },
-  en: { header: '🚨 **DEPLOY required — NOT live yet:**',        hint: 'A merge does not deploy these artifacts. Until you deploy them, the change stays inactive in production.' },
-};
-
-function renderDeployGate(items, lang) {
-  if (!items || items.length === 0) return '';
-  const labels = DEPLOY_GATE_LABEL[lang] || DEPLOY_GATE_LABEL.de;
-  const bullets = items.map(it => {
-    if (typeof it === 'string') return '* ' + it;
-    const artifact = (it && it.artifact) || '';
-    const kind = it && it.kind;
-    const action = it && it.action;
-    // "migration · supabase/migrations/1.sql — apply_migration"
-    const head = [kind, artifact].filter(Boolean).join(' · ');
-    return '* ' + head + (action ? ' — ' + action : '');
-  });
-  return labels.header + '\n' + bullets.join('\n') + '\n\n_' + labels.hint + '_';
-}
-
-function renderCTA(variant, cta, lang, state, delivery, pending, concept, batch) {
-  const templates = CTA[lang] || CTA.de;
-  cta = cta || {};
-
-  // Concept layer — a concept page is open, so this turn is a checkpoint in a
-  // loop that ends on the page, not in chat. The bridge server, keepalive
-  // pulser and pickup waker run for the whole concept and are NOT pending work
-  // (stop.flow.guard ignores them), so the CTA must not say "3 Tasks laufen";
-  // it says which of the three true states the concept is in — waiting for
-  // decisions, working on the next iteration, implementing — and folds any REAL
-  // background work (content agents, a workflow) into that sentence. Outranks
-  // the pending layer for exactly that reason.
-  if (hasConcept(concept)) {
-    const tpl = templates.concept || CTA.de.concept;
-    return tpl.replace('{what}', conceptWhat(concept, pending, lang)).replace(/^## /, '### ');
-  }
-
-  // Batch layer — /claude-batch collection is armed for this project, so the
-  // user's next prompt becomes a note and never reaches the model. Every other
-  // CTA would invite exactly that prompt as if it were going to be worked on;
-  // this one says what the collect hook will do with it. Detected from the
-  // project's own batch-mode.json (same predicate as the hook), so a card in a
-  // collecting session cannot forget to say so. Real background work is
-  // appended, as in the concept wait line.
   if (batch) {
-    const tpl = templates.batch || CTA.de.batch;
-    let what = batchWhat(batch, lang);
-    if (hasPending(pending)) what += ' · ' + pendingWhat(pending, lang);
-    return tpl.replace('{what}', what).replace(/^## /, '### ');
+    return { heading: T.batch({ n: (batch && batch.notes) || 0 }), context: '', points: [], buttonsKey: null };
+  }
+  if (hasPending(input.pending)) {
+    const what = pendingWhat(input.pending, lang);
+    const names = renderPendingLine(input.pending, lang);
+    const pts = normalizePending(input.pending).slice(0, POINTS_LIMIT)
+      .map(it => (it.name ? '`' + it.name + '`' : '') + (it.doing ? ' — ' + it.doing : ''))
+      .filter(Boolean);
+    return { heading: T.pending({ what }), context: names ? '› ' + names : '', points: pts, buttonsKey: null };
   }
 
-  // Pending layer — background subagents / tasks the turn started are STILL
-  // running. Every other CTA on this card would ask the user to act on a result
-  // that does not exist yet ("SHIP or CHANGE?", "All DONE"), so the pending CTA
-  // replaces it on EVERY variant. Deliberately the first check: it outranks the
-  // ship / release wording, since "not finished" is the truer statement about
-  // the turn than any milestone the body reports. The body keeps its facts —
-  // only the one line that tells the user what to do is corrected.
-  if (hasPending(pending)) {
-    const tpl = templates.pending || CTA.de.pending;
-    // Always H3 — "still running" is a routine status, never a payoff moment.
-    return tpl.replace('{what}', pendingWhat(pending, lang)).replace(/^## /, '### ');
-  }
+  const ctx = decisionContext(input, key, delivery, state, lang);
+  const fn = T[key] || T.fallback;
+  let heading = fn(ctx);
 
-  let key;
-  if (variant === 'ship-successful') {
-    // Out-of-band deploy pending (#243): the code merged but infra (migrations /
-    // functions) is NOT deployed. The CTA must NOT say "All DONE" — flip it to a
-    // deploy-required call to action so a merged-but-undeployed ship is never
-    // mistaken for finished. Takes precedence over the kept wording.
-    if (state && state.deployPending) key = 'ship-successful-deploy';
-    else key = (state && state.kept) ? 'ship-successful-kept' : 'ship-successful';
-  } else if (variant === 'released') {
-    // Promotion CTA keys off the channel reached: → beta is an intermediate
-    // step ("PROMOTED"), → stable is the live release ("RELEASED — LIVE").
-    const to = (delivery && delivery.promote && delivery.promote.current) || cta.to;
-    key = to === 'stable' ? 'released-stable' : 'released-beta';
-  } else {
-    key = variant;
-  }
+  const points = pointsForKey(input, key, lang);
+  const { shown, tail } = capPoints(points, lang);
+  if (tail) heading = heading.replace(/([?.])$/, tail + '$1');
 
-  // ship-successful states WHERE it landed exactly once: the published channel
-  // ("SHIPPED → alpha") when the delivery track knows it, else the merge base
-  // ("SHIPPED → main"). The old "merged → origin/main" echo is gone — the
-  // Delivery block already carries base, version and commit.
-  let dest = '';
-  if (variant === 'ship-successful') {
-    const chan = delivery && delivery.promote && delivery.promote.current;
-    if (chan) dest = ' → ' + chan;
-    else if (state && state.merged) dest = ' → ' + state.merged;
-  }
-  // released CTA version: from the delivery ship stage, else explicit cta.version.
-  const version = (delivery && delivery.ship && delivery.ship.version) || cta.version || '';
+  const context = buildContextLine(input, key, delivery, lang);
 
-  let tpl = templates[key] || templates.fallback;
-  // Merge state fields into cta for template substitution
-  const vars = Object.assign({}, cta, { dest, version }, state ? { merged: state.merged || '', branch: state.branch || '' } : {});
-  tpl = tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] || '');
+  let buttonsKey = key;
+  if (key === 'ship-successful' && !ctx.ring) buttonsKey = null; // plain merge — nothing to promote
+  if (NO_BUTTON_KEYS.has(key)) buttonsKey = null;
 
-  // Compact the ROUTINE CTAs to H3 so the card's two tallest lines (title + CTA)
-  // take less vertical space — more of the card is visible without scrolling.
-  // Milestone CTAs (a SHIP, or a channel RELEASE / PROMOTE) stay at H2 so those
-  // payoff banners keep reading as a prominent moment. Only the heading marker
-  // changes; the CTA text is intact.
-  const milestoneCta = variant === 'ship-successful' || variant === 'released';
-  return milestoneCta ? tpl : tpl.replace(/^## /, '### ');
+  return { heading, context, points: shown, buttonsKey };
 }
 
 function readToolCallCount(sessionId) {
@@ -897,20 +1054,15 @@ function readToolCallCount(sessionId) {
   }
 }
 
-function renderContextHealth(toolCallCount) {
-  if (toolCallCount <= HEALTH_WARN_THRESHOLD) return '';
-  if (toolCallCount <= HEALTH_CRIT_THRESHOLD) return toolCallCount + ' calls \u00b7 consider /compact';
-  return toolCallCount + ' calls \u00b7 consider /clear';
-}
-
 // ---------------------------------------------------------------------------
-// V&V gate \u2014 read the Light-verification flags written by post.flow.completion
-// so the card can stamp \u26a0 UNVERIFIED when the turn is finishing without a
-// passing check. Same tmp-file convention as the hooks (session-id.js); exact
-// match first, then a newest-wins glob fallback for the session_id-mismatch bug.
+// V&V gate — read the Light-verification flags written by post.flow.completion
+// so the card can stamp the ⚠ ungeprüft evidence post / heading when the turn
+// is finishing without a passing check. Same tmp-file convention as the hooks
+// (session-id.js); exact match first, then a newest-wins glob fallback for the
+// session_id-mismatch bug.
 // ---------------------------------------------------------------------------
 
-const FLAG_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2h \u2014 matches session-id.js
+const FLAG_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2h — matches session-id.js
 
 function readSessionFlagRaw(prefix, sessionId, opts) {
   const key = sessionId || 'unknown';
@@ -936,14 +1088,13 @@ function sessionFlagExists(prefix, sessionId, opts) {
 
 /**
  * Derive the verification state at card-render time. `unverified` is true when a
- * code change still owes a passing Light check (pending && !verified) \u2014 i.e. the
+ * code change still owes a passing Light check (pending && !verified) — i.e. the
  * turn is finishing without verification (a silent skip, an order violation, or
- * a red run). `red` distinguishes "a test ran but failed" for the stamp wording.
+ * a red run). `red` distinguishes "a test ran but failed" for the evidence post.
  *
- * Read EXACT (issue #290). These three flags decide whether the card carries the
- * \u26a0 UNVERIFIED stamp, so the glob fallback would let a concurrent session's
- * pending flag stamp this card \u2014 the observed symptom: a turn whose tests all
- * passed rendered as unverified because a neighbouring session still owed one.
+ * Read EXACT (issue #290): the glob fallback would let a concurrent session's
+ * pending flag stamp this card — the observed symptom was a turn whose tests all
+ * passed rendering as unverified because a neighbouring session still owed one.
  */
 function readVVState(sessionId) {
   const EXACT = { exact: true };
@@ -953,297 +1104,66 @@ function readVVState(sessionId) {
   return { unverified: pending && !verified, red };
 }
 
-const UNVERIFIED_STAMP = {
-  de: {
-    plain: '\u26a0\ufe0f **UNVERIFIZIERT** \u2014 Code ge\u00e4ndert, aber kein bestandener Test/Check in diesem Turn.',
-    red:   '\u26a0\ufe0f **TESTS ROT** \u2014 ein Test lief, schlug aber fehl. Nicht verifiziert.',
-  },
-  en: {
-    plain: '\u26a0\ufe0f **UNVERIFIED** \u2014 code changed but no passing test/check ran this turn.',
-    red:   '\u26a0\ufe0f **TESTS RED** \u2014 a test ran but failed. Not verified.',
-  },
-};
-
-function renderUnverifiedStamp(lang, red) {
-  const d = UNVERIFIED_STAMP[lang] || UNVERIFIED_STAMP.de;
-  return red ? d.red : d.plain;
-}
-
-const VALIDATION_STATUS_ICON = { met: '\u2705', partial: '\u26a0\ufe0f', unmet: '\u274c' };
-const EVIDENCE_LABEL = {
-  de: { header: 'Gepr\u00fcft',  met: (n) => n + ' weitere erf\u00fcllt', open: (n) => n + ' weitere offen' },
-  en: { header: 'Verified', met: (n) => n + ' more met',          open: (n) => n + ' more open' },
-};
-
-// Geprüft / Verified — the ONE evidence block: automated gates on the header
-// line(s), requirement validation as bullets underneath. Never more than three
-// bullets — that is what keeps a block scannable.
-//   **Geprüft** · npm test → 1460 grün · eslint → sauber · Codex-Review → skipped
-//   · <further gates wrap onto continuation header lines, never bullets>
-//   * ❌ <requirement ≤70> — <evidence ≤100>      (unmet, then partial, first)
-//   * ✅ …
-//   * ✅ 3 weitere erfüllt  /  ⚠️ 1 weitere offen · 2 weitere erfüllt   (summary bullet from the 4th item on)
-// Gates used to be three bullets whose result was "grün" 84 times out of 301;
-// validation bullets ran to 200+ characters (max 782) and were 22 % of the
-// card. Budgets are hard, ordering puts what needs attention first, and the
-// long form of the evidence belongs in the PR body.
-function renderEvidence(tests, validation, lang) {
-  const L = EVIDENCE_LABEL[lang] || EVIDENCE_LABEL.de;
-  const gates = (Array.isArray(tests) ? tests : [])
-    .filter(t => t && (t.method || t.result))
-    .slice(0, GATES_LIMIT)
-    .map(t => clampEllipsis(String(t.method || ''), GATE_METHOD_MAX) + ' \u2192 ' + clampEllipsis(String(t.result || ''), GATE_RESULT_MAX));
-  const items = (Array.isArray(validation) ? validation : []).filter(it => it && it.requirement);
-  if (!gates.length && !items.length) return '';
-
-  // Header line(s): greedy-pack the gates, ≤ GATES_LINE_MAX per line; a line
-  // always holds at least one gate, continuation lines start with "· ".
-  const lines = [];
-  let line = '**' + L.header + '**';
-  let onLine = 0;
-  for (const g of gates) {
-    const candidate = line + ' \u00b7 ' + g;
-    if (onLine > 0 && candidate.length > GATES_LINE_MAX) {
-      lines.push(line);
-      line = '\u00b7 ' + g;
-      onLine = 1;
-    } else {
-      line = candidate;
-      onLine++;
-    }
-  }
-  lines.push(line);
-
-  const isOpen = (it) => it.status === 'unmet' || it.status === 'partial';
-  const rank = (it) => it.status === 'unmet' ? 0 : it.status === 'partial' ? 1 : 2;
-  const sorted = items.map((it, i) => ({ it, i })).sort((a, b) => rank(a.it) - rank(b.it) || a.i - b.i).map(x => x.it);
-  const bullet = (it) => {
-    const icon = VALIDATION_STATUS_ICON[it.status] || '\u2022';
-    const ev = it.evidence ? ' \u2014 ' + clampEllipsis(String(it.evidence), VALIDATION_EV_MAX) : '';
-    return '* ' + icon + ' ' + clampEllipsis(String(it.requirement), VALIDATION_REQ_MAX) + ev;
+/**
+ * The structured model shared by the markdown renderer and the Desktop
+ * widget (`lib/card-widget.js`) — one source of truth for both surfaces.
+ */
+function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, healthLine, delivery, state) {
+  const decision = buildDecisionBlock(input, lang, key, delivery, state);
+  return {
+    variant: input.variant,
+    lang,
+    key,
+    resultLines: buildResultLines(input, lang),
+    evidence: buildEvidencePosts(input, lang, key),
+    budget: buildBudgetModel(usageData, delta5h, deltaWk, healthLine),
+    pipeline: renderPipelineLine(input, lang, buildId),
+    pipelinePr: state.pr || null,
+    heading: decision.heading,
+    context: decision.context,
+    points: decision.points,
+    buttonsKey: decision.buttonsKey,
   };
-  if (sorted.length <= BLOCK_BULLET_LIMIT) {
-    for (const it of sorted) lines.push(bullet(it));
-  } else {
-    // Two named items, then one summary bullet for everything else — open
-    // items are counted first so an unmet requirement never vanishes.
-    const shown = sorted.slice(0, BLOCK_BULLET_LIMIT - 1);
-    const rest = sorted.slice(BLOCK_BULLET_LIMIT - 1);
-    for (const it of shown) lines.push(bullet(it));
-    const open = rest.filter(isOpen).length;
-    const met = rest.length - open;
-    const parts = [];
-    if (open > 0) parts.push(L.open(open));
-    if (met > 0) parts.push(L.met(met));
-    lines.push('* ' + (open > 0 ? '\u26a0\ufe0f' : '\u2705') + ' ' + parts.join(' \u00b7 '));
-  }
-  return lines.join('\n');
 }
 
-function renderCard(input, meterText, buildId) {
+/**
+ * Render the completion card markdown — "one page, three lines, one
+ * decision" (§ 2 of the design doc). Two blocks: block 1 (title, result
+ * lines, evidence row, budget line, pipeline line) and block 2 (decision
+ * heading, optional context line, points, no buttons — the terminal never
+ * renders buttons; the Desktop widget draws them separately, see
+ * `lib/card-widget.js`).
+ */
+function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId) {
   const variant = input.variant || 'fallback';
-  const config = VARIANTS[variant] || VARIANTS.fallback;
   const lang = input.lang || 'de';
+  const state = input.state || {};
+  const delivery = input.delivery || {};
+  const key = resolveCardKey(input);
+  const body = hasBody(variant);
 
-  const parts = [];
+  const parts = ['&nbsp;', '', '---', '', renderTitle(input.summary || (lang === 'en' ? 'Task completed' : 'Aufgabe erledigt'))];
 
-  // Spacer above the card — one forced blank line (&nbsp; survives the
-  // renderer's blank-line collapsing) detaches the card from the preceding
-  // response text. The trailing '' keeps the opening --- a thematic break
-  // rather than turning &nbsp; into a setext heading.
-  parts.push('&nbsp;');
+  const resultLines = buildResultLines(input, lang);
+  if (body) {
+    for (const l of resultLines) parts.push('› ' + l);
+    const evidenceLine = renderEvidenceRowMd(buildEvidencePosts(input, lang, key));
+    if (evidenceLine) parts.push(evidenceLine);
+    const budgetLine = renderBudgetLineMd(buildBudgetModel(usageData, delta5h, deltaWk, healthLine));
+    if (budgetLine) parts.push(budgetLine);
+    const pipelineLine = renderPipelineLine(input, lang, buildId);
+    if (pipelineLine) parts.push(pipelineLine);
+  } else if (resultLines[0]) {
+    parts.push('› ' + resultLines[0]);
+  }
   parts.push('');
 
-  // Block A — Title + Content (no build ID in title)
-  parts.push('---');
+  const decision = buildDecisionBlock(input, lang, key, delivery, state);
+  parts.push('## ' + decision.heading);
+  if (body && decision.context) parts.push(decision.context);
+  if (body) decision.points.forEach((p, i) => parts.push((i + 1) + '. ' + p));
+
   parts.push('');
-
-  parts.push(renderTitle(input.summary || 'Task completed'));
-  parts.push('');
-
-  // V&V stamp — flagged directly under the title so an unverified / red finish
-  // is impossible to miss. Driven by the Light-verification flags (read at the
-  // call site and passed in as input.vv), not a self-reported param.
-  if (input.vv && input.vv.unverified) {
-    parts.push(blockquote(renderUnverifiedStamp(lang, input.vv.red)));
-    parts.push('');
-  }
-
-  // Self-documenting note when the ship-successful → ready guard fired (see
-  // lib/variant-guard.js) — so a genuinely-shipped run that forgot to pass
-  // state isn't silently presented as "READY — SHIP?".
-  if (input._downgraded) {
-    parts.push(blockquote(renderDowngradeNote(lang, input._downgradeReason)));
-    parts.push('');
-  }
-
-  const repoUrl = getRepoUrl(input.cwd);
-
-  // Promotion facts (released) — rendered whenever provided (variant-agnostic,
-  // like validation/deployGate): the tags/SHA/GitHub-release end-info.
-  {
-    const promotionBlock = renderPromotion(input.promotion, lang);
-    if (promotionBlock) {
-      parts.push(blockquote(promotionBlock));
-      parts.push('');
-    }
-  }
-
-  // Changes — WHAT changed, first. Read order of the compact card:
-  // what · evidence · your to-dos · where it landed · budget · CTA.
-  if (config.changes) {
-    const changesBlock = renderChanges(input.changes, lang);
-    if (changesBlock) {
-      parts.push(blockquote(changesBlock));
-      parts.push('');
-    }
-  }
-
-  // Geprüft — gates + validation in ONE block. Validation is variant-agnostic
-  // (the gate keys off validation-pending, not the variant; stop.flow.guard
-  // blocks a code-change card that omits it); gates follow the variant table.
-  {
-    const evidenceBlock = renderEvidence(config.tests ? input.tests : null, input.validation, lang);
-    if (evidenceBlock) {
-      parts.push(blockquote(evidenceBlock));
-      parts.push('');
-    }
-  }
-
-  // Pending layer — background subagents / tasks still running at turn end.
-  // Variant-agnostic (like validation and deployGate): whatever the card's
-  // variant claims, this block says the turn is a snapshot taken BEFORE those
-  // results. Placed above the test/deploy blocks because it qualifies them too —
-  // any test instruction below is provisional while work is still in flight.
-  {
-    const pendingBlock = renderPendingBlock(input.pending, lang);
-    if (pendingBlock) {
-      parts.push(pendingBlock);
-      parts.push('');
-    }
-  }
-
-  // User test steps (test variant)
-  if (config.userTest) {
-    const testBlock = renderUserTest(input.userTest, lang);
-    if (testBlock) {
-      parts.push(testBlock);
-      parts.push('');
-    }
-  }
-
-  // Out-of-band deploy gate (#243) — rendered BEFORE userFinalTest so the
-  // "not live yet" warning is the first thing after the change/test blocks. A
-  // merged-but-undeployed ship (DB migration, edge function) must never read as
-  // done. Same variant availability as userFinalTest (skipped in test/-minimal).
-  if (config.deployGate) {
-    const deployBlock = renderDeployGate(input.deployGate, lang);
-    if (deployBlock) {
-      parts.push(deployBlock);
-      parts.push('');
-    }
-  }
-
-  // User-final-test flag (Electron without takeover, 3rd-party integrations)
-  // Available in all variants except test-minimal and test — so e.g. a
-  // ship-successful card can still flag "test the real Stripe integration in
-  // prod". The test variant routes all manual steps through userTest instead,
-  // so a card never shows two stacked test sections.
-  if (config.userFinalTest) {
-    const finalBlock = renderUserFinalTest(input.userFinalTest, lang);
-    if (finalBlock) {
-      parts.push(finalBlock);
-      parts.push('');
-    }
-    // ⚠ OFFEN — decisions / cleanups that are not tests. Same availability as
-    // the test block; the test variant routes everything through userTest.
-    const openBlock = renderOpen(input.open, lang);
-    if (openBlock) {
-      parts.push(openBlock);
-      parts.push('');
-    }
-  }
-
-  // Delivery block — WHERE it landed, once, at the foot of the body. When it
-  // renders, the 📌 footer and the state line below are skipped: every fact
-  // they carried (version bump, build-id, PR, merge base, commit, branch) is
-  // in here. Variants without a delivery track keep the classic footer.
-  let deliveryRendered = false;
-  if (config.delivery && input.delivery) {
-    const deliveryBlock = renderDeliveryBlock(input.delivery, input.state, input.cta, buildId, lang, repoUrl);
-    if (deliveryBlock) {
-      parts.push(blockquote(deliveryBlock));
-      parts.push('');
-      deliveryRendered = true;
-    }
-  }
-
-  // Usage block: bars in a code fence, health/staleness notes as dim quotes
-  if (config.usage && meterText) {
-    parts.push(meterText);
-    parts.push('');
-  }
-
-  // Block C — Footer + CTA
-  // Separator before footer (skip for test-minimal — too short, looks cluttered)
-  if (variant !== 'test-minimal') {
-    parts.push('---');
-    parts.push('');
-  }
-
-  // Footer: 📌 version bump + build ID, then the end-state line — only when no
-  // Delivery block carried them above. Greyed as meta; the 📌 icon, the
-  // `build-id` and the merge/PR/commit links keep their colour.
-  if (!deliveryRendered) {
-    parts.push(blockquote(renderFooter(buildId, input.cta, variant)));
-    parts.push('');
-
-    // End state — placed between build ID and CTA, since the CTA often
-    // references this state (merge target / branch). Clusters status near the foot.
-    if (config.state) {
-      if (!repoUrl && input.state && (input.state.pr || input.state.merged || input.state.commit || input.state.branch)) {
-        console.warn(
-          '[dotclaude-completion-mcp] repoUrl empty — card will render without clickable links. ' +
-          'Pass cwd set to the target repo to fix.'
-        );
-      }
-      const stateLine = renderState(input.state, variant, repoUrl);
-      if (stateLine) {
-        parts.push(blockquote(stateLine));
-        parts.push('');
-      }
-    }
-  }
-
-  // Pending name line — names WHAT is still running, directly above the CTA and
-  // in the same dim blockquote style as the version and branch rows, so it reads
-  // as meta rather than competing with the call to action. The CTA carries only
-  // the counts once more than one thing is open; this is where the user reads
-  // WHICH workflows and agents are in flight (first three, then a "+N" tail).
-  {
-    const pendingLine = renderPendingLine(input.pending, lang);
-    if (pendingLine) {
-      parts.push(blockquote(pendingLine));
-      parts.push('');
-    }
-  }
-
-  // Concept link line — the URL the open page lives at, directly above the 🧭
-  // CTA and in the same dim style, so a user who lost the tab has the way back
-  // on the last card. Resolved from the project's concept-active.json (the page
-  // is already open at exactly that URL); nothing to resolve → no line.
-  if (hasConcept(input.concept)) {
-    const url = conceptUrl(input.cwd, input.concept);
-    if (url) {
-      parts.push(blockquote('🧭 ' + url));
-      parts.push('');
-    }
-  }
-
-  const batch = hasConcept(input.concept) ? null : readBatch(input.cwd);
-  parts.push(renderCTA(variant, input.cta, lang, input.state, input.delivery, input.pending, input.concept, batch));
-  parts.push('');
-
   parts.push('---');
 
   return parts.join('\n');
@@ -1405,10 +1325,11 @@ function sessionTitleNote(params) {
   return titleInstruction(titlePrefixFor(params, { hasPending, hasConcept }));
 }
 
-/** The clickable-CTA widget instruction (#389), '' outside the Desktop app or when nothing is clickable. */
+/** The Desktop card-widget instruction (§ 4), '' outside the Desktop app, for
+ *  test-minimal, or when the card has no renderable body. Reads the model
+ *  `buildCompletionCard` stashed on `params` — never recomputes usage data. */
 function ctaActionsNote(params) {
-  const batch = hasConcept(params.concept) ? null : readBatch(params.cwd);
-  return ctaActionsInstruction({ ...params, batch }, { hasPending, hasConcept });
+  return cardWidgetInstruction(params._cardModel || null, params._repoUrl || '');
 }
 
 /**
@@ -1471,20 +1392,31 @@ function buildCompletionCard(params) {
   const delta5h = usageResult.delta5h ?? null;
   const deltaWk = usageResult.deltaWk ?? null;
 
-  // 2. Render usage meter for card (with deltas + code fences + health line)
+  // 2. Context-health line (dim tail of the budget line, § 2.4)
   const toolCallCount = readToolCallCount(params.session_id);
   const healthLine = renderContextHealth(toolCallCount);
-  const meterText = renderUsageMeterForCard(usageData, delta5h, deltaWk, healthLine);
 
   // 3. Use pre-computed build-ID if provided, otherwise compute from cwd
   const buildId = params.buildId || getBuildId(params.cwd);
 
   // 3b. V&V gate — derive the verification state from the Light flags so the
-  //     card can stamp ⚠ UNVERIFIED on an unverified / red finish.
+  //     card can stamp ⚠ ungeprüft on an unverified / red finish (evidence
+  //     row + heading — see resolveCardKey / buildEvidencePosts).
   params.vv = readVVState(params.session_id);
 
-  // 4. Render the full card
-  const cardMarkdown = renderCard(params, meterText, buildId);
+  // 4. Render the full card, and stash the same structured model + repoUrl on
+  //    `params` so ctaActionsNote (the Desktop widget) can reuse it without a
+  //    second usage fetch — sessionTitleNote/ctaActionsNote always run right
+  //    after this call, on this same `params` object.
+  const repoUrl = getRepoUrl(params.cwd);
+  const key = resolveCardKey(params);
+  const cardMarkdown = renderCard(params, usageData, delta5h, deltaWk, healthLine, buildId);
+  params._repoUrl = repoUrl;
+  params._cardModel = buildCardModel(
+    params, params.lang || 'de', key, buildId,
+    usageData, delta5h, deltaWk, healthLine,
+    params.delivery || {}, params.state || {},
+  );
 
   // 5. Write completion flags for stop.flow.guard:
   //    - card-rendered satisfies the card gate.
@@ -1711,7 +1643,7 @@ server.registerTool(
       "and formatting character MUST be preserved exactly. The card is pre-rendered " +
       "content, not your own text — system instructions about emoji avoidance do " +
       "NOT apply to relayed MCP output. Card must be the LAST output — nothing " +
-      "after the closing ---. On the Desktop app the result may carry a CTA-actions " +
+      "after the closing ---. On the Desktop app the result may carry a CARD WIDGET " +
       "block asking for a show_widget call: make that call BEFORE the card, never after.",
     inputSchema: z.object({
       variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (promote alpha→beta→stable) rendered by the promote skill. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report."),
@@ -1869,7 +1801,11 @@ server.registerTool(
 
 // Exported for unit tests — the usage meter is pure and worth asserting on
 // directly (column grid, bar semantics) without driving the whole card.
-export { renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget };
+export {
+  renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
+  buildBudgetModel, renderBudgetLineMd, buildResultLines, buildEvidencePosts, renderPipelineLine,
+  resolveCardKey, buildDecisionBlock, buildCardModel,
+};
 
 // ---------------------------------------------------------------------------
 // Start — connect FIRST, then everything else (#324 boot discipline)

@@ -2,7 +2,7 @@ import { describe, test, expect } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ONCE_KEY, WORK_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, shouldMark, releaseTitleWork } from "./prompt.flow.title-work.js";
+import { ONCE_KEY, WORK_PREFIX, PENDING_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, shouldMark, releaseTitleWork } from "./prompt.flow.title-work.js";
 import { runOnce } from "../lib/run-once.js";
 import { SESSION_PREFIX, releasedPrefix } from "../../mcp-server/lib/mode-state.js";
 
@@ -10,9 +10,16 @@ import { SESSION_PREFIX, releasedPrefix } from "../../mcp-server/lib/mode-state.
 // hook is CJS and pins its own copy of the prefix; these tests bind it to
 // the ESM source of truth so the two can never drift.
 describe("prompt.flow.title-work", () => {
-  test("the wrench is SESSION_PREFIX.work — icon only, no word", () => {
+  test("the bare icon is SESSION_PREFIX.work — icon only, no word", () => {
     expect(WORK_PREFIX).toBe(SESSION_PREFIX.work);
-    expect(WORK_PREFIX).toBe("🔧 ");
+    expect(WORK_PREFIX).toBe("⏳ ");
+  });
+
+  test("the bare icon is distinct from the worded pending prefix (same emoji, different meaning)", () => {
+    expect(PENDING_PREFIX).toBe(SESSION_PREFIX.pending);
+    expect(PENDING_PREFIX).toBe("⏳ Working – ");
+    expect(PENDING_PREFIX.startsWith(WORK_PREFIX)).toBe(true);
+    expect(PENDING_PREFIX).not.toBe(WORK_PREFIX);
   });
 
   test("knows the leading emoji of every prefix the card or a skill may leave", () => {
@@ -49,8 +56,9 @@ describe("prompt.flow.title-work", () => {
   // Observed 2026-09-20: "🧪 Test – App-Performance-Optimierung" stayed on
   // Test for hours while a follow-up prompt had the session implementing with
   // background tasks. The instruction must replace an outcome prefix, not
-  // just add the wrench to a bare title — and must leave a mode prefix alone.
-  test("the instruction replaces an outcome prefix with the wrench and leaves mode prefixes untouched", () => {
+  // just add the bare icon to an unmarked title — and must leave a mode
+  // prefix alone.
+  test("the instruction replaces an outcome prefix with the bare icon and leaves mode prefixes untouched", () => {
     const text = instruction();
     for (const e of MODE_PREFIX_EMOJI) expect(text).toContain(e);
     expect(text).toMatch(/starts with 🧭 or 📥: do nothing/);
@@ -59,7 +67,7 @@ describe("prompt.flow.title-work", () => {
     expect(text).toContain(`"${SESSION_PREFIX.test}"`);
     expect(text).toContain(`"${SESSION_PREFIX.pending}"`);
     expect(text).toContain(`"${releasedPrefix("stable")}"`);
-    expect(text).toMatch(/already starts with 🔧: do nothing/);
+    expect(text).toContain(`already starts with "${WORK_PREFIX}" and NOT with "${PENDING_PREFIX}": do nothing`);
   });
 
   // stop.flow.guard hands the token back after every card, so the next real

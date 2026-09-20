@@ -20,8 +20,24 @@ It fires whenever a task is fully completed and Claude is waiting for the next u
    UI projects, offer automated desktop testing per `deep-knowledge/desktop-testing.md`
 2. **Issue status** — if an issue is tracked (via `prompt.issue.detect` hook),
    update its status
-3. **Completion Card** — render per `templates/completion-card.md`
+3. **Completion Card** — render per `templates/completion-card.md`, anatomy
+   pinned in `deep-knowledge/completion-card-design.md` (source of truth when
+   the two disagree)
 4. **Ship recommendation** — after 5+ code edits, recommend `/ship`
+
+**Card anatomy** (full spec: `deep-knowledge/completion-card-design.md`): two
+blocks, nothing between them. Block 1 — title (`### **✨✨✨ … ✨✨✨**`, the
+card-guard marker), ≤ 3 `›` result lines naming an effect for the user, the
+evidence row (requirements · tests · live check, deviations first and
+bright), the budget line, the pipeline line. Block 2 — a decision heading
+phrased as a question, an optional context line, ≤ 3 numbered points, and —
+Desktop app only — one `mcp__visualize__show_widget` call rendered before the
+title markdown (the `[CARD WIDGET]` block, replaces the old `[CTA ACTIONS]`;
+same Desktop-only / skip-silently semantics). `test-minimal` never calls the
+widget. The session-title hook (`prompt.flow.title-work`) sets the bare `⏳ `
+icon-only prefix on the first prompt of new work, in place of the former
+`🔧 `; the card's session-title note replaces it with the result prefix at
+turn end (§ 7 of the design doc).
 
 **Hook architecture:**
 
@@ -128,18 +144,20 @@ Subagents inherit all output contracts:
   for `ship-successful`, `🎊 Released <Alpha|Beta|Stable> – ` for `released`,
   `🧪 Test – ` for `test`, `▶️ Started – ` for `test-minimal`, `📦 Ready – ` for
   `ready`, `⛔ Blocked – ` for `ship-blocked`, `🚫 Aborted – ` for `aborted`,
-  `📋 Analysis – ` for `analysis`, `🔧 ` (wrench only) for `fallback`,
+  `📋 Analysis – ` for `analysis`, `🔧 Erledigt – ` for `fallback`,
   `⏳ Working – ` while `pending` work runs. Execute it before outputting the
   card. The first prompt of a session — and the first prompt after every
-  card — puts `🔧 ` on the title (`prompt.flow.title-work`; stop.flow.guard
-  re-arms it once a card rendered), so an outcome prefix never outlives the
-  turn it described: a new prompt means new work. Modes own the title instead:
+  card — puts the bare `⏳ ` (icon only, no word — distinct from the worded
+  `⏳ Working – ` pending prefix) on the title (`prompt.flow.title-work`;
+  stop.flow.guard re-arms it once a card rendered), so an outcome prefix
+  never outlives the turn it described: a new prompt means new work. Modes
+  own the title instead:
   `/concept` sets `🧭 Concept – ` while the page waits or iterates (the card
   re-states it per phase; an `implementing` round shows `⏳ Working – `, #416),
   `/claude-batch` `📥 Batch – ` while collecting, `/ship` `🚀 Shipping – ` while
-  the pipeline runs — the wrench never replaces 🧭 / 📥, and no card block
+  the pipeline runs — the bare `⏳ ` never replaces 🧭 / 📥, and no card block
   while a batch is armed. A mode skill strips any earlier prefix before adding
-  its own (`🧭 Concept – 🔧 Foo` is the bug). Prefixes are pinned in
+  its own (`🧭 Concept – ⏳ Foo` is the bug). Prefixes are pinned in
   `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`). Desktop-app only
   (`mcp__ccd_session_mgmt__set_session_title` `self`) — elsewhere skip silently.
 

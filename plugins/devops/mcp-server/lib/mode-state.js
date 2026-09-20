@@ -51,12 +51,15 @@ export const SESSION_PREFIX = Object.freeze({
   aborted: "🚫 Aborted – ",
   analysis: "📋 Analysis – ",
   pending: "⏳ Working – ",
-  work: "🔧 ",
+  fallback: "🔧 Done – ",
+  work: "⏳ ",
 });
 
 /** Card variant → session-title prefix. Every variant flags the sidebar with
  *  its own CTA emoji; `released` goes through `releasedPrefix` so the title
- *  also names the channel reached. */
+ *  also names the channel reached. The `fallback` card keeps the wrench —
+ *  it is no longer the bare "still working" marker (that is now the
+ *  hourglass, `SESSION_PREFIX.work`), only this one card's own emoji. */
 export const VARIANT_TITLE_PREFIX = Object.freeze({
   "ship-successful": SESSION_PREFIX.shipped,
   released: SESSION_PREFIX.released,
@@ -67,7 +70,7 @@ export const VARIANT_TITLE_PREFIX = Object.freeze({
   "ship-blocked": SESSION_PREFIX.blocked,
   aborted: SESSION_PREFIX.aborted,
   analysis: SESSION_PREFIX.analysis,
-  fallback: SESSION_PREFIX.work,
+  fallback: SESSION_PREFIX.fallback,
 });
 
 const ALL_PREFIXES = Object.freeze(Object.values(SESSION_PREFIX));

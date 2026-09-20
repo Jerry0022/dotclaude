@@ -17,6 +17,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [code-defaults.md](code-defaults.md) | Code Defaults | Standard coding conventions enforced across all projects using the devops plu... |
 | [codex-integration.md](codex-integration.md) | Codex Integration | Cross-cutting reference for all points where `codex-plugin-cc` skills are |
 | [commit-conventions.md](commit-conventions.md) | Commit Conventions | How commits are written in projects using this plugin. Referenced by `/ship`, |
+| [completion-card-design.md](completion-card-design.md) | Completion Card — Design Specification (v2, "one page, three lines, one decision") | Single source of truth for how a completion card looks and reads, on every |
 | [content-conventions.md](content-conventions.md) | Content Conventions — Sizing & Self-Reference | How to size and structure project-persistent content (CLAUDE.md, skills, |
 | [decision-format.md](decision-format.md) | Decision Format | When presenting multiple options (via AskUserQuestion or inline), use this |
 | [desktop-testing.md](desktop-testing.md) | Automated Desktop Testing (Computer Use) | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |

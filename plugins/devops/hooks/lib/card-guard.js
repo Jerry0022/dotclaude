@@ -1,18 +1,26 @@
 /**
  * @module card-guard
- * @version 0.4.1
+ * @version 0.5.0
  * @description Pure decision logic for the completion-card enforcement flow,
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
  *
- *   Three stacked gates, all one-block (stop_hook_active yields):
+ *   Stacked gates, all one-block (stop_hook_active yields):
  *     1. Completion card — block when work happened but no card was rendered.
- *     2. Validation — once a card exists, block when a code change owes a
+ *     2. Notification-turn duplicate (design § 5.5) — once a card exists on a
+ *        notification turn (background-task notification / wake-up / cron
+ *        tick, no user prompt), block a second card identical to the last one
+ *        (same variant + build-id + evidence row) — reported once.
+ *     3. Card content (design § 5.1-5.3) — once a card exists: the title may
+ *        not carry a status word, the `›` result lines are capped at three and
+ *        may not name a file/hook as their subject, and the numbered points
+ *        are capped at three unless the heading carries `+N weitere`.
+ *     4. Validation — once a card exists, block when a code change owes a
  *        validation attestation (validationPending && !validationAttested). The
  *        `validation` field rides on the card; the MCP sets the attested flag
  *        when it is populated. This is the "did we build the RIGHT thing" half;
  *        the test gate (stop.flow.browsertest) is the "did we build it right".
- *     3. Pending — once a card exists, block when background subagents / tasks
+ *     5. Pending — once a card exists, block when background subagents / tasks
  *        are still running and the card did not declare them (`pending`). Open
  *        work is proven from the transcript (lib/pending-tasks.js), so the card
  *        cannot end a turn with a CTA that asks the user to act on results that
@@ -20,12 +28,20 @@
  *        pulser, pickup waker) are infrastructure and never count — a concept
  *        that is merely open renders `concept: { phase }`, not `pending`.
  *
- *   One narrow exemption sits in front of Gate 1 (#371): a scheduled-task
- *   session (prompt wrapped in `<scheduled-task …>`) whose turn changed no
- *   file and shipped nothing passes with its one-line status — the idle tick
- *   of a gated cron routine is ~10 s of work and used to pay 4-5 turns for a
- *   card whose only content was "nothing happened". ALL THREE conditions are
- *   required; a scheduled task that edits or ships owes the card like any turn.
+ *   Two narrow exemptions sit in front of Gate 1:
+ *     - (#371) a scheduled-task session (prompt wrapped in `<scheduled-task …>`)
+ *       whose turn changed no file and shipped nothing passes with its one-line
+ *       status — the idle tick of a gated cron routine is ~10 s of work and
+ *       used to pay 4-5 turns for a card whose only content was "nothing
+ *       happened". ALL THREE conditions are required; a scheduled task that
+ *       edits or ships owes the card like any turn.
+ *     - (design § 5.5) a notification turn (background-task notification,
+ *       wake-up or cron tick, no user prompt) carries no card obligation at
+ *       all when nothing changed (tree clean, nothing shipped).
+ *
+ *   Line budget (design § 2.4 / § 5.4) is reported, never enforced by cutting —
+ *   the renderer is the one that trims. `lineBudgetReport` returns a `warning`
+ *   surfaced on an otherwise passing decision.
  *
  *   Inputs: flag state (work/card/validation/pending) + transcript + stop_hook_active.
  *   Output: { action: 'block' | 'pass', reason?, resetFlags }.
@@ -85,6 +101,151 @@ function lastAssistantContainsCard(transcriptContent) {
   return lastAssistantText(transcriptContent).includes(CARD_MARKER);
 }
 
+// ---------------------------------------------------------------------------
+// Card content gates (design § 5.1 - § 5.4)
+// ---------------------------------------------------------------------------
+
+/** Title status words the card-guard rejects (design § 5.1) — status belongs
+ *  in the decision heading, never the title. Matches whole words/phrases and
+ *  a bare agent count ("3 Agenten" / "3 agents"). */
+const TITLE_STATUS_WORD_RE =
+  /\b(läuft|laufen|wartet|pending|noch nicht|running|waiting|\d+\s*Agenten?|\d+\s*agents?)\b/i;
+
+/** Extract the title text between the two ✨✨✨ markers, or null if absent. */
+function extractCardTitle(cardText) {
+  if (!cardText) return null;
+  const re = new RegExp(`${CARD_MARKER}\\s*(.*?)\\s*${CARD_MARKER}`);
+  const m = cardText.match(re);
+  return m ? m[1].trim() : null;
+}
+
+/** The matched status word/phrase if the title carries one, else null. */
+function titleStatusWordViolation(title) {
+  if (!title) return null;
+  const m = title.match(TITLE_STATUS_WORD_RE);
+  return m ? m[0] : null;
+}
+
+/** Every `› ` result line, text only (marker stripped, trimmed). */
+function extractResultLines(cardText) {
+  if (!cardText) return [];
+  return cardText
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.startsWith('› '))
+    .map(l => l.slice(2).trim());
+}
+
+/** First token looks like a path (`foo.js`) or a hook name (`ss.`, `post.`,
+ *  `prompt.`, `stop.` prefix) — design § 5.2 forbids naming these as the
+ *  subject of a result line. */
+const RESULT_LINE_SUBJECT_RE = /^(?:\S*\.(?:js|md|ts|json)\b|(?:ss|post|prompt|stop)\.\S+)/;
+
+/** Reason string if the result lines violate § 5.2, else null. */
+function resultLinesViolation(lines) {
+  if (!Array.isArray(lines)) return null;
+  if (lines.length > 3) {
+    return `${lines.length} result lines — max 3 (design § 5.2); a 4th becomes "+1 weitere" on the last line, never dropped silently.`;
+  }
+  for (const line of lines) {
+    const firstToken = line.split(/\s+/)[0] || '';
+    if (RESULT_LINE_SUBJECT_RE.test(firstToken)) {
+      return `result line names a file/hook as its subject: "${firstToken}" — name the effect for the user instead (design § 5.2).`;
+    }
+  }
+  return null;
+}
+
+/** Numbered points (`1. …`) anywhere in the decision block (after the last
+ *  `## ` heading, or the whole card when no heading is present). */
+function extractPoints(cardText) {
+  if (!cardText) return [];
+  const headingMatch = cardText.match(/^##\s+.*$/m);
+  const body = headingMatch ? cardText.slice(cardText.indexOf(headingMatch[0])) : cardText;
+  return body
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => /^\d+\.\s/.test(l));
+}
+
+/** Reason string if the points violate § 5.3 (more than 3 without the
+ *  heading carrying "+N weitere"), else null. */
+function pointsViolation(points, heading) {
+  if (!Array.isArray(points) || points.length <= 3) return null;
+  if (/\+\d+\s+weitere/.test(heading || '')) return null;
+  return `${points.length} points — max 3 on the card (design § 5.3); more only as "+N weitere" in the heading.`;
+}
+
+/** Rendered-line budget: 14 rows on Desktop, 24 in the terminal (design
+ *  § 2.4 / § 5.4). Counts non-blank lines of the card text — the guard only
+ *  REPORTS overflow, it never cuts; the renderer decides what to trim
+ *  (evidence details → context line → pipeline names, never result lines,
+ *  points or the heading). */
+const LINE_BUDGET = Object.freeze({ desktop: 14, terminal: 24 });
+
+function cardLineCount(cardText) {
+  if (!cardText) return 0;
+  return cardText.split('\n').filter(l => l.trim().length > 0).length;
+}
+
+function lineBudgetReport(cardText, { desktop = false } = {}) {
+  const limit = desktop ? LINE_BUDGET.desktop : LINE_BUDGET.terminal;
+  const count = cardLineCount(cardText);
+  return { limit, count, overflow: count > limit };
+}
+
+/**
+ * Signature used to detect a duplicate card on a notification turn (design
+ * § 5.5): same decision heading, same build-id, same evidence row. Returns
+ * null when the card text carries none of these (nothing to compare).
+ */
+function cardSignature(cardText) {
+  if (!cardText) return null;
+  const heading = (cardText.match(/^##\s+.*$/m) || [])[0] || '';
+  const build = (cardText.match(/Build\s+(\S+)/) || [])[1] || '';
+  const evidence = (cardText.match(/^[✓✗◐].*$/m) || [])[0] || '';
+  if (!heading && !build && !evidence) return null;
+  return JSON.stringify({ heading: heading.trim(), build, evidence: evidence.trim() });
+}
+
+/** True when a notification turn's new card is identical (by signature) to
+ *  the previous one — design § 5.5 blocks the second one. */
+function isDuplicateNotificationCard(prevSignature, currSignature) {
+  return Boolean(prevSignature) && Boolean(currSignature) && prevSignature === currSignature;
+}
+
+/**
+ * True when the turn's last USER-role transcript entry is a background-task
+ * completion notification (`<task-notification>`, the same marker
+ * lib/pending-tasks.js scans for) rather than something the user typed —
+ * design § 5.5's "background-task notification" case. Scans backward so a
+ * notification followed later by the user's own message is not mistaken for
+ * the trigger of THIS turn.
+ */
+function lastUserEntryIsNotification(transcriptContent) {
+  if (!transcriptContent) return false;
+  const lines = transcriptContent.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    let entry;
+    try { entry = JSON.parse(raw); } catch { continue; }
+    if (entry.type !== 'user') continue;
+    const content = entry.message && entry.message.content;
+    let text = '';
+    if (typeof content === 'string') {
+      text = content;
+    } else if (Array.isArray(content)) {
+      text = content
+        .filter(b => b && b.type === 'text' && typeof b.text === 'string')
+        .map(b => b.text)
+        .join('');
+    }
+    return text.includes('<task-notification>');
+  }
+  return false;
+}
+
 /**
  * Decide whether the Stop hook should block the turn to force a completion card.
  *
@@ -107,12 +268,24 @@ function lastAssistantContainsCard(transcriptContent) {
  * @param {boolean} [s.shipped]       — ship_release merged something this turn
  * @param {boolean} [s.completionMcpDown] — the completion MCP heartbeat is dead, so the
  *                                     offline renderer is the FIRST instruction, not the third
- * @returns {{ action: 'block' | 'pass', resetFlags: boolean, reason?: string, exempt?: string }}
+ * @param {boolean} [s.notificationTurn] — this turn started from a background-task
+ *                                     notification, a wake-up or a cron tick, with no
+ *                                     user prompt (design § 5.5)
+ * @param {string}  [s.cardText]      — the rendered card's markdown (last assistant text),
+ *                                     used for the content gates (title / result lines /
+ *                                     points) and the notification-turn duplicate check
+ * @param {string}  [s.prevCardSignature] — signature of the previous notification-turn card
+ *                                     (see `cardSignature`), stored by the caller
+ * @param {boolean} [s.desktopClient]  — render target for the line-budget report (14 rows
+ *                                     Desktop / 24 terminal); defaults to terminal
+ * @returns {{ action: 'block' | 'pass', resetFlags: boolean, reason?: string, exempt?: string,
+ *             warning?: string, newCardSignature?: string|null }}
  */
 function decideAction({
   workHappened, cardRendered, stopHookActive, substantial, silent,
   validationPending, validationAttested, openTaskNames, pendingAttested, pluginRoot,
   scheduledTask, treeClean, shipped, completionMcpDown,
+  notificationTurn, cardText, prevCardSignature, desktopClient,
 }) {
   if (silent) {
     // Background tick (cron git-sync, concept bridge poll, autonomous loop).
@@ -137,6 +310,13 @@ function decideAction({
     return { action: 'pass', resetFlags: true, exempt: 'scheduled-task-idle' };
   }
 
+  // Notification-turn exemption (design § 5.5): a turn started by a
+  // background-task notification, wake-up or cron tick, with no user prompt,
+  // carries no card obligation at all when nothing changed.
+  if (notificationTurn && !cardRendered && treeClean === true && !shipped) {
+    return { action: 'pass', resetFlags: true, exempt: 'notification-no-change' };
+  }
+
   // Gate 1 — completion card must exist.
   if (!cardRendered && active) {
     return {
@@ -146,7 +326,46 @@ function decideAction({
     };
   }
 
-  // Gate 2 — validation must be attested for a code-change turn. Only checked
+  // Gate 2 — notification-turn duplicate (design § 5.5): a second card
+  // identical (heading + build-id + evidence row) to the last notification
+  // card is blocked once.
+  let newCardSignature;
+  if (notificationTurn && cardRendered && cardText) {
+    newCardSignature = cardSignature(cardText);
+    if (isDuplicateNotificationCard(prevCardSignature, newCardSignature)) {
+      return {
+        action: 'block',
+        resetFlags: false,
+        reason: buildDuplicateCardReason(),
+      };
+    }
+  }
+
+  // Gate 3 — card content quality (design § 5.1 - § 5.3): title status
+  // words, result-line count/subject, points count. Only checked once a card
+  // exists and its text is available.
+  if (cardRendered && cardText) {
+    const title = extractCardTitle(cardText);
+    const statusWord = titleStatusWordViolation(title);
+    if (statusWord) {
+      return { action: 'block', resetFlags: false, reason: buildTitleStatusWordReason(statusWord) };
+    }
+
+    const resultLines = extractResultLines(cardText);
+    const resultViolation = resultLinesViolation(resultLines);
+    if (resultViolation) {
+      return { action: 'block', resetFlags: false, reason: buildResultLinesReason(resultViolation) };
+    }
+
+    const heading = (cardText.match(/^##\s+.*$/m) || [])[0] || '';
+    const points = extractPoints(cardText);
+    const pointViolation = pointsViolation(points, heading);
+    if (pointViolation) {
+      return { action: 'block', resetFlags: false, reason: buildPointsReason(pointViolation) };
+    }
+  }
+
+  // Gate 4 — validation must be attested for a code-change turn. Only checked
   // once a card exists, since the `validation` field is part of the card.
   if (cardRendered && active && validationPending && !validationAttested) {
     return {
@@ -156,7 +375,7 @@ function decideAction({
     };
   }
 
-  // Gate 3 — a card rendered while background subagents / tasks are STILL
+  // Gate 5 — a card rendered while background subagents / tasks are STILL
   // running must declare them. Without `pending`, the card's CTA asks the user
   // to act ("SHIP or CHANGE?", "All DONE") on results that do not exist yet.
   // Detected from the transcript, not self-reported, so the gate cannot be
@@ -170,7 +389,16 @@ function decideAction({
     };
   }
 
-  return { action: 'pass', resetFlags: true };
+  // Line budget (design § 2.4 / § 5.4) — reported, never enforced here.
+  let warning;
+  if (cardRendered && cardText) {
+    const budget = lineBudgetReport(cardText, { desktop: Boolean(desktopClient) });
+    if (budget.overflow) {
+      warning = `[card-guard] Card is ${budget.count} lines, budget is ${budget.limit} — trim evidence details → context line → pipeline names first; never result lines, points or the heading.`;
+    }
+  }
+
+  return { action: 'pass', resetFlags: true, ...(warning ? { warning } : {}), ...(newCardSignature !== undefined ? { newCardSignature } : {}) };
 }
 
 /**
@@ -328,6 +556,59 @@ function buildPendingReason(names) {
   ].join('\n');
 }
 
+function buildTitleStatusWordReason(word) {
+  return [
+    '[stop.flow.guard] Title carries a status word — the completion card must be re-rendered.',
+    '',
+    `Found "${word}" in the title. Status ("läuft", "wartet", "pending", "noch nicht",`,
+    'agent counts, …) belongs in the decision heading, never the title (design § 5.1 /',
+    'completion-card-design.md § 2.1). The title is the outcome of the turn — when',
+    'something was NOT achieved, say so in plain words ("… — Resume-Pfad noch offen"),',
+    'never with a status word.',
+    '',
+    'Re-render `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW',
+    'with a corrected title, then relay the card VERBATIM as the LAST output.',
+  ].join('\n');
+}
+
+function buildResultLinesReason(detail) {
+  return [
+    '[stop.flow.guard] Result lines violate the card format — the completion card must be re-rendered.',
+    '',
+    detail,
+    '',
+    'Re-render `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW',
+    'with the `›` result lines fixed, then relay the card VERBATIM as the LAST output.',
+  ].join('\n');
+}
+
+function buildPointsReason(detail) {
+  return [
+    '[stop.flow.guard] Decision points violate the card format — the completion card must be re-rendered.',
+    '',
+    detail,
+    '',
+    'Re-render `mcp__plugin_devops_dotclaude-completion__render_completion_card` NOW',
+    'with the points list fixed, then relay the card VERBATIM as the LAST output.',
+  ].join('\n');
+}
+
+function buildDuplicateCardReason() {
+  return [
+    '[stop.flow.guard] Duplicate card on a notification turn — nothing changed since the last one.',
+    '',
+    'This turn started from a background-task notification, a wake-up or a cron tick',
+    '(design § 5.5), and the card just rendered is identical (same heading, build-id',
+    'and evidence row) to the previous one. A notification turn carries no card',
+    'obligation when nothing changed — the output style for this turn is silence,',
+    'not a repeated card.',
+    '',
+    'If something DID in fact change since the last card, re-render',
+    '`mcp__plugin_devops_dotclaude-completion__render_completion_card` with the new',
+    'state and relay it VERBATIM. Otherwise end the turn with no output.',
+  ].join('\n');
+}
+
 /** Cap transcript bytes read into memory — we only need the last assistant message. */
 const TRANSCRIPT_TAIL_BYTES = 200 * 1024; // 200 KB
 
@@ -385,4 +666,21 @@ module.exports = {
   buildValidationReason,
   buildPendingReason,
   safeReadTranscript,
+  TITLE_STATUS_WORD_RE,
+  extractCardTitle,
+  titleStatusWordViolation,
+  extractResultLines,
+  resultLinesViolation,
+  extractPoints,
+  pointsViolation,
+  LINE_BUDGET,
+  cardLineCount,
+  lineBudgetReport,
+  cardSignature,
+  isDuplicateNotificationCard,
+  lastUserEntryIsNotification,
+  buildTitleStatusWordReason,
+  buildResultLinesReason,
+  buildPointsReason,
+  buildDuplicateCardReason,
 };
