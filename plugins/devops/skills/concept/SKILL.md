@@ -949,13 +949,18 @@ types the next task into a session that is waiting for page decisions. So,
 right after the page is open, prefix the session title:
 
 1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
-2. If `title` does not already start with `🧭 Concept – `:
-   `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
-   `title: "🧭 Concept – {title}"`.
+2. If `title` already starts with `🧭 Concept – `: done.
+3. Strip any leading devops prefix (`🔧 `, `📦 Ready – `, `🧪 Test – `,
+   `⏳ Working – `, `🚀 Shipped – `, … — the `SESSION_PREFIX` values in
+   `mcp-server/lib/mode-state.js`) left by the first-prompt wrench or an
+   earlier card — never stack them (`🧭 Concept – 🔧 Foo` is the bug).
+4. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
+   `title: "🧭 Concept – {stripped title}"`.
 
 The prefix is exactly `🧭 Concept – ` (compass, space, word, space, en dash,
 space) — the same emoji the completion card carries in its CTA, so sidebar
-and card read as one state. Step 6a strips exactly this prefix again.
+and card read as one state. From here on the completion card keeps the title
+in step with the phase (table below); Step 6a strips the prefix again.
 
 **Both tools exist only in the Desktop app.** In a terminal session, an
 unattended run, or when the call fails for any reason: skip silently — no
@@ -984,11 +989,19 @@ card with the `concept` field **and `cwd` set to the project root**. That
 replaces the CTA of whatever variant the turn earned (and outranks `pending`)
 with the one statement that is true:
 
-| `concept.phase` | When | CTA (DE) |
-|---|---|---|
-| `waiting` (default) | Page is open, next step is the user's submission | `🧭 CONCEPT wartet auf deine Entscheidungen auf der Seite — ich MELDE mich` |
-| `iterating` | A submission was processed and the next iteration is still being produced (e.g. by background agents) | `🧭 CONCEPT in Iteration — ich MELDE mich` |
-| `implementing` | An `implement` submission is being executed and the turn hands back before it lands | `🧭 CONCEPT in Implementierung — ich MELDE mich` |
+| `concept.phase` | When | CTA (DE) | Session title |
+|---|---|---|---|
+| `waiting` (default) | Page is open, next step is the user's submission | `🧭 CONCEPT wartet auf deine Entscheidungen auf der Seite — ich MELDE mich` | `🧭 Concept – ` |
+| `iterating` | A submission was processed and the next iteration is still being produced (e.g. by background agents) | `🧭 CONCEPT in Iteration — ich MELDE mich` | `🧭 Concept – ` |
+| `implementing` | An `implement` submission is being executed and the turn hands back before it lands | `🧭 CONCEPT in Implementierung — ich MELDE mich` | `⏳ Working – ` |
+
+The card's `[SESSION TITLE]` block carries the prefix of the phase — apply it
+every time, exactly like any other card's title instruction. This is what lets
+the sidebar tell a session that waits for a decision from one that is busy
+implementing (#416): while the page waits or iterates the compass stays, an
+`implementing` round shows the hourglass, and the next `waiting` card brings
+the compass back. The phase must therefore be truthful — a card that says
+`waiting` while a feature agent implements the submission is the bug.
 
 Real content work still goes into `pending` — a feature agent implementing the
 submission, a research workflow preparing the next round — and the card folds
@@ -1834,9 +1847,10 @@ rm -f .claude/concept-active.json
 
 **Restore the session title** (Desktop app only — skip silently elsewhere):
 `mcp__ccd_session_mgmt__get_session` `self`; if the `title` starts with
-`🧭 Concept – `, call `mcp__ccd_session_mgmt__set_session_title` `self` with
-that prefix removed. A title without the prefix is left untouched — the user
-renamed it meanwhile, and that name wins.
+`🧭 Concept – ` (or `⏳ Working – ` from an implementing round), call
+`mcp__ccd_session_mgmt__set_session_title` `self` with that prefix removed.
+A title without a prefix is left untouched — the user renamed it meanwhile,
+and that name wins. The final card (Step 6b) then sets the outcome prefix.
 
 Then `CronDelete <cron_id>`. `/shutdown` replaces the older `kill $SERVER_PID`:
 on Windows the PID could already be reused by an unrelated process, and

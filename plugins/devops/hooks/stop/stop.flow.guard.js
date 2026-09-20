@@ -43,6 +43,7 @@ const {
 } = require('../lib/card-guard');
 const { scanOpenTasks, openTaskNames } = require('../lib/pending-tasks');
 const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
+const { releaseOnce } = require('../lib/run-once');
 const { execFileSync } = require('child_process');
 
 /**
@@ -115,6 +116,12 @@ process.stdin.on('end', () => {
   // Backup detection: if the last assistant text already contains the card
   // marker, treat as rendered even when the flag write failed.
   const cardRendered = flagCardRendered || lastAssistantContainsCard(transcript);
+
+  // A card just told the sidebar what this turn ended with (📦 Ready, 🧪 Test,
+  // ⏳ Working, …). The next real prompt starts new work, so hand the wrench
+  // token back to prompt.flow.title-work (its ONCE_KEY) — without this the
+  // title keeps the outcome of a turn long past while the session is busy.
+  if (cardRendered && !silent) releaseOnce('prompt-title-work', sessionId);
 
   const decision = decideAction({
     workHappened,

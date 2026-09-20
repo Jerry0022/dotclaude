@@ -114,11 +114,30 @@ describe("titlePrefixFor", () => {
     expect(titlePrefixFor({ variant: "ready", pending: [{ name: "qa", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.pending);
   });
 
-  test("an open concept owns the title — no instruction", () => {
-    expect(titlePrefixFor({ variant: "ready", concept: { phase: "waiting" } }, deps)).toBeNull();
+  // #416: the concept prefix follows the phase. A waiting/iterating page is
+  // the compass — stated every time, so a session coming back from an
+  // implementation round returns to it. An implementing round is background
+  // work: the hourglass, like any pending card.
+  test("a concept card states the prefix of its phase — compass while waiting/iterating, hourglass while implementing", () => {
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "waiting" } }, deps)).toBe(SESSION_PREFIX.concept);
+    expect(titlePrefixFor({ variant: "ready", concept: "waiting" }, deps)).toBe(SESSION_PREFIX.concept);
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "iterating" } }, deps)).toBe(SESSION_PREFIX.concept);
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "implementing" } }, deps)).toBe(SESSION_PREFIX.pending);
+    expect(titlePrefixFor({ variant: "ready", concept: "implementing" }, deps)).toBe(SESSION_PREFIX.pending);
+    expect(titlePrefixFor({ variant: "ready", concept: '{"phase":"implementing"}' }, deps)).toBe(SESSION_PREFIX.pending);
+    // Unknown phase reads as waiting — the safe default, same as the CTA.
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "bogus" } }, deps)).toBe(SESSION_PREFIX.concept);
+    expect(titlePrefixFor({ variant: "ready", concept: true }, deps)).toBe(SESSION_PREFIX.concept);
   });
 
-  test("a concept-active.json in cwd owns the title even without the concept field", () => {
+  test("an implementing concept with pending work is still the hourglass, never the compass", () => {
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "implementing" }, pending: [{ name: "feature", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.pending);
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "waiting" }, pending: [{ name: "feature", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.concept);
+  });
+
+  // Without the field the phase is unknown — hands off, the compass may be
+  // legitimately waiting for a decision.
+  test("a concept-active.json in cwd owns the title (no instruction) when the card has no concept field", () => {
     const cwd = mkdtempSync(join(tmpdir(), "devops-title-"));
     try {
       mkdirSync(join(cwd, ".claude"));

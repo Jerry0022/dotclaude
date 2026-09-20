@@ -1,19 +1,28 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.title-work
- * @version 0.1.0
+ * @version 0.2.0
  * @event UserPromptSubmit
  * @plugin devops
- * @description Marks a fresh session as "being worked on" in the sidebar: on
- *   the FIRST real prompt of a session it asks Claude to put the wrench
- *   (`🔧 `, `SESSION_PREFIX.work` in mcp-server/lib/mode-state.js) in front
- *   of the session title — icon only, no word, the app's own summary stays
- *   the title. The completion card that ends the turn replaces it with the
- *   outcome prefix (📦 Ready, 🧪 Test, …), so the wrench is exactly the
- *   "first prompt in flight" marker; a `fallback` card keeps it.
+ * @description Marks a session as "being worked on" in the sidebar: on the
+ *   first real prompt of a session — and on the first prompt after every
+ *   completion card — it asks Claude to put the wrench (`🔧 `,
+ *   `SESSION_PREFIX.work` in mcp-server/lib/mode-state.js) in front of the
+ *   session title, replacing whatever outcome prefix the last card left
+ *   (📦 Ready, 🧪 Test, ⏳ Working, …). Icon only, no word: the app's own
+ *   summary stays the title. The card that ends the turn sets the outcome
+ *   prefix again, so the sidebar always says what the session is doing NOW —
+ *   not what its last turn ended with. Observed 2026-09-20: a session sat on
+ *   `🧪 Test –` for hours while a follow-up prompt had it implementing with
+ *   background tasks.
  *
- *   Once per session (runOnce): a resumed or compacted session already has
- *   the prefix its last card left, and must not be flipped back to 🔧.
+ *   Mode prefixes are not outcomes: `🧭 Concept – ` and `📥 Batch – ` stay
+ *   untouched, their skills own them for the mode's lifetime.
+ *
+ *   Guarded by runOnce: the marker is taken here and given back by
+ *   stop.flow.guard once a card has rendered, so a multi-prompt turn without
+ *   a card in between costs one rename, not one per prompt. A resumed or
+ *   compacted session whose last turn had no card keeps whatever it carries.
  *   Silent/cron turns and scheduled-task ticks are not user work — skipped.
  *   Desktop app only — the instruction tells Claude to skip silently when the
  *   session-mgmt tools are missing (terminal, unattended run).
@@ -21,24 +30,38 @@
 
 require('../lib/plugin-guard');
 
-const { runOnce } = require('../lib/run-once');
+const { runOnce, releaseOnce } = require('../lib/run-once');
 const { isSilent, isScheduledTask } = require('./prompt.flow.silent-turn');
+
+/** The runOnce token name — stop.flow.guard releases it after a card. */
+const ONCE_KEY = 'prompt-title-work';
 
 /** Pinned copy of `SESSION_PREFIX.work` — hooks are CJS, mode-state.js is ESM. */
 const WORK_PREFIX = '\u{1F527} ';
 
-/** Every leading marker the card / skills may have left; the instruction
- *  names them so a title never stacks two. Mirrors `STRIPPABLE` in
- *  mode-state.js (the test pins the two lists together). */
-const KNOWN_PREFIX_EMOJI = ['\u{1F9ED}', '\u{1F4E5}', '\u{1F680}', '\u{1F38A}', '\u{1F9EA}', '▶️', '\u{1F4E6}', '⛔', '\u{1F6AB}', '\u{1F4CB}', '⏳', '\u{1F527}'];
+/** Leading emoji of the prefixes a mode skill owns — never replaced here.
+ *  Mirrors `SESSION_PREFIX.concept` / `.batch` in mode-state.js. */
+const MODE_PREFIX_EMOJI = ['\u{1F9ED}', '\u{1F4E5}'];
+
+/** Leading emoji of every outcome prefix a card may leave (the wrench
+ *  included, so an already-marked title is recognised). The instruction
+ *  names them so a title never stacks two. Together with MODE_PREFIX_EMOJI
+ *  this mirrors `STRIPPABLE` in mode-state.js (the test pins the lists). */
+const OUTCOME_PREFIX_EMOJI = ['\u{1F680}', '\u{1F38A}', '\u{1F9EA}', '▶️', '\u{1F4E6}', '⛔', '\u{1F6AB}', '\u{1F4CB}', '⏳', '\u{1F527}'];
+
+/** Every leading marker the card / skills may have left. */
+const KNOWN_PREFIX_EMOJI = [...MODE_PREFIX_EMOJI, ...OUTCOME_PREFIX_EMOJI];
 
 function instruction() {
   return [
-    '[prompt.flow.title-work] First prompt of this session.',
+    '[prompt.flow.title-work] New work in this session.',
     'Before any other tool call, once, Desktop app only:',
     '  mcp__ccd_session_mgmt__get_session {session_id:"self"} → title.',
-    `  If the title is non-empty and does NOT already start with one of ${KNOWN_PREFIX_EMOJI.join(' ')}:`,
-    `  mcp__ccd_session_mgmt__set_session_title {session_id:"self", title: "${WORK_PREFIX}" + title}.`,
+    `  If the title is empty or starts with ${MODE_PREFIX_EMOJI.join(' or ')}: do nothing — a mode owns it.`,
+    `  Else if it already starts with ${WORK_PREFIX.trim()}: do nothing.`,
+    `  Else strip every leading "<emoji> <Word> – " prefix whose emoji is one of ${OUTCOME_PREFIX_EMOJI.join(' ')}`,
+    `  (e.g. "🧪 Test – ", "📦 Ready – ", "⏳ Working – ", "🎊 Released Stable – ") and`,
+    `  mcp__ccd_session_mgmt__set_session_title {session_id:"self", title: "${WORK_PREFIX}" + <stripped title>}.`,
     'The wrench is icon-only — no word after it, the title text stays as it is.',
     'If either tool is unavailable or fails: skip silently — no retry, no note, no fallback.',
     'Do not mention this to the user.',
@@ -54,6 +77,12 @@ function shouldMark(hook) {
   return true;
 }
 
+/** Give the token back so the next real prompt re-marks the title. Called by
+ *  stop.flow.guard once a completion card has rendered in the turn. */
+function releaseTitleWork(sessionId) {
+  return releaseOnce(ONCE_KEY, sessionId);
+}
+
 if (require.main === module) {
   let inputData = '';
   process.stdin.setEncoding('utf8');
@@ -62,10 +91,10 @@ if (require.main === module) {
     let hook;
     try { hook = JSON.parse(inputData); } catch { process.exit(0); }
     if (!shouldMark(hook)) process.exit(0);
-    if (!runOnce('prompt-title-work', hook.session_id)) process.exit(0);
+    if (!runOnce(ONCE_KEY, hook.session_id)) process.exit(0);
     process.stdout.write(instruction() + '\n');
     process.exit(0);
   });
 }
 
-module.exports = { WORK_PREFIX, KNOWN_PREFIX_EMOJI, instruction, shouldMark };
+module.exports = { ONCE_KEY, WORK_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, shouldMark, releaseTitleWork };

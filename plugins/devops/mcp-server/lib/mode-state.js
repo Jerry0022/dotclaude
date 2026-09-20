@@ -9,7 +9,8 @@
  * the mode in the sidebar AND on the last card. The renderer resolves everything
  * from `cwd` so the skills pass nothing new — the link to the concept is the
  * URL the page is already open at, and the batch line is what the hook would
- * tell the next prompt.
+ * tell the next prompt. The concept prefix follows the page's phase — see
+ * `titlePrefixFor`.
  *
  * Pure reads, all failures swallowed: a card must never die on a missing or
  * half-written state file.
@@ -18,13 +19,17 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { normalizeConcept } from "./pending.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 /** Session-title prefixes — emoji first so the sidebar scans on the icon.
  *  `concept` / `batch` are set by their skills while the mode is on and
- *  stripped by them on the way out. `shipping` is set by /ship Pre-Step C,
- *  `work` by prompt.flow.title-work on the first prompt of a session. The
+ *  stripped by them on the way out (`concept` is re-stated by every card
+ *  that carries a waiting/iterating `concept` field). `shipping` is set by
+ *  /ship Pre-Step C, `work` by prompt.flow.title-work on the first prompt of
+ *  a session and on the first prompt after every card — a new prompt turns
+ *  any outcome prefix back into the wrench. The
  *  rest mirror completion-card variants — same emoji as the card CTA: every
  *  card the session ends a turn with tells Claude (via `titleInstruction`)
  *  which prefix the title should carry now, so the sidebar always names the
@@ -101,9 +106,20 @@ export function stripTitlePrefix(title) {
 
 /**
  * The session-title prefix this card leaves behind, or `null` when a mode
- * (open concept page, armed batch) owns the title and the card must not touch
- * it. `""` means "plain title — strip ours, leave the rest" (no variant does
- * that any more; kept for an unknown variant).
+ * (armed batch, or a concept known only from the state file) owns the title
+ * and the card must not touch it. `""` means "plain title — strip ours, leave
+ * the rest" (no variant does that any more; kept for an unknown variant).
+ *
+ * A card that carries the `concept` field follows the phase (#416): while
+ * the page `waiting`s for decisions or is `iterating`, the sidebar says
+ * `🧭 Concept – ` — stated every time, so a session that comes back from an
+ * implementation round returns to the compass. `implementing` is background
+ * work like any `pending`: the CTA says "ich MELDE mich", so the title says
+ * `⏳ Working – ` — otherwise every concept session looks like it waits for
+ * input and the one that actually does cannot be told apart. Without the
+ * field, `concept-active.json` alone still means "hands off": the phase is
+ * unknown and the wrong card here is one that steals the compass while the
+ * page waits.
  *
  * Pending background work outranks the variant: the CTA already says "ich
  * MELDE mich", the sidebar should say the same. A `released` card names the
@@ -115,7 +131,12 @@ export function stripTitlePrefix(title) {
  * @returns {string|null}
  */
 export function titlePrefixFor(params, { hasPending, hasConcept }) {
-  if (hasConcept(params.concept) || conceptUrl(params.cwd, undefined)) return null;
+  if (hasConcept(params.concept)) {
+    return conceptPhase(params.concept) === "implementing"
+      ? SESSION_PREFIX.pending
+      : SESSION_PREFIX.concept;
+  }
+  if (conceptUrl(params.cwd, undefined)) return null;
   if (readBatch(params.cwd)) return null;
   if (hasPending(params.pending)) return SESSION_PREFIX.pending;
   const variant = params.variant;
@@ -126,6 +147,12 @@ export function titlePrefixFor(params, { hasPending, hasConcept }) {
     );
   }
   return VARIANT_TITLE_PREFIX[variant] ?? "";
+}
+
+/** The phase of the card's `concept` field — same coercion as the CTA
+ *  (`normalizeConcept` in pending.js), so title and CTA read one state. */
+function conceptPhase(concept) {
+  return (normalizeConcept(concept) || { phase: "waiting" }).phase;
 }
 
 /**

@@ -735,10 +735,14 @@ emoji: `🚀 Shipped – ` (ship-successful, final and intermediate),
 `▶️ Started – ` (test-minimal), `📦 Ready – ` (ready, ready-files),
 `⛔ Blocked – ` (ship-blocked), `🚫 Aborted – ` (aborted), `📋 Analysis – `
 (analysis), `🔧 ` (fallback — wrench only, no word), `⏳ Working – ` (any
-`pending`, outranks the variant). The same `🔧 ` goes on the title when the
-first prompt of a session arrives (`prompt.flow.title-work`), so a session in
-its first turn reads as "being worked on" until its card lands. No block
-while a concept page is open or a batch is armed — those modes own the title.
+`pending`, outranks the variant), `🧭 Concept – ` (a `concept` field in
+phase `waiting` / `iterating`) and `⏳ Working – ` again for phase
+`implementing` (#416). The same `🔧 ` goes on the title when the first
+prompt of a session arrives and again on the first prompt after every card
+(`prompt.flow.title-work`), so the sidebar reads "being worked on" whenever
+the session is — an outcome prefix belongs to the turn that earned it. No
+block while a batch is armed, or while `concept-active.json` exists but the
+card carries no `concept` field — the mode owns the title then.
 Execute it (`get_session` → strip → `set_session_title`, `self`) before
 outputting the card; Desktop app only, skip silently elsewhere. Source of
 truth: `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`, `VARIANT_TITLE_PREFIX`).
