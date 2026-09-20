@@ -1821,9 +1821,12 @@ page: it is the first thing that looks broken when concepts sit side by side.
 
 A second, independent feedback channel: instead of (or alongside) the 💬
 dock's free-form notes, Claude can pin a numbered question directly onto a
-concrete element of a screen and the user answers it right there. Use it
-only when there is a concrete, element-level question — it is not a default
-decoration on every screen.
+concrete element of a screen and the user answers it right there. This is
+the home of every component-level question — top 3 to top 7 per design
+(`SKILL.md` § Step 0.5 count preferences); a view or a `decision` round
+never carries one. Pins carry questions, not decoration: a design with
+genuinely nothing element-level to ask has no layer, but that is the
+exception.
 
 - **Pin + short leader line to a bubble.** A numbered pin (`data-anno-pin`)
   sits on the annotated element; a short leader line connects it to a speech
@@ -1947,6 +1950,17 @@ its own entry in the switcher and the panel TOC.
   question stands on its own, independent of any one mockup → its own
   `decision` iteration. When in doubt, ask whether the user would need to
   flip back to a screen to answer sensibly — if yes, it is a view.
+- **A view never re-asks the design choice** (`SKILL.md` § Step 1a
+  → Orthogonality). The verdict *between* the designs comes from the dock's
+  per-design / per-screen textareas — that is what `comments.designs` is
+  for. A `decision` / `comparison` view asks a question whose answer holds
+  whichever design wins; its `[data-decision]` groups are never the
+  designs themselves, never the traits that tell them apart, and its prose
+  never argues for or against a design. An alternative whose `data-label`
+  (or heading) equals a `data-design`'s `data-nav-label` or id in the same
+  iteration is refused by the deterministic gate (validation-gate.md P31).
+  A view that names one design with `data-view-for` is *about* that
+  design — a question inside it, not a vote on it.
 - **Navigation.** `#screen-nav` gains a second `.screen-nav-group` below the
   designs group, headed by a plain (non-interactive) `.screen-nav-views-heading`
   label, then one `.screen-nav-view-item` button per view **that names no
@@ -3343,8 +3357,18 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
    The dock no longer reserves padding for the FAB: it now ends above it
    rather than spanning across it. The FAB keeps its higher z-index so it
    stays visible and clickable while the dock is open — clicking it toggles
-   the dock. */
+   the dock.
+   --dock-ceiling: the dock's TOP edge stops just below the ☰ FAB. Both are
+   right-edge overlays in the same column (right: 2rem), and the dock
+   (z-index 180) used to grow straight over the ☰ FAB on a tall viewport:
+   80vh at 1080px is 864px, the ☰ band ends 92px from the top, so the dock
+   covered it and the ☰ was unreachable while the dock was open. The
+   ceiling is viewport − ☰ band (top 2rem + 60px + 0.75rem gap) − the
+   dock's own bottom offset (2rem + 54px). Every max-height below is
+   min(--dock-ceiling, its px cap): the cap still rules on tall viewports,
+   the ceiling only bites when the content would reach the ☰. */
 .feedback-dock {
+  --dock-ceiling: calc(100vh - (2rem + 60px + 0.75rem) - (2rem + 60px - 6px));
   position: fixed;
   left: auto;
   right: 2rem;
@@ -3355,7 +3379,7 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
      scrolling or the user reaching for maximise. The old 460px cap was
      sized for the single-general-note case only, before the reorder made
      three sections the compact default's normal load. */
-  max-height: min(80vh, 900px);
+  max-height: min(var(--dock-ceiling), 900px);
   padding: 1rem 1.25rem 1.25rem;
   background: var(--panel-bg, #161b22);
   border: 1px solid var(--border-color, #30363d);
@@ -3370,7 +3394,7 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
 }
 .feedback-dock[data-size="wide"] {
   width: min(560px, calc(100vw - 4rem));
-  max-height: min(84vh, 940px);
+  max-height: min(var(--dock-ceiling), 940px);
 }
 /* Work package B — user-controlled maximise. Deliberately keyed off a
    SEPARATE attribute (data-user-maximized), not a third data-size value:
@@ -3380,7 +3404,7 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
    the stylesheet (same specificity, source-order wins). */
 .feedback-dock[data-size][data-user-maximized="true"] {
   width: min(1100px, calc(100vw - 4rem));
-  max-height: min(82vh, 860px);
+  max-height: min(var(--dock-ceiling), 860px);
 }
 .feedback-dock[data-size][data-user-maximized="true"] .feedback-section textarea {
   min-height: 220px;
@@ -3394,10 +3418,17 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* FAB sits above the dock so it stays visible AND clickable while the dock
-   is open. The dock's bottom edge overlaps the FAB's top edge by ~6px, so
-   the bubble visually reads as growing out of the FAB. */
+/* Both FABs sit above the dock so they stay visible AND clickable while
+   the dock is open. 💬: the dock's bottom edge overlaps the FAB's top edge
+   by ~6px, so the bubble visually reads as growing out of the FAB. ☰: the
+   --dock-ceiling above already keeps the dock out of its band; the z-index
+   is the second lock, so a page that lost the ceiling (an older max-height
+   rule surviving a re-sync) still leaves the ☰ clickable — and a click on
+   it closes the dock (openPanel() → closeDock(true), § Panel Chrome). The
+   ☰ FAB hides itself (.hidden) once the panel is open, so it never sits
+   above the panel it opened. */
 .feedback-fab { z-index: 220; }
+.panel-fab { z-index: 220; }
 
 .feedback-dock-header {
   display: flex; justify-content: space-between; align-items: center;
@@ -3470,7 +3501,7 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
     left: 0.75rem;
     right: 0.75rem;
     width: auto;
-    max-height: 62vh;
+    max-height: min(var(--dock-ceiling), 62vh);
     padding: 1rem;
     border-radius: 14px;
   }

@@ -374,3 +374,54 @@ describe("iteration append re-syncs a drifted engine before appending", () => {
       .toMatch(/re-sync that whole block verbatim\s+from templates\.md FIRST, then append/);
   });
 });
+
+// Fourth defect, reported on a design round: the open dock grew straight over
+// the ☰ FAB. Both are right-edge overlays (right: 2rem); the dock is z-index
+// 180, the FAB was 100, and `max-height: 80vh` at a 1080px viewport is
+// 864px — the ☰ band ends 92px from the top, so the dock covered it and the
+// menu was unreachable while the dock was open. The ceiling ends the dock
+// just below the ☰; the FAB's z-index is the second lock; the reciprocal
+// closeDock(true) in openPanel() folds the dock away on a ☰ click.
+describe("the dock stops below the ☰ FAB and yields to it", () => {
+  const dockRules = rulesFor(/^\.feedback-dock/);
+  // The geometry rule — other `.feedback-dock` selectors exist (chrome hides,
+  // `[data-open]`), so pick the one that positions the bubble.
+  const geometry = dockRules.find((r) => r.selectors.includes(".feedback-dock") && /position:\s*fixed/.test(r.body));
+
+  test("--dock-ceiling is declared on .feedback-dock from the ☰ band and the dock's bottom offset", () => {
+    expect(geometry, ".feedback-dock geometry rule").toBeTruthy();
+    const decl = /--dock-ceiling:\s*calc\(([^;]+)\);/.exec(geometry.body);
+    expect(decl, "the ceiling custom property").toBeTruthy();
+    const expr = norm(decl[1]);
+    expect(expr, "starts from the viewport").toMatch(/^100vh/);
+    expect(expr, "subtracts the ☰ band (top 2rem + 60px + gap)").toMatch(/2rem \+ 60px \+ 0\.75rem/);
+    expect(expr, "subtracts the dock's own bottom offset").toMatch(/2rem \+ 60px - 6px/);
+  });
+
+  test("every .feedback-dock max-height is bounded by the ceiling — no bare vh cap survives", () => {
+    const withMax = dockRules.filter((r) => /max-height\s*:/.test(r.body));
+    expect(withMax.length, "compact, wide, maximised and the narrow media rule").toBeGreaterThanOrEqual(4);
+    for (const r of withMax) {
+      const m = /max-height\s*:\s*([^;]+);/.exec(r.body);
+      expect(norm(m[1]), r.selectors.join(", ")).toMatch(/^min\(var\(--dock-ceiling\),/);
+    }
+  });
+
+  test("the ☰ FAB sits above the dock, like the 💬 FAB already does", () => {
+    const fab = rulesFor(/^\.panel-fab$/).filter((r) => /z-index/.test(r.body));
+    expect(fab.some((r) => /z-index:\s*220/.test(r.body)), ".panel-fab { z-index: 220 }").toBe(true);
+    const z = /z-index:\s*(\d+)/.exec(geometry.body);
+    expect(Number(z[1]), "dock stays below both FABs").toBeLessThan(220);
+  });
+
+  test("opening the ☰ panel closes the dock (hand-off, not a focus-stealing close)", () => {
+    const open = slice(stripJsComments(jsSource), "window.openPanel = () =>");
+    expect(open).toMatch(/window\.closeDock\?\.\(true\)/);
+  });
+
+  test("the gate carries P13e and lists it as an engine-drift entry", () => {
+    expect(gate).toMatch(/\| P13e \| `--dock-ceiling:` declared on `\.feedback-dock`/);
+    const drift = gate.slice(gate.indexOf("## Engine drift on iteration append"), gate.indexOf("## Generic Form Collection"));
+    expect(drift).toMatch(/P13e \(dock ceiling/);
+  });
+});

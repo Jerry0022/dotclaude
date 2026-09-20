@@ -98,24 +98,33 @@ describe("feedback dock — compact-fit at a ~1080px-tall viewport", () => {
     return m[1];
   }
 
+  // The vh term became the --dock-ceiling (design-chrome-overlap.test.js —
+  // the dock must end below the ☰ FAB): viewport − ☰ band (2rem + 60px +
+  // 0.75rem) − the dock's bottom offset (2rem + 60px − 6px). Evaluated at
+  // 16px/rem it is 100vh − 190px.
+  const CEILING_PX = (vh) => vh - (32 + 60 + 12) - (32 + 60 - 6);
+  const MAX_RE = /max-height:\s*min\(\s*var\(--dock-ceiling\)\s*,\s*(\d+)px\s*\)/;
+
   test("compact max-height clears three stacked sections without scrolling", () => {
     const body = ruleBody(/\.feedback-dock \{/);
-    const m = /max-height:\s*min\(\s*(\d+)vh\s*,\s*(\d+)px\s*\)/.exec(body);
-    expect(m, "max-height: min(<vh>vh, <px>px)").toBeTruthy();
-    const [, vh, px] = m.map(Number);
-    // At 1080px viewport height, the vh term must not be the binding
-    // constraint below a generous pixel ceiling — otherwise a tall window
+    const m = MAX_RE.exec(body);
+    expect(m, "max-height: min(var(--dock-ceiling), <px>px)").toBeTruthy();
+    const px = Number(m[1]);
+    // At 1080px viewport height, the ceiling must not be the binding
+    // constraint below a generous pixel cap — otherwise a tall window
     // still gets clamped back to the old cramped box.
-    const atViewport = Math.min((vh / 100) * 1080, px);
+    const atViewport = Math.min(CEILING_PX(1080), px);
     expect(atViewport).toBeGreaterThanOrEqual(700);
   });
 
   test("wide max-height is at least as generous as compact", () => {
     const compact = ruleBody(/\.feedback-dock \{/);
     const wide = ruleBody(/\.feedback-dock\[data-size="wide"\] \{/);
-    const cM = /max-height:\s*min\(\s*(\d+)vh\s*,\s*(\d+)px\s*\)/.exec(compact);
-    const wM = /max-height:\s*min\(\s*(\d+)vh\s*,\s*(\d+)px\s*\)/.exec(wide);
-    expect(Number(wM[2])).toBeGreaterThanOrEqual(Number(cM[2]));
+    const cM = MAX_RE.exec(compact);
+    const wM = MAX_RE.exec(wide);
+    expect(cM, "compact rule bounded by the ceiling").toBeTruthy();
+    expect(wM, "wide rule bounded by the ceiling").toBeTruthy();
+    expect(Number(wM[1])).toBeGreaterThanOrEqual(Number(cM[1]));
   });
 
   test("the two fixed widths (420 / 560) are untouched", () => {
