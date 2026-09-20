@@ -82,7 +82,7 @@ from `templates.md` § Layout before opening the tab.
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 74 patterns, regardless of template
+Every concept page must contain these 75 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -93,6 +93,7 @@ related one — count the rows, not the highest number):
 | 3 | `connection-status` | The status line inside `.panel-status` — OUTSIDE `#panel-ready`, pinned above the CTA foot (glyph + label; the raw heartbeat on `data-state` = connecting / connected / disconnected, written by `checkClaudeConnection` in EVERY panel state, the visible line composed by `renderPanelStatus`). NOT an overlay, NO acknowledge button. |
 | 3b | `_everPolled` | Pre-first-poll guard: the connection checker treats the window before the first `/heartbeat` response as "connecting", never "disconnected". Missing → the fresh-page connect→disconnect→connect flash returns. |
 | 3c | `_tabId` AND `startHeartbeatWorker` AND `sendTabBye` | Tab liveness (#397): every browser poll carries `?tab=<id>`, the `/heartbeat` poll runs in a Worker so a hidden tab keeps polling under Chromium timer throttling, and `pagehide` (persisted=false) beacons `/bye`. Missing → the waker cannot tell a hidden tab from a closed one and re-opens the page every few minutes (tab storm). |
+| 3d | `_lastSampleAt` AND `recoverFromFreeze` AND `WAKE_GRACE_MS` | Freeze-aware verdict: the checker judges the AGE OF THE SAMPLE before it judges `claude_ts`. A sample older than `SAMPLE_STALE_MS` means this page was frozen (Edge Sleeping Tabs, PC suspend, dead worker) — it re-polls at once, replaces a worker silent for a minute, and holds "connecting" through the grace window; "disconnected" needs two consecutive stale evaluations. Missing → every return to the tab and every PC wake flashes "Nur lokal gespeichert · getrennt" for 5–20 s although nothing is wrong. |
 | 4 | `checkClaudeConnection` | Heartbeat checker function |
 | 5 | `HEARTBEAT_STALE_MS` | Heartbeat staleness threshold |
 | 6 | `SERVER_STALE_MS` | Bridge-process staleness threshold (distinguishes bootstrap from dead bridge) |
@@ -588,6 +589,7 @@ enforces the same on write.
   oversized or blank inside the phone/tablet frames, with nothing logged
 - Heartbeat poller does an HTTP-only check (no `await r.json()` + `claude_ts` assignment) → indicator stays green forever because the server self-pulse always returns 200, even when Claude's cron is dead
 - Disconnected classified before the first `/heartbeat` response (no `_everPolled` guard) → a fresh page flashes connecting→disconnected→connected; with the old overlay it also forced two "Got it" clicks
+- Verdict taken from a sample that predates a freeze (no `_lastSampleAt` / `recoverFromFreeze`) → "getrennt" flashes on every return to a slept tab and after every PC wake; the user reads it as the connection dropping all the time
 - Cache hint not wired to the disconnected state (`_setCacheHints` missing from `checkClaudeConnection`) → a click made while Claude is offline looks lost instead of visibly queued (the Offline Submit Queue still delivers it on reconnect, but the user gets no signal)
 - Staleness math mixes seconds and milliseconds (`Date.now() / 1000`, or `_lastHeartbeatTs * 1000`) → comparison flips negative, page renders "Claude verbunden" even when the heartbeat is hours old
 - `submitFinalize` / `collectDisposition` / `collectIssueItems` missing → the final-report panel renders correctly but "⚠ Ausführen" does nothing on click (silent failure — no console error, no network request), or ships a payload with the user's issue selection silently emptied

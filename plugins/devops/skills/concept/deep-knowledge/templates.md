@@ -338,52 +338,23 @@ the `[ui-locale: ...]` hint produced.
            action the way the ☰/💬 FABs do (☀️ while dark) — glyph via CSS,
            tooltip + aria-label via the data-label-* pair (§ Theme Toggle JS).
            Both labels come from the locale table, never baked text. -->
+      <!-- The head row IS the "you are here" line: [data-here-round] at the
+           left (mirrors the selected tab's label via showIteration — no
+           "· aktiv"/"· active" suffix on the live round, an {{nav.archived}}
+           marker on a frozen one, "(Variante)" appended by
+           updateHereRoundParenthesis while the reading line sits inside a
+           variant section), then — right-aligned as one group —
+           #panel-here-back (frozen rounds only), the 🕘 rounds chip (count
+           of PREVIOUS rounds, hidden when there are none), the theme toggle
+           and ✕. One row for all of it: the round label used to sit on its
+           own line under the chrome row, which cost a line of the panel's
+           height for nothing (the user's call). -->
       <div class="panel-head">
-        <button type="button" id="theme-toggle" class="theme-toggle-btn"
-                data-label-light="{{theme.to_light}}"
-                data-label-dark="{{theme.to_dark}}"
-                title="{{theme.to_light}}" aria-label="{{theme.to_light}}">
-          <span class="theme-glyph" data-glyph="sun" aria-hidden="true">☀️</span>
-          <span class="theme-glyph" data-glyph="moon" aria-hidden="true">🌙</span>
-        </button>
-        <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
-      </div>
-      <!-- All visible strings are referenced by key in the locale table above.
-           Swap to the `de` column when [ui-locale: de] is active. -->
-
-      <!-- PANEL ANATOMY. Below the .panel-head chrome row the aside is a flex
-           column of exactly four children and only the second one scrolls
-           (§ Decision Panel State CSS, "Panel anatomy"):
-             .panel-here        pinned   "Iteration 8 (Variante)" · 🕘 chip+list
-             .panel-nav-scroll  flex 1   iteration tabs (hidden) + live TOC
-             .panel-status      pinned   ONE status line (+ progress dots after submit)
-             .panel-cta         pinned   #panel-ready | #panel-submitted | #panel-frozen | #panel-final-report
-           The pin is structural (flex split), never position:sticky inside the
-           scroll box: the call to action is reachable without scrolling the
-           menu, however many rounds or TOC entries the page has, and the foot
-           is the same ≤120px in the smallest and the largest case. -->
-
-      <!-- "You are here" — pinned head, FIRST line: [data-here-round] mirrors
-           the selected tab's label (showIteration), no "· aktiv"/"· active"
-           suffix on the live round (stripped from data-tab-label — the
-           authored chip text still carries it, see § Tab Switch JS), an
-           {{nav.archived}} marker on a frozen one, plus — ONLY when the
-           reading line sits inside a variant section — "(Variante)" appended
-           by updateHereRoundParenthesis. #panel-here-back (frozen rounds)
-           and the 🕘 rounds chip (count of PREVIOUS rounds, hidden when there
-           are none) sit at the right end of this SAME first line —
-           `margin-left: auto` on the back link is what pushes both there;
-           the chip follows it, tight against it. [data-here-section], the
-           "› TOC entry" sub-line, comes AFTER both (flex-basis 100% forces
-           it onto its own second line) — dropped entirely on the final
-           report. #panel-here-rounds-list (buildRoundsChip) forces a THIRD
-           line, only while unfolded. -->
-      <div class="panel-here" id="panel-here">
         <span class="panel-here-round" data-here-round></span>
-        <!-- Right end of the FIRST line, as a group: the wrapper (not either
-             child) carries margin-left: auto, so the pair stays right-aligned
-             whether or not #panel-here-back is [hidden] (the live round has
-             no back link — the chip must not lose its right alignment then). -->
+        <!-- Right end, as a group: the wrapper (not either child) carries
+             margin-left: auto, so the pair stays right-aligned whether or
+             not #panel-here-back is [hidden] (the live round has no back
+             link — the chip must not lose its right alignment then). -->
         <span class="panel-here-right">
           <button type="button" id="panel-here-back" class="link-btn panel-here-back" hidden></button>
           <!-- 🕘 rounds chip — count of PREVIOUS rounds, hidden when there are
@@ -398,6 +369,37 @@ the `[ui-locale: ...]` hint produced.
             <span aria-hidden="true">🕘</span> <span data-here-rounds-count></span>
           </button>
         </span>
+        <button type="button" id="theme-toggle" class="theme-toggle-btn"
+                data-label-light="{{theme.to_light}}"
+                data-label-dark="{{theme.to_dark}}"
+                title="{{theme.to_light}}" aria-label="{{theme.to_light}}">
+          <span class="theme-glyph" data-glyph="sun" aria-hidden="true">☀️</span>
+          <span class="theme-glyph" data-glyph="moon" aria-hidden="true">🌙</span>
+        </button>
+        <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
+      </div>
+      <!-- All visible strings are referenced by key in the locale table above.
+           Swap to the `de` column when [ui-locale: de] is active. -->
+
+      <!-- PANEL ANATOMY. Below the .panel-head row (round label · 🕘 chip ·
+           theme toggle · ✕) the aside is a flex column of exactly four
+           children and only the second one scrolls (§ Decision Panel State
+           CSS, "Panel anatomy"):
+             .panel-here        pinned   "› TOC entry" sub-line + the 🕘 rounds list
+             .panel-nav-scroll  flex 1   iteration tabs (hidden) + live TOC
+             .panel-status      pinned   ONE status line (+ progress dots after submit)
+             .panel-cta         pinned   #panel-ready | #panel-submitted | #panel-frozen | #panel-final-report
+           The pin is structural (flex split), never position:sticky inside the
+           scroll box: the call to action is reachable without scrolling the
+           menu, however many rounds or TOC entries the page has, and the foot
+           is the same ≤120px in the smallest and the largest case. -->
+
+      <!-- "You are here", second part: [data-here-section], the "› TOC entry"
+           sub-line (dropped entirely on the final report), and
+           #panel-here-rounds-list (buildRoundsChip), shown only while the 🕘
+           chip in the head row is unfolded. The round label and the chip
+           themselves live in .panel-head above. -->
+      <div class="panel-here" id="panel-here">
         <span class="panel-here-section" data-here-section hidden></span>
         <div class="panel-here-rounds-list" id="panel-here-rounds-list" hidden role="list">
           <!-- auto-populated by buildRoundsChip() -->
@@ -1020,21 +1022,35 @@ extras (the 💬 FAB's reserved row under the panel foot, the pulse).
   padding: 0.25rem;
 }
 
-/* ── Panel head row: theme toggle + ✕ ──
+/* ── Panel head row: round label · back link · 🕘 chip · theme toggle · ✕ ──
    The aside's first child. Right-aligned so the ✕ keeps its top-right
-   corner; the toggle sits to its left on the same line. The toggle is the
-   quiet one of the pair — greyed and dimmed at rest, full colour only under
-   the pointer or keyboard focus — so the row still reads as "one ✕", not as
-   two controls competing for the corner. Emoji glyphs on purpose (the user's
-   call): the grayscale filter is what keeps the full-colour platform art
-   from clashing with the dark chrome until it is actually wanted. */
+   corner; the toggle sits to its left on the same line, the 🕘 rounds chip
+   (+ the frozen-round back link) to the left of that, and the round label
+   ("Iteration 8 (Variante)") takes the left end — `margin-right: auto` on
+   it is what keeps the controls flush right. One row instead of chrome row
+   + "you are here" line: the label used to sit on its own line below the ✕,
+   a line of panel height spent on nothing (the user's call, 2026-09-20).
+   The toggle is the quiet one of the pair — greyed and dimmed at rest, full
+   colour only under the pointer or keyboard focus — so the row still reads
+   as "one ✕", not as two controls competing for the corner. Emoji glyphs on
+   purpose (the user's call): the grayscale filter is what keeps the
+   full-colour platform art from clashing with the dark chrome until it is
+   actually wanted. */
 .panel-head {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 0.25rem;
   flex: 0 0 auto;
+  min-height: 2rem;
 }
+.panel-head .panel-here-round {
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+  font-size: 0.85rem;
+}
+.panel-head .panel-here-right { margin-right: 0.25rem; }
 .theme-toggle-btn {
   background: none;
   border: none;
@@ -2504,10 +2520,23 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
     <!-- Decision panel (☰) — contains: iteration-tabs, screen-nav, submit.
          No section-TOC here: the screen-nav replaces it for design. -->
     <aside class="concept-decision-panel overlay" id="decision-panel">
-      <!-- Same head row as § Common Structure: theme toggle + ✕. This is the
-           design round's ONLY theme control — the document header that used
-           to carry one is hidden in design mode (§ Layout CSS). -->
+      <!-- Same head row as § Common Structure: round label · back link ·
+           🕘 rounds chip · theme toggle · ✕. This is the design round's ONLY
+           theme control — the document header that used to carry one is
+           hidden in design mode (§ Layout CSS). -->
       <div class="panel-head">
+        <span class="panel-here-round" data-here-round></span>
+        <!-- Same wrapper as § Common Structure — the group (not either
+             child) carries margin-left: auto, so the chip stays right-aligned
+             whether or not #panel-here-back is [hidden]. -->
+        <span class="panel-here-right">
+          <button type="button" id="panel-here-back" class="link-btn panel-here-back" hidden></button>
+          <button type="button" id="panel-here-rounds" class="panel-here-rounds-btn" hidden
+                  aria-haspopup="true" aria-expanded="false" aria-controls="panel-here-rounds-list"
+                  title="{{nav.rounds_chip}}" aria-label="{{nav.rounds_chip}}">
+            <span aria-hidden="true">🕘</span> <span data-here-rounds-count></span>
+          </button>
+        </span>
         <button type="button" id="theme-toggle" class="theme-toggle-btn"
                 data-label-light="{{theme.to_light}}"
                 data-label-dark="{{theme.to_dark}}"
@@ -2520,18 +2549,6 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
       <!-- Same four-part anatomy as § Common Structure (here / scroll box /
            status / foot) — only the containing aside differs. -->
       <div class="panel-here" id="panel-here">
-        <span class="panel-here-round" data-here-round></span>
-        <!-- Same wrapper as § Common Structure — the group (not either
-             child) carries margin-left: auto, so the chip stays right-aligned
-             on the FIRST line whether or not #panel-here-back is [hidden]. -->
-        <span class="panel-here-right">
-          <button type="button" id="panel-here-back" class="link-btn panel-here-back" hidden></button>
-          <button type="button" id="panel-here-rounds" class="panel-here-rounds-btn" hidden
-                  aria-haspopup="true" aria-expanded="false" aria-controls="panel-here-rounds-list"
-                  title="{{nav.rounds_chip}}" aria-label="{{nav.rounds_chip}}">
-            <span aria-hidden="true">🕘</span> <span data-here-rounds-count></span>
-          </button>
-        </span>
         <span class="panel-here-section" data-here-section hidden></span>
         <div class="panel-here-rounds-list" id="panel-here-rounds-list" hidden role="list">
           <!-- auto-populated by buildRoundsChip() -->
@@ -4037,8 +4054,16 @@ change) via `harvestDockValues()`.
           // the ghost bar is used — and a stale `d === active` sends a
           // FOREIGN screen id into showScreen(), which then hides every
           // screen of the design actually on the canvas (blank page).
+          // A VIEW on screen (§ Views (optional)) is the third case: the
+          // design still carries data-design-active="true" as its own
+          // "last shown page" memory, so `cur === d` reads true and a bare
+          // showScreen() would only swap pages INSIDE the hidden design —
+          // the view stays on the canvas and the click looks dead. Only
+          // showDesign() leaves view mode, so route through it whenever a
+          // view is what is actually visible.
           const cur = activeDesign();
-          if (!cur || cur.dataset.design !== d.dataset.design) showDesign(d.dataset.design, sec.id);
+          const viewOnScreen = document.body.dataset.viewActive === 'true';
+          if (viewOnScreen || !cur || cur.dataset.design !== d.dataset.design) showDesign(d.dataset.design, sec.id);
           else showScreen(sec.id);
           closePanel();
         });
@@ -7164,23 +7189,28 @@ document.addEventListener('DOMContentLoaded', buildSectionNav);
    without it, so the tree would grow past the viewport and push the pinned
    foot off screen — exactly the "scroll the menu to find the button" defect
    this anatomy exists to remove. */
+/* The "you are here" box below the head row: the "› TOC entry" sub-line
+   and, while the 🕘 chip is unfolded, the rounds list. The round label and
+   the chip themselves sit in .panel-head (§ Panel Chrome) — this box is
+   empty on the final report (no sub-line there) and then collapses to its
+   divider. */
 .panel-here {
   flex: none;
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.5rem;
-  min-height: 1.3em;
-  padding-bottom: 0.6rem;
+  padding-bottom: 0.5rem;
   margin-bottom: 0.75rem;
   border-bottom: 1px solid var(--border-color, #30363d);
   font-size: 0.8rem;
   color: var(--text-secondary, #8b949e);
 }
 .panel-here-round { font-weight: 600; color: var(--text-color, #c9d1d9); white-space: nowrap; }
-/* Right end of the FIRST line — #panel-here-back + the 🕘 chip as one group.
-   margin-left: auto lives HERE, not on either child: #panel-here-back is
-   [hidden] on the live round (the common case), and an auto margin on the
-   child itself would then contribute nothing, leaving the chip stranded
-   next to the round label instead of at the right edge. The wrapper is
-   always present, so the pair is always pushed right, back link or not. */
+/* #panel-here-back + the 🕘 chip as one group at the right end of the head
+   row, left of the theme toggle. margin-left: auto lives HERE, not on
+   either child: #panel-here-back is [hidden] on the live round (the common
+   case), and an auto margin on the child itself would then contribute
+   nothing, leaving the chip stranded next to the round label instead of at
+   the right edge. The wrapper is always present, so the pair is always
+   pushed right, back link or not. */
 .panel-here-right {
   flex: none;
   display: inline-flex; align-items: center; gap: 0.35rem;
@@ -13091,6 +13121,18 @@ right the page must (a) identify itself, (b) keep polling while hidden, and
   tab from a throttled or sleeping one, and it is what lets the waker act
   within a minute of a real close instead of guessing from silence.
 
+**Freeze-aware verdict.** The checker looks at the age of the last *sample*
+before it looks at `claude_ts`. A page that was frozen — Edge Sleeping Tabs
+or efficiency mode, a PC suspend, a worker that died without `onerror` —
+wakes up holding a sample from before the nap, and judging `claude_ts` from
+it painted "Nur lokal gespeichert · getrennt" on every return to the tab
+(the reported "connection keeps dropping"). `recoverFromFreeze` re-polls at
+once, replaces a worker that stayed silent for a minute, and opens a
+`WAKE_GRACE_MS` window in which a stale `claude_ts` reads "connecting" —
+the pulser's timers were suspended with the machine and need one cycle too.
+"disconnected" is painted only after two consecutive stale evaluations, so a
+single late pulse from a busy bridge is a blip, not a warning.
+
 ```javascript
 const HEARTBEAT_STALE_MS = 90000;  // claude_ts older than this → nothing is pulsing
 const SERVER_STALE_MS    = 90000;  // server_ts older than this → bridge process down
@@ -13105,6 +13147,23 @@ let _lastServerTs    = 0;
 // connect flash: before the first poll lands, _lastServerTs is still 0, so the
 // old code mis-classified the unknown window as a dead bridge.
 let _everPolled      = false;
+// Wall-clock time the last /heartbeat SAMPLE arrived (worker or main thread)
+// — as opposed to what the sample said. A gap here means this page was not
+// running: Edge put the tab to sleep, the PC suspended, or the worker died.
+// None of those is a dead bridge, and the verdict must not say so from a
+// sample that predates the gap (see checkClaudeConnection).
+let _lastSampleAt    = 0;
+const SAMPLE_STALE_MS = 15000;   // > 3 worker ticks without a sample → we were frozen
+// After a detected freeze the pulser needs one cycle of its own to catch up
+// (its timers were suspended with the machine), so a stale claude_ts inside
+// this window is "connecting", not "disconnected".
+const WAKE_GRACE_MS   = 45000;
+let _wakeGraceUntil   = 0;
+// A single stale evaluation never paints the warning: the line flips to
+// "getrennt" only when two consecutive checks (≥ 5 s apart) agree.
+let _disconnectStreak = 0;
+let _lastState        = 'connecting';
+let _pollInFlight     = null;
 
 // Per-load tab identity (#397). Rides on every browser-only poll as
 // `?tab=<id>` so the bridge can tell two tabs apart and notice when THIS one
@@ -13131,13 +13190,22 @@ function applyHeartbeat(data) {
   // bootstrap path is inert and behavior falls back to the old timing.
   _lastServerTs = data.server_ts || 0;
   _everPolled = true;   // we now have real evidence of the bridge state
+  _lastSampleAt = Date.now();
 }
 
-async function pollHeartbeat() {
-  try {
-    const res = await fetch('/heartbeat' + _tabQuery, { cache: 'no-store' });
-    applyHeartbeat(await res.json());
-  } catch (e) { /* server unreachable — leave _everPolled unchanged */ }
+// Single-flight: a wake-up can fire the visibility handler, the main-thread
+// interval and the worker's first message within the same second — one poll
+// answers all of them.
+function pollHeartbeat() {
+  if (_pollInFlight) return _pollInFlight;
+  _pollInFlight = (async () => {
+    try {
+      const res = await fetch('/heartbeat' + _tabQuery, { cache: 'no-store' });
+      applyHeartbeat(await res.json());
+    } catch (e) { /* server unreachable — leave _everPolled unchanged */ }
+    finally { _pollInFlight = null; }
+  })();
+  return _pollInFlight;
 }
 
 // The heartbeat poll lives in a dedicated Worker (#397). A hidden tab's DOM
@@ -13150,6 +13218,7 @@ async function pollHeartbeat() {
 let _hbWorker = null;
 function startHeartbeatWorker() {
   try {
+    if (_hbWorker) { try { _hbWorker.terminate(); } catch (e) {} _hbWorker = null; }
     const url = JSON.stringify(location.origin + '/heartbeat' + _tabQuery);
     const src = 'const u=' + url + ';async function p(){try{const r=await fetch(u,{cache:"no-store"});postMessage(await r.json())}catch(e){}}p();setInterval(p,5000);';
     const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
@@ -13158,6 +13227,24 @@ function startHeartbeatWorker() {
     _hbWorker = w;
     return true;
   } catch (e) { _hbWorker = null; return false; }
+}
+
+// Called from every wake-up path (visibility, main-thread tick, worker
+// message) when the last sample is older than the worker's cadence allows:
+// re-poll NOW instead of waiting for the next tick, and open the grace
+// window so the verdict reads "connecting" until the pulser has had its
+// turn. A worker that has been silent for a minute is not trusted to come
+// back — it is replaced.
+let _lastRecoverAt = 0;
+function recoverFromFreeze(now) {
+  // Rate-limited: a bridge that is really unreachable makes every poll fail,
+  // and each failed poll ends in checkClaudeConnection — without this guard
+  // that would be a tight poll loop.
+  if (now - _lastRecoverAt < SAMPLE_STALE_MS) return;
+  _lastRecoverAt = now;
+  if (now - _lastSampleAt > 60000) startHeartbeatWorker();
+  _wakeGraceUntil = now + WAKE_GRACE_MS;
+  pollHeartbeat().then(checkClaudeConnection);
 }
 
 // Unload beacon (#397). `pagehide` with `persisted === false` is the one
@@ -13314,9 +13401,39 @@ function checkClaudeConnection() {
   //       POST flips us to connected.
   const bootstrapping = !_everPolled || ((_lastHeartbeatTs === 0) && serverAlive);
 
-  const state = isConnected ? 'connected'
-              : bootstrapping ? 'connecting'
-              : 'disconnected';
+  // Freeze detection. Every one of these was reported as "die Verbindung
+  // bricht dauernd ab" and none of them was a dead bridge:
+  //   - Edge Sleeping Tabs / efficiency mode froze this page (worker
+  //     included); on return the DOM interval fires FIRST, with a sample
+  //     from before the nap, and read a stale claude_ts as "disconnected"
+  //     for the 5 s until the worker's next fetch;
+  //   - the PC slept: same thing, plus the pulser's own timers were
+  //     suspended, so even a fresh sample shows a stale claude_ts for up to
+  //     one pulser cycle (20 s) after wake;
+  //   - the worker died silently (no onerror): the main-thread fallback
+  //     never engaged because _hbWorker was still set.
+  // A sample older than SAMPLE_STALE_MS is evidence about THIS PAGE, not the
+  // bridge: re-poll now, replace a worker that stayed silent, and hold
+  // "connecting" through WAKE_GRACE_MS. Only a bridge that stays silent past
+  // SERVER_STALE_MS after that is "disconnected".
+  const sampleAge = _everPolled ? (now - _lastSampleAt) : 0;
+  const frozen = _everPolled && sampleAge > SAMPLE_STALE_MS;
+  if (frozen) recoverFromFreeze(now);
+  const inGrace = now < _wakeGraceUntil;
+  const unreachable = _everPolled && sampleAge > SERVER_STALE_MS && !inGrace;
+
+  let state = isConnected ? 'connected'
+            : (bootstrapping || ((frozen || inGrace) && !unreachable)) ? 'connecting'
+            : 'disconnected';
+  // Two-strike rule: a stale verdict has to repeat on the next evaluation
+  // (≥ 5 s later) before the warning paints. One late pulse — the bridge
+  // answering a heartbeat in 12 s because the machine is busy — is a blip.
+  if (state === 'disconnected' && ++_disconnectStreak < 2) {
+    state = _lastState === 'connected' ? 'connecting' : _lastState;
+  } else if (state !== 'disconnected') {
+    _disconnectStreak = 0;
+  }
+  _lastState = state;
 
   const pill = document.getElementById('connection-status');
   const btns = ['submit-iterate-btn', 'submit-implement-btn']
@@ -13357,6 +13474,15 @@ function checkClaudeConnection() {
 // notices the bootstrap at all.
 pollHeartbeat().then(checkClaudeConnection);
 startHeartbeatWorker();
+
+// Coming back to the tab is the moment the user looks at the status line —
+// and, after a nap, the moment the stale-sample verdict would have shown.
+// Poll first, judge second. Both paths go through checkClaudeConnection,
+// which handles the frozen case itself; this only shortens the wait.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  pollHeartbeat().then(checkClaudeConnection);
+});
 
 // Main-thread cadence. When the worker is alive it owns the /heartbeat fetch
 // (unthrottled in a hidden tab); this loop then only re-evaluates the verdict
@@ -13687,10 +13813,13 @@ function showIteration(n) {
   // been added to the chip (buildSectionNav), otherwise from the chip text
   // itself. The reading-line parenthesis (updateHereRoundParenthesis) is
   // re-applied by the scroll spy right after this, off the fresh base.
+  // The round label sits in the .panel-head row (one line with the 🕘 chip,
+  // theme toggle and ✕); the sub-line stays in #panel-here — hence the
+  // document-wide lookup for the label and the box-scoped one for the rest.
   const here = document.getElementById('panel-here');
   if (here) {
     const hereTab = document.querySelector('.iteration-tab[data-iteration="' + n + '"]');
-    const round = here.querySelector('[data-here-round]');
+    const round = document.querySelector('[data-here-round]');
     if (round) {
       const label = hereTab ? (hereTab.dataset.tabLabel || stripActiveSuffix(hereTab.textContent.trim())) : String(n);
       round.dataset.hereRoundBase = label + (isLive ? '' : ' · {{nav.archived}}');

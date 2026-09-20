@@ -139,10 +139,15 @@ describe("SKILL.md wires the tasks into the step list", () => {
   });
 
   test("every background-task exit reason has a documented response", () => {
-    for (const reason of ["PENDING_SUBMISSION", "SERVER_DEAD", "STATE_GONE", "PORT_CHANGED"]) {
+    for (const reason of ["PENDING_SUBMISSION", "SERVER_DEAD", "STATE_GONE", "PORT_CHANGED", "HTML_GONE",
+                          "STATE_NEVER_APPEARED", "DUPLICATE_PULSER", "DUPLICATE_WAKER"]) {
       expect(SKILL, reason).toContain(reason);
     }
-    expect(SKILL).toMatch(/re-launch \*\*both\*\* tasks/i);
+    // A dead bridge takes only the waker down with it now: the pulser never
+    // exits on request failures and reconnects on its own, so the recovery
+    // re-launches the waker — not "both" — and says so.
+    expect(SKILL).toMatch(/then re-launch the \*\*waker\*\*\. The pulser is still running/);
+    expect(SKILL).not.toMatch(/reason=SERVER_DEAD`[^|]*\|[^|]*4 consecutive failed polls/);
   });
 
   test("Step 4 no longer calls the cron the primary mechanism", () => {

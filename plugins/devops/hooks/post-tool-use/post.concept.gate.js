@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.concept.gate
- * @version 0.1.0
+ * @version 0.2.0
  * @event PostToolUse
  * @plugin devops
  * @matcher Write|Edit|NotebookEdit
@@ -23,8 +23,10 @@
  *   broken <style>/<script> structure, unsound mapping specs (ids, shapes,
  *   references, frozen `submitted`), and a decision / comparison view that
  *   lists the round's own designs as alternatives (P31 — the dock already
- *   asks which design wins) — not the full 35-pattern validation-gate.md
- *   sweep (that stays a Step-2 task).
+ *   asks which design wins), and (F) a STALE ENGINE — a page whose panel /
+ *   JS were lifted from an older concept page instead of the current
+ *   templates.md (the engine-currency markers) — not the full 35-pattern
+ *   validation-gate.md sweep (that stays a Step-2 task).
  */
 
 require('../lib/plugin-guard');
@@ -61,9 +63,9 @@ process.stdin.on('end', () => {
 
   if (!isConceptHtml(file, html)) process.exit(0);
 
-  const { ok, missing, forbidden, structural, mapping, overlap } = evaluate(file, html);
+  const { ok, missing, forbidden, structural, mapping, overlap, stale } = evaluate(file, html);
   if (ok) process.exit(0);
 
-  process.stderr.write(buildBlockReason(file, missing, forbidden, structural, mapping, overlap) + '\n');
+  process.stderr.write(buildBlockReason(file, missing, forbidden, structural, mapping, overlap, stale) + '\n');
   process.exit(2);
 });

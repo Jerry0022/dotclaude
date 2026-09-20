@@ -364,6 +364,26 @@ state input or a control. Field table and grammar:
 
 Build a single self-contained HTML file. Requirements:
 
+### Engine source (mandatory — templates.md, never an older page)
+
+The page's **engine** — the Kompass panel skeleton, § Layout CSS, § Section
+Navigation JS, § Claude Connection Heartbeat, § Two-Button Submit, § State
+Persistence, § Attachments, the viewport switcher — is copied **verbatim from
+`deep-knowledge/templates.md` of the plugin running this session**, every
+time a page is generated. Older concept pages in `docs/concepts/` (this
+project's or any other) are **content references only**: read them for
+tone, tokens, the project's CSP line and how a mockup was built — never lift
+their `<style>`, `<script>` or panel markup. A page assembled that way opens
+with whatever engine that older page had on the day it was generated (seen
+2026-09-20: a fresh page on the current plugin with a months-old panel — no
+rounds chip, no viewport toggle, no freeze-aware heartbeat), and every fix
+shipped since is silently missing. `post.concept.gate` blocks such a page as
+**STALE ENGINE** (engine-currency markers, `hooks/lib/concept-gate.js`
+`ENGINE`); the fix is to re-sync the whole engine from templates.md, not to
+add the missing tokens by hand. `scripts/build-concept-fixture.js` assembles
+an engine-current skeleton from templates.md when a starting point is
+wanted.
+
 ### Localisation (mandatory — do NOT hard-code German/English)
 
 Read the `[ui-locale: xx]` hint injected by `prompt.knowledge.dispatch`. If
@@ -1821,8 +1841,11 @@ reason has exactly one correct response:
 | Exit line | What happened | Do this |
 |---|---|---|
 | `WAKER_EXIT reason=PENDING_SUBMISSION version=N action=<a>` | A submission landed — `version` is the `_version` to hand back to `/reset`, `action` its branch (`iterate` / `implement` / `finalize`) | Fetch `/decisions` and process it (Step 5a) on that branch, then re-launch the waker. If `/decisions` comes back not submitted it was a stale wake — re-launch and carry on |
-| `WAKER_EXIT reason=SERVER_DEAD` / `PULSER_EXIT reason=SERVER_DEAD` | 4 consecutive failed polls — the bridge is gone | Restart the bridge server **on the same port** (do NOT pick a new one — the state file, the open tab and both watchers are all bound to it), then re-launch **both** tasks |
-| `*_EXIT reason=STATE_GONE` | `.claude/concept-active.json` is gone — the concept ended (the waker already POSTed `/shutdown`) | Nothing. Do not re-launch; the session is over |
+| `WAKER_EXIT reason=SERVER_DEAD` | ≥ 5 min of continuous failed polls (each waiting up to 30 s) — the bridge process is gone, not merely busy | Restart the bridge server **on the same port** (do NOT pick a new one — the state file, the open tab and the pulser are all bound to it), then re-launch the **waker**. The pulser is still running — it never exits on request failures and reconnects by itself |
+| `PULSER_EXIT reason=SERVER_DEAD` | Only an internal crash of the pulser prints this now; it no longer gives up on a slow or absent bridge | Verify the bridge with one `curl /heartbeat` (relaunch on the same port if it is down), then re-launch the pulser |
+| `PULSER_EXIT reason=DUPLICATE_PULSER` | An OLDER pulser is already pulsing this port (the watchers survive a session restart on Windows; `ss.concept.resume` re-arms them anyway) — this younger one stepped down | Nothing. The beat is covered |
+| `WAKER_EXIT reason=DUPLICATE_WAKER` | A YOUNGER waker took over this port — a newer session re-armed the watchers, and this one belonged to the superseded session | Nothing. Do not re-launch; the newer waker wakes the session that owns the concept now |
+| `*_EXIT reason=STATE_GONE` | `.claude/concept-active.json` has been gone for 3 consecutive polls (~1 min — a rewrite window is tolerated) — the concept ended (the waker already POSTed `/shutdown`) | Nothing. Do not re-launch; the session is over |
 | `WAKER_EXIT reason=HTML_GONE` | The concept page was deleted from disk — the waker shut the bridge down | Nothing to re-launch. `CronDelete` the backstop cron and remove the state file if it is still there |
 | `*_EXIT reason=STATE_NEVER_APPEARED` | The launch outran the step that writes the state file | Write it, then re-launch. NOT the same as STATE_GONE — the concept is alive |
 | `*_EXIT reason=PORT_CHANGED` | A newer concept took over | Nothing. This task belongs to a superseded session |

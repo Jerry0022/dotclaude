@@ -17,6 +17,10 @@ Replaces `python -m http.server` with a custom server that adds:
   the polling cron is dead). `server_ts` is used to distinguish the bootstrap
   window (`claude_ts==0`, server alive → "connecting") from a dead bridge
   (`server_ts` stale → disconnected warning).
+  POST accepts `?pulser=<id>` (the keepalive pulser's identity) and answers
+  `{ ok, ts, claude_ts, prev_pulser }` — `prev_pulser` is the id of the poster
+  BEFORE this one, so two pulsers on one port can see each other and the
+  younger one steps down (concept-watch.js `DUPLICATE_PULSER`).
 - GET/POST /decisions — Page submits decisions via POST, Claude reads via GET.
   GET response includes `_version` (for optimistic /reset concurrency),
   `_processed_at` (ISO timestamp of the last successful /reset — the browser
@@ -25,7 +29,9 @@ Replaces `python -m http.server` with a custom server that adds:
   fetch — drives the "Claude verarbeitet" step in the progress list), and
   `_phase` (free-form string Claude sets via /status — drives the
   "Implementierung abgeschlossen" step).
-- GET /pending — Deterministic signal for Claude's cron: returns
+- GET /pending — Deterministic signal for Claude's cron (`?waker=<id>` names the
+  polling waker; `prev_waker` in the answer is the previous poller, so a
+  superseded waker can step down — see concept-watch.js). Returns
   `{"pending": bool, "version": int, "action": str, "browser_ts": int,
     "browser_tabs": int, "browser_bye_ts": int}` with no free-form content to
   fuzzy-match (`action` is the submission's own action string, "" while
@@ -153,6 +159,19 @@ from datetime import datetime, timezone
 
 _server_ts = 0
 _claude_ts = 0
+# Id of the last pulser that POSTed /heartbeat (`?pulser=<startMs>-<pid>`,
+# concept-watch.js --mode pulse). Echoed back to the NEXT poster as
+# `prev_pulser`, which is all two pulsers on one port need to notice each
+# other: the younger one steps down. A POST without the parameter (the
+# backstop cron, a manual curl) leaves the stored id untouched, so a tick
+# between two pulses cannot hide a sibling.
+_claude_pulser = None
+# Same for the pickup waker (`GET /pending?waker=<id>` → `prev_waker`). Here
+# the OLDER one yields: a second waker only ever appears because a new
+# session re-armed the watchers, and the old one's exit would wake a session
+# that no longer listens.
+_claude_waker = None
+_PULSER_ID_RE = re.compile(r'^[0-9A-Za-z_-]{1,64}$')
 # Epoch-ms of the last poll that only a BROWSER TAB makes: GET /heartbeat and
 # GET /reload (the page's connection indicator and reload watcher). Claude's
 # pulser POSTs /heartbeat and the waker GETs /pending, so neither touches this.
@@ -1093,7 +1112,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_GET(self):
-        global _picked_up_at, _browser_ts
+        global _picked_up_at, _browser_ts, _claude_waker
         # Browser polls carry `?tab=<id>` since #397; the bare paths stay valid
         # for older pages and for curl.
         route, _, query = self.path.partition('?')
@@ -1147,7 +1166,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             obj["_picked_up_at"] = picked_up_at
             obj["_phase"] = phase
             self._json_response(obj)
-        elif self.path == '/pending':
+        elif route == '/pending':
             # Deterministic one-shot signal for Claude's cron: unambiguous
             # {"pending": bool, "version": int} so the cron instruction does
             # not have to substring-match against free-form JSON. Avoids
@@ -1165,11 +1184,17 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             if not self._same_origin_ok():
                 self.send_error(403, "forbidden origin")
                 return
+            waker = urllib.parse.parse_qs(query).get('waker', [None])[0]
+            if waker is not None and not _PULSER_ID_RE.match(waker):
+                waker = None
             with _lock:
                 data = _decisions
                 version_seen = _version
                 browser_ts = _browser_ts
                 browser_bye_ts = _browser_bye_ts
+                prev_waker = _claude_waker
+                if waker is not None:
+                    _claude_waker = waker
                 # Prune here too: a tab that stopped polling must age out of
                 # the count even when no other tab polls to trigger the prune.
                 _now = int(time.time() * 1000)
@@ -1205,6 +1230,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             self._json_response({
                 "pending": pending, "version": version_seen, "action": action,
                 "browser_ts": browser_ts, "browser_tabs": browser_tabs, "browser_bye_ts": browser_bye_ts,
+                "prev_waker": prev_waker,
             })
         elif route == '/reload':
             with _lock:
@@ -1312,16 +1338,23 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
-        global _server_ts, _claude_ts, _decisions, _version, _processed_at, _reload_counter, _picked_up_at, _phase, _browser_bye_ts
-        if self.path == '/heartbeat':
+        global _server_ts, _claude_ts, _claude_pulser, _decisions, _version, _processed_at, _reload_counter, _picked_up_at, _phase, _browser_bye_ts
+        post_route, _, post_query = self.path.partition('?')
+        if post_route == '/heartbeat':
             # POST /heartbeat is reserved for Claude (curl from cron). Updates
             # ONLY `_claude_ts` — the server's own self-pulse touches `_server_ts`
             # and must not be conflated with "Claude is reachable". See module
             # docstring for the full rationale.
+            pulser = urllib.parse.parse_qs(post_query).get('pulser', [None])[0]
+            if pulser is not None and not _PULSER_ID_RE.match(pulser):
+                pulser = None
             with _lock:
                 _claude_ts = int(time.time() * 1000)
                 ts = _claude_ts
-            self._json_response({"ok": True, "ts": ts, "claude_ts": ts})
+                prev_pulser = _claude_pulser
+                if pulser is not None:
+                    _claude_pulser = pulser
+            self._json_response({"ok": True, "ts": ts, "claude_ts": ts, "prev_pulser": prev_pulser})
         elif self.path == '/decisions':
             if not self._same_origin_ok():
                 self.send_error(403, "forbidden origin")

@@ -290,3 +290,39 @@ describe.skipIf(!PY)("concept-server per-tab registry and /bye (#397)", () => {
     }
   });
 });
+
+describe.skipIf(!PY)("concept-server watcher id echo — duplicate pulsers / wakers find each other", () => {
+  test("POST /heartbeat?pulser= and GET /pending?waker= echo the PREVIOUS poller; an id-less poll keeps the stored one", async () => {
+    const proc = startServer();
+    try {
+      await waitReady();
+      const url = (p) => `http://127.0.0.1:${PORT}${p}`;
+      const hb = async (q) => (await (await fetch(url("/heartbeat" + q), { method: "POST" })).json());
+      const pd = async (q) => (await (await fetch(url("/pending" + q))).json());
+
+      // Nobody has pulsed yet → prev is null; the id-less cron tick never sets one.
+      expect((await hb("")).prev_pulser).toBeNull();
+      expect((await hb("?pulser=100-1")).prev_pulser).toBeNull();
+      expect((await hb("?pulser=100-1")).prev_pulser).toBe("100-1");        // sees itself
+      expect((await hb("?pulser=200-2")).prev_pulser).toBe("100-1");        // the younger sees the older
+      expect((await hb("")).prev_pulser).toBe("200-2");                     // a tick between two pulses …
+      expect((await hb("?pulser=100-1")).prev_pulser).toBe("200-2");        // … does not hide the sibling
+      expect((await hb("?pulser=bad id!")).prev_pulser).toBe("100-1");      // junk is ignored, not stored
+      expect((await hb("?pulser=100-1")).prev_pulser).toBe("100-1");
+      // The pulse itself still lands whatever the query says.
+      expect((await (await fetch(url("/heartbeat"))).json()).claude_ts).toBeGreaterThan(0);
+
+      // Same contract on the waker side, independent of the pulser's id.
+      expect((await pd("")).prev_waker).toBeNull();
+      expect((await pd("?waker=300-3")).prev_waker).toBeNull();
+      expect((await pd("?waker=400-4")).prev_waker).toBe("300-3");
+      const p = await pd("?waker=300-3");
+      expect(p.prev_waker).toBe("400-4");
+      expect(typeof p.pending).toBe("boolean");                             // the rest of /pending is untouched
+      expect(typeof p.version).toBe("number");                              // (the store on this port may carry
+      expect(typeof p.browser_ts).toBe("number");                           //  an earlier test's submission)
+    } finally {
+      await stopServer(proc);
+    }
+  });
+});

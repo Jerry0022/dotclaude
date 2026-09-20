@@ -50,7 +50,7 @@ describe("parseArgs / validate", () => {
     const opts = parseArgs(["--port", "8883", "--state", "C:/p/.claude/concept-active.json"]);
     expect(opts.port).toBe(8883);
     expect(opts.state).toBe("C:/p/.claude/concept-active.json");
-    expect(opts.timeout).toBe(8);
+    expect(opts.timeout).toBe(30);   // a slow bridge under load still answers — same as concept-watch.js
   });
 
   test("does not walk the prototype chain", () => {

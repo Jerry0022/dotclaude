@@ -1,8 +1,13 @@
 import { describe, test, expect } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   REQUIRED,
+  ENGINE,
   isConceptHtml,
   findMissing,
+  findStaleEngine,
   findForbidden,
   findStructural,
   evaluate,
@@ -10,6 +15,12 @@ import {
   findMappingIssues,
   findViewOverlap,
 } from "./concept-gate.js";
+
+// The engine-currency markers as one stub — a real page carries them in the
+// Kompass panel skeleton, § Section Navigation JS and § Claude Connection
+// Heartbeat; the gate only greps for the tokens.
+const ENGINE_STUB = `<div class="panel-here"><div id="panel-status"></div></div>
+<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){}</script>`;
 
 // A minimal but valid live-bridge concept page: contains every required
 // marker, no clipboard fallback. Real pages are far larger; the gate only
@@ -23,6 +34,7 @@ const VALID = `<!doctype html><html data-template="decision" data-page-version="
   <div id="connection-status" class="connection-pill" data-state="connecting"></div></div>
 <section data-iteration="1" data-active class="concept-submitted-host"></section>
 <script>function pollHeartbeat(){} async function f(){const r=await fetch('/heartbeat');const d=await r.json();d.claude_ts;}</script>
+${ENGINE_STUB}
 </body></html>`;
 
 // The reported regression: a "copy the JSON, paste into chat" page with no
@@ -710,5 +722,44 @@ describe("findViewOverlap (P31)", () => {
     expect(reason).toMatch(/Orthogonality/);
     expect(reason).toMatch(/P31/);
     expect(reason).not.toMatch(/live-bridge/);
+  });
+});
+
+describe("findStaleEngine — a page whose engine was lifted from an older concept page", () => {
+  // 2026-09-20: a fresh page on plugin 0.180 opened with the September-14
+  // panel (no rounds chip, no viewport toggle, no freeze-aware heartbeat).
+  // The session had read an older page of the same project for reference and
+  // copied its <style>/<script> instead of templates.md. Every REQUIRED
+  // marker was present, so the gate let it through.
+  const OLD_ENGINE = VALID.replace(ENGINE_STUB, "");
+
+  test("the current engine passes; the old engine is flagged with every missing anchor", () => {
+    expect(findStaleEngine(VALID)).toEqual([]);
+    const stale = findStaleEngine(OLD_ENGINE).map(e => e.token);
+    ENGINE.forEach(e => expect(stale).toContain(e.token));
+  });
+
+  test("evaluate() blocks on a stale engine alone, and the reason names the fix", () => {
+    const r = evaluate("docs/concepts/2026-09-20-x.html", OLD_ENGINE);
+    expect(r.ok).toBe(false);
+    expect(r.missing).toEqual([]);
+    expect(r.stale.length).toBe(ENGINE.length);
+    const reason = buildBlockReason("x.html", r.missing, r.forbidden, r.structural, r.mapping, r.overlap, r.stale);
+    expect(reason).toMatch(/STALE ENGINE/);
+    expect(reason).toMatch(/VERBATIM from/);
+    expect(reason).toMatch(/templates\.md/);
+    expect(reason).toMatch(/content references only/);
+  });
+
+  test("every engine anchor exists in templates.md — the list cannot drift from the reference", () => {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const md = fs.readFileSync(path.join(here, "..", "..", "skills", "concept", "deep-knowledge", "templates.md"), "utf8");
+    for (const e of ENGINE) expect(md, e.token).toContain(e.token);
+  });
+
+  test("a partially re-synced page is still stale — one anchor is enough to block", () => {
+    const html = VALID.replace("function recoverFromFreeze(){}", "");
+    expect(findStaleEngine(html).map(e => e.token)).toEqual(["recoverFromFreeze"]);
+    expect(evaluate("docs/concepts/x.html", html).ok).toBe(false);
   });
 });

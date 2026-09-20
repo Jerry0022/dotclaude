@@ -53,7 +53,10 @@ const path = require('path');
 const http = require('http');
 
 const DEFAULTS = {
-  timeout: 8, // seconds per request
+  // Seconds per request. 30, same as concept-watch.js: a bridge on a busy box
+  // answered in 10–20 s, and this tick's relaunch instruction fires on
+  // consecutive misses — a slow answer must count as an answer.
+  timeout: 30,
 };
 
 function parseArgs(argv) {

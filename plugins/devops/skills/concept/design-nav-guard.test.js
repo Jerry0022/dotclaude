@@ -101,6 +101,24 @@ describe("the ☰ nav resolves the active design at click time", () => {
     expect(screenNavHandler(), "showDesign must carry the clicked screen id")
       .toMatch(/showDesign\(d\.dataset\.design,\s*sec\.id\)/);
   });
+
+  test("a click while a view is on screen routes through showDesign too", () => {
+    // Third case, found live: with a view (§ Views (optional)) on the canvas
+    // the hidden design still carries data-design-active="true", so the
+    // `cur === d` branch fires and a bare showScreen() only swaps pages
+    // INSIDE that hidden design — the view stays put and the ☰ row looks
+    // dead. Only showDesign() leaves view mode; the handler must consult
+    // body[data-view-active] and take that branch.
+    const code = screenNavHandler().replace(/\/\/[^\n]*/g, "");
+    expect(code, "the handler must read body.dataset.viewActive")
+      .toMatch(/body\.dataset\.viewActive\s*===\s*'true'/);
+    // The view check must be part of the SAME condition that selects
+    // showDesign(), not a separate early return.
+    const cond = /if\s*\(([^)]*)\)\s*showDesign\(d\.dataset\.design,\s*sec\.id\)/.exec(code);
+    expect(cond, "showDesign must be selected by a single if-condition").not.toBeNull();
+    expect(cond[1], "that condition must include the view-on-screen flag")
+      .toMatch(/viewOnScreen|viewActive/);
+  });
 });
 
 describe("showScreen() never hides every screen", () => {
