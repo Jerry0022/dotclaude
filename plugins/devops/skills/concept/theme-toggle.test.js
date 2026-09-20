@@ -217,3 +217,53 @@ describe("the reference says where the toggle lives and what the default is", ()
     expect(row[0]).not.toContain("#theme-toggle");
   });
 });
+
+describe("the head row carries the round label and the 🕘 chip too — one line, not two", () => {
+  // The user's call (2026-09-20): "Iteration 6" used to sit on its own line
+  // under the ☀️/✕ row, a line of panel height spent on nothing. The label
+  // now takes the left end of the head row; back link + 🕘 chip sit between
+  // it and the theme toggle. Order is the contract: label · right group ·
+  // toggle · ✕.
+  const skeletons = HTML.filter((b) => asideOf(b.code) && asideOf(b.code).includes('id="panel-close"'));
+
+  test("both skeletons: [data-here-round] and .panel-here-right are INSIDE .panel-head, in order", () => {
+    for (const s of skeletons) {
+      const head = /<div class="panel-head">[\s\S]*?<button id="panel-close"[^>]*>✕<\/button>\s*<\/div>/.exec(asideOf(s.code));
+      expect(head, `.panel-head @${s.line}`).toBeTruthy();
+      const h = head[0];
+      const idx = (t) => { const i = h.indexOf(t); expect(i, `${t} in .panel-head @${s.line}`).toBeGreaterThan(-1); return i; };
+      const round = idx("data-here-round");
+      const right = idx('class="panel-here-right"');
+      const chip = idx('id="panel-here-rounds"');
+      const back = idx('id="panel-here-back"');
+      const toggle = idx('id="theme-toggle"');
+      const close = idx('id="panel-close"');
+      expect(round).toBeLessThan(right);
+      expect(right).toBeLessThan(back);
+      expect(back).toBeLessThan(chip);
+      expect(chip).toBeLessThan(toggle);
+      expect(toggle).toBeLessThan(close);
+      // …and #panel-here keeps only the sub-line + the rounds list.
+      const here = /<div class="panel-here" id="panel-here">[\s\S]*?<\/div>\s*<\/div>/.exec(asideOf(s.code));
+      expect(here, `#panel-here @${s.line}`).toBeTruthy();
+      expect(here[0]).not.toContain("data-here-round");
+      expect(here[0]).not.toContain('id="panel-here-rounds"');
+      expect(here[0]).toContain("data-here-section");
+      expect(here[0]).toContain('id="panel-here-rounds-list"');
+    }
+  });
+
+  test("the label is pushed left by its own auto margin; the group keeps margin-left: auto", () => {
+    expect(cssSource).toMatch(/\.panel-head \.panel-here-round \{[^}]*margin-right:\s*auto/);
+    expect(cssSource).toMatch(/\.panel-here-right \{[^}]*margin-left:\s*auto/);
+    // The head row no longer folds into a second line for the label.
+    expect(cssSource).not.toMatch(/\.panel-here \{[^}]*min-height:\s*1\.3em/);
+  });
+
+  test("showIteration finds the label document-wide, not inside #panel-here", () => {
+    const jsSource = BLOCKS.filter((b) => /^(javascript|js)$/.test(b.info)).map((b) => b.code).join("\n");
+    const fn = jsSource.slice(jsSource.indexOf("const here = document.getElementById('panel-here');"));
+    expect(fn.slice(0, 600)).toContain("document.querySelector('[data-here-round]')");
+    expect(fn.slice(0, 600)).not.toContain("here.querySelector('[data-here-round]')");
+  });
+});
