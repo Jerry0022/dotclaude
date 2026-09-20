@@ -430,15 +430,29 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      `node …` invocation is already covered by `Bash(node *)`.
 
    Behaviour is otherwise unchanged: both poll every ~20 s (well under the 90 s
-   threshold), and **tolerate transient blips** — `SERVER_DEAD` only after ≥4
-   consecutive failures, because a single failed request (server busy, a
-   competing request, a duplicate-instance wedge per step 2) must NOT tear a
-   task down, or the page goes stale on every hiccup. Both self-terminate when
-   the state file is gone, its port changed, or the server is truly
-   unreachable, so neither can become a ghost (the `--html` watchdog still
-   backs them up). The exit lines (`PULSER_EXIT reason=…` / `WAKER_EXIT
-   reason=…`) keep their shape, so the reason → action table in SKILL.md Step
-   5d applies verbatim.
+   threshold), and **tolerate a slow or absent bridge** — measured on
+   2026-09-20, a bridge on a machine running four agents and a build took
+   10–20 s per `/heartbeat`, and the old 8 s deadline × 4 turned every such
+   stretch into a `SERVER_DEAD`, a relaunch and a red indicator. Requests now
+   wait up to 30 s (`--timeout`), the **pulser never exits on request
+   failures** while the state file is there (it reconnects when the bridge
+   is back or relaunched on the same port), and the waker reports
+   `SERVER_DEAD` only after `--dead-after` (300 s) of continuous failure.
+   **Cleanup verdicts are debounced** (`--confirm`, 3 polls): the state file
+   and the page are both rewritten mid-session, and on Windows a tmp+rename
+   or an `mv` leaves a window in which the file is not there — one such poll
+   used to make the waker POST `/shutdown` on a live bridge (the journal
+   shows the shutdown/restore pair). A real end still takes the server down
+   within ~1 min. **Two watchers of one kind on one port** find each other through the
+   id echo (`POST /heartbeat?pulser=<id>` → `prev_pulser`,
+   `GET /pending?waker=<id>` → `prev_waker`): the younger pulser exits
+   `DUPLICATE_PULSER`, the OLDER waker exits `DUPLICATE_WAKER` (its owner is
+   the superseded session; two wakers woke two Claudes for one submission) —
+   `ss.concept.resume` re-arms the watchers on every session start, and on
+   Windows the old detached tasks survive it.
+   The exit lines (`PULSER_EXIT reason=…` / `WAKER_EXIT reason=…`) keep
+   their shape, so the reason → action table in SKILL.md Step 5d applies
+   verbatim.
 
    **The waker owns the monitoring duty (#363).** Three things the per-minute
    cron used to carry live in `--mode watch` now, token-free:

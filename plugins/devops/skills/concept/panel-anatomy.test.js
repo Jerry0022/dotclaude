@@ -682,6 +682,11 @@ function page({ tabs = [] } = {}) {
     var _submittedAt = 0;
     var _lastHeartbeatTs = 0, _lastServerTs = 0, _everPolled = false;
     var HEARTBEAT_STALE_MS = 90000, SERVER_STALE_MS = 90000;
+    // Freeze-aware verdict state (§ Claude Connection Heartbeat).
+    var _lastSampleAt = 0, SAMPLE_STALE_MS = 15000, WAKE_GRACE_MS = 45000, _wakeGraceUntil = 0;
+    var _disconnectStreak = 0, _lastState = 'connecting';
+    var recovered = 0;
+    function recoverFromFreeze(now) { recovered++; _wakeGraceUntil = now + WAKE_GRACE_MS; }
     var retried = 0;
     function retryPendingSubmission() { retried++; }
   `;
@@ -767,15 +772,19 @@ describe("panel anatomy — status line behaviour (reference JS on jsdom)", () =
     const btn = p.document.getElementById("submit-iterate-btn");
     btn.disabled = true;
     p.window._lastHeartbeatTs = Date.now();
+    p.window._lastSampleAt = Date.now();
     p.window._everPolled = true;
     p.window.checkClaudeConnection();
     expect(p.document.getElementById("connection-status").dataset.state).toBe("connected");
     expect(p.status()).toBe("submitted");
     expect(btn.disabled, "button handling is skipped while submitted").toBe(true);
     expect(p.window.retried, "the retry stays behind the early return").toBe(0);
-    // …and a stale heartbeat is reflected there too, not frozen at submit time.
+    // …and a stale heartbeat is reflected there too, not frozen at submit time
+    // (a FRESH sample carrying a stale claude_ts, confirmed on a second check).
     p.window._lastHeartbeatTs = Date.now() - 10 * 60 * 1000;
     p.window._lastServerTs = 0;
+    p.window._lastSampleAt = Date.now();
+    p.window.checkClaudeConnection();
     p.window.checkClaudeConnection();
     expect(p.document.getElementById("connection-status").dataset.state).toBe("disconnected");
     expect(p.document.getElementById("connection-status").title).toBe("panel.disconnected_title");
@@ -785,10 +794,88 @@ describe("panel anatomy — status line behaviour (reference JS on jsdom)", () =
     const p = page();
     p.window._everPolled = true;
     p.window._lastHeartbeatTs = Date.now() - 10 * 60 * 1000;
+    p.window._lastSampleAt = Date.now();
+    p.window.checkClaudeConnection();
     p.window.checkClaudeConnection();
     expect(p.status()).toBe("local-only");
     for (const el of p.document.querySelectorAll("[data-cache-hint]")) expect(el.hidden).toBe(false);
     expect(p.document.getElementById("submit-iterate-btn").disabled).toBe(false);
     expect(p.document.getElementById("submit-implement-btn").disabled).toBe(false);
+  });
+});
+
+describe("panel anatomy — freeze-aware connection verdict (the \"connection keeps dropping\" report)", () => {
+  const stale = () => Date.now() - 10 * 60 * 1000;
+
+  test("a sample older than SAMPLE_STALE_MS is a frozen PAGE, not a dead bridge: connecting + recovery, never disconnected", () => {
+    // Edge Sleeping Tabs / PC suspend: on wake the DOM interval fires first,
+    // holding a sample from before the nap. The old checker read its stale
+    // claude_ts as "disconnected" for the 5 s until the worker's next fetch.
+    const p = page();
+    p.window._everPolled = true;
+    p.window._lastHeartbeatTs = stale();
+    p.window._lastSampleAt = Date.now() - 60 * 60 * 1000;    // last sample an hour ago
+    p.window.checkClaudeConnection();
+    expect(p.document.getElementById("connection-status").dataset.state).toBe("connecting");
+    expect(p.window.recovered, "recoverFromFreeze re-polls and opens the grace window").toBe(1);
+    // Still inside WAKE_GRACE_MS with a stale claude_ts → still connecting (the pulser needs a cycle too).
+    p.window._lastSampleAt = Date.now();
+    p.window.checkClaudeConnection();
+    p.window.checkClaudeConnection();
+    expect(p.document.getElementById("connection-status").dataset.state).toBe("connecting");
+    expect(p.status()).not.toBe("local-only");
+  });
+
+  test("a fresh sample with a stale claude_ts needs TWO consecutive checks before it reads disconnected", () => {
+    const p = page();
+    p.window._everPolled = true;
+    p.window._lastHeartbeatTs = stale();
+    p.window._lastSampleAt = Date.now();
+    p.window.checkClaudeConnection();
+    expect(p.document.getElementById("connection-status").dataset.state, "one late pulse is a blip").toBe("connecting");
+    p.window.checkClaudeConnection();
+    expect(p.document.getElementById("connection-status").dataset.state).toBe("disconnected");
+    expect(p.window.recovered, "a fresh sample never triggers freeze recovery").toBe(0);
+  });
+
+  test("a fresh claude_ts clears the streak at once — connected on the very next check", () => {
+    const p = page();
+    p.window._everPolled = true;
+    p.window._lastHeartbeatTs = stale();
+    p.window._lastSampleAt = Date.now();
+    p.window.checkClaudeConnection();
+    p.window.checkClaudeConnection();
+    expect(p.document.getElementById("connection-status").dataset.state).toBe("disconnected");
+    p.window._lastHeartbeatTs = Date.now();
+    p.window.checkClaudeConnection();
+    expect(p.document.getElementById("connection-status").dataset.state).toBe("connected");
+    p.window._lastHeartbeatTs = stale();
+    p.window.checkClaudeConnection();
+    expect(p.document.getElementById("connection-status").dataset.state, "the streak restarted from zero").toBe("connecting");
+  });
+
+  test("a bridge that stays silent past SERVER_STALE_MS after the grace window IS disconnected", () => {
+    // Freeze recovery must not become a permanent excuse: no sample for
+    // longer than the server-stale threshold, grace expired → the warning.
+    const p = page();
+    p.window._everPolled = true;
+    p.window._lastHeartbeatTs = stale();
+    p.window._lastSampleAt = Date.now() - 2 * 90000;
+    p.window._wakeGraceUntil = Date.now() - 1;
+    p.window.recoverFromFreeze = () => {};                     // a recovery that gets no answer
+    p.window.checkClaudeConnection();
+    p.window.checkClaudeConnection();
+    expect(p.document.getElementById("connection-status").dataset.state).toBe("disconnected");
+  });
+
+  test("the reference block declares the freeze machinery the gate (3d) looks for", () => {
+    const block = md.slice(md.indexOf("## Claude Connection Heartbeat"), md.indexOf("## ", md.indexOf("## Claude Connection Heartbeat") + 10));
+    for (const token of ["_lastSampleAt", "SAMPLE_STALE_MS", "WAKE_GRACE_MS", "recoverFromFreeze", "_disconnectStreak", "visibilitychange"]) {
+      expect(block, token).toContain(token);
+    }
+    // The worker can be replaced: startHeartbeatWorker terminates a previous one.
+    expect(fnSource("startHeartbeatWorker")).toContain("terminate()");
+    // Single-flight poll: wake-up paths share one fetch.
+    expect(block).toMatch(/_pollInFlight/);
   });
 });

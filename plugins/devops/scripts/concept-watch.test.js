@@ -13,26 +13,35 @@ function stateFile(contents) {
   return p;
 }
 
-/** Drive run() with fake IO so no sockets, timers, or process.exit are involved. */
-function harness({ mode = "watch", port = 8883, state, responses = [], exists = true, grace = 60, interval }) {
+/** Drive run() with fake IO so no sockets, timers, or process.exit are involved.
+ *  A virtual clock advances with every fake sleep, so `deadAfter` (wall-clock
+ *  seconds) is testable. `stopAfter` ends an otherwise endless loop — the
+ *  pulser never gives up on request failures any more — by reporting the
+ *  state file gone from that poll on (STATE_GONE after `confirm` polls). */
+function harness({ mode = "watch", port = 8883, state, responses = [], exists = true, grace = 60, interval, stopAfter = Infinity, confirm }) {
   const calls = [];
   let reason = null;
+  let clock = 1_000_000;
+  let polls = 0;
   const opts = {
     mode, port, state: state ?? "/fake/concept-active.json", ...DEFAULTS, grace,
     ...(interval === undefined ? {} : { interval }),
+    ...(confirm === undefined ? {} : { confirm }),
   };
   const p = run(opts, {
     exists: () => (typeof exists === "function" ? exists() : exists),
-    sleep: async (ms) => { calls.push({ sleep: ms }); },
+    sleep: async (ms) => { calls.push({ sleep: ms }); clock += ms; },
+    now: () => clock,
     // `state` here is the verdict checkState should return, not a path.
-    checkState: () => state,
+    checkState: () => (++polls > stopAfter ? "gone" : (typeof state === "function" ? state(polls) : state)),
     request: async (_port, reqPath, method) => {
-      calls.push({ reqPath, method });
-      return responses.shift() ?? { ok: false, body: "" };
+      calls.push({ reqPath: reqPath.replace(/\?.*$/, ""), query: reqPath.replace(/^[^?]*\??/, ""), method });
+      const next = typeof responses === "function" ? responses() : responses.shift();
+      return next ?? { ok: false, body: "" };
     },
     emit: (r) => { reason = r; return r; },
   });
-  return { done: p.then(() => reason), calls };
+  return { done: p.then(() => reason), calls, requests: () => calls.filter(c => c.reqPath) };
 }
 
 describe("parseArgs / validate", () => {
@@ -107,17 +116,38 @@ describe("run — waker", () => {
     expect(h.calls.every(c => !c.reqPath || c.reqPath === "/pending")).toBe(true);
   });
 
-  test("tolerates 3 transient failures, gives up on the 4th", async () => {
-    const fail = { ok: false, body: "" };
-    const h = harness({ state: "ok", responses: [fail, fail, fail, fail] });
+  test("gives up only after --dead-after seconds of CONTINUOUS failure, not after 4 misses", async () => {
+    // 4 misses × 20 s is ~80 s: the bridge answered /heartbeat in 10–20 s on
+    // a busy box (2026-09-20) and four such answers in a row are not a dead
+    // process. SERVER_DEAD makes Claude relaunch the bridge, so it must mean
+    // "gone", not "slow".
+    const h = harness({ state: "ok", responses: () => ({ ok: false, body: "" }) });
     await expect(h.done).resolves.toBe("SERVER_DEAD");
+    const polls = h.requests().filter(c => c.reqPath === "/pending").length;
+    expect(polls).toBeGreaterThanOrEqual(DEFAULTS.deadAfter / DEFAULTS.interval);
+    expect(polls).toBeGreaterThan(DEFAULTS.tolerate);
   });
 
-  test("a failure streak is reset by one success", async () => {
+  test("a failure streak is reset by one success — the dead-after clock too", async () => {
     const fail = { ok: false, body: "" };
     const ok = { ok: true, body: '{"pending": false}' };
-    const h = harness({ state: "ok", responses: [fail, fail, fail, ok, fail, { ok: true, body: '{"pending": true}' }] });
+    // 14 misses (280 s) → one answer → 14 more misses must NOT add up to 300 s.
+    const seq = [...Array(14).fill(fail), ok, ...Array(14).fill(fail), { ok: true, body: '{"pending": true}' }];
+    const h = harness({ state: "ok", responses: seq });
     await expect(h.done).resolves.toBe("PENDING_SUBMISSION");
+  });
+
+  test("--dead-after 0 restores the old 4-miss behaviour for a caller that wants it", async () => {
+    const fail = { ok: false, body: "" };
+    const calls = [];
+    let reason = null;
+    await run({ ...DEFAULTS, mode: "watch", port: 8883, state: "/s", deadAfter: 0 }, {
+      exists: () => true, sleep: async () => {}, now: () => 0, checkState: () => "ok",
+      request: async (_p, reqPath) => { calls.push(reqPath); return fail; },
+      emit: (r) => { reason = r; return r; },
+    });
+    expect(reason).toBe("SERVER_DEAD");
+    expect(calls).toHaveLength(DEFAULTS.tolerate);
   });
 
   test("malformed /pending JSON is treated as not-pending, not as a crash", async () => {
@@ -132,11 +162,10 @@ describe("run — waker", () => {
 describe("run — pulser", () => {
   test("POSTs the heartbeat, never GETs anything", async () => {
     const beat = { ok: true, body: "{}" };
-    const fail = { ok: false, body: "" };
-    const h = harness({ mode: "pulse", state: "ok", responses: [beat, beat, fail, fail, fail, fail] });
-    await expect(h.done).resolves.toBe("SERVER_DEAD");
-    const beats = h.calls.filter(c => c.reqPath);
-    expect(beats).toHaveLength(6);
+    const h = harness({ mode: "pulse", state: "ok", responses: [beat, beat, beat], stopAfter: 3 });
+    await expect(h.done).resolves.toBe("STATE_GONE");
+    const beats = h.requests();
+    expect(beats.length).toBeGreaterThanOrEqual(3);
     expect(beats.every(c => c.reqPath === "/heartbeat" && c.method === "POST")).toBe(true);
   });
 
@@ -145,14 +174,56 @@ describe("run — pulser", () => {
     // pending, nothing would keep `claude_ts` warm through a long `implement`
     // and the indicator would go red precisely during implementation.
     const pending = { ok: true, body: '{"pending": true}' };
+    const h = harness({ mode: "pulse", state: "ok", responses: () => pending, stopAfter: 7 });
+    await expect(h.done).resolves.toBe("STATE_GONE");
+    expect(h.requests().filter(c => c.reqPath === "/heartbeat").length).toBeGreaterThanOrEqual(7);
+  });
+
+  test("NEVER exits SERVER_DEAD on request failures — it outlives a slow or restarted bridge", async () => {
+    // 158 PULSER_EXIT reason=SERVER_DEAD lines in the transcripts, every one a
+    // red indicator until someone re-armed the pulser by hand. The bridge is
+    // relaunched on the same port off the waker's verdict; the pulser just
+    // has to still be there when it comes back.
     const fail = { ok: false, body: "" };
+    const beat = { ok: true, body: "{}" };
+    const seq = [...Array(40).fill(fail), beat, beat];
+    const h = harness({ mode: "pulse", state: "ok", responses: seq, stopAfter: 42 });
+    await expect(h.done).resolves.toBe("STATE_GONE");
+    expect(h.requests().length).toBeGreaterThanOrEqual(42);
+    // 40 misses × 20 s = 800 s, well past the waker's 300 s dead-after.
+    const slept = h.calls.filter(c => c.sleep !== undefined).reduce((a, c) => a + c.sleep, 0);
+    expect(slept).toBeGreaterThan(DEFAULTS.deadAfter * 1000);
+  });
+
+  test("carries its id on every POST and yields to an OLDER sibling after 3 echoes", async () => {
+    const older = `${1_000_000 - 5000}-111`;     // started before the harness clock
+    const echo = (prev) => ({ ok: true, body: JSON.stringify({ ok: true, prev_pulser: prev }) });
+    const h = harness({ mode: "pulse", state: "ok", responses: [echo(null), echo(older), echo(older), echo(older)] });
+    await expect(h.done).resolves.toBe("DUPLICATE_PULSER");
+    const posts = h.requests();
+    expect(posts).toHaveLength(4);
+    expect(posts.every(c => /^pulser=\d+-\d+$/.test(c.query))).toBe(true);
+  });
+
+  test("a YOUNGER sibling, a cron tick without an id, or its own echo never make it stop", async () => {
+    const younger = `${1_000_000 + 5000}-222`;
+    const echo = (prev) => ({ ok: true, body: JSON.stringify({ ok: true, prev_pulser: prev }) });
     const h = harness({
-      mode: "pulse",
-      state: "ok",
-      responses: [pending, pending, pending, fail, fail, fail, fail],
+      mode: "pulse", state: "ok", stopAfter: 6,
+      responses: [echo(younger), echo(younger), echo(younger), echo(null), echo(undefined), { ok: true, body: "{}" }],
     });
-    await expect(h.done).resolves.toBe("SERVER_DEAD");
-    expect(h.calls.filter(c => c.reqPath === "/heartbeat")).toHaveLength(7);
+    await expect(h.done).resolves.toBe("STATE_GONE");
+    expect(h.requests().length).toBeGreaterThanOrEqual(6);
+  });
+
+  test("an older sibling must be named on 3 CONSECUTIVE echoes — a tick in between resets", async () => {
+    const older = `${1_000_000 - 5000}-111`;
+    const echo = (prev) => ({ ok: true, body: JSON.stringify({ ok: true, prev_pulser: prev }) });
+    const h = harness({
+      mode: "pulse", state: "ok", stopAfter: 5,
+      responses: [echo(older), echo(older), echo(null), echo(older), echo(older)],
+    });
+    await expect(h.done).resolves.toBe("STATE_GONE");
   });
 });
 
@@ -280,7 +351,7 @@ describe("run — waker owns cleanup, liveness and the structured exit (#363)", 
       readState: () => ({ port: 8883, html_path: html }),
       reopen: (url) => { calls.push({ reopen: url }); },
       request: async (_port, reqPath, method) => {
-        calls.push({ reqPath, method });
+        calls.push({ reqPath: reqPath.replace(/\?.*$/, ""), method });
         return responses.shift() ?? { ok: false, body: "" };
       },
       emit: (reason, detail = "") => { exit = reason + detail; return reason; },
@@ -300,24 +371,62 @@ describe("run — waker owns cleanup, liveness and the structured exit (#363)", 
   });
 
   test.each([["gone", "STATE_GONE"], ["port-changed", "PORT_CHANGED"], ["html-gone", "HTML_GONE"]])(
-    "cleanup verdict %s → POST /shutdown, then exit %s",
+    "cleanup verdict %s, held for --confirm polls → POST /shutdown, then exit %s",
     async (verdict, reason) => {
-      const w = watcher({ state: verdict });
+      const w = watcher({ state: verdict, responses: [idle(1), idle(1)] });
       await expect(w.done).resolves.toBe(reason);
-      expect(w.calls).toEqual([{ reqPath: "/shutdown", method: "POST" }]);
+      // Two ordinary polls while the verdict is being confirmed, then the
+      // shutdown — never the shutdown on the first sighting.
+      expect(w.calls.filter(c => c.reqPath === "/pending")).toHaveLength(DEFAULTS.confirm - 1);
+      expect(w.calls.at(-1)).toEqual({ reqPath: "/shutdown", method: "POST" });
     }
   );
+
+  test("a cleanup verdict on ONE poll is a rewrite window, not the end of the concept", async () => {
+    // Claude rewrites the state file (baseline capture) and the page (every
+    // round) mid-session; on Windows tmp+rename / mv leave a moment where
+    // existsSync says no. That moment used to shut a live bridge down —
+    // journal: shutdown/restore pairs minutes apart, page red in between.
+    const verdicts = ["gone", "ok", "html-gone", "html-gone", "ok", "gone", "port-changed", "gone", "ok"];
+    const w = watcher({
+      state: () => verdicts.shift() ?? "ok",
+      responses: [...Array(9).fill(idle(1)), { ok: true, body: '{"pending": true, "version": 1, "browser_ts": 1}' }],
+    });
+    await expect(w.done).resolves.toBe("PENDING_SUBMISSION version=1");
+    expect(w.calls.some(c => c.reqPath === "/shutdown")).toBe(false);
+  });
 
   test("the pulser never shuts the bridge down — cleanup is the waker's job", async () => {
     const calls = [];
     let reason = null;
     await run({ mode: "pulse", port: 8883, state: "/proj/.claude/concept-active.json", ...DEFAULTS }, {
       exists: () => true, sleep: async () => {}, checkState: () => "gone",
-      request: async (_p, reqPath, method) => { calls.push({ reqPath, method }); return { ok: true, body: "" }; },
+      request: async (_p, reqPath, method) => { calls.push({ reqPath: reqPath.replace(/\?.*$/, ""), method }); return { ok: true, body: "" }; },
       emit: (r) => { reason = r; return r; },
     });
     expect(reason).toBe("STATE_GONE");
-    expect(calls).toEqual([]);
+    expect(calls.every(c => c.reqPath === "/heartbeat")).toBe(true);
+  });
+
+  test("polls /pending with its waker id; the OLDER waker yields to a younger one (DUPLICATE_WAKER)", async () => {
+    // Two wakers = two wakes for one submission (seen: two PENDING_SUBMISSION
+    // lines 4 s apart). The younger belongs to the session that re-armed, so
+    // the OLDER one is the ghost — and it must not POST /shutdown on its way
+    // out: the bridge is the younger one's now.
+    const younger = `${1_000_000 + 5000}-222`;
+    const echo = (prev) => ({ ok: true, body: JSON.stringify({ pending: false, browser_ts: 1, prev_waker: prev }) });
+    const w = watcher({ responses: [echo(null), echo(younger), echo(younger), echo(younger)] });
+    await expect(w.done).resolves.toBe("DUPLICATE_WAKER");
+    expect(w.calls.some(c => c.reqPath === "/shutdown")).toBe(false);
+    expect(w.calls.filter(c => c.reqPath === "/pending")).toHaveLength(4);
+  });
+
+  test("a waker never yields to an OLDER sibling, and a pending submission outranks the duplicate check", async () => {
+    const older = `${1_000_000 - 5000}-111`;
+    const younger = `${1_000_000 + 5000}-222`;
+    const echo = (prev, pending = false) => ({ ok: true, body: JSON.stringify({ pending, version: 3, browser_ts: 1, prev_waker: prev }) });
+    const w = watcher({ responses: [echo(older), echo(older), echo(older), echo(younger), echo(younger), echo(younger, true)] });
+    await expect(w.done).resolves.toBe("PENDING_SUBMISSION version=3");
   });
 
   test("checkState: a state file whose html_path is gone → html-gone (watch mode only)", () => {
@@ -396,7 +505,7 @@ describe("run — liveness tells a hidden tab from a closed one (#397)", () => {
       readState: () => ({ port: 8883, html_path: html }),
       reopen: (url) => { calls.push({ reopen: url }); },
       request: async (_port, reqPath, method) => {
-        calls.push({ reqPath, method });
+        calls.push({ reqPath: reqPath.replace(/\?.*$/, ""), method });
         const next = responses.shift();
         return typeof next === "function" ? next(clock) : (next ?? { ok: false, body: "" });
       },

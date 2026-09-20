@@ -13099,6 +13099,18 @@ right the page must (a) identify itself, (b) keep polling while hidden, and
   tab from a throttled or sleeping one, and it is what lets the waker act
   within a minute of a real close instead of guessing from silence.
 
+**Freeze-aware verdict.** The checker looks at the age of the last *sample*
+before it looks at `claude_ts`. A page that was frozen — Edge Sleeping Tabs
+or efficiency mode, a PC suspend, a worker that died without `onerror` —
+wakes up holding a sample from before the nap, and judging `claude_ts` from
+it painted "Nur lokal gespeichert · getrennt" on every return to the tab
+(the reported "connection keeps dropping"). `recoverFromFreeze` re-polls at
+once, replaces a worker that stayed silent for a minute, and opens a
+`WAKE_GRACE_MS` window in which a stale `claude_ts` reads "connecting" —
+the pulser's timers were suspended with the machine and need one cycle too.
+"disconnected" is painted only after two consecutive stale evaluations, so a
+single late pulse from a busy bridge is a blip, not a warning.
+
 ```javascript
 const HEARTBEAT_STALE_MS = 90000;  // claude_ts older than this → nothing is pulsing
 const SERVER_STALE_MS    = 90000;  // server_ts older than this → bridge process down
@@ -13113,6 +13125,23 @@ let _lastServerTs    = 0;
 // connect flash: before the first poll lands, _lastServerTs is still 0, so the
 // old code mis-classified the unknown window as a dead bridge.
 let _everPolled      = false;
+// Wall-clock time the last /heartbeat SAMPLE arrived (worker or main thread)
+// — as opposed to what the sample said. A gap here means this page was not
+// running: Edge put the tab to sleep, the PC suspended, or the worker died.
+// None of those is a dead bridge, and the verdict must not say so from a
+// sample that predates the gap (see checkClaudeConnection).
+let _lastSampleAt    = 0;
+const SAMPLE_STALE_MS = 15000;   // > 3 worker ticks without a sample → we were frozen
+// After a detected freeze the pulser needs one cycle of its own to catch up
+// (its timers were suspended with the machine), so a stale claude_ts inside
+// this window is "connecting", not "disconnected".
+const WAKE_GRACE_MS   = 45000;
+let _wakeGraceUntil   = 0;
+// A single stale evaluation never paints the warning: the line flips to
+// "getrennt" only when two consecutive checks (≥ 5 s apart) agree.
+let _disconnectStreak = 0;
+let _lastState        = 'connecting';
+let _pollInFlight     = null;
 
 // Per-load tab identity (#397). Rides on every browser-only poll as
 // `?tab=<id>` so the bridge can tell two tabs apart and notice when THIS one
@@ -13139,13 +13168,22 @@ function applyHeartbeat(data) {
   // bootstrap path is inert and behavior falls back to the old timing.
   _lastServerTs = data.server_ts || 0;
   _everPolled = true;   // we now have real evidence of the bridge state
+  _lastSampleAt = Date.now();
 }
 
-async function pollHeartbeat() {
-  try {
-    const res = await fetch('/heartbeat' + _tabQuery, { cache: 'no-store' });
-    applyHeartbeat(await res.json());
-  } catch (e) { /* server unreachable — leave _everPolled unchanged */ }
+// Single-flight: a wake-up can fire the visibility handler, the main-thread
+// interval and the worker's first message within the same second — one poll
+// answers all of them.
+function pollHeartbeat() {
+  if (_pollInFlight) return _pollInFlight;
+  _pollInFlight = (async () => {
+    try {
+      const res = await fetch('/heartbeat' + _tabQuery, { cache: 'no-store' });
+      applyHeartbeat(await res.json());
+    } catch (e) { /* server unreachable — leave _everPolled unchanged */ }
+    finally { _pollInFlight = null; }
+  })();
+  return _pollInFlight;
 }
 
 // The heartbeat poll lives in a dedicated Worker (#397). A hidden tab's DOM
@@ -13158,6 +13196,7 @@ async function pollHeartbeat() {
 let _hbWorker = null;
 function startHeartbeatWorker() {
   try {
+    if (_hbWorker) { try { _hbWorker.terminate(); } catch (e) {} _hbWorker = null; }
     const url = JSON.stringify(location.origin + '/heartbeat' + _tabQuery);
     const src = 'const u=' + url + ';async function p(){try{const r=await fetch(u,{cache:"no-store"});postMessage(await r.json())}catch(e){}}p();setInterval(p,5000);';
     const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
@@ -13166,6 +13205,24 @@ function startHeartbeatWorker() {
     _hbWorker = w;
     return true;
   } catch (e) { _hbWorker = null; return false; }
+}
+
+// Called from every wake-up path (visibility, main-thread tick, worker
+// message) when the last sample is older than the worker's cadence allows:
+// re-poll NOW instead of waiting for the next tick, and open the grace
+// window so the verdict reads "connecting" until the pulser has had its
+// turn. A worker that has been silent for a minute is not trusted to come
+// back — it is replaced.
+let _lastRecoverAt = 0;
+function recoverFromFreeze(now) {
+  // Rate-limited: a bridge that is really unreachable makes every poll fail,
+  // and each failed poll ends in checkClaudeConnection — without this guard
+  // that would be a tight poll loop.
+  if (now - _lastRecoverAt < SAMPLE_STALE_MS) return;
+  _lastRecoverAt = now;
+  if (now - _lastSampleAt > 60000) startHeartbeatWorker();
+  _wakeGraceUntil = now + WAKE_GRACE_MS;
+  pollHeartbeat().then(checkClaudeConnection);
 }
 
 // Unload beacon (#397). `pagehide` with `persisted === false` is the one
@@ -13322,9 +13379,39 @@ function checkClaudeConnection() {
   //       POST flips us to connected.
   const bootstrapping = !_everPolled || ((_lastHeartbeatTs === 0) && serverAlive);
 
-  const state = isConnected ? 'connected'
-              : bootstrapping ? 'connecting'
-              : 'disconnected';
+  // Freeze detection. Every one of these was reported as "die Verbindung
+  // bricht dauernd ab" and none of them was a dead bridge:
+  //   - Edge Sleeping Tabs / efficiency mode froze this page (worker
+  //     included); on return the DOM interval fires FIRST, with a sample
+  //     from before the nap, and read a stale claude_ts as "disconnected"
+  //     for the 5 s until the worker's next fetch;
+  //   - the PC slept: same thing, plus the pulser's own timers were
+  //     suspended, so even a fresh sample shows a stale claude_ts for up to
+  //     one pulser cycle (20 s) after wake;
+  //   - the worker died silently (no onerror): the main-thread fallback
+  //     never engaged because _hbWorker was still set.
+  // A sample older than SAMPLE_STALE_MS is evidence about THIS PAGE, not the
+  // bridge: re-poll now, replace a worker that stayed silent, and hold
+  // "connecting" through WAKE_GRACE_MS. Only a bridge that stays silent past
+  // SERVER_STALE_MS after that is "disconnected".
+  const sampleAge = _everPolled ? (now - _lastSampleAt) : 0;
+  const frozen = _everPolled && sampleAge > SAMPLE_STALE_MS;
+  if (frozen) recoverFromFreeze(now);
+  const inGrace = now < _wakeGraceUntil;
+  const unreachable = _everPolled && sampleAge > SERVER_STALE_MS && !inGrace;
+
+  let state = isConnected ? 'connected'
+            : (bootstrapping || ((frozen || inGrace) && !unreachable)) ? 'connecting'
+            : 'disconnected';
+  // Two-strike rule: a stale verdict has to repeat on the next evaluation
+  // (≥ 5 s later) before the warning paints. One late pulse — the bridge
+  // answering a heartbeat in 12 s because the machine is busy — is a blip.
+  if (state === 'disconnected' && ++_disconnectStreak < 2) {
+    state = _lastState === 'connected' ? 'connecting' : _lastState;
+  } else if (state !== 'disconnected') {
+    _disconnectStreak = 0;
+  }
+  _lastState = state;
 
   const pill = document.getElementById('connection-status');
   const btns = ['submit-iterate-btn', 'submit-implement-btn']
@@ -13365,6 +13452,15 @@ function checkClaudeConnection() {
 // notices the bootstrap at all.
 pollHeartbeat().then(checkClaudeConnection);
 startHeartbeatWorker();
+
+// Coming back to the tab is the moment the user looks at the status line —
+// and, after a nap, the moment the stale-sample verdict would have shown.
+// Poll first, judge second. Both paths go through checkClaudeConnection,
+// which handles the frozen case itself; this only shortens the wait.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  pollHeartbeat().then(checkClaudeConnection);
+});
 
 // Main-thread cadence. When the worker is alive it owns the /heartbeat fetch
 // (unthrottled in a hidden tab); this loop then only re-evaluates the verdict
