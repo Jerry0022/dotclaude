@@ -364,6 +364,26 @@ state input or a control. Field table and grammar:
 
 Build a single self-contained HTML file. Requirements:
 
+### Engine source (mandatory — templates.md, never an older page)
+
+The page's **engine** — the Kompass panel skeleton, § Layout CSS, § Section
+Navigation JS, § Claude Connection Heartbeat, § Two-Button Submit, § State
+Persistence, § Attachments, the viewport switcher — is copied **verbatim from
+`deep-knowledge/templates.md` of the plugin running this session**, every
+time a page is generated. Older concept pages in `docs/concepts/` (this
+project's or any other) are **content references only**: read them for
+tone, tokens, the project's CSP line and how a mockup was built — never lift
+their `<style>`, `<script>` or panel markup. A page assembled that way opens
+with whatever engine that older page had on the day it was generated (seen
+2026-09-20: a fresh page on the current plugin with a months-old panel — no
+rounds chip, no viewport toggle, no freeze-aware heartbeat), and every fix
+shipped since is silently missing. `post.concept.gate` blocks such a page as
+**STALE ENGINE** (engine-currency markers, `hooks/lib/concept-gate.js`
+`ENGINE`); the fix is to re-sync the whole engine from templates.md, not to
+add the missing tokens by hand. `scripts/build-concept-fixture.js` assembles
+an engine-current skeleton from templates.md when a starting point is
+wanted.
+
 ### Localisation (mandatory — do NOT hard-code German/English)
 
 Read the `[ui-locale: xx]` hint injected by `prompt.knowledge.dispatch`. If

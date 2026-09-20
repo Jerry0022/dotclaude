@@ -23,6 +23,8 @@ const page = extra => `<!doctype html><html data-template="free">
   <div id="connection-status" data-state="connecting"></div></div>
 ${extra}
 <script>function pollHeartbeat(){}</script>
+<div class="panel-here"><div id="panel-status"></div></div>
+<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){}</script>
 </body></html>`;
 
 const spec = extra => JSON.stringify({

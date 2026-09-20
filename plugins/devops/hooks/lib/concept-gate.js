@@ -32,6 +32,27 @@ const REQUIRED = [
   { token: 'connection-status', why: 'inline connection status pill (connecting / connected / disconnected)' },
 ];
 
+// Engine-currency markers (#engine-drift). Every one of these lives in the
+// SHARED engine of templates.md — the Kompass panel skeleton, § Section
+// Navigation JS and § Claude Connection Heartbeat — so a page generated from
+// the current reference carries all of them whatever its template. A page
+// missing them was not generated from templates.md at all: its engine was
+// copied from an OLDER concept page of the same project (seen 2026-09-20 —
+// a fresh page on plugin 0.180 with the September-14 panel, no rounds chip,
+// no viewport toggle, no freeze-aware heartbeat; the session had read the
+// old page for reference and lifted its <style>/<script> wholesale).
+// SKILL.md Step 2 forbids exactly that; this is the deterministic backstop.
+// `concept-gate.test.js` asserts every token here is present in templates.md,
+// so the list cannot drift ahead of (or behind) the reference.
+const ENGINE = [
+  { token: 'panel-here', why: 'Kompass panel head (rounds chip + section list) — § Common Structure' },
+  { token: 'panel-status', why: 'pinned status line — § Panel anatomy' },
+  { token: 'renderPanelStatus', why: 'status-line renderer — § Claude Connection Heartbeat' },
+  { token: 'buildRoundsChip', why: 'rounds chip builder — § Section Navigation JS' },
+  { token: 'buildIterationTree', why: 'section list builder — § Section Navigation JS' },
+  { token: 'recoverFromFreeze', why: 'freeze-aware connection verdict — § Claude Connection Heartbeat (gate 3d)' },
+];
+
 // Clipboard / paste-into-chat submit anti-patterns. A valid live-bridge
 // concept page never copies anything to the clipboard, so any match here is
 // the exact regression the user reported.
@@ -66,6 +87,12 @@ function isConceptHtml(filePath, html) {
     /data-template=["'](decision|prototype|free)["']/.test(body) ||
     body.includes('submit-iterate-btn')
   );
+}
+
+/** Engine-currency markers absent from the html (see ENGINE). */
+function findStaleEngine(html) {
+  const body = html || '';
+  return ENGINE.filter(e => !body.includes(e.token));
 }
 
 /** Required markers absent from the html. */
@@ -525,26 +552,28 @@ function findViewOverlap(html) {
  */
 function evaluate(filePath, html) {
   if (!isConceptHtml(filePath, html)) {
-    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [], overlap: [] };
+    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [], overlap: [], stale: [] };
   }
   const missing = findMissing(html);
   const forbidden = findForbidden(html);
   const structural = findStructural(html);
   const mapping = findMappingIssues(html);
   const overlap = findViewOverlap(html);
+  const stale = findStaleEngine(html);
   return {
     applicable: true,
-    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0 && overlap.length === 0,
+    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0 && overlap.length === 0 && stale.length === 0,
     missing,
     forbidden,
     structural,
     mapping,
     overlap,
+    stale,
   };
 }
 
 /** Build the blocking feedback shown to Claude (stderr, exit 2). */
-function buildBlockReason(filePath, missing, forbidden, structural, mapping, overlap) {
+function buildBlockReason(filePath, missing, forbidden, structural, mapping, overlap, stale = []) {
   missing = missing || [];
   forbidden = forbidden || [];
   structural = structural || [];
@@ -608,6 +637,19 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
     missing.forEach(m => lines.push(`  - ${m.token} — ${m.why}`));
     lines.push('');
   }
+  if (stale.length) {
+    lines.push('STALE ENGINE — this page was not generated from the current templates.md:');
+    stale.forEach(e => lines.push(`  - ${e.token} — ${e.why}`));
+    lines.push('');
+    lines.push('Its <style>/<script>/panel were lifted from an OLDER concept page (or an older');
+    lines.push('plugin). Older pages in docs/concepts/ are content references only — the engine');
+    lines.push('(panel skeleton, § Layout CSS, § Section Navigation JS, § Claude Connection');
+    lines.push('Heartbeat, § Two-Button Submit, § State Persistence) is copied VERBATIM from');
+    lines.push('deep-knowledge/templates.md of the plugin running THIS session, every time.');
+    lines.push('Re-sync the whole engine from templates.md now (SKILL.md Step 2 § Engine source),');
+    lines.push('keep the content sections, re-write the file.');
+    lines.push('');
+  }
   lines.push('The concept flow requires the LIVE bridge: a persistent decision panel whose');
   lines.push('"Zur nächsten Iteration" / "Mit Feedback implementieren" buttons POST to the');
   lines.push('bridge server (monitored via heartbeat + cron). A "copy the JSON and paste it');
@@ -625,9 +667,11 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
 
 module.exports = {
   REQUIRED,
+  ENGINE,
   FORBIDDEN,
   isConceptHtml,
   findMissing,
+  findStaleEngine,
   findForbidden,
   findStructural,
   findMappingIssues,
