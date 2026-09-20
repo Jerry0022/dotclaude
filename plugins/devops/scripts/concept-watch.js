@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script concept-watch
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description The concept bridge's two detached watchers, as a script instead
  *   of a shell loop pasted into three documents.
