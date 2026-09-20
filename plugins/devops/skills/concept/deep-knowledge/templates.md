@@ -4037,8 +4037,16 @@ change) via `harvestDockValues()`.
           // the ghost bar is used — and a stale `d === active` sends a
           // FOREIGN screen id into showScreen(), which then hides every
           // screen of the design actually on the canvas (blank page).
+          // A VIEW on screen (§ Views (optional)) is the third case: the
+          // design still carries data-design-active="true" as its own
+          // "last shown page" memory, so `cur === d` reads true and a bare
+          // showScreen() would only swap pages INSIDE the hidden design —
+          // the view stays on the canvas and the click looks dead. Only
+          // showDesign() leaves view mode, so route through it whenever a
+          // view is what is actually visible.
           const cur = activeDesign();
-          if (!cur || cur.dataset.design !== d.dataset.design) showDesign(d.dataset.design, sec.id);
+          const viewOnScreen = document.body.dataset.viewActive === 'true';
+          if (viewOnScreen || !cur || cur.dataset.design !== d.dataset.design) showDesign(d.dataset.design, sec.id);
           else showScreen(sec.id);
           closePanel();
         });
