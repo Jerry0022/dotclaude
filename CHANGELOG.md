@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.180.0] — 2026-09-20
+
+### Added
+
+- **`/concept`: cross-cutting views never re-ask the design choice, component questions go on the mock, and the feedback dock stops below the ☰ FAB.** Observed on a mixed concept: the `decision` views after the design variants recapped how the variants differed and effectively voted for or against them — the verdict the 💬 dock's per-design notes already collect; component-level questions (this header, that list) were lifted into views as well. Three rules, one gate. (1) **Orthogonality** (Step 1a, mirrored in templates.md § Views and the mixed-mode split): a `decision` / `comparison` view — and the `decision` round that follows a design round — asks something whose answer holds whichever design wins; never the designs or their distinguishing traits as alternatives, no for/against prose, no pre-decided default. Gate **P31** enforces the literal form deterministically (`findViewOverlap()` in `concept-gate.js`, wired into the post-write hook): an alternative whose `data-label` (fallback: first `h2`/`h3`) equals a design's `data-nav-label` or id of the same iteration blocks the write with its own reason block; paraphrases stay the manual sweep's job. (2) **Component questions are annotations** — pinned onto the element with leader line + answer field, top 3 to top 7 per design (count preference in Step 0.5); views are for general questions only. (3) **Dock ceiling**: the open dock grew over the ☰ FAB on tall viewports (dock z-index 180 vs FAB 100, `80vh` cap), so the menu was unreachable while the dock was open. `--dock-ceiling` (viewport − ☰ band − dock bottom offset) bounds every dock size, the ☰ FAB sits at z-index 220, and the existing `openPanel → closeDock(true)` hand-off is pinned as gate **P13e** — an engine-drift entry, so an existing page gets the ceiling on its next iteration append. 7 gate tests, 5 chrome tests, the compact-fit tests read the ceiling form. Not covered by Codex review — external usage limit until 2026-10-11; full suite 144 files / 3491 green (one earlier run had a single load-flake in `git-sync.*`, rerun green); `ship_build` ran the five concept/gate suites (159) under its 120-s ceiling.
+
 ## [0.179.0] — 2026-09-20
 
 ### Added
