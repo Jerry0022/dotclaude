@@ -1,0 +1,261 @@
+# Completion Card — Design Specification (v2, "one page, three lines, one decision")
+
+Single source of truth for how a completion card looks and reads, on every
+client, for every variant. Decided on the concept page
+`docs/concepts/2026-09-20-completion-card-one-page.html` (11 rounds,
+2026-09-20). The renderer (`mcp-server/index.js`), the Desktop widget
+(`mcp-server/lib/card-widget.js`), the guards (`hooks/lib/card-guard.js`,
+`hooks/stop/stop.flow.guard.js`) and the session-title hook implement this
+document; when they disagree with it, this document wins.
+
+## 1. Why
+
+The old card had to be scrolled to be read: a `Changes` block with file
+names, a `Geprüft` block with five checkmarks, `⚠ OFFEN` in the middle,
+the usage meter between body and footer, a build line, a state line, a CTA
+heading — and buttons *above* it all. At the end nobody read more than
+three lines, and those were technical. The new card is built for the reader:
+one page, three result lines that answer the prompt, one decision.
+
+## 2. Anatomy (top to bottom)
+
+Two visual blocks. Nothing between them, nothing under the second one.
+
+```
+&nbsp;
+---
+### **✨✨✨ {title} ✨✨✨**                 ← markdown, every client (card-guard marker)
+› result line 1                            ┐
+› result line 2                            │  Block 1 · "what happened"
+› result line 3                            │  (Desktop: soft panel, no border)
+✓ 3/3 Anforderungen  ✓ 3464 Tests grün  ✓ 4 Live-Checks ok     ← evidence row
+5h [time bar | usage marker] 3 h 39 m   Wk [...] 6 d 20 h   🧠 1180 Calls · /compact
+○ commit → ○ push → ○ PR → ○ merge · branch · Build 176c57d       ┘
+## 📦 {decision as a question}?            ┐
+› one context line (optional)              │  Block 2 · "what to decide"
+1. reservation / test step                 │  (Desktop: box with accent border)
+2. reservation / test step                 │
+[Ship ↗] [Ändern ↗]                        ┘  (Desktop widget only; terminal: nothing)
+---
+```
+
+### 2.1 Title
+
+- `### **✨✨✨ … ✨✨✨**` stays exactly as today — it is the marker the card-guard
+  detects. Bold H3.
+- Content: the **outcome** of the turn, ≤ 60 chars. Never status ("agents
+  running", "waiting", "pending", "noch nicht") — status belongs in the
+  decision heading. Never a version or pipeline word ("gemergt", "shipped").
+- When something was NOT achieved the title says so: "… — Resume-Pfad noch offen".
+
+### 2.2 Result lines (`›`)
+
+- **Max three**, each ≤ 120 chars, written as `› ` + text (no bullets, no
+  blockquote). A fourth line becomes `+1 weitere` on the last line, never dropped silently.
+- Each line names an **effect for the user**, never a file, function or hook
+  as subject. Names may appear as `code` at the END of a line
+  ("… steht als `stale`"). "budget.js → Refresh-Zyklus" is forbidden.
+- Wording by intent class: Feature → new behaviour · Fix → symptom gone, cause
+  in a half-sentence · Analysis → finding + recommendation · Ship → what is
+  live where.
+- **A deviation is line 1**, bright, prefixed `**Nicht erreicht:**` /
+  `**Not achieved:**` (red tests, unbuilt part, cut scope, aborted reason).
+  Never hidden in the evidence row, never parked as an open point.
+- The `Changes` block is gone. On Desktop the app shows the file list itself;
+  in the terminal the pipeline line (branch, build) is enough. Files are
+  never listed on the card.
+
+### 2.3 Evidence row
+
+Always the same three posts, always in this order, one row, two spaces
+between posts, no `·` separators:
+
+| Slot | Post | Source | Text pattern (number + noun + state) |
+|---|---|---|---|
+| 1 | Requirements | `validation[]` | `✓ 3/3 Anforderungen` · `◐ 2/3 Anforderungen` · `✗ 1/3 unerfüllt` |
+| 2 | Tests | `tests[]` (test/lint/build/typecheck entries) | `✓ 3464 Tests grün` · `✗ 2 Tests rot` · `⏭ 3 übersprungen` folded into the tooltip |
+| 3 | Live check | `tests[]` entry with real data / browser | `✓ 4 Live-Checks ok` · `◐ Overlay: nicht live geprüft` — after a ship: `✓ PR #416 → main` |
+
+- **Deviations first, bright:** a `✗` or `◐` post moves to the front of the
+  row regardless of slot. Green posts are dim.
+- **Deviation-only posts** exist only when they have a finding, and go in
+  front: `🧹 3 Warnungen` (lint), `🏗 tsc 1 Fehler` (build), `👁 Review
+  übersprungen — Limit` (second opinion), `⚠ ungeprüft — kein Test lief`
+  (the V&V stamp, replaces the old block under the title). A green lint /
+  build / review is never shown — what is not there was fine.
+- Glyphs are **monochrome text**, never emoji: `✓` met · `✗` failed · `◐`
+  partial · `○` open · `●` done · `⏭` skipped. Emoji only for the three
+  warning signs (§ 6).
+- Released cards: slot 1–3 become the promotion facts (`✓ Tags beta/v0.179.0
+  · v0.179.0`, `✓ bit-identisch mit alpha`, `✓ GitHub-Release` on stable).
+- Analysis cards: `✓ 12 Dateien gelesen`, `✓ 3 Befunde belegt`.
+- Widget: each post has a tooltip (after ~600 ms hover) with the details
+  (`144 Dateien · 3 übersprungen · 0 rot · 41 s`; the four live checks by name).
+
+### 2.4 Budget line
+
+Replaces the fenced meter. Same position (under the evidence row).
+
+- **Bar = elapsed time of the window, marker = usage.** Fill colour is the
+  accent lilac (`#4a5384` on the widget), track `#2b2d3a`. The marker is a
+  3 px bar, taller than the track (−6 px top/bottom), drawn above every label.
+- Marker colour by `usage − time` in percentage points: ≤ 10 white · ≤ 25
+  yellow (`#e6c36a`) · > 25 red (`#e07a7a`). The track never changes colour.
+- Remaining time as a **watermark** inside the track, right-aligned, dim
+  (`#7d84a8`), 10 px: `3 h 39 m` / `6 d 20 h`.
+- Labels `5h` / `Wk` before each bar; nothing after the bar. Percent, delta
+  since last card, "über Plan", reset clock — all in the bar's tooltip:
+  `35 % verbraucht · 27 % der Zeit um · 8 % über Plan · Reset 14:39 (in 3 h 39 m) · +2 % diese Runde`.
+- A light band (38 px, 18 % white) sweeps once every 4 s across the **filled
+  part only**; disabled under `prefers-reduced-motion`.
+- **Omitted entirely** while both windows are < 50 % and > 1 h from reset.
+- Terminal / markdown fallback: `5h ▰▰▰▰▰▰▰│▱▱▱▱▱▱ 3 h 39 m   Wk ▰▰│▱▱▱▱▱▱ 6 d 20 h`
+  (▰ = time, │ = usage); a yellow/red condition is written as a leading `⚠`.
+- Context health: from the tool-call threshold on, `🧠 1180 Calls · /compact`
+  sits dim at the right end of the budget line. Below the threshold nothing.
+
+### 2.5 Pipeline line ("where it lies")
+
+Dim, small, last line of block 1. Glyph BEFORE the step. Plain text — no
+code spans (they would be red on Desktop). Names in the accent lilac on the widget.
+
+```
+○ commit → ○ push → ○ PR → ○ merge · claude/devops-agent-usage-refresh-263640 · Build 176c57d
+✓ commit → ✓ push → ✓ PR #416 → ✓ merge   main → ✓ alpha → ○ beta → ○ stable · v0.179.0 · Build a91c3e2
+```
+
+- `○` open, `✓` done, both grey. After `merge` an em-gap, then the base branch.
+- Ring projects continue the line with the channels (`→ ✓ alpha → ○ beta →
+  ○ stable`). **This replaces the Delivery block / ladder.** The distance to
+  the next channel ("alpha liegt 3 Versionen / 5 Tage vor beta") is the
+  context line under the decision heading.
+- `#416` is a quiet link on the widget: no colour, underline on hover only.
+- `ready-files`: `📂 9 Dateien geändert · kein Repo · H:\notes\budget`.
+- `analysis` / no changes: `➖ keine Änderungen im Repo · branch`.
+- The variant-guard downgrade note ("ship-successful → ready, weil …") is a
+  `›` context line under the decision heading, not a block.
+
+### 2.6 Decision block
+
+- **Heading = the decision as a question**, H2, with the variant's emoji.
+  Derived from the most important reservation: `📦 Shippen trotz fremdem
+  Testfehler?`; without reservations `📦 Shippen?`. It ends with `?` (the
+  stop-hook checks that) — **except when there is nothing to decide**: then
+  it is a state ending in `.` and there are no buttons (`🎊 Released v0.179.0
+  LIVE.`, `📂 Fertig auf der Platte — noch etwas?` keeps the question form
+  because "noch etwas" is one).
+- Verb first after a ship/promotion: `🚀 Released v0.179.0 alpha — nach beta
+  promoten?`, `🎊 Promoted v0.179.0 BETA — nach stable?`, `🎊 Released
+  v0.179.0 LIVE — stable.` (channel word in CAPS for visibility; 🎊 for both
+  beta and stable; alpha keeps 🚀).
+- Optional **context line** `› …` directly under the heading, before the
+  points (promote distance, alternatives after an abort, guard notes).
+- **Points list**: numbered, max 3, marker in the accent colour. Contents in
+  order: open reservations (`open`), then manual test steps (`userTest`,
+  `userFinalTest`) prefixed `🧪` when the list mixes both, then deploy-gate
+  artifacts on a deploy card. More than three → `+N weitere` appended to the
+  heading and the rest written in the answer text above the card.
+- **Buttons** (Desktop widget only, hidden in the terminal): the two verbs
+  of the variant, primary first; each has a tooltip explaining what it
+  triggers (`Fix` → "Ich repariere die zwei Tests zuerst, dann kommt die
+  Card neu."; `Trotzdem shippen` → "Ship mit skipChecks — die roten Tests
+  landen als Issue."). Equal height; only border/text colour differs.
+- No `SHIP oder ÄNDERN` line anymore — the buttons say it. The terminal
+  shows the question heading alone.
+
+## 3. Per-variant mapping
+
+| Variant / state | Heading (de) | Points | Buttons | Notes |
+|---|---|---|---|---|
+| `ready` | `📦 Shippen trotz {top reservation}?` / `📦 Shippen?` | open + final tests | Ship · Ändern | |
+| `ready` + red tests / partial | `⚠ Trotzdem shippen mit 2 roten Tests?` | open (fix first) | Fix · Trotzdem shippen | ⚠ red; line 1 = Nicht erreicht |
+| `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
+| `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | final tests | Promote / none | context line = distance to beta |
+| `ship-successful` kept | `🚀 Released v{v} alpha — weiter in `{branch}`?` | — | Weiter | |
+| `ship-successful` deployPending | `🚨 Gemergt, aber nicht live — Migration jetzt deployen?` | deploy artifacts | Deploy | replaces the 🚨 DEPLOY block |
+| `released` → beta | `🎊 Promoted v{v} BETA — nach stable?` | — | Nach stable | evidence = promotion facts |
+| `released` → stable | `🎊 Released v{v} LIVE — stable.` | — | — | state, no question |
+| `ready-files` | `📂 Fertig auf der Platte — noch etwas?` | final tests | — | pipeline = file line |
+| `test` | `🧪 Erst testen, dann shippen?` | userTest steps | Ship · Nachbessern | unverified part = `◐` post |
+| `test-minimal` | `▶️ Läuft — viel Spaß` | — | — | title + one line + heading; no evidence, budget, pipeline, widget |
+| `analysis` | `📋 Analyse gelesen — umsetzen oder Fragen?` | — | Umsetzen · Frage | pipeline = `➖ keine Änderungen` |
+| `aborted` | `🚫 Abgebrochen wegen {reason} — anders versuchen?` | — | Nochmal | context line = alternatives |
+| `fallback` | `🔧 Erledigt — noch etwas?` | — | — | |
+| pending override | `⏳ Noch nicht fertig — {what}` | what is running | — | evidence gets `◐ Belege vorläufig` |
+| concept override | `🧭 Concept wartet auf deine Entscheidungen` | — | — | context line = the page URL (quiet link) |
+| batch override | `📥 Batch sammelt — {n} Einträge` | — | — | context line = what happens to the next prompt |
+| V&V unverified | `⚠ Ungeprüft shippen?` | "npm test lief nicht — …" | Tests laufen lassen · Trotzdem shippen | `⚠ ungeprüft` first evidence post |
+
+English strings mirror these one to one (`Ship anyway despite 2 red tests?`,
+`Released v0.179.0 alpha — promote to beta?`, `Promoted v0.179.0 BETA — to
+stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
+
+## 4. Desktop widget vs. terminal
+
+- **Desktop:** everything under the title is ONE `mcp__visualize__show_widget`
+  call (the "card body widget"), rendered immediately before the title
+  markdown is output — the title stays the last text of the turn. The widget
+  draws both blocks (panel + box), colours (green `#8fae8f` posts, red
+  `#e0a0a0`, yellow `#d9c58a`, lilac code spans `#aab4e6`), tooltips (600 ms
+  delay), the budget bars, the quiet PR link and the buttons. The markdown
+  body is still emitted (it is what other clients and the transcript see).
+- **Terminal / other clients:** the markdown body as in § 2 without buttons;
+  code spans only for error texts, names in *italics*; budget as glyph bars.
+- `test-minimal` never calls the widget.
+- The old CTA-actions widget (buttons above the card) is replaced by the body
+  widget. The `[CTA ACTIONS]` block becomes `[CARD WIDGET]` with the same
+  Desktop-only / skip-silently semantics. Controls remain `span[role=button]`
+  until the live diagnosis (concept item "Erst Live-Diagnose") says
+  otherwise; the diagnosis widget is rendered once by the implementing
+  session and the outcome recorded in this file.
+
+## 5. Guards (stop.flow.guard / card-guard)
+
+1. Title: no status words (`läuft`, `laufen`, `wartet`, `pending`, `noch
+   nicht`, `running`, `waiting`, agent counts) → block once with the reason.
+2. Result lines: ≤ 3; a line whose first token is a path / hook name
+   (`\w+\.(js|md|ts|json)`, `ss\.|post\.|prompt\.|stop\.`) → block once.
+3. Points: ≤ 3 on the card; more only as `+N weitere` in the heading.
+4. Line budget: 14 rendered lines on Desktop (title 2, result ≤ 3, evidence
+   1, budget 1, pipeline 1, heading 2, context ≤ 1, points ≤ 3) / 24 rows in
+   the terminal. Overflow is cut in this order: evidence details → context
+   line → pipeline names → never result lines, points or the heading.
+5. Notification turns (a turn that starts from a background-task
+   notification, a wake-up or a cron tick, with no user prompt) carry **no
+   card obligation** when nothing changed (same variant, same build-id, same
+   evidence). The card-guard blocks a second identical card. Output-style
+   rule (quiet): such a turn answers with nothing.
+
+## 6. Signs and colours
+
+| Sign | Meaning | Where |
+|---|---|---|
+| `⚠` red | a reservation tied to red posts (heading) · `ungeprüft` (evidence) | heading, evidence |
+| `✗` red | failed (tests, live check, preflight) | evidence, line 1 |
+| `⛔` red | a ship-pipeline gate blocked | heading of `ship-blocked` only |
+| `◐` yellow | partial (requirements, unverified part) | evidence |
+| `✓` green (dim) | met / done | evidence |
+| `○` / `●` grey | open / done | pipeline |
+| lilac | code spans (names, build-id, branch), accent border, point numbers | widget only |
+| red | never on names, branch or build-id | — |
+
+Yellow/red on the budget marker follow § 2.4, independent of the above.
+
+## 7. Session title prefixes
+
+`⏳` (icon only, no word) is set by `prompt.flow.title-work` on every prompt
+that starts work, in place of the former `🔧`; the card's session-title note
+replaces it with the result prefix at turn end. Every card variant maps to a
+prefix — the full set: `🚀 Shipping – `, `🚀 Shipped – `, `🎊 Released Alpha /
+Beta / Stable – `, `📦 Ready – `, `⛔ Blocked – `, `🧪 Test – `, `▶️ Started – `,
+`📋 Analysis – `, `🚫 Aborted – `, `⏳ Working – ` (pending), `🧭 Concept – `,
+`📥 Batch – `, and the bare `⏳ ` while working. Nothing else strips or sets
+titles.
+
+## 8. Text rules (both languages)
+
+- Sentence case, no exclamation marks, no "successfully".
+- Numbers first in evidence posts (`3464 Tests grün`, not `Tests: 3464`).
+- Verb first in ship/promotion headings (`Released`, `Promoted`, `Shipped`).
+- The three warning signs are the only emoji besides the variant emoji in
+  the heading and the ✨ marker.

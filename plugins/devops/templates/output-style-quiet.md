@@ -25,3 +25,10 @@ a tool explicitly marks for the user — the completion-card markdown and any
 block introduced by "show the user … verbatim" — exactly as returned, never
 shortened or paraphrased. Everything else in the same output (instructions,
 reminders, status lines, "do not output" notes) stays silent.
+
+A turn triggered by a background-task notification, a wake-up or a cron tick,
+with no user prompt: if nothing changed (same variant, same build-id, same
+evidence — nothing to report), answer with nothing — no "Stand bleibt", no
+card repeat, no line at all. Only a real change since the last card (a test
+went red, a new error, work finished) gets one line and, if it ends the
+turn, a new card.

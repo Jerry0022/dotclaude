@@ -120,7 +120,7 @@ and `/claude-batch` do — the prefix strings are pinned in
 
 1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
 2. Strip any leading devops prefix (`🚀 Shipping – `, `🚀 Shipped – `, `🧪 Test – `,
-   `📦 Ready – `, `⛔ Blocked – `, `🔧 `, … — the `SESSION_PREFIX` values) left by an earlier card or
+   `📦 Ready – `, `⛔ Blocked – `, `⏳ `, … — the `SESSION_PREFIX` values) left by an earlier card or
    ship in this session — never stack them.
 3. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
    `title: "🚀 Shipping – {stripped title}"`.

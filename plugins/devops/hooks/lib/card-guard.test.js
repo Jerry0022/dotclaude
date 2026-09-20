@@ -4,10 +4,25 @@ import {
   lastAssistantTextLength,
   isSubstantialAnswer,
   lastAssistantContainsCard,
+  lastUserEntryIsNotification,
   decideAction,
   buildBlockReason,
   buildValidationReason,
   buildPendingReason,
+  buildTitleStatusWordReason,
+  buildResultLinesReason,
+  buildPointsReason,
+  buildDuplicateCardReason,
+  extractCardTitle,
+  titleStatusWordViolation,
+  extractResultLines,
+  resultLinesViolation,
+  extractPoints,
+  pointsViolation,
+  cardLineCount,
+  lineBudgetReport,
+  cardSignature,
+  isDuplicateNotificationCard,
   SUBSTANTIAL_CHARS,
   CARD_MARKER,
 } from "./card-guard.js";
@@ -476,6 +491,438 @@ describe("buildValidationReason", () => {
 // ---------------------------------------------------------------------------
 // lastAssistantContainsCard — backup detection via card marker
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Card content gates (design § 5.1 - § 5.4)
+// ---------------------------------------------------------------------------
+
+function sampleCard({ title = "Filter dialog moved to settings", resultLines = [
+  "› Settings now has a Filter tab with drag & drop",
+  "› Old dialog route still works",
+], heading = "## 📦 Shippen?", points = [] } = {}) {
+  return [
+    `### **${CARD_MARKER} ${title} ${CARD_MARKER}**`,
+    ...resultLines,
+    "✓ 3/3 Anforderungen  ✓ 47 Tests grün  ✓ 4 Live-Checks ok",
+    "5h ▰▰▰▰▰▰▰│▱▱▱▱▱▱ 3 h 12 m",
+    "✓ commit → ✓ push → ✓ PR #42 → ✓ merge   main · v0.8.3 · Build a3f9b21",
+    heading,
+    ...points,
+  ].join("\n");
+}
+
+describe("extractCardTitle", () => {
+  test("extracts the title between the two markers", () => {
+    expect(extractCardTitle(sampleCard())).toBe("Filter dialog moved to settings");
+  });
+
+  test("returns null when no card marker present", () => {
+    expect(extractCardTitle("plain text")).toBeNull();
+  });
+
+  test("returns null for empty/missing input", () => {
+    expect(extractCardTitle("")).toBeNull();
+    expect(extractCardTitle(null)).toBeNull();
+  });
+});
+
+describe("titleStatusWordViolation", () => {
+  test.each([
+    ["3 agents running", "3 agents"],
+    ["Agenten laufen noch", "laufen"],
+    ["wartet auf Antwort", "wartet"],
+    ["still pending", "pending"],
+    ["noch nicht fertig", "noch nicht"],
+    ["3 Agenten arbeiten", "3 Agenten"],
+  ])("flags status word in %s", (title, expected) => {
+    expect(titleStatusWordViolation(title)).toBe(expected);
+  });
+
+  test("clean outcome title passes", () => {
+    expect(titleStatusWordViolation("Filter dialog moved to settings")).toBeNull();
+  });
+
+  test("null/empty title passes", () => {
+    expect(titleStatusWordViolation(null)).toBeNull();
+    expect(titleStatusWordViolation("")).toBeNull();
+  });
+});
+
+describe("extractResultLines / resultLinesViolation", () => {
+  test("extracts each › line, marker stripped", () => {
+    const lines = extractResultLines(sampleCard());
+    expect(lines).toEqual([
+      "Settings now has a Filter tab with drag & drop",
+      "Old dialog route still works",
+    ]);
+  });
+
+  test("no lines → empty array, no violation", () => {
+    expect(extractResultLines("no markers here")).toEqual([]);
+    expect(resultLinesViolation([])).toBeNull();
+  });
+
+  test("more than 3 result lines → violation", () => {
+    const v = resultLinesViolation(["a", "b", "c", "d"]);
+    expect(v).toMatch(/4 result lines/);
+    expect(v).toMatch(/max 3/);
+  });
+
+  test("a line whose first token is a file path → violation", () => {
+    const v = resultLinesViolation(["mcp-server/index.js → refactored"]);
+    expect(v).toMatch(/file\/hook/);
+  });
+
+  test("a line whose first token is a hook-name prefix → violation", () => {
+    expect(resultLinesViolation(["stop.flow.guard now blocks duplicates"])).toMatch(/file\/hook/);
+    expect(resultLinesViolation(["post.flow.completion updated"])).toMatch(/file\/hook/);
+    expect(resultLinesViolation(["prompt.flow.title-work sets the icon"])).toMatch(/file\/hook/);
+    expect(resultLinesViolation(["ss.tokens.scan runs first"])).toMatch(/file\/hook/);
+  });
+
+  test("a user-facing effect line passes", () => {
+    expect(resultLinesViolation(["Settings now has a Filter tab"])).toBeNull();
+  });
+
+  test("code span at the END of a line is fine (design § 2.2)", () => {
+    expect(resultLinesViolation(["The flag now steht as `stale`"])).toBeNull();
+  });
+});
+
+describe("extractPoints / pointsViolation", () => {
+  test("extracts numbered points after the decision heading", () => {
+    const card = sampleCard({ points: ["1. first step", "2. second step"] });
+    expect(extractPoints(card)).toEqual(["1. first step", "2. second step"]);
+  });
+
+  test("no heading, no points → empty array", () => {
+    expect(extractPoints("no heading here")).toEqual([]);
+  });
+
+  test("≤ 3 points → no violation", () => {
+    expect(pointsViolation(["1. a", "2. b", "3. c"], "## 📦 Shippen?")).toBeNull();
+  });
+
+  test("> 3 points without '+N weitere' in heading → violation", () => {
+    const v = pointsViolation(["1. a", "2. b", "3. c", "4. d"], "## 📦 Shippen?");
+    expect(v).toMatch(/4 points/);
+    expect(v).toMatch(/max 3/);
+  });
+
+  test("> 3 points WITH '+N weitere' in heading → no violation", () => {
+    expect(
+      pointsViolation(["1. a", "2. b", "3. c", "4. d"], "## 📦 Shippen? +1 weitere"),
+    ).toBeNull();
+  });
+});
+
+describe("cardLineCount / lineBudgetReport", () => {
+  test("counts non-blank lines only", () => {
+    expect(cardLineCount("a\n\nb\n \nc")).toBe(3);
+  });
+
+  test("empty input → 0", () => {
+    expect(cardLineCount("")).toBe(0);
+    expect(cardLineCount(null)).toBe(0);
+  });
+
+  test("terminal default budget is 24 rows", () => {
+    const r = lineBudgetReport(sampleCard());
+    expect(r.limit).toBe(24);
+    expect(r.overflow).toBe(false);
+  });
+
+  test("desktop budget is 14 rows and flags overflow past it", () => {
+    const bigCard = Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n");
+    const r = lineBudgetReport(bigCard, { desktop: true });
+    expect(r.limit).toBe(14);
+    expect(r.count).toBe(20);
+    expect(r.overflow).toBe(true);
+  });
+});
+
+describe("cardSignature / isDuplicateNotificationCard", () => {
+  test("same heading + build-id + evidence → same signature", () => {
+    const a = cardSignature(sampleCard());
+    const b = cardSignature(sampleCard());
+    expect(a).toBe(b);
+    expect(isDuplicateNotificationCard(a, b)).toBe(true);
+  });
+
+  test("different heading → different signature", () => {
+    const a = cardSignature(sampleCard());
+    const b = cardSignature(sampleCard({ heading: "## ⏳ Noch nicht fertig — warte" }));
+    expect(a).not.toBe(b);
+    expect(isDuplicateNotificationCard(a, b)).toBe(false);
+  });
+
+  test("no prior signature → never a duplicate", () => {
+    expect(isDuplicateNotificationCard(null, cardSignature(sampleCard()))).toBe(false);
+  });
+
+  test("card text with none of the tracked fields → null signature", () => {
+    expect(cardSignature("plain prose, no card")).toBeNull();
+  });
+});
+
+describe("lastUserEntryIsNotification", () => {
+  test("true when the last user entry carries <task-notification>", () => {
+    const tx = jsonl(
+      assistantMsg({ type: "text", text: "earlier turn" }),
+      { type: "user", message: { role: "user", content: "<task-notification><task-id>1</task-id></task-notification>" } },
+    );
+    expect(lastUserEntryIsNotification(tx)).toBe(true);
+  });
+
+  test("false for an ordinary user prompt", () => {
+    const tx = jsonl(userMsg("please fix the bug"));
+    expect(lastUserEntryIsNotification(tx)).toBe(false);
+  });
+
+  test("false for empty/missing transcript", () => {
+    expect(lastUserEntryIsNotification("")).toBe(false);
+    expect(lastUserEntryIsNotification(null)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// decideAction — card content gates (design § 5.1 - § 5.3)
+// ---------------------------------------------------------------------------
+
+describe("decideAction — card content gates", () => {
+  test("title status word → BLOCK once", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      cardText: sampleCard({ title: "Agents still running" }),
+    });
+    expect(d.action).toBe("block");
+    expect(d.resetFlags).toBe(false);
+    expect(d.reason).toMatch(/status word/);
+    expect(d.reason).toMatch(/running/);
+  });
+
+  test("too many result lines → BLOCK once", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      cardText: sampleCard({ resultLines: ["› a", "› b", "› c", "› d"] }),
+    });
+    expect(d.action).toBe("block");
+    expect(d.reason).toMatch(/Result lines/);
+  });
+
+  test("result line naming a file as subject → BLOCK once", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      cardText: sampleCard({ resultLines: ["› budget.js → Refresh-Zyklus"] }),
+    });
+    expect(d.action).toBe("block");
+    expect(d.reason).toMatch(/file\/hook/);
+  });
+
+  test("too many points without '+N weitere' → BLOCK once", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      cardText: sampleCard({ points: ["1. a", "2. b", "3. c", "4. d"] }),
+    });
+    expect(d.action).toBe("block");
+    expect(d.reason).toMatch(/Decision points/);
+  });
+
+  test("clean card passes with no cardText-driven block", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      cardText: sampleCard(),
+    });
+    expect(d.action).toBe("pass");
+  });
+
+  test("no cardText provided → content gates skipped (back-compat)", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+    });
+    expect(d.action).toBe("pass");
+  });
+
+  test("content gate is checked before the validation gate", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      cardText: sampleCard({ title: "still pending" }),
+      validationPending: true,
+      validationAttested: false,
+    });
+    expect(d.reason).toMatch(/status word/);
+  });
+
+  test("stop_hook_active yields the content gate too", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: true,
+      substantial: false,
+      cardText: sampleCard({ title: "still pending" }),
+    });
+    expect(d.action).toBe("pass");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// decideAction — notification-turn exemption + duplicate gate (design § 5.5)
+// ---------------------------------------------------------------------------
+
+describe("decideAction — notification turn", () => {
+  test("no card obligation when nothing changed", () => {
+    const d = decideAction({
+      workHappened: false,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: false,
+      notificationTurn: true,
+      treeClean: true,
+      shipped: false,
+    });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+    expect(d.exempt).toBe("notification-no-change");
+  });
+
+  test("something shipped on a notification turn still owes the card gate", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: false,
+      notificationTurn: true,
+      treeClean: false,
+      shipped: true,
+    });
+    expect(d.action).toBe("block");
+  });
+
+  test("second identical card on a notification turn → BLOCK once", () => {
+    const card = sampleCard();
+    const prevSig = cardSignature(card);
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      notificationTurn: true,
+      cardText: card,
+      prevCardSignature: prevSig,
+    });
+    expect(d.action).toBe("block");
+    expect(d.reason).toMatch(/Duplicate card/);
+  });
+
+  test("a DIFFERENT card on a notification turn passes and reports its new signature", () => {
+    const prevSig = cardSignature(sampleCard({ heading: "## ⏳ Noch nicht fertig" }));
+    const card = sampleCard();
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      notificationTurn: true,
+      cardText: card,
+      prevCardSignature: prevSig,
+    });
+    expect(d.action).toBe("pass");
+    expect(d.newCardSignature).toBe(cardSignature(card));
+  });
+
+  test("not a notification turn → duplicate gate never fires", () => {
+    const card = sampleCard();
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      notificationTurn: false,
+      cardText: card,
+      prevCardSignature: cardSignature(card),
+    });
+    expect(d.action).toBe("pass");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// decideAction — line-budget report (design § 2.4 / § 5.4)
+// ---------------------------------------------------------------------------
+
+describe("decideAction — line-budget report", () => {
+  test("overflow is reported as a warning on an otherwise passing turn, never blocks", () => {
+    const bigCard = Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n");
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      cardText: bigCard,
+    });
+    expect(d.action).toBe("pass");
+    expect(d.warning).toMatch(/30 lines/);
+    expect(d.warning).toMatch(/budget is 24/);
+  });
+
+  test("under budget → no warning", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: false,
+      cardText: sampleCard(),
+    });
+    expect(d.warning).toBeUndefined();
+  });
+});
+
+describe("buildTitleStatusWordReason / buildResultLinesReason / buildPointsReason / buildDuplicateCardReason", () => {
+  test("title reason names the offending word and the re-render instruction", () => {
+    const r = buildTitleStatusWordReason("running");
+    expect(r).toMatch(/running/);
+    expect(r).toMatch(/render_completion_card/);
+    expect(r).toMatch(/VERBATIM/);
+  });
+
+  test("result-lines reason carries the detail and re-render instruction", () => {
+    const r = buildResultLinesReason("4 result lines — max 3");
+    expect(r).toMatch(/4 result lines/);
+    expect(r).toMatch(/render_completion_card/);
+  });
+
+  test("points reason carries the detail and re-render instruction", () => {
+    const r = buildPointsReason("4 points — max 3");
+    expect(r).toMatch(/4 points/);
+    expect(r).toMatch(/render_completion_card/);
+  });
+
+  test("duplicate-card reason explains the notification-turn silence rule", () => {
+    const r = buildDuplicateCardReason();
+    expect(r).toMatch(/notification turn/);
+    expect(r).toMatch(/nothing changed/);
+  });
+});
 
 describe("lastAssistantContainsCard", () => {
   test("returns true when last assistant text contains ✨✨✨ marker", () => {
