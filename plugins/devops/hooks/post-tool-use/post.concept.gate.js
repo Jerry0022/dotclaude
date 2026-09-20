@@ -18,11 +18,13 @@
  *
  *   Scope: only fires on concept HTML (the `docs/concepts/` path or a concept
  *   content signature). Non-concept files pass through untouched. This is a
- *   focused gate for four deterministic failure classes — (A) missing live
+ *   focused gate for five deterministic failure classes — (A) missing live
  *   decision-panel / bridge markers, (B) a forbidden clipboard fallback,
- *   broken <style>/<script> structure, and unsound mapping specs (ids, shapes,
- *   references, frozen `submitted`) — not the full 35-pattern
- *   validation-gate.md sweep (that stays a Step-2 task).
+ *   broken <style>/<script> structure, unsound mapping specs (ids, shapes,
+ *   references, frozen `submitted`), and a decision / comparison view that
+ *   lists the round's own designs as alternatives (P31 — the dock already
+ *   asks which design wins) — not the full 35-pattern validation-gate.md
+ *   sweep (that stays a Step-2 task).
  */
 
 require('../lib/plugin-guard');
@@ -59,9 +61,9 @@ process.stdin.on('end', () => {
 
   if (!isConceptHtml(file, html)) process.exit(0);
 
-  const { ok, missing, forbidden, structural, mapping } = evaluate(file, html);
+  const { ok, missing, forbidden, structural, mapping, overlap } = evaluate(file, html);
   if (ok) process.exit(0);
 
-  process.stderr.write(buildBlockReason(file, missing, forbidden, structural, mapping) + '\n');
+  process.stderr.write(buildBlockReason(file, missing, forbidden, structural, mapping, overlap) + '\n');
   process.exit(2);
 });

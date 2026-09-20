@@ -8,6 +8,7 @@ import {
   evaluate,
   buildBlockReason,
   findMappingIssues,
+  findViewOverlap,
 } from "./concept-gate.js";
 
 // A minimal but valid live-bridge concept page: contains every required
@@ -606,5 +607,108 @@ describe("findMappingIssues", () => {
     expect(r.ok).toBe(true);
     expect(r.mapping).toEqual([]);
     expect(evaluate("src/app.js", "").mapping).toEqual([]);
+  });
+});
+
+// A decision / comparison view that lists the round's own designs as its
+// alternatives re-asks the choice the dock's per-design notes already
+// answer (SKILL.md § Step 1a → Orthogonality; validation-gate.md P31).
+describe("findViewOverlap (P31)", () => {
+  const designs = `
+<section data-iteration="2" data-iteration-template="design" data-active>
+  <section data-design="dispatch" data-nav-label="Dispatch board" data-design-active="true">
+    <section id="d1-s1" data-screen data-nav-label="Overview"></section>
+  </section>
+  <section data-design="holotable" data-nav-label="Holotable" hidden>
+    <section id="d2-s1" data-screen data-nav-label="Overview"></section>
+  </section>`;
+  const close = `</section>`;
+
+  test("a view whose alternatives are orthogonal to the designs passes", () => {
+    const html = designs + `
+  <section data-view="sync" data-view-kind="decision" data-nav-label="Sync strategy" hidden>
+    <div class="variant-evaluation" data-decision="poll" data-label="Polling"></div>
+    <div class="variant-evaluation" data-decision="push" data-label="Push"></div>
+  </section>` + close;
+    expect(findViewOverlap(html)).toEqual([]);
+  });
+
+  test("an alternative labelled like a design's nav label is refused", () => {
+    const html = designs + `
+  <section data-view="direction" data-view-kind="decision" data-nav-label="Direction" hidden>
+    <div data-decision="a" data-label="Dispatch board"></div>
+    <div data-decision="b" data-label="Holotable"></div>
+  </section>` + close;
+    const issues = findViewOverlap(html);
+    expect(issues.map(i => i.kind)).toEqual(["view-reasks-design", "view-reasks-design"]);
+    expect(issues[0].why).toMatch(/view "direction" \(decision\)/);
+    expect(issues[0].why).toMatch(/design "dispatch"/);
+    expect(issues[1].why).toMatch(/design "holotable"/);
+  });
+
+  test("matches the design id too, case-insensitively and trimmed", () => {
+    const html = designs + `
+  <section data-view="v" data-view-kind="comparison" data-nav-label="Which one" hidden>
+    <article data-compare-option="x"><div data-decision="x" data-label="  HOLOTABLE "></div></article>
+    <article data-compare-option="y"><div data-decision="y" data-label="Kanban"></div></article>
+  </section>` + close;
+    const issues = findViewOverlap(html);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].why).toMatch(/\(comparison\)/);
+  });
+
+  test("falls back to the first heading when the group has no data-label", () => {
+    const html = designs + `
+  <section data-view="v" data-view-kind="decision" data-nav-label="Direction" hidden>
+    <div class="variant-evaluation" data-decision="a"><h3>Dispatch <em>board</em></h3><p>…</p></div>
+    <div class="variant-evaluation" data-decision="b"><h3>Something else</h3></div>
+  </section>` + close;
+    const issues = findViewOverlap(html);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].why).toMatch(/data-decision="a"/);
+  });
+
+  test("designs of ANOTHER iteration do not count", () => {
+    const html = `
+<section data-iteration="1" data-iteration-template="design" hidden>
+  <section data-design="dispatch" data-nav-label="Dispatch board"></section>
+</section>
+<section data-iteration="2" data-iteration-template="design" data-active>
+  <section data-design="kanban" data-nav-label="Kanban" data-design-active="true"></section>
+  <section data-view="v" data-view-kind="decision" data-nav-label="Legacy" hidden>
+    <div data-decision="a" data-label="Dispatch board"></div>
+    <div data-decision="b" data-label="Push"></div>
+  </section>
+</section>`;
+    expect(findViewOverlap(html)).toEqual([]);
+  });
+
+  test("mapping views and pages without a decision/comparison view are skipped", () => {
+    const html = designs + `
+  <section data-view="m" data-view-kind="mapping" data-nav-label="Fields" hidden>
+    <div data-decision="x" data-label="Holotable"></div>
+  </section>` + close;
+    expect(findViewOverlap(html)).toEqual([]);
+    expect(findViewOverlap("")).toEqual([]);
+  });
+
+  test("evaluate reports it under `overlap` and buildBlockReason names the rule", () => {
+    const page = VALID.replace(
+      '<section data-iteration="1" data-active class="concept-submitted-host"></section>',
+      designs.replace('data-iteration="2"', 'data-iteration="1"') + `
+  <section data-view="d" data-view-kind="decision" data-nav-label="Direction" hidden>
+    <div data-decision="a" data-label="Holotable"></div>
+    <div data-decision="b" data-label="Dispatch board"></div>
+  </section>` + close,
+    );
+    const r = evaluate("docs/concepts/2026-09-20-x.html", page);
+    expect(r.ok).toBe(false);
+    expect(r.overlap).toHaveLength(2);
+    expect(r.missing).toEqual([]);
+    const reason = buildBlockReason("docs/concepts/2026-09-20-x.html", r.missing, r.forbidden, r.structural, r.mapping, r.overlap);
+    expect(reason).toMatch(/^BLOCKED: a view in "2026-09-20-x\.html" re-asks the design choice\./);
+    expect(reason).toMatch(/Orthogonality/);
+    expect(reason).toMatch(/P31/);
+    expect(reason).not.toMatch(/live-bridge/);
   });
 });

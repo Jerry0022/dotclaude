@@ -77,6 +77,9 @@ Claude may deviate when the content genuinely demands it.
   a later iteration's job, not designs 4 to 7.
 - **Mixed concepts** combine both: 7 on the decision side, 3 on the design
   side.
+- **Annotations: top 3 to top 7 per design.** Component-level questions
+  are pinned onto the mock (Step 1a → Annotation layer); a view or a
+  `decision` round never carries them.
 
 ## Step 1 — Pick Template, then Content Variant
 
@@ -140,11 +143,16 @@ would also fit.
    `design-tokens.*`, `theme.*`, `tailwind.config.*`, Figma tokens via
    the design MCP, or the existing UI code before inventing a look.
 
-   **Optional annotation layer:** when Claude has a concrete, element-level
-   question about a specific spot in the mock, pin it there instead of (or
-   in addition to) the general feedback dock — see § Annotation Layer
-   (optional) below. Skip it entirely when there is nothing that specific
-   to ask; it is not a default addition to every design iteration.
+   **Annotation layer — where component questions live:** every question
+   about a *part* of a design (this list, that header, the empty state, the
+   badge) is pinned onto that element as an annotation — pin, leader line,
+   answer field — never lifted out into a view or a `decision` round. Per
+   design pin the **top 3 at least, top 7 at most**, ranked by how much the
+   answer changes the design; below three the design is not being
+   questioned enough, above seven the mock is wallpapered. See
+   § Annotation Layer (optional) below. Skip the layer only when a design
+   genuinely has nothing element-level to ask — a rare case, not the
+   default.
 
    **Optional views:** alongside the ≥1 design, this same `design` iteration
    MAY also hold `section[data-view]` — fullscreen, non-visual questions
@@ -168,6 +176,24 @@ would also fit.
    round later. Views are never mandatory and never a substitute for the
    ≥1 design — an iteration that is only questions is a `decision`
    iteration, not a `design` one with zero designs.
+
+   **Orthogonality — a view never re-asks the design choice.** The call
+   *between* the designs is made in the 💬 dock (per-design and per-screen
+   textareas); that is the whole point of showing them side by side. A
+   `decision` / `comparison` view therefore asks something that stays the
+   same whichever design wins — a data model, a sync strategy, a library, a
+   naming scheme. It never lists the designs, or the traits that
+   distinguish them ("sidebar as in A" vs "tabs as in B"), as its
+   alternatives; it never argues for or against one design in its prose;
+   and it never pre-decides a design through its default selection.
+   Test before authoring: if the alternatives would collapse into
+   "Design A / B / C", the view duplicates the dock — drop it. If an
+   alternative only makes sense under one design, say so in ONE line on
+   that alternative ("needed by Holotable") and leave the verdict on the
+   design itself to the dock. The deterministic gate refuses the crudest
+   form — an alternative labelled like a design of the same round
+   (`deep-knowledge/validation-gate.md` P31); the rest is authoring
+   discipline.
 
 2. **Are there ≥2 substantive non-visual alternatives?**
    Multi-option evaluation where the user must pick from 2+ mutually-exclusive
@@ -195,7 +221,15 @@ non-visual questions (which architecture / which library / which strategy)
 are entangled, do NOT mix them into one layout. Split them: a `decision` iteration for the
 non-visual call, a separate `design` iteration for the visual one. This is
 the fix for the "same decision, written twice" failure — mockups do not fit
-into 340px variant cards, so stop trying to fit them there.
+into 340px variant cards, so stop trying to fit them there. The split cuts
+both ways: the `decision` iteration that follows a design round is bound by
+the same orthogonality rule as a view (1a above). It does not open with a
+recap of how the designs differed, does not carry variant cards that
+restate those differences, and does not weigh in on which design should
+win — the user already said that in the dock, and the design round's
+per-design notes are the only place that verdict is read from. The
+decision round's intro names the design the user picked in one clause at
+most and then asks its own, design-independent question.
 
 | Template | Layout signature |
 |---|---|
@@ -562,10 +596,14 @@ A second, independent feedback channel for the design template: instead of
 (or alongside) the dock's free-form notes, pin a numbered question directly
 onto a concrete element of a screen — "should this list auto-refresh?", "is
 this the right empty state?" — and the user answers it right there, next to
-the thing it's about. **Use it only when there is a concrete, element-level
-question to ask; it is not a default decoration on every design iteration.**
-A screen with nothing specific to ask about simply has no
-`[data-anno-layer]` — nothing degrades, nothing is missing.
+the thing it's about. **Every component-level question goes here — top 3 to
+top 7 per design (Step 0.5 count preferences), ranked by how much the answer
+changes the design.** Pins carry questions, not decoration: a pin with no
+real question behind it is noise, and a component question carried off into
+a view or a `decision` round is the reverse mistake — the user has to answer
+it away from the thing it is about. A design with genuinely nothing
+element-level to ask simply has no `[data-anno-layer]` — nothing degrades,
+nothing is missing — but that is the exception, not the default.
 
 - A pin sits on the element, connected by a short leader line to a speech
   bubble beside it. Collapsed, the bubble shows a truncated question line;
@@ -589,8 +627,9 @@ frozen iteration keeps its annotations browsable and read-only.
 ### Views (optional)
 
 A third, independent thing a `design` iteration may hold: fullscreen,
-non-visual questions that belong in the SAME round as the artefact they are
-about — `section[data-view]`, a top-level sibling of `section[data-design]`,
+**general** questions — ones that do not point at any one design or any
+one component of it — that still belong in the SAME round as the artefact
+they sit next to — `section[data-view]`, a top-level sibling of `section[data-design]`,
 switched exactly like a design (its own switcher segment, its own second
 `#screen-nav` group). Two kinds: `data-view-kind="decision"` (2..n named
 alternatives, bi-state per alternative) and `data-view-kind="comparison"`
@@ -600,7 +639,10 @@ for when to use a view instead of a separate `decision` iteration, and
 `deep-knowledge/templates.md` § Views (optional) for the full HTML/CSS/JS
 reference and the payload shape (`decisions[].view`, `comments.views`).
 **≥1 `data-design` stays mandatory** — views augment a design iteration,
-they never replace it.
+they never replace it. **And a view never re-asks the design choice** — the
+alternatives of a view are orthogonal to the designs on the same page (1a
+§ Orthogonality); which design wins is read from the dock's per-design
+notes, not from a view that lists the designs again.
 
 ### Reload Resilience
 

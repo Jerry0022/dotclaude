@@ -12,8 +12,10 @@
  *
  *   This is a focused gate, NOT a re-implementation of the full 35-pattern
  *   validation-gate.md. It checks only the markers whose absence equals
- *   failure mode A or B, plus the forbidden clipboard/paste-to-chat anti-
- *   pattern. The full pattern sweep stays Claude's Step-2 responsibility.
+ *   failure mode A or B, the forbidden clipboard/paste-to-chat anti-pattern,
+ *   <style>/<script> structure, mapping specs, and a view that lists the
+ *   round's own designs as alternatives (P31). The full pattern sweep stays
+ *   Claude's Step-2 responsibility.
  */
 
 const path = require('path');
@@ -424,40 +426,154 @@ function findMappingIssues(html) {
   return issues;
 }
 
+// --- Views re-asking the design choice (validation-gate.md P31) --------------
+
+/** One attribute value off a raw open tag; `null` when absent. */
+function attrOf(tag, name) {
+  const m = new RegExp(`(?:^|\\s)${name}=("|')([^"']*)\\1`, 'i').exec(tag);
+  return m ? m[2] : null;
+}
+
+/** Case-insensitive, whitespace-collapsed key for label comparison. */
+function labelKey(s) {
+  return String(s == null ? '' : s).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/**
+ * A `decision` / `comparison` view whose alternatives ARE the designs of the
+ * same round (SKILL.md § Step 1a → Orthogonality; validation-gate.md P31).
+ *
+ * The verdict between the designs is read from the dock's per-design notes.
+ * A view that lists the designs again as `[data-decision]` groups asks the
+ * same question a second time — and the two answers can disagree. This
+ * catches the crude form only: an alternative whose `data-label` (fallback:
+ * the first `<h2>`/`<h3>` after its open tag) equals a design's
+ * `data-nav-label` or `data-design` id of the same iteration. Paraphrases
+ * ("Sidebar as in A") stay the manual sweep's job.
+ *
+ * Regex walk like findMappingIssues: iteration open tags partition the page,
+ * designs are attributed to the nearest preceding iteration, and a view's
+ * region runs to the next top-level sibling (view / design / iteration).
+ *
+ * @returns {Array<{kind:string, why:string, at:number}>} — empty when sound.
+ */
+function findViewOverlap(html) {
+  const body = html || '';
+  const issues = [];
+  if (!/\sdata-view-kind=("|')(decision|comparison)\1/i.test(body)) return issues;
+
+  const tops = []; // every top-level sibling open tag, in document order
+  const topRe = /<section\b[^>]*\s(data-iteration|data-design|data-view)=("|')([^"']*)\2[^>]*>/gi;
+  let m;
+  while ((m = topRe.exec(body)) !== null) {
+    tops.push({ at: m.index, kind: m[1].toLowerCase(), id: m[3], tag: m[0] });
+  }
+
+  // Design labels per iteration — keyed by the iteration open tag's offset.
+  const designs = new Map();
+  let iterAt = -1;
+  for (const t of tops) {
+    if (t.kind === 'data-iteration') { iterAt = t.at; continue; }
+    if (t.kind !== 'data-design') continue;
+    if (!designs.has(iterAt)) designs.set(iterAt, new Map());
+    const set = designs.get(iterAt);
+    const nav = attrOf(t.tag, 'data-nav-label');
+    set.set(labelKey(t.id), t.id);
+    if (nav && labelKey(nav)) set.set(labelKey(nav), t.id);
+  }
+
+  const decRe = /<\w+\b[^>]*\sdata-decision=("|')([^"']*)\1[^>]*>/gi;
+  const headRe = /<h[23]\b[^>]*>([\s\S]*?)<\/h[23]>/i;
+  iterAt = -1;
+  tops.forEach((t, i) => {
+    if (t.kind === 'data-iteration') { iterAt = t.at; return; }
+    if (t.kind !== 'data-view') return;
+    const kind = (attrOf(t.tag, 'data-view-kind') || '').toLowerCase();
+    if (kind !== 'decision' && kind !== 'comparison') return;
+    const set = designs.get(iterAt);
+    if (!set || set.size === 0) return;
+    const end = i + 1 < tops.length ? tops[i + 1].at : body.length;
+    const region = body.slice(t.at, end);
+    decRe.lastIndex = 0;
+    let d;
+    while ((d = decRe.exec(region)) !== null) {
+      const at = t.at + d.index;
+      let label = attrOf(d[0], 'data-label');
+      if (label == null) {
+        // Fallback: the first heading after the open tag, before the next group.
+        const rest = region.slice(d.index + d[0].length);
+        const nextAt = rest.search(/<\w+\b[^>]*\sdata-decision=/i);
+        const h = headRe.exec(nextAt < 0 ? rest : rest.slice(0, nextAt));
+        label = h ? h[1] : '';
+      }
+      const key = labelKey(label);
+      if (!key || !set.has(key)) continue;
+      issues.push({
+        kind: 'view-reasks-design',
+        why: `view "${t.id}" (${kind}) at offset ${t.at} lists "${label.trim()}" as an alternative (data-decision="${d[2]}" at offset ${at}) — that is design "${set.get(key)}" of the same iteration; which design wins is read from the dock's per-design notes, a view asks something orthogonal (SKILL.md § Step 1a → Orthogonality, P31)`,
+        at,
+      });
+    }
+  });
+
+  return issues;
+}
+
 /**
  * Full evaluation for a written file.
- * @returns {{applicable:boolean, ok:boolean, missing:Array, forbidden:Array, structural:Array, mapping:Array}}
+ * @returns {{applicable:boolean, ok:boolean, missing:Array, forbidden:Array, structural:Array, mapping:Array, overlap:Array}}
  */
 function evaluate(filePath, html) {
   if (!isConceptHtml(filePath, html)) {
-    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [] };
+    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [], overlap: [] };
   }
   const missing = findMissing(html);
   const forbidden = findForbidden(html);
   const structural = findStructural(html);
   const mapping = findMappingIssues(html);
+  const overlap = findViewOverlap(html);
   return {
     applicable: true,
-    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0,
+    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0 && overlap.length === 0,
     missing,
     forbidden,
     structural,
     mapping,
+    overlap,
   };
 }
 
 /** Build the blocking feedback shown to Claude (stderr, exit 2). */
-function buildBlockReason(filePath, missing, forbidden, structural, mapping) {
+function buildBlockReason(filePath, missing, forbidden, structural, mapping, overlap) {
   missing = missing || [];
   forbidden = forbidden || [];
   structural = structural || [];
   mapping = mapping || [];
+  overlap = overlap || [];
   const name = path.basename(filePath || 'concept.html');
+  const onlyOverlap = overlap.length > 0 && !missing.length && !forbidden.length && !structural.length && !mapping.length;
+  if (onlyOverlap) {
+    const lines = [`BLOCKED: a view in "${name}" re-asks the design choice.`, ''];
+    overlap.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
+    lines.push('');
+    lines.push('Which design wins is what the 💬 dock\'s per-design notes are for. A decision / comparison view');
+    lines.push('asks a question whose answer holds whichever design wins (data model, sync strategy, library, …).');
+    lines.push('Fix: drop the alternatives that are the designs again — usually the whole view — rather than');
+    lines.push('relabelling them; see skills/concept/SKILL.md § Step 1a → Orthogonality and validation-gate.md P31.');
+    lines.push('The rest of the page passed — re-write the file and open it once this gate passes.');
+    return lines.join('\n');
+  }
   const onlyMapping = mapping.length > 0 && !missing.length && !forbidden.length && !structural.length;
   const lines = [];
   if (onlyMapping) lines.push(`BLOCKED: mapping spec problems in "${name}".`);
   else lines.push(`BLOCKED: "${name}" is not a valid live-bridge concept page.`);
   lines.push('');
+  if (overlap.length) {
+    lines.push('A decision / comparison view lists the designs of its own round as alternatives (P31):');
+    overlap.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
+    lines.push('  Fix: drop those alternatives (usually the whole view) — the design verdict comes from the dock.');
+    lines.push('');
+  }
   if (mapping.length) {
     lines.push('Mapping spec problems — the information-mapping engine cannot render these sections as authored:');
     mapping.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
@@ -515,6 +631,7 @@ module.exports = {
   findForbidden,
   findStructural,
   findMappingIssues,
+  findViewOverlap,
   evaluate,
   buildBlockReason,
 };
