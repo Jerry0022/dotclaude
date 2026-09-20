@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.178.3] — 2026-09-20
+
+### Fixed
+
+- **The sidebar title kept the outcome of a turn long past — and stacked prefixes (#416).** Three defects in one surface. (1) `prompt.flow.title-work` put the wrench on the title only on the *first* prompt of a session; every later prompt left whatever the last card said, so a session sat on `🧪 Test –` for hours while a follow-up prompt had it implementing with background tasks. The hook now fires on the first prompt **and on the first prompt after every completion card** — `stop.flow.guard` hands the runOnce token back once a card rendered — and its instruction *replaces* any outcome prefix (🚀 🎊 🧪 ▶️ 📦 ⛔ 🚫 📋 ⏳) with `🔧 `, while the mode prefixes `🧭 Concept – ` / `📥 Batch – ` stay untouched. (2) The card's title prefix for an open `/concept` page was "hands off" for the page's whole lifetime, so an implementing session still read as waiting for a decision; `titlePrefixFor` now follows the phase — `🧭 Concept – ` while `waiting`/`iterating` (re-stated every card, so a session returns to the compass after an implementation round), `⏳ Working – ` while `implementing`. Only a `concept-active.json` *without* a `concept` field on the card still leaves the title alone. (3) `/concept` and `/claude-batch` prepended their prefix without stripping an earlier one (observed `🧭 Concept – 🔧 …`); both now strip like `/ship` does. The offline `--render-card` ladder names the stderr `[SESSION TITLE]` step. Hook 0.2.0; docs in plugin-behavior, the card template and the concept phase table. Not covered by Codex review — external usage limit until 2026-10-11; targeted suites 1864 green, full suite green except three `git-sync.conflicts` 60-s timeouts under machine load (unrelated, pass in isolation).
+
 ## [0.178.2] — 2026-09-20
 
 ### Fixed
