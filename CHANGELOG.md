@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.183.6] — 2026-09-21
+
+### Fixed
+
+- **`/concept`: two sessions in sibling worktrees no longer kill each other's bridge.** Both wrote `<project-root>/.claude/concept-active.json` (bridge-server.md step 4 said "project root, NOT the worktree"), while `ss.concept.resume` read the file from `process.cwd()`. Session B's write made A's cron tick read "state file now owns port B, not A", POST `/shutdown` to its own bridge and tell Claude to `rm` the file; B's pulser and waker then exited `STATE_GONE`, the waker POSTed `/shutdown`, and B's page showed "Claude nicht verbunden" every 15 min — two outages in one review on 2026-09-20 (#417). Now: (1) the state file lives in the **session cwd** (the worktree when in one); server root, `--html` and `html_path` follow it; every tick / pulser / waker snippet in `bridge-server.md` and `SKILL.md` says `{session-cwd}`, and the close-out deletes the file only when its owner token matches. (2) `concept-active.json` carries an **`owner`** token (random hex minted at write time; `ss.concept.resume` 0.7.0 validates it as a plain token and threads it into the re-armed cron, pulser and waker as `--owner`); `concept-tick.js` 0.2.0 and `concept-watch.js` 0.4.0 treat a file naming another port AND another owner as foreign — no `/shutdown`, no cleanup instruction, no heartbeat bookkeeping in it, the tick keeps servicing its own port, the watchers keep running. Without an owner on both sides the port rule stands as before. 14 new tests (tick, watch, resume, docsync placeholder); concept suites 846 green. Shipped by `/run-backlog` (queue 7/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
 ## [0.183.5] — 2026-09-21
 
 ### Fixed
