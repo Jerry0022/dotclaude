@@ -7,6 +7,10 @@ import { describe, test, expect, vi, beforeAll } from "vitest";
 // Never spawn the real headless usage scraper (Edge) from a unit test — it is
 // slow and flaky under parallel load. The card renders without a budget line.
 process.env.DEVOPS_COMPLETION_NO_USAGE = "1";
+// These tests assert the terminal markdown. On the Desktop app the markdown
+// shrinks to the title line (§ 4, the widget draws the body), and a vitest run
+// started from a Desktop session inherits that entrypoint — pin the terminal.
+process.env.CLAUDE_CODE_ENTRYPOINT = "cli";
 
 // Every render() shells out to git (build-ID, repo URL). Under full parallel
 // suite load a single call has exceeded the 5s per-test default, failing
@@ -430,6 +434,32 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
     expect(red).toContain("✗ 2 Tests rot");
     expect(red).toMatch(/^## ⚠ Trotzdem shippen mit 2 roten Tests\?$/m);
     expect(red).toMatch(/^› \*\*Nicht erreicht:\*\* 2 Tests rot \(npm test\)$/m);
+  });
+
+  // An unmet requirement routes to ready-red as well, but it is no red test —
+  // the heading names what is actually red (observed 2026-09-21: "Trotzdem
+  // shippen mit 1 roten Tests?" over a green suite).
+  test("ready-red heading names unmet requirements when the tests are green", async () => {
+    const de = await cardText({
+      variant: "ready", summary: "Eins offen", lang: "de", session_id: "test-ev-unmet-de",
+      tests: [{ method: "npm test", result: "55 grün" }],
+      validation: [{ requirement: "Widget klickbar", status: "unmet", evidence: "nicht gesehen" }],
+    });
+    expect(de).toMatch(/^## ⚠ Trotzdem shippen mit 1 unerfüllter Anforderung\?$/m);
+    expect(de).not.toMatch(/roten Tests/);
+    const two = await cardText({
+      variant: "ready", summary: "Zwei offen", lang: "en", session_id: "test-ev-unmet-en",
+      validation: [
+        { requirement: "A", status: "unmet", evidence: "x" },
+        { requirement: "B", status: "unmet", evidence: "y" },
+      ],
+    });
+    expect(two).toMatch(/^## ⚠ Ship anyway with 2 unmet requirements\?$/m);
+    const partial = await cardText({
+      variant: "ready", summary: "Teilweise", lang: "de", session_id: "test-ev-partial-de",
+      validation: [{ requirement: "C", status: "partial", evidence: "z" }],
+    });
+    expect(partial).toMatch(/^## ⚠ Trotzdem shippen mit 1 teilweise erfüllter Anforderung\?$/m);
   });
 
   test("a short single reservation is quoted in the heading, a long one becomes the count", async () => {

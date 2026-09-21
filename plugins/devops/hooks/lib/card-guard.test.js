@@ -663,6 +663,17 @@ describe("cardSignature / isDuplicateNotificationCard", () => {
   test("card text with none of the tracked fields → null signature", () => {
     expect(cardSignature("plain prose, no card")).toBeNull();
   });
+
+  // Desktop (§ 4): the markdown is the ✨ title line alone, the body lives in
+  // the widget — the title is then the field to compare on.
+  test("a Desktop title-only card signs on its title", () => {
+    const a = cardSignature(`&nbsp;\n\n---\n\n### **${CARD_MARKER} Sanduhr nur Fallback ${CARD_MARKER}**\n\n---`);
+    const b = cardSignature(`&nbsp;\n\n---\n\n### **${CARD_MARKER} Sanduhr nur Fallback ${CARD_MARKER}**\n\n---`);
+    const c = cardSignature(`&nbsp;\n\n---\n\n### **${CARD_MARKER} Etwas anderes ${CARD_MARKER}**\n\n---`);
+    expect(a).toBe(JSON.stringify({ title: "Sanduhr nur Fallback" }));
+    expect(isDuplicateNotificationCard(a, b)).toBe(true);
+    expect(isDuplicateNotificationCard(a, c)).toBe(false);
+  });
 });
 
 describe("lastUserEntryIsNotification", () => {

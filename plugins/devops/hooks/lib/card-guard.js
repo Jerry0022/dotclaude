@@ -204,8 +204,13 @@ function cardSignature(cardText) {
   const heading = (cardText.match(/^##\s+.*$/m) || [])[0] || '';
   const build = (cardText.match(/Build\s+(\S+)/) || [])[1] || '';
   const evidence = (cardText.match(/^[✓✗◐].*$/m) || [])[0] || '';
-  if (!heading && !build && !evidence) return null;
-  return JSON.stringify({ heading: heading.trim(), build, evidence: evidence.trim() });
+  if (heading || build || evidence) {
+    return JSON.stringify({ heading: heading.trim(), build, evidence: evidence.trim() });
+  }
+  // Desktop (design § 4): the body lives in the widget, the markdown is the
+  // ✨ title line alone — the title is then the only field to compare on.
+  const title = extractCardTitle(cardText);
+  return title ? JSON.stringify({ title }) : null;
 }
 
 /** True when a notification turn's new card is identical (by signature) to

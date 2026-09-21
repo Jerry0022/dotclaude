@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.2.0
+ * @version 0.3.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect ship intent in user prompts and inject Skill('ship') instruction.
  *   Triggers on keywords like "ship", "shippen", "ab damit", "mach nen PR",
  *   "merge it", "das kann rein", "fertig", and affirmations after a completion
- *   card ("ja", "yes", "mach", "go", "do it").
+ *   card ("ja", "yes", "mach", "go", "do it"). The keyword list lives in
+ *   lib/ship-intent.js, shared with prompt.flow.title-work so a ship prompt
+ *   is marked `🚀 Shipping – ` in the sidebar, never the bare `⏳ `.
  */
 
 require('../lib/plugin-guard');
 
 const { execFileSync } = require('child_process');
 const { readSessionFile } = require('../lib/session-id');
+const { isShipIntent } = require('../lib/ship-intent');
 
 /**
  * Returns true if cwd is inside a git work tree.
@@ -57,23 +60,8 @@ process.stdin.on('end', () => {
     // No activityResult = first message in session → no warning
   } catch {}
 
-  // --- Direct ship intent keywords ---
-  const shipKeywords = [
-    /\bship\b/,
-    /\bship(?:pen|pe)\b/,
-    /\bab\s+damit\b/,
-    /\bmach\s+(?:nen?|einen?)\s+pr\b/,
-    /\bmerge\s+it\b/,
-    /\bpush\s+and\s+merge\b/,
-    /\bdas\s+kann\s+rein\b/,
-    /\bfertig\b/,
-    /\bausliefern\b/,
-    /\braushauen\b/,
-    /\brelease\b/,
-    /\bpr\s+erstellen\b/,
-  ];
-
-  const isDirectShipIntent = shipKeywords.some(re => re.test(userMessage));
+  // --- Direct ship intent keywords (shared with prompt.flow.title-work) ---
+  const isDirectShipIntent = isShipIntent(hook.prompt || hook.user_message || hook.message || '');
 
   // --- Affirmation after completion card (short messages) ---
   const affirmations = [

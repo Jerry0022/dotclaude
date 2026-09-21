@@ -39,7 +39,9 @@ Two visual blocks, both rendered by `render_completion_card` / `--render-card`:
   pipeline line, or the decision points. See design doc § 2 for exactly where.
 - The per-variant heading/points/buttons mapping is § 3 of the design doc —
   do not duplicate that table here; it drifts.
-- The Desktop widget (both blocks, tooltips, budget bars, buttons) is built by
+- On Desktop the markdown shrinks to the `### **✨✨✨ {title} ✨✨✨**` line
+  (marker + transcript record); the widget draws the title and the body once.
+- The Desktop widget (title, both blocks, tooltips, budget bars, buttons) is built by
   `mcp-server/lib/card-widget.js` from the same structured model the markdown
   renderer uses (`buildCardModel` in `mcp-server/index.js`).
 

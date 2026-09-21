@@ -49,8 +49,15 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(en.map((a) => a.label)).toEqual(["Ship", "Change"]);
   });
 
-  test("ready-red offers Fix and Trotzdem shippen", () => {
-    expect(buttonsFor("ready-red", "de").map((a) => a.label)).toEqual(["Fix", "Trotzdem shippen"]);
+  test("ready-red offers Fix and Trotzdem shippen — worded for red findings, not only red tests", () => {
+    const de = buttonsFor("ready-red", "de");
+    expect(de.map((a) => a.label)).toEqual(["Fix", "Trotzdem shippen"]);
+    // An unmet requirement routes to ready-red too; the prompt must not claim
+    // there are red tests to repair.
+    for (const b of [...de, ...buttonsFor("ready-red", "en")]) {
+      expect(b.prompt).not.toMatch(/^(Repariere zuerst die roten Tests|Fix the red tests first)/);
+      expect(b.prompt).toMatch(/Befunde|findings/);
+    }
   });
 
   test("ship-blocked offers Fix and Skip", () => {
@@ -126,6 +133,33 @@ describe("cardWidgetHtml", () => {
 
   test("empty model yields no HTML", () => {
     expect(cardWidgetHtml(null, "")).toBe("");
+  });
+
+  // Observed 2026-09-21: widget + full markdown = the whole card twice. The
+  // widget now carries the title (the markdown under it is the ✨ line only),
+  // wraps long result lines instead of cutting them, and sits on a panel that
+  // is visible in dark mode too.
+  test("carries the title as an h2 at the top of the panel, before the result lines", () => {
+    const html = cardWidgetHtml(baseModel({ title: "Sanduhr nur Fallback" }), "");
+    expect(html).toContain('<h2 class="card-title" style="margin:0 0 6px">Sanduhr nur Fallback</h2>');
+    expect(html.indexOf("card-title")).toBeLessThan(html.indexOf("card-result"));
+    expect(html.indexOf("card-panel")).toBeLessThan(html.indexOf("card-title"));
+    expect(cardWidgetHtml(baseModel({ title: "" }), "")).not.toContain("card-title");
+  });
+
+  test("the panel is one surface step above the page with a hairline — never the invisible surface-1", () => {
+    const html = cardWidgetHtml(baseModel(), "");
+    const panel = html.match(/<div class="card-panel" style="([^"]*)"/)[1];
+    expect(panel).toContain("background:var(--surface-2)");
+    expect(panel).toContain("border:0.5px solid var(--border)");
+    expect(panel).not.toContain("--surface-1");
+  });
+
+  test("result lines are rendered whole — no ellipsis is added by the widget", () => {
+    const long = "x".repeat(200);
+    const html = cardWidgetHtml(baseModel({ resultLines: [long] }), "");
+    expect(html).toContain(long);
+    expect(html).not.toContain("…");
   });
 
   test("no emoji on the buttons — Tabler icons only, per the design contract", () => {

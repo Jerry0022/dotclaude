@@ -2,7 +2,7 @@ import { describe, test, expect } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ONCE_KEY, WORK_PREFIX, PENDING_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, shouldMark, releaseTitleWork } from "./prompt.flow.title-work.js";
+import { ONCE_KEY, WORK_PREFIX, PENDING_PREFIX, SHIPPING_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, prefixFor, shouldMark, releaseTitleWork } from "./prompt.flow.title-work.js";
 import { runOnce } from "../lib/run-once.js";
 import { SESSION_PREFIX, releasedPrefix } from "../../mcp-server/lib/mode-state.js";
 
@@ -68,6 +68,38 @@ describe("prompt.flow.title-work", () => {
     expect(text).toContain(`"${SESSION_PREFIX.pending}"`);
     expect(text).toContain(`"${releasedPrefix("stable")}"`);
     expect(text).toContain(`already starts with "${WORK_PREFIX}" and NOT with "${PENDING_PREFIX}": do nothing`);
+  });
+
+  // Observed 2026-09-21: "/ship" after a change left "⏳" on the title for
+  // the whole pipeline — the hook only knew the hourglass and the ship
+  // skill's own rename is a courtesy the model sometimes skips. A process
+  // outranks the fallback: a ship prompt is marked 🚀 Shipping by the hook
+  // itself, and a title already on 🚀 Shipping is never downgraded.
+  test("a ship prompt gets the Shipping prefix, anything else the bare hourglass", () => {
+    expect(SHIPPING_PREFIX).toBe(SESSION_PREFIX.shipping);
+    expect(prefixFor("/ship")).toBe(SHIPPING_PREFIX);
+    expect(prefixFor("/devops:ship --keep")).toBe(SHIPPING_PREFIX);
+    expect(prefixFor("ab damit")).toBe(SHIPPING_PREFIX);
+    expect(prefixFor("fix the login bug")).toBe(WORK_PREFIX);
+    expect(prefixFor("")).toBe(WORK_PREFIX);
+  });
+
+  test("the ship instruction sets Shipping, names it as Pre-Step C done early, and strips Shipped", () => {
+    const text = instruction(SHIPPING_PREFIX);
+    expect(text).toMatch(/— a ship\./);
+    expect(text).toContain(`"${SHIPPING_PREFIX}" + <stripped title>`);
+    expect(text).toContain(`already starts with "${SHIPPING_PREFIX}": do nothing`);
+    expect(text).toContain(`"${SESSION_PREFIX.shipped}"`);
+    expect(text).toMatch(/Pre-Step C/);
+    expect(text).not.toContain(`"${WORK_PREFIX}" + <stripped title>`);
+  });
+
+  test("the hourglass instruction never replaces a running Shipping prefix", () => {
+    const text = instruction();
+    expect(text).toContain(`already starts with "${SHIPPING_PREFIX}": do nothing`);
+    expect(text).toMatch(/hourglass is only the fallback/);
+    expect(text).toContain(`"${WORK_PREFIX}" + <stripped title>`);
+    expect(instruction(WORK_PREFIX)).toBe(text);
   });
 
   // stop.flow.guard hands the token back after every card, so the next real

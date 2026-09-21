@@ -155,8 +155,10 @@ Subagents inherit all output contracts:
   `/concept` sets `🧭 Concept – ` while the page waits or iterates (the card
   re-states it per phase; an `implementing` round shows `⏳ Working – `, #416),
   `/claude-batch` `📥 Batch – ` while collecting, `/ship` `🚀 Shipping – ` while
-  the pipeline runs — the bare `⏳ ` never replaces 🧭 / 📥, and no card block
-  while a batch is armed. A mode skill strips any earlier prefix before adding
+  the pipeline runs — the bare `⏳ ` is the fallback and never replaces a
+  running 🧭 / 📥 / `🚀 Shipping – ` (a ship prompt is marked `🚀 Shipping – `
+  by `prompt.flow.title-work` itself, via `hooks/lib/ship-intent.js`), and no
+  card block while a batch is armed. A mode skill strips any earlier prefix before adding
   its own (`🧭 Concept – ⏳ Foo` is the bug). Prefixes are pinned in
   `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`). Desktop-app only
   (`mcp__ccd_session_mgmt__set_session_title` `self`) — elsewhere skip silently.

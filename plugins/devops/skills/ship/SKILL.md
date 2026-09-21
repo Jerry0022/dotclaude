@@ -119,11 +119,19 @@ and `/claude-batch` do — the prefix strings are pinned in
 `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`) next to the card emojis:
 
 1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
-2. Strip any leading devops prefix (`🚀 Shipping – `, `🚀 Shipped – `, `🧪 Test – `,
+2. If the title already starts with `🚀 Shipping – `: done — `prompt.flow.title-work`
+   marks a ship prompt itself (same classifier as `prompt.ship.detect`), so a
+   `/ship` typed by the user arrives here already marked. Only a ship reached
+   another way (an affirmation after a card, a queue in `/setup-cleanup` or
+   `/run-backlog`) still needs steps 3–4.
+3. Strip any leading devops prefix (`🚀 Shipping – `, `🚀 Shipped – `, `🧪 Test – `,
    `📦 Ready – `, `⛔ Blocked – `, `⏳ `, … — the `SESSION_PREFIX` values) left by an earlier card or
    ship in this session — never stack them.
-3. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
+4. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
    `title: "🚀 Shipping – {stripped title}"`.
+
+The bare `⏳ ` is the fallback for "being worked on", never the override: no
+hook or skill replaces a running `🚀 Shipping – ` with it (design § 7).
 
 **Both tools exist only in the Desktop app.** In a terminal session, an
 unattended run, or when the call fails for any reason: skip silently — no

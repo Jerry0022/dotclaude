@@ -4,6 +4,8 @@ import { describe, test, expect, vi, beforeAll } from "vitest";
 // card (§ 2.4 budget line, § 2.6 points cap, test-minimal's minimal form).
 // Same mock preamble as index.card.test.js.
 process.env.DEVOPS_COMPLETION_NO_USAGE = "1";
+// Terminal markdown is what these tests assert (on Desktop it is the title line only, § 4).
+process.env.CLAUDE_CODE_ENTRYPOINT = "cli";
 vi.setConfig({ testTimeout: 30_000 });
 
 const captured = vi.hoisted(() => ({ handlers: {} }));
