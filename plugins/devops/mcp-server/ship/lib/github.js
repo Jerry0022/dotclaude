@@ -21,6 +21,38 @@ function gh(args, opts = {}) {
 }
 
 /**
+ * Delete a branch on origin after its PR merged (#442). Used where
+ * `gh pr merge --delete-branch` is deliberately skipped — inside a worktree gh
+ * would try to check out base locally — so the remote head never went away and
+ * repos without `delete_branch_on_merge` accumulated stale `claude/*` heads
+ * (34 on one consumer). The DELETE is safe for the worktree: it keeps working
+ * on its local branch, and the next push re-creates the remote head.
+ *
+ * Tries the REST ref delete first (no local checkout involved), then
+ * `git push origin --delete`. Never throws — the merge already landed and a
+ * failed delete is a warning, not a failure (#398 post-merge contract).
+ *
+ * @returns {{ ok: boolean, method?: "gh-api"|"git-push", error?: string }}
+ */
+export function deleteRemoteBranch(branch, opts = {}) {
+  const errors = [];
+  try {
+    gh(["api", "-X", "DELETE", `repos/{owner}/{repo}/git/refs/heads/${branch}`], opts);
+    return { ok: true, method: "gh-api" };
+  } catch (e) {
+    errors.push(`gh api: ${sanitizeError(e) || "failed"}`);
+  }
+  try {
+    const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts;
+    execFileSync("git", ["push", "origin", "--delete", branch], { cwd, encoding: "utf8", timeout, stdio: ["pipe", "pipe", "pipe"] });
+    return { ok: true, method: "git-push" };
+  } catch (e) {
+    errors.push(`git push --delete: ${sanitizeError(e) || "failed"}`);
+  }
+  return { ok: false, error: errors.join("; ") };
+}
+
+/**
  * Create a PR and return { number, url }.
  * Body is passed via stdin to avoid shell escaping issues.
  */

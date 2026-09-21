@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.184.2] — 2026-09-22
+
+### Fixed
+- **Ship in worktrees — remote branch deleted, no manual cleanup note (#442)** — `gh pr merge --delete-branch` is skipped inside every worktree (gh would check out the base locally), so the merged head stayed on origin after every Desktop-app ship (10/10 on one consumer, 34 stale `claude/*` heads). `ship_release` now deletes the remote head itself right after a worktree merge (`gh api DELETE …/git/refs/heads/<branch>`, fallback `git push origin --delete`), drops the stale remote-tracking ref so the next lease-pinned push is not rejected, and reports `remoteBranchDeleted` / `remoteBranchWarning` — failures reported, never thrown; only the head, never the base of a hierarchical merge. `/ship` Step 5a routes a harness-created (Claude Desktop) worktree straight to keep-mode with the normal DONE CTA — the forced-keep detour and its "close the session, then `git worktree remove … && git branch -d …`" note are gone; the app owns the worktree lifecycle, `/setup-cleanup` the rest. `ship_cleanup`'s refusal names the way out per worktree kind. deep-knowledge: data-flow, cleanup (the false "`deleteBranchOnMerge` enabled" claim), hierarchical-merge.
+
 ## [0.184.1] — 2026-09-22
 
 ### Changed

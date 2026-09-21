@@ -756,6 +756,17 @@ If no → **normal cleanup** (Step 5b).
 **Default is normal cleanup.** Only switch to keep-mode when a signal is clear — false-positives
 accumulate unmerged branches and orphan worktrees.
 
+**Harness-created worktree → keep-mode, always (#442).** In a Claude Desktop (Code tab)
+session the worktree is created by the app, not by `EnterWorktree`: `ship_preflight`
+reports `inWorktree: true` and this session never called `EnterWorktree`. There
+`ExitWorktree` is a no-op, `ship_cleanup` refuses ("attached to an active worktree"),
+and the app owns the worktree lifecycle (auto-archive removes worktree + branch). Decide
+this up front — before the signals below — and go straight to Step 5c: `ship_cleanup({
+keep: true })`, normal DONE CTA (no `state.kept`, see 5c). The remote branch was
+already deleted by `ship_release` (`remoteBranchDeleted`); the local branch and
+worktree are the app's to remove. **Never print git commands for the user to run after
+a ship** — no "close the session, then `git worktree remove …`" note, ever.
+
 ### Signals that trigger keep-mode
 
 Evaluate all sources; ANY positive hit → keep-mode.
@@ -813,24 +824,18 @@ what was decided and can override (`"nein, doch räum auf"` for a follow-up clea
 implies keep-mode, and `ExitWorktree` would remove *this session's* worktree, not
 the target's. Go to Step 5c.
 
-**If in a worktree**: call `ExitWorktree(action: "remove")` FIRST to release the CWD lock.
+**If in a worktree this session entered via `EnterWorktree`**: call `ExitWorktree(action: "remove")`
+FIRST to release the CWD lock. (A harness-created worktree never reaches this substep — Step 5a
+routed it to 5c.)
 
 If `ExitWorktree` **fails** (e.g. directory locked by another process): **STOP**. Do not proceed to cleanup.
 Report the error to the user. The merge already landed on GitHub — cleanup can be retried later.
 
-**If `ExitWorktree` returns a No-op** (the worktree was created externally — by the harness or
-`git worktree add` — not via `EnterWorktree` in this session): the tool cannot release the CWD
-lock and `ship_cleanup` will refuse (`"attached to an active worktree"`). Do **NOT** force-remove
-the directory the session lives in — that would break the session. This is **forced-keep**, NOT
-deliberate keep-mode:
-- Clear the sentinel with `ship_cleanup({ ..., keep: true })` (same call as Step 5c) so Edit/branch
-  guards reset — but treat it purely as sentinel cleanup.
-- In Step 6, render the **normal** DONE CTA — do **NOT** pass `state.kept: true`. Keep-mode's
-  `WEITER in <branch>` CTA is reserved for *deliberate* keep (expected follow-up work); a worktree
-  kept only because cleanup was blocked must not signal "keep coding here".
-- Instead, add a short manual-cleanup note **above** the card (close the session, then from the main
-  repo: `git worktree remove <path>` + `git branch -d <branch>`).
-- Skip the rest of Step 5b/5c.
+**If `ExitWorktree` returns a No-op** (the worktree was created outside this session after all):
+do **NOT** force-remove the directory the session lives in — that would break the session. Fall
+back to Step 5c (`ship_cleanup({ ..., keep: true })`, normal DONE CTA, no `state.kept`) and
+stay silent about it: the remote branch is gone (`ship_release`), the local leftovers are the
+app's or `/setup-cleanup`'s job. Never hand the user git commands to run.
 
 Then call `ship_cleanup` MCP tool with the `base` from Step 1 (always pass `cwd`):
 ```
@@ -844,7 +849,8 @@ ship_cleanup({ branch: "feat/42-video-filters/core", base: "feat/42-video-filter
 
 The tool deletes the sub-branch but **preserves the feature branch** for further sub-branch merges or final ship to main.
 
-The tool will refuse to run if still inside a worktree — it returns an error reminding you to call ExitWorktree first.
+The tool refuses to run inside a worktree — its error names the way out for each worktree kind
+(harness-created → `keep: true`; `EnterWorktree` → `ExitWorktree` first).
 
 **Only own branch/worktree.** Never clean up other branches or worktrees.
 **Only after confirmed merge.** If Step 4 failed, preserve everything.
@@ -892,7 +898,8 @@ itself is broken, when in reality the content is fine at the main path.
 
 ## Step 5c — Keep-mode cleanup (sentinel only)
 
-**Only runs when Step 5a chose keep-mode.**
+**Runs when Step 5a chose keep-mode — deliberately (follow-up work expected) or because the
+worktree is harness-created (Claude Desktop, #442).**
 
 Do NOT call `ExitWorktree` — the worktree stays. Do NOT delete the branch.
 
@@ -904,12 +911,22 @@ ship_cleanup({ branch: "claude/feature-branch", base: "main", cwd: "<cwd>", keep
 
 Returns `{ success: true, kept: true, cleaned: ["sentinel"], warnings: [...] }`.
 
-The remote branch was deleted by the GitHub merge — that's expected. The next commit + push
-in this worktree will re-create it via `git push --set-upstream origin <branch>` automatically.
+The remote branch is gone either way — deleted by the GitHub merge (`--delete-branch`)
+outside a worktree, by `ship_release` itself inside one (`remoteBranchDeleted: true`; it
+also drops the stale remote-tracking ref so the next lease-pinned push is not rejected).
+The next commit + push in this worktree re-creates it via
+`git push --set-upstream origin <branch>` automatically. A `remoteBranchWarning` in the
+release result means the delete failed: surface it as one `open` item on the card
+("Remote-Branch `<branch>` konnte nicht gelöscht werden — /setup-cleanup"), nothing else.
 
-In Step 6, pass `state.kept: true` and `state.branch: "<feature-branch>"` to
-`render_completion_card` so the CTA renders `KEEP CODING in <branch>` / `WEITER in <branch>`
-instead of `All DONE` / `Alles ERLEDIGT`.
+In Step 6:
+- **Deliberate keep** (follow-up work expected): pass `state.kept: true` and
+  `state.branch: "<feature-branch>"` so the CTA renders `KEEP CODING in <branch>` /
+  `WEITER in <branch>` instead of `All DONE` / `Alles ERLEDIGT`.
+- **Harness-created worktree** (keep only because the app owns the teardown): render the
+  **normal** DONE CTA — no `state.kept`, no cleanup note. The `WEITER in <branch>` CTA is
+  reserved for expected follow-up work; a worktree kept because nobody else may remove it
+  must not read as "keep coding here".
 
 ## Step 6 — Completion Card
 
