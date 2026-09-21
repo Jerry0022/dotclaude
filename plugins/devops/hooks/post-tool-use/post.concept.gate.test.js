@@ -15,6 +15,7 @@ const HOOK = path.join(__dirname, "post.concept.gate.js");
 // A minimal live-bridge page (every marker the gate requires) with a slot for
 // extra body content.
 const page = extra => `<!doctype html><html data-template="free">
+<head><style>.concept-decision-panel { position: fixed } .concept-layout { display: flex } .concept-content { min-width: 0 }</style></head>
 <body>
 <script type="application/json" id="concept-decisions">{"submitted":false}</script>
 <div id="panel-ready"><div class="iteration-tabs"></div>
@@ -24,7 +25,7 @@ const page = extra => `<!doctype html><html data-template="free">
 ${extra}
 <script>function pollHeartbeat(){}</script>
 <div class="panel-here"><div id="panel-status"></div></div>
-<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){}</script>
+<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){} async function submitWithAction(){} async function retryPendingSubmission(){}</script>
 </body></html>`;
 
 const spec = extra => JSON.stringify({
