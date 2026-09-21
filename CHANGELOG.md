@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.185.0] — 2026-09-22
+
+### Added
+- **Concept — feedback dock in every template (#399)** — the 💬 FAB and the feedback dock are page chrome now: decision and free rounds show a compact dock with the general-notes textarea (+ attachment slot), design rounds keep their per-screen / per-design rows above it. One fixed place for a remark that belongs to no single card, in every round. Dock markup, CSS and JS moved from the design template into § Common Structure / § Panel Chrome of templates.md (open/close/maximise/size persistence shared; the design IIFE keeps only its row builders); a design page still has exactly one dock and one FAB.
+- **Concept — unified `comments` payload** — every template emits `comments: { general: { text, attachments }, items: [ { id, text, attachments } ] }` (design additionally keeps `designs` / `screens` / `views`); `applyDockFreezeState()` reads the general note back from any template. validation-gate.md: dock patterns P1/P2/P5/P11/P12/P13/P13b–e are template-independent (Phase 1), plus P13f (compact rule) and P13g (unified shape); legacy pages tolerated via `data-page-version`. monitoring.md / iteration-rules.md examples and the fixture builder follow.
+
 ## [0.184.2] — 2026-09-22
 
 ### Fixed
