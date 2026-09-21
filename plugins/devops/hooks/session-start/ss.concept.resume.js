@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.concept.resume
- * @version 0.5.0
+ * @version 0.6.0
  * @event SessionStart
  * @plugin devops
  * @description Recover an open concept session after a Claude restart.
@@ -120,12 +120,14 @@ function storeDirFor(htmlPath) {
  *
  * @returns {{unprocessed:boolean, version:number|null, marker:object|null,
  *            lastCheckpoint:object|null, progress:object[], attachments:number,
- *            storeDir:string, present:boolean}}
+ *            storeDir:string, present:boolean, lastActivityAt:string|null,
+ *            hasDraft:boolean}}
  */
 function readStore(storeDir) {
   const empty = {
     unprocessed: false, version: null, marker: null, lastCheckpoint: null,
     progress: [], attachments: 0, storeDir, present: false,
+    lastActivityAt: null, hasDraft: false,
   };
   let state = null;
   try {
@@ -167,6 +169,35 @@ function readStore(storeDir) {
     attachments = fs.readdirSync(path.join(storeDir, 'attachments')).length;
   } catch { /* none */ }
 
+  // Last activity (#426): the newest of state.json's `saved_at`, every draft
+  // snapshot's `ts`, and the journal's tail — each with the file mtime as the
+  // fallback. `started_at` in concept-active.json only says when the concept
+  // was OPENED; a concept that saved a draft last night is not abandoned
+  // because it was opened the day before. `hasDraft` is true when a snapshot
+  // holds a typed note (a `text:` key with content — the server's own
+  // DRAFT_RECOVER_PREFIX): that is the irreplaceable half of the blob and
+  // makes the concept live whatever its age.
+  const times = [];
+  const addTime = (iso) => { const t = Date.parse(iso); if (Number.isFinite(t)) times.push(t); };
+  const addMtime = (file) => { try { times.push(fs.statSync(file).mtimeMs); } catch { /* absent */ } };
+  if (typeof state.saved_at === 'string') addTime(state.saved_at); else addMtime(path.join(storeDir, 'state.json'));
+  addMtime(path.join(storeDir, 'journal.jsonl'));
+  let hasDraft = false;
+  try {
+    const draftsDir = path.join(storeDir, 'drafts');
+    for (const name of fs.readdirSync(draftsDir)) {
+      if (!name.endsWith('.json')) continue;
+      const file = path.join(draftsDir, name);
+      try {
+        const snap = JSON.parse(fs.readFileSync(file, 'utf8'));
+        if (snap && typeof snap.ts === 'string' && Number.isFinite(Date.parse(snap.ts))) addTime(snap.ts); else addMtime(file);
+        const blob = snap && snap.state && typeof snap.state === 'object' ? snap.state : {};
+        if (Object.keys(blob).some((k) => k.startsWith('text:') && typeof blob[k] === 'string' && blob[k].trim())) hasDraft = true;
+      } catch { addMtime(file); /* torn snapshot — the mtime still counts as activity */ }
+    }
+  } catch { /* no drafts dir */ }
+  const lastActivityAt = times.length ? new Date(Math.max(...times)).toISOString() : null;
+
   return {
     unprocessed,
     version: typeof state.version === 'number' ? state.version : null,
@@ -176,6 +207,8 @@ function readStore(storeDir) {
     attachments,
     storeDir,
     present: true,
+    lastActivityAt,
+    hasDraft,
   };
 }
 
@@ -262,11 +295,22 @@ function postShutdown(port, timeoutMs = 1500) {
   });
 }
 
-function isStale(state) {
-  if (!state.started_at) return false;
-  const t = Date.parse(state.started_at);
-  if (!Number.isFinite(t)) return false;
-  return (Date.now() - t) > STALE_AFTER_MS;
+/**
+ * Is this concept abandoned? Measured from the LAST ACTIVITY — the later of
+ * `started_at` (when it was opened) and the durable store's newest save /
+ * draft / journal write — not from the open alone (#426): a multi-day review
+ * with a draft from last night was pruned silently on day two because the
+ * open was more than 24 h ago. A store holding a typed note is never stale.
+ * @param {object} state — concept-active.json
+ * @param {object} [store] — readStore() result (optional: no store → age of the open)
+ */
+function isStale(state, store) {
+  if (store && store.hasDraft) return false;
+  const stamps = [state.started_at, store && store.lastActivityAt]
+    .map((s) => (typeof s === 'string' ? Date.parse(s) : NaN))
+    .filter(Number.isFinite);
+  if (!stamps.length) return false;
+  return (Date.now() - Math.max(...stamps)) > STALE_AFTER_MS;
 }
 
 /**
@@ -558,13 +602,29 @@ if (require.main === module) {
         process.stdout.write(buildDeadBridgeRecovery(state, store) + '\n');
         process.exit(0);
       }
-      // Nothing pending. A stale state file (>24 h) is an abandoned concept —
-      // prune it. Otherwise the bridge died with the previous session (#348):
-      // relaunch it on the same port instead of leaving the page disconnected
-      // until someone notices the red indicator. A server the user is already
-      // restarting in another terminal makes the relaunch fail on the bound
-      // port, which the mandate treats as "already back".
-      if (isStale(state)) { deleteState(); process.exit(0); }
+      // Nothing pending. A stale state file — no activity for >24 h, measured
+      // against the durable store, never the open alone (#426) — is an
+      // abandoned concept: prune it, and SAY so, naming the store dir so the
+      // session can rebuild the state file if the prune was wrong. The old
+      // silent exit is how a live multi-day concept vanished on day two: the
+      // next tick then saw "state file gone" and shut down the bridge the
+      // user had just relaunched by hand. Otherwise the bridge died with the
+      // previous session (#348): relaunch it on the same port instead of
+      // leaving the page disconnected until someone notices the red
+      // indicator. A server the user is already restarting in another
+      // terminal makes the relaunch fail on the bound port, which the mandate
+      // treats as "already back".
+      if (isStale(state, store)) {
+        deleteState();
+        process.stdout.write(
+          `PRUNED stale concept state ${STATE_PATH} (port ${state.port}, started ${state.started_at}` +
+          `, last activity ${store.lastActivityAt || 'none recorded'}, no draft, nothing pending): ` +
+          `no activity for more than 24 h. The durable store stays at ${store.storeDir}. ` +
+          `If the concept is still wanted, recreate the state file from that store and relaunch the bridge ` +
+          `(bridge-server.md step 4 — same port ${state.port}, same --html ${state.html_path}).\n`
+        );
+        process.exit(0);
+      }
       process.stdout.write(buildDeadBridgeRelaunch(state, STATE_PATH) + '\n');
       process.exit(0);
     }

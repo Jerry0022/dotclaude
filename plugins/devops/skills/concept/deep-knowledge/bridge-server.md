@@ -531,8 +531,10 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    - `cron_id` — the ID `CronCreate` returned in step 3. A new session
      refreshes the polling cron, the old ID is just informational (the old
      session-only cron died with the prior session and cannot be reaped).
-   - `started_at` — ISO-8601 UTC. Lets the hook age-out stale state after
-     ~24 h even if cleanup did not run.
+   - `started_at` — ISO-8601 UTC. When the concept was OPENED. Staleness is
+     measured from the last activity (this stamp, the store's `state.json`
+     `saved_at`, the newest draft, the journal tail — #426), never from the
+     open alone, and a store holding a typed note is never stale.
    - `baseline_ref` / `baseline_sha` / `baseline_captured_at` — the reality
      check's anchor: the default branch and the **remote** tip this concept was
      written against, written by `scripts/concept-drift.js --capture` right
@@ -556,9 +558,12 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    recovery mandate (relaunch on the same port, verify the store, process);
    a dead bridge with nothing pending → the relaunch mandate (same port,
    same `--html`, verified heartbeat round-trip, all three watchers). Only a
-   state file older than 24 h is pruned instead. The page reconnects on its
-   own once the heartbeat is back; the reviewer never has to reload or wait
-   for someone to notice the red indicator.
+   concept with no activity for more than 24 h — measured against the durable
+   store (last save, newest draft, journal tail), not the open — and no typed
+   draft is pruned instead, and the hook prints one PRUNED line naming the
+   state file, port and store dir, never a silent exit (#426). The page
+   reconnects on its own once the heartbeat is back; the reviewer never has
+   to reload or wait for someone to notice the red indicator.
 
    Path: ALWAYS `<project-cwd>/.claude/concept-active.json` (NOT a worktree
    subpath, NOT under `docs/`). The hook reads this exact path and silently
