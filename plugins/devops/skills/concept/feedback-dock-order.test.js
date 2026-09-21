@@ -42,7 +42,11 @@ function fencedBlock(src, startMarker, lang) {
 }
 
 describe("feedback dock — section order (specific -> general)", () => {
-  const html = fencedBlock(md, 'id="feedback-dock"', "html");
+  // The DESIGN skeleton's dock — the one with the three row containers.
+  // § Common Structure carries the same dock reduced to its general section
+  // (#399: the dock is page chrome in every template), so the marker has to
+  // be a row id, not the dock id.
+  const html = fencedBlock(md, 'id="screen-textareas"', "html");
 
   function idx(needle) {
     const i = html.indexOf(needle);

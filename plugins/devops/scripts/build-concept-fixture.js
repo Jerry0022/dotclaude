@@ -392,7 +392,7 @@ function build(opts, md = fs.readFileSync(TEMPLATES, 'utf8')) {
       .replace(/^<html data-template="design">/m,
         `<!DOCTYPE html>\n<html lang="${opts.locale}" data-theme="dark" data-page-version="${stamp}" data-template="design">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${esc(title)}</title>\n<style>\n${TOKENS}\n${css}\n</style>\n</head>`)
       .replace(/<main>[\s\S]*?<\/main>/, `<main>\n${sections}\n</main>`)
-      .replace(/<\/body>\s*<\/html>\s*$/, `<script type="application/json" id="concept-decisions">\n{"submitted": false, "decisions": [], "comments": []}\n</script>\n<script>\n${js}\n</script>\n</body>\n</html>\n`);
+      .replace(/<\/body>\s*<\/html>\s*$/, `<script type="application/json" id="concept-decisions">\n{"submitted": false, "decisions": [], "comments": {"general": {"text": "", "attachments": []}, "items": []}}\n</script>\n<script>\n${js}\n</script>\n</body>\n</html>\n`);
   } else {
     const skel = html.find(b => b.code.startsWith('<!DOCTYPE html>'));
     if (!skel) throw new Error('common structure skeleton not found in templates.md');

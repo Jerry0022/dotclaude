@@ -234,14 +234,16 @@ most and then asks its own, design-independent question.
 | Template | Layout signature |
 |---|---|
 | **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 💬 FAB bottom right (same 60px circle as ☰; collapsed by default; general / per-design / per-screen / per-view comments), design switcher when ≥2 designs; both FABs carry a locale tooltip (`title` + `aria-label`, swapped open/close) and the 💬 FAB pulses once until first use so it is not an unlabelled circle; view segments alongside it when ≥1 optional view (§ Views (optional)), device-view toggle bottom-left when ≥2 form factors |
-| **decision** | Document column, variant cards, tri-state per variant; notes inline on the card |
-| **free** | Document column, Claude-authored freeform body, optional tri-state per section; notes inline |
+| **decision** | Document column, variant cards, tri-state per variant; notes inline on the card; the 💬 dock (bottom right, same as design) holds the general note + attachments |
+| **free** | Document column, Claude-authored freeform body, optional tri-state per section; notes inline; the 💬 dock holds the general note + attachments |
 
-The ☰ panel is the same overlay in all three — it is page chrome, not part of
-the layout, and it never moves between rounds (`deep-knowledge/templates.md`
-§ Panel Chrome (all templates)). What differs per round is only where
-feedback is written: the 💬 dock over a mockup, inline textareas in a
-document round.
+The ☰ panel and the 💬 feedback dock are the same overlays in all three —
+both are page chrome, not part of the layout, and neither moves between
+rounds (`deep-knowledge/templates.md` § Panel Chrome (all templates)). What
+differs per round is only what the dock holds and where the itemised
+feedback is written: per-screen / per-design / per-view rows over a mockup,
+inline textareas in a document round — the general note lives in the dock
+in every round.
 
 `design` is the canonical name; `prototype` is accepted as a legacy alias
 (older pages/prompts) and is normalised to `design` — see
@@ -261,10 +263,11 @@ exceptions are exactly two:
   `.iteration-intro`) is built for a mockup.
 
 This is not a style rule. A `decision` round in a design concept swaps the
-feedback surface underneath the reviewer: the 💬 dock disappears and the notes
-move into the cards. That happened on real concepts — a reality-check round
-appended as `decision` in a three-round design concept — and it reads as the
-page breaking. Whatever you choose, **write it on the section**: an appended
+feedback surface underneath the reviewer: the dock folds down to its general
+note and the itemised notes move into the cards. That happened on real
+concepts — a reality-check round appended as `decision` in a three-round
+design concept — and it reads as the page breaking (before #399 the dock
+vanished outright, taking the typed note with it). Whatever you choose, **write it on the section**: an appended
 round without `data-iteration-template` used to inherit whatever tab the
 reader arrived from.
 
@@ -451,15 +454,19 @@ used to dock into a ~20% sidebar for `decision` / `free` rounds, which meant a
 concept that mixed templates moved its panel — and the surface the user writes
 feedback on — from behind the FAB into the page, mid-session.
 
-What IS template-specific is only what the round adds around it:
+The same holds for the **💬 feedback dock** (#399): one speech bubble anchored
+to the 💬 FAB bottom right, in every template, holding the general note (with
+attachments) — the design round adds its itemised rows above it. What IS
+template-specific is only what the round adds around the two:
 
 | Template | Extras |
 |---|---|
-| **decision**, **free** | Comments are written inline, next to the card or section being judged |
-| **design** | **Feedback dock** as a speech bubble anchored to the 💬 FAB bottom right, ordered per-screen / per-design / per-view / general (specific → general, top to bottom); design switcher when ≥2 designs; `#screen-nav` gains a second group below the designs group, one entry per optional view (§ Views (optional)) |
+| **decision**, **free** | Itemised comments are written inline, next to the card or section being judged; the dock is `compact` and holds the general note only |
+| **design** | The dock additionally carries per-screen / per-design / per-view rows above the general note (specific → general, top to bottom); design switcher when ≥2 designs; `#screen-nav` gains a second group below the designs group, one entry per optional view (§ Views (optional)) |
 
 A concept may mix the two freely from round to round — that choice is about
-where feedback belongs, not about where the menu lives. The overlay already
+where itemised feedback belongs, not about where the menu or the dock lives.
+The overlay already
 works on mobile (`max-width: 90vw`); only the "you are here" head folds away
 below 768px.
 
@@ -575,19 +582,29 @@ This applies to **all three templates** — even design (implement = "build
 what we designed with the feedback") and free (implement = "act on the
 findings I marked Miteinbeziehen").
 
-### Design Feedback Dock
+### Feedback Dock (all templates)
 
-The design template has no tri-state. Instead, a **speech-bubble feedback
-dock** anchored to the 💬 FAB (bottom-right) holds structured feedback,
-ordered **specific → general, top to bottom**:
+A **speech-bubble feedback dock** anchored to the 💬 FAB (bottom-right) is
+page chrome on every concept page (#399), like the ☰ panel: the same markup
+(`templates.md` § Common Structure, § Panel Chrome (all templates) → Feedback
+dock) on a `decision`, `free` and `design` round. In a **document round** it
+holds exactly one thing — the general-notes textarea with its attachment
+slot — and renders `compact`; the itemised notes of such a round are the
+inline `textarea[data-comment]` fields next to the cards. Every payload
+carries the note the same way: `comments.general = { text, attachments }`,
+next to `comments.items[]` for the itemised fields (§ Feedback Mechanism below).
+
+The **design template** has no tri-state on its screens. Its dock holds the
+structured feedback instead, ordered **specific → general, top to bottom**:
 
 - One textarea per `<section data-screen>` inside the active design,
   auto-populated by the dock (label = `data-nav-label` of that screen) — first
 - One textarea per `data-design` (only when the iteration has ≥2 designs) —
   second
-- A general-notes textarea that stays visible regardless of the active
+- The general-notes textarea that stays visible regardless of the active
   screen — last, because it is the one field that never disappears or
-  changes label as the user navigates
+  changes label as the user navigates (and the one field every other
+  template's dock has too)
 
 While a view is active (§ Views (optional) below), the design and per-screen
 rows are replaced by a single per-view textarea, so the visible order
@@ -612,8 +629,9 @@ accent circle differing only in glyph and corner, and the open dock has
 exactly two widths (compact 420px / wide 560px, picked by `applyDockSize()`).
 Copy these verbatim; hand-tuning them per concept is what made the two FABs
 different sizes and the dock alternately a mini-box and a full-width bar. See
-`deep-knowledge/templates.md` § Template: design for the full HTML/CSS/JS and
-the geometry rationale.
+`deep-knowledge/templates.md` § Panel Chrome (all templates) for the dock's
+HTML/CSS/JS and the geometry rationale, and § Template: design for the
+per-screen / per-design / per-view rows only a design round adds.
 
 ### Annotation Layer (optional)
 
@@ -736,7 +754,7 @@ The HTML page MUST include a feedback data layer:
 ```html
 <!-- Hidden container for structured decisions -->
 <script type="application/json" id="concept-decisions">
-  { "submitted": false, "decisions": [], "comments": [] }
+  { "submitted": false, "decisions": [], "comments": { "general": { "text": "", "attachments": [] }, "items": [] } }
 </script>
 ```
 
@@ -746,7 +764,7 @@ signal Claude monitors.
 
 **Submit button behavior:**
 1. Collect all toggle/checkbox states → `decisions[]`
-2. Collect all comment field values → `comments[]`
+2. Collect all comment field values → `comments` = `{ general: { text, attachments }, items: [ { id, text, attachments } ] }` — the 💬 dock's general note plus every itemised field of the live round, the same shape in every template (design adds `designs` / `screens` / `views`)
 3. Set `submitted: true` in the JSON block
 4. Add classes `concept-submitted` and `content-dimmed` to `<body>` and
    reveal `#content-dimmer` so the content area visually fades. The decision
