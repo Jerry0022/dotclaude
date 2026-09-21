@@ -50,7 +50,7 @@ import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePendin
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { coerceCardInput, validateCardInput, formatIssues } from "./lib/card-input.js";
 import { conceptUrl, readBatch, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
-import { cardWidgetInstruction } from "./lib/card-widget.js";
+import { cardWidgetInstruction, isDesktopSession } from "./lib/card-widget.js";
 import {
   assessFreshness,
   isLiveSnapshot,
@@ -407,19 +407,27 @@ function deviationText(input, lang) {
   return '';
 }
 
-/** ≤3 `›` result-line texts (WITHOUT the `› ` marker itself). */
-function buildResultLines(input, lang) {
+/**
+ * ≤3 `›` result-line texts (WITHOUT the `› ` marker itself).
+ *
+ * `clamp` (default true) cuts each line at RESULT_LINE_MAX with an ellipsis —
+ * the terminal budget (§ 5.4). The Desktop widget passes `false`: it wraps,
+ * and a line cut mid-sentence read as "the card only shows half" (observed
+ * 2026-09-21). The three-line cap and the "+N weitere" tail apply either way.
+ */
+function buildResultLines(input, lang, { clamp = true } = {}) {
   const L = DEVIATION_LABEL[lang] || DEVIATION_LABEL.de;
   const tail = RESULT_TAIL[lang] || RESULT_TAIL.de;
+  const cut = (text, max) => (clamp ? clampEllipsis(text, max) : String(text || '').trim());
   const lines = [];
 
   const dev = deviationText(input, lang);
-  if (dev) lines.push(L + ' ' + clampEllipsis(dev, RESULT_LINE_MAX));
+  if (dev) lines.push(L + ' ' + cut(dev, RESULT_LINE_MAX));
 
   const changes = Array.isArray(input.changes) ? input.changes : [];
   // test-minimal: the one line is what was started (§ 3), carried in cta.description.
   if (!changes.length && input.variant === 'test-minimal' && input.cta && input.cta.description) {
-    lines.push(clampEllipsis(String(input.cta.description), RESULT_LINE_MAX));
+    lines.push(cut(String(input.cta.description), RESULT_LINE_MAX));
   }
   for (const c of changes) {
     let text = String((c && c.description) || '');
@@ -430,7 +438,7 @@ function buildResultLines(input, lang) {
     // is still discarded.
     if (area && text && /^[a-zäöü]/.test(text) && /^\S+$/.test(area) && /[-._:/]/.test(area)) text = area + ' ' + text;
     if (!text) text = area;
-    const desc = clampEllipsis(text, RESULT_LINE_MAX);
+    const desc = cut(text, RESULT_LINE_MAX);
     if (desc) lines.push(desc);
   }
 
@@ -438,7 +446,7 @@ function buildResultLines(input, lang) {
   const shown = lines.slice(0, RESULT_LINE_LIMIT);
   const rest = lines.length - RESULT_LINE_LIMIT;
   const last = RESULT_LINE_LIMIT - 1;
-  shown[last] = clampEllipsis(shown[last], 90) + '  ' + tail(rest);
+  shown[last] = cut(shown[last], 90) + '  ' + tail(rest);
   return shown;
 }
 
@@ -769,7 +777,13 @@ function renderPipelineLine(input, lang, buildId) {
 const HEADINGS = {
   de: {
     ready: (c) => c.reservation ? `📦 Shippen trotz ${c.reservation}?` : '📦 Shippen?',
-    'ready-red': (c) => `⚠ Trotzdem shippen mit ${c.n} roten Tests?`,
+    // Names what is actually red: failing tests, else unmet requirements,
+    // else partially met ones — an unmet requirement is not a "red test".
+    'ready-red': (c) => `⚠ Trotzdem shippen mit ${c.redTests
+      ? c.redTests + ' roten Tests'
+      : c.unmet
+        ? c.unmet + (c.unmet === 1 ? ' unerfüllter Anforderung' : ' unerfüllten Anforderungen')
+        : c.n + (c.n === 1 ? ' teilweise erfüllter Anforderung' : ' teilweise erfüllten Anforderungen')}?`,
     'ship-blocked': (c) => `⛔ ${c.reason} umgehen und trotzdem shippen?`,
     'ship-successful': (c) => c.ring
       ? `🚀 Released v${c.version} alpha — nach beta promoten?`
@@ -791,7 +805,11 @@ const HEADINGS = {
   },
   en: {
     ready: (c) => c.reservation ? `📦 Ship anyway despite ${c.reservation}?` : '📦 Ship?',
-    'ready-red': (c) => `⚠ Ship anyway with ${c.n} red tests?`,
+    'ready-red': (c) => `⚠ Ship anyway with ${c.redTests
+      ? c.redTests + ' red tests'
+      : c.unmet
+        ? c.unmet + (c.unmet === 1 ? ' unmet requirement' : ' unmet requirements')
+        : c.n + (c.n === 1 ? ' partially met requirement' : ' partially met requirements')}?`,
     'ship-blocked': (c) => `⛔ Bypass ${c.reason} and ship anyway?`,
     'ship-successful': (c) => c.ring
       ? `🚀 Released v${c.version} alpha — promote to beta?`
@@ -955,15 +973,19 @@ function decisionContext(input, key, delivery, state, lang) {
       const m = /(\d+)\s*(rot|red|fail\w*|fehler|errors?)/i.exec(String(t.result || ''));
       return sum + (m ? Number(m[1]) : 1);
     }, 0);
-  const unmetCount = Array.isArray(input.validation)
-    ? input.validation.filter(v => v.status && v.status !== 'met').length
-    : 0;
+  const validation = Array.isArray(input.validation) ? input.validation : [];
+  const unmetCount = validation.filter(v => v.status && v.status !== 'met').length;
+  const strictlyUnmet = validation.filter(v => v.status === 'unmet').length;
   return {
     version: String(version || '').replace(/^v/, ''),
     ring: !!delivery.promote,
     base: (delivery.ship && delivery.ship.base) || state.merged || 'main',
     reservation: headingReservation(input.open, lang),
     n: redCount || unmetCount || 1,
+    // What the ready-red heading names: red tests first, else unmet
+    // requirements, else (n) partially met ones.
+    redTests: redCount,
+    unmet: strictlyUnmet,
     reason: (input.cta && input.cta.reason) || topGateFinding(input, lang),
     branch: state.branch || '',
   };
@@ -1114,7 +1136,11 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     variant: input.variant,
     lang,
     key,
-    resultLines: buildResultLines(input, lang),
+    // The widget carries the title itself: on Desktop the markdown under it is
+    // the ✨ marker line only (§ 4), so the body is drawn exactly once.
+    title: clampText(String(input.summary || (lang === 'en' ? 'Task completed' : 'Aufgabe erledigt')), SUMMARY_MAX).value,
+    // Unclamped — the widget wraps; the 120-char ellipsis is a terminal budget.
+    resultLines: buildResultLines(input, lang, { clamp: false }),
     evidence: buildEvidencePosts(input, lang, key),
     budget: buildBudgetModel(usageData, delta5h, deltaWk, healthLine),
     pipeline: renderPipelineLine(input, lang, buildId),
@@ -1134,7 +1160,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
  * renders buttons; the Desktop widget draws them separately, see
  * `lib/card-widget.js`).
  */
-function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId) {
+function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId, { titleOnly = false } = {}) {
   const variant = input.variant || 'fallback';
   const lang = input.lang || 'de';
   const state = input.state || {};
@@ -1143,6 +1169,14 @@ function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId) {
   const body = hasBody(variant);
 
   const parts = ['&nbsp;', '', '---', '', renderTitle(input.summary || (lang === 'en' ? 'Task completed' : 'Aufgabe erledigt'))];
+
+  // Desktop (§ 4): the body widget drew everything under the title already;
+  // the markdown is the ✨ marker line alone, so nothing is shown twice
+  // (observed 2026-09-21: widget + full markdown = the whole card twice).
+  if (titleOnly) {
+    parts.push('', '---');
+    return parts.join('\n');
+  }
 
   const resultLines = buildResultLines(input, lang);
   if (body) {
@@ -1410,7 +1444,11 @@ function buildCompletionCard(params) {
   //    after this call, on this same `params` object.
   const repoUrl = getRepoUrl(params.cwd);
   const key = resolveCardKey(params);
-  const cardMarkdown = renderCard(params, usageData, delta5h, deltaWk, healthLine, buildId);
+  // Same condition as cardWidgetInstruction: when the Desktop widget draws the
+  // body, the markdown shrinks to the title line (§ 4). test-minimal never
+  // calls the widget, so its markdown stays whole.
+  const titleOnly = isDesktopSession() && hasBody(params.variant);
+  const cardMarkdown = renderCard(params, usageData, delta5h, deltaWk, healthLine, buildId, { titleOnly });
   params._repoUrl = repoUrl;
   params._cardModel = buildCardModel(
     params, params.lang || 'de', key, buildId,

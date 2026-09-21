@@ -25,8 +25,11 @@ const ENTRY = join(dirname(fileURLToPath(import.meta.url)), "index.js");
 // parallel suite load that comfortably exceeds the 5s default.
 vi.setConfig({ testTimeout: 30_000 });
 
-// Never spawn the headless usage scraper (Edge) from a unit test.
-const CHILD_ENV = { ...process.env, DEVOPS_COMPLETION_NO_USAGE: "1" };
+// Never spawn the headless usage scraper (Edge) from a unit test. Pin the
+// terminal entrypoint: a run started from a Desktop session inherits
+// `claude-desktop`, where the markdown is the title line only (§ 4) — the
+// Desktop cases override it explicitly.
+const CHILD_ENV = { ...process.env, DEVOPS_COMPLETION_NO_USAGE: "1", CLAUDE_CODE_ENTRYPOINT: "cli" };
 
 let workDir;
 
@@ -95,7 +98,27 @@ describe("--render-card CLI fallback", () => {
     expect(desktop.stderr).toContain('data-prompt="/devops:ship"');
     const terminal = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "cli" });
     expect(terminal.stderr).not.toContain("CARD WIDGET");
-    expect(terminal.stdout).toBe(desktop.stdout);
+    // The terminal gets the whole markdown body; on Desktop the widget draws
+    // the body, so the markdown is the ✨ title line alone (§ 4) — observed
+    // 2026-09-21: widget + full markdown showed the whole card twice.
+    expect(terminal.stdout).toMatch(/^› y$/m);
+    expect(terminal.stdout).toMatch(/^## 📦 Shippen\?$/m);
+    expect(desktop.stdout).toMatch(/^### \*\*✨✨✨ CTA-Test ✨✨✨\*\*/m);
+    expect(desktop.stdout).not.toMatch(/^› /m);
+    expect(desktop.stdout).not.toMatch(/^## /m);
+    expect(desktop.stdout.trim().split("\n").filter(Boolean)).toEqual(["&nbsp;", "---", "### **✨✨✨ CTA-Test ✨✨✨**", "---"]);
+    // The widget carries the title and the body instead.
+    expect(desktop.stderr).toContain('<h2 class="card-title" style="margin:0 0 6px">CTA-Test</h2>');
+    expect(desktop.stderr).toContain("Shippen?");
+  });
+
+  test("test-minimal keeps its whole markdown on Desktop — no widget draws it", async () => {
+    const desktop = await renderCardFull(
+      { variant: "test-minimal", summary: "Dev-Server", session_id: "cli-test-minimal-md", cta: { description: "läuft auf Port 3000" } },
+      { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
+    );
+    expect(desktop.stdout).toMatch(/^› läuft auf Port 3000$/m);
+    expect(desktop.stdout).toMatch(/^## ▶️ Läuft — viel Spaß$/m);
   });
 
   test("test-minimal never rides the card-widget instruction, even on Desktop", async () => {

@@ -49,8 +49,8 @@ export const BUTTONS = {
       { label: "Ändern", icon: "edit", prompt: "Ich möchte noch etwas ändern, bevor wir shippen — frag mich, was.", tooltip: "Hält den Ship an und fragt zuerst, was noch anders sein soll." },
     ],
     "ready-red": [
-      { label: "Fix", icon: "tool", prompt: "Repariere zuerst die roten Tests, dann kommt die Card neu.", primary: true, tooltip: "Ich repariere die roten Tests zuerst, dann kommt die Card neu." },
-      { label: "Trotzdem shippen", icon: "rocket", prompt: "Ship trotzdem — mit skipChecks, die roten Tests landen als Issue.", tooltip: "Ship mit skipChecks — die roten Tests landen als Issue." },
+      { label: "Fix", icon: "tool", prompt: "Behebe zuerst die roten Befunde der letzten Card (rote Tests bzw. unerfüllte Anforderungen), dann kommt die Card neu.", primary: true, tooltip: "Ich behebe die roten Befunde zuerst, dann kommt die Card neu." },
+      { label: "Trotzdem shippen", icon: "rocket", prompt: "Ship trotzdem — mit skipChecks, die roten Befunde landen als Issue.", tooltip: "Ship mit skipChecks — die roten Befunde landen als Issue." },
     ],
     "ship-blocked": [
       { label: "Fix", icon: "tool", prompt: "/devops:fix", primary: true, tooltip: "Behebt den Blocker, dann erneut shippen." },
@@ -90,8 +90,8 @@ export const BUTTONS = {
       { label: "Change", icon: "edit", prompt: "I want to change something before we ship — ask me what.", tooltip: "Pauses the ship and asks what should change first." },
     ],
     "ready-red": [
-      { label: "Fix", icon: "tool", prompt: "Fix the red tests first, then render the card again.", primary: true, tooltip: "I fix the red tests first, then the card comes back." },
-      { label: "Ship anyway", icon: "rocket", prompt: "Ship anyway — with skipChecks; the red tests land as an issue.", tooltip: "Ship with skipChecks — the red tests land as an issue." },
+      { label: "Fix", icon: "tool", prompt: "Fix the red findings of the last card first (red tests or unmet requirements), then render the card again.", primary: true, tooltip: "I fix the red findings first, then the card comes back." },
+      { label: "Ship anyway", icon: "rocket", prompt: "Ship anyway — with skipChecks; the red findings land as an issue.", tooltip: "Ship with skipChecks — the red findings land as an issue." },
     ],
     "ship-blocked": [
       { label: "Fix", icon: "tool", prompt: "/devops:fix", primary: true, tooltip: "Fixes the blocker, then ship again." },
@@ -239,9 +239,16 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div class="card-pipeline" style="font-size:12px;color:${COLOR.watermark}">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
     : "";
 
-  // Block 1 — the soft "what happened" panel: surface tint, no border (H2 of the concept).
+  // The title lives in the widget: on Desktop the markdown under it is the ✨
+  // marker line only (§ 4), so the body is drawn once. h2 = the contract's 18px/500.
+  const titleHtml = model.title ? `<h2 class="card-title" style="margin:0 0 6px">${escapeHtml(model.title)}</h2>` : "";
+
+  // Block 1 — the soft "what happened" panel. `--surface-2` (one step above
+  // the page) plus a hairline: `--surface-1` alone was indistinguishable from
+  // the page in dark mode ("backgrounds are not rendered", 2026-09-21).
   const blockA = [
-    `<div class="card-panel" style="background:var(--surface-1);border-radius:12px;padding:12px 16px 10px;display:flex;flex-direction:column;gap:6px">`,
+    `<div class="card-panel" style="background:var(--surface-2);border:0.5px solid var(--border);border-radius:12px;padding:12px 16px 10px;display:flex;flex-direction:column;gap:6px">`,
+    titleHtml,
     resultLinesHtml,
     evidenceHtml,
     budgetHtml,

@@ -192,13 +192,23 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
 
 ## 4. Desktop widget vs. terminal
 
-- **Desktop:** everything under the title is ONE `mcp__visualize__show_widget`
-  call (the "card body widget"), rendered immediately before the title
-  markdown is output — the title stays the last text of the turn. The widget
-  draws both blocks (panel + box), colours (green `#8fae8f` posts, red
+- **Desktop:** the whole card is ONE `mcp__visualize__show_widget` call (the
+  "card body widget"), rendered immediately before the markdown is output —
+  and that markdown is the **title line alone** (`&nbsp;` · `---` · `### **✨✨✨
+  {title} ✨✨✨**` · `---`): it is the card-guard marker and the transcript
+  record, and it keeps the turn ending on visible text. The widget draws the
+  title (h2) and both blocks (panel + box), colours (green `#8fae8f` posts, red
   `#e0a0a0`, yellow `#d9c58a`, lilac code spans `#aab4e6`), tooltips (600 ms
-  delay), the budget bars, the quiet PR link and the buttons. The markdown
-  body is still emitted (it is what other clients and the transcript see).
+  delay), the budget bars, the quiet PR link and the buttons. Nothing is
+  drawn twice (observed 2026-09-21: widget + full markdown showed the whole
+  card twice). The widget wraps result lines instead of cutting them — the
+  120-char ellipsis of § 2.2 is a terminal budget, and a line cut mid-sentence
+  read as "the card only shows half". The panel sits on `--surface-2` with a
+  `--border` hairline: `--surface-1` alone was invisible on the dark page.
+  `cardSignature` (§ 5.5) falls back to the title for such a title-only card.
+- The `ready-red` heading names what is actually red: `N roten Tests` only
+  when tests failed, else `N unerfüllten Anforderungen`, else `N teilweise
+  erfüllten Anforderungen` (an unmet requirement is no red test).
 - **Terminal / other clients:** the markdown body as in § 2 without buttons;
   code spans only for error texts, names in *italics*; budget as glyph bars.
 - `test-minimal` never calls the widget.
@@ -251,6 +261,18 @@ Beta / Stable – `, `📦 Ready – `, `⛔ Blocked – `, `🧪 Test – `, `�
 `📋 Analysis – `, `🚫 Aborted – `, `⏳ Working – ` (pending), `🧭 Concept – `,
 `📥 Batch – `, and the bare `⏳ ` while working. Nothing else strips or sets
 titles.
+
+**Process prefixes outrank the hourglass.** Three prefixes name a running
+process rather than an outcome: `🚀 Shipping – ` (the ship pipeline),
+`🧭 Concept – ` (an open concept page), `📥 Batch – ` (an armed collection).
+The bare `⏳ ` is the *fallback* for "being worked on" — it is set only when no
+process prefix applies and it never replaces one. Concretely:
+`prompt.flow.title-work` leaves a title that starts with any of the three
+untouched, and a prompt that *is* a ship (`hooks/lib/ship-intent.js`, the same
+classifier `prompt.ship.detect` uses) is marked `🚀 Shipping – ` by the hook
+itself, so `/ship` after a change never sits on `⏳` for the length of the
+pipeline. Outcome prefixes (`🚀 Shipped – `, `📦 Ready – `, …) are what a new
+prompt outdates — those the hook strips. Observed 2026-09-21.
 
 ## 8. Text rules (both languages)
 

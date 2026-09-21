@@ -36,6 +36,11 @@ describe("ship SKILL.md — session title prefix", () => {
     expect(mark).toContain("`SESSION_PREFIX`");
     expect(mark).toMatch(/session_id: "self"/);
     expect(mark).toMatch(/never stack/);
+    // The title hook marks a ship prompt itself; the skill must not re-mark
+    // (and must never downgrade to the hourglass).
+    expect(mark).toMatch(/already starts with `🚀 Shipping – `: done/);
+    expect(mark).toMatch(/prompt\.flow\.title-work/);
+    expect(mark).toMatch(/fallback/);
     expect(mark).toMatch(/Desktop app/);
     expect(mark).toMatch(/skip silently/);
   });

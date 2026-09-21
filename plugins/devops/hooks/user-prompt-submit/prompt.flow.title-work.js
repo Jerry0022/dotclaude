@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.title-work
- * @version 0.3.0
+ * @version 0.4.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Marks a session as "being worked on" in the sidebar: on the
@@ -18,7 +18,14 @@
  *   implementing with background tasks.
  *
  *   Mode prefixes are not outcomes: `🧭 Concept – ` and `📥 Batch – ` stay
- *   untouched, their skills own them for the mode's lifetime.
+ *   untouched, their skills own them for the mode's lifetime. `🚀 Shipping – `
+ *   is a process prefix too: the bare hourglass is the FALLBACK for "being
+ *   worked on" and never replaces a running process — so a title that already
+ *   says Shipping keeps it, and a prompt that IS a ship (lib/ship-intent.js,
+ *   the same classifier prompt.ship.detect uses) gets `🚀 Shipping – ` right
+ *   here instead of the hourglass. Observed 2026-09-21: `/ship` after a
+ *   change left `⏳` on the title for the whole pipeline whenever the model
+ *   skipped the ship skill's own courtesy rename (Pre-Step C).
  *
  *   Guarded by runOnce: the marker is taken here and given back by
  *   stop.flow.guard once a card has rendered, so a multi-prompt turn without
@@ -33,6 +40,7 @@ require('../lib/plugin-guard');
 
 const { runOnce, releaseOnce } = require('../lib/run-once');
 const { isSilent, isScheduledTask } = require('./prompt.flow.silent-turn');
+const { isShipIntent } = require('../lib/ship-intent');
 
 /** The runOnce token name — stop.flow.guard releases it after a card. */
 const ONCE_KEY = 'prompt-title-work';
@@ -44,6 +52,11 @@ const WORK_PREFIX = '⏳ ';
  *  the ⏳ emoji with WORK_PREFIX, so "already bare-marked" must exclude it
  *  explicitly (design § 7). Mirrors `SESSION_PREFIX.pending` in mode-state.js. */
 const PENDING_PREFIX = '⏳ Working – ';
+
+/** The process prefix /ship owns while the pipeline runs — mirrors
+ *  `SESSION_PREFIX.shipping`. Shares the 🚀 with the `🚀 Shipped – ` OUTCOME,
+ *  so it is matched as a whole string, never on the emoji. */
+const SHIPPING_PREFIX = '🚀 Shipping – ';
 
 /** Leading emoji of the prefixes a mode skill owns — never replaced here.
  *  Mirrors `SESSION_PREFIX.concept` / `.batch` in mode-state.js. */
@@ -58,19 +71,41 @@ const OUTCOME_PREFIX_EMOJI = ['\u{1F680}', '\u{1F38A}', '\u{1F9EA}', '▶️', '
 /** Every leading marker the card / skills may have left. */
 const KNOWN_PREFIX_EMOJI = [...MODE_PREFIX_EMOJI, ...OUTCOME_PREFIX_EMOJI];
 
-function instruction() {
+/**
+ * The prefix a prompt puts on the title: the process it starts when it
+ * starts one (a ship → `🚀 Shipping – `), the bare hourglass otherwise. The
+ * hourglass is the fallback, never the override.
+ */
+function prefixFor(prompt) {
+  return isShipIntent(prompt) ? SHIPPING_PREFIX : WORK_PREFIX;
+}
+
+function instruction(prefix = WORK_PREFIX) {
+  const shipping = prefix === SHIPPING_PREFIX;
+  const already = shipping
+    ? [`  Else if it already starts with "${SHIPPING_PREFIX}": do nothing — the ship is already marked.`]
+    : [
+      `  Else if it already starts with "${SHIPPING_PREFIX}": do nothing — a ship is running and the`,
+      '  hourglass is only the fallback for work that is no named process.',
+      `  Else if it already starts with "${WORK_PREFIX}" and NOT with "${PENDING_PREFIX}": do nothing`,
+      `  (the bare icon and the worded "${PENDING_PREFIX}" pending prefix share the ⏳ emoji but mean`,
+      '  different things — only the bare form counts as already-marked).',
+    ];
+  const tail = shipping
+    ? 'The word is exactly "Shipping" — this is the ship skill\'s Pre-Step C done early; the skill finds the title marked and leaves it.'
+    : 'The icon is icon-only — no word after it, the title text stays as it is.';
   return [
-    '[prompt.flow.title-work] New work in this session.',
+    shipping
+      ? '[prompt.flow.title-work] New work in this session — a ship.'
+      : '[prompt.flow.title-work] New work in this session.',
     'Before any other tool call, once, Desktop app only:',
     '  mcp__ccd_session_mgmt__get_session {session_id:"self"} → title.',
     `  If the title is empty or starts with ${MODE_PREFIX_EMOJI.join(' or ')}: do nothing — a mode owns it.`,
-    `  Else if it already starts with "${WORK_PREFIX}" and NOT with "${PENDING_PREFIX}": do nothing`,
-    `  (the bare icon and the worded "${PENDING_PREFIX}" pending prefix share the ⏳ emoji but mean`,
-    '  different things — only the bare form counts as already-marked).',
+    ...already,
     `  Else strip every leading "<emoji> <Word> – " prefix whose emoji is one of ${OUTCOME_PREFIX_EMOJI.join(' ')}`,
-    `  (e.g. "🧪 Test – ", "📦 Ready – ", "${PENDING_PREFIX}", "🎊 Released Stable – ") and`,
-    `  mcp__ccd_session_mgmt__set_session_title {session_id:"self", title: "${WORK_PREFIX}" + <stripped title>}.`,
-    'The icon is icon-only — no word after it, the title text stays as it is.',
+    `  (e.g. "🧪 Test – ", "📦 Ready – ", "🚀 Shipped – ", "${PENDING_PREFIX}", "🎊 Released Stable – ") and`,
+    `  mcp__ccd_session_mgmt__set_session_title {session_id:"self", title: "${prefix}" + <stripped title>}.`,
+    tail,
     'If either tool is unavailable or fails: skip silently — no retry, no note, no fallback.',
     'Do not mention this to the user.',
   ].join('\n');
@@ -100,9 +135,10 @@ if (require.main === module) {
     try { hook = JSON.parse(inputData); } catch { process.exit(0); }
     if (!shouldMark(hook)) process.exit(0);
     if (!runOnce(ONCE_KEY, hook.session_id)) process.exit(0);
-    process.stdout.write(instruction() + '\n');
+    const prompt = hook.prompt || hook.user_message || hook.message || '';
+    process.stdout.write(instruction(prefixFor(prompt)) + '\n');
     process.exit(0);
   });
 }
 
-module.exports = { ONCE_KEY, WORK_PREFIX, PENDING_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, shouldMark, releaseTitleWork };
+module.exports = { ONCE_KEY, WORK_PREFIX, PENDING_PREFIX, SHIPPING_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, prefixFor, shouldMark, releaseTitleWork };
