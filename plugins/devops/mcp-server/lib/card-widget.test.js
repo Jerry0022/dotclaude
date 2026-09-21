@@ -175,7 +175,7 @@ describe("cardWidgetHtml", () => {
   test("detail text is one step below body size: result lines and points 14px, context 13px, buttons 13px", () => {
     const html = cardWidgetHtml(baseModel({ context: "› alpha liegt 1 Version vor stable" }), "");
     expect(html.match(/<div class="card-result" style="([^"]*)"/)[1]).toContain("font-size:14px");
-    expect(html.match(/<ol class="card-points" style="([^"]*)"/)[1]).toContain("font-size:14px");
+    expect(html.match(/<div class="card-point" style="([^"]*)"/)[1]).toContain("font-size:14px");
     expect(html.match(/<div class="card-context" style="([^"]*)"/)[1]).toContain("font-size:13px");
     expect(html.match(/<h3 class="card-heading" style="([^"]*)"/)[1]).toContain("font-size:16px");
     expect(html.match(/<span role="button" tabindex="0" id="card-act-0"[^>]*style="([^"]*)"/)[1]).toContain("font-size:13px");
@@ -187,6 +187,23 @@ describe("cardWidgetHtml", () => {
     const html = cardWidgetHtml(baseModel({ resultLines: [long] }), "");
     expect(html).toContain(long);
     expect(html).not.toContain("…");
+  });
+
+  // 2026-09-21 feedback: the › glyph was too faint and the text after it too
+  // loud; the CTA points should speak the same › language, and every › line
+  // should sit a little inset from the heading edge.
+  test("every › line shows a lilac glyph, secondary text, a 6px inset — and the points are › lines, not numbers", () => {
+    const html = cardWidgetHtml(baseModel({ context: "› alpha liegt 1 Version vor stable", points: ["Noch offen: Doku", "Nach dem Deploy testen"] }), "");
+    expect(html).not.toContain("<ol");
+    for (const cls of ["card-result", "card-context", "card-point"]) {
+      const m = html.match(new RegExp(`<div class="${cls}" style="([^"]*)"><span style="([^"]*)">›</span>`));
+      expect(m, cls).not.toBeNull();
+      expect(m[1]).toContain("padding-left:6px");
+      expect(m[1]).toContain("color:var(--text-secondary)");
+      expect(m[2]).toContain("color:#aab4e6");
+      expect(m[2]).toContain("font-weight:500");
+    }
+    expect(html.match(/<div class="card-point"/g)).toHaveLength(2);
   });
 
   test("exactly four text sizes — 16 / 14 / 13 / 11 — and none below 11px", () => {

@@ -150,7 +150,8 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
   beta and stable; alpha keeps 🚀).
 - Optional **context line** `› …` directly under the heading, before the
   points (promote distance, alternatives after an abort, guard notes).
-- **Points list**: numbered, max 3, marker in the accent colour. Contents in
+- **Points list**: max 3 — numbered in the markdown, `›` lines in the Desktop
+  widget (same glyph as the result lines, see § 4). Contents in
   order: open reservations (`open`), then manual test steps (`userTest`,
   `userFinalTest`) prefixed `🧪` when the list mixes both, then deploy-gate
   artifacts on a deploy card. More than three → `+N weitere` appended to the
@@ -219,7 +220,11 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   boxes, an h2, or a fifth size anywhere in the widget are a regression. The
   budget sweep runs over the whole track in its own clipped layer (inside a
   40 % fill it read as "a bar in a bar"); the usage marker stays outside that
-  layer so it may overhang the track.
+  layer so it may overhang the track. Every `›` line (result lines, context,
+  points) draws the glyph in lilac at weight 500, inset 6px from the heading
+  edge, with the text in `--text-secondary`: the glyph leads, the line does
+  not shout (feedback 2026-09-21: glyph too faint, text too loud). The widget
+  never numbers the points — `1.` stays a terminal-markdown form.
 - The `ready-red` heading names what is actually red: `N roten Tests` only
   when tests failed, else `N unerfüllten Anforderungen`, else `N teilweise
   erfüllten Anforderungen` (an unmet requirement is no red test).

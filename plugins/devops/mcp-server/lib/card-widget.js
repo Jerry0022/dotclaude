@@ -225,9 +225,14 @@ export function cardWidgetHtml(model, repoUrl) {
     ? "Completion card body: what happened, evidence, budget, and the decision with its actions."
     : "Completion-Card-Inhalt: was passiert ist, Belege, Budget und die Entscheidung mit ihren Aktionen.";
 
-  // › result lines — the glyph in a fixed column, deviation label kept bold.
+  // › lines (result lines, context, points): the glyph visible — lilac,
+  // weight 500 — and inset 6px from the heading edge; the text a step
+  // quieter than the headings (`--text-secondary`), so the glyph leads and
+  // the line does not shout. Deviation label kept red.
+  const glyphLine = (cls, inner, extra = "") =>
+    `<div class="${cls}" style="display:flex;gap:8px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)${extra}"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:10px">›</span><span>${inner}</span></div>`;
   const resultLinesHtml = (model.resultLines || [])
-    .map((l) => `<div class="card-result" style="display:flex;gap:10px;margin:3px 0;font-size:14px;line-height:1.5"><span style="color:var(--text-muted);flex:none;width:10px">›</span><span>${escapeHtml(l).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)}</span></div>`)
+    .map((l) => glyphLine("card-result", escapeHtml(l).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)))
     .join("\n  ");
 
   const evidenceHtml = (model.evidence || []).length
@@ -263,11 +268,14 @@ export function cardWidgetHtml(model, repoUrl) {
   // Block 2 — heading at h3 size (16px/500, same step as the title), the ›
   // context line right under it, numbered points with lilac markers.
   const headingHtml = model.heading ? `<h3 class="card-heading" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(model.heading)}</h3>` : "";
+  // Context line: same › glyph, one size smaller. Points: › lines too (no
+  // numbers in the widget — the terminal markdown keeps "1." for the same
+  // points), so both blocks speak the same language.
   const contextHtml = model.context
-    ? `<div class="card-context" style="display:flex;gap:10px;font-size:13px;color:var(--text-secondary);margin:0 0 6px"><span style="color:var(--text-muted);flex:none;width:10px">›</span><span>${escapeHtml(model.context.replace(/^›\s*/, ""))}</span></div>`
+    ? glyphLine("card-context", escapeHtml(model.context.replace(/^›\s*/, "")), ";font-size:13px;margin:0 0 4px")
     : "";
   const pointsHtml = (model.points || []).length
-    ? `<ol class="card-points" style="margin:4px 0 8px;padding-left:22px;font-size:14px;line-height:1.5">${model.points.map((p) => `<li style="color:${COLOR.lilac};margin:2px 0"><span style="color:var(--text-primary)">${escapeHtml(p)}</span></li>`).join("")}</ol>`
+    ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", escapeHtml(p))).join("")}</div>`
     : "";
 
   const buttons = buttonsFor(model.buttonsKey, lang);
