@@ -180,11 +180,14 @@ function budgetBarHtml(bar) {
   return [
     `<span class="card-budget" data-delay="600" title="${escapeHtml(bar.tooltip || "")}" style="display:inline-flex;align-items:center;gap:8px">`,
     `<span style="font-size:13px;color:var(--text-secondary);min-width:20px">${escapeHtml(bar.label)}</span>`,
-    // Track: time fill (sheen clipped INSIDE the fill), watermark in the empty
-    // part, usage marker last so it paints above both, taller than the track.
+    // Track: time fill, then ONE sweep layer clipped to the whole track (a
+    // sweep clipped inside a 40 % fill read as "a bar in a bar"), watermark in
+    // the empty part, usage marker last so it paints above all, taller than
+    // the track — the marker sits outside the clipped layer on purpose.
     `<span style="position:relative;display:inline-block;width:220px;height:12px;background:${COLOR.track};border-radius:5px">`,
-    `<span class="card-sheen" style="position:absolute;left:0;top:0;bottom:0;width:${elapsed}%;background:${COLOR.fillLilac};border-radius:5px;overflow:hidden"></span>`,
-    `<span style="position:absolute;right:6px;top:-1px;font-size:10px;color:${COLOR.watermark};white-space:nowrap">${escapeHtml(bar.watermark || "")}</span>`,
+    `<span style="position:absolute;left:0;top:0;bottom:0;width:${elapsed}%;background:${COLOR.fillLilac};border-radius:5px"></span>`,
+    `<span class="card-sheen" style="position:absolute;left:0;top:0;right:0;bottom:0;border-radius:5px;overflow:hidden"></span>`,
+    `<span style="position:absolute;right:6px;top:-1px;font-size:11px;color:${COLOR.watermark};white-space:nowrap">${escapeHtml(bar.watermark || "")}</span>`,
     `<span style="position:absolute;left:${pct}%;top:-6px;bottom:-6px;width:3px;border-radius:2px;background:${markerColor};z-index:2"></span>`,
     `</span>`,
     `</span>`,
@@ -236,7 +239,7 @@ export function cardWidgetHtml(model, repoUrl) {
     : "";
 
   const pipelineHtml = model.pipeline
-    ? `<div class="card-pipeline" style="font-size:12px;color:${COLOR.watermark}">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
+    ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark}">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
     : "";
 
   // The title lives in the widget: on Desktop the markdown under it is the ✨
@@ -294,7 +297,7 @@ export function cardWidgetHtml(model, repoUrl) {
 
   return [
     `<h2 class="sr-only" style="position:absolute;left:-9999px">${escapeHtml(summary)}</h2>`,
-    `<style>.card-sheen{position:relative}.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:38px;background:rgba(255,255,255,.18);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-38px}to{left:100%}}</style>`,
+    `<style>.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:24px;background:rgba(255,255,255,.12);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-24px}to{left:100%}}</style>`,
     // ONE surface around everything: a faint blue wash (6 % of the accent
     // blue), the same hue as the decision box one step lighter, so the card is
     // one tinted sheet with a stronger tinted foot. Fixed rgba, not a surface

@@ -189,6 +189,32 @@ describe("cardWidgetHtml", () => {
     expect(html).not.toContain("…");
   });
 
+  test("exactly four text sizes — 16 / 14 / 13 / 11 — and none below 11px", () => {
+    const html = cardWidgetHtml(baseModel({
+      title: "T",
+      context: "› c",
+      budget: { omitted: false, warn: false, contextHealth: "🧠 12 Calls", bars: [
+        { label: "5h", pct: 40, elapsedPct: 40, level: "white", watermark: "3 h", tooltip: "t" },
+      ] },
+    }), "");
+    const sizes = [...new Set((html.match(/font-size:(\d+)px/g) || []).map((m) => Number(m.slice(10, -2))))].sort((a, b) => a - b);
+    expect(sizes).toEqual([11, 13, 14, 16]);
+  });
+
+  test("the budget sweep runs over the whole track, not inside the fill", () => {
+    const html = cardWidgetHtml(baseModel({
+      budget: { omitted: false, warn: false, contextHealth: "", bars: [
+        { label: "5h", pct: 40, elapsedPct: 40, level: "white", watermark: "3 h", tooltip: "t" },
+      ] },
+    }), "");
+    const sheen = html.match(/<span class="card-sheen" style="([^"]*)"/)[1];
+    expect(sheen).toContain("right:0");
+    expect(sheen).toContain("overflow:hidden");
+    expect(sheen).not.toContain("width:40%");
+    // The fill itself is a plain layer now — no clipping, no sweep.
+    expect(html).toMatch(/width:40%;background:#4a5384;border-radius:5px"><\/span>/);
+  });
+
   test("no emoji on the buttons — Tabler icons only, per the design contract", () => {
     const html = cardWidgetHtml(baseModel(), "");
     const buttonsBlock = html.slice(html.indexOf('<span role="button"'), html.indexOf("</script>"));

@@ -212,10 +212,14 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   accent blue), 12px radius, **no border**, wraps everything. Block 1 has no box of its own inside it. Block 2
   is a box at the bottom on a quiet accent wash (`--bg-accent-muted`, 10 % of
   the accent fill, fallback `rgba(55,138,221,.10)`), 10px radius, **no accent
-  border**. Title and decision heading are `h3` 16px/500; result lines,
-  evidence posts and points 14px; context line 13px; buttons 13px / 30px; the
-  pipeline line stays 12px. Two bordered boxes or an h2 anywhere in the widget
-  are a regression.
+  border**. Exactly four text sizes: `h3` 16px/500 for the title and the
+  decision heading; 14px for result lines, evidence posts and points; 13px for
+  the context line, the buttons (30px tall), the budget label and the pipeline
+  line; 11px for the bar watermark and the context-health note. Two bordered
+  boxes, an h2, or a fifth size anywhere in the widget are a regression. The
+  budget sweep runs over the whole track in its own clipped layer (inside a
+  40 % fill it read as "a bar in a bar"); the usage marker stays outside that
+  layer so it may overhang the track.
 - The `ready-red` heading names what is actually red: `N roten Tests` only
   when tests failed, else `N unerfüllten Anforderungen`, else `N teilweise
   erfüllten Anforderungen` (an unmet requirement is no red test).
