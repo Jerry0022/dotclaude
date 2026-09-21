@@ -211,7 +211,7 @@ describe("build-concept-fixture — engine integrity anchors (#430)", () => {
 
   test("REGRESSION: cutting the decision-panel rule out of a built design page turns the gate red", () => {
     const page = build({ ...BASE, mode: 'design', mapping: false });
-    const cut = page.replace(/.concept-decision-panel {[^}]*}/, '');
+    const cut = page.replace(/\.concept-decision-panel \{[^}]*\}/, '');
     expect(cut).not.toBe(page);
     const r = evaluate('docs/concepts/fixture.html', cut);
     expect(r.ok).toBe(false);
