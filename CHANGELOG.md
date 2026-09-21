@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.182.1] — 2026-09-21
+
+### Fixed
+
+- **`/concept` design rounds use the whole viewport.** The fullscreen canvas (`section[data-screen]`, absolute inside `.concept-content`) was clipped to 1100px + 2rem padding on any wider display because the document column's `max-width` in templates.md § Layout CSS was unscoped and the design-mode rule did not lift it — a mock with `max-width: 1400px` never reached 1164px on a 1680px viewport (#418). The design-mode `.concept-content` rule now carries `max-width: none; padding: 0`; decision / free rounds keep the column cap. Browser-verified on the fixture (design 1680 px, decision 1164 px), pinned in `build-concept-fixture.test.js`. Shipped by `/run-backlog` (queue 1/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
 ## [0.182.0] — 2026-09-20
 
 ### Changed
