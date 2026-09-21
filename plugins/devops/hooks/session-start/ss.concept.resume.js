@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.concept.resume
- * @version 0.6.0
+ * @version 0.7.0
  * @event SessionStart
  * @plugin devops
  * @description Recover an open concept session after a Claude restart.
@@ -73,6 +73,8 @@ function isValidState(obj) {
   if (!isValidHtmlPath(obj.html_path)) return false;
   if (obj.slug !== undefined && typeof obj.slug !== 'string') return false;
   if (obj.slug && !/^[a-zA-Z0-9._-]{1,80}$/.test(obj.slug)) return false;
+  // `owner` (#417) is echoed into --owner arguments; keep it a plain token.
+  if (obj.owner !== undefined && (typeof obj.owner !== 'string' || !/^[a-zA-Z0-9._-]{1,40}$/.test(obj.owner))) return false;
   return true;
 }
 
@@ -391,10 +393,10 @@ function resolveScript(name, baseDir = __dirname) {
  *     `port {port}`" once the state file — and with it `cron_id` — is gone.
  *     `--port ${port}` alone does not match that phrasing.
  */
-function buildCronBody(port, statePath = STATE_PATH) {
+function buildCronBody(port, statePath = STATE_PATH, owner = '') {
   return (
     `Silently run via Bash: ${resolveScript('concept-tick.js')} ` +
-    `--port ${port} --state "${statePath}" ` +
+    `--port ${port} --state "${statePath}"${owner ? ` --owner "${owner}"` : ''} ` +
     `— this services the concept bridge on port ${port}. ` +
     `No output → produce NO output (silent tick). ` +
     `Any output IS your instruction for this tick: follow it exactly.`
@@ -420,10 +422,10 @@ function buildCronBody(port, statePath = STATE_PATH) {
  * @param {number} port
  * @param {string} statePath absolute path to .claude/concept-active.json
  */
-function buildBackgroundTasks(port, statePath) {
+function buildBackgroundTasks(port, statePath, owner = '') {
   const script = path.join(__dirname, '..', '..', 'scripts', 'concept-watch.js');
   const invoke = (mode) =>
-    `node "${script}" --mode ${mode} --port ${port} --state "${statePath}"`;
+    `node "${script}" --mode ${mode} --port ${port} --state "${statePath}"${owner ? ` --owner "${owner}"` : ''}`;
   return { pulser: invoke('pulse'), waker: invoke('watch') };
 }
 
@@ -434,7 +436,7 @@ function buildBackgroundTasks(port, statePath) {
  * @param {'pending'|'idle'|'unknown'} pendingState
  */
 function buildResumeInstructions(state, pendingState, statePath = STATE_PATH, store = null) {
-  const bg = buildBackgroundTasks(state.port, statePath);
+  const bg = buildBackgroundTasks(state.port, statePath, state.owner || '');
   const lines = [];
 
   lines.push(
@@ -445,7 +447,7 @@ function buildResumeInstructions(state, pendingState, statePath = STATE_PATH, st
   );
   lines.push(
     `(a) BACKSTOP cron (sparse — every fire is a model turn) — CronCreate with cron "*/15 * * * *" (recurring: true) and prompt: ` +
-    `'${buildCronBody(state.port, statePath)}'.`
+    `'${buildCronBody(state.port, statePath, state.owner || '')}'.`
   );
   lines.push(
     `(b) Keepalive pulser — launch as a background Bash task (run_in_background: true). Without it ` +
@@ -498,7 +500,7 @@ function buildResumeInstructions(state, pendingState, statePath = STATE_PATH, st
  */
 function buildDeadBridgeRecovery(state, store) {
   const server = path.join(__dirname, '..', '..', 'scripts', 'concept-server.py');
-  const bg = buildBackgroundTasks(state.port, STATE_PATH);
+  const bg = buildBackgroundTasks(state.port, STATE_PATH, state.owner || '');
   return [
     buildVerificationMandate(store),
     `The bridge process itself is gone. Relaunch it on the SAME port so the open tab and the ` +
@@ -523,7 +525,7 @@ function buildDeadBridgeRecovery(state, store) {
  */
 function buildDeadBridgeRelaunch(state, statePath = STATE_PATH) {
   const server = path.join(__dirname, '..', '..', 'scripts', 'concept-server.py');
-  const bg = buildBackgroundTasks(state.port, statePath);
+  const bg = buildBackgroundTasks(state.port, statePath, state.owner || '');
   return [
     `An open /concept session was found in this project (port ${state.port}, html_path ${state.html_path}, ` +
     `slug ${state.slug || '?'}), but the bridge does not answer /heartbeat — the previous Claude session took ` +
@@ -535,7 +537,7 @@ function buildDeadBridgeRelaunch(state, statePath = STATE_PATH) {
     `Then verify the heartbeat round-trips (POST /heartbeat, then GET /heartbeat must return a non-zero ` +
     `claude_ts), re-arm the keepalive pulser (${bg.pulser}) and the pickup waker (${bg.waker}) as background ` +
     `Bash tasks (run_in_background: true), and re-arm the backstop cron: CronCreate with cron "*/15 * * * *" ` +
-    `(recurring: true) and prompt: '${buildCronBody(state.port, statePath)}'. The page reconnects on its own ` +
+    `(recurring: true) and prompt: '${buildCronBody(state.port, statePath, state.owner || '')}'. The page reconnects on its own ` +
     `once the heartbeat is back — the user does not have to reload.`,
   ].join(' ');
 }

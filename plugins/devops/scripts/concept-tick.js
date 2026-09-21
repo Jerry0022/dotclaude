@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script concept-tick
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description One tick of the concept bridge's backstop cron, as a script
  *   instead of a 1128-character prompt. Since #363 the cron is sparse (every
@@ -60,14 +60,14 @@ const DEFAULTS = {
 };
 
 function parseArgs(argv) {
-  const out = { port: 0, state: '', ...DEFAULTS };
+  const out = { port: 0, state: '', owner: '', ...DEFAULTS };
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i].startsWith('--') ? argv[i].slice(2) : null;
     if (!key) continue;
     const raw = argv[i + 1];
     if (raw === undefined || raw.startsWith('--')) continue;
     i++;
-    if (key === 'state') out[key] = raw;
+    if (key === 'state' || key === 'owner') out[key] = raw;
     // hasOwn, not `in` — `in` walks the prototype chain, so `--toString 5`
     // would set junk on the options object.
     else if (Object.prototype.hasOwnProperty.call(DEFAULTS, key) || key === 'port') out[key] = Number(raw);
@@ -94,7 +94,7 @@ function validate(opts) {
  *
  * @returns {{cleanup:boolean, reason?:string, cronId?:string|null, stateReadable:boolean}}
  */
-function inspectState(statePath, port, exists = fs.existsSync) {
+function inspectState(statePath, port, exists = fs.existsSync, owner = '') {
   let raw;
   try {
     raw = fs.readFileSync(statePath, 'utf8');
@@ -118,6 +118,16 @@ function inspectState(statePath, port, exists = fs.existsSync) {
 
   // Numeric, so no `"port": 8883` spacing dependency and no 8883-vs-88831 slip.
   if (parsed.port !== port) {
+    // A file another session wrote is not this cron's to clean up (#417): two
+    // /concept sessions in one repo used to share the path, and A's tick read
+    // B's port as "my concept ended", POSTed /shutdown to ITS OWN bridge and
+    // told Claude to rm the file — B's bridge died on the next poll. With an
+    // owner token on both sides, a foreign file is reported and left alone;
+    // the tick keeps servicing its own port.
+    const fileOwner = typeof parsed.owner === 'string' ? parsed.owner : '';
+    if (owner && fileOwner && fileOwner !== owner) {
+      return { cleanup: false, foreign: true, reason: `state file belongs to session ${fileOwner}, not ${owner}`, cronId, stateReadable: true };
+    }
     return { cleanup: true, reason: `state file now owns port ${parsed.port}, not ${port}`, cronId, stateReadable: true };
   }
 
@@ -216,10 +226,11 @@ function noteHeartbeat(statePath, ok) {
  * mandate: same port, --html, both watchers — the pieces a restart or a crash
  * takes away together.
  */
-function relaunchInstruction(port, statePath, htmlPath) {
+function relaunchInstruction(port, statePath, htmlPath, owner = '') {
   const root = path.dirname(path.dirname(statePath));
   const server = path.join(__dirname, 'concept-server.py');
   const watch = path.join(__dirname, 'concept-watch.js');
+  const ownerArg = owner ? ` --owner "${owner}"` : '';
   return (
     `The concept bridge on port ${port} has not answered /heartbeat for ${RELAUNCH_AFTER_FAILURES} consecutive ` +
     `ticks — the server process is gone (a Claude restart or a crash takes it and both watchers with it). ` +
@@ -227,8 +238,8 @@ function relaunchInstruction(port, statePath, htmlPath) {
     `\`python "${server}" ${port} "${root}" --html "${htmlPath}"\` ` +
     `(Bash tool, run_in_background: true — no trailing &, no nohup). If it exits because the port is already ` +
     `bound, another session brought the bridge back — skip the relaunch. ` +
-    `Then re-arm the keepalive pulser: node "${watch}" --mode pulse --port ${port} --state "${statePath}" ` +
-    `and the pickup waker: node "${watch}" --mode watch --port ${port} --state "${statePath}" ` +
+    `Then re-arm the keepalive pulser: node "${watch}" --mode pulse --port ${port} --state "${statePath}"${ownerArg} ` +
+    `and the pickup waker: node "${watch}" --mode watch --port ${port} --state "${statePath}"${ownerArg} ` +
     `(both background Bash tasks, run_in_background: true). The page reconnects on its own once the ` +
     `heartbeat is back. This instruction is printed once; later ticks stay silent until the bridge answers again.`
   );
@@ -285,11 +296,14 @@ async function tick(opts, deps = {}) {
   const io = { request, inspectState, noteHeartbeat, exists: fs.existsSync, ...deps };
 
   // (0) Self-cleanup gate — FIRST step every tick, before any bridge traffic.
-  const state = io.inspectState(opts.state, opts.port, io.exists);
+  const state = io.inspectState(opts.state, opts.port, io.exists, opts.owner);
   if (state.cleanup) {
     await io.request(opts.port, '/shutdown', 'POST', opts.timeout);
     return { stdout: cleanupInstruction(opts.port, state.reason, state.cronId), stderr: '' };
   }
+  // A foreign state file (#417) is nobody's to write into either: the
+  // heartbeat edge is kept in the file, so it is not recorded this tick.
+  const foreign = !!state.foreign;
 
   // (1) Heartbeat POST — what keeps the page's indicator green when the pulser
   // is gone. A single failure is stderr only: a per-tick complaint about a
@@ -299,14 +313,14 @@ async function tick(opts, deps = {}) {
   // bridge answers again.
   const beat = await io.request(opts.port, '/heartbeat', 'POST', opts.timeout);
   if (!beat.ok) {
-    const note = io.noteHeartbeat(opts.state, false);
+    const note = foreign ? { relaunch: false } : io.noteHeartbeat(opts.state, false);
     if (note.relaunch) {
       const st = readStateJson(opts.state) || {};
-      return { stdout: relaunchInstruction(opts.port, opts.state, String(st.html_path || '')), stderr: '' };
+      return { stdout: relaunchInstruction(opts.port, opts.state, String(st.html_path || ''), opts.owner), stderr: '' };
     }
-    return { stdout: '', stderr: `concept-tick: bridge on port ${opts.port} did not answer /heartbeat\n` };
+    return { stdout: '', stderr: `concept-tick: bridge on port ${opts.port} did not answer /heartbeat${foreign ? ` (${state.reason})` : ''}\n` };
   }
-  io.noteHeartbeat(opts.state, true);
+  if (!foreign) io.noteHeartbeat(opts.state, true);
 
   // (2) Pending check via /pending — a strict `{"pending": bool, "version": N}`,
   // never a substring match on /decisions.
@@ -345,7 +359,7 @@ if (require.main === module) {
   const err = validate(opts);
   if (err) {
     process.stderr.write(`concept-tick: ${err}\n`);
-    process.stderr.write('usage: concept-tick.js --port <n> --state <abs path> [--timeout 8]\n');
+    process.stderr.write('usage: concept-tick.js --port <n> --state <abs path> [--owner <token>] [--timeout 8]\n');
     process.exit(2);
   }
   tick(opts)

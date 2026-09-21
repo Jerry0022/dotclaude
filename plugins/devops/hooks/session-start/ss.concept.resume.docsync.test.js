@@ -29,10 +29,11 @@ const STATE_PATH = "C:/proj/.claude/concept-active.json";
 
 /** The hook's prompt, normalised back to the doc's placeholder form. */
 const emittedCron = () =>
-  buildCronBody(PORT, STATE_PATH)
+  buildCronBody(PORT, STATE_PATH, "a1b2c3d4")   // #417: the owner token rides on the cron too
     .replace(/\\/g, "/")
     .replace(/"[^"]*\/scripts\/concept-tick\.js"/, '"{plugin-root}/scripts/concept-tick.js"')
-    .replace(/"[^"]*\/\.claude\/concept-active\.json"/, '"{project-root}/.claude/concept-active.json"')
+    .replace(/"[^"]*\/\.claude\/concept-active\.json"/, '"{session-cwd}/.claude/concept-active.json"')
+    .replace('--owner "a1b2c3d4"', "--owner {owner}")
     .replace(new RegExp(String(PORT), "g"), "{port}");
 
 const documentedCron = () =>
