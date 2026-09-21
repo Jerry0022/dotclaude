@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.184.0] — 2026-09-22
+
+### Added
+- **Concept gate — engine integrity (#430)** — `concept-gate.js` now asserts the engine's own CSS/JS blocks are intact, not just present at generation: `.concept-decision-panel {`, `submitWithAction` and `retryPendingSubmission` on every page; the screen nav (`#screen-nav`, `.screen-nav {`), `activeDesign` and `showScreen` on design pages; `.concept-layout {` / `.concept-content {` on decision/free pages — keyed on `<html data-template>`. A page whose engine rules were cut out by a later edit (a spliced mock-CSS block, a scratch script whose search ran past a block) is blocked under the STALE ENGINE section instead of reaching the user as "ready" with a static 1280-px panel behind the screens. validation-gate.md entries 64 / P33; built fixtures of both modes pass the whole gate.
+
 ## [0.183.12] — 2026-09-21
 
 ### Fixed

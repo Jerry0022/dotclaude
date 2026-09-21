@@ -13,9 +13,10 @@
  *   This is a focused gate, NOT a re-implementation of the full 35-pattern
  *   validation-gate.md. It checks only the markers whose absence equals
  *   failure mode A or B, the forbidden clipboard/paste-to-chat anti-pattern,
- *   <style>/<script> structure, mapping specs, and a view that lists the
- *   round's own designs as alternatives (P31). The full pattern sweep stays
- *   Claude's Step-2 responsibility.
+ *   <style>/<script> structure, mapping specs, a view that lists the
+ *   round's own designs as alternatives (P31), and — since #430 — that the
+ *   engine's own CSS/JS blocks are still intact (validation-gate.md 64 / P33).
+ *   The full pattern sweep stays Claude's Step-2 responsibility.
  */
 
 const path = require('path');
@@ -51,6 +52,33 @@ const ENGINE = [
   { token: 'buildRoundsChip', why: 'rounds chip builder — § Section Navigation JS' },
   { token: 'buildIterationTree', why: 'section list builder — § Section Navigation JS' },
   { token: 'recoverFromFreeze', why: 'freeze-aware connection verdict — § Claude Connection Heartbeat (gate 3d)' },
+  // Engine-integrity anchors (#430). The entries above prove the page was
+  // generated from the CURRENT templates.md; these prove the engine blocks
+  // are still INTACT afterwards. Round 11 of a design concept lost the whole
+  // `.concept-decision-panel { … }` rule (and every engine rule between the
+  // spliced mock-CSS block and it) to a scratch script whose search ran past
+  // the block — the page passed, the panel rendered as a static 1280-px
+  // aside behind the screens. Structure was fine; the engine was gutted.
+  { token: '.concept-decision-panel {', why: 'decision-panel stylesheet rule — § Panel Chrome (engine CSS gutted?)' },
+  { token: 'async function submitWithAction', why: 'two-button submit handler — § Two-Button Submit (engine JS gutted?)' },
+  { token: 'async function retryPendingSubmission', why: 'pending-submission retry — § Two-Button Submit (engine JS gutted?)' },
+];
+
+// Template-scoped engine-integrity anchors (#430). Asserted only for the
+// template the page's <html data-template> names — a decision page has no
+// screen nav, a design page does not carry the document-round layout rules.
+// A page without the attribute (pre-rename) gets the shared ENGINE list only.
+// `re` (when present) wins over `token` for matching; `token` stays the
+// human-readable name and the templates.md drift anchor.
+const ENGINE_DESIGN = [
+  { token: 'id="screen-nav"', why: 'screen navigation element — § Layout — Fullscreen single-screen (design engine markup gutted?)' },
+  { token: '.screen-nav {', why: 'screen-nav stylesheet rule — § Layout CSS (design engine CSS gutted?)' },
+  { token: 'function activeDesign', why: 'active-design resolver — § Layout JS (design engine JS gutted?)' },
+  { token: 'showScreen', re: /window\.showScreen\s*=|function\s+showScreen\b/, why: 'screen switcher — § Layout JS (design engine JS gutted?)' },
+];
+const ENGINE_DOCUMENT = [
+  { token: '.concept-layout {', why: 'document-round layout rule — § Layout — Document rounds (engine CSS gutted?)' },
+  { token: '.concept-content {', why: 'document-round content rule — § Layout — Document rounds (engine CSS gutted?)' },
 ];
 
 // Clipboard / paste-into-chat submit anti-patterns. A valid live-bridge
@@ -190,10 +218,29 @@ function isConceptHtml(filePath, html) {
   );
 }
 
-/** Engine-currency markers absent from the html (see ENGINE). */
+/** The page-level template from `<html data-template="…">` (null when absent). */
+function pageTemplate(html) {
+  const m = /<html\b[^>]*\sdata-template=["']([a-z]+)["']/i.exec(html || '');
+  return m ? m[1].toLowerCase() : null;
+}
+
+function engineAnchorMissing(body, e) {
+  return e.re ? !e.re.test(body) : !body.includes(e.token);
+}
+
+/**
+ * Engine-currency / engine-integrity markers absent from the html (see
+ * ENGINE, ENGINE_DESIGN, ENGINE_DOCUMENT). The shared list always applies;
+ * the template-scoped lists follow `<html data-template>` (design →
+ * ENGINE_DESIGN; decision / free / prototype → ENGINE_DOCUMENT; absent → none).
+ */
 function findStaleEngine(html) {
   const body = html || '';
-  return ENGINE.filter(e => !body.includes(e.token));
+  const template = pageTemplate(body);
+  const scoped = template === 'design' ? ENGINE_DESIGN
+    : (template === 'decision' || template === 'free' || template === 'prototype') ? ENGINE_DOCUMENT
+    : [];
+  return [...ENGINE, ...scoped].filter(e => engineAnchorMissing(body, e));
 }
 
 /** Required markers absent from the html. */
@@ -762,11 +809,13 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
     lines.push('');
   }
   if (stale.length) {
-    lines.push('STALE ENGINE — this page was not generated from the current templates.md:');
+    lines.push('STALE ENGINE — this page was not generated from the current templates.md, or its engine blocks were damaged afterwards:');
     stale.forEach(e => lines.push(`  - ${e.token} — ${e.why}`));
     lines.push('');
-    lines.push('Its <style>/<script>/panel were lifted from an OLDER concept page (or an older');
-    lines.push('plugin). Older pages in docs/concepts/ are content references only — the engine');
+    lines.push('Either its <style>/<script>/panel were lifted from an OLDER concept page (or an');
+    lines.push('older plugin), or a later edit (a spliced mock-CSS block, a scratch script whose');
+    lines.push('search ran past a block) cut engine rules out. Older pages in docs/concepts/ are');
+    lines.push('content references only — the engine');
     lines.push('(panel skeleton, § Layout CSS, § Section Navigation JS, § Claude Connection');
     lines.push('Heartbeat, § Two-Button Submit, § State Persistence) is copied VERBATIM from');
     lines.push('deep-knowledge/templates.md of the plugin running THIS session, every time.');
@@ -792,6 +841,8 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
 module.exports = {
   REQUIRED,
   ENGINE,
+  ENGINE_DESIGN,
+  ENGINE_DOCUMENT,
   FORBIDDEN,
   isConceptHtml,
   findMissing,

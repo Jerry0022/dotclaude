@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import {
   REQUIRED,
   ENGINE,
+  ENGINE_DESIGN,
+  ENGINE_DOCUMENT,
   isConceptHtml,
   findMissing,
   findStaleEngine,
@@ -22,12 +24,27 @@ import {
 // Kompass panel skeleton, § Section Navigation JS and § Claude Connection
 // Heartbeat; the gate only greps for the tokens.
 const ENGINE_STUB = `<div class="panel-here"><div id="panel-status"></div></div>
-<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){}</script>`;
+<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){} async function submitWithAction(){} async function retryPendingSubmission(){}</script>`;
+// The engine's head stylesheet (#430 integrity anchor). Lives in <head> like
+// the real engine CSS — a <style> after the live section would be attributed
+// to that round by the P32 collision scan.
+const ENGINE_CSS_STUB = `<style>.concept-decision-panel { position: fixed }</style>`;
+
+// The template-scoped engine-integrity anchors (#430): the document-round
+// layout rules a decision/free page carries, and the screen nav + layout JS
+// a design page carries. Kept apart from ENGINE_STUB so the stale-engine
+// tests can count the shared list alone. CSS parts sit in <head>, markup/JS
+// in <body>, like the real engine.
+const DOCUMENT_ENGINE_CSS_STUB = `<style>.concept-layout { display: grid } .concept-content { min-width: 0 }</style>`;
+const DESIGN_ENGINE_CSS_STUB = `<style>.screen-nav { display: flex }</style>`;
+const DESIGN_ENGINE_STUB = `<nav id="screen-nav"></nav>
+<script>function activeDesign(){} window.showScreen = function(){};</script>`;
 
 // A minimal but valid live-bridge concept page: contains every required
 // marker, no clipboard fallback. Real pages are far larger; the gate only
 // cares about these tokens.
 const VALID = `<!doctype html><html data-template="decision" data-page-version="2026-06-07T10:00:00">
+<head>${ENGINE_CSS_STUB}${DOCUMENT_ENGINE_CSS_STUB}</head>
 <body>
 <script type="application/json" id="concept-decisions">{"submitted":false}</script>
 <div id="panel-ready"><div class="iteration-tabs"></div>
@@ -733,7 +750,7 @@ describe("findStaleEngine — a page whose engine was lifted from an older conce
   // The session had read an older page of the same project for reference and
   // copied its <style>/<script> instead of templates.md. Every REQUIRED
   // marker was present, so the gate let it through.
-  const OLD_ENGINE = VALID.replace(ENGINE_STUB, "");
+  const OLD_ENGINE = VALID.replace(ENGINE_STUB, "").replace(ENGINE_CSS_STUB, "");
 
   test("the current engine passes; the old engine is flagged with every missing anchor", () => {
     expect(findStaleEngine(VALID)).toEqual([]);
@@ -763,6 +780,77 @@ describe("findStaleEngine — a page whose engine was lifted from an older conce
     const html = VALID.replace("function recoverFromFreeze(){}", "");
     expect(findStaleEngine(html).map(e => e.token)).toEqual(["recoverFromFreeze"]);
     expect(evaluate("docs/concepts/x.html", html).ok).toBe(false);
+  });
+});
+
+// #430 — round 11 of a design concept lost `.concept-decision-panel { … }`
+// (and every engine rule between the spliced mock-CSS block and it) to a
+// scratch script whose search ran past the block. Every REQUIRED and every
+// currency marker was still there, so the gate passed and the panel rendered
+// as a static 1280-px aside behind the screens. The gate now asserts the
+// engine blocks are INTACT, per template.
+describe("findStaleEngine — engine blocks gutted after generation (#430)", () => {
+  const DESIGN = VALID
+    .replace('data-template="decision"', 'data-template="design"')
+    .replace(DOCUMENT_ENGINE_CSS_STUB, DESIGN_ENGINE_CSS_STUB)
+    .replace(ENGINE_STUB, ENGINE_STUB + DESIGN_ENGINE_STUB);
+
+  test("intact decision and design pages pass", () => {
+    expect(findStaleEngine(VALID)).toEqual([]);
+    expect(findStaleEngine(DESIGN)).toEqual([]);
+    expect(evaluate("docs/concepts/2026-09-20-x.html", DESIGN).ok).toBe(true);
+  });
+
+  test("REGRESSION: the decision-panel CSS rule cut out of an otherwise current page blocks it", () => {
+    const html = DESIGN.replace(".concept-decision-panel { position: fixed }", "");
+    const r = evaluate("docs/concepts/2026-09-20-codex-landing-redesign.html", html);
+    expect(r.ok).toBe(false);
+    expect(r.stale.map(e => e.token)).toEqual([".concept-decision-panel {"]);
+    const reason = buildBlockReason("x.html", r.missing, r.forbidden, r.structural, r.mapping, r.overlap, r.stale);
+    expect(reason).toMatch(/STALE ENGINE/);
+    expect(reason).toMatch(/damaged afterwards/);
+    expect(reason).toMatch(/engine CSS gutted/);
+  });
+
+  test("the shared submit JS is asserted on every template", () => {
+    for (const page of [VALID, DESIGN]) {
+      const html = page.replace("async function submitWithAction(){}", "").replace("async function retryPendingSubmission(){}", "");
+      expect(findStaleEngine(html).map(e => e.token)).toEqual(["async function submitWithAction", "async function retryPendingSubmission"]);
+    }
+  });
+
+  test("design anchors: screen nav markup, its CSS rule, activeDesign and showScreen (either declaration form)", () => {
+    const missingOne = (from, to) => findStaleEngine(DESIGN.replace(from, to)).map(e => e.token);
+    expect(missingOne('<nav id="screen-nav"></nav>', "")).toEqual(['id="screen-nav"']);
+    expect(missingOne(".screen-nav { display: flex }", "")).toEqual([".screen-nav {"]);
+    expect(missingOne("function activeDesign(){}", "")).toEqual(["function activeDesign"]);
+    expect(missingOne("window.showScreen = function(){};", "")).toEqual(["showScreen"]);
+    expect(missingOne("window.showScreen = function(){};", "function showScreen(id){}")).toEqual([]);
+  });
+
+  test("document anchors: the layout rules of a decision / free page; not asserted on a design page", () => {
+    const html = VALID.replace(DOCUMENT_ENGINE_CSS_STUB, "");
+    expect(findStaleEngine(html).map(e => e.token)).toEqual([".concept-layout {", ".concept-content {"]);
+    expect(findStaleEngine(html.replace('data-template="decision"', 'data-template="free"')).map(e => e.token)).toEqual([".concept-layout {", ".concept-content {"]);
+    expect(findStaleEngine(DESIGN.replace(DESIGN_ENGINE_STUB, "").replace(DESIGN_ENGINE_CSS_STUB, DOCUMENT_ENGINE_CSS_STUB)).map(e => e.token)).toEqual(ENGINE_DESIGN.map(e => e.token));
+  });
+
+  test("template-scoped anchors are keyed on <html data-template>, not on a CSS selector that names it", () => {
+    // A decision page whose engine CSS mentions [data-template="design"] is still a decision page.
+    const html = VALID.replace("<style>.concept-layout", '<style>[data-template="design"] .x { top: 0 } .concept-layout');
+    expect(findStaleEngine(html)).toEqual([]);
+    // No attribute at all (pre-rename page) → shared list only.
+    const bare = VALID.replace(' data-template="decision"', "").replace(DOCUMENT_ENGINE_CSS_STUB, "");
+    expect(findStaleEngine(bare)).toEqual([]);
+  });
+
+  test("every template-scoped anchor exists in templates.md — the lists cannot drift from the reference", () => {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const md = fs.readFileSync(path.join(here, "..", "..", "skills", "concept", "deep-knowledge", "templates.md"), "utf8");
+    for (const e of [...ENGINE_DESIGN, ...ENGINE_DOCUMENT]) {
+      expect(md, e.token).toContain(e.token);
+      if (e.re) expect(md, e.token).toMatch(e.re);
+    }
   });
 });
 
