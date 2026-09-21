@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.183.3] — 2026-09-21
+
+### Fixed
+
+- **`--render-card` refuses a wrong variant instead of rendering a generic card.** With the completion MCP server down for a session, a ship card rendered through the offline fallback with `variant: "ship"` (plus `links` / `validation` as plain strings) came out as a plain `DONE — Noch was ANDERES?` card — no Delivery, no bump, no SHIPPED CTA — with exit 0, and the user had to ask where the ship card was (#406). `CARD_VARIANTS` now lives in `mcp-server/lib/card-input.js` (0.2.0) and feeds both the tool's `z.enum` and the CLI validator; the CLI keeps the raw variant (the "unknown → fallback" rewrite is MCP-only now), so `"ship"` exits 2 listing the valid variants, a `ship-successful` without `state.pushed: true` + `state.merged` exits 2 naming both fields (a file-only project is pointed at `ready-files`), and unknown top-level keys are reported on stderr and ignored — parity with the zod strip, never a rejection. The Stop-gate offline text (`card-guard` 0.5.1) prints `CARD_VARIANT_REFERENCE` — the enum and the `ship-successful` minimum (`state`, `cta`, `delivery`) — next to the field shapes; `card-input.test.js` pins the hook's copy equal to the exported one. `plugin-behavior.md` § offline renderer states the contract. Completion server 0.6.1. card-input 21 / CLI 19 / card-guard 105 tests green. Shipped by `/run-backlog` (queue 4/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
 ## [0.183.2] — 2026-09-21
 
 ### Fixed
