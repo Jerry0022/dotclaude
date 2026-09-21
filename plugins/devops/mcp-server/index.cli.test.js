@@ -108,7 +108,7 @@ describe("--render-card CLI fallback", () => {
     expect(desktop.stdout).not.toMatch(/^## /m);
     expect(desktop.stdout.trim().split("\n").filter(Boolean)).toEqual(["&nbsp;", "---", "### **✨✨✨ CTA-Test ✨✨✨**", "---"]);
     // The widget carries the title and the body instead.
-    expect(desktop.stderr).toContain('<h2 class="card-title" style="margin:0 0 6px">CTA-Test</h2>');
+    expect(desktop.stderr).toContain('<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">CTA-Test</h3>');
     expect(desktop.stderr).toContain("Shippen?");
   });
 
