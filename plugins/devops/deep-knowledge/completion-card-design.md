@@ -41,8 +41,11 @@ Two visual blocks. Nothing between them, nothing under the second one.
 
 ### 2.1 Title
 
-- `### **✨✨✨ … ✨✨✨**` stays exactly as today — it is the marker the card-guard
-  detects. Bold H3.
+- `### **✨✨✨ … ✨✨✨**` stays exactly as today in the terminal — it is the
+  marker the card-guard detects. Bold H3. On Desktop, where the widget is the
+  visible card, the same marker is emitted as an HTML comment
+  (`<!-- ✨✨✨ … ✨✨✨ -->`, § 4, #443): invisible in the turn, present in the
+  transcript the guard reads.
 - Content: the **outcome** of the turn, ≤ 60 chars. Never status ("agents
   running", "waiting", "pending", "noch nicht") — status belongs in the
   decision heading. Never a version or pipeline word ("gemergt", "shipped").
@@ -198,9 +201,16 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
 
 - **Desktop:** the whole card is ONE `mcp__visualize__show_widget` call (the
   "card body widget"), rendered immediately before the markdown is output —
-  and that markdown is the **title line alone** (`&nbsp;` · `---` · `### **✨✨✨
-  {title} ✨✨✨**` · `---`): it is the card-guard marker and the transcript
-  record, and it keeps the turn ending on visible text. The widget draws the
+  and that markdown is the **marker alone, as an HTML comment**
+  (`<!-- ✨✨✨ {title} ✨✨✨ -->`, #443): it is the card-guard marker and the
+  transcript record, and the Desktop renderer hides it, so the widget is the
+  one visible rendering of the card. (Until 0.184.0 the markdown was the
+  visible title line — `&nbsp;` · `---` · `### **✨✨✨ {title} ✨✨✨**` ·
+  `---` — which read as a second, empty card header under the widget on
+  every turn.) The visible ✨ line is suppressed ONLY on this widget path:
+  a variant without a widget body, or a widget call that fails (Claude then
+  prints the visible `### **✨✨✨ {title} ✨✨✨**` line instead of the
+  comment), keeps the ✨ headline as before. The widget draws the
   title (h3) and both blocks, colours (green `#8fae8f` posts, red
   `#e0a0a0`, yellow `#d9c58a`, lilac code spans `#aab4e6`), tooltips (600 ms
   delay), the budget bars, the quiet PR link and the buttons. Nothing is
@@ -319,4 +329,5 @@ mentions a ship in passing is work, not a ship, and gets the hourglass.
 - Numbers first in evidence posts (`3464 Tests grün`, not `Tests: 3464`).
 - Verb first in ship/promotion headings (`Released`, `Promoted`, `Shipped`).
 - The three warning signs are the only emoji besides the variant emoji in
-  the heading and the ✨ marker.
+  the heading and the ✨ marker (visible in the terminal, an HTML comment on
+  Desktop — § 4).

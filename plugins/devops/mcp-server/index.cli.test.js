@@ -99,14 +99,19 @@ describe("--render-card CLI fallback", () => {
     const terminal = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "cli" });
     expect(terminal.stderr).not.toContain("CARD WIDGET");
     // The terminal gets the whole markdown body; on Desktop the widget draws
-    // the body, so the markdown is the ✨ title line alone (§ 4) — observed
-    // 2026-09-21: widget + full markdown showed the whole card twice.
+    // the whole card, so the markdown is the ✨ marker alone — as an HTML
+    // comment the renderer hides (§ 4, #443). 2026-09-21: widget + full
+    // markdown showed the card twice; then widget + visible title line read
+    // as a second, empty card header under the widget.
     expect(terminal.stdout).toMatch(/^› y$/m);
     expect(terminal.stdout).toMatch(/^## 📦 Shippen\?$/m);
-    expect(desktop.stdout).toMatch(/^### \*\*✨✨✨ CTA-Test ✨✨✨\*\*/m);
+    expect(terminal.stdout).toMatch(/^### \*\*✨✨✨ CTA-Test ✨✨✨\*\*/m);
     expect(desktop.stdout).not.toMatch(/^› /m);
     expect(desktop.stdout).not.toMatch(/^## /m);
-    expect(desktop.stdout.trim().split("\n").filter(Boolean)).toEqual(["&nbsp;", "---", "### **✨✨✨ CTA-Test ✨✨✨**", "---"]);
+    expect(desktop.stdout).not.toMatch(/^### /m);
+    expect(desktop.stdout).not.toContain("&nbsp;");
+    expect(desktop.stdout).not.toContain("---");
+    expect(desktop.stdout.trim().split("\n").filter(Boolean)).toEqual(["<!-- ✨✨✨ CTA-Test ✨✨✨ -->"]);
     // The widget carries the title and the body instead.
     expect(desktop.stderr).toContain('<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">CTA-Test</h3>');
     expect(desktop.stderr).toContain("Shippen?");

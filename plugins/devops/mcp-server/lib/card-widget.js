@@ -248,7 +248,8 @@ export function cardWidgetHtml(model, repoUrl) {
     : "";
 
   // The title lives in the widget: on Desktop the markdown under it is the ✨
-  // marker line only (§ 4), so the body is drawn once. h3 = the contract's
+  // marker only, as an HTML comment (§ 4, #443), so the whole card is drawn
+  // once and nothing visible follows the widget. h3 = the contract's
   // 16px/500 — one step below h2, which read too large in the chat column.
   const titleHtml = model.title ? `<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(model.title)}</h3>` : "";
 
@@ -351,8 +352,9 @@ export function cardWidgetInstruction(model, repoUrl, env = process.env) {
     `title "completion_card_body", loading_messages ["Card wird geladen"] and widget_code set to ` +
     "EXACTLY the HTML below (verbatim, no edits, no read_me call needed). It draws both card blocks " +
     "— what happened and what to decide, including the buttons — right above the markdown card. " +
-    "If the tool is unavailable or fails: skip silently — no retry, no note, " +
-    "no fallback; the markdown card already carries the same facts and verbs.\n" +
+    "If the tool is unavailable or fails: no retry, no note — output the visible title line " +
+    "`### **✨✨✨ {title} ✨✨✨**` (the title from the marker comment) instead of the comment, " +
+    "so the turn still ends on the card headline.\n" +
     "----- widget_code -----\n" +
     html + "\n" +
     "----- end widget_code -----"

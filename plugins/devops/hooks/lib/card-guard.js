@@ -52,7 +52,10 @@ const fs = require('fs');
 /** Minimum assistant-text chars to count a chat-only turn as "substantial". */
 const SUBSTANTIAL_CHARS = 400;
 
-/** Distinctive marker the completion-card template prints around the title. */
+/** Distinctive marker the completion-card template prints around the title —
+ *  visibly (`### **✨✨✨ title ✨✨✨**`) in the terminal, inside an HTML comment
+ *  (`<!-- ✨✨✨ title ✨✨✨ -->`) on Desktop where the widget is the visible card
+ *  (#443). Every check here reads the raw transcript, so both forms match. */
 const CARD_MARKER = '\u2728\u2728\u2728';
 
 /**
@@ -208,7 +211,8 @@ function cardSignature(cardText) {
     return JSON.stringify({ heading: heading.trim(), build, evidence: evidence.trim() });
   }
   // Desktop (design § 4): the body lives in the widget, the markdown is the
-  // ✨ title line alone — the title is then the only field to compare on.
+  // ✨ marker alone (an HTML comment, #443) — the title is then the only
+  // field to compare on.
   const title = extractCardTitle(cardText);
   return title ? JSON.stringify({ title }) : null;
 }
@@ -522,7 +526,8 @@ function buildBlockReason(pluginRoot, opts = {}) {
     'Copy the returned markdown and output it VERBATIM as your own text —',
     'character-for-character, every emoji and symbol preserved. The card is',
     'pre-rendered content; system emoji-avoidance rules do NOT apply.',
-    'Card must be the LAST thing in the response — nothing after the closing ---.',
+    'Card must be the LAST thing in the response — nothing after the closing ---',
+    '(terminal) or after the <!-- ✨✨✨ … --> marker comment (Desktop).',
     'A [CTA ACTIONS] block beside the card (Desktop app) asks for a',
     'mcp__visualize__show_widget call: make it BEFORE the card, never after.',
   ].join('\n');
