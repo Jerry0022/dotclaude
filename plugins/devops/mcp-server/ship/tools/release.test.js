@@ -49,6 +49,7 @@ vi.mock("../lib/github.js", () => ({
   createRelease: vi.fn(() => undefined),
   findExistingPR: vi.fn(() => null),
   watchPRChecks: vi.fn(() => ({ status: "passed", checks: [] })),
+  deleteRemoteBranch: vi.fn(() => ({ ok: true, method: "gh-api" })),
 }));
 
 // The marker scan reads real files off disk. Stub the scan (the lib has its own
@@ -114,8 +115,10 @@ function addCalls() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Restore the default happy-path implementations (detectRepoMode lives on the
-  // repo-mode mock and keeps its factory default through clearAllMocks).
+  // Restore the default happy-path implementations. clearAllMocks keeps a
+  // mockReturnValue set by an earlier test (the repo-mode suite pins
+  // "unknown" / "none"), so the mode is restored explicitly too.
+  detectRepoMode.mockReturnValue("git");
   gitLib.currentBranch.mockReturnValue("feature-x");
   gitLib.headShort.mockReturnValue("abc1234");
   gitLib.dirtyState.mockReturnValue({ dirty: false, modified: [], untracked: [], lines: [] });
@@ -142,6 +145,7 @@ beforeEach(() => {
   ghLib.createPR.mockReturnValue({ number: 42, url: "https://example.com/pull/42" });
   ghLib.mergePR.mockReturnValue({ sha: "merge12", verified: true });
   ghLib.watchPRChecks.mockReturnValue({ status: "passed", checks: [] });
+  ghLib.deleteRemoteBranch.mockReturnValue({ ok: true, method: "gh-api" });
   scanConflictMarkers.mockReturnValue({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [], repoOffenders: [], repoScanned: 0, repoTruncated: false });
 });
 
@@ -885,5 +889,75 @@ describe("repo modes without a usable origin", () => {
     expect(result.error).toMatch(/ETIMEDOUT/);
     expect(result.merged).toBeUndefined();
     expect(execFileSync).not.toHaveBeenCalledWith("git", ["commit", "-m", "chore(release): v1.0.0"], expect.anything());
+  });
+});
+
+// #442 — in a worktree `gh pr merge --delete-branch` is skipped (gh would try
+// to check out base locally), so the merged head stayed on origin: 10/10
+// Desktop ships left their remote branch behind, 34 stale claude/* heads on
+// one consumer. ship_release now deletes the remote head itself after the
+// merge and drops the stale remote-tracking ref (the next push pins its lease
+// to it). Reported, never thrown — the merge already landed.
+describe("ship_release — remote branch deletion in worktrees (#442)", () => {
+  const updateRefCalls = () =>
+    gitLib.gitArgs.mock.calls.map((c) => c[0]).filter((a) => Array.isArray(a) && a[0] === "update-ref");
+
+  test("worktree ship: merge skips --delete-branch, the head is deleted on origin afterwards, tracking ref dropped", async () => {
+    gitLib.isWorktree.mockReturnValue(true);
+    const res = await handler(params());
+    expect(res.success).toBe(true);
+    expect(res.merged).toBe("main");
+    expect(ghLib.mergePR).toHaveBeenCalledWith(42, "main", expect.anything(), expect.objectContaining({ skipDeleteBranch: true }));
+    expect(ghLib.deleteRemoteBranch).toHaveBeenCalledTimes(1);
+    expect(ghLib.deleteRemoteBranch).toHaveBeenCalledWith("feature-x", expect.anything());
+    expect(res.remoteBranchDeleted).toBe(true);
+    expect(res.remoteBranchWarning).toBeUndefined();
+    expect(updateRefCalls()).toEqual([["update-ref", "-d", "refs/remotes/origin/feature-x"]]);
+  });
+
+  test("non-worktree ship: gh deletes the branch with the merge, no separate delete", async () => {
+    gitLib.isWorktree.mockReturnValue(false);
+    const res = await handler(params());
+    expect(res.success).toBe(true);
+    expect(ghLib.mergePR).toHaveBeenCalledWith(42, "main", expect.anything(), expect.objectContaining({ skipDeleteBranch: false }));
+    expect(ghLib.deleteRemoteBranch).not.toHaveBeenCalled();
+    expect(res.remoteBranchDeleted).toBeUndefined();
+    expect(updateRefCalls()).toEqual([]);
+  });
+
+  test("a failed remote delete is reported on a still-successful, merged result — never thrown", async () => {
+    gitLib.isWorktree.mockReturnValue(true);
+    ghLib.deleteRemoteBranch.mockReturnValue({ ok: false, error: "gh api: HTTP 403" });
+    const res = await handler(params());
+    expect(res.success).toBe(true);
+    expect(res.merged).toBe("main");
+    expect(res.remoteBranchDeleted).toBe(false);
+    expect(res.remoteBranchWarning).toMatch(/origin\/feature-x could not be deleted/);
+    expect(res.remoteBranchWarning).toMatch(/HTTP 403/);
+    expect(updateRefCalls()).toEqual([]);
+    // The ring tag still happens — tag trouble and branch trouble never fail a landed merge.
+    expect(res.tag).toBe("alpha/v1.0.0");
+  });
+
+  test("only the head is deleted — the base of a hierarchical merge is never touched", async () => {
+    gitLib.isWorktree.mockReturnValue(true);
+    gitLib.currentBranch.mockReturnValue("feat/42-video/core");
+    const res = await handler(params({ base: "feat/42-video" }));
+    expect(res.merged).toBe("feat/42-video");
+    expect(ghLib.deleteRemoteBranch).toHaveBeenCalledWith("feat/42-video/core", expect.anything());
+    expect(ghLib.deleteRemoteBranch).not.toHaveBeenCalledWith("feat/42-video", expect.anything());
+  });
+
+  test("a missing remote-tracking ref (never fetched) does not disturb the result", async () => {
+    gitLib.isWorktree.mockReturnValue(true);
+    gitLib.gitArgs.mockImplementation((args) => {
+      if (Array.isArray(args) && args[0] === "rev-parse") return "remoteSha";
+      if (Array.isArray(args) && args[0] === "update-ref") throw new Error("fatal: no such ref");
+      return "";
+    });
+    const res = await handler(params());
+    expect(res.success).toBe(true);
+    expect(res.remoteBranchDeleted).toBe(true);
+    expect(res.remoteBranchWarning).toBeUndefined();
   });
 });

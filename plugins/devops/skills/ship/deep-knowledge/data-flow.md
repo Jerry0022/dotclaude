@@ -15,11 +15,12 @@ ship_build → { success, buildId, steps }
       ↓
 ship_version_bump → { vOld, vNew, filesUpdated, verified }
       ↓
-ship_release → { commit, pushed, pr, merged, tag }
+ship_release → { commit, pushed, pr, merged, tag, remoteBranchDeleted? }  ← in a worktree the tool deletes the remote head itself (#442)
       ↓
-[ExitWorktree if needed]
+[ExitWorktree — only for a worktree this session entered via EnterWorktree;
+ a harness-created (Claude Desktop) worktree goes straight to keep-mode]
       ↓
-ship_cleanup → { cleaned }
+ship_cleanup → { cleaned }  |  ship_cleanup({ keep: true }) → { cleaned: ["sentinel"] }
       ↓
 render_completion_card → card markdown (VERBATIM)
       ↓
@@ -37,9 +38,9 @@ ship_build → { success, buildId, steps }
       ↓
 [SKIP version bump]
       ↓
-ship_release → { commit, pushed, pr, merged: "feat/42", tag: null }
+ship_release → { commit, pushed, pr, merged: "feat/42", tag: null, remoteBranchDeleted? }  ← only the sub-branch head, never feat/42
       ↓
-[ExitWorktree if needed]
+[ExitWorktree — EnterWorktree worktrees only; harness-created → keep-mode]
       ↓
 ship_cleanup → { cleaned, intermediate: true }  ← feature branch preserved
       ↓

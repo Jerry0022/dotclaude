@@ -74,8 +74,11 @@ If the refs differ, resolve before reporting success. See
 
 ### 3. Verify remote branch is gone
 
-The merge step uses `--delete-branch`, and the repo has `deleteBranchOnMerge` enabled,
-but neither is guaranteed (API hiccups, setting changes, manual merges). Always verify:
+Outside a worktree the merge step uses `--delete-branch`; inside one `ship_release`
+deletes the remote head itself right after the merge (`remoteBranchDeleted`, #442) —
+consumer repos generally do NOT have `delete_branch_on_merge` enabled (34 stale
+`claude/*` heads accumulated on one before #442), so nothing else deletes it. Neither
+path is guaranteed (API hiccups, manual merges). Always verify:
 
 ```bash
 git ls-remote --heads origin <shipped-branch>

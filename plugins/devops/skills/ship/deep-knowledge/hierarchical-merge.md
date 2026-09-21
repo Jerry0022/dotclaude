@@ -25,3 +25,14 @@ auto-detects the parent:
 
 This requires no manual `base` parameter — detection is automatic based
 on branch naming convention (`<parent>/<role>`).
+
+## Cleanup in worktrees
+
+Every ship deletes only the **head** it merged: the sub-branch on an intermediate
+ship, the feature branch on the final one. Inside a worktree `gh pr merge
+--delete-branch` is skipped (gh would try to check out the base locally), so
+`ship_release` deletes the remote head itself after the merge
+(`remoteBranchDeleted`, #442) — the base of a hierarchical merge is never
+touched. The local branch and worktree stay with the session: a harness-created
+(Claude Desktop) worktree is removed by the app, an `EnterWorktree` one by
+`ExitWorktree` + `ship_cleanup`.
