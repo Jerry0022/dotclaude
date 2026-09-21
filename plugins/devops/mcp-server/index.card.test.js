@@ -406,6 +406,29 @@ describe("render_completion_card — every input. field lands somewhere", () => 
     expect(text).toMatch(/^## 🧭 Concept wartet auf deine Entscheidungen$/m);
     expect(text).toContain("› http://localhost:4321/docs/concepts/x.html");
   });
+
+  // Observed 2026-09-21: an implementation run (agents working) rendered
+  // "Concept wartet auf deine Entscheidungen" — the heading ignored the phase.
+  test("concept heading follows the phase: iterating / implementing promise to report back", async () => {
+    const iter = await cardText({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-fields-concept-iter",
+      concept: { phase: "iterating", url: "http://localhost:4321/x.html" },
+    });
+    expect(iter).toMatch(/^## 🧭 Concept in Iteration — ich melde mich$/m);
+    const impl = await cardText({
+      variant: "ready", summary: "Implementieren gestartet", lang: "de", session_id: "test-fields-concept-impl",
+      concept: "implementing",
+      pending: [{ name: "devops:core", doing: "Hangar-Mechanik" }, { name: "devops:frontend", doing: "Holotable" }],
+    });
+    expect(impl).toMatch(/^## 🧭 Concept in Implementierung\. 2 Agenten arbeiten — ich melde mich$/m);
+    expect(impl).not.toMatch(/wartet auf deine Entscheidungen/);
+    expect(impl).toContain("`devops:core` — Hangar-Mechanik");
+    const en = await cardText({
+      variant: "ready", summary: "x", lang: "en", session_id: "test-fields-concept-en",
+      concept: { phase: "implementing" },
+    });
+    expect(en).toMatch(/^## 🧭 Concept in implementation — I will report back$/m);
+  });
 });
 
 describe("render_completion_card — evidence heuristics (post-concept fixes)", () => {

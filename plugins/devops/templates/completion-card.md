@@ -25,8 +25,8 @@ Two visual blocks, both rendered by `render_completion_card` / `--render-card`:
 › result line 1                            ┐  Block 1 — "what happened"
 › result line 2 (≤ 3, deviation first)     │  (Desktop: one surface, no border)
 ✓ 3/3 Anforderungen  ✓ 3464 Tests grün     │  evidence row
-5h [bar] 3 h 39 m   Wk [bar] 6 d 20 h      │  budget line (omitted when low + far from reset)
 ○ commit → ○ push → ○ PR → ○ merge · Build │  pipeline line
+5h [bar] 3 h 39 m   Wk [bar] 6 d 20 h      │  budget line (omitted when low + far from reset)
 ## 📦 {decision as a question}?            ┐  Block 2 — "what to decide"
 › optional context line                    │  (Desktop: quiet accent-tinted box)
 1. reservation / test step (≤ 3)           │

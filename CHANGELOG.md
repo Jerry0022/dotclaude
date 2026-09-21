@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.183.9] — 2026-09-21
+
+### Changed
+- **Completion card** — pipeline line now sits directly under the evidence row and the budget line is the footer of block 1 (widget and markdown, every variant); the `›` glyph hugs its text (8px column, 4px gap); pipeline and budget rows carry their own vertical padding. The budget glint is clipped to the elapsed fill again (it must never run over time that has not passed) and is narrower and softer so it does not read as a second bar. All nine variants verified to share one block order. Design doc § 2/§ 4 and the template updated.
+
+### Fixed
+- **Concept CTA** — the heading follows the page's phase again: `in Iteration` / `in Implementierung — ich melde mich`, with running agents as their own sentence and listed as points; an implementation run no longer claims "wartet auf deine Entscheidungen".
+
 ## [0.183.8] — 2026-09-21
 
 ### Changed

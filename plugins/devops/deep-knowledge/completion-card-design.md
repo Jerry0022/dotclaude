@@ -29,8 +29,8 @@ Two visual blocks. Nothing between them, nothing under the second one.
 › result line 2                            │  Block 1 · "what happened"
 › result line 3                            │  (Desktop: top of the one surface)
 ✓ 3/3 Anforderungen  ✓ 3464 Tests grün  ✓ 4 Live-Checks ok     ← evidence row
-5h [time bar | usage marker] 3 h 39 m   Wk [...] 6 d 20 h   🧠 1180 Calls · /compact
-○ commit → ○ push → ○ PR → ○ merge · branch · Build 176c57d       ┘
+○ commit → ○ push → ○ PR → ○ merge · branch · Build 176c57d       ← pipeline line
+5h [time bar | usage marker] 3 h 39 m   Wk [...] 6 d 20 h   🧠 1180 Calls · /compact  ┘ budget (footer)
 ## 📦 {decision as a question}?            ┐
 › one context line (optional)              │  Block 2 · "what to decide"
 1. reservation / test step                 │  (Desktop: quiet accent-tinted box)
@@ -94,7 +94,8 @@ between posts, no `·` separators:
 
 ### 2.4 Budget line
 
-Replaces the fenced meter. Same position (under the evidence row).
+Replaces the fenced meter. Last line of block 1 — under the pipeline line;
+it is the card's footer, not part of the evidence.
 
 - **Bar = elapsed time of the window, marker = usage.** Fill colour is the
   accent lilac (`#4a5384` on the widget), track `#2b2d3a`. The marker is a
@@ -106,8 +107,9 @@ Replaces the fenced meter. Same position (under the evidence row).
 - Labels `5h` / `Wk` before each bar; nothing after the bar. Percent, delta
   since last card, "über Plan", reset clock — all in the bar's tooltip:
   `35 % verbraucht · 27 % der Zeit um · 8 % über Plan · Reset 14:39 (in 3 h 39 m) · +2 % diese Runde`.
-- A light band (38 px, 18 % white) sweeps once every 4 s across the **filled
-  part only**; disabled under `prefers-reduced-motion`.
+- A light glint (24 px, 12 % white) sweeps once every 4 s across the **filled
+  part only** — never over time that has not passed; disabled under
+  `prefers-reduced-motion`.
 - **Omitted entirely** while both windows are < 50 % and > 1 h from reset.
 - Terminal / markdown fallback: `5h ▰▰▰▰▰▰▰│▱▱▱▱▱▱ 3 h 39 m   Wk ▰▰│▱▱▱▱▱▱ 6 d 20 h`
   (▰ = time, │ = usage); a yellow/red condition is written as a leading `⚠`.
@@ -116,7 +118,8 @@ Replaces the fenced meter. Same position (under the evidence row).
 
 ### 2.5 Pipeline line ("where it lies")
 
-Dim, small, last line of block 1. Glyph BEFORE the step. Plain text — no
+Dim, small, directly under the evidence row (the budget line follows it as
+the footer). Glyph BEFORE the step. Plain text — no
 code spans (they would be red on Desktop). Names in the accent lilac on the widget.
 
 ```
@@ -183,7 +186,7 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
 | `aborted` | `🚫 Abgebrochen wegen {reason} — anders versuchen?` | — | Nochmal | context line = alternatives |
 | `fallback` | `🔧 Erledigt — noch etwas?` | — | — | |
 | pending override | `⏳ Noch nicht fertig — {what}` | what is running | — | evidence gets `◐ Belege vorläufig` |
-| concept override | `🧭 Concept wartet auf deine Entscheidungen` | — | — | context line = the page URL (quiet link) |
+| concept override | by phase: `🧭 Concept wartet auf deine Entscheidungen` · `🧭 Concept in Iteration — ich melde mich` · `🧭 Concept in Implementierung — ich melde mich`; running work as its own sentence (`… in Implementierung. 2 Agenten arbeiten — …`) | the running items | — | context line = the page URL (quiet link); "wartet" during an implementation run is a regression |
 | batch override | `📥 Batch sammelt — {n} Einträge` | — | — | context line = what happens to the next prompt |
 | V&V unverified | `⚠ Ungeprüft shippen?` | "npm test lief nicht — …" | Tests laufen lassen · Trotzdem shippen | `⚠ ungeprüft` first evidence post |
 
@@ -218,13 +221,19 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   the context line, the buttons (30px tall), the budget label and the pipeline
   line; 11px for the bar watermark and the context-health note. Two bordered
   boxes, an h2, or a fifth size anywhere in the widget are a regression. The
-  budget sweep runs over the whole track in its own clipped layer (inside a
-  40 % fill it read as "a bar in a bar"); the usage marker stays outside that
-  layer so it may overhang the track. Every `›` line (result lines, context,
+  budget sweep stays clipped to the elapsed fill (a glint over time that has
+  not passed made no sense), narrow and soft so it reads as a glint, not as
+  a second bar. Every `›` line (result lines, context,
   points) draws the glyph in lilac at weight 500, inset 6px from the heading
-  edge, with the text in `--text-secondary`: the glyph leads, the line does
+  edge and hugging its text (8px column, 4px gap), with the text in
+  `--text-secondary`: the glyph leads, the line does
   not shout (feedback 2026-09-21: glyph too faint, text too loud). The widget
-  never numbers the points — `1.` stays a terminal-markdown form.
+  never numbers the points — `1.` stays a terminal-markdown form. Block 1
+  order on every variant: title → result lines → evidence → pipeline →
+  budget; the pipeline line and the budget row carry their own vertical
+  padding (4px) so they do not stick to the evidence row. The white frame around the whole
+  widget is the Desktop app's `show_widget` container — not part of the card
+  and not controllable from inside.
 - The `ready-red` heading names what is actually red: `N roten Tests` only
   when tests failed, else `N unerfüllten Anforderungen`, else `N teilweise
   erfüllten Anforderungen` (an unmet requirement is no red test).
