@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.concept.gate
- * @version 0.2.0
+ * @version 0.3.0
  * @event PostToolUse
  * @plugin devops
  * @matcher Write|Edit|NotebookEdit
@@ -63,9 +63,9 @@ process.stdin.on('end', () => {
 
   if (!isConceptHtml(file, html)) process.exit(0);
 
-  const { ok, missing, forbidden, structural, mapping, overlap, stale } = evaluate(file, html);
+  const { ok, missing, forbidden, structural, mapping, overlap, stale, collisions } = evaluate(file, html);
   if (ok) process.exit(0);
 
-  process.stderr.write(buildBlockReason(file, missing, forbidden, structural, mapping, overlap, stale) + '\n');
+  process.stderr.write(buildBlockReason(file, missing, forbidden, structural, mapping, overlap, stale, collisions) + '\n');
   process.exit(2);
 });

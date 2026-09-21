@@ -212,10 +212,51 @@ describe("--render-card CLI fallback", () => {
     expect(existsSync(attested)).toBe(false);
   });
 
-  test("an unknown variant still yields a card instead of an error", async () => {
-    const out = await renderCard({ variant: "not-a-variant", summary: "Unbekannte Variante", session_id: "cli-test-variant" });
-    expect(out).toMatch(/✨✨✨ Unbekannte Variante ✨✨✨/);
-    expect(out).toMatch(/^## 🔧 Erledigt/m);
+  // #406 — with the MCP server down, a ship card was rendered offline with
+  // `variant: "ship"`; the CLI silently rendered a generic `DONE — Noch was
+  // ANDERES?` card without Delivery, bump or SHIPPED CTA, and the user had to
+  // ask where the ship card was. An unknown variant is now a hard error that
+  // names the valid ones — the MCP path already rejects it via the zod enum.
+  test("REGRESSION (#406): an unknown variant exits 2 with the valid variants on stderr and writes no flag", async () => {
+    const err = await renderCardFull({ variant: "ship", summary: "Falsche Variante", session_id: "cli-test-406-variant" })
+      .then(() => null, (e) => e);
+    expect(err).not.toBeNull();
+    expect(err.code).toBe(2);
+    expect(err.stderr).toMatch(/variant: "ship" is not a card variant/);
+    expect(err.stderr).toMatch(/ship-successful\|ready\|released\|ship-blocked\|test\|test-minimal\|analysis\|aborted\|fallback\|ready-files/);
+    expect(err.stdout).toBe("");
+    expect(existsSync(flagFile("cli-test-406-variant"))).toBe(false);
+  });
+
+  test("#406: ship-successful without the merge proof exits 2 naming state.pushed + state.merged", async () => {
+    const err = await renderCardFull({
+      variant: "ship-successful", summary: "Ohne Beweis", session_id: "cli-test-406-proof",
+      state: { branch: "main", commit: "abc1234" },
+    }).then(() => null, (e) => e);
+    expect(err).not.toBeNull();
+    expect(err.code).toBe(2);
+    expect(err.stderr).toMatch(/state: ship-successful requires the merge proof state\.pushed: true and state\.merged/);
+    expect(existsSync(flagFile("cli-test-406-proof"))).toBe(false);
+  });
+
+  test("#406: a real ship-successful payload still renders the SHIPPED card", async () => {
+    const out = await renderCard({
+      variant: "ship-successful", summary: "Echter Ship", session_id: "cli-test-406-real", lang: "de",
+      state: { branch: "main", commit: "abc1234", pushed: true, merged: "main", pr: { number: 7, title: "fix: x" } },
+      cta: { vOld: "1.0.0", vNew: "1.0.1", bump: "patch" },
+      delivery: { pr: { number: 7, title: "fix: x" }, ship: { version: "1.0.1", base: "main" } },
+    });
+    expect(out).toMatch(/✨✨✨ Echter Ship ✨✨✨/);
+    expect(out).not.toMatch(/^## 🔧 Erledigt/m);
+  });
+
+  test("#406: unknown top-level keys are reported on stderr (parity with the zod strip) but never reject", async () => {
+    const res = await renderCardFull({
+      variant: "ready", summary: "Fremde Keys", session_id: "cli-test-406-keys",
+      links: "https://example.invalid/pr/1", validationNotes: "plain string",
+    });
+    expect(res.stderr).toMatch(/ignored unknown top-level key\(s\): links, validationNotes/);
+    expect(res.stdout).toMatch(/✨✨✨ Fremde Keys ✨✨✨/);
   });
 
   test("exits 2 with a diagnostic when the payload is unreadable", async () => {

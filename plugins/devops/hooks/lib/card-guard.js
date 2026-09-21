@@ -1,6 +1,6 @@
 /**
  * @module card-guard
- * @version 0.5.0
+ * @version 0.5.1
  * @description Pure decision logic for the completion-card enforcement flow,
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
@@ -436,6 +436,20 @@ const CARD_FIELD_REFERENCE =
   'userFinalTest: [string | { action, afterDeployment }] · open: [string] · ' +
   'pending: [{ name, kind: agent|task|workflow, doing }] · state / cta / delivery: objects.';
 
+/**
+ * The variant contract for the offline path (#406): the enum and what a
+ * `ship-successful` payload must carry. A ship card rendered offline with
+ * `variant: "ship"` produced a generic DONE card that the user had to question;
+ * the CLI now exits 2 on it, and this line is what keeps the agent from
+ * guessing in the first place. Mirrors CARD_VARIANT_REFERENCE in
+ * mcp-server/lib/card-input.js; card-input.test.js pins the two equal.
+ */
+const CARD_VARIANT_REFERENCE =
+  'Variants: ship-successful|ready|released|ship-blocked|test|test-minimal|analysis|aborted|fallback|ready-files · ' +
+  'a shipped PR is "ship-successful" (never "ship") and requires ' +
+  'state: { pushed: true, merged: "main", pr: { number, title }, commit }, cta: { vOld, vNew, bump }, ' +
+  'delivery: { pr, ship: { version, base } }.';
+
 function renderLadderLines(pluginRoot, { completionMcpDown } = {}) {
   const offline = [
     `  node "${offlineRendererPath(pluginRoot)}" --render-card <payload.json>`,
@@ -445,8 +459,11 @@ function renderLadderLines(pluginRoot, { completionMcpDown } = {}) {
     'stderr carries the [SESSION TITLE] block: follow it (rename the session) before',
     'relaying the card, exactly as on the tool path — never relay it as output.',
     CARD_FIELD_REFERENCE,
-    'A payload off these shapes exits 2 with the issues on stderr — fix the payload',
-    'or fall back to the tool; never relay a card with an empty Changes block.',
+    CARD_VARIANT_REFERENCE,
+    'A payload off these shapes, an unknown variant, or a ship-successful without the',
+    'merge proof exits 2 with the issues on stderr — fix the payload or fall back to',
+    'the tool; never relay a card with an empty Changes block or a generic DONE card',
+    'in place of the SHIPPED one.',
   ];
   if (completionMcpDown) {
     return [
@@ -656,6 +673,7 @@ function safeReadTranscript(transcriptPath, tailBytes = TRANSCRIPT_TAIL_BYTES) {
 
 module.exports = {
   CARD_FIELD_REFERENCE,
+  CARD_VARIANT_REFERENCE,
   SUBSTANTIAL_CHARS,
   CARD_MARKER,
   TRANSCRIPT_TAIL_BYTES,

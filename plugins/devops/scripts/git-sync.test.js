@@ -20,7 +20,12 @@ import {
 
 afterAll(cleanupWorlds);
 
-describe.concurrent("merge source — the regression that made the sync a silent no-op", () => {
+// Sequential on purpose (#424): every test here blocks the worker inside
+// execFileSync for 10-15 s (two real clones + the sync). Under describe.concurrent
+// vitest starts every test's 60 s timer at once, so the LAST test of a group
+// was charged the whole group's wall clock (65-75 s measured) and timed out on
+// a loaded machine although each test alone takes a sixth of that.
+describe("merge source — the regression that made the sync a silent no-op", () => {
   test("merges origin/main even though main is checked out in the primary worktree", () => {
     const { root, primary, wt, other } = makeWorld();
     advanceOrigin(other, "feature-of-main.txt", "from main\n", "main moves on");
@@ -68,7 +73,7 @@ describe.concurrent("merge source — the regression that made the sync a silent
   });
 });
 
-describe.concurrent("uncommitted work", () => {
+describe("uncommitted work", () => {
   test("skips silently while a dirty file overlaps the incoming change", () => {
     const { root, wt, other } = makeWorld();
     advanceOrigin(other, "base.txt", "base, edited on main\n", "main edits base.txt");

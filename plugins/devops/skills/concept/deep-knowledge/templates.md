@@ -330,7 +330,7 @@ the `[ui-locale: ...]` hint produced.
          (all templates)). The #panel-toggle FAB and the .panel-backdrop after
          the aside are part of the same component and are not optional on a
          decision/free page: without them the panel has no way to open. -->
-    <aside class="concept-decision-panel overlay" id="decision-panel">
+    <aside class="concept-decision-panel" id="decision-panel">
       <!-- Head row — the panel's chrome line, right-aligned: the theme toggle
            and the ✕. The toggle is page chrome exactly like the panel itself
            (§ Theme Toggle): one control, the same place in every template,
@@ -870,7 +870,7 @@ the `[ui-locale: ...]` hint produced.
 ## Panel Chrome (all templates)
 
 **The decision panel is page chrome, not a layout choice.** It is the same
-`<aside class="concept-decision-panel overlay" id="decision-panel">` on every
+`<aside class="concept-decision-panel" id="decision-panel">` on every
 page, opened by the same ☰ FAB in the top-right corner, backed by the same
 `.panel-backdrop`, in `decision`, `free` and `design` rounds alike.
 
@@ -2520,7 +2520,7 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
 
     <!-- Decision panel (☰) — contains: iteration-tabs, screen-nav, submit.
          No section-TOC here: the screen-nav replaces it for design. -->
-    <aside class="concept-decision-panel overlay" id="decision-panel">
+    <aside class="concept-decision-panel" id="decision-panel">
       <!-- Same head row as § Common Structure: round label · back link ·
            🕘 rounds chip · theme toggle · ✕. This is the design round's ONLY
            theme control — the document header that used to carry one is
@@ -5688,6 +5688,20 @@ with `data-screen`:
   no `<script>`, `<canvas>`, `<style>` or `<iframe>`, no `vh`/`vw` units, no
   `position: fixed`, and no `#id` selectors in its CSS. § Responsive device
   views explains what each of those does when cloned.
+- **Mock CSS is namespaced per design — never a bare generic name, never an
+  engine chrome class.** A round's `<style>` (at the top of the iteration,
+  outside every `section[data-screen]`) lives in the same document as the
+  engine: a mock rule `.overlay { position: absolute; left: 0; pointer-events:
+  none }` for its fog SVGs once restyled the decision panel, which then sat
+  docked left with a dead ☰ FAB (#400). Prefix every mock class per design
+  (`.d1-fog`, `.d2-card`; `mock-` is accepted too) or scope the selector
+  under the design (`[data-design="d1"] .fog`). Never write a selector that
+  names an engine class — `concept-decision-panel`, `panel-fab`,
+  `panel-backdrop`, `feedback-fab`, `feedback-dock`, `iteration-tabs`,
+  `iteration-tab`, `screen-indicator`, `design-switcher`, `frozen-bar`,
+  `closeout-sheet`, `device-frame`, `panel-here`, `panel-status`,
+  `concept-layout`, `concept-content` — the engine's own head stylesheet
+  owns those. `post.concept.gate` blocks both shapes (validation-gate.md P32).
 
 ### Annotated screen (optional annotation layer)
 
@@ -6111,7 +6125,7 @@ content.
       </main>
     </div>
 
-    <aside class="concept-decision-panel overlay" id="decision-panel">
+    <aside class="concept-decision-panel" id="decision-panel">
       <!-- Same structure as decision, including the .panel-head row
            (#theme-toggle + #panel-close). Panel TOC auto-detects which
            sections have eval-{id} radios and mirrors their current state. -->

@@ -65,6 +65,14 @@ Same field names as the tool (including `session_id`), card markdown on stdout,
 same `card-rendered` / `validation-attested` flags written. Relay stdout VERBATIM.
 "No card possible" is never the answer — that path exists for exactly this case.
 
+The CLI validates the payload like the tool does (#396, #406): the variant must be
+one of the tool's enum (a shipped PR is `ship-successful`, never `ship`), a
+`ship-successful` needs the merge proof `state: { pushed: true, merged: "<base>" }`
+plus `cta` / `delivery`, and off-shape fields exit 2 with the issues on stderr —
+never a degraded generic card. Unknown top-level keys are reported on stderr and
+ignored, as the tool's schema strips them. The Stop-gate hook prints the field
+shapes and the variant contract next to the command.
+
 **Desktop App visibility:** The `render_completion_card` MCP tool result is hidden
 inside a collapsed "Hat ein Tool verwendet" element. All hooks instruct Claude to
 copy the returned markdown and output it VERBATIM as direct text response.

@@ -1,10 +1,13 @@
 /**
  * @module mcp-server/lib/card-input
- * @version 0.1.0
+ * @version 0.2.0
  * @description Lenient coercion + structural validation of the completion-card
  *   payload — the shapes the MCP tool's zod schema enforces, written once
  *   without a dependency so the `--render-card` CLI fallback can enforce them
- *   too (#396).
+ *   too (#396). Owns CARD_VARIANTS (the MCP schema's enum imports it from
+ *   here) and the ship-successful merge-proof rule, so the CLI rejects
+ *   `variant: "ship"` and a `ship-successful` without `state.pushed` +
+ *   `state.merged` with exit 2 instead of a silent generic card (#406).
  *
  *   The MCP path rejects a malformed payload before the handler runs. The CLI
  *   path is reached exactly when the MCP server is down — the agent then has
@@ -30,6 +33,35 @@
  *   third-party module before the CLI branch — that property is what makes it
  *   a fallback for a session whose MCP server never came up.
  */
+
+/**
+ * Every accepted card variant. The MCP schema's `z.enum` and the CLI validator
+ * both read this list, so a variant cannot be accepted on one path and not on
+ * the other (#406). Plain array, no SDK cost — this module must stay loadable
+ * before the CLI branch exits.
+ */
+export const CARD_VARIANTS = [
+  "ship-successful", "ready", "released", "ship-blocked", "test",
+  "test-minimal", "analysis", "aborted", "fallback", "ready-files",
+];
+
+/**
+ * Top-level keys the tool schema knows. Anything else is silently stripped by
+ * zod on the MCP path; the CLI reports it on stderr (parity: a warning, never
+ * a rejection) so a `links` or `validation: "…"` written from memory does not
+ * vanish without a trace (#406).
+ */
+export const CARD_KNOWN_KEYS = [
+  "variant", "summary", "lang", "cwd", "buildId", "session_id", "changes", "tests",
+  "state", "cta", "userTest", "userFinalTest", "open", "pending", "concept",
+  "deployGate", "validation", "delivery", "promotion",
+];
+
+/** Top-level keys of `params` the schema does not know, in payload order. */
+export function unknownCardKeys(params) {
+  if (!params || typeof params !== "object" || Array.isArray(params)) return [];
+  return Object.keys(params).filter((k) => !CARD_KNOWN_KEYS.includes(k));
+}
 
 /** Separators that split a one-line change into `area` and `description`, first match wins. */
 const CHANGE_SEPARATORS = [" → ", " — ", " -> ", ": "];
@@ -115,8 +147,23 @@ export function validateCardInput(params) {
   const issues = [];
   if (!isObj(params)) return { ok: false, issues: [{ path: "", message: "payload must be a JSON object" }] };
 
-  if (!isStr(params.variant)) issues.push({ path: "variant", message: "must be a string" });
+  // The variant is an enum on the MCP path (zod rejects `"ship"`); here it is
+  // the one field a payload written from memory gets wrong most often, and a
+  // wrong one used to render a generic `DONE — Noch was ANDERES?` card with
+  // exit 0 — the ship card the user then had to ask for (#406).
+  if (!isStr(params.variant)) issues.push({ path: "variant", message: `must be one of ${CARD_VARIANTS.join("|")}` });
+  else if (!CARD_VARIANTS.includes(params.variant)) issues.push({ path: "variant", message: `"${params.variant}" is not a card variant — must be one of ${CARD_VARIANTS.join("|")}` });
   if (!isStr(params.summary)) issues.push({ path: "summary", message: "must be a string" });
+
+  // ship-successful asserts "merged to remote" and the MCP path polices it
+  // (variant-guard: no pushed+merged → downgraded to `ready`). On the CLI a
+  // silent downgrade is exactly the generic card #406 is about, so the
+  // merge proof is required up front; a file-only project has its own variant.
+  if (params.variant === "ship-successful") {
+    const s = isObj(params.state) ? params.state : null;
+    if (s && s.mode === "file-only") issues.push({ path: "variant", message: 'a file-only project has no merge to report — use "ready-files"' });
+    else if (!s || s.pushed !== true || !s.merged) issues.push({ path: "state", message: 'ship-successful requires the merge proof state.pushed: true and state.merged: "<base>" (e.g. "main")' });
+  }
   if (params.lang !== undefined && params.lang !== "de" && params.lang !== "en") issues.push({ path: "lang", message: 'must be "de" or "en"' });
 
   eachEntry(issues, "changes", params.changes, (c) =>
@@ -194,3 +241,14 @@ export const CARD_FIELD_REFERENCE =
   'validation: [{ requirement, status: met|partial|unmet, evidence }] · ' +
   'userFinalTest: [string | { action, afterDeployment }] · open: [string] · ' +
   'pending: [{ name, kind: agent|task|workflow, doing }] · state / cta / delivery: objects.';
+
+/**
+ * The variant contract for the offline path (#406): the enum, and the minimum
+ * a `ship-successful` payload must carry — the two facts the misfiled ship
+ * card lacked. Printed by the Stop-gate hook next to CARD_FIELD_REFERENCE;
+ * card-input.test.js pins the hook's copy equal to this one.
+ */
+export const CARD_VARIANT_REFERENCE =
+  `Variants: ${CARD_VARIANTS.join("|")} · a shipped PR is "ship-successful" (never "ship") and requires ` +
+  'state: { pushed: true, merged: "main", pr: { number, title }, commit }, cta: { vOld, vNew, bump }, ' +
+  'delivery: { pr, ship: { version, base } }.';

@@ -14,6 +14,8 @@ import {
   buildBlockReason,
   findMappingIssues,
   findViewOverlap,
+  findChromeCollisions,
+  ENGINE_CLASSES,
 } from "./concept-gate.js";
 
 // The engine-currency markers as one stub — a real page carries them in the
@@ -761,5 +763,66 @@ describe("findStaleEngine — a page whose engine was lifted from an older conce
     const html = VALID.replace("function recoverFromFreeze(){}", "");
     expect(findStaleEngine(html).map(e => e.token)).toEqual(["recoverFromFreeze"]);
     expect(evaluate("docs/concepts/x.html", html).ok).toBe(false);
+  });
+});
+
+
+// #400 — a round's mock <style> defined `.overlay { position:absolute; left:0;
+// pointer-events:none }` for its fog SVGs; the decision panel carried the same
+// bare class and was restyled: docked LEFT, ☰ FAB dead. The panel no longer
+// carries `overlay`, and the gate blocks a mock selector that names an engine
+// class or is a bare unprefixed single class.
+describe("findChromeCollisions (P32, #400)", () => {
+  const page = (style) => `<html><head><style>.concept-decision-panel{position:fixed}</style></head><body>
+<section data-iteration="1" id="i1" hidden><h2>old</h2></section>
+<section data-iteration="2" id="i2" data-active><style>${style}</style><section data-design="d1"><section data-screen="s1"><div class="d1-fog"></div></section></section></section>
+</body></html>`;
+
+  test("the engine's own head stylesheet is exempt; a prefixed or scoped mock rule passes", () => {
+    expect(findChromeCollisions(page(".d1-fog { position:absolute; left:0 } [data-design=\"d1\"] .fog { opacity:.5 } .mock-btn:hover { color:red } #i2 .card { padding:1px }"))).toEqual([]);
+  });
+
+  test("REGRESSION: a bare `.overlay` mock rule is blocked as a bare class", () => {
+    const r = findChromeCollisions(page(".overlay { position:absolute; left:0; pointer-events:none }"));
+    expect(r).toHaveLength(1);
+    expect(r[0].kind).toBe("bare-class");
+    expect(r[0].why).toContain("#i2");
+    expect(r[0].why).toContain('".overlay"');
+    expect(r[0].why).toContain(".d1-overlay");
+  });
+
+  test("a selector naming an engine chrome class is blocked wherever the class appears in it", () => {
+    for (const sel of [".concept-decision-panel", ".d1-x .panel-fab", "body.panel-open .feedback-dock", ".d1-frame.device-frame"]) {
+      const r = findChromeCollisions(page(`${sel} { left:0 }`));
+      expect(r.map(i => i.kind), sel).toEqual(["engine-class"]);
+    }
+  });
+
+  test("rules nested in @media are checked; comments are stripped; :is() lists are not split", () => {
+    expect(findChromeCollisions(page("@media (max-width: 600px) { .overlay { left:0 } }")).map(i => i.kind)).toEqual(["bare-class"]);
+    expect(findChromeCollisions(page("/* .overlay { } */ .d1-a { color:red }"))).toEqual([]);
+    expect(findChromeCollisions(page(".d1-a:is(.d1-b, .d1-c) { color:red }"))).toEqual([]);
+    expect(findChromeCollisions(page(".d1-a:is(.d1-b, .panel-fab) { color:red }")).map(i => i.kind)).toEqual(["engine-class"]);
+  });
+
+  test("only <style> blocks inside an iteration count; a page without iteration styles is clean", () => {
+    expect(findChromeCollisions("<html><head><style>.overlay{left:0}</style></head><body><section data-iteration=\"1\"></section></body></html>")).toEqual([]);
+  });
+
+  test("evaluate reports collisions and fails the page; buildBlockReason names P32 and the selector", () => {
+    const html = VALID.replace("</body>", '<section data-iteration="9" id="i9"><style>.overlay{left:0}</style></section></body>');
+    const r = evaluate("docs/concepts/2026-09-21-x.html", html);
+    expect(r.ok).toBe(false);
+    expect(r.collisions.map(i => i.kind)).toEqual(["bare-class"]);
+    const text = buildBlockReason("docs/concepts/2026-09-21-x.html", [], [], [], [], [], [], r.collisions);
+    expect(text).toContain("P32");
+    expect(text).toContain('".overlay"');
+    expect(text).toContain("#400");
+  });
+
+  test("ENGINE_CLASSES names only classes the templates actually use", () => {
+    const templates = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "concept", "deep-knowledge", "templates.md"), "utf8");
+    for (const c of ENGINE_CLASSES) expect(templates, c).toMatch(new RegExp(`class="[^"]*\\b${c}\\b|\\.${c}\\b`));
+    expect(templates).not.toContain('class="concept-decision-panel overlay"');
   });
 });

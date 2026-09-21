@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.183.7] — 2026-09-21
+
+### Fixed
+
+- **`/concept`: the ☰ panel can no longer be restyled by a round's mock CSS.** A design round's `<style>` defined `.overlay { position: absolute; left: 0; pointer-events: none }` for its fog SVGs; the decision panel carried the same bare class (`concept-decision-panel overlay`) and was restyled — docked LEFT, 360 px wide, content pushed right, ☰ FAB toggling `body.panel-open` on a panel that was already on screen (#400). No engine rule ever referenced `.overlay`, so the three panel skeletons drop it. New gate **P32** (`findChromeCollisions` in `concept-gate.js`, relayed by `post.concept.gate` 0.3.0): every rule of every `<style>` inside a `section[data-iteration]` — `@media` recursed, comments stripped, `:is()` / `:where()` lists kept whole — is blocked when a selector names an engine chrome class (explicit `ENGINE_CLASSES` list, pinned to `templates.md` by a test) or is a bare single-class selector without a per-design prefix (`.d1-…`, `mock-`); a scoped selector (`[data-design="d1"] .fog`, `#i2 .card`) passes, and the engine's own head stylesheet sits outside every iteration. `templates.md` § Design layout rules → *Mock CSS is namespaced*, `validation-gate.md` P32 and `SKILL.md` § Engine source state the rule. 7 gate tests; 156 tests across gate / post-tool-use / concept template suites green. Shipped by `/run-backlog` (queue 8/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
+## [0.183.6] — 2026-09-21
+
+### Fixed
+
+- **`/concept`: two sessions in sibling worktrees no longer kill each other's bridge.** Both wrote `<project-root>/.claude/concept-active.json` (bridge-server.md step 4 said "project root, NOT the worktree"), while `ss.concept.resume` read the file from `process.cwd()`. Session B's write made A's cron tick read "state file now owns port B, not A", POST `/shutdown` to its own bridge and tell Claude to `rm` the file; B's pulser and waker then exited `STATE_GONE`, the waker POSTed `/shutdown`, and B's page showed "Claude nicht verbunden" every 15 min — two outages in one review on 2026-09-20 (#417). Now: (1) the state file lives in the **session cwd** (the worktree when in one); server root, `--html` and `html_path` follow it; every tick / pulser / waker snippet in `bridge-server.md` and `SKILL.md` says `{session-cwd}`, and the close-out deletes the file only when its owner token matches. (2) `concept-active.json` carries an **`owner`** token (random hex minted at write time; `ss.concept.resume` 0.7.0 validates it as a plain token and threads it into the re-armed cron, pulser and waker as `--owner`); `concept-tick.js` 0.2.0 and `concept-watch.js` 0.4.0 treat a file naming another port AND another owner as foreign — no `/shutdown`, no cleanup instruction, no heartbeat bookkeeping in it, the tick keeps servicing its own port, the watchers keep running. Without an owner on both sides the port rule stands as before. 14 new tests (tick, watch, resume, docsync placeholder); concept suites 846 green. Shipped by `/run-backlog` (queue 7/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
+## [0.183.5] — 2026-09-21
+
+### Fixed
+
+- **`/concept` resume no longer prunes a live multi-day concept, and never silently.** A concept opened 2026-09-20 11:32 (9 iterations, draft rev 199 saved 22:03, journal restore 14:50 the next day) vanished on a session restart at ~15:00: the bridge died with the session, `ss.concept.resume` measured staleness from `started_at` — the OPEN, > 24 h ago — deleted the state file and exited with no output, and the next `concept-tick` shut down the bridge the user had just relaunched by hand (#426). `readStore()` now reports `lastActivityAt` (the newest of `state.json` `saved_at`, every `drafts/*.json` snapshot `ts` and the journal, file mtimes as fallback) and `hasDraft` (a snapshot holding a typed `text:` note — the server's own recover prefix); `isStale(state, store)` takes the later of the open and that activity, and a store with a draft is never stale. A prune prints one `PRUNED stale concept state …` line naming the state file, port, both timestamps and the store dir, with the relaunch recipe. Hook 0.6.0; `bridge-server.md` step 4 and the `started_at` field state the rule. 11 new tests (unit + the hook as a process against a store shaped like the server writes it). Shipped by `/run-backlog` (queue 6/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
+## [0.183.4] — 2026-09-21
+
+### Fixed
+
+- **git-sync suites no longer time out under load.** `git-sync.test.js`, `git-sync.conflicts.test.js` and `git-sync.guards.test.js` hit the 60 s budget in every full run of the day and, measured, even when the three files ran alone (four timeouts, 65–75 s per group). Root cause: the groups were `describe.concurrent` while every test blocks the worker inside `execFileSync` for 3–10 s (two real clones + the sync), so vitest started every test's timer at once and the LAST test of a group was charged the whole group's wall clock (#424). Plain `describe` gives each test its own budget — 22/22 green in 52 s, longest single test 10 s, total file time unchanged; the fixture's docblock records why the groups must stay sequential. No timeout was raised. Shipped by `/run-backlog` (queue 5/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
+## [0.183.3] — 2026-09-21
+
+### Fixed
+
+- **`--render-card` refuses a wrong variant instead of rendering a generic card.** With the completion MCP server down for a session, a ship card rendered through the offline fallback with `variant: "ship"` (plus `links` / `validation` as plain strings) came out as a plain `DONE — Noch was ANDERES?` card — no Delivery, no bump, no SHIPPED CTA — with exit 0, and the user had to ask where the ship card was (#406). `CARD_VARIANTS` now lives in `mcp-server/lib/card-input.js` (0.2.0) and feeds both the tool's `z.enum` and the CLI validator; the CLI keeps the raw variant (the "unknown → fallback" rewrite is MCP-only now), so `"ship"` exits 2 listing the valid variants, a `ship-successful` without `state.pushed: true` + `state.merged` exits 2 naming both fields (a file-only project is pointed at `ready-files`), and unknown top-level keys are reported on stderr and ignored — parity with the zod strip, never a rejection. The Stop-gate offline text (`card-guard` 0.5.1) prints `CARD_VARIANT_REFERENCE` — the enum and the `ship-successful` minimum (`state`, `cta`, `delivery`) — next to the field shapes; `card-input.test.js` pins the hook's copy equal to the exported one. `plugin-behavior.md` § offline renderer states the contract. Completion server 0.6.1. card-input 21 / CLI 19 / card-guard 105 tests green. Shipped by `/run-backlog` (queue 4/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
+## [0.183.2] — 2026-09-21
+
+### Fixed
+
+- **A chained command that dies before the test runner no longer stamps ⚠️ TESTS ROT.** `post.flow.completion` classified a Bash call as a test run when the command string matched the runner pattern and took a non-zero exit as authoritative, so `python patch.py && npm run test:gate && git commit …` failing in `patch.py` wrote `light-red` and the next card reported a red run over a session whose every real run had passed (three cards in a row on 2026-09-18, #409). `testRunOutcome` (`browsertest-guard` 0.5.0) now returns `'unknown'` for a non-zero exit whose output carries no runner summary — `RUNNER_OUTPUT_RE`, one anchored form per runner family (node:test `ℹ tests N`, vitest/jest `Tests: N passed`, TAP `ok N`/`1..N`, pytest `N passed`, mocha `N passing`, go `ok|FAIL|---`, cargo `test result:`, dotnet `Passed!/Failed!`, phpunit `OK (N tests`, rspec `N examples`) — and the hook (0.22.0) touches neither `light-verified` nor `light-red` in that case. A runner that ran and failed (summary present, or an explicit failure line) still reddens; exit 0 still verifies. The output signature was chosen over "last `&&` segment" parsing because it also covers a runner that crashes on import and PowerShell `;` chains. Guard 84 / hook 16 tests green. Shipped by `/run-backlog` (queue 3/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
+## [0.183.1] — 2026-09-21
+
+### Fixed
+
+- **Build id survives a deleted-but-tracked file.** `scripts/build-id.js` hashed every path from `git ls-files --cached`, which still lists a tracked file that was deleted in the working tree but not staged; `git hash-object --stdin-paths` then failed on that one path and every card in the session read `Build no-build-id` (seen mid-refactor while `cta-actions.js` was being renamed, #423). The script (0.3.0) hashes only the paths that exist and folds the missing ones in by name, so the id stays readable and still moves with the deletion; an intact tree hashes exactly as before. Regression test in a temp repo (`build-id.test.js`). Shipped by `/run-backlog` (queue 2/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
 ## [0.183.0] — 2026-09-21
 
 ### Fixed

@@ -45,7 +45,7 @@ describe("concept SKILL.md — session title prefix", () => {
 
   test("the open-concept card passes cwd so the page URL is resolved from the state file", () => {
     const cards = section("### Completion cards while the concept is open", "## Step 4 — Monitor via HTTP Bridge");
-    expect(cards).toMatch(/`cwd` set to the project root/);
+    expect(cards).toMatch(/`cwd` set to the session cwd/);   // #417: the state file lives in the session cwd
     expect(cards).toContain("concept-active.json");
     expect(cards).toContain("http://localhost:{port}/docs/concepts/{date}-{slug}.html");
   });

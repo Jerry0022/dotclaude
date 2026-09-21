@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script concept-watch
- * @version 0.3.0
+ * @version 0.4.0
  * @plugin devops
  * @description The concept bridge's two detached watchers, as a script instead
  *   of a shell loop pasted into three documents.
@@ -123,7 +123,7 @@ const DEFAULTS = {
 const BYE_GRACE_MS = 60_000;
 
 function parseArgs(argv) {
-  const out = { mode: '', port: 0, state: '', ...DEFAULTS };
+  const out = { mode: '', port: 0, state: '', owner: '', ...DEFAULTS };
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i].startsWith('--') ? argv[i].slice(2) : null;
     if (!key) continue;
@@ -132,7 +132,7 @@ function parseArgs(argv) {
     i++;
     // `--dead-after 300` and `--deadAfter 300` are the same option.
     const name = key.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-    if (name === 'mode' || name === 'state') out[name] = raw;
+    if (name === 'mode' || name === 'state' || name === 'owner') out[name] = raw;
     // hasOwn, not `in` — `in` walks the prototype chain, so `--toString 5`
     // would set junk on the options object.
     else if (Object.prototype.hasOwnProperty.call(DEFAULTS, name) || name === 'port') out[name] = Number(raw);
@@ -194,7 +194,7 @@ const DUPLICATE_AFTER = 3;
  * `html-gone`: the concept's page was deleted, the session is over (#363).
  * @returns {'ok'|'gone'|'port-changed'|'html-gone'}
  */
-function checkState(statePath, port, exists) {
+function checkState(statePath, port, exists, owner = '') {
   let raw;
   try {
     raw = fs.readFileSync(statePath, 'utf8');
@@ -214,7 +214,15 @@ function checkState(statePath, port, exists) {
   }
   if (!parsed || typeof parsed.port !== 'number') return 'gone';
   // Numeric, so no `"port": 8883` spacing dependency and no 8883-vs-88831 slip.
-  if (parsed.port !== port) return 'port-changed';
+  if (parsed.port !== port) {
+    // Another session's file (#417): not ours to judge, and never a reason to
+    // POST /shutdown — the bridge's own liveness decides when this watcher
+    // leaves. Only a file we own that names a different port means OUR
+    // concept moved on.
+    const fileOwner = typeof parsed.owner === 'string' ? parsed.owner : '';
+    if (owner && fileOwner && fileOwner !== owner) return 'ok';
+    return 'port-changed';
+  }
   if (exists && typeof parsed.html_path === 'string' && parsed.html_path) {
     const root = path.dirname(path.dirname(statePath));
     if (!exists(path.join(root, parsed.html_path))) return 'html-gone';
@@ -346,7 +354,7 @@ async function run(opts, deps = {}) {
   const startedAt = io.now();
   let reopened = false;
   for (;;) {
-    const state = io.checkState(opts.state, opts.port, watch ? io.exists : undefined);
+    const state = io.checkState(opts.state, opts.port, watch ? io.exists : undefined, opts.owner);
     if (confirmed(state)) {
       if (state === 'gone') return leave('STATE_GONE');
       if (state === 'port-changed') return leave('PORT_CHANGED');
@@ -429,7 +437,7 @@ if (require.main === module) {
   const err = validate(opts);
   if (err) {
     process.stderr.write(`concept-watch: ${err}\n`);
-    process.stderr.write('usage: concept-watch.js --mode pulse|watch --port <n> --state <abs path> [--interval 20] [--grace 60] [--liveness 900]\n');
+    process.stderr.write('usage: concept-watch.js --mode pulse|watch --port <n> --state <abs path> [--owner <token>] [--interval 20] [--grace 60] [--liveness 900]\n');
     process.exit(2);
   }
   // A crash must still announce itself as a reason line, not as a stack trace:

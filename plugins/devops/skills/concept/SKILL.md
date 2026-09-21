@@ -366,6 +366,11 @@ Build a single self-contained HTML file. Requirements:
 
 ### Engine source (mandatory — templates.md, never an older page)
 
+Mock CSS in a round's `<style>` is namespaced per design (`.d1-…`) and never
+names an engine chrome class — the panel, FABs, dock, tabs and frames belong
+to the engine's head stylesheet (templates.md § Design layout rules → Mock
+CSS is namespaced; gate P32, #400).
+
 The page's **engine** — the Kompass panel skeleton, § Layout CSS, § Section
 Navigation JS, § Claude Connection Heartbeat, § Two-Button Submit, § State
 Persistence, § Attachments, the viewport switcher — is copied **verbatim from
@@ -935,8 +940,10 @@ cross-session registry (`node scripts/concept-port-registry.js pick "<project-ro
 — skips ports owned by another live concept session; see bridge-server.md
 § port selection), arm the sparse backstop cron (fires every 15 minutes —
 each fire is a model turn, so it is a last resort, never the monitor), write
-`.claude/concept-active.json` so a future SessionStart can rediscover this
-concept, **send the first heartbeat AND verify it round-trips with a
+`.claude/concept-active.json` — in the **session cwd**, with a fresh `owner`
+token (`deep-knowledge/bridge-server.md` § step 4; two sessions in sibling
+worktrees must never share one file, #417) — so a future SessionStart can
+rediscover this concept, **send the first heartbeat AND verify it round-trips with a
 non-zero `claude_ts`** (see `deep-knowledge/bridge-server.md` § Step 5 —
 the read-back is mandatory; a naked POST leaves a dead-bridge failure
 mode invisible until the user submits and gets no response), then open
@@ -952,8 +959,9 @@ launched via the Bash tool with `run_in_background: true` (exact invocations in
    green even through a long `implement`.
 2. **Pickup waker** — polls `/pending` every ~20 s and exits the instant a
    submission lands, which wakes Claude immediately. It also owns the
-   self-cleanup gate (state file gone / foreign port / page deleted ⇒
-   `/shutdown` + exit) and page liveness (no tab registered any more — the
+   self-cleanup gate (state file gone / OUR file on a foreign port / page
+   deleted ⇒ `/shutdown` + exit; a file another session owns is left alone,
+   #417) and page liveness (no tab registered any more — the
    last tab said `/bye`, or 15 min of silence from every tab ⇒ the page is
    re-opened in Edge, once per window; a hidden tab never counts as closed,
    #397) — token-free, see
@@ -980,7 +988,7 @@ launching them here, before step 4 writes it, is safe.
 
 ```bash
 node "{plugin-root}/scripts/concept-drift.js" --capture \
-     --state "{project-root}/.claude/concept-active.json"
+     --state "{session-cwd}/.claude/concept-active.json" --owner {owner}
 ```
 
 It records the default branch's current remote tip into the state file, which is
@@ -1047,7 +1055,8 @@ Pick the wording that matches the `[ui-locale: ...]` hint injected by
 
 Every turn that ends with the concept still open — right after opening the
 page, after each processing round, after a stale wake — renders its completion
-card with the `concept` field **and `cwd` set to the project root**. That
+card with the `concept` field **and `cwd` set to the session cwd** (where
+`.claude/concept-active.json` lives). That
 replaces the CTA of whatever variant the turn earned (and outranks `pending`)
 with the one statement that is true:
 
@@ -1225,7 +1234,7 @@ never re-run a completed step. The checkpoint records what the previous run
    decision they made is never asked again:
    ```bash
    node "{plugin-root}/scripts/concept-drift.js" --capture \
-        --state "{project-root}/.claude/concept-active.json" --sha <section's data-reality-head>
+        --state "{session-cwd}/.claude/concept-active.json" --owner {owner} --sha <section's data-reality-head>
    ```
    The commit to pin is the one that round was generated from, and the round
    carries it itself in `data-reality-head` — so this works from a resumed
@@ -1256,7 +1265,7 @@ never re-run a completed step. The checkpoint records what the previous run
      goes straight through. This is what makes a second forced round impossible.
    - Otherwise `POST /status {"phase":"reality-check","version":$NOTED_VERSION}`
      (before the fetch, so the longer wait stays legible), then run
-     `node "{plugin-root}/scripts/concept-drift.js" --state "{project-root}/.claude/concept-active.json" --paths "<paths the concept names>"`.
+     `node "{plugin-root}/scripts/concept-drift.js" --state "{session-cwd}/.claude/concept-active.json" --owner {owner} --paths "<paths the concept names>"`.
    - `verdict: "skip"` or `"clear"` → advance the baseline (`--capture --sha
      <advanceTo>`) and continue with step 1 below. Every unresolvable condition
      — no remote, offline, force-pushed baseline — lands here: the check never
@@ -1907,7 +1916,9 @@ in the sheet's files block.
 
 ```bash
 curl -s -X POST http://localhost:$PORT/shutdown > /dev/null 2>&1 || true
-rm -f .claude/concept-active.json
+# Only YOUR state file (#417): a sibling session may have written its own
+# since — compare the owner token before deleting.
+node -e "const f='.claude/concept-active.json',fs=require('fs');try{const s=JSON.parse(fs.readFileSync(f,'utf8'));if(!s.owner||s.owner===process.argv[1])fs.unlinkSync(f)}catch{}" "$OWNER"
 ```
 
 **Restore the session title** (Desktop app only — skip silently elsewhere):
