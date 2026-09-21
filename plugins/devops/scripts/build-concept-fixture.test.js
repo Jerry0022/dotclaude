@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { JSDOM } from "jsdom";
 import { build, parseArgs } from "./build-concept-fixture.js";
-import { findMappingIssues, findStructural } from "../hooks/lib/concept-gate.js";
+import { findMappingIssues, findStructural, evaluate, findStaleEngine } from "../hooks/lib/concept-gate.js";
 
 // The fixture builder's `--mapping` flag (Task 8): both modes gain an
 // information mapping (templates.md § Information Mapping (engine)) that the
@@ -191,5 +191,30 @@ describe("build-concept-fixture — design canvas width (#418)", () => {
     const rule = columnRule(build({ ...BASE, mode: 'decision' }));
     expect(rule).toContain('max-width: 1100px');
     expect(rule).toContain('padding: 2rem');
+  });
+});
+
+// #430 — the gate asserts the engine CSS/JS blocks are intact, per template.
+// The fixture concatenates every css/js block of templates.md, so a built
+// page of EITHER mode must carry every shared and template-scoped anchor;
+// a fixture that fails here means the anchor list drifted from the engine.
+describe("build-concept-fixture — engine integrity anchors (#430)", () => {
+  for (const mode of ['decision', 'design']) {
+    test(`${mode} mode: the built page passes the whole deterministic gate, no stale-engine anchor`, () => {
+      const page = build({ ...BASE, mode, mapping: false });
+      expect(page).toMatch(new RegExp(`<html[^>]*data-template="${mode}"`));
+      expect(findStaleEngine(page)).toEqual([]);
+      const r = evaluate('docs/concepts/fixture.html', page);
+      expect(r.ok, JSON.stringify({ stale: r.stale, structural: r.structural, collisions: r.collisions })).toBe(true);
+    });
+  }
+
+  test("REGRESSION: cutting the decision-panel rule out of a built design page turns the gate red", () => {
+    const page = build({ ...BASE, mode: 'design', mapping: false });
+    const cut = page.replace(/.concept-decision-panel {[^}]*}/, '');
+    expect(cut).not.toBe(page);
+    const r = evaluate('docs/concepts/fixture.html', cut);
+    expect(r.ok).toBe(false);
+    expect(r.stale.map(e => e.token)).toContain('.concept-decision-panel {');
   });
 });
