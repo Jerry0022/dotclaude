@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.title-work
- * @version 0.4.0
+ * @version 0.4.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description Marks a session as "being worked on" in the sidebar: on the
@@ -28,9 +28,12 @@
  *   skipped the ship skill's own courtesy rename (Pre-Step C).
  *
  *   Guarded by runOnce: the marker is taken here and given back by
- *   stop.flow.guard once a card has rendered, so a multi-prompt turn without
- *   a card in between costs one rename, not one per prompt. A resumed or
- *   compacted session whose last turn had no card keeps whatever it carries.
+ *   stop.flow.guard at every non-silent turn end (card or no card — since
+ *   0.183.10; releasing only after a card let a card-less answer after a ship
+ *   pin `🚀 Shipped – ` on the title for the rest of the session), so a
+ *   multi-prompt turn costs one rename, not one per prompt. An outcome prefix
+ *   therefore lives exactly one turn: `🚀 Shipped – ` stays only while the
+ *   LAST thing this session did was a ship.
  *   Silent/cron turns and scheduled-task ticks are not user work — skipped.
  *   Desktop app only — the instruction tells Claude to skip silently when the
  *   session-mgmt tools are missing (terminal, unattended run).

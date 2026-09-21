@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.guard
- * @version 0.5.0
+ * @version 0.5.1
  * @event Stop
  * @plugin devops
  * @description Per-turn completion card + validation enforcement (the validation
@@ -143,11 +143,15 @@ process.stdin.on('end', () => {
   const treeClean = (!silent && (scheduledTask || notificationTurn)) ? isTreeClean(hook.cwd, sessionId) : null;
   const completionMcpDown = silent ? false : !isMcpServerAlive('dotclaude-completion');
 
-  // A card just told the sidebar what this turn ended with (📦 Ready, 🧪 Test,
-  // ⏳ Working, …). The next real prompt starts new work, so hand the wrench
-  // token back to prompt.flow.title-work (its ONCE_KEY) — without this the
-  // title keeps the outcome of a turn long past while the session is busy.
-  if (cardRendered && !silent) releaseOnce('prompt-title-work', sessionId);
+  // The sidebar prefix belongs to the turn that just ended (📦 Ready, 🧪 Test,
+  // 🚀 Shipped, …). The next real prompt starts new work, so hand the wrench
+  // token back to prompt.flow.title-work (its ONCE_KEY) on EVERY non-silent
+  // turn end — card or no card. Releasing only after a card (until 0.183.9)
+  // let one card-less answer after a ship pin `🚀 Shipped – ` on the title for
+  // the rest of the session: every later prompt found the token taken, never
+  // marked ⏳, and the next card's outcome was the only thing that could move
+  // it. Observed 2026-09-21 — "Shipped" while the session was mid-implementation.
+  if (!silent) releaseOnce('prompt-title-work', sessionId);
 
   const decision = decideAction({
     workHappened,

@@ -302,6 +302,17 @@ itself, so `/ship` after a change never sits on `⏳` for the length of the
 pipeline. Outcome prefixes (`🚀 Shipped – `, `📦 Ready – `, …) are what a new
 prompt outdates — those the hook strips. Observed 2026-09-21.
 
+**An outcome prefix lives exactly one turn.** `stop.flow.guard` hands the
+title-work token back at every non-silent turn end — card or no card — so the
+next prompt always marks `⏳ ` and the card that ends that turn sets its own
+outcome (`📦 Ready – `, `🧪 Test – `, …). `🚀 Shipped – ` therefore stays on
+the sidebar only while the LAST thing the session did was a ship; work after
+a ship reads ⏳ → Ready/Test, never Shipped. (Until 0.183.9 the token was
+released only after a card, and one card-less answer after a ship pinned
+Shipped for the rest of the session.) A ship keyword is an order only in a
+short prompt (`KEYWORD_MAX_CHARS` in `ship-intent.js`): long prose that
+mentions a ship in passing is work, not a ship, and gets the hourglass.
+
 ## 8. Text rules (both languages)
 
 - Sentence case, no exclamation marks, no "successfully".

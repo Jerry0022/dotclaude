@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.183.10] — 2026-09-21
+
+### Fixed
+- **Project ship extension (Step 8 finalizer)** — the self-sync hook is now taken from the marketplace clone first and, only as a fallback, from the highest cached version dir (`sort -V | tail -1`). The old `ls | head -1` picked the lexically first, i.e. oldest, cache dir (0.179.0), whose hook exited 0 without pulling or rebuilding — the local install silently stayed one version behind after a ship. Same version-glob rule as CONVENTIONS.md.
+- **Session title** — an outcome prefix now lives exactly one turn: `stop.flow.guard` releases the title-work token at every non-silent turn end (card or no card), so work after a ship reads ⏳ → Ready/Test and `🚀 Shipped – ` stays only while the last thing the session did was a ship. Before, one card-less answer after a ship pinned "Shipped" for the rest of the session.
+- **Ship intent** — a ship keyword counts as an order only in a prompt of up to 160 characters (`/ship` has no limit); long prose that mentions a ship in passing ("the ship extension", "ein ship war") is no longer marked 🚀 Shipping or routed to the ship skill.
+
 ## [0.183.9] — 2026-09-21
 
 ### Changed
