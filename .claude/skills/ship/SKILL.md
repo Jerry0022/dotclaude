@@ -105,12 +105,18 @@ source of truth, no duplicated logic).
 pins the version dir the session started with (e.g. `…/devops/0.106.0`), which a
 cache rebuild (a parallel session's SessionStart, or a prior finalizer run) may have
 **deleted** by the time Step 8 runs — observed as `MODULE_NOT_FOUND` right after the
-0.107.0 ship. Glob the cache first, fall back to the marketplace clone (always
-present, survives every rebuild):
+0.107.0 ship. Take the **marketplace clone's** hook first: it is always present, it
+survives every rebuild, and it is the newest hook on disk (the clone was pulled by
+the previous sync and is pulled again by this run). Only when the clone is missing,
+fall back to the cache — the **highest** version dir, never the first one `ls`
+prints: several version dirs coexist and `ls | head -1` returns the lexically first,
+i.e. the OLDEST (observed 2026-09-21: the 0.179.0 hook ran with `--force`, exited 0,
+printed nothing and moved nothing; only the clone's hook synced 0.183.8 → 0.183.9).
+Same version-glob rule as `CONVENTIONS.md` (Scripts → Version-glob rule).
 
 ```bash
-f="$(ls -d "$HOME/.claude/plugins/cache/dotclaude/devops"/*/hooks/session-start/ss.plugin.update.js 2>/dev/null | head -1)"
-[ -z "$f" ] && f="$HOME/.claude/plugins/marketplaces/dotclaude/plugins/devops/hooks/session-start/ss.plugin.update.js"
+f="$HOME/.claude/plugins/marketplaces/dotclaude/plugins/devops/hooks/session-start/ss.plugin.update.js"
+[ -f "$f" ] || f="$(ls -d "$HOME/.claude/plugins/cache/dotclaude/devops"/*/hooks/session-start/ss.plugin.update.js 2>/dev/null | sort -V | tail -1)"
 node "$f" --force
 ```
 
