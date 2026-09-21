@@ -22,7 +22,12 @@ import {
 
 afterAll(cleanupWorlds);
 
-describe.concurrent("refuses to run unless the repo is quiescent", () => {
+// Sequential on purpose (#424): every test here blocks the worker inside
+// execFileSync for 10-15 s (two real clones + the sync). Under describe.concurrent
+// vitest starts every test's 60 s timer at once, so the LAST test of a group
+// was charged the whole group's wall clock (65-75 s measured) and timed out on
+// a loaded machine although each test alone takes a sixth of that.
+describe("refuses to run unless the repo is quiescent", () => {
   test("does nothing on a detached HEAD", () => {
     const { root, wt, other } = makeWorld();
     advanceOrigin(other, "from-main.txt", "main\n", "main moves");
@@ -67,7 +72,7 @@ describe.concurrent("refuses to run unless the repo is quiescent", () => {
   });
 });
 
-describe.concurrent("repo hooks and unmarked conflicts", () => {
+describe("repo hooks and unmarked conflicts", () => {
   test("a rejecting commit-msg hook does not turn every sync into a failure", () => {
     const { root, wt, other } = makeWorld();
     // A commitlint-style gate: git's own "Merge remote-tracking branch …"
@@ -148,7 +153,7 @@ describe.concurrent("repo hooks and unmarked conflicts", () => {
   });
 });
 
-describe.concurrent("default branch", () => {
+describe("default branch", () => {
   test("syncs a repo whose default branch is master", () => {
     // Built by hand rather than via makeWorld — the point is the branch name.
     const root = makeRoot();
