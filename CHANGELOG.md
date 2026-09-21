@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.183.11] — 2026-09-21
+
+### Fixed
+- **Project ship extension (Step 8 finalizer)** — verifies the sync and retries: after each hook run it reads the clone's `plugin.json`, refetches the tags and runs again (up to three attempts) when the version is still vOld; the card's "lokal auf vNew synchronisiert" item is asserted only after that confirmation, otherwise an honest "/auto-update ausführen" item. Twice today the first run seconds after the release had not yet seen the new alpha tag and exited silently.
+- **ss.plugin.update** — prints one stderr line when `git fetch --tags` fails and, under `--force`, when the pinned channel already resolves to HEAD, so a silent no-op is diagnosable.
+
 ## [0.183.10] — 2026-09-21
 
 ### Fixed
