@@ -46,7 +46,7 @@ import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
-import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending } from "./lib/pending.js";
+import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
 import { conceptUrl, readBatch, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
@@ -799,7 +799,7 @@ const HEADINGS = {
     aborted: (c) => `🚫 Abgebrochen wegen ${c.reason} — anders versuchen?`,
     fallback: () => '🔧 Erledigt — noch etwas?',
     pending: (c) => `⏳ Noch nicht fertig — ${c.what}`,
-    concept: () => '🧭 Concept wartet auf deine Entscheidungen',
+    concept: (c) => `🧭 Concept ${c.what}`,
     batch: (c) => `📥 Batch sammelt — ${c.n} Einträge`,
     'vv-unverified': () => '⚠ Ungeprüft shippen?',
   },
@@ -825,13 +825,31 @@ const HEADINGS = {
     aborted: (c) => `🚫 Aborted because of ${c.reason} — try differently?`,
     fallback: () => '🔧 Done — anything else?',
     pending: (c) => `⏳ Not done yet — ${c.what}`,
-    concept: () => '🧭 Concept waiting for your decisions',
+    concept: (c) => `🧭 Concept ${c.what}`,
     batch: (c) => `📥 Batch collecting — ${c.n} entries`,
     'vv-unverified': () => '⚠ Ship unverified?',
   },
 };
 
 const POINTS_LIMIT = 3;
+
+// The concept heading follows the page's PHASE (the § 3 override row): while
+// the page waits it asks nothing but names the wait; while iterating or
+// implementing it says so and promises to report back — a card that keeps
+// saying "wartet auf deine Entscheidungen" during an implementation run was
+// the wrong CTA (observed 2026-09-21). Real background work rides along as
+// its own sentence, exactly like `conceptWhat` in pending.js.
+const CONCEPT_HEADING = {
+  de: { waiting: 'wartet auf deine Entscheidungen', tail: ' — ich melde mich' },
+  en: { waiting: 'waiting for your decisions', tail: ' — I will report back' },
+};
+function conceptHeadingWhat(concept, pending, lang) {
+  const { phase } = normalizeConcept(concept) || { phase: 'waiting' };
+  const L = CONCEPT_HEADING[lang] || CONCEPT_HEADING.de;
+  const work = pendingWhat(pending, lang);
+  if (phase === 'waiting') return L.waiting + (work ? ' · ' + work : '');
+  return (CONCEPT_LABEL[lang] || CONCEPT_LABEL.de)[phase] + (work ? '. ' + work : '') + L.tail;
+}
 const POINTS_TAIL = { de: (n) => ' +' + n + ' weitere', en: (n) => ' +' + n + ' more' };
 
 function normalizeFinalTestItems(items, lang) {
@@ -1025,7 +1043,13 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
 
   if (hasConcept(input.concept)) {
     const url = conceptUrl(input.cwd, input.concept);
-    return { heading: T.concept(), context: url ? '› ' + url : '', points: [], buttonsKey: null };
+    const what = conceptHeadingWhat(input.concept, input.pending, lang);
+    // Background work of an iterating/implementing concept is listed like the
+    // pending block's items — the user sees WHO is working, not only that.
+    const pts = normalizePending(input.pending).slice(0, POINTS_LIMIT)
+      .map(it => (it.name ? '`' + it.name + '`' : '') + (it.doing ? ' — ' + it.doing : ''))
+      .filter(Boolean);
+    return { heading: T.concept({ what }), context: url ? '› ' + url : '', points: pts, buttonsKey: null };
   }
   if (batch) {
     return { heading: T.batch({ n: (batch && batch.notes) || 0 }), context: '', points: [], buttonsKey: null };
