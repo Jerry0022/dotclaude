@@ -48,7 +48,7 @@ import { createRequire } from "node:module";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
-import { coerceCardInput, validateCardInput, formatIssues } from "./lib/card-input.js";
+import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
 import { conceptUrl, readBatch, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
 import { cardWidgetInstruction, isDesktopSession } from "./lib/card-widget.js";
 import {
@@ -1334,11 +1334,8 @@ function refreshUsage() {
 // Card assembly — the single implementation behind BOTH entry points
 // ---------------------------------------------------------------------------
 
-/** Every accepted card variant. Shared by the MCP schema and the CLI fallback. */
-const CARD_VARIANTS = [
-  "ship-successful", "ready", "released", "ship-blocked", "test",
-  "test-minimal", "analysis", "aborted", "fallback", "ready-files",
-];
+// CARD_VARIANTS lives in lib/card-input.js since #406 — the MCP schema's z.enum
+// and the CLI validator read the same list.
 
 /** Structured fields the MCP schema accepts as either an object or a JSON string. */
 const JSON_FIELDS = [
@@ -1370,13 +1367,17 @@ function ctaActionsNote(params) {
  * Apply the coercions the zod schema performs on the MCP path — JSON-string
  * fields, the `lang` default, and the soft clamps — to a raw CLI payload, so
  * an identical payload renders an identical card through either entry point.
- * Unknown variants fall back rather than throwing: a card that names the wrong
- * variant still beats no card at all, which is the whole point of the fallback.
+ * On the MCP path an unknown variant falls back rather than throwing (zod has
+ * already rejected it there, so this is belt and braces). The CLI passes
+ * `strictVariant` and keeps the raw value: its validator then rejects
+ * `variant: "ship"` with exit 2 and the valid list instead of a silent
+ * generic card (#406) — an unattended ship needs the real SHIPPED card or an
+ * error it can act on, never a degraded render.
  */
-function normalizeCardParams(raw) {
+function normalizeCardParams(raw, { strictVariant = false } = {}) {
   const params = { ...(raw && typeof raw === 'object' ? raw : {}) };
 
-  params.variant = CARD_VARIANTS.includes(params.variant) ? params.variant : 'fallback';
+  if (!strictVariant) params.variant = CARD_VARIANTS.includes(params.variant) ? params.variant : 'fallback';
   params.summary = clampText(String(params.summary ?? ''), SUMMARY_MAX).value;
   params.lang = (params.lang === 'en' || params.lang === 'de') ? params.lang : 'de';
 
@@ -1519,15 +1520,23 @@ function runRenderCardCli(source) {
   // stdout-ok — the --render-card CLI entry point IS a stdout renderer; this
   // branch always process.exit()s before the MCP transport is ever created,
   // so it can never interleave with the JSON-RPC wire.
-  const params = normalizeCardParams(payload);
+  const params = normalizeCardParams(payload, { strictVariant: true });
   // The tool path has zod in front of the handler; this path has nothing, and
   // a malformed payload used to render an empty Changes block with exit 0.
   // Same shapes, enforced dependency-free; exit 2 so the hook's ladder moves
-  // on to the tool instead of relaying a card that says nothing (#396).
+  // on to the tool instead of relaying a card that says nothing (#396). The
+  // variant and the ship-successful merge proof are checked the same way
+  // (#406) — `variant: "ship"` no longer renders a generic card.
   const check = validateCardInput(params);
   if (!check.ok) {
     process.stderr.write('[dotclaude-completion] payload does not match the card schema:\n' + formatIssues(check.issues) + '\n');
     process.exit(2);
+  }
+  // Parity with the zod strip on the MCP path: unknown keys never reach the
+  // renderer there either, but the CLI says so instead of dropping them mutely.
+  const unknown = unknownCardKeys(payload);
+  if (unknown.length) {
+    process.stderr.write(`[dotclaude-completion] ignored unknown top-level key(s): ${unknown.join(', ')} — not part of the card schema\n`);
   }
   process.stdout.write(buildCompletionCard(params) + '\n'); // stdout-ok
   // The rename and CTA-widget instructions ride on stderr so stdout stays the verbatim card.
@@ -1550,7 +1559,7 @@ const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/
 const { z } = await import("zod");
 
 const SERVER_NAME = "dotclaude-completion";
-const SERVER_VERSION = "0.6.0";
+const SERVER_VERSION = "0.6.1";
 
 const server = new McpServer({
   name: SERVER_NAME,
