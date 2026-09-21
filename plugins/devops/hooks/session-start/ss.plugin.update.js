@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.12.1
+ * @version 0.12.2
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -232,7 +232,17 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
   // converges on the resolved tag.
   const channel = readChannelPin(path.join(home, '.claude', 'plugins'), marketplace);
   const localHead = run('git rev-parse HEAD', mDir);
-  run('git fetch origin --tags 2>&1', mDir);
+  // A failed fetch is the one thing that turns this hook into a silent no-op
+  // (stale tag list → resolved tag == HEAD → nothing to report). Observed
+  // 2026-09-21: run seconds after a ship, twice, exit 0, no output. Say so on
+  // stderr — the post-ship finalizer reads it and retries.
+  let fetchError = '';
+  try {
+    execSync('git fetch origin --tags', { cwd: mDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 15000 });
+  } catch (e) {
+    fetchError = String((e && e.stderr) || (e && e.message) || 'unknown').trim().split('\n').filter(Boolean).pop() || 'unknown';
+    process.stderr.write(`[ss.plugin.update] ${marketplace}: git fetch --tags failed — ${fetchError}\n`);
+  }
   const tagList = run('git tag --list', mDir).split('\n').filter(Boolean);
   const hasStableTag = tagList.some((tag) => tag.startsWith('stable/'));
   let newHead = localHead;
@@ -265,6 +275,10 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
       run('git clean -fd', mDir);
       run(`git checkout --detach "${resolved.tag}" 2>&1`, mDir);
       newHead = run('git rev-parse HEAD', mDir);
+    } else if (FORCE && resolved) {
+      // An explicit run that has nothing to move: name the tag it stayed on,
+      // so "nothing happened" is distinguishable from "never ran".
+      process.stderr.write(`[ss.plugin.update] ${marketplace}: ${channel} resolves to ${resolved.tag}, already at HEAD${fetchError ? ' (tags may be stale — fetch failed)' : ''}\n`);
     }
   }
 

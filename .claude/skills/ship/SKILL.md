@@ -27,8 +27,13 @@ automatically sync to every ship.
 1. Read the channel pin: `~/.claude/plugins/.channels.json` → `dotclaude` (absent/unknown → `stable`).
 2. Read installed version: `~/.claude/plugins/installed_plugins.json` → `plugins["devops@dotclaude"][0].version`.
 3. Add exactly one `userFinalTest` item, in the user's language:
-   - **Pin is `alpha`** — the install tracks alpha, so the Step 8 finalizer moves it to vNew:
+   - **Pin is `alpha`** — the install tracks alpha, so the Step 8 finalizer moves it to vNew.
+     Assert the sync only after Step 8's verify loop has CONFIRMED the clone is on vNew:
      > `{ action: "devops lokal (alpha) auf v<vNew> synchronisiert — Claude einmal neu starten, dann ist die neue Version aktiv.", afterDeployment: true }`
+
+     When the loop gives up (the clone still reports vOld after three attempts), say so
+     instead — never claim a sync that did not happen:
+     > `{ action: "devops lokal (alpha) steht noch auf v<vOld> — der Sync-Hook hat das Tag alpha/v<vNew> nicht gesehen. /auto-update ausführen, dann Claude einmal neu starten.", afterDeployment: true }`
    - **Pin is `alpha` AND a `backlog-runner` lockout is active** (Step 8 guard below —
      this ship is one of several in a `/run-backlog` queue): the finalizer is deferred
      to the runner's own Step 5, so do not claim a sync yet:
@@ -115,10 +120,31 @@ printed nothing and moved nothing; only the clone's hook synced 0.183.8 → 0.18
 Same version-glob rule as `CONVENTIONS.md` (Scripts → Version-glob rule).
 
 ```bash
-f="$HOME/.claude/plugins/marketplaces/dotclaude/plugins/devops/hooks/session-start/ss.plugin.update.js"
+M="$HOME/.claude/plugins/marketplaces/dotclaude"
+f="$M/plugins/devops/hooks/session-start/ss.plugin.update.js"
 [ -f "$f" ] || f="$(ls -d "$HOME/.claude/plugins/cache/dotclaude/devops"/*/hooks/session-start/ss.plugin.update.js 2>/dev/null | sort -V | tail -1)"
-node "$f" --force
+installed() { node -e "console.log(require('$M/plugins/devops/.claude-plugin/plugin.json').version)" 2>/dev/null; }
+for attempt in 1 2 3; do
+  node "$f" --force
+  [ "$(installed)" = "<vNew>" ] && break
+  echo "[finalizer] attempt $attempt: clone still on $(installed), expected <vNew> — refetching tags" >&2
+  git -C "$M" fetch --tags origin >/dev/null 2>&1
+  sleep 5
+done
+echo "[finalizer] installed: $(installed)"
 ```
+
+**Verify, then retry — never trust one silent run.** Observed 2026-09-21 twice: the hook
+run seconds after `ship_release` returned (tag verified on the remote) exited 0 with no
+output and moved nothing — its `git fetch origin --tags` had not yet delivered the new
+tag (propagation delay, or a concurrent fetch/lock from the post-merge watcher or
+another session's SessionStart), so the resolved channel tag equalled HEAD and the hook
+had nothing to report. A second run a minute later synced. The loop above reads the
+clone's `plugin.json` after every run, refetches the tags explicitly and tries up to
+three times; the last `[finalizer] installed:` line is what Step 6.5's `userFinalTest`
+item must be based on (synced vs. the honest miss). Since 0.183.11 the hook itself
+prints one stderr line when the fetch fails or when `--force` resolves to the tag it is
+already on, so a no-op is diagnosable in the tool result.
 
 `--force` is mandatory here: since #324 the hook sits behind a 6 h cooldown at
 SessionStart (boot discipline — it must not race the MCP servers' connect
@@ -128,8 +154,9 @@ silently skipped and the local install would stay on the previous version.
 
 If the cache/registry/marketplace already report the just-shipped version and no
 `~/.claude/plugins/.mcp-stale.json` exists, another session raced ahead and the sync
-already happened — the hook run is then a silent no-op; verify the three paths (see
-reference.md) instead of treating the earlier `MODULE_NOT_FOUND`-style failure as fatal.
+already happened — the first hook run then reports `already at HEAD` on stderr and the
+loop exits on its first check; verify the three paths (see reference.md) instead of
+treating the earlier `MODULE_NOT_FOUND`-style failure as fatal.
 
 The hook handles `git pull --ff-only` on the marketplace clone, cache rebuild to the
 shipped version, `installed_plugins.json` update, and the MCP-stale sentinel on a real
