@@ -247,3 +247,64 @@ describe("post.flow.completion — concept bridge infrastructure is not pending"
     cleanup(dir);
   });
 });
+
+// #409 — `python patch.py && npm run test:gate && git commit …` that fails in
+// patch.py exits 1 and never reaches the runner. The command string matches the
+// runner pattern, so the hook read the non-zero exit as a red RUN and wrote
+// `light-red`; the next card stamped ⚠️ TESTS ROT over a session whose every
+// real run had passed. A non-zero exit without the runner's own summary in the
+// output now leaves both flags untouched.
+describe("post.flow.completion — a chained command that died before the runner is not a red run (#409)", () => {
+  const flag = (dir, name, sid) => path.join(dir, ".tmp", `dotclaude-devops-${name}-${sid}`);
+  const CHAIN = "python patch.py && npm run test:gate && git commit -m x";
+
+  test("pre-runner failure: neither light-red nor light-verified is written", () => {
+    const dir = project();
+    const sid = "s-409-chain";
+    runHook(dir, sid, "Bash", {
+      tool_input: { command: CHAIN, description: "Patch, test, commit" },
+      tool_response: { exit_code: 1, stdout: "", stderr: "Traceback (most recent call last):\n  File patch.py, line 3\nKeyError: x" },
+    });
+    expect(fs.existsSync(flag(dir, "light-red", sid))).toBe(false);
+    expect(fs.existsSync(flag(dir, "light-verified", sid))).toBe(false);
+    cleanup(dir);
+  });
+
+  test("pre-runner failure keeps an EARLIER red flag as it was (nothing is cleared either)", () => {
+    const dir = project();
+    const sid = "s-409-keep";
+    fs.writeFileSync(flag(dir, "light-red", sid), "Bash");
+    runHook(dir, sid, "Bash", {
+      tool_input: { command: CHAIN, description: "Patch, test, commit" },
+      tool_response: { exit_code: 1, stderr: "npm ERR! missing script: test:gate" },
+    });
+    expect(fs.existsSync(flag(dir, "light-red", sid))).toBe(true);
+    expect(fs.existsSync(flag(dir, "light-verified", sid))).toBe(false);
+    cleanup(dir);
+  });
+
+  test("a runner that ran and failed still writes light-red", () => {
+    const dir = project();
+    const sid = "s-409-red";
+    runHook(dir, sid, "Bash", {
+      tool_input: { command: "npm run test:gate", description: "Run the gate" },
+      tool_response: { exit_code: 1, stdout: "ℹ tests 9\nℹ pass 8\nℹ fail 1" },
+    });
+    expect(fs.existsSync(flag(dir, "light-red", sid))).toBe(true);
+    expect(fs.existsSync(flag(dir, "light-verified", sid))).toBe(false);
+    cleanup(dir);
+  });
+
+  test("a green run verifies and clears an earlier red flag — unchanged", () => {
+    const dir = project();
+    const sid = "s-409-green";
+    fs.writeFileSync(flag(dir, "light-red", sid), "Bash");
+    runHook(dir, sid, "Bash", {
+      tool_input: { command: "npm run test:gate", description: "Run the gate" },
+      tool_response: { exit_code: 0, stdout: "ℹ tests 9\nℹ pass 9\nℹ fail 0" },
+    });
+    expect(fs.existsSync(flag(dir, "light-verified", sid))).toBe(true);
+    expect(fs.existsSync(flag(dir, "light-red", sid))).toBe(false);
+    cleanup(dir);
+  });
+});

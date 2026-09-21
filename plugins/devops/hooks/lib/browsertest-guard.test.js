@@ -14,6 +14,7 @@ import {
   isLightVerification,
   normalizeToolResponse,
   testRunOutcome,
+  hasRunnerOutput,
   hasSkipJustification,
   decideLightTest,
   buildLightTestReason,
@@ -539,10 +540,51 @@ describe("normalizeToolResponse", () => {
 // ---------------------------------------------------------------------------
 
 describe("testRunOutcome", () => {
-  test("zero exit code is authoritative pass, non-zero is fail", () => {
+  test("zero exit code is authoritative pass; non-zero is fail once the runner's own summary is in the output", () => {
     expect(testRunOutcome({ exit_code: 0 })).toBe("pass");
-    expect(testRunOutcome({ exit_code: 1 })).toBe("fail");
-    expect(testRunOutcome({ exitCode: 2 })).toBe("fail");
+    expect(testRunOutcome({ exit_code: 1, stdout: "ℹ tests 9\nℹ pass 8\nℹ fail 1" })).toBe("fail");
+    expect(testRunOutcome({ exitCode: 2, stdout: "Test Files  1 failed | 3 passed\nTests  2 failed | 40 passed" })).toBe("fail");
+    expect(testRunOutcome({ exit_code: 1, stdout: "=== 1 failed, 3 passed in 0.4s ===" })).toBe("fail");
+    expect(testRunOutcome({ exit_code: 1, stdout: "FAIL src/foo.test.ts" })).toBe("fail");
+  });
+
+  // #409: `python patch.py && npm run test:gate && git commit …` that dies in
+  // patch.py exits 1 and never reaches the runner. The command string matched
+  // TEST_RUNNER_RE, so the non-zero exit was read as a red RUN and the card
+  // stamped TESTS ROT over a session whose every real run had passed.
+  test("non-zero exit WITHOUT a runner summary is 'unknown' — a chain that died before the runner", () => {
+    expect(testRunOutcome({ exit_code: 1 })).toBe("unknown");
+    expect(testRunOutcome({ exit_code: 1, stdout: "", stderr: "Traceback (most recent call last):\n  File \"patch.py\", line 3\nKeyError: 'x'" })).toBe("unknown");
+    expect(testRunOutcome({ exit_code: 127, stderr: "bash: pytest: command not found" })).toBe("unknown");
+    expect(testRunOutcome({ exitCode: 2, stdout: "npm ERR! missing script: test:gate" })).toBe("unknown");
+  });
+
+  test("a runner that ran but exited non-zero for its own reasons still counts as a run", () => {
+    // vitest: all tests green, exit 1 because of unhandled worker errors
+    expect(testRunOutcome({ exit_code: 1, stdout: "Test Files  144 passed (144)\nTests  3554 passed (3554)\nErrors  2 errors" })).toBe("fail");
+    // node:test summary with every runner family's anchored form
+    for (const out of [
+      "ℹ tests 3\nℹ pass 3",
+      "ok 1 - a\nnot ok 2 - b\n1..2",
+      "3 passing (12ms)\n1 failing",
+      "ok  \tgithub.com/x/y\t0.012s",
+      "--- FAIL: TestThing (0.00s)",
+      "test result: FAILED. 1 passed; 1 failed",
+      "Failed!  - Failed:     1, Passed:     4",
+      "OK (12 tests, 30 assertions)",
+      "5 examples, 1 failure",
+    ]) {
+      expect(testRunOutcome({ exit_code: 1, stdout: out })).toBe("fail");
+    }
+  });
+
+  test("hasRunnerOutput recognises a runner summary and nothing else", () => {
+    expect(hasRunnerOutput("ℹ tests 9\nℹ pass 9")).toBe(true);
+    expect(hasRunnerOutput("Tests: 12 passed, 12 total")).toBe(true);
+    expect(hasRunnerOutput("Traceback (most recent call last)")).toBe(false);
+    expect(hasRunnerOutput("build done")).toBe(false);
+    expect(hasRunnerOutput("")).toBe(false);
+    expect(hasRunnerOutput(null)).toBe(false);
   });
 
   test("interrupted run is a fail", () => {

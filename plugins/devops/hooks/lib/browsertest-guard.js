@@ -1,6 +1,6 @@
 /**
  * @module browsertest-guard
- * @version 0.4.0
+ * @version 0.5.0
  * @description Pure decision logic for the Light-verification enforcement gate
  *   (the "V" in the V&V gate). Split out of stop.flow.browsertest.js so the
  *   rules can be unit-tested without mocking stdin or temp files.
@@ -284,6 +284,30 @@ const FAIL_TEXT_RE =
 // Counter-signal: "0 failed" / "0 failures" / "failures=0" must NOT count.
 const ZERO_FAIL_RE = /\b0\s+fail(?:ed|ures?)\b|\bfailures=0\b/i;
 
+// Did a test runner actually RUN? A command string that matches TEST_RUNNER_RE
+// only says the runner was named; a chain like `python patch.py && npm test`
+// that dies in patch.py never reaches it, yet exits non-zero (#409). Before a
+// non-zero exit is read as a red run, the OUTPUT must carry a runner's own
+// summary line. One anchored form per runner family:
+//   node:test  ℹ tests N / ℹ pass N / ℹ fail N      vitest/jest  Tests: | Test Files
+//   TAP        ok N / not ok N / 1..N               pytest       N passed / N failed / N error(s)
+//   mocha      N passing / N failing / N pending    go test      ok|FAIL|---
+//   cargo      test result:                          dotnet       Passed!|Failed!
+//   phpunit    OK (N tests / Tests: N               rspec        N examples
+const RUNNER_OUTPUT_RE =
+  /ℹ\s+(?:tests|pass|fail|suites)\s+\d+|\bTests?(?:\s+Files)?:?\s+\d+\s+(?:passed|failed|skipped|total)|\bTests?\s+\d+\s+(?:passed|failed)\b|^(?:ok|not ok)\s+\d+|^1\.\.\d+\s*$|\b\d+\s+(?:passed|failed|errors?|skipped)\b|\b\d+\s+(?:passing|failing|pending)\b|^(?:ok|FAIL|---\s+(?:PASS|FAIL))\s+\S|\btest result:\s+(?:ok|FAILED)\b|\b(?:Passed|Failed)!\s+-\s+Failed:\s+\d+|\bOK \(\d+ tests?\b|\b\d+ examples?,\s+\d+ failures?\b/im;
+
+/**
+ * Does the output carry a test runner's own summary line — i.e. did a runner
+ * actually run, whatever the exit code says?
+ * @param {string} text — normalized tool_response text
+ * @returns {boolean}
+ */
+function hasRunnerOutput(text) {
+  if (!text) return false;
+  return RUNNER_OUTPUT_RE.test(String(text));
+}
+
 /**
  * Pull a usable text blob + numeric exit hint out of a PostToolUse tool_response,
  * whose exact shape varies by Claude Code version. Defensive on every field.
@@ -319,15 +343,23 @@ function normalizeToolResponse(toolResponse) {
 
 /**
  * Best-effort outcome of a test run from its PostToolUse response.
- * 'fail' only on strong signals (numeric non-zero exit, interrupted, or an
- * unambiguous failure summary). Everything else → 'pass', so a green run we
- * cannot parse is never falsely blocked. A zero exit code is authoritative.
+ * 'fail' only on strong signals (numeric non-zero exit WITH a runner summary
+ * in the output, interrupted, or an unambiguous failure summary). A zero exit
+ * code is authoritative. A non-zero exit whose output carries no runner
+ * summary is 'unknown' (#409): the command named a runner but died before it
+ * — `python patch.py && npm test` failing in patch.py — and neither verifies
+ * nor reddens the session. Everything else → 'pass', so a green run we cannot
+ * parse is never falsely blocked.
  * @param {*} toolResponse
- * @returns {'pass'|'fail'}
+ * @returns {'pass'|'fail'|'unknown'}
  */
 function testRunOutcome(toolResponse) {
   const { text, exitCode, interrupted } = normalizeToolResponse(toolResponse);
-  if (typeof exitCode === 'number') return exitCode === 0 ? 'pass' : 'fail';
+  if (typeof exitCode === 'number') {
+    if (exitCode === 0) return 'pass';
+    if (hasRunnerOutput(text) || (text && FAIL_TEXT_RE.test(text) && !ZERO_FAIL_RE.test(text))) return 'fail';
+    return 'unknown';
+  }
   if (interrupted) return 'fail';
   if (text && FAIL_TEXT_RE.test(text) && !ZERO_FAIL_RE.test(text)) return 'fail';
   return 'pass';
@@ -525,6 +557,7 @@ module.exports = {
   isLightVerification,
   normalizeToolResponse,
   testRunOutcome,
+  hasRunnerOutput,
   hasSkipJustification,
   decideLightTest,
   buildLightTestReason,

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.21.0
+ * @version 0.22.0
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -18,7 +18,9 @@
  *       a test runner, the run PASSED (Kern ②). A new qualifying edit clears it
  *       (Kern ③ — order: verification must come after the last change).
  *     - light-red — a test ran but FAILED (does not verify; enriches the gate
- *       reason and the card stamp).
+ *       reason and the card stamp). "Ran" means the runner's own summary is in
+ *       the output: a chained command that dies before the runner (#409) is
+ *       'unknown' and touches neither flag.
  *     - validation-pending — any source change owes a validation attestation in
  *       the completion card; a new edit clears a prior validation-attested flag.
  *   Subagent delegation does not satisfy any of these gates.
@@ -297,13 +299,18 @@ process.stdin.on('end', () => {
       );
     }
     if (runnerSatisfies) {
-      if (testRunOutcome(hook.tool_response) === 'pass') {
+      // 'unknown' (#409): the command named a runner but exited non-zero
+      // without any runner output — a chain that died BEFORE the runner
+      // (`python patch.py && npm test`). Neither verified nor red: the flags
+      // stay exactly as they were.
+      const outcome = testRunOutcome(hook.tool_response);
+      if (outcome === 'pass') {
         writeSessionFile(
           sessionFile('dotclaude-devops-light-verified', hook.session_id),
           toolName,
         );
         unlinkFlag('dotclaude-devops-light-red');
-      } else {
+      } else if (outcome === 'fail') {
         writeSessionFile(
           sessionFile('dotclaude-devops-light-red', hook.session_id),
           toolName,
