@@ -1183,10 +1183,12 @@ function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId, { t
     for (const l of resultLines) parts.push('› ' + l);
     const evidenceLine = renderEvidenceRowMd(buildEvidencePosts(input, lang, key));
     if (evidenceLine) parts.push(evidenceLine);
-    const budgetLine = renderBudgetLineMd(buildBudgetModel(usageData, delta5h, deltaWk, healthLine));
-    if (budgetLine) parts.push(budgetLine);
+    // Pipeline first, budget last (§ 2.5 / § 2.4): the "where it lies" line
+    // belongs to the evidence; the budget is the card's footer.
     const pipelineLine = renderPipelineLine(input, lang, buildId);
     if (pipelineLine) parts.push(pipelineLine);
+    const budgetLine = renderBudgetLineMd(buildBudgetModel(usageData, delta5h, deltaWk, healthLine));
+    if (budgetLine) parts.push(budgetLine);
   } else if (resultLines[0]) {
     parts.push('› ' + resultLines[0]);
   }

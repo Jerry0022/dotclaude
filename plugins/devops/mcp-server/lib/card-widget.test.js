@@ -199,6 +199,8 @@ describe("cardWidgetHtml", () => {
       const m = html.match(new RegExp(`<div class="${cls}" style="([^"]*)"><span style="([^"]*)">›</span>`));
       expect(m, cls).not.toBeNull();
       expect(m[1]).toContain("padding-left:6px");
+      expect(m[1]).toContain("gap:4px");
+      expect(m[2]).toContain("width:8px");
       expect(m[1]).toContain("color:var(--text-secondary)");
       expect(m[2]).toContain("color:#aab4e6");
       expect(m[2]).toContain("font-weight:500");
@@ -218,18 +220,32 @@ describe("cardWidgetHtml", () => {
     expect(sizes).toEqual([11, 13, 14, 16]);
   });
 
-  test("the budget sweep runs over the whole track, not inside the fill", () => {
+  test("the budget row and the pipeline line have room above and below", () => {
+    const html = cardWidgetHtml(baseModel({
+      budget: { omitted: false, warn: false, contextHealth: "", bars: [
+        { label: "5h", pct: 40, elapsedPct: 40, level: "white", watermark: "3 h", tooltip: "t" },
+      ] },
+    }), "");
+    expect(html.match(/<div class="card-budget-row" style="([^"]*)"/)[1]).toContain("padding:4px 0 2px");
+    expect(html.match(/<div class="card-pipeline" style="([^"]*)"/)[1]).toContain("padding:4px 0");
+    // Order in block 1: result lines → evidence → pipeline → budget (footer).
+    expect(html.indexOf("card-evidence")).toBeLessThan(html.indexOf("card-pipeline"));
+    expect(html.indexOf("card-pipeline")).toBeLessThan(html.indexOf("card-budget-row"));
+    expect(html.indexOf("card-budget-row")).toBeLessThan(html.indexOf("card-box"));
+  });
+
+  test("the budget sweep is clipped to the elapsed fill — never over time that has not passed", () => {
     const html = cardWidgetHtml(baseModel({
       budget: { omitted: false, warn: false, contextHealth: "", bars: [
         { label: "5h", pct: 40, elapsedPct: 40, level: "white", watermark: "3 h", tooltip: "t" },
       ] },
     }), "");
     const sheen = html.match(/<span class="card-sheen" style="([^"]*)"/)[1];
-    expect(sheen).toContain("right:0");
+    expect(sheen).toContain("width:40%");
+    expect(sheen).toContain("background:#4a5384");
     expect(sheen).toContain("overflow:hidden");
-    expect(sheen).not.toContain("width:40%");
-    // The fill itself is a plain layer now — no clipping, no sweep.
-    expect(html).toMatch(/width:40%;background:#4a5384;border-radius:5px"><\/span>/);
+    expect(html.match(/class="card-sheen"/g)).toHaveLength(1); // the fill alone carries the sweep
+    expect(html).toContain("width:24px;background:rgba(255,255,255,.12)");
   });
 
   test("no emoji on the buttons — Tabler icons only, per the design contract", () => {

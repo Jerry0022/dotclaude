@@ -180,13 +180,13 @@ function budgetBarHtml(bar) {
   return [
     `<span class="card-budget" data-delay="600" title="${escapeHtml(bar.tooltip || "")}" style="display:inline-flex;align-items:center;gap:8px">`,
     `<span style="font-size:13px;color:var(--text-secondary);min-width:20px">${escapeHtml(bar.label)}</span>`,
-    // Track: time fill, then ONE sweep layer clipped to the whole track (a
-    // sweep clipped inside a 40 % fill read as "a bar in a bar"), watermark in
-    // the empty part, usage marker last so it paints above all, taller than
-    // the track — the marker sits outside the clipped layer on purpose.
+    // Track: time fill with the sweep clipped INSIDE it (the glint runs over
+    // elapsed time only — never over time that has not passed), watermark in
+    // the empty part, usage marker last so it paints above both, taller than
+    // the track. The sweep is narrow and soft (24px, 12 % white) so it reads
+    // as a glint, not as a second bar inside the fill.
     `<span style="position:relative;display:inline-block;width:220px;height:12px;background:${COLOR.track};border-radius:5px">`,
-    `<span style="position:absolute;left:0;top:0;bottom:0;width:${elapsed}%;background:${COLOR.fillLilac};border-radius:5px"></span>`,
-    `<span class="card-sheen" style="position:absolute;left:0;top:0;right:0;bottom:0;border-radius:5px;overflow:hidden"></span>`,
+    `<span class="card-sheen" style="position:absolute;left:0;top:0;bottom:0;width:${elapsed}%;background:${COLOR.fillLilac};border-radius:5px;overflow:hidden"></span>`,
     `<span style="position:absolute;right:6px;top:-1px;font-size:11px;color:${COLOR.watermark};white-space:nowrap">${escapeHtml(bar.watermark || "")}</span>`,
     `<span style="position:absolute;left:${pct}%;top:-6px;bottom:-6px;width:3px;border-radius:2px;background:${markerColor};z-index:2"></span>`,
     `</span>`,
@@ -230,7 +230,7 @@ export function cardWidgetHtml(model, repoUrl) {
   // quieter than the headings (`--text-secondary`), so the glyph leads and
   // the line does not shout. Deviation label kept red.
   const glyphLine = (cls, inner, extra = "") =>
-    `<div class="${cls}" style="display:flex;gap:8px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)${extra}"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:10px">›</span><span>${inner}</span></div>`;
+    `<div class="${cls}" style="display:flex;gap:4px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)${extra}"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:8px">›</span><span>${inner}</span></div>`;
   const resultLinesHtml = (model.resultLines || [])
     .map((l) => glyphLine("card-result", escapeHtml(l).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)))
     .join("\n  ");
@@ -240,11 +240,11 @@ export function cardWidgetHtml(model, repoUrl) {
     : "";
 
   const budgetHtml = model.budget && !model.budget.omitted
-    ? `<div class="card-budget-row" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">${(model.budget.bars || []).map(budgetBarHtml).join(" ")}${model.budget.contextHealth ? `<span style="font-size:11px;color:${COLOR.watermark}">${escapeHtml(model.budget.contextHealth)}</span>` : ""}</div>`
+    ? `<div class="card-budget-row" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:4px 0 2px">${(model.budget.bars || []).map(budgetBarHtml).join(" ")}${model.budget.contextHealth ? `<span style="font-size:11px;color:${COLOR.watermark}">${escapeHtml(model.budget.contextHealth)}</span>` : ""}</div>`
     : "";
 
   const pipelineHtml = model.pipeline
-    ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark}">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
+    ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
     : "";
 
   // The title lives in the widget: on Desktop the markdown under it is the ✨
@@ -260,8 +260,8 @@ export function cardWidgetHtml(model, repoUrl) {
     titleHtml,
     resultLinesHtml,
     evidenceHtml,
-    budgetHtml,
     pipelineHtml,
+    budgetHtml,
     `</div>`,
   ].filter(Boolean).join("\n  ");
 
