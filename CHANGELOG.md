@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.183.2] — 2026-09-21
+
+### Fixed
+
+- **A chained command that dies before the test runner no longer stamps ⚠️ TESTS ROT.** `post.flow.completion` classified a Bash call as a test run when the command string matched the runner pattern and took a non-zero exit as authoritative, so `python patch.py && npm run test:gate && git commit …` failing in `patch.py` wrote `light-red` and the next card reported a red run over a session whose every real run had passed (three cards in a row on 2026-09-18, #409). `testRunOutcome` (`browsertest-guard` 0.5.0) now returns `'unknown'` for a non-zero exit whose output carries no runner summary — `RUNNER_OUTPUT_RE`, one anchored form per runner family (node:test `ℹ tests N`, vitest/jest `Tests: N passed`, TAP `ok N`/`1..N`, pytest `N passed`, mocha `N passing`, go `ok|FAIL|---`, cargo `test result:`, dotnet `Passed!/Failed!`, phpunit `OK (N tests`, rspec `N examples`) — and the hook (0.22.0) touches neither `light-verified` nor `light-red` in that case. A runner that ran and failed (summary present, or an explicit failure line) still reddens; exit 0 still verifies. The output signature was chosen over "last `&&` segment" parsing because it also covers a runner that crashes on import and PowerShell `;` chains. Guard 84 / hook 16 tests green. Shipped by `/run-backlog` (queue 3/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
 ## [0.183.1] — 2026-09-21
 
 ### Fixed
