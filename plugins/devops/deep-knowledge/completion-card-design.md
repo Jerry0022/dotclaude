@@ -27,13 +27,13 @@ Two visual blocks. Nothing between them, nothing under the second one.
 ### **✨✨✨ {title} ✨✨✨**                 ← markdown, every client (card-guard marker)
 › result line 1                            ┐
 › result line 2                            │  Block 1 · "what happened"
-› result line 3                            │  (Desktop: soft panel, no border)
+› result line 3                            │  (Desktop: top of the one surface)
 ✓ 3/3 Anforderungen  ✓ 3464 Tests grün  ✓ 4 Live-Checks ok     ← evidence row
 5h [time bar | usage marker] 3 h 39 m   Wk [...] 6 d 20 h   🧠 1180 Calls · /compact
 ○ commit → ○ push → ○ PR → ○ merge · branch · Build 176c57d       ┘
 ## 📦 {decision as a question}?            ┐
 › one context line (optional)              │  Block 2 · "what to decide"
-1. reservation / test step                 │  (Desktop: box with accent border)
+1. reservation / test step                 │  (Desktop: quiet accent-tinted box)
 2. reservation / test step                 │
 [Ship ↗] [Ändern ↗]                        ┘  (Desktop widget only; terminal: nothing)
 ---
@@ -150,7 +150,8 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
   beta and stable; alpha keeps 🚀).
 - Optional **context line** `› …` directly under the heading, before the
   points (promote distance, alternatives after an abort, guard notes).
-- **Points list**: numbered, max 3, marker in the accent colour. Contents in
+- **Points list**: max 3 — numbered in the markdown, `›` lines in the Desktop
+  widget (same glyph as the result lines, see § 4). Contents in
   order: open reservations (`open`), then manual test steps (`userTest`,
   `userFinalTest`) prefixed `🧪` when the list mixes both, then deploy-gate
   artifacts on a deploy card. More than three → `+N weitere` appended to the
@@ -159,7 +160,7 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
   of the variant, primary first; each has a tooltip explaining what it
   triggers (`Fix` → "Ich repariere die zwei Tests zuerst, dann kommt die
   Card neu."; `Trotzdem shippen` → "Ship mit skipChecks — die roten Tests
-  landen als Issue."). Equal height; only border/text colour differs.
+  landen als Issue."). Equal height, 13px; only border/text colour differs.
 - No `SHIP oder ÄNDERN` line anymore — the buttons say it. The terminal
   shows the question heading alone.
 
@@ -197,15 +198,33 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   and that markdown is the **title line alone** (`&nbsp;` · `---` · `### **✨✨✨
   {title} ✨✨✨**` · `---`): it is the card-guard marker and the transcript
   record, and it keeps the turn ending on visible text. The widget draws the
-  title (h2) and both blocks (panel + box), colours (green `#8fae8f` posts, red
+  title (h3) and both blocks, colours (green `#8fae8f` posts, red
   `#e0a0a0`, yellow `#d9c58a`, lilac code spans `#aab4e6`), tooltips (600 ms
   delay), the budget bars, the quiet PR link and the buttons. Nothing is
   drawn twice (observed 2026-09-21: widget + full markdown showed the whole
   card twice). The widget wraps result lines instead of cutting them — the
   120-char ellipsis of § 2.2 is a terminal budget, and a line cut mid-sentence
-  read as "the card only shows half". The panel sits on `--surface-2` with a
-  `--border` hairline: `--surface-1` alone was invisible on the dark page.
-  `cardSignature` (§ 5.5) falls back to the title for such a title-only card.
+  read as "the card only shows half". `cardSignature` (§ 5.5) falls back to
+  the title for such a title-only card.
+- **Desktop surfaces and sizes** (feedback 2026-09-21: two bordered boxes did
+  not read as one card; both titles and the detail text were a step too
+  large; the grey surface tokens read "too colourless" on the dark page):
+  ONE outer surface on a faint blue wash (`rgba(55,138,221,.06)`, 6 % of the
+  accent blue), 12px radius, **no border**, wraps everything. Block 1 has no box of its own inside it. Block 2
+  is a box at the bottom on a quiet accent wash (`--bg-accent-muted`, 10 % of
+  the accent fill, fallback `rgba(55,138,221,.10)`), 10px radius, **no accent
+  border**. Exactly four text sizes: `h3` 16px/500 for the title and the
+  decision heading; 14px for result lines, evidence posts and points; 13px for
+  the context line, the buttons (30px tall), the budget label and the pipeline
+  line; 11px for the bar watermark and the context-health note. Two bordered
+  boxes, an h2, or a fifth size anywhere in the widget are a regression. The
+  budget sweep runs over the whole track in its own clipped layer (inside a
+  40 % fill it read as "a bar in a bar"); the usage marker stays outside that
+  layer so it may overhang the track. Every `›` line (result lines, context,
+  points) draws the glyph in lilac at weight 500, inset 6px from the heading
+  edge, with the text in `--text-secondary`: the glyph leads, the line does
+  not shout (feedback 2026-09-21: glyph too faint, text too loud). The widget
+  never numbers the points — `1.` stays a terminal-markdown form.
 - The `ready-red` heading names what is actually red: `N roten Tests` only
   when tests failed, else `N unerfüllten Anforderungen`, else `N teilweise
   erfüllten Anforderungen` (an unmet requirement is no red test).
@@ -246,7 +265,7 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
 | `◐` yellow | partial (requirements, unverified part) | evidence |
 | `✓` green (dim) | met / done | evidence |
 | `○` / `●` grey | open / done | pipeline |
-| lilac | code spans (names, build-id, branch), accent border, point numbers | widget only |
+| lilac | code spans (names, build-id, branch), point numbers | widget only |
 | red | never on names, branch or build-id | — |
 
 Yellow/red on the budget marker follow § 2.4, independent of the above.

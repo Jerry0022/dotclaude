@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.183.8] — 2026-09-21
+
+### Changed
+- **Completion card (Desktop widget)** — one tinted sheet instead of two bordered boxes: a faint blue wash around everything, the decision box a quieter accent wash at the bottom, no borders; the status part has no box of its own. Title and decision heading are h3 (16px); result lines, evidence and points 14px; context, buttons and pipeline 13px; watermarks 11px — exactly four text sizes. The budget sweep runs over the whole track in its own clipped layer (inside a 40 % fill it read as "a bar in a bar"). Design doc § 4 and the template note updated.
+
 ## [0.183.7] — 2026-09-21
 
 ### Fixed

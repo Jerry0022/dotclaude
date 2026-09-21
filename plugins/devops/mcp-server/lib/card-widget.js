@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.1.0
+ * @version 0.2.0
  */
 
 /** The env var the Desktop app sets on every process it spawns (hooks, MCP servers). */
@@ -180,11 +180,14 @@ function budgetBarHtml(bar) {
   return [
     `<span class="card-budget" data-delay="600" title="${escapeHtml(bar.tooltip || "")}" style="display:inline-flex;align-items:center;gap:8px">`,
     `<span style="font-size:13px;color:var(--text-secondary);min-width:20px">${escapeHtml(bar.label)}</span>`,
-    // Track: time fill (sheen clipped INSIDE the fill), watermark in the empty
-    // part, usage marker last so it paints above both, taller than the track.
+    // Track: time fill, then ONE sweep layer clipped to the whole track (a
+    // sweep clipped inside a 40 % fill read as "a bar in a bar"), watermark in
+    // the empty part, usage marker last so it paints above all, taller than
+    // the track — the marker sits outside the clipped layer on purpose.
     `<span style="position:relative;display:inline-block;width:220px;height:12px;background:${COLOR.track};border-radius:5px">`,
-    `<span class="card-sheen" style="position:absolute;left:0;top:0;bottom:0;width:${elapsed}%;background:${COLOR.fillLilac};border-radius:5px;overflow:hidden"></span>`,
-    `<span style="position:absolute;right:6px;top:-1px;font-size:10px;color:${COLOR.watermark};white-space:nowrap">${escapeHtml(bar.watermark || "")}</span>`,
+    `<span style="position:absolute;left:0;top:0;bottom:0;width:${elapsed}%;background:${COLOR.fillLilac};border-radius:5px"></span>`,
+    `<span class="card-sheen" style="position:absolute;left:0;top:0;right:0;bottom:0;border-radius:5px;overflow:hidden"></span>`,
+    `<span style="position:absolute;right:6px;top:-1px;font-size:11px;color:${COLOR.watermark};white-space:nowrap">${escapeHtml(bar.watermark || "")}</span>`,
     `<span style="position:absolute;left:${pct}%;top:-6px;bottom:-6px;width:3px;border-radius:2px;background:${markerColor};z-index:2"></span>`,
     `</span>`,
     `</span>`,
@@ -222,13 +225,18 @@ export function cardWidgetHtml(model, repoUrl) {
     ? "Completion card body: what happened, evidence, budget, and the decision with its actions."
     : "Completion-Card-Inhalt: was passiert ist, Belege, Budget und die Entscheidung mit ihren Aktionen.";
 
-  // › result lines — the glyph in a fixed column, deviation label kept bold.
+  // › lines (result lines, context, points): the glyph visible — lilac,
+  // weight 500 — and inset 6px from the heading edge; the text a step
+  // quieter than the headings (`--text-secondary`), so the glyph leads and
+  // the line does not shout. Deviation label kept red.
+  const glyphLine = (cls, inner, extra = "") =>
+    `<div class="${cls}" style="display:flex;gap:8px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)${extra}"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:10px">›</span><span>${inner}</span></div>`;
   const resultLinesHtml = (model.resultLines || [])
-    .map((l) => `<div class="card-result" style="display:flex;gap:10px;margin:3px 0"><span style="color:var(--text-muted);flex:none;width:10px">›</span><span>${escapeHtml(l).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)}</span></div>`)
+    .map((l) => glyphLine("card-result", escapeHtml(l).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)))
     .join("\n  ");
 
   const evidenceHtml = (model.evidence || []).length
-    ? `<div class="card-evidence" style="display:flex;flex-wrap:wrap;gap:16px">${model.evidence.map(evidencePostHtml).join(" ")}</div>`
+    ? `<div class="card-evidence" style="display:flex;flex-wrap:wrap;gap:16px;font-size:14px">${model.evidence.map(evidencePostHtml).join(" ")}</div>`
     : "";
 
   const budgetHtml = model.budget && !model.budget.omitted
@@ -236,18 +244,19 @@ export function cardWidgetHtml(model, repoUrl) {
     : "";
 
   const pipelineHtml = model.pipeline
-    ? `<div class="card-pipeline" style="font-size:12px;color:${COLOR.watermark}">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
+    ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark}">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
     : "";
 
   // The title lives in the widget: on Desktop the markdown under it is the ✨
-  // marker line only (§ 4), so the body is drawn once. h2 = the contract's 18px/500.
-  const titleHtml = model.title ? `<h2 class="card-title" style="margin:0 0 6px">${escapeHtml(model.title)}</h2>` : "";
+  // marker line only (§ 4), so the body is drawn once. h3 = the contract's
+  // 16px/500 — one step below h2, which read too large in the chat column.
+  const titleHtml = model.title ? `<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(model.title)}</h3>` : "";
 
-  // Block 1 — the soft "what happened" panel. `--surface-2` (one step above
-  // the page) plus a hairline: `--surface-1` alone was indistinguishable from
-  // the page in dark mode ("backgrounds are not rendered", 2026-09-21).
+  // Block 1 — the "what happened" part: no box of its own. It is the top of
+  // the ONE outer surface (see `return`), so the status and the decision read
+  // as one card; a second bordered panel made them look like two.
   const blockA = [
-    `<div class="card-panel" style="background:var(--surface-2);border:0.5px solid var(--border);border-radius:12px;padding:12px 16px 10px;display:flex;flex-direction:column;gap:6px">`,
+    `<div class="card-panel" style="display:flex;flex-direction:column;gap:6px;padding:0 0 2px">`,
     titleHtml,
     resultLinesHtml,
     evidenceHtml,
@@ -256,18 +265,21 @@ export function cardWidgetHtml(model, repoUrl) {
     `</div>`,
   ].filter(Boolean).join("\n  ");
 
-  // Block 2 — heading at h2 size (the widget contract's 18px/500), the › context
-  // line right under it, numbered points with lilac markers and plain text.
-  const headingHtml = model.heading ? `<h2 class="card-heading" style="margin:0 0 4px">${escapeHtml(model.heading)}</h2>` : "";
+  // Block 2 — heading at h3 size (16px/500, same step as the title), the ›
+  // context line right under it, numbered points with lilac markers.
+  const headingHtml = model.heading ? `<h3 class="card-heading" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(model.heading)}</h3>` : "";
+  // Context line: same › glyph, one size smaller. Points: › lines too (no
+  // numbers in the widget — the terminal markdown keeps "1." for the same
+  // points), so both blocks speak the same language.
   const contextHtml = model.context
-    ? `<div class="card-context" style="display:flex;gap:10px;font-size:14px;color:var(--text-secondary);margin:0 0 6px"><span style="color:var(--text-muted);flex:none;width:10px">›</span><span>${escapeHtml(model.context.replace(/^›\s*/, ""))}</span></div>`
+    ? glyphLine("card-context", escapeHtml(model.context.replace(/^›\s*/, "")), ";font-size:13px;margin:0 0 4px")
     : "";
   const pointsHtml = (model.points || []).length
-    ? `<ol class="card-points" style="margin:4px 0 8px;padding-left:24px">${model.points.map((p) => `<li style="color:${COLOR.lilac};margin:2px 0"><span style="color:var(--text-primary)">${escapeHtml(p)}</span></li>`).join("")}</ol>`
+    ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", escapeHtml(p))).join("")}</div>`
     : "";
 
   const buttons = buttonsFor(model.buttonsKey, lang);
-  const buttonBase = "display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:14px;line-height:1.2;cursor:pointer;user-select:none;background:transparent;color:var(--text-primary);height:32px;box-sizing:border-box";
+  const buttonBase = "display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;line-height:1.2;cursor:pointer;user-select:none;background:transparent;color:var(--text-primary);height:30px;box-sizing:border-box";
   const buttonsHtml = buttons.length
     ? `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 0 0">` +
       buttons.map((a, i) => {
@@ -279,8 +291,11 @@ export function cardWidgetHtml(model, repoUrl) {
       `</div>`
     : "";
 
+  // The decision box: a quiet accent wash (10 % of the accent fill — visible
+  // on the dark and the light page alike), no border. The outer surface
+  // already frames the card; a second line here cut it in two.
   const blockB = [
-    `<div class="card-box" style="border:1px solid var(--border-accent);border-radius:12px;padding:12px 16px;margin-top:10px">`,
+    `<div class="card-box" style="background:var(--bg-accent-muted, rgba(55,138,221,0.10));border-radius:10px;padding:10px 14px;margin-top:10px">`,
     headingHtml,
     contextHtml,
     pointsHtml,
@@ -290,9 +305,16 @@ export function cardWidgetHtml(model, repoUrl) {
 
   return [
     `<h2 class="sr-only" style="position:absolute;left:-9999px">${escapeHtml(summary)}</h2>`,
-    `<style>.card-sheen{position:relative}.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:38px;background:rgba(255,255,255,.18);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-38px}to{left:100%}}</style>`,
+    `<style>.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:24px;background:rgba(255,255,255,.12);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-24px}to{left:100%}}</style>`,
+    // ONE surface around everything: a faint blue wash (6 % of the accent
+    // blue), the same hue as the decision box one step lighter, so the card is
+    // one tinted sheet with a stronger tinted foot. Fixed rgba, not a surface
+    // token: `--surface-1`/`-2` read as grey-on-grey ("too colourless") on the
+    // dark page. No border — the tint alone says "one card".
+    `<div class="card-surface" style="background:rgba(55,138,221,0.06);border-radius:12px;padding:12px 16px 12px">`,
     blockA,
     blockB,
+    `</div>`,
     `<script>`,
     `document.querySelectorAll('[role="button"][data-prompt]').forEach(function (b) {`,
     `  var go = function () { sendPrompt(b.getAttribute('data-prompt')); };`,

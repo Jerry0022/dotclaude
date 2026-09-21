@@ -1,7 +1,7 @@
 ---
 name: completion-card
 description: Master template for task completion cards — all variants derive from this single source.
-version: 0.10.0
+version: 0.10.1
 used-by: ship, test, start, commit, review, analysis, and any skill/agent that completes work
 ---
 
@@ -23,12 +23,12 @@ Two visual blocks, both rendered by `render_completion_card` / `--render-card`:
 ---
 ### **✨✨✨ {title} ✨✨✨**                 ← outcome, ≤ 60 chars
 › result line 1                            ┐  Block 1 — "what happened"
-› result line 2 (≤ 3, deviation first)     │  (Desktop: soft panel)
+› result line 2 (≤ 3, deviation first)     │  (Desktop: one surface, no border)
 ✓ 3/3 Anforderungen  ✓ 3464 Tests grün     │  evidence row
 5h [bar] 3 h 39 m   Wk [bar] 6 d 20 h      │  budget line (omitted when low + far from reset)
 ○ commit → ○ push → ○ PR → ○ merge · Build │  pipeline line
 ## 📦 {decision as a question}?            ┐  Block 2 — "what to decide"
-› optional context line                    │  (Desktop: box with accent border)
+› optional context line                    │  (Desktop: quiet accent-tinted box)
 1. reservation / test step (≤ 3)           │
 [Ship ↗] [Ändern ↗]                        ┘  Desktop widget only; terminal: nothing
 ---
