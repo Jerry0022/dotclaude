@@ -14,6 +14,11 @@
  *   reporter RPC timed out mid-run ("Timeout calling onTaskUpdate") — reported
  *   as an error next to a fully green suite. Separate files land in separate
  *   workers and stay short enough for that not to happen.
+ *
+ *   The describes are NOT concurrent (#424): the tests spawn synchronously, so
+ *   under describe.concurrent every test's timeout timer starts together and
+ *   the last one is charged the whole group's wall clock — 65-75 s for a
+ *   five-test group, over the 60 s budget, while each test alone takes 10-15 s.
  */
 
 import { execFileSync } from "child_process";

@@ -21,7 +21,12 @@ import {
 
 afterAll(cleanupWorlds);
 
-describe.concurrent("conflict reporting", () => {
+// Sequential on purpose (#424): every test here blocks the worker inside
+// execFileSync for 10-15 s (two real clones + the sync). Under describe.concurrent
+// vitest starts every test's 60 s timer at once, so the LAST test of a group
+// was charged the whole group's wall clock (65-75 s measured) and timed out on
+// a loaded machine although each test alone takes a sixth of that.
+describe("conflict reporting", () => {
   test("auto-resolves a whitespace-only conflict instead of asking for help", () => {
     const { root, wt, other } = makeWorld();
     // Same line touched on both sides, but the worktree only re-indented it —
@@ -139,7 +144,7 @@ describe.concurrent("conflict reporting", () => {
   });
 });
 
-describe.concurrent("branch hierarchy", () => {
+describe("branch hierarchy", () => {
   test("merges the whole parent chain from remote-tracking refs", () => {
     const { root, primary, other, originPath } = makeWorld();
 

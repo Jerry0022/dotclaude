@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.183.4] — 2026-09-21
+
+### Fixed
+
+- **git-sync suites no longer time out under load.** `git-sync.test.js`, `git-sync.conflicts.test.js` and `git-sync.guards.test.js` hit the 60 s budget in every full run of the day and, measured, even when the three files ran alone (four timeouts, 65–75 s per group). Root cause: the groups were `describe.concurrent` while every test blocks the worker inside `execFileSync` for 3–10 s (two real clones + the sync), so vitest started every test's timer at once and the LAST test of a group was charged the whole group's wall clock (#424). Plain `describe` gives each test its own budget — 22/22 green in 52 s, longest single test 10 s, total file time unchanged; the fixture's docblock records why the groups must stay sequential. No timeout was raised. Shipped by `/run-backlog` (queue 5/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
 ## [0.183.3] — 2026-09-21
 
 ### Fixed
