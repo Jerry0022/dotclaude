@@ -172,3 +172,24 @@ describe("build-concept-fixture --designs", () => {
     expect(dom(build({ ...BASE, mode: 'design' })).querySelectorAll('section[data-iteration][data-active] > section[data-design]').length).toBe(1);
   });
 });
+
+// #418: a design round's canvas is the whole viewport. The document column's
+// `max-width: 1100px; padding: 2rem` letterboxed every fullscreen mock to
+// 1164px on a 1680px display; the design-mode rule lifts it, and only there.
+describe("build-concept-fixture — design canvas width (#418)", () => {
+  const designRule = html => (html.match(/\[data-template="design"\] \.concept-layout\.design \.concept-content \{([^}]*)\}/) || [])[1] || '';
+  const columnRule = html => (html.match(/\.concept-content \{\s*flex: 1;([^}]*)\}/) || [])[1] || '';  // the layout block, not the fixture's padding-only stub
+
+  test("the design-mode rule lifts the column cap and padding", () => {
+    const rule = designRule(build({ ...BASE, mode: 'design' }));
+    expect(rule).toContain('max-width: none');
+    expect(rule).toContain('padding: 0');
+    expect(rule).toContain('inset: 0');
+  });
+
+  test("the document column keeps its 1100px cap for decision / free rounds", () => {
+    const rule = columnRule(build({ ...BASE, mode: 'decision' }));
+    expect(rule).toContain('max-width: 1100px');
+    expect(rule).toContain('padding: 2rem');
+  });
+});

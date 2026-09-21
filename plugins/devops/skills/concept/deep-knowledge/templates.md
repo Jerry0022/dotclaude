@@ -1253,7 +1253,8 @@ page carries.
   flex: 1;
   /* The panel is position: fixed, so the column no longer competes with a 20%
      sidebar. Capped for line length instead — a 2000px paragraph is not an
-     improvement over the old split. */
+     improvement over the old split. Design rounds lift the cap (see the
+     design-mode rule in § Fullscreen canvas). */
   max-width: 1100px;
   margin: 0 auto;
   padding: 2rem;
@@ -2804,7 +2805,11 @@ body { margin: 0; padding: 0; }
 html[data-template="design"],
 html[data-template="design"] body { height: 100%; overflow: hidden; }
 [data-template="design"] .concept-layout.design.fullscreen { display: block; width: 100vw; height: 100vh; overflow: hidden; }
-[data-template="design"] .concept-layout.design .concept-content { position: absolute; inset: 0; overflow: hidden; }
+/* The canvas takes the whole viewport: the document column's `max-width:
+   1100px; padding: 2rem` (§ Layout CSS) is lifted here — a fullscreen mock
+   letterboxed to 1164px on a 1680px display was #418. Decision / free rounds
+   keep the cap. */
+[data-template="design"] .concept-layout.design .concept-content { position: absolute; inset: 0; overflow: hidden; max-width: none; padding: 0; }
 
 /* ── Document chrome vs. the fullscreen canvas ──────────────────────────
    A page may START as decision or free (§ Per-Iteration Templates), and
