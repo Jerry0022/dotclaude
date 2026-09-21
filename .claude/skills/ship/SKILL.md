@@ -123,7 +123,9 @@ Same version-glob rule as `CONVENTIONS.md` (Scripts → Version-glob rule).
 M="$HOME/.claude/plugins/marketplaces/dotclaude"
 f="$M/plugins/devops/hooks/session-start/ss.plugin.update.js"
 [ -f "$f" ] || f="$(ls -d "$HOME/.claude/plugins/cache/dotclaude/devops"/*/hooks/session-start/ss.plugin.update.js 2>/dev/null | sort -V | tail -1)"
-installed() { node -e "console.log(require('$M/plugins/devops/.claude-plugin/plugin.json').version)" 2>/dev/null; }
+# sed, not node: under Git Bash `$M` is a POSIX path (/c/Users/…) that node's
+# require() cannot resolve — the helper printed '' and the loop never saw success.
+installed() { sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$M/plugins/devops/.claude-plugin/plugin.json" | head -1; }
 for attempt in 1 2 3; do
   node "$f" --force
   [ "$(installed)" = "<vNew>" ] && break
