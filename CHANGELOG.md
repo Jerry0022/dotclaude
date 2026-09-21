@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.183.1] — 2026-09-21
+
+### Fixed
+
+- **Build id survives a deleted-but-tracked file.** `scripts/build-id.js` hashed every path from `git ls-files --cached`, which still lists a tracked file that was deleted in the working tree but not staged; `git hash-object --stdin-paths` then failed on that one path and every card in the session read `Build no-build-id` (seen mid-refactor while `cta-actions.js` was being renamed, #423). The script (0.3.0) hashes only the paths that exist and folds the missing ones in by name, so the id stays readable and still moves with the deletion; an intact tree hashes exactly as before. Regression test in a temp repo (`build-id.test.js`). Shipped by `/run-backlog` (queue 2/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
 ## [0.183.0] — 2026-09-21
 
 ### Fixed
