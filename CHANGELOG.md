@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.183.5] — 2026-09-21
+
+### Fixed
+
+- **`/concept` resume no longer prunes a live multi-day concept, and never silently.** A concept opened 2026-09-20 11:32 (9 iterations, draft rev 199 saved 22:03, journal restore 14:50 the next day) vanished on a session restart at ~15:00: the bridge died with the session, `ss.concept.resume` measured staleness from `started_at` — the OPEN, > 24 h ago — deleted the state file and exited with no output, and the next `concept-tick` shut down the bridge the user had just relaunched by hand (#426). `readStore()` now reports `lastActivityAt` (the newest of `state.json` `saved_at`, every `drafts/*.json` snapshot `ts` and the journal, file mtimes as fallback) and `hasDraft` (a snapshot holding a typed `text:` note — the server's own recover prefix); `isStale(state, store)` takes the later of the open and that activity, and a store with a draft is never stale. A prune prints one `PRUNED stale concept state …` line naming the state file, port, both timestamps and the store dir, with the relaunch recipe. Hook 0.6.0; `bridge-server.md` step 4 and the `started_at` field state the rule. 11 new tests (unit + the hook as a process against a store shaped like the server writes it). Shipped by `/run-backlog` (queue 6/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
 ## [0.183.4] — 2026-09-21
 
 ### Fixed
