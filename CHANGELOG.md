@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.183.12] — 2026-09-21
+
+### Fixed
+- **Project ship extension (Step 8 finalizer)** — the verify loop reads the clone's version with `sed` instead of node's `require()`: under Git Bash the marketplace path is a POSIX path (`/c/Users/…`) that `require()` cannot resolve, so the helper printed nothing, the loop never saw the sync succeed and ran all three attempts (first live run of 0.183.11).
+
 ## [0.183.11] — 2026-09-21
 
 ### Fixed
