@@ -59,7 +59,7 @@ const themeJs = () =>
 
 /** The `<aside … id="decision-panel">…</aside>` slice of a skeleton, or null. */
 function asideOf(code) {
-  const m = /<aside class="concept-decision-panel overlay" id="decision-panel">[\s\S]*?<\/aside>/.exec(code);
+  const m = /<aside class="concept-decision-panel" id="decision-panel">[\s\S]*?<\/aside>/.exec(code);
   return m ? m[0] : null;
 }
 /** Every `.concept-content > header` (the document header, not .iteration-intro). */
@@ -93,7 +93,7 @@ describe("the theme toggle lives in the ☰ panel head", () => {
         expect(h, `header @${b.line}`).not.toContain("theme-toggle");
       }
       // …and nowhere else outside the aside either.
-      const outside = b.code.replace(/<aside class="concept-decision-panel overlay" id="decision-panel">[\s\S]*?<\/aside>/g, "");
+      const outside = b.code.replace(/<aside class="concept-decision-panel" id="decision-panel">[\s\S]*?<\/aside>/g, "");
       expect(outside, `#theme-toggle outside the panel @${b.line}`).not.toContain('id="theme-toggle"');
     }
   });

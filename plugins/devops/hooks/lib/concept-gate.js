@@ -69,6 +69,107 @@ const FORBIDDEN = [
   { re: /paste[^.\n]{0,24}chat/i, why: '"paste … into chat" instruction' },
 ];
 
+// Engine chrome classes a round's mock <style> must never restyle (#400).
+// The engine's own head stylesheet owns them; a mock rule on the same bare
+// name — `.overlay` for a fog SVG — once restyled the decision panel, which
+// then sat docked LEFT with a dead ☰ FAB. Kept explicit and short so a
+// legitimately named mock class cannot false-block.
+const ENGINE_CLASSES = [
+  'concept-decision-panel', 'panel-fab', 'panel-backdrop', 'feedback-fab',
+  'feedback-dock', 'feedback-dock-header', 'feedback-section', 'iteration-tabs',
+  'iteration-tab', 'screen-indicator', 'design-switcher', 'frozen-bar',
+  'frozen-bar-text', 'closeout-sheet', 'device-frame', 'panel-here',
+  'concept-layout', 'concept-content', 'iteration-intro',
+];
+// A mock class is namespaced when it carries a per-design prefix.
+const MOCK_PREFIX_RE = /^(d\d+-|s\d+-|mock-|mk-)/;
+
+function stripCssComments(css) {
+  return String(css).replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+/** Split a selector list on top-level commas (`:is(a, b)` stays whole). */
+function splitSelectors(list) {
+  const out = [];
+  let depth = 0, buf = '';
+  for (const ch of list) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    if (ch === ',' && depth === 0) { out.push(buf.trim()); buf = ''; continue; }
+    buf += ch;
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out;
+}
+
+/** Brace-balanced rule walker; recurses into at-rules (`@media`, `@supports`). */
+function cssRules(src) {
+  const out = [];
+  let i = 0, sel = '';
+  while (i < src.length) {
+    if (src[i] === '}') { sel = ''; i++; continue; }
+    if (src[i] !== '{') { sel += src[i]; i++; continue; }
+    let depth = 1, j = i + 1;
+    while (j < src.length && depth > 0) {
+      if (src[j] === '{') depth++;
+      else if (src[j] === '}') { depth--; if (!depth) break; }
+      j++;
+    }
+    const head = sel.trim();
+    if (head.startsWith('@')) {
+      if (/^@(media|supports|container|layer)\b/.test(head)) out.push(...cssRules(src.slice(i + 1, j)));
+    } else if (head) {
+      out.push({ selectors: splitSelectors(head), body: src.slice(i + 1, j) });
+    }
+    sel = '';
+    i = j + 1;
+  }
+  return out;
+}
+
+/**
+ * P32 (#400): mock CSS inside an iteration must not collide with the engine.
+ * For every `<style>` inside a `section[data-iteration]` (iterations are
+ * siblings, so a block runs from one `<section … data-iteration` to the
+ * next), every rule's selectors are checked: a class from ENGINE_CLASSES is
+ * a collision; a bare single-class selector without a per-design prefix is
+ * a generic name waiting to collide. `@media` is recursed, comments are
+ * stripped, `:is()` / `:where()` lists are not split. The engine's own head
+ * stylesheet sits outside every iteration and is exempt by construction.
+ * @returns {{ kind: 'engine-class'|'bare-class', why: string }[]}
+ */
+function findChromeCollisions(html) {
+  const issues = [];
+  const src = String(html || '');
+  const starts = [...src.matchAll(/<section\b[^>]*\bdata-iteration\b[^>]*>/g)];
+  for (let n = 0; n < starts.length; n++) {
+    const from = starts[n].index;
+    const to = n + 1 < starts.length ? starts[n + 1].index : src.length;
+    const tag = starts[n][0];
+    const idm = /\sid="([^"]+)"/.exec(tag);
+    const itm = /\sdata-iteration="([^"]*)"/.exec(tag);
+    const where = idm ? `#${idm[1]}` : `section[data-iteration="${itm ? itm[1] : '?'}"]`;
+    const chunk = src.slice(from, to);
+    for (const m of chunk.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)) {
+      for (const rule of cssRules(stripCssComments(m[1]))) {
+        for (const sel of rule.selectors) {
+          const classes = [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map(x => x[1]);
+          const hit = classes.find(c => ENGINE_CLASSES.includes(c));
+          if (hit) {
+            issues.push({ kind: 'engine-class', why: `<style> in ${where}: selector "${sel}" restyles the engine chrome class .${hit}` });
+            continue;
+          }
+          const bare = /^\.(-?[_a-zA-Z][\w-]*)$/.exec(sel);
+          if (bare && !MOCK_PREFIX_RE.test(bare[1])) {
+            issues.push({ kind: 'bare-class', why: `<style> in ${where}: bare selector "${sel}" — prefix mock classes per design (.d1-${bare[1]}) or scope them ([data-design="d1"] ${sel})` });
+          }
+        }
+      }
+    }
+  }
+  return issues;
+}
+
 /**
  * Is this written file a concept page we should gate?
  * Triggers on the canonical output location (the `docs/concepts/*.html` path
@@ -560,26 +661,43 @@ function evaluate(filePath, html) {
   const mapping = findMappingIssues(html);
   const overlap = findViewOverlap(html);
   const stale = findStaleEngine(html);
+  const collisions = findChromeCollisions(html);
   return {
     applicable: true,
-    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0 && overlap.length === 0 && stale.length === 0,
+    ok: missing.length === 0 && forbidden.length === 0 && structural.length === 0 && mapping.length === 0 && overlap.length === 0 && stale.length === 0 && collisions.length === 0,
     missing,
     forbidden,
     structural,
     mapping,
     overlap,
     stale,
+    collisions,
   };
 }
 
 /** Build the blocking feedback shown to Claude (stderr, exit 2). */
-function buildBlockReason(filePath, missing, forbidden, structural, mapping, overlap, stale = []) {
+function buildBlockReason(filePath, missing, forbidden, structural, mapping, overlap, stale = [], collisions = []) {
   missing = missing || [];
   forbidden = forbidden || [];
   structural = structural || [];
   mapping = mapping || [];
   overlap = overlap || [];
+  stale = stale || [];
+  collisions = collisions || [];
   const name = path.basename(filePath || 'concept.html');
+  const onlyCollisions = collisions.length > 0 && !missing.length && !forbidden.length && !structural.length && !mapping.length && !overlap.length && !stale.length;
+  if (onlyCollisions) {
+    const lines = [`BLOCKED: mock CSS in "${name}" collides with the engine chrome (P32).`, ''];
+    collisions.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
+    lines.push('');
+    lines.push('A round\'s <style> shares the document with the decision panel, the FABs, the dock and the');
+    lines.push('frames. A mock rule on a bare generic name (.overlay, .card) or on an engine class restyles');
+    lines.push('them — the panel then sits docked left with a dead ☰ FAB (#400). Fix: prefix every mock');
+    lines.push('class per design (.d1-…) or scope it under the design ([data-design="d1"] …); never name an');
+    lines.push('engine class. See templates.md § Design layout rules → Mock CSS is namespaced.');
+    lines.push('The rest of the page passed — re-write the file and open it once this gate passes.');
+    return lines.join('\n');
+  }
   const onlyOverlap = overlap.length > 0 && !missing.length && !forbidden.length && !structural.length && !mapping.length;
   if (onlyOverlap) {
     const lines = [`BLOCKED: a view in "${name}" re-asks the design choice.`, ''];
@@ -597,6 +715,12 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
   if (onlyMapping) lines.push(`BLOCKED: mapping spec problems in "${name}".`);
   else lines.push(`BLOCKED: "${name}" is not a valid live-bridge concept page.`);
   lines.push('');
+  if (collisions.length) {
+    lines.push('Mock CSS collides with the engine chrome (P32):');
+    collisions.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
+    lines.push('  Fix: prefix mock classes per design (.d1-…) or scope them under the design; never name an engine class.');
+    lines.push('');
+  }
   if (overlap.length) {
     lines.push('A decision / comparison view lists the designs of its own round as alternatives (P31):');
     overlap.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
@@ -676,6 +800,8 @@ module.exports = {
   findStructural,
   findMappingIssues,
   findViewOverlap,
+  findChromeCollisions,
+  ENGINE_CLASSES,
   evaluate,
   buildBlockReason,
 };
