@@ -446,16 +446,23 @@ describe("panel anatomy — CSS", () => {
       /\.concept-decision-panel \{[^}]*position:\s*sticky/);
   });
 
-  test("the ☰ FAB that opens it is page chrome, never design-only", () => {
-    // The FAB used to be hidden outside design mode, which is what made the
-    // docked sidebar necessary in the first place.
+  test("neither FAB is design-only chrome — ☰ and 💬 are reachable in every template", () => {
+    // The ☰ FAB used to be hidden outside design mode, which is what made the
+    // docked sidebar necessary in the first place; the 💬 FAB and its dock
+    // followed in #399. Only the dock's design-only ROWS may sit behind the
+    // projection (the compact rule), never the dock or the FAB themselves.
     const hidden = /html:not\(\[data-template="design"\]\) ([^,{]+)[,{]/g;
     const hiddenSelectors = [];
     let m;
     const css = stripComments(cssSource);
     while ((m = hidden.exec(css))) hiddenSelectors.push(m[1].trim());
-    expect(hiddenSelectors, "design-only chrome list").toContain(".feedback-fab");
+    expect(hiddenSelectors, "design-only chrome list still hides the mockup chrome").toContain(".screen-indicator");
     expect(hiddenSelectors, "☰ must stay reachable in every template").not.toContain(".panel-fab");
+    expect(hiddenSelectors, "💬 must stay reachable in every template").not.toContain(".feedback-fab");
+    expect(hiddenSelectors, "the dock itself is never hidden by template").not.toContain(".feedback-dock");
+    expect(hiddenSelectors, "document rounds fold the design-only rows").toContain(
+      ".feedback-dock .feedback-section:not(:has(#design-general-feedback))");
+    expect(hiddenSelectors).toContain(".feedback-dock .feedback-divider");
   });
 
   test("only .panel-nav-scroll scrolls, and min-height: 0 is on it", () => {
@@ -480,9 +487,13 @@ describe("panel anatomy — CSS", () => {
     }
   });
 
-  test("design mode reserves the 💬 FAB's row under the foot — derived from the FAB's own geometry", () => {
-    const gutter = rulesFor(/^\[data-template="design"\] \.concept-layout\.design \.panel-cta$/)[0];
-    expect(gutter, "design-scoped .panel-cta rule").toBeTruthy();
+  test("every template reserves the 💬 FAB's row under the foot — derived from the FAB's own geometry", () => {
+    // Unscoped since #399: the 💬 FAB floats over the panel's bottom-right
+    // corner in every template, so the gutter is page chrome like the FAB.
+    expect(rulesFor(/^\[data-template="design"\] \.concept-layout\.design \.panel-cta$/).length,
+      "no design-scoped gutter left behind").toBe(0);
+    const gutter = rulesFor(/^\.panel-cta$/).find((r) => /padding-bottom:\s*calc\(/.test(r.body));
+    expect(gutter, "unscoped .panel-cta gutter rule").toBeTruthy();
     const m = /padding-bottom:\s*calc\((\d+)px \+ ([\d.]+)rem\)/.exec(gutter.body);
     expect(m, "padding-bottom: calc(<fab>px + <offset>rem)").toBeTruthy();
     const fab = RULES.find((r) => r.selectors.some((s) => norm(s) === ".feedback-fab") && /height:\s*\d+px/.test(r.body));

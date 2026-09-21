@@ -83,7 +83,7 @@ describe("mapping integration — engine hooks in the shared systems", () => {
       CSS_STUB,
       "function resolveIterationTemplate() { return 'free'; }",
       "function attachmentsFor() { return []; }",
-      fn("collectAllFormFields"), fn("collectFreeDecisions"), fn("collectDecisions"),
+      fn("collectAllFormFields"), fn("collectComments"), fn("collectFreeDecisions"), fn("collectDecisions"),
     ].join("\n"));
     p.window.renderMappings();
     const st = p.document.getElementById("map-veh-cells-card@phone");
@@ -94,7 +94,7 @@ describe("mapping integration — engine hooks in the shared systems", () => {
     expect(payload.mappings[0].assigned["card@phone"].sort()).toEqual([["status", "card.badge"], ["vin", "card.header"]]);
     expect(payload.allFields["map-veh-cells-card@phone"]).toBe("vin>card.header status>card.badge");   // re-encoded in decode order
     expect(Object.keys(payload.allFields).some(k => k.includes(">"))).toBe(false);                    // no checkbox leaks into allFields
-    expect(payload.comments).toEqual([]);                                                               // empty note is not a comment
+    expect(payload.comments).toEqual({ general: { text: "", attachments: [] }, items: [] });           // empty note is not a comment (#399 shape)
   });
   test("jsdom: saveState() persists a written state input under the iteration-namespaced text: key, no checkbox leaks", () => {
     const p = page({ specs: [["veh", VEHICLE_SPEC]], url: "http://localhost/fixture.html" });   // a real origin: jsdom refuses localStorage on about:blank
@@ -120,7 +120,7 @@ describe("mapping integration — engine hooks in the shared systems", () => {
       CSS_STUB,
       "function resolveIterationTemplate() { return 'free'; }",
       "function attachmentsFor() { return []; }",
-      fn("collectAllFormFields"), fn("collectFreeDecisions"), fn("collectDecisions"),
+      fn("collectAllFormFields"), fn("collectComments"), fn("collectFreeDecisions"), fn("collectDecisions"),
     ].join("\n"));
     prependFrozenRound(p, '<section id="old" data-nav-label="Old"><input type="radio" name="eval-old" value="discard" checked>'
       + '<textarea data-comment="map-old-note">stale</textarea></section>');
@@ -129,7 +129,7 @@ describe("mapping integration — engine hooks in the shared systems", () => {
     expect(p.section("veh_old").dataset.mapRendered).toBe("true");                                    // the frozen mapping IS rendered …
     expect(p.document.getElementById("map-veh_old-cells-card@phone").value).toBe("vin>card.header status>card.badge");
     const payload = p.window.collectDecisions("iterate");
-    expect(payload.comments).toEqual([]);                                                               // … but nothing of it is collected
+    expect(payload.comments).toEqual({ general: { text: "", attachments: [] }, items: [] });           // … but nothing of it is collected
     expect(payload.decisions.map(d => d.id)).not.toContain("old");
     expect(payload.mappings.map(m => m.id)).toEqual(["veh"]);
   });

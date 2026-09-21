@@ -39,7 +39,7 @@ describe("decision template — getElementState / collectDecisionDecisions (#383
       CSS_STUB,
       "function resolveIterationTemplate() { return 'decision'; }",
       "function attachmentsFor() { return []; }",
-      fn("collectAllFormFields"), fn("getElementState"), fn("collectDecisionDecisions"), fn("collectDecisions"),
+      fn("collectAllFormFields"), fn("collectComments"), fn("getElementState"), fn("collectDecisionDecisions"), fn("collectDecisions"),
     ].join("\n"));
     const active = w.document.querySelector("section[data-iteration][data-active]");
     const groups = active.querySelectorAll("[data-decision]");

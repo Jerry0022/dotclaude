@@ -254,11 +254,14 @@ describe("the ☰ panel is page chrome", () => {
     }
   });
 
-  test("the FAB actually opens the panel on a page that has no dock", () => {
+  test("the FAB actually opens the panel on a document page, where the design Layout JS never runs", () => {
     // The regression this whole change is about: on a decision/free page the
     // design Layout JS never runs, so while openPanel lived inside it the ☰
     // FAB was a button that did nothing — which is why the panel used to be
     // hidden and docked into the page instead. Executed, not grepped.
+    // Since #399 the same page carries the 💬 dock (general note only), wired
+    // by the same shared section — so the P13e hand-off (☰ folds the dock
+    // away) is exercised here too.
     const skeleton = BLOCKS.find(
       (b) => b.info === "html" && b.code.includes('id="panel-final-report"')
     );
@@ -268,7 +271,13 @@ describe("the ☰ panel is page chrome", () => {
     });
     const { window } = dom;
     const { document } = window;
-    expect(document.getElementById("feedback-dock"), "no dock on this page").toBeNull();
+    const dock = document.getElementById("feedback-dock");
+    expect(dock, "the document skeleton carries the dock (#399)").not.toBeNull();
+    expect(document.querySelectorAll("#feedback-dock .feedback-section").length,
+      "a document round's dock holds the general section only").toBe(1);
+    expect(dock.querySelector('textarea[data-comment="general"][data-attachable]')).not.toBeNull();
+    expect(dock.querySelector('.attach-slot[data-attach-slot="general"]')).not.toBeNull();
+    expect(document.querySelectorAll("#feedback-toggle").length).toBe(1);
 
     const shared = sectionBlocks("## Panel Chrome (all templates)")
       .filter((b) => /^(javascript|js)$/.test(b.info))
@@ -305,6 +314,28 @@ describe("the ☰ panel is page chrome", () => {
     toggle.click();
     document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
     expect(panel.classList.contains("open"), "Escape closes it").toBe(false);
+
+    // The dock on the same page: 💬 opens it, ☰ folds it away (P13e "dock
+    // ceiling" hand-off), the dock's − minimises it, and the size is always
+    // compact on a document round.
+    const fab = document.getElementById("feedback-toggle");
+    fab.click();
+    expect(dock.dataset.open, "💬 opens the dock").toBe("true");
+    expect(fab.getAttribute("aria-expanded")).toBe("true");
+    expect(fab.hasAttribute("data-untouched"), "the pulse ends on first open").toBe(false);
+    toggle.click();
+    expect(panel.classList.contains("open")).toBe(true);
+    expect(dock.dataset.open, "☰ closes the dock (openPanel → closeDock(true))").toBe("false");
+    document.getElementById("panel-close").click();
+    fab.click();
+    expect(dock.dataset.open).toBe("true");
+    expect(dock.dataset.size, "document round → compact").toBe("compact");
+    document.getElementById("feedback-maximize").click();
+    expect(dock.dataset.userMaximized, "⤢ maximises without closing").toBe("true");
+    expect(dock.dataset.open).toBe("true");
+    document.getElementById("feedback-close").click();
+    expect(dock.dataset.open, "− minimises").toBe("false");
+    expect(dock.dataset.userMaximized, "…and keeps the size choice").toBe("true");
   });
 
   test("an open panel is modal: nothing scrolls behind it, no FAB paints over it", () => {
@@ -331,15 +362,44 @@ describe("the ☰ panel is page chrome", () => {
     expect(shared).toContain("addEventListener('DOMContentLoaded', boot)");
   });
 
-  test("only the dock side of the chrome stays design-only", () => {
-    // Selectors only — the rule's own comment names .panel-fab to explain why
-    // it is NOT in the list.
+  test("only the mockup chrome stays design-only — neither FAB, not the dock", () => {
+    // Selectors only — the rule's own comment names the FABs to explain why
+    // they are NOT in the list.
     // Anchored on the chrome list itself — other `html:not([data-template=
-    // "design"])` rules exist now (the panel-open scroll lock among them).
+    // "design"])` rules exist now (the panel-open scroll lock, the dock's
+    // compact rule among them).
     const rule = /^(html:not\(\[data-template="design"\]\) \.screen-indicator[\s\S]*?display: none !important; \})/m.exec(cssSource);
     expect(rule, "design-only chrome rule").toBeTruthy();
-    expect(rule[1]).toContain(".feedback-fab");
-    expect(rule[1]).toContain(".feedback-dock");
+    for (const sel of [".viewport-toggle", ".design-switcher", ".anno-toggle-fab", ".anno-layer"]) {
+      expect(rule[1], sel).toContain(sel);
+    }
+    expect(rule[1], "#399: the dock is page chrome").not.toContain(".feedback-fab");
+    expect(rule[1], "#399: the dock is page chrome").not.toContain(".feedback-dock");
     expect(rule[1]).not.toContain(".panel-fab");
+  });
+
+  test("the dock is wired in the shared section and the design IIFE only calls its exports", () => {
+    const shared = sectionBlocks("## Panel Chrome (all templates)")
+      .filter((b) => /^(javascript|js)$/.test(b.info))
+      .map((b) => b.code)
+      .join("\n");
+    for (const name of ["closeDock", "openDock", "applyDockSize", "applyDockFreezeState", "primeDock",
+      "harvestDockValues", "liveIterationId", "stashLiveDockValues", "markDockSubmitted", "unmarkDockSubmitted"]) {
+      expect(shared, name).toMatch(new RegExp("window\\." + name + " = "));
+    }
+    const design = sectionBlocks("## Layout JS — single-screen navigation + context-sensitive feedback")
+      .filter((b) => /^(javascript|js)$/.test(b.info))
+      .map((b) => b.code)
+      .join("\n");
+    for (const decl of ["function closeDock(", "function openDock(", "function applyDockSize(",
+      "function applyDockFreezeState(", "function primeDock(", "function harvestDockValues(",
+      "window.markDockSubmitted =", "getElementById('feedback-toggle')"]) {
+      expect(design, decl + " must not be re-declared in the design IIFE").not.toContain(decl);
+    }
+    // …and the shared block precedes the design IIFE in the file, so its boot
+    // listener is registered (and runs) first.
+    const sharedLine = sectionBlocks("## Panel Chrome (all templates)").find((b) => b.code.includes("Feedback dock (all templates)")).line;
+    const designLine = sectionBlocks("## Layout JS — single-screen navigation + context-sensitive feedback")[0].line;
+    expect(sharedLine).toBeLessThan(designLine);
   });
 });

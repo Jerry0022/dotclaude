@@ -197,6 +197,33 @@ describe("build-concept-fixture — design canvas width (#418)", () => {
 // #430 — the gate asserts the engine CSS/JS blocks are intact, per template.
 // The fixture concatenates every css/js block of templates.md, so a built
 // page of EITHER mode must carry every shared and template-scoped anchor;
+// #399: the 💬 feedback dock is page chrome in every template. The decision /
+// free path builds from § Common Structure, which carries the dock now, so a
+// built document page must have exactly one dock + one FAB (general section
+// only), the design page its full dock, and both must pass the gate.
+describe("build-concept-fixture — the feedback dock is in every mode (#399)", () => {
+  test.each([['decision', false], ['decision', true], ['design', false]])("%s mode (mapping %s): one #feedback-dock, one #feedback-toggle, gate green", (mode, mapping) => {
+    const page = build({ ...BASE, mode, mapping });
+    const doc = dom(page);
+    expect(doc.querySelectorAll('#feedback-dock').length).toBe(1);
+    expect(doc.querySelectorAll('#feedback-toggle').length).toBe(1);
+    expect(doc.querySelectorAll('.feedback-fab').length).toBe(1);
+    const dock = doc.getElementById('feedback-dock');
+    expect(dock.dataset.open).toBe('false');
+    expect(dock.querySelector('#feedback-maximize')).not.toBeNull();
+    expect(dock.querySelector('#feedback-close')).not.toBeNull();
+    expect(dock.querySelector('textarea#design-general-feedback[data-comment="general"][data-attachable]')).not.toBeNull();
+    expect(dock.querySelector('.attach-slot[data-attach-slot="general"]')).not.toBeNull();
+    const sections = dock.querySelectorAll('.feedback-section').length;
+    expect(sections, 'general only on a document page, the four rows on a design page').toBe(mode === 'design' ? 4 : 1);
+    // The initial decisions JSON already carries the unified comments shape.
+    const initial = JSON.parse(doc.getElementById('concept-decisions').textContent);
+    expect(initial.comments).toEqual({ general: { text: '', attachments: [] }, items: [] });
+    const r = evaluate('docs/concepts/fixture.html', page);
+    expect(r.ok, JSON.stringify({ missing: r.missing, stale: r.stale, structural: r.structural, collisions: r.collisions })).toBe(true);
+  });
+});
+
 // a fixture that fails here means the anchor list drifted from the engine.
 describe("build-concept-fixture — engine integrity anchors (#430)", () => {
   for (const mode of ['decision', 'design']) {

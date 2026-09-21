@@ -162,7 +162,7 @@ proof that no `/pending` call ever ran while that submission was current.
 
 **Read decisions** — they're in the same JSON response from `GET /decisions`:
 ```json
-{"submitted": true, "decisions": [...], "comments": [...]}
+{"submitted": true, "decisions": [...], "comments": {"general": {"text": "...", "attachments": []}, "items": [...]}}
 ```
 
 No browser eval needed. The bridge server handles everything.
@@ -339,14 +339,30 @@ The JSON from `#concept-decisions` follows this schema:
       "...": "variant-specific fields (accepted, included, selected, rating, etc.)"
     }
   ],
-  "comments": [
-    {
-      "id": "string — section identifier",
-      "text": "string — user comment"
-    }
-  ]
+  "comments": {
+    "general": {
+      "text": "string — the 💬 dock's general note (every template; empty string when none)",
+      "attachments": [ { "id": "<sha256>.png", "name": "...", "mime": "...", "size": 0, "path": "..." } ]
+    },
+    "items": [
+      {
+        "id": "string — field identifier (data-comment)",
+        "text": "string — user comment",
+        "attachments": []
+      }
+    ]
+  }
 }
 ```
+
+`comments` has this ONE shape whatever the template (templates.md
+§ collectDecisions (dispatcher), #399): `general` is always present — read it
+first, it is the note the user left on the round as a whole — and `items`
+lists every itemised field that carries text or an attachment. A design round
+additionally carries `comments.designs` / `comments.screens` / `comments.views`
+(the dock rows keyed by id) next to them. Never look for the general note in
+`items` or in `allFields`: the dock lives outside the iteration section, so
+`comments.general` is its only typed home.
 
 ### Summarization
 
@@ -358,6 +374,7 @@ After parsing, produce a brief summary:
 **Akzeptiert:** Finding 1, Finding 3, Finding 5
 **Abgelehnt:** Finding 2, Finding 4
 **Varianten:** Variant A → Miteinbeziehen, Variant B → Verworfen, Variant C → Exakt diese
+**Allgemein:** "Ship the smallest slice first" (`comments.general`)
 **Kommentare:**
 - Finding 1: "Focus on this first, highest business impact"
 - Finding 4: "Not relevant for current sprint"
@@ -442,8 +459,8 @@ appending one entry per round:
 ```json
 {
   "rounds": [
-    { "round": 1, "timestamp": "...", "decisions": [...], "comments": [...] },
-    { "round": 2, "timestamp": "...", "decisions": [...], "comments": [...] }
+    { "round": 1, "timestamp": "...", "decisions": [...], "comments": { "general": { "text": "...", "attachments": [] }, "items": [...] } },
+    { "round": 2, "timestamp": "...", "decisions": [...], "comments": { "general": { "text": "...", "attachments": [] }, "items": [...] } }
   ]
 }
 ```

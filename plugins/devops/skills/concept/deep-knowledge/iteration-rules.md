@@ -205,25 +205,40 @@ annotation answer textareas (`textarea[data-annotation]`) the same as to
 every other comment field — they go `readonly`, never `disabled`, and their
 submitted answer is what the reader sees when they reopen the pin's bubble.
 
-**The feedback dock needs explicit handling.** Its textareas are built by
-JS and live OUTSIDE `section[data-iteration]`, so the freeze sweep never
-reaches them — a frozen tab would otherwise show empty, editable fields and
-imply the user submitted nothing. Freezing a `design` iteration therefore
-also requires embedding the submitted comments in the frozen section:
+**The feedback dock needs explicit handling — in EVERY template.** The
+dock is page chrome (templates.md § Panel Chrome (all templates), #399): its
+general-notes textarea, and on a design round its per-screen / per-design /
+per-view textareas, live OUTSIDE `section[data-iteration]`, so the freeze
+sweep never reaches them — a frozen tab would otherwise show an empty,
+editable field and imply the user submitted nothing. Freezing ANY iteration
+therefore also requires embedding the submitted comments in the frozen
+section. A `decision` / `free` round carries just the general note; a
+`design` round the general note plus its keyed rows:
 
 ```html
+<!-- decision / free round -->
 <script type="application/json" data-frozen-feedback>
-  {"general": "…", "designs": {"dispatch": "…"}, "screens": {"d1-s1": "…"}, "views": {"nav-model": "…"}}
+  {"general": {"text": "…", "attachments": []}}
+</script>
+
+<!-- design round -->
+<script type="application/json" data-frozen-feedback>
+  {"general": {"text": "…", "attachments": []}, "designs": {"dispatch": "…"}, "screens": {"d1-s1": "…"}, "views": {"nav-model": "…"}}
 </script>
 ```
 
-`applyDockFreezeState()` (templates.md § Layout JS) reads that blob whenever
+Write `general` exactly as the payload delivered it (`comments.general`, the
+`{ text, attachments }` object); a bare string is still accepted for pages
+frozen before #399. `applyDockFreezeState()` (templates.md § Panel Chrome
+(all templates) → Feedback dock) reads that blob whenever
 `body.viewing-frozen` is set, fills the dock read-only, and restores the live
-iteration's unsent text when the user switches back. `views` follows the
-same rule as `designs`/`screens` — present (possibly `{}`) whenever the
-iteration uses views, keyed by view id, and only needed because the
-view-level dock textarea lives OUTSIDE `section[data-iteration]` just like
-the general/design/screen ones.
+iteration's unsent text when the user switches back — on a document page
+through the dock block's own `iteration:changed` listener, on a design page
+through § Layout JS's handler (which primes the dock on a document round of
+the same concept too). `views` follows the same rule as `designs`/`screens`
+— present (possibly `{}`) whenever the iteration uses views, keyed by view
+id, and only needed because the view-level dock textarea lives OUTSIDE
+`section[data-iteration]` just like the general/design/screen ones.
 
 **A frozen view's own `[data-decision]` bi-state and notes need no blob at
 all.** Unlike the dock, a view's bi-state groups and their adjacent
@@ -317,7 +332,8 @@ When appending a new iteration section (Step 5c of `SKILL.md`), verify
       the JSON. If any is missing → the catch-all is broken, fix BEFORE
       reload.
 5. ☐ The round being frozen carries the user's comments in its own HTML —
-      textarea values plus the `data-frozen-feedback` blob for the dock. Do
+      textarea values plus the `data-frozen-feedback` blob for the dock
+      (every template: at least `general`, § Freezing Design Iterations). Do
       not rely on `localStorage` to render a frozen round: the append bumps
       the live round, so its keys move to a new namespace and the frozen tab
       would come back blank.
