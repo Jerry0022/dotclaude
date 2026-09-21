@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.184.1] — 2026-09-22
+
+### Changed
+- **Completion card on Desktop (#443)** — the markdown under the card widget is the ✨ marker alone, as an HTML comment the Desktop renderer hides (`<!-- ✨✨✨ title ✨✨✨ -->`): the widget is the one visible rendering, no stray `### **✨✨✨ title ✨✨✨**` headline under it any more. The Stop-hook card guard keeps reading the marker from the raw transcript (presence, title status word, duplicate signature) — no gate changed. The visible ✨ line stays wherever no widget carries the card: terminal sessions, variants without a widget body, and a failed widget call (Claude then prints the visible title line instead of the comment). Design doc § 2.1 / § 4 / § 8.
+
 ## [0.184.0] — 2026-09-22
 
 ### Added

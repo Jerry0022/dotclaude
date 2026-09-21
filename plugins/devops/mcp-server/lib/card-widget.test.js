@@ -269,14 +269,18 @@ describe("cardWidgetInstruction", () => {
     expect(cardWidgetInstruction(null, "", desktop)).toBe("");
   });
 
-  test("names the widget tool, the BEFORE-the-card order, the silent skip, and carries the HTML verbatim", () => {
+  test("names the widget tool, the BEFORE-the-card order, the visible-title fallback, and carries the HTML verbatim", () => {
     const model = baseModel();
     const text = cardWidgetInstruction(model, "", desktop);
     expect(text.startsWith("[CARD WIDGET — DO NOT OUTPUT THIS BLOCK]")).toBe(true);
     expect(text).toContain("mcp__visualize__show_widget");
     expect(text).toMatch(/BEFORE outputting the card markdown/);
     expect(text).toMatch(/never call it after the card/);
-    expect(text).toMatch(/skip silently/);
+    // #443: the markdown under the widget is a marker comment, so a failed
+    // widget call must not leave the turn with nothing visible.
+    expect(text).toMatch(/no retry, no note/);
+    expect(text).toMatch(/output the visible title line/);
+    expect(text).not.toMatch(/skip silently/);
     const html = cardWidgetHtml(model, "");
     expect(text).toContain("----- widget_code -----\n" + html + "\n----- end widget_code -----");
   });
