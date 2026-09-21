@@ -250,3 +250,29 @@ describe("buildResumeInstructions", () => {
     expect(out.match(/--port 9001/g)).toHaveLength(3);
   });
 });
+
+
+// #417 — the owner token in the state file rides on every re-armed watcher
+// and the backstop cron, so a resumed session's tick can tell its own file
+// from a sibling session's.
+describe("owner token (#417)", () => {
+  const STATE_PATH = "C:/proj/.claude/concept-active.json";
+
+  test("buildCronBody / buildBackgroundTasks carry --owner when given, and not otherwise", () => {
+    expect(buildCronBody(8883, STATE_PATH, "aaaa1111")).toContain('--owner "aaaa1111"');
+    expect(buildCronBody(8883, STATE_PATH)).not.toContain("--owner");
+    const bg = buildBackgroundTasks(8883, STATE_PATH, "aaaa1111");
+    expect(bg.pulser).toContain('--owner "aaaa1111"');
+    expect(bg.waker).toContain('--owner "aaaa1111"');
+    expect(buildBackgroundTasks(8883, STATE_PATH).pulser).not.toContain("--owner");
+  });
+
+  test("isValidState accepts a plain owner token and rejects anything that could not be echoed into a command", () => {
+    expect(isValidState({ ...STATE, owner: "aaaa1111" })).toBe(true);
+    expect(isValidState({ ...STATE, owner: "sess.1-x_2" })).toBe(true);
+    expect(isValidState({ ...STATE })).toBe(true);
+    expect(isValidState({ ...STATE, owner: "" })).toBe(false);
+    expect(isValidState({ ...STATE, owner: 'a"b' })).toBe(false);
+    expect(isValidState({ ...STATE, owner: 42 })).toBe(false);
+  });
+});

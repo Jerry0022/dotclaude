@@ -338,3 +338,64 @@ describe("tick", () => {
     }
   });
 });
+
+
+// #417 — two /concept sessions in sibling worktrees shared one state file;
+// A's tick read B's port as "my concept ended", POSTed /shutdown and told
+// Claude to rm the file, and B's bridge died on the next poll. With an owner
+// token on both sides a foreign file is left alone and the tick keeps
+// servicing its own port.
+describe("inspectState / tick — a state file owned by another session (#417)", () => {
+  test("port mismatch + different owner → not a cleanup, reported as foreign", () => {
+    writeState({ ...LIVE, port: 9001, owner: "bbbb2222" });
+    writeHtml(LIVE.html_path);
+    const res = inspectState(statePath, PORT, fs.existsSync, "aaaa1111");
+    expect(res.cleanup).toBe(false);
+    expect(res.foreign).toBe(true);
+    expect(res.reason).toContain("bbbb2222");
+  });
+
+  test("port mismatch + SAME owner → cleanup as before (our own concept moved on)", () => {
+    writeState({ ...LIVE, port: 9001, owner: "aaaa1111" });
+    writeHtml(LIVE.html_path);
+    expect(inspectState(statePath, PORT, fs.existsSync, "aaaa1111").cleanup).toBe(true);
+  });
+
+  test("no owner on either side → the old port rule stands (backward compatible)", () => {
+    writeState({ ...LIVE, port: 9001 });
+    writeHtml(LIVE.html_path);
+    expect(inspectState(statePath, PORT).cleanup).toBe(true);
+    expect(inspectState(statePath, PORT, fs.existsSync, "aaaa1111").cleanup).toBe(true);
+    writeState({ ...LIVE, port: 9001, owner: "bbbb2222" });
+    expect(inspectState(statePath, PORT).cleanup).toBe(true);
+  });
+
+  test("a foreign file never makes the tick POST /shutdown, and the tick still services its own port", async () => {
+    writeState({ ...LIVE, port: 9001, owner: "bbbb2222" });
+    writeHtml(LIVE.html_path);
+    const calls = [];
+    const request = async (port, pathname) => {
+      calls.push(pathname);
+      if (pathname === "/heartbeat") return { ok: true, body: "" };
+      if (pathname === "/pending") return { ok: true, body: JSON.stringify({ pending: false }) };
+      return { ok: false, body: "" };
+    };
+    const res = await tick({ port: PORT, state: statePath, timeout: 8, owner: "aaaa1111" }, { request });
+    expect(calls).not.toContain("/shutdown");
+    expect(calls).toContain("/heartbeat");
+    expect(res.stdout).toBe("");
+    // and the foreign file was not written into (no heartbeat bookkeeping)
+    expect(JSON.parse(fs.readFileSync(statePath, "utf8")).tick_heartbeat_failures).toBeUndefined();
+  });
+
+  test("parseArgs reads --owner; the relaunch instruction re-arms the watchers with it", async () => {
+    expect(parseArgs(["--port", "8883", "--state", "/s", "--owner", "aaaa1111"]).owner).toBe("aaaa1111");
+    writeState({ ...LIVE, owner: "aaaa1111" });
+    writeHtml(LIVE.html_path);
+    const request = async () => ({ ok: false, body: "" });
+    let out = "";
+    for (let i = 0; i < 4 && !out; i++) out = (await tick({ port: PORT, state: statePath, timeout: 8, owner: "aaaa1111" }, { request })).stdout;
+    expect(out).toContain('--mode pulse --port 8883 --state');
+    expect(out).toContain('--owner "aaaa1111"');
+  });
+});

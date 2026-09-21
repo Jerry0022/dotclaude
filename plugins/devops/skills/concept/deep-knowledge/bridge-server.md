@@ -43,9 +43,10 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    `concept-tick.js`, `concept-drift.js`): `sort -V | tail -1`, never
    `head -1`. See CONVENTIONS.md § Scripts → Path rule.
 
-2. Start the bridge server in the **project root** (NOT the worktree root —
-   the watchdog resolves `--html` against the cwd, and concept HTML lives in
-   the main project tree):
+2. Start the bridge server in the **session cwd** — the worktree when this
+   session runs in one (the watchdog resolves `--html` against the cwd, the
+   concept HTML is written into THIS checkout, and the state file of step 4
+   lives here too, #417):
    **Launch it via the Bash tool's `run_in_background: true`** — NOT
    `nohup … &` (or any `&`-backgrounded child) inside a single foreground
    Bash call. A child backgrounded inside one tool call is reaped when that
@@ -54,7 +55,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    detached background task survives across turns:
    ```bash
    # Bash tool, run_in_background: true  (no trailing &, no nohup)
-   python "$PLUGIN_ROOT" {port} "{project-root}" \
+   python "$PLUGIN_ROOT" {port} "{session-cwd}" \
        --html "docs/concepts/{date}-{slug}.html"
    ```
 
@@ -210,7 +211,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 
    ```
    CronCreate(cron: "*/15 * * * *", recurring: true, prompt: <<EOF
-   Silently run via Bash: node "{plugin-root}/scripts/concept-tick.js" --port {port} --state "{project-root}/.claude/concept-active.json" — this services the concept bridge on port {port}. No output → produce NO output (silent tick). Any output IS your instruction for this tick: follow it exactly.
+   Silently run via Bash: node "{plugin-root}/scripts/concept-tick.js" --port {port} --state "{session-cwd}/.claude/concept-active.json" --owner {owner} — this services the concept bridge on port {port}. No output → produce NO output (silent tick). Any output IS your instruction for this tick: follow it exactly.
    EOF)
    ```
 
@@ -241,7 +242,10 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
          - `state.port` ≠ `{port}` (this cron is for a stale session — a newer
            concept overwrote the state file with a different port).
          - `state.html_path` does not exist on disk (resolved against the
-           state file's grandparent, i.e. the project root).
+           state file's grandparent, i.e. the session cwd).
+         A state file that names another port AND another `owner` is a
+         sibling session's (#417): NOT a trigger — the tick reports it on
+         stderr and keeps servicing its own port.
        A state file that is present but *unreadable* (EBUSY/EPERM during a
        rewrite on Windows, EMFILE under load) or half-written is explicitly
        NOT a trigger — one unlucky tick must not tear down a live concept.
@@ -392,7 +396,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    once at concept open; runs for the whole session so `claude_ts` stays warm
    even across a long `implement`. Exits only when the concept is truly gone:
    ```bash
-   node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | sort -V | tail -1)" --mode pulse --port {port} --state "{project-root}/.claude/concept-active.json"
+   node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | sort -V | tail -1)" --mode pulse --port {port} --state "{session-cwd}/.claude/concept-active.json" --owner {owner}
    ```
 
    **(2) Pickup waker — wakes Claude the instant a submission lands.** Its
@@ -400,7 +404,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    the next cron tick. Re-launched after each processing round. It does NOT
    pulse the heartbeat (that is the pulser's job) — it only watches `/pending`:
    ```bash
-   node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | sort -V | tail -1)" --mode watch --port {port} --state "{project-root}/.claude/concept-active.json"
+   node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | sort -V | tail -1)" --mode watch --port {port} --state "{session-cwd}/.claude/concept-active.json" --owner {owner}
    ```
 
    **Verify both actually started.** They are the only launches in this document
@@ -415,7 +419,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    loop shape is easy to write and was wrong in four independent ways, each of
    which silently reproduced the bug the watchers exist to prevent:
    - it tested a **relative** `.claude/concept-active.json`, but this document
-     mandates the state file at the project root, which is not always the
+     mandates the state file at the session cwd, which is not always the
      task's cwd — both watchers then exited `STATE_GONE` on iteration 1;
    - it was launched here, in step 3, **before** step 4 writes that file, so a
      literal reading killed both at t=0. `--state` is absolute and `--grace`
@@ -504,7 +508,8 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    is open).
 
 4. **Persist active-concept state.** Write `.claude/concept-active.json` in
-   the project root with the metadata the SessionStart resume hook
+   the **session cwd** — the worktree when this session runs in one, the
+   project root otherwise — with the metadata the SessionStart resume hook
    (`ss.concept.resume`) needs to recover this concept after a Claude
    restart. Do this BEFORE the first heartbeat — once the file exists, any
    subsequent SessionStart can rediscover the running server.
@@ -516,6 +521,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      "slug": "auth-middleware-redesign",
      "server_pid": 12345,
      "cron_id": "ab12cd34",
+     "owner": "a1b2c3d4",
      "started_at": "2026-04-12T14:30:00.000Z",
      "baseline_ref": "main",
      "baseline_sha": "4f2a1c9e77b3",
@@ -531,6 +537,13 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    - `cron_id` — the ID `CronCreate` returned in step 3. A new session
      refreshes the polling cron, the old ID is just informational (the old
      session-only cron died with the prior session and cannot be reaped).
+   - `owner` — a random token minted when this file is written
+     (`node -e "process.stdout.write(require('crypto').randomBytes(4).toString('hex'))"`),
+     passed as `--owner {owner}` to the tick, the pulser and the waker.
+     A tick or watcher that finds the file naming another owner AND another
+     port leaves it alone — no `/shutdown`, no cleanup instruction — and
+     keeps servicing its own port (#417). Without an owner on both sides the
+     port rule alone decides, as before.
    - `started_at` — ISO-8601 UTC. When the concept was OPENED. Staleness is
      measured from the last activity (this stamp, the store's `state.json`
      `saved_at`, the newest draft, the journal tail — #426), never from the
@@ -565,11 +578,17 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    reconnects on its own once the heartbeat is back; the reviewer never has
    to reload or wait for someone to notice the red indicator.
 
-   Path: ALWAYS `<project-cwd>/.claude/concept-active.json` (NOT a worktree
-   subpath, NOT under `docs/`). The hook reads this exact path and silently
-   exits when missing. Create `.claude/` if needed; do not commit the file
-   (add `concept-active.json` to `.gitignore` if not already covered by
-   `.claude/`).
+   Path: ALWAYS `<session-cwd>/.claude/concept-active.json` — the cwd this
+   Claude session runs in, i.e. the worktree for a worktree session (NOT the
+   primary checkout's root, NOT under `docs/`). `ss.concept.resume` reads
+   exactly `process.cwd()/.claude/concept-active.json`, and two sessions in
+   sibling worktrees of one repo must not share a file: when they did, B's
+   write made A's tick read "my concept ended", POST `/shutdown` and tell
+   Claude to `rm` the file — B's page went "nicht verbunden" every 15 min
+   (#417). The server may still be rooted anywhere; `--html` and
+   `html_path` are relative to this cwd. Create `.claude/` if needed; do
+   not commit the file (add `concept-active.json` to `.gitignore` if not
+   already covered by `.claude/`).
 
 4b. **The durable store — nothing to launch, but know it exists (#284).**
    The server creates `.claude/concepts/<html-basename>/` on startup, derived
@@ -904,7 +923,9 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    if [ "$post" -le "$pre" ]; then
      echo "Bridge server on port $PORT did not advance claude_ts ($pre -> $post) — aborting."
      kill $SERVER_PID 2>/dev/null
-     rm -f .claude/concept-active.json
+     # Only YOUR state file (#417): a sibling session may have written its own
+     # since — compare the owner token before deleting.
+     node -e "const f='.claude/concept-active.json',fs=require('fs');try{const s=JSON.parse(fs.readFileSync(f,'utf8'));if(!s.owner||s.owner===process.argv[1])fs.unlinkSync(f)}catch{}" "$OWNER"
      # Tell the user; DO NOT proceed to step 6 (opening the browser would
      # land on a dead or stale bridge).
      exit 1
@@ -981,7 +1002,9 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    # its PID reused by an unrelated program. The server replies 200 then
    # calls os._exit(0); the listening socket is released within ~100 ms.
    curl -s -X POST http://localhost:$PORT/shutdown > /dev/null 2>&1 || true
-   rm -f .claude/concept-active.json
+   # Only YOUR state file (#417): a sibling session may have written its own
+   # since — compare the owner token before deleting.
+   node -e "const f='.claude/concept-active.json',fs=require('fs');try{const s=JSON.parse(fs.readFileSync(f,'utf8'));if(!s.owner||s.owner===process.argv[1])fs.unlinkSync(f)}catch{}" "$OWNER"
    ```
    Also delete the polling cron via `CronDelete <cron_id>`. The state file
    MUST be removed when the concept session is intentionally ended,

@@ -609,3 +609,25 @@ describe("run — liveness tells a hidden tab from a closed one (#397)", () => {
     expect(parseArgs([]).liveness).toBe(900);
   });
 });
+
+
+// #417 — a state file another session owns is not this watcher's to judge:
+// it must never turn into STATE_GONE / PORT_CHANGED and never a /shutdown.
+describe("checkState — a foreign owner's file is left alone (#417)", () => {
+  test("port mismatch + different owner → ok (keep running)", () => {
+    expect(checkState(stateFile({ port: 9001, owner: "bbbb2222" }), 8883, undefined, "aaaa1111")).toBe("ok");
+  });
+
+  test("port mismatch + same owner → port-changed (our own concept moved on)", () => {
+    expect(checkState(stateFile({ port: 9001, owner: "aaaa1111" }), 8883, undefined, "aaaa1111")).toBe("port-changed");
+  });
+
+  test("no owner on either side → port-changed as before", () => {
+    expect(checkState(stateFile({ port: 9001 }), 8883, undefined, "aaaa1111")).toBe("port-changed");
+    expect(checkState(stateFile({ port: 9001, owner: "bbbb2222" }), 8883)).toBe("port-changed");
+  });
+
+  test("parseArgs reads --owner", () => {
+    expect(parseArgs(["--mode", "pulse", "--port", "8883", "--state", "/s", "--owner", "aaaa1111"]).owner).toBe("aaaa1111");
+  });
+});
