@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.3.0
+ * @version 0.4.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect ship intent in user prompts and inject Skill('ship') instruction.
@@ -10,6 +10,9 @@
  *   card ("ja", "yes", "mach", "go", "do it"). The keyword list lives in
  *   lib/ship-intent.js, shared with prompt.flow.title-work so a ship prompt
  *   is marked `🚀 Shipping – ` in the sidebar, never the bare `⏳ `.
+ *   Above a context threshold the hook emits the careful-compact advice from
+ *   lib/ship-compact.js INSTEAD of the ship instruction: the ship would
+ *   re-read that context ~16 times, and only the user can compact.
  */
 
 require('../lib/plugin-guard');
@@ -17,6 +20,8 @@ require('../lib/plugin-guard');
 const { execFileSync } = require('child_process');
 const { readSessionFile } = require('../lib/session-id');
 const { isShipIntent } = require('../lib/ship-intent');
+const { currentContextTokens } = require('../lib/context-size');
+const { shipCompactAdvice } = require('../lib/ship-compact');
 
 /**
  * Returns true if cwd is inside a git work tree.
@@ -100,6 +105,19 @@ process.stdin.on('end', () => {
 
   // --- Guard: skip injection in non-git directories ---
   if (!isGitRepo(process.cwd())) {
+    process.exit(0);
+  }
+
+  // --- Careful compact before ship: measure the context, stop before the
+  // pipeline pays for it (lib/ship-compact.js has the numbers and the why).
+  // Only user prompts reach this hook, so a ship an orchestrator invokes via
+  // the Skill tool is never held up here. `--no-compact` skips it once.
+  const advice = shipCompactAdvice({
+    tokens: currentContextTokens(hook.transcript_path),
+    prompt: hook.prompt || hook.user_message || hook.message || '',
+  });
+  if (advice) {
+    process.stdout.write([...(cacheWarning ? [cacheWarning, ''] : []), advice].join('\n') + '\n');
     process.exit(0);
   }
 

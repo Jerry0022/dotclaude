@@ -208,7 +208,7 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ## Features
 
-- **<!--devops:count:hooks-->48<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:hooks-->49<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, auto-graph, claude-batch, claude-strict, web-guide
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
@@ -219,7 +219,7 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->48<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->49<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -244,6 +244,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.git.sync` — Starts ONE detached background git sync for this worktree.
 - `ss.graphify` — graphify enforcement — install-check + auto-build wiring for the auto-graph feature.
 - `ss.ship.verify` — Surface results from the post-merge watcher (post-ship CI + optional deploy verify).
+- `ss.ship.resume` — Keep a running /ship stable across a compaction or a resume.
 - `ss.concept.resume` — Recover an open concept session after a Claude restart.
 - `ss.team.changelog` — Show a summary of changes made by other contributors on remote main since the last ti…
 
@@ -313,8 +314,9 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 #### ship — enforce the shipping pipeline
 
 - `pre.ship.guard` — Block manual PR/merge via Bash *(PreToolUse)*
-- `prompt.ship.detect` — Detect ship intent, enforce /ship skill *(UserPromptSubmit)*
+- `prompt.ship.detect` — Detect ship intent, enforce /ship skill; above `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` (200 k tokens) hands the user a `/compact` command instead *(UserPromptSubmit)*
 - `ss.ship.verify` — Surface post-merge watcher results *(SessionStart)*
+- `ss.ship.resume` — Re-enter a ship that was mid-pipeline when the context compacted or the session paused: verify git/gh state first, never a second PR or tag *(SessionStart)*
 
 #### flow — track progress toward completion
 
@@ -522,7 +524,7 @@ markdown card, minus the buttons.
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->48<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── hooks/                         ← <!--devops:count:hooks-->49<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 ├── skills/                        ← <!--devops:count:skills-->23<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs

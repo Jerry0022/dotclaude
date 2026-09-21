@@ -17,6 +17,7 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.git.sync.js", "timeout": 20 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.graphify.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.ship.verify.js", "timeout": 10 },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.ship.resume.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.concept.resume.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.team.changelog.js", "timeout": 20 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.flow.selfcalibration.js", "timeout": 10, "_deprecated": "moved to UserPromptSubmit — kept as fallback for older runtimes" }
