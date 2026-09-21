@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.183.7] — 2026-09-21
+
+### Fixed
+
+- **`/concept`: the ☰ panel can no longer be restyled by a round's mock CSS.** A design round's `<style>` defined `.overlay { position: absolute; left: 0; pointer-events: none }` for its fog SVGs; the decision panel carried the same bare class (`concept-decision-panel overlay`) and was restyled — docked LEFT, 360 px wide, content pushed right, ☰ FAB toggling `body.panel-open` on a panel that was already on screen (#400). No engine rule ever referenced `.overlay`, so the three panel skeletons drop it. New gate **P32** (`findChromeCollisions` in `concept-gate.js`, relayed by `post.concept.gate` 0.3.0): every rule of every `<style>` inside a `section[data-iteration]` — `@media` recursed, comments stripped, `:is()` / `:where()` lists kept whole — is blocked when a selector names an engine chrome class (explicit `ENGINE_CLASSES` list, pinned to `templates.md` by a test) or is a bare single-class selector without a per-design prefix (`.d1-…`, `mock-`); a scoped selector (`[data-design="d1"] .fog`, `#i2 .card`) passes, and the engine's own head stylesheet sits outside every iteration. `templates.md` § Design layout rules → *Mock CSS is namespaced*, `validation-gate.md` P32 and `SKILL.md` § Engine source state the rule. 7 gate tests; 156 tests across gate / post-tool-use / concept template suites green. Shipped by `/run-backlog` (queue 8/9). Not covered by Codex review — external usage limit until 2026-10-11.
+
 ## [0.183.6] — 2026-09-21
 
 ### Fixed

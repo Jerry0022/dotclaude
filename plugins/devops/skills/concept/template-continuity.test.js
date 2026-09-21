@@ -155,7 +155,7 @@ describe("the ☰ panel is page chrome", () => {
     for (const s of skeletons) {
       expect(s.code, `#panel-toggle @${s.line}`).toContain('id="panel-toggle"');
       expect(s.code, `#panel-backdrop @${s.line}`).toContain('id="panel-backdrop"');
-      expect(s.code, `overlay class @${s.line}`).toContain("concept-decision-panel overlay");
+      expect(s.code, `panel class @${s.line}`).toContain('class="concept-decision-panel" id="decision-panel"');   // #400: no bare `overlay` any more
     }
     expect(htmlSource).toContain('id="panel-close"');
   });

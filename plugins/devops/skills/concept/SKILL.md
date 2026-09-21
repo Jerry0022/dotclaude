@@ -366,6 +366,11 @@ Build a single self-contained HTML file. Requirements:
 
 ### Engine source (mandatory — templates.md, never an older page)
 
+Mock CSS in a round's `<style>` is namespaced per design (`.d1-…`) and never
+names an engine chrome class — the panel, FABs, dock, tabs and frames belong
+to the engine's head stylesheet (templates.md § Design layout rules → Mock
+CSS is namespaced; gate P32, #400).
+
 The page's **engine** — the Kompass panel skeleton, § Layout CSS, § Section
 Navigation JS, § Claude Connection Heartbeat, § Two-Button Submit, § State
 Persistence, § Attachments, the viewport switcher — is copied **verbatim from
