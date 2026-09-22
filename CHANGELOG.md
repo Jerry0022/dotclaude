@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.186.0] — 2026-09-22
+
+### Added
+- **Careful compact before a ship** — a `/ship` runs ~16 API calls that each re-read the whole context, at the end of a session when that context is largest: measured over 10 sessions across 4 projects (26 ships), Ø 434 k tokens per call and ~24 % of the session's tokens (99 % of it cache reads) for ~10 k tokens of output. Nothing in Claude Code lets a hook, skill or MCP tool trigger a compaction — only the user can — so `prompt.ship.detect` 0.4.0 measures the context on every ship prompt and, above `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` (default 200 k tokens, `0` disables), emits a `[ship-compact]` block **instead of** the `Skill("ship")` instruction: do not start the pipeline, show the user the ready-made `/compact` command, end the turn. The focus text keeps what the user asked to keep — their prompts and intentions in wording, the problems hit and how they were solved — plus branch, changed files, test command and open points. `--no-compact` on the prompt skips the stop for one ship; a ship an orchestrator invokes through the Skill tool never sees it (the hook reads user prompts only), and an unknown context size never stops a ship. New `hooks/lib/context-size.js` reads the size from the transcript tail (newest assistant `usage`: input + cache read + cache create), no API call. `/ship` Pre-Step 0 obeys the block.
+- **`ss.ship.resume` — a ship survives a compaction, a pause and a restart** — when the ship sentinel (`.claude/.ship-in-progress`) is active at SessionStart, the hook hands Claude the one instruction that keeps a half-finished pipeline safe: re-establish the real state from `git status` / `git log` / `gh pr list` first, then re-enter `/ship`, whose steps are idempotent (an open PR is reused, a merged PR ends the release) — never a second PR, never a second tag. A ship that had already landed is only cleaned up (`ship_cleanup keep:true`). Silent without a sentinel, and on a stale one (60 min — a crashed ship, not a paused one).
+
 ## [0.185.0] — 2026-09-22
 
 ### Added
