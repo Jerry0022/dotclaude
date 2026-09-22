@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.187.0] — 2026-09-22
+
+### Added
+- **The installed Quiet output style now follows plugin updates** — consumers copy `templates/output-style-quiet.md` to `~/.claude/output-styles/quiet.md` once, and nothing touched that copy again: an install from 2026-09-14 still lacked two paragraphs a week later, incl. the reply-language rule of 0.186.4. `ss.plugin.update` (every non-cooldown pass, `/auto-update` included) now refreshes it through the new `hooks/lib/output-style-sync.js` — only when the file already exists, its frontmatter says `name: Quiet`, and its content (CRLF normalized) equals a version this plugin shipped, listed as sha256 in the new `templates/output-style-quiet.shipped.json`. It is never created unprompted; a customized copy is left alone with one stderr note; a refresh adds one line to the update report ("active from the next session"). `output-style-sync.test.js` covers every branch with a temp HOME, runs the real hook end to end, and fails when the template changes without its hash in the manifest (rule added to `CONVENTIONS.md`). `/auto-update` reports the style state.
+
 ## [0.186.5] — 2026-09-22
 
 ### Fixed
