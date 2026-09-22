@@ -35,12 +35,24 @@ function nudgeFromSource() {
 function runHook(userMessage, home, cwd, field = "prompt") {
   const env = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT };
   if (home) { env.HOME = home; env.USERPROFILE = home; }
+  // Always hand the hook a project dir of its own: it falls back to
+  // process.cwd() for the delegation mode and the AFK lockout sentinel, and a
+  // vitest run from the repo root would otherwise leak the repo's own state in
+  // (an armed AUTONOMOUS-LOCKOUT.flag during /run-backlog silenced the budget
+  // line and failed the reset tests, 2026-09-22).
+  cwd ??= emptyProject();
   const r = spawnSync(process.execPath, [HOOK], {
     input: JSON.stringify({ session_id: `vitest-dispatch-${process.pid}-${Date.now()}`, [field]: userMessage, cwd }),
+    cwd,
     env,
     encoding: "utf8",
   });
   return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.additionalContext : "";
+}
+
+/** A fresh project dir with no delegation.json and no lockout sentinel. */
+function emptyProject() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "dispatch-cwd-"));
 }
 
 /** A fake HOME whose settings enable the plugin (plugin-guard) and whose usage snapshot says Pro. */
@@ -186,5 +198,15 @@ describe("prompt.knowledge.dispatch — the positive budget signal after a reset
       session: { pct: 100, resetInMinutes: 10 }, weekly: { pct: 100, resetInMinutes: 300 }, plan: "Max 20x",
     });
     expect(runHook("AUTONOMOUS_RESUME: continue the queued implementation of the tenant switcher", h)).not.toContain("[budget]");
+  });
+
+  test("an armed lockout sentinel in the project makes the same short retry unattended — no line", () => {
+    const h = homeWith({
+      timestamp: new Date(Date.now() - 30 * 3_600_000).toISOString(),
+      session: { pct: 100, resetInMinutes: 10 }, weekly: { pct: 100, resetInMinutes: 300 }, plan: "Max 20x",
+    });
+    const cwd = emptyProject();
+    fs.writeFileSync(path.join(cwd, "AUTONOMOUS-LOCKOUT.flag"), JSON.stringify({ owner: "vitest", since: new Date().toISOString() }));
+    expect(runHook("Erneut versuchen", h, cwd)).not.toContain("[budget]");
   });
 });

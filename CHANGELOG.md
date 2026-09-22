@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.186.1] — 2026-09-22
+
+### Fixed
+- **Dispatch hook tests no longer read the repo they run in** — `prompt.knowledge.dispatch.js` falls back to `process.cwd()` for the delegation mode and the AFK lockout sentinel, and the test helper sent no `cwd`: under vitest that fallback was the repo root, so an `AUTONOMOUS-LOCKOUT.flag` armed there by a `/run-backlog` run made every prompt look unattended and silenced the budget line — the two "positive budget signal after a reset" tests failed during the run and passed again in a pristine worktree. `runHook` now hands each run a fresh empty temp project dir (payload `cwd` **and** spawn `cwd`), and a new test pins the suppression itself: an armed sentinel in the project → no `[budget]` line. Hook behaviour unchanged; the other hook tests that spawn a hook already pass an explicit temp cwd, and only this hook reads the sentinel.
+
 ## [0.186.0] — 2026-09-22
 
 ### Added
