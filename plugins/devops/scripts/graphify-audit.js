@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script graphify-audit
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Measures whether the graphify enforcement chain (nudge → gate →
  *   `graphify query`) actually pays for itself, from two sources that need no
@@ -26,15 +26,15 @@
  *   from the telemetry stream (sid 'nosid' excluded — that is a hook run with
  *   no session context, not a real session): queries/queryChars,
  *   searches/searchChars, gate fired/bypassed/noanswer/relented, and token
- *   guard blocks/releases. It ends with an ESTIMATED savings line, method
- *   stated inline: for each `gate_fired` event that was NOT subsequently
- *   bypassed (approximated per project as
- *   `max(0, gate_fired_count - gate_bypassed_count)`), the saved cost is the
- *   MEDIAN `responseChars` of ELIGIBLE searches that actually ran in the same
- *   project (fallback: the global median across all projects) minus that
- *   gate's own `answerChars`; tokens ≈ chars/4. This is an estimate, not a
- *   measurement — the counter-to-bypass link is inferred from counts, not a
- *   direct pairing.
+ *   guard blocks/releases. It ends with a NET estimate line (Requirement 9):
+ *   `gate_fired`/`gate_bypassed` events carry a short `keyHash` that DIRECTLY
+ *   links a bypass back to the block it bypassed; a bypassed gate counts as a
+ *   NET LOSS (the block's `answerChars` were paid AND the raw search still
+ *   ran), an accepted gate as a gain (or loss — NOT clamped to 0) against the
+ *   median `responseChars` of ELIGIBLE searches sharing the same
+ *   `outputMode`, in the same project (falling back to that mode globally,
+ *   then to the overall global median). See `estimateSavings`'s doc comment
+ *   for the full method.
  */
 
 'use strict';
@@ -44,7 +44,10 @@ const path = require('node:path');
 const os = require('node:os');
 
 const PROJECTS_ROOT = path.join(os.homedir(), '.claude', 'projects');
-const METRICS_FILE = path.join(os.homedir(), '.claude', 'graphify-metrics.jsonl');
+// Same override graphify-metrics.js's own metricsPath() honours (Requirement
+// 8) — lets a live-QA run or a test point this script at an isolated file
+// instead of the real `~/.claude/graphify-metrics.jsonl`.
+const METRICS_FILE = process.env.DOTCLAUDE_GRAPHIFY_METRICS || path.join(os.homedir(), '.claude', 'graphify-metrics.jsonl');
 const MIN_TRANSCRIPT_BYTES = 100 * 1024; // below this a "session" is a hook-only stub
 const QUERY_RE = /graphify\s+query/;
 const GATE_MARK = 'GRAPHIFY GATE';
@@ -111,7 +114,11 @@ function analyzeTranscript(lines) {
         if (!tu) continue;
         const text = resultText(c);
         const t = tok(text);
-        if (text.includes(GATE_MARK)) {
+        // Requirement 9: only a genuine hook-BLOCK error result counts as a
+        // gate — `is_error: true` on the tool_result, not merely text that
+        // happens to CONTAIN "GRAPHIFY GATE" (a grep of this very file's own
+        // source, or a Read of this script, would otherwise false-positive).
+        if (c.is_error && text.includes(GATE_MARK)) {
           r.gate++; r.gateTok += t;
           gated.add(`${tu.name}:${tu.input.pattern || ''}`);
           r.trace.push({ step: 'GATE', tool: tu.name, brief: String(tu.input.pattern || ''), tok: t });
@@ -235,51 +242,105 @@ function aggregateMetricsBySession(events) {
 }
 
 /**
- * ESTIMATED tokens saved by the graphify gate (Requirement C). Method: for
- * each `gate_fired` event that was NOT subsequently bypassed — approximated
- * PER PROJECT as `max(0, gate_fired_count - gate_bypassed_count)`, since the
- * telemetry stream does not link a specific bypass back to the block it
- * bypassed — the saved cost is the MEDIAN `responseChars` of ELIGIBLE
- * searches that actually ran in the SAME project (fallback: the global
- * median across all projects, when this project ran no eligible search of
- * its own) minus the AVERAGE `answerChars` of that project's fired gates;
- * tokens ≈ chars/4. `sid: 'nosid'` events are excluded throughout.
- * @returns {{savedChars:number, savedTokens:number, gatesCounted:number, globalMedian:number}}
+ * NET tokens the graphify gate cost/saved (Requirement 9). NOT clamped to 0 —
+ * a bypassed gate is a real LOSS (the block's own `answerChars` were paid AND
+ * the original search still ran afterward), and an accepted answer bigger
+ * than its baseline is a real loss too; hiding either behind a floor of 0
+ * would overstate how well the gate is doing.
+ *
+ * Linking a `gate_bypassed` back to the `gate_fired` it bypassed uses the
+ * short `keyHash` both events carry (added alongside this rewrite) — a
+ * direct pairing, not an inferred count. Events recorded by an older hook
+ * version (no `keyHash`) fall back to the previous per-project count
+ * approximation (`max(0, fired - bypassed)`, oldest-first-treated-as-bypassed)
+ * so an audit spanning an upgrade window does not silently drop older data.
+ *
+ * The baseline for an ACCEPTED gate — what the search would have cost as a
+ * raw Grep — and the "search that ran anyway" cost for a BYPASSED gate are
+ * both the MEDIAN `responseChars` of ELIGIBLE searches with the SAME
+ * `outputMode`, in the SAME project (fallback: that `outputMode` across all
+ * projects; fallback of the fallback: the global median across every
+ * eligible search regardless of mode). Splitting by `outputMode` matters
+ * because a `content`-mode gate's true alternative is a `content`-mode
+ * search, not a much cheaper `files_with_matches`/`count` one.
+ *
+ * `sid: 'nosid'` events are excluded throughout. tokens ≈ chars/4.
+ * @returns {{netChars:number, netTokens:number, acceptedCount:number, bypassedCount:number, globalMedian:number}}
  */
 function estimateSavings(events) {
-  const eligibleByProject = new Map();
+  const eligibleByProjMode = new Map(); // `${proj}\u0000${mode}` -> chars[]
+  const eligibleByMode = new Map();     // mode -> chars[]
   const eligibleAll = [];
-  const firedByProject = new Map();
-  const bypassedByProject = new Map();
+  const firedByHash = new Map();        // keyHash -> {project, outputMode, answerChars}
+  const bypassedHashes = new Set();
+  const firedNoHash = [];               // legacy (pre-keyHash) fired events
+  const bypassedNoHashByProject = new Map();
+
   for (const e of events) {
     if (!e || e.sid === 'nosid') continue;
     const proj = e.project || 'unknown';
     if (e.event === 'search_ran' && e.eligible) {
-      if (!eligibleByProject.has(proj)) eligibleByProject.set(proj, []);
-      eligibleByProject.get(proj).push(e.responseChars || 0);
+      const mode = e.outputMode || '';
+      const pmKey = proj + '\u0000' + mode;
+      if (!eligibleByProjMode.has(pmKey)) eligibleByProjMode.set(pmKey, []);
+      eligibleByProjMode.get(pmKey).push(e.responseChars || 0);
+      if (!eligibleByMode.has(mode)) eligibleByMode.set(mode, []);
+      eligibleByMode.get(mode).push(e.responseChars || 0);
       eligibleAll.push(e.responseChars || 0);
     } else if (e.event === 'gate_fired') {
-      if (!firedByProject.has(proj)) firedByProject.set(proj, []);
-      firedByProject.get(proj).push(e.answerChars || 0);
+      const entry = { project: proj, outputMode: e.outputMode || '', answerChars: e.answerChars || 0 };
+      if (e.keyHash) firedByHash.set(e.keyHash, entry);
+      else firedNoHash.push(entry);
     } else if (e.event === 'gate_bypassed') {
-      bypassedByProject.set(proj, (bypassedByProject.get(proj) || 0) + 1);
+      if (e.keyHash) bypassedHashes.add(e.keyHash);
+      else bypassedNoHashByProject.set(proj, (bypassedNoHashByProject.get(proj) || 0) + 1);
     }
   }
+
   const globalMedian = median(eligibleAll);
-  let savedChars = 0;
-  let gatesCounted = 0;
-  for (const [proj, fired] of firedByProject) {
-    const bypassed = bypassedByProject.get(proj) || 0;
-    const notBypassed = Math.max(0, fired.length - bypassed);
-    if (!notBypassed) continue;
-    const baseline = eligibleByProject.has(proj) && eligibleByProject.get(proj).length
-      ? median(eligibleByProject.get(proj))
-      : globalMedian;
-    const avgAnswerChars = fired.reduce((a, b) => a + b, 0) / fired.length;
-    savedChars += notBypassed * Math.max(0, baseline - avgAnswerChars);
-    gatesCounted += notBypassed;
+  const baselineFor = (proj, mode) => {
+    const pm = eligibleByProjMode.get(proj + '\u0000' + mode);
+    if (pm && pm.length) return median(pm);
+    const m = eligibleByMode.get(mode);
+    if (m && m.length) return median(m);
+    return globalMedian;
+  };
+
+  let netChars = 0;
+  let acceptedCount = 0;
+  let bypassedCount = 0;
+
+  for (const [hash, fired] of firedByHash) {
+    const baseline = baselineFor(fired.project, fired.outputMode);
+    if (bypassedHashes.has(hash)) {
+      netChars -= (fired.answerChars + baseline); // NET LOSS — paid the answer AND ran the search anyway
+      bypassedCount++;
+    } else {
+      netChars += (baseline - fired.answerChars); // NOT clamped to 0
+      acceptedCount++;
+    }
   }
-  return { savedChars, savedTokens: Math.round(savedChars / 4), gatesCounted, globalMedian };
+
+  const legacyByProject = new Map();
+  for (const f of firedNoHash) {
+    if (!legacyByProject.has(f.project)) legacyByProject.set(f.project, []);
+    legacyByProject.get(f.project).push(f);
+  }
+  for (const [proj, fired] of legacyByProject) {
+    const bypassed = bypassedNoHashByProject.get(proj) || 0;
+    fired.forEach((f, idx) => {
+      const baseline = baselineFor(f.project, f.outputMode);
+      if (idx < bypassed) {
+        netChars -= (f.answerChars + baseline);
+        bypassedCount++;
+      } else {
+        netChars += (baseline - f.answerChars);
+        acceptedCount++;
+      }
+    });
+  }
+
+  return { netChars, netTokens: Math.round(netChars / 4), acceptedCount, bypassedCount, globalMedian };
 }
 
 function shortProject(d) {
@@ -371,10 +432,13 @@ function main(argv) {
       );
     }
     const est = estimateSavings(events);
+    const sign = est.netTokens >= 0 ? '+' : '';
     console.log(
-      `\nESTIMATED savings: ${fmt(est.savedTokens)} tok over ${est.gatesCounted} answered-and-not-bypassed gate(s)`
-      + ` — method: per such gate, median eligible-search chars in its project`
-      + ` (fallback global median ${fmt(Math.round(est.globalMedian))} chars) minus the gate's own answerChars, tokens ≈ chars/4.`
+      `\nNET estimate: ${sign}${fmt(est.netTokens)} tok`
+      + ` over ${est.acceptedCount} accepted + ${est.bypassedCount} bypassed gate(s) (not clamped to 0)`
+      + ` — method: accepted = outputMode-matched median eligible-search chars minus answerChars;`
+      + ` bypassed = -(answerChars + that same median) since the block's answer AND the raw search both ran;`
+      + ` global median fallback ${fmt(Math.round(est.globalMedian))} chars; tokens ≈ chars/4.`
     );
   } else {
     console.log('\nPER-SESSION TELEMETRY: no sessions with an sid in the telemetry stream yet.');

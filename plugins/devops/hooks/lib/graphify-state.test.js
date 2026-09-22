@@ -41,6 +41,7 @@ import {
   refreshUpdateLockFile,
   clearUpdateLockFile,
   lockBaseDir,
+  GATE_STATE_TTL_MS,
   bypassCount,
   bypassCountPath,
   noteBypass,
@@ -48,6 +49,12 @@ import {
   relentFlagPath,
   markRelented,
   isRelented,
+  lastBlockedPath,
+  getLastBlocked,
+  setLastBlocked,
+  markLastBlockedBypassed,
+  gateQuerySlotPath,
+  acquireGateQuerySlot,
 } from "./graphify-state.js";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -296,6 +303,136 @@ describe("adaptive gate relent — bypass streak + relent flag (Requirement B3)"
     expect(bypassCountPath("s1", dir)).not.toBe(bypassCountPath("s2", dir));
     expect(relentFlagPath("s1", dir)).not.toBe(relentFlagPath("s1", tmp()));
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  describe("TTL (~12h, Requirement 5) — stale state reads as absent, never as approval", () => {
+    test("bypassCount reads 0 once the streak is older than GATE_STATE_TTL_MS", () => {
+      const dir = tmp();
+      noteBypass("s1", dir);
+      const stale = JSON.parse(fs.readFileSync(bypassCountPath("s1", dir), "utf8"));
+      fs.writeFileSync(bypassCountPath("s1", dir), JSON.stringify({ ...stale, ts: Date.now() - GATE_STATE_TTL_MS - 1000 }));
+      expect(bypassCount("s1", dir)).toBe(0);
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+    });
+
+    test("isRelented reads false once the relent flag is older than GATE_STATE_TTL_MS", () => {
+      const dir = tmp();
+      markRelented("s1", dir);
+      fs.writeFileSync(relentFlagPath("s1", dir), String(Date.now() - GATE_STATE_TTL_MS - 1000));
+      expect(isRelented("s1", dir)).toBe(false);
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+    });
+
+    test("getLastBlocked reads null once the record is older than GATE_STATE_TTL_MS", () => {
+      const dir = tmp();
+      setLastBlocked("s1", dir, "Grep:x:{}");
+      const cur = getLastBlocked("s1", dir);
+      expect(cur.key).toBe("Grep:x:{}");
+      fs.writeFileSync(lastBlockedPath("s1", dir), JSON.stringify({ ...cur, ts: Date.now() - GATE_STATE_TTL_MS - 1000 }));
+      expect(getLastBlocked("s1", dir)).toBe(null);
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+    });
+  });
+});
+
+describe("last-blocked record — setLastBlocked / getLastBlocked / markLastBlockedBypassed", () => {
+  test("null when nothing has been blocked yet", () => {
+    const dir = tmp();
+    expect(getLastBlocked("s1", dir)).toBe(null);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("setLastBlocked records a fresh, un-bypassed entry", () => {
+    const dir = tmp();
+    setLastBlocked("s1", dir, "Grep:x:{}");
+    expect(getLastBlocked("s1", dir)).toMatchObject({ key: "Grep:x:{}", bypassed: false });
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("markLastBlockedBypassed flips bypassed without changing the key", () => {
+    const dir = tmp();
+    setLastBlocked("s1", dir, "Grep:x:{}");
+    markLastBlockedBypassed("s1", dir);
+    expect(getLastBlocked("s1", dir)).toMatchObject({ key: "Grep:x:{}", bypassed: true });
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("markLastBlockedBypassed is a no-op when there is nothing to mark", () => {
+    const dir = tmp();
+    expect(() => markLastBlockedBypassed("s1", dir)).not.toThrow();
+    expect(getLastBlocked("s1", dir)).toBe(null);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("a NEW setLastBlocked replaces the previous entry entirely", () => {
+    const dir = tmp();
+    setLastBlocked("s1", dir, "Grep:x:{}");
+    markLastBlockedBypassed("s1", dir);
+    setLastBlocked("s1", dir, "Grep:y:{}");
+    expect(getLastBlocked("s1", dir)).toMatchObject({ key: "Grep:y:{}", bypassed: false });
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("isolated per (session, project)", () => {
+    const dir = tmp();
+    setLastBlocked("s1", dir, "Grep:x:{}");
+    expect(getLastBlocked("s2", dir)).toBe(null);
+    expect(getLastBlocked("s1", tmp())).toBe(null);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+});
+
+describe("acquireGateQuerySlot — machine-wide gate-query concurrency cap (Requirement 2)", () => {
+  let origLockDir, isoLockDir, origMax, origStale;
+  beforeEach(() => {
+    origLockDir = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    isoLockDir = fs.mkdtempSync(path.join(os.tmpdir(), "gatequeue-lockiso-"));
+    process.env.DOTCLAUDE_GRAPHLOCK_DIR = isoLockDir;
+    origMax = process.env.DOTCLAUDE_GATE_QUERY_MAX;
+    origStale = process.env.DOTCLAUDE_GATE_QUERY_STALE_MS;
+  });
+  afterEach(() => {
+    try { fs.rmSync(isoLockDir, { recursive: true, force: true }); } catch {}
+    if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR; else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
+    if (origMax === undefined) delete process.env.DOTCLAUDE_GATE_QUERY_MAX; else process.env.DOTCLAUDE_GATE_QUERY_MAX = origMax;
+    if (origStale === undefined) delete process.env.DOTCLAUDE_GATE_QUERY_STALE_MS; else process.env.DOTCLAUDE_GATE_QUERY_STALE_MS = origStale;
+  });
+
+  test("acquires up to the cap (default 2), then the next call is refused", () => {
+    const r1 = acquireGateQuerySlot();
+    const r2 = acquireGateQuerySlot();
+    const r3 = acquireGateQuerySlot();
+    expect(typeof r1).toBe("function");
+    expect(typeof r2).toBe("function");
+    expect(r3).toBe(null);
+    r1(); r2();
+  });
+
+  test("releasing a slot frees it up for the next acquirer", () => {
+    const r1 = acquireGateQuerySlot();
+    const r2 = acquireGateQuerySlot();
+    expect(acquireGateQuerySlot()).toBe(null);
+    r1();
+    const r3 = acquireGateQuerySlot();
+    expect(typeof r3).toBe("function");
+    r2(); r3();
+  });
+
+  test("a stale slot (older than the stale window) is reclaimed, not treated as busy", () => {
+    process.env.DOTCLAUDE_GATE_QUERY_STALE_MS = "50";
+    fs.writeFileSync(gateQuerySlotPath(0), JSON.stringify({ pid: 999999, ts: Date.now() - 1000 }));
+    fs.writeFileSync(gateQuerySlotPath(1), JSON.stringify({ pid: 999999, ts: Date.now() - 1000 }));
+    const r = acquireGateQuerySlot();
+    expect(typeof r).toBe("function");
+    r();
+  });
+
+  test("DOTCLAUDE_GATE_QUERY_MAX overrides the default cap", () => {
+    process.env.DOTCLAUDE_GATE_QUERY_MAX = "1";
+    const r1 = acquireGateQuerySlot();
+    expect(typeof r1).toBe("function");
+    expect(acquireGateQuerySlot()).toBe(null);
+    r1();
   });
 });
 

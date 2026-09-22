@@ -3,7 +3,7 @@ import { analyzeTranscript, resultText, aggregateMetricsBySession, estimateSavin
 
 const line = (o) => JSON.stringify(o);
 const use = (id, name, input) => line({ type: "assistant", cwd: "C:/p", message: { usage: { input_tokens: 10, cache_creation_input_tokens: 5, cache_read_input_tokens: 1000, output_tokens: 20 }, content: [{ type: "tool_use", id, name, input }] } });
-const res = (id, content) => line({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content }] } });
+const res = (id, content, isError = false) => line({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content, is_error: isError }] } });
 
 const GATE_MSG = "PreToolUse:Grep hook error: ⛔  GRAPHIFY GATE — broad search blocked (graph available)\n" + "─".repeat(54);
 
@@ -11,11 +11,11 @@ describe("graphify-audit — analyzeTranscript", () => {
   test("counts a gate block, the PowerShell query that followed, and the retry bypass", () => {
     const lines = [
       use("t1", "Grep", { pattern: "site_routine|least" }),
-      res("t1", GATE_MSG),
+      res("t1", GATE_MSG, true),
       use("t2", "PowerShell", { command: 'graphify query "where is site_routine granted?"' }),
       res("t2", "x".repeat(800)),
       use("t3", "Glob", { pattern: "**/.env.example" }),
-      res("t3", GATE_MSG),
+      res("t3", GATE_MSG, true),
       use("t4", "Glob", { pattern: "**/.env.example" }),
       res("t4", ".env.example"),
       use("t5", "Read", { file_path: "C:/p/.env.example" }),
@@ -45,6 +45,17 @@ describe("graphify-audit — analyzeTranscript", () => {
     const steps = r.trace.map((t) => t.step);
     expect(steps[0]).toBe("GATE");
     expect(r.trace.filter((t) => t.step === "GATE")).toHaveLength(2);
+  });
+
+  // Requirement 9: only a genuine hook-block error result counts — text that
+  // merely CONTAINS "GRAPHIFY GATE" (e.g. a grep of this very file's own
+  // source, or a Read of pre.tokens.guard.js) must never false-positive.
+  test("text containing GRAPHIFY GATE that is NOT an error tool_result is not counted as a gate", () => {
+    const r = analyzeTranscript([
+      use("t1", "Grep", { pattern: "GRAPHIFY GATE" }),
+      res("t1", `plugins/devops/hooks/pre-tool-use/pre.tokens.guard.js:308:      console.error('\\n⛔  ${GATE_MSG}');`, false),
+    ]);
+    expect(r.gate).toBe(0);
   });
 
   test("a shell command that only mentions graphify (update, --help) is not a query", () => {
@@ -110,66 +121,90 @@ describe("aggregateMetricsBySession — per-session telemetry rollup", () => {
   });
 });
 
-describe("estimateSavings — ESTIMATED gate savings (Requirement C)", () => {
+describe("estimateSavings — NET gate estimate (Requirement 9)", () => {
   const ev = (event, sid, project, extra = {}) => ({ event, sid, project, ...extra });
 
-  test("per-project median baseline minus answerChars, only for not-bypassed gates", () => {
+  test("keyHash directly links a bypass to its block — accepted gates are the outputMode-matched median minus answerChars", () => {
     const events = [
-      // Project P: 3 eligible searches (median 1000), 2 gates fired, 1 bypassed → 1 counted.
-      ev("search_ran", "s1", "P", { eligible: true, responseChars: 900 }),
-      ev("search_ran", "s1", "P", { eligible: true, responseChars: 1000 }),
-      ev("search_ran", "s1", "P", { eligible: true, responseChars: 1100 }),
-      ev("gate_fired", "s1", "P", { answerChars: 200 }),
-      ev("gate_fired", "s1", "P", { answerChars: 200 }),
-      ev("gate_bypassed", "s1", "P"),
+      // Project P, mode 'content': 3 eligible searches (median 1000).
+      ev("search_ran", "s1", "P", { eligible: true, responseChars: 900, outputMode: "content" }),
+      ev("search_ran", "s1", "P", { eligible: true, responseChars: 1000, outputMode: "content" }),
+      ev("search_ran", "s1", "P", { eligible: true, responseChars: 1100, outputMode: "content" }),
+      // One gate fired and accepted (never bypassed).
+      ev("gate_fired", "s1", "P", { answerChars: 200, outputMode: "content", keyHash: "aaa" }),
     ];
     const est = estimateSavings(events);
-    // notBypassed = max(0, 2-1) = 1; baseline = median([900,1000,1100]) = 1000;
-    // avgAnswerChars = 200; saved = 1 * (1000-200) = 800 chars → 200 tok.
-    expect(est.gatesCounted).toBe(1);
-    expect(est.savedChars).toBe(800);
-    expect(est.savedTokens).toBe(200);
+    expect(est.acceptedCount).toBe(1);
+    expect(est.bypassedCount).toBe(0);
+    // baseline = median([900,1000,1100]) = 1000; net = 1000 - 200 = 800 chars → 200 tok.
+    expect(est.netChars).toBe(800);
+    expect(est.netTokens).toBe(200);
   });
 
-  test("falls back to the global median when the project ran no eligible search of its own", () => {
+  test("a bypassed gate (matching keyHash) is a NET LOSS: -(answerChars + baseline)", () => {
     const events = [
-      ev("search_ran", "s1", "OTHER", { eligible: true, responseChars: 2000 }),
-      ev("gate_fired", "s2", "LONELY", { answerChars: 300 }),
+      ev("search_ran", "s1", "P", { eligible: true, responseChars: 1000, outputMode: "content" }),
+      ev("gate_fired", "s1", "P", { answerChars: 200, outputMode: "content", keyHash: "bbb" }),
+      ev("gate_bypassed", "s1", "P", { outputMode: "content", keyHash: "bbb" }),
+    ];
+    const est = estimateSavings(events);
+    expect(est.bypassedCount).toBe(1);
+    expect(est.acceptedCount).toBe(0);
+    expect(est.netChars).toBe(-(200 + 1000));
+  });
+
+  test("an accepted gate whose answer is BIGGER than the baseline is a real (unclamped) loss", () => {
+    const events = [
+      ev("search_ran", "s1", "P", { eligible: true, responseChars: 100, outputMode: "content" }),
+      ev("gate_fired", "s1", "P", { answerChars: 900, outputMode: "content", keyHash: "ccc" }),
+    ];
+    const est = estimateSavings(events);
+    expect(est.acceptedCount).toBe(1);
+    expect(est.netChars).toBe(100 - 900); // negative, NOT clamped to 0
+  });
+
+  test("baseline is split by outputMode: a content gate never uses a files_with_matches baseline", () => {
+    const events = [
+      ev("search_ran", "s1", "P", { eligible: true, responseChars: 100, outputMode: "files_with_matches" }),
+      ev("search_ran", "s1", "P", { eligible: true, responseChars: 5000, outputMode: "content" }),
+      ev("gate_fired", "s1", "P", { answerChars: 400, outputMode: "content", keyHash: "ddd" }),
+    ];
+    const est = estimateSavings(events);
+    expect(est.netChars).toBe(5000 - 400); // used the content baseline, not files_with_matches
+  });
+
+  test("falls back to the mode-global median, then the overall global median, when the project has no matching-mode eligible search", () => {
+    const events = [
+      ev("search_ran", "s1", "OTHER", { eligible: true, responseChars: 2000, outputMode: "content" }),
+      ev("gate_fired", "s2", "LONELY", { answerChars: 300, outputMode: "content", keyHash: "eee" }),
     ];
     const est = estimateSavings(events);
     expect(est.globalMedian).toBe(2000);
-    expect(est.gatesCounted).toBe(1);
-    expect(est.savedChars).toBe(2000 - 300);
-  });
-
-  test("gates fully offset by bypasses in the same project count nothing", () => {
-    const events = [
-      ev("search_ran", "s1", "P", { eligible: true, responseChars: 500 }),
-      ev("gate_fired", "s1", "P", { answerChars: 50 }),
-      ev("gate_bypassed", "s1", "P"),
-    ];
-    const est = estimateSavings(events);
-    expect(est.gatesCounted).toBe(0);
-    expect(est.savedChars).toBe(0);
+    expect(est.netChars).toBe(2000 - 300);
   });
 
   test("sid 'nosid' is excluded from every input to the estimate", () => {
     const events = [
       ev("search_ran", "nosid", "P", { eligible: true, responseChars: 5000 }),
-      ev("gate_fired", "nosid", "P", { answerChars: 1 }),
+      ev("gate_fired", "nosid", "P", { answerChars: 1, keyHash: "fff" }),
     ];
     const est = estimateSavings(events);
-    expect(est.gatesCounted).toBe(0);
+    expect(est.acceptedCount).toBe(0);
+    expect(est.bypassedCount).toBe(0);
     expect(est.globalMedian).toBe(0);
   });
 
-  test("a baseline below the answer cost never produces a negative saving", () => {
+  test("legacy events without a keyHash fall back to the per-project count approximation", () => {
     const events = [
-      ev("search_ran", "s1", "P", { eligible: true, responseChars: 100 }),
-      ev("gate_fired", "s1", "P", { answerChars: 900 }), // answer bigger than the baseline
+      ev("search_ran", "s1", "P", { eligible: true, responseChars: 1000, outputMode: "" }),
+      ev("gate_fired", "s1", "P", { answerChars: 200 }), // no keyHash — legacy
+      ev("gate_fired", "s1", "P", { answerChars: 200 }), // no keyHash — legacy
+      ev("gate_bypassed", "s1", "P"),                    // no keyHash — legacy
     ];
     const est = estimateSavings(events);
-    expect(est.savedChars).toBe(0);
-    expect(est.gatesCounted).toBe(1);
+    // 2 fired, 1 legacy-bypassed → first counted as bypassed, second accepted.
+    expect(est.bypassedCount).toBe(1);
+    expect(est.acceptedCount).toBe(1);
+    expect(est.netChars).toBe((1000 - 200) - (200 + 1000));
   });
 });

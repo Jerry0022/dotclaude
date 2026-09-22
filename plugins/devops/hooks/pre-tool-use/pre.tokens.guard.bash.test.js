@@ -61,6 +61,10 @@ function project() {
 // they raise the env var to a value that keeps the pre-cap behaviour intact.
 const UNCAPPED_OUTPUT_LEN = "1000000";
 
+// Requirement 8: every hook spawn points DOTCLAUDE_GRAPHIFY_METRICS at an
+// isolated temp file — never the real `~/.claude/graphify-metrics.jsonl`.
+const METRICS_FILE = path.join(HOME_DIR, "graphify-metrics-isolated.jsonl");
+
 function runBash(dir, sid, toolInput, extraEnv = {}) {
   // The full suite runs 50+ files in parallel; on a loaded machine spawnSync
   // can fail to start the child at all (status null, res.error set). That is
@@ -73,6 +77,7 @@ function runBash(dir, sid, toolInput, extraEnv = {}) {
       HOME: HOME_DIR, USERPROFILE: HOME_DIR,
       TMPDIR: tmp, TEMP: tmp, TMP: tmp,
       BASH_MAX_OUTPUT_LENGTH: UNCAPPED_OUTPUT_LEN,
+      DOTCLAUDE_GRAPHIFY_METRICS: METRICS_FILE,
       ...extraEnv,
     };
     // Node's spawn env requires string values — `undefined` (a test's way of
@@ -351,9 +356,8 @@ describe("pre.tokens.guard — Bash cost cap (Requirement A1)", () => {
 
 describe("pre.tokens.guard — guard_blocked / guard_released telemetry", () => {
   const metricsEvents = () => {
-    const f = path.join(HOME_DIR, ".claude", "graphify-metrics.jsonl");
-    if (!fs.existsSync(f)) return [];
-    return fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    if (!fs.existsSync(METRICS_FILE)) return [];
+    return fs.readFileSync(METRICS_FILE, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
   };
 
   test("a block records guard_blocked with tool/kind/est; the releasing retry records guard_released", () => {

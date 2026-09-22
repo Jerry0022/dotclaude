@@ -26,18 +26,23 @@ function project() {
   return dir;
 }
 
+/** Requirement 8: isolated metrics file for this `home`, never the real one. */
+function metricsFileFor(home) {
+  return path.join(home, "graphify-metrics-isolated.jsonl");
+}
+
 function run(hook, dir, home, payload) {
   return spawnSync(process.execPath, [hook], {
     cwd: dir,
     input: JSON.stringify(payload),
     encoding: "utf8",
-    env: { ...process.env, HOME: home, USERPROFILE: home },
+    env: { ...process.env, HOME: home, USERPROFILE: home, DOTCLAUDE_GRAPHIFY_METRICS: metricsFileFor(home) },
   });
 }
 
-/** Parsed events from the isolated metrics file (HOME-scoped, never the real one). */
+/** Parsed events from the isolated metrics file — never the real one. */
 function events(home) {
-  const f = path.join(home, ".claude", "graphify-metrics.jsonl");
+  const f = metricsFileFor(home);
   if (!fs.existsSync(f)) return [];
   return fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 }
@@ -172,14 +177,43 @@ describe("post.graphify.search — raw-search cost telemetry", () => {
     expect(ev[0]).toMatchObject({ outputMode: "content", pathKind: "none", eligible: true });
   });
 
-  test("a Grep scoped to a directory records pathKind 'dir' and eligible true", () => {
+  test("a Grep scoped to a directory (inside the graph root, output_mode:'content') records pathKind 'dir' and eligible true", () => {
+    // Eligibility for a directory-scoped Grep additionally requires
+    // output_mode:'content' and a resolvable graph rooted at (or above) `dir`
+    // — see graph-nudge.isEligibleSearch (R4/R7).
+    const gp = path.join(dir, "graphify-out", "graph.json");
+    fs.mkdirSync(path.dirname(gp), { recursive: true });
+    fs.writeFileSync(gp, JSON.stringify({ nodes: Array(50).fill({ id: "x" }) }));
     run(SEARCH_HOOK, dir, home, {
       tool_name: "Grep", session_id: "s-dir",
+      tool_input: { pattern: "authService", path: dir, output_mode: "content" },
+      tool_response: "x",
+    });
+    const ev = events(home);
+    expect(ev[0]).toMatchObject({ pathKind: "dir", eligible: true, outputMode: "content" });
+  });
+
+  test("a Grep scoped to a directory WITHOUT output_mode:'content' → eligible false", () => {
+    const gp = path.join(dir, "graphify-out", "graph.json");
+    fs.mkdirSync(path.dirname(gp), { recursive: true });
+    fs.writeFileSync(gp, JSON.stringify({ nodes: Array(50).fill({ id: "x" }) }));
+    run(SEARCH_HOOK, dir, home, {
+      tool_name: "Grep", session_id: "s-dir-nocontent",
       tool_input: { pattern: "authService", path: dir },
       tool_response: "x",
     });
     const ev = events(home);
-    expect(ev[0]).toMatchObject({ pathKind: "dir", eligible: true });
+    expect(ev[0]).toMatchObject({ pathKind: "dir", eligible: false });
+  });
+
+  test("Glob is never eligible, regardless of path", () => {
+    run(SEARCH_HOOK, dir, home, {
+      tool_name: "Glob", session_id: "s-glob-elig",
+      tool_input: { pattern: "authService" },
+      tool_response: "x",
+    });
+    const ev = events(home);
+    expect(ev[0]).toMatchObject({ tool: "Glob", eligible: false });
   });
 
   test("a Grep scoped to a file records pathKind 'file' and eligible false", () => {

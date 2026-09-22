@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-state
- * @version 0.10.0
+ * @version 0.11.0
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
  *   layer (auto-graph). Default-on / opt-out model: graphify enforcement is
@@ -312,7 +312,7 @@ function queryDone(sessionId, cwd) {
   }
 }
 
-// ── Adaptive gate relent (Requirement B3) ────────────────────────────────────
+// ── Adaptive gate relent ─────────────────────────────────────────────────────
 // The old "relent for the rest of the session once ANY `graphify query` ran"
 // policy is gone — the gate now answers eligible searches itself (see
 // pre.tokens.guard's answer-in-gate), so a manual query elsewhere in the
@@ -321,19 +321,32 @@ function queryDone(sessionId, cwd) {
 // passes — never touches these files), PLUS an adaptive backstop for a
 // session that keeps hitting searches the graph genuinely cannot answer: 3
 // consecutive bypasses with no accepted answer in between relents the gate
-// for the rest of THAT session. Both counter and relent flag are keyed on
-// (session, cwd) so one project's noisy session cannot silence the gate for
-// another.
+// for the rest of THAT session.
+//
+// "Consecutive" is tracked across DIFFERENT searches, not just retries of one:
+// the hook keeps `getLastBlocked`/`setLastBlocked`/`markLastBlockedBypassed`
+// alongside the counter. A NEW block resets the streak only when the PREVIOUS
+// blocked search was never retried (an accepted answer); a bypass of the
+// search that IS the current `lastBlocked` key increments the streak and
+// marks it bypassed so the NEXT block does not reset it — this is what lets
+// three DIFFERENT searches, each fired-then-bypassed once, relent the gate.
+//
+// All three flags (bypass counter, relent flag, last-blocked record) carry a
+// TTL (`GATE_STATE_TTL_MS`, ~12h) — without one a machine left running for
+// days would accumulate a streak (or a relent) that outlives any session that
+// could plausibly still be "the same burst of noisy searches".
+const GATE_STATE_TTL_MS = 12 * 60 * 60 * 1000;
 
 function bypassCountPath(sessionId, cwd) {
   const key = crypto.createHash('md5').update(`gbypass:${sessionId || 'nosid'}:${cwd}`).digest('hex').slice(0, 12);
   return path.join(os.tmpdir(), `dotclaude-graphbypass-${key}.count`);
 }
 
-/** Consecutive bypasses since the last accepted answer, for this (session, cwd). 0 when unknown. */
+/** Consecutive bypasses since the last accepted answer, for this (session, cwd). 0 when unknown or TTL-expired. */
 function bypassCount(sessionId, cwd) {
   try {
-    const n = parseInt(fs.readFileSync(bypassCountPath(sessionId, cwd), 'utf8'), 10);
+    const { n, ts } = JSON.parse(fs.readFileSync(bypassCountPath(sessionId, cwd), 'utf8'));
+    if (typeof ts !== 'number' || Date.now() - ts >= GATE_STATE_TTL_MS) return 0;
     return Number.isInteger(n) && n > 0 ? n : 0;
   } catch { return 0; }
 }
@@ -341,11 +354,11 @@ function bypassCount(sessionId, cwd) {
 /** Record one more bypass; returns the new count. Never throws. */
 function noteBypass(sessionId, cwd) {
   const n = bypassCount(sessionId, cwd) + 1;
-  try { fs.writeFileSync(bypassCountPath(sessionId, cwd), String(n)); } catch { /* best effort */ }
+  try { fs.writeFileSync(bypassCountPath(sessionId, cwd), JSON.stringify({ n, ts: Date.now() })); } catch { /* best effort */ }
   return n;
 }
 
-/** An answer was delivered — the bypass streak no longer applies. */
+/** An answer was delivered and never retried — the bypass streak no longer applies. */
 function clearBypassStreak(sessionId, cwd) {
   try { fs.unlinkSync(bypassCountPath(sessionId, cwd)); } catch { /* already gone */ }
 }
@@ -360,9 +373,100 @@ function markRelented(sessionId, cwd) {
   try { fs.writeFileSync(relentFlagPath(sessionId, cwd), String(Date.now())); return true; } catch { return false; }
 }
 
-/** Has this (session, cwd) already relented? */
+/** Has this (session, cwd) already relented (and is that relent still within its TTL)? */
 function isRelented(sessionId, cwd) {
-  try { return fs.existsSync(relentFlagPath(sessionId, cwd)); } catch { return false; }
+  try {
+    const written = parseInt(fs.readFileSync(relentFlagPath(sessionId, cwd), 'utf8'), 10);
+    return Number.isFinite(written) && (Date.now() - written) < GATE_STATE_TTL_MS;
+  } catch { return false; }
+}
+
+function lastBlockedPath(sessionId, cwd) {
+  const key = crypto.createHash('md5').update(`glastblocked:${sessionId || 'nosid'}:${cwd}`).digest('hex').slice(0, 12);
+  return path.join(os.tmpdir(), `dotclaude-graphlastblocked-${key}.json`);
+}
+
+/**
+ * The most recently BLOCKED gate key for this (session, cwd) — `{key,
+ * bypassed, ts}` — or `null` when none, unreadable, or past its TTL. `key` is
+ * the same string the escape-hatch flag is keyed on (see pre.tokens.guard's
+ * `gflag`); `bypassed` is whether that block has since been retried. Never
+ * throws.
+ */
+function getLastBlocked(sessionId, cwd) {
+  try {
+    const obj = JSON.parse(fs.readFileSync(lastBlockedPath(sessionId, cwd), 'utf8'));
+    if (!obj || typeof obj.key !== 'string' || typeof obj.ts !== 'number') return null;
+    if (Date.now() - obj.ts >= GATE_STATE_TTL_MS) return null;
+    return obj;
+  } catch { return null; }
+}
+
+/** Record a NEW block for this (session, cwd), replacing whatever was there before. Never throws. */
+function setLastBlocked(sessionId, cwd, key) {
+  try { fs.writeFileSync(lastBlockedPath(sessionId, cwd), JSON.stringify({ key, bypassed: false, ts: Date.now() })); } catch { /* best effort */ }
+}
+
+/** Mark the current last-blocked key as having been retried (bypassed). No-op if it already expired. Never throws. */
+function markLastBlockedBypassed(sessionId, cwd) {
+  const cur = getLastBlocked(sessionId, cwd);
+  if (!cur) return;
+  try { fs.writeFileSync(lastBlockedPath(sessionId, cwd), JSON.stringify({ ...cur, bypassed: true })); } catch { /* best effort */ }
+}
+
+// ── Gate query concurrency cap ───────────────────────────────────────────────
+// The answer-in-gate spawns a REAL `graphify query` child synchronously. A
+// machine running many concurrent sessions/worktrees, each firing an eligible
+// search around the same moment, could otherwise stack an unbounded number of
+// those children at once. A small, machine-wide semaphore (default 2
+// in-flight, overridable) bounds that: a slot is a plain file created with the
+// atomic exclusive `wx` flag, stamped `{pid, ts}`; a slot older than its stale
+// window (default ~10s — well above a single query's own ~4s hard timeout) is
+// treated as abandoned (a hook that crashed/was killed mid-query) and
+// reclaimed. Over the cap → the caller skips the gate entirely (fail-open,
+// `gate_skipped_busy`) rather than queueing, since queuing would just move the
+// latency the cap exists to bound.
+const GATE_QUERY_MAX_INFLIGHT_DEFAULT = 2;
+const GATE_QUERY_SLOT_STALE_MS_DEFAULT = 10 * 1000;
+
+function gateQueryMaxInFlight() {
+  const n = parseInt(process.env.DOTCLAUDE_GATE_QUERY_MAX, 10);
+  return Number.isInteger(n) && n > 0 ? n : GATE_QUERY_MAX_INFLIGHT_DEFAULT;
+}
+
+function gateQuerySlotStaleMs() {
+  const n = parseInt(process.env.DOTCLAUDE_GATE_QUERY_STALE_MS, 10);
+  return Number.isInteger(n) && n > 0 ? n : GATE_QUERY_SLOT_STALE_MS_DEFAULT;
+}
+
+function gateQuerySlotPath(i) {
+  return path.join(lockBaseDir(), `dotclaude-gatequery-slot-${i}.lock`);
+}
+
+/**
+ * Acquire one of the machine-wide gate-query slots. Never throws.
+ * @returns {(() => void)|null} a release function, or `null` when every slot
+ *   is busy — the caller must fail OPEN (skip the gate, allow the search).
+ */
+function acquireGateQuerySlot() {
+  const cap = gateQueryMaxInFlight();
+  const staleMs = gateQuerySlotStaleMs();
+  for (let i = 0; i < cap; i++) {
+    const p = gateQuerySlotPath(i);
+    try {
+      fs.writeFileSync(p, JSON.stringify({ pid: process.pid, ts: Date.now() }), { flag: 'wx' });
+      return () => { try { fs.unlinkSync(p); } catch { /* already gone */ } };
+    } catch {
+      try {
+        const { ts } = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (typeof ts === 'number' && Date.now() - ts > staleMs) {
+          fs.writeFileSync(p, JSON.stringify({ pid: process.pid, ts: Date.now() }));
+          return () => { try { fs.unlinkSync(p); } catch { /* already gone */ } };
+        }
+      } catch { /* corrupt, or a genuine race with another acquirer — try the next slot */ }
+    }
+  }
+  return null;
 }
 
 /**
@@ -764,6 +868,7 @@ module.exports = {
   queryFlagPath,
   markQueryDone,
   queryDone,
+  GATE_STATE_TTL_MS,
   bypassCountPath,
   bypassCount,
   noteBypass,
@@ -771,6 +876,14 @@ module.exports = {
   relentFlagPath,
   markRelented,
   isRelented,
+  lastBlockedPath,
+  getLastBlocked,
+  setLastBlocked,
+  markLastBlockedBypassed,
+  gateQueryMaxInFlight,
+  gateQuerySlotStaleMs,
+  gateQuerySlotPath,
+  acquireGateQuerySlot,
   isGraphifyQueryCommand,
   sentinelPath,
   lockBaseDir,
