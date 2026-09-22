@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.4.0
+ * @version 0.5.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect ship intent in user prompts and inject Skill('ship') instruction.
@@ -12,16 +12,22 @@
  *   is marked `🚀 Shipping – ` in the sidebar, never the bare `⏳ `.
  *   Above a context threshold the hook emits the careful-compact advice from
  *   lib/ship-compact.js INSTEAD of the ship instruction: the ship would
- *   re-read that context ~16 times, and only the user can compact.
+ *   re-read that context ~16 times, and only the user can compact. The
+ *   ship prompt right after an advice runs — never the advice twice in a row.
  */
 
 require('../lib/plugin-guard');
 
+const fs = require('fs');
 const { execFileSync } = require('child_process');
-const { readSessionFile } = require('../lib/session-id');
+const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { isShipIntent } = require('../lib/ship-intent');
 const { currentContextTokens } = require('../lib/context-size');
 const { shipCompactAdvice } = require('../lib/ship-compact');
+
+/** Set when a ship prompt got the compact advice; the next ship prompt of
+ *  the same session consumes it and runs — never the advice twice in a row. */
+const ADVISED_PREFIX = 'dotclaude-devops-ship-compact-advised';
 
 /**
  * Returns true if cwd is inside a git work tree.
@@ -111,12 +117,19 @@ process.stdin.on('end', () => {
   // --- Careful compact before ship: measure the context, stop before the
   // pipeline pays for it (lib/ship-compact.js has the numbers and the why).
   // Only user prompts reach this hook, so a ship an orchestrator invokes via
-  // the Skill tool is never held up here. `--no-compact` skips it once.
+  // the Skill tool is never held up here. `--no-compact` skips it once, and
+  // the ship prompt right after an advice runs: the marker is this session's
+  // alone (exact read), set by an advice and consumed by the next ship prompt.
+  const advisedFile = sessionFile(ADVISED_PREFIX, hook.session_id);
+  const advisedBefore = !!readSessionFile(ADVISED_PREFIX, hook.session_id, { exact: true });
+  if (advisedBefore) { try { fs.unlinkSync(advisedFile); } catch {} }
   const advice = shipCompactAdvice({
     tokens: currentContextTokens(hook.transcript_path),
     prompt: hook.prompt || hook.user_message || hook.message || '',
+    advisedBefore,
   });
   if (advice) {
+    try { writeSessionFile(advisedFile, String(Date.now())); } catch {}
     process.stdout.write([...(cacheWarning ? [cacheWarning, ''] : []), advice].join('\n') + '\n');
     process.exit(0);
   }

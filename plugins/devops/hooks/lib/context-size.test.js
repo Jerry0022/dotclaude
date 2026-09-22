@@ -53,6 +53,18 @@ describe("context-size", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  test("a compaction newer than every assistant line makes the size unknown", () => {
+    // 2026-09-22: /compact, then "ship" — the newest usage was the 269 k call
+    // from before the compaction, the real context was ~103 k.
+    const boundary = JSON.stringify({ type: "system", subtype: "compact_boundary", compactMetadata: { trigger: "manual", preTokens: 269_000, postTokens: 25_601 } });
+    const summary = JSON.stringify({ type: "user", isCompactSummary: true, message: { content: "summary" } });
+    const before = [asst({ cache_read_input_tokens: 269_000 }), user(), boundary, summary].join("\n") + "\n";
+    expect(contextFromTranscriptText(before)).toBeNull();
+    // once the first post-compact call is logged, its usage is the answer again
+    const after = before + asst({ cache_read_input_tokens: 103_000 }) + "\n";
+    expect(contextFromTranscriptText(after)).toBe(103_000);
+  });
+
   test("formatTokens rounds to thousands", () => {
     expect(formatTokens(433_545)).toBe("434 k");
     expect(formatTokens(null)).toBe("?");

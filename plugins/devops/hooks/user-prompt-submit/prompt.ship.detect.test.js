@@ -89,7 +89,29 @@ describe("prompt.ship.detect — careful compact", () => {
     expect(r.stdout).toContain('Skill("ship")');
   });
 
-  afterEach(() => { try { fs.unlinkSync(sessionFile("dotclaude-devops-edits", "ship-detect-test")); } catch {} });
+  test("never twice in a row: the next ship prompt runs, the one after that is asked again", () => {
+    const t = transcript(434_000);
+    expect(runHook({ prompt: "ship", transcript_path: t }).stdout).toContain("[ship-compact]");
+    const second = runHook({ prompt: "ship", transcript_path: t });
+    expect(second.stdout).toContain('Skill("ship")');
+    expect(second.stdout).not.toContain("[ship-compact]");
+    // the marker was consumed — a later ship on a big context is asked again
+    expect(runHook({ prompt: "ship", transcript_path: t }).stdout).toContain("[ship-compact]");
+  });
+
+  test("right after /compact the stale pre-compact size does not stop the ship", () => {
+    const t = transcript(469_000);
+    fs.appendFileSync(t, JSON.stringify({ type: "system", subtype: "compact_boundary", compactMetadata: { trigger: "manual", preTokens: 469_000 } }) + "\n");
+    const r = runHook({ prompt: "ship", transcript_path: t });
+    expect(r.stdout).toContain('Skill("ship")');
+    expect(r.stdout).not.toContain("[ship-compact]");
+  });
+
+  afterEach(() => {
+    for (const prefix of ["dotclaude-devops-edits", "dotclaude-devops-ship-compact-advised"]) {
+      try { fs.unlinkSync(sessionFile(prefix, "ship-detect-test")); } catch {}
+    }
+  });
 
   test("a non-ship prompt is untouched", () => {
     const r = runHook({ prompt: "erklär mir cache reads", transcript_path: transcript(900_000) });

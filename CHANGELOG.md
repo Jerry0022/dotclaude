@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.186.5] — 2026-09-22
+
+### Fixed
+- **The careful-compact advice before `/ship` stops nagging** — an audit of the sessions since #448 found 8 advice fires in 4 sessions: 3 fired right after the user had compacted, 1 re-fired on the user's second `ship`, only 4 were legitimate (one session went advice → ship → advice → `/compact` → advice → `/compact` → advice → `--no-compact`). Three fixes: (1) `context-size.js` reads a `compact_boundary` newer than every assistant line as "size unknown" instead of reporting the stale pre-compact usage (a compacted session measured 103–113 k, the hook still said 251–269 k); (2) `prompt.ship.detect` 0.5.0 never gives the advice twice in a row — the ship prompt right after an advice is the user's answer and runs (per-session marker, consumed on the next ship prompt); (3) `ship-compact.js` 0.2.0 raises the default threshold from 200 k to 350 k (a compacted session keeps ~100 k, so below that the saving was as small as ~1.6 M cache reads while ~70 % of all ships got stopped; at 350 k it is ~1/3, each saving ≥ 4 M) and the advice now names the saving instead of the total cost. `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` and `--no-compact` unchanged.
+
 ## [0.186.4] — 2026-09-22
 
 ### Fixed

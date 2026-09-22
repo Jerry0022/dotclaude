@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { shipCompactAdvice, threshold, shipCostEstimate, DEFAULT_THRESHOLD, COMPACT_FOCUS } from "./ship-compact.js";
+import { shipCompactAdvice, threshold, shipCostEstimate, shipSavingEstimate, DEFAULT_THRESHOLD, POST_COMPACT_FLOOR, COMPACT_FOCUS } from "./ship-compact.js";
 
 // A /ship at session end re-reads a ~434 k context ~16 times (measured over
 // 10 sessions, 2026-09-21) — a quarter of the session's tokens. Only the user
@@ -21,7 +21,7 @@ describe("ship-compact", () => {
     expect(out).toContain("Do NOT start the ship pipeline");
     expect(out).toContain("verbatim");
     expect(out).toContain(`/compact ${COMPACT_FOCUS}`);
-    expect(out).toContain("/ship --no-compact");
+    expect(out).toContain("spart ≈ 5.3 M");
     expect(shipCompactAdvice({ tokens: DEFAULT_THRESHOLD, prompt: "/ship", env })).not.toBeNull();
   });
 
@@ -36,6 +36,22 @@ describe("ship-compact", () => {
     expect(shipCompactAdvice({ tokens: 700_000, prompt: "/ship --no-compact", env })).toBeNull();
     expect(shipCompactAdvice({ tokens: 700_000, prompt: "ship it --no-compact bitte", env })).toBeNull();
     expect(shipCompactAdvice({ tokens: 700_000, prompt: "/ship --no-compaction", env })).not.toBeNull();
+  });
+
+  test("never twice in a row: the ship prompt after an advice runs", () => {
+    // 2026-09-22: advice, "ship", advice again, /compact, advice again (stale
+    // size), /compact, advice again, then "/ship --no-compact". The second
+    // ship prompt is the user's informed answer.
+    expect(shipCompactAdvice({ tokens: 434_000, prompt: "/ship", advisedBefore: true, env })).toBeNull();
+    expect(shipCompactAdvice({ tokens: 434_000, prompt: "/ship", advisedBefore: false, env })).not.toBeNull();
+  });
+
+  test("the default is high enough that compacting pays: ≥ 4 M saved", () => {
+    expect(DEFAULT_THRESHOLD).toBe(350_000);
+    expect(POST_COMPACT_FLOOR).toBe(100_000);
+    expect(shipSavingEstimate(DEFAULT_THRESHOLD)).toBe("≈ 4.0 M");
+    expect(shipCompactAdvice({ tokens: 285_000, prompt: "ship", env })).toBeNull();
+    expect(shipSavingEstimate(50_000)).toBe("≈ 0.0 M");
   });
 
   test("an unknown context size never stops a ship", () => {

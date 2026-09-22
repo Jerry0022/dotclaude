@@ -46,13 +46,15 @@ session when that context is largest (measured 2026-09-21: Ø 434 k tokens per
 call, ~24 % of a session's tokens). Nothing in Claude Code lets a skill or hook
 compact the context — only the user can, with `/compact`. So
 `prompt.ship.detect` measures the context on every ship prompt and, above
-`DOTCLAUDE_SHIP_COMPACT_THRESHOLD` (default 200 k tokens, `0` disables), emits a
-`[ship-compact]` block instead of the ship instruction.
+`DOTCLAUDE_SHIP_COMPACT_THRESHOLD` (default 350 k tokens, `0` disables), emits a
+`[ship-compact]` block instead of the ship instruction. It never fires twice
+in a row: the ship prompt right after an advice is the user's answer and runs.
 
 **If that block is in this turn's context: stop here.** Show its user-facing
 part verbatim, run nothing — no Pre-Step, no `ship_*` call, no git — and end
-the turn. The user either compacts and types `/ship` again (the hook then
-measures a small context and lets it through) or types `/ship --no-compact`.
+the turn. The user either compacts and types `/ship` again (the hook sees the
+compaction and lets it through), or simply types `/ship` again without
+compacting (or `/ship --no-compact`).
 Ships reached through the Skill tool by an orchestrator (`/run-backlog`,
 `/setup-cleanup`) never see the block — the hook only reads user prompts.
 

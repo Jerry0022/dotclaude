@@ -1,6 +1,6 @@
 /**
  * @module ship-compact
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description The "careful compact before /ship" advice, shared by
  *   `prompt.ship.detect` (which emits it instead of the Skill('ship')
@@ -16,17 +16,28 @@
  *   command. One extra prompt from the user; the ship then runs on a
  *   context a fraction of the size.
  *
- *   Careful by design: the advice only fires above a threshold, never for a
- *   ship an orchestrator invokes through the Skill tool (those are not user
- *   prompts), and `--no-compact` on the prompt skips it for one ship.
- *   Threshold: `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` (tokens; `0` disables),
- *   default 200 k — a compaction of a 200 k context costs one full read and
- *   saves ~15.
+ *   Careful by design, because every advice costs the user a prompt:
+ *   - Threshold `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` (tokens; `0` disables),
+ *     default 350 k. A compacted session does not drop to zero — system
+ *     prompt, tools and summary leave ~100 k (measured 103–113 k after three
+ *     compactions, 2026-09-22) — so the saving is (context − ~100 k) × 16.
+ *     At the old 200 k default ~70 % of all ships were stopped for a saving
+ *     as small as ~1.6 M cache reads; at 350 k it is ~1/3 of ships, each
+ *     saving ≥ 4 M.
+ *   - Never twice in a row: a ship prompt right after an advice is the
+ *     user's informed answer and runs (`advisedBefore`). Asking again only
+ *     made the user compact twice and then type `--no-compact` anyway.
+ *   - Never for a ship an orchestrator invokes through the Skill tool
+ *     (those are not user prompts), `--no-compact` skips it for one ship.
  */
 
 const { formatTokens } = require('./context-size');
 
-const DEFAULT_THRESHOLD = 200_000;
+const DEFAULT_THRESHOLD = 350_000;
+
+/** What a compacted session still carries: system prompt, tool schemas,
+ *  summary, preserved tail. Measured 103–113 k (2026-09-22). */
+const POST_COMPACT_FLOOR = 100_000;
 
 /** `/ship --no-compact`, `ship it --no-compact` — one-shot opt-out. */
 const NO_COMPACT = /(^|\s)--no-compact\b/i;
@@ -61,13 +72,26 @@ function shipCostEstimate(tokens) {
 }
 
 /**
+ * What compacting first saves on one ship: the context above the
+ * post-compact floor, re-read ~16 times.
+ * @param {number} tokens
+ * @returns {string} "≈ 5.3 M"
+ */
+function shipSavingEstimate(tokens) {
+  return shipCostEstimate(Math.max(0, tokens - POST_COMPACT_FLOOR));
+}
+
+/**
  * The advice block, or null when the ship should just run.
- * @param {{ tokens: number|null, prompt: string, env?: NodeJS.ProcessEnv }} o
+ * @param {{ tokens: number|null, prompt: string, advisedBefore?: boolean, env?: NodeJS.ProcessEnv }} o
+ *   advisedBefore — the previous ship prompt of this session already got the
+ *   advice; this one is the user's answer and runs.
  * @returns {string|null}
  */
-function shipCompactAdvice({ tokens, prompt, env = process.env }) {
+function shipCompactAdvice({ tokens, prompt, advisedBefore = false, env = process.env }) {
   const limit = threshold(env);
   if (!limit || tokens == null || tokens < limit) return null;
+  if (advisedBefore) return null;
   if (NO_COMPACT.test(prompt || '')) return null;
   const size = formatTokens(tokens);
   return [
@@ -78,12 +102,15 @@ function shipCompactAdvice({ tokens, prompt, env = process.env }) {
     'the user has to. Show the user this block verbatim, then end the turn (no completion card needed:',
     'nothing ran):',
     '',
-    `Kontext: ${size} Tokens — ein Ship darauf kostet ${shipCostEstimate(tokens)} Tokens. Erst kompaktieren, dann erneut shippen:`,
+    `Kontext: ${size} Tokens — Kompaktieren vor dem Ship spart ${shipSavingEstimate(tokens)} Tokens. Erst kompaktieren, dann erneut shippen:`,
     '',
     `/compact ${COMPACT_FOCUS}`,
     '',
-    'Danach: `/ship` — oder jetzt ohne Kompaktierung: `/ship --no-compact`',
+    'Danach: `/ship` — oder ohne Kompaktierung einfach nochmal `/ship` (der Hinweis kommt nicht zweimal hintereinander)',
   ].join('\n');
 }
 
-module.exports = { DEFAULT_THRESHOLD, NO_COMPACT, COMPACT_FOCUS, threshold, shipCostEstimate, shipCompactAdvice };
+module.exports = {
+  DEFAULT_THRESHOLD, POST_COMPACT_FLOOR, NO_COMPACT, COMPACT_FOCUS,
+  threshold, shipCostEstimate, shipSavingEstimate, shipCompactAdvice,
+};

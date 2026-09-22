@@ -19,6 +19,12 @@
  *   the last few hundred KB even after a huge tool result), never the whole
  *   transcript. Returns null when nothing usable is found — a caller must
  *   treat null as "unknown", never as "small".
+ *
+ *   A `compact_boundary` newer than every assistant line means the session
+ *   was just compacted: the newest `usage` predates the compaction and
+ *   describes a context that no longer exists. That is unknown (null), not
+ *   the old size — reading past the boundary made the ship-compact advice
+ *   fire again right after the user compacted (3 of 8 fires, 2026-09-22).
  */
 
 const fs = require('fs');
@@ -50,6 +56,12 @@ function contextFromTranscriptText(text) {
   const lines = text.split('\n');
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
+    if (line.includes('"compact_boundary"')) {
+      try {
+        const obj = JSON.parse(line);
+        if (obj.type === 'system' && obj.subtype === 'compact_boundary') return null;
+      } catch { /* truncated slice line — not a boundary we can trust */ }
+    }
     // cheap pre-filter before JSON.parse — most lines are tool results
     if (!line.includes('"assistant"') || !line.includes('"usage"')) continue;
     let obj;
