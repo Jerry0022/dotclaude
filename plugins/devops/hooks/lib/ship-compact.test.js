@@ -1,0 +1,60 @@
+import { describe, test, expect } from "vitest";
+import { shipCompactAdvice, threshold, shipCostEstimate, DEFAULT_THRESHOLD, COMPACT_FOCUS } from "./ship-compact.js";
+
+// A /ship at session end re-reads a ~434 k context ~16 times (measured over
+// 10 sessions, 2026-09-21) — a quarter of the session's tokens. Only the user
+// can compact, so the hook has to stop the ship BEFORE the pipeline pays and
+// hand over the exact /compact command. Careful: threshold, one-shot opt-out,
+// env off-switch, never on an unknown context size.
+describe("ship-compact", () => {
+  const env = {};
+
+  test("below the threshold the ship just runs", () => {
+    expect(shipCompactAdvice({ tokens: 120_000, prompt: "/ship", env })).toBeNull();
+    expect(shipCompactAdvice({ tokens: DEFAULT_THRESHOLD - 1, prompt: "ship it", env })).toBeNull();
+  });
+
+  test("at or above the threshold the advice replaces the ship", () => {
+    const out = shipCompactAdvice({ tokens: 434_000, prompt: "/ship", env });
+    expect(out).toContain("[ship-compact]");
+    expect(out).toContain("434 k");
+    expect(out).toContain("Do NOT start the ship pipeline");
+    expect(out).toContain("verbatim");
+    expect(out).toContain(`/compact ${COMPACT_FOCUS}`);
+    expect(out).toContain("/ship --no-compact");
+    expect(shipCompactAdvice({ tokens: DEFAULT_THRESHOLD, prompt: "/ship", env })).not.toBeNull();
+  });
+
+  test("the focus keeps what the user asked to keep", () => {
+    for (const must of ["Prompts", "Absichten", "Probleme", "Branch", "Test-Kommando", "offene Punkte"]) {
+      expect(COMPACT_FOCUS).toContain(must);
+    }
+    expect(COMPACT_FOCUS).not.toContain("\n");
+  });
+
+  test("--no-compact skips the stop for this one ship", () => {
+    expect(shipCompactAdvice({ tokens: 700_000, prompt: "/ship --no-compact", env })).toBeNull();
+    expect(shipCompactAdvice({ tokens: 700_000, prompt: "ship it --no-compact bitte", env })).toBeNull();
+    expect(shipCompactAdvice({ tokens: 700_000, prompt: "/ship --no-compaction", env })).not.toBeNull();
+  });
+
+  test("an unknown context size never stops a ship", () => {
+    expect(shipCompactAdvice({ tokens: null, prompt: "/ship", env })).toBeNull();
+    expect(shipCompactAdvice({ tokens: undefined, prompt: "/ship", env })).toBeNull();
+  });
+
+  test("DOTCLAUDE_SHIP_COMPACT_THRESHOLD overrides, 0 disables, garbage falls back", () => {
+    expect(threshold({})).toBe(DEFAULT_THRESHOLD);
+    expect(threshold({ DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "300000" })).toBe(300_000);
+    expect(threshold({ DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "0" })).toBe(0);
+    expect(threshold({ DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "lots" })).toBe(DEFAULT_THRESHOLD);
+    expect(threshold({ DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "-5" })).toBe(DEFAULT_THRESHOLD);
+    expect(shipCompactAdvice({ tokens: 900_000, prompt: "/ship", env: { DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "0" } })).toBeNull();
+    expect(shipCompactAdvice({ tokens: 250_000, prompt: "/ship", env: { DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "300000" } })).toBeNull();
+  });
+
+  test("cost estimate is ~16 re-reads", () => {
+    expect(shipCostEstimate(434_000)).toBe("≈ 6.9 M");
+    expect(shipCostEstimate(800_000)).toBe("≈ 13 M");
+  });
+});

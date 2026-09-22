@@ -1,6 +1,6 @@
 ---
 name: ship
-version: 0.9.1
+version: 0.10.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, render_completion_card,
@@ -35,7 +35,26 @@ that safe; a plain `/ship` with no arguments behaves exactly as before.
 | `--queued` | This ship is one of several in a queue. Informational: the card `summary` gets a `(Queue n/N)` suffix when the orchestrator passes `--queued=n/N`, and a `ship-blocked` outcome is expected to be *parked* by the caller, not retried here. |
 | `.claude/.ship-queue` marker in the target repo root (`{ owner, since }`) | Written by the orchestrator before its first ship, deleted after its own finalizer. Project ship extensions MUST skip any post-ship step that mutates this install (plugin self-sync, cache rebuild, MCP restart) while it exists — the orchestrator runs that step exactly once at the end. Not a lockout: `AskUserQuestion` gates stay interactive unless Pre-Step A says otherwise. **Stale rule:** a marker whose `since` is older than 6 h belongs to a queue that died; a plain `/ship` (no `--queued`) deletes it and proceeds as if absent, so one crashed cleanup run never defers finalizers forever. |
 
+| `--no-compact` | Skip the careful-compact stop for this one ship (below). Parsed and dropped — it changes nothing else. |
+
 Parse these from the skill arguments first; then continue with Pre-Step A.
+
+## Pre-Step 0 — Careful compact (the hook decides, this skill obeys)
+
+A ship runs ~16 API calls, each re-reading the whole context, at the end of a
+session when that context is largest (measured 2026-09-21: Ø 434 k tokens per
+call, ~24 % of a session's tokens). Nothing in Claude Code lets a skill or hook
+compact the context — only the user can, with `/compact`. So
+`prompt.ship.detect` measures the context on every ship prompt and, above
+`DOTCLAUDE_SHIP_COMPACT_THRESHOLD` (default 200 k tokens, `0` disables), emits a
+`[ship-compact]` block instead of the ship instruction.
+
+**If that block is in this turn's context: stop here.** Show its user-facing
+part verbatim, run nothing — no Pre-Step, no `ship_*` call, no git — and end
+the turn. The user either compacts and types `/ship` again (the hook then
+measures a small context and lets it through) or types `/ship --no-compact`.
+Ships reached through the Skill tool by an orchestrator (`/run-backlog`,
+`/setup-cleanup`) never see the block — the hook only reads user prompts.
 
 ## Pre-Step A — Autonomous Lockout Detection
 
