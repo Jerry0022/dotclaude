@@ -35,16 +35,34 @@ const HOME_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "graphgate-home-"));
 fs.mkdirSync(path.join(HOME_DIR, ".claude"), { recursive: true });
 
 // The hook under test spawns a REAL detached `graphify update .` whenever it
-// decides to self-heal. Left on the real binary, every "refresh kicked" case
-// below launched the Python indexer against a temp dir that the test deleted
-// moments later — hundreds of `fail:1` sentinels in the machine's temp dir, and
-// a fresh interpreter boot per test. Point the hook at an exit-0 stub instead
-// (DOTCLAUDE_GRAPHIFY_BIN): the spawn path stays real, the indexer never runs.
+// decides to self-heal, AND a synchronous `graphify query ...` for the
+// answer-in-gate. Left on the real binary, every case below would launch the
+// Python indexer/query engine against a temp dir the test deletes moments
+// later. Point the hook at stub binaries instead (DOTCLAUDE_GRAPHIFY_BIN): the
+// spawn path stays real, the indexer/query engine never runs.
+//
+// ANSWER_STUB echoes its own argv back (prefixed "Node:") — a stand-in
+// "found a node" answer that also lets a test assert on exactly what args the
+// query was invoked with (the `--budget`/`--graph` plumbing) without needing a
+// real graphify. NOANSWER_STUB reproduces the exact "nothing found" output a
+// real graphify prints. TIMEOUT_STUB never exits, to exercise the hard
+// timeout. Self-heal's `update .` calls ignore the stub's stdout entirely
+// (stdio:'ignore' in the runner), so the same stubs serve both call sites.
 const STUB_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "graphgate-stub-"));
+function writeStub(name, body) {
+  const p = process.platform === "win32" ? path.join(STUB_DIR, `${name}.cmd`) : path.join(STUB_DIR, name);
+  fs.writeFileSync(p, body, { mode: 0o755 });
+  return p;
+}
 const GRAPHIFY_STUB = process.platform === "win32"
-  ? path.join(STUB_DIR, "graphify.cmd")
-  : path.join(STUB_DIR, "graphify");
-fs.writeFileSync(GRAPHIFY_STUB, process.platform === "win32" ? "@exit /b 0\r\n" : "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  ? writeStub("graphify", "@echo off\r\necho Node: %*\r\n")
+  : writeStub("graphify", "#!/bin/sh\necho \"Node: $*\"\n");
+const NOANSWER_STUB = process.platform === "win32"
+  ? writeStub("graphify-noanswer", "@echo off\r\necho No matching nodes found.\r\n")
+  : writeStub("graphify-noanswer", "#!/bin/sh\necho 'No matching nodes found.'\n");
+const TIMEOUT_STUB = process.platform === "win32"
+  ? writeStub("graphify-timeout", "@echo off\r\nping -n 8 127.0.0.1 > nul\r\necho Node: too slow\r\n")
+  : writeStub("graphify-timeout", "#!/bin/sh\nsleep 8\necho 'Node: too slow'\n");
 
 afterAll(() => {
   for (const d of [STUB_DIR, HOME_DIR]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
@@ -86,12 +104,12 @@ function project({ consent, graph }) {
   return dir;
 }
 
-function runGrep(dir, sid, pattern, homeDir = HOME_DIR) {
+function runGrep(dir, sid, pattern, homeDir = HOME_DIR, bin = GRAPHIFY_STUB, toolInput = {}) {
   const res = spawnSync(process.execPath, [HOOK], {
     cwd: dir,
-    input: JSON.stringify({ tool_name: "Grep", tool_input: { pattern }, session_id: sid }),
+    input: JSON.stringify({ tool_name: "Grep", tool_input: { pattern, ...toolInput }, session_id: sid }),
     encoding: "utf8",
-    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir, DOTCLAUDE_GRAPHIFY_BIN: GRAPHIFY_STUB },
+    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir, DOTCLAUDE_GRAPHIFY_BIN: bin },
   });
   return { status: res.status, stderr: res.stderr || "" };
 }
@@ -174,15 +192,20 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     const r = runGrep(wt, "s-worktree", "theta");
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("GRAPHIFY GATE");
-    expect(r.stderr).toContain(`--graph "${mainGraph}"`);
+    // The stub echoes its own argv (see ANSWER_STUB) — proof the query was
+    // actually invoked with --graph pointing at the PRIMARY checkout's graph,
+    // not the graph-less worktree.
+    expect(r.stderr).toContain("--graph");
+    expect(r.stderr).toContain(mainGraph);
     cleanup(wt); cleanup(main);
   });
 
-  test("after graphify query ran this session → gate relents", () => {
+  test("a `graphify query` run elsewhere no longer relents the whole session (old policy removed)", () => {
     const dir = project({ consent: true, graph: "fresh" });
     markQueryDone("s-queried", dir);
     const r = runGrep(dir, "s-queried", "zeta");
-    expect(r.stderr).not.toContain("GRAPHIFY GATE");
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("GRAPHIFY GATE"); // still fires — queryDone no longer matters here
     cleanup(dir);
   });
 
@@ -231,6 +254,106 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     // The spawn never happened, so the 2-minute cooldown must NOT be charged —
     // otherwise the next search cannot retry and the graph never converges.
     expect(fs.existsSync(refreshFlagPath(dir))).toBe(false);
+    cleanup(dir);
+  });
+
+  describe("eligibility — the gate must not fire on searches the graph cannot usefully answer", () => {
+    test("a Grep scoped to a single FILE never gates, even with a semantic pattern", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const filePath = path.join(dir, "a.js");
+      const r = runGrep(dir, "s-file-scope", "authService", HOME_DIR, GRAPHIFY_STUB, { path: filePath });
+      expect(r.stderr).not.toContain("GRAPHIFY GATE");
+      cleanup(dir);
+    });
+
+    test("a Grep scoped to a directory IS eligible", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const r = runGrep(dir, "s-dir-scope", "authService", HOME_DIR, GRAPHIFY_STUB, { path: dir });
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain("GRAPHIFY GATE");
+      cleanup(dir);
+    });
+
+    test("a version-literal pattern is not eligible", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const r = runGrep(dir, "s-version", "0\\.51\\.0");
+      expect(r.stderr).not.toContain("GRAPHIFY GATE");
+      cleanup(dir);
+    });
+
+    test("a path-like pattern is not eligible", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const r = runGrep(dir, "s-path-pattern", "plugins/devops/hooks");
+      expect(r.stderr).not.toContain("GRAPHIFY GATE");
+      cleanup(dir);
+    });
+
+    test("a natural-language / sentence pattern (>4 words) is not eligible", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const r = runGrep(dir, "s-sentence", "where is the retry logic implemented exactly");
+      expect(r.stderr).not.toContain("GRAPHIFY GATE");
+      cleanup(dir);
+    });
+
+    test("a very short term is not eligible", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const r = runGrep(dir, "s-short", "ab");
+      expect(r.stderr).not.toContain("GRAPHIFY GATE");
+      cleanup(dir);
+    });
+
+    test("an alternation of two identifier terms IS eligible", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const r = runGrep(dir, "s-alt", "authService|userRepo");
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain("GRAPHIFY GATE");
+      cleanup(dir);
+    });
+  });
+
+  describe("answer-in-gate — hit vs. no-hit vs. timeout", () => {
+    test("a graph HIT blocks and puts the answer directly in the message", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const r = runGrep(dir, "s-hit", "authService", HOME_DIR, GRAPHIFY_STUB);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain("Node:");
+      expect(r.stderr).toContain("retry the same search if you need exact matches.");
+      cleanup(dir);
+    });
+
+    test("no matching nodes → ALLOWS silently, no gate text at all", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const r = runGrep(dir, "s-noanswer", "authService", HOME_DIR, NOANSWER_STUB);
+      expect(r.stderr).not.toContain("GRAPHIFY GATE");
+      cleanup(dir);
+    });
+
+    test("a query that exceeds the timeout ALLOWS silently, same as no answer", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const r = runGrep(dir, "s-timeout", "authService", HOME_DIR, TIMEOUT_STUB);
+      expect(r.stderr).not.toContain("GRAPHIFY GATE");
+      cleanup(dir);
+    }, 15_000);
+  });
+
+  test("adaptive relent fires after 3 consecutive bypasses with no accepted answer in between", () => {
+    const dir = project({ consent: true, graph: "fresh" });
+    const sid = "s-adaptive-relent-2";
+    const first = runGrep(dir, sid, "answerTerm", HOME_DIR, GRAPHIFY_STUB);
+    expect(first.status).toBe(2); // blocked with an accepted answer — bypass streak starts at 0
+    // Three consecutive retries of the SAME already-gated search: each one is
+    // a bypass via the escape hatch, and none of them is a fresh accepted
+    // answer, so the streak accumulates instead of resetting.
+    for (let i = 0; i < 3; i++) {
+      const r = runGrep(dir, sid, "answerTerm", HOME_DIR, GRAPHIFY_STUB);
+      expect(r.stderr).not.toContain("GRAPHIFY GATE"); // escape hatch bypass
+    }
+    // A brand-new eligible search must no longer be gated by GRAPHIFY —
+    // the gate relented for the rest of this session. (It may still hit the
+    // separate, pre-existing generic broad-search token guard — unrelated to
+    // this feature — which is why this only asserts on the GATE text.)
+    const freshSearch = runGrep(dir, sid, "freshUnseenTerm", HOME_DIR, GRAPHIFY_STUB);
+    expect(freshSearch.stderr).not.toContain("GRAPHIFY GATE");
     cleanup(dir);
   });
 });

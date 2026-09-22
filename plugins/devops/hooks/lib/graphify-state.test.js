@@ -41,6 +41,13 @@ import {
   refreshUpdateLockFile,
   clearUpdateLockFile,
   lockBaseDir,
+  bypassCount,
+  bypassCountPath,
+  noteBypass,
+  clearBypassStreak,
+  relentFlagPath,
+  markRelented,
+  isRelented,
 } from "./graphify-state.js";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -242,6 +249,52 @@ describe("per-session query flag", () => {
     expect(queryDone("s1", dir)).toBe(true);
     expect(queryDone("s2", dir)).toBe(false); // different session
     expect(queryDone("s1", tmp())).toBe(false); // different project
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+});
+
+describe("adaptive gate relent — bypass streak + relent flag (Requirement B3)", () => {
+  test("bypassCount starts at 0 and increments with noteBypass", () => {
+    const dir = tmp();
+    expect(bypassCount("s1", dir)).toBe(0);
+    expect(noteBypass("s1", dir)).toBe(1);
+    expect(noteBypass("s1", dir)).toBe(2);
+    expect(bypassCount("s1", dir)).toBe(2);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("clearBypassStreak resets the count to 0", () => {
+    const dir = tmp();
+    noteBypass("s1", dir);
+    noteBypass("s1", dir);
+    clearBypassStreak("s1", dir);
+    expect(bypassCount("s1", dir)).toBe(0);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("isolated per (session, project)", () => {
+    const dir = tmp();
+    noteBypass("s1", dir);
+    expect(bypassCount("s2", dir)).toBe(0);         // different session
+    expect(bypassCount("s1", tmp())).toBe(0);        // different project
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("isRelented is false until markRelented; then true for that (session, cwd) only", () => {
+    const dir = tmp();
+    expect(isRelented("s1", dir)).toBe(false);
+    markRelented("s1", dir);
+    expect(isRelented("s1", dir)).toBe(true);
+    expect(isRelented("s2", dir)).toBe(false);
+    expect(isRelented("s1", tmp())).toBe(false);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("bypassCountPath / relentFlagPath are stable and session+cwd scoped", () => {
+    const dir = tmp();
+    expect(bypassCountPath("s1", dir)).toBe(bypassCountPath("s1", dir));
+    expect(bypassCountPath("s1", dir)).not.toBe(bypassCountPath("s2", dir));
+    expect(relentFlagPath("s1", dir)).not.toBe(relentFlagPath("s1", tmp()));
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
   });
 });

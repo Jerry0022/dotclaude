@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script graphify-audit
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Measures whether the graphify enforcement chain (nudge → gate →
  *   `graphify query`) actually pays for itself, from two sources that need no
@@ -16,11 +16,25 @@
  *   gate blocks, and Grep/Glob output at 0.03 % of new input — i.e. nothing
  *   to save. Re-run after a fix to see whether that moved:
  *
- *     node scripts/graphify-audit.js [--sessions 20] [--since 2026-09-01] [--skip <sid-prefix>]
+ *     node scripts/graphify-audit.js [--sessions 10] [--since 2026-09-01] [--skip <sid-prefix>]
  *
  *   `--skip` drops the session running the audit (its own grep output would
  *   otherwise count as gate hits). Token figures are chars/4 for tool results
  *   and `message.usage` sums for the model side. Read-only; never writes.
+ *
+ *   A SECOND per-session table (`--sessions N`, default 10) is built purely
+ *   from the telemetry stream (sid 'nosid' excluded — that is a hook run with
+ *   no session context, not a real session): queries/queryChars,
+ *   searches/searchChars, gate fired/bypassed/noanswer/relented, and token
+ *   guard blocks/releases. It ends with an ESTIMATED savings line, method
+ *   stated inline: for each `gate_fired` event that was NOT subsequently
+ *   bypassed (approximated per project as
+ *   `max(0, gate_fired_count - gate_bypassed_count)`), the saved cost is the
+ *   MEDIAN `responseChars` of ELIGIBLE searches that actually ran in the same
+ *   project (fallback: the global median across all projects) minus that
+ *   gate's own `answerChars`; tokens ≈ chars/4. This is an estimate, not a
+ *   measurement — the counter-to-bypass link is inferred from counts, not a
+ *   direct pairing.
  */
 
 'use strict';
@@ -146,16 +160,25 @@ function listSessions({ sessions, skip }) {
     .slice(0, sessions);
 }
 
-/** Aggregate the telemetry stream since `since` (ISO date), test runs excluded. */
-function metricsSummary(since) {
-  const out = { events: {}, queryChars: 0, searchChars: 0, broadSearchChars: 0, searches: 0, broadSearches: 0 };
+/** Every telemetry line since `since` (ISO date) as a parsed event, test runs excluded. */
+function readMetricsEvents(since) {
   let raw;
-  try { raw = fs.readFileSync(METRICS_FILE, 'utf8'); } catch { return out; }
+  try { raw = fs.readFileSync(METRICS_FILE, 'utf8'); } catch { return []; }
+  const out = [];
   for (const l of raw.split('\n')) {
     if (!l) continue;
     let e; try { e = JSON.parse(l); } catch { continue; }
     if (since && e.ts < since) continue;
     if (/[\\/]Temp[\\/]|[\\/]tmp[\\/]/.test(e.project || '')) continue; // vitest runs
+    out.push(e);
+  }
+  return out;
+}
+
+/** Aggregate the telemetry stream since `since` (ISO date), test runs excluded. */
+function metricsSummary(since) {
+  const out = { events: {}, queryChars: 0, searchChars: 0, broadSearchChars: 0, searches: 0, broadSearches: 0 };
+  for (const e of readMetricsEvents(since)) {
     out.events[e.event] = (out.events[e.event] || 0) + 1;
     if (e.event === 'query_ran') out.queryChars += e.responseChars || 0;
     if (e.event === 'search_ran') {
@@ -166,6 +189,99 @@ function metricsSummary(since) {
   return out;
 }
 
+/** Median of a numeric array; 0 for an empty array. */
+function median(nums) {
+  if (!nums.length) return 0;
+  const s = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/**
+ * Per-SESSION rollup of the telemetry stream (sid 'nosid' excluded — a hook
+ * run with no session context is not a session). Pure function of the parsed
+ * event array so the aggregation is unit-testable with fixture data. Sessions
+ * are returned newest-first (by each session's latest event timestamp).
+ */
+function aggregateMetricsBySession(events) {
+  const sessions = new Map();
+  for (const e of events) {
+    if (!e || !e.sid || e.sid === 'nosid') continue;
+    let s = sessions.get(e.sid);
+    if (!s) {
+      s = {
+        sid: e.sid, project: e.project || '', lastTs: e.ts || '',
+        queries: 0, queryChars: 0, searches: 0, searchChars: 0,
+        gatesFired: 0, gatesBypassed: 0, gatesNoAnswer: 0, gatesRelented: 0,
+        guardBlocks: 0, guardReleases: 0,
+      };
+      sessions.set(e.sid, s);
+    }
+    if (!s.project && e.project) s.project = e.project;
+    if (e.ts && e.ts > s.lastTs) s.lastTs = e.ts;
+    switch (e.event) {
+      case 'query_ran': s.queries++; s.queryChars += e.responseChars || 0; break;
+      case 'search_ran': s.searches++; s.searchChars += e.responseChars || 0; break;
+      case 'gate_fired': s.gatesFired++; break;
+      case 'gate_bypassed': s.gatesBypassed++; break;
+      case 'gate_noanswer': s.gatesNoAnswer++; break;
+      case 'gate_relented': s.gatesRelented++; break;
+      case 'guard_blocked': s.guardBlocks++; break;
+      case 'guard_released': s.guardReleases++; break;
+      default: break;
+    }
+  }
+  return [...sessions.values()].sort((a, b) => (b.lastTs || '').localeCompare(a.lastTs || ''));
+}
+
+/**
+ * ESTIMATED tokens saved by the graphify gate (Requirement C). Method: for
+ * each `gate_fired` event that was NOT subsequently bypassed — approximated
+ * PER PROJECT as `max(0, gate_fired_count - gate_bypassed_count)`, since the
+ * telemetry stream does not link a specific bypass back to the block it
+ * bypassed — the saved cost is the MEDIAN `responseChars` of ELIGIBLE
+ * searches that actually ran in the SAME project (fallback: the global
+ * median across all projects, when this project ran no eligible search of
+ * its own) minus the AVERAGE `answerChars` of that project's fired gates;
+ * tokens ≈ chars/4. `sid: 'nosid'` events are excluded throughout.
+ * @returns {{savedChars:number, savedTokens:number, gatesCounted:number, globalMedian:number}}
+ */
+function estimateSavings(events) {
+  const eligibleByProject = new Map();
+  const eligibleAll = [];
+  const firedByProject = new Map();
+  const bypassedByProject = new Map();
+  for (const e of events) {
+    if (!e || e.sid === 'nosid') continue;
+    const proj = e.project || 'unknown';
+    if (e.event === 'search_ran' && e.eligible) {
+      if (!eligibleByProject.has(proj)) eligibleByProject.set(proj, []);
+      eligibleByProject.get(proj).push(e.responseChars || 0);
+      eligibleAll.push(e.responseChars || 0);
+    } else if (e.event === 'gate_fired') {
+      if (!firedByProject.has(proj)) firedByProject.set(proj, []);
+      firedByProject.get(proj).push(e.answerChars || 0);
+    } else if (e.event === 'gate_bypassed') {
+      bypassedByProject.set(proj, (bypassedByProject.get(proj) || 0) + 1);
+    }
+  }
+  const globalMedian = median(eligibleAll);
+  let savedChars = 0;
+  let gatesCounted = 0;
+  for (const [proj, fired] of firedByProject) {
+    const bypassed = bypassedByProject.get(proj) || 0;
+    const notBypassed = Math.max(0, fired.length - bypassed);
+    if (!notBypassed) continue;
+    const baseline = eligibleByProject.has(proj) && eligibleByProject.get(proj).length
+      ? median(eligibleByProject.get(proj))
+      : globalMedian;
+    const avgAnswerChars = fired.reduce((a, b) => a + b, 0) / fired.length;
+    savedChars += notBypassed * Math.max(0, baseline - avgAnswerChars);
+    gatesCounted += notBypassed;
+  }
+  return { savedChars, savedTokens: Math.round(savedChars / 4), gatesCounted, globalMedian };
+}
+
 function shortProject(d) {
   return d.replace(/^C--Users-[^-]+-IdeaProjects-/, '').replace(/--claude-worktrees-/, '/wt:');
 }
@@ -173,9 +289,9 @@ function shortProject(d) {
 function fmt(n) { return Number(n).toLocaleString('en-US'); }
 
 function main(argv) {
-  const opt = { sessions: 20, since: '', skip: '' };
+  const opt = { sessions: 10, since: '', skip: '' };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--sessions') opt.sessions = parseInt(argv[++i], 10) || 20;
+    if (argv[i] === '--sessions') opt.sessions = parseInt(argv[++i], 10) || 10;
     else if (argv[i] === '--since') opt.since = argv[++i] || '';
     else if (argv[i] === '--skip') opt.skip = argv[++i] || '';
   }
@@ -235,8 +351,39 @@ function main(argv) {
   console.log('  ' + Object.entries(ms.events).sort().map(([k, v]) => `${k} ${v}`).join('   '));
   if (ms.searches) console.log(`  search_ran: ${ms.searches} (broad ${ms.broadSearches}) → ${fmt(ms.searchChars)} chars (broad ${fmt(ms.broadSearchChars)});  query answers ${fmt(ms.queryChars)} chars`);
   else console.log('  no search_ran events yet — sizes arrive with post.graphify.search (v0.1.0+)');
+
+  // ── Per-session telemetry table + estimated savings (Requirement C) ──────
+  const events = readMetricsEvents(opt.since);
+  const sessionRows = aggregateMetricsBySession(events).slice(0, opt.sessions);
+  if (sessionRows.length) {
+    console.log(`\nPER-SESSION TELEMETRY (${sessionRows.length} most recent sessions, sid 'nosid' excluded)`);
+    console.log(
+      pad('sid', 12) + pad('project', 34) + num('query', 6) + num('qChr', 7)
+      + num('srch', 5) + num('sChr', 7) + num('fired', 6) + num('byps', 5)
+      + num('noans', 6) + num('relnt', 6) + num('gblk', 5) + num('grls', 5)
+    );
+    for (const s of sessionRows) {
+      console.log(
+        pad(s.sid.slice(0, 10), 12) + pad(shortProject(s.project).slice(0, 32), 34)
+        + num(s.queries, 6) + num(fmt(s.queryChars), 7) + num(s.searches, 5) + num(fmt(s.searchChars), 7)
+        + num(s.gatesFired, 6) + num(s.gatesBypassed, 5) + num(s.gatesNoAnswer, 6) + num(s.gatesRelented, 6)
+        + num(s.guardBlocks, 5) + num(s.guardReleases, 5)
+      );
+    }
+    const est = estimateSavings(events);
+    console.log(
+      `\nESTIMATED savings: ${fmt(est.savedTokens)} tok over ${est.gatesCounted} answered-and-not-bypassed gate(s)`
+      + ` — method: per such gate, median eligible-search chars in its project`
+      + ` (fallback global median ${fmt(Math.round(est.globalMedian))} chars) minus the gate's own answerChars, tokens ≈ chars/4.`
+    );
+  } else {
+    console.log('\nPER-SESSION TELEMETRY: no sessions with an sid in the telemetry stream yet.');
+  }
 }
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { analyzeTranscript, metricsSummary, listSessions, resultText };
+module.exports = {
+  analyzeTranscript, metricsSummary, listSessions, resultText,
+  readMetricsEvents, aggregateMetricsBySession, estimateSavings, median,
+};

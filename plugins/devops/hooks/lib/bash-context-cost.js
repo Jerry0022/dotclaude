@@ -1,6 +1,6 @@
 /**
  * @module bash-context-cost
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Decide which large-file references inside a Bash command
  *   actually cost Claude context. Used by pre.tokens.guard to stop blocking
@@ -211,6 +211,15 @@ function extractSubstitutions(text, sink) {
 }
 
 const SPLIT_RE = /\s*(?:&&|\|\||[|;&\n])\s*/;
+// Statement boundary: everything SPLIT_RE treats as a hard separator EXCEPT a
+// single pipe — a pipe keeps its segments in the same "pipeline" (see
+// groupedSegments), while `;`, `&&`, `||`, a bare `&`, or a newline start a
+// genuinely new statement.
+const STATEMENT_SPLIT_RE = /\s*(?:&&|\|\||[;&\n])\s*/;
+// Splits a single statement into its pipeline members. Applied only AFTER
+// STATEMENT_SPLIT_RE has already consumed every `||`, so a lone `|` here is
+// always a real pipe.
+const PIPE_SPLIT_RE = /\s*\|\s*/;
 const MAX_PASSES = 2000;
 // Second bound, on work rather than iterations: this hook runs before every
 // Bash call, so a pathological command must not cost more than a fixed budget.
@@ -240,6 +249,50 @@ function segmentize(command) {
     pending.push(...nested);
   }
   return segments;
+}
+
+/**
+ * Same walk as `segmentize`, but grouped by STATEMENT rather than flattened —
+ * each group is one pipeline: one or more segments joined by a single `|`
+ * (pipe members stay together, `xargs` included, since a reader downstream of
+ * a pipe still pulls an upstream path into context). A nested command
+ * substitution becomes its own group(s): it is a separate invocation, not a
+ * pipeline member of the segment that contains it.
+ *
+ * This is what fixes the false positive where a Bash command such as
+ * `ls -la <big file>; git log -1; graphify query "..."; node -e '<code>' file`
+ * was blocked in full: the old flat-list widening in `matchCostlyFiles`
+ * substring-matched the ENTIRE command the moment ANY segment anywhere in it
+ * was a `reader` (here, `git log` and `node -e`) — so a path only ever handed
+ * to `ls`, in an unrelated `;`-separated statement, still counted. Grouping by
+ * statement/pipeline means that widening can only ever pull in the text of
+ * the pipeline that actually contains the reader.
+ * @returns {string[][]} array of pipelines, each an array of segment strings
+ */
+function groupedSegments(command) {
+  const pending = [String(command || '')];
+  const groups = [];
+  let passes = 0;
+  let chars = 0;
+  while (pending.length) {
+    if (passes++ >= MAX_PASSES || chars >= MAX_CHARS) {
+      for (const rest of pending) {
+        if (rest.trim()) groups.push([`${OVERFLOW_HEAD} ${rest.trim()}`]);
+      }
+      break;
+    }
+    const next = pending.shift();
+    chars += next.length;
+    const nested = [];
+    const flat = extractSubstitutions(next, nested);
+    for (const stmt of flat.split(STATEMENT_SPLIT_RE)) {
+      if (!stmt.trim()) continue;
+      const pipeline = stmt.split(PIPE_SPLIT_RE).map(s => s.trim()).filter(Boolean);
+      if (pipeline.length) groups.push(pipeline);
+    }
+    pending.push(...nested);
+  }
+  return groups;
 }
 
 /** Resolve a segment's effective command head, skipping env vars and wrappers. */
@@ -450,8 +503,9 @@ function normalizeSlashes(text) {
  */
 function matchCostlyFiles(command, expensiveFiles, opts = {}) {
   const runInBackground = !!opts.runInBackground;
-  const segments = segmentize(command);
-  const costly = segments
+  const groups = groupedSegments(command);
+  const costly = groups
+    .flat()
     .filter(seg => {
       const kind = classifySegment(seg);
       if (kind === 'reader') return true;   // background does not save a reader
@@ -459,13 +513,16 @@ function matchCostlyFiles(command, expensiveFiles, opts = {}) {
       return !runInBackground;              // unknown: safe by default, free when detached
     })
     .map(normalizeSlashes);
-  // A reader can consume a path that lives in another segment —
-  // `echo big.html | xargs cat`, `find . -name x | cat`. Once anything reads,
-  // fall back to matching the whole command, exactly as the pre-0.9 substring
-  // check did. Strictly no wider than that check, so it adds no new
-  // false positives relative to the behaviour it replaces.
-  if (segments.some(seg => classifySegment(seg) === 'reader')) {
-    costly.push(normalizeSlashes(command));
+  // A reader can consume a path that lives in another segment of the SAME
+  // pipeline — `echo big.html | xargs cat`, `find . -name x | cat`. Once
+  // anything in a pipeline reads, widen to that pipeline's own text, exactly
+  // as the pre-0.9 substring check did for the whole command. Scoped to the
+  // statement/pipeline (not the whole command) so a path mentioned only in an
+  // unrelated `;`-separated statement is never swept in — see groupedSegments.
+  for (const group of groups) {
+    if (group.some(seg => classifySegment(seg) === 'reader')) {
+      costly.push(normalizeSlashes(group.join(' | ')));
+    }
   }
   const files = Array.isArray(expensiveFiles) ? expensiveFiles : [];
   const matched = [];
@@ -482,6 +539,7 @@ function matchCostlyFiles(command, expensiveFiles, opts = {}) {
 module.exports = {
   baseName,
   segmentize,
+  groupedSegments,
   commandHead,
   classifySegment,
   isFreeOfContextCost,

@@ -81,6 +81,29 @@ describe("post.graphify.query — query detection across shells", () => {
     expect(ev[0]).toMatchObject({ tool: "PowerShell", responseChars: 39 });
   });
 
+  test("a `--budget N` flag on the query command is recorded", () => {
+    const sid = "s-budget-" + Date.now();
+    run(QUERY_HOOK, dir, home, {
+      tool_name: "Bash", session_id: sid,
+      tool_input: { command: 'graphify query "who calls foo?" --budget 400' },
+      tool_response: { stdout: "x".repeat(120), stderr: "" },
+    });
+    const ev = events(home).filter((e) => e.event === "query_ran");
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ budget: 400, responseChars: 120 });
+  });
+
+  test("no --budget flag → no budget field on the event", () => {
+    const sid = "s-nobudget-" + Date.now();
+    run(QUERY_HOOK, dir, home, {
+      tool_name: "Bash", session_id: sid,
+      tool_input: { command: 'graphify query "who calls foo?"' },
+      tool_response: { stdout: "x", stderr: "" },
+    });
+    const ev = events(home).filter((e) => e.event === "query_ran");
+    expect(ev[0].budget).toBeUndefined();
+  });
+
   test("a command that merely MENTIONS graphify query (grep -c 'graphify query') is not a query", () => {
     const sid = "s-mention-" + Date.now();
     run(QUERY_HOOK, dir, home, {
@@ -136,6 +159,39 @@ describe("post.graphify.search — raw-search cost telemetry", () => {
     const ev = events(home);
     expect(ev).toHaveLength(1);
     expect(ev[0]).toMatchObject({ tool: "Glob", broad: false, responseChars: 19 });
+  });
+
+  test("records outputMode, pathKind and eligible", () => {
+    const r = run(SEARCH_HOOK, dir, home, {
+      tool_name: "Grep", session_id: "s-fields",
+      tool_input: { pattern: "authService", output_mode: "content" },
+      tool_response: "src/auth.js:1:authService",
+    });
+    expect(r.status).toBe(0);
+    const ev = events(home);
+    expect(ev[0]).toMatchObject({ outputMode: "content", pathKind: "none", eligible: true });
+  });
+
+  test("a Grep scoped to a directory records pathKind 'dir' and eligible true", () => {
+    run(SEARCH_HOOK, dir, home, {
+      tool_name: "Grep", session_id: "s-dir",
+      tool_input: { pattern: "authService", path: dir },
+      tool_response: "x",
+    });
+    const ev = events(home);
+    expect(ev[0]).toMatchObject({ pathKind: "dir", eligible: true });
+  });
+
+  test("a Grep scoped to a file records pathKind 'file' and eligible false", () => {
+    const f = path.join(dir, "a.js");
+    fs.writeFileSync(f, "x");
+    run(SEARCH_HOOK, dir, home, {
+      tool_name: "Grep", session_id: "s-file",
+      tool_input: { pattern: "authService", path: f },
+      tool_response: "x",
+    });
+    const ev = events(home);
+    expect(ev[0]).toMatchObject({ pathKind: "file", eligible: false });
   });
 
   test("non-search tools are ignored", () => {

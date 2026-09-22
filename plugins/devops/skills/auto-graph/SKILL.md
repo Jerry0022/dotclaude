@@ -1,6 +1,6 @@
 ---
 name: auto-graph
-version: 0.5.0
+version: 0.6.0
 description: >-
   Codebase knowledge graph via the external graphify CLI — default-on,
   opt-out via `{"consent":false}` in `.claude/graphify.json` or
@@ -89,19 +89,24 @@ extraction over docs/papers/images.
 
 ## Step 4 — Query
 
-Answer the user's codebase question against the graph instead of grepping:
+Graphify answers *structural/semantic* questions (what defines/calls X, how do
+A and B relate, where is Y handled) — grep is still the right tool for an
+*exact string*. Ask, don't grep, and keep the budget small — a wide default
+answer can cost more than the raw search it replaces:
 
 ```bash
-graphify query "<the user's question>"
+graphify query "<the user's question>" --budget 400
 ```
 
-In a **linked worktree** (or a session whose cwd is a subdirectory), the graph
-usually lives in the primary checkout, not under the cwd. The gate message and
-the session-start nudge print the resolved path — copy their `--graph` flag
-verbatim:
+`--budget` up to `800` is fine for a question that genuinely needs more nodes;
+going wider than that usually means the question is too broad, not the budget
+too small. In a **linked worktree** (or a session whose cwd is a subdirectory),
+the graph usually lives in the primary checkout, not under the cwd. The gate
+message and the session-start nudge print the resolved path — copy their
+`--graph` flag verbatim:
 
 ```bash
-graphify query "<the user's question>" --graph "<primary-checkout>/graphify-out/graph.json"
+graphify query "<the user's question>" --budget 400 --graph "<primary-checkout>/graphify-out/graph.json"
 ```
 
 Relay the result. For follow-up questions in the same session, reuse the
@@ -146,9 +151,17 @@ the graph is missing, stale, or fails a periodic validity check. So the graph
 follows the code purely via windowless SessionStart refresh + PreToolUse
 self-heal — never via graphify's own git hooks.
 
-**2. Hard gate (D3).** `pre.tokens.guard` **blocks** a broad raw-file Grep/Glob
-(exit 2) and tells Claude to run `graphify query` instead. Two preconditions
-keep this safe — both enforced in code, never optional:
+**2. Answer-in-gate.** `pre.tokens.guard` does not just nudge toward
+`graphify query` — for an ELIGIBLE search it *runs the query itself*
+(`--budget 400`, ~4s timeout, argument array only) and either blocks with the
+answer already in the message (exit 2 — nothing further to call) or, when the
+graph has no answer, allows the search silently. Eligibility
+(`graph-nudge.isEligibleSearch`) is deliberately narrow — a default-budget
+query costs more than most scoped grep results, so the gate must not fire on
+every search: no `path`, or an existing **directory** (never a single file),
+and a pattern that reads as a semantic/identifier question (1-4 identifier-ish
+terms) rather than an exact string, a path, or a version literal. Safety
+preconditions, all enforced in code, never optional:
 
 - **Bounded staleness tolerance** — the gate does not require perfect
   freshness. `stalenessInfo` counts how many source files are newer than
@@ -160,9 +173,11 @@ keep this safe — both enforced in code, never optional:
 - **Escape hatch** — the gate blocks a given search at most once per session;
   *retrying the same search falls through*, so a question the graph cannot
   answer (exact string, a new/uncommitted file, a non-code asset) is never
-  wedged. Once any `graphify query` runs (tracked by `post.graphify.query`, on
-  Bash **and** PowerShell — the Desktop app's default shell), the gate relents
-  for the rest of the session.
+  wedged.
+- **Adaptive relent** — 3 consecutive bypasses in a session with no accepted
+  answer in between disables the gate for the rest of that session
+  (`gate_relented`). A `graphify query` run elsewhere no longer relents the
+  gate by itself — the gate answers eligible searches directly now.
 - **Graph resolution** — `hasGraph`/`stalenessInfo` look for the graph in this
   order: `<cwd>/graphify-out/graph.json` → the enclosing repo root → the
   **primary checkout** when cwd is a linked worktree (graph-nudge
@@ -174,14 +189,17 @@ keep this safe — both enforced in code, never optional:
 
 ### Measuring whether it pays off
 
-Telemetry (`~/.claude/graphify-metrics.jsonl`) records `gate_fired`,
-`gate_bypassed`, `query_ran` (with `responseChars`) and — via
-`post.graphify.search` — every Grep/Glob that ran (`search_ran`, `broad`,
-`responseChars`). The audit script reads that stream **and** the session
-transcripts, so it also covers sessions from before the telemetry existed:
+Telemetry (`~/.claude/graphify-metrics.jsonl`) records `gate_fired` (with
+`answerChars`), `gate_noanswer`, `gate_bypassed`, `gate_relented`, `query_ran`
+(with `responseChars` and `budget`), `guard_blocked`/`guard_released` (the
+generic token guard), and — via `post.graphify.search` — every Grep/Glob that
+ran (`search_ran`, `broad`, `pathKind`, `eligible`, `responseChars`). The audit
+script reads that stream **and** the session transcripts, so it also covers
+sessions from before the telemetry existed, and prints a per-session telemetry
+table plus an ESTIMATED tokens-saved line:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/graphify-audit.js" --sessions 20 --since 2026-09-01
+node "${CLAUDE_PLUGIN_ROOT}/scripts/graphify-audit.js" --sessions 10 --since 2026-09-01
 ```
 
 Baseline 2026-09-17 (20 sessions): 1 session with a query, 3 gate blocks

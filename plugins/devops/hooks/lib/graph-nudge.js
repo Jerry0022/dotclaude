@@ -1,14 +1,20 @@
 'use strict';
 /**
  * @lib graph-nudge
- * @version 0.4.0
+ * @version 0.5.0
  * @plugin devops
  * @description Pure helpers for the ambient graphify nudge injected by
  *   pre.tokens.guard on the first broad search of a session. Detects whether a
  *   graphify knowledge graph exists in the project and builds the one-line hint
  *   that steers Claude toward `graphify query` instead of grepping raw files.
- *   Kept separate from the hook so the decision logic is unit-testable without
- *   stdin plumbing or an installed graphify.
+ *   Also carries the gate ELIGIBILITY heuristic (`isEligibleSearch`) that
+ *   decides which searches are worth answering from the graph at all — a
+ *   default-budget query (4.7k-6.3k chars) costs more than most scoped grep
+ *   results (p50 1025 chars), so the gate must stay narrow: no `path`, or an
+ *   existing directory (never a single file), and a pattern that reads as a
+ *   semantic/identifier question rather than an exact string, a path, or a
+ *   version literal. Kept separate from the hook so the decision logic is
+ *   unit-testable without stdin plumbing or an installed graphify.
  */
 
 const fs = require('node:fs');
@@ -114,25 +120,117 @@ function buildGraphNudge(cwd) {
 }
 
 /**
- * Derive a concrete `graphify query` suggestion from the actual blocked
- * search (Gap #3) so the gate message is actionable instead of the generic
- * `<your question>` placeholder. Deliberately dumb and predictable: strip
- * regex metacharacters/escapes, collapse separators to spaces, and wrap the
- * remaining words in a fixed "What defines or uses X?" template. Never
- * throws; falls back to the generic placeholder when nothing usable remains.
+ * Turn a search pattern into a plain-English graph question. Deliberately
+ * dumb and predictable: strip regex metacharacters/escapes, collapse
+ * separators to spaces, and wrap the remaining words in a fixed "What defines
+ * or uses X?" template. Never throws; returns null when nothing usable
+ * remains. Shared by `suggestQuery` (the display suggestion) and the
+ * PreToolUse answer-in-gate (the actual `graphify query` argument).
  */
-function suggestQuery(pattern, graphFlagSuffix = '') {
-  if (typeof pattern !== 'string' || !pattern.trim()) {
-    return `graphify query "<your question>"${graphFlagSuffix}`;
-  }
+function questionFromPattern(pattern) {
+  if (typeof pattern !== 'string' || !pattern.trim()) return null;
   const words = pattern
     .replace(/\\[a-zA-Z]/g, ' ')          // \d \w \s \b etc.
     .replace(/[.*+?^${}()|[\]\\]/g, ' ')  // regex metacharacters
     .replace(/[_-]/g, ' ')                // snake/kebab separators → words
     .split(/\s+/)
     .filter(Boolean);
-  if (!words.length) return `graphify query "<your question>"${graphFlagSuffix}`;
-  return `graphify query "What defines or uses ${words.join(' ')}?"${graphFlagSuffix}`;
+  if (!words.length) return null;
+  return `What defines or uses ${words.join(' ')}?`;
+}
+
+/**
+ * Derive a concrete `graphify query` suggestion from the actual blocked
+ * search (Gap #3) so the gate message is actionable instead of the generic
+ * `<your question>` placeholder. Never throws; falls back to the generic
+ * placeholder when nothing usable remains.
+ */
+function suggestQuery(pattern, graphFlagSuffix = '') {
+  const q = questionFromPattern(pattern);
+  if (!q) return `graphify query "<your question>"${graphFlagSuffix}`;
+  return `graphify query "${q}"${graphFlagSuffix}`;
+}
+
+// ── Gate eligibility heuristic (Requirement B1) ──────────────────────────────
+// Whether a search is even worth answering from the graph. A default-budget
+// `graphify query` costs 4.7k-6.3k chars — MORE than most scoped grep results
+// (p50 1025 chars) — so forcing an answer onto every search would cost more
+// tokens than it saves. Eligibility is deliberately narrow: only searches
+// that are (a) not already scoped to a single file, and (b) look like a
+// semantic/identifier question rather than an exact string, a path, or a
+// regex the graph cannot represent.
+
+/**
+ * Cheap, statSync-only classification of a Grep/Glob `path` input for
+ * telemetry and eligibility. Never throws.
+ * @returns {'none'|'dir'|'file'} 'file' also covers a nonexistent path — an
+ *   unresolvable path is never treated as an eligible directory scope.
+ */
+function pathKindFor(searchPath, cwd) {
+  if (!searchPath) return 'none';
+  try {
+    const abs = path.isAbsolute(searchPath) ? searchPath : path.join(cwd || process.cwd(), searchPath);
+    return fs.statSync(abs).isDirectory() ? 'dir' : 'file';
+  } catch {
+    return 'file';
+  }
+}
+
+/**
+ * True iff `pattern` reads as a semantic/identifier-like question the graph
+ * can plausibly answer: 1-4 identifier-ish terms (camelCase, snake_case,
+ * kebab-case, dotted names, or a `|` alternation of such terms) once regex
+ * escapes are stripped. Rejects version/number literals (`0\.51\.0`),
+ * path-like patterns (containing a slash), quoted/sentence patterns (more
+ * than 4 words), very short terms (<3 significant characters), and patterns
+ * with heavy regex structure (character classes, groups, quantifiers,
+ * anchors). Never throws.
+ */
+function isSemanticPattern(pattern) {
+  if (typeof pattern !== 'string') return false;
+  const trimmed = pattern.trim();
+  if (!trimmed) return false;
+  // Version/number literal: nothing but digits, dots and escapes (0\.51\.0).
+  if (/^[\d.\\]+$/.test(trimmed)) return false;
+  const stripped = trimmed.replace(/\\[a-zA-Z]/g, ' '); // \d \w \s \b etc.
+  // Path-like: a slash (escaped or not) means "a file location", not a name.
+  if (/\\?\//.test(stripped)) return false;
+  // Heavy regex structure: character classes, groups, quantifiers, anchors.
+  if (/[[\](){}^$*+?]/.test(stripped)) return false;
+  const terms = stripped
+    .split(/[|\s]+/)
+    .map(t => t.trim())
+    .filter(Boolean);
+  if (!terms.length || terms.length > 4) return false; // nothing left, or a sentence/phrase
+  for (const term of terms) {
+    if (!/^[A-Za-z][A-Za-z0-9_.-]*$/.test(term)) return false;
+    if (term.replace(/[_.-]/g, '').length < 3) return false; // very short term
+  }
+  return true;
+}
+
+/**
+ * Is this Grep/Glob call worth answering from the graph? Glob keeps the
+ * existing behaviour (path-less only — glob patterns are shell globs, not
+ * identifier questions). Grep is eligible when the `path` is absent or an
+ * existing DIRECTORY (never a single file — a file-scoped grep is already as
+ * narrow as it can get) AND the pattern reads as a semantic question. Never
+ * throws.
+ */
+function isEligibleSearch(toolName, toolInput = {}, cwd) {
+  if (toolName === 'Glob') return !toolInput.path;
+  if (toolName === 'Grep') {
+    if (pathKindFor(toolInput.path, cwd) === 'file') return false;
+    return isSemanticPattern(toolInput.pattern);
+  }
+  return false;
+}
+
+/** True iff a `graphify query` stdout actually names a node (a real answer). */
+function hasGraphAnswer(stdout) {
+  const t = String(stdout || '').trim();
+  if (!t) return false;
+  return !/^no matching nodes found\.?$/i.test(t);
 }
 
 // Directories whose contents never count toward "newest source file": VCS,
@@ -242,7 +340,12 @@ module.exports = {
   hasLocalGraph,
   graphFlag,
   buildGraphNudge,
+  questionFromPattern,
   suggestQuery,
+  pathKindFor,
+  isSemanticPattern,
+  isEligibleSearch,
+  hasGraphAnswer,
   scanSources,
   stalenessInfo,
   graphIsStale,

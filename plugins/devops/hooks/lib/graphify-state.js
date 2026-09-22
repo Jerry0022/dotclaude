@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-state
- * @version 0.9.0
+ * @version 0.10.0
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
  *   layer (auto-graph). Default-on / opt-out model: graphify enforcement is
@@ -310,6 +310,59 @@ function queryDone(sessionId, cwd) {
   } catch {
     return false;
   }
+}
+
+// ── Adaptive gate relent (Requirement B3) ────────────────────────────────────
+// The old "relent for the rest of the session once ANY `graphify query` ran"
+// policy is gone — the gate now answers eligible searches itself (see
+// pre.tokens.guard's answer-in-gate), so a manual query elsewhere in the
+// session no longer needs to disable it wholesale. What remains: the
+// per-(session, search) escape hatch (a retry of the exact same search always
+// passes — never touches these files), PLUS an adaptive backstop for a
+// session that keeps hitting searches the graph genuinely cannot answer: 3
+// consecutive bypasses with no accepted answer in between relents the gate
+// for the rest of THAT session. Both counter and relent flag are keyed on
+// (session, cwd) so one project's noisy session cannot silence the gate for
+// another.
+
+function bypassCountPath(sessionId, cwd) {
+  const key = crypto.createHash('md5').update(`gbypass:${sessionId || 'nosid'}:${cwd}`).digest('hex').slice(0, 12);
+  return path.join(os.tmpdir(), `dotclaude-graphbypass-${key}.count`);
+}
+
+/** Consecutive bypasses since the last accepted answer, for this (session, cwd). 0 when unknown. */
+function bypassCount(sessionId, cwd) {
+  try {
+    const n = parseInt(fs.readFileSync(bypassCountPath(sessionId, cwd), 'utf8'), 10);
+    return Number.isInteger(n) && n > 0 ? n : 0;
+  } catch { return 0; }
+}
+
+/** Record one more bypass; returns the new count. Never throws. */
+function noteBypass(sessionId, cwd) {
+  const n = bypassCount(sessionId, cwd) + 1;
+  try { fs.writeFileSync(bypassCountPath(sessionId, cwd), String(n)); } catch { /* best effort */ }
+  return n;
+}
+
+/** An answer was delivered — the bypass streak no longer applies. */
+function clearBypassStreak(sessionId, cwd) {
+  try { fs.unlinkSync(bypassCountPath(sessionId, cwd)); } catch { /* already gone */ }
+}
+
+function relentFlagPath(sessionId, cwd) {
+  const key = crypto.createHash('md5').update(`grelent:${sessionId || 'nosid'}:${cwd}`).digest('hex').slice(0, 12);
+  return path.join(os.tmpdir(), `dotclaude-graphrelent-${key}.flag`);
+}
+
+/** Disable the gate for the rest of this (session, cwd) — the adaptive backstop. */
+function markRelented(sessionId, cwd) {
+  try { fs.writeFileSync(relentFlagPath(sessionId, cwd), String(Date.now())); return true; } catch { return false; }
+}
+
+/** Has this (session, cwd) already relented? */
+function isRelented(sessionId, cwd) {
+  try { return fs.existsSync(relentFlagPath(sessionId, cwd)); } catch { return false; }
 }
 
 /**
@@ -711,6 +764,13 @@ module.exports = {
   queryFlagPath,
   markQueryDone,
   queryDone,
+  bypassCountPath,
+  bypassCount,
+  noteBypass,
+  clearBypassStreak,
+  relentFlagPath,
+  markRelented,
+  isRelented,
   isGraphifyQueryCommand,
   sentinelPath,
   lockBaseDir,
