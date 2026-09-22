@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.186.4] — 2026-09-22
+
+### Fixed
+- **Replies follow the language of the user's latest message** — the `[ui-locale]` tag was detected once from the first prompt of a session and then locked, so a session opened with `/ship`, a short ack or an English sentence stayed English (cards, hook texts, and with them the replies) for its whole lifetime. `ensureLocale` (`hooks/lib/locale.js`) now re-detects on every prompt and switches the cached locale on a clear signal only — German as before (umlaut or two German markers), English on three distinct English markers via the new `detectSignal`; "ok", "ja", `/ship` or a pasted path keep the cache. The Quiet output style (`templates/output-style-quiet.md`) gains a reply-language rule: tool output, hook text, skill files and relayed blocks never decide the reply language. Consumers copy the style to `~/.claude/output-styles/quiet.md` by hand — re-copy it to pick up the rule.
+
 ## [0.186.3] — 2026-09-22
 
 ### Fixed
