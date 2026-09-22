@@ -5,9 +5,10 @@
  *
  *   The plugin renders user-facing strings (completion-card CTAs, hook prompts,
  *   skill output templates) in either English or German. The locale is detected
- *   ONCE per session from the first non-trivial user prompt — heuristically by
- *   counting German-language markers — then cached in a session file so all
- *   subsequent hooks/skills agree without re-detecting.
+ *   from the first non-trivial user prompt — heuristically by counting
+ *   German-language markers — and cached in a session file so all hooks/skills
+ *   agree. Each later prompt with a clear language signal updates the cache,
+ *   so the locale follows the language the user is writing in right now.
  *
  *   Why per-session, not global: the same user may run a German chat in one
  *   project and an English chat in another; per-session keeps that decoupled.
@@ -70,6 +71,34 @@ function detectFromPrompt(prompt) {
   return DEFAULT_LOCALE;
 }
 
+// English markers for the switch-back direction. Only consulted when the
+// prompt has fewer than two German hits, so German prompts that quote code
+// or English terms never flip to 'en'.
+const EN_WORDS = [
+  'the', 'this', 'that', 'these', 'those', 'please', 'what', 'why', 'how',
+  'should', 'could', 'would', 'does', 'did', 'is', 'are', 'was', 'were',
+  'you', 'your', 'it', 'its', 'can', 'with', 'from', 'about', 'again',
+];
+
+/**
+ * Like detectFromPrompt, but returns null when the prompt carries no clear
+ * language signal ("ok", "/ship", a pasted path). A cached session locale
+ * only switches on a clear signal, so short acknowledgements never flip it.
+ */
+function detectSignal(prompt) {
+  if (!prompt || typeof prompt !== 'string') return null;
+  if (detectFromPrompt(prompt) === 'de') return 'de';
+  const tokens = new Set(prompt.toLowerCase().match(/[a-z]+/g) || []);
+  let hits = 0;
+  for (const w of EN_WORDS) {
+    if (tokens.has(w)) {
+      hits += 1;
+      if (hits >= 3) return 'en';
+    }
+  }
+  return null;
+}
+
 /**
  * Read cached session locale. Returns one of SUPPORTED, defaulting to
  * DEFAULT_LOCALE when no cache exists or the cached value is invalid.
@@ -92,8 +121,11 @@ function setLocale(sessionId, lang) {
 }
 
 /**
- * Idempotent: if no locale is cached for this session yet, detect from
- * `prompt` and persist; otherwise return the cached value untouched.
+ * First call per session: detect from `prompt` and persist. Later calls
+ * follow the language of the latest prompt, but only when it carries a clear
+ * signal (detectSignal); otherwise the cached value stands. Locking the
+ * locale to the first prompt made a session that opened with "/ship" or an
+ * English sentence answer in English for its whole lifetime.
  * Returns `{ lang, isFresh }` — `isFresh` is true only on the first call
  * per session, so callers can announce the locale to Claude exactly once.
  */
@@ -101,7 +133,14 @@ function ensureLocale(sessionId, prompt) {
   const cached = readSessionFile(SESSION_PREFIX, sessionId);
   if (cached) {
     const lang = cached.content.trim();
-    if (SUPPORTED.includes(lang)) return { lang, isFresh: false };
+    if (SUPPORTED.includes(lang)) {
+      const signal = detectSignal(prompt);
+      if (signal && signal !== lang) {
+        setLocale(sessionId, signal);
+        return { lang: signal, isFresh: false };
+      }
+      return { lang, isFresh: false };
+    }
   }
   const detected = detectFromPrompt(prompt);
   setLocale(sessionId, detected);
@@ -122,6 +161,7 @@ module.exports = {
   DEFAULT_LOCALE,
   SUPPORTED,
   detectFromPrompt,
+  detectSignal,
   getLocale,
   setLocale,
   ensureLocale,
