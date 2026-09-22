@@ -1,12 +1,14 @@
 /**
  * @module card-guard
- * @version 0.5.1
+ * @version 0.6.0
  * @description Pure decision logic for the completion-card enforcement flow,
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
  *
  *   Stacked gates, all one-block (stop_hook_active yields):
  *     1. Completion card — block when work happened but no card was rendered.
+ *        1b. (#449) block when the card was rendered but its markdown never
+ *        reached the turn's last assistant text (the ✨ marker is missing).
  *     2. Notification-turn duplicate (design § 5.5) — once a card exists on a
  *        notification turn (background-task notification / wake-up / cron
  *        tick, no user prompt), block a second card identical to the last one
@@ -94,9 +96,9 @@ function isSubstantialAnswer(transcriptContent, threshold = SUBSTANTIAL_CHARS) {
 }
 
 /**
- * Backup detection: did the last assistant message already contain a
- * completion card? Triggered when the card-rendered flag write fails
- * (e.g. tmp-file I/O error) but Claude did output the card text.
+ * Did the last assistant message contain a completion card? Proves the card
+ * was relayed, not just rendered (#449, Gate 1b), and backs up a failed
+ * card-rendered flag write (e.g. tmp-file I/O error).
  * Matches the distinctive ✨✨✨ title marker — unlikely to collide with
  * regular prose.
  */
@@ -287,6 +289,8 @@ function lastUserEntryIsNotification(transcriptContent) {
  *                                     (see `cardSignature`), stored by the caller
  * @param {boolean} [s.desktopClient]  — render target for the line-budget report (14 rows
  *                                     Desktop / 24 terminal); defaults to terminal
+ * @param {boolean} [s.cardRelayed]    — the card marker is in the turn's last assistant text;
+ *                                     undefined when the transcript could not be read (#449)
  * @returns {{ action: 'block' | 'pass', resetFlags: boolean, reason?: string, exempt?: string,
  *             warning?: string, newCardSignature?: string|null }}
  */
@@ -294,7 +298,7 @@ function decideAction({
   workHappened, cardRendered, stopHookActive, substantial, silent,
   validationPending, validationAttested, openTaskNames, pendingAttested, pluginRoot,
   scheduledTask, treeClean, shipped, completionMcpDown,
-  notificationTurn, cardText, prevCardSignature, desktopClient,
+  notificationTurn, cardText, prevCardSignature, desktopClient, cardRelayed,
 }) {
   if (silent) {
     // Background tick (cron git-sync, concept bridge poll, autonomous loop).
@@ -332,6 +336,20 @@ function decideAction({
       action: 'block',
       resetFlags: false, // keep flags so the post-render stop hook sees consistent state
       reason: buildBlockReason(pluginRoot, { completionMcpDown }),
+    };
+  }
+
+  // Gate 1b — rendered but never relayed (#449). The render flag only proves
+  // the tool ran; the user sees the card only when its markdown is in the
+  // turn's last assistant text. `cardRelayed` is undefined when the caller
+  // could not read the transcript — then the flag alone must suffice, a
+  // blind block would bounce every turn. A second render mid-turn stays
+  // legal: only the marker of the last relayed card is checked.
+  if (cardRendered && cardRelayed === false) {
+    return {
+      action: 'block',
+      resetFlags: false,
+      reason: buildNotRelayedReason(),
     };
   }
 
@@ -533,6 +551,21 @@ function buildBlockReason(pluginRoot, opts = {}) {
   ].join('\n');
 }
 
+function buildNotRelayedReason() {
+  return [
+    '[stop.flow.guard] Card rendered but never relayed — the user sees no card this turn.',
+    '',
+    'render_completion_card ran, but its markdown is not in your final answer. The',
+    'tool result sits in a collapsed block the user does not read; only the text you',
+    'output yourself is visible.',
+    '',
+    'Output the markdown of the LAST card you rendered VERBATIM now, character-for-',
+    'character, as the LAST thing in the response. If circumstances changed since',
+    'that render (a blocker cleared, a gate got fixed), re-render first and relay the',
+    'new card instead. Nothing after the card.',
+  ].join('\n');
+}
+
 function buildValidationReason() {
   return [
     '[stop.flow.guard] Validation required — the completion card has no `validation` field.',
@@ -692,6 +725,7 @@ module.exports = {
   renderLadderLines,
   offlineRendererPath,
   buildValidationReason,
+  buildNotRelayedReason,
   buildPendingReason,
   safeReadTranscript,
   TITLE_STATUS_WORD_RE,
