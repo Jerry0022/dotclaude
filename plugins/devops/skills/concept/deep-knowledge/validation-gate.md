@@ -82,7 +82,7 @@ from `templates.md` § Layout before opening the tab.
 
 ## Phase 1 — Shared patterns (ALL templates)
 
-Every concept page must contain these 75 patterns, regardless of template
+Every concept page must contain these 76 patterns, regardless of template
 (the numbering carries `b` suffixes where a pattern was added next to a
 related one — count the rows, not the highest number):
 
@@ -150,7 +150,7 @@ related one — count the rows, not the highest number):
 | 50 | `queueDraftSync` AND `hydrateDraftFromBridge` AND `flushDraftBeacon` | The durable mirror: every autosave is POSTed to the bridge's `/draft` (fsynced before the ack), flushed by `sendBeacon` on `pagehide`/`hidden`, and merged back on load. `localStorage` alone does not survive a wiped profile, a private window, a quota error or a power cut — and it is the ONLY copy of work that has not been submitted yet. All three halves required: without the flush a closed tab outruns the last write; without the hydrate the durable copy is never read back. |
 | 51 | `markDockSubmitted` AND `unmarkDockSubmitted` (the latter CALLED from `restorePanelToReady`) — AND NOT `clearDock()` anywhere on the submit path | The dock keeps every character when a round is submitted; only editing is taken away. The round stays LIVE until Claude appends the next section, so its comments are the only on-screen record of what was sent — emptying the dock at submit time meant a detour into an older tab and back came home blank on a round that had not even been answered. The un-mark is not optional: every path that hands control back on a round that did not go through (507, or the safety timeout when Claude stopped answering) re-arms the submit buttons, and a ready panel over a read-only comment surface lets the user re-submit without being able to change anything first. |
 | 52 | `_carryOverTypedWork` — AND NO `removeItem(STORAGE_KEY)` anywhere | Nothing may delete the state blob. TTL expiry and a page-version change prune it key by key (every `text:` entry is kept, the rest is dropped, the original is archived under `-archive`); the panel reset clears panel flags only. Each of those was once a one-line "clean up local state" that deleted every comment on the page — and two of them fire exactly when things are already going wrong (a bridge that answered 507; Claude stuck on a usage limit past `PROCESSED_SAFETY_MS`). |
-| 53 | `section[data-iteration]:not([data-active])` inside `saveState`'s `persistable` — AND a `viewing-frozen` guard on `#feedback-dock` | A frozen round is never persisted. Browsing an old tab is allowed and ends every `showScreen()` in a `saveState()`, and `applyDockFreezeState()` has painted that round's submitted comments into the shared dock — so without both exclusions the old round's answers are written over the live round's unsent ones, silently. ENGINE entry. |
+| 53 | `section[data-iteration]:not([data-active])` inside `saveState`'s `persistable` — AND a `viewing-frozen` guard on `#feedback-dock` | A frozen round is never persisted. Browsing an old tab is allowed and ends every `showScreen()` in a `saveState()`, and `applyDockFreezeState()` has painted that round's submitted comments into the shared dock — so without both exclusions the old round's answers are written over the live round's unsent ones, silently. ENGINE entry. Since #399 the dock exists on every page, so this guard is exercised on every template — a decision page browsing an old round with the pre-#399 persistence block writes the frozen general note over the live one. |
 | 54 | `data-step="reality-check"` in the `#status-steps` list — AND a `_phase === 'reality-check'` branch in `updateStatusSteps` | The implement gate's progress step. The reality check sits between the pickup and the first code write, so without it a minutes-long check reads as a stalled submission and the user re-clicks implement — which is one of the few ways to reach a second forced round. The `<li>` must ship `hidden` and be unhidden ONLY by that branch: pre-arming it would advertise a check on every implement, and the overwhelmingly common case is a branch that has not moved. See templates.md § Submit Progress Steps. ENGINE entry — see § Engine drift on iteration append. |
 | 55 | `iteration-tab[data-reality-check]` (the CSS) — required on any page that already contains a `section[data-iteration][data-reality-check]` | The reality-check round's tab marker. `data-reality-check` on the section is what tells the implement path "this round WAS the check, implement straight through"; the chip styling is how the user understands why an implement click produced another round instead of code. A page carrying the section without the styling still behaves correctly but looks like an unexplained extra iteration. Both the section and its chip carry the attribute — see reality-check.md § The forced round. |
 | 62 | `panel-toggle` AND `panel-backdrop` AND `panel-close` in the markup, `window.openPanel` in the JS — on EVERY page, whatever its templates — AND NEITHER `.panel-fab` inside any `html:not([data-template="design"])` rule NOR a `.concept-decision-panel` rule carrying `position: sticky` or `width: 20%` | The ☰ decision panel is page chrome. It used to be design-only, with a docked sidebar standing in for it in decision/free rounds, so a concept that mixed templates moved its panel — and the surface the user writes feedback on — from behind the FAB into the page, mid-session. The panel wiring must also live OUTSIDE the design layout IIFE, which a document-only page never runs. The residual-sidebar negative is what catches the dangerous mixed page: both `.concept-decision-panel` rules have the same specificity, so a leftover `position: sticky; width: 20%` wins on source order — the FAB then renders, `.open { right: 0 }` does nothing to a sticky element, and the backdrop (z-index 150) covers the panel. Dark screen, no way in, every literal above still present. See templates.md § Panel Chrome (all templates). ENGINE entry — see § Engine drift on iteration append. |
@@ -166,6 +166,40 @@ related one — count the rows, not the highest number):
 | 61 | `data-here-section` (the element) AND `openNavGroupFor` (CALLED from `setActiveNavItem`) AND `updateHereRoundParenthesis` (CALLED from `setActiveNavItem`) AND `pickInitialNavTarget` (CALLED from `buildSectionNav`) | The pinned "you are here" breadcrumb is written by the scroll spy (`setActiveNavItem`), which also updates the head's `data-here-round` parenthesis — "Iteration N (Variante)" — ONLY when the entry under the reading line carries `data-variant`, and opens the group that holds the active entry, honouring a deliberate close for `NAV_MANUAL_CLOSE_GRACE_MS` (4 s). The group state cannot wait for the spy, though: on a fresh build no item may be `.is-active` yet (first paint, an async/IntersectionObserver spy, or a `getBoundingClientRect()` read that predates layout), so `buildSectionNav()` calls `pickInitialNavTarget()` synchronously — `.is-active` if any, else the reading-line entry from real geometry, else the FIRST entry — and opens ITS group unconditionally, on load and on every rebuild, before the spy runs at all. `[data-here-section]` is dropped entirely on the final report (`showIteration` hides it under `isFinal`). Missing → the head never names the section under the reading line, never shows the variant parenthesis, and the TOC opens empty (both groups collapsed) until the user scrolls. |
 | 63 | `.draft-offline-strip[hidden]` AND `.recovered-notes-strip[hidden]` (the CSS rule, `display: none`) — required wherever the `.draft-offline-strip, .recovered-notes-strip` rule exists | The two bottom strips are `display: flex` by their base rule, which outranks the UA `[hidden] { display: none }` — so `_setDraftHealth(true)` and the recovered-strip dismiss button set the attribute and nothing happens on screen. Without the override a momentary bridge blip (three debounced saves in ~3 s) leaves a permanent, false „Bridge nicht erreichbar" strip over a bridge that answers 200 (#362). Same pattern every other toggled bar carries (`.frozen-bar[hidden]`, `.content-dimmer[hidden]`, `.hint-cache[hidden]`). ENGINE entry — see § Engine drift on iteration append. |
 | 64 | `.concept-decision-panel {` (the CSS rule) AND `async function submitWithAction` AND `async function retryPendingSubmission` (the functions) — on EVERY page; plus, keyed on `<html data-template>`: decision / free / prototype → `.concept-layout {` AND `.concept-content {` (§ Layout — Document rounds); design → see P33 | **Engine integrity (#430).** Entries 56 / 59 / 62 prove the page was generated from the CURRENT templates.md; this one proves the engine blocks are still INTACT afterwards. Round 11 of a design concept lost the whole `.concept-decision-panel { … }` rule (and every engine rule between a spliced mock-CSS block and it) to a scratch script whose search ran past the block; every structural marker was still there, the page passed, and the decision panel rendered as a static 1280-px `aside` behind the absolutely positioned screens. Enforced by `hooks/lib/concept-gate.js` (`findStaleEngine`, `ENGINE` + `ENGINE_DOCUMENT` / `ENGINE_DESIGN`) under the STALE ENGINE block — the fix is the same as for drift: re-sync the whole engine from templates.md, keep the content sections. Never edit the engine `<style>` / `<script>` with a splice script; append rounds by inserting content sections only (SKILL.md Step 5c). ENGINE entry — see § Engine drift on iteration append. |
+
+**Feedback dock — page chrome in every template (#399).** The 💬 FAB and its
+dock used to be checked under § Template: design only. They are part of the
+shared engine now (templates.md § Panel Chrome (all templates) → Feedback
+dock): the same markup, CSS and JS on a `decision`, `free` or `design` page, a
+document round showing only the general-notes section. Run these on EVERY
+page, whatever its templates:
+
+| # | Pattern | Purpose |
+|---|---------|---------|
+| P1 | `feedback-dock` | Speech-bubble dock anchored to the 💬 FAB (bottom-right) — page chrome in EVERY template (#399): a document round shows its general section only, a design round adds the per-screen / per-design / per-view rows |
+| P2 | `feedback-toggle` | The 💬 FAB that opens the dock — exactly one per page, never inside `html:not([data-template="design"])`-hidden chrome |
+| P5 | `design-general-feedback` OR `proto-general-feedback` | General-notes textarea inside the dock, `data-comment="general"` + `data-attachable` + its `.attach-slot` (legacy pages use the `proto-` name). This is the `comments.general` of every payload |
+| P11 | `data-open="false"` on `#feedback-dock` | The dock MUST start collapsed. A page that ships `data-open="true"` opens onto three empty textareas covering the artefact. |
+| P12 | `applyDockSize` (exported as `window.applyDockSize` from § Panel Chrome (all templates) → Feedback dock, NOT inside `wireDesignLayout()`) | Picks the dock's size: `compact` on every document round, from `body[data-single-*]` on a design round. Missing → the dock falls back to whatever width the page's CSS happens to declare, which is how the same concept renders as a mini-box in one iteration and a full-width bar in the next. |
+| P13 | `.panel-fab,` + `.feedback-fab` sharing ONE size/shape rule | Both FABs are one component with two positions. A page that declares separate `width`/`height`/`border-radius` per FAB has the 56-vs-64px mismatch back. |
+| P13b | `feedback-maximize` | Dock maximise/restore control — a DISTINCT button from `feedback-close` (minimise closes, this only resizes). Mandatory on every page: the dock has no other way to grow past its automatic compact/wide size. |
+| P13c | `data-user-maximized` on `#feedback-dock` | The persisted maximise override. Deliberately a SEPARATE attribute from `data-size` (which `applyDockSize()` still only ever sets to `compact`/`wide` — exactly two automatic sizes, unchanged): the maximised CSS rule (`.feedback-dock[data-user-maximized="true"]`) composes on top of whichever of the two is current. Missing → the maximise button toggles the DOM but nothing resizes, or a reload silently drops the user's choice. |
+| P13d | `title=` AND `aria-label=` on BOTH `#panel-toggle` and `#feedback-toggle`, plus `data-untouched` on the 💬 FAB | Two halves of the "unlabelled emoji circle" fix. **Labels are tooltip-only:** both FABs carry `title` + `aria-label` sourced from the locale table (never a baked-in literal such as "Feedback"), swapped between `data-label-open` / `data-label-close` together with `aria-expanded` by the toggle JS. No visible pill text — a label rendered inside the button changes the box and breaks P13's shared geometry. **The pulse may not touch geometry either:** `@keyframes fabPulse` + `.feedback-fab[data-untouched="true"]` may animate `box-shadow` and `transform` ONLY — any `width`, `height`, `border-radius` or `padding` in the keyframes or the rule re-opens the 56-vs-64px drift P13 exists to prevent. It must be a one-shot (finite iteration count), cleared by the JS on the first dock open and on the first keystroke inside the dock, and disabled under `@media (prefers-reduced-motion: reduce)`. |
+| P13e | `--dock-ceiling:` declared on `.feedback-dock` AND `var(--dock-ceiling)` inside EVERY `max-height` of `.feedback-dock` / `[data-size="wide"]` / `[data-user-maximized="true"]` / the ≤560px media rule, AND `.panel-fab { z-index: 220; }`, AND `closeDock?.(true)` inside `window.openPanel` | The dock and the ☰ FAB share the right-edge column. A dock capped at `80vh` grew straight over the ☰ (dock z-index 180 vs FAB 100) on a tall viewport, so the menu was unreachable while the dock was open. Three locks: the ceiling (viewport − ☰ band − dock bottom offset) ends the dock just below the ☰; the ☰ FAB's z-index keeps it clickable even on a page whose ceiling was lost to an old rule; the reciprocal `closeDock(true)` in `openPanel()` folds the dock away the moment the ☰ is clicked (the user wants the panel, not both). A `max-height` that names a bare `vh` without the ceiling re-opens the overlap. |
+| P13f | `html:not([data-template="design"]) .feedback-dock .feedback-section:not(:has(#design-general-feedback))` (the compact rule) — AND NEITHER `.feedback-fab` NOR `.feedback-dock` inside the `html:not([data-template="design"])` chrome hide list | What a document round shows of the dock is decided by folding the design-only rows, never by hiding the dock. A page that still lists `.feedback-fab` / `.feedback-dock` in the hide list has the pre-#399 engine: the dock vanishes on every document round of a mixed concept, together with the note typed into it. ENGINE entry — see § Engine drift on iteration append. |
+| P13g | `function collectComments(` — AND `comments: { general: { text, attachments }, items: [ … ] }` as the shape every branch returns (grep `collectComments(active` inside `collectDecisionDecisions`, `collectFreeDecisions` AND `collectDesignDecisions`) | One payload shape for the note the dock carries in every template (§ collectDecisions (dispatcher)). A branch still pushing a flat `comments[]` array ships the general note nowhere on a document round. ENGINE entry. |
+
+**Required for new pages, tolerated on legacy ones.** Every page generated
+from the current reference carries all of the above — a fresh `decision` or
+`free` page without `#feedback-dock` is a hard fail exactly like a design
+page without it. A page whose `data-page-version` (pattern 11) predates the
+dock becoming page chrome (#399, generated on plugin < 0.184) and whose
+base template is `decision` / `free` legitimately has no dock yet: do not
+fail it, re-sync it on its next append — § Common Structure's FAB + dock
+markup, § Panel Chrome (all templates) CSS + JS and § collectDecisions
+(dispatcher) as one unit (§ Engine drift on iteration append) — and only
+then run P1–P13g against it. The same version path is what already keeps
+the P3 / P5 legacy ids acceptable.
 
 **Failure for 21 / 22:** if either pattern is missing, the page is rejected
 at the post-generation gate. See § Generic Form Collection below for the
@@ -262,9 +296,11 @@ relock), 44 (attachments), 44b (attachment locale), 46 / 47 (design-mode
 chrome), 48 (scroll boxes), 49–53 (comment durability), 54 (reality-check
 progress step), 56 (panel anatomy), 59 (Kompass tree), 62 (panel chrome), 63 (strip
 `[hidden]` override), 64 / P33 (engine integrity — a rule or function cut out of the
-engine block by a later edit), P13e (dock ceiling below the ☰ FAB — a design page
+engine block by a later edit), P13e (dock ceiling below the ☰ FAB — a page
 whose dock still caps at a bare `80vh` covers the menu FAB on every later
-round), or
+round), P13f / P13g (dock as page chrome + the unified `comments` shape —
+a page that still hides the dock outside design rounds or ships a flat
+`comments[]`), or
 the tab-switch patterns — re-sync that whole
 shared block **verbatim from templates.md** BEFORE the new section goes in.
 Re-sync the block, not the one line the grep flagged: these blocks fail in
@@ -307,7 +343,7 @@ than rendering it badly, and the round being appended is exactly the moment
 they fire: the append freezes the round the user just commented on and the
 reload lands on a fresh dock. A page carrying the old § State Persistence
 block loses those comments *during your append*, so re-syncing afterwards
-recovers nothing. Re-sync § State Persistence, the § Layout JS dock block and
+recovers nothing. Re-sync § State Persistence, the § Panel Chrome dock block and
 the submit handler as one unit — they share the namespace contract and a
 half-updated page is worse than an untouched one.
 
@@ -321,8 +357,8 @@ receives incomplete data.
 **Rule:** `collectDecisions()` MUST collect every form element inside the
 active iteration via a generic selector — NOT via hand-listed selectors
 per field. Specific selectors (for grouped sub-objects like `decisions[]`,
-`comments[]`) are allowed *in addition* but must never replace the
-catch-all.
+`comments` — `{ general, items }` in every branch) are allowed *in addition*
+but must never replace the catch-all.
 
 ### Required pattern (free, decision, and design branches)
 
@@ -355,7 +391,7 @@ function collectDecisions(action) {
   const active = document.querySelector('section[data-iteration][data-active]')
               || document.body;
   const allFields = collectAllFormFields(active);
-  // Optional: also build typed sub-objects (decisions[], comments[], …)
+  // Optional: also build typed sub-objects (decisions[], comments{}, …)
   // for ergonomics — but NEVER as a replacement for allFields.
   return { submitted: true, action, allFields, /* …typed objects… */ };
 }
@@ -397,25 +433,21 @@ template instead. Reconsider the template pick before suppressing these.
 
 ### Template: design (legacy alias: prototype)
 
+The dock patterns P1 / P2 / P5 / P11 / P12 / P13 / P13b–P13g are NOT here any
+more: the 💬 dock is page chrome in every template (#399) and they run on
+every page from the Phase 1 block above. What follows is only what a design
+round adds — the row containers, the screen markup, the design switcher and
+the device views.
+
 | # | Pattern | Purpose |
 |---|---------|---------|
-| P1 | `feedback-dock` | Speech-bubble dock anchored to the 💬 FAB (bottom-right) |
-| P2 | `feedback-toggle` | FAB that opens the dock |
 | P3 | `screen-textareas` OR `feedback-screen-list` | Auto-populated per-page comment container (legacy pages use `feedback-screen-list`) |
 | P4 | `data-screen` | Marker on screen sections that feed the dock |
-| P5 | `design-general-feedback` OR `proto-general-feedback` | General-notes textarea (legacy pages use the `proto-` name) |
 | P6 | `panel-fab` | FAB that opens the decision overlay |
 | P7 | `panel-backdrop` | Overlay backdrop element |
 | P8 | `collectDesignDecisions` OR `collectPrototypeDecisions` | Design branch of `collectDecisions` (legacy pages may still name it `collectPrototypeDecisions`) |
 | P9 | `data-design` | Design wrapper marker — required even for a single design (uniform markup shape) |
 | P10 | `data-design-comment` | Design-level feedback textarea — required only when the iteration has ≥2 `data-design` wrappers |
-| P11 | `data-open="false"` on `#feedback-dock` | The dock MUST start collapsed. A page that ships `data-open="true"` opens onto three empty textareas covering the artefact. |
-| P12 | `applyDockSize` | Picks the dock's size from `body[data-single-*]`. Missing → the dock falls back to whatever width the page's CSS happens to declare, which is how the same concept renders as a mini-box in one iteration and a full-width bar in the next. |
-| P13 | `.panel-fab,` + `.feedback-fab` sharing ONE size/shape rule | Both FABs are one component with two positions. A page that declares separate `width`/`height`/`border-radius` per FAB has the 56-vs-64px mismatch back. |
-| P13b | `feedback-maximize` | Dock maximise/restore control — a DISTINCT button from `feedback-close` (minimise closes, this only resizes). Mandatory on every `design` page: the dock has no other way to grow past its automatic compact/wide size. |
-| P13c | `data-user-maximized` on `#feedback-dock` | The persisted maximise override. Deliberately a SEPARATE attribute from `data-size` (which `applyDockSize()` still only ever sets to `compact`/`wide` — exactly two automatic sizes, unchanged): the maximised CSS rule (`.feedback-dock[data-user-maximized="true"]`) composes on top of whichever of the two is current. Missing → the maximise button toggles the DOM but nothing resizes, or a reload silently drops the user's choice. |
-| P13d | `title=` AND `aria-label=` on BOTH `#panel-toggle` and `#feedback-toggle`, plus `data-untouched` on the 💬 FAB | Two halves of the "unlabelled emoji circle" fix. **Labels are tooltip-only:** both FABs carry `title` + `aria-label` sourced from the locale table (never a baked-in literal such as "Feedback"), swapped between `data-label-open` / `data-label-close` together with `aria-expanded` by the toggle JS. No visible pill text — a label rendered inside the button changes the box and breaks P13's shared geometry. **The pulse may not touch geometry either:** `@keyframes fabPulse` + `.feedback-fab[data-untouched="true"]` may animate `box-shadow` and `transform` ONLY — any `width`, `height`, `border-radius` or `padding` in the keyframes or the rule re-opens the 56-vs-64px drift P13 exists to prevent. It must be a one-shot (finite iteration count), cleared by the JS on the first dock open and on the first keystroke inside the dock, and disabled under `@media (prefers-reduced-motion: reduce)`. |
-| P13e | `--dock-ceiling:` declared on `.feedback-dock` AND `var(--dock-ceiling)` inside EVERY `max-height` of `.feedback-dock` / `[data-size="wide"]` / `[data-user-maximized="true"]` / the ≤560px media rule, AND `.panel-fab { z-index: 220; }`, AND `closeDock?.(true)` inside `window.openPanel` | The dock and the ☰ FAB share the right-edge column. A dock capped at `80vh` grew straight over the ☰ (dock z-index 180 vs FAB 100) on a tall viewport, so the menu was unreachable while the dock was open. Three locks: the ceiling (viewport − ☰ band − dock bottom offset) ends the dock just below the ☰; the ☰ FAB's z-index keeps it clickable even on a page whose ceiling was lost to an old rule; the reciprocal `closeDock(true)` in `openPanel()` folds the dock away the moment the ☰ is clicked (the user wants the panel, not both). A `max-height` that names a bare `vh` without the ceiling re-opens the overlap. |
 | P14 | `data-device-clone` appearing in BOTH `saveState()` and `collectAllFormFields()` | Device frames are clones of the mockup living inside `section[data-iteration][data-active]`. Without the `closest('[data-device-clone]')` filter in both, every mock field ships two extra times in `allFields` under namespaced names, and the localStorage blob fills with `dv1-*` keys that the next screen switch deletes again. Silent in both directions — the panel goes green either way. |
 | P14b | `restoreState()` called IMMEDIATELY after `buildDesignUI()` in § Layout JS's own `DOMContentLoaded` handler — before any `showScreen()` / `showView()` / `primeDock()` — AND `saveState()` merging over the stored blob rather than rebuilding it from the DOM | Two halves of one defect, both required. The dock textareas do not exist until `buildDesignUI()` builds them, and § State Persistence's `DOMContentLoaded` listener has NO guaranteed order against § Layout JS's — so the page-load `restoreState()` can scan an empty dock, write nothing, and never re-run. The second half is what makes that fatal: a `saveState()` that rebuilds `state = {}` from the live DOM then persists a blob with no `text:{screen-id}` keys on the very first `input` event, DELETING every dock note instead of merely failing to show it. ORDER WITHIN the handler is load-bearing, not just "somewhere after `buildDesignUI()`": `showScreen()` ends in `saveState()`, and the freshly rebuilt textareas are EMPTY, so a restore placed after it reads a blob that call has already blanked (measured: one reload wiped `text:{screen-id}`). Grep for a `JSON.parse(localStorage.getItem(STORAGE_KEY))` seed at the top of `saveState()`, and for the guarded `restoreState()` sitting BEFORE the first `showScreen(`/`primeDock(` in both the load handler and the `iteration:changed` handler (which rebuilds the dock too). Third half, belt and braces: `saveState()` must refuse to overwrite a non-empty stored `text:` value with `''` from a node the user has never typed into (`data-touched`, stamped from a trusted `input` event) — otherwise any future call ordered before the restore re-opens the same hole. Keys written conditionally (`_activeView`, `_userInteracted`) MUST be `delete`d in the else branch — under a merge, "not written" no longer means "cleared". Silent both ways: the checker panel is green and the dock looks merely empty. |
 | P15 | `applyViewport()` called from inside `showScreen()` | The single route that rebuilds the frames for the screen that just became active and re-clamps the mode against what the design declares. Defined-but-never-called leaves the toggle switching a mode nothing renders. |
@@ -432,7 +464,7 @@ or `section[data-design]` carrying `data-viewports` with ≥2 entries):
 | P17 | `bestFit` + `device-fit` | The fit maths and the size-compensating wrapper. `transform: scale()` leaves the layout box unscaled, so a page missing `.device-fit` scrolls around empty space and puts the top of the stage out of reach. |
 | P18 | NO `<script>`, `<canvas>`, `<style>` or `<iframe>` inside any `section[data-screen]`, and NO `vh`/`vw`/`dvh`/`svh` unit or `position: fixed` in their CSS | These survive `cloneNode()` badly or not at all (a cloned `<script>` never runs, a cloned `<canvas>` is blank) or resolve against the browser window instead of the frame. Each renders correctly in desktop mode and dead or oversized in device mode — a divergence with no error anywhere. See templates.md § Responsive device views. |
 
-**Why P3/P5 carry alternates:** the dock was rebuilt for the design layer and
+**Why P3 (here) and P5 (Phase 1) carry alternates:** the dock was rebuilt for the design layer and
 its ids changed (`feedback-screen-list` → `screen-textareas`,
 `proto-general-feedback` → `design-general-feedback`). A gate pinned to the old
 ids alone hard-fails every freshly generated page, and the likely "repair" is

@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.185.0] — 2026-09-22
+
+### Added
+- **Concept — feedback dock in every template (#399)** — the 💬 FAB and the feedback dock are page chrome now: decision and free rounds show a compact dock with the general-notes textarea (+ attachment slot), design rounds keep their per-screen / per-design rows above it. One fixed place for a remark that belongs to no single card, in every round. Dock markup, CSS and JS moved from the design template into § Common Structure / § Panel Chrome of templates.md (open/close/maximise/size persistence shared; the design IIFE keeps only its row builders); a design page still has exactly one dock and one FAB.
+- **Concept — unified `comments` payload** — every template emits `comments: { general: { text, attachments }, items: [ { id, text, attachments } ] }` (design additionally keeps `designs` / `screens` / `views`); `applyDockFreezeState()` reads the general note back from any template. validation-gate.md: dock patterns P1/P2/P5/P11/P12/P13/P13b–e are template-independent (Phase 1), plus P13f (compact rule) and P13g (unified shape); legacy pages tolerated via `data-page-version`. monitoring.md / iteration-rules.md examples and the fixture builder follow.
+
+## [0.184.2] — 2026-09-22
+
+### Fixed
+- **Ship in worktrees — remote branch deleted, no manual cleanup note (#442)** — `gh pr merge --delete-branch` is skipped inside every worktree (gh would check out the base locally), so the merged head stayed on origin after every Desktop-app ship (10/10 on one consumer, 34 stale `claude/*` heads). `ship_release` now deletes the remote head itself right after a worktree merge (`gh api DELETE …/git/refs/heads/<branch>`, fallback `git push origin --delete`), drops the stale remote-tracking ref so the next lease-pinned push is not rejected, and reports `remoteBranchDeleted` / `remoteBranchWarning` — failures reported, never thrown; only the head, never the base of a hierarchical merge. `/ship` Step 5a routes a harness-created (Claude Desktop) worktree straight to keep-mode with the normal DONE CTA — the forced-keep detour and its "close the session, then `git worktree remove … && git branch -d …`" note are gone; the app owns the worktree lifecycle, `/setup-cleanup` the rest. `ship_cleanup`'s refusal names the way out per worktree kind. deep-knowledge: data-flow, cleanup (the false "`deleteBranchOnMerge` enabled" claim), hierarchical-merge.
+
+## [0.184.1] — 2026-09-22
+
+### Changed
+- **Completion card on Desktop (#443)** — the markdown under the card widget is the ✨ marker alone, as an HTML comment the Desktop renderer hides (`<!-- ✨✨✨ title ✨✨✨ -->`): the widget is the one visible rendering, no stray `### **✨✨✨ title ✨✨✨**` headline under it any more. The Stop-hook card guard keeps reading the marker from the raw transcript (presence, title status word, duplicate signature) — no gate changed. The visible ✨ line stays wherever no widget carries the card: terminal sessions, variants without a widget body, and a failed widget call (Claude then prints the visible title line instead of the comment). Design doc § 2.1 / § 4 / § 8.
+
 ## [0.184.0] — 2026-09-22
 
 ### Added

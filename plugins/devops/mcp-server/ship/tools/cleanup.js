@@ -89,7 +89,7 @@ export async function handler(params) {
     clearSentinel(cwd);
     return {
       success: false,
-      error: "Still inside a worktree. Call ExitWorktree(action: 'remove') first, then retry ship_cleanup.",
+      error: "Still inside a worktree. Harness-created worktree (Claude Desktop): call ship_cleanup with keep: true — the app owns the worktree lifecycle and ship_release already deleted the remote branch. EnterWorktree-created worktree: call ExitWorktree(action: 'remove') first, then retry.",
       cleaned: [],
       warnings: [],
     };
@@ -101,7 +101,7 @@ export async function handler(params) {
     clearSentinel(cwd);
     return {
       success: false,
-      error: `Branch '${branch}' is attached to an active worktree. Cannot delete — worktree session would break. Remove the worktree first (ExitWorktree action:'remove'), then retry.`,
+      error: `Branch '${branch}' is attached to an active worktree. Cannot delete — worktree session would break. Harness-created worktree (Claude Desktop): use keep: true — the app removes worktree + branch. EnterWorktree-created: ExitWorktree(action:'remove') first, then retry.`,
       cleaned: [],
       warnings: [],
     };

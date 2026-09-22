@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { git, gitStrict, gitArgs, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf, NETWORK_TIMEOUT } from "../lib/git.js";
-import { createPR, mergePR, findExistingPR, watchPRChecks } from "../lib/github.js";
+import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch } from "../lib/github.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { remoteTagExists } from "../lib/remote-tags.js";
 import { retryUntil } from "../lib/retry.js";
@@ -316,8 +316,10 @@ export async function handler(params) {
     // exactly the tree that was rebased + built + tested. (#207)
     const shippedTree = treeOf("HEAD", opts);
 
-    // Merge PR (delete branch; skip --delete-branch in worktrees
-    // where gh tries to switch to base locally — cleanup handles branch deletion)
+    // Merge PR (delete branch; skip --delete-branch in worktrees where gh
+    // tries to switch to base locally — the remote head is deleted right
+    // after the merge below instead, #442; the local branch stays with the
+    // worktree: the Desktop app owns that lifecycle, /setup-cleanup the rest)
     const worktree = isWorktree(opts);
     const merge = mergePR(pr.number, base, opts, { skipDeleteBranch: worktree, strategy: mergeStrategy });
     // The merge is the irreversible step. From here on the result MUST carry
@@ -379,6 +381,29 @@ export async function handler(params) {
     const baseSync = syncLocalBranch(base, opts);
     result.baseSync = baseSync.method;
     if (baseSync.warning) result.baseSyncWarning = baseSync.warning;
+
+    // Worktree ships skipped `--delete-branch`, so the merged head is still on
+    // origin. Delete it here — the merge is the moment it is provably obsolete
+    // — and drop the stale remote-tracking ref, otherwise the next push from
+    // this worktree pins its lease to a ref origin no longer has and is
+    // rejected as "stale info" (the lease above reads refs/remotes/origin/<branch>).
+    // Only the head goes: `base` (a parent feature branch in hierarchical
+    // merges) is never touched. Failure is reported, never thrown (#442, #398).
+    if (worktree) {
+      const del = deleteRemoteBranch(branch, { ...opts, timeout: NETWORK_TIMEOUT });
+      result.remoteBranchDeleted = del.ok;
+      if (del.ok) {
+        try {
+          gitArgs(["update-ref", "-d", `refs/remotes/origin/${branch}`], opts);
+        } catch {
+          /* the ref was never fetched — nothing to drop */
+        }
+      } else {
+        result.remoteBranchWarning =
+          `PR merged, but the remote branch origin/${branch} could not be deleted (${del.error}) — ` +
+          `delete it by hand or let /setup-cleanup prune it.`;
+      }
+    }
 
     // Alpha channel tag (only for final merges to main, skip for intermediate).
     // Every ship publishes to the EARLIEST channel autonomously — beta/stable

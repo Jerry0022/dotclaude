@@ -6,7 +6,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { execSync, execFileSync } from "node:child_process";
-import { createPR, mergePR, findExistingPR, watchPRChecks } from "./github.js";
+import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch } from "./github.js";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -304,5 +304,40 @@ describe("watchPRChecks", () => {
     const result = watchPRChecks(42);
     expect(result.status).toBe("probe-error");
     expect(result.error).toMatch(/could not refresh token/);
+  });
+});
+
+// #442 — the remote head of a worktree ship is deleted after the merge by a
+// REST ref delete (no local checkout involved), falling back to git push.
+describe("deleteRemoteBranch (#442)", () => {
+  test("deletes the ref through gh api first", () => {
+    routeExec({ "gh api -X": "" });
+    expect(deleteRemoteBranch("claude/x")).toEqual({ ok: true, method: "gh-api" });
+    expect(execFileSync).toHaveBeenCalledWith(
+      "gh",
+      ["api", "-X", "DELETE", "repos/{owner}/{repo}/git/refs/heads/claude/x"],
+      expect.any(Object),
+    );
+    expect(execFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  test("falls back to git push --delete when the api call fails", () => {
+    routeExec({
+      "gh api -X": () => { throw new Error("HTTP 422: Reference does not exist"); },
+      "git push origin": "",
+    });
+    expect(deleteRemoteBranch("claude/x")).toEqual({ ok: true, method: "git-push" });
+    expect(execFileSync).toHaveBeenCalledWith("git", ["push", "origin", "--delete", "claude/x"], expect.any(Object));
+  });
+
+  test("never throws — both paths failing yield ok:false with both reasons", () => {
+    routeExec({
+      "gh api -X": () => { throw new Error("HTTP 403"); },
+      "git push origin": () => { throw new Error("remote: permission denied"); },
+    });
+    const r = deleteRemoteBranch("claude/x");
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/gh api: .*HTTP 403/);
+    expect(r.error).toMatch(/git push --delete: .*permission denied/);
   });
 });

@@ -84,7 +84,13 @@ function code(src) {
 }
 
 function iterationChangedHandler() {
-  return slice(jsSource, "document.addEventListener('iteration:changed'");
+  // The DESIGN layout's handler, not the first one in the file: the shared
+  // dock block (§ Panel Chrome → Feedback dock, #399) registers its own
+  // `iteration:changed` listener for document-only pages, earlier in the
+  // source.
+  const from = jsSource.indexOf("function wireDesignLayout()");
+  expect(from, "wireDesignLayout").toBeGreaterThan(-1);
+  return slice(jsSource, "document.addEventListener('iteration:changed'", from);
 }
 
 describe("the dock text restore runs after the dock is built", () => {

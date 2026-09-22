@@ -5,9 +5,9 @@ picked **per iteration**, not per page — see § Per-Iteration Templates below:
 
 | Template | Layout | When to use |
 |---|---|---|
-| **decision** | Document column + the ☰ overlay panel, multi-variant cards | Multi-option evaluation, trade-offs, architecture or tech decisions — the canonical "pick one" flow with bi-state (Verwerfen / Miteinbeziehen) per variant and multiple iterations |
+| **decision** | Document column + the ☰ overlay panel + the 💬 feedback dock (general note), multi-variant cards | Multi-option evaluation, trade-offs, architecture or tech decisions — the canonical "pick one" flow with bi-state (Verwerfen / Miteinbeziehen) per variant and multiple iterations |
 | **design** | Fullscreen content + overlay decision panel (☰ FAB top-right, collapsed by default) + speech-bubble feedback dock anchored to the 💬 FAB (bottom-right, same 60px circle as ☰, dock collapsed by default) | UI mockups, wireframes, visual design concepts, click-through flows — one artefact that needs maximum screen real estate, plus structured per-screen feedback |
-| **free** | Document column + the ☰ overlay panel, freeform body content | Analysis, walkthrough, brainstorm, explainer, timeline — structured content without forced variant framing. Bi-state evaluation is optional (opt-in per section) |
+| **free** | Document column + the ☰ overlay panel + the 💬 feedback dock (general note), freeform body content | Analysis, walkthrough, brainstorm, explainer, timeline — structured content without forced variant framing. Bi-state evaluation is optional (opt-in per section) |
 
 The decision panel itself is the SAME in all three — one ☰ overlay, page
 chrome, never a sidebar and never moving between rounds (§ Panel Chrome (all
@@ -819,9 +819,7 @@ the `[ui-locale: ...]` hint produced.
       </div><!-- /.panel-cta -->
     </aside>
 
-    <!-- ☰ FAB + backdrop — page chrome, same markup in every template. The
-         design layout repeats them next to the 💬 FAB; a decision/free page
-         carries exactly these two. -->
+    <!-- ☰ FAB + backdrop — page chrome, same markup in every template. -->
     <button id="panel-toggle" class="panel-fab"
             aria-label="{{panel.toggle_open}}"
             title="{{panel.toggle_open}}"
@@ -829,6 +827,45 @@ the `[ui-locale: ...]` hint produced.
             data-label-open="{{panel.toggle_open}}"
             data-label-close="{{panel.toggle_close}}">☰</button>
     <div class="panel-backdrop" id="panel-backdrop"></div>
+
+    <!-- 💬 FAB + feedback dock — page chrome in EVERY template (§ Panel
+         Chrome (all templates) → Feedback dock). A document round carries
+         exactly this: the header row (maximise · minimise) and the
+         general-notes section with its attachment slot. The design skeleton
+         (§ Layout — Fullscreen single-screen) adds the per-screen /
+         per-design / per-view rows ABOVE the general section; on a page that
+         mixes templates those rows hide by CSS while a document round is on
+         screen. Same ids everywhere: #feedback-toggle, #feedback-dock,
+         #feedback-maximize, #feedback-close, #design-general-feedback.
+         CLOSED by default (data-open="false"); data-size is written by
+         applyDockSize() (§ Panel Chrome JS) — always `compact` on a document
+         round. `data-untouched` drives the one-shot pulse that the JS clears
+         on the first open or the first keystroke. Every label comes from the
+         locale table; never bake English (or "Feedback") in here. -->
+    <button id="feedback-toggle" class="feedback-fab"
+            aria-label="{{proto.feedback_toggle}}"
+            title="{{proto.feedback_toggle}}"
+            aria-expanded="false"
+            data-untouched="true"
+            data-label-open="{{proto.feedback_toggle}}"
+            data-label-close="{{panel.minimize}}">💬</button>
+    <aside class="feedback-dock" id="feedback-dock" data-open="false" data-size="compact" data-user-maximized="false">
+      <div class="feedback-dock-header">
+        <strong>{{proto.feedback_title}}</strong>
+        <!-- Maximise is a distinct control from minimise: minimise CLOSES
+             the dock (data-open toggle), maximise RESIZES it (data-size
+             override) without touching data-open at all. Never merge them. -->
+        <button id="feedback-maximize" class="feedback-maximize-btn" aria-pressed="false"
+                aria-label="{{panel.maximize}}" title="{{panel.maximize}}">⤢</button>
+        <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" title="{{panel.minimize}}">−</button>
+      </div>
+      <div class="feedback-section">
+        <label>{{proto.feedback_general}}</label>
+        <textarea id="design-general-feedback" data-comment="general" data-attachable
+                  placeholder="{{proto.feedback_general}}"></textarea>
+        <div class="attach-slot" data-attach-slot="general"></div>
+      </div>
+    </aside>
   </div>
 
   <!-- Content dimmer (all templates) — two jobs, one element.
@@ -860,7 +897,7 @@ the `[ui-locale: ...]` hint produced.
   </div>
 
   <script type="application/json" id="concept-decisions">
-    {"submitted": false, "decisions": [], "comments": []}
+    {"submitted": false, "decisions": [], "comments": {"general": {"text": "", "attachments": []}, "items": []}}
   </script>
   <script>/* all JS inline */</script>
 </body>
@@ -883,15 +920,23 @@ they had been using for three rounds was suddenly a column in the page, and
 the note fields with it. Where the panel lives must not depend on which round
 is on screen.
 
-What stays per-round is the **feedback surface**, because that is content:
+**The 💬 feedback dock is page chrome too.** The same `<aside class="feedback-dock"
+id="feedback-dock">` behind the same 💬 FAB in the bottom-right corner, in
+every round of every template (#399). It used to exist only in `design`
+rounds, so a reviewer's general note had a home over a mockup and none over a
+document — and a concept that mixed templates lost the dock mid-session
+together with whatever was typed into it. What differs per round is only what
+the dock CONTAINS:
 
-| Round | Where comments are written |
-|---|---|
-| `design` | the 💬 dock on the bottom-right FAB (general / per-design / per-screen / per-view) |
-| `decision`, `free` | inline `textarea[data-comment]` next to the item being judged |
+| Round | What the 💬 dock holds | Where else comments are written |
+|---|---|---|
+| `design` | per-screen / per-design / per-view rows (specific → general, top to bottom), then the general note | annotation bubbles, view notes |
+| `decision`, `free` | the general note only (+ its attachment slot) — the dock is `compact` | inline `textarea[data-comment]` next to the item being judged |
 
-Both are legitimate and a concept may mix them freely from round to round —
-what may never move is the ☰ panel.
+A concept may mix the two freely from round to round — what may never move is
+the ☰ panel or the 💬 dock. The payload is one shape everywhere
+(`comments: { general: { text, attachments }, items: [ … ] }`, § collectDecisions
+(dispatcher)), so no consumer branches on the template to find the general note.
 
 **Required on every generated page, whatever the template:**
 
@@ -904,16 +949,26 @@ what may never move is the ☰ panel.
         data-label-open="{{panel.toggle_open}}"
         data-label-close="{{panel.toggle_close}}">☰</button>
 <div class="panel-backdrop" id="panel-backdrop"></div>
+
+<!-- …and the 💬 FAB + dock right after them: header row (#feedback-maximize,
+     #feedback-close) + the general section (#design-general-feedback with
+     data-comment="general" data-attachable + its .attach-slot). Copy them
+     from § Common Structure; a design page copies the design skeleton's
+     dock, which is the same markup plus the three row containers above the
+     general section. -->
 ```
 
 plus, inside the aside, the `.panel-head` row (`#theme-toggle` + `#panel-close`,
-§ Theme Toggle) as its first child, and the
-CSS below. All of it is unscoped and required even on a page that never
-renders a mockup — that is the point of this section: a `decision`- or
-`free`-only page carries its panel WITHOUT taking § Layout CSS (the design
-canvas) with it. Only the 💬 FAB and its dock stay behind
-`html:not([data-template="design"])`; § Layout CSS keeps just the design-side
-extras (the 💬 FAB's reserved row under the panel foot, the pulse).
+§ Theme Toggle) as its first child, and the CSS + JS below. All of it is
+unscoped and required even on a page that never renders a mockup — that is
+the point of this section: a `decision`- or `free`-only page carries its
+panel AND its dock WITHOUT taking § Layout CSS (the design canvas) with it.
+The `html:not([data-template="design"])` hide list in § Layout CSS covers the
+design-only chrome (screen indicator, switchers, device toggle, annotation
+layer) and nothing of the dock; the compact rule at the end of the CSS block
+below is what turns the dock into a general-note-only bubble while a document
+round is on screen. § Layout CSS keeps only the design-side row collapse
+rules (`body[data-single-*]`, the view-mode swap).
 
 ```css
 /* Overlay decision panel — PAGE CHROME, unscoped on purpose: the same aside,
@@ -1092,6 +1147,224 @@ html:not([data-template="design"]) body.panel-open { overflow: hidden; }
    pointer (openDock() closes the panel by design). It hides with the panel
    open, exactly like the design switcher does. */
 body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
+
+/* The 💬 FAB (60px circle, bottom: 2rem — see .panel-fab/.feedback-fab) floats
+   over the panel's bottom-right corner in EVERY template now, so the pinned
+   foot reserves its row under the call to action everywhere — this used to
+   be a design-scoped rule, back when only a design round had the FAB. */
+.panel-cta { padding-bottom: calc(60px + 2rem); }
+
+/* ── One-shot attention pulse on the 💬 FAB ──
+   The dock is where every note is written, and an unlabelled emoji circle in
+   a corner is genuinely missable — so the FAB announces itself exactly three
+   times, then never again: the JS strips `data-untouched` on the first dock
+   open OR the first keystroke inside the dock, so a returning user is not
+   nagged. It is `animation`, not a class, so it costs nothing once the
+   attribute is gone.
+   Geometry is OFF LIMITS here (gate P13): box-shadow and transform ONLY, no
+   width/height/border-radius/padding — those live in the shared
+   .panel-fab/.feedback-fab rule and the two FABs must stay one component.
+   transform: scale() also composes with the :hover scale rather than
+   fighting it, since both write the same property and hover wins by
+   source order while pointing. */
+@keyframes fabPulse {
+  0%, 100% { transform: scale(1);    box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  50%      { transform: scale(1.12); box-shadow: 0 4px 12px rgba(0,0,0,0.3), 0 0 0 12px rgba(88,166,255,0.18); }
+}
+.feedback-fab[data-untouched="true"] { animation: fabPulse 2.6s ease-in-out 3; }
+@media (prefers-reduced-motion: reduce) {
+  /* No substitute cue: the tooltip is the discoverability path that does not
+     move, and it is present either way. */
+  .feedback-fab[data-untouched="true"] { animation: none; }
+}
+
+/* ── Feedback Dock — Speech-Bubble anchored to the 💬 FAB (bottom-right) ──
+   Geometry: ☰ lives top-right, 💬 bottom-right (60px). The dock is anchored
+   to the FAB's corner and has EXACTLY TWO sizes — never a viewport-
+   proportional one, never shrink-to-content:
+     compact  420px wide  — one general note (every document round; a design
+                             round with a single design and a single screen)
+     wide     560px wide  — screen + design + general notes, specific → general
+   Both sizes are deliberate. A dock that spans the page turns every textarea
+   into one 1200px line nobody ever wraps in; a dock sized to its content
+   becomes a box you cannot type three lines into without scrolling. Which
+   size applies is decided in JS by applyDockSize() (§ Panel Chrome JS)
+   from the <html data-template> projection and the same body[data-single-*]
+   flags the design layout sets, so the same round shape always yields the
+   same dock.
+   * right = FAB.right (2rem)             → bubble's right edge aligns with FAB
+   * bottom = FAB.bottom + 60 - 6px       → bubble sits directly above the 60px
+                                            FAB with a hair of overlap so the
+                                            visual connection reads as "the
+                                            bubble grows out of the FAB".
+   The dock no longer reserves padding for the FAB: it now ends above it
+   rather than spanning across it. The FAB keeps its higher z-index so it
+   stays visible and clickable while the dock is open — clicking it toggles
+   the dock.
+   --dock-ceiling: the dock's TOP edge stops just below the ☰ FAB. Both are
+   right-edge overlays in the same column (right: 2rem), and the dock
+   (z-index 180) used to grow straight over the ☰ FAB on a tall viewport:
+   80vh at 1080px is 864px, the ☰ band ends 92px from the top, so the dock
+   covered it and the ☰ was unreachable while the dock was open. The
+   ceiling is viewport − ☰ band (top 2rem + 60px + 0.75rem gap) − the
+   dock's own bottom offset (2rem + 54px). Every max-height below is
+   min(--dock-ceiling, its px cap): the cap still rules on tall viewports,
+   the ceiling only bites when the content would reach the ☰. */
+.feedback-dock {
+  --dock-ceiling: calc(100vh - (2rem + 60px + 0.75rem) - (2rem + 60px - 6px));
+  position: fixed;
+  left: auto;
+  right: 2rem;
+  bottom: calc(2rem + 60px - 6px);
+  width: min(420px, calc(100vw - 4rem));
+  /* 900px, not 460px: at a ~1080px-tall viewport the compact dock must show
+     screen + design + general at once (§ Feedback behaviour) without
+     scrolling or the user reaching for maximise. The old 460px cap was
+     sized for the single-general-note case only, before the reorder made
+     three sections the compact default's normal load. */
+  max-height: min(var(--dock-ceiling), 900px);
+  padding: 1rem 1.25rem 1.25rem;
+  background: var(--panel-bg, #161b22);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.25);
+  z-index: 180;
+  overflow-y: auto;
+  display: none;
+  flex-direction: column;
+  gap: 0.85rem;
+  transform-origin: 100% 100%; /* anchor: the 💬 FAB it grows out of */
+}
+.feedback-dock[data-size="wide"] {
+  width: min(560px, calc(100vw - 4rem));
+  max-height: min(var(--dock-ceiling), 940px);
+}
+/* Work package B — user-controlled maximise. Deliberately keyed off a
+   SEPARATE attribute (data-user-maximized), not a third data-size value:
+   applyDockSize() (§ Panel Chrome JS) still only ever assigns compact/wide from
+   the round's shape — exactly the same two sizes as before — and this
+   rule composes on top of whichever one is active by appearing later in
+   the stylesheet (same specificity, source-order wins). */
+.feedback-dock[data-size][data-user-maximized="true"] {
+  width: min(1100px, calc(100vw - 4rem));
+  max-height: min(var(--dock-ceiling), 860px);
+}
+.feedback-dock[data-size][data-user-maximized="true"] .feedback-section textarea {
+  min-height: 220px;
+}
+.feedback-dock[data-open="true"] {
+  display: flex;
+  animation: feedback-dock-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes feedback-dock-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Both FABs sit above the dock so they stay visible AND clickable while
+   the dock is open. 💬: the dock's bottom edge overlaps the FAB's top edge
+   by ~6px, so the bubble visually reads as growing out of the FAB. ☰: the
+   --dock-ceiling above already keeps the dock out of its band; the z-index
+   is the second lock, so a page that lost the ceiling (an older max-height
+   rule surviving a re-sync) still leaves the ☰ clickable — and a click on
+   it closes the dock (openPanel() → closeDock(true), § Panel Chrome). The
+   ☰ FAB hides itself (.hidden) once the panel is open, so it never sits
+   above the panel it opened. */
+.feedback-fab { z-index: 220; }
+.panel-fab { z-index: 220; }
+
+.feedback-dock-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.25rem;
+}
+.feedback-dock-header strong { font-size: 1rem; }
+
+/* Minimise button — visual cue is the underscore-low minus, not an ✕,
+   so the user understands their text is preserved (not destroyed). */
+.feedback-close-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-secondary, #8b949e);
+  font-size: 1.6rem; line-height: 1; font-weight: 500;
+  padding: 0 0.4rem 0.2rem; border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+.feedback-close-btn:hover {
+  background: color-mix(in srgb, var(--text-color) 12%, transparent);
+  color: var(--text-color, #c9d1d9);
+}
+
+/* Maximise/restore — a DISTINCT control from minimise (above): minimise
+   closes the dock, this one only resizes it. Same visual language so the
+   two read as a pair, but a different icon/meaning entirely. */
+.feedback-maximize-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-secondary, #8b949e);
+  font-size: 1.1rem; line-height: 1;
+  padding: 0.2rem 0.4rem; border-radius: 6px; margin-right: 0.15rem;
+  transition: background 0.15s, color 0.15s;
+}
+.feedback-maximize-btn:hover {
+  background: color-mix(in srgb, var(--text-color) 12%, transparent);
+  color: var(--text-color, #c9d1d9);
+}
+.feedback-maximize-btn[aria-pressed="true"] { color: var(--accent-color); }
+
+.feedback-section { display: flex; flex-direction: column; gap: 0.35rem; }
+.feedback-section label { font-size: 0.82rem; color: var(--text-secondary); font-weight: 500; }
+.feedback-section label strong { color: var(--accent-color); }
+.feedback-section textarea {
+  width: 100%; padding: 0.65rem 0.7rem;
+  border: 1px solid var(--border-color); border-radius: 10px;
+  background: var(--input-bg, #0d1117); color: var(--text-color, #c9d1d9);
+  /* 80px, not 90px: with the reorder the compact dock's normal load is
+     three sections (§ Feedback behaviour), so each textarea gives up a
+     little height to the max-height budget above — 80px still clears
+     ~2-3 visible lines at this line-height/padding, it just no longer
+     eats the margin the dock needed for the two rows beside it. */
+  font-family: inherit; font-size: 0.95rem; line-height: 1.5; resize: vertical; min-height: 80px;
+}
+.feedback-section textarea:focus { outline: none; border-color: var(--accent-color); }
+.feedback-divider { height: 1px; background: var(--border-color); margin: 0.2rem 0; }
+/* The attach bar's own margin-top (§ Attachments CSS) is meant for contexts
+   with no flex-gap parent (decision notes, annotation bubbles). Inside the
+   dock, .feedback-section already applies that same gap between its
+   children (label / textarea / attach-slot), so the bar's margin-top would
+   double it — the bar would sit further from "its" textarea than the
+   textarea sits from its own label. Zeroing it here keeps the rhythm even
+   without touching the shared .attach-bar rule other surfaces still rely on. */
+.feedback-dock .attach-bar { margin-top: 0; }
+
+/* Narrow viewports (≤560px): the two fixed widths stop making sense below
+   the compact size, so the dock spans the viewport with tight margins.
+   Both size variants collapse to the same geometry here. */
+@media (max-width: 560px) {
+  .feedback-dock,
+  .feedback-dock[data-size="wide"],
+  .feedback-dock[data-size][data-user-maximized="true"] {
+    left: 0.75rem;
+    right: 0.75rem;
+    width: auto;
+    max-height: min(var(--dock-ceiling), 62vh);
+    padding: 1rem;
+    border-radius: 14px;
+  }
+}
+
+/* ── Document rounds: the general note only ──
+   The dock is the same overlay in every round; what a decision / free round
+   shows of it is the header row and the general section. A page copied from
+   § Common Structure carries no other rows, so this rule is a no-op there;
+   on a page that mixes templates (a design concept's reality-check or final
+   report round) it folds the per-screen / per-design / per-view rows and
+   every divider away while a document round is on screen, and they come
+   back untouched on the next design tab — nothing is rebuilt, only hidden.
+   Keyed on the <html data-template> projection (§ Per-Iteration Templates),
+   exactly like the design-only chrome list in § Layout CSS, and with the
+   `html` type selector for the same reason (a bare :not() also matches
+   <body>). The general section is found by its textarea's id so a design
+   page's row order (general LAST) does not matter here. */
+html:not([data-template="design"]) .feedback-dock .feedback-section:not(:has(#design-general-feedback)),
+html:not([data-template="design"]) .feedback-dock .feedback-divider { display: none; }
 ```
 
 ```javascript
@@ -1129,8 +1402,9 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
   // sit expanded on top of each other. The reciprocal call belongs in the
   // OPEN paths only — a close path must never touch the other overlay, or
   // dismissing one would resurrect the other.
-  // closeDock goes through `window.` and is optional on purpose: it only
-  // exists on a page that has a dock, and a page without one must still be
+  // closeDock goes through `window.` and is optional on purpose: it is
+  // exported by the dock block below (same section, every template) once
+  // that has booted, and a page whose dock markup is missing must still be
   // able to open its panel.
   window.openPanel = () => {
     const dock = document.getElementById('feedback-dock');
@@ -1181,6 +1455,332 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
     if (!document.body.classList.contains('panel-open')) return;
     window.closePanel();
   });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+```
+
+```javascript
+// --- Feedback dock (all templates) ---
+// The 💬 FAB and its dock are page chrome exactly like the ☰ panel above:
+// the same markup in every template, wired here at page level and NOT
+// inside the design layout IIFE (§ Layout JS), which returns early on a page
+// that never renders a mockup. A decision/free page used to have no dock at
+// all — the general note had nowhere to go but an inline field the author
+// had to remember to add. Now every round has the dock; a document round
+// shows only its general-notes section (§ Panel Chrome CSS compact rule),
+// a design round adds the per-screen / per-design / per-view rows.
+//
+// Everything a design page's Layout JS needs from the dock is exported on
+// `window` — closeDock (also reached from openPanel), applyDockSize (also
+// from restoreState), harvestDockValues + liveIterationId (the dock row
+// builders), stashLiveDockValues + applyDockFreezeState + primeDock (the
+// iteration:changed path), markDockSubmitted / unmarkDockSubmitted (the
+// submit handler + Panel State Reset). Load order: this block precedes
+// § Layout JS in templates.md and in every page copied from it, so its boot
+// (registered first) runs first on DOMContentLoaded.
+(() => {
+  const DOCK_DESIGN_TEMPLATES = new Set(['design', 'prototype']);
+  const boot = () => {
+  const dock = document.getElementById('feedback-dock');
+  const dockToggle = document.getElementById('feedback-toggle');
+  const dockClose = document.getElementById('feedback-close');
+  // Same contract as the panel block's missingPanelParts: name what is
+  // missing ONCE, then degrade. Everything below guards on `dock`, so a page
+  // that shipped without the markup keeps its panel, its submit and its
+  // keyboard shortcuts — only the dock is inert.
+  const missingDockParts = [
+    ['feedback-dock', dock], ['feedback-toggle', dockToggle],
+    ['feedback-close', dockClose],
+  ].filter(([, el]) => !el).map(([id]) => id);
+  if (missingDockParts.length) {
+    console.error('[concept] feedback-dock markup incomplete, dock disabled — missing: '
+      + missingDockParts.join(', '));
+  }
+  // The dock is a Speech-Bubble anchored to the 💬 FAB — the FAB stays
+  // visible and clickable while the dock is open, so clicking it toggles
+  // (open ↔ minimised). The − button is a *minimise*, not a destroy:
+  // closing the dock leaves all textarea content intact (localStorage
+  // persistence is untouched).
+  // Accessibility:
+  //   * aria-expanded reflects open/closed state on the FAB
+  //   * aria-label swaps between data-label-open / data-label-close so
+  //     screen-reader users hear the correct next action
+  //   * on close, focus is restored to the FAB if it was inside the dock
+  //     (the dock disappears via display:none, so leaving focus there
+  //     would orphan it)
+  const LABEL_OPEN = dockToggle?.dataset.labelOpen || dockToggle?.getAttribute('aria-label') || '';
+  const LABEL_CLOSE = dockToggle?.dataset.labelClose || LABEL_OPEN;
+  function openDock() {
+    if (!dock || !dockToggle) return;
+    window.closePanel?.();   // mutually exclusive overlays, see openPanel above
+    dock.dataset.open = 'true';
+    dockToggle.setAttribute('aria-expanded', 'true');
+    dockToggle.setAttribute('aria-label', LABEL_CLOSE);
+    dockToggle.title = LABEL_CLOSE;
+  }
+  // `handOff` = the dock is closing because the panel is taking over. Then
+  // the FAB must NOT be focused: it sits at z-index 220, above the panel
+  // backdrop, so a keyboard user would be left standing on a control that
+  // dismisses the overlay that just opened. openPanel() moves focus into the
+  // panel instead. Every other close still restores the FAB, or focus would
+  // be orphaned inside a display:none dock.
+  function closeDock(handOff) {
+    // Reachable from openPanel() through `window.closeDock?.()`, so it must
+    // survive a page whose dock never existed.
+    if (!dock || !dockToggle) return;
+    const focusWasInside = !handOff && dock.contains(document.activeElement);
+    dock.dataset.open = 'false';
+    dockToggle.setAttribute('aria-expanded', 'false');
+    dockToggle.setAttribute('aria-label', LABEL_OPEN);
+    dockToggle.title = LABEL_OPEN;
+    if (focusWasInside) dockToggle.focus();
+  }
+  window.openDock = openDock;
+  window.closeDock = closeDock;
+  // The one-shot pulse (§ Panel Chrome CSS, fabPulse) ends the moment the
+  // user proves they found the FAB. Two independent proofs, because either
+  // can come first: opening the dock from the FAB, or typing into it (a
+  // restored session can land with the dock already open, and closeDock()
+  // is also reached by the panel hand-off, which proves nothing about the
+  // dock).
+  const stopFabPulse = () => dockToggle?.removeAttribute('data-untouched');
+  dockToggle?.addEventListener('click', () => {
+    stopFabPulse();
+    if (dock?.dataset.open === 'true') closeDock();
+    else openDock();
+  });
+  dock?.addEventListener('input', stopFabPulse);
+  dockClose?.addEventListener('click', closeDock);
+
+  // Maximise/restore (Work package B) — a RESIZE, never a close. Distinct
+  // from minimise above: minimise flips data-open, this flips
+  // data-userMaximized, a SEPARATE attribute from data-size (applyDockSize()
+  // below still only ever computes compact/wide from the round's shape,
+  // unchanged) — the CSS composes the two via
+  // `.feedback-dock[data-size][data-user-maximized="true"]`, which applies on
+  // top of whichever of compact/wide is current. The choice is persisted
+  // (state['dockMaximized'], § State Persistence) and restored on reload via
+  // window.applyDockSize() (see restoreState()) — primeDock() must never
+  // silently clear data-userMaximized on an iteration switch, and it does
+  // not: applyDockSize() only ever writes data-size.
+  const dockMaximize = document.getElementById('feedback-maximize');
+  function syncMaximizeButton() {
+    if (!dockMaximize || !dock) return;
+    const on = dock.dataset.userMaximized === 'true';
+    dockMaximize.setAttribute('aria-pressed', String(on));
+    const label = on ? '{{panel.restore_size}}' : '{{panel.maximize}}';
+    dockMaximize.setAttribute('aria-label', label);
+    dockMaximize.title = label;
+  }
+  dockMaximize?.addEventListener('click', () => {
+    if (!dock) return;
+    dock.dataset.userMaximized = dock.dataset.userMaximized === 'true' ? 'false' : 'true';
+    applyDockSize();
+    if (typeof saveState === 'function') saveState();
+  });
+
+  // ── Closed by default, opened only by the user ──
+  // The dock starts minimised (data-open="false" in markup). It used to open
+  // itself on load and auto-close on the first mockup click, which meant the
+  // first thing a concept showed was three empty textareas over the artefact
+  // the user came to look at. Now the 💬 FAB is the only thing that opens it,
+  // in every iteration state including frozen ones — no auto-open, no
+  // auto-close, nothing to un-learn.
+  //
+  // Size is one of exactly two values. A document round (decision / free —
+  // the projection on <html data-template>, which showIteration() rewrites
+  // before any iteration:changed listener runs) shows only the general
+  // section and is always compact; a design round derives it from the same
+  // body flags the layout already sets. Never size the dock to its content
+  // or to the viewport: content-sizing produces the mini-box nobody can type
+  // in, and viewport-sizing produces the full-width panel whose textareas
+  // never wrap.
+  function applyDockSize() {
+    // Sync the maximise button's a11y state on every call — cheap, and
+    // covers both the click handler's own call and any call site that
+    // re-applies sizing without having touched the button (restoreState(),
+    // an iteration switch via primeDock()).
+    syncMaximizeButton();
+    // The automatic compact/wide computation always runs — still exactly two
+    // sizes. The user's maximise override lives on a SEPARATE attribute
+    // (data-userMaximized) and composes with whichever of these two is
+    // current via CSS (`.feedback-dock[data-size][data-user-maximized="true"]`),
+    // rather than replacing this value — so it also survives an iteration
+    // switch untouched: primeDock() calls this on every switch but never
+    // clears data-userMaximized itself.
+    // Exposed as window.applyDockSize and called from restoreState(), which
+    // runs on every page — including one whose dock markup is missing.
+    if (!dock) return;
+    const designRound = DOCK_DESIGN_TEMPLATES.has(document.documentElement.dataset.template || '');
+    const singleScreen = document.body.dataset.singleScreen === 'true';
+    const singleDesign = document.body.dataset.singleDesign === 'true';
+    dock.dataset.size = (!designRound || (singleScreen && singleDesign)) ? 'compact' : 'wide';
+  }
+  window.applyDockSize = applyDockSize;
+
+  // The dock is one shared overlay, but its content always belongs to
+  // whichever round is live. The rebuild stamp (§ Layout JS buildDesignUI)
+  // and § State Persistence's key namespacing derive from this one answer.
+  function liveIterationId() {
+    const live = document.querySelector('section[data-iteration][data-active]');
+    return live ? String(live.dataset.iteration) : '';
+  }
+  window.liveIterationId = liveIterationId;
+  function visibleIteration() {
+    return document.querySelector('section[data-iteration]:not([hidden])');
+  }
+
+  // Snapshot the dock's current values, keyed by data-comment, so the one
+  // rebuild the design row builders still perform (iteration change) does
+  // not drop text. restoreState() only runs on DOMContentLoaded, so anything
+  // lost here is lost for good — and the next saveState() would delete its
+  // localStorage key too.
+  function harvestDockValues() {
+    // A rebuild caused by a NEW live round must not carry the previous round's
+    // text forward: the ids repeat (`d1-s1`), so it would re-fill — and
+    // re-send — notes belonging to the round before. The stamp is written at
+    // the end of buildDesignUI(), so during a rebuild it still names the round
+    // the values on screen came from.
+    if (dock && dock.dataset.iteration && dock.dataset.iteration !== liveIterationId()) return {};
+    const values = {};
+    document.querySelectorAll('#feedback-dock [data-comment]').forEach(el => {
+      if (el.value) values[el.dataset.comment] = el.value;
+    });
+    return values;
+  }
+  window.harvestDockValues = harvestDockValues;
+
+  // Dock content is per-iteration, but the dock itself is ONE shared overlay
+  // that lives outside section[data-iteration]. Entering a frozen tab
+  // stashes the live iteration's unsent values, shows the frozen
+  // iteration's SUBMITTED values read-only (never `disabled` — see
+  // iteration-rules.md § Freezing Design Iterations), and returning to the
+  // live tab restores the stash. Both directions write EVERY dock field,
+  // empty string included: screen ids repeat across iterations, so leaving a
+  // field untouched would leak the other iteration's text into it.
+  // The frozen payload is the JSON blob the freeze step writes into the
+  // section as a script[type="application/json"][data-frozen-feedback]
+  // element — `general` plus, on a design round, designs / screens / views
+  // (iteration-rules.md § Freezing Design Iterations has the exact markup).
+  // `general` is accepted as the submitted `{ text, attachments }` object OR
+  // as a bare string, so no template needs an adapter to read its note back.
+  // Never write that closing script tag literally inside this JS, not even in
+  // a comment: the HTML parser ends the surrounding script element at it.
+  // Missing blob (older pages) degrades to empty read-only fields rather
+  // than editable ones.
+  let liveDockValues = null;
+  // The outgoing round's unsent text, taken ONCE per frozen visit — the
+  // design layout's iteration:changed handler calls this before it rebuilds
+  // the dock rows, applyDockFreezeState() calls it for every other path.
+  function stashLiveDockValues() {
+    if (liveDockValues === null) liveDockValues = harvestDockValues();
+  }
+  window.stashLiveDockValues = stashLiveDockValues;
+  function frozenFeedback() {
+    const it = visibleIteration();
+    const node = it && it.querySelector('script[type="application/json"][data-frozen-feedback]');
+    if (!node) return null;
+    try { return JSON.parse(node.textContent); } catch (e) { return null; }
+  }
+  function frozenGeneralText(data) {
+    const g = data.general;
+    if (g && typeof g === 'object') return g.text || '';
+    return typeof g === 'string' ? g : '';
+  }
+  function applyDockFreezeState() {
+    if (!dock) return;
+    const frozen = document.body.classList.contains('viewing-frozen');
+    const fields = [...document.querySelectorAll('#feedback-dock textarea')];
+    if (frozen) {
+      stashLiveDockValues();
+      const data = frozenFeedback() || {};
+      fields.forEach(ta => {
+        if (ta.dataset.designComment) ta.value = (data.designs || {})[ta.dataset.designComment] || '';
+        else if (ta.dataset.screenComment) ta.value = (data.screens || {})[ta.dataset.screenComment] || '';
+        // Views (§ Views (optional)) — same treatment as designs/screens
+        // above: the dock lives outside section[data-iteration], so its
+        // view-level textareas need the same frozen blob restore.
+        else if (ta.dataset.viewComment) ta.value = (data.views || {})[ta.dataset.viewComment] || '';
+        else if (ta.dataset.comment === 'general') ta.value = frozenGeneralText(data);
+        ta.readOnly = true;
+      });
+    } else {
+      const stash = liveDockValues;
+      liveDockValues = null;
+      // A submitted round stays read-only on the way back from a frozen tab —
+      // its text is the record of what is currently in flight, not a field to
+      // keep editing. Without this check the return trip silently re-armed
+      // editing on a round whose payload had already left.
+      const submitted = dock.dataset.submitted === 'true';
+      fields.forEach(ta => {
+        ta.readOnly = submitted;
+        if (stash) ta.value = stash[ta.dataset.comment] || '';
+      });
+    }
+  }
+  window.applyDockFreezeState = applyDockFreezeState;
+
+  // Called by the submit handler once the payload is captured. The dock keeps
+  // every character: the round the user just submitted is still the LIVE round
+  // until Claude appends the next section, and those comments are the only
+  // on-screen record of what was sent. Emptying the dock here — which is what
+  // this function used to do — meant a detour into an older tab and back came
+  // home to a blank dock on a round that had not even been answered yet.
+  //
+  // Nothing leaks into the next round any more: its storage keys carry the
+  // round number (§ State Persistence `_iterationPrefix`), and the reload onto
+  // iteration N+1 rebuilds the dock from that empty namespace. Only editing is
+  // taken away, so what is on screen cannot drift from what is in flight.
+  window.markDockSubmitted = function() {
+    if (!dock) return;
+    document.querySelectorAll('#feedback-dock textarea').forEach(ta => { ta.readOnly = true; });
+    dock.dataset.submitted = 'true';
+    if (typeof saveState === 'function') saveState();
+    // Push the round's final text to the bridge's durable store immediately,
+    // rather than one debounce later — a reload can land at any moment now.
+    if (typeof flushDraft === 'function') flushDraft();
+  };
+
+  // The exact inverse, for every path that hands control back on a round that
+  // did NOT go through: a 507 from the bridge, or the safety timeout when
+  // Claude stopped answering. The panel returns to ready, so the dock has to
+  // return to editable — a read-only dock under a re-armed submit button means
+  // the user can see their comments and change nothing about them.
+  window.unmarkDockSubmitted = function() {
+    if (!dock) return;
+    if (document.body.classList.contains('viewing-frozen')) return;
+    document.querySelectorAll('#feedback-dock textarea').forEach(ta => { ta.readOnly = false; });
+    delete dock.dataset.submitted;
+  };
+
+  // Runs on load and after every iteration / design / screen switch: keep the
+  // frozen-vs-live field state and the dock size in sync with what is on
+  // screen. It deliberately does NOT open or close the dock — that is the
+  // user's call alone, and a switch must never yank the dock open over the
+  // content they just navigated to.
+  function primeDock() {
+    applyDockFreezeState();
+    applyDockSize();
+  }
+  window.primeDock = primeDock;
+
+  // A page with a design round hands the switch path to § Layout JS, whose
+  // iteration:changed handler orders the stash, the row rebuild, the
+  // restore and primeDock() itself (P14b). A document-only page has no such
+  // handler, so the dock primes itself: once now, and on every tab switch —
+  // showIteration() sets body.viewing-frozen and the <html data-template>
+  // projection BEFORE it dispatches the event, so both reads below are
+  // already about the round being shown. Same guard as wireDesignLayout():
+  // the PAGE, not the current projection.
+  const pageHasDesign = DOCK_DESIGN_TEMPLATES.has(document.documentElement.dataset.template || '')
+    || !!document.querySelector('section[data-iteration][data-iteration-template="design"],'
+                              + 'section[data-iteration][data-iteration-template="prototype"]');
+  if (!pageHasDesign) {
+    primeDock();
+    document.addEventListener('iteration:changed', primeDock);
+  }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
@@ -1239,10 +1839,11 @@ bi-state per variant, submits, Claude iterates.
 ## Layout — Document rounds (decision / free)
 
 The content column fills the page; the decision panel is the **same ☰ overlay
-a design round uses** and is not part of the flow. There is no docked-sidebar
-variant any more — see § Panel Chrome (all templates) for why the panel is
-page chrome rather than a per-template layout, and for the markup + JS every
-page carries.
+a design round uses** and is not part of the flow, and the **same 💬 feedback
+dock** sits on the bottom-right FAB — reduced to its general-notes section
+here (#399). There is no docked-sidebar variant any more — see § Panel Chrome
+(all templates) for why both are page chrome rather than a per-template
+layout, and for the markup + CSS + JS every page carries.
 
 ```css
 .concept-layout {
@@ -1479,11 +2080,19 @@ the override slot.
     { "id": "variant-b", "label": "...", "evaluation": "discard", "rating": 2 },
     { "id": "variant-c", "label": "...", "evaluation": "include", "rating": 5 }
   ],
-  "comments": [
-    { "id": "variant-a", "text": "..." }
-  ]
+  "comments": {
+    "general": { "text": "...", "attachments": [] },
+    "items": [
+      { "id": "variant-a-note", "text": "...", "attachments": [] }
+    ]
+  }
 }
 ```
+
+`comments` is the one shape every template emits (§ collectDecisions
+(dispatcher)): `general` is the 💬 dock's general note — always present, even
+empty — and `items` lists every inline note of the live round that carries
+text or an attachment.
 
 `evaluation` values: `"discard"` | `"include"`
 `action` values: `"iterate"` | `"implement"` — determined by which submit
@@ -2623,7 +3232,7 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
         </details>
       </div>
       <!-- CTA foot — pinned, ≤120px, and it reserves the 💬 FAB's row below
-           it (§ Layout CSS: padding-bottom: calc(60px + 2rem)). -->
+           it (§ Panel Chrome CSS: padding-bottom: calc(60px + 2rem)). -->
       <div class="panel-cta">
       <div id="panel-ready">
         <div class="submit-split">
@@ -2686,10 +3295,16 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
          is preserved on close, no value is lost.
          CLOSED by default (data-open="false"): at concept start the user
          wants to look at the mockup, not at three empty textareas covering
-         it. data-size is written by applyDockSize() — see Layout JS. -->
+         it. data-size is written by applyDockSize() — § Panel Chrome JS.
+         The dock is PAGE CHROME (§ Panel Chrome (all templates)): the
+         header row and the general section below are the same markup every
+         template carries; only the three row containers (#screen-textareas,
+         #design-textareas, #view-textareas) are the design layout's
+         addition, and they fold away by CSS while a document round of the
+         same page is on screen. -->
     <aside class="feedback-dock" id="feedback-dock" data-open="false" data-size="compact" data-user-maximized="false">
       <div class="feedback-dock-header">
-        <strong>Feedback</strong>
+        <strong>{{proto.feedback_title}}</strong>
         <!-- Maximise (Work package B) is a distinct control from minimise:
              minimise CLOSES the dock (data-open toggle), maximise RESIZES it
              (data-size override) without touching data-open at all. The two
@@ -2986,20 +3601,21 @@ body:not([data-view-active="true"]) section[data-view] { display: none; }
   text-align: left; font-size: 0.9rem;
 }
 
-/* Design-only chrome: the 💬 FAB, its dock, the screen indicator, the
-   switchers and the device toggle all describe a fullscreen mockup, so they
+/* Design-only chrome: the screen indicator, the switchers, the device
+   toggle and the annotation layer all describe a fullscreen mockup, so they
    exist in the DOM on every page but only render in design mode.
-   `.panel-fab` is deliberately NOT in this list: the ☰ decision panel is page
-   chrome, reached the same way in every template (§ Panel Chrome (all
-   templates)). It used to be hidden here and the panel docked into a sidebar
-   instead — which is how a concept that mixed templates moved its whole
-   feedback surface between rounds.
+   `.panel-fab`, `.feedback-fab` and `.feedback-dock` are deliberately NOT in
+   this list: the ☰ decision panel and the 💬 feedback dock are page chrome,
+   reached the same way in every template (§ Panel Chrome (all templates)).
+   All three used to be hidden here (the panel docked into a sidebar instead,
+   the dock simply vanished) — which is how a concept that mixed templates
+   moved its whole feedback surface between rounds. What a document round
+   shows of the dock is decided by the compact rule in § Panel Chrome CSS,
+   not by hiding it.
    The `html` type selector is REQUIRED — a bare `:not([data-template="design"])`
    also matches <body> (which never carries the attribute) and would hide the
    chrome in design mode too. */
 html:not([data-template="design"]) .screen-indicator,
-html:not([data-template="design"]) .feedback-fab,
-html:not([data-template="design"]) .feedback-dock,
 html:not([data-template="design"]) .viewport-toggle,
 html:not([data-template="design"]) .design-switcher,
 html:not([data-template="design"]) .anno-toggle-fab,
@@ -3270,38 +3886,9 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
 /* Panel chrome (overlay aside, ☰ FAB, backdrop, close button) is NOT in this
    section — it applies in every template and lives in § Panel Chrome (all
    templates), so a decision- or free-only page carries it without taking the
-   design layout with it. Only the 💬 FAB's own reservation stays here. */
-
-/* The 💬 FAB (60px circle, bottom: 2rem — see .panel-fab/.feedback-fab) floats
-   over the panel's bottom-right corner. Reserve its row under the pinned foot
-   so the call to action never sits beneath it. */
-[data-template="design"] .concept-layout.design .panel-cta {
-  padding-bottom: calc(60px + 2rem);
-}
-
-/* ── One-shot attention pulse on the 💬 FAB ──
-   The dock is where every note is written, and an unlabelled emoji circle in
-   a corner is genuinely missable — so the FAB announces itself exactly three
-   times, then never again: the JS strips `data-untouched` on the first dock
-   open OR the first keystroke inside the dock, so a returning user is not
-   nagged. It is `animation`, not a class, so it costs nothing once the
-   attribute is gone.
-   Geometry is OFF LIMITS here (gate P13): box-shadow and transform ONLY, no
-   width/height/border-radius/padding — those live in the shared
-   .panel-fab/.feedback-fab rule and the two FABs must stay one component.
-   transform: scale() also composes with the :hover scale rather than
-   fighting it, since both write the same property and hover wins by
-   source order while pointing. */
-@keyframes fabPulse {
-  0%, 100% { transform: scale(1);    box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-  50%      { transform: scale(1.12); box-shadow: 0 4px 12px rgba(0,0,0,0.3), 0 0 0 12px rgba(88,166,255,0.18); }
-}
-.feedback-fab[data-untouched="true"] { animation: fabPulse 2.6s ease-in-out 3; }
-@media (prefers-reduced-motion: reduce) {
-  /* No substitute cue: the tooltip is the discoverability path that does not
-     move, and it is present either way. */
-  .feedback-fab[data-untouched="true"] { animation: none; }
-}
+   design layout with it. The 💬 FAB, its dock and the FAB's reserved row
+   under the panel foot moved there too (#399) — the dock is page chrome in
+   every template; only the design-side row collapse rules stay below. */
 
 /* ── Screen navigation inside the ☰ panel ── */
 .screen-nav { display: flex; flex-direction: column; gap: 4px;
@@ -3358,176 +3945,6 @@ body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
   border-color: var(--accent-color); font-weight: 600;
 }
 .screen-nav-view-item .has-notes { color: var(--warning-color); font-size: 0.75rem; }
-
-/* ── Feedback Dock — Speech-Bubble anchored to the 💬 FAB (bottom-right) ──
-   Geometry: ☰ lives top-right, 💬 bottom-right (60px). The dock is anchored
-   to the FAB's corner and has EXACTLY TWO sizes — never a viewport-
-   proportional one, never shrink-to-content:
-     compact  420px wide  — one general note (single design, single screen)
-     wide     560px wide  — screen + design + general notes, specific → general
-   Both sizes are deliberate. A dock that spans the page turns every textarea
-   into one 1200px line nobody ever wraps in; a dock sized to its content
-   becomes a box you cannot type three lines into without scrolling. Which
-   size applies is decided in JS by applyDockSize() from the same
-   body[data-single-*] flags the rest of the layout uses, so the same
-   iteration shape always yields the same dock.
-   * right = FAB.right (2rem)             → bubble's right edge aligns with FAB
-   * bottom = FAB.bottom + 60 - 6px       → bubble sits directly above the 60px
-                                            FAB with a hair of overlap so the
-                                            visual connection reads as "the
-                                            bubble grows out of the FAB".
-   The dock no longer reserves padding for the FAB: it now ends above it
-   rather than spanning across it. The FAB keeps its higher z-index so it
-   stays visible and clickable while the dock is open — clicking it toggles
-   the dock.
-   --dock-ceiling: the dock's TOP edge stops just below the ☰ FAB. Both are
-   right-edge overlays in the same column (right: 2rem), and the dock
-   (z-index 180) used to grow straight over the ☰ FAB on a tall viewport:
-   80vh at 1080px is 864px, the ☰ band ends 92px from the top, so the dock
-   covered it and the ☰ was unreachable while the dock was open. The
-   ceiling is viewport − ☰ band (top 2rem + 60px + 0.75rem gap) − the
-   dock's own bottom offset (2rem + 54px). Every max-height below is
-   min(--dock-ceiling, its px cap): the cap still rules on tall viewports,
-   the ceiling only bites when the content would reach the ☰. */
-.feedback-dock {
-  --dock-ceiling: calc(100vh - (2rem + 60px + 0.75rem) - (2rem + 60px - 6px));
-  position: fixed;
-  left: auto;
-  right: 2rem;
-  bottom: calc(2rem + 60px - 6px);
-  width: min(420px, calc(100vw - 4rem));
-  /* 900px, not 460px: at a ~1080px-tall viewport the compact dock must show
-     screen + design + general at once (§ Feedback behaviour) without
-     scrolling or the user reaching for maximise. The old 460px cap was
-     sized for the single-general-note case only, before the reorder made
-     three sections the compact default's normal load. */
-  max-height: min(var(--dock-ceiling), 900px);
-  padding: 1rem 1.25rem 1.25rem;
-  background: var(--panel-bg, #161b22);
-  border: 1px solid var(--border-color, #30363d);
-  border-radius: 18px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.25);
-  z-index: 180;
-  overflow-y: auto;
-  display: none;
-  flex-direction: column;
-  gap: 0.85rem;
-  transform-origin: 100% 100%; /* anchor: the 💬 FAB it grows out of */
-}
-.feedback-dock[data-size="wide"] {
-  width: min(560px, calc(100vw - 4rem));
-  max-height: min(var(--dock-ceiling), 940px);
-}
-/* Work package B — user-controlled maximise. Deliberately keyed off a
-   SEPARATE attribute (data-user-maximized), not a third data-size value:
-   applyDockSize() (§ Layout JS) still only ever assigns compact/wide from
-   the iteration shape — exactly the same two sizes as before — and this
-   rule composes on top of whichever one is active by appearing later in
-   the stylesheet (same specificity, source-order wins). */
-.feedback-dock[data-size][data-user-maximized="true"] {
-  width: min(1100px, calc(100vw - 4rem));
-  max-height: min(var(--dock-ceiling), 860px);
-}
-.feedback-dock[data-size][data-user-maximized="true"] .feedback-section textarea {
-  min-height: 220px;
-}
-.feedback-dock[data-open="true"] {
-  display: flex;
-  animation: feedback-dock-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
-}
-@keyframes feedback-dock-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.94); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* Both FABs sit above the dock so they stay visible AND clickable while
-   the dock is open. 💬: the dock's bottom edge overlaps the FAB's top edge
-   by ~6px, so the bubble visually reads as growing out of the FAB. ☰: the
-   --dock-ceiling above already keeps the dock out of its band; the z-index
-   is the second lock, so a page that lost the ceiling (an older max-height
-   rule surviving a re-sync) still leaves the ☰ clickable — and a click on
-   it closes the dock (openPanel() → closeDock(true), § Panel Chrome). The
-   ☰ FAB hides itself (.hidden) once the panel is open, so it never sits
-   above the panel it opened. */
-.feedback-fab { z-index: 220; }
-.panel-fab { z-index: 220; }
-
-.feedback-dock-header {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 0.25rem;
-}
-.feedback-dock-header strong { font-size: 1rem; }
-
-/* Minimise button — visual cue is the underscore-low minus, not an ✕,
-   so the user understands their text is preserved (not destroyed). */
-.feedback-close-btn {
-  background: none; border: none; cursor: pointer;
-  color: var(--text-secondary, #8b949e);
-  font-size: 1.6rem; line-height: 1; font-weight: 500;
-  padding: 0 0.4rem 0.2rem; border-radius: 6px;
-  transition: background 0.15s, color 0.15s;
-}
-.feedback-close-btn:hover {
-  background: color-mix(in srgb, var(--text-color) 12%, transparent);
-  color: var(--text-color, #c9d1d9);
-}
-
-/* Maximise/restore — a DISTINCT control from minimise (above): minimise
-   closes the dock, this one only resizes it. Same visual language so the
-   two read as a pair, but a different icon/meaning entirely. */
-.feedback-maximize-btn {
-  background: none; border: none; cursor: pointer;
-  color: var(--text-secondary, #8b949e);
-  font-size: 1.1rem; line-height: 1;
-  padding: 0.2rem 0.4rem; border-radius: 6px; margin-right: 0.15rem;
-  transition: background 0.15s, color 0.15s;
-}
-.feedback-maximize-btn:hover {
-  background: color-mix(in srgb, var(--text-color) 12%, transparent);
-  color: var(--text-color, #c9d1d9);
-}
-.feedback-maximize-btn[aria-pressed="true"] { color: var(--accent-color); }
-
-.feedback-section { display: flex; flex-direction: column; gap: 0.35rem; }
-.feedback-section label { font-size: 0.82rem; color: var(--text-secondary); font-weight: 500; }
-.feedback-section label strong { color: var(--accent-color); }
-.feedback-section textarea {
-  width: 100%; padding: 0.65rem 0.7rem;
-  border: 1px solid var(--border-color); border-radius: 10px;
-  background: var(--input-bg, #0d1117); color: var(--text-color, #c9d1d9);
-  /* 80px, not 90px: with the reorder the compact dock's normal load is
-     three sections (§ Feedback behaviour), so each textarea gives up a
-     little height to the max-height budget above — 80px still clears
-     ~2-3 visible lines at this line-height/padding, it just no longer
-     eats the margin the dock needed for the two rows beside it. */
-  font-family: inherit; font-size: 0.95rem; line-height: 1.5; resize: vertical; min-height: 80px;
-}
-.feedback-section textarea:focus { outline: none; border-color: var(--accent-color); }
-.feedback-divider { height: 1px; background: var(--border-color); margin: 0.2rem 0; }
-/* The attach bar's own margin-top (§ Attachments CSS) is meant for contexts
-   with no flex-gap parent (decision notes, annotation bubbles). Inside the
-   dock, .feedback-section already applies that same gap between its
-   children (label / textarea / attach-slot), so the bar's margin-top would
-   double it — the bar would sit further from "its" textarea than the
-   textarea sits from its own label. Zeroing it here keeps the rhythm even
-   without touching the shared .attach-bar rule other surfaces still rely on. */
-.feedback-dock .attach-bar { margin-top: 0; }
-
-/* Narrow viewports (≤560px): the two fixed widths stop making sense below
-   the compact size, so the dock spans the viewport with tight margins.
-   Both size variants collapse to the same geometry here. */
-@media (max-width: 560px) {
-  .feedback-dock,
-  .feedback-dock[data-size="wide"],
-  .feedback-dock[data-size][data-user-maximized="true"] {
-    left: 0.75rem;
-    right: 0.75rem;
-    width: auto;
-    max-height: min(var(--dock-ceiling), 62vh);
-    padding: 1rem;
-    border-radius: 14px;
-  }
-}
 
 /* Hidden per-screen / per-design / per-view textareas: only the active one
    shown. #view-textareas belongs here for the same reason the other two do —
@@ -3877,6 +4294,13 @@ Same rule, same reason as `buildDesignTextareas()` for the design-level row.
 Both builders carry values across the one rebuild they do have (iteration
 change) via `harvestDockValues()`.
 
+The dock itself — toggle, maximise, `applyDockSize()`, `applyDockFreezeState()`,
+`primeDock()`, `markDockSubmitted()` — is NOT wired here: it is page chrome in
+every template (§ Panel Chrome (all templates) → Feedback dock, #399), and this
+IIFE only calls the globals that block exports. What stays here is what only a
+design round has: the three row builders and the ordering of stash → rebuild
+→ restore → `primeDock()` on an iteration switch (gate P14b).
+
 ```javascript
 (function wireDesignLayout() {
   // Guard on the PAGE, not on the current projection: a page whose first
@@ -4114,33 +4538,9 @@ change) via `harvestDockValues()`.
     if (dock.dataset.iteration !== _liveNow) delete dock.dataset.submitted;
     dock.dataset.iteration = _liveNow;
   }
-
-  // Snapshot the dock's current values, keyed by data-comment, so the one
-  // rebuild these builders still perform (iteration change) does not drop
-  // text. restoreState() only runs on DOMContentLoaded, so anything lost
-  // here is lost for good — and the next saveState() would delete its
-  // localStorage key too.
-  function harvestDockValues() {
-    // A rebuild caused by a NEW live round must not carry the previous round's
-    // text forward: the ids repeat (`d1-s1`), so it would re-fill — and
-    // re-send — notes belonging to the round before. The stamp is written at
-    // the end of buildDesignUI(), so during a rebuild it still names the round
-    // the values on screen came from.
-    if (dock && dock.dataset.iteration && dock.dataset.iteration !== liveIterationId()) return {};
-    const values = {};
-    document.querySelectorAll('#feedback-dock [data-comment]').forEach(el => {
-      if (el.value) values[el.dataset.comment] = el.value;
-    });
-    return values;
-  }
-
-  // The dock is one shared overlay, but its content always belongs to whichever
-  // round is live. Both the stamp above and § State Persistence's key
-  // namespacing derive from this one answer.
-  function liveIterationId() {
-    const live = document.querySelector('section[data-iteration][data-active]');
-    return live ? String(live.dataset.iteration) : '';
-  }
+  // harvestDockValues() and liveIterationId() are globals from § Panel
+  // Chrome's dock block (the dock is page chrome, so the carry-over that
+  // protects a rebuild belongs to it, not to this layout).
 
   // Per-design textareas (💬) — one per design, only the active one shown.
   // Rebuilt only when the design SET changes (buildDesignUI, i.e. iteration
@@ -4870,243 +5270,15 @@ change) via `harvestDockValues()`.
   // reached through `window.` from the dock paths below; the only thing kept
   // here is the reference the click-through guard needs.
   const panel = document.getElementById('decision-panel');
-
+  // Dock toggle, maximise, sizing, freeze state, submitted state: NOT here
+  // either (#399). The 💬 dock is page chrome like the panel, wired in
+  // § Panel Chrome (all templates) → Feedback dock, and reached from this
+  // IIFE through the globals it exports: harvestDockValues / liveIterationId
+  // (the row builders above), stashLiveDockValues / primeDock (the
+  // iteration:changed handler below), applyDockSize (restoreState). The
+  // element reference is kept only for the keyboard-shortcut guard at the
+  // bottom of this block.
   const dock = document.getElementById('feedback-dock');
-  const dockToggle = document.getElementById('feedback-toggle');
-  const dockClose = document.getElementById('feedback-close');
-  // Same contract as the panel block's missingPanelParts: name what is
-  // missing ONCE, then degrade. Everything below used to dereference these
-  // three unguarded, so a page that shipped without the dock threw on
-  // `dockToggle.dataset` — and since this IIFE wires EVERYTHING after it too
-  // (screen switching, click-through, the keyboard shortcuts), the whole page
-  // went silent with it. The user then sees a mockup that ignores every
-  // click and arrow key, which reads as "the mockup is broken" rather than
-  // "the dock markup is missing".
-  const missingDockParts = [
-    ['feedback-dock', dock], ['feedback-toggle', dockToggle],
-    ['feedback-close', dockClose],
-  ].filter(([, el]) => !el).map(([id]) => id);
-  if (missingDockParts.length) {
-    console.error('[concept] feedback-dock markup incomplete, dock disabled — missing: '
-      + missingDockParts.join(', '));
-  }
-  // The dock is a Speech-Bubble anchored to the 💬 FAB — the FAB stays
-  // visible and clickable while the dock is open, so clicking it toggles
-  // (open ↔ minimised). The X button is a *minimise*, not a destroy:
-  // closing the dock leaves all textarea content intact (localStorage
-  // persistence is untouched).
-  // Accessibility:
-  //   * aria-expanded reflects open/closed state on the FAB
-  //   * aria-label swaps between data-label-open / data-label-close so
-  //     screen-reader users hear the correct next action
-  //   * on close, focus is restored to the FAB if it was inside the dock
-  //     (the dock disappears via display:none, so leaving focus there
-  //     would orphan it)
-  const LABEL_OPEN = dockToggle?.dataset.labelOpen || dockToggle?.getAttribute('aria-label') || '';
-  const LABEL_CLOSE = dockToggle?.dataset.labelClose || LABEL_OPEN;
-  function openDock() {
-    if (!dock || !dockToggle) return;
-    window.closePanel?.();   // mutually exclusive overlays, see openPanel above
-    dock.dataset.open = 'true';
-    dockToggle.setAttribute('aria-expanded', 'true');
-    dockToggle.setAttribute('aria-label', LABEL_CLOSE);
-    dockToggle.title = LABEL_CLOSE;
-  }
-  // `handOff` = the dock is closing because the panel is taking over. Then
-  // the FAB must NOT be focused: it sits at z-index 220, above the panel
-  // backdrop, so a keyboard user would be left standing on a control that
-  // dismisses the overlay that just opened. openPanel() moves focus into the
-  // panel instead. Every other close still restores the FAB, or focus would
-  // be orphaned inside a display:none dock.
-  function closeDock(handOff) {
-    // Reachable from openPanel() through `window.closeDock?.()`, so it must
-    // survive a page whose dock never existed.
-    if (!dock || !dockToggle) return;
-    const focusWasInside = !handOff && dock.contains(document.activeElement);
-    dock.dataset.open = 'false';
-    dockToggle.setAttribute('aria-expanded', 'false');
-    dockToggle.setAttribute('aria-label', LABEL_OPEN);
-    dockToggle.title = LABEL_OPEN;
-    if (focusWasInside) dockToggle.focus();
-  }
-  window.closeDock = closeDock;
-  // The one-shot pulse (§ Layout CSS) ends the moment the user proves they
-  // found the FAB. Two independent proofs, because either can come first:
-  // opening the dock from the FAB, or typing into it (a restored session can
-  // land with the dock already open, and closeDock() is also reached by the
-  // panel hand-off, which proves nothing about the dock).
-  const stopFabPulse = () => dockToggle?.removeAttribute('data-untouched');
-  dockToggle?.addEventListener('click', () => {
-    stopFabPulse();
-    if (dock?.dataset.open === 'true') closeDock();
-    else openDock();
-  });
-  dock?.addEventListener('input', stopFabPulse);
-  dockClose?.addEventListener('click', closeDock);
-
-  // Maximise/restore (Work package B) — a RESIZE, never a close. Distinct
-  // from minimise above: minimise flips data-open, this flips
-  // data-userMaximized, a SEPARATE attribute from data-size (applyDockSize()
-  // below still only ever computes compact/wide from the iteration shape,
-  // unchanged) — § Layout CSS composes the two via
-  // `.feedback-dock[data-size][data-user-maximized="true"]`, which applies on top of
-  // whichever of compact/wide is current. The choice is persisted
-  // (state['dockMaximized'], § State Persistence) and restored on reload via
-  // window.applyDockSize() (see restoreState()) — primeDock() must never
-  // silently clear data-userMaximized on an iteration switch, and it does
-  // not: applyDockSize() only ever writes data-size.
-  const dockMaximize = document.getElementById('feedback-maximize');
-  function syncMaximizeButton() {
-    if (!dockMaximize || !dock) return;
-    const on = dock.dataset.userMaximized === 'true';
-    dockMaximize.setAttribute('aria-pressed', String(on));
-    const label = on ? '{{panel.restore_size}}' : '{{panel.maximize}}';
-    dockMaximize.setAttribute('aria-label', label);
-    dockMaximize.title = label;
-  }
-  dockMaximize?.addEventListener('click', () => {
-    if (!dock) return;
-    dock.dataset.userMaximized = dock.dataset.userMaximized === 'true' ? 'false' : 'true';
-    applyDockSize();
-    if (typeof saveState === 'function') saveState();
-  });
-
-  // ── Closed by default, opened only by the user ──
-  // The dock starts minimised (data-open="false" in markup). It used to open
-  // itself on load and auto-close on the first mockup click, which meant the
-  // first thing a concept showed was three empty textareas over the artefact
-  // the user came to look at. Now the 💬 FAB is the only thing that opens it,
-  // in every iteration state including frozen ones — no auto-open, no
-  // auto-close, nothing to un-learn.
-  //
-  // Size is one of exactly two values, derived from the same body flags the
-  // layout already sets. Never size the dock to its content or to the
-  // viewport: content-sizing produces the mini-box nobody can type in, and
-  // viewport-sizing produces the full-width panel whose textareas never wrap.
-  function applyDockSize() {
-    // Sync the maximise button's a11y state on every call — cheap, and
-    // covers both the click handler's own call and any call site that
-    // re-applies sizing without having touched the button (restoreState(),
-    // an iteration switch via primeDock()).
-    syncMaximizeButton();
-    // The automatic compact/wide computation is UNCHANGED and always runs —
-    // still exactly two sizes, same as before Work package B. The user's
-    // maximise override lives on a SEPARATE attribute (data-userMaximized)
-    // and composes with whichever of these two is current via CSS (§ Layout
-    // CSS `.feedback-dock[data-size][data-user-maximized="true"]`), rather than
-    // replacing this value — so it also survives an iteration switch
-    // untouched: primeDock() calls this on every switch but never clears
-    // data-userMaximized itself.
-    // Exposed as window.applyDockSize and called from restoreState(), which
-    // runs on every page — including one with no dock.
-    if (!dock) return;
-    const singleScreen = document.body.dataset.singleScreen === 'true';
-    const singleDesign = document.body.dataset.singleDesign === 'true';
-    dock.dataset.size = (singleScreen && singleDesign) ? 'compact' : 'wide';
-  }
-  // Exposed so restoreState() (§ State Persistence, a separate script block
-  // whose DOMContentLoaded listener may run before OR after this one — see
-  // the ordering note there) can re-apply sizing immediately after it sets
-  // dock.dataset.userMaximized from the persisted value, rather than waiting
-  // for a switch that may never come.
-  window.applyDockSize = applyDockSize;
-  // Dock content is per-iteration, but the dock itself is ONE shared overlay
-  // that lives outside section[data-iteration]. Entering a frozen tab
-  // stashes the live iteration's unsent values, shows the frozen
-  // iteration's SUBMITTED values read-only (never `disabled` — see
-  // iteration-rules.md § Freezing Design Iterations), and returning to the
-  // live tab restores the stash. Both directions write EVERY dock field,
-  // empty string included: screen ids repeat across iterations, so leaving a
-  // field untouched would leak the other iteration's text into it.
-  // The frozen payload is the JSON blob the freeze step writes into the
-  // section as a script[type="application/json"][data-frozen-feedback]
-  // element — same shape collectDesignDecisions() submitted
-  // ({general, designs, screens}); see iteration-rules.md § Freezing Design
-  // Iterations for the exact markup. Never write that closing script tag
-  // literally inside this JS, not even in a comment: the HTML parser ends
-  // the surrounding script element at it. Missing blob (older pages)
-  // degrades to empty read-only fields rather than editable ones.
-  let liveDockValues = null;
-  function frozenFeedback() {
-    const it = visibleIteration();
-    const node = it && it.querySelector('script[type="application/json"][data-frozen-feedback]');
-    if (!node) return null;
-    try { return JSON.parse(node.textContent); } catch (e) { return null; }
-  }
-  function applyDockFreezeState() {
-    if (!dock) return;
-    const frozen = document.body.classList.contains('viewing-frozen');
-    const fields = [...document.querySelectorAll('#feedback-dock textarea')];
-    if (frozen) {
-      if (liveDockValues === null) liveDockValues = harvestDockValues();
-      const data = frozenFeedback() || {};
-      fields.forEach(ta => {
-        if (ta.dataset.designComment) ta.value = (data.designs || {})[ta.dataset.designComment] || '';
-        else if (ta.dataset.screenComment) ta.value = (data.screens || {})[ta.dataset.screenComment] || '';
-        // Views (§ Views (optional)) — same treatment as designs/screens
-        // above: the dock lives outside section[data-iteration], so its
-        // view-level textareas need the same frozen blob restore.
-        else if (ta.dataset.viewComment) ta.value = (data.views || {})[ta.dataset.viewComment] || '';
-        else if (ta.dataset.comment === 'general') ta.value = data.general || '';
-        ta.readOnly = true;
-      });
-    } else {
-      const stash = liveDockValues;
-      liveDockValues = null;
-      // A submitted round stays read-only on the way back from a frozen tab —
-      // its text is the record of what is currently in flight, not a field to
-      // keep editing. Without this check the return trip silently re-armed
-      // editing on a round whose payload had already left.
-      const submitted = dock.dataset.submitted === 'true';
-      fields.forEach(ta => {
-        ta.readOnly = submitted;
-        if (stash) ta.value = stash[ta.dataset.comment] || '';
-      });
-    }
-  }
-
-  // Called by the submit handler once the payload is captured. The dock keeps
-  // every character: the round the user just submitted is still the LIVE round
-  // until Claude appends the next section, and those comments are the only
-  // on-screen record of what was sent. Emptying the dock here — which is what
-  // this function used to do — meant a detour into an older tab and back came
-  // home to a blank dock on a round that had not even been answered yet.
-  //
-  // Nothing leaks into the next round any more: its storage keys carry the
-  // round number (§ State Persistence `_iterationPrefix`), and the reload onto
-  // iteration N+1 rebuilds the dock from that empty namespace. Only editing is
-  // taken away, so what is on screen cannot drift from what is in flight.
-  window.markDockSubmitted = function() {
-    if (!dock) return;
-    document.querySelectorAll('#feedback-dock textarea').forEach(ta => { ta.readOnly = true; });
-    dock.dataset.submitted = 'true';
-    if (typeof saveState === 'function') saveState();
-    // Push the round's final text to the bridge's durable store immediately,
-    // rather than one debounce later — a reload can land at any moment now.
-    if (typeof flushDraft === 'function') flushDraft();
-  };
-
-  // The exact inverse, for every path that hands control back on a round that
-  // did NOT go through: a 507 from the bridge, or the safety timeout when
-  // Claude stopped answering. The panel returns to ready, so the dock has to
-  // return to editable — a read-only dock under a re-armed submit button means
-  // the user can see their comments and change nothing about them.
-  window.unmarkDockSubmitted = function() {
-    if (!dock) return;
-    if (document.body.classList.contains('viewing-frozen')) return;
-    document.querySelectorAll('#feedback-dock textarea').forEach(ta => { ta.readOnly = false; });
-    delete dock.dataset.submitted;
-  };
-
-  // Runs on load and after every iteration / design / screen switch: keep the
-  // frozen-vs-live field state and the dock size in sync with what is on
-  // screen. It deliberately does NOT open or close the dock — that is the
-  // user's call alone, and a switch must never yank the dock open over the
-  // mockup they just navigated to.
-  function primeDock() {
-    applyDockFreezeState();
-    applyDockSize();
-  }
 
   document.addEventListener('DOMContentLoaded', () => {
     buildDesignUI();
@@ -5194,9 +5366,7 @@ change) via `harvestDockValues()`.
     // page-wide, so a view note was lost every single time.
     // showIteration() sets body.viewing-frozen BEFORE dispatching this
     // event, so the class already describes the tab we are moving TO.
-    if (document.body.classList.contains('viewing-frozen') && liveDockValues === null) {
-      liveDockValues = harvestDockValues();
-    }
+    if (document.body.classList.contains('viewing-frozen')) stashLiveDockValues();
     // Same round re-entered (the boot showIteration() above all) vs. a real
     // tab switch. A question view survives the former and never the latter:
     // on boot this block's own DOMContentLoaded listener has just restored
@@ -5265,7 +5435,14 @@ change) via `harvestDockValues()`.
       return;
     }
     const design = activeDesign();
-    if (!design) return;
+    // A document round of this page (a decision reality-check, the free
+    // final report) has no design to show — but it HAS the dock (#399: page
+    // chrome in every template, general note only here), so the freeze
+    // state and the compact size still have to be applied before leaving.
+    // Skipping this used to be harmless only because the dock was hidden
+    // outside design rounds; now it would leave the live round's note
+    // editable under a frozen tab.
+    if (!design) { primeDock(); updateNoteMarkers(); return; }
     const prevId = document.querySelector('[data-screen][data-screen-active="true"]')?.id;
     const stillThere = prevId && design.querySelector(`section[data-screen]#${CSS.escape(prevId)}`);
     const remembered = lastScreenByDesign[design.dataset.design];
@@ -5796,10 +5973,13 @@ exist. **≥1 `data-design` remains mandatory** alongside any number of views
 
 ## Decision schema
 
-The design submit payload's comments are keyed by feedback level (general /
-designs / screens / **views**). `comments.screens` keeps flat screen-id
-keying regardless of which design a screen belongs to, so no consumer needs
-to learn the design nesting to read page feedback. `decisions` was always
+The design submit payload's comments carry the shape every template emits —
+`general` (the dock's general note, `{ text, attachments }`, always present)
+and `items` (every other commented field: the dock rows as `design-{id}` /
+`{screen-id}` / `view-{id}`, view decision notes as `{id}-note`) — PLUS the
+design-level keyed maps `designs` / `screens` / `views`. `comments.screens`
+keeps flat screen-id keying regardless of which design a screen belongs to,
+so no consumer needs to learn the design nesting to read page feedback. `decisions` was always
 `[]` for a design iteration with no views — it is now populated whenever the
 iteration has ≥1 `data-view-kind="decision"` or `"comparison"` view, one
 entry per `[data-decision]` group across every view, each tagged with the
@@ -5817,7 +5997,13 @@ contributes no `decisions[]` entry; its result is one `mappings[]` entry:
     { "id": "compact", "label": "Compact", "evaluation": "include", "view": "card-density", "note": "" }
   ],
   "comments": {
-    "general": "...",
+    "general": { "text": "...", "attachments": [ { "id": "<sha256>.png", "name": "shot.png", "mime": "image/png", "size": 84213, "path": ".claude/concepts/{{slug}}/attachments/<sha256>.png" } ] },
+    "items": [
+      { "id": "design-dispatch", "text": "...", "attachments": [] },
+      { "id": "d1-s1", "text": "...", "attachments": [] },
+      { "id": "view-nav-model", "text": "...", "attachments": [] },
+      { "id": "nav-tabs-note", "text": "only for the desktop layout", "attachments": [] }
+    ],
     "designs": { "dispatch": "...", "holotable": "..." },
     "screens": { "d1-s1": "...", "d1-s2": "..." },
     "views": { "nav-model": "...", "card-density": "..." }
@@ -5921,10 +6107,10 @@ already produces (`{id, name, mime, size, path}`, synced files only). A slot
 with zero attachments is simply absent from the map — it is not padded with
 an empty array, unlike `comments.*`, because the map itself may legitimately
 be `{}` for an iteration where nothing was attached. This is a *separate*
-top-level key from the decision template's own inline `comments[].attachments`
-(§ collectDecisions (dispatcher)) — the design template's comments are a
-keyed object, not an array of `{id, text}` records, so attachments cannot be
-inlined the same way and get their own top-level map instead.
+top-level key from the shared `comments.general.attachments` /
+`comments.items[].attachments` (§ collectDecisions (dispatcher)) — those
+cover the commented fields; this map is the complete per-slot index of the
+round (annotation answers included), which is why it stays its own key.
 
 ## collectDecisions (design branch)
 
@@ -5946,7 +6132,13 @@ inlined the same way and get their own top-level map instead.
 // old submit-time wipe that guaranteed the same thing, it does not destroy the
 // round's comments while the user is still waiting to read them back.
 function collectDesignDecisions() {
-  const comments = { general: '', designs: {}, screens: {}, views: {} };
+  const active = document.querySelector('section[data-iteration][data-active]');
+  // The shared shape first — { general: { text, attachments }, items } over
+  // the live round + the dock (§ collectDecisions (dispatcher),
+  // collectComments) — then the design-specific keyed maps on top: the same
+  // dock rows, keyed by design / screen / view id so no consumer has to
+  // parse the `design-{id}` / `view-{id}` item ids.
+  const comments = { ...collectComments(active || document), designs: {}, screens: {}, views: {} };
   document.querySelectorAll('#feedback-dock input, #feedback-dock select, #feedback-dock textarea').forEach(el => {
     const value = (el.value || '').trim();
     if (!value) return;
@@ -5955,9 +6147,7 @@ function collectDesignDecisions() {
     // Views (§ Views (optional)) — same "dock lives outside
     // section[data-iteration]" reasoning as designs/screens above.
     else if (el.dataset.viewComment) comments.views[el.dataset.viewComment] = value;
-    else if (el.dataset.comment === 'general') comments.general = value;
   });
-  const active = document.querySelector('section[data-iteration][data-active]');
   // Decisions authored inside views (§ Views (optional)) — reuses the same
   // [data-decision] bi-state markup and value convention
   // ("include"/"discard") as the decision template's own cards (§ Bi-State
@@ -6030,10 +6220,11 @@ function collectDesignDecisions() {
     });
   }
   // Attachments (§ Attachments) — one entry per slot key that has at least
-  // one synced file. Design iterations have no single [data-comment] scan
-  // point the way the decision/free branches do (their comments are a flat
-  // array), so this walks every slot the attachment engine knows about
-  // rather than re-deriving the slot-key list from the DOM.
+  // one synced file. `comments.general.attachments` / `items[].attachments`
+  // already carry the commented fields' files; this map is the complete
+  // per-slot index (annotation answers included), walking every slot the
+  // attachment engine knows about rather than re-deriving the list from the
+  // DOM.
   const attachments = {};
   if (typeof attachmentsFor === 'function' && typeof _attachments !== 'undefined') {
     for (const slotKey of _attachments.keys()) {
@@ -6186,7 +6377,7 @@ does not have because the dock provides it there.
 - **The inline note is mandatory** in a free-round block:
   `textarea[data-comment="map-{m}-note"][data-attachable]` inside the
   section (gate rule M5, validation-gate.md § Mappings). `collectMappings()` reads it into the
-  entry's `note`; it also arrives in `comments[]` like every other
+  entry's `note`; it also arrives in `comments.items[]` like every other
   `[data-comment]` of the live round, and attachments ride the existing
   `data-attachable` path. Per-slot notes (`slotNotes: true`) are generated
   by the engine, not authored.
@@ -6232,7 +6423,9 @@ Shared Systems § Section Navigation for the implementation.
 ## Decision schema
 
 The free template emits **only the sections that actually have bi-state
-radios**, plus whatever comments the user typed:
+radios**, plus whatever comments the user typed — inline notes under
+`items`, the 💬 dock's general note under `general` (same shape as every
+other template, § collectDecisions (dispatcher)):
 
 ```json
 {
@@ -6240,17 +6433,20 @@ radios**, plus whatever comments the user typed:
   "decisions": [
     { "id": "finding-1", "label": "Finding: latency spike", "evaluation": "include" }
   ],
-  "comments": [
-    { "id": "finding-1", "text": "..." },
-    { "id": "recommendation", "text": "..." }
-  ],
+  "comments": {
+    "general": { "text": "...", "attachments": [] },
+    "items": [
+      { "id": "finding-1", "text": "...", "attachments": [] },
+      { "id": "recommendation", "text": "...", "attachments": [] }
+    ]
+  },
   "mappings": []
 }
 ```
 
 If no section has bi-state markers, `decisions` is an empty array and the
-submit payload is effectively a general-notes post. `mappings` is always
-present — `[]` without a mapping block, otherwise one entry per live
+submit payload is effectively a general-notes post (`comments.general`).
+`mappings` is always present — `[]` without a mapping block, otherwise one entry per live
 `section[data-mapping]` in the shape documented under § Template: design →
 Decision schema (`note` = the inline `map-{m}-note` text here; no `view` /
 `design` keys in a free round).
@@ -6274,13 +6470,10 @@ function collectFreeDecisions() {
       evaluation: radio.value
     });
   });
-  const comments = [];
-  active.querySelectorAll('[data-comment]').forEach(el => {
-    const text = el.value.trim();
-    const attachments = (typeof attachmentsFor === 'function')
-      ? attachmentsFor(el.dataset.comment) : [];
-    if (text || attachments.length) comments.push({ id: el.dataset.comment, text, attachments });
-  });
+  // { general: { text, attachments }, items: [ … ] } — the live round's
+  // inline notes plus the 💬 dock's general note (§ collectDecisions
+  // (dispatcher), collectComments).
+  const comments = collectComments(active);
   // Mappings (§ Information Mapping (engine)); `[]` without the engine block.
   // `window.` on purpose: a bare `typeof collectMappings` here hits the TDZ of this very const.
   const collectMappings = (typeof window.collectMappings === 'function') ? window.collectMappings : () => [];
@@ -8629,7 +8822,7 @@ function saveState() {
   // legitimate copy, so skipping the clones loses nothing.
   // A FROZEN iteration's fields carry the values the user already submitted,
   // and the shared feedback dock is painted with that same frozen text while
-  // a past tab is on screen (applyDockFreezeState, § Layout JS). Persisting
+  // a past tab is on screen (applyDockFreezeState, § Panel Chrome). Persisting
   // either writes round N's answers over round N+1's — silently, because
   // navigating a frozen design tab is allowed and every showScreen() ends in
   // saveState(). Measured symptom: click an old tab, click a screen, come
@@ -8696,9 +8889,9 @@ function saveState() {
   // Work package B — the dock's user-controlled maximise override (a DOM
   // attribute, not a JS closure variable, so it can be read/written from
   // this script block even though applyDockSize() lives in a different
-  // IIFE — § Layout JS `wireDesignLayout()`). Only meaningful for the
-  // design template's dock; absent everywhere else, so the `?.` guard
-  // degenerates to `undefined` -> falsy, never a crash.
+  // IIFE — § Panel Chrome (all templates) → Feedback dock). The dock is page
+  // chrome in every template (#399); the `?.` guard only covers a page whose
+  // dock markup is missing, where it degenerates to `undefined` -> falsy.
   state['dockMaximized'] = document.getElementById('feedback-dock')?.dataset.userMaximized === 'true';
   // Work package C — persist the active VIEW (§ Views (optional)) the same
   // DOM-read way: a view's active state lives on the element itself
@@ -8804,7 +8997,7 @@ function restoreState() {
     // Mirror of the annoHidden restore above — see saveState(). Re-applies
     // sizing immediately (not just on the next iteration switch) because
     // this script block's DOMContentLoaded listener is not guaranteed to
-    // run after wireDesignLayout()'s own initial applyDockSize() call.
+    // run after the dock block's own initial applyDockSize() call.
     if (state.dockMaximized) {
       const dockEl = document.getElementById('feedback-dock');
       if (dockEl) dockEl.dataset.userMaximized = 'true';
@@ -11359,6 +11552,15 @@ replace it with hand-listed selectors. The typed sub-objects (`decisions`,
 `comments`) live alongside `allFields` for ergonomics; they do not
 substitute for it.
 
+`comments` has ONE shape in every branch — `collectComments()` below builds
+it: `{ general: { text, attachments }, items: [ { id, text, attachments } ] }`.
+`general` is the 💬 dock's general note (page chrome, every template) and is
+always present; `items` lists every other commented field of the live round.
+The design branch keeps its `designs` / `screens` / `views` maps next to
+them. Note that the dock lives OUTSIDE `section[data-iteration]`, so
+`allFields` (scoped to the active section) does not carry the general note —
+`comments.general` is its typed home.
+
 ```javascript
 function collectAllFormFields(scope) {
   const fields = {};
@@ -11391,6 +11593,51 @@ function collectAllFormFields(scope) {
     }
   });
   return fields;
+}
+
+// Comments in ONE shape for every template (#399):
+//   { general: { text, attachments }, items: [ { id, text, attachments } ] }
+// `general` is the 💬 dock's general-notes textarea (data-comment="general",
+// § Panel Chrome (all templates) → Feedback dock) — ALWAYS present, empty
+// strings and all, so no consumer branches on the template to find the note.
+// `items` holds every other [data-comment] field that carries text or an
+// attachment: the inline notes of a decision/free round, the {id}-note of a
+// view decision, a mapping note, and on a design round the dock's per-design /
+// per-screen / per-view rows (the design branch additionally keys those into
+// its `designs` / `screens` / `views` maps).
+// The dock lives OUTSIDE section[data-iteration], so the scan covers the live
+// round AND the dock — never the whole document: ids repeat across rounds, and
+// a frozen round's fields must not ship as this round's. The dock cannot leak
+// a frozen round either: its rows are rebuilt per round (§ Layout JS) and its
+// general field is stashed/restored around every frozen visit
+// (applyDockFreezeState). A page that also carries an inline
+// data-comment="general" (older document rounds) contributes to the same
+// note — the texts are joined, nothing is dropped.
+function collectComments(active) {
+  const attachmentsOf = key => (typeof attachmentsFor === 'function') ? attachmentsFor(key) : [];
+  const generalTexts = [];
+  const items = [];
+  const seen = new Set();
+  const fields = [
+    ...active.querySelectorAll('[data-comment]'),
+    ...document.querySelectorAll('#feedback-dock [data-comment]'),
+  ];
+  fields.forEach(el => {
+    if (seen.has(el)) return;
+    seen.add(el);
+    const id = el.dataset.comment;
+    const text = (el.value || '').trim();
+    if (id === 'general') { if (text) generalTexts.push(text); return; }
+    const attachments = attachmentsOf(id);
+    // An image with no prose is a complete comment — a screenshot often says
+    // it better than a sentence. Gating on `text` alone (as this did before
+    // attachments existed) would silently drop an image-only remark.
+    if (text || attachments.length) items.push({ id, text, attachments });
+  });
+  return {
+    general: { text: generalTexts.join('\n\n'), attachments: attachmentsOf('general') },
+    items,
+  };
 }
 
 function collectDecisions(action = 'iterate') {
@@ -11430,7 +11677,6 @@ function getElementState(el) {
 
 function collectDecisionDecisions() {
   const decisions = [];
-  const comments = [];
   // Scoped to the LIVE round — decision ids and comment keys repeat across
   // rounds (same reasoning as collectFreeDecisions()).
   const active = document.querySelector('section[data-iteration][data-active]') || document;
@@ -11443,17 +11689,9 @@ function collectDecisionDecisions() {
     });
   });
 
-  active.querySelectorAll('[data-comment]').forEach(el => {
-    const text = el.value.trim();
-    const attachments = (typeof attachmentsFor === 'function')
-      ? attachmentsFor(el.dataset.comment) : [];
-    // An image with no prose is a complete comment — a screenshot often says
-    // it better than a sentence. Gating on `text` alone (as this did before
-    // attachments existed) would silently drop an image-only remark.
-    if (text || attachments.length) {
-      comments.push({ id: el.dataset.comment, text, attachments });
-    }
-  });
+  // { general: { text, attachments }, items: [ … ] } — the live round's
+  // inline notes plus the 💬 dock's general note (collectComments above).
+  const comments = collectComments(active);
 
   // `mappings` is always present (§ Information Mapping (engine), uniform
   // payload shape); the decision template hosts no mapping section.
@@ -11704,7 +11942,8 @@ async function submitWithAction(action) {
   // namespaced per iteration now (§ State Persistence `_iterationPrefix`), so
   // nothing leaks forward and nothing has to be thrown away — the dock is only
   // marked read-only, so the user can read back what they sent while Claude
-  // works. Runs AFTER collectDecisions(), never before. See § Layout JS.
+  // works. Runs AFTER collectDecisions(), never before. See § Panel Chrome
+  // (all templates) → Feedback dock.
   if (typeof markDockSubmitted === 'function') markDockSubmitted();
   document.body.classList.add('concept-submitted', 'content-dimmed');
   showContentDimmer();
