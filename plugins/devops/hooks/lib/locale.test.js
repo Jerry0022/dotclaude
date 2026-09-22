@@ -6,6 +6,7 @@ import {
   DEFAULT_LOCALE,
   SUPPORTED,
   detectFromPrompt,
+  detectSignal,
   getLocale,
   setLocale,
   ensureLocale,
@@ -120,12 +121,53 @@ describe("ensureLocale", () => {
     expect(res.isFresh).toBe(true);
   });
 
-  test("subsequent call: returns cached, isFresh:false, ignores new prompt", () => {
+  test("subsequent call without a clear signal keeps the cache, isFresh:false", () => {
     const sid = TEST_SESSION_BASE + "-fresh-2";
     ensureLocale(sid, "ich kann das nicht"); // sets de
-    const res = ensureLocale(sid, "now totally English here"); // ignored
+    const res = ensureLocale(sid, "now totally English here"); // no signal
     expect(res.lang).toBe("de");
     expect(res.isFresh).toBe(false);
+  });
+
+  test("a later clear English prompt switches the session to en", () => {
+    const sid = TEST_SESSION_BASE + "-switch-en";
+    ensureLocale(sid, "ich kann das nicht");
+    const res = ensureLocale(sid, "why is this card still shown?");
+    expect(res).toEqual({ lang: "en", isFresh: false });
+    expect(getLocale(sid)).toBe("en");
+  });
+
+  test("a session opened with /ship switches to de on the first German prompt", () => {
+    const sid = TEST_SESSION_BASE + "-switch-de";
+    expect(ensureLocale(sid, "/ship").lang).toBe("en");
+    const res = ensureLocale(sid, "Warum antwortest du mir nicht auf Deutsch?");
+    expect(res).toEqual({ lang: "de", isFresh: false });
+    expect(getLocale(sid)).toBe("de");
+  });
+
+  test("short acknowledgements never flip the cached locale", () => {
+    const sid = TEST_SESSION_BASE + "-ack";
+    ensureLocale(sid, "ich kann das nicht");
+    for (const p of ["ok", "yes", "go", "/ship", "weiter"]) {
+      expect(ensureLocale(sid, p).lang).toBe("de");
+    }
+  });
+});
+
+describe("detectSignal", () => {
+  test("German markers win, even with English terms quoted", () => {
+    expect(detectSignal("mach das mit the output style")).toBe("de");
+  });
+
+  test("three English markers → en", () => {
+    expect(detectSignal("can you check the build")).toBe("en");
+  });
+
+  test("no clear signal → null", () => {
+    expect(detectSignal("ok")).toBeNull();
+    expect(detectSignal("/ship")).toBeNull();
+    expect(detectSignal("plugins/devops/hooks/lib/locale.js")).toBeNull();
+    expect(detectSignal(null)).toBeNull();
   });
 });
 

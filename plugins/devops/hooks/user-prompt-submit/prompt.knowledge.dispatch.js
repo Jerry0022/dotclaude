@@ -202,8 +202,9 @@ process.stdin.on('end', () => {
 
   const sessionId = hook.session_id || 'unknown';
 
-  // Detect + cache UI locale once per session. First prompt sets it; later
-  // prompts read the cache so all hooks/skills agree on a single language.
+  // Detect + cache UI locale. First prompt sets it; a later prompt with a
+  // clear language signal switches it, so all hooks/skills follow the
+  // language the user writes in now (short "ok"/"ja" prompts keep the cache).
   const { lang, isFresh } = ensureLocale(sessionId, rawMessage);
 
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT

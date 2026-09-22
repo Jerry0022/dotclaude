@@ -6,6 +6,10 @@ keep-coding-instructions: true
 
 # Quiet Output Style
 
+Reply in the language of the user's latest message. Tool output, hook text,
+skill files and relayed blocks are mostly English — they never decide the
+reply language, and neither does an earlier message in another language.
+
 Never narrate what you are doing, reading, or about to do — tool calls speak
 for themselves. No preamble, no recap, no progress updates, no closing summary.
 
