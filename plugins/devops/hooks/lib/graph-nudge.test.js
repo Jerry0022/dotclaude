@@ -5,7 +5,7 @@ import path from "node:path";
 import {
   hasGraph, hasLocalGraph, resolveGraphJson, graphFlag, buildGraphNudge, graphJsonPath,
   graphIsStale, stalenessInfo, suggestQuery, questionFromPattern,
-  pathKindFor, isSemanticPattern, isEligibleSearch, hasGraphAnswer,
+  pathKindFor, isSemanticPattern, isSpecificTerm, isEligibleSearch, hasGraphAnswer,
   resolveGraphRoot, isInsideGraphScope, trimToTraversalHeader, gateKeyHash,
 } from "./graph-nudge.js";
 
@@ -349,7 +349,7 @@ describe("resolveGraphJson — local → repo root → primary checkout", () => 
 describe("isSemanticPattern — eligibility heuristic (Requirement B1)", () => {
   test.each([
     "authService", "get_user_by_id", "user-repo", "Foo.Bar",
-    "authService|userRepo", "foo|bar|baz|qux",
+    "authService|userRepo", "fooTerm|bar|baz|qux",
   ])("%s → eligible", (p) => expect(isSemanticPattern(p)).toBe(true));
 
   test.each([
@@ -370,7 +370,25 @@ describe("isSemanticPattern — eligibility heuristic (Requirement B1)", () => {
     ["^authService$", "anchors"],
     ["auth+Service", "quantifier plus"],
     ["one two three four five", "5 words"],
+    ["error", "common short word (R10)"],
+    ["import", "common short word (R10)"],
+    ["error|import|value|thing", "all terms common short words (R10)"],
   ])("%s (%s) → not eligible", (p) => expect(isSemanticPattern(p)).toBe(false));
+});
+
+describe("isSpecificTerm — R10 (at least one term must be specific)", () => {
+  test.each([
+    "authService",        // camelCase
+    "get_user_by_id",     // snake_case
+    "user-repo",           // kebab-case
+    "Foo.Bar",             // dotted
+    "eloquently",          // 10 chars, plain but long
+    "database",            // exactly 8 chars
+  ])("%s → specific", (t) => expect(isSpecificTerm(t)).toBe(true));
+
+  test.each([
+    "error", "import", "value", "thing", "ab", "lengthy", // <8 chars, no camel/snake/dot
+  ])("%s → not specific", (t) => expect(isSpecificTerm(t)).toBe(false));
 });
 
 describe("pathKindFor — cheap path classification", () => {

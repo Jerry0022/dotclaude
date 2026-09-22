@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script graphify-audit
- * @version 0.3.0
+ * @version 0.4.0
  * @plugin devops
  * @description Measures whether the graphify enforcement chain (nudge → gate →
  *   `graphify query`) actually pays for itself, from two sources that need no
@@ -248,12 +248,18 @@ function aggregateMetricsBySession(events) {
  * than its baseline is a real loss too; hiding either behind a floor of 0
  * would overstate how well the gate is doing.
  *
- * Linking a `gate_bypassed` back to the `gate_fired` it bypassed uses the
- * short `keyHash` both events carry (added alongside this rewrite) — a
- * direct pairing, not an inferred count. Events recorded by an older hook
- * version (no `keyHash`) fall back to the previous per-project count
- * approximation (`max(0, fired - bypassed)`, oldest-first-treated-as-bypassed)
- * so an audit spanning an upgrade window does not silently drop older data.
+ * A `gate_bypassed` is paired back to the `gate_fired` it bypassed by
+ * `(sid, keyHash)` — BOTH, not `keyHash` alone: `keyHash` depends only on
+ * tool+cwd+cost-fields, so two DIFFERENT sessions running the identical
+ * search on the same project would otherwise collide and pair across
+ * sessions that never interacted.
+ *
+ * `gate_fired` events missing `keyHash` or a numeric `answerChars` (recorded
+ * by a hook version older than this rewrite) are EXCLUDED from the NET
+ * estimate entirely — counted only as `legacyCount` — rather than folded in
+ * via the old, much less precise per-project count approximation. A NET
+ * figure built partly from precise pairs and partly from a guess is worse
+ * than reporting the guessable part honestly as "not estimated".
  *
  * The baseline for an ACCEPTED gate — what the search would have cost as a
  * raw Grep — and the "search that ran anyway" cost for a BYPASSED gate are
@@ -265,16 +271,15 @@ function aggregateMetricsBySession(events) {
  * search, not a much cheaper `files_with_matches`/`count` one.
  *
  * `sid: 'nosid'` events are excluded throughout. tokens ≈ chars/4.
- * @returns {{netChars:number, netTokens:number, acceptedCount:number, bypassedCount:number, globalMedian:number}}
+ * @returns {{netChars:number, netTokens:number, acceptedCount:number, bypassedCount:number, legacyCount:number, globalMedian:number}}
  */
 function estimateSavings(events) {
   const eligibleByProjMode = new Map(); // `${proj}\u0000${mode}` -> chars[]
   const eligibleByMode = new Map();     // mode -> chars[]
   const eligibleAll = [];
-  const firedByHash = new Map();        // keyHash -> {project, outputMode, answerChars}
-  const bypassedHashes = new Set();
-  const firedNoHash = [];               // legacy (pre-keyHash) fired events
-  const bypassedNoHashByProject = new Map();
+  const firedByKey = new Map();         // `${sid}\u0000${keyHash}` -> {project, outputMode, answerChars}
+  const bypassedKeys = new Set();
+  let legacyCount = 0;                  // gate_fired lacking keyHash/answerChars — not estimated
 
   for (const e of events) {
     if (!e || e.sid === 'nosid') continue;
@@ -288,12 +293,10 @@ function estimateSavings(events) {
       eligibleByMode.get(mode).push(e.responseChars || 0);
       eligibleAll.push(e.responseChars || 0);
     } else if (e.event === 'gate_fired') {
-      const entry = { project: proj, outputMode: e.outputMode || '', answerChars: e.answerChars || 0 };
-      if (e.keyHash) firedByHash.set(e.keyHash, entry);
-      else firedNoHash.push(entry);
+      if (!e.keyHash || typeof e.answerChars !== 'number') { legacyCount++; continue; }
+      firedByKey.set(`${e.sid}\u0000${e.keyHash}`, { project: proj, outputMode: e.outputMode || '', answerChars: e.answerChars });
     } else if (e.event === 'gate_bypassed') {
-      if (e.keyHash) bypassedHashes.add(e.keyHash);
-      else bypassedNoHashByProject.set(proj, (bypassedNoHashByProject.get(proj) || 0) + 1);
+      if (e.keyHash) bypassedKeys.add(`${e.sid}\u0000${e.keyHash}`);
     }
   }
 
@@ -310,9 +313,9 @@ function estimateSavings(events) {
   let acceptedCount = 0;
   let bypassedCount = 0;
 
-  for (const [hash, fired] of firedByHash) {
+  for (const [key, fired] of firedByKey) {
     const baseline = baselineFor(fired.project, fired.outputMode);
-    if (bypassedHashes.has(hash)) {
+    if (bypassedKeys.has(key)) {
       netChars -= (fired.answerChars + baseline); // NET LOSS — paid the answer AND ran the search anyway
       bypassedCount++;
     } else {
@@ -321,26 +324,24 @@ function estimateSavings(events) {
     }
   }
 
-  const legacyByProject = new Map();
-  for (const f of firedNoHash) {
-    if (!legacyByProject.has(f.project)) legacyByProject.set(f.project, []);
-    legacyByProject.get(f.project).push(f);
-  }
-  for (const [proj, fired] of legacyByProject) {
-    const bypassed = bypassedNoHashByProject.get(proj) || 0;
-    fired.forEach((f, idx) => {
-      const baseline = baselineFor(f.project, f.outputMode);
-      if (idx < bypassed) {
-        netChars -= (f.answerChars + baseline);
-        bypassedCount++;
-      } else {
-        netChars += (baseline - f.answerChars);
-        acceptedCount++;
-      }
-    });
-  }
+  return { netChars, netTokens: Math.round(netChars / 4), acceptedCount, bypassedCount, legacyCount, globalMedian };
+}
 
-  return { netChars, netTokens: Math.round(netChars / 4), acceptedCount, bypassedCount, globalMedian };
+/**
+ * Gate latency cost line (Requirement 9): sum + median of `ms` across
+ * `gate_fired` and `gate_noanswer` events — the wall-clock the real
+ * `graphify query` child cost, whether or not it ended up answering
+ * anything. `sid: 'nosid'` excluded; events without a numeric `ms` (an older
+ * hook version) are skipped, not counted as 0.
+ * @returns {{count:number, sumMs:number, medianMs:number}}
+ */
+function gateLatencyStats(events) {
+  const ms = [];
+  for (const e of events) {
+    if (!e || e.sid === 'nosid') continue;
+    if ((e.event === 'gate_fired' || e.event === 'gate_noanswer') && typeof e.ms === 'number') ms.push(e.ms);
+  }
+  return { count: ms.length, sumMs: ms.reduce((a, b) => a + b, 0), medianMs: median(ms) };
 }
 
 function shortProject(d) {
@@ -440,6 +441,13 @@ function main(argv) {
       + ` bypassed = -(answerChars + that same median) since the block's answer AND the raw search both ran;`
       + ` global median fallback ${fmt(Math.round(est.globalMedian))} chars; tokens ≈ chars/4.`
     );
+    if (est.legacyCount) {
+      console.log(`  legacy gates (not estimated): ${est.legacyCount}  — gate_fired events without a keyHash/answerChars (pre-upgrade hook)`);
+    }
+    const lat = gateLatencyStats(events);
+    if (lat.count) {
+      console.log(`  gate latency cost: ${lat.count} timed queries — sum ${fmt(Math.round(lat.sumMs))}ms, median ${fmt(Math.round(lat.medianMs))}ms`);
+    }
   } else {
     console.log('\nPER-SESSION TELEMETRY: no sessions with an sid in the telemetry stream yet.');
   }
@@ -449,5 +457,5 @@ if (require.main === module) main(process.argv.slice(2));
 
 module.exports = {
   analyzeTranscript, metricsSummary, listSessions, resultText,
-  readMetricsEvents, aggregateMetricsBySession, estimateSavings, median,
+  readMetricsEvents, aggregateMetricsBySession, estimateSavings, gateLatencyStats, median,
 };

@@ -186,7 +186,7 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
 
   test("consent + fresh graph → first broad search is BLOCKED by the graph gate", () => {
     const dir = project({ consent: true, graph: "fresh" });
-    const r = runGrep(dir, "s-block", "alpha");
+    const r = runGrep(dir, "s-block", "alphaTerm");
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("GRAPHIFY GATE");
     cleanup(dir);
@@ -194,9 +194,9 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
 
   test("retry of the same search relents (escape hatch) AND does not double-block (R6)", () => {
     const dir = project({ consent: true, graph: "fresh" });
-    const first = runGrep(dir, "s-retry", "beta");
+    const first = runGrep(dir, "s-retry", "betaTerm");
     expect(first.stderr).toContain("GRAPHIFY GATE");
-    const second = runGrep(dir, "s-retry", "beta");
+    const second = runGrep(dir, "s-retry", "betaTerm");
     expect(second.stderr).not.toContain("GRAPHIFY GATE");
     // R6: without the classic-confirm-flag pre-release, this retry fell
     // straight into the classic full-repo-search threshold block a SECOND
@@ -208,7 +208,7 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
 
   test("no consent record (default-on, opt-out model) → graph gate STILL fires", () => {
     const dir = project({ consent: null, graph: "fresh" });
-    const r = runGrep(dir, "s-noconsent", "gamma");
+    const r = runGrep(dir, "s-noconsent", "gammaTerm");
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("GRAPHIFY GATE");
     cleanup(dir);
@@ -216,14 +216,14 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
 
   test("declined (consent:false) → graph gate never fires", () => {
     const dir = project({ consent: false, graph: "fresh" });
-    const r = runGrep(dir, "s-declined", "delta");
+    const r = runGrep(dir, "s-declined", "deltaTerm");
     expect(r.stderr).not.toContain("GRAPHIFY GATE");
     cleanup(dir);
   });
 
   test("stale graph within tolerance (1 newer file) → STILL blocked, with a lag disclosure", () => {
     const dir = project({ consent: true, graph: "stale" });
-    const r = runGrep(dir, "s-stale", "epsilon");
+    const r = runGrep(dir, "s-stale", "epsilonTerm");
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("GRAPHIFY GATE");
     expect(r.stderr).toContain("graph lags");
@@ -241,7 +241,7 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     fs.writeFileSync(path.join(wt, ".git"), `gitdir: ${path.join(main, ".git", "worktrees", "wt")}\n`);
     fs.utimesSync(path.join(wt, "a.js"), OLD, OLD); // no branch edits newer than the primary graph
     const mainGraph = path.join(main, "graphify-out", "graph.json");
-    const r = runGrep(wt, "s-worktree", "theta");
+    const r = runGrep(wt, "s-worktree", "thetaTerm");
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("GRAPHIFY GATE");
     // The stub echoes its own argv (see ANSWER_STUB) — proof the query was
@@ -255,7 +255,7 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
   test("a `graphify query` run elsewhere no longer relents the whole session (old policy removed)", () => {
     const dir = project({ consent: true, graph: "fresh" });
     markQueryDone("s-queried", dir);
-    const r = runGrep(dir, "s-queried", "zeta");
+    const r = runGrep(dir, "s-queried", "zetaTerm");
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("GRAPHIFY GATE"); // still fires — queryDone no longer matters here
     cleanup(dir);
@@ -269,7 +269,7 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
       path.join(declinedHome, ".claude", "graphify.json"),
       JSON.stringify({ consent: false })
     );
-    const r = runGrep(dir, "s-global-declined", "eta", declinedHome);
+    const r = runGrep(dir, "s-global-declined", "etaTerm", declinedHome);
     expect(r.stderr).not.toContain("GRAPHIFY GATE");
     cleanup(dir);
     cleanup(declinedHome);
@@ -283,7 +283,7 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
       fs.writeFileSync(p, "x");
       fs.utimesSync(p, NOW, NOW);
     }
-    const r = runGrep(dir, "s-heal", "omega");
+    const r = runGrep(dir, "s-heal", "omegaTerm");
     expect(r.stderr).not.toContain("GRAPHIFY GATE"); // never block beyond tolerance
     expect(fs.existsSync(refreshFlagPath(dir))).toBe(true); // background refresh kicked
     cleanup(dir);
@@ -301,7 +301,7 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
       writeUpdateLock(fs.mkdtempSync(path.join(os.tmpdir(), "graphgate-busy-")), process.pid);
     }
 
-    const r = runGrep(dir, "s-heal-declined", "omega");
+    const r = runGrep(dir, "s-heal-declined", "omegaTerm");
     expect(r.stderr).not.toContain("GRAPHIFY GATE"); // still never blocks beyond tolerance
     // The spawn never happened, so the 2-minute cooldown must NOT be charged —
     // otherwise the next search cannot retry and the graph never converges.
@@ -471,21 +471,118 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     });
   });
 
-  test("adaptive relent fires after 3 consecutive bypasses of the SAME search, with no accepted answer in between", () => {
+  // R1: a non-block outcome (timeout, no-hit, error, or a busy slot) must not
+  // leave the search undeclared — a retry of the EXACT same search must never
+  // then get gate-blocked, whichever way round the two calls go. Live-observed:
+  // a path-less search timed out on call 1, then the identical call 2 got a
+  // real answer and was BLOCKED — the double block this covers in reverse.
+  // The session-start project-map/graph-nudge injection (pre.tokens.guard's
+  // OTHER once-per-session feature) intercepts the FIRST broad Grep/Glob of a
+  // session with an ALLOW + additionalContext, regardless of the graphify
+  // gate's own verdict. `primeMapInjection` burns that one-time slot with an
+  // ineligible, throwaway search first, so the tests below observe the
+  // classic threshold block on their own first real call, not the nudge.
+  function primeMapInjection(dir, sid) {
+    runGrep(dir, sid, "ab"); // "ab" fails isSemanticPattern (too short) — never touches the gate
+  }
+
+  describe("R1 — declined marker prevents a double block via a non-block outcome", () => {
+    test("timeout → classic block on call 1 → identical retry is allowed, never gate-blocked", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const sid = "s-r1-timeout";
+      primeMapInjection(dir, sid);
+      const first = runGrep(dir, sid, "authService", HOME_DIR, TIMEOUT_STUB);
+      expect(first.stderr).not.toContain("GRAPHIFY GATE");
+      // The classic full-repo-search threshold block fires instead (first
+      // time reaching that code this invocation — the gate declined).
+      expect(first.status).toBe(2);
+      expect(first.stderr).toContain("HIGH TOKEN COST");
+      const second = runGrep(dir, sid, "authService", HOME_DIR, TIMEOUT_STUB);
+      expect(second.stderr).not.toContain("GRAPHIFY GATE");
+      expect(second.status).toBe(0); // classic retry-to-proceed releases it
+      cleanup(dir);
+    }, 15_000);
+
+    test("no-hit → classic block on call 1 → identical retry is allowed, never gate-blocked", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const sid = "s-r1-nohit";
+      primeMapInjection(dir, sid);
+      const first = runGrep(dir, sid, "authService", HOME_DIR, NOANSWER_STUB);
+      expect(first.stderr).not.toContain("GRAPHIFY GATE");
+      expect(first.status).toBe(2);
+      expect(first.stderr).toContain("HIGH TOKEN COST");
+      const second = runGrep(dir, sid, "authService", HOME_DIR, NOANSWER_STUB);
+      expect(second.stderr).not.toContain("GRAPHIFY GATE");
+      expect(second.status).toBe(0);
+      cleanup(dir);
+    });
+
+    test("a no-hit outcome even if the SAME search would hit on a retry never flips to a gate block (the exact live-observed bug)", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const sid = "s-r1-flip";
+      const first = runGrep(dir, sid, "authService", HOME_DIR, NOANSWER_STUB);
+      expect(first.stderr).not.toContain("GRAPHIFY GATE");
+      // Retry with the STUB THAT WOULD ANSWER — proves the declined marker,
+      // not merely "the same stub", is what prevents the flip.
+      const second = runGrep(dir, sid, "authService", HOME_DIR, GRAPHIFY_STUB);
+      expect(second.stderr).not.toContain("GRAPHIFY GATE");
+      cleanup(dir);
+    });
+
+    test("busy skip → classic block on call 1 → retry with a FREE slot is allowed, never gate-blocked", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const sid = "s-r1-busy";
+      primeMapInjection(dir, sid);
+      fs.writeFileSync(gateQuerySlotPath(0), JSON.stringify({ pid: 999999, ts: Date.now() }));
+      fs.writeFileSync(gateQuerySlotPath(1), JSON.stringify({ pid: 999999, ts: Date.now() }));
+      const first = runGrep(dir, sid, "authService", HOME_DIR, GRAPHIFY_STUB);
+      expect(first.stderr).not.toContain("GRAPHIFY GATE");
+      expect(first.status).toBe(2);
+      expect(first.stderr).toContain("HIGH TOKEN COST");
+      // Free the slots — the retry must still not be gate-blocked (the
+      // declined marker skips the query regardless of slot availability).
+      try { fs.unlinkSync(gateQuerySlotPath(0)); } catch {}
+      try { fs.unlinkSync(gateQuerySlotPath(1)); } catch {}
+      const second = runGrep(dir, sid, "authService", HOME_DIR, GRAPHIFY_STUB);
+      expect(second.stderr).not.toContain("GRAPHIFY GATE");
+      expect(second.status).toBe(0);
+      cleanup(dir);
+    });
+
+    test("a declined outcome does NOT touch the bypass streak or write gate_bypassed", () => {
+      const dir = project({ consent: true, graph: "fresh" });
+      const sid = "s-r1-no-streak";
+      const before = events().length;
+      runGrep(dir, sid, "authService", HOME_DIR, NOANSWER_STUB);
+      runGrep(dir, sid, "authService", HOME_DIR, NOANSWER_STUB); // declined-marker skip
+      const evs = events().slice(before);
+      expect(evs.some((e) => e.event === "gate_bypassed")).toBe(false);
+      expect(evs.some((e) => e.event === "gate_noanswer")).toBe(true);
+      // Only ONE gate_noanswer — the second call skipped the query entirely.
+      expect(evs.filter((e) => e.event === "gate_noanswer")).toHaveLength(1);
+      cleanup(dir);
+    });
+  });
+
+  // R2: repeating the SAME already-bypassed search must NOT keep inflating
+  // the streak (the old bug — `last.key === searchKey` without also checking
+  // `!last.bypassed` — let ONE search retried three times relent the gate,
+  // as if three DIFFERENT searches had each declined an answer).
+  test("R2: repeating the SAME bypassed search 2 more times does NOT relent the gate", () => {
     const dir = project({ consent: true, graph: "fresh" });
-    const sid = "s-adaptive-relent-2";
+    const sid = "s-r2-no-inflation";
     const first = runGrep(dir, sid, "answerTerm", HOME_DIR, GRAPHIFY_STUB);
     expect(first.status).toBe(2); // blocked with an accepted answer — bypass streak starts at 0
     for (let i = 0; i < 3; i++) {
       const r = runGrep(dir, sid, "answerTerm", HOME_DIR, GRAPHIFY_STUB);
-      expect(r.stderr).not.toContain("GRAPHIFY GATE"); // escape hatch bypass
+      expect(r.stderr).not.toContain("GRAPHIFY GATE"); // escape hatch bypass, every time
     }
-    // A brand-new eligible search must no longer be gated by GRAPHIFY —
-    // the gate relented for the rest of this session. (It may still hit the
-    // separate, pre-existing generic broad-search token guard — unrelated to
-    // this feature — which is why this only asserts on the GATE text.)
+    // A brand-new eligible search must STILL be gated — the streak only ever
+    // reached 1 (the same search bypassed repeatedly counts once), nowhere
+    // near the 3-DIFFERENT-searches threshold.
     const freshSearch = runGrep(dir, sid, "freshUnseenTerm", HOME_DIR, GRAPHIFY_STUB);
-    expect(freshSearch.stderr).not.toContain("GRAPHIFY GATE");
+    expect(freshSearch.status).toBe(2);
+    expect(freshSearch.stderr).toContain("GRAPHIFY GATE");
     cleanup(dir);
   });
 

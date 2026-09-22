@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-query-spawn
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Synchronous, injection-safe argv spawn used by the graphify
  *   answer-in-gate (pre.tokens.guard). Split out from the hook so the
@@ -25,19 +25,35 @@
 const { spawnSync } = require('node:child_process');
 
 /**
- * Strict-quote one argv element for a literal cmd.exe command line. Used
- * ONLY by `spawnGraphifySync`'s ENOENT shell fallback — an explicit
- * `.cmd`/`.bat` binary override (the real `graphify` binary is a
- * `.exe`/native executable and never takes this path). Wraps the argument in
- * double quotes and escapes embedded double quotes; deliberately narrower
- * than a general cmd.exe escaper (it does not separately neutralise
- * `&`/`|`/`^`/`%` — cmd.exe treats those as literal once inside a quoted
- * span) but every element handed to it is already a discrete argv element,
- * never a string built by interpolating untrusted input.
+ * Quote one argv element for a literal cmd.exe command line, for the RARE
+ * `.cmd`/`.bat`-override fallback only. This wraps the argument in double
+ * quotes and doubles any embedded quote (`"` → `""`) — the correct cmd.exe
+ * escape; a backslash before a quote (`\"`) is NOT special to cmd.exe's own
+ * tokenizer (that is MSVCRT argv-parsing convention, a different layer, and
+ * an earlier version of this comment wrongly implied backslash-escaping was
+ * sufficient here — it is not, hence `CMD_UNSAFE_RE` below refusing the
+ * fallback outright for any argument containing a quote in the first place).
+ * Wrapping in quotes does NOT protect against cmd.exe's OWN in-quote
+ * behaviour: `%VAR%` is still expanded by cmd.exe INSIDE double quotes (a
+ * real data-corruption/injection vector — an untrusted argument containing
+ * `%PATH%` would be replaced with the actual PATH value), `!VAR!` similarly
+ * under delayed expansion, and `^` is cmd.exe's own escape character. None of
+ * that is fixable by quoting alone, which is why `spawnGraphifySync` below
+ * refuses to use this function at all on any argument containing one of
+ * those characters — see `CMD_UNSAFE_RE`.
  */
 function quoteForCmdExe(arg) {
-  return `"${String(arg).replace(/"/g, '\\"')}"`;
+  return `"${String(arg).replace(/"/g, '""')}"`;
 }
+
+// Characters this module cannot safely carry through the cmd.exe fallback at
+// all: `%`/`!` (variable expansion, still active INSIDE double quotes),
+// `"` (would need context-sensitive escaping beyond what quoteForCmdExe
+// does), `^` (cmd.exe's own escape character), and `\r`/`\n` (could inject an
+// extra command). Rather than attempt a "correct" full cmd.exe escaper — a
+// well-known minefield — any argument matching this is refused outright:
+// the fallback spawn is skipped entirely (R7).
+const CMD_UNSAFE_RE = /[%"!^\r\n]/;
 
 // child_process error codes a shell-less spawn of a non-PE Windows binary
 // (a `.cmd`/`.bat` batch file) can surface — measured both: an async `spawn`
@@ -60,7 +76,11 @@ const SHELLLESS_BATCH_SPAWN_ERROR_CODES = new Set(['ENOENT', 'EINVAL']);
  * Node's `shell:true` the raw `(command, args)` pair (that array-join is
  * exactly the corruption mechanism this function exists to avoid). Never
  * throws — a spawn failure comes back as `{error}` on the returned object,
- * same as plain `spawnSync`.
+ * same as plain `spawnSync`. If ANY argv element (including `bin` itself)
+ * contains a character `CMD_UNSAFE_RE` flags, the fallback is refused
+ * outright — no shell spawn is attempted at all, and the original `direct`
+ * (shell-less) result is returned as-is, so the caller sees an ordinary spawn
+ * failure and fails open (R7).
  * @param {string} bin
  * @param {string[]} args
  * @param {object} opts spawnSync options (cwd, timeout, encoding, …) — `shell` is ignored/overridden
@@ -70,10 +90,14 @@ function spawnGraphifySync(bin, args, opts = {}) {
   const direct = spawnSync(bin, args, { ...opts, shell: false });
   const isExplicitShim = /\.(cmd|bat)$/i.test(String(bin));
   if (direct.error && SHELLLESS_BATCH_SPAWN_ERROR_CODES.has(direct.error.code) && process.platform === 'win32' && isExplicitShim) {
-    const commandLine = [bin, ...args].map(quoteForCmdExe).join(' ');
+    const allArgs = [bin, ...args];
+    if (allArgs.some((a) => CMD_UNSAFE_RE.test(String(a)))) {
+      return direct; // refuse the fallback — fail open, no shell spawn attempted
+    }
+    const commandLine = allArgs.map(quoteForCmdExe).join(' ');
     return spawnSync(commandLine, { ...opts, shell: true });
   }
   return direct;
 }
 
-module.exports = { quoteForCmdExe, spawnGraphifySync };
+module.exports = { quoteForCmdExe, spawnGraphifySync, CMD_UNSAFE_RE };

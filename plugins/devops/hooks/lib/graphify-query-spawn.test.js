@@ -2,7 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnGraphifySync, quoteForCmdExe } from "./graphify-query-spawn.js";
+import { spawnGraphifySync, quoteForCmdExe, CMD_UNSAFE_RE } from "./graphify-query-spawn.js";
 
 // A real, directly-executable stub: node.exe itself is a native binary, so
 // `spawnGraphifySync(process.execPath, [ECHO_SCRIPT, ...args])` exercises the
@@ -45,8 +45,8 @@ describe("quoteForCmdExe", () => {
     expect(quoteForCmdExe("authService")).toBe('"authService"');
   });
 
-  test("escapes an embedded double quote", () => {
-    expect(quoteForCmdExe('say "hi"')).toBe('"say \\"hi\\""');
+  test("escapes an embedded double quote by DOUBLING it (the correct cmd.exe escape)", () => {
+    expect(quoteForCmdExe('say "hi"')).toBe('"say ""hi"""');
   });
 
   test("a space stays inside the quoted span (one shell token)", () => {
@@ -84,6 +84,31 @@ describe("spawnGraphifySync — ENOENT shell fallback (explicit .cmd/.bat only)"
       expect(res.error).toBeFalsy();
       expect(fs.existsSync(marker2)).toBe(false);
       expect(res.stdout).toContain("ran:");
+    });
+
+    // R7: cmd.exe expands %VAR% (and !VAR! under delayed expansion) INSIDE
+    // double quotes, and `^` is its own escape char — none of that is fixed
+    // by quoting alone, so the fallback must refuse these outright rather
+    // than attempt (and get wrong) a "correct" escape.
+    test.each([
+      ["%TEMP%", "percent — variable expansion survives inside quotes"],
+      ["!TEMP!", "bang — delayed-expansion variable"],
+      ["a^b", "caret — cmd.exe's own escape character"],
+      ["say \"hi\"", "double quote"],
+      ["line1\r\nline2", "embedded CRLF — could inject an extra command"],
+    ])("an argument containing %s (%s) refuses the fallback — no shell spawn attempted", (unsafeArg) => {
+      const stub = path.join(dir, "argv-echo2.cmd");
+      fs.writeFileSync(stub, "@echo off\r\necho ran: %*\r\n");
+      const res = spawnGraphifySync(stub, ["query", unsafeArg], { encoding: "utf8" });
+      // Refused → the ORIGINAL shell-less error passes through unchanged,
+      // never a real (possibly successful) shell-spawn result.
+      expect(res.error).toBeTruthy();
+      expect(res.stdout).toBeFalsy();
+    });
+
+    test("CMD_UNSAFE_RE matches exactly the refused character classes", () => {
+      for (const ch of ['%', '!', '^', '"', '\r', '\n']) expect(CMD_UNSAFE_RE.test(ch)).toBe(true);
+      for (const ch of ['authService', 'a-b_c.d', '&', '|', '>', '<']) expect(CMD_UNSAFE_RE.test(ch)).toBe(false);
     });
   }
 });

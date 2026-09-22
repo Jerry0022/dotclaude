@@ -189,10 +189,29 @@ function pathKindFor(searchPath, cwd) {
 }
 
 /**
+ * True iff `term` looks specific enough to be worth a graph traversal on its
+ * own: camelCase (a lower→upper transition), snake_case/kebab-case (`_`/`-`),
+ * a dotted name (`.`), or just plain long (≥8 significant characters).
+ * Deliberately excludes bare short lowercase words — `error`, `import` — an
+ * eligible pattern needs at least ONE term like this (R10): those common
+ * words matched far too much of the graph to be worth a query.
+ */
+function isSpecificTerm(term) {
+  if (/[a-z][A-Z]/.test(term)) return true;            // camelCase
+  if (term.includes('_') || term.includes('-')) return true; // snake_case / kebab-case
+  if (term.includes('.')) return true;                  // dotted.name
+  return term.replace(/[_.-]/g, '').length >= 8;         // just long enough
+}
+
+/**
  * True iff `pattern` reads as a semantic/identifier-like question the graph
  * can plausibly answer: 1-4 identifier-ish terms (camelCase, snake_case,
  * kebab-case, dotted names, or a `|` alternation of such terms) once regex
- * escapes are stripped. Rejects version/number literals (`0\.51\.0`),
+ * escapes are stripped, with AT LEAST ONE term specific enough
+ * (`isSpecificTerm`) that the graph is likely to have something narrow to say
+ * about it — a pattern built entirely from common short words (`error`,
+ * `import`) is rejected even though each individual term parses as a valid
+ * identifier shape (R10). Also rejects version/number literals (`0\.51\.0`),
  * path-like patterns (containing a slash), quoted/sentence patterns (more
  * than 4 words), very short terms (<3 significant characters), and patterns
  * with heavy regex structure (character classes, groups, quantifiers,
@@ -218,6 +237,7 @@ function isSemanticPattern(pattern) {
     if (!/^[A-Za-z][A-Za-z0-9_.-]*$/.test(term)) return false;
     if (term.replace(/[_.-]/g, '').length < 3) return false; // very short term
   }
+  if (!terms.some(isSpecificTerm)) return false; // R10 — no common-word-only patterns
   return true;
 }
 
@@ -396,6 +416,12 @@ function scanSources(cwd, opts = {}) {
  * `Infinity` in the "cannot be trusted at all" cases so any tolerance
  * threshold naturally treats them as fully stale. Reuses the single
  * `scanSources` walk. Never throws.
+ * @param {object} [opts]
+ * @param {{file:string,source:string}|null} [opts.resolved] a graph already
+ *   resolved by the caller (e.g. `resolveGraphJson(cwd)`) — pass this to skip
+ *   re-resolving here. Without it, this function resolves the graph itself.
+ *   The PreToolUse gate resolves the graph exactly ONCE per invocation and
+ *   threads it through every caller that would otherwise re-resolve it.
  * @returns {{newerCount:number, truncated:boolean, graphMtime:number}}
  */
 function stalenessInfo(cwd, opts = {}) {
@@ -404,7 +430,7 @@ function stalenessInfo(cwd, opts = {}) {
   // branch edits as "newer", which is exactly the lag that graph has.
   let graphMtime;
   try {
-    const r = resolveGraphJson(cwd);
+    const r = Object.prototype.hasOwnProperty.call(opts, 'resolved') ? opts.resolved : resolveGraphJson(cwd);
     if (!r) return { newerCount: Infinity, truncated: false, graphMtime: 0 };
     graphMtime = fs.statSync(r.file).mtimeMs;
   } catch { return { newerCount: Infinity, truncated: false, graphMtime: 0 }; }
@@ -439,6 +465,7 @@ module.exports = {
   suggestQuery,
   pathKindFor,
   isSemanticPattern,
+  isSpecificTerm,
   isEligibleSearch,
   resolveGraphRoot,
   isInsideGraphScope,

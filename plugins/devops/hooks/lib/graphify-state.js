@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-state
- * @version 0.11.0
+ * @version 0.12.0
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
  *   layer (auto-graph). Default-on / opt-out model: graphify enforcement is
@@ -414,6 +414,39 @@ function markLastBlockedBypassed(sessionId, cwd) {
   try { fs.writeFileSync(lastBlockedPath(sessionId, cwd), JSON.stringify({ ...cur, bypassed: true })); } catch { /* best effort */ }
 }
 
+// ── "Declined" marker — R1 (double block via no-answer) ─────────────────────
+// A query that timed out, found nothing, errored, or was skipped because the
+// concurrency slots were all busy is NOT a block — the gate flag must stay
+// unwritten (see the doc comment above `bypassCountPath`). But without ANY
+// record of the attempt, an identical retry re-runs the query from scratch,
+// which is not just wasted latency: it can also flip outcome between the two
+// calls (live-observed — a path-less search timed out on call 1, then the
+// retry got a real answer and was blocked on call 2, exactly the double-block
+// this whole mechanism exists to prevent, just via the opposite direction).
+// The declined marker records "this exact search was already tried and
+// declined, do not try again" — the retry skips the query ENTIRELY (zero
+// latency), and is deliberately inert: no gate_bypassed, no streak, no
+// classic-flag pre-write, because nothing was ever blocked.
+function declinedFlagPath(sessionId, cwd, searchKey) {
+  const key = crypto.createHash('md5').update(`gdeclined:${sessionId || 'nosid'}:${cwd}:${searchKey}`).digest('hex').slice(0, 12);
+  return path.join(gateStateTmpDir(), `dotclaude-graphdeclined-${key}.json`);
+}
+
+/** Record a declined (non-block) outcome for this exact search. Never throws. */
+function markDeclined(sessionId, cwd, searchKey, reason) {
+  try { fs.writeFileSync(declinedFlagPath(sessionId, cwd, searchKey), JSON.stringify({ reason, ts: Date.now() })); return true; } catch { return false; }
+}
+
+/** Read a (still-fresh, within GATE_STATE_TTL_MS) declined record, or null. Never throws. */
+function getDeclined(sessionId, cwd, searchKey) {
+  try {
+    const obj = JSON.parse(fs.readFileSync(declinedFlagPath(sessionId, cwd, searchKey), 'utf8'));
+    if (!obj || typeof obj.ts !== 'number') return null;
+    if (Date.now() - obj.ts >= GATE_STATE_TTL_MS) return null;
+    return obj;
+  } catch { return null; }
+}
+
 // ── Gate query concurrency cap ───────────────────────────────────────────────
 // The answer-in-gate spawns a REAL `graphify query` child synchronously. A
 // machine running many concurrent sessions/worktrees, each firing an eligible
@@ -444,7 +477,97 @@ function gateQuerySlotPath(i) {
 }
 
 /**
+ * Release a gate-query slot, but ONLY if it still names `pid` — the same
+ * ownership discipline as `refreshUpdateLockFile`/`clearUpdateLockFile`
+ * above. Without this a release() closure could unlink a slot a DIFFERENT
+ * process has since reclaimed (this process's own slot went stale and was
+ * taken over by another acquirer before this process finished), which would
+ * let a third acquirer take the slot early and defeat the cap. A slot whose
+ * body cannot be parsed (corrupt/0-byte) is left alone — there is nothing
+ * safely ownable to remove. Never throws.
+ */
+function releaseGateQuerySlot(slotPath, pid) {
+  try {
+    const cur = JSON.parse(fs.readFileSync(slotPath, 'utf8'));
+    if (cur && cur.pid === pid) fs.unlinkSync(slotPath);
+  } catch { /* corrupt, already gone, or owned by someone else — leave it */ }
+}
+
+// ── Opportunistic TTL sweep — R8 ─────────────────────────────────────────────
+// Every gate-state file above carries a TTL, but nothing ever DELETES an
+// expired one proactively — each is only ever re-checked (and cleaned up) the
+// next time that EXACT (session, cwd, search) tuple recurs, which on a
+// machine with many short-lived sessions may be never. Left alone forever,
+// os.tmpdir() slowly accumulates one small file per distinct search ever
+// gated. This is a bounded, fail-silent best-effort sweep — not a mutex, not
+// exhaustive — meant to be called occasionally (e.g. once per SessionStart,
+// itself throttled by the caller) so the count stays small in practice
+// without costing a real directory walk's worth of stats on every call.
+const SWEEP_MAX_ENTRIES = 200;
+const TMPDIR_SWEEP_PATTERNS = [
+  /^claude_confirm_.*\.flag$/,          // classic confirm flag AND the graphgate escape-hatch flag (same namespace)
+  /^dotclaude-graphbypass-.*\.count$/,
+  /^dotclaude-graphrelent-.*\.flag$/,
+  /^dotclaude-graphlastblocked-.*\.json$/,
+  /^dotclaude-graphdeclined-.*\.json$/,
+];
+const LOCKDIR_SWEEP_PATTERNS = [/^dotclaude-gatequery-slot-.*\.lock$/];
+
+/**
+ * Remove entries in `dir` matching any of `patterns` whose mtime is older
+ * than `ttlMs`, up to `budget` MATCHING entries considered (non-matching
+ * entries in the same `readdirSync` listing are free — only a name-regex
+ * test, no stat). Never throws.
+ * @returns {{scanned:number, removed:number}}
+ */
+function sweepDirForStaleFiles(dir, patterns, ttlMs, budget) {
+  let scanned = 0, removed = 0;
+  let entries;
+  try { entries = fs.readdirSync(dir); } catch { return { scanned, removed }; }
+  for (const name of entries) {
+    if (scanned >= budget) break;
+    if (!patterns.some((re) => re.test(name))) continue;
+    scanned++;
+    const p = path.join(dir, name);
+    try {
+      if (Date.now() - fs.statSync(p).mtimeMs > ttlMs) {
+        fs.unlinkSync(p);
+        removed++;
+      }
+    } catch { /* gone already, or a transient stat/unlink failure — skip */ }
+  }
+  return { scanned, removed };
+}
+
+/**
+ * Bounded, fail-silent opportunistic cleanup of expired gate/declined/
+ * bypass/relent/last-blocked/slot temp files (R8). Splits the
+ * `SWEEP_MAX_ENTRIES` budget between `os.tmpdir()` (gate/declined/bypass/
+ * relent/classic-confirm flags) and `lockBaseDir()` (gate-query slots — a
+ * distinct dir only when `DOTCLAUDE_GRAPHLOCK_DIR` overrides it, tests
+ * mainly). Intended to be called from a throttled SessionStart path, not the
+ * PreToolUse hot path. Never throws.
+ * @returns {{scanned:number, removed:number}}
+ */
+function sweepStaleGateState() {
+  try {
+    const budgetEach = Math.floor(SWEEP_MAX_ENTRIES / 2);
+    const a = sweepDirForStaleFiles(gateStateTmpDir(), TMPDIR_SWEEP_PATTERNS, GATE_STATE_TTL_MS, budgetEach);
+    const b = sweepDirForStaleFiles(lockBaseDir(), LOCKDIR_SWEEP_PATTERNS, gateQuerySlotStaleMs(), budgetEach);
+    return { scanned: a.scanned + b.scanned, removed: a.removed + b.removed };
+  } catch {
+    return { scanned: 0, removed: 0 };
+  }
+}
+
+/**
  * Acquire one of the machine-wide gate-query slots. Never throws.
+ *
+ * A slot whose body fails `JSON.parse` (a 0-byte file from an interrupted
+ * write, or genuine corruption) is NOT left alone forever — with the default
+ * cap of 2, two such files would silently disable the gate machine-wide,
+ * with no self-heal. It falls back to the slot FILE's own mtime to decide
+ * staleness instead, same threshold as the parseable case.
  * @returns {(() => void)|null} a release function, or `null` when every slot
  *   is busy — the caller must fail OPEN (skip the gate, allow the search).
  */
@@ -455,15 +578,24 @@ function acquireGateQuerySlot() {
     const p = gateQuerySlotPath(i);
     try {
       fs.writeFileSync(p, JSON.stringify({ pid: process.pid, ts: Date.now() }), { flag: 'wx' });
-      return () => { try { fs.unlinkSync(p); } catch { /* already gone */ } };
+      return () => releaseGateQuerySlot(p, process.pid);
     } catch {
+      let stale = false;
       try {
         const { ts } = JSON.parse(fs.readFileSync(p, 'utf8'));
-        if (typeof ts === 'number' && Date.now() - ts > staleMs) {
+        stale = typeof ts === 'number' && Date.now() - ts > staleMs;
+      } catch {
+        // Corrupt or 0-byte — JSON.parse tells us nothing; fall back to the
+        // file's own mtime so this slot still eventually reclaims (R5).
+        try { stale = Date.now() - fs.statSync(p).mtimeMs > staleMs; } catch { stale = false; }
+      }
+      if (stale) {
+        try {
           fs.writeFileSync(p, JSON.stringify({ pid: process.pid, ts: Date.now() }));
-          return () => { try { fs.unlinkSync(p); } catch { /* already gone */ } };
-        }
-      } catch { /* corrupt, or a genuine race with another acquirer — try the next slot */ }
+          return () => releaseGateQuerySlot(p, process.pid);
+        } catch { /* lost a race writing the reclaim — try the next slot */ }
+      }
+      // else: genuinely busy (or a race with another acquirer) — try the next slot
     }
   }
   return null;
@@ -534,6 +666,19 @@ function updateLockHeartbeatMs() {
 /** Directory holding the per-project update-lock and sentinel files. Overridable for tests. */
 function lockBaseDir() {
   return process.env.DOTCLAUDE_GRAPHLOCK_DIR || os.tmpdir();
+}
+
+/**
+ * Where per-search gate state (currently: the declined marker) lives.
+ * Defaults to `os.tmpdir()`, overridable via `DOTCLAUDE_GRAPHSTATE_TMPDIR` —
+ * tests use this to isolate a directory-WIDE scan (`sweepStaleGateState`)
+ * from whatever litter genuinely sits in the real system tmp dir (left by
+ * other test files or a long-running machine); every other single-file flag
+ * in this module targets a unique hashed filename, so a bare `os.tmpdir()`
+ * never collides across tests and does not need this override.
+ */
+function gateStateTmpDir() {
+  return process.env.DOTCLAUDE_GRAPHSTATE_TMPDIR || os.tmpdir();
 }
 
 /** Machine-wide cap on concurrent `graphify update` runners (default 2, min 1). */
@@ -880,10 +1025,17 @@ module.exports = {
   getLastBlocked,
   setLastBlocked,
   markLastBlockedBypassed,
+  gateStateTmpDir,
+  declinedFlagPath,
+  markDeclined,
+  getDeclined,
   gateQueryMaxInFlight,
   gateQuerySlotStaleMs,
   gateQuerySlotPath,
+  releaseGateQuerySlot,
   acquireGateQuerySlot,
+  sweepDirForStaleFiles,
+  sweepStaleGateState,
   isGraphifyQueryCommand,
   sentinelPath,
   lockBaseDir,

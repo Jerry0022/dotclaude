@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.12.0
+ * @version 0.13.0
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
@@ -227,29 +227,58 @@ process.stdin.on('end', () => {
   // all of these); that self-heals silently instead. Safety properties:
   //   1. Escape hatch — block at most once per (session, search); a retry of
   //      the same search falls through (gate_bypassed) and ALSO pre-releases
-  //      the classic confirm flag for the same key (R6 — without this, a
-  //      bypassed gate fell straight into the classic full-repo-search
-  //      threshold block a SECOND time on the same retry).
-  //   2. Adaptive relent — 3 consecutive bypasses with no accepted answer in
+  //      the classic confirm flag for the same key, but ONLY when that search
+  //      is path-less/`.`/`/` — the only shapes the classic check itself ever
+  //      acts on (R6/R8 — without this, a bypassed gate fell straight into
+  //      the classic full-repo-search threshold block a SECOND time).
+  //   2. Declined marker — a query that timed out, had no hit, errored, or
+  //      was skipped for a busy concurrency slot is NOT a block, so it must
+  //      not leave the escape-hatch flag unwritten AND undeclared: a retry of
+  //      that exact search would otherwise re-run the query from scratch,
+  //      which can flip the outcome between the two calls — live-observed as
+  //      a path-less search that timed out on call 1 and was BLOCKED on the
+  //      identical call 2 (R1). The declined marker (gstate.markDeclined/
+  //      getDeclined, same ~12h TTL) makes a repeat of that exact search skip
+  //      the query entirely — zero latency — and is deliberately inert: no
+  //      gate_bypassed, no streak movement, no classic-flag pre-write.
+  //   3. Both the escape-hatch flag AND the declined marker are checked
+  //      immediately after eligibility (R3/R4) — before `isEnabled`,
+  //      `resolveGraphJson`, or `stalenessInfo` (a full directory walk) ever
+  //      run — so a retry of an already-decided search costs next to nothing,
+  //      and the graph cannot be rewritten mid-retry in a way that changes
+  //      the outcome. The graph is also resolved exactly ONCE per invocation
+  //      (previously re-resolved by `hasGraph`, `stalenessInfo`, and the
+  //      query's own `--graph` argument separately) and threaded through.
+  //   4. Adaptive relent — 3 consecutive bypasses with no accepted answer in
   //      between (tracked ACROSS different searches via gstate's
   //      last-blocked record, not just retries of one) disables the gate for
-  //      the rest of the session (gate_relented).
-  //   3. The gate flag itself is only ever WRITTEN when a real block happens
+  //      the rest of the session (gate_relented). The streak only advances on
+  //      the FIRST bypass of a given block (R2) — repeating an
+  //      already-bypassed retry must not keep inflating it, or one search
+  //      retried three times relents the gate as if three DIFFERENT searches
+  //      had each declined an answer.
+  //   5. The gate flag itself is only ever WRITTEN when a real block happens
   //      (never on a no-answer or a busy-slot skip) — writing it
   //      unconditionally used to let a single no-answer permanently "use up"
   //      the escape hatch for a search the gate never actually blocked.
-  //   4. Every flag here (gate flag, bypass streak, relent, last-blocked)
-  //      carries a ~12h TTL so a long-running machine cannot accumulate state
-  //      that outlives any session it could plausibly still describe.
-  //   5. A missing/unstable session id (`sid === 'nosid'`) skips this WHOLE
+  //   6. Every flag here (gate flag, declined marker, bypass streak, relent,
+  //      last-blocked) carries a ~12h TTL so a long-running machine cannot
+  //      accumulate state that outlives any session it could plausibly still
+  //      describe — and an opportunistic, bounded sweep in the SessionStart
+  //      graphify hook (gstate.sweepStaleGateState) proactively cleans up
+  //      expired entries rather than waiting for that exact search to recur.
+  //   7. A missing/unstable session id (`sid === 'nosid'`) skips this WHOLE
   //      block — same instability lib/session-id.js documents for the classic
   //      confirm flag below (issue #10); this gate's state is
   //      session-scoped, so an unstable id could wedge or leak it in ways the
   //      classic flag deliberately avoids by not keying on session at all.
-  //   6. A machine-wide concurrency cap (gstate.acquireGateQuerySlot, default
+  //   8. A machine-wide concurrency cap (gstate.acquireGateQuerySlot, default
   //      2 in-flight, ~10s stale window) bounds how many real `graphify
   //      query` children can run at once; over the cap skips the gate
-  //      entirely (gate_skipped_busy) rather than queuing.
+  //      entirely (gate_skipped_busy, and records a declined marker per #2)
+  //      rather than queuing. The lagging-but-within-tolerance self-heal kick
+  //      runs AFTER the query, not before, so it does not compete with the
+  //      query itself for CPU (a likely contributor to observed ~5s timeouts).
   // Fail-open: any error here must never block a search.
   //
   // Tolerance is a file COUNT, not a time window, because scanSources already
@@ -279,136 +308,176 @@ process.stdin.on('end', () => {
       try {
         const graphNudge = require('../lib/graph-nudge');
         const gstate = require('../lib/graphify-state');
-        const metrics = require('../lib/graphify-metrics');
-        const { spawnGraphifySync } = require('../lib/graphify-query-spawn');
         const patternForLog = String(pattern || '').slice(0, 120);
         const outputMode = toolInput.output_mode || '';
         const eligible = graphNudge.isEligibleSearch(toolName, toolInput, cwd);
-        if (eligible && gstate.isEnabled(cwd) && graphNudge.hasGraph(cwd) && !gstate.isRelented(sid, cwd)) {
-          const info = graphNudge.stalenessInfo(cwd);
-          const withinTolerance = !info.truncated && info.newerCount <= GRAPHIFY_STALE_TOLERANCE;
-          if (!withinTolerance) {
-            // Demand-driven self-heal: a search arrived but the graph lags too
-            // far behind (or its staleness cannot be bounded at all), so the
-            // gate below must not fire and the graph would just rot until the
-            // next SessionStart. Kick a throttled background AST refresh (free,
-            // sentinel-tracked — see Gap #5) so the graph converges and the gate
-            // can enforce on LATER searches this session. Never blocks.
-            if (gstate.markRefresh(cwd, 2 * 60 * 1000)) {
-              // Release the throttle slot when the spawn is declined (PID lock /
-              // global cap) — otherwise the cooldown is spent on a build that
-              // never ran and the graph cannot converge (issue #291). The metric
-              // must only record a spawn that actually issued, or the log claims
-              // self-heals that never happened.
-              if (gstate.bgWithSentinel(gstate.graphifyBin(), ['update', '.'], cwd)) {
-                // Infinity is JSON-null; -1 keeps "unbounded" distinguishable in the log.
-                const newerCount = Number.isFinite(info.newerCount) ? info.newerCount : -1;
-                metrics.record('self_heal_kicked', { newerCount, truncated: info.truncated }, { cwd, sid });
-              } else {
-                gstate.releaseRefresh(cwd);
+
+        if (eligible && !gstate.isRelented(sid, cwd)) {
+          // The SAME key the classic confirm flag below is keyed on (R6/R8) —
+          // sharing it is what lets the bypass branch pre-release that flag.
+          const costFieldsJson = JSON.stringify(costFields(toolName, toolInput));
+          const searchKey = `${toolName}:${cwd}:${costFieldsJson}`;
+          const gflag = flagPath(`graphgate:${sid}:${searchKey}`);
+
+          // R3/R4 ordering: the escape-hatch flag AND the declined marker are
+          // checked FIRST — before anything that costs a `require()`, a
+          // consent-file read, or (worst) the full `stalenessInfo` directory
+          // walk — so a retry of an already-decided search costs next to
+          // nothing, and a graph being rewritten mid-retry cannot change the
+          // outcome between the block and its retry.
+          let gflagFresh = false;
+          if (fs.existsSync(gflag)) {
+            try {
+              const written = parseInt(fs.readFileSync(gflag, 'utf8'), 10);
+              gflagFresh = Number.isFinite(written) && (Date.now() - written) < GRAPHGATE_FLAG_TTL_MS;
+            } catch { /* stays stale */ }
+            if (!gflagFresh) { try { fs.unlinkSync(gflag); } catch {} }
+          }
+
+          if (gflagFresh) {
+            // Escape hatch: already gated this exact search — fall through.
+            const metrics = require('../lib/graphify-metrics');
+            const keyHash = graphNudge.gateKeyHash(toolName, cwd, costFieldsJson);
+            metrics.record('gate_bypassed', { tool: toolName, pattern: patternForLog, outputMode, keyHash }, { cwd, sid });
+            // R6/R8 double-block fix: the classic full-repo-search threshold
+            // check further below is keyed on the SAME `searchKey` and would
+            // otherwise block a SECOND time on this exact retry (it has never
+            // seen a confirmation yet — the graphify gate answered first).
+            // Pre-write a fresh classic flag now so that check finds it
+            // already confirmed — but ONLY when this search is the kind the
+            // classic check would otherwise ever act on (path-less, or `.`/
+            // `/`); a directory+content-mode search never reaches that check
+            // at all (see the per-tool Grep branch below), so writing its
+            // flag there would just be a stray file for no behavioural gain.
+            if (!searchPath || searchPath === '.' || searchPath === '/') {
+              try { fs.writeFileSync(flagPath(searchKey), Date.now().toString()); } catch {}
+            }
+            // Bypass streak: only counts when this IS the most recently
+            // blocked search AND it has not already been counted as bypassed
+            // once (R2) — without the `!last.bypassed` guard, repeating the
+            // SAME already-bypassed retry kept incrementing the streak
+            // (relenting the gate off of ONE search retried three times,
+            // rather than three DIFFERENT searches each declining the
+            // answer).
+            const last = gstate.getLastBlocked(sid, cwd);
+            if (last && last.key === searchKey && !last.bypassed) {
+              gstate.markLastBlockedBypassed(sid, cwd);
+              if (gstate.noteBypass(sid, cwd) >= GRAPHIFY_RELENT_AFTER_BYPASSES) {
+                gstate.markRelented(sid, cwd);
+                metrics.record('gate_relented', { tool: toolName }, { cwd, sid });
               }
             }
           } else {
-            // The SAME key the classic confirm flag below is keyed on (R6) —
-            // sharing it is what lets the bypass branch pre-release that flag.
-            const searchKey = `${toolName}:${cwd}:${JSON.stringify(costFields(toolName, toolInput))}`;
-            const gflag = flagPath(`graphgate:${sid}:${searchKey}`);
-            const keyHash = graphNudge.gateKeyHash(toolName, cwd, JSON.stringify(costFields(toolName, toolInput)));
+            const declined = gstate.getDeclined(sid, cwd, searchKey);
+            if (declined) {
+              // R1: this exact search already timed out / had no hit / errored
+              // / was skipped for a busy slot. Skip the query ENTIRELY (zero
+              // latency) — deliberately inert otherwise: no gate_bypassed, no
+              // streak movement, no classic-flag pre-write, because nothing
+              // was ever actually blocked the first time.
+            } else if (gstate.isEnabled(cwd)) {
+              // R3/R4: resolve the graph exactly ONCE per invocation and
+              // thread it through every call that would otherwise re-resolve
+              // it (hasGraph / stalenessInfo / the query's own --graph flag).
+              const resolved = graphNudge.resolveGraphJson(cwd);
+              if (resolved) {
+                const metrics = require('../lib/graphify-metrics');
+                const { spawnGraphifySync } = require('../lib/graphify-query-spawn');
+                const keyHash = graphNudge.gateKeyHash(toolName, cwd, costFieldsJson);
+                const info = graphNudge.stalenessInfo(cwd, { resolved });
+                const withinTolerance = !info.truncated && info.newerCount <= GRAPHIFY_STALE_TOLERANCE;
 
-            let gflagFresh = false;
-            if (fs.existsSync(gflag)) {
-              try {
-                const written = parseInt(fs.readFileSync(gflag, 'utf8'), 10);
-                gflagFresh = Number.isFinite(written) && (Date.now() - written) < GRAPHGATE_FLAG_TTL_MS;
-              } catch { /* stays stale */ }
-              if (!gflagFresh) { try { fs.unlinkSync(gflag); } catch {} }
-            }
-
-            if (gflagFresh) {
-              // Escape hatch: already gated this exact search — fall through.
-              metrics.record('gate_bypassed', { tool: toolName, pattern: patternForLog, outputMode, keyHash }, { cwd, sid });
-              // R6 double-block fix: the classic full-repo-search threshold
-              // check further below is keyed on the SAME `searchKey` and would
-              // otherwise block a SECOND time on this exact retry (it has
-              // never seen a confirmation yet — the graphify gate answered
-              // first). Pre-write a fresh classic flag now so that check finds
-              // it already confirmed.
-              try { fs.writeFileSync(flagPath(searchKey), Date.now().toString()); } catch {}
-              // Bypass streak: only counts when this IS the most recently
-              // blocked search (R5) — a stale retry of an OLDER blocked
-              // search still bypasses via the flag above but does not move
-              // the streak.
-              const last = gstate.getLastBlocked(sid, cwd);
-              if (last && last.key === searchKey) {
-                gstate.markLastBlockedBypassed(sid, cwd);
-                if (gstate.noteBypass(sid, cwd) >= GRAPHIFY_RELENT_AFTER_BYPASSES) {
-                  gstate.markRelented(sid, cwd);
-                  metrics.record('gate_relented', { tool: toolName }, { cwd, sid });
-                }
-              }
-            } else {
-              // Within tolerance but still lagging by >0 files — enforce AND kick
-              // a refresh in parallel so it converges toward newerCount 0.
-              if (info.newerCount > 0 && gstate.markRefresh(cwd, 2 * 60 * 1000)) {
-                if (gstate.bgWithSentinel(gstate.graphifyBin(), ['update', '.'], cwd)) {
-                  metrics.record('self_heal_kicked', { newerCount: info.newerCount, truncated: false }, { cwd, sid });
-                } else {
-                  gstate.releaseRefresh(cwd); // declined — do not spend the cooldown (#291)
-                }
-              }
-
-              const release = gstate.acquireGateQuerySlot();
-              if (!release) {
-                metrics.record('gate_skipped_busy', { tool: toolName, pattern: patternForLog }, { cwd, sid });
-                // Machine-wide query slots are all busy — fail open, no block,
-                // no gflag write (this search was never actually gated).
-              } else {
-                let queryOut = '';
-                let queryOk = false;
-                try {
-                  const question = graphNudge.questionFromPattern(pattern);
-                  if (question) {
-                    const resolved = graphNudge.resolveGraphJson(cwd);
-                    const queryArgs = ['query', question, '--budget', String(GRAPHIFY_QUERY_BUDGET)];
-                    if (resolved && resolved.source !== 'local') queryArgs.push('--graph', resolved.file);
-                    const res = spawnGraphifySync(gstate.graphifyBin(), queryArgs, {
-                      cwd, timeout: GRAPHIFY_QUERY_TIMEOUT_MS, windowsHide: true, encoding: 'utf8',
-                    });
-                    if (!res.error && res.status === 0) { queryOut = res.stdout || ''; queryOk = true; }
+                const kickSelfHeal = (newerCount, truncated) => {
+                  // Demand-driven self-heal: kick a throttled background AST
+                  // refresh (free, sentinel-tracked — see Gap #5) so the graph
+                  // converges and the gate can enforce on LATER searches.
+                  // Never blocks.
+                  if (gstate.markRefresh(cwd, 2 * 60 * 1000)) {
+                    if (gstate.bgWithSentinel(gstate.graphifyBin(), ['update', '.'], cwd)) {
+                      metrics.record('self_heal_kicked', { newerCount, truncated }, { cwd, sid });
+                    } else {
+                      gstate.releaseRefresh(cwd); // declined — do not spend the cooldown (#291)
+                    }
                   }
-                } catch { /* treat as no answer — fail open */ }
-                finally { release(); }
+                };
 
-                if (!queryOk || !graphNudge.hasGraphAnswer(queryOut)) {
-                  metrics.record('gate_noanswer', { tool: toolName, pattern: patternForLog, outputMode }, { cwd, sid });
-                  // No answer — nothing to show, no gflag write, fall through and allow.
+                if (!withinTolerance) {
+                  // Graph lags too far behind (or its staleness cannot be
+                  // bounded at all) — the gate must not fire on THIS search.
+                  // No query runs, so there is nothing to compete with the
+                  // self-heal spawn for CPU; kick it right away.
+                  const newerCount = Number.isFinite(info.newerCount) ? info.newerCount : -1;
+                  kickSelfHeal(newerCount, info.truncated);
                 } else {
-                  // R5: write the gate flag only now — a genuine block.
-                  try { fs.writeFileSync(gflag, Date.now().toString()); } catch {}
-                  // Reset the bypass streak only when the PREVIOUS block was
-                  // never retried (an accepted answer) — see gstate's doc
-                  // comment for why this is what lets 3 bypasses on 3
-                  // DIFFERENT searches still relent the gate.
-                  const prevLast = gstate.getLastBlocked(sid, cwd);
-                  if (prevLast && !prevLast.bypassed) gstate.clearBypassStreak(sid, cwd);
-                  gstate.setLastBlocked(sid, cwd, searchKey);
+                  const release = gstate.acquireGateQuerySlot();
+                  if (!release) {
+                    metrics.record('gate_skipped_busy', { tool: toolName, pattern: patternForLog }, { cwd, sid });
+                    gstate.markDeclined(sid, cwd, searchKey, 'busy'); // R1
+                  } else {
+                    let queryOut = '';
+                    let queryOk = false;
+                    // Why a query produced nothing, and what it cost in
+                    // wall-clock — the latency is the gate's only price on a
+                    // no-answer search.
+                    let reason = 'nohit';
+                    const queryStart = Date.now();
+                    try {
+                      const question = graphNudge.questionFromPattern(pattern);
+                      if (!question) reason = 'noquestion';
+                      else {
+                        const queryArgs = ['query', question, '--budget', String(GRAPHIFY_QUERY_BUDGET)];
+                        if (resolved.source !== 'local') queryArgs.push('--graph', resolved.file);
+                        const res = spawnGraphifySync(gstate.graphifyBin(), queryArgs, {
+                          cwd, timeout: GRAPHIFY_QUERY_TIMEOUT_MS, windowsHide: true, encoding: 'utf8',
+                        });
+                        if (!res.error && res.status === 0) { queryOut = res.stdout || ''; queryOk = true; }
+                        else reason = res.error && res.error.code === 'ETIMEDOUT' ? 'timeout' : 'error';
+                      }
+                    } catch { reason = 'error'; /* treat as no answer — fail open */ }
+                    finally { release(); }
+                    const queryMs = Date.now() - queryStart;
 
-                  const answer = graphNudge.trimToTraversalHeader(queryOut).slice(0, 2000);
-                  console.error('\n⛔  GRAPHIFY GATE — broad search blocked (graph available)');
-                  console.error('─'.repeat(54));
-                  console.error(answer);
-                  if (info.newerCount > 0) {
-                    console.error('');
-                    console.error(`note: graph lags ${info.newerCount} file(s) behind — background refresh started`);
+                    // R3/R4: kick the lagging-but-within-tolerance self-heal
+                    // AFTER the query, not before — running it first made the
+                    // background build compete with the query for CPU, a
+                    // likely contributor to observed ~5s query timeouts.
+                    if (info.newerCount > 0) kickSelfHeal(info.newerCount, false);
+
+                    if (!queryOk || !graphNudge.hasGraphAnswer(queryOut)) {
+                      metrics.record('gate_noanswer', { tool: toolName, pattern: patternForLog, outputMode, reason, ms: queryMs }, { cwd, sid });
+                      gstate.markDeclined(sid, cwd, searchKey, reason); // R1 — no gflag write, this was never a block
+                    } else {
+                      // R5 (streak): write the gate flag only now — a genuine block.
+                      try { fs.writeFileSync(gflag, Date.now().toString()); } catch {}
+                      // Reset the bypass streak only when the PREVIOUS block
+                      // was never retried (an accepted answer) — see gstate's
+                      // doc comment for why this is what lets 3 bypasses on 3
+                      // DIFFERENT searches still relent the gate.
+                      const prevLast = gstate.getLastBlocked(sid, cwd);
+                      if (prevLast && !prevLast.bypassed) gstate.clearBypassStreak(sid, cwd);
+                      gstate.setLastBlocked(sid, cwd, searchKey);
+
+                      const answer = graphNudge.trimToTraversalHeader(queryOut).slice(0, 2000);
+                      console.error('\n⛔  GRAPHIFY GATE — broad search blocked (graph available)');
+                      console.error('─'.repeat(54));
+                      console.error(answer);
+                      if (info.newerCount > 0) {
+                        console.error('');
+                        console.error(`note: graph lags ${info.newerCount} file(s) behind — background refresh started`);
+                      }
+                      console.error('');
+                      console.error('retry the same search if you need exact matches.');
+                      console.error('─'.repeat(54));
+                      // R9: answerChars reflects what was actually SHOWN
+                      // (trimmed to the traversal header, capped at 2000),
+                      // not graphify's raw, potentially much larger stdout.
+                      metrics.record('gate_fired', {
+                        newerCount: info.newerCount, tool: toolName, pattern: patternForLog,
+                        answerChars: answer.length, outputMode, keyHash, ms: queryMs,
+                      }, { cwd, sid });
+                      process.exit(2);
+                    }
                   }
-                  console.error('');
-                  console.error('retry the same search if you need exact matches.');
-                  console.error('─'.repeat(54));
-                  metrics.record('gate_fired', {
-                    newerCount: info.newerCount, tool: toolName, pattern: patternForLog,
-                    answerChars: queryOut.length, outputMode, keyHash,
-                  }, { cwd, sid });
-                  process.exit(2);
                 }
               }
             }

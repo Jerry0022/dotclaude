@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { analyzeTranscript, resultText, aggregateMetricsBySession, estimateSavings, median } from "./graphify-audit.js";
+import { analyzeTranscript, resultText, aggregateMetricsBySession, estimateSavings, gateLatencyStats, median } from "./graphify-audit.js";
 
 const line = (o) => JSON.stringify(o);
 const use = (id, name, input) => line({ type: "assistant", cwd: "C:/p", message: { usage: { input_tokens: 10, cache_creation_input_tokens: 5, cache_read_input_tokens: 1000, output_tokens: 20 }, content: [{ type: "tool_use", id, name, input }] } });
@@ -194,17 +194,78 @@ describe("estimateSavings — NET gate estimate (Requirement 9)", () => {
     expect(est.globalMedian).toBe(0);
   });
 
-  test("legacy events without a keyHash fall back to the per-project count approximation", () => {
+  // R9: legacy gate_fired events (missing keyHash and/or a numeric
+  // answerChars — recorded by a hook version older than this rewrite) are
+  // EXCLUDED from the NET estimate entirely, not folded in via a guess.
+  test("legacy gate_fired events (no keyHash) are excluded from NET, counted separately", () => {
     const events = [
       ev("search_ran", "s1", "P", { eligible: true, responseChars: 1000, outputMode: "" }),
       ev("gate_fired", "s1", "P", { answerChars: 200 }), // no keyHash — legacy
-      ev("gate_fired", "s1", "P", { answerChars: 200 }), // no keyHash — legacy
-      ev("gate_bypassed", "s1", "P"),                    // no keyHash — legacy
+      ev("gate_fired", "s1", "P", { answerChars: 200, keyHash: "real1" }), // a real, estimable one
     ];
     const est = estimateSavings(events);
-    // 2 fired, 1 legacy-bypassed → first counted as bypassed, second accepted.
-    expect(est.bypassedCount).toBe(1);
+    expect(est.legacyCount).toBe(1);
+    expect(est.acceptedCount).toBe(1); // only the keyHash'd one counted
+    expect(est.bypassedCount).toBe(0);
+    expect(est.netChars).toBe(1000 - 200); // legacy event contributes nothing
+  });
+
+  test("legacy gate_fired events (answerChars not a number) are also excluded and counted as legacy", () => {
+    const events = [
+      ev("gate_fired", "s1", "P", { keyHash: "no-answer-chars" }), // answerChars missing entirely
+    ];
+    const est = estimateSavings(events);
+    expect(est.legacyCount).toBe(1);
+    expect(est.acceptedCount).toBe(0);
+    expect(est.netChars).toBe(0);
+  });
+
+  // R9: pairing is by (sid, keyHash), NOT keyHash alone — two DIFFERENT
+  // sessions running the identical search on the same project must not
+  // cross-pair (a bypass in session 2 must never cancel out a block in
+  // session 1 that session 2 never even saw).
+  test("pairing is scoped to (sid, keyHash) — a same-keyHash bypass in a DIFFERENT session does not pair", () => {
+    const events = [
+      ev("search_ran", "s1", "P", { eligible: true, responseChars: 1000, outputMode: "content" }),
+      ev("gate_fired", "s1", "P", { answerChars: 200, outputMode: "content", keyHash: "shared" }),
+      ev("gate_bypassed", "s2", "P", { outputMode: "content", keyHash: "shared" }), // different session!
+    ];
+    const est = estimateSavings(events);
+    // The fired gate in s1 is NEVER bypassed (from s1's point of view) — it
+    // must be counted as accepted, not swallowed by s2's unrelated bypass.
     expect(est.acceptedCount).toBe(1);
-    expect(est.netChars).toBe((1000 - 200) - (200 + 1000));
+    expect(est.bypassedCount).toBe(0);
+    expect(est.netChars).toBe(1000 - 200);
+  });
+});
+
+describe("gateLatencyStats — R9 gate latency cost line", () => {
+  const ev = (event, sid, project, extra = {}) => ({ event, sid, project, ...extra });
+
+  test("sums and finds the median of ms across gate_fired and gate_noanswer", () => {
+    const events = [
+      ev("gate_fired", "s1", "P", { ms: 100 }),
+      ev("gate_noanswer", "s1", "P", { ms: 300 }),
+      ev("gate_fired", "s1", "P", { ms: 200 }),
+    ];
+    const stats = gateLatencyStats(events);
+    expect(stats.count).toBe(3);
+    expect(stats.sumMs).toBe(600);
+    expect(stats.medianMs).toBe(200);
+  });
+
+  test("excludes sid 'nosid' and events without a numeric ms", () => {
+    const events = [
+      ev("gate_fired", "nosid", "P", { ms: 999 }),
+      ev("gate_fired", "s1", "P", {}), // no ms — an older hook version
+      ev("gate_bypassed", "s1", "P", { ms: 50 }), // wrong event type
+    ];
+    const stats = gateLatencyStats(events);
+    expect(stats.count).toBe(0);
+    expect(stats.sumMs).toBe(0);
+  });
+
+  test("empty input never throws", () => {
+    expect(gateLatencyStats([])).toEqual({ count: 0, sumMs: 0, medianMs: 0 });
   });
 });
