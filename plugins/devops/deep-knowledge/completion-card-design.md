@@ -210,7 +210,11 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   every turn.) The visible ✨ line is suppressed ONLY on this widget path:
   a variant without a widget body, or a widget call that fails (Claude then
   prints the visible `### **✨✨✨ {title} ✨✨✨**` line instead of the
-  comment), keeps the ✨ headline as before. The widget draws the
+  comment), keeps the ✨ headline as before. That title line is the error
+  path only, never a shortcut (#451): every Desktop render also saves the
+  widget HTML to `<tmp>/dotclaude-devops-card-widget-<session>` and names
+  it in the `[CARD WIDGET]` block, and `stop.flow.guard` blocks a card turn
+  on which `show_widget` was never called, pointing at that file. The widget draws the
   title (h3) and both blocks, colours (green `#8fae8f` posts, red
   `#e0a0a0`, yellow `#d9c58a`, lilac code spans `#aab4e6`), tooltips (600 ms
   delay), the budget bars, the quiet PR link and the buttons. Nothing is

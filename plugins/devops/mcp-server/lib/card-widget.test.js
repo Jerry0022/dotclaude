@@ -1,9 +1,14 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import {
   isDesktopSession,
   buttonsFor,
   cardWidgetHtml,
   cardWidgetInstruction,
+  writeCardWidgetFile,
+  WIDGET_FILE_PREFIX,
   BUTTONS,
 } from "./card-widget.js";
 
@@ -283,5 +288,45 @@ describe("cardWidgetInstruction", () => {
     expect(text).not.toMatch(/skip silently/);
     const html = cardWidgetHtml(model, "");
     expect(text).toContain("----- widget_code -----\n" + html + "\n----- end widget_code -----");
+  });
+
+  test("the fallback line reads as the error path, never a shortcut (#451)", () => {
+    const text = cardWidgetInstruction(baseModel(), "", desktop);
+    expect(text).toMatch(/mandatory, never optional/);
+    expect(text).toMatch(/never grep, filter or skip the HTML/);
+    expect(text).toMatch(/ONLY when the call itself fails, or the tool does not exist/);
+    expect(text).toMatch(/never a shortcut/);
+  });
+
+  test("names the saved widget file when one was written, and only then", () => {
+    const withFile = cardWidgetInstruction(baseModel(), "", desktop, { widgetFile: "C:/tmp/dotclaude-devops-card-widget-s1" });
+    expect(withFile).toContain("The same HTML is saved in C:/tmp/dotclaude-devops-card-widget-s1");
+    expect(cardWidgetInstruction(baseModel(), "", desktop)).not.toContain("The same HTML is saved");
+  });
+});
+
+describe("writeCardWidgetFile (#451)", () => {
+  const dirs = [];
+  const tmp = () => { const d = mkdtempSync(join(tmpdir(), "card-widget-")); dirs.push(d); return d; };
+  afterEach(() => { while (dirs.length) rmSync(dirs.pop(), { recursive: true, force: true }); });
+
+  test("Desktop: writes the widget HTML per session and returns a forward-slash path", () => {
+    const dir = tmp();
+    const model = baseModel();
+    const file = writeCardWidgetFile(model, "", "s-42", dir, desktop);
+    expect(file).toBe(join(dir, `${WIDGET_FILE_PREFIX}-s-42`).replace(/\\/g, "/"));
+    expect(readFileSync(file, "utf8")).toBe(cardWidgetHtml(model, ""));
+  });
+
+  test("nothing written outside Desktop, for test-minimal, or without a model", () => {
+    const dir = tmp();
+    expect(writeCardWidgetFile(baseModel(), "", "s", dir, terminal)).toBe("");
+    expect(writeCardWidgetFile(baseModel({ variant: "test-minimal" }), "", "s", dir, desktop)).toBe("");
+    expect(writeCardWidgetFile(null, "", "s", dir, desktop)).toBe("");
+    expect(existsSync(join(dir, `${WIDGET_FILE_PREFIX}-s`))).toBe(false);
+  });
+
+  test("a failed write returns '' instead of throwing", () => {
+    expect(writeCardWidgetFile(baseModel(), "", "s", join(tmp(), "missing", "dir"), desktop)).toBe("");
   });
 });

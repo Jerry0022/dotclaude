@@ -1,5 +1,5 @@
-import { describe, test, expect } from "vitest";
-import { spawnSync } from "node:child_process";
+import { describe, test, expect, vi } from "vitest";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -38,68 +38,111 @@ function transcript(dir, ...texts) {
   return file;
 }
 
+// Async spawn, never spawnSync: a sync child blocks the vitest worker's event
+// loop and fails a loaded full run with "Timeout calling onTaskUpdate".
 function stop(dir, transcriptPath, extra = {}) {
   const tmp = dir + "-tmp";
-  const res = spawnSync(process.execPath, [STOP_HOOK], {
-    cwd: dir,
-    input: JSON.stringify({ session_id: SESSION, cwd: dir, stop_hook_active: false, transcript_path: transcriptPath, ...extra }),
-    encoding: "utf8",
-    env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp },
-    timeout: 20_000,
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [STOP_HOOK], {
+      cwd: dir,
+      env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp },
+    });
+    let out = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (d) => { out += d; });
+    child.on("error", reject);
+    child.on("close", () => resolve(out));
+    child.stdin.end(JSON.stringify({ session_id: SESSION, cwd: dir, stop_hook_active: false, transcript_path: transcriptPath, ...extra }));
   });
-  return res.stdout || "";
 }
 
+vi.setConfig({ testTimeout: 30_000 });
+
 describe("stop.flow.guard — a rendered card must also be relayed (#449)", () => {
-  test("flag set, card markdown relayed as the last text → pass", () => {
+  test("flag set, card markdown relayed as the last text → pass", async () => {
     const dir = project();
     try {
       setFlag(dir, "work-happened");
       setFlag(dir, "card-rendered");
-      const out = stop(dir, transcript(dir, `### **${MARKER} Card relay guarded ${MARKER}**\n\n---`));
+      const out = await stop(dir, transcript(dir, `### **${MARKER} Card relay guarded ${MARKER}**\n\n---`));
       expect(out.trim()).toBe("");
     } finally { cleanup(dir); }
   });
 
-  test("Desktop marker comment counts as relayed", () => {
+  test("Desktop marker comment counts as relayed", async () => {
     const dir = project();
     try {
       setFlag(dir, "work-happened");
       setFlag(dir, "card-rendered");
-      const out = stop(dir, transcript(dir, `<!-- ${MARKER} Card relay guarded ${MARKER} -->`));
+      const out = await stop(dir, transcript(dir, `<!-- ${MARKER} Card relay guarded ${MARKER} -->`));
       expect(out.trim()).toBe("");
     } finally { cleanup(dir); }
   });
 
-  test("flag set, the turn ended on other text → block once", () => {
+  test("flag set, the turn ended on other text → block once", async () => {
     const dir = project();
     try {
       setFlag(dir, "work-happened");
       setFlag(dir, "card-rendered");
       const t = transcript(dir, "Release ran, all good.");
-      const out = stop(dir, t);
+      const out = await stop(dir, t);
       expect(out).toContain('"decision":"block"');
       expect(out).toContain("never relayed");
       // The follow-up stop cycle yields, whatever the answer was.
-      expect(stop(dir, t, { stop_hook_active: true }).trim()).toBe("");
+      expect((await stop(dir, t, { stop_hook_active: true })).trim()).toBe("");
     } finally { cleanup(dir); }
   });
 
-  test("unreadable transcript → the flag alone still passes", () => {
+  test("unreadable transcript → the flag alone still passes", async () => {
     const dir = project();
     try {
       setFlag(dir, "work-happened");
       setFlag(dir, "card-rendered");
-      const out = stop(dir, path.join(dir, "missing.jsonl"));
+      const out = await stop(dir, path.join(dir, "missing.jsonl"));
       expect(out.trim()).toBe("");
     } finally { cleanup(dir); }
   });
 
-  test("marker relayed but flag write failed → still counts as rendered", () => {
+  test("Desktop render owed the widget, no show_widget call → block naming the file (#451)", async () => {
     const dir = project();
     try {
       setFlag(dir, "work-happened");
-      const out = stop(dir, transcript(dir, `### **${MARKER} Card relay guarded ${MARKER}**`));
+      setFlag(dir, "card-rendered");
+      setFlag(dir, "card-widget");
+      const t = transcript(dir, `<!-- ${MARKER} Card relay guarded ${MARKER} -->`);
+      const out = await stop(dir, t);
+      expect(out).toContain('"decision":"block"');
+      expect(out).toContain("Card widget skipped");
+      expect(out).toContain(`dotclaude-devops-card-widget-${SESSION}`);
+      // A block keeps the widget file for the retry to Read.
+      expect(fs.existsSync(path.join(dir + "-tmp", `dotclaude-devops-card-widget-${SESSION}`))).toBe(true);
+    } finally { cleanup(dir); }
+  });
+
+  test("Desktop render with the show_widget call → pass, widget file cleared", async () => {
+    const dir = project();
+    try {
+      setFlag(dir, "work-happened");
+      setFlag(dir, "card-rendered");
+      setFlag(dir, "card-widget");
+      const file = path.join(dir, "t.jsonl");
+      const lines = [
+        { type: "user", message: { role: "user", content: [{ type: "text", text: "ship it" }] } },
+        { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "w1", name: "mcp__visualize__show_widget", input: {} }] } },
+        { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "w1", content: "ok" }] } },
+        { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: `<!-- ${MARKER} Card relay guarded ${MARKER} -->` }] } },
+      ];
+      fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+      expect((await stop(dir, file)).trim()).toBe("");
+      expect(fs.existsSync(path.join(dir + "-tmp", `dotclaude-devops-card-widget-${SESSION}`))).toBe(false);
+    } finally { cleanup(dir); }
+  });
+
+  test("marker relayed but flag write failed → still counts as rendered", async () => {
+    const dir = project();
+    try {
+      setFlag(dir, "work-happened");
+      const out = await stop(dir, transcript(dir, `### **${MARKER} Card relay guarded ${MARKER}**`));
       expect(out.trim()).toBe("");
     } finally { cleanup(dir); }
   });
