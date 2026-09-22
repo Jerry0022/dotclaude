@@ -275,8 +275,16 @@ templates/
 ├── changelog-entry.md
 ├── completion-card.md
 ├── github-release.md
-└── output-style-quiet.md   ← consumer copy target (~/.claude/output-styles/)
+├── output-style-quiet.md          ← consumer copy target (~/.claude/output-styles/)
+└── output-style-quiet.shipped.json ← sha256 of every shipped version of it
 ```
+
+`ss.plugin.update` keeps an existing `~/.claude/output-styles/quiet.md` in step
+with the template (`hooks/lib/output-style-sync.js`) — but only when that copy
+equals a shipped version; a customized copy is never overwritten, and a missing
+one is never created. **Whenever you edit `output-style-quiet.md`, add its new
+hash to `output-style-quiet.shipped.json`** (`output-style-sync.test.js` fails
+until you do), otherwise every consumer on that version reads as customized.
 
 ## Auto-Maintained Documentation
 
