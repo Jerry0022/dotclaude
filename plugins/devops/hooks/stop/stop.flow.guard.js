@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.guard
- * @version 0.5.1
+ * @version 0.6.0
  * @event Stop
  * @plugin devops
  * @description Per-turn completion card + validation enforcement (the validation
@@ -11,6 +11,8 @@
  *   Block (JSON `{decision:"block"}` on stdout) when, and this is not already a
  *   blocked stop cycle (stop_hook_active=false):
  *     1. no card rendered AND (tool calls happened OR substantial prose), OR
+ *        a card was rendered but never relayed — the ✨ marker is missing from
+ *        the last assistant text (#449), OR
  *     2. a notification turn (see below) re-rendered a card identical to the
  *        previous one (design § 5.5), OR
  *     3. a card exists but its title carries a status word, its `›` result
@@ -134,9 +136,12 @@ process.stdin.on('end', () => {
   const substantial = isSubstantialAnswer(transcript);
   const openTasks = silent ? [] : openTaskNames(scanOpenTasks(transcript));
   const notificationTurn = !silent && lastUserEntryIsNotification(transcript);
-  // Backup detection: if the last assistant text already contains the card
-  // marker, treat as rendered even when the flag write failed.
-  const cardRendered = flagCardRendered || lastAssistantContainsCard(transcript);
+  // The marker in the last assistant text proves the card was RELAYED, not
+  // just rendered (#449). It also backs up a failed flag write: marker alone
+  // still counts as rendered. An unreadable transcript leaves it undefined so
+  // the relay gate stays out of the way instead of blocking blind.
+  const cardRelayed = (silent || !transcript) ? undefined : lastAssistantContainsCard(transcript);
+  const cardRendered = flagCardRendered || cardRelayed === true;
   const cardText = (!silent && cardRendered) ? lastAssistantText(transcript) : '';
   // Both probes are only needed on the paths that read them: the tree check
   // shells out to git, the heartbeat stats a PID file — skip both on silent ticks.
@@ -173,6 +178,7 @@ process.stdin.on('end', () => {
     notificationTurn,
     cardText,
     prevCardSignature,
+    cardRelayed,
   });
 
   if (decision.resetFlags) {

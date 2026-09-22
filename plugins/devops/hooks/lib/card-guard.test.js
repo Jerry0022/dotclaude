@@ -264,6 +264,70 @@ describe("decideAction", () => {
 });
 
 // ---------------------------------------------------------------------------
+// decideAction — relay gate (#449): rendered is not the same as shown
+// ---------------------------------------------------------------------------
+
+describe("decideAction — relay gate", () => {
+  const base = { workHappened: true, stopHookActive: false, substantial: false };
+
+  test("flag set + marker in the last answer → pass", () => {
+    const d = decideAction({ ...base, cardRendered: true, cardRelayed: true });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+  });
+
+  test("flag set + marker missing → BLOCK with the never-relayed reason, keep flags", () => {
+    const d = decideAction({ ...base, cardRendered: true, cardRelayed: false });
+    expect(d.action).toBe("block");
+    expect(d.resetFlags).toBe(false);
+    expect(d.reason).toMatch(/never relayed/);
+    expect(d.reason).toMatch(/VERBATIM/);
+    expect(d.reason).toMatch(/LAST/);
+  });
+
+  test("transcript unreadable (cardRelayed undefined) → the flag alone passes", () => {
+    const d = decideAction({ ...base, cardRendered: true });
+    expect(d.action).toBe("pass");
+  });
+
+  test("stop_hook_active yields even when the card was never relayed", () => {
+    const d = decideAction({ ...base, cardRendered: true, cardRelayed: false, stopHookActive: true });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+  });
+
+  test("relay gate runs before the content gates", () => {
+    const d = decideAction({
+      ...base, cardRendered: true, cardRelayed: false,
+      cardText: `### **${CARD_MARKER} Agents running ${CARD_MARKER}**`,
+    });
+    expect(d.reason).toMatch(/never relayed/);
+  });
+
+  test("a card rendered twice passes as long as the last answer carries a marker", () => {
+    // The guard never compares payloads — the second render's markdown is the
+    // one relayed, and its marker is all Gate 1b asks for.
+    const transcript = jsonl(
+      assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} }),
+      assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} }),
+      assistantMsg({ type: "text", text: `<!-- ${CARD_MARKER} Shipped v2 ${CARD_MARKER} -->` }),
+    );
+    const d = decideAction({ ...base, cardRendered: true, cardRelayed: lastAssistantContainsCard(transcript) });
+    expect(d.action).toBe("pass");
+  });
+
+  test("render followed by a tool call and no relay → marker missing → BLOCK", () => {
+    const transcript = jsonl(
+      assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} }),
+      assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude-ship__ship_release", input: {} }),
+      assistantMsg({ type: "text", text: "Released." }),
+    );
+    const d = decideAction({ ...base, cardRendered: true, cardRelayed: lastAssistantContainsCard(transcript) });
+    expect(d.action).toBe("block");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // decideAction — validation gate (V&V)
 // ---------------------------------------------------------------------------
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.186.2] — 2026-09-22
+
+### Fixed
+- **A rendered card that was never shown no longer passes the Stop gate (#449)** — `stop.flow.guard` accepted the turn as soon as `render_completion_card` had set its flag, so a turn that rendered a card and then ended on other text (observed: a `ship-blocked` card re-rendered, then `ship_release` ran instead of relaying it) ended with no card in sight. New Gate 1b in `card-guard.js` 0.6.0: flag set but the ✨ marker missing from the turn's last assistant text → block once, "card rendered but never relayed — output it VERBATIM as the LAST thing". The marker check covers both the terminal headline and the Desktop marker comment (#443); a second render mid-turn stays legal (only the last relayed card's marker counts); a marker without the flag still counts as rendered (flag-write fallback); an unreadable transcript leaves the flag alone in charge instead of blocking blind; `stop_hook_active` still yields. Unit tests plus an end-to-end test through the real hook.
+
 ## [0.186.1] — 2026-09-22
 
 ### Fixed
