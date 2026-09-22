@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.guard
- * @version 0.6.0
+ * @version 0.7.0
  * @event Stop
  * @plugin devops
  * @description Per-turn completion card + validation enforcement (the validation
@@ -13,6 +13,7 @@
  *     1. no card rendered AND (tool calls happened OR substantial prose), OR
  *        a card was rendered but never relayed — the ✨ marker is missing from
  *        the last assistant text (#449), OR
+ *        a Desktop card owed its widget call and show_widget never ran (#451), OR
  *     2. a notification turn (see below) re-rendered a card identical to the
  *        previous one (design § 5.5), OR
  *     3. a card exists but its title carries a status word, its `›` result
@@ -58,6 +59,7 @@ const {
   lastAssistantText,
   lastUserEntryIsNotification,
   safeReadTranscript,
+  showWidgetCalledThisTurn,
   PENDING_TAIL_BYTES,
 } = require('../lib/card-guard');
 const { scanOpenTasks, openTaskNames } = require('../lib/pending-tasks');
@@ -107,6 +109,9 @@ process.stdin.on('end', () => {
   const pendAttestedResult = readSessionFile('dotclaude-devops-pending-attested', sessionId, EXACT);
   const scheduledResult = readSessionFile('dotclaude-devops-scheduled-task', sessionId, EXACT);
   const shippedResult = readSessionFile('dotclaude-devops-shipped', sessionId, EXACT);
+  // Written by the completion MCP next to a Desktop card render (#451): the
+  // widget HTML, so its presence means "show_widget is owed this turn".
+  const widgetResult = readSessionFile('dotclaude-devops-card-widget', sessionId, EXACT);
   // Signature of the last notification-turn card (design § 5.5) — persists
   // ACROSS turns (not cleared by resetFlags) so the next notification turn
   // can be compared against it.
@@ -143,6 +148,8 @@ process.stdin.on('end', () => {
   const cardRelayed = (silent || !transcript) ? undefined : lastAssistantContainsCard(transcript);
   const cardRendered = flagCardRendered || cardRelayed === true;
   const cardText = (!silent && cardRendered) ? lastAssistantText(transcript) : '';
+  const widgetFile = widgetResult ? String(widgetResult.filePath).replace(/\\/g, '/') : '';
+  const widgetCalled = (widgetFile && transcript) ? showWidgetCalledThisTurn(transcript) : undefined;
   // Both probes are only needed on the paths that read them: the tree check
   // shells out to git, the heartbeat stats a PID file — skip both on silent ticks.
   const treeClean = (!silent && (scheduledTask || notificationTurn)) ? isTreeClean(hook.cwd, sessionId) : null;
@@ -179,6 +186,8 @@ process.stdin.on('end', () => {
     cardText,
     prevCardSignature,
     cardRelayed,
+    widgetFile,
+    widgetCalled,
   });
 
   if (decision.resetFlags) {
@@ -195,6 +204,8 @@ process.stdin.on('end', () => {
     // prove "no ship, scheduler prompt" again on its own.
     if (scheduledResult) try { fs.unlinkSync(scheduledResult.filePath); } catch {}
     if (shippedResult) try { fs.unlinkSync(shippedResult.filePath); } catch {}
+    // The widget file is per-turn too; a block keeps it so the retry can Read it.
+    if (widgetResult) try { fs.unlinkSync(widgetResult.filePath); } catch {}
   }
 
   // Persist the notification-card signature ACROSS turns (independent of

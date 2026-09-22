@@ -21,8 +21,11 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.2.0
+ * @version 0.3.0
  */
+
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 /** The env var the Desktop app sets on every process it spawns (hooks, MCP servers). */
 export const DESKTOP_ENTRYPOINT = "claude-desktop";
@@ -340,23 +343,57 @@ export function cardWidgetHtml(model, repoUrl) {
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {string}
  */
-export function cardWidgetInstruction(model, repoUrl, env = process.env) {
+export function cardWidgetInstruction(model, repoUrl, env = process.env, { widgetFile = "" } = {}) {
   if (!isDesktopSession(env)) return "";
   if (!model || model.variant === "test-minimal") return "";
   const html = cardWidgetHtml(model, repoUrl);
   if (!html) return "";
+  const fileLine = widgetFile
+    ? `The same HTML is saved in ${widgetFile} — if the block below reached you cut off or filtered, ` +
+      "Read that file and pass its content instead.\n"
+    : "";
   return (
     "[CARD WIDGET — DO NOT OUTPUT THIS BLOCK]\n" +
     "Desktop app only, once, immediately BEFORE outputting the card markdown (the card stays " +
     "the last text of the turn; never call it after the card): call mcp__visualize__show_widget with " +
     `title "completion_card_body", loading_messages ["Card wird geladen"] and widget_code set to ` +
     "EXACTLY the HTML below (verbatim, no edits, no read_me call needed). It draws both card blocks " +
-    "— what happened and what to decide, including the buttons — right above the markdown card. " +
-    "If the tool is unavailable or fails: no retry, no note — output the visible title line " +
-    "`### **✨✨✨ {title} ✨✨✨**` (the title from the marker comment) instead of the comment, " +
-    "so the turn still ends on the card headline.\n" +
+    "— what happened and what to decide, including the buttons — right above the markdown card, and " +
+    "it IS the card the user sees: the markdown under it is only a hidden marker comment.\n" +
+    "The widget call is mandatory, never optional: never grep, filter or skip the HTML to save tokens. " +
+    "ONLY when the call itself fails, or the tool does not exist in this session: no retry, no note — " +
+    "output the visible title line `### **✨✨✨ {title} ✨✨✨**` (the title from the marker comment) " +
+    "instead of the comment, so the turn still ends on the card headline. That line is the error " +
+    "path, never a shortcut — the Stop gate blocks a card turn on which show_widget was not called.\n" +
+    fileLine +
     "----- widget_code -----\n" +
     html + "\n" +
     "----- end widget_code -----"
   );
+}
+
+/** Prefix of the per-session widget file (tmpdir). The Stop gate reads it as
+ *  "a widget is owed this turn" and names it in its block reason (#451). */
+export const WIDGET_FILE_PREFIX = "dotclaude-devops-card-widget";
+
+/**
+ * Save the widget HTML where the Stop gate and a recovering Claude can find
+ * it (#451): `<dir>/dotclaude-devops-card-widget-<session>`. Same rule as
+ * `cardWidgetInstruction` — '' (nothing written) outside the Desktop app, for
+ * test-minimal, or without a body. Best effort: a failed write returns ''.
+ *
+ * @returns {string} the file path, or '' when nothing was written
+ */
+export function writeCardWidgetFile(model, repoUrl, sessionId, dir, env = process.env) {
+  if (!isDesktopSession(env)) return "";
+  if (!model || model.variant === "test-minimal") return "";
+  const html = cardWidgetHtml(model, repoUrl);
+  if (!html) return "";
+  const file = join(dir, `${WIDGET_FILE_PREFIX}-${sessionId || "unknown"}`);
+  try {
+    writeFileSync(file, html);
+  } catch {
+    return "";
+  }
+  return file.replace(/\\/g, "/");
 }

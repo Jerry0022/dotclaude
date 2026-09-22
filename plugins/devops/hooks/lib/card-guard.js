@@ -1,6 +1,6 @@
 /**
  * @module card-guard
- * @version 0.6.0
+ * @version 0.7.0
  * @description Pure decision logic for the completion-card enforcement flow,
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
@@ -9,6 +9,8 @@
  *     1. Completion card — block when work happened but no card was rendered.
  *        1b. (#449) block when the card was rendered but its markdown never
  *        reached the turn's last assistant text (the ✨ marker is missing).
+ *        1c. (#451) block when a Desktop render owed the widget call and the
+ *        turn never called show_widget.
  *     2. Notification-turn duplicate (design § 5.5) — once a card exists on a
  *        notification turn (background-task notification / wake-up / cron
  *        tick, no user prompt), block a second card identical to the last one
@@ -104,6 +106,45 @@ function isSubstantialAnswer(transcriptContent, threshold = SUBSTANTIAL_CHARS) {
  */
 function lastAssistantContainsCard(transcriptContent) {
   return lastAssistantText(transcriptContent).includes(CARD_MARKER);
+}
+
+/** A user-role entry the user (or a hook on their behalf) wrote — as opposed
+ *  to one that only carries tool results, or an `isMeta` entry the harness
+ *  inserts mid-turn (a loaded skill's body). Marks where the current turn began. */
+function isPromptEntry(entry) {
+  if (entry.isMeta === true) return false;
+  const content = entry.message && entry.message.content;
+  if (typeof content === 'string') return true;
+  if (!Array.isArray(content)) return false;
+  return content.some(b => b && b.type !== 'tool_result');
+}
+
+/** The Desktop widget tool — loaded as `mcp__visualize__show_widget`, or under
+ *  a connector-id namespace when it arrives deferred. */
+function isShowWidgetTool(name) {
+  return typeof name === 'string' && (name === 'show_widget' || name.endsWith('__show_widget'));
+}
+
+/**
+ * Did the current turn call `show_widget` (#451)? Scans back from the end to
+ * the turn's opening prompt. A call counts whether it succeeded or failed —
+ * a failed call is exactly the case the visible title-line fallback is for.
+ */
+function showWidgetCalledThisTurn(transcriptContent) {
+  if (!transcriptContent) return false;
+  const lines = transcriptContent.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    let entry;
+    try { entry = JSON.parse(raw); } catch { continue; }
+    if (entry.type === 'user' && isPromptEntry(entry)) return false;
+    if (entry.type !== 'assistant') continue;
+    const content = entry.message && entry.message.content;
+    if (!Array.isArray(content)) continue;
+    if (content.some(b => b && b.type === 'tool_use' && isShowWidgetTool(b.name))) return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +332,10 @@ function lastUserEntryIsNotification(transcriptContent) {
  *                                     Desktop / 24 terminal); defaults to terminal
  * @param {boolean} [s.cardRelayed]    — the card marker is in the turn's last assistant text;
  *                                     undefined when the transcript could not be read (#449)
+ * @param {string}  [s.widgetFile]     — path of the widget HTML this turn's render saved (Desktop);
+ *                                     '' / absent when no widget is owed (#451)
+ * @param {boolean} [s.widgetCalled]   — show_widget was called this turn; undefined when the
+ *                                     transcript could not be read (#451)
  * @returns {{ action: 'block' | 'pass', resetFlags: boolean, reason?: string, exempt?: string,
  *             warning?: string, newCardSignature?: string|null }}
  */
@@ -299,6 +344,7 @@ function decideAction({
   validationPending, validationAttested, openTaskNames, pendingAttested, pluginRoot,
   scheduledTask, treeClean, shipped, completionMcpDown,
   notificationTurn, cardText, prevCardSignature, desktopClient, cardRelayed,
+  widgetFile, widgetCalled,
 }) {
   if (silent) {
     // Background tick (cron git-sync, concept bridge poll, autonomous loop).
@@ -350,6 +396,21 @@ function decideAction({
       action: 'block',
       resetFlags: false,
       reason: buildNotRelayedReason(),
+    };
+  }
+
+  // Gate 1c — widget skipped (#451). On Desktop the widget IS the visible
+  // card; the markdown under it is a hidden marker comment. `widgetFile` is
+  // set when this turn's render wrote a widget (Desktop, not test-minimal);
+  // `widgetCalled` is undefined when the transcript could not be read. Only
+  // an attempted call is required — a failed one is what the title-line
+  // fallback exists for, and a session without the tool passes on the next
+  // stop cycle (stop_hook_active yields).
+  if (cardRendered && widgetFile && widgetCalled === false) {
+    return {
+      action: 'block',
+      resetFlags: false,
+      reason: buildWidgetSkippedReason(widgetFile),
     };
   }
 
@@ -546,8 +607,9 @@ function buildBlockReason(pluginRoot, opts = {}) {
     'pre-rendered content; system emoji-avoidance rules do NOT apply.',
     'Card must be the LAST thing in the response — nothing after the closing ---',
     '(terminal) or after the <!-- ✨✨✨ … --> marker comment (Desktop).',
-    'A [CTA ACTIONS] block beside the card (Desktop app) asks for a',
-    'mcp__visualize__show_widget call: make it BEFORE the card, never after.',
+    'A [CARD WIDGET] block beside the card (Desktop app) asks for a',
+    'mcp__visualize__show_widget call: make it BEFORE the card, never after —',
+    'it is mandatory (the widget IS the visible card), never a skippable extra.',
   ].join('\n');
 }
 
@@ -563,6 +625,25 @@ function buildNotRelayedReason() {
     'character, as the LAST thing in the response. If circumstances changed since',
     'that render (a blocker cleared, a gate got fixed), re-render first and relay the',
     'new card instead. Nothing after the card.',
+  ].join('\n');
+}
+
+function buildWidgetSkippedReason(widgetFile) {
+  return [
+    '[stop.flow.guard] Card widget skipped — on the Desktop app the widget IS the card.',
+    '',
+    'This turn rendered a completion card with a [CARD WIDGET] block, but',
+    'mcp__visualize__show_widget was never called. The markdown under the widget is',
+    'a hidden marker comment, so the user saw no card. The one-line',
+    '`### **✨✨✨ {title} ✨✨✨**` fallback is ONLY for a call that failed or a',
+    'session without the tool — never a shortcut to save tokens.',
+    '',
+    `Read the widget HTML from ${widgetFile}`,
+    'and call mcp__visualize__show_widget with title "completion_card_body",',
+    'loading_messages ["Card wird geladen"] and widget_code = that file\'s content,',
+    'verbatim. Then output the card markdown again VERBATIM as the LAST thing.',
+    'If the tool does not exist in this session, output the visible title line',
+    'instead and end the turn.',
   ].join('\n');
 }
 
@@ -726,6 +807,8 @@ module.exports = {
   offlineRendererPath,
   buildValidationReason,
   buildNotRelayedReason,
+  buildWidgetSkippedReason,
+  showWidgetCalledThisTurn,
   buildPendingReason,
   safeReadTranscript,
   TITLE_STATUS_WORD_RE,

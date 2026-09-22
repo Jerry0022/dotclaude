@@ -5,6 +5,7 @@ import {
   isSubstantialAnswer,
   lastAssistantContainsCard,
   lastUserEntryIsNotification,
+  showWidgetCalledThisTurn,
   decideAction,
   buildBlockReason,
   buildValidationReason,
@@ -324,6 +325,87 @@ describe("decideAction — relay gate", () => {
     );
     const d = decideAction({ ...base, cardRendered: true, cardRelayed: lastAssistantContainsCard(transcript) });
     expect(d.action).toBe("block");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// showWidgetCalledThisTurn + widget gate (#451)
+// ---------------------------------------------------------------------------
+
+function toolUse(name) {
+  return assistantMsg({ type: "tool_use", id: "t1", name, input: {} });
+}
+
+function toolResult() {
+  return { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] } };
+}
+
+describe("showWidgetCalledThisTurn", () => {
+  test("a show_widget call after the turn's prompt counts", () => {
+    const t = jsonl(userMsg("ship it"), toolUse("mcp__visualize__show_widget"), toolResult(),
+      assistantMsg({ type: "text", text: `<!-- ${CARD_MARKER} T ${CARD_MARKER} -->` }));
+    expect(showWidgetCalledThisTurn(t)).toBe(true);
+  });
+
+  test("a connector-namespaced show_widget (deferred tool) counts too", () => {
+    const t = jsonl(userMsg("go"), toolUse("mcp__6f616b42-0ed8-571e-823f-ee4aca6b7ce9__show_widget"));
+    expect(showWidgetCalledThisTurn(t)).toBe(true);
+  });
+
+  test("a call from an EARLIER turn does not count", () => {
+    const t = jsonl(userMsg("first"), toolUse("mcp__visualize__show_widget"), toolResult(),
+      userMsg("second"), toolUse("mcp__plugin_devops_dotclaude-completion__render_completion_card"), toolResult());
+    expect(showWidgetCalledThisTurn(t)).toBe(false);
+  });
+
+  test("tool results and isMeta entries (a loaded skill) do not end the turn", () => {
+    const t = jsonl(userMsg("ship it"), toolUse("mcp__visualize__show_widget"), toolResult(),
+      { ...userMsg("Base directory for this skill: …"), isMeta: true },
+      toolUse("Bash"), toolResult());
+    expect(showWidgetCalledThisTurn(t)).toBe(true);
+  });
+
+  test("other tools only → false; empty transcript → false", () => {
+    expect(showWidgetCalledThisTurn(jsonl(userMsg("x"), toolUse("Bash"), toolResult()))).toBe(false);
+    expect(showWidgetCalledThisTurn("")).toBe(false);
+  });
+});
+
+describe("decideAction — widget gate", () => {
+  const base = { workHappened: true, stopHookActive: false, substantial: false, cardRendered: true, cardRelayed: true };
+  const widgetFile = "C:/tmp/dotclaude-devops-card-widget-s1";
+
+  test("widget owed + not called → BLOCK naming the file, keep flags", () => {
+    const d = decideAction({ ...base, widgetFile, widgetCalled: false });
+    expect(d.action).toBe("block");
+    expect(d.resetFlags).toBe(false);
+    expect(d.reason).toMatch(/Card widget skipped/);
+    expect(d.reason).toContain(widgetFile);
+    expect(d.reason).toMatch(/never a shortcut/);
+  });
+
+  test("widget owed + called (success or error) → pass", () => {
+    expect(decideAction({ ...base, widgetFile, widgetCalled: true }).action).toBe("pass");
+  });
+
+  test("no widget owed (terminal, test-minimal) → pass", () => {
+    expect(decideAction({ ...base, widgetFile: "", widgetCalled: false }).action).toBe("pass");
+    expect(decideAction({ ...base, widgetCalled: false }).action).toBe("pass");
+  });
+
+  test("transcript unreadable (widgetCalled undefined) → pass", () => {
+    expect(decideAction({ ...base, widgetFile }).action).toBe("pass");
+  });
+
+  test("stop_hook_active yields — a session without the tool ends on the next cycle", () => {
+    const d = decideAction({ ...base, widgetFile, widgetCalled: false, stopHookActive: true });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+  });
+
+  test("the relay gate outranks the widget gate", () => {
+    const d = decideAction({ ...base, cardRelayed: false, widgetFile, widgetCalled: false });
+    expect(d.reason).toMatch(/never relayed/);
   });
 });
 

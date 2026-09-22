@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.22.0
+ * @version 0.22.1
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -376,7 +376,8 @@ process.stdin.on('end', () => {
     'and how you confirmed it. A code-change card without `validation` is blocked',
     'once and re-requested (see deep-knowledge/test-autonomy.md).',
     'Card LAST, nothing after the closing ---. The show_widget call a [CARD WIDGET] block',
-    'beside the card asks for (Desktop app) goes BEFORE the card, never after.',
+    'beside the card asks for (Desktop app) goes BEFORE the card, never after — and it is',
+    'mandatory: the one-line ✨ title is only for a failed call, never a shortcut.',
   );
 
   // Background work started by THIS tool call. Injected loudly and immediately,

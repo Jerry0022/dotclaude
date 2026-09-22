@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll, vi } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync, mkdtempSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -60,6 +60,12 @@ beforeAll(() => {
 
 afterAll(() => {
   try { rmSync(workDir, { recursive: true, force: true }); } catch { /* best effort */ }
+  // Every Desktop render saves its widget HTML to the real tmpdir (#451).
+  try {
+    for (const f of readdirSync(tmpdir())) {
+      if (f.startsWith("dotclaude-devops-card-widget-cli-test-")) rmSync(join(tmpdir(), f), { force: true });
+    }
+  } catch { /* best effort */ }
 });
 
 describe("--render-card CLI fallback", () => {
@@ -115,6 +121,28 @@ describe("--render-card CLI fallback", () => {
     // The widget carries the title and the body instead.
     expect(desktop.stderr).toContain('<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">CTA-Test</h3>');
     expect(desktop.stderr).toContain("Shippen?");
+  });
+
+  test("a Desktop render saves the widget HTML for the Stop gate and names the file (#451)", async () => {
+    const session = "cli-test-widget-file";
+    const file = join(tmpdir(), `dotclaude-devops-card-widget-${session}`);
+    try { unlinkSync(file); } catch { /* best effort */ }
+    const payload = { variant: "ready", summary: "Widget-Datei", session_id: session, changes: [{ area: "x", description: "y" }] };
+    try {
+      const terminal = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "cli" });
+      expect(terminal.stderr).not.toContain("CARD WIDGET");
+      expect(existsSync(file)).toBe(false);
+
+      const desktop = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
+      expect(existsSync(file)).toBe(true);
+      const html = readFileSync(file, "utf8");
+      // The file carries exactly the inline widget_code.
+      expect(desktop.stderr).toContain("----- widget_code -----\n" + html + "\n----- end widget_code -----");
+      expect(desktop.stderr).toContain(file.replace(/\\/g, "/"));
+      expect(desktop.stderr).toMatch(/never a shortcut/);
+    } finally {
+      try { unlinkSync(file); } catch { /* best effort */ }
+    }
   });
 
   test("test-minimal keeps its whole markdown on Desktop — no widget draws it", async () => {

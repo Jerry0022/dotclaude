@@ -50,7 +50,7 @@ import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePendin
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
 import { conceptUrl, readBatch, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
-import { cardWidgetInstruction, isDesktopSession } from "./lib/card-widget.js";
+import { cardWidgetInstruction, isDesktopSession, writeCardWidgetFile } from "./lib/card-widget.js";
 import {
   assessFreshness,
   isLiveSnapshot,
@@ -1392,9 +1392,14 @@ function sessionTitleNote(params) {
 
 /** The Desktop card-widget instruction (§ 4), '' outside the Desktop app, for
  *  test-minimal, or when the card has no renderable body. Reads the model
- *  `buildCompletionCard` stashed on `params` — never recomputes usage data. */
+ *  `buildCompletionCard` stashed on `params` — never recomputes usage data.
+ *  The HTML is also saved to a per-session tmp file (#451): stop.flow.guard
+ *  reads it as "a widget is owed this turn" and points a skipped call at it. */
 function ctaActionsNote(params) {
-  return cardWidgetInstruction(params._cardModel || null, params._repoUrl || '');
+  const model = params._cardModel || null;
+  const repoUrl = params._repoUrl || '';
+  const widgetFile = writeCardWidgetFile(model, repoUrl, params.session_id, tmpdir());
+  return cardWidgetInstruction(model, repoUrl, process.env, { widgetFile });
 }
 
 /**
@@ -1727,7 +1732,8 @@ server.registerTool(
       "after the closing --- (terminal) or after the <!-- ✨✨✨ … --> marker comment " +
       "(Desktop: the widget is the visible card, the comment is the transcript record). " +
       "On the Desktop app the result may carry a CARD WIDGET " +
-      "block asking for a show_widget call: make that call BEFORE the card, never after.",
+      "block asking for a show_widget call: make that call BEFORE the card, never after — it is " +
+      "mandatory; the visible title line is only for a failed call, never a shortcut.",
     inputSchema: z.object({
       variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (promote alpha→beta→stable) rendered by the promote skill. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report."),
       summary: z.string().transform(v => clampText(v, SUMMARY_MAX).value)

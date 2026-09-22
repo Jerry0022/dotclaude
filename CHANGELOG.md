@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.186.3] — 2026-09-22
+
+### Fixed
+- **The Desktop card widget can no longer be skipped silently (#451)** — on Desktop the widget IS the card (the markdown under it is a hidden marker comment, #443), yet a turn could filter the ~6 KB `widget_code` out of the output, never call `show_widget` and relay only the one-line `### **✨✨✨ {title} ✨✨✨**` fallback (observed on a `released` card via the offline `--render-card` path): the user saw no card. Three layers now: (1) every Desktop render — MCP tool and CLI — also saves the widget HTML to `<tmp>/dotclaude-devops-card-widget-<session>` and names that file in the `[CARD WIDGET]` block, so a filtered block is recoverable; (2) the block, the tool description and the post-render reminder say it plainly: the call is mandatory, the title line is ONLY for a failed call or a session without the tool, never a token-saving shortcut; (3) `stop.flow.guard` Gate 1c (`card-guard.js` 0.7.0): a card turn that owed the widget and never called `show_widget` (success or error both count; `isMeta` skill loads and tool results do not end the turn) is blocked once, the reason pointing at the saved file. Terminal sessions and `test-minimal` write no file and are unaffected; an unreadable transcript never blocks; `stop_hook_active` still yields. The relay e2e test now spawns the hook asynchronously (a sync spawn starves the vitest worker under load). Design doc § 4 updated.
+
 ## [0.186.2] — 2026-09-22
 
 ### Fixed
