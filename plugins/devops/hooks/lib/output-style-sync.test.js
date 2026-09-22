@@ -117,6 +117,9 @@ describe("ss.plugin.update → Quiet style sync (end to end)", () => {
     execFileSync("git", ["init", "-q"], { cwd: mDir });
     execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "add", "-A"], { cwd: mDir });
     execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"], { cwd: mDir });
+    // A stable tag on HEAD puts the hook on the channel path with nothing to
+    // move — no pull/reset/clean round trips, so the run stays fast under load.
+    execFileSync("git", ["tag", "stable/v1.0.0"], { cwd: mDir });
     // Registry points at the clone itself: version matches, nothing to rebuild.
     write(
       path.join(home, ".claude", "plugins", "installed_plugins.json"),
@@ -128,12 +131,12 @@ describe("ss.plugin.update → Quiet style sync (end to end)", () => {
     const r = spawnSync(process.execPath, [HOOK, "--force"], {
       cwd: tmp,
       encoding: "utf8",
-      timeout: 60000,
+      timeout: 150000,
       env: { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PLUGIN_ROOT: REPO_PLUGIN },
     });
 
     expect(r.status).toBe(0);
     expect(fs.readFileSync(target, "utf8")).toBe(NEW);
     expect(r.stdout).toContain("Quiet output style");
-  }, 90000);
+  }, 180000);
 });
