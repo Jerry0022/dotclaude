@@ -95,6 +95,19 @@ describe("#268 — findings survive a session that never asks", () => {
     expect(out[0]).toContain("before any completion card");
   });
 
+  test("findings the turn resolved (a ship landed them) are dropped, not restated", () => {
+    for (const workspace of [onMain, null]) {
+      const out = compose({
+        dirty: [currentRepo(issue("uncommitted", 4, "4 uncommitted file(s)"))],
+        workspace,
+        cwd: CWD,
+      });
+      expect(out[0]).toContain("Restate only findings that still hold");
+      expect(out[0]).toContain("/ship landed the changes");
+      expect(out[0]).toContain('no "outdated" note');
+    }
+  });
+
   test("no input combination drops a current-repo finding — full rendered line, in the repo block", () => {
     const cases = [
       [issue("uncommitted", 1, "1 uncommitted file(s)"), "- 1 uncommitted file(s) → run `/ship` to commit, push & create PR"],

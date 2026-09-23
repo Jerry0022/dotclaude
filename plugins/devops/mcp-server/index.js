@@ -1779,6 +1779,10 @@ server.registerTool(
       "NOT apply to relayed MCP output. Card must be the LAST output — nothing " +
       "after the closing --- (terminal) or after the <!-- ✨✨✨ … --> marker comment " +
       "(Desktop: the widget is the visible card, the comment is the transcript record). " +
+      "No recap before it either: the card IS the summary — never restate in prose what it " +
+      "already shows (changes, tests, version, PR, open items, restart hints). Text before the " +
+      "card only for what it cannot carry: answers to side questions or other topics of the " +
+      "user's prompt, points beyond the card's three, hook blocks still marked for the user. " +
       "On the Desktop app the result may carry a CARD WIDGET " +
       "block asking for a show_widget call: make that call BEFORE the card, never after — it is " +
       "mandatory; the visible title line is only for a failed call, never a shortcut.",

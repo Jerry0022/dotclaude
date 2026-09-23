@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.189.1**
+**Version: 0.191.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -208,8 +208,8 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ## Features
 
-- **<!--devops:count:hooks-->49<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->23<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, auto-graph, claude-batch, claude-strict, web-guide
+- **<!--devops:count:hooks-->50<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:skills-->24<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, tune-audit, auto-graph, claude-batch, claude-strict, web-guide
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /ship skill routing
@@ -219,7 +219,7 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->49<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->50<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -273,6 +273,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `pre.edit.branch` — Prevent Edit/Write tool calls while HEAD is on local main/master.
 - `pre.mcp.health` — Detects dead or stale MCP servers before tool calls fail cryptically.
 - `pre.strict.agent-gate` — While `/claude-strict` is active, refuse an Agent spawn whose prompt does not start w…
+- `pre.agent.announce` — Makes every Agent spawn visible to the user: resolves the agent's effective model and…
 
 #### PostToolUse — runs after each tool call
 
@@ -379,6 +380,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 | `/tune-polish` | Explicit | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
 | `/auto-graph` | Explicit + Hook | On-demand code knowledge graph via graphify, with opt-in auto-build + hard-gate enforcement |
 | `/tune-rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, concept decision, autonomous implementation |
+| `/tune-audit` | Explicit | Full-spectrum audit (functional, visual, animation, audio, a11y, logging, performance, …) of this chat's work, the last 48h's requirements, or everything; then fixes or a DevOps concept page |
 | `/claude-batch` | Explicit + Hook | Collect mode: batch prompts into `.claude/batch.md` instead of executing them, then merge into one feasibility-checked plan |
 | `/web-guide` | Explicit | Live tutorial in the user's Edge tab: step panel overlay for logins, API keys, and settings Claude cannot do itself |
 | `/claude-strict` | Explicit + Hook | Strict mode: the deliverable is exactly what the prompt names, unnamed attributes are chosen and reported; propagates to agents, skills and concept iterations; `on`/`off` binds it to the current worktree + branch |
@@ -418,6 +420,11 @@ code and UI** — no new features, no fresh scope.
   puts the rules in context the moment a UI file is written.
 - **`/tune-rethink`** — strategic reset: code-blind fresh approaches for
   stuck development, decided on a concept page, then implemented.
+- **`/tune-audit`** — full-spectrum audit: functional requirements traced to
+  evidence plus visual, animation, audio, accessibility, logging, performance,
+  resilience, security basics, tests and build. Asks the scope (this chat's
+  work / functional requirements of the last 48h / everything incl. 48h) and
+  the output (audit + implementation, or a DevOps concept page).
 
 Something actually **broken**? That's **`/fix`** (alias `/debug`) —
 standalone root-cause analysis and repair, not a refinement pass.
@@ -524,8 +531,8 @@ markdown card, minus the buttons.
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->49<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
-├── skills/                        ← <!--devops:count:skills-->23<!--/devops:count:skills--> skill definitions (SKILL.md)
+├── hooks/                         ← <!--devops:count:hooks-->50<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── skills/                        ← <!--devops:count:skills-->24<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates

@@ -81,6 +81,9 @@ describe("submitWithAction — a throwing collector never wedges the button (#38
     w.eval([
       "var _submitInFlight = false, _submittedAt = 0, _userInteracted = true;",
       "var calls = 0;",
+      // The page logs the collector's throw on purpose; capture it instead of
+      // letting it reach the runner's stderr as a stray ReferenceError trace.
+      "var logged = []; console.error = function () { logged.push(Array.prototype.join.call(arguments, ' ')); };",
       "function collectDecisions() { calls++; throw new ReferenceError('getElementState is not defined'); }",
       fn("showSubmitWarning"),
       asyncFn("submitWithAction"),
@@ -102,6 +105,7 @@ describe("submitWithAction — a throwing collector never wedges the button (#38
     await w.submitWithAction("iterate");
     expect(w.eval("_submitInFlight")).toBe(false);
     expect(w.eval("calls")).toBe(1);
+    expect(w.eval("logged")).toEqual([expect.stringContaining("collectDecisions failed")]);
     const strip = w.document.querySelector("#panel-ready .submit-warning");
     expect(strip).not.toBeNull();
     expect(strip.textContent).toContain("getElementState is not defined");

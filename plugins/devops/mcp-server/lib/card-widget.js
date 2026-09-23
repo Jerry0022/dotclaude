@@ -448,6 +448,9 @@ export function cardWidgetInstruction(model, repoUrl, env = process.env, { widge
     "EXACTLY the HTML below (verbatim, no edits, no read_me call needed). It draws both card blocks " +
     "— what happened and what to decide, including the buttons — right above the markdown card, and " +
     "it IS the card the user sees: the markdown under it is only a hidden marker comment.\n" +
+    "No prose between the widget and the marker comment that restates the card (changes, tests, " +
+    "version, PR, open items, restart hints) — only answers to side questions or other topics of " +
+    "the user's prompt, and hook blocks still marked for the user, may stand there.\n" +
     "The widget call is mandatory, never optional: never grep, filter or skip the HTML to save tokens. " +
     "ONLY when the call itself fails, or the tool does not exist in this session: no retry, no note — " +
     "output the visible title line `### **✨✨✨ {title} ✨✨✨**` (the title from the marker comment) " +

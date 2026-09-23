@@ -378,6 +378,10 @@ process.stdin.on('end', () => {
     'Card LAST, nothing after the closing ---. The show_widget call a [CARD WIDGET] block',
     'beside the card asks for (Desktop app) goes BEFORE the card, never after — and it is',
     'mandatory: the one-line ✨ title is only for a failed call, never a shortcut.',
+    'NO RECAP before the card either: the card IS the summary — never restate in prose what',
+    'it already shows (changes, tests, version, PR, open items, restart hints). Text before',
+    'the card only for what it cannot carry: answers to side questions or other topics of',
+    'the user\'s prompt, points beyond the card\'s three, hook blocks still marked for the user.',
   );
 
   // Background work started by THIS tool call. Injected loudly and immediately,

@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.191.1] — 2026-09-23
+
+### Fixed
+- **A ship no longer leaves a Desktop session that can't be archived.** The Desktop app copies the main checkout's untracked `.claude/` into every new worktree and refuses to archive a dirty one. The 0.191.0 ship moved the untracked `.claude/graphify.json` aside so preflight would pass, then put it back after the merge, and the session could not be archived. `/ship` Step 1a now handles untracked files at their source inside the ship: plugin configuration (the *MUST be tracked* list in `/setup-project`, e.g. `graphify.json`) is committed, runtime state is ignored, and stray hook artifacts are deleted. After Step 5c, a harness worktree must have an empty `git status --porcelain`. This repo now tracks its `.claude/graphify.json`.
+
+## [0.191.0] — 2026-09-23
+
+### Added
+- **`/tune-audit` — a full audit of all quality areas.** It checks functional requirements (each traced to evidence) plus visual, animation, audio, accessibility, logging, performance, resilience, security basics, tests, architecture, build/config and user-facing text. Each area has an applicability check, a checklist and a required kind of proof (`skills/tune-audit/deep-knowledge/dimensions.md`); areas that don't apply or can't be run are listed with the reason, never dropped. It starts with one intake of two questions. **Scope:** this chat's work (offered only if the chat built something), the functional requirements of the last 48 h, or everything including the last 48 h. **Output:** audit + implementation (recommended) or a DevOps concept page. The 48 h requirement catalog is built from git, merged PRs, issues, the CHANGELOG and the user prompts of recent Desktop sessions in the repo. Implementation uses the same risk gates as `/tune-harden`, and every applied fix is re-checked with the proof that found the problem; a fix that fails that check is undone. Concept mode hands the scorecard, findings and Now/Next/Later plan to `Skill("devops:concept")`. Audio is checked by instrumentation (media events, `AudioContext` state, signal level, delay); how it actually sounds becomes a manual test step.
+
+### Fixed
+- **No more "Unhandled Error: Timeout calling onTaskUpdate" next to a green suite.** The git-sync test fixture ran every git and node call through `execFileSync`. One test builds two clones and runs the sync: 10-15 s idle, over 60 s under load. During that time the worker's event loop was frozen, so the reply to its last `onTaskUpdate` call went unread and vitest's 60 s RPC timer fired first. `__fixtures__/git-sync-world.js` now awaits a promisified `execFile`, and the three `git-sync*.test.js` suites await it.
+- **The concept tests no longer print a `ReferenceError: getElementState is not defined` stack trace in every run.** `decision-collect.test.js` throws that error on purpose to prove a broken collector cannot jam the submit button. The page's `console.error` of it is now captured and asserted instead of going to stderr.
+
+## [0.190.0] — 2026-09-23
+
+### Added
+- **Every agent spawn shows its model and effort in the chat, also under the Quiet output style.** The delegation policy asked for a spawn line only in prose, without the effort. The Quiet style ("never narrate") swallowed it, and nothing enforced it. The new PreToolUse hook `pre.agent.announce` (matcher `Agent`) resolves the spawn's effective model and effort from the agent frontmatter (`devops:*`, project and user `.claude/agents/`), an invocation override shown as `default → override` (e.g. the budget downgrade `opus → sonnet`), and `inherit`, which resolves to the session's model with its version read from the transcript. It then hands Claude `→ Agent devops:research · opus · high · background — <description>` to show verbatim, the one relay Quiet honours. It stays silent inside subagents and for a spawn `pre.strict.agent-gate` is about to refuse (the retry announces). Models stay family aliases (`opus`, `sonnet`, `fable`, `haiku`, `inherit`), which the harness resolves to the newest model of each family (Claude Code 2.1.280: `opus` → `claude-opus-5-5`, `fable` → `claude-fable-5-1`). A test pins that no agent frontmatter carries a version. `pre.agent.announce.test.js` has 17 cases. The new behavioral eval `evals/delegation/agent-announce-quiet` scaffolds the Quiet style and passed 2/2 with the hook, 0/2 without it.
+
+## [0.189.2] — 2026-09-23
+
+### Fixed
+- **No more prose next to the completion card after a ship** — in the last 9 ship sessions, 5 left text around the card, from two causes. (1) The model restated the card in prose (changes, tests, skipped CI checks, missing Codex review, restart hint): only text *after* the card was forbidden, not a recap before it. `render_completion_card`, the Desktop `[CARD WIDGET]` block, the `post.flow.completion` reminder and `/ship` Step 6 now forbid it. Text before the card stays allowed for what the card cannot carry: answers to side questions or other topics of the user's prompt, points beyond the card's three, and hook blocks still marked for the user. (2) The session-start git check (`git-check-output.js`) demanded its "N uncommitted/unpushed" findings be restated in the final message even after the ship had landed them, which led to a stale block plus an "outdated" note. Only findings that still hold are restated now; resolved ones are dropped silently, and the #268 guarantee for unresolved findings stays. New tests in `git-check-output.test.js` and `card-widget.test.js`.
+
 ## [0.189.1] — 2026-09-23
 
 ### Fixed
