@@ -161,3 +161,27 @@ unambiguous source confirms it exists under exactly that name and location:
   `git worktree list --porcelain`, a "verwaister Ordner" must *not* be, and
   both must still be on disk — `/setup-cleanup` Step 10 re-reads both before
   acting, exactly like the branch audit.
+
+### A half-done worktree removal is Claude's to finish
+
+`git worktree remove` on a checkout with a big `node_modules/` can take many
+minutes on Windows. A synchronous call with a short timeout (120 s) kills git
+mid-delete. The registration is gone after the next `worktree prune`, and a
+directory is left on disk with no `.git` file and tens of thousands of files
+(observed 2026-09-23: three SC-Web worktrees, ~40k files each).
+
+- **Run the removal so it can finish:** in the background or with a timeout of
+  at least 15 min, never under a 120 s ceiling.
+- **Finish an orphan left anyway, don't hand it to the user.** It qualifies
+  when **all** of these hold:
+  - not in `git worktree list --porcelain`, and has no `.git` file;
+  - no process names the path in its cwd or argv;
+  - every top-level entry is in `origin/<default>` (`git cat-file -e
+    origin/main:<entry>`) or a gitignored build artifact (`node_modules`,
+    `dist`, `graphify-out`, …).
+
+  Then delete the directory yourself (`rm -rf`) and report it as done. The
+  content is in main, and the removal was already decided; handing "delete
+  manually" to the user leaves the cleanup half done. Any entry outside that
+  list (an untracked file, a local note) → keep the folder and name that
+  entry. Uncommitted work is never deleted.
