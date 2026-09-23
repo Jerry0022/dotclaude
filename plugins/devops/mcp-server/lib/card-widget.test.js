@@ -298,6 +298,12 @@ describe("cardWidgetInstruction", () => {
     expect(text).toMatch(/never a shortcut/);
   });
 
+  test("forbids a prose recap of the card between widget and marker, keeps room for side questions", () => {
+    const text = cardWidgetInstruction(baseModel(), "", desktop);
+    expect(text).toMatch(/No prose between the widget and the marker comment that restates the card/);
+    expect(text).toMatch(/only answers to side questions or other topics of the user's prompt/);
+  });
+
   test("names the saved widget file when one was written, and only then", () => {
     const withFile = cardWidgetInstruction(baseModel(), "", desktop, { widgetFile: "C:/tmp/dotclaude-devops-card-widget-s1" });
     expect(withFile).toContain("The same HTML is saved in C:/tmp/dotclaude-devops-card-widget-s1");

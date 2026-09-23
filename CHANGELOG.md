@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.189.2] — 2026-09-23
+
+### Fixed
+- **No more prose next to the completion card after a ship** — in the last 9 ship sessions, 5 left text around the card, from two causes. (1) The model restated the card in prose (changes, tests, skipped CI checks, missing Codex review, restart hint): only text *after* the card was forbidden, not a recap before it. `render_completion_card`, the Desktop `[CARD WIDGET]` block, the `post.flow.completion` reminder and `/ship` Step 6 now forbid it. Text before the card stays allowed for what the card cannot carry: answers to side questions or other topics of the user's prompt, points beyond the card's three, and hook blocks still marked for the user. (2) The session-start git check (`git-check-output.js`) demanded its "N uncommitted/unpushed" findings be restated in the final message even after the ship had landed them, which led to a stale block plus an "outdated" note. Only findings that still hold are restated now; resolved ones are dropped silently, and the #268 guarantee for unresolved findings stays. New tests in `git-check-output.test.js` and `card-widget.test.js`.
+
 ## [0.189.1] — 2026-09-23
 
 ### Fixed
