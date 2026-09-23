@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.192.4] — 2026-09-23
+
+### Fixed
+- **The "check before you finish" gate decides per edited file, not per project type.** In a web or Electron profile, a UI file still needs a browser check. A backend file can now be verified by a test run instead. The test profile gains an explicit `class` field and a `dom_paths` list, and the gate also reads the project's own `profile.json`. `node --test` counts as a test runner, and Node's `fail 0` summary no longer reads as a failed run. The new `light-kind` session flag is read session-exact like every other flag (#290), so one session can no longer pick up another session's flag. `browsertest-guard` 0.6.0, `post.flow.completion` 0.23.0.
+
 ## [0.192.3] — 2026-09-23
 
 ### Changed
