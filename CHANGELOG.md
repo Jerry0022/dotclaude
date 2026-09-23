@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.189.1] — 2026-09-23
+
+### Fixed
+- **Full test runs from parallel sessions no longer turn each other red** — `vitest.config.mjs` sizes the workers for one run per machine, but every session runs `npm test` before a ship: on 2026-09-23 four full suites ran at once, the git-sync worlds that take 10-15 s alone took 100-650 s, and 14 tests in `git-sync*.test.js` / `strict-state.test.js` timed out next to 13 files failing on "Timeout calling onTaskUpdate" — all green when run alone. The new `vitest.suite-lock.mjs` (globalSetup) queues full `vitest run`s behind a machine-wide lock file in the OS temp dir: a second full run prints "[suite-lock] another full test run is active … waiting" and starts when the first ends. Filtered runs (`vitest run some.test.js`) and watch mode never lock; a dead owner pid or a 40-min-old lock frees it; a waiter runs anyway after 30 min; `DOTCLAUDE_SUITE_LOCK=0` opts out. `suite-lock.test.js` covers the CLI detection, acquire/release, dead-pid takeover, staleness and foreign-lock safety; verified end to end with a held lock (second run waited 14 s, then released cleanly). Sessions on an older checkout keep running unlocked until they pick up this version.
+
 ## [0.189.0] — 2026-09-23
 
 ### Changed
