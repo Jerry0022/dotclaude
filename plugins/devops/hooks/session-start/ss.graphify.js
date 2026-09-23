@@ -126,6 +126,14 @@ function bg(cmd, args) {
   gstate.bgWindowless(cmd, args, cwd);
 }
 
+// Opportunistic, bounded, fail-silent cleanup of expired gate/declined/
+// bypass/relent/last-blocked/slot temp files (R8) — throttled machine-wide
+// (not per-cwd; the state it sweeps is not project-scoped) so a burst of
+// SessionStart re-entries across many projects sweeps at most once/hour.
+if (runOnce('ss-graphify-sweep', 'machine', { cooldownMs: 60 * 60 * 1000 })) {
+  gstate.sweepStaleGateState();
+}
+
 // Not a project → nothing graphify-related happens here: no transparency line,
 // no install kick, no hook cleanup, no build. bgWithSentinel refuses such a cwd
 // anyway (defence in depth), but stopping here also keeps the 10-min throttle

@@ -43,7 +43,7 @@ Before starting, read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` §4 (Q
   - Third-party integrations (OAuth, payments, webhooks, external APIs) →
     `🔬 TESTE bitte noch:` + bullet with `— nach Deployment` suffix
   - Always include concrete action (what to open, what to click, what to verify).
-- **Automatically run** Codex review via Bash: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" "<review prompt with diff>"` — for complex or high-risk changes (multi-file, architectural, security-sensitive). Skip for trivial single-file fixes. Handle exit codes per codex-integration.md: rc=124 → log timeout and continue without findings; rc=126/127 → skip silently; other non-zero → note and continue. **Never** invoke `/codex:rescue` via the Agent tool.
+- **Automatically run** Codex review via Bash: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" "<review prompt with diff>"` — for complex or high-risk changes (multi-file, architectural, security-sensitive). Skip for trivial single-file fixes. Handle exit codes per codex-integration.md: rc=124 → log timeout and continue without findings; rc=75 → usage limit (stored until reset) — continue without findings, no retry; rc=126/127 → skip silently; other non-zero → note and continue. **Never** invoke `/codex:rescue` via the Agent tool.
 - Report findings in structured format
 
 ## Output format

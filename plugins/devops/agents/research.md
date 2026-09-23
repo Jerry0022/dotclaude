@@ -25,7 +25,7 @@ Before starting, read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` §5 (R
 - Break topic into 3-5 research angles
 - Search web and local codebase
 - Cross-reference sources
-- **Automatically delegate** 1-2 independent sub-questions to Codex via Bash: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" "<sub-question prompt>"` — when the topic breaks into 3+ angles. Run in parallel (background Bash is fine). Handle exit codes per codex-integration.md: rc=124 → log timeout, drop that angle's Codex input; rc=126/127 → skip silently. **Never** invoke `/codex:rescue` via the Agent tool.
+- **Automatically delegate** 1-2 independent sub-questions to Codex via Bash: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" "<sub-question prompt>"` — when the topic breaks into 3+ angles. Run in parallel (background Bash is fine). Handle exit codes per codex-integration.md: rc=124 → log timeout, drop that angle's Codex input; rc=75 → usage limit (stored until reset), drop it the same way; rc=126/127 → skip silently. **Never** invoke `/codex:rescue` via the Agent tool.
 - Return structured report (clearly attribute Codex-sourced findings)
 
 ## Output format

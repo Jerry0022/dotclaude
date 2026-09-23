@@ -423,6 +423,7 @@ If `success: false` → call `render_completion_card` with variant `ship-blocked
      **If `$SHIP_LOCKOUT` (Pre-Step A):** do not ask — **BLOCK** (`ship-blocked`,
      naming the finding). A design/logic/security concern must not merge
      unreviewed unattended; the caller parks the issue for the user.
+   - **rc=75** (Codex usage limit — stored per user, or just hit) → continue to Step 3 immediately; card `tests` line `{ method: "Codex-Review", result: "übersprungen — Limit bis <reset time from stderr>" }`. The wrapper skips Codex on its own until that time; the first ship after it runs Codex again. Do NOT retry. If the user says Codex is usable again before then (plan bought, limit raised), run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" --reset-limit` once, then call the gate normally.
    - **rc=124** (timeout, 5 min) → log "Codex review timed out — proceeding without review" in the ship log, continue to Step 3. Do NOT retry, do NOT block the ship.
    - **rc=126** (`DEVOPS_DISABLE_CODEX=1`) or **rc=127** (codex CLI missing) → skip silently
    - **other non-zero** → surface first line of stderr, continue to Step 3

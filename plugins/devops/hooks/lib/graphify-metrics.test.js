@@ -22,6 +22,31 @@ describe("graphify-metrics — event telemetry", () => {
     expect(DEFAULT_METRICS_PATH).toContain(os.homedir());
   });
 
+  describe("DOTCLAUDE_GRAPHIFY_METRICS override (Requirement 8)", () => {
+    const orig = process.env.DOTCLAUDE_GRAPHIFY_METRICS;
+    afterEach(() => {
+      if (orig === undefined) delete process.env.DOTCLAUDE_GRAPHIFY_METRICS;
+      else process.env.DOTCLAUDE_GRAPHIFY_METRICS = orig;
+    });
+
+    test("metricsPath prefers the env var over the real default", () => {
+      process.env.DOTCLAUDE_GRAPHIFY_METRICS = "/tmp/isolated-metrics.jsonl";
+      expect(metricsPath()).toBe("/tmp/isolated-metrics.jsonl");
+    });
+
+    test("an explicit opts.path still wins over the env var", () => {
+      process.env.DOTCLAUDE_GRAPHIFY_METRICS = "/tmp/isolated-metrics.jsonl";
+      expect(metricsPath({ path: "/tmp/explicit.jsonl" })).toBe("/tmp/explicit.jsonl");
+    });
+
+    test("record() actually writes to the env-var path, never the real default", () => {
+      process.env.DOTCLAUDE_GRAPHIFY_METRICS = file;
+      record("gate_fired", { x: 1 }, {});
+      expect(fs.existsSync(file)).toBe(true);
+      expect(fs.existsSync(DEFAULT_METRICS_PATH) && fs.readFileSync(DEFAULT_METRICS_PATH, "utf8").includes('"x":1')).toBeFalsy();
+    });
+  });
+
   test("appends one JSON line per event with ts/event/project/sid", () => {
     record("gate_fired", { newerCount: 3 }, { path: file, cwd: "/proj", sid: "s1" });
     const lines = fs.readFileSync(file, "utf8").trim().split("\n");

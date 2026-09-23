@@ -41,6 +41,25 @@ import {
   refreshUpdateLockFile,
   clearUpdateLockFile,
   lockBaseDir,
+  GATE_STATE_TTL_MS,
+  bypassCount,
+  bypassCountPath,
+  noteBypass,
+  clearBypassStreak,
+  relentFlagPath,
+  markRelented,
+  isRelented,
+  lastBlockedPath,
+  getLastBlocked,
+  setLastBlocked,
+  markLastBlockedBypassed,
+  gateQuerySlotPath,
+  acquireGateQuerySlot,
+  declinedFlagPath,
+  markDeclined,
+  getDeclined,
+  sweepDirForStaleFiles,
+  sweepStaleGateState,
 } from "./graphify-state.js";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -243,6 +262,365 @@ describe("per-session query flag", () => {
     expect(queryDone("s2", dir)).toBe(false); // different session
     expect(queryDone("s1", tmp())).toBe(false); // different project
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+});
+
+describe("adaptive gate relent — bypass streak + relent flag (Requirement B3)", () => {
+  test("bypassCount starts at 0 and increments with noteBypass", () => {
+    const dir = tmp();
+    expect(bypassCount("s1", dir)).toBe(0);
+    expect(noteBypass("s1", dir)).toBe(1);
+    expect(noteBypass("s1", dir)).toBe(2);
+    expect(bypassCount("s1", dir)).toBe(2);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("clearBypassStreak resets the count to 0", () => {
+    const dir = tmp();
+    noteBypass("s1", dir);
+    noteBypass("s1", dir);
+    clearBypassStreak("s1", dir);
+    expect(bypassCount("s1", dir)).toBe(0);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("isolated per (session, project)", () => {
+    const dir = tmp();
+    noteBypass("s1", dir);
+    expect(bypassCount("s2", dir)).toBe(0);         // different session
+    expect(bypassCount("s1", tmp())).toBe(0);        // different project
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("isRelented is false until markRelented; then true for that (session, cwd) only", () => {
+    const dir = tmp();
+    expect(isRelented("s1", dir)).toBe(false);
+    markRelented("s1", dir);
+    expect(isRelented("s1", dir)).toBe(true);
+    expect(isRelented("s2", dir)).toBe(false);
+    expect(isRelented("s1", tmp())).toBe(false);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("bypassCountPath / relentFlagPath are stable and session+cwd scoped", () => {
+    const dir = tmp();
+    expect(bypassCountPath("s1", dir)).toBe(bypassCountPath("s1", dir));
+    expect(bypassCountPath("s1", dir)).not.toBe(bypassCountPath("s2", dir));
+    expect(relentFlagPath("s1", dir)).not.toBe(relentFlagPath("s1", tmp()));
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  describe("TTL (~12h, Requirement 5) — stale state reads as absent, never as approval", () => {
+    test("bypassCount reads 0 once the streak is older than GATE_STATE_TTL_MS", () => {
+      const dir = tmp();
+      noteBypass("s1", dir);
+      const stale = JSON.parse(fs.readFileSync(bypassCountPath("s1", dir), "utf8"));
+      fs.writeFileSync(bypassCountPath("s1", dir), JSON.stringify({ ...stale, ts: Date.now() - GATE_STATE_TTL_MS - 1000 }));
+      expect(bypassCount("s1", dir)).toBe(0);
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+    });
+
+    test("isRelented reads false once the relent flag is older than GATE_STATE_TTL_MS", () => {
+      const dir = tmp();
+      markRelented("s1", dir);
+      fs.writeFileSync(relentFlagPath("s1", dir), String(Date.now() - GATE_STATE_TTL_MS - 1000));
+      expect(isRelented("s1", dir)).toBe(false);
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+    });
+
+    test("getLastBlocked reads null once the record is older than GATE_STATE_TTL_MS", () => {
+      const dir = tmp();
+      setLastBlocked("s1", dir, "Grep:x:{}");
+      const cur = getLastBlocked("s1", dir);
+      expect(cur.key).toBe("Grep:x:{}");
+      fs.writeFileSync(lastBlockedPath("s1", dir), JSON.stringify({ ...cur, ts: Date.now() - GATE_STATE_TTL_MS - 1000 }));
+      expect(getLastBlocked("s1", dir)).toBe(null);
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+    });
+  });
+});
+
+describe("last-blocked record — setLastBlocked / getLastBlocked / markLastBlockedBypassed", () => {
+  test("null when nothing has been blocked yet", () => {
+    const dir = tmp();
+    expect(getLastBlocked("s1", dir)).toBe(null);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("setLastBlocked records a fresh, un-bypassed entry", () => {
+    const dir = tmp();
+    setLastBlocked("s1", dir, "Grep:x:{}");
+    expect(getLastBlocked("s1", dir)).toMatchObject({ key: "Grep:x:{}", bypassed: false });
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("markLastBlockedBypassed flips bypassed without changing the key", () => {
+    const dir = tmp();
+    setLastBlocked("s1", dir, "Grep:x:{}");
+    markLastBlockedBypassed("s1", dir);
+    expect(getLastBlocked("s1", dir)).toMatchObject({ key: "Grep:x:{}", bypassed: true });
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("markLastBlockedBypassed is a no-op when there is nothing to mark", () => {
+    const dir = tmp();
+    expect(() => markLastBlockedBypassed("s1", dir)).not.toThrow();
+    expect(getLastBlocked("s1", dir)).toBe(null);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("a NEW setLastBlocked replaces the previous entry entirely", () => {
+    const dir = tmp();
+    setLastBlocked("s1", dir, "Grep:x:{}");
+    markLastBlockedBypassed("s1", dir);
+    setLastBlocked("s1", dir, "Grep:y:{}");
+    expect(getLastBlocked("s1", dir)).toMatchObject({ key: "Grep:y:{}", bypassed: false });
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("isolated per (session, project)", () => {
+    const dir = tmp();
+    setLastBlocked("s1", dir, "Grep:x:{}");
+    expect(getLastBlocked("s2", dir)).toBe(null);
+    expect(getLastBlocked("s1", tmp())).toBe(null);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+});
+
+describe("declined marker — markDeclined / getDeclined (Requirement R1)", () => {
+  test("null when nothing was ever declined", () => {
+    const dir = tmp();
+    expect(getDeclined("s1", dir, "Grep:x:{}")).toBe(null);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("markDeclined records a reason retrievable via getDeclined", () => {
+    const dir = tmp();
+    markDeclined("s1", dir, "Grep:x:{}", "timeout");
+    expect(getDeclined("s1", dir, "Grep:x:{}")).toMatchObject({ reason: "timeout" });
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("isolated per (session, project, searchKey)", () => {
+    const dir = tmp();
+    markDeclined("s1", dir, "Grep:x:{}", "nohit");
+    expect(getDeclined("s2", dir, "Grep:x:{}")).toBe(null);          // different session
+    expect(getDeclined("s1", tmp(), "Grep:x:{}")).toBe(null);         // different project
+    expect(getDeclined("s1", dir, "Grep:y:{}")).toBe(null);           // different search key
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("TTL: a stale (>12h) declined record reads as null", () => {
+    const dir = tmp();
+    markDeclined("s1", dir, "Grep:x:{}", "error");
+    const p = declinedFlagPath("s1", dir, "Grep:x:{}");
+    const cur = JSON.parse(fs.readFileSync(p, "utf8"));
+    fs.writeFileSync(p, JSON.stringify({ ...cur, ts: Date.now() - GATE_STATE_TTL_MS - 1000 }));
+    expect(getDeclined("s1", dir, "Grep:x:{}")).toBe(null);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  test("declinedFlagPath is stable for the same inputs and differs when any input differs", () => {
+    const dir = tmp();
+    expect(declinedFlagPath("s1", dir, "k")).toBe(declinedFlagPath("s1", dir, "k"));
+    expect(declinedFlagPath("s1", dir, "k")).not.toBe(declinedFlagPath("s1", dir, "k2"));
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+});
+
+describe("sweepStaleGateState / sweepDirForStaleFiles — R8 opportunistic TTL cleanup", () => {
+  let sweepDir;
+  beforeEach(() => { sweepDir = fs.mkdtempSync(path.join(os.tmpdir(), "gsweep-")); });
+  afterEach(() => { try { fs.rmSync(sweepDir, { recursive: true, force: true }); } catch {} });
+
+  const touch = (name, ageMs) => {
+    const p = path.join(sweepDir, name);
+    fs.writeFileSync(p, "x");
+    const t = new Date(Date.now() - ageMs);
+    fs.utimesSync(p, t, t);
+    return p;
+  };
+
+  test("removes matching files older than ttlMs, leaves fresh ones and non-matching names alone", () => {
+    const stale = touch("dotclaude-graphbypass-aaa.count", 20_000);
+    const fresh = touch("dotclaude-graphbypass-bbb.count", 1_000);
+    const unrelated = touch("some-other-file.txt", 20_000);
+    const r = sweepDirForStaleFiles(sweepDir, [/^dotclaude-graphbypass-.*\.count$/], 5_000, 200);
+    expect(r.scanned).toBe(2); // only the two matching names count toward the budget
+    expect(r.removed).toBe(1);
+    expect(fs.existsSync(stale)).toBe(false);
+    expect(fs.existsSync(fresh)).toBe(true);
+    expect(fs.existsSync(unrelated)).toBe(true);
+  });
+
+  test("respects the scan budget — stops after `budget` MATCHING entries", () => {
+    for (let i = 0; i < 5; i++) touch(`dotclaude-graphbypass-${i}.count`, 20_000);
+    const r = sweepDirForStaleFiles(sweepDir, [/^dotclaude-graphbypass-.*\.count$/], 5_000, 3);
+    expect(r.scanned).toBe(3);
+  });
+
+  test("a nonexistent directory never throws — returns zeroes", () => {
+    expect(sweepDirForStaleFiles(path.join(sweepDir, "nope"), [/.*/], 1000, 200))
+      .toEqual({ scanned: 0, removed: 0 });
+  });
+
+  describe("sweepStaleGateState — real TTL-scoped state files", () => {
+    let origLockDir, isoLockDir, origStateDir, isoStateDir;
+    beforeEach(() => {
+      origLockDir = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+      isoLockDir = fs.mkdtempSync(path.join(os.tmpdir(), "gsweep-lockiso-"));
+      process.env.DOTCLAUDE_GRAPHLOCK_DIR = isoLockDir;
+      // Isolate the tmpdir-wide scan too — without this, litter genuinely
+      // present in the real system tmp dir (left by other test files, or a
+      // long-running dev machine) can consume the whole scan budget before
+      // this test's own marker is ever reached.
+      origStateDir = process.env.DOTCLAUDE_GRAPHSTATE_TMPDIR;
+      isoStateDir = fs.mkdtempSync(path.join(os.tmpdir(), "gsweep-stateiso-"));
+      process.env.DOTCLAUDE_GRAPHSTATE_TMPDIR = isoStateDir;
+    });
+    afterEach(() => {
+      try { fs.rmSync(isoLockDir, { recursive: true, force: true }); } catch {}
+      try { fs.rmSync(isoStateDir, { recursive: true, force: true }); } catch {}
+      if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR; else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
+      if (origStateDir === undefined) delete process.env.DOTCLAUDE_GRAPHSTATE_TMPDIR; else process.env.DOTCLAUDE_GRAPHSTATE_TMPDIR = origStateDir;
+    });
+
+    test("cleans up an expired declined marker written via markDeclined", () => {
+      const dir = tmp();
+      markDeclined("s1", dir, "Grep:x:{}", "timeout");
+      const p = declinedFlagPath("s1", dir, "Grep:x:{}");
+      const old = new Date(Date.now() - GATE_STATE_TTL_MS - 60_000);
+      fs.utimesSync(p, old, old);
+      const r = sweepStaleGateState();
+      expect(r.removed).toBeGreaterThanOrEqual(1);
+      expect(fs.existsSync(p)).toBe(false);
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+    });
+
+    test("never throws even with an unwritable/missing lock dir", () => {
+      process.env.DOTCLAUDE_GRAPHLOCK_DIR = path.join(isoLockDir, "does", "not", "exist");
+      expect(() => sweepStaleGateState()).not.toThrow();
+    });
+  });
+});
+
+describe("acquireGateQuerySlot — machine-wide gate-query concurrency cap (Requirement 2)", () => {
+  let origLockDir, isoLockDir, origMax, origStale;
+  beforeEach(() => {
+    origLockDir = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    isoLockDir = fs.mkdtempSync(path.join(os.tmpdir(), "gatequeue-lockiso-"));
+    process.env.DOTCLAUDE_GRAPHLOCK_DIR = isoLockDir;
+    origMax = process.env.DOTCLAUDE_GATE_QUERY_MAX;
+    origStale = process.env.DOTCLAUDE_GATE_QUERY_STALE_MS;
+  });
+  afterEach(() => {
+    try { fs.rmSync(isoLockDir, { recursive: true, force: true }); } catch {}
+    if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR; else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
+    if (origMax === undefined) delete process.env.DOTCLAUDE_GATE_QUERY_MAX; else process.env.DOTCLAUDE_GATE_QUERY_MAX = origMax;
+    if (origStale === undefined) delete process.env.DOTCLAUDE_GATE_QUERY_STALE_MS; else process.env.DOTCLAUDE_GATE_QUERY_STALE_MS = origStale;
+  });
+
+  test("acquires up to the cap (default 2), then the next call is refused", () => {
+    const r1 = acquireGateQuerySlot();
+    const r2 = acquireGateQuerySlot();
+    const r3 = acquireGateQuerySlot();
+    expect(typeof r1).toBe("function");
+    expect(typeof r2).toBe("function");
+    expect(r3).toBe(null);
+    r1(); r2();
+  });
+
+  test("releasing a slot frees it up for the next acquirer", () => {
+    const r1 = acquireGateQuerySlot();
+    const r2 = acquireGateQuerySlot();
+    expect(acquireGateQuerySlot()).toBe(null);
+    r1();
+    const r3 = acquireGateQuerySlot();
+    expect(typeof r3).toBe("function");
+    r2(); r3();
+  });
+
+  test("a stale slot (older than the stale window) is reclaimed, not treated as busy", () => {
+    process.env.DOTCLAUDE_GATE_QUERY_STALE_MS = "50";
+    fs.writeFileSync(gateQuerySlotPath(0), JSON.stringify({ pid: 999999, ts: Date.now() - 1000 }));
+    fs.writeFileSync(gateQuerySlotPath(1), JSON.stringify({ pid: 999999, ts: Date.now() - 1000 }));
+    const r = acquireGateQuerySlot();
+    expect(typeof r).toBe("function");
+    r();
+  });
+
+  test("DOTCLAUDE_GATE_QUERY_MAX overrides the default cap", () => {
+    process.env.DOTCLAUDE_GATE_QUERY_MAX = "1";
+    const r1 = acquireGateQuerySlot();
+    expect(typeof r1).toBe("function");
+    expect(acquireGateQuerySlot()).toBe(null);
+    r1();
+  });
+
+  describe("R5 — a corrupt/0-byte slot is still reclaimed via mtime fallback", () => {
+    test("a 0-byte slot file (JSON.parse throws) is reclaimed once past the stale window", () => {
+      process.env.DOTCLAUDE_GATE_QUERY_MAX = "1";
+      process.env.DOTCLAUDE_GATE_QUERY_STALE_MS = "50";
+      const p = gateQuerySlotPath(0);
+      fs.writeFileSync(p, ""); // 0 bytes — JSON.parse throws
+      const old = new Date(Date.now() - 1000);
+      fs.utimesSync(p, old, old);
+      const r = acquireGateQuerySlot();
+      expect(typeof r).toBe("function");
+      r();
+    });
+
+    test("a garbage (non-JSON) slot file is reclaimed once past the stale window", () => {
+      process.env.DOTCLAUDE_GATE_QUERY_MAX = "1";
+      process.env.DOTCLAUDE_GATE_QUERY_STALE_MS = "50";
+      const p = gateQuerySlotPath(0);
+      fs.writeFileSync(p, "not json at all {{{");
+      const old = new Date(Date.now() - 1000);
+      fs.utimesSync(p, old, old);
+      const r = acquireGateQuerySlot();
+      expect(typeof r).toBe("function");
+      r();
+    });
+
+    test("a 0-byte slot file that is NOT yet past the stale window stays busy", () => {
+      process.env.DOTCLAUDE_GATE_QUERY_MAX = "1";
+      process.env.DOTCLAUDE_GATE_QUERY_STALE_MS = "60000"; // 1 min — fresh 0-byte file must not reclaim
+      fs.writeFileSync(gateQuerySlotPath(0), "");
+      expect(acquireGateQuerySlot()).toBe(null);
+    });
+  });
+
+  describe("release() checks pid ownership before unlinking (R5)", () => {
+    test("release() does nothing if the slot has since been reclaimed by another pid", () => {
+      const release = acquireGateQuerySlot();
+      expect(typeof release).toBe("function");
+      const p = gateQuerySlotPath(0);
+      // Simulate a takeover by a different process (e.g. this slot went
+      // stale and was reclaimed by someone else before this release() ran).
+      fs.writeFileSync(p, JSON.stringify({ pid: 424242, ts: Date.now() }));
+      release();
+      // The foreign owner's slot must survive — release() must not have
+      // unlinked a slot it no longer owns.
+      expect(fs.existsSync(p)).toBe(true);
+      const cur = JSON.parse(fs.readFileSync(p, "utf8"));
+      expect(cur.pid).toBe(424242);
+    });
+
+    test("release() removes the slot it genuinely still owns", () => {
+      const release = acquireGateQuerySlot();
+      const p = gateQuerySlotPath(0);
+      expect(fs.existsSync(p)).toBe(true);
+      release();
+      expect(fs.existsSync(p)).toBe(false);
+    });
+
+    test("release() on an already-corrupt slot does not throw", () => {
+      const release = acquireGateQuerySlot();
+      const p = gateQuerySlotPath(0);
+      fs.writeFileSync(p, "garbage");
+      expect(() => release()).not.toThrow();
+      expect(fs.existsSync(p)).toBe(true); // left alone — nothing safely ownable
+    });
   });
 });
 

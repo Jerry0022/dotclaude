@@ -1,21 +1,22 @@
 #!/usr/bin/env node
 /**
  * @hook post.graphify.query
- * @version 0.3.0
+ * @version 0.4.0
  * @event PostToolUse
  * @plugin devops
  * @matcher Bash|PowerShell
  * @description When Claude runs `graphify query ...`, record a per-session flag
- *   so the PreToolUse graphify-gate relents for the rest of the session — Claude
- *   has consulted the graph, so it should not be re-blocked on every broad
- *   search. Also records a `query_ran` telemetry event (hooks/lib/
- *   graphify-metrics) carrying `responseChars` — the numerator AND the cost
- *   side of the query-adoption metric (real `graphify query` runs vs. gate
- *   fires, and what those answers weigh in context). Listens on PowerShell as
- *   well as Bash: Desktop-app sessions default to PowerShell, and with a
- *   Bash-only matcher every one of their queries went unrecorded and the gate
- *   never relented (measured: 4 of 7 queries in a month). Purely a state
- *   write + metrics append; never blocks.
+ *   (`markQueryDone` — kept for callers that still care whether a query ran
+ *   this session; the PreToolUse gate itself no longer relents on it, see
+ *   graphify-state's adaptive-relent doc comment). Also records a `query_ran`
+ *   telemetry event (hooks/lib/graphify-metrics) carrying `responseChars` —
+ *   the numerator AND the cost side of the query-adoption metric (real
+ *   `graphify query` runs vs. gate fires, and what those answers weigh in
+ *   context) — plus `budget` when the command passed `--budget N`. Listens on
+ *   PowerShell as well as Bash: Desktop-app sessions default to PowerShell,
+ *   and with a Bash-only matcher every one of their queries went unrecorded
+ *   (measured: 4 of 7 queries in a month). Purely a state write + metrics
+ *   append; never blocks.
  */
 
 require('../lib/plugin-guard');
@@ -24,6 +25,7 @@ const gstate = require('../lib/graphify-state');
 const metrics = require('../lib/graphify-metrics');
 
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
+const BUDGET_RE = /--budget[= ](\d+)/;
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -37,7 +39,10 @@ process.stdin.on('end', () => {
   if (gstate.isGraphifyQueryCommand(cmd)) {
     const sid = hook.session_id || hook.sessionId || 'nosid';
     gstate.markQueryDone(sid, process.cwd());
-    metrics.record('query_ran', { tool: toolName, responseChars: metrics.responseChars(hook.tool_response) }, { cwd: process.cwd(), sid });
+    const extra = { tool: toolName, responseChars: metrics.responseChars(hook.tool_response) };
+    const budgetMatch = BUDGET_RE.exec(cmd);
+    if (budgetMatch) extra.budget = Number(budgetMatch[1]);
+    metrics.record('query_ran', extra, { cwd: process.cwd(), sid });
   }
   process.exit(0);
 });
