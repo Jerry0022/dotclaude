@@ -54,7 +54,7 @@ export const CARD_VARIANTS = [
 export const CARD_KNOWN_KEYS = [
   "variant", "summary", "lang", "cwd", "buildId", "session_id", "changes", "tests",
   "state", "cta", "userTest", "userFinalTest", "open", "pending", "concept",
-  "deployGate", "validation", "delivery", "promotion",
+  "deployGate", "validation", "delivery", "promotion", "compact",
 ];
 
 /** Top-level keys of `params` the schema does not know, in payload order. */
@@ -217,6 +217,14 @@ export function validateCardInput(params) {
     if (isStr(c)) { if (!CONCEPT_PHASES.includes(c)) issues.push({ path: "concept", message: `must be one of ${CONCEPT_PHASES.join("|")} or { phase?, url? }` }); }
     else if (!isObj(c)) issues.push({ path: "concept", message: "must be a phase string or an object" });
     else if (c.phase !== undefined && !CONCEPT_PHASES.includes(c.phase)) issues.push({ path: "concept.phase", message: `must be one of ${CONCEPT_PHASES.join("|")}` });
+  }
+  if (params.compact !== undefined && params.compact !== null) {
+    const c = params.compact;
+    if (!isObj(c)) issues.push({ path: "compact", message: "must be { tokens: number, focus?: string }" });
+    else {
+      if (typeof c.tokens !== "number") issues.push({ path: "compact.tokens", message: "must be a number" });
+      if (c.focus !== undefined && !isStr(c.focus)) issues.push({ path: "compact.focus", message: "must be a string" });
+    }
   }
   if (isObj(params.state) && params.state.pr !== undefined && params.state.pr !== null) {
     const pr = params.state.pr;
