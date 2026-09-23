@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.192.7] — 2026-09-24
+
+### Fixed
+- **The session title shows the hourglass whenever Claude works, and the compass only while a concept page waits for you.** Before, `🧭 Concept – ` stayed on the title while the page was still being generated and between two iterations. That told the user to look at the page when nothing was there to decide yet. Now the compass appears only for the card phase `waiting`. `iterating` and `implementing` show `⏳ `. A typed prompt in a concept session swaps the compass for `⏳ ` (`prompt.flow.title-work` 0.5.0), and the turn's card brings it back while the page waits. A picked-up submission is swapped by the concept skill itself. Task-notification turns keep the compass, because such a turn may end without a card. A card with no `concept` field in a project with an open concept now carries a conditional title instruction instead of leaving the title alone: the owning session gets the compass, and any other session, or the turn that closes the concept, gets its outcome prefix. A concept close-out that ships ends on `🚀 Shipped – `.
+- **One hourglass.** Pending background work now sets the same bare `⏳ ` as a working turn. The worded `⏳ Working – ` is gone and is stripped from older titles.
+- **Card test flake under load.** The terminal "no buttons" check ran about 20 renders inside one 30 s test and timed out on a busy machine. It is now one test per variant.
+
 ## [0.192.6] — 2026-09-24
 
 ### Fixed
