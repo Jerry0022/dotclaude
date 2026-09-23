@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.191.1] — 2026-09-23
+
+### Fixed
+- **A ship no longer leaves a Desktop session that can't be archived.** The Desktop app copies the main checkout's untracked `.claude/` into every new worktree and refuses to archive a dirty one. The 0.191.0 ship moved the untracked `.claude/graphify.json` aside so preflight would pass, then put it back after the merge, and the session could not be archived. `/ship` Step 1a now handles untracked files at their source inside the ship: plugin configuration (the *MUST be tracked* list in `/setup-project`, e.g. `graphify.json`) is committed, runtime state is ignored, and stray hook artifacts are deleted. After Step 5c, a harness worktree must have an empty `git status --porcelain`. This repo now tracks its `.claude/graphify.json`.
+
 ## [0.191.0] — 2026-09-23
 
 ### Added
