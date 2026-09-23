@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-state
- * @version 0.9.0
+ * @version 0.12.0
  * @plugin devops
  * @description Consent + session-state helpers for the graphify enforcement
  *   layer (auto-graph). Default-on / opt-out model: graphify enforcement is
@@ -312,6 +312,295 @@ function queryDone(sessionId, cwd) {
   }
 }
 
+// ── Adaptive gate relent ─────────────────────────────────────────────────────
+// The old "relent for the rest of the session once ANY `graphify query` ran"
+// policy is gone — the gate now answers eligible searches itself (see
+// pre.tokens.guard's answer-in-gate), so a manual query elsewhere in the
+// session no longer needs to disable it wholesale. What remains: the
+// per-(session, search) escape hatch (a retry of the exact same search always
+// passes — never touches these files), PLUS an adaptive backstop for a
+// session that keeps hitting searches the graph genuinely cannot answer: 3
+// consecutive bypasses with no accepted answer in between relents the gate
+// for the rest of THAT session.
+//
+// "Consecutive" is tracked across DIFFERENT searches, not just retries of one:
+// the hook keeps `getLastBlocked`/`setLastBlocked`/`markLastBlockedBypassed`
+// alongside the counter. A NEW block resets the streak only when the PREVIOUS
+// blocked search was never retried (an accepted answer); a bypass of the
+// search that IS the current `lastBlocked` key increments the streak and
+// marks it bypassed so the NEXT block does not reset it — this is what lets
+// three DIFFERENT searches, each fired-then-bypassed once, relent the gate.
+//
+// All three flags (bypass counter, relent flag, last-blocked record) carry a
+// TTL (`GATE_STATE_TTL_MS`, ~12h) — without one a machine left running for
+// days would accumulate a streak (or a relent) that outlives any session that
+// could plausibly still be "the same burst of noisy searches".
+const GATE_STATE_TTL_MS = 12 * 60 * 60 * 1000;
+
+function bypassCountPath(sessionId, cwd) {
+  const key = crypto.createHash('md5').update(`gbypass:${sessionId || 'nosid'}:${cwd}`).digest('hex').slice(0, 12);
+  return path.join(os.tmpdir(), `dotclaude-graphbypass-${key}.count`);
+}
+
+/** Consecutive bypasses since the last accepted answer, for this (session, cwd). 0 when unknown or TTL-expired. */
+function bypassCount(sessionId, cwd) {
+  try {
+    const { n, ts } = JSON.parse(fs.readFileSync(bypassCountPath(sessionId, cwd), 'utf8'));
+    if (typeof ts !== 'number' || Date.now() - ts >= GATE_STATE_TTL_MS) return 0;
+    return Number.isInteger(n) && n > 0 ? n : 0;
+  } catch { return 0; }
+}
+
+/** Record one more bypass; returns the new count. Never throws. */
+function noteBypass(sessionId, cwd) {
+  const n = bypassCount(sessionId, cwd) + 1;
+  try { fs.writeFileSync(bypassCountPath(sessionId, cwd), JSON.stringify({ n, ts: Date.now() })); } catch { /* best effort */ }
+  return n;
+}
+
+/** An answer was delivered and never retried — the bypass streak no longer applies. */
+function clearBypassStreak(sessionId, cwd) {
+  try { fs.unlinkSync(bypassCountPath(sessionId, cwd)); } catch { /* already gone */ }
+}
+
+function relentFlagPath(sessionId, cwd) {
+  const key = crypto.createHash('md5').update(`grelent:${sessionId || 'nosid'}:${cwd}`).digest('hex').slice(0, 12);
+  return path.join(os.tmpdir(), `dotclaude-graphrelent-${key}.flag`);
+}
+
+/** Disable the gate for the rest of this (session, cwd) — the adaptive backstop. */
+function markRelented(sessionId, cwd) {
+  try { fs.writeFileSync(relentFlagPath(sessionId, cwd), String(Date.now())); return true; } catch { return false; }
+}
+
+/** Has this (session, cwd) already relented (and is that relent still within its TTL)? */
+function isRelented(sessionId, cwd) {
+  try {
+    const written = parseInt(fs.readFileSync(relentFlagPath(sessionId, cwd), 'utf8'), 10);
+    return Number.isFinite(written) && (Date.now() - written) < GATE_STATE_TTL_MS;
+  } catch { return false; }
+}
+
+function lastBlockedPath(sessionId, cwd) {
+  const key = crypto.createHash('md5').update(`glastblocked:${sessionId || 'nosid'}:${cwd}`).digest('hex').slice(0, 12);
+  return path.join(os.tmpdir(), `dotclaude-graphlastblocked-${key}.json`);
+}
+
+/**
+ * The most recently BLOCKED gate key for this (session, cwd) — `{key,
+ * bypassed, ts}` — or `null` when none, unreadable, or past its TTL. `key` is
+ * the same string the escape-hatch flag is keyed on (see pre.tokens.guard's
+ * `gflag`); `bypassed` is whether that block has since been retried. Never
+ * throws.
+ */
+function getLastBlocked(sessionId, cwd) {
+  try {
+    const obj = JSON.parse(fs.readFileSync(lastBlockedPath(sessionId, cwd), 'utf8'));
+    if (!obj || typeof obj.key !== 'string' || typeof obj.ts !== 'number') return null;
+    if (Date.now() - obj.ts >= GATE_STATE_TTL_MS) return null;
+    return obj;
+  } catch { return null; }
+}
+
+/** Record a NEW block for this (session, cwd), replacing whatever was there before. Never throws. */
+function setLastBlocked(sessionId, cwd, key) {
+  try { fs.writeFileSync(lastBlockedPath(sessionId, cwd), JSON.stringify({ key, bypassed: false, ts: Date.now() })); } catch { /* best effort */ }
+}
+
+/** Mark the current last-blocked key as having been retried (bypassed). No-op if it already expired. Never throws. */
+function markLastBlockedBypassed(sessionId, cwd) {
+  const cur = getLastBlocked(sessionId, cwd);
+  if (!cur) return;
+  try { fs.writeFileSync(lastBlockedPath(sessionId, cwd), JSON.stringify({ ...cur, bypassed: true })); } catch { /* best effort */ }
+}
+
+// ── "Declined" marker — R1 (double block via no-answer) ─────────────────────
+// A query that timed out, found nothing, errored, or was skipped because the
+// concurrency slots were all busy is NOT a block — the gate flag must stay
+// unwritten (see the doc comment above `bypassCountPath`). But without ANY
+// record of the attempt, an identical retry re-runs the query from scratch,
+// which is not just wasted latency: it can also flip outcome between the two
+// calls (live-observed — a path-less search timed out on call 1, then the
+// retry got a real answer and was blocked on call 2, exactly the double-block
+// this whole mechanism exists to prevent, just via the opposite direction).
+// The declined marker records "this exact search was already tried and
+// declined, do not try again" — the retry skips the query ENTIRELY (zero
+// latency), and is deliberately inert: no gate_bypassed, no streak, no
+// classic-flag pre-write, because nothing was ever blocked.
+function declinedFlagPath(sessionId, cwd, searchKey) {
+  const key = crypto.createHash('md5').update(`gdeclined:${sessionId || 'nosid'}:${cwd}:${searchKey}`).digest('hex').slice(0, 12);
+  return path.join(gateStateTmpDir(), `dotclaude-graphdeclined-${key}.json`);
+}
+
+/** Record a declined (non-block) outcome for this exact search. Never throws. */
+function markDeclined(sessionId, cwd, searchKey, reason) {
+  try { fs.writeFileSync(declinedFlagPath(sessionId, cwd, searchKey), JSON.stringify({ reason, ts: Date.now() })); return true; } catch { return false; }
+}
+
+/** Read a (still-fresh, within GATE_STATE_TTL_MS) declined record, or null. Never throws. */
+function getDeclined(sessionId, cwd, searchKey) {
+  try {
+    const obj = JSON.parse(fs.readFileSync(declinedFlagPath(sessionId, cwd, searchKey), 'utf8'));
+    if (!obj || typeof obj.ts !== 'number') return null;
+    if (Date.now() - obj.ts >= GATE_STATE_TTL_MS) return null;
+    return obj;
+  } catch { return null; }
+}
+
+// ── Gate query concurrency cap ───────────────────────────────────────────────
+// The answer-in-gate spawns a REAL `graphify query` child synchronously. A
+// machine running many concurrent sessions/worktrees, each firing an eligible
+// search around the same moment, could otherwise stack an unbounded number of
+// those children at once. A small, machine-wide semaphore (default 2
+// in-flight, overridable) bounds that: a slot is a plain file created with the
+// atomic exclusive `wx` flag, stamped `{pid, ts}`; a slot older than its stale
+// window (default ~10s — well above a single query's own ~4s hard timeout) is
+// treated as abandoned (a hook that crashed/was killed mid-query) and
+// reclaimed. Over the cap → the caller skips the gate entirely (fail-open,
+// `gate_skipped_busy`) rather than queueing, since queuing would just move the
+// latency the cap exists to bound.
+const GATE_QUERY_MAX_INFLIGHT_DEFAULT = 2;
+const GATE_QUERY_SLOT_STALE_MS_DEFAULT = 10 * 1000;
+
+function gateQueryMaxInFlight() {
+  const n = parseInt(process.env.DOTCLAUDE_GATE_QUERY_MAX, 10);
+  return Number.isInteger(n) && n > 0 ? n : GATE_QUERY_MAX_INFLIGHT_DEFAULT;
+}
+
+function gateQuerySlotStaleMs() {
+  const n = parseInt(process.env.DOTCLAUDE_GATE_QUERY_STALE_MS, 10);
+  return Number.isInteger(n) && n > 0 ? n : GATE_QUERY_SLOT_STALE_MS_DEFAULT;
+}
+
+function gateQuerySlotPath(i) {
+  return path.join(lockBaseDir(), `dotclaude-gatequery-slot-${i}.lock`);
+}
+
+/**
+ * Release a gate-query slot, but ONLY if it still names `pid` — the same
+ * ownership discipline as `refreshUpdateLockFile`/`clearUpdateLockFile`
+ * above. Without this a release() closure could unlink a slot a DIFFERENT
+ * process has since reclaimed (this process's own slot went stale and was
+ * taken over by another acquirer before this process finished), which would
+ * let a third acquirer take the slot early and defeat the cap. A slot whose
+ * body cannot be parsed (corrupt/0-byte) is left alone — there is nothing
+ * safely ownable to remove. Never throws.
+ */
+function releaseGateQuerySlot(slotPath, pid) {
+  try {
+    const cur = JSON.parse(fs.readFileSync(slotPath, 'utf8'));
+    if (cur && cur.pid === pid) fs.unlinkSync(slotPath);
+  } catch { /* corrupt, already gone, or owned by someone else — leave it */ }
+}
+
+// ── Opportunistic TTL sweep — R8 ─────────────────────────────────────────────
+// Every gate-state file above carries a TTL, but nothing ever DELETES an
+// expired one proactively — each is only ever re-checked (and cleaned up) the
+// next time that EXACT (session, cwd, search) tuple recurs, which on a
+// machine with many short-lived sessions may be never. Left alone forever,
+// os.tmpdir() slowly accumulates one small file per distinct search ever
+// gated. This is a bounded, fail-silent best-effort sweep — not a mutex, not
+// exhaustive — meant to be called occasionally (e.g. once per SessionStart,
+// itself throttled by the caller) so the count stays small in practice
+// without costing a real directory walk's worth of stats on every call.
+const SWEEP_MAX_ENTRIES = 200;
+const TMPDIR_SWEEP_PATTERNS = [
+  /^claude_confirm_.*\.flag$/,          // classic confirm flag AND the graphgate escape-hatch flag (same namespace)
+  /^dotclaude-graphbypass-.*\.count$/,
+  /^dotclaude-graphrelent-.*\.flag$/,
+  /^dotclaude-graphlastblocked-.*\.json$/,
+  /^dotclaude-graphdeclined-.*\.json$/,
+];
+const LOCKDIR_SWEEP_PATTERNS = [/^dotclaude-gatequery-slot-.*\.lock$/];
+
+/**
+ * Remove entries in `dir` matching any of `patterns` whose mtime is older
+ * than `ttlMs`, up to `budget` MATCHING entries considered (non-matching
+ * entries in the same `readdirSync` listing are free — only a name-regex
+ * test, no stat). Never throws.
+ * @returns {{scanned:number, removed:number}}
+ */
+function sweepDirForStaleFiles(dir, patterns, ttlMs, budget) {
+  let scanned = 0, removed = 0;
+  let entries;
+  try { entries = fs.readdirSync(dir); } catch { return { scanned, removed }; }
+  for (const name of entries) {
+    if (scanned >= budget) break;
+    if (!patterns.some((re) => re.test(name))) continue;
+    scanned++;
+    const p = path.join(dir, name);
+    try {
+      if (Date.now() - fs.statSync(p).mtimeMs > ttlMs) {
+        fs.unlinkSync(p);
+        removed++;
+      }
+    } catch { /* gone already, or a transient stat/unlink failure — skip */ }
+  }
+  return { scanned, removed };
+}
+
+/**
+ * Bounded, fail-silent opportunistic cleanup of expired gate/declined/
+ * bypass/relent/last-blocked/slot temp files (R8). Splits the
+ * `SWEEP_MAX_ENTRIES` budget between `os.tmpdir()` (gate/declined/bypass/
+ * relent/classic-confirm flags) and `lockBaseDir()` (gate-query slots — a
+ * distinct dir only when `DOTCLAUDE_GRAPHLOCK_DIR` overrides it, tests
+ * mainly). Intended to be called from a throttled SessionStart path, not the
+ * PreToolUse hot path. Never throws.
+ * @returns {{scanned:number, removed:number}}
+ */
+function sweepStaleGateState() {
+  try {
+    const budgetEach = Math.floor(SWEEP_MAX_ENTRIES / 2);
+    const a = sweepDirForStaleFiles(gateStateTmpDir(), TMPDIR_SWEEP_PATTERNS, GATE_STATE_TTL_MS, budgetEach);
+    const b = sweepDirForStaleFiles(lockBaseDir(), LOCKDIR_SWEEP_PATTERNS, gateQuerySlotStaleMs(), budgetEach);
+    return { scanned: a.scanned + b.scanned, removed: a.removed + b.removed };
+  } catch {
+    return { scanned: 0, removed: 0 };
+  }
+}
+
+/**
+ * Acquire one of the machine-wide gate-query slots. Never throws.
+ *
+ * A slot whose body fails `JSON.parse` (a 0-byte file from an interrupted
+ * write, or genuine corruption) is NOT left alone forever — with the default
+ * cap of 2, two such files would silently disable the gate machine-wide,
+ * with no self-heal. It falls back to the slot FILE's own mtime to decide
+ * staleness instead, same threshold as the parseable case.
+ * @returns {(() => void)|null} a release function, or `null` when every slot
+ *   is busy — the caller must fail OPEN (skip the gate, allow the search).
+ */
+function acquireGateQuerySlot() {
+  const cap = gateQueryMaxInFlight();
+  const staleMs = gateQuerySlotStaleMs();
+  for (let i = 0; i < cap; i++) {
+    const p = gateQuerySlotPath(i);
+    try {
+      fs.writeFileSync(p, JSON.stringify({ pid: process.pid, ts: Date.now() }), { flag: 'wx' });
+      return () => releaseGateQuerySlot(p, process.pid);
+    } catch {
+      let stale = false;
+      try {
+        const { ts } = JSON.parse(fs.readFileSync(p, 'utf8'));
+        stale = typeof ts === 'number' && Date.now() - ts > staleMs;
+      } catch {
+        // Corrupt or 0-byte — JSON.parse tells us nothing; fall back to the
+        // file's own mtime so this slot still eventually reclaims (R5).
+        try { stale = Date.now() - fs.statSync(p).mtimeMs > staleMs; } catch { stale = false; }
+      }
+      if (stale) {
+        try {
+          fs.writeFileSync(p, JSON.stringify({ pid: process.pid, ts: Date.now() }));
+          return () => releaseGateQuerySlot(p, process.pid);
+        } catch { /* lost a race writing the reclaim — try the next slot */ }
+      }
+      // else: genuinely busy (or a race with another acquirer) — try the next slot
+    }
+  }
+  return null;
+}
+
 /**
  * True iff `cmd` actually RUNS `graphify query` (not merely mentions it).
  * Matches only when a command segment STARTS with `graphify query`, so
@@ -377,6 +666,19 @@ function updateLockHeartbeatMs() {
 /** Directory holding the per-project update-lock and sentinel files. Overridable for tests. */
 function lockBaseDir() {
   return process.env.DOTCLAUDE_GRAPHLOCK_DIR || os.tmpdir();
+}
+
+/**
+ * Where per-search gate state (currently: the declined marker) lives.
+ * Defaults to `os.tmpdir()`, overridable via `DOTCLAUDE_GRAPHSTATE_TMPDIR` —
+ * tests use this to isolate a directory-WIDE scan (`sweepStaleGateState`)
+ * from whatever litter genuinely sits in the real system tmp dir (left by
+ * other test files or a long-running machine); every other single-file flag
+ * in this module targets a unique hashed filename, so a bare `os.tmpdir()`
+ * never collides across tests and does not need this override.
+ */
+function gateStateTmpDir() {
+  return process.env.DOTCLAUDE_GRAPHSTATE_TMPDIR || os.tmpdir();
 }
 
 /** Machine-wide cap on concurrent `graphify update` runners (default 2, min 1). */
@@ -711,6 +1013,29 @@ module.exports = {
   queryFlagPath,
   markQueryDone,
   queryDone,
+  GATE_STATE_TTL_MS,
+  bypassCountPath,
+  bypassCount,
+  noteBypass,
+  clearBypassStreak,
+  relentFlagPath,
+  markRelented,
+  isRelented,
+  lastBlockedPath,
+  getLastBlocked,
+  setLastBlocked,
+  markLastBlockedBypassed,
+  gateStateTmpDir,
+  declinedFlagPath,
+  markDeclined,
+  getDeclined,
+  gateQueryMaxInFlight,
+  gateQuerySlotStaleMs,
+  gateQuerySlotPath,
+  releaseGateQuerySlot,
+  acquireGateQuerySlot,
+  sweepDirForStaleFiles,
+  sweepStaleGateState,
   isGraphifyQueryCommand,
   sentinelPath,
   lockBaseDir,

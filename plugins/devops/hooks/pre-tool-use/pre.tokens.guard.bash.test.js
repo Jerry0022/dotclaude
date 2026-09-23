@@ -52,22 +52,43 @@ function project() {
   return dir;
 }
 
-function runBash(dir, sid, toolInput) {
+// Requirement A1 caps every Bash cost estimate at
+// `BASH_MAX_OUTPUT_LENGTH * tokensPerByte` — with the harness's real default
+// (30000) that is 7500 tokens, BELOW this suite's 20000-token threshold, so a
+// blocking test would silently stop blocking. These tests are about the
+// large-file MATCHING logic (bash-context-cost) and the retry-to-proceed
+// mechanics, not the cap itself (that has its own describe block below), so
+// they raise the env var to a value that keeps the pre-cap behaviour intact.
+const UNCAPPED_OUTPUT_LEN = "1000000";
+
+// Requirement 8: every hook spawn points DOTCLAUDE_GRAPHIFY_METRICS at an
+// isolated temp file — never the real `~/.claude/graphify-metrics.jsonl`.
+const METRICS_FILE = path.join(HOME_DIR, "graphify-metrics-isolated.jsonl");
+
+function runBash(dir, sid, toolInput, extraEnv = {}) {
   // The full suite runs 50+ files in parallel; on a loaded machine spawnSync
   // can fail to start the child at all (status null, res.error set). That is
   // harness pressure, not a hook verdict, so retry it — but never retry a
   // child that actually ran, or a real block would be masked.
   for (let attempt = 0; ; attempt++) {
     const tmp = path.join(dir, ".tmp");
+    const env = {
+      ...process.env,
+      HOME: HOME_DIR, USERPROFILE: HOME_DIR,
+      TMPDIR: tmp, TEMP: tmp, TMP: tmp,
+      BASH_MAX_OUTPUT_LENGTH: UNCAPPED_OUTPUT_LEN,
+      DOTCLAUDE_GRAPHIFY_METRICS: METRICS_FILE,
+      ...extraEnv,
+    };
+    // Node's spawn env requires string values — `undefined` (a test's way of
+    // asking "no override, use the hook's own real default") must be REMOVED,
+    // not passed through.
+    for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
     const res = spawnSync(process.execPath, [HOOK], {
       cwd: dir,
       input: JSON.stringify({ tool_name: "Bash", tool_input: toolInput, session_id: sid }),
       encoding: "utf8",
-      env: {
-        ...process.env,
-        HOME: HOME_DIR, USERPROFILE: HOME_DIR,
-        TMPDIR: tmp, TEMP: tmp, TMP: tmp,
-      },
+      env,
     });
     if (res.status !== null || attempt >= 3) {
       if (res.status === null) {
@@ -276,6 +297,83 @@ describe("pre.tokens.guard — retry-to-proceed release (integration)", () => {
     const dir = project();
     expect(blocked(runBash(dir, "s-x", { command: `cat ${BIG}` }))).toBe(true);
     expect(blocked(runBash(dir, "s-x", { command: `grep foo ${BIG}` }))).toBe(true);
+    cleanup(dir);
+  });
+});
+
+describe("pre.tokens.guard — Bash cost cap (Requirement A1)", () => {
+  test("with the real BASH_MAX_OUTPUT_LENGTH default, a large-file read no longer blocks", () => {
+    const dir = project();
+    // No BASH_MAX_OUTPUT_LENGTH override — the hook falls back to its own
+    // default (30000), giving a 7500-token cap, below this suite's
+    // 20000-token threshold. The Bash tool itself could never have put the
+    // file's full ~49557-token estimate into context anyway.
+    const r = runBash(dir, "s-cap-default", { command: `cat ${BIG}` }, { BASH_MAX_OUTPUT_LENGTH: undefined });
+    expect(r.status).toBe(0);
+    cleanup(dir);
+  });
+
+  test("a small enough BASH_MAX_OUTPUT_LENGTH still allows the read through", () => {
+    const dir = project();
+    const r = runBash(dir, "s-cap-tiny", { command: `cat ${BIG}` }, { BASH_MAX_OUTPUT_LENGTH: "100" });
+    expect(r.status).toBe(0);
+    cleanup(dir);
+  });
+
+  test("a large enough BASH_MAX_OUTPUT_LENGTH restores the block", () => {
+    const dir = project();
+    // cap = ceil(1_000_000 * 0.25) = 250000, well above both the file's own
+    // 49557 estimate and the 20000 threshold.
+    const r = runBash(dir, "s-cap-big", { command: `cat ${BIG}` }, { BASH_MAX_OUTPUT_LENGTH: "1000000" });
+    expect(blocked(r)).toBe(true);
+    cleanup(dir);
+  });
+
+  /** Pull the "Est. cost: ~<N> tokens" figure out of the block message, locale-agnostic. */
+  const estCostTokens = (stderr) => {
+    const m = /Est\. cost:\s*~([\d.,]+)\s*tokens/.exec(stderr);
+    return m ? Number(m[1].replace(/[.,]/g, "")) : null;
+  };
+
+  test("the displayed cost is CAPPED, not the raw file size, once the cap is narrower", () => {
+    const dir = project();
+    // cap = ceil(90000*0.25) = 22500, narrower than the file's own 49557
+    // estimate but still above the 20000 threshold, so it still blocks.
+    const r = runBash(dir, "s-cap-shown", { command: `cat ${BIG}` }, { BASH_MAX_OUTPUT_LENGTH: "90000" });
+    expect(blocked(r)).toBe(true);
+    expect(estCostTokens(r.stderr)).toBe(22500);
+    cleanup(dir);
+  });
+
+  test("the displayed cost is the file's own (smaller) estimate when the cap is wide", () => {
+    const dir = project();
+    const r = runBash(dir, "s-cap-wide", { command: `cat ${BIG}` }, { BASH_MAX_OUTPUT_LENGTH: "1000000" });
+    expect(blocked(r)).toBe(true);
+    expect(estCostTokens(r.stderr)).toBe(49557);
+    cleanup(dir);
+  });
+});
+
+describe("pre.tokens.guard — guard_blocked / guard_released telemetry", () => {
+  const metricsEvents = () => {
+    if (!fs.existsSync(METRICS_FILE)) return [];
+    return fs.readFileSync(METRICS_FILE, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  };
+
+  test("a block records guard_blocked with tool/kind/est; the releasing retry records guard_released", () => {
+    const dir = project();
+    const before = metricsEvents().length;
+    const input = { command: `cat ${BIG}` };
+    const r1 = runBash(dir, "s-metrics", input);
+    expect(blocked(r1)).toBe(true);
+    const r2 = runBash(dir, "s-metrics", input);
+    expect(r2.status).toBe(0);
+    const evs = metricsEvents().slice(before);
+    const blockedEv = evs.find((e) => e.event === "guard_blocked");
+    const releasedEv = evs.find((e) => e.event === "guard_released");
+    expect(blockedEv).toMatchObject({ tool: "Bash", kind: "bash-file" });
+    expect(blockedEv.est).toBeGreaterThan(0);
+    expect(releasedEv).toMatchObject({ tool: "Bash", kind: "bash-file" });
     cleanup(dir);
   });
 });

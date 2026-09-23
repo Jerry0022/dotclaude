@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @lib graphify-metrics
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Append-only usage telemetry for the graphify enforcement chain.
  *   Audit finding: 634 graphify mentions across session transcripts but only 5
@@ -9,9 +9,11 @@
  *   even measure that. This lib gives the enforcement chain a single,
  *   fail-silent event sink so query-adoption can be measured going forward.
  *   Writes one JSON line per event to `~/.claude/graphify-metrics.jsonl`
- *   (override via `opts.path` — tests MUST inject a temp path, never the real
- *   home dir). Every write is wrapped so a metrics failure can NEVER break the
- *   hook that called it — record() never throws.
+ *   (override via `opts.path`, or the `DOTCLAUDE_GRAPHIFY_METRICS` env var for
+ *   callers — hooks spawned as subprocesses — that cannot pass `opts`; tests
+ *   and live-QA runs MUST set one of the two, never the real home dir). Every
+ *   write is wrapped so a metrics failure can NEVER break the hook that called
+ *   it — record() never throws.
  */
 
 const fs = require('node:fs');
@@ -25,8 +27,17 @@ const DEFAULT_METRICS_PATH = path.join(os.homedir(), '.claude', 'graphify-metric
 // good enough for a diagnostic stream nobody rotates by hand.
 const MAX_BYTES = 2 * 1024 * 1024;
 
+/**
+ * Resolution order: an explicit `opts.path` (a caller that already knows its
+ * own temp file) → `DOTCLAUDE_GRAPHIFY_METRICS` (env override — every test
+ * that spawns a hook MUST set this, or it writes to the real
+ * `~/.claude/graphify-metrics.jsonl`; a live QA session pointed it at a temp
+ * file instead of having to back up and restore the real file, which had
+ * previously lost lines written by other concurrent sessions) → the real
+ * per-user default.
+ */
 function metricsPath(opts = {}) {
-  return opts.path || DEFAULT_METRICS_PATH;
+  return opts.path || process.env.DOTCLAUDE_GRAPHIFY_METRICS || DEFAULT_METRICS_PATH;
 }
 
 /** Keep only the newest half of lines if `file` is over the size cap. Fail-silent. */
