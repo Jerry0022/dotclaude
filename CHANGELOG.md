@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.192.1] — 2026-09-23
+
+### Fixed
+- **Completion-card buttons no longer prefill slash commands, which the Desktop host refuses.** In a live test on 2026-09-23, the Code-tab host refused every `ui/message` prefill whose text starts with `/`, with or without a leading space: `/compact …` and `/devops:ship …` stayed red, while `ship --no-compact` and plain sentences landed. That made Ship (`ready`, `test`), Promote (`ship-successful`), Nach stable (`released-beta`) and Fix (`ship-blocked`) dead buttons. They now prefill trigger words the hooks and skills already recognise: `ship` goes through `prompt.ship.detect`, `promote` / `promote stable` reach the promote skill, and `Debug den Blocker der letzten Card und behebe ihn.` reaches the fix skill. Two new tests pin this: `card-widget.test.js` rejects any prompt that starts with whitespace plus `/`, and checks each button's routing against `isShipIntent` (ship buttons are ship intents, promote and fix are not). The host simulator in `card-widget.send.test.js` also learned the slash rule, and `completion-card-design.md` § 4 records it as host rule 4.
+
+## [0.192.0] — 2026-09-23
+
+### Changed
+- **The careful-compact stop before `/ship` is now a completion card.** Before, the `[ship-compact]` advice (#455) was a text block for the user to read. Now the hook asks for a `ship-blocked` card with a new `compact: { tokens }` field (MCP schema, CLI validator and `--render-card`). The card shows `🗜 Kontext N k Tokens — vor dem Ship kompaktieren?`, the saving as the context line, and the full `/compact <Ship-Fokus>` command. The numbers and the focus come from `hooks/lib/ship-compact.js`, so card and hook always agree. The card also drops the misleading "ungeprüft" evidence post, because nothing ran. On Desktop it offers one button, **Ohne Kompaktieren shippen**, which puts `ship --no-compact` into the input box; the terminal card spells out "just `/ship` again" instead. A **Kompaktieren** button was tried and dropped: in a live test the Desktop host refused every button text starting with `/`, even with a leading space, while plain text landed. A card button therefore cannot put `/compact` into the input box. The ship skill's Pre-Step 0 and the `ship-compact` lib (0.3.0) are updated to match.
+
+## [0.191.1] — 2026-09-23
+
+### Fixed
+- **A ship no longer leaves a Desktop session that can't be archived.** The Desktop app copies the main checkout's untracked `.claude/` into every new worktree and refuses to archive a dirty one. The 0.191.0 ship moved the untracked `.claude/graphify.json` aside so preflight would pass, then put it back after the merge, and the session could not be archived. `/ship` Step 1a now handles untracked files at their source inside the ship: plugin configuration (the *MUST be tracked* list in `/setup-project`, e.g. `graphify.json`) is committed, runtime state is ignored, and stray hook artifacts are deleted. After Step 5c, a harness worktree must have an empty `git status --porcelain`. This repo now tracks its `.claude/graphify.json`.
+
+## [0.191.0] — 2026-09-23
+
+### Added
+- **`/tune-audit` — a full audit of all quality areas.** It checks functional requirements (each traced to evidence) plus visual, animation, audio, accessibility, logging, performance, resilience, security basics, tests, architecture, build/config and user-facing text. Each area has an applicability check, a checklist and a required kind of proof (`skills/tune-audit/deep-knowledge/dimensions.md`); areas that don't apply or can't be run are listed with the reason, never dropped. It starts with one intake of two questions. **Scope:** this chat's work (offered only if the chat built something), the functional requirements of the last 48 h, or everything including the last 48 h. **Output:** audit + implementation (recommended) or a DevOps concept page. The 48 h requirement catalog is built from git, merged PRs, issues, the CHANGELOG and the user prompts of recent Desktop sessions in the repo. Implementation uses the same risk gates as `/tune-harden`, and every applied fix is re-checked with the proof that found the problem; a fix that fails that check is undone. Concept mode hands the scorecard, findings and Now/Next/Later plan to `Skill("devops:concept")`. Audio is checked by instrumentation (media events, `AudioContext` state, signal level, delay); how it actually sounds becomes a manual test step.
+
+### Fixed
+- **No more "Unhandled Error: Timeout calling onTaskUpdate" next to a green suite.** The git-sync test fixture ran every git and node call through `execFileSync`. One test builds two clones and runs the sync: 10-15 s idle, over 60 s under load. During that time the worker's event loop was frozen, so the reply to its last `onTaskUpdate` call went unread and vitest's 60 s RPC timer fired first. `__fixtures__/git-sync-world.js` now awaits a promisified `execFile`, and the three `git-sync*.test.js` suites await it.
+- **The concept tests no longer print a `ReferenceError: getElementState is not defined` stack trace in every run.** `decision-collect.test.js` throws that error on purpose to prove a broken collector cannot jam the submit button. The page's `console.error` of it is now captured and asserted instead of going to stderr.
+
 ## [0.190.0] — 2026-09-23
 
 ### Added

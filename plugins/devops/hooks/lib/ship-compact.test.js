@@ -19,9 +19,12 @@ describe("ship-compact", () => {
     expect(out).toContain("[ship-compact]");
     expect(out).toContain("434 k");
     expect(out).toContain("Do NOT start the ship pipeline");
-    expect(out).toContain("verbatim");
-    expect(out).toContain(`/compact ${COMPACT_FOCUS}`);
-    expect(out).toContain("spart ≈ 5.3 M");
+    // The stop ends in a card: the card carries saving, command and buttons.
+    expect(out).toContain("render_completion_card");
+    expect(out).toContain('variant: "ship-blocked"');
+    expect(out).toContain("compact: { tokens: 434000 }");
+    expect(out).toContain("Ohne Kompaktieren shippen");
+    expect(out).toContain("ship --no-compact");
     expect(shipCompactAdvice({ tokens: DEFAULT_THRESHOLD, prompt: "/ship", env })).not.toBeNull();
   });
 

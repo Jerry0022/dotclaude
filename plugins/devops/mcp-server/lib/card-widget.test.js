@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
 import {
   isDesktopSession,
   buttonsFor,
@@ -46,10 +47,10 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     }
   });
 
-  test("ready offers Ship (primary, the slash command) and Ändern, in both languages", () => {
+  test("ready offers Ship (primary, plain 'ship') and Ändern, in both languages", () => {
     const de = buttonsFor("ready", "de");
     expect(de.map((a) => a.label)).toEqual(["Ship", "Ändern"]);
-    expect(de[0]).toMatchObject({ prompt: "/devops:ship", primary: true });
+    expect(de[0]).toMatchObject({ prompt: "ship", primary: true });
     const en = buttonsFor("ready", "en");
     expect(en.map((a) => a.label)).toEqual(["Ship", "Change"]);
   });
@@ -76,8 +77,45 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(btns[0].primary).toBe(true);
   });
 
+  test("ship-compact: one plain-text button, ship --no-compact — never a slash prompt", () => {
+    // Live 2026-09-23: the host refuses a prefill starting with "/" (leading
+    // space too), so /compact stays text in the card; plain text lands.
+    for (const lang of ["de", "en"]) {
+      const btns = buttonsFor("ship-compact", lang);
+      expect(btns).toHaveLength(1);
+      expect(btns[0]).toMatchObject({ prompt: "ship --no-compact", primary: true });
+      expect(btns[0].prompt).not.toMatch(/^\s*\//);
+    }
+    expect(buttonsFor("ship-compact", "de")[0].label).toBe("Ohne Kompaktieren shippen");
+  });
+
   test("vv-unverified offers Tests laufen lassen and Trotzdem shippen", () => {
     expect(buttonsFor("vv-unverified", "de").map((a) => a.label)).toEqual(["Tests laufen lassen", "Trotzdem shippen"]);
+  });
+
+  // Live 2026-09-23: the Desktop host refuses a prefill that starts with "/"
+  // (leading space too); plain text lands. A slash prompt is a dead button.
+  test("no button prompt starts with a slash — in any key, in any language", () => {
+    for (const lang of ["de", "en"]) {
+      for (const key of Object.keys(BUTTONS[lang])) {
+        for (const b of buttonsFor(key, lang)) {
+          expect(b.prompt, `${lang}/${key}/${b.label}`).not.toMatch(/^\s*\//);
+        }
+      }
+    }
+  });
+
+  test("plain-text prompts still route: ship buttons are ship intents, the others are not", () => {
+    const { isShipIntent } = createRequire(import.meta.url)("../../hooks/lib/ship-intent.js");
+    for (const lang of ["de", "en"]) {
+      for (const key of ["ready", "test"]) expect(isShipIntent(buttonsFor(key, lang)[0].prompt)).toBe(true);
+      for (const key of ["ship-successful", "released-beta", "ship-blocked"]) {
+        expect(isShipIntent(buttonsFor(key, lang)[0].prompt), `${lang}/${key}`).toBe(false);
+      }
+      expect(buttonsFor("ship-successful", lang)[0].prompt).toMatch(/^promote\b/);
+      expect(buttonsFor("released-beta", lang)[0].prompt).toMatch(/^promote\b.*stable/);
+      expect(buttonsFor("ship-blocked", lang)[0].prompt).toMatch(/^Debug\b/);
+    }
   });
 
   test("every button in every language carries a tooltip and a Tabler icon name", () => {

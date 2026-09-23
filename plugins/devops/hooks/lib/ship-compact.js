@@ -1,6 +1,6 @@
 /**
  * @module ship-compact
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description The "careful compact before /ship" advice, shared by
  *   `prompt.ship.detect` (which emits it instead of the Skill('ship')
@@ -29,6 +29,12 @@
  *     made the user compact twice and then type `--no-compact` anyway.
  *   - Never for a ship an orchestrator invokes through the Skill tool
  *     (those are not user prompts), `--no-compact` skips it for one ship.
+ *
+ *   The advice ends in a completion card (`compact` field, 2026-09-23) that
+ *   spells out the `/compact` command. On Desktop its one button "Ohne
+ *   Kompaktieren shippen" prefills `ship --no-compact` (a card button can only
+ *   prefill the composer, never send). A "Kompaktieren" button was tried and
+ *   dropped: the host refuses any prefill starting with "/", leading space or not.
  */
 
 const { formatTokens } = require('./context-size');
@@ -99,14 +105,13 @@ function shipCompactAdvice({ tokens, prompt, advisedBefore = false, env = proces
     `re-reads it ~16 times (${shipCostEstimate(tokens)} tokens, almost all cache reads) for ~10 k tokens of output.`,
     'Do NOT start the ship pipeline on this prompt: no ship skill, no ship_preflight, no git/gh',
     'command — even if the ship skill is already loaded in this turn. No hook or skill can trigger a compaction —',
-    'the user has to. Show the user this block verbatim, then end the turn (no completion card needed:',
-    'nothing ran):',
+    'the user has to. End the turn with the completion card and nothing else — render_completion_card with:',
     '',
-    `Kontext: ${size} Tokens — Kompaktieren vor dem Ship spart ${shipSavingEstimate(tokens)} Tokens. Erst kompaktieren, dann erneut shippen:`,
+    `  variant: "ship-blocked", summary: "Ship angehalten — Kontext erst kompaktieren", compact: { tokens: ${tokens} }`,
     '',
-    `/compact ${COMPACT_FOCUS}`,
-    '',
-    'Danach: `/ship` — oder ohne Kompaktierung einfach nochmal `/ship` (der Hinweis kommt nicht zweimal hintereinander)',
+    'plus lang, cwd and session_id as always. The card carries the saving, the full /compact command as text',
+    'and, on Desktop, one button "Ohne Kompaktieren shippen" (puts "ship --no-compact" into the input box).',
+    'Relay it like every card; no text of your own.',
   ].join('\n');
 }
 

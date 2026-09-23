@@ -41,6 +41,11 @@ export function isDesktopSession(env = process.env) {
  * presses Enter (see `cardWidgetScript`), so an action must read as a
  * complete, sensible instruction on its own.
  *
+ * No prompt may start with "/": the host refuses a prefill whose text starts
+ * with a slash — a leading space does not help (live 2026-09-23) — while plain
+ * text lands. Skills are reached by their trigger words instead: "ship" hits
+ * prompt.ship.detect, "promote" the promote skill, "Debug …" the fix skill.
+ *
  * `icon` is a Tabler outline icon name (the widget font); `primary` marks the
  * one accent button per row (the card's main verb). Each also carries a
  * `tooltip` — shown on hover, explaining what the click triggers (§ 2.6).
@@ -48,7 +53,7 @@ export function isDesktopSession(env = process.env) {
 export const BUTTONS = {
   de: {
     ready: [
-      { label: "Ship", icon: "rocket", prompt: "/devops:ship", primary: true, tooltip: "Startet die Ship-Pipeline mit dem aktuellen Stand." },
+      { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Startet die Ship-Pipeline mit dem aktuellen Stand." },
       { label: "Ändern", icon: "edit", prompt: "Ich möchte noch etwas ändern, bevor wir shippen — frag mich, was.", tooltip: "Hält den Ship an und fragt zuerst, was noch anders sein soll." },
     ],
     "ready-red": [
@@ -56,11 +61,11 @@ export const BUTTONS = {
       { label: "Trotzdem shippen", icon: "rocket", prompt: "Ship trotzdem — mit skipChecks, die roten Befunde landen als Issue.", tooltip: "Ship mit skipChecks — die roten Befunde landen als Issue." },
     ],
     "ship-blocked": [
-      { label: "Fix", icon: "tool", prompt: "/devops:fix", primary: true, tooltip: "Behebt den Blocker, dann erneut shippen." },
+      { label: "Fix", icon: "tool", prompt: "Debug den Blocker der letzten Card und behebe ihn.", primary: true, tooltip: "Behebt den Blocker, dann erneut shippen." },
       { label: "Skip", icon: "player-skip-forward", prompt: "Blocker bewusst überspringen: Ship erneut mit skipChecks (Hot-fix-Bypass) durchführen.", tooltip: "Überspringt den Blocker bewusst (Hot-fix-Bypass)." },
     ],
     "ship-successful": [
-      { label: "Promote", icon: "arrow-up", prompt: "/devops:promote", primary: true, tooltip: "Promotet den aktuellen Build in den nächsten Channel." },
+      { label: "Promote", icon: "arrow-up", prompt: "promote", primary: true, tooltip: "Promotet den aktuellen Build in den nächsten Channel." },
     ],
     "ship-successful-kept": [
       { label: "Weiter", icon: "arrow-right", prompt: "Ich mache auf diesem Branch weiter — was ist der nächste Schritt?", primary: true, tooltip: "Setzt die Arbeit auf dem offen gehaltenen Branch fort." },
@@ -69,10 +74,10 @@ export const BUTTONS = {
       { label: "Deploy", icon: "cloud-upload", prompt: "Deploye jetzt die ausstehenden Out-of-band-Artefakte aus dem Deploy-Gate der letzten Card.", primary: true, tooltip: "Deployt die ausstehenden Migrationen/Functions." },
     ],
     "released-beta": [
-      { label: "Nach stable", icon: "arrow-up", prompt: "/devops:promote stable", primary: true, tooltip: "Promotet von beta nach stable." },
+      { label: "Nach stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotet von beta nach stable." },
     ],
     test: [
-      { label: "Ship", icon: "rocket", prompt: "/devops:ship", primary: true, tooltip: "Test war ok — jetzt shippen." },
+      { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Test war ok — jetzt shippen." },
       { label: "Nachbessern", icon: "bug", prompt: "Beim Testen ist mir etwas aufgefallen, das noch nicht passt — frag mich, was.", tooltip: "Hält den Ship an und fragt, was beim Testen auffiel." },
     ],
     analysis: [
@@ -82,6 +87,12 @@ export const BUTTONS = {
     aborted: [
       { label: "Nochmal", icon: "refresh", prompt: "Versuch es nochmal mit einem anderen Ansatz — nenn mir zuerst kurz die Alternativen.", primary: true, tooltip: "Nennt zuerst die Alternativen, dann ein neuer Versuch." },
     ],
+    // One button only: the host refuses a prefill that starts with "/" (live
+    // 2026-09-23, even with a leading space), so /compact cannot be a button —
+    // the card shows the command as text. Plain "ship --no-compact" lands.
+    "ship-compact": [
+      { label: "Ohne Kompaktieren shippen", icon: "rocket", prompt: "ship --no-compact", primary: true, tooltip: "Shippt sofort auf dem vollen Kontext." },
+    ],
     "vv-unverified": [
       { label: "Tests laufen lassen", icon: "player-play", prompt: "Führ jetzt npm test (bzw. die passenden Checks) aus, bevor wir shippen.", primary: true, tooltip: "Holt die fehlende Verifikation nach, bevor geshippt wird." },
       { label: "Trotzdem shippen", icon: "rocket", prompt: "Ship trotzdem ungeprüft — mit skipChecks falls nötig.", tooltip: "Ship ohne Verifikation — bewusstes Risiko." },
@@ -89,7 +100,7 @@ export const BUTTONS = {
   },
   en: {
     ready: [
-      { label: "Ship", icon: "rocket", prompt: "/devops:ship", primary: true, tooltip: "Starts the ship pipeline with the current state." },
+      { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Starts the ship pipeline with the current state." },
       { label: "Change", icon: "edit", prompt: "I want to change something before we ship — ask me what.", tooltip: "Pauses the ship and asks what should change first." },
     ],
     "ready-red": [
@@ -97,11 +108,11 @@ export const BUTTONS = {
       { label: "Ship anyway", icon: "rocket", prompt: "Ship anyway — with skipChecks; the red findings land as an issue.", tooltip: "Ship with skipChecks — the red findings land as an issue." },
     ],
     "ship-blocked": [
-      { label: "Fix", icon: "tool", prompt: "/devops:fix", primary: true, tooltip: "Fixes the blocker, then ship again." },
+      { label: "Fix", icon: "tool", prompt: "Debug the blocker from the last card and fix it.", primary: true, tooltip: "Fixes the blocker, then ship again." },
       { label: "Skip", icon: "player-skip-forward", prompt: "Deliberately skip the blocker: run the ship again with skipChecks (hot-fix bypass).", tooltip: "Deliberately skips the blocker (hot-fix bypass)." },
     ],
     "ship-successful": [
-      { label: "Promote", icon: "arrow-up", prompt: "/devops:promote", primary: true, tooltip: "Promotes the current build to the next channel." },
+      { label: "Promote", icon: "arrow-up", prompt: "promote", primary: true, tooltip: "Promotes the current build to the next channel." },
     ],
     "ship-successful-kept": [
       { label: "Continue", icon: "arrow-right", prompt: "I'll continue on this branch — what's the next step?", primary: true, tooltip: "Continues the work on the branch kept open." },
@@ -110,10 +121,10 @@ export const BUTTONS = {
       { label: "Deploy", icon: "cloud-upload", prompt: "Deploy the pending out-of-band artifacts from the last card's deploy gate now.", primary: true, tooltip: "Deploys the pending migrations/functions." },
     ],
     "released-beta": [
-      { label: "To stable", icon: "arrow-up", prompt: "/devops:promote stable", primary: true, tooltip: "Promotes from beta to stable." },
+      { label: "To stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotes from beta to stable." },
     ],
     test: [
-      { label: "Ship", icon: "rocket", prompt: "/devops:ship", primary: true, tooltip: "Test was fine — ship now." },
+      { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Test was fine — ship now." },
       { label: "Rework", icon: "bug", prompt: "While testing I noticed something that is not right yet — ask me what.", tooltip: "Pauses the ship and asks what was found while testing." },
     ],
     analysis: [
@@ -122,6 +133,9 @@ export const BUTTONS = {
     ],
     aborted: [
       { label: "Retry", icon: "refresh", prompt: "Try again with a different approach — name the alternatives briefly first.", primary: true, tooltip: "Names the alternatives first, then a new attempt." },
+    ],
+    "ship-compact": [
+      { label: "Ship without compacting", icon: "rocket", prompt: "ship --no-compact", primary: true, tooltip: "Ships right away on the full context." },
     ],
     "vv-unverified": [
       { label: "Run tests", icon: "player-play", prompt: "Run npm test (or the matching checks) now, before we ship.", primary: true, tooltip: "Catches up on the missing verification before shipping." },
