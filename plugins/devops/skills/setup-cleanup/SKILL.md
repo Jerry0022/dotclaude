@@ -1,6 +1,6 @@
 ---
 name: setup-cleanup
-version: 0.6.0
+version: 0.6.1
 description: >-
   Analyze repository branch hygiene: unmerged branches, stale locals with deleted
   remotes, active sessions (worktrees), open PRs that still need to land, verify
@@ -634,7 +634,10 @@ for Aktive Sessions classified as `clean` in Step 2. Enforce these rules:
    again immediately before acting. If ANY output → SKIP with warning:
    "Worktree hat inzwischen Aenderungen — Entfernung abgebrochen."
 2. **Never force-remove:** Use `git worktree remove <path>` (without `--force`).
-   If it fails, report the error — do NOT retry with `--force`.
+   If it fails, report the error — do NOT retry with `--force`. Run it in the
+   background (a big `node_modules` outlasts a 120 s call), and finish a
+   half-removed orphan yourself: `{PLUGIN_ROOT}/deep-knowledge/git-hygiene.md` § *A
+   half-done worktree removal is Claude's to finish*.
 3. **Never discard changes:** If a worktree (Aktive Session) has `status: has-changes`,
    the UI must NOT render any DESTRUCTIVE action controls — no delete checkbox,
    no "discard", no "reset", no implicit-cleanup option. The ONLY allowed

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.192.6] — 2026-09-24
+
+### Fixed
+- **`/setup-cleanup` finishes a half-removed worktree instead of handing it off.** A `git worktree remove` on a checkout with a large `node_modules` was killed after 120 s. That left three SC-Web worktree folders on disk (~40k files each) with no `.git` and no registration, and they were handed to the user to "delete manually" although their content was in main. `git-hygiene.md` § *A half-done worktree removal is Claude's to finish* now covers this. The removal runs in the background. An orphan that is unregistered, has no `.git`, is named by no process, and holds only main content plus gitignored build artifacts is deleted by Claude. Any other entry keeps the folder and gets named. `setup-cleanup` 0.6.1 points there from its *Worktree Removal Safety* rules.
+
 ## [0.192.5] — 2026-09-23
 
 ### Fixed
