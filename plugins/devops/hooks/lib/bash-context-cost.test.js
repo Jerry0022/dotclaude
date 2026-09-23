@@ -293,12 +293,28 @@ describe("matchCostlyFiles — fail-safe invariant", () => {
     expect(classifySegment("gh --repo o/r pr diff")).toBe("reader");
   });
 
-  test("the whole-command fallback is deliberately over-inclusive", () => {
-    // Once anything reads, the whole command is the haystack, so a path only a
-    // PASSER touches is still counted. Pinned so the trade-off is a decision:
-    // it is a subset of the pre-0.9 behaviour, but wider than per-segment.
-    expect(hits("ls docs/concepts/big.html && cat other.txt"))
-      .toEqual(["docs/concepts/big.html"]);
+  test("the fallback widening is scoped to the statement, not the whole command", () => {
+    // `cat other.txt` is a reader, but it sits in its own `;`/`&&`-separated
+    // statement — it must not sweep in a path that only a PASSER touches in a
+    // DIFFERENT statement. This replaced the old whole-command fallback.
+    expect(hits("ls docs/concepts/big.html && cat other.txt")).toEqual([]);
+  });
+
+  // The exact false positive reported against the pre-fix behaviour: `ls`
+  // merely references the expensive path in ITS OWN `;`-separated statement;
+  // `git log -1` (a reader — `log` is outside GIT_SAFE_SUB) and `node -e` with
+  // a `;` INSIDE its quoted script (which the statement splitter, not being
+  // quote-aware, still cuts into extra pseudo-statements) sit in different
+  // statements and must never sweep the `graphify-out/graph.json` path in.
+  test("regression: ls;git log;graphify query;node -e '<code with ;>' file no longer blocks in full", () => {
+    const files = [{ path: "graphify-out/graph.json", estimatedTokens: 20000 }];
+    const cmd = [
+      "ls -la graphify-out/graph.json",
+      "git log -1",
+      'graphify query "who calls foo?"',
+      `node -e 'const a = 1; console.log(a)' file`,
+    ].join("; ");
+    expect(matchCostlyFiles(cmd, files)).toEqual([]);
   });
 
   test("the character budget trips independently of the pass budget", () => {

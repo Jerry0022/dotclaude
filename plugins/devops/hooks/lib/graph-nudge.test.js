@@ -2,7 +2,12 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hasGraph, hasLocalGraph, resolveGraphJson, graphFlag, buildGraphNudge, graphJsonPath, graphIsStale, stalenessInfo, suggestQuery } from "./graph-nudge.js";
+import {
+  hasGraph, hasLocalGraph, resolveGraphJson, graphFlag, buildGraphNudge, graphJsonPath,
+  graphIsStale, stalenessInfo, suggestQuery, questionFromPattern,
+  pathKindFor, isSemanticPattern, isSpecificTerm, isEligibleSearch, hasGraphAnswer,
+  resolveGraphRoot, isInsideGraphScope, trimToTraversalHeader, gateKeyHash,
+} from "./graph-nudge.js";
 
 describe("hasGraph — graph.json detection", () => {
   let dir;
@@ -229,12 +234,15 @@ describe("stalenessInfo — bounded-tolerance gate precondition", () => {
 });
 
 describe("suggestQuery — Gap #3 concrete gate suggestion", () => {
-  test("strips regex metachars and collapses into a plain-English question", () => {
-    expect(suggestQuery("foo.*bar")).toBe('graphify query "What defines or uses foo bar?"');
+  // No "What defines or uses X?" template anymore (live finding: graphify
+  // matched the template's own noise words instead of the real terms) — just
+  // the sanitized terms themselves.
+  test("strips regex metachars and collapses into bare terms", () => {
+    expect(suggestQuery("foo.*bar")).toBe('graphify query "foo bar"');
   });
 
   test("collapses snake/kebab separators into words", () => {
-    expect(suggestQuery("foo_bar-baz")).toBe('graphify query "What defines or uses foo bar baz?"');
+    expect(suggestQuery("foo_bar-baz")).toBe('graphify query "foo bar baz"');
   });
 
   test("falls back to the generic placeholder for empty/non-string patterns", () => {
@@ -245,7 +253,7 @@ describe("suggestQuery — Gap #3 concrete gate suggestion", () => {
 
   test("carries a --graph suffix through, on the concrete and the placeholder form", () => {
     const flag = ' --graph "C:\\repo\\graphify-out\\graph.json"';
-    expect(suggestQuery("foo_bar", flag)).toBe(`graphify query "What defines or uses foo bar?"${flag}`);
+    expect(suggestQuery("foo_bar", flag)).toBe(`graphify query "foo bar"${flag}`);
     expect(suggestQuery("", flag)).toBe(`graphify query "<your question>"${flag}`);
   });
 });
@@ -335,5 +343,261 @@ describe("resolveGraphJson — local → repo root → primary checkout", () => 
     fs.mkdirSync(path.dirname(gp), { recursive: true });
     fs.writeFileSync(gp, "{}");
     expect(resolveGraphJson(wt)).toEqual({ file: mainGraph, source: "main" });
+  });
+});
+
+describe("isSemanticPattern — eligibility heuristic (Requirement B1)", () => {
+  test.each([
+    "authService", "get_user_by_id", "user-repo", "Foo.Bar",
+    "authService|userRepo", "fooTerm|bar|baz|qux",
+  ])("%s → eligible", (p) => expect(isSemanticPattern(p)).toBe(true));
+
+  test.each([
+    [null, "not a string"],
+    ["", "empty"],
+    ["   ", "whitespace only"],
+    ["0\\.51\\.0", "version literal"],
+    ["12345", "pure digits"],
+    ["plugins/devops/hooks", "path-like (slash)"],
+    ["plugins\\/devops\\/hooks", "path-like (escaped slash)"],
+    ["where is the retry logic implemented exactly", "sentence (>4 words)"],
+    ["ab", "very short term"],
+    ["a|bc", "one term too short even in an alternation"],
+    ["fo|barBaz|qu|x1", "4 terms but one too short"],
+    ["[a-z]+Service", "character class"],
+    ["(foo|bar)Baz", "capturing group"],
+    ["auth{2,3}", "quantifier braces"],
+    ["^authService$", "anchors"],
+    ["auth+Service", "quantifier plus"],
+    ["one two three four five", "5 words"],
+    ["error", "common short word (R10)"],
+    ["import", "common short word (R10)"],
+    ["error|import|value|thing", "all terms common short words (R10)"],
+  ])("%s (%s) → not eligible", (p) => expect(isSemanticPattern(p)).toBe(false));
+});
+
+describe("isSpecificTerm — R10 (at least one term must be specific)", () => {
+  test.each([
+    "authService",        // camelCase
+    "get_user_by_id",     // snake_case
+    "user-repo",           // kebab-case
+    "Foo.Bar",             // dotted
+    "eloquently",          // 10 chars, plain but long
+    "database",            // exactly 8 chars
+  ])("%s → specific", (t) => expect(isSpecificTerm(t)).toBe(true));
+
+  test.each([
+    "error", "import", "value", "thing", "ab", "lengthy", // <8 chars, no camel/snake/dot
+  ])("%s → not specific", (t) => expect(isSpecificTerm(t)).toBe(false));
+});
+
+describe("pathKindFor — cheap path classification", () => {
+  let dir;
+  beforeAll(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "graph-nudge-pathkind-")); });
+  afterAll(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  test("no path → 'none'", () => expect(pathKindFor("", dir)).toBe("none"));
+  test("an existing directory → 'dir'", () => expect(pathKindFor(dir, dir)).toBe("dir"));
+  test("an existing file → 'file'", () => {
+    const f = path.join(dir, "a.js");
+    fs.writeFileSync(f, "x");
+    expect(pathKindFor(f, dir)).toBe("file");
+  });
+  test("a nonexistent path → 'file' (never treated as an eligible directory)", () => {
+    expect(pathKindFor(path.join(dir, "does-not-exist"), dir)).toBe("file");
+  });
+  test("a relative path resolves against cwd", () => {
+    expect(pathKindFor("a.js", dir)).toBe("file");
+  });
+});
+
+describe("isEligibleSearch — Grep only (R4/R7 — Glob removed entirely)", () => {
+  let dir;
+  const GRAPH = JSON.stringify({ nodes: Array(50).fill({ id: "x" }) });
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "graph-nudge-eligible-"));
+    const gp = graphJsonPath(dir);
+    fs.mkdirSync(path.dirname(gp), { recursive: true });
+    fs.writeFileSync(gp, GRAPH);
+  });
+  afterAll(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  test("Grep, no path, semantic pattern → eligible", () => {
+    expect(isEligibleSearch("Grep", { pattern: "authService" }, dir)).toBe(true);
+  });
+
+  test("Grep, no path, is eligible regardless of output_mode", () => {
+    expect(isEligibleSearch("Grep", { pattern: "authService", output_mode: "files_with_matches" }, dir)).toBe(true);
+    expect(isEligibleSearch("Grep", { pattern: "authService", output_mode: "count" }, dir)).toBe(true);
+  });
+
+  test("Grep scoped to a directory INSIDE the graph root with output_mode:'content' → eligible", () => {
+    expect(isEligibleSearch("Grep", { pattern: "authService", path: dir, output_mode: "content" }, dir)).toBe(true);
+  });
+
+  test("Grep scoped to a directory WITHOUT output_mode:'content' → not eligible (R4/R7)", () => {
+    expect(isEligibleSearch("Grep", { pattern: "authService", path: dir }, dir)).toBe(false);
+    expect(isEligibleSearch("Grep", { pattern: "authService", path: dir, output_mode: "files_with_matches" }, dir)).toBe(false);
+    expect(isEligibleSearch("Grep", { pattern: "authService", path: dir, output_mode: "count" }, dir)).toBe(false);
+  });
+
+  test("Grep scoped to a directory OUTSIDE the resolved graph root → not eligible", () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "graph-nudge-outside-"));
+    expect(isEligibleSearch("Grep", { pattern: "authService", path: outside, output_mode: "content" }, dir)).toBe(false);
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  test("Grep scoped to a SKIP_DIRS subdirectory (e.g. node_modules) → not eligible", () => {
+    const nm = path.join(dir, "node_modules");
+    fs.mkdirSync(nm, { recursive: true });
+    expect(isEligibleSearch("Grep", { pattern: "authService", path: nm, output_mode: "content" }, dir)).toBe(false);
+  });
+
+  test("Grep scoped to a FILE → never eligible, even with output_mode:'content'", () => {
+    const f = path.join(dir, "b.js");
+    fs.writeFileSync(f, "x");
+    expect(isEligibleSearch("Grep", { pattern: "authService", path: f, output_mode: "content" }, dir)).toBe(false);
+  });
+
+  test("Grep with a non-semantic pattern → not eligible", () => {
+    expect(isEligibleSearch("Grep", { pattern: "0\\.51\\.0" }, dir)).toBe(false);
+  });
+
+  test("Glob is NEVER eligible — the answer-in-gate no longer covers it at all", () => {
+    expect(isEligibleSearch("Glob", { pattern: "**/*.js" }, dir)).toBe(false);
+    expect(isEligibleSearch("Glob", { pattern: "authService" }, dir)).toBe(false);
+  });
+
+  test("an unrelated tool → not eligible", () => {
+    expect(isEligibleSearch("Read", { file_path: "x" }, dir)).toBe(false);
+  });
+});
+
+describe("resolveGraphRoot / isInsideGraphScope", () => {
+  let dir;
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "graph-nudge-scope-"));
+    const gp = graphJsonPath(dir);
+    fs.mkdirSync(path.dirname(gp), { recursive: true });
+    fs.writeFileSync(gp, JSON.stringify({ nodes: Array(50).fill({ id: "x" }) }));
+  });
+  afterAll(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  test("resolveGraphRoot returns the directory holding graphify-out/graph.json", () => {
+    expect(resolveGraphRoot(dir)).toBe(dir);
+  });
+
+  test("resolveGraphRoot is null when nothing resolves", () => {
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "graph-nudge-noroot-"));
+    expect(resolveGraphRoot(bare)).toBe(null);
+    fs.rmSync(bare, { recursive: true, force: true });
+  });
+
+  test("the root itself is inside its own scope", () => {
+    expect(isInsideGraphScope(dir, dir)).toBe(true);
+  });
+
+  test("a nested subdirectory is inside scope", () => {
+    const sub = path.join(dir, "src", "lib");
+    fs.mkdirSync(sub, { recursive: true });
+    expect(isInsideGraphScope(sub, dir)).toBe(true);
+  });
+
+  test("outside the root is never in scope", () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "graph-nudge-outside2-"));
+    expect(isInsideGraphScope(outside, dir)).toBe(false);
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  test("a SKIP_DIRS segment anywhere in the relative path is out of scope", () => {
+    const nested = path.join(dir, "src", "node_modules", "pkg");
+    fs.mkdirSync(nested, { recursive: true });
+    expect(isInsideGraphScope(nested, dir)).toBe(false);
+  });
+
+  test("a dot-dir segment is out of scope", () => {
+    const hidden = path.join(dir, ".hidden", "x");
+    fs.mkdirSync(hidden, { recursive: true });
+    expect(isInsideGraphScope(hidden, dir)).toBe(false);
+  });
+});
+
+describe("questionFromPattern / suggestQuery", () => {
+  // No template — bare, sanitized terms only (a live finding: the old "What
+  // defines or uses X?" wrapper let graphify match its own noise words).
+  test("turns identifier terms into the bare terms, sanitized", () => {
+    expect(questionFromPattern("authService")).toBe("authService");
+  });
+
+  test("sanitizes down to [A-Za-z0-9 ] only — defence in depth", () => {
+    expect(questionFromPattern("auth;Service`rm -rf`")).toBe("auth Service rm rf");
+    expect(questionFromPattern("foo&calc&bar")).toBe("foo calc bar");
+  });
+
+  test("returns null for nothing usable", () => {
+    expect(questionFromPattern("")).toBe(null);
+    expect(questionFromPattern(undefined)).toBe(null);
+  });
+
+  test("suggestQuery wraps the question in a graphify query command", () => {
+    expect(suggestQuery("authService")).toBe('graphify query "authService"');
+    expect(suggestQuery("")).toBe('graphify query "<your question>"');
+  });
+});
+
+describe("hasGraphAnswer / trimToTraversalHeader — traversal-header gated", () => {
+  test("empty / whitespace-only output → no answer", () => {
+    expect(hasGraphAnswer("")).toBe(false);
+    expect(hasGraphAnswer("   \n  ")).toBe(false);
+    expect(hasGraphAnswer(undefined)).toBe(false);
+  });
+
+  test("the exact 'no nodes' message (no header) → no answer", () => {
+    expect(hasGraphAnswer("No matching nodes found.")).toBe(false);
+    expect(hasGraphAnswer("no matching nodes found")).toBe(false);
+    expect(hasGraphAnswer("  No matching nodes found.  \n")).toBe(false);
+  });
+
+  test("a header reporting 0 nodes → no answer", () => {
+    expect(hasGraphAnswer("Traversal: BFS depth=2 | 0 nodes found")).toBe(false);
+  });
+
+  test("text that merely CONTAINS answer-shaped words but no header → no answer", () => {
+    expect(hasGraphAnswer("Node: authService (src/auth.js:12)")).toBe(false);
+  });
+
+  test("a real header with N>0 → an answer", () => {
+    expect(hasGraphAnswer("Traversal: BFS depth=2 | 33 nodes found")).toBe(true);
+    expect(hasGraphAnswer("Traversal: BFS depth=1 | 1 node found")).toBe(true);
+  });
+
+  test("warnings printed BEFORE a valid header still count as an answer", () => {
+    expect(hasGraphAnswer("Warning: cache miss\nTraversal: BFS depth=2 | 5 nodes found\nNode: a")).toBe(true);
+  });
+
+  test("trimToTraversalHeader drops everything before the header", () => {
+    const out = "Warning: cache miss\nTraversal: BFS depth=2 | 5 nodes found\nNode: a\nNode: b";
+    expect(trimToTraversalHeader(out)).toBe("Traversal: BFS depth=2 | 5 nodes found\nNode: a\nNode: b");
+  });
+
+  test("trimToTraversalHeader falls back to the trimmed full text when no header is present", () => {
+    expect(trimToTraversalHeader("  just some text  ")).toBe("just some text");
+  });
+});
+
+describe("gateKeyHash — short stable hash for gate_fired/gate_bypassed linkage", () => {
+  test("deterministic for the same inputs", () => {
+    expect(gateKeyHash("Grep", "C:/p", '{"pattern":"authService"}'))
+      .toBe(gateKeyHash("Grep", "C:/p", '{"pattern":"authService"}'));
+  });
+
+  test("differs when any input differs", () => {
+    const base = gateKeyHash("Grep", "C:/p", '{"pattern":"authService"}');
+    expect(gateKeyHash("Grep", "C:/p", '{"pattern":"userRepo"}')).not.toBe(base);
+    expect(gateKeyHash("Grep", "C:/other", '{"pattern":"authService"}')).not.toBe(base);
+  });
+
+  test("short and stable-length", () => {
+    expect(gateKeyHash("Grep", "C:/p", "{}")).toHaveLength(8);
   });
 });

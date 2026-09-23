@@ -108,7 +108,7 @@ describe("cardWidgetHtml", () => {
     expect(html.match(/<span role="button" tabindex="0"/g)).toHaveLength(2);
     expect(html).not.toContain("<button");
     expect(html).toContain('class="ti ti-rocket"');
-    expect(html).toContain("sendPrompt(b.getAttribute('data-prompt'))");
+    expect(html).toContain("method: 'ui/message'");
     expect(html.trim().endsWith("</script>")).toBe(true);
   });
 

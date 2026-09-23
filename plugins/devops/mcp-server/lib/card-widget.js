@@ -37,9 +37,9 @@ export function isDesktopSession(env = process.env) {
 
 /**
  * Button verbs per decision key (§ 3 table, "Buttons" column). Every prompt is
- * self-sufficient: the Desktop app may either pre-fill the composer (the user
- * presses Enter) or send it right away, so an action must read as a complete,
- * sensible instruction both ways.
+ * self-sufficient: the Code-tab host puts it into the composer and the user
+ * presses Enter (see `cardWidgetScript`), so an action must read as a
+ * complete, sensible instruction on its own.
  *
  * `icon` is a Tabler outline icon name (the widget font); `primary` marks the
  * one accent button per row (the card's main verb). Each also carries a
@@ -292,6 +292,9 @@ export function cardWidgetHtml(model, repoUrl) {
           `<i class="ti ti-${escapeHtml(a.icon)}" aria-hidden="true" style="font-size:16px"></i>` +
           `${escapeHtml(a.label)} ↗</span>`;
       }).join("\n  ") +
+      // Delivery status: one quiet line right of the buttons, filled by the
+      // script after a click (green = in the composer, red = refused).
+      `<span class="card-act-state" role="status" aria-live="polite" style="font-size:11px;margin-left:4px"></span>` +
       `</div>`
     : "";
 
@@ -320,12 +323,88 @@ export function cardWidgetHtml(model, repoUrl) {
     blockB,
     `</div>`,
     `<script>`,
-    `document.querySelectorAll('[role="button"][data-prompt]').forEach(function (b) {`,
-    `  var go = function () { sendPrompt(b.getAttribute('data-prompt')); };`,
-    `  b.addEventListener('click', go);`,
-    `  b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });`,
-    `});`,
+    cardWidgetScript(lang),
     `</script>`,
+  ].join("\n");
+}
+
+/** Per-language status texts the button script shows after a click. */
+const SEND_TEXT = {
+  de: { sent: "Im Eingabefeld, Enter sendet", failed: "Nicht übernommen, Eingabefeld leeren und erneut klicken" },
+  en: { sent: "In the input box, Enter sends", failed: "Not taken, clear the input box and click again" },
+};
+
+/**
+ * Retry timing. The Code-tab host takes a `ui/message` only while the click's
+ * user activation is still live (Chromium keeps it ~5 s), so every re-post
+ * has to land inside that window.
+ */
+export const SEND_RETRY_WINDOW_MS = 5000;
+export const SEND_RETRY_INTERVAL_MS = 300;
+export const SEND_REPLY_TIMEOUT_MS = 1000;
+
+/**
+ * The button script. How the Desktop Code-tab host handles `ui/message`
+ * (read from its bundle, 2026-09-22):
+ *
+ * - It never sends. A granted message goes into the composer via
+ *   `onPrefillComposer`, and the user presses Enter. There is no auto-submit
+ *   path for a widget.
+ * - It rejects the message with `isError` unless the host frame has live user
+ *   activation AND saw no pointer or key event of its own in the last 5250 ms.
+ *   So a click within ~5 s of clicking, scrolling by the scrollbar or typing
+ *   in the app window is refused.
+ * - It also rejects when the composer is not empty (text, attachments, an
+ *   upload in progress).
+ *
+ * `sendPrompt()` ignores the reply, so every one of these refusals was
+ * silent, which is why the buttons seemed to work only sometimes. This
+ * script posts `ui/message` itself and reads the reply. After an error or no
+ * reply it re-posts every 300 ms for as long as the click's activation
+ * lasts. That covers the 5250 ms gate: its lock runs out while the click
+ * still counts. A re-post can never double the prompt, because a composer
+ * that is already filled refuses. If every attempt fails, the likely cause
+ * is a non-empty composer, and the button says so. One click at a time per
+ * button (`data-busy`).
+ *
+ * @param {'de'|'en'} lang
+ * @returns {string} plain ES5, no comments (widget streaming rules)
+ */
+export function cardWidgetScript(lang = "de") {
+  const t = JSON.stringify(SEND_TEXT[lang] || SEND_TEXT.de);
+  return [
+    `(function () {`,
+    `  var T = ${t}, SPAN = ${SEND_RETRY_WINDOW_MS}, GAP = ${SEND_RETRY_INTERVAL_MS}, WAIT = ${SEND_REPLY_TIMEOUT_MS};`,
+    `  var nextId = 700000000 + Math.floor(Math.random() * 100000000);`,
+    `  function ok(d) { return 'result' in d && !d.error && !(d.result && d.result.isError); }`,
+    `  function deliver(text, done) {`,
+    `    var ids = {}, cur = -1, settled = false, spent = 0, timer = null;`,
+    `    function finish(success) { if (settled) return; settled = true; clearTimeout(timer); window.removeEventListener('message', onReply); done(success); }`,
+    `    function again(waited) { if (settled) return; clearTimeout(timer); spent += waited + GAP; if (spent > SPAN) { finish(false); return; } timer = setTimeout(post, GAP); }`,
+    `    function onReply(e) { var d = e.data; if (!d || typeof d !== 'object' || d.method || !ids[d.id]) return; if (ok(d)) { finish(true); } else if (d.id === cur) { again(0); } }`,
+    `    function post() {`,
+    `      if (settled) return;`,
+    `      cur = nextId++; ids[cur] = true;`,
+    `      try { window.parent.postMessage({ jsonrpc: '2.0', id: cur, method: 'ui/message', params: { role: 'user', content: [{ type: 'text', text: text }] } }, '*'); } catch (x) { again(0); return; }`,
+    `      timer = setTimeout(function () { again(WAIT); }, WAIT);`,
+    `    }`,
+    `    window.addEventListener('message', onReply);`,
+    `    post();`,
+    `  }`,
+    `  function mark(b, text, color) { var s = b.parentNode && b.parentNode.querySelector('.card-act-state'); if (!s) return; s.textContent = text; s.style.color = color; }`,
+    `  function go(b) {`,
+    `    if (b.getAttribute('data-busy')) return;`,
+    `    b.setAttribute('data-busy', '1'); b.style.opacity = '0.6';`,
+    `    deliver(b.getAttribute('data-prompt'), function (success) {`,
+    `      b.removeAttribute('data-busy'); b.style.opacity = '';`,
+    `      mark(b, success ? T.sent : T.failed, success ? 'var(--text-success)' : 'var(--text-danger)');`,
+    `    });`,
+    `  }`,
+    `  document.querySelectorAll('[role="button"][data-prompt]').forEach(function (b) {`,
+    `    b.addEventListener('click', function () { go(b); });`,
+    `    b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(b); } });`,
+    `  });`,
+    `})();`,
   ].join("\n");
 }
 
