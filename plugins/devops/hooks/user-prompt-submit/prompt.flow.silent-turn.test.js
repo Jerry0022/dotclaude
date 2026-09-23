@@ -1,5 +1,20 @@
 import { describe, test, expect } from "vitest";
-import { isSilent } from "./prompt.flow.silent-turn.js";
+import { isSilent, isMachineTurn } from "./prompt.flow.silent-turn.js";
+
+describe("isMachineTurn — prompts nobody typed", () => {
+  test("task notifications, system notifications and channel messages are machine turns", () => {
+    expect(isMachineTurn("<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>")).toBe(true);
+    expect(isMachineTurn("  [SYSTEM NOTIFICATION] agent finished")).toBe(true);
+    expect(isMachineTurn('<channel source="slack">hi</channel>')).toBe(true);
+  });
+
+  test("a typed prompt is not — even one that talks about notifications", () => {
+    expect(isMachineTurn("mach weiter mit dem concept")).toBe(false);
+    expect(isMachineTurn("why did the task notification not arrive?")).toBe(false);
+    expect(isMachineTurn("")).toBe(false);
+    expect(isMachineTurn(undefined)).toBe(false);
+  });
+});
 
 describe("isSilent — silent-turn prompt detector", () => {
   test("git-sync cron prompt (starts with 'Silently run via Bash')", () => {

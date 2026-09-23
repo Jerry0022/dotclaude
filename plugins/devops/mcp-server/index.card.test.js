@@ -308,12 +308,15 @@ describe("render_completion_card — § 3 per-variant table (de + en)", () => {
     expect(text).not.toMatch(/Ungepr(ü|u)ft shippen/);
   });
 
-  test("terminal renders no buttons for any variant", async () => {
-    for (const c of cases) {
+  // One test per case: every render shells out to git, and ~20 serial renders
+  // inside ONE test shared a single 30 s budget — under full-suite load that
+  // timed out although each render alone takes about a second.
+  for (const c of cases) {
+    test("terminal renders no buttons: " + c.name, async () => {
       const text = await cardText({ ...c.params, summary: "x", lang: "de", session_id: "test-nobtn-" + c.name.replace(/\W+/g, "-") });
       expect(text, c.name).not.toMatch(/role="button"/);
-    }
-  });
+    });
+  }
 });
 
 describe("render_completion_card — out-of-band deploy gate (#243)", () => {

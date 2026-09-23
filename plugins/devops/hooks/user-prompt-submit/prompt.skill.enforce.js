@@ -27,6 +27,7 @@ require('../lib/plugin-guard');
 
 const fs = require('fs');
 const path = require('path');
+const { isMachineTurn } = require('./prompt.flow.silent-turn');
 
 // A mention is "/<name>" preceded by start-of-string, whitespace, or common
 // opening punctuation — NOT by a path segment ("docs/devops-guide.md"). The
@@ -50,7 +51,7 @@ function detectInlineSkillMentions(message, knownSkills) {
   // report that *discusses* /run-agents must not force a ceremony (observed
   // 2026-09-14 — a red-team report mentioning four run-* skills demanded
   // four Skill loads).
-  if (/^\s*\[SYSTEM NOTIFICATION|<task-notification>|<channel\s+source=/i.test(message)) return [];
+  if (isMachineTurn(message)) return [];
   const known = new Set((knownSkills || []).map(s => String(s).toLowerCase()));
   const found = [];
   for (const m of message.matchAll(MENTION_RE)) {

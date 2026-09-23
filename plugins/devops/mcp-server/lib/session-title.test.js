@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   SESSION_PREFIX,
+  LEGACY_PREFIXES,
   VARIANT_TITLE_PREFIX,
   stripTitlePrefix,
   releasedPrefix,
@@ -21,9 +22,9 @@ const deps = {
 };
 
 describe("SESSION_PREFIX", () => {
-  test("every worded prefix is emoji-first and ends in ' – '; work is the bare hourglass", () => {
+  test("every worded prefix is emoji-first and ends in ' – '; work and pending are the bare hourglass", () => {
     for (const [k, p] of Object.entries(SESSION_PREFIX)) {
-      if (k === "work") expect(p).toBe("⏳ ");
+      if (k === "work" || k === "pending") expect(p, k).toBe("⏳ ");
       else expect(p, k).toMatch(/^\S+ [A-Z][a-z]+ – $/u);
     }
   });
@@ -38,6 +39,13 @@ describe("SESSION_PREFIX", () => {
     expect(SESSION_PREFIX.analysis.startsWith("📋")).toBe(true);
     expect(SESSION_PREFIX.fallback.startsWith("🔧")).toBe(true);
     expect(SESSION_PREFIX.work.startsWith("⏳")).toBe(true);
+  });
+
+  // One hourglass, one meaning: "Claude works, not your move". The worded
+  // "⏳ Working – " next to the bare "⏳ " read as two states for one.
+  test("the hourglass is one state — pending work and a working turn share the bare icon", () => {
+    expect(SESSION_PREFIX.pending).toBe(SESSION_PREFIX.work);
+    for (const p of Object.values(SESSION_PREFIX)) expect(p).not.toMatch(/Working/);
   });
 
   test("shipped is the finished form of shipping — same rocket, no -ing", () => {
@@ -72,6 +80,13 @@ describe("stripTitlePrefix", () => {
     expect(stripTitlePrefix("🎊 Released Stable – Foo")).toBe("Foo");
     expect(stripTitlePrefix(SESSION_PREFIX.work + "Foo")).toBe("Foo");
     expect(stripTitlePrefix(SESSION_PREFIX.work + SESSION_PREFIX.ready + "Foo")).toBe("Foo");
+  });
+
+  test("removes the legacy worded hourglass, alone or stacked", () => {
+    expect(LEGACY_PREFIXES).toContain("⏳ Working – ");
+    expect(stripTitlePrefix("⏳ Working – Foo")).toBe("Foo");
+    expect(stripTitlePrefix("⏳ Working – " + SESSION_PREFIX.concept + "Foo")).toBe("Foo");
+    expect(stripTitlePrefix(SESSION_PREFIX.work + "⏳ Working – Foo")).toBe("Foo");
   });
 
   test("leaves a plain title untouched", () => {
@@ -115,14 +130,16 @@ describe("titlePrefixFor", () => {
     expect(titlePrefixFor({ variant: "ready", pending: [{ name: "qa", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.pending);
   });
 
-  // #416: the concept prefix follows the phase. A waiting/iterating page is
-  // the compass — stated every time, so a session coming back from an
-  // implementation round returns to it. An implementing round is background
-  // work: the hourglass, like any pending card.
-  test("a concept card states the prefix of its phase — compass while waiting/iterating, hourglass while implementing", () => {
+  // #416: the concept prefix follows the phase. The compass means "your
+  // move — look at the page": only a waiting page carries it, stated every
+  // time so a session coming back from a round of work returns to it.
+  // Iterating and implementing are Claude's move: the hourglass, like any
+  // pending card.
+  test("a concept card states the prefix of its phase — compass only while waiting, hourglass while iterating/implementing", () => {
     expect(titlePrefixFor({ variant: "ready", concept: { phase: "waiting" } }, deps)).toBe(SESSION_PREFIX.concept);
     expect(titlePrefixFor({ variant: "ready", concept: "waiting" }, deps)).toBe(SESSION_PREFIX.concept);
-    expect(titlePrefixFor({ variant: "ready", concept: { phase: "iterating" } }, deps)).toBe(SESSION_PREFIX.concept);
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "iterating" } }, deps)).toBe(SESSION_PREFIX.pending);
+    expect(titlePrefixFor({ variant: "ready", concept: "iterating" }, deps)).toBe(SESSION_PREFIX.pending);
     expect(titlePrefixFor({ variant: "ready", concept: { phase: "implementing" } }, deps)).toBe(SESSION_PREFIX.pending);
     expect(titlePrefixFor({ variant: "ready", concept: "implementing" }, deps)).toBe(SESSION_PREFIX.pending);
     expect(titlePrefixFor({ variant: "ready", concept: '{"phase":"implementing"}' }, deps)).toBe(SESSION_PREFIX.pending);
@@ -131,19 +148,28 @@ describe("titlePrefixFor", () => {
     expect(titlePrefixFor({ variant: "ready", concept: true }, deps)).toBe(SESSION_PREFIX.concept);
   });
 
-  test("an implementing concept with pending work is still the hourglass, never the compass", () => {
+  test("an implementing/iterating concept with pending work is still the hourglass, never the compass", () => {
     expect(titlePrefixFor({ variant: "ready", concept: { phase: "implementing" }, pending: [{ name: "feature", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.pending);
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "iterating" }, pending: [{ name: "research", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.pending);
     expect(titlePrefixFor({ variant: "ready", concept: { phase: "waiting" }, pending: [{ name: "feature", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.concept);
   });
 
-  // Without the field the phase is unknown — hands off, the compass may be
-  // legitimately waiting for a decision.
-  test("a concept-active.json in cwd owns the title (no instruction) when the card has no concept field", () => {
+  // Without the field the card cannot tell whether the open page belongs to
+  // THIS session. The title-work hook swaps the compass for the hourglass on
+  // every user prompt, so "hands off" here would strand ⏳ on a waiting page:
+  // the card hands Claude a conditional instead.
+  test("a concept-active.json in cwd without a concept field yields a conditional: compass for the owner, the outcome for anyone else", () => {
     const cwd = mkdtempSync(join(tmpdir(), "devops-title-"));
     try {
       mkdirSync(join(cwd, ".claude"));
       writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html" }));
-      expect(titlePrefixFor({ variant: "ready", cwd }, deps)).toBeNull();
+      expect(titlePrefixFor({ variant: "ready", cwd }, deps)).toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.ready });
+      expect(titlePrefixFor({ variant: "ship-successful", cwd }, deps)).toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
+      // Background work outranks the compass for the owner, and the variant for anyone else.
+      expect(titlePrefixFor({ variant: "ready", cwd, pending: [{ name: "qa", kind: "agent" }] }, deps))
+        .toEqual({ owned: SESSION_PREFIX.pending, other: SESSION_PREFIX.pending });
+      // The explicit concept field still wins over the state file.
+      expect(titlePrefixFor({ variant: "ready", cwd, concept: { phase: "iterating" } }, deps)).toBe(SESSION_PREFIX.pending);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -170,12 +196,13 @@ describe("titlePrefixFor", () => {
     }
   });
 
-  test("a fresh concept-active.json (started_at within 24 h) still owns the title", () => {
+  test("a fresh concept-active.json (started_at within 24 h) still counts as an open concept", () => {
     const cwd = mkdtempSync(join(tmpdir(), "devops-title-live-"));
     try {
       mkdirSync(join(cwd, ".claude"));
       writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: new Date().toISOString() }));
-      expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps)).toBeNull();
+      expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps))
+        .toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -197,6 +224,29 @@ describe("titleInstruction", () => {
     for (const c of ["Alpha", "Beta", "Stable"]) expect(text).toContain(`"🎊 Released ${c} – "`);
     expect(text).toMatch(/skip silently/);
     expect(text).toMatch(/Desktop app only/);
+  });
+
+  // The concept finalize ship renders its ship card while the state file is
+  // still there: the "closes the concept out" branch is what lets that card
+  // end on 🚀 Shipped instead of the compass.
+  test("a conditional names the concept, the owner's prefix, the close-out case and the other prefix", () => {
+    const text = titleInstruction({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
+    expect(text.startsWith("[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]")).toBe(true);
+    expect(text).toContain("concept-active.json");
+    expect(text).toMatch(/If THIS session runs that concept/);
+    expect(text).toContain(`"${SESSION_PREFIX.concept}" + <stripped title>`);
+    expect(text).toMatch(/this turn closes the concept out/);
+    expect(text).toContain(`"${SESSION_PREFIX.shipped}" + <stripped title>`);
+    expect(text).toMatch(/skip silently/);
+  });
+
+  test("a conditional with no other prefix (armed batch) leaves a foreign title alone", () => {
+    const text = titleInstruction({ owned: SESSION_PREFIX.concept, other: null });
+    expect(text).toMatch(/leave the title as it is/);
+  });
+
+  test("the legacy worded hourglass is in the strip list", () => {
+    expect(titleInstruction(SESSION_PREFIX.ready)).toContain('"⏳ Working – "');
   });
 
   test("an empty prefix asks for the stripped title only when something was stripped", () => {

@@ -25,19 +25,23 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 /** Session-title prefixes — emoji first so the sidebar scans on the icon.
  *  `concept` / `batch` are set by their skills while the mode is on and
- *  stripped by them on the way out (`concept` is re-stated by every card
- *  that carries a waiting/iterating `concept` field). `shipping` is set by
- *  /ship Pre-Step C, `work` by prompt.flow.title-work on the first prompt of
- *  a session and on the first prompt after every card — a new prompt turns
- *  any outcome prefix back into the wrench. The
+ *  stripped by them on the way out. `concept` means "the page waits for
+ *  you": it is re-stated by every card that carries a `waiting` `concept`
+ *  field, and replaced by the hourglass whenever Claude works (a user
+ *  prompt, a picked-up submission). `shipping` is set by /ship Pre-Step C,
+ *  `work` by prompt.flow.title-work on the first prompt of a session and on
+ *  the first prompt after every card — a new prompt turns any outcome
+ *  prefix (and the compass) back into the hourglass. The
  *  rest mirror completion-card variants — same emoji as the card CTA: every
  *  card the session ends a turn with tells Claude (via `titleInstruction`)
  *  which prefix the title should carry now, so the sidebar always names the
  *  state the last card left the session in. `released` is a base — the
  *  channel reached is spliced in by `releasedPrefix` ("🎊 Released Stable – ").
- *  `work` is the one prefix without a word: the wrench alone marks a session
- *  that is being worked on, the summary stays the title. `stripTitlePrefix`
- *  removes any of them. */
+ *  The hourglass is the one prefix without a word, and ONE state: "Claude
+ *  works, not your move" — `work` (this turn runs) and `pending` (background
+ *  work continues after the card) are the same bare `⏳ `, the summary stays
+ *  the title. `stripTitlePrefix` removes any of them, and the
+ *  `LEGACY_PREFIXES` older versions left. */
 export const SESSION_PREFIX = Object.freeze({
   concept: "🧭 Concept – ",
   batch: "📥 Batch – ",
@@ -50,10 +54,16 @@ export const SESSION_PREFIX = Object.freeze({
   blocked: "⛔ Blocked – ",
   aborted: "🚫 Aborted – ",
   analysis: "📋 Analysis – ",
-  pending: "⏳ Working – ",
+  pending: "⏳ ",
   fallback: "🔧 Done – ",
   work: "⏳ ",
 });
+
+/** Prefixes older versions set and no code sets any more — still stripped,
+ *  so a title from before the change comes out clean. `⏳ Working – ` was
+ *  the worded pending hourglass; next to the bare `⏳ ` it read as two
+ *  different states for one. */
+export const LEGACY_PREFIXES = Object.freeze(["⏳ Working – "]);
 
 /** Card variant → session-title prefix. Every variant flags the sidebar with
  *  its own CTA emoji; `released` goes through `releasedPrefix` so the title
@@ -73,7 +83,7 @@ export const VARIANT_TITLE_PREFIX = Object.freeze({
   fallback: SESSION_PREFIX.fallback,
 });
 
-const ALL_PREFIXES = Object.freeze(Object.values(SESSION_PREFIX));
+const ALL_PREFIXES = Object.freeze([...new Set([...Object.values(SESSION_PREFIX), ...LEGACY_PREFIXES])]);
 
 const CHANNELS = Object.freeze(["Alpha", "Beta", "Stable"]);
 
@@ -108,21 +118,29 @@ export function stripTitlePrefix(title) {
 }
 
 /**
- * The session-title prefix this card leaves behind, or `null` when a mode
- * (armed batch, or a concept known only from the state file) owns the title
- * and the card must not touch it. `""` means "plain title — strip ours, leave
- * the rest" (no variant does that any more; kept for an unknown variant).
+ * The session-title prefix this card leaves behind, or `null` when an armed
+ * batch owns the title and the card must not touch it. `""` means "plain
+ * title — strip ours, leave the rest" (no variant does that any more; kept
+ * for an unknown variant).
  *
- * A card that carries the `concept` field follows the phase (#416): while
- * the page `waiting`s for decisions or is `iterating`, the sidebar says
- * `🧭 Concept – ` — stated every time, so a session that comes back from an
- * implementation round returns to the compass. `implementing` is background
- * work like any `pending`: the CTA says "ich MELDE mich", so the title says
- * `⏳ Working – ` — otherwise every concept session looks like it waits for
- * input and the one that actually does cannot be told apart. Without the
- * field, `concept-active.json` alone still means "hands off": the phase is
- * unknown and the wrong card here is one that steals the compass while the
- * page waits.
+ * The compass means "your move — look at the page". A card that carries the
+ * `concept` field follows the phase (#416): only while the page `waiting`s
+ * for decisions does the sidebar say `🧭 Concept – ` — stated every time, so
+ * a session that comes back from a round of work returns to the compass.
+ * `iterating` and `implementing` are Claude's move, background work like any
+ * `pending`: the CTA says "ich MELDE mich", so the title says `⏳ `
+ * — otherwise every concept session between two rounds looks like it waits
+ * for input and the one that actually does cannot be told apart.
+ *
+ * Without the field, a live `concept-active.json` in `cwd` means a page
+ * waits in this project — but not necessarily for THIS session (a sibling
+ * session may share the checkout). The card cannot tell, so it hands
+ * Claude a conditional (`{ owned, other }`, see `titleInstruction`): the
+ * session that runs the concept restores the compass (the hourglass while
+ * background work is pending), any other session — or the turn that closes
+ * the concept out — gets the plain outcome prefix. prompt.flow.title-work
+ * swaps the compass for the bare hourglass on every user prompt, so a card
+ * that left the title alone here would strand `⏳ ` on a waiting page.
  *
  * Pending background work outranks the variant: the CTA already says "ich
  * MELDE mich", the sidebar should say the same. A `released` card names the
@@ -131,17 +149,29 @@ export function stripTitlePrefix(title) {
  *
  * @param {{ variant?: string, state?: object, pending?: unknown, concept?: unknown, cwd?: string, delivery?: object, promotion?: object, cta?: object }} params
  * @param {{ hasPending: (p: unknown) => boolean, hasConcept: (c: unknown) => boolean }} deps
- * @returns {string|null}
+ * @returns {string|null|{ owned: string, other: string }}
  */
 export function titlePrefixFor(params, { hasPending, hasConcept }) {
   if (hasConcept(params.concept)) {
-    return conceptPhase(params.concept) === "implementing"
-      ? SESSION_PREFIX.pending
-      : SESSION_PREFIX.concept;
+    return conceptPhase(params.concept) === "waiting"
+      ? SESSION_PREFIX.concept
+      : SESSION_PREFIX.pending;
   }
-  if (conceptUrl(params.cwd, undefined)) return null;
+  if (conceptUrl(params.cwd, undefined)) {
+    const pending = hasPending(params.pending);
+    return {
+      owned: pending ? SESSION_PREFIX.pending : SESSION_PREFIX.concept,
+      other: readBatch(params.cwd) ? null : outcomePrefix(params, pending),
+    };
+  }
   if (readBatch(params.cwd)) return null;
-  if (hasPending(params.pending)) return SESSION_PREFIX.pending;
+  return outcomePrefix(params, hasPending(params.pending));
+}
+
+/** The prefix the card's own outcome earns — pending work first, then the
+ *  variant (`released` with its channel). */
+function outcomePrefix(params, pending) {
+  if (pending) return SESSION_PREFIX.pending;
   const variant = params.variant;
   if (variant === "released") {
     const { delivery: d, promotion: p, cta: c } = params;
@@ -164,21 +194,32 @@ function conceptPhase(concept) {
  * session before it outputs the card. Empty string when the title is owned by
  * a mode. Never part of the card markdown.
  *
- * @param {string|null} prefix from `titlePrefixFor`
+ * A `{ owned, other }` prefix (an open concept the card could not attribute)
+ * becomes a conditional: Claude knows whether it runs that concept in this
+ * session and whether this turn closes it out; the renderer does not.
+ *
+ * @param {string|null|{ owned: string, other: string|null }} prefix from `titlePrefixFor`
  * @returns {string}
  */
 export function titleInstruction(prefix) {
   if (prefix === null) return "";
   const list = STRIPPABLE.map((p) => `"${p}"`).join(", ");
-  const set = prefix
-    ? `set the title to "${prefix}" + <stripped title>`
-    : "set the stripped title (no prefix) — only if a prefix was actually removed";
+  const setFor = (p) => (p
+    ? `set the title to "${p}" + <stripped title>`
+    : "set the stripped title (no prefix) — only if a prefix was actually removed");
+  const set = typeof prefix === "object"
+    ? "— this project has an open concept page (.claude/concept-active.json). " +
+      "If THIS session runs that concept (it opened or resumed the page) and the page stays open after this turn: " +
+      `${setFor(prefix.owned)}. ` +
+      "Otherwise (another session's concept, or this turn closes the concept out): " +
+      (prefix.other === null ? "leave the title as it is." : `${setFor(prefix.other)}.`)
+    : `${setFor(prefix)}.`;
   return (
     "[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]\n" +
     "Before outputting the card, once, Desktop app only: " +
     'mcp__ccd_session_mgmt__get_session {session_id:"self"} → ' +
     `strip every leading prefix from [${list}] → ` +
-    `mcp__ccd_session_mgmt__set_session_title {session_id:"self"} and ${set}. ` +
+    `mcp__ccd_session_mgmt__set_session_title {session_id:"self"} and ${set} ` +
     "If either tool is unavailable or fails: skip silently — no retry, no note, no fallback. " +
     "The card stays the last output of the turn."
   );
