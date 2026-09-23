@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.192.1] — 2026-09-23
+
+### Fixed
+- **Completion-card buttons no longer prefill slash commands, which the Desktop host refuses.** In a live test on 2026-09-23, the Code-tab host refused every `ui/message` prefill whose text starts with `/`, with or without a leading space: `/compact …` and `/devops:ship …` stayed red, while `ship --no-compact` and plain sentences landed. That made Ship (`ready`, `test`), Promote (`ship-successful`), Nach stable (`released-beta`) and Fix (`ship-blocked`) dead buttons. They now prefill trigger words the hooks and skills already recognise: `ship` goes through `prompt.ship.detect`, `promote` / `promote stable` reach the promote skill, and `Debug den Blocker der letzten Card und behebe ihn.` reaches the fix skill. Two new tests pin this: `card-widget.test.js` rejects any prompt that starts with whitespace plus `/`, and checks each button's routing against `isShipIntent` (ship buttons are ship intents, promote and fix are not). The host simulator in `card-widget.send.test.js` also learned the slash rule, and `completion-card-design.md` § 4 records it as host rule 4.
+
 ## [0.192.0] — 2026-09-23
 
 ### Changed
