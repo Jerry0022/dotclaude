@@ -1104,6 +1104,15 @@ names the kept branch on the Delivery ship line (`· \`feat/x (kept locally)\``)
 
 Output the card markdown VERBATIM — card is the last **visible** output, nothing after closing `---`.
 
+**No recap before the card.** The card (on Desktop: the widget) is the ship
+summary — never restate in prose what it already shows: changes, tests, skipped
+checks, version, PR, open items, a restart hint. Everything of that belongs in
+the card fields (`tests`, `open`, `userFinalTest`, …). Text before the card only
+for what the card cannot carry: answers to side questions or other topics of the
+user's prompt, points beyond the card's three, and hook blocks that are still
+marked for the user and still true (a session-start finding this ship resolved
+is dropped, not restated with an "outdated" note).
+
 ## Step 7 — Memory Dream
 
 Silent memory consolidation after shipping. Runs **after** the completion card so it never delays user-facing output.

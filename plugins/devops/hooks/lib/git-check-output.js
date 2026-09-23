@@ -51,11 +51,19 @@ function issueLine(issue) {
  *      before any card. Prose before the card is permitted; content after it
  *      is not.
  */
+/**
+ * A finding the turn itself resolved (a /ship that committed and pushed the
+ * changes) is no longer true at the end of the turn. Restating it anyway put
+ * a stale "4 uncommitted file(s)" block plus an "this is outdated" note above
+ * every post-ship completion card. Only findings that still hold are owed.
+ */
+const RESOLVED_CLAUSE = 'Restate only findings that still hold at that point: one this turn resolved (e.g. a /ship landed the changes) is dropped silently — no restatement, no "outdated" note.';
+
 function header(workspace) {
   if (workspace) {
-    return 'Workspace check at session start. Show the user this summary verbatim and call AskUserQuestion as the FIRST action of this turn. If this turn cannot ask (scheduled, cron or headless run), you MUST still restate the findings below verbatim in your final message, before any completion card — never drop them.';
+    return `Workspace check at session start. Show the user this summary verbatim and call AskUserQuestion as the FIRST action of this turn. If this turn cannot ask (scheduled, cron or headless run), you MUST still restate the findings below verbatim in your final message, before any completion card — never drop them. ${RESOLVED_CLAUSE}`;
   }
-  return 'Stale changes found at session start. Show the user this summary verbatim. You MUST restate these findings verbatim in your final message, before any completion card — also in a scheduled, cron or headless run.';
+  return `Stale changes found at session start. Show the user this summary verbatim. You MUST restate these findings verbatim in your final message, before any completion card — also in a scheduled, cron or headless run. ${RESOLVED_CLAUSE}`;
 }
 
 function workspaceLines(workspace) {
