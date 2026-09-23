@@ -50,11 +50,13 @@ compact the context — only the user can, with `/compact`. So
 `[ship-compact]` block instead of the ship instruction. It never fires twice
 in a row: the ship prompt right after an advice is the user's answer and runs.
 
-**If that block is in this turn's context: stop here.** Show its user-facing
-part verbatim, run nothing — no Pre-Step, no `ship_*` call, no git — and end
-the turn. The user either compacts and types `/ship` again (the hook sees the
-compaction and lets it through), or simply types `/ship` again without
-compacting (or `/ship --no-compact`).
+**If that block is in this turn's context: stop here.** Run nothing — no
+Pre-Step, no `ship_*` call, no git — and end the turn with the completion card
+the block names (`variant: "ship-blocked"`, `compact: { tokens }`). The card
+shows the saving and the full `/compact` command as text; on Desktop its one
+button puts `ship --no-compact` into the input box. The user either compacts
+and types `/ship` again (the hook sees the compaction and lets it through), or
+ships without compacting (the button, or simply `/ship` again).
 Ships reached through the Skill tool by an orchestrator (`/run-backlog`,
 `/setup-cleanup`) never see the block — the hook only reads user prompts.
 

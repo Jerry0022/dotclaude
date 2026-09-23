@@ -76,6 +76,18 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(btns[0].primary).toBe(true);
   });
 
+  test("ship-compact: one plain-text button, ship --no-compact — never a slash prompt", () => {
+    // Live 2026-09-23: the host refuses a prefill starting with "/" (leading
+    // space too), so /compact stays text in the card; plain text lands.
+    for (const lang of ["de", "en"]) {
+      const btns = buttonsFor("ship-compact", lang);
+      expect(btns).toHaveLength(1);
+      expect(btns[0]).toMatchObject({ prompt: "ship --no-compact", primary: true });
+      expect(btns[0].prompt).not.toMatch(/^\s*\//);
+    }
+    expect(buttonsFor("ship-compact", "de")[0].label).toBe("Ohne Kompaktieren shippen");
+  });
+
   test("vv-unverified offers Tests laufen lassen and Trotzdem shippen", () => {
     expect(buttonsFor("vv-unverified", "de").map((a) => a.label)).toEqual(["Tests laufen lassen", "Trotzdem shippen"]);
   });

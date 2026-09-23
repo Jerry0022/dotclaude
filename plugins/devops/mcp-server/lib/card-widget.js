@@ -82,6 +82,12 @@ export const BUTTONS = {
     aborted: [
       { label: "Nochmal", icon: "refresh", prompt: "Versuch es nochmal mit einem anderen Ansatz — nenn mir zuerst kurz die Alternativen.", primary: true, tooltip: "Nennt zuerst die Alternativen, dann ein neuer Versuch." },
     ],
+    // One button only: the host refuses a prefill that starts with "/" (live
+    // 2026-09-23, even with a leading space), so /compact cannot be a button —
+    // the card shows the command as text. Plain "ship --no-compact" lands.
+    "ship-compact": [
+      { label: "Ohne Kompaktieren shippen", icon: "rocket", prompt: "ship --no-compact", primary: true, tooltip: "Shippt sofort auf dem vollen Kontext." },
+    ],
     "vv-unverified": [
       { label: "Tests laufen lassen", icon: "player-play", prompt: "Führ jetzt npm test (bzw. die passenden Checks) aus, bevor wir shippen.", primary: true, tooltip: "Holt die fehlende Verifikation nach, bevor geshippt wird." },
       { label: "Trotzdem shippen", icon: "rocket", prompt: "Ship trotzdem ungeprüft — mit skipChecks falls nötig.", tooltip: "Ship ohne Verifikation — bewusstes Risiko." },
@@ -122,6 +128,9 @@ export const BUTTONS = {
     ],
     aborted: [
       { label: "Retry", icon: "refresh", prompt: "Try again with a different approach — name the alternatives briefly first.", primary: true, tooltip: "Names the alternatives first, then a new attempt." },
+    ],
+    "ship-compact": [
+      { label: "Ship without compacting", icon: "rocket", prompt: "ship --no-compact", primary: true, tooltip: "Ships right away on the full context." },
     ],
     "vv-unverified": [
       { label: "Run tests", icon: "player-play", prompt: "Run npm test (or the matching checks) now, before we ship.", primary: true, tooltip: "Catches up on the missing verification before shipping." },
