@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.13.0
+ * @version 0.13.1
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
@@ -60,7 +60,8 @@ const os = require('os');
 const crypto = require('crypto');
 
 const cwd = process.cwd();
-const CONFIG_DIR = path.join(cwd, '.claude');
+// Written by ss.tokens.scan at the repo root (lib/project-root.js).
+const CONFIG_DIR = require('../lib/project-root').projectClaudeDir(cwd);
 const CONFIG_PATH = path.join(CONFIG_DIR, 'token-config.json');
 
 // Note: background graphify spawns (self-heal refresh) go through

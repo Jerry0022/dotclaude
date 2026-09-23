@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module plugin-guard
- * @version 0.3.0
+ * @version 0.3.1
  * @description Project isolation guard — self-executing on require().
  *   Checks whether devops plugin is enabled for the current project
  *   (project settings) or globally (user settings). If neither, exits
@@ -28,8 +28,12 @@ const PLUGIN_KEY_LEGACY_V1 = 'dotclaude-dev-ops@Jerry0022';
 const PLUGIN_KEY_LEGACY_V2 = 'dotclaude-dev-ops@dotclaude-dev-ops';
 const PLUGIN_KEY = 'devops@dotclaude';
 
-const projectSettings = path.join(process.cwd(), '.claude', 'settings.json');
-const projectLocalSettings = path.join(process.cwd(), '.claude', 'settings.local.json');
+// Project settings live at the repo root, not wherever the session cwd has
+// wandered to — a session in a subdirectory must not silence every hook of a
+// per-project-enabled plugin (lib/project-root.js).
+const projectDir = require('./project-root').projectClaudeDir(process.cwd());
+const projectSettings = path.join(projectDir, 'settings.json');
+const projectLocalSettings = path.join(projectDir, 'settings.local.json');
 const globalSettings = path.join(os.homedir(), '.claude', 'settings.json');
 
 function isEnabledInAny(settingsPath) {

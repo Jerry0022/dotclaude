@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
  * @module ship-sentinel
- * @version 0.1.0
+ * @version 0.1.1
  * @description Shared helper for the ship-in-progress sentinel file.
  *   The sentinel lets Bash-scoped guards (pre.main.guard, pre.edit.branch)
  *   know when the ship pipeline is running so Claude's Bash fallback retries
  *   are not blocked while ship is legitimately touching main.
  *
- *   The file lives at <cwd>/.claude/.ship-in-progress and contains a JSON
+ *   The file lives at <repo-root>/.claude/.ship-in-progress (project-root.js —
+ *   never the raw cwd, which may be a subdirectory) and contains a JSON
  *   payload with a timestamp + pid. It is stale after SENTINEL_MAX_AGE_MS
  *   to avoid deadlocks if cleanup never ran.
  *
@@ -20,6 +21,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { projectRoot } = require('./project-root');
 
 const SENTINEL_REL = path.join('.claude', '.ship-in-progress');
 // Deadlock backstop only — NOT a normal expiry (ship_cleanup clears it on every
@@ -33,7 +35,7 @@ const SENTINEL_REL = path.join('.claude', '.ship-in-progress');
 const SENTINEL_MAX_AGE_MS = 60 * 60 * 1000;
 
 function sentinelPath(cwd) {
-  return path.join(cwd || process.cwd(), SENTINEL_REL);
+  return path.join(projectRoot(cwd), SENTINEL_REL);
 }
 
 function write(cwd) {

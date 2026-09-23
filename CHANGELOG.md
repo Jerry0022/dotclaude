@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.192.2] — 2026-09-23
+
+### Fixed
+- **Hooks no longer scatter `.claude/` folders into subdirectories.** Hooks get the session's *current* cwd, which follows every `cd`. A session that had `cd`'d into `plugins/devops/scripts` therefore created `plugins/devops/.claude/batch-activity` and `plugins/devops/scripts/.claude/batch-activity`: untracked, not covered by the root-anchored ignore block, failing `/ship` preflight's clean-tree check and blocking the Desktop archive (observed 2026-09-23). The new `hooks/lib/project-root.js` resolves the git work-tree root (the same directory `git rev-parse --show-toplevel` prints, a linked worktree's own root included) with a plain filesystem walk, no git spawn, and falls back to the cwd outside a repo or under a dotfiles repo in `~`. Every project-rooted writer now goes through it: the `/claude-batch` files, `strict-mode.json`, the ship sentinel (hook and MCP mirror), `token-config.json`, and `plugin-guard`'s project-settings lookup, which used to silence every hook of a per-project-enabled plugin from a subdirectory. `check-claude-artifacts.js` now also fails on any `.claude/` runtime path joined onto the raw cwd. `/concept` state is exempt, because it is keyed to the session cwd on purpose. Regression tests spawn the hooks from a subdirectory cwd and assert that nothing lands below the repo root; 9 of them fail on the pre-fix code. `CONVENTIONS.md` gains a *Project-Rooted State* rule.
+
 ## [0.192.1] — 2026-09-23
 
 ### Fixed

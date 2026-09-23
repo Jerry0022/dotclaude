@@ -58,32 +58,8 @@ function graphifyBin() {
   return typeof v === 'string' && v.trim() ? v : 'graphify';
 }
 
-/** Path equality the way the OS sees it (win32 ignores case). */
-function samePath(a, b) {
-  const na = path.resolve(a), nb = path.resolve(b);
-  return process.platform === 'win32' ? na.toLowerCase() === nb.toLowerCase() : na === nb;
-}
-
-/**
- * Nearest enclosing git work tree root of `cwd` — the directory holding `.git`
- * (a dir for a primary checkout, a FILE for a linked worktree). Pure fs walk, no
- * git spawn: this runs on hook hot paths. Never throws.
- * @returns {string|null} absolute root, or null when no `.git` sits on the path
- */
-function findRepoRoot(cwd) {
-  if (typeof cwd !== 'string' || !cwd) return null;
-  try {
-    let dir = path.resolve(cwd);
-    for (;;) {
-      if (fs.existsSync(path.join(dir, '.git'))) return dir;
-      const parent = path.dirname(dir);
-      if (parent === dir) return null; // filesystem root reached
-      dir = parent;
-    }
-  } catch {
-    return null;
-  }
-}
+// Shared with every project-rooted `.claude/` writer (lib/project-root.js).
+const { findRepoRoot, samePath } = require('./project-root');
 
 /**
  * Root of the PRIMARY checkout when `cwd` sits inside a linked git worktree,
