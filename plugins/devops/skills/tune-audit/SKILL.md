@@ -243,7 +243,8 @@ Never commit — the user lands the result via `/ship`.
 
 ### 7b. `concept`
 
-Nothing is changed. Invoke `concept` with the audit dossier
+Nothing is changed. Invoke the plugin's `concept` skill
+(`Skill("devops:concept")` — never a hand-built HTML page) with the audit dossier
 (`requirements.md` + `findings.json`) and let its per-iteration template rule
 (`skills/concept/SKILL.md` § Step 1a) choose the layout — normally a
 `decision` iteration. The page must carry:
