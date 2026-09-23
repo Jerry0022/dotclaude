@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module strict-state
- * @version 0.1.0
+ * @version 0.1.1
  * @description State, mention detection and the canonical contract text for
  *   `/claude-strict` — literal scope, discretionary parameters.
  *
@@ -28,6 +28,7 @@
 const fs   = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { projectRoot, projectClaudeDir } = require('./project-root');
 
 const MODE_FILE = 'strict-mode.json';
 
@@ -77,7 +78,8 @@ const CONTRACT_BLOCK = [
 
 // ── paths / io ─────────────────────────────────────────────────────────────
 
-function claudeDir(cwd) { return path.join(cwd || process.cwd(), '.claude'); }
+/** Anchored at the work-tree root, never the raw cwd — see project-root.js. */
+function claudeDir(cwd) { return projectClaudeDir(cwd); }
 function modePath(cwd)  { return path.join(claudeDir(cwd), MODE_FILE); }
 
 function readMode(cwd) {
@@ -162,7 +164,7 @@ function bind(cwd, reason, boundTo, now) {
 /** First workflow binding whose state file exists in `cwd`, or null. */
 function findBinding(cwd) {
   for (const b of BINDINGS) {
-    if (fs.existsSync(path.join(cwd, b.file))) return b;
+    if (fs.existsSync(path.join(projectRoot(cwd), b.file))) return b;
   }
   return null;
 }
@@ -186,7 +188,7 @@ function evaluate(cwd, opts = {}) {
   if (!mode || mode.active !== true) return { active: false, mode: null, why: 'off' };
   const now = typeof opts.now === 'number' ? opts.now : Date.now();
   if (mode.expiresAt && now >= Date.parse(mode.expiresAt)) return { active: false, mode, why: 'expired' };
-  if (mode.boundTo && !fs.existsSync(path.join(inherited ? mainWorktree(cwd) || cwd : cwd, mode.boundTo))) {
+  if (mode.boundTo && !fs.existsSync(path.join(inherited ? mainWorktree(cwd) || projectRoot(cwd) : projectRoot(cwd), mode.boundTo))) {
     return { active: false, mode, why: 'binding-gone' };
   }
   if (!inherited && mode.branch) {
@@ -204,7 +206,7 @@ function isActive(cwd, opts) { return evaluate(cwd, opts).active; }
  */
 function resolveInherited(cwd) {
   const main = mainWorktree(cwd);
-  if (!main || path.resolve(main) === path.resolve(cwd)) return null;
+  if (!main || path.resolve(main) === projectRoot(cwd)) return null;
   const mode = readMode(main);
   if (!mode || mode.active !== true || !mode.branch) return null;
   const b = currentBranch(cwd);
