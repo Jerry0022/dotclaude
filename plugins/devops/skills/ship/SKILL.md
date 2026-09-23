@@ -247,6 +247,20 @@ Check the result:
 
 The tool checks: clean tree, commits ahead, all pushed, version consistency (skipped for intermediate), worktree detection, and unresolved conflict markers (`no-conflict-markers`).
 
+**Dirty tree from untracked files: fix the source, never park and restore.**
+The Desktop app refuses to archive a session whose worktree is dirty, and it
+copies the main checkout's untracked `.claude/` into every new worktree. An
+untracked file moved aside so preflight passes and put back after the merge
+blocks the archive — observed with `.claude/graphify.json` (2026-09-23). Settle
+each file where it belongs, inside this ship:
+- **Plugin configuration** (`.claude/graphify.json`, `settings.json`, the rest
+  of the *MUST be tracked* list in `skills/setup-project/SKILL.md` § 2.2) →
+  commit it. Include it in the ship when it matches the main checkout's copy.
+- **Plugin runtime state** → add it to the ignore block (`/setup-project`) or
+  delete it when it is a stray hook artifact (e.g. a `.claude/` created in a
+  subdirectory).
+A harness-created worktree must end Step 5c with an empty `git status --porcelain`.
+
 The marker check has two scopes. A marker in the files **this ship would land** is a hard error — `ship_release` re-scans immediately before committing, so one left behind by the rebase in 1b is caught there too. A marker anywhere else in the repo is a **warning**: it predates this branch, so report it and open a separate fix rather than holding an unrelated release hostage.
 Merge-safety issues (`base-ahead`, `file-overlap`, `config-conflictstyle`) are **warnings, not errors** — they are resolved autonomously below.
 
@@ -932,6 +946,10 @@ ship_cleanup({ branch: "claude/feature-branch", base: "main", cwd: "<cwd>", keep
 ```
 
 Returns `{ success: true, kept: true, cleaned: ["sentinel"], warnings: [...] }`.
+
+Harness-created worktree: run `git status --porcelain` afterwards. Anything
+listed blocks the Desktop archive — settle it per Step 1a (*Dirty tree from
+untracked files*) before the card, never by restoring a parked copy.
 
 The remote branch is gone either way — deleted by the GitHub merge (`--delete-branch`)
 outside a worktree, by `ship_release` itself inside one (`remoteBranchDeleted: true`; it
