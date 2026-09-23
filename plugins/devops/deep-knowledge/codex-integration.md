@@ -36,14 +36,33 @@ The wrapper enforces a **5-minute** default ceiling
 | rc   | Meaning                          | Required Action                                                 |
 |------|----------------------------------|-----------------------------------------------------------------|
 | 0    | Codex returned output            | Use stdout as advisory input                                    |
+| 75   | Codex usage limit exhausted      | **Continue without Codex findings, no wait.** Stderr names the reset time — report "Codex → übersprungen — Limit bis <time>". Do NOT retry. |
 | 124  | Timeout exceeded                 | **Continue without Codex findings.** Log "Codex timed out — proceeding without review." Do NOT retry. |
 | 126  | `DEVOPS_DISABLE_CODEX=1`         | Skip silently                                                   |
 | 127  | `codex` CLI missing              | Skip silently (graceful unavailability)                         |
 | *    | Codex error (auth, quota, etc.)  | Skip Codex findings, note stderr briefly, continue              |
 
+### Usage limit memory (rc=75)
+
+When Codex answers "You've hit your usage limit … try again at <time>", the
+wrapper stores that reset time per user in `~/.claude/codex-limit.json`
+(`scripts/codex-limit.js`) and kills Codex at once instead of waiting out the
+ceiling. Every later call — any repo, any skill or agent — returns rc=75
+immediately until the reset time has passed; the first call after it runs
+Codex again and the entry is deleted. No reset time announced → one-hour
+retry window.
+
+Codex usable again before the stored reset (plan bought, limit raised) — the
+user says so, e.g. "codex limit zurücksetzen", "ich hab jetzt ein Abo":
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" --reset-limit    # forget it once
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" --limit-status   # show it
+```
+
 **Hard constraints:**
 
-- Never retry on rc=124. One shot, then move on.
+- Never retry on rc=124 or rc=75. One shot, then move on.
 - Never block the user on a Codex result — all findings are advisory.
 - Do NOT call `/codex:rescue` via the Agent tool from inside any devops
   skill or agent. The Agent tool has no timeout; if Codex hangs, the whole
