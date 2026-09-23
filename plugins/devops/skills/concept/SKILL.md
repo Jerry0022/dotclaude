@@ -1038,10 +1038,10 @@ right after the page is open, prefix the session title:
 
 1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
 2. If `title` already starts with `🧭 Concept – `: done.
-3. Strip any leading devops prefix (`🔧 `, `📦 Ready – `, `🧪 Test – `,
-   `⏳ Working – `, `🚀 Shipped – `, … — the `SESSION_PREFIX` values in
-   `mcp-server/lib/mode-state.js`) left by the first-prompt wrench or an
-   earlier card — never stack them (`🧭 Concept – 🔧 Foo` is the bug).
+3. Strip any leading devops prefix (`⏳ `, `📦 Ready – `, `🧪 Test – `,
+   `🚀 Shipped – `, … — the `SESSION_PREFIX` and `LEGACY_PREFIXES` values in
+   `mcp-server/lib/mode-state.js`) left by the first-prompt hourglass or an
+   earlier card — never stack them (`🧭 Concept – ⏳ Foo` is the bug).
 4. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
    `title: "🧭 Concept – {stripped title}"`.
 
@@ -1049,6 +1049,16 @@ The prefix is exactly `🧭 Concept – ` (compass, space, word, space, en dash,
 space) — the same emoji the completion card carries in its CTA, so sidebar
 and card read as one state. From here on the completion card keeps the title
 in step with the phase (table below); Step 6a strips the prefix again.
+
+**The compass means "your move — look at the page", nothing else.** Never set
+it before the page is open: while `/concept` is invoked and the page is still
+being generated, the title keeps the bare `⏳ ` that `prompt.flow.title-work`
+put there. And whenever Claude works again later — a submission is picked up
+(Step 5 § Mark the round as work), the user types into the chat (the hook
+swaps the compass for `⏳ ` itself), a round iterates or implements — the
+title is `⏳ `; the card that hands the page back (`phase: "waiting"`) brings
+the compass back. The hourglass is always the bare icon, never a worded
+`⏳ Working – `.
 
 **Both tools exist only in the Desktop app.** In a terminal session, an
 unattended run, or when the call fails for any reason: skip silently — no
@@ -1081,16 +1091,18 @@ with the one statement that is true:
 | `concept.phase` | When | CTA (DE) | Session title |
 |---|---|---|---|
 | `waiting` (default) | Page is open, next step is the user's submission | `🧭 CONCEPT wartet auf deine Entscheidungen auf der Seite — ich MELDE mich` | `🧭 Concept – ` |
-| `iterating` | A submission was processed and the next iteration is still being produced (e.g. by background agents) | `🧭 CONCEPT in Iteration — ich MELDE mich` | `🧭 Concept – ` |
-| `implementing` | An `implement` submission is being executed and the turn hands back before it lands | `🧭 CONCEPT in Implementierung — ich MELDE mich` | `⏳ Working – ` |
+| `iterating` | A submission was processed and the next iteration is still being produced (e.g. by background agents) | `🧭 CONCEPT in Iteration — ich MELDE mich` | `⏳ ` |
+| `implementing` | An `implement` submission is being executed and the turn hands back before it lands | `🧭 CONCEPT in Implementierung — ich MELDE mich` | `⏳ ` |
 
 The card's `[SESSION TITLE]` block carries the prefix of the phase — apply it
 every time, exactly like any other card's title instruction. This is what lets
 the sidebar tell a session that waits for a decision from one that is busy
-implementing (#416): while the page waits or iterates the compass stays, an
-`implementing` round shows the hourglass, and the next `waiting` card brings
-the compass back. The phase must therefore be truthful — a card that says
-`waiting` while a feature agent implements the submission is the bug.
+(#416): only while the page waits does the compass show; between two
+iterations and during an implementation it is Claude's move and the sidebar
+shows the hourglass, and the next `waiting` card brings the compass back. The
+phase must therefore be truthful — a card that says `waiting` while a feature
+agent implements the submission, or while the next round is still being
+produced, is the bug.
 
 Real content work still goes into `pending` — a feature agent implementing the
 submission, a research workflow preparing the next round — and the card folds
@@ -1160,6 +1172,22 @@ Feedback is processed **iteratively**, not as a one-shot. The cycle:
 ```
 User submits → Claude reads → Claude processes → Claude updates page → User can act again
 ```
+
+### Mark the round as work
+
+A submission usually arrives as the waker's task notification, not as a user
+prompt, so `prompt.flow.title-work` leaves the compass alone on that turn —
+the swap is yours. Once the wake is confirmed real (`/pending` is `true` with
+a new `_version`, Step 5d § re-confirm) and before Step 5a, Desktop app only:
+`mcp__ccd_session_mgmt__get_session` `self`; if the `title` starts with
+`🧭 Concept – `, `mcp__ccd_session_mgmt__set_session_title` `self` with
+`"⏳ " + {title without that prefix}`. Any other title is left as it is. A
+stale wake changes nothing. Skip silently when the tools are missing or fail.
+
+This round then MUST end with its completion card (`concept` field + `cwd`,
+phase per the table in Step 3) — that card is what turns `⏳ ` back into the
+compass when the page waits again. A round that ends without a card leaves
+the sidebar on the hourglass while the page waits for the user.
 
 ### 5a. Read & Parse
 1. Read the JSON from `#concept-decisions`
@@ -1940,11 +1968,14 @@ node -e "const f='.claude/concept-active.json',fs=require('fs');try{const s=JSON
 ```
 
 **Restore the session title** (Desktop app only — skip silently elsewhere):
-`mcp__ccd_session_mgmt__get_session` `self`; if the `title` starts with
-`🧭 Concept – ` (or `⏳ Working – ` from an implementing round), call
-`mcp__ccd_session_mgmt__set_session_title` `self` with that prefix removed.
-A title without a prefix is left untouched — the user renamed it meanwhile,
-and that name wins. The final card (Step 6b) then sets the outcome prefix.
+`mcp__ccd_session_mgmt__get_session` `self`; strip every leading devops
+prefix (`🧭 Concept – `, `⏳ `, `🚀 Shipping – `, … — the `SESSION_PREFIX`
+and `LEGACY_PREFIXES` values). If part C shipped successfully, its ship card
+is the closing artefact and no Step 6b card follows — set
+`"🚀 Shipped – " + {stripped title}`. Otherwise set the stripped title; the
+final card (Step 6b) then sets the outcome prefix (`📦 Ready – `, …). A
+title without any prefix is left untouched — the user renamed it meanwhile,
+and that name wins.
 
 Then `CronDelete <cron_id>`. `/shutdown` replaces the older `kill $SERVER_PID`:
 on Windows the PID could already be reused by an unrelated process, and

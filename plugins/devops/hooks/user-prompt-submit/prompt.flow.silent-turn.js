@@ -62,6 +62,15 @@ function isScheduledTask(prompt) {
   return typeof prompt === 'string' && SCHEDULED_TASK_PATTERN.test(prompt);
 }
 
+/** A machine turn: a background task / agent result or a channel message
+ *  arrives through UserPromptSubmit too, but nobody typed it. Not silent —
+ *  such a turn may do real work — just not the user's own prompt. */
+const MACHINE_TURN_PATTERN = /^\s*\[SYSTEM NOTIFICATION|<task-notification>|<channel\s+source=/i;
+
+function isMachineTurn(prompt) {
+  return typeof prompt === 'string' && MACHINE_TURN_PATTERN.test(prompt);
+}
+
 // Guarded so prompt.flow.title-work can require the detectors without a
 // second stdin consumer racing this one to process.exit().
 if (require.main === module) {
@@ -90,4 +99,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { isSilent, isScheduledTask, SILENT_PATTERNS, SCHEDULED_TASK_PATTERN };
+module.exports = { isSilent, isScheduledTask, isMachineTurn, SILENT_PATTERNS, SCHEDULED_TASK_PATTERN, MACHINE_TURN_PATTERN };

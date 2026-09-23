@@ -150,9 +150,9 @@ says what is going on:
 
 1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
 2. If `title` already starts with `📥 Batch – `: done.
-3. Strip any leading devops prefix (`🔧 `, `📦 Ready – `, `🧪 Test – `,
-   `⏳ Working – `, … — the `SESSION_PREFIX` values in
-   `mcp-server/lib/mode-state.js`) left by the first-prompt wrench or an
+3. Strip any leading devops prefix (`⏳ `, `📦 Ready – `, `🧪 Test – `,
+   `🧭 Concept – `, … — the `SESSION_PREFIX` and `LEGACY_PREFIXES` values in
+   `mcp-server/lib/mode-state.js`) left by the first-prompt hourglass or an
    earlier card — never stack them (`📥 Batch – 🔧 Foo` is the bug).
 4. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
    `title: "📥 Batch – {stripped title}"`.

@@ -329,16 +329,23 @@ that starts work, in place of the former `🔧`; the card's session-title note
 replaces it with the result prefix at turn end. Every card variant maps to a
 prefix — the full set: `🚀 Shipping – `, `🚀 Shipped – `, `🎊 Released Alpha /
 Beta / Stable – `, `📦 Ready – `, `⛔ Blocked – `, `🧪 Test – `, `▶️ Started – `,
-`📋 Analysis – `, `🚫 Aborted – `, `⏳ Working – ` (pending), `🧭 Concept – `,
-`📥 Batch – `, and the bare `⏳ ` while working. Nothing else strips or sets
-titles.
+`📋 Analysis – `, `🚫 Aborted – `, `🧭 Concept – ` (the page waits for the
+user), `📥 Batch – `, and the bare `⏳ ` — while a turn works AND while
+`pending` background work runs after the card: one hourglass, one meaning
+("Claude works, not your move"), never a worded `⏳ Working – ` (legacy, only
+stripped). Nothing else strips or sets titles.
 
-**Process prefixes outrank the hourglass.** Three prefixes name a running
-process rather than an outcome: `🚀 Shipping – ` (the ship pipeline),
-`🧭 Concept – ` (an open concept page), `📥 Batch – ` (an armed collection).
-The bare `⏳ ` is the *fallback* for "being worked on" — it is set only when no
-process prefix applies and it never replaces one. Concretely:
-`prompt.flow.title-work` leaves a title that starts with any of the three
+**Process prefixes outrank the hourglass.** Two prefixes name a running
+process rather than an outcome: `🚀 Shipping – ` (the ship pipeline) and
+`📥 Batch – ` (an armed collection). The bare `⏳ ` is the *fallback* for
+"being worked on" — it is set only when no process prefix applies and it
+never replaces one. `🧭 Concept – ` is no process but a wait: it says "your
+move — look at the page", so whenever Claude works in a concept session
+(generating the page, a user prompt, a picked-up submission, iterating,
+implementing) the title is `⏳ `, and the card brings the compass back only
+for the `waiting` phase. Only a task-notification turn leaves the compass
+alone (it may end without a card). Concretely:
+`prompt.flow.title-work` leaves `🚀 Shipping – ` / `📥 Batch – ` titles
 untouched, and a prompt that *is* a ship (`hooks/lib/ship-intent.js`, the same
 classifier `prompt.ship.detect` uses) is marked `🚀 Shipping – ` by the hook
 itself, so `/ship` after a change never sits on `⏳` for the length of the

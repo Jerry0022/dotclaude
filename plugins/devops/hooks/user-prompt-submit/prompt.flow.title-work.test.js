@@ -2,9 +2,11 @@ import { describe, test, expect } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ONCE_KEY, WORK_PREFIX, PENDING_PREFIX, SHIPPING_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, prefixFor, shouldMark, releaseTitleWork } from "./prompt.flow.title-work.js";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { ONCE_KEY, WORK_PREFIX, LEGACY_PENDING_PREFIX, SHIPPING_PREFIX, CONCEPT_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, prefixFor, shouldMark, releaseTitleWork } from "./prompt.flow.title-work.js";
 import { runOnce } from "../lib/run-once.js";
-import { SESSION_PREFIX, releasedPrefix } from "../../mcp-server/lib/mode-state.js";
+import { SESSION_PREFIX, LEGACY_PREFIXES, releasedPrefix } from "../../mcp-server/lib/mode-state.js";
 
 // The first prompt of a session puts the wrench on the sidebar title. The
 // hook is CJS and pins its own copy of the prefix; these tests bind it to
@@ -15,15 +17,21 @@ describe("prompt.flow.title-work", () => {
     expect(WORK_PREFIX).toBe("⏳ ");
   });
 
-  test("the bare icon is distinct from the worded pending prefix (same emoji, different meaning)", () => {
-    expect(PENDING_PREFIX).toBe(SESSION_PREFIX.pending);
-    expect(PENDING_PREFIX).toBe("⏳ Working – ");
-    expect(PENDING_PREFIX.startsWith(WORK_PREFIX)).toBe(true);
-    expect(PENDING_PREFIX).not.toBe(WORK_PREFIX);
+  // One hourglass: the card's pending prefix IS the bare icon. The worded
+  // "⏳ Working – " is only a legacy form a title may still carry.
+  test("the card's pending prefix is the same bare icon; the worded form is legacy only", () => {
+    expect(SESSION_PREFIX.pending).toBe(WORK_PREFIX);
+    expect(LEGACY_PREFIXES).toContain(LEGACY_PENDING_PREFIX);
+    expect(LEGACY_PENDING_PREFIX).toBe("⏳ Working – ");
+    expect(LEGACY_PENDING_PREFIX.startsWith(WORK_PREFIX)).toBe(true);
+  });
+
+  test("the concept prefix mirrors SESSION_PREFIX.concept", () => {
+    expect(CONCEPT_PREFIX).toBe(SESSION_PREFIX.concept);
   });
 
   test("knows the leading emoji of every prefix the card or a skill may leave", () => {
-    const all = [...Object.values(SESSION_PREFIX), releasedPrefix("stable")];
+    const all = [...Object.values(SESSION_PREFIX), ...LEGACY_PREFIXES, releasedPrefix("stable")];
     for (const p of all) {
       expect(KNOWN_PREFIX_EMOJI.some((e) => p.startsWith(e)), p).toBe(true);
     }
@@ -58,16 +66,45 @@ describe("prompt.flow.title-work", () => {
   // background tasks. The instruction must replace an outcome prefix, not
   // just add the bare icon to an unmarked title — and must leave a mode
   // prefix alone.
-  test("the instruction replaces an outcome prefix with the bare icon and leaves mode prefixes untouched", () => {
+  test("the instruction replaces an outcome prefix with the bare icon and leaves batch untouched", () => {
     const text = instruction();
     for (const e of MODE_PREFIX_EMOJI) expect(text).toContain(e);
-    expect(text).toMatch(/starts with 🧭 or 📥: do nothing/);
+    expect(text).toMatch(/starts with 📥: do nothing — batch mode owns it/);
     for (const e of OUTCOME_PREFIX_EMOJI) expect(text).toContain(e);
     expect(text).toMatch(/strip every leading/);
     expect(text).toContain(`"${SESSION_PREFIX.test}"`);
-    expect(text).toContain(`"${SESSION_PREFIX.pending}"`);
+    expect(text).toContain(`"${LEGACY_PENDING_PREFIX}"`);
     expect(text).toContain(`"${releasedPrefix("stable")}"`);
-    expect(text).toContain(`already starts with "${WORK_PREFIX}" and NOT with "${PENDING_PREFIX}": do nothing`);
+    expect(text).toContain(`already starts with "${WORK_PREFIX}" and NOT with "${LEGACY_PENDING_PREFIX}": do nothing`);
+  });
+
+  // The compass means "the page waits for YOU". A user prompt in a concept
+  // session means Claude works now — the sidebar must say so, and the turn's
+  // card brings the compass back while the page still waits.
+  test("a user prompt swaps the concept compass for the hourglass and names the card that restores it", () => {
+    const text = instruction();
+    expect(text).not.toMatch(/starts with 🧭 or 📥: do nothing/);
+    expect(text).toMatch(/prefix whose emoji is one of 🧭 /);
+    expect(text).toContain(`"${CONCEPT_PREFIX}"`);
+    expect(text).toMatch(/brings the compass back/);
+    expect(text).toContain(`"${WORK_PREFIX}" + <stripped title>`);
+    // A ship prompt in a concept session goes straight to Shipping.
+    const ship = instruction(SHIPPING_PREFIX);
+    expect(ship).toMatch(/prefix whose emoji is one of 🧭 /);
+    expect(ship).toContain(`"${SHIPPING_PREFIX}" + <stripped title>`);
+  });
+
+  // A machine turn (a task notification — the concept waker/pulser exit that
+  // way) may end without a card: flipping the compass there would strand ⏳
+  // on a page that waits. The concept skill does that swap itself once a
+  // submission is confirmed.
+  test("a machine turn keeps the concept compass and the batch prefix", () => {
+    const text = instruction(WORK_PREFIX, { machine: true });
+    expect(text).toMatch(/starts with 🧭 or 📥: do nothing — a mode owns it/);
+    expect(text).not.toMatch(/prefix whose emoji is one of 🧭 /);
+    expect(text).not.toContain(`"${CONCEPT_PREFIX}"`);
+    expect(text).not.toMatch(/brings the compass back/);
+    expect(text).toContain(`"${WORK_PREFIX}" + <stripped title>`);
   });
 
   // Observed 2026-09-21: "/ship" after a change left "⏳" on the title for
@@ -116,6 +153,43 @@ describe("prompt.flow.title-work", () => {
     } finally {
       releaseTitleWork(sid);
     }
+  });
+
+  // End to end through the real hook process: a typed prompt may swap the
+  // compass, a task notification (the concept waker's wake-up) must not.
+  describe("hook process", () => {
+    const HOOK = fileURLToPath(new URL("./prompt.flow.title-work.js", import.meta.url));
+    const PLUGIN_ROOT = fileURLToPath(new URL("../..", import.meta.url));
+    const run = (prompt) => {
+      const sid = "title-work-e2e-" + process.pid + "-" + Math.random().toString(36).slice(2);
+      try {
+        return execFileSync(process.execPath, [HOOK], {
+          input: JSON.stringify({ session_id: sid, prompt }),
+          env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT },
+          encoding: "utf8",
+        });
+      } finally {
+        releaseTitleWork(sid);
+      }
+    };
+
+    test("a typed prompt gets the instruction that swaps the compass", () => {
+      const out = run("mach die Seite noch hübscher");
+      expect(out).toContain("[prompt.flow.title-work]");
+      expect(out).toMatch(/prefix whose emoji is one of 🧭 /);
+      expect(out).toMatch(/starts with 📥: do nothing — batch mode owns it/);
+    });
+
+    test("a task notification keeps the compass", () => {
+      const out = run("<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n<summary>WAKER_EXIT reason=PENDING_SUBMISSION version=3 action=iterate</summary>\n</task-notification>");
+      expect(out).toContain("[prompt.flow.title-work]");
+      expect(out).toMatch(/starts with 🧭 or 📥: do nothing — a mode owns it/);
+      expect(out).not.toMatch(/prefix whose emoji is one of 🧭 /);
+    });
+
+    test("a silent tick gets nothing", () => {
+      expect(run("Silently service the concept bridge on port 8851")).toBe("");
+    });
   });
 
   test("marks a real user prompt, not a silent tick, a scheduled task, or an empty prompt", () => {

@@ -153,20 +153,24 @@ Subagents inherit all output contracts:
   `🧪 Test – ` for `test`, `▶️ Started – ` for `test-minimal`, `📦 Ready – ` for
   `ready`, `⛔ Blocked – ` for `ship-blocked`, `🚫 Aborted – ` for `aborted`,
   `📋 Analysis – ` for `analysis`, `🔧 Erledigt – ` for `fallback`,
-  `⏳ Working – ` while `pending` work runs. Execute it before outputting the
+  the bare `⏳ ` while `pending` work runs. Execute it before outputting the
   card. The first prompt of a session — and the first prompt after every
-  card — puts the bare `⏳ ` (icon only, no word — distinct from the worded
-  `⏳ Working – ` pending prefix) on the title (`prompt.flow.title-work`;
-  stop.flow.guard re-arms it once a card rendered), so an outcome prefix
-  never outlives the turn it described: a new prompt means new work. Modes
-  own the title instead:
-  `/concept` sets `🧭 Concept – ` while the page waits or iterates (the card
-  re-states it per phase; an `implementing` round shows `⏳ Working – `, #416),
-  `/claude-batch` `📥 Batch – ` while collecting, `/ship` `🚀 Shipping – ` while
-  the pipeline runs — the bare `⏳ ` is the fallback and never replaces a
-  running 🧭 / 📥 / `🚀 Shipping – ` (a ship prompt is marked `🚀 Shipping – `
-  by `prompt.flow.title-work` itself, via `hooks/lib/ship-intent.js`), and no
-  card block while a batch is armed. A mode skill strips any earlier prefix before adding
+  card — puts the same bare `⏳ ` (icon only, no word) on the title
+  (`prompt.flow.title-work`; stop.flow.guard re-arms it once a card
+  rendered), so an outcome prefix never outlives the turn it described: a
+  new prompt means new work. The hourglass is one state — "Claude works, not
+  your move" — never a worded `⏳ Working – ` (a legacy form, only stripped).
+  `/concept` sets `🧭 Concept – ` only while the page waits for the user:
+  generating the page, processing a submission, iterating and implementing
+  are Claude's move and show `⏳ ` (a user prompt swaps the compass for it,
+  the concept skill does so when it picks up a submission, and the card
+  re-states the compass only for the `waiting` phase, #416).
+  `/claude-batch` owns `📥 Batch – ` while collecting, `/ship` `🚀 Shipping – `
+  while the pipeline runs — the bare `⏳ ` never replaces a running 📥 /
+  `🚀 Shipping – ` (a ship prompt is marked `🚀 Shipping – ` by
+  `prompt.flow.title-work` itself, via `hooks/lib/ship-intent.js`), nor a
+  🧭 on a task-notification turn, and no card block while a batch is armed.
+  A mode skill strips any earlier prefix before adding
   its own (`🧭 Concept – ⏳ Foo` is the bug). Prefixes are pinned in
   `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`). Desktop-app only
   (`mcp__ccd_session_mgmt__set_session_title` `self`) — elsewhere skip silently.
