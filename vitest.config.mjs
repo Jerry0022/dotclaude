@@ -23,6 +23,11 @@ export default defineConfig({
     environment: "node",
     include: ["plugins/**/*.test.js"],
     maxWorkers: HEAVY_SPAWN_WORKERS,
+    // That cap assumes one full run per machine; parallel sessions each
+    // running `npm test` broke it (4 suites at once → git-sync tests at
+    // 100-650 s). Full runs queue behind a machine-wide lock; filtered runs
+    // (`vitest run some.test.js`) and watch mode pass straight through.
+    globalSetup: ["./vitest.suite-lock.mjs"],
     minWorkers: 1,
     // Hook tests spawn real node processes (that IS the contract under test —
     // the harness invokes hooks as child processes). On Windows a single spawn
