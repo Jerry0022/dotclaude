@@ -14,8 +14,14 @@ first tool call; pick the tier by signal, not by habit.
 | **2–3 agents, parallel** | Two *analysis* lenses on one question (`research` + `po`, `po` + `redteam`) | Spawn in one message, ~5–15 tool calls per agent. **Implementing** agents in parallel (`core` + `frontend` editing the working tree at once) are never auto-spawned: offer it in one sentence like a ceremony. A UI consuming a new endpoint is not independent: Inline if ~5 files or fewer, else Full ceremony. |
 | **Full ceremony** | 3+ domains, a feature end-to-end, or a high-risk change (migration, auth, breaking contract, destructive op) | Never auto-start. Offer `/run-agents` (`/run-autonomous` if the user will be away) in one sentence; proceed only on a yes. |
 
-Announce every spawn in one line showing the mode:
-`→ research agent (opus, ≤15 calls): <what>` / `→ research agent (sonnet, ≤10 calls, spare): <what>`.
+Every spawn is announced to the user — also under the Quiet output style.
+`pre.agent.announce` resolves the effective model and effort and hands you
+the line to show verbatim:
+`→ Agent devops:research · opus · high · background — <what>` /
+`→ Agent devops:research · opus → sonnet · high · background — <what>` (spare).
+Models are family aliases (`opus`, `sonnet`, `fable`, `haiku`, `inherit`) —
+the harness resolves each to the newest model of that family, so never pin a
+version (`claude-opus-5-5`) in frontmatter, an override or a prompt.
 
 ## Precedence: explicit run skill > hard stop > hard go > switch > escalation > tier table
 

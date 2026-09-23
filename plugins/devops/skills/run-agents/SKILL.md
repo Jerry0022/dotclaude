@@ -229,7 +229,8 @@ After all waves complete:
 ## Rules
 
 - **Never skip the plan step** — always present and confirm before executing
-- **Never run agents silently** — announce each agent launch
+- **Never run agents silently** — relay the `→ Agent … · model · effort` line
+  `pre.agent.announce` hands you for each launch, verbatim
 - **Respect wave dependencies** — Core before Frontend, QA after all code changes
 - **Never ship automatically** — agents commit and push only. The user decides when to run `/ship`
 - **Follow handoff protocol** — every agent-to-agent transition uses structured handoffs
