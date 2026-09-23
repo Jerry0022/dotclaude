@@ -42,14 +42,23 @@ function transcript(dir, model) {
   return file;
 }
 
-function runHook(dir, { toolName = "Agent", input = {}, extra = {} } = {}) {
+// CLAUDE_PLUGIN_ROOT is dropped: set (e.g. when the ship MCP server runs the
+// suite) it points outside the private HOME's plugin cache, so plugin-guard
+// would treat the hook as an ad-hoc load and pass it even when disabled.
+function hookEnv(dir) {
   const home = path.join(dir, ".home");
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  delete env.CLAUDE_PLUGIN_ROOT;
+  return env;
+}
+
+function runHook(dir, { toolName = "Agent", input = {}, extra = {} } = {}) {
   for (let attempt = 0; ; attempt++) {
     const res = spawnSync(process.execPath, [HOOK], {
       cwd: dir,
       input: JSON.stringify({ tool_name: toolName, tool_input: input, cwd: dir, ...extra }),
       encoding: "utf8",
-      env: { ...process.env, HOME: home, USERPROFILE: home },
+      env: hookEnv(dir),
     });
     if (res.status !== null || attempt >= 3) {
       if (res.status === null) {
@@ -180,7 +189,7 @@ describe("pre.agent.announce (hook)", () => {
 
     const bad = spawnSync(process.execPath, [HOOK], {
       cwd: dir, input: "{not json", encoding: "utf8",
-      env: { ...process.env, HOME: path.join(dir, ".home"), USERPROFILE: path.join(dir, ".home") },
+      env: hookEnv(dir),
     });
     expect(bad.status).toBe(0);
     expect(bad.stdout).toBe("");
