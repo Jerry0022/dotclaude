@@ -134,6 +134,10 @@ function runTool(toolName, dir, sid, toolInput, homeDir = HOME_DIR, bin = GRAPHI
     HOME: homeDir, USERPROFILE: homeDir,
     DOTCLAUDE_GRAPHIFY_BIN: bin,
     DOTCLAUDE_GRAPHIFY_METRICS: METRICS_FILE,
+    // Answering stubs get a generous query timeout so a loaded full-suite run
+    // cannot turn an expected block into a timeout allow; the timeout stub keeps
+    // the production 4 s so it still exercises the hard bound.
+    ...(bin === TIMEOUT_STUB ? {} : { DOTCLAUDE_GRAPHIFY_QUERY_TIMEOUT_MS: "30000" }),
     ...extraEnv,
   };
   const payload = { tool_name: toolName, tool_input: toolInput };

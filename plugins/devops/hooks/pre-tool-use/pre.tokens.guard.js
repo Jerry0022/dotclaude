@@ -285,7 +285,9 @@ process.stdin.on('end', () => {
   // walks the tree per-search — comparing counts costs nothing extra and is
   // robust to editors touching files without changing them meaningfully.
   const GRAPHIFY_STALE_TOLERANCE = 25;
-  const GRAPHIFY_QUERY_TIMEOUT_MS = 4000;
+  // Env override for tests only: a stub on a loaded CI box can outlast 4 s and
+  // turn an expected block into a silent allow.
+  const GRAPHIFY_QUERY_TIMEOUT_MS = Number(process.env.DOTCLAUDE_GRAPHIFY_QUERY_TIMEOUT_MS) || 4000;
   const GRAPHIFY_QUERY_BUDGET = 400;
   const GRAPHIFY_RELENT_AFTER_BYPASSES = 3;
   const GRAPHGATE_FLAG_TTL_MS = 12 * 60 * 60 * 1000;
