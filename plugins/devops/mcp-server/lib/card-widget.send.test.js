@@ -4,7 +4,9 @@
 //   - a granted `ui/message` prefills the composer, it never sends;
 //   - refused (isError) unless the click's user activation is live (~5 s)
 //     AND the host saw no pointer/key event of its own for 5250 ms;
-//   - refused while the composer is not empty.
+//   - refused while the composer is not empty;
+//   - refused when the text starts with "/" (leading space too) — seen live
+//     2026-09-23, not in the bundle read.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import {
@@ -50,7 +52,8 @@ function mount({ lang = "de", composer = "", lastHostInputAgo = Infinity, drop =
         const activation = host.now - host.clickAt <= ACTIVATION_MS;
         const unlocked = host.now - host.hostInputAt >= HOST_LOCK_MS;
         let reply;
-        if (!activation || !unlocked || host.composer.trim() !== "") reply = { result: { isError: true } };
+        const slash = /^\s*\//.test(msg.params.content[0].text);
+        if (!activation || !unlocked || slash || host.composer.trim() !== "") reply = { result: { isError: true } };
         else {
           host.composer = msg.params.content[0].text;
           host.prefills++;
@@ -83,13 +86,13 @@ describe("card widget buttons — Code-tab host", () => {
     const w = mount();
     w.click(w.buttons[0]);
     await w.advance(200);
-    expect(w.host.composer).toBe("/devops:ship");
+    expect(w.host.composer).toBe("ship");
     expect(w.host.prefills).toBe(1);
     expect(w.host.posted).toHaveLength(1);
     expect(w.host.posted[0].msg).toMatchObject({
       jsonrpc: "2.0",
       method: "ui/message",
-      params: { role: "user", content: [{ type: "text", text: "/devops:ship" }] },
+      params: { role: "user", content: [{ type: "text", text: "ship" }] },
     });
     expect(w.state(w.buttons[0])).toBe("Im Eingabefeld, Enter sendet");
     await w.advance(8000);
@@ -103,7 +106,7 @@ describe("card widget buttons — Code-tab host", () => {
     w.click(w.buttons[0]);
     await w.advance(3000);
     expect(w.host.prefills).toBe(1);
-    expect(w.host.composer).toBe("/devops:ship");
+    expect(w.host.composer).toBe("ship");
     expect(w.host.posted.length).toBeGreaterThan(1);
     const landed = w.host.posted[w.host.posted.length - 1].at;
     expect(landed).toBeGreaterThanOrEqual(1250);
@@ -118,6 +121,18 @@ describe("card widget buttons — Code-tab host", () => {
     w.dom.window.postMessage({ jsonrpc: "2.0", id: 1, method: "ui/message", params: { role: "user", content: [{ type: "text", text: "x" }] } }, "*");
     await w.advance(50);
     expect(w.host.prefills).toBe(0);
+  });
+
+  test("a slash prompt is refused even with activation, empty composer and no lock", async () => {
+    // Why the buttons carry "ship", not "/devops:ship" (live 2026-09-23).
+    const w = mount();
+    for (const text of ["/devops:ship", " /compact focus"]) {
+      w.host.clickAt = w.host.now;
+      w.dom.window.postMessage({ jsonrpc: "2.0", id: 2, method: "ui/message", params: { role: "user", content: [{ type: "text", text }] } }, "*");
+      await w.advance(50);
+    }
+    expect(w.host.prefills).toBe(0);
+    expect(w.host.composer).toBe("");
   });
 
   test("composer not empty: every attempt refused, button says to clear it", async () => {
@@ -139,7 +154,7 @@ describe("card widget buttons — Code-tab host", () => {
     w.host.composer = "";
     w.click(w.buttons[0]);
     await w.advance(200);
-    expect(w.host.composer).toBe("/devops:ship");
+    expect(w.host.composer).toBe("ship");
     expect(w.state(w.buttons[0])).toBe("Im Eingabefeld, Enter sendet");
   });
 
@@ -148,7 +163,7 @@ describe("card widget buttons — Code-tab host", () => {
     w.click(w.buttons[0]);
     await w.advance(SEND_RETRY_WINDOW_MS + 2000);
     expect(w.host.prefills).toBe(1);
-    expect(w.host.composer).toBe("/devops:ship");
+    expect(w.host.composer).toBe("ship");
     expect(w.host.posted[1].at).toBeGreaterThanOrEqual(SEND_REPLY_TIMEOUT_MS);
   });
 

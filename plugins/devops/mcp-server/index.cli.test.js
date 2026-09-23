@@ -116,7 +116,7 @@ describe("--render-card CLI fallback", () => {
     expect(desktop.stdout).not.toContain("CARD WIDGET");
     expect(desktop.stderr).toContain("[CARD WIDGET — DO NOT OUTPUT THIS BLOCK]");
     expect(desktop.stderr).toContain("mcp__visualize__show_widget");
-    expect(desktop.stderr).toContain('data-prompt="/devops:ship"');
+    expect(desktop.stderr).toContain('data-prompt="ship"');
     const terminal = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "cli" });
     expect(terminal.stderr).not.toContain("CARD WIDGET");
     // The terminal gets the whole markdown body; on Desktop the widget draws
