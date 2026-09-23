@@ -256,10 +256,28 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
 - `test-minimal` never calls the widget.
 - The old CTA-actions widget (buttons above the card) is replaced by the body
   widget. The `[CTA ACTIONS]` block becomes `[CARD WIDGET]` with the same
-  Desktop-only / skip-silently semantics. Controls remain `span[role=button]`
-  until the live diagnosis (concept item "Erst Live-Diagnose") says
-  otherwise; the diagnosis widget is rendered once by the implementing
-  session and the outcome recorded in this file.
+  Desktop-only / skip-silently semantics. Controls remain `span[role=button]`.
+- **Delivery (Code-tab host rules, read from its bundle 2026-09-22):**
+  1. `ui/message` never sends. When it is accepted, the host puts the prompt
+     into the composer (`onPrefillComposer`) and the user presses Enter. A
+     widget has no path to auto-submit.
+  2. The host refuses (`isError`) unless its frame has live user activation
+     (about 5 s after the click in the widget) and it saw no pointer or key
+     event of its own in the last 5250 ms. A click soon after typing,
+     clicking or dragging the scrollbar in the app window is refused.
+  3. It also refuses while the composer is not empty (text, attachments, or
+     an upload in progress).
+
+  `sendPrompt()` drops the reply, so all of these failures were silent. That
+  is the "works only sometimes" bug. The button script now posts
+  `ui/message` itself and reads the reply. After a refusal or no reply
+  (1 s), it posts again every 300 ms while the click's activation lasts
+  (5 s), which gets past rule 2. It cannot double the prompt: once the
+  composer is filled, rule 3 refuses the next post. The button then shows
+  `Im Eingabefeld, Enter sendet`, or
+  `Nicht übernommen, Eingabefeld leeren und erneut klicken`. There is no
+  clipboard fallback. `card-widget.send.test.js` pins this behavior against
+  a host simulator that applies these three rules.
 
 ## 5. Guards (stop.flow.guard / card-guard)
 
