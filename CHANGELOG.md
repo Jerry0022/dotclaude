@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.188.0] — 2026-09-23
+
+### Added
+- **An exhausted Codex usage limit is remembered until its reset** — once Codex answered "You've hit your usage limit … try again at Oct 11th, 2026 12:03 AM", every later ship still called Codex and sat in the review gate until it failed or hit the 5-min ceiling, up to the reset date. `codex-safe.sh` now stores the announced reset time per user in `~/.claude/codex-limit.json` (new `scripts/codex-limit.js`) and returns the new rc **75** at once — no Codex call — until that time passes; the first call after it runs Codex again and drops the entry. A limit that appears mid-run kills Codex immediately instead of waiting out the ceiling. Only lines that start like a Codex error count, so a reviewed diff that merely mentions a usage limit never switches Codex off; no announced time → one-hour retry window. `codex-safe.sh --reset-limit` clears the entry early (plan bought), `--limit-status` shows it. `/ship`, `/fix`, the QA and research agents and `codex-integration.md` handle rc 75 ("Codex-Review → übersprungen — Limit bis …"). `codex-limit.test.js` covers the parser, the lifecycle and the wrapper end to end with a fake `codex`.
+
 ## [0.187.1] — 2026-09-23
 
 ### Fixed
