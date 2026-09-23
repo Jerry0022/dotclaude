@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.12.2
+ * @version 0.13.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -42,6 +42,12 @@
  *   cache still self-heals next session), node_modules excluded from the copy, and a rebuild that targets
  *   a version dir a live session already claims handed to a detached child that
  *   sleeps past the window. The mechanics live in ../lib/cache-rebuild.js.
+ *
+ *   QUIET STYLE: after the update loop, a plugin that ships
+ *   templates/output-style-quiet.md refreshes the user's
+ *   ~/.claude/output-styles/quiet.md — only when that copy exists and equals a
+ *   shipped version; a customized copy gets one stderr note instead
+ *   (../lib/output-style-sync.js).
  */
 
 require('../lib/plugin-guard');
@@ -52,6 +58,7 @@ const path = require('path');
 const { t } = require('../lib/locale');
 const { latestVisible, readChannelPin } = require('../lib/channels');
 const { runOnce, releaseOnce } = require('../lib/run-once');
+const { syncQuietStyle } = require('../lib/output-style-sync');
 const {
   DEFER_DELAY_MS,
   cacheBroken,
@@ -71,12 +78,14 @@ const DICT = {
   en: {
     header: 'Plugin updates applied (workaround for claude-code#14061):',
     restart: '⚡ **Plugin updated ({names}) — restart Claude to activate the new version.**',
+    style_synced: '- **Quiet output style**: synced to the shipped version (active from the next session)',
     dk_reread: 'Deep-knowledge index may have changed — re-read INDEX.md on next relevant task.',
     show_asis: 'Show the user this restart notice verbatim.',
   },
   de: {
     header: 'Plugin-Updates angewendet (Workaround für claude-code#14061):',
     restart: '⚡ **Plugin aktualisiert ({names}) — Claude neu starten, um die neue Version zu aktivieren.**',
+    style_synced: '- **Quiet-Ausgabestil**: auf die ausgelieferte Version synchronisiert (aktiv ab der nächsten Session)',
     dk_reread: 'Deep-Knowledge-Index hat sich evtl. geändert — INDEX.md beim nächsten relevanten Task neu lesen.',
     show_asis: 'Dem User diese Restart-Notice verbatim zeigen.',
   },
@@ -195,6 +204,9 @@ if (!FORCE && !integrity.broken && !runOnce('ss-plugin-update', null, { cooldown
 }
 
 const updated = [];
+// Plugin dirs (in the marketplace clone, i.e. the pinned version) that ship
+// the Quiet output style template — synced after the loop.
+const styleSources = [];
 // Tracks plugins whose installPath moved and that expose MCP servers.
 // Used at the end to either write or clear the stale sentinel.
 const mcpAffected = [];
@@ -289,6 +301,7 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
   for (const { name, dir } of pluginDirs) {
     const after = getVersion(dir);
     if (!after) continue;
+    if (fs.existsSync(path.join(dir, 'templates', 'output-style-quiet.md'))) styleSources.push(dir);
 
     const versionChanged = headChanged && after !== beforeVersions[name];
 
@@ -428,13 +441,27 @@ if (updated.some(u => !u.verified)) {
   releaseOnce('ss-plugin-update', null);
 }
 
+// Refresh the consumer copy of the Quiet output style. Runs on every
+// non-cooldown pass, not only on a version move: the copy drifts independently
+// of the cache (hand-copied once, never touched again).
+let styleSynced = false;
+for (const dir of styleSources) {
+  const res = syncQuietStyle({ home, pluginDir: dir });
+  if (res.status === 'updated') styleSynced = true;
+  else if (res.status === 'customized') {
+    process.stderr.write(`[ss.plugin.update] ${res.target} differs from every shipped Quiet style — left as is (customized). Delete it and re-copy templates/output-style-quiet.md to track updates again.\n`);
+  } else if (res.status === 'error') {
+    process.stderr.write(`[ss.plugin.update] Quiet style sync failed — ${res.error}\n`);
+  }
+}
+
 // Report only what the user can act on. A SUCCESSFUL same-version cache repair
 // is pure housekeeping — the plugin was already at the right version, nothing
 // changed for the user, and no restart is needed — yet it used to print a
 // three-line block at the top of every session ("1.0.0 → 1.0.0 [cache repair]").
 // Version changes and failures still surface: those are real.
 const reportable = updated.filter(u => !u.verified || u.from !== u.to);
-if (reportable.length === 0) process.exit(0);
+if (reportable.length === 0 && !styleSynced) process.exit(0);
 
 const lines = [t('header', lang, DICT)];
 lines.push('');
@@ -443,6 +470,7 @@ for (const u of reportable) {
   const repair = u.cacheRepair ? ' [cache repair]' : '';
   lines.push(`- **${u.name}**: ${u.from} → ${u.to} (${status}${repair})`);
 }
+if (styleSynced) lines.push(t('style_synced', lang, DICT));
 lines.push('');
 
 // Detect real version upgrades (not just cache repairs)

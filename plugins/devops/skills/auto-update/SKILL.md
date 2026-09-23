@@ -74,6 +74,10 @@ The hook handles:
   linked, not copied; `ss.mcp.deps` owns dependency resolution)
 - `installed_plugins.json` registry update (incl. informational `channel`)
 - Silent verification (version alignment, cache completeness)
+- Quiet output style refresh: when `~/.claude/output-styles/quiet.md` exists and
+  matches a version this plugin shipped (`templates/output-style-quiet.shipped.json`),
+  it is overwritten with the current `templates/output-style-quiet.md`. Never
+  created unprompted; a customized copy is left alone with one stderr note
 
 Capture and display the hook's stdout (update status lines).
 
@@ -88,6 +92,12 @@ git -C MARKETPLACE_DIR log --oneline {old_sha}..HEAD
 If no changes: report "Already up to date" and stop.
 
 ## Step 3 — Verify & Report
+
+The Quiet style line in 3d comes from the hook output: a
+`**Quiet output style**: synced …` line → `synced`; a stderr
+`differs from every shipped Quiet style` note → `customized — left as is`;
+otherwise `current` when `~/.claude/output-styles/quiet.md` exists, else
+`not installed`.
 
 ### 3a — Version alignment
 
@@ -127,6 +137,7 @@ Commits: {count} new commits
 {changelog}
 
 Verified: ✓ version aligned, ✓ cache complete, ✓ {skill_count} skills
+Quiet style: {synced | current | customized — left as is | not installed}
 Restart the session for hooks and MCP tools to take effect.
 Skills are available immediately.
 
