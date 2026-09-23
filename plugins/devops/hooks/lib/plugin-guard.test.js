@@ -2,7 +2,7 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
 /**
  * The bug: `claude plugin eval` (and `claude --plugin-dir`) load the plugin
@@ -61,5 +61,19 @@ describe("plugin-guard", () => {
     );
     const cached = path.join(home, ".claude", "plugins", "cache", "dotclaude", "devops", "0.1.0");
     expect(runGuard({ home, cwd, pluginRoot: cached })).toBe("alive");
+  });
+
+  test("project settings at the repo root still apply when the cwd is a subdirectory", () => {
+    const { home, cwd: root } = freshHome();
+    execFileSync("git", ["init", "-q", root], { stdio: "ignore" });
+    fs.mkdirSync(path.join(root, ".claude"));
+    fs.writeFileSync(
+      path.join(root, ".claude", "settings.json"),
+      JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } }),
+    );
+    const sub = path.join(root, "plugins", "devops", "scripts");
+    fs.mkdirSync(sub, { recursive: true });
+    const cached = path.join(home, ".claude", "plugins", "cache", "dotclaude", "devops", "0.1.0");
+    expect(runGuard({ home, cwd: sub, pluginRoot: cached })).toBe("alive");
   });
 });

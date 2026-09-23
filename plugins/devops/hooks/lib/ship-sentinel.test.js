@@ -34,9 +34,9 @@ afterEach(() => {
 });
 
 describe("ship-sentinel — path + round trip", () => {
-  test("sentinelPath joins the well-known relative path onto cwd", () => {
+  test("outside a repo, sentinelPath joins the well-known relative path onto the resolved cwd", () => {
     const cwd = path.join("/", "proj");
-    expect(sentinelPath(cwd)).toBe(path.join(cwd, SENTINEL_REL));
+    expect(sentinelPath(cwd)).toBe(path.join(path.resolve(cwd), SENTINEL_REL));
   });
 
   test("write → isActive true → clear → isActive false", () => {

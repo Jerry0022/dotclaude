@@ -1,6 +1,6 @@
 /**
  * @module batch-state
- * @version 0.4.0
+ * @version 0.4.1
  * @description State and classification for the `/claude-batch` collect mode.
  *
  * Collect mode batches user prompts into `.claude/batch.md` instead of acting
@@ -19,6 +19,7 @@
 const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
+const { projectClaudeDir } = require('./project-root');
 
 /**
  * First characters the harness claims before a prompt exists.
@@ -161,8 +162,9 @@ function configPath() {
   return path.join(os.homedir(), '.claude', 'claude-batch.json');
 }
 
+/** Anchored at the git work-tree root, never the raw cwd — see project-root.js. */
 function claudeDir(cwd) {
-  return path.join(cwd || process.cwd(), '.claude');
+  return projectClaudeDir(cwd);
 }
 
 function notesPath(cwd)    { return path.join(claudeDir(cwd), 'batch.md'); }

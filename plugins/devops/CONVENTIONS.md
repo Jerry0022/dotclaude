@@ -85,6 +85,18 @@ The authoritative list of registered hooks and their matchers is
 - `process.stdout.write()` — Injected into Claude's context as instructions
 - `console.error()` — Same as stderr, shown in hook output
 
+### Project-Rooted State
+
+Hooks receive the session's **current** cwd, which follows every `cd` the
+session makes. Any file a hook, script or MCP tool keeps in the project's
+`.claude/` is anchored with `projectRoot(cwd)` / `projectClaudeDir(cwd)` from
+`hooks/lib/project-root.js` (the git work-tree root — a linked worktree's own
+root), never `path.join(cwd, '.claude', …)`. A cwd-rooted writer drops
+`<subdir>/.claude/<file>` wherever the session stands: untracked, not covered
+by the root-anchored ignore block, fails /ship preflight's clean-tree check.
+`scripts/check-claude-artifacts.js` fails on a cwd-rooted runtime path; the
+only exception is `/concept` state, which is keyed to the session cwd by design.
+
 ### User-Relay Marker
 
 Everything a hook or MCP tool writes to stdout is addressed to Claude, not to
