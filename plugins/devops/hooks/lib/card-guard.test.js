@@ -818,12 +818,12 @@ describe("cardSignature / isDuplicateNotificationCard", () => {
     const c = cardSignature(`&nbsp;\n\n---\n\n### **${CARD_MARKER} Etwas anderes ${CARD_MARKER}**\n\n---`);
     expect(a).toBe(JSON.stringify({ title: "Sanduhr nur Fallback" }));
     expect(isDuplicateNotificationCard(a, b)).toBe(true);
-    // #443: the Desktop marker is an HTML comment now — same signature, same
+    // The Desktop marker is a markdown comment — same signature, same
     // duplicate verdict, and identical to the older visible title line.
-    const d = cardSignature(`<!-- ${CARD_MARKER} Sanduhr nur Fallback ${CARD_MARKER} -->`);
+    const d = cardSignature(`[//]: # (${CARD_MARKER} Sanduhr nur Fallback ${CARD_MARKER})`);
     expect(d).toBe(JSON.stringify({ title: "Sanduhr nur Fallback" }));
     expect(isDuplicateNotificationCard(a, d)).toBe(true);
-    expect(isDuplicateNotificationCard(d, cardSignature(`<!-- ${CARD_MARKER} Etwas anderes ${CARD_MARKER} -->`))).toBe(false);
+    expect(isDuplicateNotificationCard(d, cardSignature(`[//]: # (${CARD_MARKER} Etwas anderes ${CARD_MARKER})`))).toBe(false);
     expect(isDuplicateNotificationCard(a, c)).toBe(false);
   });
 });
@@ -1095,13 +1095,19 @@ describe("lastAssistantContainsCard", () => {
     expect(lastAssistantContainsCard(tx)).toBe(true);
   });
 
-  // #443: on Desktop the card markdown is the marker inside an HTML comment —
-  // invisible in the rendered turn, present in the transcript the hook reads.
+  // On Desktop the card markdown is the marker inside a [//]: # (…) markdown
+  // comment — invisible in the rendered turn, present in the transcript the
+  // hook reads. (An HTML comment, #443, rendered as literal text.)
   test("returns true for the Desktop marker comment, and the title is still extracted", () => {
-    const text = `<!-- ${CARD_MARKER} Sanduhr nur Fallback ${CARD_MARKER} -->`;
+    const text = `[//]: # (${CARD_MARKER} Sanduhr nur Fallback ${CARD_MARKER})`;
     const tx = jsonl(assistantMsg({ type: "text", text }));
     expect(lastAssistantContainsCard(tx)).toBe(true);
     expect(extractCardTitle(text)).toBe("Sanduhr nur Fallback");
+  });
+
+  test("unescapes parentheses and backslashes in the Desktop marker title", () => {
+    const text = `[//]: # (${CARD_MARKER} Fix \\(x\\) in a\\\\b ${CARD_MARKER})`;
+    expect(extractCardTitle(text)).toBe("Fix (x) in a\\b");
   });
 
   test("returns false when no marker present", () => {

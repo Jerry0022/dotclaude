@@ -43,9 +43,10 @@ Two visual blocks. Nothing between them, nothing under the second one.
 
 - `### **✨✨✨ … ✨✨✨**` stays exactly as today in the terminal — it is the
   marker the card-guard detects. Bold H3. On Desktop, where the widget is the
-  visible card, the same marker is emitted as an HTML comment
-  (`<!-- ✨✨✨ … ✨✨✨ -->`, § 4, #443): invisible in the turn, present in the
-  transcript the guard reads.
+  visible card, the same marker is emitted as a markdown comment
+  (`[//]: # (✨✨✨ … ✨✨✨)`, § 4): invisible in the turn, present in the
+  transcript the guard reads. (An HTML comment, #443, rendered as literal
+  text on Desktop.)
 - Content: the **outcome** of the turn, ≤ 60 chars. Never status ("agents
   running", "waiting", "pending", "noch nicht") — status belongs in the
   decision heading. Never a version or pipeline word ("gemergt", "shipped").
@@ -201,8 +202,10 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
 
 - **Desktop:** the whole card is ONE `mcp__visualize__show_widget` call (the
   "card body widget"), rendered immediately before the markdown is output —
-  and that markdown is the **marker alone, as an HTML comment**
-  (`<!-- ✨✨✨ {title} ✨✨✨ -->`, #443): it is the card-guard marker and the
+  and that markdown is the **marker alone, as a markdown comment**
+  (`[//]: # (✨✨✨ {title} ✨✨✨)` — a link reference definition, which renders
+  to nothing; `\`, `(`, `)` in the title are backslash-escaped. The HTML
+  comment of #443 showed as literal text): it is the card-guard marker and the
   transcript record, and the Desktop renderer hides it, so the widget is the
   one visible rendering of the card. (Until 0.184.0 the markdown was the
   visible title line — `&nbsp;` · `---` · `### **✨✨✨ {title} ✨✨✨**` ·
@@ -359,5 +362,5 @@ mentions a ship in passing is work, not a ship, and gets the hourglass.
 - Numbers first in evidence posts (`3464 Tests grün`, not `Tests: 3464`).
 - Verb first in ship/promotion headings (`Released`, `Promoted`, `Shipped`).
 - The three warning signs are the only emoji besides the variant emoji in
-  the heading and the ✨ marker (visible in the terminal, an HTML comment on
+  the heading and the ✨ marker (visible in the terminal, a markdown comment on
   Desktop — § 4).

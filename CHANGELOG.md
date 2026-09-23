@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.192.5] — 2026-09-23
+
+### Fixed
+- **No stray `<!-- ✨✨✨ … ✨✨✨ -->` line under the completion card on Desktop.** The Desktop renderer does not hide HTML comments; it shows them as literal text. So the card-guard marker that #443 moved into a comment appeared as a visible line under the widget on every card. The Desktop marker is now a markdown comment, `[//]: # (✨✨✨ title ✨✨✨)`: a link reference definition, which renders to nothing. Backslash and parentheses in the title are escaped so they cannot close the definition early, and `card-guard`'s `extractCardTitle` unescapes them. The terminal card and the visible title-line fallback for a failed widget call are unchanged.
+
 ## [0.192.4] — 2026-09-23
 
 ### Fixed

@@ -265,7 +265,7 @@ export function cardWidgetHtml(model, repoUrl) {
     : "";
 
   // The title lives in the widget: on Desktop the markdown under it is the ✨
-  // marker only, as an HTML comment (§ 4, #443), so the whole card is drawn
+  // marker only, as a markdown comment (§ 4), so the whole card is drawn
   // once and nothing visible follows the widget. h3 = the contract's
   // 16px/500 — one step below h2, which read too large in the chat column.
   const titleHtml = model.title ? `<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(model.title)}</h3>` : "";
