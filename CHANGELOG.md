@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.192.3] — 2026-09-23
+
+### Changed
+- **Repo hygiene for the plugin-source repo.** The root `.gitignore` is regrouped by section and deduplicated against the marked plugin block. It no longer lists the legacy copy-install directories (`.claude/hooks/`, `agents/`, `deep-knowledge/`, `templates/`, `scripts/`, `scheduled-tasks/`, `.plugin-version`), because ignoring them would hide project-authored agents and deep-knowledge. It also drops the home-rooted `usage-live.json`, and it ignores nested `plugins/**/.claude/` runtime dirs, for example from `claude plugin eval`. `package-lock.json` is now tracked so installs are reproducible, and a new `.editorconfig` matches `.gitattributes` (LF, UTF-8, 2-space indent).
+
 ## [0.192.2] — 2026-09-23
 
 ### Fixed
