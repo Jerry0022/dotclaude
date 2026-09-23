@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.192.0] — 2026-09-23
+
+### Changed
+- **The careful-compact stop before `/ship` is now a completion card.** Before, the `[ship-compact]` advice (#455) was a text block for the user to read. Now the hook asks for a `ship-blocked` card with a new `compact: { tokens }` field (MCP schema, CLI validator and `--render-card`). The card shows `🗜 Kontext N k Tokens — vor dem Ship kompaktieren?`, the saving as the context line, and the full `/compact <Ship-Fokus>` command. The numbers and the focus come from `hooks/lib/ship-compact.js`, so card and hook always agree. The card also drops the misleading "ungeprüft" evidence post, because nothing ran. On Desktop it offers one button, **Ohne Kompaktieren shippen**, which puts `ship --no-compact` into the input box; the terminal card spells out "just `/ship` again" instead. A **Kompaktieren** button was tried and dropped: in a live test the Desktop host refused every button text starting with `/`, even with a leading space, while plain text landed. A card button therefore cannot put `/compact` into the input box. The ship skill's Pre-Step 0 and the `ship-compact` lib (0.3.0) are updated to match.
+
 ## [0.191.1] — 2026-09-23
 
 ### Fixed
