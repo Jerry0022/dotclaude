@@ -1,6 +1,6 @@
 /**
  * @module browsertest-guard
- * @version 0.5.0
+ * @version 0.6.0
  * @description Pure decision logic for the Light-verification enforcement gate
  *   (the "V" in the V&V gate). Split out of stop.flow.browsertest.js so the
  *   rules can be unit-tested without mocking stdin or temp files.

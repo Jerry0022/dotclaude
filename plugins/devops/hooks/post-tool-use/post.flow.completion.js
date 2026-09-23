@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.22.1
+ * @version 0.23.0
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -303,7 +303,7 @@ process.stdin.on('end', () => {
     // never be satisfied by the test run it legitimately requires. Falls back to
     // the profile class when no pending kind was recorded.
     let owedKind = profileClass;
-    const kindFlag = readSessionFile('dotclaude-devops-light-kind', hook.session_id);
+    const kindFlag = readSessionFile('dotclaude-devops-light-kind', hook.session_id, { exact: true });
     if (kindFlag && typeof kindFlag.content === 'string' && kindFlag.content.trim()) {
       owedKind = kindFlag.content.trim();
     }
