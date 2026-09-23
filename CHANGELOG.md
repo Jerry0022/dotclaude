@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.187.1] — 2026-09-23
+
+### Fixed
+- **Completion-card CTA buttons land reliably in the input box** — a click only sporadically reached the chat. The Desktop Code-tab host treats `ui/message` as a composer prefill (never a send) and refuses it with `isError` unless the click's user activation is still live, the host saw no pointer/key event of its own for 5250 ms, and the composer is empty; the widget runtime's `sendPrompt()` dropped those refusals silently. The button script (`cardWidgetScript` in `mcp-server/lib/card-widget.js`) now posts `ui/message` itself, re-posts every 300 ms within the ~5 s activation window, never doubles a prompt (a filled composer refuses the re-post), locks against double clicks, and shows a subtle green/red status beside the buttons ("Im Eingabefeld, Enter sendet" / "Nicht übernommen, Eingabefeld leeren und erneut klicken"). No clipboard fallback. New `card-widget.send.test.js` runs the script against a host simulator with the three rules (11 tests). Design doc § 4 updated.
+
 ## [0.187.0] — 2026-09-22
 
 ### Added
