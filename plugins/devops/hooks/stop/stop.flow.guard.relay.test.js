@@ -74,7 +74,7 @@ describe("stop.flow.guard — a rendered card must also be relayed (#449)", () =
     try {
       setFlag(dir, "work-happened");
       setFlag(dir, "card-rendered");
-      const out = await stop(dir, transcript(dir, `<!-- ${MARKER} Card relay guarded ${MARKER} -->`));
+      const out = await stop(dir, transcript(dir, `[//]: # (${MARKER} Card relay guarded ${MARKER})`));
       expect(out.trim()).toBe("");
     } finally { cleanup(dir); }
   });
@@ -109,7 +109,7 @@ describe("stop.flow.guard — a rendered card must also be relayed (#449)", () =
       setFlag(dir, "work-happened");
       setFlag(dir, "card-rendered");
       setFlag(dir, "card-widget");
-      const t = transcript(dir, `<!-- ${MARKER} Card relay guarded ${MARKER} -->`);
+      const t = transcript(dir, `[//]: # (${MARKER} Card relay guarded ${MARKER})`);
       const out = await stop(dir, t);
       expect(out).toContain('"decision":"block"');
       expect(out).toContain("Card widget skipped");

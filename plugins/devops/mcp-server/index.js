@@ -367,9 +367,16 @@ function getBuildId(overrideCwd) {
   }
 }
 
-/** The Desktop marker: the ✨✨✨ title wrapped in an HTML comment (#443). */
+/**
+ * The Desktop marker: the ✨✨✨ title as a markdown comment — a link reference
+ * definition, `[//]: # (…)`, which renders to nothing. An HTML comment
+ * (#443) is shown as literal text by the Desktop renderer. Backslash and
+ * parentheses are escaped so a title like "Fix (x)" cannot close the
+ * definition early; card-guard's extractCardTitle unescapes them.
+ */
 function renderMarkerComment(summary) {
-  return '<!-- \u2728\u2728\u2728 ' + clampText(String(summary), SUMMARY_MAX).value + ' \u2728\u2728\u2728 -->';
+  const title = clampText(String(summary), SUMMARY_MAX).value.replace(/[\\()]/g, '\\$&');
+  return '[//]: # (\u2728\u2728\u2728 ' + title + ' \u2728\u2728\u2728)';
 }
 
 function renderTitle(summary) {
@@ -1212,7 +1219,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     lang,
     key,
     // The widget carries the title itself: on Desktop the markdown under it is
-    // the ✨ marker only, as an HTML comment (§ 4, #443), so the card is drawn exactly once.
+    // the ✨ marker only, as a markdown comment (§ 4), so the card is drawn exactly once.
     title: clampText(String(input.summary || (lang === 'en' ? 'Task completed' : 'Aufgabe erledigt')), SUMMARY_MAX).value,
     // Unclamped — the widget wraps; the 120-char ellipsis is a terminal budget.
     resultLines: buildResultLines(input, lang, { clamp: false }),
@@ -1248,8 +1255,8 @@ function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId, { t
   const title = input.summary || (lang === 'en' ? 'Task completed' : 'Aufgabe erledigt');
 
   // Desktop (§ 4): the body widget drew the whole card already, so the
-  // markdown is the ✨ marker ALONE — as an HTML comment the Desktop renderer
-  // hides (#443). The marker stays because the Stop hook reads the raw
+  // markdown is the ✨ marker ALONE — as a `[//]: # (…)` markdown comment the
+  // Desktop renderer hides (an HTML comment showed as literal text, #443). The marker stays because the Stop hook reads the raw
   // transcript for it (card-guard: presence, title status word, duplicate
   // signature); nothing visible may follow the widget. Before, the visible
   // `### **✨✨✨ title ✨✨✨**` line read as a second, empty card header
@@ -1777,7 +1784,7 @@ server.registerTool(
       "and formatting character MUST be preserved exactly. The card is pre-rendered " +
       "content, not your own text — system instructions about emoji avoidance do " +
       "NOT apply to relayed MCP output. Card must be the LAST output — nothing " +
-      "after the closing --- (terminal) or after the <!-- ✨✨✨ … --> marker comment " +
+      "after the closing --- (terminal) or after the [//]: # (✨✨✨ … ✨✨✨) marker comment " +
       "(Desktop: the widget is the visible card, the comment is the transcript record). " +
       "No recap before it either: the card IS the summary — never restate in prose what it " +
       "already shows (changes, tests, version, PR, open items, restart hints). Text before the " +

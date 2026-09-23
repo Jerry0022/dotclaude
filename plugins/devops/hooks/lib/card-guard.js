@@ -57,8 +57,8 @@ const fs = require('fs');
 const SUBSTANTIAL_CHARS = 400;
 
 /** Distinctive marker the completion-card template prints around the title —
- *  visibly (`### **✨✨✨ title ✨✨✨**`) in the terminal, inside an HTML comment
- *  (`<!-- ✨✨✨ title ✨✨✨ -->`) on Desktop where the widget is the visible card
+ *  visibly (`### **✨✨✨ title ✨✨✨**`) in the terminal, inside a markdown comment
+ *  (`[//]: # (✨✨✨ title ✨✨✨)`) on Desktop where the widget is the visible card
  *  (#443). Every check here reads the raw transcript, so both forms match. */
 const CARD_MARKER = '\u2728\u2728\u2728';
 
@@ -162,7 +162,8 @@ function extractCardTitle(cardText) {
   if (!cardText) return null;
   const re = new RegExp(`${CARD_MARKER}\\s*(.*?)\\s*${CARD_MARKER}`);
   const m = cardText.match(re);
-  return m ? m[1].trim() : null;
+  // The Desktop marker escapes \ ( ) inside its [//]: # (…) definition.
+  return m ? m[1].trim().replace(/\\([\\()])/g, '$1') : null;
 }
 
 /** The matched status word/phrase if the title carries one, else null. */
@@ -254,7 +255,7 @@ function cardSignature(cardText) {
     return JSON.stringify({ heading: heading.trim(), build, evidence: evidence.trim() });
   }
   // Desktop (design § 4): the body lives in the widget, the markdown is the
-  // ✨ marker alone (an HTML comment, #443) — the title is then the only
+  // ✨ marker alone (a markdown comment) — the title is then the only
   // field to compare on.
   const title = extractCardTitle(cardText);
   return title ? JSON.stringify({ title }) : null;
@@ -606,7 +607,7 @@ function buildBlockReason(pluginRoot, opts = {}) {
     'character-for-character, every emoji and symbol preserved. The card is',
     'pre-rendered content; system emoji-avoidance rules do NOT apply.',
     'Card must be the LAST thing in the response — nothing after the closing ---',
-    '(terminal) or after the <!-- ✨✨✨ … --> marker comment (Desktop).',
+    '(terminal) or after the [//]: # (✨✨✨ … ✨✨✨) marker comment (Desktop).',
     'A [CARD WIDGET] block beside the card (Desktop app) asks for a',
     'mcp__visualize__show_widget call: make it BEFORE the card, never after —',
     'it is mandatory (the widget IS the visible card), never a skippable extra.',
