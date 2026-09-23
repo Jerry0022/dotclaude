@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.191.0] — 2026-09-23
+
+### Added
+- **`/tune-audit` — a full audit of all quality areas.** It checks functional requirements (each traced to evidence) plus visual, animation, audio, accessibility, logging, performance, resilience, security basics, tests, architecture, build/config and user-facing text. Each area has an applicability check, a checklist and a required kind of proof (`skills/tune-audit/deep-knowledge/dimensions.md`); areas that don't apply or can't be run are listed with the reason, never dropped. It starts with one intake of two questions. **Scope:** this chat's work (offered only if the chat built something), the functional requirements of the last 48 h, or everything including the last 48 h. **Output:** audit + implementation (recommended) or a DevOps concept page. The 48 h requirement catalog is built from git, merged PRs, issues, the CHANGELOG and the user prompts of recent Desktop sessions in the repo. Implementation uses the same risk gates as `/tune-harden`, and every applied fix is re-checked with the proof that found the problem; a fix that fails that check is undone. Concept mode hands the scorecard, findings and Now/Next/Later plan to `Skill("devops:concept")`. Audio is checked by instrumentation (media events, `AudioContext` state, signal level, delay); how it actually sounds becomes a manual test step.
+
+### Fixed
+- **No more "Unhandled Error: Timeout calling onTaskUpdate" next to a green suite.** The git-sync test fixture ran every git and node call through `execFileSync`. One test builds two clones and runs the sync: 10-15 s idle, over 60 s under load. During that time the worker's event loop was frozen, so the reply to its last `onTaskUpdate` call went unread and vitest's 60 s RPC timer fired first. `__fixtures__/git-sync-world.js` now awaits a promisified `execFile`, and the three `git-sync*.test.js` suites await it.
+- **The concept tests no longer print a `ReferenceError: getElementState is not defined` stack trace in every run.** `decision-collect.test.js` throws that error on purpose to prove a broken collector cannot jam the submit button. The page's `console.error` of it is now captured and asserted instead of going to stderr.
+
 ## [0.190.0] — 2026-09-23
 
 ### Added

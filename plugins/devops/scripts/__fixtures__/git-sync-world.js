@@ -15,13 +15,22 @@
  *   as an error next to a fully green suite. Separate files land in separate
  *   workers and stay short enough for that not to happen.
  *
- *   The describes are NOT concurrent (#424): the tests spawn synchronously, so
- *   under describe.concurrent every test's timeout timer starts together and
- *   the last one is charged the whole group's wall clock — 65-75 s for a
- *   five-test group, over the 60 s budget, while each test alone takes 10-15 s.
+ *   The describes are NOT concurrent (#424): under describe.concurrent every
+ *   test's timeout timer starts together and the last one is charged the whole
+ *   group's wall clock — 65-75 s for a five-test group, over the 60 s budget,
+ *   while each test alone takes 10-15 s.
+ *
+ *   Every process call is ASYNC. A world is two clones plus the sync, 10-15 s
+ *   idle and 60 s+ on a loaded machine, and with execFileSync that whole span
+ *   froze the worker's event loop. The reply to the worker's last
+ *   `onTaskUpdate` RPC then sat unread until the loop woke up, by which time
+ *   the RPC's 60 s timer fired first — "Unhandled Error: Timeout calling
+ *   onTaskUpdate" next to an all-green suite, still after the file split.
+ *   Awaiting each spawn keeps the loop free to answer.
  */
 
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -32,6 +41,8 @@ export const SCRIPT = path.join(
   "..",
   "git-sync.js"
 );
+
+const run = promisify(execFile);
 
 /** Every world this process created, for the suite's afterAll sweep. */
 const worlds = [];
@@ -55,22 +66,21 @@ const GIT_ENV = {
   GIT_CONFIG_VALUE_0: "false",
 };
 
-export function git(cwd, args) {
-  return execFileSync("git", args, {
+export async function git(cwd, args) {
+  const { stdout } = await run("git", args, {
     cwd,
     encoding: "utf8",
-    stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
     env: GIT_ENV,
-  }).trim();
+  });
+  return stdout.trim();
 }
 
 /** Run git-sync.js the way the background spawner does. Returns its report or "". */
-export function runSync(cwd, resultFile, envOverride = {}) {
-  execFileSync(process.execPath, [SCRIPT], {
+export async function runSync(cwd, resultFile, envOverride = {}) {
+  await run(process.execPath, [SCRIPT], {
     cwd,
     encoding: "utf8",
-    stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
     env: { ...GIT_ENV, ...envOverride, DEVOPS_GIT_SYNC_RESULT_FILE: resultFile },
   });
@@ -90,9 +100,9 @@ export function read(repo, file) {
   return fs.readFileSync(path.join(repo, file), "utf8").replace(/\r\n/g, "\n");
 }
 
-export function commitAll(repo, message) {
-  git(repo, ["add", "-A"]);
-  git(repo, ["commit", "-m", message, "--no-verify"]);
+export async function commitAll(repo, message) {
+  await git(repo, ["add", "-A"]);
+  await git(repo, ["commit", "-m", message, "--no-verify"]);
 }
 
 /** A scratch directory tracked for cleanup, for suites that build their own world. */
@@ -108,34 +118,34 @@ export function makeRoot() {
  * the way a merged PR does — it must not be primary, because advancing
  * primary's local main would destroy the very precondition under test.
  */
-export function makeWorld() {
+export async function makeWorld() {
   const root = makeRoot();
   const originPath = path.join(root, "origin.git");
-  git(root, ["init", "--bare", "--initial-branch=main", originPath]);
+  await git(root, ["init", "--bare", "--initial-branch=main", originPath]);
 
   const primary = path.join(root, "primary");
-  git(root, ["clone", "--quiet", originPath, primary]);
+  await git(root, ["clone", "--quiet", originPath, primary]);
   write(primary, "base.txt", "base\n");
   write(primary, "untouched.txt", "untouched\n");
-  commitAll(primary, "base");
-  git(primary, ["push", "--quiet", "origin", "main"]);
+  await commitAll(primary, "base");
+  await git(primary, ["push", "--quiet", "origin", "main"]);
 
   // Linked worktree on a feature branch — primary STAYS on main.
   const wt = path.join(root, "wt");
-  git(primary, ["worktree", "add", "--quiet", "-b", "feature", wt, "main"]);
+  await git(primary, ["worktree", "add", "--quiet", "-b", "feature", wt, "main"]);
 
   const other = path.join(root, "other");
-  git(root, ["clone", "--quiet", originPath, other]);
+  await git(root, ["clone", "--quiet", originPath, other]);
 
   return { root, originPath, primary, wt, other };
 }
 
 /** Land a commit on origin/main, as a merged PR would. Expects `other` on main. */
-export function advanceOrigin(other, file, content, message) {
-  git(other, ["pull", "--quiet", "--ff-only", "origin", "main"]);
+export async function advanceOrigin(other, file, content, message) {
+  await git(other, ["pull", "--quiet", "--ff-only", "origin", "main"]);
   write(other, file, content);
-  commitAll(other, message);
-  git(other, ["push", "--quiet", "origin", "main"]);
+  await commitAll(other, message);
+  await git(other, ["push", "--quiet", "origin", "main"]);
 }
 
 /** Register as the suite's afterAll. */
