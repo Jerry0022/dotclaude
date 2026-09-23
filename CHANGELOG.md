@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.190.0] — 2026-09-23
+
+### Added
+- **Every agent spawn shows its model and effort in the chat, also under the Quiet output style.** The delegation policy asked for a spawn line only in prose, without the effort. The Quiet style ("never narrate") swallowed it, and nothing enforced it. The new PreToolUse hook `pre.agent.announce` (matcher `Agent`) resolves the spawn's effective model and effort from the agent frontmatter (`devops:*`, project and user `.claude/agents/`), an invocation override shown as `default → override` (e.g. the budget downgrade `opus → sonnet`), and `inherit`, which resolves to the session's model with its version read from the transcript. It then hands Claude `→ Agent devops:research · opus · high · background — <description>` to show verbatim, the one relay Quiet honours. It stays silent inside subagents and for a spawn `pre.strict.agent-gate` is about to refuse (the retry announces). Models stay family aliases (`opus`, `sonnet`, `fable`, `haiku`, `inherit`), which the harness resolves to the newest model of each family (Claude Code 2.1.280: `opus` → `claude-opus-5-5`, `fable` → `claude-fable-5-1`). A test pins that no agent frontmatter carries a version. `pre.agent.announce.test.js` has 17 cases. The new behavioral eval `evals/delegation/agent-announce-quiet` scaffolds the Quiet style and passed 2/2 with the hook, 0/2 without it.
+
 ## [0.189.2] — 2026-09-23
 
 ### Fixed
