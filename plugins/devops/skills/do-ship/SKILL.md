@@ -71,7 +71,7 @@ check, so a squash-merged keep-mode branch counts as shipped
 **Promotion stays a user decision.** The channel word the user typed IS that
 decision — no extra confirmation. Never promote on a channel that did not
 come from the user: arguments an orchestrator passes (`--queued`, `--cwd`,
-`/do-run backlog`, `/setup-cleanup`) and any `$SHIP_LOCKOUT` run skip the
+`/do-run backlog`, auto-cleanup) and any `$SHIP_LOCKOUT` run skip the
 promotion and name it as an `open` item. A bare "promote" (no channel) asks
 which promotion (`modes/promote.md` Step 2). All `ship_promote` guards stay
 final (monotonicity, ancestry, immutability — `modes/promote.md` Step 3).
@@ -79,7 +79,7 @@ final (monotonicity, ancestry, immutability — `modes/promote.md` Step 3).
 ## Composed ships — `--cwd`, `--keep`, `--queued`, the queue marker
 
 `/do-ship` is also invoked by orchestrators that land **several** PRs from ONE
-session (`/setup-cleanup` Step 10b ships every selected open PR this way;
+session (the auto-cleanup skill's Step 10b ships every selected open PR this way;
 `/do-run backlog` ships every queued issue). Three arguments and one marker make
 that safe; a plain `/do-ship` with no arguments behaves exactly as before.
 
@@ -87,7 +87,7 @@ that safe; a plain `/do-ship` with no arguments behaves exactly as before.
 |---|---|
 | `--cwd=<path>` | **Target directory override.** Every `ship_*` MCP call passes this path as `cwd`, every git/gh command runs with `git -C <path>` / inside it, and both Step 1e passes get `--cwd=<path>`. The branch that ships is the one checked out THERE, not this session's own. Pre-Step B (session activity) and Pre-Step C (sidebar title) still refer to this session; `ExitWorktree` is **never** called (it would act on this session's worktree, not the target) — the orchestrator owns the target's teardown, so `--cwd` implies `--keep`. |
 | `--keep` | Keep-mode (Step 5a signal 4): no branch or worktree teardown, `ship_cleanup({ keep: true })` only clears the sentinel. |
-| `--queued` | This ship is one of several in a queue. Informational: the card `summary` gets a `(Queue n/N)` suffix when the orchestrator passes `--queued=n/N`, and a `ship-blocked` outcome is expected to be *parked* by the caller, not retried here. |
+| `--queued` | This ship is one of several in a queue. The card `summary` gets a `(Queue n/N)` suffix when the orchestrator passes `--queued=n/N`, a `ship-blocked` outcome is expected to be *parked* by the caller, not retried here, and Step 6 skips `ship_hygiene` — the orchestrator decided what stays. |
 | `.claude/.ship-queue` marker in the target repo root (`{ owner, since }`) | Written by the orchestrator before its first ship, deleted after its own finalizer. Project ship extensions MUST skip any post-ship step that mutates this install (plugin self-sync, cache rebuild, MCP restart) while it exists — the orchestrator runs that step exactly once at the end. Not a lockout: `AskUserQuestion` gates stay interactive unless Pre-Step A says otherwise. **Stale rule:** a marker whose `since` is older than 6 h belongs to a queue that died; a plain `/do-ship` (no `--queued`) deletes it and proceeds as if absent, so one crashed cleanup run never defers finalizers forever. |
 
 | `--no-compact` | Skip the careful-compact stop for this one ship (below). Parsed and dropped — it changes nothing else. |
@@ -113,7 +113,7 @@ button puts `ship --no-compact` into the input box. The user either compacts
 and types `/do-ship` again (the hook sees the compaction and lets it through), or
 ships without compacting (the button, or simply `/do-ship` again).
 Ships reached through the Skill tool by an orchestrator (`/do-run backlog`,
-`/setup-cleanup`) never see the block — the hook only reads user prompts.
+auto-cleanup) never see the block — the hook only reads user prompts.
 A **promotion-only** prompt ("promote stable" with nothing unshipped) never
 gets it either: that run is ~4 calls (ls-remote, `ship_promote`, the card),
 not ~16, so the stop would cost the user more than it saves. A promotion that
@@ -205,7 +205,7 @@ and `/do-batch` do — the prefix strings are pinned in
 2. If the title already starts with `🚀 Shipping – `: done — `prompt.flow.title-work`
    marks a ship prompt itself (same classifier as `prompt.ship.detect`), so a
    `/do-ship` typed by the user arrives here already marked. Only a ship reached
-   another way (an affirmation after a card, a queue in `/setup-cleanup` or
+   another way (an affirmation after a card, a queue in auto-cleanup or
    `/do-run backlog`) still needs steps 3–4.
 3. Strip any leading devops prefix (`🚀 Shipping – `, `🚀 Shipped – `, `🧪 Test – `,
    `📦 Ready – `, `⛔ Blocked – `, `⏳ `, … — the `SESSION_PREFIX` values) left by an earlier card or
@@ -268,12 +268,12 @@ See `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md` for the full pattern.
 
 ```
 ToolSearch({
-  query: "select:mcp__plugin_devops_dotclaude-ship__ship_preflight,mcp__plugin_devops_dotclaude-ship__ship_build,mcp__plugin_devops_dotclaude-ship__ship_version_bump,mcp__plugin_devops_dotclaude-ship__ship_release,mcp__plugin_devops_dotclaude-ship__ship_cleanup",
-  max_results: 5
+  query: "select:mcp__plugin_devops_dotclaude-ship__ship_preflight,mcp__plugin_devops_dotclaude-ship__ship_build,mcp__plugin_devops_dotclaude-ship__ship_version_bump,mcp__plugin_devops_dotclaude-ship__ship_release,mcp__plugin_devops_dotclaude-ship__ship_cleanup,mcp__plugin_devops_dotclaude-ship__ship_hygiene",
+  max_results: 6
 })
 ```
 
-If the `ToolSearch` result contains all five `<function>` entries, proceed. If ANY are missing from the returned block, the server is genuinely not registered — do NOT fall back to `gh pr create` (the guard hook blocks it). When the session reminder shows the server as **failed to connect** (`Connection closed`), run the cache diagnosis in `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md → When the server is genuinely down` before reporting: a cache that lost its `*.js` files is the usual cause and is repairable in-session.
+If the `ToolSearch` result contains all six `<function>` entries, proceed. If ANY are missing from the returned block, the server is genuinely not registered — do NOT fall back to `gh pr create` (the guard hook blocks it). When the session reminder shows the server as **failed to connect** (`Connection closed`), run the cache diagnosis in `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md → When the server is genuinely down` before reporting: a cache that lost its `*.js` files is the usual cause and is repairable in-session.
 
 Do NOT skip this step even if you "think" the tools are available. `analysis` / `ready` / `test` cards have no ship-tool dependency and won't hit this — only the full pipeline does.
 
@@ -318,11 +318,13 @@ untracked file moved aside so preflight passes and put back after the merge
 blocks the archive — observed with `.claude/graphify.json` (2026-09-23). Settle
 each file where it belongs, inside this ship:
 - **Plugin configuration** (`.claude/graphify.json`, `settings.json`, the rest
-  of the *MUST be tracked* list in `skills/setup-project/SKILL.md` § 2.2) →
-  commit it. Include it in the ship when it matches the main checkout's copy.
-- **Plugin runtime state** → add it to the ignore block (`/setup-project`) or
-  delete it when it is a stray hook artifact (e.g. a `.claude/` created in a
-  subdirectory).
+  of the *MUST be tracked* list in `{PLUGIN_ROOT}/deep-knowledge/project-setup.md`
+  § .gitignore) → commit it. Include it in the ship when it matches the main
+  checkout's copy.
+- **Plugin runtime state** → it belongs in `hooks/lib/runtime-ignores.js`, which
+  `ss.project.setup` writes into `.git/info/exclude` at every session start (a
+  file missing there is a plugin bug — add it to that list), or delete it when
+  it is a stray hook artifact (e.g. a `.claude/` created in a subdirectory).
 A harness-created worktree must end Step 5c with an empty `git status --porcelain`.
 
 The marker check has two scopes. A marker in the files **this ship would land** is a hard error — `ship_release` re-scans immediately before committing, so one left behind by the rebase in 1b is caught there too. A marker anywhere else in the repo is a **warning**: it predates this branch, so report it and open a separate fix rather than holding an unrelated release hostage.
@@ -965,7 +967,7 @@ Report the error to the user. The merge already landed on GitHub — cleanup can
 do **NOT** force-remove the directory the session lives in — that would break the session. Fall
 back to Step 5c (`ship_cleanup({ ..., keep: true })`, normal DONE CTA, no `state.kept`) and
 stay silent about it: the remote branch is gone (`ship_release`), the local leftovers are the
-app's or `/setup-cleanup`'s job. Never hand the user git commands to run.
+app's, `ship_hygiene`'s or the auto-cleanup page's job. Never hand the user git commands to run.
 
 Then call `ship_cleanup` MCP tool with the `base` from Step 1 (always pass `cwd`):
 ```
@@ -1051,7 +1053,7 @@ also drops the stale remote-tracking ref so the next lease-pinned push is not re
 The next commit + push in this worktree re-creates it via
 `git push --set-upstream origin <branch>` automatically. A `remoteBranchWarning` in the
 release result means the delete failed: surface it as one `open` item on the card
-("Remote-Branch `<branch>` konnte nicht gelöscht werden — /setup-cleanup"), nothing else.
+("Remote-Branch `<branch>` konnte nicht gelöscht werden — »branches aufräumen« öffnet die Aufräum-Seite"), nothing else.
 
 In Step 6:
 - **Deliberate keep** (follow-up work expected): pass `state.kept: true` and
@@ -1167,6 +1169,32 @@ The card renders them on the channel ladder line
 (`alpha **v0.27.0** › beta v0.25.0 (−2) › stable v0.19.0 (−8 · 7 d)`).
 It is NOT a `userFinalTest` item — it is not a test — and NOT an `open` item.
 Visible lag is the ring model working; the nudge just keeps it visible.
+
+### Post-ship hygiene (merged ship or promotion — MANDATORY)
+
+After every run that merged (`ship-successful` — normal, keep-mode or
+intermediate) or promoted (`released`), call once, before the card, with the
+same `cwd` the card gets:
+
+```
+ship_hygiene({ cwd: "<cwd>", trigger: "ship", lang: "de" })
+```
+
+(`trigger: "promote"` for a promotion-only run — `modes/promote.md` Step 4.)
+The tool removes leftover branches and session worktrees whose content
+provably landed — only after a ship, only once one of them is older than the
+age gate (default 30 days), and then every removable one older than 7 days;
+younger leftovers stay for the page. It also decides whether the cleanup page
+is worth suggesting (more than 50 leftovers, at most once a week). Pass its
+card lines through unchanged: `card.tests` → append to `tests`, `card.open` (a
+`{ text, reply }` item) → append to `open`. Both are absent when nothing happened — add nothing then, and
+never restate the result in prose.
+
+Skip it for `--queued` ships (the auto-cleanup queue already decided on its
+page what stays) and for every blocked or aborted run. A failed call
+(`success: false`) is non-fatal: no card line, no retry. The thresholds are the
+user's settings (`{PLUGIN_ROOT}/deep-knowledge/devops-config.md`) — never
+override them for one run.
 
 ```
 render_completion_card({

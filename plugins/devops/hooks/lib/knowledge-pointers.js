@@ -1,14 +1,17 @@
 'use strict';
 /**
  * @module knowledge-pointers
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Trigger phrases → one-line POINTERS to a deep-knowledge doc,
  *   for `prompt.knowledge.dispatch`. PR 3 of the skill restructure
  *   (docs/superpowers/specs/2026-09-24-skill-restructure-design.md) retired
- *   four skills into deep-knowledge docs; their trigger phrases live here now
- *   (the full retirement snapshot is `RETIRED_TRIGGERS` in skill-names.js,
- *   and `scripts/skill-graph.test.js` asserts each phrase still matches).
+ *   four skills into deep-knowledge docs (setup-project followed on
+ *   2026-09-24); their trigger phrases live here now (the full retirement
+ *   snapshot is `RETIRED_TRIGGERS` in skill-names.js, and
+ *   `scripts/skill-graph.test.js` asserts each phrase still matches). An entry
+ *   with `legacy: null` is a plain topic pointer that never was a skill
+ *   (devops-config.md — the settings runbook).
  *
  *   Why a pointer and not the doc body (the dispatch's TOPIC_MAP injects
  *   whole files): these docs are 5–14 KB, and some of their words are common
@@ -33,7 +36,7 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * @type {ReadonlyArray<{file:string, legacy:string, extension:boolean, topic:string, phrases:ReadonlyArray<string>}>}
+ * @type {ReadonlyArray<{file:string, legacy:string|null, extension:boolean, topic:string, phrases:ReadonlyArray<string>}>}
  */
 const POINTERS = Object.freeze([
   Object.freeze({
@@ -73,6 +76,28 @@ const POINTERS = Object.freeze([
       'strict', 'strikt', 'strict mode', 'strict modus', 'strikt modus', 'strict an', 'strict aus',
       'genau so und nicht mehr', 'nur das ändern', 'nichts anderes anfassen', 'nur den rand',
       '/claude-strict',
+    ]),
+  }),
+  Object.freeze({
+    file: 'project-setup.md',
+    legacy: 'setup-project',
+    extension: true,
+    topic: 'project setup / repo hygiene (.gitignore for the stack, secrets, LICENSE, CLAUDE.md audit, platform audit) — do only the part asked for; the plugin\'s own runtime files are excluded automatically',
+    phrases: Object.freeze([
+      'set up this project', 'init repo', 'audit gitignore', 'add license', 'fix gitignore', 'repo hygiene',
+      'Projekt einrichten', 'Repo aufsetzen', 'Lizenz hinzufügen', 'gitignore prüfen',
+      '/setup-project',
+    ]),
+  }),
+  Object.freeze({
+    file: 'devops-config.md',
+    legacy: null,
+    extension: false,
+    topic: 'devops plugin settings, per project or global (e.g. when the cleanup hint appears, whether old branches/worktrees are removed automatically) — change them with scripts/devops-config.js, never by editing JSON',
+    phrases: Object.freeze([
+      'devops config', 'devops settings', 'devops einstellungen', 'plugin einstellungen', 'plugin settings',
+      'cleanup einstellen', 'cleanup settings', 'cleanup konfigurieren', 'aufräumen einstellen',
+      'nicht automatisch aufräumen', 'automatisch aufräumen', 'aufräum-hinweis', 'cleanup hint',
     ]),
   }),
 ]);
@@ -134,7 +159,9 @@ function legacyOverrides(legacy, opts = {}) {
  */
 function pointerLine(hit, dkDir, overrides = []) {
   const file = path.join(dkDir, hit.file).replace(/\\/g, '/');
-  let line = `[deep-knowledge pointer] "${hit.phrase}" → ${hit.topic}. Read ${file} before acting on it (not a skill — do not invoke one named ${hit.legacy}).`;
+  let line = hit.legacy
+    ? `[deep-knowledge pointer] "${hit.phrase}" → ${hit.topic}. Read ${file} before acting on it (not a skill — do not invoke one named ${hit.legacy}).`
+    : `[deep-knowledge pointer] "${hit.phrase}" → ${hit.topic}. Read ${file} before acting on it (not a skill).`;
   if (overrides.length) {
     line += ` Project override from the old ${hit.legacy} extension, applies on top: ${overrides.map(o => o.replace(/\\/g, '/')).join(', ')}.`;
   }

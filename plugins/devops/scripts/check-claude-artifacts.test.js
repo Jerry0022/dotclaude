@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import {
   readCoveredEntries,
   isCovered,
@@ -14,10 +15,11 @@ import {
 } from "./check-claude-artifacts.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 const SCRIPT = path.join(__dirname, "check-claude-artifacts.js");
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const PLUGIN_ROOT = path.resolve(__dirname, "..");
-const SKILL = path.join(PLUGIN_ROOT, "skills", "setup-project", "SKILL.md");
+const LIST = path.join(PLUGIN_ROOT, "hooks", "lib", "runtime-ignores.js");
 
 // Spawns a cold `node` while 70 other files do the same — see the note in
 // pre.tokens.guard.graphgate.test.js. 30s catches a hang without flaking.
@@ -30,8 +32,9 @@ describe("check-claude-artifacts — the ignore list stays complete (#292)", () 
     ).not.toThrow();
   });
 
-  test("the marked block is present and replaceable in place", () => {
-    const text = fs.readFileSync(SKILL, "utf8");
+  test("the rendered block has exactly one marker pair — replaceable in place", () => {
+    const { renderBlock } = require(LIST);
+    const text = renderBlock();
     // Exactly one marker pair — two would make in-place replacement ambiguous
     // and is how the "appending duplicates" problem reappears.
     expect(text.split(BLOCK_START).length - 1).toBe(1);
@@ -40,14 +43,14 @@ describe("check-claude-artifacts — the ignore list stays complete (#292)", () 
   });
 
   test("every artifact the plugin writes into a project is covered", () => {
-    const covered = readCoveredEntries(SKILL);
+    const covered = readCoveredEntries(LIST);
     for (const name of scanArtifacts(PLUGIN_ROOT).keys()) {
       expect(isCovered(name, covered), `.claude/${name} is not ignored`).toBe(true);
     }
   });
 
   test("home-rooted state is NOT listed — it cannot dirty a repo", () => {
-    const covered = readCoveredEntries(SKILL);
+    const covered = readCoveredEntries(LIST);
     for (const homeOnly of [
       "claude-batch.json", "graphify-metrics.jsonl", "usage-live.json",
       "usage-baseline.json", "edge-usage-profile", "concept-bridges",
@@ -58,7 +61,7 @@ describe("check-claude-artifacts — the ignore list stays complete (#292)", () 
   });
 
   test("configuration stays tracked — never ignored", () => {
-    const covered = readCoveredEntries(SKILL);
+    const covered = readCoveredEntries(LIST);
     for (const cfg of ["graphify.json", "settings.json"]) {
       expect(isCovered(cfg, covered), `${cfg} must stay tracked`).toBe(false);
     }
@@ -76,8 +79,8 @@ describe("check-claude-artifacts — the ignore list stays complete (#292)", () 
     const fake = fs.mkdtempSync(path.join(os.tmpdir(), "artifacts-guard-"));
     const dir = path.join(fake, "plugins", "devops", "hooks");
     fs.mkdirSync(dir, { recursive: true });
-    fs.mkdirSync(path.join(fake, "plugins", "devops", "skills", "setup-project"), { recursive: true });
-    fs.copyFileSync(SKILL, path.join(fake, "plugins", "devops", "skills", "setup-project", "SKILL.md"));
+    fs.mkdirSync(path.join(fake, "plugins", "devops", "hooks", "lib"), { recursive: true });
+    fs.copyFileSync(LIST, path.join(fake, "plugins", "devops", "hooks", "lib", "runtime-ignores.js"));
     fs.writeFileSync(
       path.join(dir, "new-feature.js"),
       "const p = join(cwd, '.claude', 'brand-new-state.json');\n",
@@ -102,8 +105,8 @@ describe("check-claude-artifacts — runtime state is anchored at the repo root"
     const plugin = path.join(fake, "plugins", "devops");
     const dir = path.join(plugin, "hooks");
     fs.mkdirSync(dir, { recursive: true });
-    fs.mkdirSync(path.join(plugin, "skills", "setup-project"), { recursive: true });
-    fs.copyFileSync(SKILL, path.join(plugin, "skills", "setup-project", "SKILL.md"));
+    fs.mkdirSync(path.join(plugin, "hooks", "lib"), { recursive: true });
+    fs.copyFileSync(LIST, path.join(plugin, "hooks", "lib", "runtime-ignores.js"));
     for (const [name, src] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), src);
     return { fake, plugin };
   }

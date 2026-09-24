@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.ship.guard
- * @version 0.4.0
+ * @version 0.4.1
  * @event PreToolUse
  * @plugin devops
  * @description Block manual PR creation/merging via Bash.
@@ -79,7 +79,8 @@ process.stdin.on('end', () => {
     'mcp__plugin_devops_dotclaude-ship__ship_build,' +
     'mcp__plugin_devops_dotclaude-ship__ship_version_bump,' +
     'mcp__plugin_devops_dotclaude-ship__ship_release,' +
-    'mcp__plugin_devops_dotclaude-ship__ship_cleanup", max_results: 5 })',
+    'mcp__plugin_devops_dotclaude-ship__ship_cleanup,' +
+    'mcp__plugin_devops_dotclaude-ship__ship_hygiene", max_results: 6 })',
   );
 
   if (!shipAlive) {

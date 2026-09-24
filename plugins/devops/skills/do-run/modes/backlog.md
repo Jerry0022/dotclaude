@@ -327,7 +327,7 @@ for each issue in queue:
                  per test-strategy.md (browser verification MANDATORY for web tech)
   3b. PASSES   → the router's Q4 passes over this issue's diff: /auto-harden,
                  then /auto-polish, each --invoked-by=autonomous (+ --strict
-                 under "Nur das"); skipped when none were chosen
+                 under "Strikt"); skipped when none were chosen
   4. SHIP      → $SHIP=auto: /do-ship (MCP ship tools) — this skill's own
                  authority. $SHIP=manual: commit on the issue branch, no
                  push/PR, item → ready; skip 5

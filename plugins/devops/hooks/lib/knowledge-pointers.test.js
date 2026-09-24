@@ -11,14 +11,16 @@ const DK = path.resolve(import.meta.dirname, "..", "..", "deep-knowledge");
 const files = (msg) => matchPointers(msg).map((h) => h.file);
 
 describe("knowledge-pointers", () => {
-  test("every pointer doc exists and belongs to a retired skill", () => {
+  test("every pointer doc exists; a retired skill's pointer is its RETIRED doc", () => {
     for (const p of POINTERS) {
       expect(fs.existsSync(path.join(DK, p.file)), p.file).toBe(true);
-      expect(RETIRED[p.legacy]?.doc, p.legacy).toBe(p.file);
+      if (p.legacy) expect(RETIRED[p.legacy]?.doc, p.legacy).toBe(p.file);
+      else expect(p.extension, `${p.file}: no legacy skill, no legacy override`).toBe(false);
     }
-    expect(POINTERS.map((p) => p.legacy).sort()).toEqual(Object.keys(RETIRED).sort());
-    // Only the three skills that had an extension step keep an override.
-    expect(POINTERS.filter((p) => p.extension).map((p) => p.legacy).sort()).toEqual(["auto-usage", "claude-strict", "setup-readme"]);
+    expect(POINTERS.filter((p) => p.legacy).map((p) => p.legacy).sort()).toEqual(Object.keys(RETIRED).sort());
+    // Only the skills that had an extension step keep an override.
+    expect(POINTERS.filter((p) => p.extension).map((p) => p.legacy).sort())
+      .toEqual(["auto-usage", "claude-strict", "setup-project", "setup-readme"]);
   });
 
   test.each([
@@ -33,6 +35,12 @@ describe("knowledge-pointers", () => {
     ["strikt bitte", "strict.md"],
     ["nichts anderes anfassen", "strict.md"],
     ["/claude-strict on", "strict.md"],
+    ["bitte Projekt einrichten", "project-setup.md"],
+    ["add license please", "project-setup.md"],
+    ["mach das mit /setup-project", "project-setup.md"],
+    ["cleanup einstellen: Hinweis erst ab 80", "devops-config.md"],
+    ["zeig mir die devops einstellungen", "devops-config.md"],
+    ["bitte nicht automatisch aufräumen in diesem Projekt", "devops-config.md"],
   ])("%j → %s", (msg, file) => {
     expect(files(msg)).toContain(file);
   });
@@ -45,6 +53,14 @@ describe("knowledge-pointers", () => {
     "",
   ])("no pointer for %j", (msg) => {
     expect(files(msg)).toEqual([]);
+  });
+
+  test("a pointer without a legacy skill names no old skill", () => {
+    const [hit] = matchPointers("devops einstellungen");
+    const line = pointerLine(hit, "/x/deep-knowledge");
+    expect(line).toContain("/x/deep-knowledge/devops-config.md");
+    expect(line).toMatch(/not a skill/);
+    expect(line).not.toMatch(/named null|named undefined/);
   });
 
   test("pointer names the doc, never asks for a Skill, and lists overrides", () => {

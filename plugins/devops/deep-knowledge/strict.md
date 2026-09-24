@@ -32,7 +32,7 @@ way). `/claude-strict` anywhere inside a prompt always reaches the hook.
 | `strict status` · `/claude-strict status` · `/claude-strict` | status |
 | `strict: <task>` · `strikt: <task>` · `/claude-strict <task>` | inline — this turn only (bound to a workflow the turn starts) |
 | "genau so und nicht mehr", "nur das ändern", "nichts anderes anfassen" anywhere in the prose | inline — this turn only |
-| do-run question 3 "Nur das" | inline — for the run (`strict-state.js inline`) |
+| do-run question 3 "Strikt" | inline — for the run (`strict-state.js inline`) |
 | a bare "strict" / "strikt" | nothing is armed; this document is pointed at, you decide |
 
 The switch words must be the **whole prompt** (`strict on`, optionally with a
@@ -198,7 +198,7 @@ node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" contract
   branch, bound workflow, expiry. When `why` is `branch-mismatch`, say which
   branch armed it and offer `strict on` / `strict off`.
 - **inline** — arms an inline mode for this turn / run, never over an active
-  branch mode (`kept: true` then). The do-run "Nur das" answer and a
+  branch mode (`kept: true` then). The do-run "Strikt" answer and a
   model-decided arm (bare "strict", see above) use it.
 - **contract** — prints the block, to prepend to an Agent prompt.
 

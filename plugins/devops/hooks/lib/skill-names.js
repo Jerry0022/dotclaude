@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module skill-names
- * @version 0.3.0
+ * @version 0.4.0
  * @plugin devops
  * @description The one table of skill names that changed in PR 2 and PR 3 of
  *   the skill restructure
@@ -15,7 +15,8 @@
  *     `promote`).
  *   - `RETIRED` — PR 3: skills that are no skill at all any more; their body
  *     is a deep-knowledge doc and their triggers live in a hook
- *     (`setup-readme`, `auto-graph`, `auto-usage`, `claude-strict`). An old
+ *     (`setup-readme`, `auto-graph`, `auto-usage`, `claude-strict`; later
+ *     `setup-project`). An old
  *     slash name maps to that mechanism, NEVER to a Skill: the router has no
  *     alias for them (`ALIAS_MAP` is built from RENAMED + FOLDED only), and
  *     `canonicalSkillName` passes them through unchanged — a name that is
@@ -53,6 +54,9 @@ const RENAMED = Object.freeze({
   'tune-polish': 'auto-polish',
   'run-agents': 'auto-agents',
   'setup-issue': 'auto-issue',
+  // 2026-09-24: out of the slash menu, reached through ship_hygiene's card
+  // hint and its trigger phrases (skill-restructure spec § Addendum).
+  'setup-cleanup': 'auto-cleanup',
 });
 
 /** Old name → the skill + mode its body moved into. */
@@ -116,7 +120,12 @@ const RETIRED = Object.freeze({
   }),
   'claude-strict': Object.freeze({
     doc: 'strict.md',
-    home: 'prompt.strict.enforce / pre.strict.agent-gate / stop.strict.release + do-run Q3 "Nur das" + prompt.knowledge.dispatch pointer',
+    home: 'prompt.strict.enforce / pre.strict.agent-gate / stop.strict.release + do-run Q3 "Strikt" + prompt.knowledge.dispatch pointer',
+  }),
+  // 2026-09-24 (skill-restructure spec § Addendum)
+  'setup-project': Object.freeze({
+    doc: 'project-setup.md',
+    home: 'ss.project.setup (runtime ignores → .git/info/exclude, one-time offer in a new repo) + prompt.knowledge.dispatch pointer',
   }),
 });
 
@@ -142,6 +151,10 @@ const RETIRED_TRIGGERS = Object.freeze({
     en: ['/claude-strict', 'strict'],
     de: ['strikt', 'genau so und nicht mehr', 'nur das ändern', 'nichts anderes anfassen',
       'strict modus', 'nur den rand', 'strict an', 'strict aus'],
+  }),
+  'setup-project': Object.freeze({
+    en: ['set up this project', 'init repo', 'audit gitignore', 'add license', 'fix gitignore', 'repo hygiene', '/setup-project'],
+    de: ['Projekt einrichten', 'Repo aufsetzen'],
   }),
 });
 

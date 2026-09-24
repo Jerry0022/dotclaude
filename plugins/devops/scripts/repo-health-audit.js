@@ -3,7 +3,7 @@
  * @script repo-health-audit
  * @version 0.1.0
  * @plugin devops
- * @description Truth-source gate for /setup-cleanup candidates. Every branch the
+ * @description Truth-source gate for auto-cleanup candidates. Every branch the
  *   concept page offers for deletion — and every branch about to be deleted —
  *   must pass this audit against the live repo, not against a cached listing:
  *     - local candidates must exist as `refs/heads/<name>` (full refname);

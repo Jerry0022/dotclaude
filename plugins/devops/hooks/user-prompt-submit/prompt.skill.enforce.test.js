@@ -107,7 +107,7 @@ describe("detectInlineSkillMentions — machine prompts (R1)", () => {
 });
 
 describe("PR 3 retired skills — never mandated by the hook", () => {
-  const RETIRED = ["setup-readme", "auto-graph", "auto-usage", "claude-strict"];
+  const RETIRED = ["setup-readme", "auto-graph", "auto-usage", "claude-strict", "setup-project"];
 
   test("they are not skill directories any more, so no inline mention counts", () => {
     const skills = listPluginSkills();
@@ -122,6 +122,8 @@ describe("PR 3 retired skills — never mandated by the hook", () => {
     "/auto-usage",
     "/auto-graph und dann knowledge graph erklären",
     "create a readme and refresh usage",
+    "mach das mit /setup-project",
+    "fix gitignore and add license",
   ])("run(%j) emits no Skill mandate for a retired name", (prompt) => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "enforce-retired-"));
     try {

@@ -245,9 +245,9 @@ describe("loadAllSkills", () => {
 describe("loadAllSkills against the real devops skills directory", () => {
   const REAL_ROOT = path.join(process.cwd(), "plugins", "devops", "skills");
 
-  test("parses every real SKILL.md without throwing and yields 15 skills (PR 3 retired four)", () => {
+  test("parses every real SKILL.md without throwing and yields 14 skills (PR 3 retired four, setup-project followed)", () => {
     const all = loadAllSkills(REAL_ROOT);
-    expect(Object.keys(all).length).toBe(15);
+    expect(Object.keys(all).length).toBe(14);
     for (const [name, meta] of Object.entries(all)) {
       expect(meta.name, `${name}: meta.name`).toBeTruthy();
       expect(typeof meta.layer, `${name}: layer type`).toBe("number");

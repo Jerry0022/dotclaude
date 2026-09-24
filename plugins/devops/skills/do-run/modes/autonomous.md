@@ -41,7 +41,7 @@ questions, then stop. Steps 1-8 do NOT apply.
 
 1. `git worktree list --porcelain` → collect every worktree whose branch starts
    with `claude/` (each is an active Claude session; same detection as
-   `setup-cleanup`).
+   `auto-cleanup`).
 2. Classify each. A worktree is **done** if its root holds `AUTONOMOUS-DONE.flag`,
    or an `AUTONOMOUS-REPORT.html` with COMPLETED status and **no**
    `AUTONOMOUS-RESUME.json`. Skip done worktrees — never re-trigger finished work.

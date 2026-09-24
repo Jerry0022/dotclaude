@@ -319,7 +319,7 @@ export async function handler(params) {
     // Merge PR (delete branch; skip --delete-branch in worktrees where gh
     // tries to switch to base locally — the remote head is deleted right
     // after the merge below instead, #442; the local branch stays with the
-    // worktree: the Desktop app owns that lifecycle, /setup-cleanup the rest)
+    // worktree: the Desktop app owns that lifecycle, ship_hygiene / auto-cleanup the rest)
     const worktree = isWorktree(opts);
     const merge = mergePR(pr.number, base, opts, { skipDeleteBranch: worktree, strategy: mergeStrategy });
     // The merge is the irreversible step. From here on the result MUST carry
@@ -401,7 +401,7 @@ export async function handler(params) {
       } else {
         result.remoteBranchWarning =
           `PR merged, but the remote branch origin/${branch} could not be deleted (${del.error}) — ` +
-          `delete it by hand or let /setup-cleanup prune it.`;
+          `the cleanup page removes it (say "branch cleanup").`;
       }
     }
 

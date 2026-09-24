@@ -39,14 +39,14 @@ it is the layer this skill *executes through*. Four ways in:
    runs as documented below. Asks questions when `$AUTONOMOUS=0`.
 2. **From `/do-run`** ("Harden danach") — `--invoked-by=do-run`, a full pass
    scoped to the run's changes, executed through auto-agents (§ Execution).
-   Under "Autonom" do-run adds `--autonomous`; under "Nur das" it adds
+   Under "Autonom" do-run adds `--autonomous`; under "Strikt" it adds
    `--strict`. The pre-PR-2 values `--invoked-by=agents` and
    `--invoked-by=autonomous` (the latter implies `--autonomous`) are read as
    `do-run`.
 3. **From `/do-ship`** — `--invoked-by=ship --base=<base> [--cwd=<path>] <files of the diff>`.
    The **ship path**: static checks on the diff's added lines, mechanical
    fixes only, no agents, no browser, no card. See § Ship path.
-4. **Under strict** — `--strict` (from do-run "Nur das", from /do-ship when
+4. **Under strict** — `--strict` (from do-run "Strikt", from /do-ship when
    strict mode is active, or when the `[claude-strict contract]` is in
    context): stay inside the named scope; everything wider is reported as a
    finding instead of fixed. On the ship path it means *report-only*.
@@ -103,7 +103,7 @@ Scan `$ARGUMENTS` for:
 - `--base=<branch>` → the diff base (ship path; default: the repo's default
   branch).
 - `--cwd=<path>` → the target checkout (a composed /do-ship `--cwd`, e.g.
-  from /setup-cleanup). It scopes BOTH the diff and the fixes: every git
+  from auto-cleanup). It scopes BOTH the diff and the fixes: every git
   command runs as `git -C <path>`, scope paths resolve against `<path>`, and
   Read/Edit touch only files under `<path>` — never this session's own
   checkout. Absent → the session's cwd.

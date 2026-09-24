@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.201.1] — 2026-09-24
+
+### Fixed
+- **Claude answers in your language, not in the language of what lands in your slot.** A German session got English three times: "No response requested." to the app's English "Continue from where you left off.", a ship-verify block relayed "exactly as returned", and a wrap-up written after a stretch of English tool results and skill bodies. The Quiet output style said "the language of the user's latest message", and in the Desktop app most of what arrives there is not typed by the user. It now follows the words you typed and names the app's own turns — the resume prompt, the no-output nudge, the summary after a compaction, a task notification — as never deciding the language. A block marked for you is still relayed complete, every line, number and link kept, but in your language.
+
+## [0.201.0] — 2026-09-24
+
+### Changed
+- **do-run's scope question reads as a choice.** Q3 „Umfang?" now offers „Flexibel (Recommended)" and „Strikt" instead of „Mit Umfeld" and „Nur das", which read like descriptions. Flexibel: „Zieht Nötiges mit: Aufrufer, Tests, Doku." Strikt: „Nur was der Prompt nennt; jede offene Wahl wird berichtet." Behavior is unchanged: Strikt arms strict mode for the run, and Q3 is still dropped when strict is already on for the branch. `strict.md`, auto-harden, auto-polish, backlog mode and the tests use the new label.
+
+## [0.200.0] — 2026-09-24
+
+### Added
+- **Old branches and worktrees clean themselves up after a ship.** After every successful ship, the new `ship_hygiene` step removes leftovers whose content is provably in main: local branches (git ancestor, the head of a merged PR, or every file they touched identical in main) and clean, idle session worktrees under `.claude/worktrees/` together with their branch. It acts only once such a leftover is older than 30 days, and then removes every removable one older than 7 days; younger leftovers stay for the cleanup page. Unshipped work, uncommitted changes, locked worktrees, worktrees outside `.claude/worktrees/`, the current worktree, the default branch and remote branches are never touched. Every removal re-checks its subject right before it runs, and the card's **Geprüft** line says what went ("Aufräumen (auto) → 3 Branches · 1 Worktree entfernt").
+- **The card suggests the cleanup page when too much piles up.** After a successful ship or promote, more than 50 leftover branches/worktrees put an open point on the card, at most once a week. It carries the answer „Ja, branches aufräumen.", so „Nachbessern" opens the page with one Enter.
+- **Plugin settings in plain words.** Tell Claude how the plugin should behave („Aufräum-Hinweis erst ab 80, nur hier", „nie automatisch aufräumen, überall") and it changes the setting with `scripts/devops-config.js`, for this project (the clone and all its worktrees) or for every project. The six `cleanup.*` values are the first settings: auto-clean on/off, age gate, minimum age, hint on/off, threshold and cooldown. `deep-knowledge/devops-config.md` lists them.
+- **Plugin runtime files stay out of git by themselves.** At every session start `ss.project.setup` writes the plugin's runtime ignore list into the clone's `.git/info/exclude`: shared by every worktree, never a diff in the repo. A release that adds a runtime file no longer dirties the repos that install it. A new repository (no commit yet, or no `.gitignore`) gets a one-time offer of the project setup.
+
+### Changed
+- **Cleanup and setup left the slash menu.** `setup-cleanup` is now the hidden `auto-cleanup` skill: say „branches aufräumen", „worktrees aufräumen" or „branch cleanup", or accept the card's hint. It always works on the current project; the all-projects mode is gone. The trigger router used to demand `setup-cleanup` on these phrases although Claude was not allowed to load it — that works now.
+- **`setup-project` is no longer a skill.** Its instructions live in `deep-knowledge/project-setup.md`. „set up this project", „fix gitignore", „add license" and its other phrases point there, and a project extension under `.claude/skills/setup-project/` still applies. `scripts/check-claude-artifacts.js` checks against `hooks/lib/runtime-ignores.js` now.
+
 ## [0.199.0] — 2026-09-24
 
 ### Added

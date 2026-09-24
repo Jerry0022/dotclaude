@@ -56,7 +56,7 @@ describe("deep-knowledge/strict.md", () => {
       expect(sw).toContain(`"${phrase}"`);
       expect(detectCommand(`bitte ${phrase}`).route, phrase).toBe("task");
     }
-    expect(sw).toMatch(/Nur das/);
+    expect(sw).toMatch(/"Strikt"/);
     expect(sw).toMatch(/TypeScript/);
   });
 

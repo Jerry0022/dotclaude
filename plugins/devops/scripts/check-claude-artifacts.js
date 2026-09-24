@@ -2,7 +2,9 @@
 /**
  * @script check-claude-artifacts
  * @description Fail when the plugin writes a PROJECT-rooted `.claude/` file that
- *   the `/setup-project` ignore block does not cover (issue #292).
+ *   the runtime ignore list does not cover (issue #292). The list is
+ *   hooks/lib/runtime-ignores.js; ss.project.setup writes it into every
+ *   clone's `.git/info/exclude`.
  *
  *   Without this, every plugin release that starts writing a new artifact
  *   silently dirties every repo that installs it — the user finds out at their
@@ -12,7 +14,7 @@
  *   Scope is deliberately narrow: only paths built from the PROJECT's `.claude/`
  *   (`claudeDir(cwd)`, `join(cwd, '.claude', …)`). Home-rooted state
  *   (`os.homedir()/.claude/…`) can never dirty a repo and must NOT be listed —
- *   see setup-project/SKILL.md § 2.2.
+ *   see hooks/lib/runtime-ignores.js.
  *
  *   Second check: a runtime artifact must be anchored at the REPO ROOT
  *   (hooks/lib/project-root.js), never joined onto the raw cwd. Hooks get the
@@ -26,9 +28,7 @@
 
 const fs = require('fs');
 const path = require('path');
-
-const BLOCK_START = '# >>> devops-plugin runtime state';
-const BLOCK_END = '# <<< devops-plugin runtime state';
+const { BLOCK_START, BLOCK_END } = require('../hooks/lib/runtime-ignores');
 
 /** Directories whose sources are scanned for artifact writes. */
 const SCAN_DIRS = ['hooks', 'scripts', 'mcp-server'];
@@ -59,23 +59,23 @@ const NOT_RUNTIME = new Set([
 const CWD_ANCHORED_BY_DESIGN = new Set(['concept-active.json', 'concepts']);
 
 /**
- * Every `.claude/` entry the skill tells a project to ignore — the generic
- * Claude Code state list AND the plugin's marked block. Coverage is coverage:
- * an artifact already handled by the generic list must not be reported as a
- * gap just because it predates the marked block.
+ * Every `.claude/` entry the runtime ignore list covers — Claude Code's own
+ * session state AND the plugin's artifacts — as names relative to `.claude/`.
+ * Coverage is coverage: an artifact already handled by the Claude Code part
+ * must not be reported as a gap. Loads the list module at `listPath` (the
+ * checked plugin tree's own copy); null when it cannot be loaded.
  */
-function readCoveredEntries(skillPath) {
-  const text = fs.readFileSync(skillPath, 'utf8');
-  if (!text.includes(BLOCK_START) || !text.includes(BLOCK_END)) return null;
-  const out = [];
-  for (const m of text.matchAll(/```gitignore\n([\s\S]*?)```/g)) {
-    for (const raw of m[1].split('\n')) {
-      const l = raw.trim();
-      if (!l || l.startsWith('#') || !l.startsWith('.claude/')) continue;
-      out.push(l.replace(/^\.claude\//, '').replace(/\/$/, ''));
-    }
+function readCoveredEntries(listPath) {
+  let mod;
+  try {
+    mod = require(path.resolve(listPath));
+  } catch {
+    return null;
   }
-  return out;
+  if (!mod || typeof mod.allEntries !== 'function') return null;
+  return mod.allEntries()
+    .filter(l => l.startsWith('.claude/'))
+    .map(l => l.replace(/^\.claude\//, '').replace(/\/$/, ''));
 }
 
 /** Does any ignore entry cover `name`? Supports the `*.log` style wildcard. */
@@ -161,11 +161,11 @@ function scanUnanchored(pluginRoot) {
 function main() {
   const repoRoot = process.argv[2] || path.resolve(__dirname, '..', '..', '..');
   const pluginRoot = path.join(repoRoot, 'plugins', 'devops');
-  const skillPath = path.join(pluginRoot, 'skills', 'setup-project', 'SKILL.md');
+  const listPath = path.join(pluginRoot, 'hooks', 'lib', 'runtime-ignores.js');
 
-  const listed = readCoveredEntries(skillPath);
+  const listed = readCoveredEntries(listPath);
   if (listed === null) {
-    console.error('[check-claude-artifacts] ignore block markers not found in setup-project/SKILL.md');
+    console.error('[check-claude-artifacts] runtime ignore list not loadable: hooks/lib/runtime-ignores.js');
     process.exit(1);
   }
 
@@ -181,9 +181,9 @@ function main() {
 
   if (missing.length) {
     console.error('[check-claude-artifacts] Project-rooted .claude/ artifacts missing from the');
-    console.error('  /setup-project ignore block (setup-project/SKILL.md § 2.2):');
+    console.error('  runtime ignore list (hooks/lib/runtime-ignores.js):');
     for (const [name, src] of missing) console.error(`  .claude/${name}   ← written by ${src}`);
-    console.error('\nAdd them to the marked block, or the next release dirties every consumer repo.');
+    console.error('\nAdd them to PLUGIN_STATE there, or the next release dirties every consumer repo.');
   }
   if (unanchored.length) {
     console.error('[check-claude-artifacts] .claude/ paths joined onto the raw cwd — a session in a');
