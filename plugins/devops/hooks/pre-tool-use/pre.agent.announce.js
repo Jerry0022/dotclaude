@@ -1,14 +1,19 @@
 #!/usr/bin/env node
 /**
  * @hook pre.agent.announce
- * @version 0.1.0
+ * @version 0.2.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Agent
  * @description Makes every Agent spawn visible to the user: resolves the
  *   agent's effective model and effort (frontmatter, invocation override,
- *   `inherit` → the session's own model) and hands Claude a one-line
- *   announcement to show verbatim. The delegation policy asked for this line
+ *   `inherit` → the session's own model) and hands Claude the agent card
+ *   (lib/agent-card.js) to show verbatim — the same template for one agent
+ *   or ten. Agents launched in one assistant message share one card: each
+ *   tool_use is written to the transcript before its hook runs, so every hook
+ *   reads the message's earlier Agent calls and the batch's last card lists
+ *   them all. (Before 0.2.0 a one-line announcement; parallel launches then
+ *   got summarised in prose instead.) The delegation policy asked for this line
  *   in prose only, and the Quiet output style ("never narrate") swallowed it;
  *   the "show the user … verbatim" marker is the one relay Quiet honours.
  *
@@ -27,6 +32,8 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+
+const { renderAgentCard } = require('../lib/agent-card');
 
 const AGENTS_DIR = path.resolve(__dirname, '..', '..', 'agents');
 const TRANSCRIPT_TAIL_BYTES = 256 * 1024;
@@ -124,6 +131,69 @@ function buildLine(input, cwd, transcriptPath) {
   return `→ Agent ${type} · ${model} · ${effort} · ${mode}${desc ? ` — ${desc}` : ''}`;
 }
 
+/**
+ * The Agent inputs launched in the same assistant message as this spawn, in
+ * order, up to and including it. Parallel tool_uses of one message are
+ * separate transcript lines sharing `message.id`, each written before its
+ * PreToolUse hook runs. Falls back to `[input]` when the transcript cannot
+ * place this spawn.
+ */
+function batchInputs(input, transcriptPath, toolUseId) {
+  if (!transcriptPath) return [input];
+  let text;
+  let fd;
+  try {
+    fd = fs.openSync(transcriptPath, 'r');
+    const size = fs.fstatSync(fd).size;
+    const len = Math.min(size, TRANSCRIPT_TAIL_BYTES);
+    const buf = Buffer.alloc(len);
+    fs.readSync(fd, buf, 0, len, size - len);
+    text = buf.toString('utf8');
+  } catch {
+    return [input];
+  } finally {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch {}
+  }
+
+  const calls = []; // { msgId, id, input }
+  for (const line of text.split('\n')) {
+    if (!line.includes('"Agent"')) continue;
+    let j;
+    try { j = JSON.parse(line); } catch { continue; }
+    if (j.type !== 'assistant' || j.isSidechain || !Array.isArray(j.message?.content)) continue;
+    for (const c of j.message.content) {
+      if (c.type === 'tool_use' && c.name === 'Agent') calls.push({ msgId: j.message.id, id: c.id, input: c.input || {} });
+    }
+  }
+  const same = (c) => c.input.prompt === input.prompt && c.input.description === input.description;
+  let at = toolUseId ? calls.findIndex(c => c.id === toolUseId) : -1;
+  if (at === -1) for (let i = calls.length - 1; i >= 0; i--) if (same(calls[i])) { at = i; break; }
+  if (at === -1 || !calls[at].msgId) return [input];
+  const msgId = calls[at].msgId;
+  return calls.slice(0, at + 1).filter(c => c.msgId === msgId).map(c => c.input);
+}
+
+/** The agent card for this spawn and the ones launched with it. */
+function buildCard(input, cwd, transcriptPath, toolUseId, lang) {
+  const agents = batchInputs(input, transcriptPath, toolUseId).map((inp) => {
+    const { model, effort } = resolve(inp, cwd, transcriptPath);
+    return {
+      type: inp.subagent_type || 'general-purpose',
+      description: inp.description,
+      model,
+      effort,
+      mode: inp.run_in_background === false ? 'foreground' : 'background',
+    };
+  });
+  return renderAgentCard({ kind: 'start', agents, lang });
+}
+
+// Without a session id getLocale would fall back to ANY session's newest file.
+function sessionLang(sessionId) {
+  if (!sessionId) return 'en';
+  try { return require('../lib/locale').getLocale(sessionId); } catch { return 'en'; }
+}
+
 /** True when pre.strict.agent-gate will refuse this spawn. */
 function strictWillBlock(cwd, prompt) {
   try {
@@ -151,15 +221,16 @@ function main() {
       const prompt = typeof input.prompt === 'string' ? input.prompt : '';
       if (strictWillBlock(cwd, prompt)) process.exit(0);
 
-      const line = buildLine(input, cwd, hook.transcript_path);
+      const card = buildCard(input, cwd, hook.transcript_path, hook.tool_use_id, sessionLang(hook.session_id));
       process.stdout.write(JSON.stringify({
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
           additionalContext:
-            'Agent spawn — show the user this line verbatim in the next text you write (before your next ' +
-            'tool call if you would otherwise stay silent), also under the Quiet output style. Several ' +
-            'agents started together → every line, one per agent; a prose summary never replaces them:\n' +
-            line,
+            'Agent card — show the user this card verbatim in the next text you write (before your next ' +
+            'tool call if you would otherwise stay silent), also under the Quiet output style. Agents ' +
+            'launched in one message each hand you a card that grows by one row: show only the LAST ' +
+            'card of the message — it lists them all; never a prose summary in its place:\n' +
+            card,
         },
       }));
       process.exit(0);
@@ -171,4 +242,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { readFrontmatter, findAgentFile, friendlyModel, sessionModel, resolve, buildLine };
+module.exports = { readFrontmatter, findAgentFile, friendlyModel, sessionModel, resolve, buildLine, batchInputs, buildCard };

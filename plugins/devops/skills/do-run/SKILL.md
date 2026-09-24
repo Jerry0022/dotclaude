@@ -279,7 +279,7 @@ same run — never a new Skill call to `do-run`.
 Q4, `$STRICT` from Q3. Implementation always goes through `auto-agents`,
 the single execution path: `Skill("devops:auto-agents")` with args
 `--from=do-run --mode=<interactive|background> --ship=<auto|manual> <task>`
-(Interaktiv → `interactive`, Autonom → `background`). It shows its own start table,
+(Interaktiv → `interactive`, Autonom → `background`). It shows its own agent cards,
 returns a result block (`tier`, `done`, `open`, `needs-decision`, `ship`)
 and never ships or renders a card — this router acts on the block and
 renders the card. **Inline shortcut:** when the router's own check already

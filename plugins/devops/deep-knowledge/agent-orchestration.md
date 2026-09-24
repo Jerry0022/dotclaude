@@ -40,14 +40,14 @@ Each agent defines `model` and optionally `effort` in its frontmatter.
 The orchestrator can override `model` at invocation time but **not** `effort` —
 the Agent tool has no effort parameter, so the frontmatter value is always the
 effective one.
-This table is the **source of truth for the `Model · Effort` column** the plan
-tables show — the auto-agents Step 3 plan renders each agent as `model · effort` (e.g.
-`opus · high`), and its Step 5 start table splits the same values into a Model
-column (the family resolved per run to its newest release, never a pinned id)
-and an Effort column; the `/do-run burn` plan lists `default → override` per role — keep
-it in sync with the agent frontmatter. When you override a model at invocation,
-show it as `default → override` with the effort repeated on both sides
-(`sonnet · medium → opus · medium`); the effort never carries an arrow.
+This table is the **source of truth for the `Model · Effort` column** of
+every agent card (auto-agents Step 5: `scripts/agent-card.js` for the plan,
+`pre.agent.announce` for each spawn) — both resolve `model · effort` from
+the frontmatter, a Model cell (the family resolved per run to its newest
+release, never a pinned id) and an Effort cell; the `/do-run burn` plan lists
+`default → override` per role — keep it in sync with the agent frontmatter.
+A model override at invocation shows as `default → override` (`sonnet → opus`);
+the effort never carries an arrow.
 One standing override comes from the delegation policy's budget class
 ([agent-proactivity.md](agent-proactivity.md) § Budget): under
 `ask-before-parallel` and `sonnet-only` (unless the user answered "the right
