@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.194.6] — 2026-09-24
+
+### Changed
+- **The doc generators no longer print a module-type warning.** `gen-readme-sections`, `gen-dk-index` and `gen-project-map` are ES modules, but the package declares no `"type"`. Node parsed each one as CommonJS, failed, parsed it again as ESM and printed a warning on every ship. They are now `.mjs`, so the file extension sets the type. `ship_build`, `ship_preflight`, the hooks and the docs call the new names. The CommonJS hooks are unchanged (#476).
+
 ## [0.194.5] — 2026-09-24
 
 ### Fixed
