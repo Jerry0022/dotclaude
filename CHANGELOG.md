@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.201.0] — 2026-09-24
+
+### Changed
+- **do-run's scope question reads as a choice.** Q3 „Umfang?" now offers „Flexibel (Recommended)" and „Strikt" instead of „Mit Umfeld" and „Nur das", which read like descriptions. Flexibel: „Zieht Nötiges mit: Aufrufer, Tests, Doku." Strikt: „Nur was der Prompt nennt; jede offene Wahl wird berichtet." Behavior is unchanged: Strikt arms strict mode for the run, and Q3 is still dropped when strict is already on for the branch. `strict.md`, auto-harden, auto-polish, backlog mode and the tests use the new label.
+
 ## [0.200.0] — 2026-09-24
 
 ### Added
