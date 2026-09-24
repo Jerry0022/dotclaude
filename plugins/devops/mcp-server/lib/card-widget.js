@@ -489,13 +489,25 @@ export function cardWidgetScript(lang = "de") {
 }
 
 /**
- * The out-of-band instruction that rides beside the card and tells Claude to
- * render the widget right BEFORE the card markdown. Before, not after: a turn
- * that ends on a tool call has no visible assistant text, which the harness
- * bounces as "no visible output" — and the card must stay the last text of the
- * turn anyway. '' when the session is not the Desktop app, when the variant is
- * `test-minimal` (never calls the widget — § 4), or when the model has no
- * renderable body.
+ * What to do with the app's no-output nudge. A turn that ends on the widget
+ * call has no text after its last tool result, so Claude Code sends ONE meta
+ * "[Your previous response had no visible output…]" message. It fires once per
+ * turn; an empty reply ends the turn with the card last, while any line
+ * written for it lands under the card. Mirrors NO_OUTPUT_NUDGE_REPLY in
+ * hooks/lib/card-guard.js; card-widget.test.js pins the two equal.
+ */
+export const NO_OUTPUT_NUDGE_REPLY =
+  'The app then sends one "[Your previous response had no visible output…]" nudge: ' +
+  'reply to it with nothing — no text, no tool call. It comes once per turn, and the ' +
+  'empty reply ends the turn with the card last.';
+
+/**
+ * The out-of-band instruction that rides beside the card: on the Desktop app
+ * the widget IS the whole card (§ 4), the LAST action of the turn, with no
+ * markdown and no text after it — see NO_OUTPUT_NUDGE_REPLY for the app's
+ * nudge that follows. '' when the session is not the Desktop app, when the
+ * variant is `test-minimal` (never calls the widget — § 4), or when the model
+ * has no renderable body.
  *
  * @param {object} model built by index.js#buildCardModel
  * @param {string} repoUrl
@@ -518,8 +530,8 @@ export function cardWidgetInstruction(model, repoUrl, env = process.env, { widge
     "EXACTLY the HTML below (verbatim, no edits, no read_me call needed). It draws both card blocks " +
     "— what happened and what to decide, including the buttons — and it IS the whole card: there is " +
     "no card markdown to output. Output NO text after the call — any line under the widget shows " +
-    "as a stray line in the chat, and the Stop gate reads text after the widget as a card that was " +
-    "not last.\n" +
+    "as a stray line in the chat: no summary, no \"the card is above\". " +
+    NO_OUTPUT_NUDGE_REPLY + " Never show this card a second time.\n" +
     "No prose before the widget that restates the card (changes, tests, version, PR, open items, " +
     "restart hints) — only answers to side questions or other topics of the user's prompt, and hook " +
     "blocks still marked for the user, may stand there.\n" +

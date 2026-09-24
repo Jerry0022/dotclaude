@@ -50,7 +50,7 @@ import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePendin
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
 import { batchGuide, conceptUrl, readBatch, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
-import { cardWidgetInstruction, isDesktopSession, writeCardWidgetFile } from "./lib/card-widget.js";
+import { cardWidgetInstruction, isDesktopSession, NO_OUTPUT_NUDGE_REPLY, writeCardWidgetFile } from "./lib/card-widget.js";
 import {
   assessFreshness,
   isLiveSnapshot,
@@ -1518,8 +1518,7 @@ const WIDGET_RELAY_INSTRUCTION =
   "[INSTRUCTION — DO NOT OUTPUT THIS BLOCK]\n" +
   "Desktop app: this card has no markdown to relay. The show_widget call in the CARD WIDGET " +
   "block below IS the card — make it the LAST action of the turn and output no text after it. " +
-  "If the app then asks for a user-visible response anyway, the card already counts: answer " +
-  "with ONE short line and never render or show the card a second time. " +
+  NO_OUTPUT_NUDGE_REPLY + " Never render or show the card a second time. " +
   "Do NOT output this instruction block.";
 
 /** The tool-result blocks: relay contract, notes, and the markdown unless the widget is the card. */
@@ -1882,7 +1881,8 @@ server.registerTool(
       "card only for what it cannot carry: answers to side questions or other topics of the " +
       "user's prompt, points beyond the card's three, hook blocks still marked for the user. " +
       "On the Desktop app the result carries a CARD WIDGET block instead of markdown: that " +
-      "show_widget call IS the card — mandatory, the LAST action of the turn, no text after it; " +
+      "show_widget call IS the card — mandatory, the LAST action of the turn, no text after it, " +
+      "and the app's one no-output nudge that follows gets an empty reply; " +
       "the visible title line is only for a failed call, never a shortcut.",
     inputSchema: z.object({
       variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran — also after a ship in the same run (ship stable): ONE released card then carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report."),

@@ -3,8 +3,12 @@ import {
   lastAssistantText,
   lastAssistantTextLength,
   isSubstantialAnswer,
-  lastAssistantContainsCard,
-  lastAssistantCardText,
+  cardDelivered,
+  deliveredCardText,
+  isCardRenderCall,
+  buildNotRelayedReason,
+  buildWidgetSkippedReason,
+  NO_OUTPUT_NUDGE_REPLY,
   widgetCardTitle,
   lastUserEntryIsNotification,
   showWidgetCalledThisTurn,
@@ -307,7 +311,7 @@ describe("decideAction — relay gate", () => {
     expect(d.reason).toMatch(/never relayed/);
   });
 
-  test("a card rendered twice passes as long as the last answer carries a marker", () => {
+  test("a card rendered twice passes as long as the second render was shown", () => {
     // The guard never compares payloads — the second render's markdown is the
     // one relayed, and its marker is all Gate 1b asks for.
     const transcript = jsonl(
@@ -315,7 +319,7 @@ describe("decideAction — relay gate", () => {
       assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} }),
       assistantMsg({ type: "text", text: `<!-- ${CARD_MARKER} Shipped v2 ${CARD_MARKER} -->` }),
     );
-    const d = decideAction({ ...base, cardRendered: true, cardRelayed: lastAssistantContainsCard(transcript) });
+    const d = decideAction({ ...base, cardRendered: true, cardRelayed: cardDelivered(transcript) });
     expect(d.action).toBe("pass");
   });
 
@@ -325,7 +329,7 @@ describe("decideAction — relay gate", () => {
       assistantMsg({ type: "tool_use", name: "mcp__plugin_devops_dotclaude-ship__ship_release", input: {} }),
       assistantMsg({ type: "text", text: "Released." }),
     );
-    const d = decideAction({ ...base, cardRendered: true, cardRelayed: lastAssistantContainsCard(transcript) });
+    const d = decideAction({ ...base, cardRendered: true, cardRelayed: cardDelivered(transcript) });
     expect(d.action).toBe("block");
   });
 });
@@ -635,10 +639,6 @@ describe("buildValidationReason", () => {
     expect(r).toMatch(/VERBATIM|LAST/);
   });
 });
-
-// ---------------------------------------------------------------------------
-// lastAssistantContainsCard — backup detection via card marker
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Card content gates (design § 5.1 - § 5.4)
@@ -1088,66 +1088,81 @@ describe("buildTitleStatusWordReason / buildResultLinesReason / buildPointsReaso
   });
 });
 
-describe("lastAssistantContainsCard", () => {
-  test("returns true when last assistant text contains ✨✨✨ marker", () => {
-    const tx = jsonl(
-      assistantMsg({ type: "text", text: `## ${CARD_MARKER} Task done ${CARD_MARKER}` }),
-    );
-    expect(lastAssistantContainsCard(tx)).toBe(true);
+describe("cardDelivered / deliveredCardText — the card shown after the last render", () => {
+  const render = assistantMsg({ type: "tool_use", id: "r1", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} });
+  const renderResult = { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "r1", content: "card" }] } };
+
+  test("terminal: the ✨ marker text after the render counts", () => {
+    const tx = jsonl(userMsg("go"), render, renderResult,
+      assistantMsg({ type: "text", text: `## ${CARD_MARKER} Task done ${CARD_MARKER}` }));
+    expect(cardDelivered(tx)).toBe(true);
   });
 
   // On Desktop there is no card markdown (§ 4): every hidden marker showed as
-  // literal text in the chat (#443, #470). The card-body widget call that
-  // ends the turn is the card.
+  // literal text in the chat (#443, #470). The card-body widget call is the card.
   const cardWidget = (title) => assistantMsg({
     type: "tool_use", id: "w1", name: "mcp__visualize__show_widget",
     input: { title: "completion_card_body", widget_code: `<div><h3 class="card-title" style="x">${title}</h3></div>` },
   });
   const widgetResult = { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "w1", content: "ok" }] } };
 
-  test("Desktop: a card widget that ends the turn counts, with its title as the card text", () => {
-    const tx = jsonl(userMsg("go"), cardWidget("Fix (x) &amp; mehr"), widgetResult);
-    expect(lastAssistantContainsCard(tx)).toBe(true);
-    expect(lastAssistantCardText(tx)).toBe(`${CARD_MARKER} Fix (x) & mehr ${CARD_MARKER}`);
-    expect(extractCardTitle(lastAssistantCardText(tx))).toBe("Fix (x) & mehr");
+  test("Desktop: the card widget counts, with its title as the card text", () => {
+    const tx = jsonl(userMsg("go"), render, renderResult, cardWidget("Fix (x) &amp; mehr"), widgetResult);
+    expect(cardDelivered(tx)).toBe(true);
+    expect(deliveredCardText(tx)).toBe(`${CARD_MARKER} Fix (x) & mehr ${CARD_MARKER}`);
+    expect(extractCardTitle(deliveredCardText(tx))).toBe("Fix (x) & mehr");
   });
 
-  test("Desktop: blank text after the widget still counts; real text after it does not", () => {
-    expect(lastAssistantContainsCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult,
-      assistantMsg({ type: "text", text: "\n" })))).toBe(true);
-    expect(lastAssistantContainsCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult,
-      assistantMsg({ type: "text", text: "Nachsatz" })))).toBe(false);
-  });
-
-  // A widget-only turn ends without text, so the Desktop app sometimes nudges
-  // for a visible reply. That forced reply is not a card left unrelayed — it
-  // made the guard demand a second, identical card (2026-09-24).
+  // Regression 2026-09-24: a line after the widget made the guard demand the
+  // card again; the re-shown widget then drew the same card a second time,
+  // and the app's nudge added one more line under it.
   const nudge = { type: "user", isMeta: true, message: { role: "user", content: "[Your previous response had no visible output. Please continue and produce a user-visible response.]" } };
+  const stopFeedback = { type: "user", isMeta: true, message: { role: "user", content: "Stop hook feedback:\n[stop.flow.guard] …" } };
 
-  test("Desktop: the reply to the app's no-output nudge does not unseat the card", () => {
-    const tx = jsonl(userMsg("go"), cardWidget("T"), widgetResult, nudge,
-      assistantMsg({ type: "text", text: "Sammelmodus an." }));
-    expect(lastAssistantContainsCard(tx)).toBe(true);
-    expect(extractCardTitle(lastAssistantCardText(tx))).toBe("T");
+  test("Desktop: text after the widget does not unsee the card — no second card", () => {
+    const tx = jsonl(userMsg("go"), render, renderResult, cardWidget("T"), widgetResult,
+      assistantMsg({ type: "text", text: "Die Änderungen sind committet und bereit zum Shippen." }));
+    expect(cardDelivered(tx)).toBe(true);
+    expect(extractCardTitle(deliveredCardText(tx))).toBe("T");
   });
 
-  test("Desktop: text before the nudge, or a tool call after it, still unseats the card", () => {
-    expect(lastAssistantContainsCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult,
-      assistantMsg({ type: "text", text: "Nachsatz" }), nudge,
-      assistantMsg({ type: "text", text: "noch einer" })))).toBe(false);
-    expect(lastAssistantContainsCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult, nudge,
-      toolUse("Bash"), toolResult()))).toBe(false);
-    // A non-meta user message with the same words is a real prompt.
-    const typed = { type: "user", message: { role: "user", content: nudge.message.content } };
-    expect(lastAssistantContainsCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult, typed,
-      assistantMsg({ type: "text", text: "ok" })))).toBe(false);
+  test("Desktop: the reply to the app's nudge, or an empty reply, keeps the card", () => {
+    expect(cardDelivered(jsonl(userMsg("go"), render, renderResult, cardWidget("T"), widgetResult, nudge,
+      assistantMsg({ type: "text", text: "Die Card steht oben." })))).toBe(true);
+    expect(cardDelivered(jsonl(userMsg("go"), render, renderResult, cardWidget("T"), widgetResult, nudge,
+      assistantMsg({ type: "thinking", thinking: "" })))).toBe(true);
   });
 
-  test("Desktop: another widget, another tool after the card, or a widget of an earlier turn → no card", () => {
+  test("Desktop: a tool call after the widget keeps the card too", () => {
+    expect(cardDelivered(jsonl(userMsg("go"), render, renderResult, cardWidget("T"), widgetResult,
+      toolUse("mcp__ccd_session_mgmt__set_session_title"), toolResult()))).toBe(true);
+  });
+
+  test("a render and its card may straddle a Stop-hook block", () => {
+    expect(cardDelivered(jsonl(userMsg("go"), render, renderResult,
+      assistantMsg({ type: "text", text: "Fertig." }), stopFeedback, cardWidget("T"), widgetResult))).toBe(true);
+  });
+
+  test("a render AFTER the shown card means the newest card was never shown", () => {
+    expect(cardDelivered(jsonl(userMsg("go"), render, renderResult, cardWidget("Alt"), widgetResult,
+      render, renderResult, assistantMsg({ type: "text", text: "Neu." })))).toBe(false);
+    expect(cardDelivered(jsonl(userMsg("go"), render, renderResult,
+      assistantMsg({ type: "text", text: `${CARD_MARKER} Alt ${CARD_MARKER}` }), render, renderResult))).toBe(false);
+  });
+
+  test("the offline renderer counts as a render; other Bash calls do not", () => {
+    const offline = assistantMsg({ type: "tool_use", id: "b1", name: "Bash", input: { command: 'node "C:/x/devops/mcp-server/index.js" --render-card p.json' } });
+    expect(isCardRenderCall(offline.message.content[0])).toBe(true);
+    expect(isCardRenderCall({ type: "tool_use", name: "Bash", input: { command: 'grep -n "--render-card" README.md' } })).toBe(false);
+    expect(cardDelivered(jsonl(userMsg("go"), cardWidget("Alt"), widgetResult, offline, toolResult()))).toBe(false);
+    expect(cardDelivered(jsonl(userMsg("go"), offline, toolResult(), cardWidget("Neu"), widgetResult))).toBe(true);
+  });
+
+  test("another widget, a widget of an earlier turn, or no card at all → nothing delivered", () => {
     const other = assistantMsg({ type: "tool_use", id: "w1", name: "mcp__visualize__show_widget", input: { title: "chart", widget_code: '<h3 class="card-title">T</h3>' } });
-    expect(lastAssistantContainsCard(jsonl(userMsg("go"), other, widgetResult))).toBe(false);
-    expect(lastAssistantContainsCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult, toolUse("Bash"), toolResult()))).toBe(false);
-    expect(lastAssistantContainsCard(jsonl(userMsg("a"), cardWidget("T"), widgetResult, userMsg("b")))).toBe(false);
+    expect(cardDelivered(jsonl(userMsg("go"), render, renderResult, other, widgetResult))).toBe(false);
+    expect(cardDelivered(jsonl(userMsg("a"), cardWidget("T"), widgetResult, userMsg("b")))).toBe(false);
+    expect(cardDelivered(jsonl(userMsg("go"), render, renderResult, assistantMsg({ type: "text", text: "Released." })))).toBe(false);
   });
 
   test("widgetCardTitle reads the h3 and decodes entities", () => {
@@ -1155,33 +1170,44 @@ describe("lastAssistantContainsCard", () => {
     expect(widgetCardTitle("<div>no title</div>")).toBe(null);
   });
 
-  test("returns false when no marker present", () => {
-    const tx = jsonl(assistantMsg({ type: "text", text: "plain answer" }));
-    expect(lastAssistantContainsCard(tx)).toBe(false);
-  });
-
-  test("returns false when marker is in an EARLIER assistant message", () => {
+  test("returns false when the marker is in an EARLIER turn", () => {
     const tx = jsonl(
       assistantMsg({ type: "text", text: `## ${CARD_MARKER} old card ${CARD_MARKER}` }),
       userMsg("follow-up"),
       assistantMsg({ type: "text", text: "new answer without card" }),
     );
-    expect(lastAssistantContainsCard(tx)).toBe(false);
+    expect(cardDelivered(tx)).toBe(false);
   });
 
   test("returns false for empty / missing transcript", () => {
-    expect(lastAssistantContainsCard("")).toBe(false);
-    expect(lastAssistantContainsCard(null)).toBe(false);
+    expect(cardDelivered("")).toBe(false);
+    expect(cardDelivered(null)).toBe(false);
   });
 
-  test("handles tool_use blocks + text with marker", () => {
+  test("handles tool_use blocks + text with marker in one message", () => {
     const tx = jsonl(
       assistantMsg(
         { type: "tool_use", id: "t1", name: "Bash", input: {} },
         { type: "text", text: `## ${CARD_MARKER} done ${CARD_MARKER}` },
       ),
     );
-    expect(lastAssistantContainsCard(tx)).toBe(true);
+    expect(cardDelivered(tx)).toBe(true);
+  });
+
+  test("the exact 2026-09-24 sequence passes the relay gate — no re-demand, no duplicate", () => {
+    const tx = jsonl(userMsg("go"), render, renderResult, cardWidget("T"), widgetResult,
+      assistantMsg({ type: "text", text: "Die Änderungen sind committet und bereit zum Shippen." }));
+    const d = decideAction({ workHappened: true, stopHookActive: false, substantial: false,
+      cardRendered: true, cardRelayed: cardDelivered(tx), cardText: deliveredCardText(tx),
+      widgetFile: "/tmp/w", widgetCalled: showWidgetCalledThisTurn(tx) });
+    expect(d.action).toBe("pass");
+  });
+
+  test("every block reason that asks for the widget says how to answer the nudge", () => {
+    expect(NO_OUTPUT_NUDGE_REPLY).toMatch(/reply to it with nothing/);
+    for (const r of [buildBlockReason("/p"), buildNotRelayedReason(), buildWidgetSkippedReason("/tmp/w")]) {
+      expect(r).toContain(NO_OUTPUT_NUDGE_REPLY);
+    }
   });
 });
 

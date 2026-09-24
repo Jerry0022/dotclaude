@@ -157,7 +157,7 @@ Only after an explicit **Implement** decision. Assemble the task briefing:
 - pointer to the `.claude/rethink/<date>-<slug>/` artifacts.
 
 Then hand this briefing back to the do-run router (`../SKILL.md` Step 6) as
-the task: Ablauf "Dabei" → `auto-agents`; "Weg" → autonomous mode
+the task: Ablauf "Interaktiv" → `auto-agents`; "Autonom" → autonomous mode
 (`modes/autonomous.md`, same skill), which owns permission priming,
 confirmation, worktree, implementation, testing and the report — do not
 re-implement any of that here.
