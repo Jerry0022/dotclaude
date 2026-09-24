@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.201.2] — 2026-09-24
+
+### Fixed
+- **The full test suite no longer fails under machine load while every test passes.** vitest's runner moves from one test to the next through promise continuations only, so a file of tests that spawn hooks, git or servers synchronously kept its worker's event loop busy for the whole file. The reply to vitest's `onTaskUpdate` report sat unread, and after 60 s the run ended with "Timeout calling onTaskUpdate" and exit 1: a red ship gate caused by load alone. The new `vitest.yield-setup.mjs` lets pending replies through before each test and yields one loop turn after it. Reproduced with 70 tests of 1 s synchronous work and with one 70 s test: exit 1 before, exit 0 after.
+- **The global 60 s test timeout applies again.** 28 test files still pinned `vi.setConfig({ testTimeout: 30_000 })` from the days of vitest's 5 s default and so halved the budget (`index.cli.test.js` timed out under load). The pins are gone, and `vitest.config.mjs` says why they must not come back.
+- **`prompt.ship.detect` no longer fails when test runs overlap.** Its tests use a fixed session id, so parallel runs shared the hook's marker files in the system temp folder ("careful compact › never twice in a row" failed in 3 of 4 concurrent runs). Each test now gives the hook a private temp folder.
+
 ## [0.201.1] — 2026-09-24
 
 ### Fixed
