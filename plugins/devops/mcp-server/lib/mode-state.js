@@ -380,3 +380,33 @@ export function batchGuide(batch, lang) {
     ],
   };
 }
+
+/**
+ * The do-run run-contract line for the card — what the user chose in the
+ * do-run router and what actually ran, e.g. "🧾 Run · Backlog · Autonom ·
+ * Ship auto — auto-agents ✓ · Harden ✓ · Polish ⚠ (keine UI) · QA ✓ ·
+ * do-ship ✓". Null when no contract is active or was closed/aborted within
+ * the lib's own 15-minute grace window (see `readContractForCard`).
+ *
+ * Delegates entirely to `hooks/lib/run-contract.js` (Wave 1, CommonJS) so the
+ * card and the gates can never disagree on state or wording — this is a pure
+ * read, no git calls, every failure swallowed: a card must never die on a
+ * missing or corrupt `.claude/run-contract.json`.
+ *
+ * @param {string|undefined} cwd
+ * @param {'de'|'en'} [lang]
+ * @returns {string|null}
+ */
+export function readRunContractLine(cwd, lang = "de") {
+  if (!cwd) return null;
+  try {
+    const require = createRequire(import.meta.url);
+    const RC = require(join(here, "..", "..", "hooks", "lib", "run-contract.js"));
+    const contract = RC.readContractForCard(cwd);
+    if (!contract) return null;
+    const evs = RC.events(cwd);
+    return RC.summaryForCard(contract, evs, lang, { codeFilesChanged: null }) || null;
+  } catch {
+    return null;
+  }
+}

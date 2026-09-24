@@ -219,6 +219,14 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(cardWidgetHtml(baseModel({ ladder: null }), "")).not.toContain("card-ladder");
   });
 
+  test("the run-contract line sits under the pipeline line, dim like it, and is absent when null", () => {
+    const html = cardWidgetHtml(baseModel({ runContract: "🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · Harden ✓" }), "");
+    expect(html).toContain("card-run-contract");
+    expect(html).toContain("🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · Harden ✓");
+    expect(html.indexOf("card-pipeline")).toBeLessThan(html.indexOf("card-run-contract"));
+    expect(cardWidgetHtml(baseModel({ runContract: null }), "")).not.toContain("card-run-contract");
+  });
+
   test("the widget HTML puts the versioned prompt on the promote button", () => {
     const html = cardWidgetHtml({ lang: "de", heading: "x", buttonsKey: "released-beta", promoteVersion: "0.193.0" }, "");
     expect(html).toContain('data-prompt="promote stable 0.193.0"');
