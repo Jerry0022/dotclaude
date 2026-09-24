@@ -306,6 +306,32 @@ describe("ship_promote — tagging", () => {
     expect(r.release).toBe(true);
   });
 
+  // Ring invariant stable ⊆ beta ⊆ alpha: a direct alpha→stable promotion
+  // pulls beta along instead of leaving it behind stable.
+  test("alpha→stable tags beta/vN first, then stable/vN and bare vN", async () => {
+    mockRemote({ "alpha/v0.113.0": SHA, "beta/v0.110.0": "b".repeat(40) });
+    const r = await handler(params({ from: "alpha", to: "stable" }));
+    expect(r.success).toBe(true);
+    expect(r.tag).toBe("stable/v0.113.0");
+    expect(r.betaTag).toBe("beta/v0.113.0");
+    expect(tagCreateCalls().map((c) => c[1][2])).toEqual(["beta/v0.113.0", "stable/v0.113.0", "v0.113.0"]);
+  });
+
+  test("alpha→stable leaves beta alone when it already serves this version", async () => {
+    mockRemote({ "alpha/v0.113.0": SHA, "beta/v0.113.0": SHA });
+    const r = await handler(params({ from: "alpha", to: "stable" }));
+    expect(r.success).toBe(true);
+    expect(tagCreateCalls().map((c) => c[1][2])).toEqual(["stable/v0.113.0", "v0.113.0"]);
+  });
+
+  test("alpha→stable never re-tags a beta that is already ahead", async () => {
+    mockRemote({ "alpha/v0.113.0": SHA, "beta/v0.114.0": "c".repeat(40) });
+    const r = await handler(params({ from: "alpha", to: "stable" }));
+    expect(r.success).toBe(true);
+    expect(r.betaTag).toBeUndefined();
+    expect(tagCreateCalls().map((c) => c[1][2])).toEqual(["stable/v0.113.0", "v0.113.0"]);
+  });
+
   test("stable: bare push failure → success:false with missing list", async () => {
     mockRemote({ "beta/v0.113.0": SHA }, { pushFails: (t) => t === "v0.113.0" });
     const r = await handler(params({ from: "beta", to: "stable" }));

@@ -128,14 +128,20 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
 
 ```
 ○ commit → ○ push → ○ PR → ○ merge · claude/devops-agent-usage-refresh-263640 · Build 176c57d
-✓ commit → ✓ push → ✓ PR #416 → ✓ merge   main → ✓ alpha → ○ beta → ○ stable · v0.179.0 · Build a91c3e2
+✓ commit → ✓ push → ✓ PR #416 → ✓ merge   main · Build a91c3e2
+alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 ```
 
 - `○` open, `✓` done, both grey. After `merge` an em-gap, then the base branch.
-- Ring projects continue the line with the channels (`→ ✓ alpha → ○ beta →
-  ○ stable`). **This replaces the Delivery block / ladder.** The distance to
-  the next channel ("alpha liegt 3 Versionen / 5 Tage vor beta") is the
-  context line under the decision heading.
+- Ring projects add the **channel ladder** under the pipeline line: each
+  channel with the version it serves. The highest version leads (lilac,
+  weight 500); lagging channels follow quieter with their distance in yellow
+  (`−3`, `−9 · 12 d`, from `betaLag` / `stableLag`). Channels on the same
+  version merge (`alpha · beta v0.179.0`); all three equal turn green with a
+  `✓`. Plain text — no frame, no fill: it must never read like a button next
+  to the promote buttons. The ladder is the only place the version appears on
+  the lines (the pipeline line drops its `· v…`), and it replaces the old
+  lag context line under the heading.
 - `#416` is a quiet link on the widget: no colour, underline on hover only.
 - `ready-files`: `📂 9 Dateien geändert · kein Repo · H:\notes\budget`.
 - `analysis` / no changes: `➖ keine Änderungen im Repo · branch`.
@@ -178,10 +184,10 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
 | `ready` | `📦 Shippen trotz {top reservation}?` / `📦 Shippen?` | open + final tests | Ship · Ändern | |
 | `ready` + red tests / partial | `⚠ Trotzdem shippen mit 2 roten Tests?` | open (fix first) | Fix · Trotzdem shippen | ⚠ red; line 1 = Nicht erreicht |
 | `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
-| `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | final tests | Promote / none | context line = distance to beta |
+| `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | final tests | Promote beta (primary) + Promote stable / only Promote stable when the ladder already sits on beta / none | context line = distance to beta |
 | `ship-successful` kept | `🚀 Released v{v} alpha — weiter in `{branch}`?` | — | Weiter | |
 | `ship-successful` deployPending | `🚨 Gemergt, aber nicht live — Migration jetzt deployen?` | deploy artifacts | Deploy | replaces the 🚨 DEPLOY block |
-| `released` → beta | `🎊 Promoted v{v} BETA — nach stable?` | — | Nach stable | evidence = promotion facts |
+| `released` → beta | `🎊 Promoted v{v} BETA — nach stable?` | — | Promote stable | evidence = promotion facts |
 | `released` → stable | `🎊 Released v{v} LIVE — stable.` | — | — | state, no question |
 | `ready-files` | `📂 Fertig auf der Platte — noch etwas?` | final tests | — | pipeline = file line |
 | `test` | `🧪 Erst testen, dann shippen?` | userTest steps | Ship · Nachbessern | unverified part = `◐` post |

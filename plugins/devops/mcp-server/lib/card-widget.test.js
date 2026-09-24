@@ -117,10 +117,11 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
         expect(parseShipRequest(buttonsFor(key, lang)[0].prompt)).toMatchObject({ ship: true, promote: false });
       }
       const v = { version: "0.193.0" };
-      expect(parseShipRequest(buttonsFor("ship-successful", lang, v)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: null, version: "0.193.0" });
+      expect(parseShipRequest(buttonsFor("ship-successful", lang, v)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: "beta", version: "0.193.0" });
+      expect(parseShipRequest(buttonsFor("ship-successful", lang, v)[1].prompt)).toMatchObject({ ship: true, promote: true, channel: "stable", version: "0.193.0" });
       expect(parseShipRequest(buttonsFor("released-beta", lang, v)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: "stable", version: "0.193.0" });
       expect(isShipIntent(buttonsFor("ship-blocked", lang)[0].prompt), `${lang}/ship-blocked`).toBe(false);
-      expect(buttonsFor("ship-successful", lang, v)[0].prompt).toBe("promote 0.193.0");
+      expect(buttonsFor("ship-successful", lang, v).map((b) => b.prompt)).toEqual(["promote beta 0.193.0", "promote stable 0.193.0"]);
       expect(buttonsFor("released-beta", lang, v)[0].prompt).toBe("promote stable 0.193.0");
       expect(buttonsFor("ship-blocked", lang)[0].prompt).toMatch(/^Debug\b/);
     }
@@ -131,12 +132,43 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
   // prompt.ship.detect), and without a known version there is no button.
   test("promote buttons carry the card's version; without one they are dropped", () => {
     for (const lang of ["de", "en"]) {
-      expect(buttonsFor("ship-successful", lang, { version: "v0.193.0" })[0].prompt).toBe("promote 0.193.0");
+      expect(buttonsFor("ship-successful", lang, { version: "v0.193.0" })[0].prompt).toBe("promote beta 0.193.0");
       expect(buttonsFor("ship-successful", lang)).toEqual([]);
       expect(buttonsFor("released-beta", lang, { version: "not-a-version" })).toEqual([]);
       // non-promote buttons are untouched by the version
       expect(buttonsFor("ready", lang, { version: "0.193.0" })[0].prompt).toBe("ship");
     }
+  });
+
+  // After an alpha ship both promotions are offered — beta as the main verb,
+  // stable as the fast track. On beta only the stable step is left.
+  test("ship-successful offers Promote beta (primary) and Promote stable; released-beta only Promote stable", () => {
+    for (const lang of ["de", "en"]) {
+      const shipped = buttonsFor("ship-successful", lang, { version: "0.193.0" });
+      expect(shipped.map((b) => b.label)).toEqual(["Promote beta", "Promote stable"]);
+      expect(shipped.map((b) => !!b.primary)).toEqual([true, false]);
+      const onBeta = buttonsFor("released-beta", lang, { version: "0.193.0" });
+      expect(onBeta.map((b) => b.label)).toEqual(["Promote stable"]);
+      expect(onBeta[0].primary).toBe(true);
+    }
+  });
+
+  // The ladder is plain text: no border, no fill — it must never read like
+  // a button next to the promote buttons.
+  test("the channel ladder renders frameless, highest version accented, lag hinted", () => {
+    const ladder = { allEqual: false, groups: [
+      { channels: ["alpha"], version: "0.193.0", top: true },
+      { channels: ["beta"], version: "0.190.2", top: false, lag: { versions: 3 } },
+      { channels: ["stable"], version: "0.188.0", top: false, lag: { versions: 5, days: 7 } },
+    ] };
+    const html = cardWidgetHtml(baseModel({ ladder }), "");
+    const block = html.match(/<div class="card-ladder"[\s\S]*?<\/div>/)[0];
+    expect(block).not.toMatch(/border|background|role="button"/);
+    expect(block).toMatch(/font-weight:500">v0\.193\.0</);
+    expect(block).toContain("−3");
+    expect(block).toContain("−5 · 7 d");
+    expect(html.indexOf("card-pipeline")).toBeLessThan(html.indexOf("card-ladder"));
+    expect(cardWidgetHtml(baseModel({ ladder: null }), "")).not.toContain("card-ladder");
   });
 
   test("the widget HTML puts the versioned prompt on the promote button", () => {

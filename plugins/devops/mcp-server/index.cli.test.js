@@ -182,12 +182,32 @@ describe("--render-card CLI fallback", () => {
       state: { pushed: true, merged: "main" },
       delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0" }, current: "alpha" } },
     }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
-    expect(shipped.stderr).toContain('data-prompt="promote 0.193.0"');
+    expect(shipped.stderr).toContain('data-prompt="promote beta 0.193.0"');
+    expect(shipped.stderr).toContain('data-prompt="promote stable 0.193.0"');
     const released = await renderCardFull({
       variant: "released", summary: "Beta", session_id: "cli-test-promote-version-beta",
       delivery: { promote: { channels: { alpha: "0.193.0", beta: "0.193.0" }, current: "beta" } },
     }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
     expect(released.stderr).toContain('data-prompt="promote stable 0.193.0"');
+    expect(released.stderr).not.toContain('data-prompt="promote beta');
+  });
+
+  // A ship card whose ladder already sits on beta (e.g. "ship beta") must not
+  // offer a beta promotion any more — only the stable step is left.
+  test("a ship-successful card already on beta offers only Promote stable", async () => {
+    const onBeta = await renderCardFull({
+      variant: "ship-successful", summary: "Ship", session_id: "cli-test-promote-on-beta",
+      state: { pushed: true, merged: "main" },
+      delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0", beta: "0.193.0" }, current: "beta" } },
+    }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
+    expect(onBeta.stderr).toContain('data-prompt="promote stable 0.193.0"');
+    expect(onBeta.stderr).not.toContain('data-prompt="promote beta');
+    const onStable = await renderCardFull({
+      variant: "ship-successful", summary: "Ship", session_id: "cli-test-promote-on-stable",
+      state: { pushed: true, merged: "main" },
+      delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0", stable: "0.193.0" }, current: "stable" } },
+    }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
+    expect(onStable.stderr).not.toContain('data-prompt="promote');
   });
 
   test("test-minimal keeps its whole markdown on Desktop — no widget draws it", async () => {

@@ -751,27 +751,98 @@ function renderPipelineLine(input, lang, buildId) {
   if (mergeDone) line += '   ' + state.merged;
   else if (state.branch) line += ' · ' + state.branch;
 
-  const promote = delivery.promote;
-  if (promote) {
-    const order = ['alpha', 'beta', 'stable'];
-    const channels = promote.channels || {};
-    const shipped = String((delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '').replace(/^v/, '');
-    const reached = Math.max(order.indexOf(promote.current), -1);
-    const chParts = order.map((ch, i) => {
-      if (promote.fastTrack && ch === 'beta' && !channels.beta) return '⏭️ ' + ch;
-      // A channel is done only when THIS version reached it — an older version
-      // sitting on beta is not a tick for the release being reported.
-      const atVersion = shipped && channels[ch] && String(channels[ch]).replace(/^v/, '') === shipped;
-      const done = i <= reached || atVersion;
-      return (done ? '✓' : '○') + ' ' + ch;
-    });
-    line += ' → ' + chParts.join(' → ');
-  }
-
+  // A ring project shows its versions on the channel ladder line below; the
+  // pipeline line then names no version of its own.
   const version = (delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '';
-  if (version) line += ' · v' + String(version).replace(/^v/, '');
+  if (version && !delivery.promote) line += ' · v' + String(version).replace(/^v/, '');
   line += ' · Build ' + buildId;
   return line;
+}
+
+// ---------------------------------------------------------------------------
+// Channel ladder (ring model) — alpha › beta › stable with the version each
+// channel serves. Channels on the same version merge into one group; the
+// highest version leads (accent), the lagging ones follow quieter with their
+// distance (−3 · 7 d). Replaces the old channel ticks on the pipeline line and
+// the stableLag context line — every version appears once.
+// ---------------------------------------------------------------------------
+
+const LADDER_ORDER = ['alpha', 'beta', 'stable'];
+
+function stripV(v) {
+  return v ? String(v).trim().replace(/^v/, '') : '';
+}
+
+function compareSemver(a, b) {
+  const pa = stripV(a).split(/[.-]/).map(n => parseInt(n, 10) || 0);
+  const pb = stripV(b).split(/[.-]/).map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+  return 0;
+}
+
+/**
+ * @returns {null | { groups: Array<{ channels: string[], version: string, top: boolean,
+ *   skipped?: boolean, lag?: { versions?: number, days?: number } }>, allEqual: boolean }}
+ */
+function buildChannelLadder(input) {
+  const delivery = input.delivery || {};
+  const promote = delivery.promote;
+  if (!promote) return null;
+  const channels = { ...(promote.channels || {}) };
+  // The version this card reports sits on the channel it landed on, even when
+  // the caller only filled `ship.version`.
+  const reported = stripV((delivery.ship && delivery.ship.version) || (input.cta && input.cta.version));
+  const current = promote.current || 'alpha';
+  if (reported && !channels[current]) channels[current] = reported;
+  // A channel above the landed one never trails it: stable ⊆ beta ⊆ alpha.
+  const at = LADDER_ORDER.indexOf(current);
+  if (reported) for (let i = 0; i < at; i++) if (!channels[LADDER_ORDER[i]]) channels[LADDER_ORDER[i]] = reported;
+
+  const top = LADDER_ORDER.map(ch => stripV(channels[ch])).filter(Boolean)
+    .reduce((hi, v) => (!hi || compareSemver(v, hi) > 0 ? v : hi), '');
+  if (!top) return null;
+  const lags = { beta: promote.betaLag, stable: promote.stableLag };
+
+  const groups = [];
+  for (const ch of LADDER_ORDER) {
+    const v = stripV(channels[ch]);
+    const last = groups[groups.length - 1];
+    if (last && v && last.version === v) { last.channels.push(ch); continue; }
+    const g = { channels: [ch], version: v, top: !!v && v === top };
+    if (!v && ch === 'beta' && promote.fastTrack) g.skipped = true;
+    const lag = lags[ch];
+    if (v && v !== top && lag && Number(lag.versions) > 0) {
+      g.lag = { versions: Number(lag.versions) };
+      if (lag.days) g.lag.days = Number(lag.days);
+    }
+    groups.push(g);
+  }
+  return { groups, allEqual: groups.length === 1 };
+}
+
+const LADDER_WORDS = {
+  de: { skipped: 'übersprungen', days: 'd' },
+  en: { skipped: 'skipped', days: 'd' },
+};
+
+function ladderLag(lag, lang) {
+  if (!lag) return '';
+  const w = LADDER_WORDS[lang] || LADDER_WORDS.de;
+  return '−' + lag.versions + (lag.days ? ' · ' + lag.days + ' ' + w.days : '');
+}
+
+/** Terminal form: `alpha **v0.193.0** › beta v0.190.2 (−3) › stable v0.188.0 (−5 · 7 d)`. */
+function renderChannelLadderMd(ladder, lang) {
+  if (!ladder) return '';
+  const w = LADDER_WORDS[lang] || LADDER_WORDS.de;
+  return ladder.groups.map(g => {
+    const name = g.channels.join(' · ');
+    if (g.skipped) return name + ' ' + w.skipped;
+    if (!g.version) return name + ' —';
+    const ver = 'v' + g.version;
+    const lag = ladderLag(g.lag, lang);
+    return name + ' ' + (g.top ? '**' + ver + '**' + (ladder.allEqual ? ' ✓' : '') : ver) + (lag ? ' (' + lag + ')' : '');
+  }).join(' › ');
 }
 
 // ---------------------------------------------------------------------------
@@ -1027,24 +1098,9 @@ function decisionContext(input, key, delivery, state, lang) {
   };
 }
 
-const PROMOTE_LAG = {
-  de: (ch, n, d, v) => '› ' + ch + ' liegt ' + n + (n === 1 ? ' Version' : ' Versionen') + (d ? ' / ' + d + ' Tage' : '') + ' vor stable → `/do-ship promote' + (v ? ' ' + v : '') + '`',
-  en: (ch, n, d, v) => '› ' + ch + ' is ' + n + (n === 1 ? ' version' : ' versions') + (d ? ' / ' + d + ' days' : '') + ' ahead of stable → `/do-ship promote' + (v ? ' ' + v : '') + '`',
-};
-
 /** The optional `›` context line under the heading (§ 2.6). */
 function buildContextLine(input, key, delivery, lang) {
   if (input._downgraded) return '› ' + renderDowngradeNote(lang, input._downgradeReason);
-  if (key === 'ship-successful' && delivery.promote && delivery.promote.stableLag) {
-    const lag = delivery.promote.stableLag;
-    if (Number(lag.versions) > 0) {
-      const fn = PROMOTE_LAG[lang] || PROMOTE_LAG.de;
-      // The version the lag line names — the one this card shipped — so the
-      // suggested command stays promotion-only when typed later.
-      const v = String((delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '').replace(/^v/, '');
-      return fn(delivery.promote.current || 'alpha', Number(lag.versions), lag.days ? Number(lag.days) : 0, v);
-    }
-  }
   if (key === 'aborted' && input.cta && input.cta.info) return '› ' + input.cta.info;
   return '';
 }
@@ -1140,6 +1196,10 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
 
   let buttonsKey = key;
   if (key === 'ship-successful' && !ctx.ring) buttonsKey = null; // plain merge — nothing to promote
+  // The ladder already sits above alpha: beta offers only stable, stable nothing.
+  const landed = delivery.promote && delivery.promote.current;
+  if (key === 'ship-successful' && landed === 'beta') buttonsKey = 'released-beta';
+  if (key === 'ship-successful' && landed === 'stable') buttonsKey = null;
   if (NO_BUTTON_KEYS.has(key)) buttonsKey = null;
 
   // The version rides on the promote buttons (card-widget.js#buttonsFor): a
@@ -1237,6 +1297,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     budget: buildBudgetModel(usageData, delta5h, deltaWk, healthLine),
     pipeline: renderPipelineLine(input, lang, buildId),
     pipelinePr: state.pr || null,
+    ladder: buildChannelLadder(input),
     heading: decision.heading,
     context: decision.context,
     // A decision block may carry its own widget points (ship-compact: the
@@ -1284,6 +1345,8 @@ function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId, { t
     // belongs to the evidence; the budget is the card's footer.
     const pipelineLine = renderPipelineLine(input, lang, buildId);
     if (pipelineLine) parts.push(pipelineLine);
+    const ladderLine = renderChannelLadderMd(buildChannelLadder(input), lang);
+    if (ladderLine) parts.push(ladderLine);
     const budgetLine = renderBudgetLineMd(buildBudgetModel(usageData, delta5h, deltaWk, healthLine));
     if (budgetLine) parts.push(budgetLine);
   } else if (resultLines[0]) {
@@ -1946,10 +2009,11 @@ server.registerTool(
           pr: z.object({ number: z.number(), title: z.string() }).nullable().optional().describe("PR for this work, or null for a direct commit (PR node renders '⊘ no PR')."),
           ship: z.object({ version: z.string(), base: z.string().optional() }).nullable().optional().describe("Ship stage: version merged to `base` (e.g. main). null = not shipped yet."),
           promote: z.object({
-            channels: z.object({ alpha: z.string().nullable().optional(), beta: z.string().nullable().optional(), stable: z.string().nullable().optional() }).describe("Version reached per channel; null = not reached (renders as —)."),
+            channels: z.object({ alpha: z.string().nullable().optional(), beta: z.string().nullable().optional(), stable: z.string().nullable().optional() }).describe("Version each channel serves right now — pass the latest beta and stable too, not only the reached ones; null = channel has no tag yet (renders as —). Channels on the same version merge on the ladder."),
             current: z.enum(["alpha", "beta", "stable"]).optional().describe("Channel this turn landed on — highlighted 🟢 in the ladder."),
             fastTrack: z.boolean().optional().describe("alpha→stable direct: beta renders as ⏭ skipped."),
-            stableLag: z.object({ versions: z.number(), days: z.number().optional() }).optional().describe("How far the current channel is ahead of stable (from git ls-remote --tags). Renders the promote nudge on the ladder line: '· alpha 8 Versionen / 7 Tage vor stable → `/do-ship promote`'. Replaces the old userFinalTest promote item."),
+            betaLag: z.object({ versions: z.number(), days: z.number().optional() }).optional().describe("How far beta trails the highest channel (from git ls-remote --tags). Renders as '−N · D d' after beta's version on the channel ladder."),
+            stableLag: z.object({ versions: z.number(), days: z.number().optional() }).optional().describe("How far stable trails the highest channel (from git ls-remote --tags). Renders as '−N · D d' after stable's version on the channel ladder. Replaces the old userFinalTest promote item."),
           }).nullable().optional().describe("Promote stage: alpha→beta→stable ladder. null = not promoted yet (Promote node ⚪)."),
         }).optional(),
       ).describe("Delivery track (ready / ship-successful / released) — the pipeline through-line PR → Ship → Promote(alpha→beta→stable) showing WHERE this turn sits (✅ done · 🟢 current · ⚪ pending). ship-successful also names the reached channel in its CTA. Populate the stages that happened; leave later ones null/absent."),
@@ -1979,7 +2043,7 @@ server.registerTool(
 // directly (column grid, bar semantics) without driving the whole card.
 export {
   renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
-  buildBudgetModel, renderBudgetLineMd, buildResultLines, buildEvidencePosts, renderPipelineLine,
+  buildBudgetModel, renderBudgetLineMd, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
   resolveCardKey, buildDecisionBlock, buildCardModel,
 };
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.196.0] — 2026-09-24
+
+### Added
+- **The ship card offers Promote beta and Promote stable.** After an alpha ship the card has two buttons: Promote beta as the main one and Promote stable as the fast track. A card that already sits on beta offers only Promote stable. A card on stable offers no promotion. Each button still carries the card's version, so a click on an old card promotes exactly that build.
+- **A channel ladder shows the version of every channel.** Under the pipeline line the card reads `alpha v0.193.0 › beta v0.190.2 −3 › stable v0.188.0 −5 · 7 d`. The highest version is lilac, the lagging channels are quieter and show their distance. Channels on the same version merge into one entry, and all three equal turn green with a tick. It is plain text with no frame, so it never looks like a button. It replaces the channel ticks and the version on the pipeline line, and the lag line under the heading. `do-ship` passes the latest beta version and a new `betaLag` for it.
+
+### Changed
+- **Promoting alpha straight to stable moves beta too.** `ship_promote` from alpha to stable now tags `beta/vN` first, unless beta already serves this version or a newer one. Beta can no longer sit behind stable, and the fast track is one call instead of two.
+
 ## [0.195.1] — 2026-09-24
 
 ### Fixed

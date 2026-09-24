@@ -44,7 +44,7 @@ export function isDesktopSession(env = process.env) {
  * No prompt may start with "/": the host refuses a prefill whose text starts
  * with a slash — a leading space does not help (live 2026-09-23) — while plain
  * text lands. Skills are reached by their trigger words instead: "ship" hits
- * prompt.ship.detect, "promote <version>" / "promote stable <version>" do-ship's promotion-only run (prompt.ship.detect parses channel + version), "Debug …" auto-fix.
+ * prompt.ship.detect, "promote beta <version>" / "promote stable <version>" do-ship's promotion-only run (prompt.ship.detect parses channel + version), "Debug …" auto-fix.
  *
  * `icon` is a Tabler outline icon name (the widget font); `primary` marks the
  * one accent button per row (the card's main verb). Each also carries a
@@ -65,7 +65,8 @@ export const BUTTONS = {
       { label: "Skip", icon: "player-skip-forward", prompt: "Blocker bewusst überspringen: Ship erneut mit skipChecks (Hot-fix-Bypass) durchführen.", tooltip: "Überspringt den Blocker bewusst (Hot-fix-Bypass)." },
     ],
     "ship-successful": [
-      { label: "Promote", icon: "arrow-up", prompt: "promote", primary: true, tooltip: "Promotet den aktuellen Build in den nächsten Channel." },
+      { label: "Promote beta", icon: "arrow-up", prompt: "promote beta", primary: true, tooltip: "Promotet den aktuellen Build von alpha nach beta." },
+      { label: "Promote stable", icon: "arrow-bar-to-up", prompt: "promote stable", tooltip: "Promotet den aktuellen Build direkt nach stable — beta zieht auf dieselbe Version mit." },
     ],
     "ship-successful-kept": [
       { label: "Weiter", icon: "arrow-right", prompt: "Ich mache auf diesem Branch weiter — was ist der nächste Schritt?", primary: true, tooltip: "Setzt die Arbeit auf dem offen gehaltenen Branch fort." },
@@ -74,7 +75,7 @@ export const BUTTONS = {
       { label: "Deploy", icon: "cloud-upload", prompt: "Deploye jetzt die ausstehenden Out-of-band-Artefakte aus dem Deploy-Gate der letzten Card.", primary: true, tooltip: "Deployt die ausstehenden Migrationen/Functions." },
     ],
     "released-beta": [
-      { label: "Nach stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotet von beta nach stable." },
+      { label: "Promote stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotet von beta nach stable." },
     ],
     test: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Test war ok — jetzt shippen." },
@@ -112,7 +113,8 @@ export const BUTTONS = {
       { label: "Skip", icon: "player-skip-forward", prompt: "Deliberately skip the blocker: run the ship again with skipChecks (hot-fix bypass).", tooltip: "Deliberately skips the blocker (hot-fix bypass)." },
     ],
     "ship-successful": [
-      { label: "Promote", icon: "arrow-up", prompt: "promote", primary: true, tooltip: "Promotes the current build to the next channel." },
+      { label: "Promote beta", icon: "arrow-up", prompt: "promote beta", primary: true, tooltip: "Promotes the current build from alpha to beta." },
+      { label: "Promote stable", icon: "arrow-bar-to-up", prompt: "promote stable", tooltip: "Promotes the current build straight to stable — beta follows to the same version." },
     ],
     "ship-successful-kept": [
       { label: "Continue", icon: "arrow-right", prompt: "I'll continue on this branch — what's the next step?", primary: true, tooltip: "Continues the work on the branch kept open." },
@@ -121,7 +123,7 @@ export const BUTTONS = {
       { label: "Deploy", icon: "cloud-upload", prompt: "Deploy the pending out-of-band artifacts from the last card's deploy gate now.", primary: true, tooltip: "Deploys the pending migrations/functions." },
     ],
     "released-beta": [
-      { label: "To stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotes from beta to stable." },
+      { label: "Promote stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotes from beta to stable." },
     ],
     test: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Test was fine — ship now." },
@@ -148,8 +150,8 @@ export const BUTTONS = {
  * The buttons a card offers, or [] when nothing is clickable (pending /
  * concept / batch overrides, test-minimal, states with nothing to decide).
  *
- * A promote button carries the card's version ("promote 0.193.0", "promote
- * stable 0.193.0"): prompt.ship.detect treats a named version as
+ * A promote button carries the card's version ("promote beta 0.193.0",
+ * "promote stable 0.193.0"): prompt.ship.detect treats a named version as
  * promotion-only, so a stale click on an old card promotes exactly that
  * build and never ships edits made after it. Without a known version the
  * promote button is dropped — a bare "promote" could ship later work.
@@ -171,7 +173,7 @@ export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
     .map((a) => (isPromotePrompt(a.prompt) ? { ...a, prompt: `${a.prompt} ${semver}` } : { ...a }));
 }
 
-/** A promote button's prompt ("promote", "promote stable"). */
+/** A promote button's prompt ("promote beta", "promote stable"). */
 function isPromotePrompt(prompt) {
   return /^promote\b/i.test(String(prompt || ""));
 }
@@ -257,6 +259,32 @@ function pipelinePrHtml(pipelinePr, repoUrl) {
 }
 
 /**
+ * The ring model's channel ladder as plain text — no frame, no fill, nothing
+ * that reads like a button next to the promote buttons. The highest version
+ * leads in lilac (green once every channel serves it), the lagging channels
+ * follow quieter with their distance in yellow ("−3 · 7 d").
+ */
+function channelLadderHtml(ladder, lang) {
+  if (!ladder || !Array.isArray(ladder.groups) || !ladder.groups.length) return "";
+  const skipped = lang === "en" ? "skipped" : "übersprungen";
+  const lead = ladder.allEqual ? COLOR.green : COLOR.lilac;
+  const sep = `<span aria-hidden="true" style="color:${COLOR.watermark}">›</span>`;
+  const parts = ladder.groups.map((g) => {
+    const name = `<span style="color:${COLOR.watermark}">${escapeHtml(g.channels.join(" · "))}</span>`;
+    if (g.skipped) return `<span>${name} <span style="color:${COLOR.watermark}">${skipped}</span></span>`;
+    if (!g.version) return `<span>${name} <span style="color:${COLOR.watermark}">—</span></span>`;
+    const ver = g.top
+      ? `<span style="color:${lead};font-weight:500">v${escapeHtml(g.version)}${ladder.allEqual ? " ✓" : ""}</span>`
+      : `<span style="color:var(--text-secondary)">v${escapeHtml(g.version)}</span>`;
+    const lag = g.lag
+      ? ` <span style="font-size:11px;color:${COLOR.yellow}">−${g.lag.versions}${g.lag.days ? ` · ${g.lag.days} d` : ""}</span>`
+      : "";
+    return `<span>${name} ${ver}${lag}</span>`;
+  });
+  return `<div class="card-ladder" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-size:13px;padding:0 0 4px">${parts.join(sep)}</div>`;
+}
+
+/**
  * Render the whole card body — both § 2 blocks — as one HTML fragment.
  * Follows the widget design contract: no emoji in buttons, Tabler outline
  * icons (`ti ti-*`), CSS variables for host-matching chrome, sr-only summary,
@@ -299,6 +327,8 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
     : "";
 
+  const ladderHtml = channelLadderHtml(model.ladder, lang);
+
   // The title lives in the widget: on Desktop there is no card markdown
   // (§ 4), so the whole card is drawn once and nothing follows the widget.
   // card-guard reads this h3 as the card title. h3 = the contract's
@@ -314,6 +344,7 @@ export function cardWidgetHtml(model, repoUrl) {
     resultLinesHtml,
     evidenceHtml,
     pipelineHtml,
+    ladderHtml,
     budgetHtml,
     `</div>`,
   ].filter(Boolean).join("\n  ");

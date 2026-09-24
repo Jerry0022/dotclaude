@@ -107,17 +107,18 @@ describe("pipeline line forms (§ 2.5)", () => {
       delivery: { ship: { version: "0.2.0", base: "main" }, promote: { channels: { alpha: "0.2.0" }, current: "alpha" } },
     });
     expect(text).toMatch(/^✓ commit → ✓ push → ✓ PR #42 → ✓ merge {3}main/m);
-    expect(text).toContain("✓ alpha → ○ beta → ○ stable");
-    expect(text).toContain("v0.2.0");
+    expect(text).toContain("alpha **v0.2.0** › beta — › stable —");
   });
 
-  test("fastTrack skips beta with the skip glyph", async () => {
+  // alpha→stable pulls beta along (ship_promote tags beta/vN too), so the
+  // ladder shows beta on the promoted version, merged with its neighbours.
+  test("fastTrack lands every channel on the promoted version", async () => {
     const text = await cardText({
       variant: "ship-successful", summary: "x", lang: "de", session_id: "test-compact-pipeline-fasttrack",
       state: { branch: "main", pushed: true, merged: "main" },
       delivery: { ship: { version: "0.2.0" }, promote: { channels: { alpha: "0.2.0", stable: "0.2.0" }, current: "stable", fastTrack: true } },
     });
-    expect(text).toContain("⏭️ beta");
+    expect(text).toContain("alpha · beta · stable **v0.2.0** ✓");
   });
 });
 
