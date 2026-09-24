@@ -1083,10 +1083,22 @@ const NO_BUTTON_KEYS = new Set(['ready-files', 'test-minimal', 'released-stable'
  * The whole decision block: heading (already carrying any "+N weitere" tail),
  * optional context line, ≤3 points, and the button-table key for the widget.
  * Handles the concept / batch / pending overrides, which replace the block
- * of every OTHER variant (§ 2.6, § 3).
+ * of every OTHER variant (§ 2.6, § 3). The careful-compact stop outranks them
+ * all: the ship halted before it started and only the user can compact, so
+ * that is the one decision — an open concept page must not hide it.
  */
 function buildDecisionBlock(input, lang, key, delivery, state) {
   const T = HEADINGS[lang] || HEADINGS.de;
+  const compact = shipCompactInfo(input.compact, lang);
+  if (compact) {
+    return {
+      heading: T['ship-compact'](compact),
+      context: compact.context,
+      points: compact.points,
+      widgetPoints: compact.widgetPoints,
+      buttonsKey: 'ship-compact',
+    };
+  }
   const batch = hasConcept(input.concept) ? null : readBatch(input.cwd);
 
   if (hasConcept(input.concept)) {
@@ -1109,16 +1121,6 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
       .map(it => (it.name ? '`' + it.name + '`' : '') + (it.doing ? ' — ' + it.doing : ''))
       .filter(Boolean);
     return { heading: T.pending({ what }), context: names ? '› ' + names : '', points: pts, buttonsKey: null };
-  }
-  const compact = shipCompactInfo(input.compact, lang);
-  if (compact) {
-    return {
-      heading: T['ship-compact'](compact),
-      context: compact.context,
-      points: compact.points,
-      widgetPoints: compact.widgetPoints,
-      buttonsKey: 'ship-compact',
-    };
   }
 
   const ctx = decisionContext(input, key, delivery, state, lang);

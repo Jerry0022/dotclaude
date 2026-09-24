@@ -98,6 +98,18 @@ describe("--render-card CLI fallback", () => {
     expect(stderr).toContain(">/compact Ship steht an. Behalte:");
   });
 
+  test("compact outranks an open concept page — the ship stop stays the decision", async () => {
+    const payload = {
+      variant: "ship-blocked", summary: "Ship angehalten", lang: "de", session_id: "cli-test-compact-concept",
+      compact: { tokens: 435000 }, concept: "waiting", pending: [{ name: "devops:qa", doing: "Suite" }],
+    };
+    const term = await renderCard(payload);
+    expect(term).toMatch(/^## 🗜 Kontext 435 k Tokens — vor dem Ship kompaktieren\?/m);
+    expect(term).not.toContain("🧭 Concept");
+    const { stderr } = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
+    expect(stderr).toContain('data-prompt="ship --no-compact"');
+  });
+
   test("stdout carries the card only — no relay-instruction preamble to strip", async () => {
     const out = await renderCard({ variant: "analysis", summary: "Nur die Karte", session_id: "cli-test-clean" });
     expect(out).not.toContain("DO NOT OUTPUT THIS BLOCK");
